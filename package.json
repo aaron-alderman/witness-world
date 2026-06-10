@@ -1,0 +1,14 @@
+{
+  "name": "witness-world",
+  "version": "0.31.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "demo": "node src/demo-todo-server.js",
+    "test:ui": "node --test test/ui*.test.js",
+    "test:all": "npm test && npm run test:ui"
+  },
+  "devDependencies": {
+    "playwright": "^1.54.0"
+  }
+}

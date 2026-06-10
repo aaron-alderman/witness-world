@@ -1,0 +1,13 @@
+# Shared context declarations.
+
+[context.common]
+actor = "system"
+capabilities = []
+
+[context.backend]
+actor = "backendHost"
+capabilities = ["http.serve", "fs.json.read", "fs.json.write"]
+
+[context.frontend]
+actor = "frontendHost"
+capabilities = ["dom.render", "http.fetch"]

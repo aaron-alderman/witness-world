@@ -1,0 +1,565 @@
+# Frontend UI and browser program definition.
+
+[[defaults]]
+context = "frontend"
+program = "todo_frontend_program"
+
+[[page]]
+id = "todo_app_widget"
+children = ["todo_session", "todo_title", "todo_form", "todo_status", "todo_list", "todo_private_notes", "todo_widget_editor", "todo_process_graph_lab", "todo_world_link", "todo_witnesses", "todo_version_playground"]
+title = "Witness Todo"
+
+[[box]]
+id = "todo_session"
+children = ["todo_session_title", "todo_session_form", "todo_session_status"]
+class = "session-panel"
+role = "session-panel"
+
+[[text]]
+id = "todo_session_title"
+text = "Personal Projection"
+
+[[form]]
+id = "todo_session_form"
+children = ["todo_actor_select", "todo_open_button", "todo_logout_button"]
+role = "login-form"
+
+[[select]]
+id = "todo_actor_select"
+name = "actor"
+role = "actor-select"
+
+[[button]]
+id = "todo_open_button"
+text = "Open"
+type = "submit"
+
+[[button]]
+id = "todo_logout_button"
+text = "Logout"
+type = "button"
+action = "logout"
+
+[[text]]
+id = "todo_session_status"
+text = ""
+role = "session-status"
+
+[[heading]]
+id = "todo_title"
+text = "Witness Todo"
+level = 1
+
+[[form]]
+id = "todo_form"
+children = ["todo_input", "todo_add_button"]
+role = "todo-form"
+
+[[input]]
+id = "todo_input"
+name = "title"
+placeholder = "New todo"
+
+[[button]]
+id = "todo_add_button"
+text = "Add"
+type = "submit"
+
+[[text]]
+id = "todo_status"
+text = ""
+class = "status"
+
+[[list]]
+id = "todo_list"
+role = "todo-list"
+
+[[box]]
+id = "todo_private_notes"
+children = ["todo_private_notes_title", "todo_private_notes_form", "todo_private_note_list"]
+class = "private-notes"
+role = "private-notes"
+
+[[heading]]
+id = "todo_private_notes_title"
+text = "Private Notes"
+level = 2
+
+[[form]]
+id = "todo_private_notes_form"
+children = ["todo_private_note_input", "todo_private_note_button"]
+role = "private-note-form"
+
+[[input]]
+id = "todo_private_note_input"
+name = "text"
+placeholder = "Only your perspective can see this"
+
+[[button]]
+id = "todo_private_note_button"
+text = "Save note"
+type = "submit"
+
+[[box]]
+id = "todo_private_note_list"
+class = "private-note-list"
+role = "private-note-list"
+
+
+[[box]]
+id = "todo_process_graph_lab"
+children = ["todo_process_graph_title", "todo_simulate_network_button"]
+class = "process-graph-lab"
+role = "process-graph-lab"
+
+[[heading]]
+id = "todo_process_graph_title"
+text = "Process Graph Lab"
+level = 2
+
+[[button]]
+id = "todo_simulate_network_button"
+text = "Simulate network error"
+type = "button"
+action = "simulateNetworkError"
+
+
+[[link]]
+id = "todo_world_link"
+href = "/world"
+text = "Open World Graph"
+class = "world-graph-link"
+
+[[box]]
+id = "todo_witnesses"
+children = ["todo_witnesses_title", "todo_witness_list"]
+class = "witness-inspector"
+role = "witness-inspector"
+
+[[heading]]
+id = "todo_witnesses_title"
+text = "Witness Inspector"
+level = 2
+
+[[box]]
+id = "todo_witness_list"
+class = "witness-list"
+role = "witness-list"
+
+[[box]]
+id = "todo_widget_editor"
+children = ["todo_widget_editor_title", "todo_widget_editor_form"]
+class = "widget-editor"
+role = "widget-editor"
+
+[[heading]]
+id = "todo_widget_editor_title"
+text = "Widget Editor"
+level = 2
+
+[[form]]
+id = "todo_widget_editor_form"
+children = ["todo_widget_kind", "todo_widget_text", "todo_widget_parent", "todo_widget_editor_button"]
+role = "widget-editor-form"
+
+[[input]]
+id = "todo_widget_kind"
+name = "kind"
+placeholder = "Widget kind, e.g. Text or Heading"
+
+[[input]]
+id = "todo_widget_text"
+name = "text"
+placeholder = "Widget text"
+
+[[input]]
+id = "todo_widget_parent"
+name = "parent"
+placeholder = "Parent widget id, blank = root"
+
+[[button]]
+id = "todo_widget_editor_button"
+text = "Add widget"
+type = "submit"
+
+[[frontendProgram]]
+id = "todo_frontend_program"
+rootWidget = "todo_app_widget"
+
+[[step]]
+order = 0
+op = "initSession"
+on = "load"
+
+[[step]]
+order = 1
+op = "renderSession"
+on = "load"
+widget = "todo_session"
+
+[[step]]
+order = 2
+op = "setText"
+on = "load"
+widget = "todo_status"
+text = "Loading..."
+
+[[step]]
+order = 3
+op = "fetchJson"
+on = "load"
+url = "/api/todos"
+into = "todoResponse"
+
+[[step]]
+order = 4
+op = "renderList"
+on = "load"
+widget = "todo_list"
+from = "todoResponse.todos"
+itemTextPath = "title"
+
+[[step]]
+order = 5
+op = "fetchJson"
+on = "load"
+url = "/api/witnesses"
+into = "witnessResponse"
+
+[[step]]
+order = 6
+op = "renderWitnesses"
+on = "load"
+widget = "todo_witnesses"
+from = "witnessResponse.witnesses"
+
+
+[[step]]
+order = 7
+op = "fetchJson"
+on = "load"
+url = "/api/private-notes"
+into = "privateNotesResponse"
+
+[[step]]
+order = 8
+op = "renderPrivateNotes"
+on = "load"
+widget = "todo_private_notes"
+from = "privateNotesResponse.notes"
+
+[[step]]
+order = 9
+op = "setText"
+on = "load"
+widget = "todo_status"
+text = "Ready"
+
+[[step]]
+order = 0
+op = "readForm"
+on = "submit:todo_form"
+widget = "todo_form"
+into = "draftTodo"
+
+[[step]]
+order = 1
+op = "setText"
+on = "submit:todo_form"
+widget = "todo_status"
+text = "Saving..."
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:todo_form"
+url = "/api/todos"
+method = "POST"
+from = "draftTodo"
+pick = ["title"]
+into = "createdTodo"
+
+[[step]]
+order = 3
+op = "clearForm"
+on = "submit:todo_form"
+widget = "todo_form"
+
+[[step]]
+order = 4
+op = "run"
+on = "submit:todo_form"
+event = "load"
+
+[[step]]
+order = 0
+op = "setText"
+on = "click:toggleTodo"
+widget = "todo_status"
+text = "Updating..."
+
+[[step]]
+order = 1
+op = "patchJson"
+on = "click:toggleTodo"
+url = "/api/todos/${event.id}"
+body = { done = "${event.done}" }
+into = "updatedTodo"
+
+[[step]]
+order = 2
+op = "run"
+on = "click:toggleTodo"
+event = "load"
+
+[[step]]
+order = 0
+op = "setText"
+on = "click:deleteTodo"
+widget = "todo_status"
+text = "Deleting..."
+
+[[step]]
+order = 1
+op = "deleteJson"
+on = "click:deleteTodo"
+url = "/api/todos/${event.id}"
+into = "deletedTodo"
+
+[[step]]
+order = 2
+op = "run"
+on = "click:deleteTodo"
+event = "load"
+
+[[step]]
+order = 0
+op = "readForm"
+on = "submit:todo_session_form"
+widget = "todo_session_form"
+into = "sessionDraft"
+
+[[step]]
+order = 1
+op = "setSession"
+on = "submit:todo_session_form"
+from = "sessionDraft"
+path = "actor"
+
+[[step]]
+order = 2
+op = "run"
+on = "submit:todo_session_form"
+event = "load"
+
+[[step]]
+order = 0
+op = "logout"
+on = "click:logout"
+
+[[step]]
+order = 1
+op = "run"
+on = "click:logout"
+event = "load"
+
+[[step]]
+order = 0
+op = "readForm"
+on = "submit:todo_private_notes_form"
+widget = "todo_private_notes_form"
+into = "privateNoteDraft"
+
+[[step]]
+order = 1
+op = "postJson"
+on = "submit:todo_private_notes_form"
+url = "/api/private-notes"
+from = "privateNoteDraft"
+pick = ["text"]
+into = "privateNoteCreated"
+
+[[step]]
+order = 2
+op = "clearForm"
+on = "submit:todo_private_notes_form"
+widget = "todo_private_notes_form"
+
+[[step]]
+order = 3
+op = "run"
+on = "submit:todo_private_notes_form"
+event = "load"
+
+[[step]]
+order = 0
+op = "readForm"
+on = "submit:todo_widget_editor_form"
+widget = "todo_widget_editor_form"
+into = "widgetDraft"
+
+[[step]]
+order = 1
+op = "postWidgetDefinition"
+on = "submit:todo_widget_editor_form"
+from = "widgetDraft"
+into = "widgetCreated"
+
+[[step]]
+order = 2
+op = "clearForm"
+on = "submit:todo_widget_editor_form"
+widget = "todo_widget_editor_form"
+
+[[step]]
+order = 3
+op = "run"
+on = "submit:todo_widget_editor_form"
+event = "load"
+
+[[widgetVersion]]
+soul = "todo_versioned_banner"
+version = "todo_versioned_banner_v1"
+kind = "Text"
+index = 0
+text = "Versioned widget: v1"
+class = "versioned-banner"
+
+[[widgetVersion]]
+soul = "todo_versioned_banner"
+version = "todo_versioned_banner_v2"
+kind = "Text"
+index = 1
+text = "Versioned widget: v2"
+class = "versioned-banner"
+
+[[activateWidgetVersion]]
+soul = "todo_versioned_banner"
+version = "todo_versioned_banner_v1"
+
+[[box]]
+id = "todo_version_playground"
+children = ["todo_version_title", "todo_versioned_banner", "todo_activate_v1", "todo_activate_v2"]
+class = "version-playground"
+
+[[heading]]
+id = "todo_version_title"
+text = "Live Widget Versions"
+level = 2
+
+[[button]]
+id = "todo_activate_v1"
+text = "Activate v1"
+type = "button"
+action = "activateWidgetVersion"
+eventSoul = "todo_versioned_banner"
+eventVersion = "todo_versioned_banner_v1"
+
+[[button]]
+id = "todo_activate_v2"
+text = "Activate v2"
+type = "button"
+action = "activateWidgetVersion"
+eventSoul = "todo_versioned_banner"
+eventVersion = "todo_versioned_banner_v2"
+
+
+[[step]]
+order = 0
+op = "setText"
+on = "click:simulateNetworkError"
+widget = "todo_status"
+text = "Simulating network failure..."
+
+[[step]]
+order = 1
+op = "fetchJson"
+on = "click:simulateNetworkError"
+url = "/api/simulate-network-error"
+into = "simulatedNetworkFailure"
+allowFailure = true
+
+[[step]]
+order = 2
+op = "fetchJson"
+on = "click:simulateNetworkError"
+url = "/api/witnesses"
+into = "witnessResponse"
+
+[[step]]
+order = 3
+op = "renderWitnesses"
+on = "click:simulateNetworkError"
+widget = "todo_witnesses"
+from = "witnessResponse.witnesses"
+
+[[step]]
+order = 4
+op = "setText"
+on = "click:simulateNetworkError"
+widget = "todo_status"
+text = "Simulated network failure witnessed."
+
+[[step]]
+order = 0
+op = "setText"
+on = "click:activateWidgetVersion"
+widget = "todo_status"
+text = "Activating widget version..."
+
+[[step]]
+order = 1
+op = "activateWidgetVersion"
+on = "click:activateWidgetVersion"
+soul = "${event.soul}"
+version = "${event.version}"
+into = "activatedWidgetVersion"
+
+[[step]]
+order = 2
+op = "reloadPage"
+on = "click:activateWidgetVersion"
+
+
+
+# Dedicated world graph page. This is a separate perspective, not embedded in the todo UI.
+[[page]]
+id = "world_graph_page"
+children = ["world_graph_back_link", "world_graph_title", "world_graph_canvas"]
+title = "Witness World Graph"
+
+[[link]]
+id = "world_graph_back_link"
+href = "/"
+text = "← Back to Todo"
+class = "world-graph-link"
+
+[[heading]]
+id = "world_graph_title"
+text = "World Graph"
+level = 1
+
+[[box]]
+id = "world_graph_canvas"
+class = "world-graph-body"
+role = "world-graph-body"
+
+[[frontendProgram]]
+id = "world_graph_program"
+rootWidget = "world_graph_page"
+
+[[step]]
+program = "world_graph_program"
+order = 0
+op = "fetchJson"
+on = "load"
+url = "/api/world-graph"
+into = "worldGraphResponse"
+
+[[step]]
+program = "world_graph_program"
+order = 1
+op = "renderWorldGraph"
+on = "load"
+widget = "world_graph_canvas"
+from = "worldGraphResponse.graph"

@@ -1,0 +1,15 @@
+# Backend server/runtime definition.
+
+[[defaults]]
+context = "backend"
+
+[[todoServer]]
+id = "demo_todo_server"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+rootWidget = "todo_app_widget"
+frontendProgram = "todo_frontend_program"
+worldRootWidget = "world_graph_page"
+worldFrontendProgram = "world_graph_program"
+storeName = "witness-world-demo-todos.json"
+actors = [{ id = "aaron", label = "Aaron" }, { id = "callan", label = "Callan" }]
