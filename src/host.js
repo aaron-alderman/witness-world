@@ -1,6 +1,7 @@
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { thing, relation } from "./kernel.js";
 import { todoState, privateNotesFor, publicWitnessesFor } from "./projections.js";
 import { actorRequired, runGates, textRequired } from "./gates.js";
@@ -85,6 +86,23 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
     return { ok: false, reason: "root widget not defined" };
   }
 
+  const srcDir = path.dirname(fileURLToPath(import.meta.url));
+  const canvasLibFiles = new Map([
+    ["projectors-core.js", path.join(srcDir, "projectors-core.js")],
+    ["canvas-projection.js", path.join(srcDir, "canvas-projection.js")]
+  ]);
+
+  const sseClients = new Set();
+  let sseLastCount = world.allWitnesses().length;
+  const sseWatcher = setInterval(() => {
+    const count = world.allWitnesses().length;
+    if (count <= sseLastCount) return;
+    sseLastCount = count;
+    const frame = `data: {"count":${count}}\n\n`;
+    for (const client of sseClients) client.write(frame);
+  }, 250);
+  sseWatcher.unref();
+
   const server = http.createServer(async (req, res) => {
     const startedAt = Date.now();
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -116,6 +134,35 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
           body: { route: "/world" }
         });
         send(res, 200, "text/html", renderWidgetPage(world, { actor: frontendHost, rootWidget: worldRootWidget, frontendProgram: worldFrontendProgram, appConfig: { actors, page: "world" } }));
+        return;
+      }
+
+      if (req.method === "GET" && req.url?.startsWith("/canvas-lib/")) {
+        const name = decodeURIComponent(req.url.slice("/canvas-lib/".length));
+        const resolved = canvasLibFiles.get(name);
+        if (!resolved) {
+          world.emit({ process: "backend.readCanvasLib.failed", actor: backendHost, claims: [], body: { name, reason: "not in canvas-lib whitelist" } });
+          sendJson(res, 404, { error: "unknown canvas-lib module", name });
+          return;
+        }
+        const text = await fs.readFile(resolved, "utf8");
+        world.emit({ process: "backend.readCanvasLib", actor: backendHost, claims: [relation(backendHost, "read", `source:${resolved}`)], body: { file: resolved, bytes: text.length } });
+        res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-cache" });
+        res.end(text);
+        return;
+      }
+
+      if (req.method === "GET" && req.url === "/api/events") {
+        res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
+        res.write(`data: {"count":${world.allWitnesses().length}}\n\n`);
+        sseClients.add(res);
+        req.on("close", () => sseClients.delete(res));
+        world.emit({
+          process: "backend.eventsStream",
+          actor: backendHost,
+          claims: [relation(backendHost, "streams", "witnessLog")],
+          body: { clients: sseClients.size }
+        });
         return;
       }
 
@@ -400,14 +447,24 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
         return;
       }
 
-      if (req.method === "GET" && req.url === "/api/witnesses") {
-        world.emit({
-          process: "backend.readWitnesses",
-          actor: backendHost,
-          claims: [relation(backendHost, "read", "witnessLog")],
-          body: { count: world.allWitnesses().length }
-        });
-        sendJson(res, 200, { witnesses: publicWitnessesFor(world.allWitnesses(), actorFromRequest(req)) });
+      if (req.method === "GET" && (req.url === "/api/witnesses" || req.url?.startsWith("/api/witnesses?"))) {
+        const url = new URL(req.url, "http://127.0.0.1");
+        const rawOffset = url.searchParams.get("offset");
+        const visible = publicWitnessesFor(world.allWitnesses(), actorFromRequest(req));
+        if (rawOffset === null) {
+          world.emit({
+            process: "backend.readWitnesses",
+            actor: backendHost,
+            claims: [relation(backendHost, "read", "witnessLog")],
+            body: { count: world.allWitnesses().length }
+          });
+          sendJson(res, 200, { witnesses: visible, offset: 0, total: visible.length });
+          return;
+        }
+        // Incremental polls are NOT witnessed: the SSE-driven refetch loop would otherwise
+        // grow the log on every read, which re-triggers the SSE signal forever.
+        const offset = Math.max(0, Math.min(visible.length, Number(rawOffset) || 0));
+        sendJson(res, 200, { witnesses: visible.slice(offset), offset, total: visible.length });
         return;
       }
 
@@ -483,7 +540,13 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
   return {
     ok: true,
     url,
-    close: () => new Promise(resolve => server.close(resolve))
+    close: () => {
+      clearInterval(sseWatcher);
+      for (const client of sseClients) client.end();
+      sseClients.clear();
+      server.closeAllConnections?.();
+      return new Promise(resolve => server.close(resolve));
+    }
   };
 }
 

@@ -2,7 +2,7 @@
 
 ## Current version
 
-`0.34.0`
+`0.35.0`
 
 ## How to run
 
@@ -44,6 +44,8 @@ Projection caches such as todo JSON are derived and should not be treated as tru
 
 ```text
 src/kernel.js          core world/witness helpers
+src/projectors-core.js browser-safe claim ops + projectors (served to the canvas client via /canvas-lib)
+src/canvas-undo.js     generic compensating-witness undo/redo (compensationClaims, undoState)
 src/witness-log.js     append-only witness persistence
 src/dsl.js             TOML-ish DSL parser/application
 src/widgets.js         widget projection, HTML rendering, browser engine
@@ -86,7 +88,10 @@ The source browser is intentionally VS-Code-like:
 - pan via Space-drag, middle-button, or Pan mode; resize via 8 handles on a single selected node (min 40x24)
 - snap-to-grid is perspective state, witnessed via `canvas.grid` (`hasGrid` relation), like the camera
 - a Thing may be placed multiple times in one perspective (`canvas.duplicate` / Ctrl+D, or re-place from the palette, which shows placed counts); connectors draw between every instance pair of the related Things
-- small changes (geometry, style, camera, grid) go through a browser-side outbox: coalesced latest-wins per target and flushed after 1.5s as ONE atomic `canvas.batch` witness; structural ops flush the outbox first, and perspective/actor switches and page hide force-flush (keepalive fetch). One debounce window = one witness = one future undo step.
+- small changes (geometry, style, camera, grid) go through a browser-side outbox: coalesced latest-wins per target and flushed after 1.5s as ONE atomic `canvas.batch` witness; structural ops flush the outbox first, and perspective/actor switches and page hide force-flush (keepalive fetch). One debounce window = one witness = one undo step.
+- the Timeline panel scrubs the full witness log with playback; past states are projected CLIENT-SIDE by the same `canvas-projection.js` the server uses, served at `/canvas-lib/*`. While scrubbed, the canvas is read-only (banner; all mutation paths inert) and keeps the user's live camera.
+- undo/redo (`canvas.undo`/`canvas.redo`, Ctrl+Z/Ctrl+Y) emit compensating witnesses scoped to the actor's last action in the current perspective; the stack derives from the log, so it survives reloads. Undo re-emits pre-target state and can clobber another actor's later edit to the same triple (documented; selective undo is a flagged follow-up).
+- `GET /api/events` (SSE) signals log growth to other tabs; incremental `GET /api/witnesses?offset=N` fetches are deliberately UNWITNESSED and SSE refreshes re-project client-side — re-adding read witnesses to either path recreates an infinite signal/read feedback loop.
 
 ## Things to be careful about
 

@@ -1,4 +1,18 @@
 
+## 0.35.0
+
+CANVAS-v2 phase 4: timeline, undo/redo, polish, live sync. This completes the CANVAS-v2 roadmap.
+
+- Witness Timeline panel on `/canvas`: scrub over the full witness log with a filterable event strip (All / canvas.*), playhead position, and a Play button that animates history as witness playback. While scrubbed back, the canvas is a read-only history view (banner + every mutation path disabled); Now/Escape returns to live.
+- Timeline scrubbing projects CLIENT-SIDE: kernel's pure projectors were extracted into browser-safe `src/projectors-core.js` (kernel re-exports them), and the real `canvas-projection.js` + `projectors-core.js` source files are served to the browser at `/canvas-lib/*` — the same projection code runs on the server and in the page. Zero network per scrub step.
+- Witness-aware undo/redo (`canvas.undo` / `canvas.redo`, Ctrl+Z / Ctrl+Y, toolbar buttons): scoped to the requesting actor's last action in the current perspective, implemented as compensating witnesses computed generically from the target's claims (`src/canvas-undo.js`). History stays append-only; the undo/redo stack derives purely from the log and survives reloads. One outbox batch = one undo step.
+- Live sync: `GET /api/events` (SSE) signals witness-log growth; other tabs refetch incrementally (`GET /api/witnesses?offset=N`, deliberately unwitnessed to prevent a read-witness feedback loop) and re-project client-side.
+- Multi-select polish: bulk color for N selected nodes (one batch witness via the outbox) and proportional group resize via corner handles on the selection bounding box.
+- World Browser no longer shows canvas view-state vocabulary (`geometry`/`style`/`camera`/`grid` tokens and their edges).
+- `canvas.thing.setTitle` and `canvas.unrelate` now record the perspective they were performed in, making them undoable in-perspective.
+- Server `close()` hardened to end SSE streams and idle connections.
+- 161 passing tests.
+
 ## 0.34.0
 
 CANVAS-v2 phase 3: browser-side outbox for batched small changes.

@@ -32,6 +32,28 @@ test("world graph projection returns deterministic positioned nodes and relation
   assert.equal(a.nodes.some(n => n.id === "widget_w" && n.badges.some(b => b.label === "owner:sourcery")), true);
 });
 
+test("world graph hides canvas view-state vocabulary nodes and edges", async () => {
+  const { createThing } = await import("../src/kernel.js");
+  const { createPerspective, placeThing, styleInstance, setCamera, setGrid } = await import("../src/canvas-processes.js");
+  const world = createWorld();
+  createThing(world, { actor: "adam", id: "aaron" });
+  createThing(world, { actor: "aaron", id: "customer" });
+  const perspective = createPerspective(world, { actor: "aaron", title: "Workspace" }).body.id;
+  const instance = placeThing(world, { actor: "aaron", perspective, thing: "customer", x: 10, y: 20 }).body.instance;
+  styleInstance(world, { actor: "aaron", perspective, instance, style: { color: "#fff" } });
+  setCamera(world, { actor: "aaron", perspective, x: 1, y: 2, zoom: 1 });
+  setGrid(world, { actor: "aaron", perspective, snap: true, size: 20 });
+
+  const graph = worldGraphProjection(world.allWitnesses());
+  for (const token of ["geometry", "style", "camera", "grid"]) {
+    assert.equal(graph.nodes.some(n => n.id === token), false, `unexpected node ${token}`);
+  }
+  for (const rel of ["hasGeometry", "hasStyle", "hasCamera", "hasGrid"]) {
+    assert.equal(graph.edges.some(e => e.rel === rel), false, `unexpected edge ${rel}`);
+  }
+  assert.equal(graph.nodes.some(n => n.id === perspective), true);
+});
+
 test("world graph groups nodes into context boxes and hides witness nodes by default", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });

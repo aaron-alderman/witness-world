@@ -60,6 +60,13 @@ test("canvas page renders with inspector sections and parseable scripts", async 
     assert.match(html, /keepalive/);
     assert.match(html, /queueMove/);
     assert.match(html, /FLUSH_DELAY_MS/);
+    assert.match(html, /timeline-panel/);
+    assert.match(html, /history-banner/);
+    assert.match(html, /undo-btn/);
+    assert.match(html, /canvas-lib/);
+    assert.match(html, /EventSource/);
+    assert.match(html, /groupResize/);
+    assert.match(html, /canvas\.undo/);
     const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
     assert(scripts.length > 0, "expected generated canvas scripts");
     for (const script of scripts) {
@@ -217,6 +224,130 @@ test("canvas.batch with a ghost instance applies nothing", async () => {
     const canvas = (await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent(perspective)}`, { headers: asAaron }).then(r => r.json())).canvas;
     assert.equal(canvas.instances.find(i => i.id === a).x, 0);
     assert.equal(canvas.perspective.camera, null);
+  } finally {
+    await server.close();
+  }
+});
+
+test("undo and redo work over HTTP; empty stack is a 400 with the failure witness", async () => {
+  const { server } = await startCanvasServer();
+  try {
+    const perspective = (await postProcess(server, "canvas.perspective.create", { title: "History" }).then(r => r.json())).witness.body.id;
+
+    const empty = await postProcess(server, "canvas.undo", { perspective });
+    assert.equal(empty.status, 400);
+    assert.equal((await empty.json()).witness.process, "canvas.undo.failed");
+
+    const a = (await postProcess(server, "canvas.createThing", { perspective, name: "A", x: 10, y: 10 }).then(r => r.json())).witness.body.instance;
+    const moved = await postProcess(server, "canvas.move", { perspective, instance: a, x: 300, y: 300 });
+    assert.equal(moved.status, 200);
+
+    const undone = await postProcess(server, "canvas.undo", { perspective });
+    assert.equal(undone.status, 200);
+    let canvas = (await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent(perspective)}`, { headers: asAaron }).then(r => r.json())).canvas;
+    assert.equal(canvas.instances.find(i => i.id === a).x, 10);
+
+    const redone = await postProcess(server, "canvas.redo", { perspective });
+    assert.equal(redone.status, 200);
+    canvas = (await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent(perspective)}`, { headers: asAaron }).then(r => r.json())).canvas;
+    assert.equal(canvas.instances.find(i => i.id === a).x, 300);
+  } finally {
+    await server.close();
+  }
+});
+
+test("canvas-lib serves the real projection modules and rejects unknown names", async () => {
+  const { world, server } = await startCanvasServer();
+  try {
+    const projection = await fetch(`${server.url}/canvas-lib/canvas-projection.js`);
+    assert.equal(projection.status, 200);
+    assert.match(projection.headers.get("content-type"), /text\/javascript/);
+    assert.match(await projection.text(), /from "\.\/projectors-core\.js"/);
+
+    const core = await fetch(`${server.url}/canvas-lib/projectors-core.js`);
+    assert.equal(core.status, 200);
+    assert.match(await core.text(), /currentRelations/);
+
+    assert.equal((await fetch(`${server.url}/canvas-lib/kernel.js`)).status, 404);
+    assert.equal((await fetch(`${server.url}/canvas-lib/..%2Fpackage.json`)).status, 404);
+    assert(world.allWitnesses().some(w => w.process === "backend.readCanvasLib"));
+  } finally {
+    await server.close();
+  }
+});
+
+test("witness offset fetches return the tail and are not themselves witnessed", async () => {
+  const { world, server } = await startCanvasServer();
+  try {
+    const full = await fetch(`${server.url}/api/witnesses`, { headers: asAaron }).then(r => r.json());
+    assert(full.total > 0);
+
+    const readsBefore = world.allWitnesses().filter(w => w.process === "backend.readWitnesses").length;
+    const offset = full.total - 2;
+    const tail = await fetch(`${server.url}/api/witnesses?offset=${offset}`, { headers: asAaron }).then(r => r.json());
+    assert.equal(tail.offset, offset);
+    assert(tail.witnesses.length >= 2);
+    assert.equal(tail.witnesses.length, tail.total - offset);
+    const readsAfter = world.allWitnesses().filter(w => w.process === "backend.readWitnesses").length;
+    assert.equal(readsAfter, readsBefore);
+  } finally {
+    await server.close();
+  }
+});
+
+test("SSE stream signals witness growth and the server still closes cleanly", async () => {
+  const { server } = await startCanvasServer();
+  const controller = new AbortController();
+  try {
+    const response = await fetch(`${server.url}/api/events`, { headers: asAaron, signal: controller.signal });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type"), /text\/event-stream/);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    let received = "";
+    const readFrame = async () => {
+      while (!received.includes("\n\n")) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        received += decoder.decode(value, { stream: true });
+      }
+      const frame = received.slice(0, received.indexOf("\n\n"));
+      received = received.slice(received.indexOf("\n\n") + 2);
+      return frame;
+    };
+
+    const initial = await readFrame();
+    assert.match(initial, /data: \{"count":\d+\}/);
+
+    await postProcess(server, "canvas.perspective.create", { title: "Streamed" });
+    const update = await readFrame();
+    assert.match(update, /data: \{"count":\d+\}/);
+
+    controller.abort();
+  } catch (err) {
+    if (err?.name !== "AbortError") throw err;
+  } finally {
+    await server.close();
+  }
+});
+
+test("client projection module output matches the server canvas API", async () => {
+  const { world, server } = await startCanvasServer();
+  try {
+    const perspective = (await postProcess(server, "canvas.perspective.create", { title: "Parity" }).then(r => r.json())).witness.body.id;
+    const a = (await postProcess(server, "canvas.createThing", { perspective, name: "A", x: 10, y: 10 }).then(r => r.json())).witness.body;
+    const b = (await postProcess(server, "canvas.createThing", { perspective, name: "B", x: 200, y: 200 }).then(r => r.json())).witness.body;
+    await postProcess(server, "canvas.relate", { from: a.thing, rel: "references", to: b.thing, perspective });
+
+    const served = await fetch(`${server.url}/canvas-lib/canvas-projection.js`).then(r => r.text());
+    assert(served.length > 0);
+    const { canvasProjection } = await import("../src/canvas-projection.js");
+    const { publicWitnessesFor } = await import("../src/projections.js");
+    const local = canvasProjection(publicWitnessesFor(world.allWitnesses(), "aaron"), perspective);
+
+    const api = (await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent(perspective)}`, { headers: asAaron }).then(r => r.json())).canvas;
+    assert.deepEqual(local, api);
   } finally {
     await server.close();
   }

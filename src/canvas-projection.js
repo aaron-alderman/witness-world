@@ -1,4 +1,4 @@
-import { projectors } from "./kernel.js";
+import { projectors } from "./projectors-core.js";
 
 const DEFAULT_GEOMETRY = { x: 40, y: 40, w: 160, h: 56 };
 const CANVAS_VOCABULARY_RELS = new Set(["contains", "proxies", "cloneOf", "hasGeometry", "hasStyle", "hasCamera", "hasGrid", "hasModuleKind", "hasTitle", "hasDone"]);

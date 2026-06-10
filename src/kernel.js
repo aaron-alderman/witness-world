@@ -1,5 +1,8 @@
 import crypto from "node:crypto";
 import { WitnessLog } from "./witness-log.js";
+import { thing, relation, retract, projectors, stableStringify } from "./projectors-core.js";
+
+export { thing, relation, retract, projectors };
 
 const deepFreeze = value => {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
@@ -9,14 +12,7 @@ const deepFreeze = value => {
   return value;
 };
 
-const canonical = value => JSON.stringify(value, Object.keys(value).sort());
 const hash = value => crypto.createHash("sha256").update(stableStringify(value)).digest("hex");
-
-function stableStringify(value) {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(",")}}`;
-}
 
 export function createWorld({ genesis = { system: "witness-world", version: "0.1.0" }, witnessLog = null, witnessLogPath = null } = {}) {
   const log = witnessLog ?? new WitnessLog({ file: witnessLogPath });
@@ -77,88 +73,6 @@ function makeWitness({ cause, process, actor, claims, body }) {
   const id = `w_${hash(payload).slice(0, 24)}`;
   return deepFreeze({ id, ...payload });
 }
-
-export const thing = id => ({ op: "thing", id });
-export const relation = (from, rel, to, meta = {}) => ({ op: "relation", from, rel, to, meta });
-export const retract = (from, rel, to, meta = {}) => ({ op: "retract", from, rel, to, meta });
-
-export const projectors = {
-  things(witnesses) {
-    const out = new Set();
-    for (const w of witnesses) {
-      for (const c of w.claims) {
-        if (c.op === "thing") out.add(c.id);
-      }
-    }
-    return out;
-  },
-
-  relations(witnesses) {
-    const rows = [];
-    for (const w of witnesses) {
-      for (const c of w.claims) {
-        if (c.op === "relation") rows.push({ ...c, witness: w.id });
-      }
-    }
-    return rows;
-  },
-
-  currentRelations(witnesses) {
-    const map = new Map();
-    for (const w of witnesses) {
-      for (const c of w.claims) {
-        if (c.op !== "relation" && c.op !== "retract") continue;
-        const key = `${c.from}\u0000${c.rel}\u0000${c.to}`;
-        if (c.op === "relation") map.set(key, { ...c, witness: w.id });
-        if (c.op === "retract") map.delete(key);
-      }
-    }
-    return [...map.values()];
-  },
-
-  owners(witnesses) {
-    const owners = new Map();
-    for (const w of witnesses) {
-      for (const c of w.claims) {
-        if (c.op === "relation" && c.rel === "owns") owners.set(c.to, c.from);
-      }
-    }
-    return owners;
-  },
-
-  main(witnesses) {
-    let main = null;
-    for (const w of witnesses) {
-      for (const c of w.claims) {
-        if (c.op === "relation" && c.from === "main" && c.rel === "pointsTo") main = c.to;
-      }
-    }
-    return main;
-  },
-
-  stewards(witnesses) {
-    const map = new Map();
-    for (const w of witnesses) {
-      for (const c of w.claims) {
-        if (c.op === "relation" && c.rel === "stewards") {
-          if (!map.has(c.to)) map.set(c.to, new Set());
-          map.get(c.to).add(c.from);
-        }
-      }
-    }
-    return map;
-  },
-
-  proxies(witnesses) {
-    const map = new Map();
-    for (const w of witnesses) {
-      for (const c of w.claims) {
-        if (c.op === "relation" && c.rel === "proxies") map.set(c.from, c.to);
-      }
-    }
-    return map;
-  }
-};
 
 export function canAcceptInto(world, actor, target) {
   const owners = world.project(projectors.owners);

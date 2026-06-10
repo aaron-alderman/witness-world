@@ -10,7 +10,16 @@ const CANVAS_CSS = `
   button.mode-active { border-style: inset; background: #c0d4ec; }
   #status { margin-left: auto; color: #444; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .canvas-shell { display: flex; flex: 1; min-height: 0; }
-  .canvas-stage { position: relative; flex: 1; min-width: 0; border: 2px inset #fff; margin: 6px; background: #f4f4f1; }
+  .canvas-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+  .canvas-stage { position: relative; flex: 1; min-width: 0; min-height: 0; border: 2px inset #fff; margin: 6px; background: #f4f4f1; }
+  #history-banner { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 5; background: #fff8d8; border: 1px solid #b89c2a; padding: 3px 8px; display: flex; align-items: center; gap: 8px; box-shadow: 1px 1px 4px rgba(0,0,0,0.25); }
+  #timeline-panel { flex: none; margin: 0 6px 6px; padding: 6px; background: #d4d0c8; border: 2px outset #fff; }
+  .timeline-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  #timeline-slider { flex: 1; }
+  #timeline-strip { display: flex; gap: 3px; overflow-x: auto; padding-bottom: 4px; }
+  .timeline-tick { flex: none; font-size: 10px; padding: 1px 5px; background: #e8e6e1; border: 1px solid #999; cursor: pointer; white-space: nowrap; }
+  .timeline-tick.tick-canvas { background: #c0d4ec; }
+  .timeline-older { flex: none; color: #666; font-style: italic; padding: 1px 5px; }
   #canvas-surface { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: default; }
   #overlay-input { position: absolute; display: none; z-index: 10; min-width: 140px; border: 1px solid #336; padding: 3px 5px; box-shadow: 2px 2px 4px rgba(0,0,0,0.35); }
   aside.canvas-inspector { width: 280px; flex: none; margin: 6px 6px 6px 0; padding: 8px; background: #d4d0c8; border: 2px outset #fff; overflow-y: auto; }
@@ -28,10 +37,11 @@ const CANVAS_CSS = `
   .danger { color: #7a0000; }
 `;
 
-const CANVAS_CLIENT_JS = `(() => {
+const CANVAS_CLIENT_JS = `(async () => {
   const actors = window.__CANVAS_ACTORS__ || [];
   const MIN_W = 40, MIN_H = 24;
   const FLUSH_DELAY_MS = 1500;
+  const PLAY_INTERVAL_MS = 150;
   const el = id => document.getElementById(id);
   const canvas = el('canvas-surface');
   const ctx = canvas.getContext('2d');
@@ -52,12 +62,16 @@ const CANVAS_CLIENT_JS = `(() => {
     spaceDown: false,
     drag: null,
     rubber: null,
-    dirty: true
+    dirty: true,
+    history: { witnesses: [], playhead: null, filter: 'all', playing: null, open: false }
   };
   const outbox = { perspective: '', moves: new Map(), styles: new Map(), camera: null, grid: null };
   let flushTimer = null;
   let flushInFlight = null;
   let overlayCommit = null;
+  let projectionModule = null;
+
+  const isLive = () => state.history.playhead === null;
 
   const setStatus = text => { statusEl.textContent = text || ''; };
   const markDirty = () => { state.dirty = true; };
@@ -79,6 +93,7 @@ const CANVAS_CLIENT_JS = `(() => {
   };
 
   async function post(process, params) {
+    if (!isLive()) { setStatus('read-only: history view'); return null; }
     if (process !== 'canvas.batch') await flushOutbox(true);
     const response = await fetch('/api/canvas/process', {
       method: 'POST',
@@ -116,21 +131,20 @@ const CANVAS_CLIENT_JS = `(() => {
     }
   }
 
-  async function loadCanvas() {
-    if (!state.perspective) { state.model = null; renderInspector(); markDirty(); return; }
-    const response = await fetch('/api/canvas?perspective=' + encodeURIComponent(state.perspective), { headers: headers() });
-    if (!response.ok) { state.model = null; setStatus('perspective not found'); renderInspector(); markDirty(); return; }
-    const body = await response.json();
-    state.model = body.canvas;
-    if (state.cameraPerspective !== state.perspective) {
-      state.cameraPerspective = state.perspective;
-      const camera = state.model.perspective.camera;
-      if (camera) state.camera = { x: camera.x || 0, y: camera.y || 0, zoom: camera.zoom || 1 };
-      else state.camera = { x: 0, y: 0, zoom: 1 };
+  function adoptModel(model, adoptCamera) {
+    state.model = model;
+    if (!model) { updateUndoButtons(); renderInspector(); markDirty(); return; }
+    if (adoptCamera) {
+      if (state.cameraPerspective !== state.perspective) {
+        state.cameraPerspective = state.perspective;
+        const camera = model.perspective.camera;
+        if (camera) state.camera = { x: camera.x || 0, y: camera.y || 0, zoom: camera.zoom || 1 };
+        else state.camera = { x: 0, y: 0, zoom: 1 };
+      }
+      const grid = model.perspective.grid;
+      if (grid && !outbox.grid) state.grid = { snap: grid.snap === true, size: grid.size || 20 };
+      el('snap-toggle-btn').classList.toggle('mode-active', state.grid.snap);
     }
-    const grid = state.model.perspective.grid;
-    if (grid && !outbox.grid) state.grid = { snap: grid.snap === true, size: grid.size || 20 };
-    el('snap-toggle-btn').classList.toggle('mode-active', state.grid.snap);
     if (outbox.perspective === state.perspective) {
       for (const id of [...outbox.moves.keys()]) {
         const node = findInstance(id);
@@ -147,8 +161,17 @@ const CANVAS_CLIENT_JS = `(() => {
     }
     state.selected = new Set([...state.selected].filter(id => findInstance(id)));
     if (state.selectedConnector && !findConnector(state.selectedConnector)) state.selectedConnector = null;
+    updateUndoButtons();
     renderInspector();
     markDirty();
+  }
+
+  async function loadCanvas() {
+    if (!state.perspective) { adoptModel(null, false); return; }
+    const response = await fetch('/api/canvas?perspective=' + encodeURIComponent(state.perspective), { headers: headers() });
+    if (!response.ok) { setStatus('perspective not found'); adoptModel(null, false); return; }
+    const body = await response.json();
+    adoptModel(body.canvas, true);
   }
 
   const refresh = () => loadCanvas();
@@ -177,6 +200,7 @@ const CANVAS_CLIENT_JS = `(() => {
   }
 
   function queueMove(id, geometry) {
+    if (!isLive()) return;
     outbox.perspective = state.perspective;
     outbox.moves.set(id, geometry);
     scheduleFlush();
@@ -184,6 +208,7 @@ const CANVAS_CLIENT_JS = `(() => {
   }
 
   function queueStyle(id, style) {
+    if (!isLive()) return;
     outbox.perspective = state.perspective;
     outbox.styles.set(id, style);
     scheduleFlush();
@@ -191,6 +216,7 @@ const CANVAS_CLIENT_JS = `(() => {
   }
 
   function queueCamera() {
+    if (!isLive()) return;
     if (!state.perspective || !state.actor) return;
     outbox.perspective = state.perspective;
     outbox.camera = { x: state.camera.x, y: state.camera.y, zoom: state.camera.zoom };
@@ -199,6 +225,7 @@ const CANVAS_CLIENT_JS = `(() => {
   }
 
   function queueGrid() {
+    if (!isLive()) return;
     outbox.perspective = state.perspective;
     outbox.grid = { snap: state.grid.snap, size: state.grid.size };
     scheduleFlush();
@@ -239,6 +266,105 @@ const CANVAS_CLIENT_JS = `(() => {
     });
   }
 
+  async function fetchWitnesses() {
+    const offset = state.history.witnesses.length;
+    const response = await fetch('/api/witnesses?offset=' + offset, { headers: headers() });
+    if (!response.ok) return;
+    const body = await response.json();
+    state.history.witnesses = state.history.witnesses.concat(body.witnesses);
+  }
+
+  function historyProjection(n) {
+    if (!projectionModule || !state.perspective) return null;
+    return projectionModule.canvasProjection(state.history.witnesses.slice(0, n), state.perspective);
+  }
+
+  function setHistoryBanner() {
+    const banner = el('history-banner');
+    if (isLive()) { banner.hidden = true; return; }
+    banner.hidden = false;
+    el('history-label').textContent = 'history view ' + state.history.playhead + '/' + state.history.witnesses.length;
+  }
+
+  function updateUndoButtons() {
+    const enabled = isLive() && !!state.actor && !!state.perspective;
+    el('undo-btn').disabled = !enabled;
+    el('redo-btn').disabled = !enabled;
+  }
+
+  function stopPlayback() {
+    if (state.history.playing) {
+      clearInterval(state.history.playing);
+      state.history.playing = null;
+      el('timeline-play-btn').textContent = 'Play';
+    }
+  }
+
+  function scrubTo(n) {
+    const total = state.history.witnesses.length;
+    const clamped = Math.max(0, Math.min(total, Math.round(n)));
+    if (clamped >= total) { exitHistory(); return; }
+    state.history.playhead = clamped;
+    adoptModel(historyProjection(clamped), false);
+    setHistoryBanner();
+    renderTimeline();
+  }
+
+  async function exitHistory() {
+    stopPlayback();
+    state.history.playhead = null;
+    setHistoryBanner();
+    renderTimeline();
+    await loadCanvas();
+  }
+
+  function renderTimeline() {
+    if (!state.history.open) return;
+    const witnesses = state.history.witnesses;
+    const position = state.history.playhead === null ? witnesses.length : state.history.playhead;
+    const slider = el('timeline-slider');
+    slider.max = String(witnesses.length);
+    slider.value = String(position);
+    el('timeline-pos').textContent = position + '/' + witnesses.length;
+    const strip = el('timeline-strip');
+    strip.innerHTML = '';
+    const indexed = [];
+    for (let i = 0; i < witnesses.length; i++) {
+      if (state.history.filter === 'canvas' && witnesses[i].process.indexOf('canvas.') !== 0) continue;
+      indexed.push(i);
+    }
+    const MAX_TICKS = 400;
+    const start = Math.max(0, indexed.length - MAX_TICKS);
+    if (start > 0) {
+      const older = document.createElement('span');
+      older.className = 'timeline-older';
+      older.textContent = '... ' + start + ' older';
+      strip.appendChild(older);
+    }
+    for (const i of indexed.slice(start)) {
+      const w = witnesses[i];
+      const tick = document.createElement('button');
+      tick.type = 'button';
+      tick.className = 'timeline-tick' + (w.process.indexOf('canvas.') === 0 ? ' tick-canvas' : '');
+      tick.textContent = w.process;
+      tick.title = w.actor + ' ' + w.id;
+      tick.addEventListener('click', () => scrubTo(i + 1));
+      strip.appendChild(tick);
+    }
+    strip.scrollLeft = strip.scrollWidth;
+  }
+
+  async function toggleTimeline() {
+    if (!projectionModule) { setStatus('projection module unavailable - timeline disabled'); return; }
+    await flushOutbox(true);
+    await fetchWitnesses();
+    state.history.open = !state.history.open;
+    el('timeline-panel').hidden = !state.history.open;
+    el('timeline-btn').classList.toggle('mode-active', state.history.open);
+    if (!state.history.open && !isLive()) { await exitHistory(); return; }
+    renderTimeline();
+  }
+
   function resize() {
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.max(1, Math.round(canvas.clientWidth * dpr));
@@ -277,6 +403,37 @@ const CANVAS_CLIENT_JS = `(() => {
     const tolerance = 6 / state.camera.zoom;
     for (const h of handlePositions(n)) {
       if (Math.abs(wx - h[1]) <= tolerance && Math.abs(wy - h[2]) <= tolerance) return h[0];
+    }
+    return null;
+  }
+
+  function selectionBounds() {
+    let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+    for (const id of state.selected) {
+      const n = findInstance(id);
+      if (!n) continue;
+      left = Math.min(left, n.x);
+      top = Math.min(top, n.y);
+      right = Math.max(right, n.x + n.w);
+      bottom = Math.max(bottom, n.y + n.h);
+    }
+    if (left === Infinity) return null;
+    return { x: left, y: top, w: right - left, h: bottom - top };
+  }
+
+  function groupCorners(bounds) {
+    return [
+      ['nw', bounds.x, bounds.y],
+      ['ne', bounds.x + bounds.w, bounds.y],
+      ['se', bounds.x + bounds.w, bounds.y + bounds.h],
+      ['sw', bounds.x, bounds.y + bounds.h]
+    ];
+  }
+
+  function hitGroupCorner(bounds, wx, wy) {
+    const tolerance = 7 / state.camera.zoom;
+    for (const c of groupCorners(bounds)) {
+      if (Math.abs(wx - c[1]) <= tolerance && Math.abs(wy - c[2]) <= tolerance) return c[0];
     }
     return null;
   }
@@ -340,6 +497,26 @@ const CANVAS_CLIENT_JS = `(() => {
     for (const h of handlePositions(n)) {
       ctx.beginPath();
       ctx.rect(h[1] - side / 2, h[2] - side / 2, side, side);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = '#0a52c8';
+      ctx.stroke();
+    }
+  }
+
+  function drawGroupBounds(bounds) {
+    ctx.beginPath();
+    ctx.rect(bounds.x, bounds.y, bounds.w, bounds.h);
+    ctx.setLineDash([6 / state.camera.zoom, 4 / state.camera.zoom]);
+    ctx.lineWidth = 1.2 / state.camera.zoom;
+    ctx.strokeStyle = '#0a52c8';
+    ctx.stroke();
+    ctx.setLineDash([]);
+    const side = 8 / state.camera.zoom;
+    ctx.lineWidth = 1 / state.camera.zoom;
+    for (const c of groupCorners(bounds)) {
+      ctx.beginPath();
+      ctx.rect(c[1] - side / 2, c[2] - side / 2, side, side);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
       ctx.strokeStyle = '#0a52c8';
@@ -429,7 +606,11 @@ const CANVAS_CLIENT_JS = `(() => {
     }
     for (const n of state.model.instances) drawNode(n);
     const sole = soleSelected();
-    if (sole) drawHandles(sole);
+    if (sole && isLive()) drawHandles(sole);
+    if (selectionSize() > 1 && isLive()) {
+      const bounds = selectionBounds();
+      if (bounds) drawGroupBounds(bounds);
+    }
     if (state.drag && state.drag.kind === 'marquee') drawMarquee();
   }
 
@@ -501,7 +682,7 @@ const CANVAS_CLIENT_JS = `(() => {
     if (event.button !== 0) return;
     const node = hitInstance(w.x, w.y);
     if (state.mode === 'connect') {
-      if (!node) return;
+      if (!node || !isLive()) return;
       const c = center(node);
       state.drag = { kind: 'rubber', from: node };
       state.rubber = { x1: c.x, y1: c.y, x2: w.x, y2: w.y };
@@ -509,10 +690,36 @@ const CANVAS_CLIENT_JS = `(() => {
       return;
     }
     const sole = soleSelected();
-    if (sole) {
+    if (sole && isLive()) {
       const handle = hitHandle(sole, w.x, w.y);
       if (handle) {
         state.drag = { kind: 'resize', id: sole.id, handle: handle, startRect: { x: sole.x, y: sole.y, w: sole.w, h: sole.h }, moved: false };
+        return;
+      }
+    }
+    if (selectionSize() > 1 && isLive()) {
+      const bounds = selectionBounds();
+      const corner = bounds ? hitGroupCorner(bounds, w.x, w.y) : null;
+      if (corner) {
+        const origins = {};
+        for (const id of state.selected) {
+          const member = findInstance(id);
+          if (member) origins[id] = { x: member.x, y: member.y, w: member.w, h: member.h };
+        }
+        state.drag = {
+          kind: 'groupResize',
+          corner: corner,
+          anchor: {
+            x: corner.indexOf('w') >= 0 ? bounds.x + bounds.w : bounds.x,
+            y: corner.indexOf('n') >= 0 ? bounds.y + bounds.h : bounds.y
+          },
+          startCorner: {
+            x: corner.indexOf('w') >= 0 ? bounds.x : bounds.x + bounds.w,
+            y: corner.indexOf('n') >= 0 ? bounds.y : bounds.y + bounds.h
+          },
+          origins: origins,
+          moved: false
+        };
         return;
       }
     }
@@ -520,16 +727,19 @@ const CANVAS_CLIENT_JS = `(() => {
       if (event.shiftKey) {
         toggleSelected(node.id);
         state.drag = null;
-      } else if (state.selected.has(node.id) && selectionSize() > 1) {
+      } else if (isLive() && state.selected.has(node.id) && selectionSize() > 1) {
         const origins = {};
         for (const id of state.selected) {
           const member = findInstance(id);
           if (member) origins[id] = { x: member.x, y: member.y };
         }
         state.drag = { kind: 'group', anchorId: node.id, origins: origins, startWX: w.x, startWY: w.y, moved: false };
-      } else {
+      } else if (isLive()) {
         selectOnly(node.id);
         state.drag = { kind: 'node', id: node.id, offsetX: w.x - node.x, offsetY: w.y - node.y, moved: false };
+      } else {
+        selectOnly(node.id);
+        state.drag = null;
       }
     } else {
       const connector = hitConnector(w.x, w.y);
@@ -585,6 +795,22 @@ const CANVAS_CLIENT_JS = `(() => {
       if (drag.handle.includes('n')) top = Math.min(snapValue(w.y), bottom - MIN_H);
       node.x = left; node.y = top; node.w = right - left; node.h = bottom - top;
       drag.moved = true;
+    } else if (drag.kind === 'groupResize') {
+      const cornerX = snapValue(w.x), cornerY = snapValue(w.y);
+      const denomX = drag.startCorner.x - drag.anchor.x;
+      const denomY = drag.startCorner.y - drag.anchor.y;
+      const sx = denomX ? Math.max(0.05, (cornerX - drag.anchor.x) / denomX) : 1;
+      const sy = denomY ? Math.max(0.05, (cornerY - drag.anchor.y) / denomY) : 1;
+      for (const id of Object.keys(drag.origins)) {
+        const member = findInstance(id);
+        if (!member) continue;
+        const o = drag.origins[id];
+        member.x = Math.round(drag.anchor.x + (o.x - drag.anchor.x) * sx);
+        member.y = Math.round(drag.anchor.y + (o.y - drag.anchor.y) * sy);
+        member.w = Math.max(MIN_W, Math.round(o.w * sx));
+        member.h = Math.max(MIN_H, Math.round(o.h * sy));
+      }
+      drag.moved = true;
     } else if (drag.kind === 'marquee') {
       drag.x2 = w.x;
       drag.y2 = w.y;
@@ -612,7 +838,7 @@ const CANVAS_CLIENT_JS = `(() => {
         queueMove(node.id, { x: node.x, y: node.y, w: node.w, h: node.h });
         renderInspector();
       }
-    } else if (drag.kind === 'group' && drag.moved) {
+    } else if ((drag.kind === 'group' || drag.kind === 'groupResize') && drag.moved) {
       for (const id of Object.keys(drag.origins)) {
         const member = findInstance(id);
         if (member) queueMove(member.id, { x: member.x, y: member.y, w: member.w, h: member.h });
@@ -659,6 +885,7 @@ const CANVAS_CLIENT_JS = `(() => {
 
   canvas.addEventListener('dblclick', event => {
     if (!state.model) return;
+    if (!isLive()) { setStatus('read-only: history view'); return; }
     const { px, py } = pointerPosition(event);
     const w = screenToWorld(px, py);
     if (hitInstance(w.x, w.y)) return;
@@ -678,17 +905,34 @@ const CANVAS_CLIENT_JS = `(() => {
     }
     if ((event.ctrlKey || event.metaKey) && (event.key === 'd' || event.key === 'D')) {
       event.preventDefault();
-      if (state.model) await duplicateSelected();
+      if (state.model && isLive()) await duplicateSelected();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && (event.key === 'z' || event.key === 'Z')) {
+      event.preventDefault();
+      if (state.model && isLive()) {
+        const result = await post('canvas.undo', { perspective: state.perspective });
+        if (result) await refresh();
+      }
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && (event.key === 'y' || event.key === 'Y')) {
+      event.preventDefault();
+      if (state.model && isLive()) {
+        const result = await post('canvas.redo', { perspective: state.perspective });
+        if (result) await refresh();
+      }
       return;
     }
     if (event.key === 'Escape') {
+      if (!isLive()) { exitHistory(); return; }
       clearSelection();
       setMode('select');
       hideOverlay();
       renderInspector();
       markDirty();
     }
-    if ((event.key === 'Delete' || event.key === 'Backspace') && state.model) {
+    if ((event.key === 'Delete' || event.key === 'Backspace') && state.model && isLive()) {
       if (selectionSize() > 1) {
         await post('canvas.removeMany', { perspective: state.perspective, instances: [...state.selected] });
         clearSelection();
@@ -699,7 +943,7 @@ const CANVAS_CLIENT_JS = `(() => {
         await refresh();
       } else if (state.selectedConnector) {
         const c = findConnector(state.selectedConnector);
-        if (c) await post('canvas.unrelate', { from: c.from, rel: c.rel, to: c.to });
+        if (c) await post('canvas.unrelate', { from: c.from, rel: c.rel, to: c.to, perspective: state.perspective });
         clearSelection();
         await refresh();
       }
@@ -750,6 +994,16 @@ const CANVAS_CLIENT_JS = `(() => {
       summary.className = 'prop-id';
       summary.textContent = count + ' nodes selected';
       thingProps.appendChild(summary);
+      const bulkColor = textInput('#ffcc00', value => {
+        for (const id of state.selected) {
+          const member = findInstance(id);
+          if (!member) continue;
+          member.style = Object.assign({}, member.style, { color: value });
+          queueStyle(id, member.style);
+        }
+        markDirty();
+      }, 'color');
+      projectionProps.appendChild(propRow('Color all', bulkColor));
       const removeAll = document.createElement('button');
       removeAll.textContent = 'Remove all (' + count + ')';
       removeAll.className = 'danger';
@@ -768,7 +1022,7 @@ const CANVAS_CLIENT_JS = `(() => {
         thingProps.appendChild(id);
         thingProps.appendChild(propRow('Name', textInput(node.label, async value => {
           if (!value.trim()) return;
-          await post('canvas.thing.setTitle', { thing: node.thing, title: value });
+          await post('canvas.thing.setTitle', { thing: node.thing, title: value, perspective: state.perspective });
           await refresh();
         })));
         for (const r of node.relations || []) {
@@ -827,7 +1081,7 @@ const CANVAS_CLIENT_JS = `(() => {
         remove.textContent = 'Delete relation';
         remove.className = 'danger';
         remove.addEventListener('click', async () => {
-          await post('canvas.unrelate', { from: c.from, rel: c.rel, to: c.to });
+          await post('canvas.unrelate', { from: c.from, rel: c.rel, to: c.to, perspective: state.perspective });
           clearSelection();
           await refresh();
         });
@@ -860,6 +1114,11 @@ const CANVAS_CLIENT_JS = `(() => {
     if (!state.model.availableThings.length) {
       palette.innerHTML = '<div class="inspector-empty">No things yet.</div>';
     }
+    if (!isLive()) {
+      for (const section of [thingProps, projectionProps, palette]) {
+        for (const control of section.querySelectorAll('input, button')) control.disabled = true;
+      }
+    }
   }
 
   function initToolbar() {
@@ -877,8 +1136,12 @@ const CANVAS_CLIENT_JS = `(() => {
     }
     actorSelect.value = state.actor;
     actorSelect.addEventListener('change', async () => {
+      stopPlayback();
+      state.history.playhead = null;
+      setHistoryBanner();
       await flushOutbox(true);
       state.actor = actorSelect.value;
+      state.history.witnesses = [];
       if (state.actor) {
         localStorage.setItem('witness.actor', state.actor);
         await fetch('/api/session', { method: 'POST', headers: headers(), body: JSON.stringify({ actor: state.actor }) });
@@ -886,15 +1149,21 @@ const CANVAS_CLIENT_JS = `(() => {
       } else {
         localStorage.removeItem('witness.actor');
       }
+      if (state.history.open) { await fetchWitnesses(); renderTimeline(); }
+      updateUndoButtons();
       markDirty();
     });
 
     el('perspective-select').addEventListener('change', async event => {
+      stopPlayback();
+      state.history.playhead = null;
+      setHistoryBanner();
       await flushOutbox(true);
       state.perspective = event.target.value;
       localStorage.setItem('witness.canvasPerspective', state.perspective);
       clearSelection();
       await loadCanvas();
+      renderTimeline();
     });
 
     el('new-perspective-btn').addEventListener('click', () => {
@@ -924,9 +1193,41 @@ const CANVAS_CLIENT_JS = `(() => {
     el('mode-pan-btn').addEventListener('click', () => setMode('pan'));
     el('snap-toggle-btn').addEventListener('click', () => {
       if (!state.model) { setStatus('choose a perspective first'); return; }
+      if (!isLive()) { setStatus('read-only: history view'); return; }
       state.grid.snap = !state.grid.snap;
       el('snap-toggle-btn').classList.toggle('mode-active', state.grid.snap);
       queueGrid();
+    });
+
+    el('undo-btn').addEventListener('click', async () => {
+      if (!state.model || !isLive()) return;
+      const result = await post('canvas.undo', { perspective: state.perspective });
+      if (result) await refresh();
+    });
+    el('redo-btn').addEventListener('click', async () => {
+      if (!state.model || !isLive()) return;
+      const result = await post('canvas.redo', { perspective: state.perspective });
+      if (result) await refresh();
+    });
+
+    el('timeline-btn').addEventListener('click', () => toggleTimeline());
+    el('timeline-now-btn').addEventListener('click', () => exitHistory());
+    el('history-now-btn').addEventListener('click', () => exitHistory());
+    el('timeline-slider').addEventListener('input', event => scrubTo(Number(event.target.value)));
+    el('timeline-filter-btn').addEventListener('click', () => {
+      state.history.filter = state.history.filter === 'all' ? 'canvas' : 'all';
+      el('timeline-filter-btn').textContent = state.history.filter === 'all' ? 'All' : 'canvas.*';
+      renderTimeline();
+    });
+    el('timeline-play-btn').addEventListener('click', () => {
+      if (!state.history.open) return;
+      if (state.history.playing) { stopPlayback(); return; }
+      el('timeline-play-btn').textContent = 'Stop';
+      if (state.history.playhead === null) state.history.playhead = 0;
+      state.history.playing = setInterval(() => {
+        const current = state.history.playhead === null ? state.history.witnesses.length : state.history.playhead;
+        scrubTo(current + 1);
+      }, PLAY_INTERVAL_MS);
     });
   }
 
@@ -935,10 +1236,30 @@ const CANVAS_CLIENT_JS = `(() => {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') flushKeepalive();
   });
+  try {
+    projectionModule = await import('/canvas-lib/canvas-projection.js');
+  } catch (e) {
+    setStatus('projection module failed to load - timeline disabled');
+  }
   initToolbar();
   setMode('select');
   resize();
-  loadPerspectives().then(loadCanvas);
+  updateUndoButtons();
+  await loadPerspectives();
+  await loadCanvas();
+  try {
+    const events = new EventSource('/api/events');
+    events.onmessage = async () => {
+      await fetchWitnesses();
+      if (isLive()) {
+        if (state.perspective && projectionModule) {
+          const projected = projectionModule.canvasProjection(state.history.witnesses, state.perspective);
+          if (projected) adoptModel(projected, false);
+        }
+      }
+      renderTimeline();
+    };
+  } catch (e) {}
   requestAnimationFrame(frame);
 })();`;
 
@@ -963,12 +1284,31 @@ export function renderCanvasPage({ actors = [] } = {}) {
   <button id="mode-pan-btn" type="button">Pan</button>
   <button id="snap-toggle-btn" type="button">Snap</button>
   <button id="new-thing-btn" type="button">New Thing</button>
+  <button id="undo-btn" type="button">Undo</button>
+  <button id="redo-btn" type="button">Redo</button>
+  <button id="timeline-btn" type="button">Timeline</button>
   <span id="status"></span>
 </header>
 <div class="canvas-shell">
-  <div class="canvas-stage" id="canvas-stage">
-    <canvas id="canvas-surface"></canvas>
-    <input id="overlay-input" type="text" autocomplete="off">
+  <div class="canvas-main">
+    <div class="canvas-stage" id="canvas-stage">
+      <canvas id="canvas-surface"></canvas>
+      <input id="overlay-input" type="text" autocomplete="off">
+      <div id="history-banner" hidden>
+        <span id="history-label"></span>
+        <button id="history-now-btn" type="button">Now</button>
+      </div>
+    </div>
+    <div id="timeline-panel" hidden>
+      <div class="timeline-controls">
+        <button id="timeline-play-btn" type="button">Play</button>
+        <input id="timeline-slider" type="range" min="0" max="0" value="0">
+        <span id="timeline-pos"></span>
+        <button id="timeline-filter-btn" type="button">All</button>
+        <button id="timeline-now-btn" type="button">Now</button>
+      </div>
+      <div id="timeline-strip"></div>
+    </div>
   </div>
   <aside class="canvas-inspector">
     <h2>Thing properties</h2>

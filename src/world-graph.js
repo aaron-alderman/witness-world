@@ -70,6 +70,8 @@ export function worldGraphProjection(witnesses, { includeWitnesses = false, limi
     // Frontend steps are rendered from their structured semantic paths below.
     // The raw relation target is legacy/storage identity and must not leak into the view.
     if (r.rel === "hasFrontendStep") continue;
+    // Canvas view-state is perspective-local; the geometry/style/camera/grid tokens are not world objects.
+    if (r.rel === "hasGeometry" || r.rel === "hasStyle" || r.rel === "hasCamera" || r.rel === "hasGrid") continue;
     if (r.rel === "hasModuleKind") {
       addNode(r.from, inferKind(r.from, relations), r.from, [{ label: `kind:${displayLabel(r.to)}` }], nodeContext.get(r.from));
       if (isGraphId(r.to)) addNode(r.to, "vocabulary", r.to, [{ label: "kind" }], "system/vocabulary");

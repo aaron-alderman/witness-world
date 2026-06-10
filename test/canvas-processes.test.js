@@ -17,6 +17,8 @@ import {
   setCamera,
   setGrid,
   batchApply,
+  undoLastAction,
+  redoLastUndo,
   canvasProcessHandlers
 } from "../src/canvas-processes.js";
 import { canvasProjection } from "../src/canvas-projection.js";
@@ -172,7 +174,9 @@ test("every canvas process is reachable through the handler map", () => {
     "canvas.thing.setTitle",
     "canvas.camera",
     "canvas.grid",
-    "canvas.batch"
+    "canvas.batch",
+    "canvas.undo",
+    "canvas.redo"
   ];
   assert.deepEqual(Object.keys(canvasProcessHandlers).sort(), expected.sort());
   for (const handler of Object.values(canvasProcessHandlers)) assert.equal(typeof handler, "function");
@@ -376,6 +380,79 @@ test("camera-only batch succeeds with exactly one claim; steward may batch", () 
   world.emit({ process: "delegateStewardship", actor: "aaron", claims: [relation("callan", "stewards", perspective)], body: {} });
   const steward = batchApply(world, { actor: "callan", perspective, camera: { x: 9, y: 9, zoom: 1 } });
   assert.equal(steward.process, "canvas.batch");
+});
+
+const geometryOf = (world, instance) =>
+  world.project(projectors.currentRelations).find(r => r.from === instance && r.rel === "hasGeometry").meta;
+
+test("undo restores prior geometry; redo re-applies; new action clears redo", () => {
+  const { world, perspective } = worldWithPerspective();
+  const instance = placeThing(world, { actor: "aaron", perspective, thing: "customer", x: 10, y: 20 }).body.instance;
+  moveInstance(world, { actor: "aaron", perspective, instance, x: 300, y: 400 });
+
+  const undo = undoLastAction(world, { actor: "aaron", perspective });
+  assert.equal(undo.process, "canvas.undo");
+  assert.equal(geometryOf(world, instance).x, 10);
+
+  const redo = redoLastUndo(world, { actor: "aaron", perspective });
+  assert.equal(redo.process, "canvas.redo");
+  assert.equal(geometryOf(world, instance).x, 300);
+
+  moveInstance(world, { actor: "aaron", perspective, instance, x: 50, y: 50 });
+  assert.equal(redoLastUndo(world, { actor: "aaron", perspective }).process, "canvas.redo.failed");
+});
+
+test("two undos walk back two actions", () => {
+  const { world, perspective } = worldWithPerspective();
+  const instance = placeThing(world, { actor: "aaron", perspective, thing: "customer", x: 10, y: 20 }).body.instance;
+  moveInstance(world, { actor: "aaron", perspective, instance, x: 100, y: 100 });
+  moveInstance(world, { actor: "aaron", perspective, instance, x: 200, y: 200 });
+
+  undoLastAction(world, { actor: "aaron", perspective });
+  assert.equal(geometryOf(world, instance).x, 100);
+  undoLastAction(world, { actor: "aaron", perspective });
+  assert.equal(geometryOf(world, instance).x, 10);
+});
+
+test("undo with nothing to undo fails; non-owner undo fails", () => {
+  const { world, perspective } = worldWithPerspective();
+  const empty = undoLastAction(world, { actor: "aaron", perspective });
+  assert.equal(empty.process, "canvas.undo.failed");
+  assert.equal(empty.body.reason, "nothing to undo");
+  assert.equal(undoLastAction(world, { actor: "callan", perspective }).process, "canvas.undo.failed");
+  assert.equal(undoLastAction(world, { actor: "aaron", perspective: "nope" }).process, "canvas.undo.failed");
+});
+
+test("undo of a batch restores geometry, style, camera, and grid together", () => {
+  const { world, perspective } = worldWithPerspective();
+  const instance = placeThing(world, { actor: "aaron", perspective, thing: "customer", x: 10, y: 20 }).body.instance;
+  setCamera(world, { actor: "aaron", perspective, x: 1, y: 1, zoom: 1 });
+  batchApply(world, {
+    actor: "aaron",
+    perspective,
+    moves: [{ instance, x: 500, y: 500 }],
+    styles: [{ instance, style: { color: "#ffcc00" } }],
+    camera: { x: 99, y: 99, zoom: 3 },
+    grid: { snap: true, size: 20 }
+  });
+
+  undoLastAction(world, { actor: "aaron", perspective });
+  const rels = world.project(projectors.currentRelations);
+  assert.equal(geometryOf(world, instance).x, 10);
+  assert.equal(rels.some(r => r.from === instance && r.rel === "hasStyle"), false);
+  assert.deepEqual(rels.find(r => r.from === perspective && r.rel === "hasCamera").meta, { x: 1, y: 1, zoom: 1 });
+  assert.equal(rels.some(r => r.from === perspective && r.rel === "hasGrid"), false);
+});
+
+test("documented semantics: undo re-emits pre-target state even over a foreign later edit", () => {
+  const { world, perspective } = worldWithPerspective();
+  const instance = placeThing(world, { actor: "aaron", perspective, thing: "customer", x: 10, y: 20 }).body.instance;
+  moveInstance(world, { actor: "aaron", perspective, instance, x: 100, y: 100 });
+  world.emit({ process: "delegateStewardship", actor: "aaron", claims: [relation("callan", "stewards", perspective)], body: {} });
+  moveInstance(world, { actor: "callan", perspective, instance, x: 777, y: 777 });
+
+  undoLastAction(world, { actor: "aaron", perspective });
+  assert.equal(geometryOf(world, instance).x, 10);
 });
 
 test("geometry is clamped to the minimum node size", () => {

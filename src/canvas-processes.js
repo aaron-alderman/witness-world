@@ -2,6 +2,7 @@ import { thing, relation, retract, projectors, canAcceptInto } from "./kernel.js
 import { thingId } from "./ids.js";
 import { runGates, actorRequired, textRequired } from "./gates.js";
 import { defineRoute } from "./modules.js";
+import { compensationClaims, undoState } from "./canvas-undo.js";
 
 const DEFAULT_GEOMETRY = { x: 40, y: 40, w: 160, h: 56 };
 const STYLE_KEYS = ["color", "textColor", "shape"];
@@ -288,7 +289,7 @@ export function relateThings(world, { actor, from, rel, to, perspective = null }
   });
 }
 
-export function unrelateThings(world, { actor, from, rel, to }) {
+export function unrelateThings(world, { actor, from, rel, to, perspective = null }) {
   const process = "canvas.unrelate";
   const blocked = blockedWitness(world, { actor, process, gates: [actorRequired, textRequired("rel")], context: { actor, rel } });
   if (blocked) return blocked;
@@ -302,11 +303,11 @@ export function unrelateThings(world, { actor, from, rel, to }) {
     process,
     actor,
     claims: [retract(from, rel, to)],
-    body: { from, rel, to }
+    body: { from, rel, to, perspective }
   });
 }
 
-export function setThingTitle(world, { actor, thing: target, title }) {
+export function setThingTitle(world, { actor, thing: target, title, perspective = null }) {
   const process = "canvas.thing.setTitle";
   const blocked = blockedWitness(world, { actor, process, gates: [actorRequired, textRequired("title")], context: { actor, title } });
   if (blocked) return blocked;
@@ -321,7 +322,7 @@ export function setThingTitle(world, { actor, thing: target, title }) {
     process,
     actor,
     claims: [...previous.map(r => retract(r.from, r.rel, r.to)), relation(target, "hasTitle", title.trim())],
-    body: { thing: target, title: title.trim() }
+    body: { thing: target, title: title.trim(), perspective }
   });
 }
 
@@ -417,6 +418,40 @@ export function batchApply(world, { actor, perspective, moves, styles, camera, g
   });
 }
 
+function compensate(world, { actor, perspective, process, target, link }) {
+  if (!isPerspective(world, perspective)) {
+    return failed(world, { process, actor, body: { perspective, reason: "unknown perspective" } });
+  }
+  if (!canAcceptInto(world, actor, perspective)) {
+    return failed(world, { process, actor, body: { perspective, reason: "actor does not own or steward perspective" } });
+  }
+  if (!target) {
+    return failed(world, { process, actor, body: { perspective, reason: link === "undoes" ? "nothing to undo" : "nothing to redo" } });
+  }
+  return world.emit({
+    process,
+    actor,
+    claims: compensationClaims(world.allWitnesses(), target),
+    body: { perspective, [link]: target.id }
+  });
+}
+
+export function undoLastAction(world, { actor, perspective }) {
+  const process = "canvas.undo";
+  const blocked = blockedWitness(world, { actor, process, gates: [actorRequired], context: { actor } });
+  if (blocked) return blocked;
+  const { undoTarget } = undoState(world.allWitnesses(), actor, perspective);
+  return compensate(world, { actor, perspective, process, target: undoTarget, link: "undoes" });
+}
+
+export function redoLastUndo(world, { actor, perspective }) {
+  const process = "canvas.redo";
+  const blocked = blockedWitness(world, { actor, process, gates: [actorRequired], context: { actor } });
+  if (blocked) return blocked;
+  const { redoTarget } = undoState(world.allWitnesses(), actor, perspective);
+  return compensate(world, { actor, perspective, process, target: redoTarget, link: "redoes" });
+}
+
 export const canvasProcessHandlers = {
   "canvas.perspective.create": createPerspective,
   "canvas.place": placeThing,
@@ -432,7 +467,9 @@ export const canvasProcessHandlers = {
   "canvas.thing.setTitle": setThingTitle,
   "canvas.camera": setCamera,
   "canvas.grid": setGrid,
-  "canvas.batch": batchApply
+  "canvas.batch": batchApply,
+  "canvas.undo": undoLastAction,
+  "canvas.redo": redoLastUndo
 };
 
 export function declareCanvasRoutes(world, { actor }) {
