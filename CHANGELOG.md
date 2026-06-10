@@ -1,4 +1,42 @@
 
+## 0.34.0
+
+CANVAS-v2 phase 3: browser-side outbox for batched small changes.
+
+- Small changes (move/resize geometry, style, camera, snap grid) now accumulate in a client-side outbox, coalesce latest-wins per target, and flush after a 1.5s debounce as ONE `canvas.batch` witness — rapid editing no longer emits a witness per micro-gesture.
+- New `canvas.batch` process: moves + styles + camera + grid in one atomic witness; all-or-nothing validation (a stale instance rejects the whole batch with one `.failed` witness); server-side last-wins dedupe; reuses all existing clamps and the style whitelist.
+- Structural ops (create, place, relate, remove, duplicate, rename) stay immediate and force-flush the outbox first, so the log ordering always reflects what the user saw (also fixes duplicate cloning from stale unflushed geometry).
+- Safety flushes on perspective/actor switch and on page hide / tab switch via `fetch keepalive` (keeps the `x-witness-actor` header, unlike sendBeacon).
+- Failed flushes discard the outbox and refresh from server truth — optimistic changes visibly revert.
+- The old per-gesture client POSTs (`canvas.move`/`moveMany`/`style`/`camera`/`grid`) are replaced by the outbox; the server handlers remain for API compatibility. The dedicated camera debounce was absorbed by the outbox.
+- Status line shows a pending-changes count during the debounce window.
+- 138 passing tests.
+
+## 0.33.0
+
+CANVAS-v2 phase 2: editor ergonomics.
+
+- Multi-select on the canvas: marquee (empty-drag in Select mode), shift-click toggle, group drag.
+- Group gestures stay one-witness: new atomic `canvas.moveMany` and `canvas.removeMany` processes (all-or-nothing validation; a partial failure emits a single `.failed` witness and changes nothing).
+- 8-point resize handles on a single selected node, minimum 40x24 enforced client-side and clamped server-side in `geometryFrom`.
+- Snap-to-grid toggle, witnessed per perspective via `canvas.grid` (`hasGrid` relation with mutable meta, like the camera); applies to drag, resize, create, place, and duplicate.
+- Duplicate placement: a Thing may now appear multiple times in one perspective. `canvas.duplicate` (Ctrl+D or inspector button) clones an instance with style in one witness; the palette shows placed counts instead of hiding placed things; connectors draw between every instance pair of related Things.
+- Pan moved to Space-drag, middle-button drag, or a new Pan mode button (empty-drag now marquees); pointer buttons are filtered explicitly.
+- 129 passing tests.
+
+## 0.32.0
+
+CANVAS-v2 phase 1: interactive canvas with witnessed perspectives.
+
+- Added `/canvas`: a standalone Canvas 2D editor page (pan, zoom, drag, connect) that projects Things and Relations through a chosen Perspective.
+- Perspectives are first-class witnessed Things; canvas nodes are `projectionInstance` proxy Things so view-local geometry/style never lands on the represented Thing.
+- Added `canvas.*` processes (perspective.create, place, move, style, remove, createThing, relate, unrelate, thing.setTitle, camera) — every canvas mutation is a witness, replayable from the log.
+- Connectors are backed by real Relation records and appear in every perspective where both endpoints are placed.
+- Added a property inspector split into Thing properties (reality) and Projection properties (perspective).
+- Added `GET /api/canvas`, `GET /api/canvas/perspectives`, and `POST /api/canvas/process`; canvas routes are themselves witnessed via `defineRoute`.
+- Home page now links to `/canvas`.
+- 111 passing tests.
+
 ## 0.31.0
 
 - Promoted Thing List to a first-class World Browser mode.

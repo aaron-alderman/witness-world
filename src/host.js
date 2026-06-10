@@ -8,6 +8,9 @@ import { thingId } from "./ids.js";
 import { witnessRelations } from "./modules.js";
 import { defineWidget, attachWidget, activateWidgetVersion, renderWidgetPage } from "./widgets.js";
 import { worldGraphProjection } from "./world-graph.js";
+import { canvasProcessHandlers, declareCanvasRoutes } from "./canvas-processes.js";
+import { canvasProjection, perspectivesProjection } from "./canvas-projection.js";
+import { renderCanvasPage } from "./canvas-page.js";
 import { createLogger } from "./logger.js";
 
 export function declareBackendHost(world, { actor, id, owner = actor }) {
@@ -113,6 +116,71 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
           body: { route: "/world" }
         });
         send(res, 200, "text/html", renderWidgetPage(world, { actor: frontendHost, rootWidget: worldRootWidget, frontendProgram: worldFrontendProgram, appConfig: { actors, page: "world" } }));
+        return;
+      }
+
+      if (req.method === "GET" && req.url === "/canvas") {
+        world.emit({
+          process: "frontend.renderCanvasPage",
+          actor: frontendHost,
+          claims: [relation(frontendHost, "rendered", "canvasView")],
+          body: { route: "/canvas" }
+        });
+        send(res, 200, "text/html", renderCanvasPage({ actors }));
+        return;
+      }
+
+      if (req.method === "GET" && req.url === "/api/canvas/perspectives") {
+        const perspectives = perspectivesProjection(publicWitnessesFor(world.allWitnesses(), actorFromRequest(req)));
+        world.emit({
+          process: "backend.readPerspectives",
+          actor: backendHost,
+          claims: [relation(backendHost, "projected", "canvasView")],
+          body: { count: perspectives.length }
+        });
+        sendJson(res, 200, { perspectives });
+        return;
+      }
+
+      if (req.method === "GET" && req.url?.startsWith("/api/canvas?")) {
+        const url = new URL(req.url, "http://127.0.0.1");
+        const perspective = url.searchParams.get("perspective") || "";
+        const canvas = canvasProjection(publicWitnessesFor(world.allWitnesses(), actorFromRequest(req)), perspective);
+        if (!canvas) {
+          world.emit({ process: "backend.readCanvas.failed", actor: backendHost, claims: [], body: { perspective, reason: "unknown perspective" } });
+          sendJson(res, 404, { error: "unknown perspective", perspective });
+          return;
+        }
+        world.emit({
+          process: "backend.readCanvas",
+          actor: backendHost,
+          claims: [relation(backendHost, "projected", "canvasView")],
+          body: { perspective, instances: canvas.instances.length, connectors: canvas.connectors.length }
+        });
+        sendJson(res, 200, { canvas });
+        return;
+      }
+
+      if (req.method === "POST" && req.url === "/api/canvas/process") {
+        const requestActor = actorFromRequest(req);
+        if (!requestActor) {
+          world.emit({ process: "canvas.process.failed", actor: backendHost, claims: [], body: { reason: "no actor" } });
+          sendJson(res, 401, { error: "choose a perspective first" });
+          return;
+        }
+        const body = await readJson(req);
+        const handler = canvasProcessHandlers[body.process];
+        if (!handler) {
+          world.emit({ process: "canvas.process.failed", actor: requestActor, claims: [], body: { process: body.process, reason: "unknown canvas process" } });
+          sendJson(res, 400, { error: "unknown canvas process", process: body.process });
+          return;
+        }
+        const witness = handler(world, { actor: requestActor, ...(body.params ?? {}) });
+        if (witness.process.endsWith(".failed") || witness.process.endsWith(".blocked")) {
+          sendJson(res, 400, { error: witness.body.reason ?? "rejected", witness });
+          return;
+        }
+        sendJson(res, 200, { ok: true, witness });
         return;
       }
 
@@ -388,6 +456,8 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
       sendJson(res, 500, { error: "internal error", requestId });
     }
   });
+
+  declareCanvasRoutes(world, { actor });
 
   await new Promise(resolve => server.listen(port, "127.0.0.1", resolve));
   const address = server.address();

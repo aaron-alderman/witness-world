@@ -6,7 +6,7 @@ program = "todo_frontend_program"
 
 [[page]]
 id = "todo_app_widget"
-children = ["todo_session", "todo_title", "todo_form", "todo_status", "todo_list", "todo_private_notes", "todo_widget_editor", "todo_process_graph_lab", "todo_world_link", "todo_witnesses", "todo_version_playground"]
+children = ["todo_session", "todo_title", "todo_form", "todo_status", "todo_list", "todo_private_notes", "todo_widget_editor", "todo_process_graph_lab", "todo_world_link", "todo_canvas_link", "todo_witnesses", "todo_version_playground"]
 title = "Witness Todo"
 
 [[box]]
@@ -128,6 +128,12 @@ action = "simulateNetworkError"
 id = "todo_world_link"
 href = "/world"
 text = "Open World Graph"
+class = "world-graph-link"
+
+[[link]]
+id = "todo_canvas_link"
+href = "/canvas"
+text = "Open Canvas"
 class = "world-graph-link"
 
 [[box]]

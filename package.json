@@ -1,6 +1,6 @@
 {
   "name": "witness-world",
-  "version": "0.31.0",
+  "version": "0.34.0",
   "type": "module",
   "scripts": {
     "test": "node --test",

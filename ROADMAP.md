@@ -83,9 +83,14 @@ Next:
 
 ### Personal projection layout
 
-- Store view-local graph positions on personal proxies
+Started in 0.32.0: `/canvas` stores view-local positions on `projectionInstance` proxies owned by witnessed Perspectives. 0.33.0 added editor ergonomics (multi-select, atomic group moves, resize, witnessed snap-to-grid, duplicate placement). 0.34.0 added the browser-side outbox: small changes coalesce client-side and land as one `canvas.batch` witness per debounce window (which will be one undo step in the undo phase).
+
+- Store view-local graph positions on personal proxies (done for /canvas)
 - Allow manual override of auto-layout
 - Keep shared canonical graph separate from personal layout
+- Bring perspective layouts into the World Graph view
+- CANVAS-v2 phase 3 (preferences recorded): witness timeline scrubbing over all witnesses with a canvas-filtered event strip; witness-aware undo scoped to the actor's last action in the current perspective; later, animation as witness playback
+- Canvas follow-ups: `canvas.styleMany` for one-witness bulk styling, group resize, connector bundling for dense duplicate pairs
 
 ### Cross-context communication
 

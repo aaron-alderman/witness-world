@@ -1,90 +1,78 @@
-# CANVAS-v2 Phase 1: Core Canvas + Perspectives
+# CANVAS-v2 Phase 4 (final): Timeline + Undo/Redo + Polish + Live Sync
 
 ## Context
 
-[docs/CANVAS-v2.md](docs/CANVAS-v2.md) respecifies the diagram canvas as a **projection engine** over the witness-oriented ontology: the canvas displays Things/Relations/Processes/Witnesses through a Perspective; visual nodes are proxies ("Projection Instances"); connectors are backed by real Relation records; layout/styling belong to Perspectives, never to Things.
+Phases 1–3 (v0.34.0, 138 tests green) delivered the witness-oriented `/canvas`: perspectives, proxy instances, multi-select ergonomics, and the batching outbox. This phase **completes the CANVAS-v2 roadmap** with the four remaining items (user-decided): a Witness Timeline with playback, witness-aware undo/redo, multi-select polish (bulk color + group resize), and World Browser cleanup + SSE live sync.
 
-The witness substrate already exists and works ([src/kernel.js](src/kernel.js): `createWorld`, `emit`, claim ops `thing`/`relation`/`retract`, projectors with latest-wins `currentRelations`; [src/witness-log.js](src/witness-log.js): append-only JSONL persistence; [src/host.js](src/host.js): witnessed HTTP routes + gates; [src/gates.js](src/gates.js)). What's missing is any interactive canvas — the existing `/world` graph is read-only with deterministic layout and no persisted positions.
+**Key architecture decision (user-chose):** timeline scrubbing uses **client-side projection** — the real `canvasProjection` code runs in the browser. This requires extracting kernel's pure projectors into a browser-safe module ([src/kernel.js](src/kernel.js) imports `node:crypto`, so it can't ship as-is); the same source files are then served to and imported by the browser. Scrubbing costs zero network per step.
 
-**User decisions (binding):**
-1. **Scope** — interactive canvas with Perspective-scoped layout stored as witnesses, Thing/Relation creation from the canvas, and a Thing-vs-Projection property inspector. Timeline, animation, undo/redo, scripting are later phases (the witness model keeps them unblocked).
-2. **Placement** — standalone `/canvas` page with its own shell, sharing only the kernel and JSON APIs.
-3. **Rendering** — Canvas 2D, vanilla JS, zero dependencies, DOM for inspector/overlays.
+**Critical design constraint discovered in planning — SSE witness feedback loop:** every existing read route emits a witness, so a naive "signal on log growth → client refetches" loops forever (refetch emits a witness → signal → …). Broken structurally by two binding rules: (1) `GET /api/witnesses?offset=N` does **not** emit a witness (the stream connection is witnessed once instead); (2) SSE-triggered live refreshes use the client-side projection, never `GET /api/canvas`. Do not re-add read witnesses to those paths.
 
-Shippable demo target: open `/canvas`, pick/create a perspective, place and drag things, connect them, inspect them, restart server with same witness log → everything reproduced purely from the log.
+Binding constraints carried forward: zero deps; client JS concat-only (no backticks/`${`); every change witnessed; one gesture = one witness.
 
 ## Design
 
-### Witness vocabulary
+### 1. Browser-safe projectors ([src/projectors-core.js](src/projectors-core.js), new)
 
-**Load-bearing kernel fact** ([src/kernel.js:106-117](src/kernel.js#L106-L117)): `projectors.currentRelations` keys on `from rel to' only — meta is NOT in the key, so re-emitting the same triple with new meta is latest-wins. This is the position-update mechanism (emit on pointer-up, not mousemove).
+Move verbatim from kernel.js: `thing`/`relation`/`retract` claim ops, `projectors`, and `stableStringify` (kernel's hashing uses it; undo needs it for meta equality). Zero imports. kernel.js imports + re-exports them — **every existing import site keeps working** (all code imports these by name from kernel.js). [src/canvas-projection.js](src/canvas-projection.js) switches to `import { projectors } from "./projectors-core.js"` — its only import becomes a browser-resolvable relative path. Full suite must be green after this step alone.
 
-**Projection Instances are proxy Things** (per CANVAS-v2 "Visual Nodes" + ROADMAP "positions on personal proxies"): a canvas node is a witnessed Thing of kind `projectionInstance` that `proxies` the real Thing and is `contains`-ed by the Perspective. This lets one Thing appear in many perspectives with independent geometry. Geometry/style/camera use stable triples with mutable meta — `relation(instanceId, "hasGeometry", "geometry", {x,y,w,h})` — so the constant `to` token gives clean latest-wins.
+### 2. Witness-aware undo/redo ([src/canvas-undo.js](src/canvas-undo.js) new + [src/canvas-processes.js](src/canvas-processes.js))
 
-Processes (all emitted server-side; IDs via `thingId(kind, {…, ordinal: world.allWitnesses().length})` from [src/ids.js](src/ids.js), following the private-note pattern at [src/host.js:175](src/host.js#L175)):
+**Generic compensation, not per-process logic** — `compensationClaims(witnesses, target)`: replay claims before `target` into a triple-keyed map (currentRelations semantics), then for each of target's claims in reverse (dedup by key): `relation` with no prior → `retract`; prior with different meta (via `stableStringify`) → re-emit prior; identical → nothing; `retract` → re-emit the prior relation. Uniformly handles move/style/camera/grid/batch (prior-meta re-emit), place/create/duplicate (retract placement relations; the Thing remains), remove (re-emit `contains`), relate/unrelate, and setTitle's two-claim retract+re-emit shape.
 
-| Process | Claims |
-|---|---|
-| `canvas.perspective.create` | `thing(perspId)`, `relation(actor,"owns",perspId)`, `relation(perspId,"hasModuleKind","perspective")`, `relation(perspId,"hasTitle",title)` |
-| `canvas.place` | `thing(instId)`, owns, `relation(instId,"hasModuleKind","projectionInstance")`, `relation(instId,"proxies",thingId)`, `relation(perspId,"contains",instId)`, `relation(instId,"hasGeometry","geometry",{x,y,w,h})` |
-| `canvas.move` | `relation(instId,"hasGeometry","geometry",{x,y,w,h})` (re-emit, latest wins) |
-| `canvas.style` | `relation(instId,"hasStyle","style",{color,…})` (whitelist-filtered meta; client sends merged style) |
-| `canvas.remove` | `retract(perspId,"contains",instId)` — instance Thing + history remain (replayable) |
-| `canvas.createThing` | reality Thing (`thing`/owns/created/`hasTitle`) + full `canvas.place` claim set, one atomic witness |
-| `canvas.relate` | `relation(fromThing, rel, toThing)` — between **Things**, not instances; connector then appears in every perspective where both are placed |
-| `canvas.unrelate` | `retract(from, rel, to)` |
-| `canvas.thing.setTitle` | `relation(thingId,"hasTitle",title)` (reuses existing title vocabulary, [src/host.js:223](src/host.js#L223) area) |
-| `canvas.camera` | `relation(perspId,"hasCamera","camera",{x,y,zoom})`, client-debounced |
+**Stack simulation** — `undoState(witnesses, actor, perspective)`: walk the actor's `canvas.*` witnesses with `body.perspective === perspective` (skip `.failed`/`.blocked`/`perspective.create`); normal action pushes + clears redo; `canvas.undo` pops to redo stack; `canvas.redo` pushes back. Redo = compensating the undo witness itself — the same generic function; undo→redo→undo chains work with no special cases. Stack derives purely from the log → survives reload.
 
-Authority: `canAcceptInto(world, actor, perspectiveId)` ([src/kernel.js:163](src/kernel.js#L163)) guards place/move/style/remove; failures emit `<process>.failed` witnesses (pattern: `transferOwnership`, [src/kernel.js:169-193](src/kernel.js#L169-L193)). Input-shape checks use `runGates` with `actorRequired`/`textRequired` — note gate failures emit `<process>.blocked` ([src/gates.js:10-14](src/gates.js#L10-L14)).
+**Handlers** `undoLastAction`/`redoLastUndo` (gates + perspective + `canAcceptInto`, `.failed` "nothing to undo/redo" on empty): emit ONE witness `{process: "canvas.undo"|"canvas.redo", claims: compensation, body: {perspective, undoes|redoes: target.id}}` — emit even when compensation is empty (stack bookkeeping). Register both in `canvasProcessHandlers` (zero host changes). Also: `setThingTitle` and `unrelateThings` gain optional `perspective` into body (client passes it; legacy witnesses without it are simply never undo targets).
 
-### Server API (inline route blocks in host.js, existing convention)
+**Accepted semantics, documented:** per-actor target selection skips interleaved foreign witnesses; compensation re-emits *pre-target* meta, so undoing can clobber another actor's later write to the same triple. Selective undo flagged in ROADMAP as a follow-up.
 
-- `GET /canvas` — emits `frontend.renderCanvasPage` witness (mirror of `/world` block at [src/host.js:104-117](src/host.js#L104-L117)); serves HTML from `renderCanvasPage({actors})`.
-- `GET /api/canvas/perspectives` — `{perspectives: [{id,title,owner}]}`.
-- `GET /api/canvas?perspective=<id>` — full canvas projection; 404 + failure witness if unknown.
-- `POST /api/canvas/process` — body `{process, params}`; dispatches via a `canvasProcessHandlers` map; actor from `x-witness-actor` header (existing `actorFromRequest`); no actor → 401 + failure witness; witness process ending `.failed`/`.blocked` → HTTP 400 `{error, witness}`, else 200 `{ok, witness}`.
+### 3. Timeline + playback ([src/canvas-page.js](src/canvas-page.js) + [src/host.js](src/host.js))
 
-At server start, `declareCanvasRoutes(world, {actor})` emits `defineRoute` witnesses (from [src/modules.js](src/modules.js)) so the canvas surface is visible in the World Browser.
+- **Serving the projection**: `GET /canvas-lib/projectors-core.js|canvas-projection.js` — whitelist Map → `fs.readFile` → witnessed `backend.readCanvasLib` → `text/javascript`, `cache-control: no-cache` (mirrors the `/api/source` pattern). The relative import inside the served file resolves under the same URL prefix.
+- **Client load**: IIFE becomes `(async () => {...})()`; `projectionModule = await import('/canvas-lib/canvas-projection.js')` — **dynamic import parses inside `new Function`** (verified; static `import` would break the host parse test). Graceful degrade if load fails (timeline disabled).
+- **Witness cache**: `state.history = {witnesses, playhead, filter, playing, open}`; `fetchWitnesses()` uses new `GET /api/witnesses?offset=N` (incremental, **unwitnessed** — loop rule 1; respond `{witnesses: tail, offset, total}`); cache resets on actor change (per-actor visibility).
+- **UI**: Timeline toolbar button → panel under the stage: Play, range slider, position `N/M`, filter toggle (All / `canvas.*`), Now button, clickable event strip (DOM capped ~400 ticks + "older" count). `scrubTo(n)` renders `canvasProjection(witnesses.slice(0,n), perspective)` locally. Refactor `loadCanvas`'s tail into `adoptModel(model, adoptCamera)` — history/SSE paths pass `adoptCamera=false`, which is how **the user's current camera/grid are kept while scrubbing**. Play = `setInterval(~150ms)` advancing the playhead to the end, then back to live ("animation as witness playback").
+- **Read-only mode while scrubbed** (`isLive()` guards every mutating entry point): `post()` returns null with a status message; all four `queue*` early-return (pan/zoom stay visual-only); pointerdown allows pan/select/marquee but skips drag/resize/connect creation; dblclick blocked; Delete/Ctrl+D/Ctrl+Z/Ctrl+Y blocked, Escape → `exitHistory()`; inspector inputs disabled and action buttons unwired; palette unclickable; perspective/actor switch exits history first; visible "history view N/M" banner + Now button; undo/redo buttons disabled.
 
-### Canvas projection
+### 4. SSE live sync ([src/host.js](src/host.js))
 
-`canvasProjection(witnesses, perspectiveId)` → `{perspective: {id,title,owner,camera}, instances: [{id,thing,label,x,y,w,h,style}], connectors: [{from,rel,to,fromInstance,toInstance,witness}], availableThings: [{id,label}]}`.
+`GET /api/events` (text/event-stream): connections tracked in a Set; a `setInterval(250ms).unref()` watcher compares `world.allWitnesses().length` and broadcasts `data: {"count":N}` on growth — **signal-only**, no payload, no per-actor filtering. One `backend.eventsStream` witness per connection. Client `EventSource.onmessage` → `fetchWitnesses()` → if live, re-project client-side (loop rule 2) and `adoptModel(..., false)`; if scrubbed, just extend the strip. **Teardown (critical or tests hang)**: returned `close()` now does `clearInterval(watcher)` → end all SSE responses → `server.closeAllConnections?.()` → `server.close()`.
 
-Built from one `projectors.currentRelations` pass: instances = `contains` targets with kind `projectionInstance`; geometry/style from meta (default geometry `{x:40,y:40,w:160,h:56}`); labels via `hasTitle` else id. Connectors = current relations whose both endpoints are proxied by placed instances, excluding internal vocabulary (`contains`, `proxies`, `hasGeometry`, `hasStyle`, `hasCamera`, `hasModuleKind`). `availableThings` = all Things minus infrastructure kinds (projectionInstance/perspective/widget/widgetVersion/frontendProgram/route) minus already-placed. All arrays sorted by id (determinism).
+### 5. Multi-select polish ([src/canvas-page.js](src/canvas-page.js))
 
-### Client (single server-generated page, ~350-line IIFE)
+- **Bulk color**: N>1 inspector gains a color input → per selected node, merge style locally + `queueStyle` → existing outbox coalesces into ONE `canvas.batch` witness (no new server process; `batchApply` already takes `styles[]` — supersedes the old `canvas.styleMany` follow-up).
+- **Group resize**: N>1 selection draws a dashed bounding box + 4 corner handles; drag kind `groupResize` scales members' x/y/w/h proportionally from the opposite-corner anchor (snap the dragged corner; clamp scale positive; per-member MIN 40×24); pointer-up → `queueMove` per member → one batch witness.
 
-Standalone module returning a full HTML string (own CSS, NOT the widget-tree engine — Canvas-2D pointer/rAF interaction doesn't decompose into declarative frontend-program steps; keeps [src/widgets.js](src/widgets.js) untouched while preserving the server-generated-JS convention).
+### 6. World Browser cleanup ([src/world-graph.js](src/world-graph.js))
 
-- **Shell**: header (perspective `<select>` + new, actor `<select>` reusing the `localStorage['witness.actor']` + `POST /api/session` pattern from widgets.js, mode buttons Select|Connect, New Thing, status) · `<canvas>` main + absolutely-positioned overlay `<input>` for inline naming · DOM inspector aside.
-- **Rendering**: dirty-flag + `requestAnimationFrame`; `ctx.setTransform` for camera (handle devicePixelRatio + resize); draws grid, connectors (line/arrowhead/rel label), nodes (rounded rect, style color, label), selection outline, connect rubber-band.
-- **Interactions**: wheel zoom toward cursor (clamp 0.2–4); drag empty = pan (debounced `canvas.camera`); drag node = optimistic local move, `canvas.move` on pointer-up; Connect mode drag node→node → rel-name overlay (default `references`) → `canvas.relate`; New Thing / dblclick-empty → name overlay → `canvas.createThing`; click connector selects it; Delete → `canvas.remove`; Escape clears.
-- **Inspector** (the CANVAS-v2 reality/projection split):
-  - *Thing properties*: id (read-only), Name → `canvas.thing.setTitle`, current reality relations.
-  - *Projection properties*: x/y/w/h inputs → `canvas.move`, color picker → `canvas.style`, Remove from canvas → `canvas.remove`; connector selection shows from/rel/to + delete via `canvas.unrelate`.
-  - *Palette* (nothing selected): `availableThings`, click → `canvas.place` at viewport center.
-- **Data flow**: every successful mutation re-GETs `/api/canvas` — witnesses stay the single source of truth; optimistic position only bridges the in-flight gap.
+In `worldGraphProjection`'s relation loop (next to the existing `hasFrontendStep` skip): skip rels in `{hasGeometry, hasStyle, hasCamera, hasGrid}` — suppresses both the edges and the synthesized `geometry`/`style`/`camera`/`grid` token nodes. No existing test asserts them (verified).
 
-## Implementation steps (dependency order)
+## Implementation steps (dependency order — run full suite after 1, 3, 5, 6)
 
-1. **`src/canvas-processes.js`** (new, ~170 lines) — handlers for all processes above + `canvasProcessHandlers` map + `declareCanvasRoutes`. Imports kernel claim ops/projectors/`canAcceptInto`, `thingId`, gates, `defineRoute`. No HTTP knowledge.
-2. **`src/canvas-projection.js`** (new, ~130 lines) — `perspectivesProjection`, `canvasProjection` as specced.
-3. **`test/canvas-processes.test.js` + `test/canvas-projection.test.js`** (new; `node --test`, kernel.test.js style) — perspective create; place; **two moves → latest geometry wins**; remove hides instance but Thing persists; same Thing in two perspectives with different positions; connectors require both endpoints placed and exclude vocabulary rels; **replay determinism** (persist to temp `witnessLogPath`, recreate world, identical projection); authority failures (`canvas.move` on foreign perspective → `.failed`; steward via `delegateStewardship` succeeds, reusing test/kernel.test.js:64-79 pattern).
-4. **`src/canvas-page.js`** (new, ~450 lines) — `renderCanvasPage({actors})` per Client design.
-5. **`src/host.js`** (modify) — imports; `declareCanvasRoutes` call at startup; four route blocks alongside existing GET/POST APIs (insert near [src/host.js:182](src/host.js#L182) region, before 404).
-6. **`test/canvas-host.test.js`** (new; host.test.js harness pattern) — `GET /canvas` 200 + contains `canvas-surface` / `Thing properties` / `Projection properties`; embedded `<script>` parses via `new Function` (host.test.js pattern); end-to-end POST sequence (perspective.create → createThing → place → move → relate) then `GET /api/canvas` shows 2 instances + 1 connector with expected coords; no-actor POST → 401; unknown process → 400 + failure witness.
-7. **Demo + docs** (modify) — [examples/demo-todo-server.wtoml](examples/demo-todo-server.wtoml): home-page link to `/canvas` (like the existing `/world` link); `package.json` → 0.32.0; `CHANGELOG.md` new top block (existing convention); `HANDOFF.md` (new modules, `/canvas`, note that layout lives on projectionInstance proxies); `ROADMAP.md` mark "Personal projection layout" started.
+1. **[src/projectors-core.js](src/projectors-core.js)** extraction + kernel re-export + canvas-projection import switch (must be invisible: 138 green).
+2. **[src/canvas-undo.js](src/canvas-undo.js)** — `compensationClaims`, `undoState` (imports only projectors-core). **New `test/canvas-undo.test.js`**: compensation cases incl. setTitle two-claim shape, batch multi-kind, place retracts with Thing surviving, identical-meta no-op, duplicate-key-once; undoState push/pop/redo-clear/foreign-actor/other-perspective/legacy-no-perspective skips, undo→redo→undo chain.
+3. **[src/canvas-processes.js](src/canvas-processes.js)** — undo/redo handlers + registration; `perspective` into setTitle/unrelate bodies. Extend [test/canvas-processes.test.js](test/canvas-processes.test.js): undo restores geometry; redo re-applies; two undos walk back two; empty-stack `.failed`; action-after-undo kills redo; undo of batch restores all four kinds; non-owner fails; clobber-semantics test documents the accepted behavior; handler-map list updated.
+4. **[src/world-graph.js](src/world-graph.js)** skip-set + one [test/world-graph.test.js](test/world-graph.test.js) assertion (no canvas vocab nodes/edges after place/style/camera).
+5. **[src/host.js](src/host.js)** — `/canvas-lib/*` route (whitelist, witnessed, JS content-type), `/api/witnesses?offset=` (unwitnessed when offset present — comment why), `/api/events` SSE + watcher + hardened `close()`.
+6. **[src/canvas-page.js](src/canvas-page.js)** — async IIFE + dynamic import; timeline panel HTML/CSS + strip/slider/play/filter/now; `adoptModel` refactor; read-only rule set; SSE EventSource; undo/redo buttons + Ctrl+Z/Y (through `post()`, so the outbox auto-flush makes a pending batch the undo target — correct); bulk color; group resize; setTitle/unrelate call sites pass perspective.
+7. **[test/canvas-host.test.js](test/canvas-host.test.js)** — HTTP undo/redo (+400 empty); `/canvas-lib/*` 200/content-type/relative-import-regex + traversal/unknown 404 + witness; `?offset` tail + total + **asserts no `backend.readWitnesses` witness from offset fetch** (locks loop rule 1); SSE via `fetch` + `AbortController` reader (initial frame, trigger process, second frame, abort, `server.close()` completing IS the teardown assertion); projection parity guard (client-module projection deep-equals `/api/canvas` response); HTML markers `timeline-panel`, `history-banner`, `undo-btn`, `canvas-lib`, `EventSource`, `groupResize`, `canvas.undo` (existing markers all survive).
+8. **Docs** — package.json 0.35.0; CHANGELOG (house style + passing count); HANDOFF (new modules, `/api/events`, `/canvas-lib/*`, timeline/undo behavior); ROADMAP marks **CANVAS-v2 phases COMPLETE**, leaving flagged nice-to-haves: connector bundling, selective (non-clobbering) undo, timeline strip virtualization, memoized prefix projection.
 
 ## Verification
 
-- `npm test` — all existing tests plus ~12 new pass.
-- Manual: `npm run demo` → http://127.0.0.1:3000/canvas → pick actor `aaron` → create perspective → New Thing "Customer" → place a todo from palette → drag both → connect as `references` → recolor → rename via inspector → **restart server with the same witness log path** → reload: layout, style, camera, connector all reproduced from the log alone. Check `/world` shows the new `perspective`/`projectionInstance` things and `canvas.*` processes.
-- Optional stretch: Playwright drag+reload smoke via `npm run test:ui` (playwright is already a devDependency).
+- `npm test` — 138 existing + ~25-30 new, all green.
+- Manual (`npm run demo`, two windows):
+  - Timeline: scrub renders history instantly with current camera; every mutation path inert while scrubbed; Now/Escape return live; Play animates to the end and lands live; filter toggles strip.
+  - Undo: drag → flush → Ctrl+Z restores → Ctrl+Y re-applies; rename undo restores old title; empty stack → "nothing to undo" status; reload mid-stack → undo still works (log-derived).
+  - Live sync: edit in window A appears in window B ≤ ~250ms; scrubbed window only grows its strip; **no witness storm while idle** (log stays quiet — proves the feedback loop is dead); server close doesn't hang with a stream open.
+  - Polish: group corner-resize scales proportionally (min 40×24, one batch witness); bulk color recolors N nodes in one witness.
+  - `/world` shows no geometry/style/camera/grid token nodes; restart with same `WITNESS_LOG` reprojects everything.
 
-## Risks / notes
+## Risks
 
-- **World Browser noise**: `hasGeometry`/`hasStyle` relations will surface `geometry`/`style` vocabulary nodes in `/world`, and world-graph's edge-meta merge may show stale coords. Cosmetic; one-line skip-set in `worldGraphProjection` if objectionable.
-- **Log growth**: one witness per drag-end/style/camera-settle — fine for the prototype; compaction is a later-phase concern (the timeline phase wants this history anyway).
-- **No live multi-client sync**: refetch-after-mutation only; acceptable for phase 1.
-- **Palette includes todos**: canvas-created Things and todos both use `hasTitle`; todos appear in `availableThings` — treated as a feature (place todos on canvas).
+- **Dynamic import in `new Function`** — verified safe (parses; static import would not).
+- **SSE lifecycle** — watcher `unref()` + explicit client `end()` + `closeAllConnections` in `close()`; the SSE test must abort its reader before closing.
+- **Feedback loop** — structurally prevented; the "log stays quiet while idle" manual check and the no-witness-on-offset test guard it.
+- **Undo clobber across actors** — accepted, tested as documented behavior, refinement flagged.
+- **Scrub perf** — O(witnesses) per step is fine at demo scale; strip capped at ~400 DOM ticks; memoization flagged.
+- **Client cache staleness** — `no-cache` on `/canvas-lib/*`; module imported once per page session.
