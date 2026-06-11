@@ -138,7 +138,10 @@ test("ergonomic step syntax lowers unknown keys into frontend step params", () =
       event: "load",
       op: "setText",
       order: 0,
-      params: { widget: "status", text: "Ready" }
+      params: { widget: "status", text: "Ready" },
+      when: null,
+      repeat: null,
+      after: []
     }
   ]);
   assert.equal(program.graph.length, 1);

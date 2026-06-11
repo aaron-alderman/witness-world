@@ -33,6 +33,7 @@ The demo is a Todo app that is intentionally more complicated than a normal Todo
 - versioned widgets and live activation
 - personal projections with private notes
 - a bootstrap seam that can recover a blank world into a runnable app
+- first-class capability objects with local catalog/install projections
 - a guided tutorial that builds the Todo app through the real bootstrap surface
 - dedicated World and Process views
 
@@ -96,7 +97,7 @@ The semi-internal bootstrap seam.
 
 It includes:
 
-- focused builders for identities, widgets, programs, routes, mounts, and server runners
+- focused builders for identities, widgets, programs, routes, mounts, server runners, and capabilities
 - blank-world recovery when no reachable home app route exists
 - a first-class guided tutorial that walks through building the Todo app from scratch
 - a de-emphasized fast path for experienced users
@@ -233,6 +234,13 @@ npm run test:all  # unit + integration + browser
 This is not a production framework. It is a working architecture probe.
 
 The most important current behavior is that the app is increasingly described by witnessed data rather than hand-written special cases, and that a blank world can now recover into a bootstrap seam that teaches and assembles a runnable app through the real product surface.
+
+The current capability slice is real but still intentionally narrow:
+
+- capability objects, installs, catalog projections, and bootstrap CRUD now exist
+- legacy capability strings still bridge into that model as compatibility sugar
+- route-page placement currently means route-root `Page` placement only
+- deeper version/authority/store semantics are still future work
 
 The current Todo/bootstrap path should be read as a proving ground, not the final product shape. The longer arc is to keep building out:
 

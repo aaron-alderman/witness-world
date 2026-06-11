@@ -6,7 +6,7 @@ import path from "node:path";
 import { createWorld, thing, relation } from "../src/kernel.js";
 import { worldGraphProjection } from "../src/world-graph.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
-import { applyWitnessDocs, loadWitnessTomlFile } from "../src/dsl.js";
+import { applyWitnessDocs, applyWitnessToml, loadWitnessTomlFile } from "../src/dsl.js";
 import { renderWidgetPage } from "../src/widgets.js";
 
 async function tempStore() {
@@ -320,6 +320,44 @@ test("world graph scopes runtime hosts, capabilities, and vocabulary", async () 
   assert.equal(graph.nodes.find(n => n.id === "dom.render")?.context, "frontend/capabilities");
   assert.equal(graph.nodes.find(n => n.id === "widget")?.context, "system/vocabulary");
   assert.equal(graph.nodes.some(n => n.context === "unscoped" && ["widget", "frontendProgram", "fs.json.read"].includes(n.id)), false);
+});
+
+test("world graph renders explicit capability install and dependency edges", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[defaults]]
+actor = "adam"
+
+[[widget]]
+id = "home"
+kind = "Page"
+props = { title = "Home" }
+
+[[route]]
+id = "home_route"
+path = "/"
+serves = "homePage"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "home", page = "home" }
+
+[[capability]]
+id = "notes.sidebar"
+label = "Notes Sidebar"
+dependsOn = ["dom.render"]
+placement = ["routePage"]
+
+[[capabilityInstall]]
+capability = "notes.sidebar"
+target = "home_route"
+targetKind = "routePage"
+`);
+
+  const graph = worldGraphProjection(world.allWitnesses());
+  assert.equal(graph.nodes.find(n => n.id === "notes.sidebar")?.kind, "capability");
+  assert.equal(graph.nodes.find(n => n.id === "notes.sidebar")?.context, "frontend/capabilities");
+  assert.equal(graph.edges.some(e => e.from === "home_route" && e.to === "notes.sidebar" && e.rel === "installs capability"), true);
+  assert.equal(graph.edges.some(e => e.from === "notes.sidebar" && e.to === "dom.render" && e.rel === "depends on"), true);
 });
 
 test("world graph exposes object properties, association metadata, and DSL source provenance", async () => {

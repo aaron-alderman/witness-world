@@ -153,6 +153,7 @@ The generic runtime currently owns these categories:
 - bootstrap fallback at `/` when no served home page exists
 - the semi-internal bootstrap shell at `/_bootstrap`
 - typed bootstrap authoring endpoints for identities, widgets, frontend programs/steps, routes, `serve` mounts, and `serverRunner` wiring
+- typed bootstrap capability authoring/install/remove endpoints plus local catalog/install read models
 - method/path route matching, including named params
 - page rendering for widget pages, world page, process page, and canvas page
 - session open/read/logout
@@ -181,6 +182,8 @@ The current demo baseline expects these routes/surfaces to remain reachable:
 - `/canvas`
 - `/api/bootstrap-model`
 - `/api/bootstrap-state`
+- `/api/capabilities`
+- `/api/capability-installs`
 - `/api/session`
 - `/api/identities`
 - `/api/frontend-programs`

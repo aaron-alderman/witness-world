@@ -1,4 +1,184 @@
-import { thing, relation, createThing } from "./kernel.js";
+import { thing, relation, retract, createThing, projectors } from "./kernel.js";
+import { normalizeFields } from "./type-model.js";
+
+const CAPABILITY_INSTALL_TARGET_KINDS = new Set(["context", "serverRunner", "routePage", "host"]);
+
+function normalizeCapabilityDefinition({
+  id,
+  label = id,
+  version = null,
+  provenance = null,
+  dependsOn = [],
+  publicApi = [],
+  config = [],
+  internals = [],
+  authority = [],
+  placement = []
+}) {
+  return {
+    id: String(id),
+    label: String(label ?? id),
+    version: typeof version === "string" && version.trim() ? version.trim() : null,
+    provenance: provenance && typeof provenance === "object" ? { ...provenance } : null,
+    dependsOn: [...new Set((Array.isArray(dependsOn) ? dependsOn : []).map(String).filter(Boolean))],
+    publicApi: normalizeFields(publicApi),
+    config: normalizeFields(config),
+    internals: normalizeFields(internals),
+    authority: normalizeFields(authority),
+    placement: [...new Set((Array.isArray(placement) ? placement : []).map(String).filter(Boolean))]
+  };
+}
+
+function currentRelations(witnesses) {
+  return projectors.currentRelations(witnesses);
+}
+
+function capabilityDefinitionsById(witnesses) {
+  const rows = new Map();
+  for (const w of witnesses) {
+    if (w.process !== "defineCapability" || !w.body?.id) continue;
+    rows.set(w.body.id, normalizeCapabilityDefinition(w.body));
+  }
+  return rows;
+}
+
+export function ensureCapabilityDefinition(world, {
+  actor,
+  id,
+  label = id,
+  version = null,
+  provenance = null,
+  dependsOn = [],
+  publicApi = [],
+  config = [],
+  internals = [],
+  authority = [],
+  placement = [],
+  owner = actor
+}) {
+  if (capabilityDefinitionsById(world.allWitnesses()).has(id)) return null;
+  return defineCapability(world, {
+    actor,
+    id,
+    label,
+    version,
+    provenance,
+    dependsOn,
+    publicApi,
+    config,
+    internals,
+    authority,
+    placement,
+    owner
+  });
+}
+
+export function defineCapability(world, {
+  actor,
+  id,
+  label = id,
+  version = null,
+  provenance = null,
+  dependsOn = [],
+  publicApi = [],
+  config = [],
+  internals = [],
+  authority = [],
+  placement = [],
+  owner = actor
+}) {
+  createThing(world, { actor, id, owner });
+  const normalized = normalizeCapabilityDefinition({
+    id,
+    label,
+    version,
+    provenance,
+    dependsOn,
+    publicApi,
+    config,
+    internals,
+    authority,
+    placement
+  });
+  return world.emit({
+    process: "defineCapability",
+    actor,
+    claims: [
+      relation(id, "hasModuleKind", "capability"),
+      ...normalized.dependsOn.map(target => relation(id, "dependsOnCapability", target))
+    ],
+    body: normalized
+  });
+}
+
+export function installCapability(world, {
+  actor,
+  capability,
+  target,
+  targetKind,
+  config = null
+}) {
+  const witnesses = world.allWitnesses();
+  const capabilityKinds = moduleProjectors.modules(witnesses);
+  const targetExists = world.project(projectors.things).has(target);
+  const capabilityExists = capabilityKinds.get(capability) === "capability";
+  const knownTargetKind = CAPABILITY_INSTALL_TARGET_KINDS.has(String(targetKind || ""));
+  if (!capabilityExists || !targetExists || !knownTargetKind) {
+    return world.emit({
+      process: "installCapability.failed",
+      actor,
+      claims: [],
+      body: {
+        capability,
+        target,
+        targetKind,
+        ok: false,
+        reason: !knownTargetKind
+          ? "unknown install target kind"
+          : (!capabilityExists ? "capability not found" : "target not found")
+      }
+    });
+  }
+
+  const meta = { targetKind: String(targetKind) };
+  if (config && typeof config === "object") meta.config = { ...config };
+  return world.emit({
+    process: "installCapability",
+    actor,
+    claims: [relation(target, "installsCapability", capability, meta)],
+    body: {
+      capability,
+      target,
+      targetKind: String(targetKind),
+      config: config && typeof config === "object" ? { ...config } : null,
+      ok: true
+    }
+  });
+}
+
+export function removeCapability(world, {
+  actor,
+  capability,
+  target,
+  targetKind
+}) {
+  const current = currentRelations(world.allWitnesses());
+  const installed = current.some(r => r.from === target && r.rel === "installsCapability" && r.to === capability);
+  if (!installed) {
+    return world.emit({
+      process: "removeCapability.failed",
+      actor,
+      claims: [],
+      body: { capability, target, targetKind: targetKind ? String(targetKind) : null, ok: false, reason: "capability install not found" }
+    });
+  }
+  return world.emit({
+    process: "removeCapability",
+    actor,
+    claims: [retract(target, "installsCapability", capability)],
+    body: { capability, target, targetKind: targetKind ? String(targetKind) : null, ok: true }
+  });
+}
 
 export function createCompiler(world, { actor, id, owner = actor }) {
   const w = createThing(world, { actor, id, owner });
@@ -213,10 +393,109 @@ export function witnessRelations(witnesses) {
 export const moduleProjectors = {
   modules(witnesses) {
     const modules = new Map();
-    for (const r of witnessRelations(witnesses)) {
+    for (const r of currentRelations(witnesses)) {
       if (r.rel === "hasModuleKind") modules.set(r.from, r.to);
     }
     return modules;
+  },
+
+  contexts(witnesses) {
+    const map = new Map();
+    const rels = currentRelations(witnesses);
+    const installs = moduleProjectors.capabilityInstalls(witnesses)
+      .filter(row => row.targetKind === "context");
+    for (const r of rels) {
+      if (r.rel === "hasModuleKind" && r.to === "context") {
+        if (!map.has(r.from)) map.set(r.from, { id: r.from, actor: null, parent: null, capabilities: [] });
+      }
+    }
+    for (const r of rels) {
+      if (!map.has(r.from)) continue;
+      const ctx = map.get(r.from);
+      if (r.rel === "contextActor") ctx.actor = r.to;
+      if (r.rel === "parentContext") ctx.parent = r.to;
+      if (r.rel === "contextCapability" && !ctx.capabilities.includes(r.to)) ctx.capabilities.push(r.to);
+    }
+    for (const row of installs) {
+      const ctx = map.get(row.target);
+      if (!ctx) continue;
+      if (!ctx.capabilities.includes(row.capability)) ctx.capabilities.push(row.capability);
+    }
+    return [...map.values()]
+      .map(row => ({ ...row, capabilities: [...new Set(row.capabilities)].sort() }))
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  },
+
+  capabilities(witnesses) {
+    return [...capabilityDefinitionsById(witnesses).values()]
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  },
+
+  capabilityIndex(witnesses) {
+    const rows = moduleProjectors.capabilities(witnesses);
+    const byId = Object.create(null);
+    for (const row of rows) byId[row.id] = row;
+    return { rows, byId };
+  },
+
+  capabilityInstalls(witnesses) {
+    const rows = [];
+    const seen = new Set();
+    const rels = currentRelations(witnesses);
+    const add = row => {
+      const key = `${row.targetKind}\u0000${row.target}\u0000${row.capability}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      rows.push(row);
+    };
+
+    for (const r of rels) {
+      if (r.rel === "installsCapability") {
+        add({
+          target: r.from,
+          capability: r.to,
+          targetKind: String(r.meta?.targetKind || ""),
+          config: r.meta?.config && typeof r.meta.config === "object" ? { ...r.meta.config } : null,
+          source: "explicit",
+          witness: r.witness
+        });
+      }
+      if (r.rel === "contextCapability") {
+        add({
+          target: r.from,
+          capability: r.to,
+          targetKind: "context",
+          config: null,
+          source: "legacy-context",
+          witness: r.witness
+        });
+      }
+      if (r.rel === "hostCapability") {
+        add({
+          target: r.from,
+          capability: r.to,
+          targetKind: "host",
+          config: null,
+          source: "legacy-host",
+          witness: r.witness
+        });
+      }
+    }
+    return rows.sort((a, b) =>
+      String(a.targetKind).localeCompare(String(b.targetKind))
+      || String(a.target).localeCompare(String(b.target))
+      || String(a.capability).localeCompare(String(b.capability))
+    );
+  },
+
+  capabilityCatalog(witnesses) {
+    const installs = moduleProjectors.capabilityInstalls(witnesses);
+    const installCounts = new Map();
+    for (const row of installs) installCounts.set(row.capability, (installCounts.get(row.capability) ?? 0) + 1);
+    return moduleProjectors.capabilities(witnesses).map(row => ({
+      ...row,
+      installCount: installCounts.get(row.id) ?? 0
+    }));
   },
 
   compiledArtifacts(witnesses) {

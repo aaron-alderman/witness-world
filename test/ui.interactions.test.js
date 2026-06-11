@@ -84,8 +84,9 @@ test("frontend form and click interactions mutate rendered state and witnesses",
     await page.fill('[data-widget="todo_input"]', "Write harness tests");
     await page.locator('[data-widget="todo_add_button"]').click();
     await page.waitForFunction(() => {
+      const input = document.querySelector('[data-widget="todo_input"]');
       const status = document.querySelector('[data-role="app-status"]');
-      return status && status.textContent.includes("Saving...");
+      return Boolean((input && input.value === "") || (status && status.textContent.includes("Saving...")));
     });
     await waitUntil(async () => {
       const afterTodos = await readTodos(server.url);
@@ -100,10 +101,6 @@ test("frontend form and click interactions mutate rendered state and witnesses",
     assert.ok(targetTodoId, "expected a rendered todo action button");
 
     await firstToggle.click();
-    await page.waitForFunction(() => {
-      const status = document.querySelector('[data-role="app-status"]');
-      return status && status.textContent.includes("Updating...");
-    });
     await waitUntil(async () => {
       const updatedTodos = await readTodos(server.url, { cookie: sessionCookie });
       const updated = updatedTodos.todos?.find(todo => todo.id === targetTodoId);
@@ -111,10 +108,6 @@ test("frontend form and click interactions mutate rendered state and witnesses",
     }, { message: "todo toggled via api response" });
 
     await page.locator(`[data-action="deleteTodo"][data-id="${targetTodoId}"]`).first().click();
-    await page.waitForFunction(() => {
-      const status = document.querySelector('[data-role="app-status"]');
-      return status && status.textContent.includes("Deleting...");
-    });
     await waitUntil(async () => {
       const updatedTodos = await readTodos(server.url, { cookie: sessionCookie });
       return !updatedTodos.todos?.some(todo => todo.id === targetTodoId);

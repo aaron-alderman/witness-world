@@ -1,11 +1,10 @@
 import { projectors } from "./kernel.js";
-import { witnessRelations } from "./modules.js";
 import { activeWidgetVersions, frontendProgram } from "./widgets.js";
 
 export function worldGraphProjection(witnesses, { includeWitnesses = false, limitWitnesses = 36 } = {}) {
   const nodeMap = new Map();
   const edgeMap = new Map();
-  const relations = witnessRelations(witnesses);
+  const relations = projectors.currentRelations(witnesses);
   const owners = projectors.owners(witnesses);
   const main = projectors.main(witnesses);
   const activeVersions = activeWidgetVersions(witnesses);
@@ -73,11 +72,17 @@ export function worldGraphProjection(witnesses, { includeWitnesses = false, limi
       if (isGraphId(r.to)) addNode(r.to, "vocabulary", r.to, [{ label: "kind" }], "system/vocabulary");
       continue;
     }
-    if (r.rel === "contextCapability" || r.rel === "hostCapability") {
+    if (r.rel === "contextCapability" || r.rel === "hostCapability" || r.rel === "installsCapability") {
       addNode(r.from, inferKind(r.from, relations), r.from, [], nodeContext.get(r.from));
-      const capabilityContext = capabilityContextFor(r.from, r.to, nodeContext);
+      const capabilityContext = capabilityContextFor(r.from, r.to, nodeContext, r.meta);
       addNode(r.to, "capability", r.to, [], capabilityContext);
-      addEdge(r.from, r.to, "capability", r.witness, "capability", r.meta);
+      addEdge(r.from, r.to, r.rel === "installsCapability" ? "installs capability" : "capability", r.witness, "capability", r.meta);
+      continue;
+    }
+    if (r.rel === "dependsOnCapability") {
+      addNode(r.from, "capability", r.from, [], nodeContext.get(r.from));
+      addNode(r.to, "capability", r.to, [], nodeContext.get(r.to));
+      addEdge(r.from, r.to, "depends on", r.witness, "capability", r.meta);
       continue;
     }
     if (r.rel === "usesFrontendProgram") {
@@ -396,8 +401,14 @@ function applySemanticLayoutContexts(relations, nodeContext, contexts) {
   const frontendPrograms = [...moduleKinds.entries()].filter(([, kind]) => kind === "frontendProgram").map(([id]) => id);
   const routes = [...moduleKinds.entries()].filter(([, kind]) => kind === "route").map(([id]) => id);
   const serverRunners = [...moduleKinds.entries()].filter(([, kind]) => kind === "serverRunner").map(([id]) => id);
-  const backendHosts = [...new Set(relations.filter(r => r.rel === "hostCapability" && ["http.serve", "fs.json.read", "fs.json.write"].includes(r.to)).map(r => r.from))];
-  const frontendHosts = [...new Set(relations.filter(r => r.rel === "hostCapability" && ["dom.render", "http.fetch"].includes(r.to)).map(r => r.from))];
+  const backendHosts = [...new Set(relations.filter(r =>
+    (r.rel === "hostCapability" || (r.rel === "installsCapability" && r.meta?.targetKind === "host"))
+    && ["http.serve", "fs.json.read", "fs.json.write"].includes(r.to)
+  ).map(r => r.from))];
+  const frontendHosts = [...new Set(relations.filter(r =>
+    (r.rel === "hostCapability" || (r.rel === "installsCapability" && r.meta?.targetKind === "host"))
+    && ["dom.render", "http.fetch"].includes(r.to)
+  ).map(r => r.from))];
   const serverRunnerIds = [...moduleKinds.entries()].filter(([, kind]) => kind === "serverRunner").map(([id]) => id);
 
   const children = new Map();
@@ -462,7 +473,7 @@ function contextProjection(relations) {
     if (!map.has(r.from)) continue;
     const ctx = ensureContext(map, r.from);
     if (r.rel === "contextActor") ctx.actor = r.to;
-    if (r.rel === "contextCapability") ctx.capabilities.push(r.to);
+    if (r.rel === "contextCapability" || (r.rel === "installsCapability" && r.meta?.targetKind === "context")) ctx.capabilities.push(r.to);
     if (r.rel === "parentContext") ctx.parent = r.to;
   }
   return map;
@@ -507,7 +518,7 @@ function projectedNodeContexts(witnesses, contexts) {
 function shouldAssignRelationTargetContext(c) {
   if (!c.to || looksLikeCapability(c.to) || looksLikeKind(c.to)) return false;
   // These are cross-context references; target context should come from its own definition.
-  if (["usesFrontendProgram", "usesFrontendHost", "usesBackendHost", "usesRootWidget"].includes(c.rel)) return false;
+  if (["usesFrontendProgram", "usesFrontendHost", "usesBackendHost", "usesRootWidget", "installsCapability", "dependsOnCapability"].includes(c.rel)) return false;
   return true;
 }
 
@@ -520,18 +531,19 @@ function looksLikeCapability(value) {
 }
 
 function looksLikeKind(value) {
-  return ["widget", "widgetVersion", "widgetVersionTransition", "frontendProgram", "context", "app", "route", "serverRunner", "frontendRunner", "compiler", "description", "compiledArtifact", "trait", "valueType", "processSpec"].includes(value);
+  return ["widget", "widgetVersion", "widgetVersionTransition", "frontendProgram", "context", "capability", "app", "route", "serverRunner", "frontendRunner", "compiler", "description", "compiledArtifact", "trait", "valueType", "processSpec"].includes(value);
 }
 
-function capabilityContextFor(source, capability, nodeContext) {
+function capabilityContextFor(source, capability, nodeContext, meta = {}) {
   const sourceContext = nodeContext.get(source) ?? "";
+  if (meta?.targetKind === "routePage") return "frontend/capabilities";
   if (sourceContext.startsWith("backend") || ["http.serve", "fs.json.read", "fs.json.write"].includes(capability)) return "backend/capabilities";
   if (sourceContext.startsWith("frontend") || ["dom.render", "http.fetch"].includes(capability)) return "frontend/capabilities";
   return "system/vocabulary";
 }
 
 function relationStyle(rel) {
-  if (rel === "contextCapability" || rel === "hostCapability") return "capability";
+  if (rel === "contextCapability" || rel === "hostCapability" || rel === "installsCapability" || rel === "dependsOnCapability") return "capability";
   if (rel === "hasChildWidget") return "composition";
   if (rel === "hasFrontendStep") return "process";
   return "relation";
@@ -546,6 +558,7 @@ function inferKind(id, relations) {
   if (id.startsWith("layout:")) return "layout";
   const moduleKind = relations.find(r => r.from === id && r.rel === "hasModuleKind")?.to;
   if (moduleKind === "context") return "context";
+  if (moduleKind === "capability") return "capability";
   if (moduleKind === "trait" || moduleKind === "valueType" || moduleKind === "processSpec") return moduleKind;
   if (moduleKind?.includes("widget")) return "widget";
   if (moduleKind) return "module";

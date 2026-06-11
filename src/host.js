@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { thing, relation, projectors } from "./kernel.js";
-import { witnessRelations, moduleProjectors } from "./modules.js";
+import { witnessRelations, moduleProjectors, ensureCapabilityDefinition, installCapability } from "./modules.js";
 import {
   renderWidgetPage,
   requestWidgetVersionActivation,
@@ -27,6 +27,9 @@ import {
   requestBootstrapServerRunnerDefine,
   requestBootstrapRouteDefine,
   requestBootstrapServeDefine,
+  requestBootstrapCapabilityDefine,
+  requestBootstrapCapabilityInstall,
+  requestBootstrapCapabilityRemove,
   requestBootstrapFrontendProgramDefine,
   requestBootstrapFrontendStepDefine,
   requestWidgetDefine
@@ -84,37 +87,70 @@ const FRONTEND_TRACE_PROCESSES = new Set([
 ]);
 
 export function declareBackendHost(world, { actor, id, owner = actor }) {
-  world.emit({
+  const capabilities = ["http.serve", "fs.json.read", "fs.json.write"];
+  for (const capability of capabilities) {
+    ensureCapabilityDefinition(world, {
+      actor,
+      id: capability,
+      label: capability,
+      provenance: { source: "host.declare.backend" }
+    });
+  }
+  const define = world.emit({
     process: "declareBackendHost",
     actor,
     claims: [
       thing(id),
-      relation(owner, "owns", id),
-      relation(id, "hostCapability", "http.serve"),
-      relation(id, "hostCapability", "fs.json.read"),
-      relation(id, "hostCapability", "fs.json.write")
+      relation(owner, "owns", id)
     ],
     body: { id }
   });
+  const installs = capabilities.map(capability => installCapability(world, {
+    actor,
+    capability,
+    target: id,
+    targetKind: "host"
+  }));
+  return [define, ...installs];
 }
 
 export function declareFrontendHost(world, { actor, id, owner = actor }) {
-  world.emit({
+  const capabilities = ["dom.render", "http.fetch"];
+  for (const capability of capabilities) {
+    ensureCapabilityDefinition(world, {
+      actor,
+      id: capability,
+      label: capability,
+      provenance: { source: "host.declare.frontend" }
+    });
+  }
+  const define = world.emit({
     process: "declareFrontendHost",
     actor,
     claims: [
       thing(id),
-      relation(owner, "owns", id),
-      relation(id, "hostCapability", "dom.render"),
-      relation(id, "hostCapability", "http.fetch")
+      relation(owner, "owns", id)
     ],
     body: { id }
   });
+  const installs = capabilities.map(capability => installCapability(world, {
+    actor,
+    capability,
+    target: id,
+    targetKind: "host"
+  }));
+  return [define, ...installs];
 }
 
 export function hostCapabilities(world, hostId) {
-  const rels = world.project(witnessRelations);
-  return new Set(rels.filter(r => r.from === hostId && (r.rel === "hostCapability" || r.rel === "contextCapability")).map(r => r.to));
+  const installs = world.project(moduleProjectors.capabilityInstalls);
+  const capabilities = installs
+    .filter(row => row.target === hostId)
+    .map(row => row.capability);
+  const legacy = world.project(projectors.currentRelations)
+    .filter(r => r.from === hostId && (r.rel === "hostCapability" || r.rel === "contextCapability"))
+    .map(r => r.to);
+  return new Set([...capabilities, ...legacy]);
 }
 
 export function resolveServerRunner(world, serverRunnerId = null) {
@@ -130,9 +166,24 @@ export function resolveServerRunner(world, serverRunnerId = null) {
 }
 
 function uniqueHostByCapability(world, capability) {
-  const hosts = [...new Set(witnessRelations(world.allWitnesses()).filter(r => r.rel === "hostCapability" && r.to === capability).map(r => r.from))];
+  const hosts = hostIdsByCapability(world, capability);
+  if (hosts.length !== 1) {
+    const legacyHosts = [...new Set(witnessRelations(world.allWitnesses()).filter(r => r.rel === "hostCapability" && r.to === capability).map(r => r.from))];
+    if (legacyHosts.length !== 1) return null;
+    return legacyHosts[0];
+  }
   if (hosts.length !== 1) return null;
   return hosts[0];
+}
+
+function hostIdsByCapability(world, capability) {
+  return [
+    ...new Set(
+      world.project(moduleProjectors.capabilityInstalls)
+        .filter(row => row.targetKind === "host" && row.capability === capability)
+        .map(row => row.target)
+    )
+  ];
 }
 
 function resolveStartupRunner(world, serverRunnerId = null) {
@@ -583,8 +634,8 @@ function createGenericRouteHandlers({
     "canvas.process",
     ...supportedHandlerSets.flatMap(id => HANDLER_SET_DEFINITIONS[id]?.handlers ?? [])
   ];
-  const backendHosts = [...new Set(witnessRelations(world.allWitnesses()).filter(r => r.rel === "hostCapability" && r.to === "http.serve").map(r => r.from))];
-  const frontendHosts = [...new Set(witnessRelations(world.allWitnesses()).filter(r => r.rel === "hostCapability" && r.to === "dom.render").map(r => r.from))];
+  const backendHosts = hostIdsByCapability(world, "http.serve");
+  const frontendHosts = hostIdsByCapability(world, "dom.render");
   const bootstrapAuthAllowed = () => currentIdentityIndex().rows.length === 0;
   const requireBootstrapActor = requestActor => {
     if (requestActor) return { ok: true, actor: requestActor };
@@ -596,6 +647,12 @@ function createGenericRouteHandlers({
     const homeRoute = authored.servedRoutes.find(route => route.method === "GET" && route.path === "/" && route.handler === "page.home");
     const appReady = Boolean(homeRoute && homeRoute.params?.rootWidget);
     const typeModel = world.project(typeModelProjection);
+    const pageRoutes = (authored.routes || []).filter(route => {
+      if (!String(route.handler || "").startsWith("page.")) return false;
+      const rootWidget = route.params?.rootWidget ?? null;
+      const widget = (authored.widgets || []).find(row => row.id === rootWidget);
+      return widget?.kind === "Page";
+    });
     return {
       appReady,
       homeReason: appReady ? "reachable home route" : "no reachable app home route",
@@ -607,18 +664,40 @@ function createGenericRouteHandlers({
       supportedFrontendOps: SUPPORTED_FRONTEND_OPS,
       backendHosts: backendHosts.map(id => ({ id })),
       frontendHosts: frontendHosts.map(id => ({ id })),
-      processSpecs: Object.values(typeModel.processSpecsByProcess ?? {})
+      processSpecs: Object.values(typeModel.processSpecsByProcess ?? {}),
+      capabilityTargetKinds: ["context", "serverRunner", "routePage"],
+      capabilityTargets: {
+        contexts: authored.contexts || [],
+        serverRunners: authored.serverRunners || [],
+        routePages: pageRoutes
+      }
     };
   };
   const bootstrapState = () => {
     const routes = world.project(moduleProjectors.routes);
     const servedRoutes = world.project(moduleProjectors.servedRoutes);
     const serverRunners = world.project(moduleProjectors.serverRunners);
+    const contexts = world.project(moduleProjectors.contexts);
+    const capabilities = world.project(moduleProjectors.capabilities);
+    const capabilityCatalog = world.project(moduleProjectors.capabilityCatalog);
+    const capabilityInstalls = world.project(moduleProjectors.capabilityInstalls);
     const identities = world.project(moduleProjectors.identities);
     const widgets = widgetDefinitions(world.allWitnesses());
     const frontendPrograms = frontendProgramsProjection(world.allWitnesses());
     const frontendSteps = frontendStepsProjection(world.allWitnesses());
-    return { identities, widgets, frontendPrograms, frontendSteps, routes, servedRoutes, serverRunners };
+    return {
+      contexts,
+      capabilities,
+      capabilityCatalog,
+      capabilityInstalls,
+      identities,
+      widgets,
+      frontendPrograms,
+      frontendSteps,
+      routes,
+      servedRoutes,
+      serverRunners
+    };
   };
   const tutorialProgressFor = (requestSession, tutorialId) => requestSession?.tutorialProgress?.[tutorialId] ?? null;
   const setTutorialProgress = (requestSession, tutorialId, progress) => {
@@ -700,6 +779,51 @@ function createGenericRouteHandlers({
         return;
       }
       sendJson(res, result.status, { identity: result.identity, witness: result.witness });
+    },
+
+    "capability.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        return;
+      }
+      const body = await readJson(req);
+      const result = requestBootstrapCapabilityDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { capability: result.capability, witness: result.witness });
+    },
+
+    "capability.install": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        return;
+      }
+      const body = await readJson(req);
+      const result = requestBootstrapCapabilityInstall(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { capabilityInstall: result.capabilityInstall, witness: result.witness });
+    },
+
+    "capability.remove": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        return;
+      }
+      const body = await readJson(req);
+      const result = requestBootstrapCapabilityRemove(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { capabilityInstall: result.capabilityInstall, witness: result.witness });
     },
 
     "serverRunner.create": async ({ req, res, requestActor }) => {
@@ -1210,6 +1334,9 @@ function matchGenericEndpoint(method, pathname) {
   }
   if (targetMethod === "POST" && pathname === "/api/widgets") return { handler: "widgets.create", params: {} };
   if (targetMethod === "POST" && pathname === "/api/identities") return { handler: "identity.create", params: {} };
+  if (targetMethod === "POST" && pathname === "/api/capabilities") return { handler: "capability.create", params: {} };
+  if (targetMethod === "POST" && pathname === "/api/capability-installs") return { handler: "capability.install", params: {} };
+  if (targetMethod === "DELETE" && pathname === "/api/capability-installs") return { handler: "capability.remove", params: {} };
   if (targetMethod === "POST" && pathname === "/api/frontend-programs") return { handler: "frontendProgram.create", params: {} };
   if (targetMethod === "POST" && pathname === "/api/frontend-steps") return { handler: "frontendStep.create", params: {} };
   if (targetMethod === "POST" && pathname === "/api/routes") return { handler: "route.create", params: {} };

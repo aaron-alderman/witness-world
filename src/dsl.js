@@ -5,6 +5,10 @@ import {
   createCompiler,
   createDescription,
   compileDescription,
+  defineCapability,
+  ensureCapabilityDefinition,
+  installCapability,
+  removeCapability,
   createServerRunner,
   createIdentity,
   defineRoute,
@@ -142,6 +146,11 @@ function sourceTargets(kind, values) {
   }
   if (kind === "activateWidgetVersion" && values.soul) ids.push(values.soul);
   if ((kind === "frontendStep" || kind === "step") && values.program) ids.push(values.program);
+  if (kind === "capability" && values.id) ids.push(values.id);
+  if (kind === "capabilityInstall") {
+    if (values.capability) ids.push(values.capability);
+    if (values.target) ids.push(values.target);
+  }
   if (kind === "attachWidget") {
     if (values.parent) ids.push(values.parent);
     if (values.child) ids.push(values.child);
@@ -198,18 +207,67 @@ function applyDoc(world, { kind, values }, context) {
       const actor = valuesWithDefaults.actor ?? id;
       const capabilities = valuesWithDefaults.capabilities ?? [];
       context.contexts[id] = { ...valuesWithDefaults, id, actor, capabilities };
-      return world.emit({
+      const define = world.emit({
         process: "context.define",
         actor,
         claims: [
           thing(id),
           relation(id, "hasModuleKind", "context"),
-          relation(id, "contextActor", actor),
-          ...capabilities.map(capability => relation(id, "contextCapability", capability))
+          relation(id, "contextActor", actor)
         ],
         body: { id, actor, capabilities }
       });
+      const sugar = [];
+      for (const capability of capabilities) {
+        ensureCapabilityDefinition(world, {
+          actor,
+          id: capability,
+          label: capability,
+          provenance: { source: "dsl.context.capabilities" },
+          placement: ["context"]
+        });
+        sugar.push(installCapability(world, {
+          actor,
+          capability,
+          target: id,
+          targetKind: "context"
+        }));
+      }
+      return [define, ...sugar];
     }
+
+    case "capability":
+      return defineCapability(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        id: req(valuesWithDefaults, "id"),
+        label: valuesWithDefaults.label ?? valuesWithDefaults.id,
+        version: valuesWithDefaults.version ?? null,
+        provenance: valuesWithDefaults.provenance ?? null,
+        dependsOn: valuesWithDefaults.dependsOn ?? [],
+        publicApi: valuesWithDefaults.publicApi ?? [],
+        config: valuesWithDefaults.config ?? [],
+        internals: valuesWithDefaults.internals ?? [],
+        authority: valuesWithDefaults.authority ?? [],
+        placement: valuesWithDefaults.placement ?? [],
+        owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
+      });
+
+    case "capabilityInstall":
+      return installCapability(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        capability: req(valuesWithDefaults, "capability"),
+        target: req(valuesWithDefaults, "target"),
+        targetKind: req(valuesWithDefaults, "targetKind"),
+        config: valuesWithDefaults.config ?? null
+      });
+
+    case "capabilityRemove":
+      return removeCapability(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        capability: req(valuesWithDefaults, "capability"),
+        target: req(valuesWithDefaults, "target"),
+        targetKind: valuesWithDefaults.targetKind ?? null
+      });
 
     case "thing":
       return createThing(world, {

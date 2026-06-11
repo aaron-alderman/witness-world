@@ -199,3 +199,41 @@ outputs = [{ name = "id", accepts = "widget.text", required = true }]
   assert.equal(world.allWitnesses().some(w => w.process === "dsl.source.annotate" && w.body.section === "valueType" && w.body.target === "widget.text"), true);
   assert.equal(world.allWitnesses().some(w => w.process === "dsl.source.annotate" && w.body.section === "processSpec" && w.body.target === "widget_define_spec"), true);
 });
+
+test("capability DSL sections emit first-class capability definitions and installs", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[context.frontend]
+actor = "browser"
+capabilities = ["dom.render"]
+
+[[capability]]
+actor = "adam"
+id = "notes.sidebar"
+label = "Notes Sidebar"
+version = "0.1.0"
+provenance = { source = "local" }
+dependsOn = ["dom.render"]
+publicApi = [{ name = "mount", accepts = "widget.id", required = true }]
+config = [{ name = "title", accepts = "widget.text", required = false }]
+internals = []
+authority = [{ name = "browser.dom", accepts = "authority.id", required = true }]
+placement = ["context", "routePage"]
+
+[[capabilityInstall]]
+actor = "adam"
+capability = "notes.sidebar"
+target = "frontend"
+targetKind = "context"
+`);
+
+  const capabilities = world.project(moduleProjectors.capabilities);
+  const installs = world.project(moduleProjectors.capabilityInstalls);
+  const custom = capabilities.find(row => row.id === "notes.sidebar");
+  assert.ok(custom);
+  assert.deepEqual(custom.placement, ["context", "routePage"]);
+  assert.deepEqual(custom.dependsOn, ["dom.render"]);
+  assert.equal(capabilities.some(row => row.id === "dom.render"), true);
+  assert.equal(installs.some(row => row.capability === "dom.render" && row.target === "frontend" && row.targetKind === "context"), true);
+  assert.equal(installs.some(row => row.capability === "notes.sidebar" && row.target === "frontend" && row.targetKind === "context"), true);
+});

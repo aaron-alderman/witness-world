@@ -191,3 +191,66 @@ test("tutorial progress syncs into the authenticated session store", async () =>
     await server.close();
   }
 });
+
+test("bootstrap capability catalog and install lifecycle are exposed through the generic API", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const initialState = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(initialState.capabilityCatalog.some(row => row.id === "dom.render"), true);
+
+    const post = (pathname, body, method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    assert.equal((await post("/api/server-runners", {
+      id: "demo_server",
+      backendHost: "backendHost",
+      frontendHost: "frontendHost"
+    })).status, 201);
+
+    const created = await post("/api/capabilities", {
+      id: "notes.sidebar",
+      label: "Notes Sidebar",
+      version: "0.1.0",
+      provenanceJson: JSON.stringify({ source: "local" }),
+      dependsOnJson: "[]",
+      publicApiJson: "[]",
+      configJson: "[]",
+      internalsJson: "[]",
+      authorityJson: "[]",
+      placementJson: JSON.stringify(["serverRunner", "routePage"])
+    });
+    assert.equal(created.status, 201);
+
+    const installed = await post("/api/capability-installs", {
+      capability: "notes.sidebar",
+      target: "demo_server",
+      targetKind: "serverRunner"
+    });
+    assert.equal(installed.status, 201);
+
+    const duplicate = await post("/api/capability-installs", {
+      capability: "notes.sidebar",
+      target: "demo_server",
+      targetKind: "serverRunner"
+    });
+    assert.equal(duplicate.status, 409);
+
+    const afterInstall = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(afterInstall.capabilityInstalls.some(row => row.capability === "notes.sidebar" && row.target === "demo_server" && row.targetKind === "serverRunner"), true);
+
+    const removed = await post("/api/capability-installs", {
+      capability: "notes.sidebar",
+      target: "demo_server",
+      targetKind: "serverRunner"
+    }, "DELETE");
+    assert.equal(removed.status, 200);
+
+    const afterRemove = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(afterRemove.capabilityInstalls.some(row => row.capability === "notes.sidebar" && row.target === "demo_server" && row.targetKind === "serverRunner"), false);
+  } finally {
+    await server.close();
+  }
+});

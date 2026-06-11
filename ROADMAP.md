@@ -49,18 +49,45 @@ The active question is no longer "can the baseline work?" It is "what seams most
 
 ### 1. Capability Core
 
-Status: active
+Status: partial
 
 This is the highest-leverage missing seam. The platform needs first-class capability/plugin objects rather than a world where composition still bottoms out in hidden wiring.
 
-- [ ] Make capability/plugin objects first-class in the model and DSL.
-- [ ] Define capability surfaces explicitly: public API, configuration, internals, context, and authority requirements.
-- [ ] Make capability installation and placement first-class rather than a detached setup ritual.
-- [ ] Make capability authoring part of the product story, not a privileged side channel.
-- [ ] Introduce a capability catalog/store model with install/update/remove lifecycle, provenance, and compatibility surfaces.
+- [x] Make capability/plugin objects first-class in the model and DSL.
+- [x] Define capability surfaces explicitly: public API, configuration, internals, context, and authority requirements.
+- [x] Make capability installation and placement first-class rather than a detached setup ritual.
+- [x] Make capability authoring part of the product story, not a privileged side channel.
+- [x] Introduce a local capability catalog/install surface with provenance and compatibility read models.
+- [ ] Turn the local catalog projection into a fuller catalog/store lifecycle with update flows, review surfaces, and remote provenance/trust channels.
+- [ ] Deepen compatibility beyond typed facet presence into stronger install-time compatibility reasoning across versions, authorities, and richer target semantics.
 - [ ] Keep the core engineering rule explicit: do not hide app semantics in JS unless they are universal runtime/shell behavior or explicit plugin implementation code.
 
 This seam is the main transition from "wiring one app" to "assembling many capabilities."
+
+Current first slice now exists:
+
+- authored `capability` objects in the model and DSL
+- typed facet groups for `publicApi`, `config`, `internals`, `authority`, and `placement`
+- install/remove flows onto `context`, `serverRunner`, and route-root `Page` surfaces
+- bootstrap capability authoring/install/remove forms
+- local catalog/read-model exposure through bootstrap APIs
+- world graph capability nodes plus install/dependency edges
+- compatibility projection from legacy `context.capabilities` and host capability strings
+
+Honest caveats / rollback watch:
+
+- Host capability support still uses an internal `targetKind = "host"` path even though the first public placement slice only exposes `context`, `serverRunner`, and `routePage`.
+  This is a pragmatic bridge for runtime startup compatibility, but if host capabilities later want a cleaner first-class public contract, this internal shape may need revision rather than being treated as final.
+- Legacy capability sugar currently synthesizes placeholder capability definitions during projection/load.
+  That keeps old worlds working, but it is still a compatibility bridge rather than a principled authored migration format.
+- `routePage` placement is only route-root `Page` placement, not a true page entity or arbitrary widget-subtree placement model.
+  If a stronger page concept lands later, this slice should be treated as intentionally narrow and replaceable.
+- Install validation is typed and dependency-aware, but it is still shallow.
+  It checks placement, dependency existence, and duplicate installs, but it does not yet perform deeper semantic compatibility checks, version negotiation, or authority conflict analysis.
+- The current catalog is a local projection, not yet a real package/store protocol.
+  The naming is directionally correct, but the implementation is still closer to a local indexed read model than a mature install ecosystem.
+- The bootstrap capability authoring surface is intentionally minimal and JSON-heavy.
+  It is truthful, but not yet a strong product-quality authoring experience.
 
 ### 2. Context, Identity, and Authority
 

@@ -98,3 +98,57 @@ test("blank world can bootstrap into a working todo app purely through the UI", 
     await closeServer();
   }
 });
+
+test("bootstrap UI can define, install, and remove a route-page capability", async () => {
+  const { server, close: closeServer } = await startBlankUiServer();
+  const { page, close: closeBrowser } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await page.waitForFunction(() => document.body.textContent.includes("Recover And Author The App Boundary"));
+
+    await page.fill('#identity-form input[name="id"]', "identity.aaron");
+    await page.fill('#identity-form input[name="actor"]', "aaron");
+    await page.fill('#identity-form input[name="label"]', "Aaron");
+    await page.fill('#identity-form input[name="username"]', "aaron");
+    await page.fill('#identity-form input[name="password"]', "aaron");
+    await page.fill('#identity-form input[name="homePerspective"]', "aaron:personal");
+    await page.locator('#identity-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("identity-status")?.textContent.includes("Identity created."));
+
+    await page.fill('#session-form input[name="username"]', "aaron");
+    await page.fill('#session-form input[name="password"]', "aaron");
+    await page.locator('#session-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Signed in as Aaron"));
+
+    await page.locator('details').last().evaluate(node => { node.open = true; });
+    await page.locator('#create-todo-starter').click();
+    await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
+
+    await page.locator('summary').filter({ hasText: 'Capabilities' }).click();
+    await page.fill('#capability-form input[name="id"]', "notes.sidebar");
+    await page.fill('#capability-form input[name="label"]', "Notes Sidebar");
+    await page.fill('#capability-form input[name="version"]', "0.1.0");
+    await page.fill('#capability-form textarea[name="placementJson"]', '["routePage"]');
+    await page.fill('#capability-form textarea[name="dependsOnJson"]', '[]');
+    await page.locator('#capability-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("capability-status")?.textContent.includes("Saved."));
+
+    await page.selectOption('#capability-install-capability', "notes.sidebar");
+    await page.selectOption('#capability-install-kind', "routePage");
+    await page.selectOption('#capability-install-target', "home_page_route");
+    await page.locator('#capability-install-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("capability-install-status")?.textContent.includes("Saved."));
+    await page.waitForFunction(() => document.getElementById("state-capability-installs")?.textContent.includes("home_page_route"));
+
+    await page.selectOption('#capability-remove-capability', "notes.sidebar");
+    await page.selectOption('#capability-remove-kind', "routePage");
+    await page.selectOption('#capability-remove-target', "home_page_route");
+    await page.locator('#capability-remove-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("capability-remove-status")?.textContent.includes("Removed."));
+    await page.waitForFunction(() => !document.getElementById("state-capability-installs")?.textContent.includes("notes.sidebar"));
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});

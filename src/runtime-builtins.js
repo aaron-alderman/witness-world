@@ -1,4 +1,5 @@
 import { defineTrait, defineValueType, defineProcessSpec } from "./type-model.js";
+import { defineCapability } from "./modules.js";
 
 const TRAITS = [
   { id: "textual", label: "Textual" },
@@ -51,6 +52,13 @@ const VALUE_TYPES = [
   { id: "serverRunner.handlerSet", label: "Handler Set", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "serverRunner.host", label: "Host Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "serverRunner.storage", label: "Storage Path", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "context.id", label: "Context Id", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "capability.id", label: "Capability Id", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "capability.label", label: "Capability Label", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "capability.version", label: "Capability Version", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "capability.target", label: "Capability Install Target", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "capability.targetKind", label: "Capability Install Target Kind", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["context", "serverRunner", "routePage"] } },
+  { id: "authority.id", label: "Authority Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "json.text", label: "JSON Text", compatibleWith: ["textual"], editor: { control: "text" } }
 ];
 
@@ -163,6 +171,86 @@ const PROCESS_SPECS = [
       { name: "allowActorHeader", accepts: "widget.attach", required: false }
     ],
     outputs: [{ name: "id", accepts: "serverRunner.id", required: true }]
+  },
+  {
+    id: "capability_define_spec",
+    process: "capability.define",
+    inputs: [
+      { name: "id", accepts: "capability.id", required: true },
+      { name: "label", accepts: "capability.label", required: true },
+      { name: "version", accepts: "capability.version", required: false },
+      { name: "provenanceJson", accepts: "json.text", required: false },
+      { name: "dependsOnJson", accepts: "json.text", required: false },
+      { name: "publicApiJson", accepts: "json.text", required: false },
+      { name: "configJson", accepts: "json.text", required: false },
+      { name: "internalsJson", accepts: "json.text", required: false },
+      { name: "authorityJson", accepts: "json.text", required: false },
+      { name: "placementJson", accepts: "json.text", required: false }
+    ],
+    outputs: [{ name: "id", accepts: "capability.id", required: true }]
+  },
+  {
+    id: "capability_install_spec",
+    process: "capability.install",
+    inputs: [
+      { name: "capability", accepts: "capability.id", required: true },
+      { name: "target", accepts: "capability.target", required: true },
+      { name: "targetKind", accepts: "capability.targetKind", required: true }
+    ],
+    outputs: [{ name: "capability", accepts: "capability.id", required: true }]
+  },
+  {
+    id: "capability_remove_spec",
+    process: "capability.remove",
+    inputs: [
+      { name: "capability", accepts: "capability.id", required: true },
+      { name: "target", accepts: "capability.target", required: true },
+      { name: "targetKind", accepts: "capability.targetKind", required: true }
+    ],
+    outputs: [{ name: "capability", accepts: "capability.id", required: true }]
+  }
+];
+
+const BUILTIN_CAPABILITIES = [
+  {
+    id: "http.serve",
+    label: "HTTP Serve",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    authority: [{ name: "network.listen", accepts: "authority.id", required: true }],
+    placement: ["context", "serverRunner"]
+  },
+  {
+    id: "fs.json.read",
+    label: "JSON File Read",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    authority: [{ name: "filesystem.read", accepts: "authority.id", required: true }],
+    placement: ["context", "serverRunner"]
+  },
+  {
+    id: "fs.json.write",
+    label: "JSON File Write",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    authority: [{ name: "filesystem.write", accepts: "authority.id", required: true }],
+    placement: ["context", "serverRunner"]
+  },
+  {
+    id: "dom.render",
+    label: "DOM Render",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    authority: [{ name: "browser.dom", accepts: "authority.id", required: true }],
+    placement: ["context", "serverRunner", "routePage"]
+  },
+  {
+    id: "http.fetch",
+    label: "HTTP Fetch",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    authority: [{ name: "network.fetch", accepts: "authority.id", required: true }],
+    placement: ["context", "serverRunner", "routePage"]
   }
 ];
 
@@ -177,6 +265,9 @@ export function ensureRuntimeBuiltins(world, { actor = "system" } = {}) {
   const definedProcessSpecs = new Set(
     witnesses.filter(w => w.process === "defineProcessSpec" && w.body?.id).map(w => w.body.id)
   );
+  const definedCapabilities = new Set(
+    witnesses.filter(w => w.process === "defineCapability" && w.body?.id).map(w => w.body.id)
+  );
 
   for (const trait of TRAITS) {
     if (definedTraits.has(trait.id)) continue;
@@ -189,5 +280,9 @@ export function ensureRuntimeBuiltins(world, { actor = "system" } = {}) {
   for (const spec of PROCESS_SPECS) {
     if (definedProcessSpecs.has(spec.id)) continue;
     defineProcessSpec(world, { actor, id: spec.id, process: spec.process, inputs: spec.inputs, outputs: spec.outputs, owner: actor });
+  }
+  for (const capability of BUILTIN_CAPABILITIES) {
+    if (definedCapabilities.has(capability.id)) continue;
+    defineCapability(world, { actor, ...capability, owner: actor });
   }
 }

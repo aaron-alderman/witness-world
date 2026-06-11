@@ -46,11 +46,16 @@
 - Import model:
   - `app.imports` recursively loads other DSL files (cycle-safe).
 - DSL sections are mapped to kernel/app operations:
-  - app/context/serverRunner/identity/thing/relation
+  - app/context/serverRunner/identity/thing/relation/capability
   - trait/valueType/processSpec
   - compiler/description/compile/route/serve
   - frontendRunner/view/render/action/widget/widgetVersion/widgetVersionTransition/activateWidgetVersion/attachWidget
   - frontendProgram/frontEndStep + ergonomic step syntax
+- Capability-specific sections now include:
+  - `[[capability]]`
+  - `[[capabilityInstall]]`
+  - `[[capabilityRemove]]`
+- Legacy `context.capabilities = [...]` and legacy host capability strings remain compatibility sugar and are projected into the first-class capability model during load/projection.
 - Unknown sections emit `dsl.unknownSection` witnesses.
 - Source witnesses are emitted for provenance and browser source mode.
 
@@ -62,10 +67,15 @@
 - DOM form coercion is intentionally narrow: string-to-number and string-to-boolean for typed form fields only.
 
 ## 6. Hosts and HTTP Surface
-- Backend host must have:
+- Backend host must expose capability objects equivalent to:
   - `http.serve`, `fs.json.read`, `fs.json.write`
-- Frontend host must have:
+- Frontend host must expose capability objects equivalent to:
   - `dom.render`, `http.fetch`
+- Capability placement in the first public slice supports:
+  - `context`
+  - `serverRunner`
+  - `routePage`
+- Runtime startup still bridges host capability resolution through the new capability model so older behavior continues to work.
 - Canonical startup path is the generic CLI:
   - `node src/cli.js bootstrap [--port <n>]`
   - `node src/cli.js serve <dslPath> [--server <id>] [--port <n>]`
@@ -82,6 +92,8 @@
   - bootstrap and authoring APIs:
     - `/api/bootstrap-model`
     - `/api/bootstrap-state`
+    - `/api/capabilities`
+    - `/api/capability-installs`
     - `/api/identities`
     - `/api/frontend-programs`
     - `/api/frontend-steps`
@@ -114,9 +126,11 @@
 - Cookie-backed session identity is the canonical auth transport for normal browser use.
 - `x-witness-actor` is a dev-only escape hatch and is ignored unless a runner explicitly allows it.
 - `/api/widgets` now uses the witnessed `widget.define` process spec for both input validation and output validation.
+- `/api/capabilities` and `/api/capability-installs` now use witnessed `capability.define`, `capability.install`, and `capability.remove` process specs for typed validation.
 
 ## 7. Modules, Widgets, and Process Engine
 - Module operations emit witnesses and gate on `supportsProcess` relations.
+- Capability operations emit witnessed definitions/installs/removals and project catalog/install read models from those witnesses.
 - Widget definitions project to render trees via attachment graph.
 - `ValueEditor` is a primitive widget kind that chooses a concrete HTML control from value-type / trait metadata.
 - Template widgets can render as inert DOM `<template>` sources and can be consumed by `renderCollection`.

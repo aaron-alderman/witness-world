@@ -1,4 +1,18 @@
 
+## 0.37.0
+
+Capability Core first vertical slice.
+
+- Added first-class `capability` objects to the world model and DSL, including explicit `[[capability]]`, `[[capabilityInstall]]`, and `[[capabilityRemove]]` sections.
+- Added typed capability process specs: `capability.define`, `capability.install`, and `capability.remove`.
+- Added typed capability facets and projections for `publicApi`, `config`, `internals`, `authority`, `placement`, `dependsOn`, provenance, and version metadata.
+- Added bootstrap capability authoring/install/remove APIs and UI: `/api/capabilities`, `/api/capability-installs`, plus extended bootstrap read models for `capabilities`, `capabilityCatalog`, and `capabilityInstalls`.
+- Added local catalog projection that combines authored capabilities with built-in runtime capabilities such as `http.serve` and `dom.render`.
+- Added route-root `Page` placement validation, duplicate/dependency checks, and world-graph capability/install/dependency edges.
+- Kept legacy `context.capabilities` arrays and older host capability strings working by projecting them into the new model as compatibility sugar.
+- Honest caveat: host capability startup still uses an internal host-target install bridge, `routePage` is still route-root-only placement, and catalog/store semantics remain local-only for now.
+- 194 passing tests.
+
 ## 0.36.0
 
 Type / trait model v1.

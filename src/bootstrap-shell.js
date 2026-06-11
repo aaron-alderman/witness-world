@@ -324,6 +324,48 @@ export function renderBootstrapPage() {
           </form>
           <p class="status" id="runner-status"></p>
         </details>
+
+        <details>
+          <summary><strong>Capabilities</strong></summary>
+          <form id="capability-form" class="stack">
+            <div class="grid two">
+              <label>Capability Id<input name="id" placeholder="notes.sidebar" /></label>
+              <label>Label<input name="label" placeholder="Notes Sidebar" /></label>
+            </div>
+            <div class="grid two">
+              <label>Version<input name="version" placeholder="0.1.0" /></label>
+              <label>Placement JSON<textarea name="placementJson">["context"]</textarea></label>
+            </div>
+            <label>Depends On JSON<textarea name="dependsOnJson">[]</textarea></label>
+            <label>Provenance JSON<textarea name="provenanceJson">{"source":"local"}</textarea></label>
+            <label>Public API JSON<textarea name="publicApiJson">[]</textarea></label>
+            <label>Config JSON<textarea name="configJson">[]</textarea></label>
+            <label>Internals JSON<textarea name="internalsJson">[]</textarea></label>
+            <label>Authority JSON<textarea name="authorityJson">[]</textarea></label>
+            <div class="actions"><button type="submit">Define Capability</button></div>
+          </form>
+          <p class="status" id="capability-status"></p>
+
+          <form id="capability-install-form" class="stack">
+            <div class="grid two">
+              <label>Capability<select id="capability-install-capability" name="capability"></select></label>
+              <label>Target Kind<select id="capability-install-kind" name="targetKind"></select></label>
+            </div>
+            <label>Target<select id="capability-install-target" name="target"></select></label>
+            <div class="actions"><button type="submit">Install Capability</button></div>
+          </form>
+          <p class="status" id="capability-install-status"></p>
+
+          <form id="capability-remove-form" class="stack">
+            <div class="grid two">
+              <label>Capability<select id="capability-remove-capability" name="capability"></select></label>
+              <label>Target Kind<select id="capability-remove-kind" name="targetKind"></select></label>
+            </div>
+            <label>Target<select id="capability-remove-target" name="target"></select></label>
+            <div class="actions"><button type="submit" class="secondary">Remove Capability</button></div>
+          </form>
+          <p class="status" id="capability-remove-status"></p>
+        </details>
       </article>
 
       <article class="card">
@@ -345,6 +387,10 @@ export function renderBootstrapPage() {
         <h2>Authored State</h2>
         <p>The tutorial uses the same authored structures shown here. Nothing is hidden behind a fake wizard layer.</p>
         <div class="stack">
+          <section>
+            <h3>Contexts</h3>
+            <div id="state-contexts" class="state-list"></div>
+          </section>
           <section>
             <h3>Identities</h3>
             <div id="state-identities" class="state-list"></div>
@@ -372,6 +418,14 @@ export function renderBootstrapPage() {
           <section>
             <h3>Server Runners</h3>
             <div id="state-runners" class="state-list"></div>
+          </section>
+          <section>
+            <h3>Capabilities</h3>
+            <div id="state-capabilities" class="state-list"></div>
+          </section>
+          <section>
+            <h3>Capability Installs</h3>
+            <div id="state-capability-installs" class="state-list"></div>
           </section>
         </div>
       </article>
@@ -437,6 +491,19 @@ export function renderBootstrapPage() {
       if (includeBlank) select.append(new Option("", ""));
       for (const row of rows) select.append(new Option(getLabel(row), getValue(row)));
       if ([...select.options].some(option => option.value === current)) select.value = current;
+    };
+    const capabilityTargetsFor = kind => {
+      const targets = state.model?.capabilityTargets || {};
+      if (kind === "context") return targets.contexts || [];
+      if (kind === "serverRunner") return targets.serverRunners || [];
+      if (kind === "routePage") return targets.routePages || [];
+      return [];
+    };
+    const refreshCapabilityTargetOptions = (kindSelectId, targetSelectId) => {
+      const kind = byId(kindSelectId)?.value || "";
+      const rows = capabilityTargetsFor(kind);
+      const label = row => kind === "routePage" ? row.id + " " + (row.path || "") : row.id;
+      fillSelect(targetSelectId, rows, row => row.id, label, { includeBlank: false });
     };
     const renderStateList = (id, rows, label) => {
       const root = byId(id);
@@ -849,7 +916,14 @@ export function renderBootstrapPage() {
       fillSelect("runner-handler-set", model.supportedHandlerSets || [], x => x, x => x);
       fillSelect("runner-backend-host", model.backendHosts || [], x => x.id, x => x.id, { includeBlank: false });
       fillSelect("runner-frontend-host", model.frontendHosts || [], x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("capability-install-capability", authored.capabilityCatalog || [], x => x.id, x => x.id + (x.version ? " [" + x.version + "]" : ""), { includeBlank: false });
+      fillSelect("capability-remove-capability", authored.capabilityCatalog || [], x => x.id, x => x.id + (x.version ? " [" + x.version + "]" : ""), { includeBlank: false });
+      fillSelect("capability-install-kind", model.capabilityTargetKinds || [], x => x, x => x, { includeBlank: false });
+      fillSelect("capability-remove-kind", model.capabilityTargetKinds || [], x => x, x => x, { includeBlank: false });
+      refreshCapabilityTargetOptions("capability-install-kind", "capability-install-target");
+      refreshCapabilityTargetOptions("capability-remove-kind", "capability-remove-target");
 
+      renderStateList("state-contexts", authored.contexts || [], row => row.id + ((row.capabilities || []).length ? " -> " + row.capabilities.join(", ") : ""));
       renderStateList("state-identities", authored.identities || [], row => row.id + " -> " + row.actor);
       renderStateList("state-widgets", authored.widgets || [], row => row.id + " (" + row.kind + ")");
       renderStateList("state-programs", authored.frontendPrograms || [], row => row.id + " -> " + row.rootWidget);
@@ -857,9 +931,11 @@ export function renderBootstrapPage() {
       renderStateList("state-routes", authored.routes || [], row => row.id + " " + row.method + " " + row.path);
       renderStateList("state-serves", authored.servedRoutes || [], row => row.serverRunner + " -> " + row.id);
       renderStateList("state-runners", authored.serverRunners || [], row => row.id + (row.handlerSet ? " [" + row.handlerSet + "]" : ""));
+      renderStateList("state-capabilities", authored.capabilityCatalog || [], row => row.id + (row.placement?.length ? " -> " + row.placement.join(", ") : ""));
+      renderStateList("state-capability-installs", authored.capabilityInstalls || [], row => row.targetKind + " " + row.target + " -> " + row.capability);
 
       const editingEnabled = session.authenticated || !(authored.identities || []).length;
-      for (const formId of ["widget-form", "program-form", "step-form", "route-form", "serve-form", "runner-form"]) {
+      for (const formId of ["widget-form", "program-form", "step-form", "route-form", "serve-form", "runner-form", "capability-form", "capability-install-form", "capability-remove-form"]) {
         const form = byId(formId);
         if (!form) continue;
         form.querySelectorAll("input,select,textarea,button").forEach(el => { el.disabled = !editingEnabled; });
@@ -981,6 +1057,22 @@ export function renderBootstrapPage() {
     }));
     bindCreate("serve-form", "serve-status", "/api/serve-mounts", data => data);
     bindCreate("runner-form", "runner-status", "/api/server-runners", data => data);
+    bindCreate("capability-form", "capability-status", "/api/capabilities", data => data);
+    bindCreate("capability-install-form", "capability-install-status", "/api/capability-installs", data => data);
+    byId("capability-remove-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      try {
+        const data = readForm(form);
+        await postJson("/api/capability-installs", data, "DELETE");
+        setStatus("capability-remove-status", "Removed.");
+        await refresh();
+      } catch (error) {
+        setStatus("capability-remove-status", error.message);
+      }
+    });
+    byId("capability-install-kind").addEventListener("change", () => refreshCapabilityTargetOptions("capability-install-kind", "capability-install-target"));
+    byId("capability-remove-kind").addEventListener("change", () => refreshCapabilityTargetOptions("capability-remove-kind", "capability-remove-target"));
 
     byId("tutorial-overlay-handle").addEventListener("pointerdown", event => {
       const overlay = byId("tutorial-overlay");

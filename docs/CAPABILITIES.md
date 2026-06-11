@@ -564,7 +564,7 @@ This is the largest missing acceleration layer.
 
 ### 6.1 First-class capability object model
 
-Status: `missing`
+Status: `partial`
 
 What it is:
 
@@ -574,15 +574,20 @@ Why it accelerates:
 
 - turns "I want sessions/charts/database browsing" into a composable unit rather than a hand-wired checklist
 
-Missing molecules:
+Current molecules:
 
 - capability definition shape in the DSL/model
-- public API declaration
-- configuration schema
-- internal structure visibility
-- authority/permission declaration
-- dependency/import model
-- installation state and versioning
+- typed facet groups for `publicApi`, `config`, `internals`, `authority`, and `placement`
+- dependency declaration through `dependsOn`
+- provenance/version fields in capability projections
+- first-class capability nodes in the world graph
+
+Still missing:
+
+- stronger version semantics beyond a projected version field
+- richer dependency/import semantics beyond local dependency ids
+- stronger authority/compatibility reasoning at install time
+- a cleaner migration path away from legacy capability sugar
 
 Do:
 
@@ -595,7 +600,7 @@ Do not:
 
 ### 6.2 Capability installation and placement
 
-Status: `missing`
+Status: `partial`
 
 What it is:
 
@@ -605,12 +610,20 @@ Why it accelerates:
 
 - keeps composition local and reduces ceremony
 
-Missing molecules:
+Current molecules:
 
 - installation flow
-- placement into context/page/world
-- dependency resolution and conflict reporting
-- shell-specific capability awareness
+- removal flow
+- placement into `context`, `serverRunner`, and route-root `Page`
+- duplicate/dependency/placement validation
+- bootstrap install/remove surface and read models
+
+Still missing:
+
+- placement into richer page/widget/world scopes
+- shell-specific capability awareness as a clean public surface
+- deeper conflict reporting beyond current placement/dependency checks
+- richer update/replace semantics
 
 Do:
 
@@ -622,7 +635,7 @@ Do not:
 
 ### 6.3 Capability catalog / store
 
-Status: `missing`
+Status: `partial`
 
 What it is:
 
@@ -632,13 +645,18 @@ Why it accelerates:
 
 - shared composition becomes exponential once reusable capability packages exist
 
-Missing molecules:
+Current molecules:
 
-- local catalog
+- local catalog projection
+- local install/remove lifecycle
+- provenance surfaced in the bootstrap read models
+
+Still missing:
+
 - remote catalog/store protocol
-- install/update/remove lifecycle
-- trust/provenance surfaces
-- version compatibility and review surfaces
+- update lifecycle
+- trust/review/report surfaces
+- richer version compatibility semantics
 
 Do:
 
@@ -650,7 +668,7 @@ Do not:
 
 ### 6.4 Capability authoring
 
-Status: `missing`
+Status: `partial`
 
 What it is:
 
@@ -660,12 +678,17 @@ Why it accelerates:
 
 - this is how the Todo app builder becomes a plugin builder and eventually a meta-editor
 
-Missing molecules:
+Current molecules:
 
 - capability authoring DSL/model
+- bootstrap capability authoring form
+
+Still missing:
+
 - packaging/bundling semantics
 - installable export format
 - capability testing/preview
+- less JSON-heavy product-grade authoring surfaces
 
 Do:
 
@@ -674,6 +697,20 @@ Do:
 Do not:
 
 - make plugins a privileged platform-developer-only format forever
+
+### 6.5 Honesty notes on the current slice
+
+Status: `active caution`
+
+The current capability slice is real, but a few parts are still bridge-quality rather than obviously final:
+
+- Host capabilities currently travel through an internal `host` install target kind so startup and bootstrap compatibility continue to work.
+- Legacy `context.capabilities` arrays and legacy host capability strings synthesize placeholder capability objects rather than forcing an authored migration.
+- `routePage` means the served route plus its root `Page` widget only; it is not a general page/entity/subtree placement model.
+- Validation is typed and dependency-aware, but not yet a deep semantic solver for version, authority, or cross-surface conflicts.
+- The local catalog behaves like a projected index, not yet like a full ecosystem/store protocol.
+
+These are acceptable for the first vertical slice, but they should stay visible so later work can tighten or replace them intentionally rather than accrete around them by accident.
 
 ---
 
@@ -931,4 +968,3 @@ When new work is discovered, it should ideally be captured in both places:
 
 - the roadmap should say **when** and **why**
 - this catalog should say **what reusable molecule is being added**
-
