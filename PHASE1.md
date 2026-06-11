@@ -40,9 +40,9 @@ The core execution/stability gaps have now been closed:
 - browser and server now share the same type compatibility/coercion/validation path
 - `widget.define` defaults and mutation semantics have been extracted out of demo route code into [src/widget-define.js](C:\Users\aaron\Documents\world\src\widget-define.js)
 
-The main remaining gap is no longer hidden runtime contradiction. It is that the current baseline still depends on off-platform authored source files for major application structures.
+The last major gap was no longer hidden runtime contradiction. It was that the baseline still depended on off-platform authored source files for major application structures.
 
-By the stricter Phase 1 bar now in force, the phase is not complete until the platform can start from a blank world and recreate the todo app purely through the UI.
+That gap is now closed: a blank world can fall back into the bootstrap seam, and the todo app can be recreated through the UI against the existing runtime and explicit handler boundary.
 
 The current boundary and baseline contract are now recorded in [BASELINE.md](C:\Users\aaron\Documents\world\BASELINE.md).
 
@@ -312,7 +312,7 @@ If the same hidden semantics still live in a slightly more abstract JS helper, P
 
 ### 6. Define the Stable Baseline Contract
 
-Status: partially complete
+Status: complete
 
 #### Problem
 
@@ -358,29 +358,25 @@ The end state should include one compact baseline contract document or section t
 
 ### 7. Blank-World Authoring to a Working Todo App
 
-Status: not started
+Status: complete
 
 #### Problem
 
-The platform can now execute the demo coherently, but it still cannot *author* that demo coherently from inside itself.
+The platform needed one last baseline capability: from a blank world, it had to be able to recover into a safe bootstrap seam and author a runnable app boundary from inside the product.
 
-The missing gap is not just "more forms." It is a complete bootstrap path:
+That is now implemented through:
 
-- from a blank world, there is no authored app route to land on
-- major authored structures still live in WTOML:
-  - `[[identity]]`
-  - widgets and template widgets
-  - `[[frontendProgram]]` and steps
-  - `[[route]]`
-  - `[[serve]]`
-  - `[[serverRunner]]`
-- a user can mutate some runtime state through the UI, but cannot assemble a runnable application boundary from inside the product
-
-That means the platform still depends on off-platform authorship for the structures that actually make an app exist.
+- bootstrap fallback and request handling in [src/host.js](C:\Users\aaron\Documents\world\src\host.js)
+- runtime-owned builtins for typed bootstrap authoring in [src/runtime-builtins.js](C:\Users\aaron\Documents\world\src\runtime-builtins.js)
+- typed bootstrap mutation helpers in [src/bootstrap-authoring.js](C:\Users\aaron\Documents\world\src\bootstrap-authoring.js)
+- the semi-internal bootstrap shell in [src/bootstrap-shell.js](C:\Users\aaron\Documents\world\src\bootstrap-shell.js)
+- browser and host coverage in [test/ui.bootstrap.test.js](C:\Users\aaron\Documents\world\test\ui.bootstrap.test.js) and [test/bootstrap-host.test.js](C:\Users\aaron\Documents\world\test\bootstrap-host.test.js)
 
 #### Required outcome
 
 Make it possible to start from a blank world and recreate the todo app purely through the UI, using first-class authoring flows for the missing baseline structures.
+
+This outcome is now met.
 
 #### Scope guard
 
@@ -433,11 +429,11 @@ The point of this split is to help the user understand:
 #### Required sub-outcomes
 
 1. **Bootstrap editing entry**
-   - A blank world must still expose a generic editor shell or fallback route so the user can begin authoring without first creating an app page by hand.
-   - This should live in the semi-internal bootstrap seam, not as ordinary app content.
+   - A blank world now exposes a generic editor shell through `/_bootstrap`, and `/` falls back to that shell when no served home page exists.
+   - This lives in the semi-internal bootstrap seam rather than ordinary app content.
 
 2. **First-class structure editors**
-   - The UI must support creation and editing of:
+   - The UI now supports creation of:
      - identities
      - widgets and template widgets
      - frontend programs and steps
@@ -446,7 +442,7 @@ The point of this split is to help the user understand:
      - `serverRunner` runtime wiring
 
 3. **Reference-safe composition**
-   - Those editors must compose by reference rather than by fragile free-text copying wherever practical:
+   - Those editors compose by projected references rather than fragile free-text copying wherever practical:
      - select a root widget for a page
      - select a frontend program for a page route
      - select a route for a `serve` mount
@@ -454,7 +450,7 @@ The point of this split is to help the user understand:
      - select identities/perspectives/parents/templates from projected data
 
 4. **Runnable app assembly**
-   - The authored structures must be sufficient to expose:
+   - The authored structures are sufficient to expose:
      - `/`
      - `/api/session`
      - `/api/todos`
@@ -462,22 +458,22 @@ The point of this split is to help the user understand:
      - any additional routes needed for the recognizable todo demo
 
 5. **Proof by recreation**
-   - The todo app must be rebuilt from blank through the UI in an end-to-end test.
+   - The todo app is rebuilt from blank through the UI in end-to-end browser coverage.
 
 6. **Visibility discipline**
-   - The bootstrap seam must be hidden by default but intentionally revealable.
-   - Deep internal compiler/primitive machinery must remain hidden by default.
-   - The default editing experience should emphasize app-authored structures over platform substrate.
+   - The bootstrap seam is hidden by default but intentionally revealable.
+   - Deep internal compiler/primitive machinery remain hidden by default.
+   - The default editing experience emphasizes app-authored structures over platform substrate.
 
 #### Minimum acceptance
 
 - starting from a blank world, the user can reach a generic authoring UI
-- the user can create at least one identity through that UI and log in through the resulting app
+- the user can create the first identity through that UI and authenticate
 - the user can author the widget/page structure for the todo app through the UI
 - the user can author the frontend program flow for load, submit, update, delete, and logout through the UI
 - the user can author the required routes, `serve` mounts, and `serverRunner` wiring through the UI
-- the resulting app is reachable and performs todo CRUD without hand-editing WTOML
-- the whole flow is proven by automated end-to-end coverage
+- the resulting app is reachable and performs todo CRUD and private notes without hand-editing WTOML
+- the whole flow is proven by automated host and browser coverage
 
 #### Recommended implementation direction
 
@@ -490,9 +486,11 @@ The point of this split is to help the user understand:
 - Add a generic bootstrap shell that exists even when no user-authored app route exists yet.
 - Keep bootstrap and recovery affordances visibly separate from ordinary app editing so users can tell when they are editing platform harness rather than app behavior.
 
+That implementation direction is now the delivered baseline shape.
+
 #### Recommended proving artifact
 
-Add one browser/integration test that starts from a blank world, drives the authoring UI, publishes the todo app wiring, then verifies:
+The proving artifact is the combination of one browser/integration test and one host-level bootstrap test that start from a blank world, drive the authoring flow, publish the todo app wiring, then verify:
 
 - login works
 - todo create works
@@ -678,6 +676,7 @@ Phase 1 is done only when all of these are true:
 - the route/process execution boundary is explicit and defensible
 - `widget.define` semantics are no longer hidden in demo ad hoc logic
 - the stable baseline contract is documented
+- a blank world can recover into the bootstrap seam and recreate the todo app through the UI
 - the tests prove the contract rather than only incidental behavior
 
 If any of those remain fuzzy, Phase 1 is not done.

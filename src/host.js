@@ -4,9 +4,16 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { thing, relation } from "./kernel.js";
+import { thing, relation, projectors } from "./kernel.js";
 import { witnessRelations, moduleProjectors } from "./modules.js";
-import { renderWidgetPage, requestWidgetVersionActivation, rollbackWidgetVersion } from "./widgets.js";
+import {
+  renderWidgetPage,
+  requestWidgetVersionActivation,
+  rollbackWidgetVersion,
+  widgetDefinitions,
+  frontendProgramsProjection,
+  frontendStepsProjection
+} from "./widgets.js";
 import { worldGraphProjection, astNodesProjection } from "./world-graph.js";
 import { processRunProjection, processViewProjection, renderProcessPage } from "./process-view.js";
 import { canvasProcessHandlers } from "./canvas-processes.js";
@@ -14,10 +21,56 @@ import { canvasProjection, perspectivesProjection } from "./canvas-projection.js
 import { renderCanvasPage } from "./canvas-page.js";
 import { createLogger } from "./logger.js";
 import { createDemoHandlerSet } from "./demo-handler-set.js";
+import { typeModelProjection } from "./type-model.js";
+import {
+  requestBootstrapIdentityDefine,
+  requestBootstrapServerRunnerDefine,
+  requestBootstrapRouteDefine,
+  requestBootstrapServeDefine,
+  requestBootstrapFrontendProgramDefine,
+  requestBootstrapFrontendStepDefine,
+  requestWidgetDefine
+} from "./bootstrap-authoring.js";
+import { ensureRuntimeBuiltins } from "./runtime-builtins.js";
+import { renderBootstrapPage } from "./bootstrap-shell.js";
 
 const HANDLER_SET_FACTORIES = {
   demo: createDemoHandlerSet
 };
+
+const HANDLER_SET_DEFINITIONS = {
+  demo: {
+    handlers: [
+      "privateNotes.list",
+      "privateNotes.create",
+      "todos.list",
+      "todos.create",
+      "todos.update",
+      "todos.delete",
+      "widgets.create",
+      "network.simulateError"
+    ]
+  }
+};
+
+const SUPPORTED_FRONTEND_OPS = [
+  "initSession",
+  "setSession",
+  "logout",
+  "setText",
+  "setValue",
+  "fetchJson",
+  "renderCollection",
+  "renderWorldGraph",
+  "readForm",
+  "refreshProjection",
+  "reloadPage",
+  "postJson",
+  "patchJson",
+  "deleteJson",
+  "clearForm",
+  "run"
+];
 
 const FRONTEND_TRACE_PROCESSES = new Set([
   "frontend.process.start",
@@ -75,6 +128,36 @@ export function resolveServerRunner(world, serverRunnerId = null) {
   return { ok: false, reason: "multiple server runners defined", body: { serverRunners: runners.map(runner => runner.id) } };
 }
 
+function uniqueHostByCapability(world, capability) {
+  const hosts = [...new Set(witnessRelations(world.allWitnesses()).filter(r => r.rel === "hostCapability" && r.to === capability).map(r => r.from))];
+  if (hosts.length !== 1) return null;
+  return hosts[0];
+}
+
+function resolveStartupRunner(world, serverRunnerId = null) {
+  const resolved = resolveServerRunner(world, serverRunnerId);
+  if (resolved.ok) return resolved;
+  if (serverRunnerId || resolved.reason !== "no server runners defined") return resolved;
+  const backendHost = uniqueHostByCapability(world, "http.serve");
+  const frontendHost = uniqueHostByCapability(world, "dom.render");
+  if (!backendHost || !frontendHost) {
+    return { ok: false, reason: "no server runners defined", body: {} };
+  }
+  return {
+    ok: true,
+    runner: {
+      id: "__bootstrap__",
+      backendHost,
+      frontendHost,
+      handlerSet: null,
+      actors: null,
+      storage: null,
+      allowActorHeader: false,
+      bootstrapOnly: true
+    }
+  };
+}
+
 export async function startServer(world, {
   actor,
   serverRunnerId = null,
@@ -82,7 +165,8 @@ export async function startServer(world, {
   runtimeRoot = os.tmpdir(),
   logger = createLogger()
 }) {
-  const resolved = resolveServerRunner(world, serverRunnerId);
+  ensureRuntimeBuiltins(world);
+  const resolved = resolveStartupRunner(world, serverRunnerId);
   if (!resolved.ok) {
     world.emit({
       process: "server.start.failed",
@@ -144,22 +228,55 @@ export async function startServer(world, {
   }
 
   const visibleWitnesses = appContext.visibleWitnesses ?? (() => world.allWitnesses());
-  const routeHandlers = {
-    ...createGenericRouteHandlers({
-      world,
-      backendHost,
-      frontendHost,
-      actors: appContext.actors,
-      identityIndex: appContext.identityIndex,
-      sessionStore: new Map(),
-      logger,
-      visibleWitnesses
-    }),
-    ...(appContext.handlers ?? {})
-  };
-  const routeTable = world.project(moduleProjectors.servedRoutes)
-    .filter(route => route.serverRunner === serverRunner.id)
+  const sessionStore = new Map();
+  const genericHandlers = createGenericRouteHandlers({
+    world,
+    backendHost,
+    frontendHost,
+    sessionStore,
+    logger
+  });
+  const runtimeContexts = new Map([[serverRunner.id, appContext]]);
+  const mountedRoutesFor = runnerId => world.project(moduleProjectors.servedRoutes)
+    .filter(route => route.serverRunner === runnerId)
     .map(route => ({ ...route, matcher: compileRouteMatcher(route.path) }));
+  const bootstrapRuntime = { runner: serverRunner, context: appContext };
+  const resolveActiveRuntime = async () => {
+    if (!serverRunner.bootstrapOnly) return bootstrapRuntime;
+    const resolvedRunner = resolveServerRunner(world, null);
+    if (!resolvedRunner.ok) return bootstrapRuntime;
+    const liveRunner = resolvedRunner.runner;
+    if (liveRunner.id === serverRunner.id) return bootstrapRuntime;
+    if (runtimeContexts.has(liveRunner.id)) {
+      return { runner: liveRunner, context: runtimeContexts.get(liveRunner.id) };
+    }
+    const liveStorage = resolveStorageConfig(liveRunner.storage, runtimeRoot);
+    const liveContext = await createAppContext({
+      world,
+      serverRunner: liveRunner,
+      backendHost: liveRunner.backendHost,
+      frontendHost: liveRunner.frontendHost,
+      runtimeRoot,
+      storage: liveStorage,
+      sendJson,
+      readJson
+    });
+    if (!liveContext.ok) {
+      return {
+        runner: liveRunner,
+        context: {
+          ok: false,
+          reason: liveContext.reason,
+          actors: actorsFromIdentities(world.project(moduleProjectors.identityIndex).rows),
+          handlers: {},
+          visibleWitnesses: () => world.allWitnesses()
+        }
+      };
+    }
+    runtimeContexts.set(liveRunner.id, liveContext);
+    return { runner: liveRunner, context: liveContext };
+  };
+  const appHomeReachable = async runtime => hasReachableHomeRoute(world, mountedRoutesFor(runtime.runner.id));
 
   const srcDir = path.dirname(fileURLToPath(import.meta.url));
   const canvasLibFiles = new Map([
@@ -181,7 +298,8 @@ export async function startServer(world, {
   const server = http.createServer(async (req, res) => {
     const startedAt = Date.now();
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const requestContext = resolveRequestContext(req, routeHandlers.__sessionStore, { allowActorHeader: serverRunner.allowActorHeader === true });
+    const runtime = await resolveActiveRuntime();
+    const requestContext = resolveRequestContext(req, sessionStore, { allowActorHeader: runtime.runner.allowActorHeader === true });
     const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
     let matchedRoute = null;
     const witnessCountBefore = world.allWitnesses().length;
@@ -220,12 +338,51 @@ export async function startServer(world, {
         return;
       }
 
-      const matched = matchDeclaredRoute(routeTable, req.method || "GET", requestUrl.pathname);
+      const bootstrapEndpoint = matchBootstrapEndpoint(req.method || "GET", requestUrl.pathname);
+      if (bootstrapEndpoint) {
+        const handler = genericHandlers[bootstrapEndpoint];
+        const mounted = matchDeclaredRoute(mountedRoutesFor(runtime.runner.id), req.method || "GET", requestUrl.pathname);
+        await handler({
+          req,
+          res,
+          requestId,
+          requestUrl,
+          route: mounted?.route ?? null,
+          params: mounted?.params ?? {},
+          requestActor: requestContext.actor,
+          requestIdentity: requestContext.identity,
+          requestSession: requestContext.session,
+          appContext: runtime.context
+        });
+        return;
+      }
+
+      if (req.method === "GET" && requestUrl.pathname === "/" && !await appHomeReachable(runtime)) {
+        await genericHandlers["bootstrap.page"]({
+          req,
+          res,
+          requestId,
+          requestUrl,
+          route: null,
+          params: {},
+          requestActor: requestContext.actor,
+          requestIdentity: requestContext.identity,
+          requestSession: requestContext.session,
+          appContext: runtime.context
+        });
+        return;
+      }
+
+      const matched = matchDeclaredRoute(mountedRoutesFor(runtime.runner.id), req.method || "GET", requestUrl.pathname);
       if (!matched) {
         sendJson(res, 404, { error: "not found" });
         return;
       }
       matchedRoute = matched.route;
+      const routeHandlers = {
+        ...genericHandlers,
+        ...(runtime.context.handlers ?? {})
+      };
       const handler = matched.route.handler ? routeHandlers[matched.route.handler] : null;
       if (!handler) {
         world.observe({
@@ -247,7 +404,8 @@ export async function startServer(world, {
         params: matched.params,
         requestActor: requestContext.actor,
         requestIdentity: requestContext.identity,
-        requestSession: requestContext.session
+        requestSession: requestContext.session,
+        appContext: runtime.context
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -256,7 +414,7 @@ export async function startServer(world, {
         process: "server.request.failed",
         actor: backendHost,
         claims: [],
-        body: { requestId, method: req.method, url: req.url, message, serverRunner: serverRunner.id }
+        body: { requestId, method: req.method, url: req.url, message, serverRunner: runtime.runner.id }
       });
       sendJson(res, 500, { error: "internal error", requestId });
     } finally {
@@ -293,7 +451,7 @@ export async function startServer(world, {
     claims: [
       relation(backendHost, "serves", serverRunner.id),
       relation(frontendHost, "renders", serverRunner.id),
-      ...routeTable.map(route => relation(serverRunner.id, "serves", route.id))
+      ...mountedRoutesFor(serverRunner.id).map(route => relation(serverRunner.id, "serves", route.id))
     ],
     body: {
       url,
@@ -303,7 +461,7 @@ export async function startServer(world, {
       handlerSet: serverRunner.handlerSet ?? null,
       actors: appContext.actors,
       storage,
-      routeCount: routeTable.length
+      routeCount: mountedRoutesFor(serverRunner.id).length
     }
   });
 
@@ -371,14 +529,17 @@ function createGenericRouteHandlers({
   world,
   backendHost,
   frontendHost,
-  actors,
-  identityIndex,
   sessionStore,
-  logger,
-  visibleWitnesses
+  logger
 }) {
-  const processViewInputs = requestActor => {
-    const witnesses = visibleWitnesses(requestActor);
+  const currentIdentityIndex = () => world.project(moduleProjectors.identityIndex);
+  const requestVisibleWitnesses = (requestActor, appContext) => {
+    const projector = appContext?.visibleWitnesses ?? (() => world.allWitnesses());
+    return projector(requestActor);
+  };
+  const requestActors = appContext => appContext?.actors ?? [];
+  const processViewInputs = (requestActor, appContext) => {
+    const witnesses = requestVisibleWitnesses(requestActor, appContext);
     const visibleIds = new Set(witnesses.map(witness => witness.id));
     const observations = world.allObservations()
       .filter(observation => observation.process === "backend.request.finish")
@@ -399,8 +560,169 @@ function createGenericRouteHandlers({
     nodeId: requestUrl.searchParams.get("node") || null,
     replay: requestUrl.searchParams.get("replay")
   });
+  const supportedHandlerSets = Object.keys(HANDLER_SET_DEFINITIONS);
+  const supportedHandlers = [
+    "session.read",
+    "session.open",
+    "session.logout",
+    "widgetVersions.activate",
+    "widgetVersions.rollback",
+    "page.home",
+    "page.world",
+    "page.process",
+    "page.canvas",
+    "witnesses.list",
+    "worldGraph.read",
+    "processView.read",
+    "processRun.read",
+    "processEvents.record",
+    "source.read",
+    "canvas.perspectives.list",
+    "canvas.read",
+    "canvas.process",
+    ...supportedHandlerSets.flatMap(id => HANDLER_SET_DEFINITIONS[id]?.handlers ?? [])
+  ];
+  const backendHosts = [...new Set(witnessRelations(world.allWitnesses()).filter(r => r.rel === "hostCapability" && r.to === "http.serve").map(r => r.from))];
+  const frontendHosts = [...new Set(witnessRelations(world.allWitnesses()).filter(r => r.rel === "hostCapability" && r.to === "dom.render").map(r => r.from))];
+  const bootstrapAuthAllowed = () => currentIdentityIndex().rows.length === 0;
+  const requireBootstrapActor = requestActor => {
+    if (requestActor) return { ok: true, actor: requestActor };
+    if (bootstrapAuthAllowed()) return { ok: true, actor: backendHost };
+    return { ok: false };
+  };
+  const bootstrapModel = () => {
+    const authored = bootstrapState();
+    const homeRoute = authored.servedRoutes.find(route => route.method === "GET" && route.path === "/" && route.handler === "page.home");
+    const appReady = Boolean(homeRoute && homeRoute.params?.rootWidget);
+    const typeModel = world.project(typeModelProjection);
+    return {
+      appReady,
+      homeReason: appReady ? "reachable home route" : "no reachable app home route",
+      widgetKinds: ["Page", "Box", "Section", "Heading", "Text", "Form", "Input", "Select", "Option", "Button", "Link", "List", "ValueEditor"],
+      supportedMethods: ["GET", "POST", "PATCH", "DELETE"],
+      supportedHandlers,
+      supportedPageHandlers: ["page.home", "page.world", "page.process", "page.canvas"],
+      supportedHandlerSets,
+      supportedFrontendOps: SUPPORTED_FRONTEND_OPS,
+      backendHosts: backendHosts.map(id => ({ id })),
+      frontendHosts: frontendHosts.map(id => ({ id })),
+      processSpecs: Object.values(typeModel.processSpecsByProcess ?? {})
+    };
+  };
+  const bootstrapState = () => {
+    const routes = world.project(moduleProjectors.routes);
+    const servedRoutes = world.project(moduleProjectors.servedRoutes);
+    const serverRunners = world.project(moduleProjectors.serverRunners);
+    const identities = world.project(moduleProjectors.identities);
+    const widgets = widgetDefinitions(world.allWitnesses());
+    const frontendPrograms = frontendProgramsProjection(world.allWitnesses());
+    const frontendSteps = frontendStepsProjection(world.allWitnesses());
+    return { identities, widgets, frontendPrograms, frontendSteps, routes, servedRoutes, serverRunners };
+  };
   const handlers = {
     __sessionStore: sessionStore,
+    "bootstrap.model.read": async ({ res }) => {
+      sendJson(res, 200, bootstrapModel());
+    },
+
+    "bootstrap.state.read": async ({ res }) => {
+      sendJson(res, 200, bootstrapState());
+    },
+
+    "bootstrap.page": async ({ res }) => {
+      send(res, 200, "text/html; charset=utf-8", renderBootstrapPage());
+    },
+
+    "identity.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        return;
+      }
+      const body = await readJson(req);
+      const result = requestBootstrapIdentityDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { identity: result.identity, witness: result.witness });
+    },
+
+    "serverRunner.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        return;
+      }
+      const body = await readJson(req);
+      const result = requestBootstrapServerRunnerDefine(world, { actor: gate.actor, backendHost, body, allowedHandlerSets: supportedHandlerSets });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { serverRunner: result.serverRunner, witness: result.witness });
+    },
+
+    "route.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        return;
+      }
+      const body = await readJson(req);
+      const result = requestBootstrapRouteDefine(world, { actor: gate.actor, backendHost, body, allowedHandlers: supportedHandlers });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { route: result.route, witness: result.witness });
+    },
+
+    "serve.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        return;
+      }
+      const body = await readJson(req);
+      const result = requestBootstrapServeDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { serve: result.serve, witness: result.witness });
+    },
+
+    "frontendProgram.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        return;
+      }
+      const body = await readJson(req);
+      const result = requestBootstrapFrontendProgramDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { frontendProgram: result.frontendProgram, witness: result.witness });
+    },
+
+    "frontendStep.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        return;
+      }
+      const body = await readJson(req);
+      const result = requestBootstrapFrontendStepDefine(world, { actor: gate.actor, backendHost, body, allowedOps: SUPPORTED_FRONTEND_OPS });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { step: result.step, witness: result.witness });
+    },
+
     "session.read": async ({ res, requestActor, requestIdentity, requestSession }) => {
       world.observe({
         process: "session.read",
@@ -425,6 +747,7 @@ function createGenericRouteHandlers({
       const body = await readJson(req);
       const username = typeof body.username === "string" ? body.username.trim() : "";
       const password = typeof body.password === "string" ? body.password : "";
+      const identityIndex = currentIdentityIndex();
       const identity = username ? identityIndex.byUsername[username] ?? null : null;
       if (!identity || identity.password !== password) {
         world.emit({
@@ -522,7 +845,27 @@ function createGenericRouteHandlers({
       sendJson(res, 200, { ok: true, status: result.status, soul: result.soul, version: result.version, witnesses: result.witnesses, witness: result.witness });
     },
 
-    "page.home": async ({ res, route }) => {
+    "widgets.create": async ({ req, res, requestActor, route }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        return;
+      }
+      const body = await readJson(req);
+      const result = requestWidgetDefine(world, {
+        actor: gate.actor,
+        backendHost,
+        body,
+        defaultParent: route?.params?.rootWidget ?? null
+      });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { widget: result.widget, witness: result.witness });
+    },
+
+    "page.home": async ({ res, route, appContext }) => {
       const params = route.params ?? {};
       const rootWidget = params.rootWidget ?? null;
       if (!rootWidget) {
@@ -541,11 +884,11 @@ function createGenericRouteHandlers({
         actor: frontendHost,
         rootWidget,
         frontendProgram: params.frontendProgram ?? null,
-        appConfig: { actors, page, excludeWidgetRoles, liveProjection: params.liveProjection !== false }
+        appConfig: { actors: requestActors(appContext), page, excludeWidgetRoles, liveProjection: params.liveProjection !== false }
       }));
     },
 
-    "page.world": async ({ res, route }) => {
+    "page.world": async ({ res, route, appContext }) => {
       const params = route.params ?? {};
       const rootWidget = params.rootWidget ?? null;
       if (!rootWidget) {
@@ -562,28 +905,28 @@ function createGenericRouteHandlers({
         actor: frontendHost,
         rootWidget,
         frontendProgram: params.frontendProgram ?? null,
-        appConfig: { actors, page: params.page ?? "world", liveProjection: params.liveProjection !== false }
+        appConfig: { actors: requestActors(appContext), page: params.page ?? "world", liveProjection: params.liveProjection !== false }
       }));
     },
 
-    "page.process": async ({ res, route, requestUrl, requestActor }) => {
-      const model = processViewProjection(processViewInputs(requestActor), processSelection(requestUrl));
+    "page.process": async ({ res, route, requestUrl, requestActor, appContext }) => {
+      const model = processViewProjection(processViewInputs(requestActor, appContext), processSelection(requestUrl));
       send(res, 200, "text/html", renderProcessPage(model, { currentPath: route.path || "/process" }));
     },
 
-    "page.canvas": async ({ res, route }) => {
+    "page.canvas": async ({ res, route, appContext }) => {
       world.observe({
         process: "frontend.renderCanvasPage",
         actor: frontendHost,
         claims: [relation(frontendHost, "rendered", route.serves || "canvasView")],
         body: { route: route.path }
       });
-      send(res, 200, "text/html", renderCanvasPage({ actors }));
+      send(res, 200, "text/html", renderCanvasPage({ actors: requestActors(appContext) }));
     },
 
-    "witnesses.list": async ({ res, requestUrl, requestActor }) => {
+    "witnesses.list": async ({ res, requestUrl, requestActor, appContext }) => {
       const rawOffset = requestUrl.searchParams.get("offset");
-      const visible = visibleWitnesses(requestActor).map(witness => ({
+      const visible = requestVisibleWitnesses(requestActor, appContext).map(witness => ({
         ...witness,
         bodyJson: JSON.stringify(witness.body ?? {})
       }));
@@ -601,14 +944,14 @@ function createGenericRouteHandlers({
       sendJson(res, 200, { witnesses: visible.slice(offset), offset, total: visible.length });
     },
 
-    "worldGraph.read": async ({ res, requestActor, requestId }) => {
+    "worldGraph.read": async ({ res, requestActor, requestId, appContext }) => {
       world.observe({
         process: "backend.readWorldGraph",
         actor: backendHost,
         claims: [relation(backendHost, "projected", "worldGraph")],
         body: { count: world.allWitnesses().length }
       });
-      const visible = visibleWitnesses(requestActor);
+      const visible = requestVisibleWitnesses(requestActor, appContext);
       const graph = worldGraphProjection(visible);
       const ast = astNodesProjection(visible);
       const astNodes = {
@@ -619,14 +962,14 @@ function createGenericRouteHandlers({
       sendJson(res, 200, { graph, astNodes });
     },
 
-    "processView.read": async ({ res, requestUrl, requestActor }) => {
-      const model = processViewProjection(processViewInputs(requestActor), processSelection(requestUrl));
+    "processView.read": async ({ res, requestUrl, requestActor, appContext }) => {
+      const model = processViewProjection(processViewInputs(requestActor, appContext), processSelection(requestUrl));
       sendJson(res, 200, model);
     },
 
-    "processRun.read": async ({ res, requestUrl, requestActor, params }) => {
+    "processRun.read": async ({ res, requestUrl, requestActor, params, appContext }) => {
       const replay = requestUrl.searchParams.get("replay");
-      const run = processRunProjection(processViewInputs(requestActor), { runId: params.runId || "", replay });
+      const run = processRunProjection(processViewInputs(requestActor, appContext), { runId: params.runId || "", replay });
       if (!run) {
         sendJson(res, 404, { error: "process run not found", runId: params.runId || "" });
         return;
@@ -679,8 +1022,8 @@ function createGenericRouteHandlers({
       sendJson(res, 200, { file: resolvedFile, text });
     },
 
-    "canvas.perspectives.list": async ({ res, requestActor }) => {
-      const perspectives = perspectivesProjection(visibleWitnesses(requestActor));
+    "canvas.perspectives.list": async ({ res, requestActor, appContext }) => {
+      const perspectives = perspectivesProjection(requestVisibleWitnesses(requestActor, appContext));
       world.observe({
         process: "backend.readPerspectives",
         actor: backendHost,
@@ -690,9 +1033,9 @@ function createGenericRouteHandlers({
       sendJson(res, 200, { perspectives });
     },
 
-    "canvas.read": async ({ res, requestUrl, requestActor }) => {
+    "canvas.read": async ({ res, requestUrl, requestActor, appContext }) => {
       const perspective = requestUrl.searchParams.get("perspective") || "";
-      const canvas = canvasProjection(visibleWitnesses(requestActor), perspective);
+      const canvas = canvasProjection(requestVisibleWitnesses(requestActor, appContext), perspective);
       if (!canvas) {
         world.observe({ process: "backend.readCanvas.failed", actor: backendHost, claims: [], body: { perspective, reason: "unknown perspective" } });
         sendJson(res, 404, { error: "unknown perspective", perspective });
@@ -776,6 +1119,34 @@ function matchDeclaredRoute(routeTable, method, pathname) {
     const params = route.matcher(pathname);
     if (params) return { route, params };
   }
+  return null;
+}
+
+function hasReachableHomeRoute(world, routeTable) {
+  const home = routeTable.find(route => route.method === "GET" && route.path === "/" && route.handler === "page.home");
+  if (!home) return false;
+  const rootWidget = home.params?.rootWidget;
+  if (!rootWidget) return false;
+  return world.project(projectors.things).has(rootWidget);
+}
+
+function matchBootstrapEndpoint(method, pathname) {
+  const targetMethod = String(method || "GET").toUpperCase();
+  if (targetMethod === "GET" && pathname === "/_bootstrap") return "bootstrap.page";
+  if (targetMethod === "GET" && pathname === "/api/bootstrap-model") return "bootstrap.model.read";
+  if (targetMethod === "GET" && pathname === "/api/bootstrap-state") return "bootstrap.state.read";
+  if (pathname === "/api/session") {
+    if (targetMethod === "GET") return "session.read";
+    if (targetMethod === "POST") return "session.open";
+    if (targetMethod === "DELETE") return "session.logout";
+  }
+  if (targetMethod === "POST" && pathname === "/api/widgets") return "widgets.create";
+  if (targetMethod === "POST" && pathname === "/api/identities") return "identity.create";
+  if (targetMethod === "POST" && pathname === "/api/frontend-programs") return "frontendProgram.create";
+  if (targetMethod === "POST" && pathname === "/api/frontend-steps") return "frontendStep.create";
+  if (targetMethod === "POST" && pathname === "/api/routes") return "route.create";
+  if (targetMethod === "POST" && pathname === "/api/serve-mounts") return "serve.create";
+  if (targetMethod === "POST" && pathname === "/api/server-runners") return "serverRunner.create";
   return null;
 }
 

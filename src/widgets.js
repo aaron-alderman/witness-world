@@ -331,6 +331,13 @@ export function widgetTree(witnesses, root) {
   return projectWidgetState(witnesses).build(root);
 }
 
+export function widgetDefinitions(witnesses) {
+  const state = projectWidgetState(witnesses);
+  return [...state.widgets.values()]
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+    .map(widget => ({ id: widget.id, kind: widget.kind, props: { ...(widget.props ?? {}) } }));
+}
+
 export function templateWidgetTrees(witnesses) {
   const state = projectWidgetState(witnesses);
   return [...state.widgets.values()]
@@ -361,6 +368,32 @@ export function frontendProgram(witnesses, programId) {
   }
   const steps = [...stepMap.values()].sort((a, b) => a.order - b.order);
   return { id: program.id, rootWidget: program.rootWidget, steps, graph: stepGraphFromLinearSteps(steps, { programId: program.id }) };
+}
+
+export function frontendProgramsProjection(witnesses) {
+  const rows = [];
+  for (const witness of witnesses) {
+    if (witness.process !== "defineFrontendProgram" || !witness.body?.id) continue;
+    if (rows.some(row => row.id === witness.body.id)) continue;
+    rows.push({ id: witness.body.id, rootWidget: witness.body.rootWidget });
+  }
+  return rows.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+}
+
+export function frontendStepsProjection(witnesses) {
+  return witnesses
+    .filter(witness => witness.process === "defineFrontendStep" && witness.body?.program)
+    .map(witness => ({
+      program: witness.body.program,
+      event: witness.body.event,
+      op: witness.body.op,
+      order: witness.body.order ?? 0,
+      params: witness.body.params ?? {},
+      when: witness.body.when ?? null,
+      repeat: witness.body.repeat ?? null,
+      after: Array.isArray(witness.body.after) ? witness.body.after : []
+    }))
+    .sort((a, b) => String(a.program).localeCompare(String(b.program)) || String(a.event).localeCompare(String(b.event)) || a.order - b.order);
 }
 
 export function stableJson(value) {

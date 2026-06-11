@@ -11,7 +11,7 @@ It is intentionally narrower than the roadmap. It answers:
 
 It should be read with [ROADMAP.md](C:\Users\aaron\Documents\world\ROADMAP.md) and [PHASE1.md](C:\Users\aaron\Documents\world\PHASE1.md).
 
-This contract describes the **current runtime baseline**. It is not, by itself, proof that Phase 1 is complete under the stricter blank-world authoring bar now recorded in [PHASE1.md](C:\Users\aaron\Documents\world\PHASE1.md).
+This contract describes the **current runtime baseline**. Phase 1's stricter blank-world authoring bar is now met through the bootstrap seam and browser coverage recorded in [PHASE1.md](C:\Users\aaron\Documents\world\PHASE1.md).
 
 Under that stricter bar, the intended UX split is:
 
@@ -26,6 +26,7 @@ Under that stricter bar, the intended UX split is:
 Phase 1 adopts an **explicit app/plugin execution boundary**.
 
 - Generic runtime behavior lives in [src/host.js](C:\Users\aaron\Documents\world\src\host.js), [src/widgets.js](C:\Users\aaron\Documents\world\src\widgets.js), [src/type-model.js](C:\Users\aaron\Documents\world\src\type-model.js), [src/widget-define.js](C:\Users\aaron\Documents\world\src\widget-define.js), [src/world-graph.js](C:\Users\aaron\Documents\world\src\world-graph.js), and [src/process-view.js](C:\Users\aaron\Documents\world\src\process-view.js).
+- Blank-world bootstrap and recovery authoring live in [src/bootstrap-shell.js](C:\Users\aaron\Documents\world\src\bootstrap-shell.js), [src/bootstrap-authoring.js](C:\Users\aaron\Documents\world\src\bootstrap-authoring.js), and [src/runtime-builtins.js](C:\Users\aaron\Documents\world\src\runtime-builtins.js).
 - App-specific behavior remains behind explicit handler sets such as [src/demo-handler-set.js](C:\Users\aaron\Documents\world\src\demo-handler-set.js).
 - `serverRunner.handlerSet` is therefore an intentional extension boundary for now, not a hidden claim that backend route behavior is already executable from witnessed definitions.
 
@@ -125,6 +126,9 @@ This is a supported baseline behavior, but broader live runtime migration remain
 The generic runtime currently owns these categories:
 
 - server startup through `serverRunner` + `serve`
+- bootstrap fallback at `/` when no served home page exists
+- the semi-internal bootstrap shell at `/_bootstrap`
+- typed bootstrap authoring endpoints for identities, widgets, frontend programs/steps, routes, `serve` mounts, and `serverRunner` wiring
 - method/path route matching, including named params
 - page rendering for widget pages, world page, process page, and canvas page
 - session open/read/logout
@@ -147,10 +151,19 @@ The generic runtime does **not** currently claim to own:
 The current demo baseline expects these routes/surfaces to remain reachable:
 
 - `/`
+- `/_bootstrap`
 - `/world`
 - `/process`
 - `/canvas`
+- `/api/bootstrap-model`
+- `/api/bootstrap-state`
 - `/api/session`
+- `/api/identities`
+- `/api/frontend-programs`
+- `/api/frontend-steps`
+- `/api/routes`
+- `/api/serve-mounts`
+- `/api/server-runners`
 - `/api/todos`
 - `/api/private-notes`
 - `/api/widgets`
@@ -187,6 +200,9 @@ The current baseline is evidenced by these tests:
 - projection editing / `widget.define`:
   - [test/widget-define.test.js](C:\Users\aaron\Documents\world\test\widget-define.test.js)
   - [test/hardening.test.js](C:\Users\aaron\Documents\world\test\hardening.test.js)
+- blank-world bootstrap and UI assembly:
+  - [test/bootstrap-host.test.js](C:\Users\aaron\Documents\world\test\bootstrap-host.test.js)
+  - [test/ui.bootstrap.test.js](C:\Users\aaron\Documents\world\test\ui.bootstrap.test.js)
 - world/process inspection surfaces:
   - [test/world-graph.test.js](C:\Users\aaron\Documents\world\test\world-graph.test.js)
   - [test/ui.process-view.test.js](C:\Users\aaron\Documents\world\test\ui.process-view.test.js)

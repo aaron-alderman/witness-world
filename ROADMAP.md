@@ -34,14 +34,14 @@ Phase 1 has established most of the runtime baseline:
 - one shared type execution path across browser and server
 - one explicit app/plugin execution boundary for runtime behavior
 - one explicit baseline contract with tests mapped to the supported surface
-
-What is still missing for a true Phase 1 sign-off is first-class in-product authoring. The platform cannot yet start from a blank world and recreate the todo app purely through the UI; key authored structures still live outside the UI in WTOML.
+- one blank-world bootstrap seam that can recover into a runnable app
+- one browser-proven path that recreates the todo app purely through the UI against the current runtime boundary
 
 ---
 
 ## Phase 1: Stable Baseline
 
-Status: in progress
+Status: complete
 
 This phase is about reaching the point where the runtime is coherent, testable, explicit about its real boundaries, and authorable enough from inside the product to recreate the baseline demo without dropping back to source files.
 
@@ -56,16 +56,16 @@ This phase is about reaching the point where the runtime is coherent, testable, 
 - [x] Decide whether more route/process behavior becomes executable from witnessed definitions or remains an explicit app/plugin boundary in JS.
 - [x] Move `widget.define` defaults and mutation semantics out of demo-owned ad hoc logic.
 - [x] Define and test the stable baseline contract so the supported runtime surface is explicit.
-- [ ] Make it possible to start from a blank world and recreate the todo app purely through the UI.
-- [ ] Add a blank-world bootstrap editing shell so the product is usable before any app routes have been authored.
-- [ ] Keep that bootstrap shell in a semi-internal seam: hidden by default, easy to reveal, and clearly separate from normal app content.
-- [ ] Provide first-class UI authoring for the missing baseline structures: identities, widgets, frontend programs, routes, `serve` mounts, and `serverRunner` runtime wiring.
-- [ ] Make those authoring flows compose through projected references and supported handler selection rather than brittle copied ids.
-- [ ] Keep the current explicit app/plugin handler boundary, but make it selectable and wireable through the UI for baseline app assembly.
-- [ ] Keep compiler/primitives and deep runtime machinery hidden by default so the default authoring surface stays focused on "your app" rather than substrate.
-- [ ] Prove the blank-to-todo flow with an end-to-end test rather than manual source edits.
+- [x] Make it possible to start from a blank world and recreate the todo app purely through the UI.
+- [x] Add a blank-world bootstrap editing shell so the product is usable before any app routes have been authored.
+- [x] Keep that bootstrap shell in a semi-internal seam: hidden by default, easy to reveal, and clearly separate from normal app content.
+- [x] Provide first-class UI authoring for the missing baseline structures: identities, widgets, frontend programs, routes, `serve` mounts, and `serverRunner` runtime wiring.
+- [x] Make those authoring flows compose through projected references and supported handler selection rather than brittle copied ids.
+- [x] Keep the current explicit app/plugin handler boundary, but make it selectable and wireable through the UI for baseline app assembly.
+- [x] Keep compiler/primitives and deep runtime machinery hidden by default so the default authoring surface stays focused on "your app" rather than substrate.
+- [x] Prove the blank-to-todo flow with an end-to-end test rather than manual source edits.
 
-Phase 1 is only complete when the platform can honestly say it is no longer papering over core architectural choices and the baseline demo can be rebuilt from inside the product rather than by editing WTOML by hand.
+Phase 1 now means the platform can honestly say it is no longer papering over core architectural choices at the baseline layer and the demo can be rebuilt from inside the product rather than by editing WTOML by hand.
 
 For this phase, "purely through the UI" means wiring the app from a blank world against the existing runtime and explicit handler/plugin boundary. It does not require authoring new backend JS handler implementations in-product.
 

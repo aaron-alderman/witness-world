@@ -43,6 +43,32 @@ export async function startUiDemoServer({
   };
 }
 
+export async function startBlankUiServer() {
+  const world = createWorld();
+  const runtimeRoot = await tempRuntimeRoot("witness-world-bootstrap-ui-");
+
+  declareBackendHost(world, { actor: "system", id: "backendHost" });
+  declareFrontendHost(world, { actor: "system", id: "frontendHost" });
+
+  const server = await startServer(world, {
+    actor: "system",
+    runtimeRoot
+  });
+
+  if (!server.ok) {
+    throw new Error(`failed to start blank bootstrap server for UI tests: ${server.reason}`);
+  }
+
+  return {
+    world,
+    server,
+    url: server.url,
+    close: async () => {
+      await server.close();
+    }
+  };
+}
+
 export async function launchBrowser({
   headless = true,
   viewport = { width: 1280, height: 900 }
