@@ -270,7 +270,7 @@ test("canvas-lib serves the real projection modules and rejects unknown names", 
 
     assert.equal((await fetch(`${server.url}/canvas-lib/kernel.js`)).status, 404);
     assert.equal((await fetch(`${server.url}/canvas-lib/..%2Fpackage.json`)).status, 404);
-    assert(world.allWitnesses().some(w => w.process === "backend.readCanvasLib"));
+    assert(world.allObservations().some(w => w.process === "backend.readCanvasLib"));
   } finally {
     await server.close();
   }
@@ -282,13 +282,13 @@ test("witness offset fetches return the tail and are not themselves witnessed", 
     const full = await fetch(`${server.url}/api/witnesses`, { headers: asAaron }).then(r => r.json());
     assert(full.total > 0);
 
-    const readsBefore = world.allWitnesses().filter(w => w.process === "backend.readWitnesses").length;
+    const readsBefore = world.allObservations().filter(w => w.process === "backend.readWitnesses").length;
     const offset = full.total - 2;
     const tail = await fetch(`${server.url}/api/witnesses?offset=${offset}`, { headers: asAaron }).then(r => r.json());
     assert.equal(tail.offset, offset);
     assert(tail.witnesses.length >= 2);
     assert.equal(tail.witnesses.length, tail.total - offset);
-    const readsAfter = world.allWitnesses().filter(w => w.process === "backend.readWitnesses").length;
+    const readsAfter = world.allObservations().filter(w => w.process === "backend.readWitnesses").length;
     assert.equal(readsAfter, readsBefore);
   } finally {
     await server.close();

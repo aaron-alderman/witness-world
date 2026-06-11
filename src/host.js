@@ -8,7 +8,7 @@ import { actorRequired, runGates, textRequired } from "./gates.js";
 import { thingId } from "./ids.js";
 import { witnessRelations } from "./modules.js";
 import { defineWidget, attachWidget, activateWidgetVersion, renderWidgetPage } from "./widgets.js";
-import { worldGraphProjection } from "./world-graph.js";
+import { worldGraphProjection, astNodesProjection } from "./world-graph.js";
 import { canvasProcessHandlers, declareCanvasRoutes } from "./canvas-processes.js";
 import { canvasProjection, perspectivesProjection } from "./canvas-projection.js";
 import { renderCanvasPage } from "./canvas-page.js";
@@ -112,7 +112,7 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
     });
     try {
       if (req.method === "GET" && req.url === "/") {
-        world.emit({
+        world.observe({
           process: "frontend.render",
           actor: frontendHost,
           claims: [relation(frontendHost, "rendered", "todoAppView")],
@@ -127,7 +127,7 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
           sendJson(res, 404, { error: "world graph page not configured" });
           return;
         }
-        world.emit({
+        world.observe({
           process: "frontend.renderWorldPage",
           actor: frontendHost,
           claims: [relation(frontendHost, "rendered", "worldGraphView")],
@@ -141,12 +141,12 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
         const name = decodeURIComponent(req.url.slice("/canvas-lib/".length));
         const resolved = canvasLibFiles.get(name);
         if (!resolved) {
-          world.emit({ process: "backend.readCanvasLib.failed", actor: backendHost, claims: [], body: { name, reason: "not in canvas-lib whitelist" } });
+          world.observe({ process: "backend.readCanvasLib.failed", actor: backendHost, claims: [], body: { name, reason: "not in canvas-lib whitelist" } });
           sendJson(res, 404, { error: "unknown canvas-lib module", name });
           return;
         }
         const text = await fs.readFile(resolved, "utf8");
-        world.emit({ process: "backend.readCanvasLib", actor: backendHost, claims: [relation(backendHost, "read", `source:${resolved}`)], body: { file: resolved, bytes: text.length } });
+        world.observe({ process: "backend.readCanvasLib", actor: backendHost, claims: [relation(backendHost, "read", `source:${resolved}`)], body: { file: resolved, bytes: text.length } });
         res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-cache" });
         res.end(text);
         return;
@@ -157,7 +157,7 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
         res.write(`data: {"count":${world.allWitnesses().length}}\n\n`);
         sseClients.add(res);
         req.on("close", () => sseClients.delete(res));
-        world.emit({
+        world.observe({
           process: "backend.eventsStream",
           actor: backendHost,
           claims: [relation(backendHost, "streams", "witnessLog")],
@@ -167,7 +167,7 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
       }
 
       if (req.method === "GET" && req.url === "/canvas") {
-        world.emit({
+        world.observe({
           process: "frontend.renderCanvasPage",
           actor: frontendHost,
           claims: [relation(frontendHost, "rendered", "canvasView")],
@@ -179,7 +179,7 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
 
       if (req.method === "GET" && req.url === "/api/canvas/perspectives") {
         const perspectives = perspectivesProjection(publicWitnessesFor(world.allWitnesses(), actorFromRequest(req)));
-        world.emit({
+        world.observe({
           process: "backend.readPerspectives",
           actor: backendHost,
           claims: [relation(backendHost, "projected", "canvasView")],
@@ -194,11 +194,11 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
         const perspective = url.searchParams.get("perspective") || "";
         const canvas = canvasProjection(publicWitnessesFor(world.allWitnesses(), actorFromRequest(req)), perspective);
         if (!canvas) {
-          world.emit({ process: "backend.readCanvas.failed", actor: backendHost, claims: [], body: { perspective, reason: "unknown perspective" } });
+          world.observe({ process: "backend.readCanvas.failed", actor: backendHost, claims: [], body: { perspective, reason: "unknown perspective" } });
           sendJson(res, 404, { error: "unknown perspective", perspective });
           return;
         }
-        world.emit({
+        world.observe({
           process: "backend.readCanvas",
           actor: backendHost,
           claims: [relation(backendHost, "projected", "canvasView")],
@@ -251,7 +251,7 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
 
       if (req.method === "DELETE" && req.url === "/api/session") {
         const requestActor = actorFromRequest(req);
-        world.emit({ process: "session.logout", actor: requestActor || backendHost, claims: [], body: { actor: requestActor } });
+        world.observe({ process: "session.logout", actor: requestActor || backendHost, claims: [], body: { actor: requestActor } });
         sendJson(res, 200, { ok: true });
         return;
       }
@@ -263,7 +263,7 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
           return;
         }
         const notes = projectPrivateNotes(requestActor);
-        world.emit({ process: "privateNotes.read", actor: requestActor, claims: [relation(requestActor, "read", `${requestActor}:privateNotes`)], body: { count: notes.length } });
+        world.observe({ process: "privateNotes.read", actor: requestActor, claims: [relation(requestActor, "read", `${requestActor}:privateNotes`)], body: { count: notes.length } });
         sendJson(res, 200, { notes });
         return;
       }
@@ -296,7 +296,7 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
 
       if (req.method === "GET" && req.url === "/api/todos") {
         const todos = projectTodos();
-        world.emit({
+        world.observe({
           process: "backend.readTodos",
           actor: backendHost,
           claims: [relation(backendHost, "read", "todoStore")],
@@ -452,7 +452,7 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
         const rawOffset = url.searchParams.get("offset");
         const visible = publicWitnessesFor(world.allWitnesses(), actorFromRequest(req));
         if (rawOffset === null) {
-          world.emit({
+          world.observe({
             process: "backend.readWitnesses",
             actor: backendHost,
             claims: [relation(backendHost, "read", "witnessLog")],
@@ -469,7 +469,7 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
       }
 
       if (req.method === "GET" && req.url === "/api/world-graph") {
-        world.emit({
+        world.observe({
           process: "backend.readWorldGraph",
           actor: backendHost,
           claims: [relation(backendHost, "projected", "worldGraph")],
@@ -477,8 +477,13 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
         });
         const visible = publicWitnessesFor(world.allWitnesses(), actorFromRequest(req));
         const graph = worldGraphProjection(visible);
+        const ast = astNodesProjection(visible);
+        const astNodes = {
+          byFile: Object.fromEntries([...ast.byFile.entries()].map(([f, nodes]) => [f, nodes])),
+          byTarget: Object.fromEntries([...ast.byTarget.entries()].map(([t, nodes]) => [t, nodes]))
+        };
         logger.info("worldGraph.projected", { requestId, witnesses: visible.length, nodes: graph.nodes.length, edges: graph.edges.length });
-        sendJson(res, 200, { graph });
+        sendJson(res, 200, { graph, astNodes });
         return;
       }
 
@@ -490,12 +495,12 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
           .map(w => path.resolve(w.body.file)));
         const resolved = path.resolve(requested);
         if (!allowed.has(resolved)) {
-          world.emit({ process: "backend.readSource.failed", actor: backendHost, claims: [], body: { file: requested, reason: "source file not in witnessed imports" } });
+          world.observe({ process: "backend.readSource.failed", actor: backendHost, claims: [], body: { file: requested, reason: "source file not in witnessed imports" } });
           sendJson(res, 404, { error: "source file not available", file: requested });
           return;
         }
         const text = await fs.readFile(resolved, "utf8");
-        world.emit({ process: "backend.readSource", actor: backendHost, claims: [relation(backendHost, "read", `source:${resolved}`)], body: { file: resolved, bytes: text.length } });
+        world.observe({ process: "backend.readSource", actor: backendHost, claims: [relation(backendHost, "read", `source:${resolved}`)], body: { file: resolved, bytes: text.length } });
         sendJson(res, 200, { file: resolved, text });
         return;
       }
@@ -504,7 +509,7 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.error("http.request.failed", { requestId, method: req.method, url: req.url, actor: actorFromRequest(req), durationMs: Date.now() - startedAt, error: err });
-      world.emit({
+      world.observe({
         process: "todoServer.request.failed",
         actor: backendHost,
         claims: [],

@@ -116,7 +116,7 @@ test("malformed JSON requests are witnessed as request failures", async () => {
     });
 
     assert.equal(response.status, 500);
-    assert.equal(world.allWitnesses().at(-1).process, "todoServer.request.failed");
+    assert.equal(world.allObservations().at(-1).process, "todoServer.request.failed");
   } finally {
     await server.close();
   }

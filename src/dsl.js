@@ -32,21 +32,23 @@ import { defineWidget, defineWidgetVersion, activateWidgetVersion, attachWidget,
 export function parseWitnessToml(source) {
   const docs = [];
   let current = null;
+  let lineNum = 0;
 
   for (const raw of source.split(/\r?\n/)) {
+    lineNum++;
     const line = stripComment(raw).trim();
     if (!line) continue;
 
     const arraySection = line.match(/^\[\[\s*([A-Za-z_][A-Za-z0-9_-]*)\s*\]\]$/);
     if (arraySection) {
-      current = { kind: arraySection[1], values: {} };
+      current = { kind: arraySection[1], values: {}, line: lineNum };
       docs.push(current);
       continue;
     }
 
     const tableSection = line.match(/^\[\s*([A-Za-z_][A-Za-z0-9_-]*)(?:\.([A-Za-z_][A-Za-z0-9_-]*))?\s*\]$/);
     if (tableSection) {
-      current = { kind: tableSection[1], values: tableSection[2] ? { id: tableSection[2] } : {} };
+      current = { kind: tableSection[1], values: tableSection[2] ? { id: tableSection[2] } : {}, line: lineNum };
       docs.push(current);
       continue;
     }
@@ -119,7 +121,7 @@ function annotateSource(world, doc, context) {
       relation(fileId, "hasModuleKind", "sourceFile"),
       relation(target, "definedIn", fileId, { section: doc.kind })
     ],
-    body: { target, file: doc.file, section: doc.kind, values: doc.values ?? {} }
+    body: { target, file: doc.file, section: doc.kind, line: doc.line ?? null, values: doc.values ?? {} }
   }));
 }
 

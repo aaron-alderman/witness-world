@@ -158,6 +158,7 @@ function nodeDetails(witnesses, relations, knownIds = new Set()) {
       d.sources = dedupeObjects([...(d.sources ?? []), {
         file: w.body.file,
         section: w.body.section,
+        line: w.body.line ?? null,
         values: w.body.values ?? {},
         witness: w.id
       }], x => `${x.file}\u0000${x.section}\u0000${JSON.stringify(x.values)}`);
@@ -661,4 +662,19 @@ function layout(nodes, edges, contexts) {
 
 function contextOrder(id) {
   return { common: 0, backend: 1, frontend: 2, system: 3 }[id] ?? 10;
+}
+
+export function astNodesProjection(witnesses) {
+  const byFile = new Map();
+  const byTarget = new Map();
+  for (const w of witnesses) {
+    if (w.process !== "dsl.source.annotate" || !w.body?.file) continue;
+    const { file, section, line, target, values } = w.body;
+    const node = { id: `ast:${section}:${target}`, section, line: line ?? null, target, values, witness: w.id, file };
+    if (!byFile.has(file)) byFile.set(file, []);
+    byFile.get(file).push(node);
+    if (!byTarget.has(target)) byTarget.set(target, []);
+    byTarget.get(target).push(node);
+  }
+  return { byFile, byTarget };
 }

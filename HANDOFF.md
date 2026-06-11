@@ -101,6 +101,7 @@ The source browser is intentionally VS-Code-like:
 4. Do not make JSON projection files canonical.
 5. Keep frontend/backend capabilities separate.
 6. When adding UI, add browser/runtime regression tests.
+7. Use `world.observe()` for HTTP read routes, page renders, SSE opens, and file reads. `world.emit()` is for domain mutations only. The canvas timeline and all projectors operate on `world.allWitnesses()` (mutation log) exclusively. Adding read witnesses back to either path recreates noise in the timeline and risks the SSE feedback loop.
 
 ## Known weak spots
 

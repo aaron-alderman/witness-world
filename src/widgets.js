@@ -548,7 +548,7 @@ function renderClientEngine(program) {
         '<div class="world-edge-props">' + (a.properties || []).map(p => '<span class="world-badge">' + escapeHtml(p.key) + '=' + escapeHtml(JSON.stringify(p.value)) + '</span>').join('') + '</div></div>'
       ).join('') + '</div>' : '';
       const sourceList = (node.sources || []).length ? '<div class="world-inspector-list"><strong>Source definition</strong>' + node.sources.slice(-6).reverse().map(src =>
-        '<div class="world-inspector-item"><div>' + escapeHtml(src.section || '') + '</div><button class="world-ref-button" data-world-source-file="' + escapeHtml(src.file || '') + '" data-world-source-focus="' + escapeHtml(node.id) + '">' + escapeHtml(src.file || '') + '</button><pre class="world-source-ast">' + escapeHtml(JSON.stringify(src.values || {}, null, 2)) + '</pre></div>'
+        '<div class="world-inspector-item"><div>' + escapeHtml(src.section || '') + '</div><button class="world-ref-button" data-world-source-file="' + escapeHtml(src.file || '') + '" data-world-source-focus="' + escapeHtml(node.id) + '">' + escapeHtml(src.file || '') + (src.line != null ? ' (line ' + src.line + ')' : '') + '</button><pre class="world-source-ast">' + escapeHtml(JSON.stringify(src.values || {}, null, 2)) + '</pre></div>'
       ).join('') + '</div>' : '';
       return '<h2>Selected Object</h2>' +
         rows.map(([k, v]) => '<div class="world-inspector-row"><span class="world-inspector-key">' + escapeHtml(k) + '</span><span>' + v + '</span></div>').join('') +
@@ -565,6 +565,14 @@ function renderClientEngine(program) {
       const src = (node?.sources || []).slice(-1)[0];
       if (!src || !text) return null;
       const lines = text.split(/\r?\n/);
+      if (src.line != null) {
+        const startLine = src.line - 1;
+        let endLine = lines.length - 1;
+        for (let i = startLine + 1; i < lines.length; i++) {
+          if (/^\s*\[\[?/.test(lines[i]) && i > startLine) { endLine = i - 1; break; }
+        }
+        return { start: startLine, end: endLine };
+      }
       const candidates = [src.values?.id, src.values?.soul, src.values?.version, focusId].filter(Boolean).map(String);
       const section = src.section ? '[[' + src.section + ']]' : null;
       let startLine = -1;
@@ -599,7 +607,11 @@ function renderClientEngine(program) {
         }
         return out;
       };
-      return text.split(/\r?\n/).map((line, i) => '<div class="world-source-line ' + (range && i >= range.start && i <= range.end ? 'world-source-highlight' : '') + '"><span class="world-source-line-number">' + (i + 1) + '</span><span class="world-source-line-code">' + linkLine(line) + '</span></div>').join('');
+      return text.split(/\r?\n/).map((line, i) => {
+        const highlighted = range && i >= range.start && i <= range.end;
+        const lineNumAttrs = highlighted && focusId ? ' data-world-jump-to-graph="' + escapeHtml(focusId) + '" title="Jump to object in graph"' : '';
+        return '<div class="world-source-line ' + (highlighted ? 'world-source-highlight' : '') + '"><span class="world-source-line-number"' + lineNumAttrs + '>' + (i + 1) + '</span><span class="world-source-line-code">' + linkLine(line) + '</span></div>';
+      }).join('');
     };
     const renderSourceDocument = () => {
       const doc = state.worldGraphSource;
@@ -709,6 +721,19 @@ function renderClientEngine(program) {
           event.preventDefault();
           const file = el.getAttribute('data-world-source-file') || '';
           await openSourceFile(file, el.getAttribute('data-world-source-focus') || state.worldGraphSourceFocus || selectedId);
+          draw();
+        });
+      });
+      root.querySelectorAll('[data-world-jump-to-graph]').forEach(el => {
+        el.addEventListener('click', event => {
+          event.preventDefault();
+          const id = el.getAttribute('data-world-jump-to-graph');
+          if (!id) return;
+          selectedId = id;
+          state.worldGraphSelectedId = id;
+          state.worldGraphSelectedKind = '';
+          state.worldGraphSource = null;
+          state.worldGraphMode = 'graph';
           draw();
         });
       });

@@ -100,8 +100,23 @@ The project deliberately avoids TypeScript for now. Instead it relies on:
 ## Important scripts
 
 ```bash
-npm test      # run all tests
+npm test      # run all tests (unit + integration, no browser required)
 npm run demo  # start the demo server
+```
+
+## Browser / UI tests
+
+The UI tests use Playwright and require Chromium to be installed once:
+
+```bash
+npx playwright install chromium
+```
+
+Then:
+
+```bash
+npm run test:ui   # browser tests only
+npm run test:all  # unit + integration + browser
 ```
 
 ## Current status

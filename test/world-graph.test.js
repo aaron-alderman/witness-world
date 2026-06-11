@@ -145,7 +145,7 @@ test("demo UI includes world graph widget and frontend render operation", async 
     assert.equal(Array.isArray(graph.graph.nodes), true);
     assert.equal(Array.isArray(graph.graph.edges), true);
     assert.equal(graph.graph.nodes.some(n => n.id === "todo_app_widget"), true);
-    assert.equal(world.allWitnesses().some(w => w.process === "backend.readWorldGraph"), true);
+    assert.equal(world.allObservations().some(w => w.process === "backend.readWorldGraph"), true);
   } finally {
     await server.close();
   }

@@ -10,17 +10,17 @@ A reflective application environment where memory is executable, witnessed, comp
 
 ### Browser-runtime tests
 
-- [ ] Set up a small DOM execution harness (no full browser automation required)
-- [ ] Catch generated JS regressions automatically
-- [ ] Test clicks / forms / rendering without manual browser inspection
-- [ ] Test World Browser interactions
+- [x] Set up a small DOM execution harness (no full browser automation required)
+- [x] Catch generated JS regressions automatically
+- [x] Test clicks / forms / rendering without manual browser inspection
+- [x] Test World Browser interactions
 
 ### Source AST as first-class projection
 
-- [ ] Expose parsed DSL docs as AST objects
-- [ ] Link source lines to AST nodes
-- [ ] Link AST nodes to witnessed Things / Relations / Processes
-- [ ] Allow selecting AST nodes from the graph and vice versa
+- [x] Expose parsed DSL docs as AST objects
+- [x] Link source lines to AST nodes
+- [x] Link AST nodes to witnessed Things / Relations / Processes
+- [x] Allow selecting AST nodes from the graph and vice versa
 
 ### Process View
 

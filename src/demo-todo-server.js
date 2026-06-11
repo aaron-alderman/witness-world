@@ -17,7 +17,8 @@ if (!serverDef) {
 }
 
 const witnessLogPath = process.env.WITNESS_LOG || path.join(os.tmpdir(), serverDef.witnessLogName ?? "witness-world-demo.witnesses.jsonl");
-const world = createWorld({ genesis: { system: "witness-world", demo: "todo-ui", definitionPath }, witnessLogPath });
+const observationLogPath = process.env.OBSERVATION_LOG || path.join(os.tmpdir(), serverDef.observationLogName ?? "witness-world-demo.observations.jsonl");
+const world = createWorld({ genesis: { system: "witness-world", demo: "todo-ui", definitionPath }, witnessLogPath, observationLogPath });
 
 declareBackendHost(world, { actor: serverDef.actor, id: serverDef.backendHost });
 declareFrontendHost(world, { actor: serverDef.actor, id: serverDef.frontendHost });
@@ -48,6 +49,7 @@ console.log(`Witness Todo running: ${server.url}`);
 console.log(`Definition: ${definitionPath}`);
 console.log(`Projection cache: ${storePath}`);
 console.log(`Witness log: ${witnessLogPath}`);
+console.log(`Observation log: ${observationLogPath}`);
 console.log("Press Ctrl+C to stop.");
 
 process.on("SIGINT", async () => {

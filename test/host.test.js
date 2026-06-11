@@ -137,11 +137,12 @@ order = 2
     assert.deepEqual(list.todos.map(t => t.title), ["Ship witness kernel"]);
 
     const processes = world.allWitnesses().map(w => w.process);
+    const obsProcesses = world.allObservations().map(w => w.process);
     assert.equal(processes.includes("todoServer.start"), true);
-    assert.equal(processes.includes("frontend.render"), true);
+    assert.equal(obsProcesses.includes("frontend.render"), true);
     assert.equal(processes.includes("widget.renderHtml"), true);
     assert.equal(processes.includes("todo.create"), true);
-    assert.equal(processes.includes("backend.readTodos"), true);
+    assert.equal(obsProcesses.includes("backend.readTodos"), true);
   } finally {
     await server.close();
   }
@@ -201,7 +202,7 @@ test("todo server supports done/delete actions and witness inspector data", asyn
     assert.equal(processes.includes("todo.create"), true);
     assert.equal(processes.includes("todo.update"), true);
     assert.equal(processes.includes("todo.delete"), true);
-    assert.equal(processes.includes("backend.readWitnesses"), true);
+    assert.equal(world.allObservations().some(w => w.process === "backend.readWitnesses"), true);
   } finally {
     await server.close();
   }
@@ -505,7 +506,7 @@ props = { title = "Witness Todo" }
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.deepEqual(body, { ok: true });
-    assert.equal(world.allWitnesses().some(w => w.process === "session.logout" && w.actor === "aaron"), true);
+    assert.equal(world.allObservations().some(w => w.process === "session.logout" && w.actor === "aaron"), true);
   } finally {
     await server.close();
   }

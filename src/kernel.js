@@ -14,11 +14,12 @@ const deepFreeze = value => {
 
 const hash = value => crypto.createHash("sha256").update(stableStringify(value)).digest("hex");
 
-export function createWorld({ genesis = { system: "witness-world", version: "0.1.0" }, witnessLog = null, witnessLogPath = null } = {}) {
+export function createWorld({ genesis = { system: "witness-world", version: "0.1.0" }, witnessLog = null, witnessLogPath = null, observationLog = null, observationLogPath = null } = {}) {
   const log = witnessLog ?? new WitnessLog({ file: witnessLogPath });
+  const obsLog = observationLog ?? new WitnessLog({ file: observationLogPath });
   const existing = log.all();
   if (existing.length > 0) {
-    return makeWorldFromLog({ genesis, log });
+    return makeWorldFromLog({ genesis, log, obsLog });
   }
   const genesisWitness = makeWitness({
     cause: null,
@@ -35,10 +36,10 @@ export function createWorld({ genesis = { system: "witness-world", version: "0.1
   });
   log.append(genesisWitness);
 
-  return makeWorldFromLog({ genesis, log });
+  return makeWorldFromLog({ genesis, log, obsLog });
 }
 
-function makeWorldFromLog({ genesis, log }) {
+function makeWorldFromLog({ genesis, log, obsLog }) {
   function emit({ process, actor, claims = [], body = {}, cause = undefined }) {
     const prior = log.all().at(-1)?.id ?? null;
     const actualCause = cause === undefined ? prior : cause;
@@ -47,8 +48,18 @@ function makeWorldFromLog({ genesis, log }) {
     return w;
   }
 
+  function observe({ process, actor, claims = [], body = {}, cause = undefined }) {
+    const prior = obsLog.all().at(-1)?.id ?? null;
+    const actualCause = cause === undefined ? prior : cause;
+    const w = makeWitness({ cause: actualCause, process, actor, claims, body });
+    obsLog.append(w);
+    return w;
+  }
+
   function fork() {
-    const child = createWorld({ genesis });
+    const childObsLog = new WitnessLog();
+    childObsLog.replace(obsLog.all());
+    const child = createWorld({ genesis, observationLog: childObsLog });
     child._replaceWitnesses(log.all());
     return child;
   }
@@ -61,11 +72,15 @@ function makeWorldFromLog({ genesis, log }) {
     return log.all();
   }
 
+  function allObservations() {
+    return obsLog.all();
+  }
+
   function _replaceWitnesses(next) {
     log.replace(next);
   }
 
-  return { emit, project, allWitnesses, fork, _replaceWitnesses };
+  return { emit, observe, project, allWitnesses, allObservations, fork, _replaceWitnesses };
 }
 
 function makeWitness({ cause, process, actor, claims, body }) {
