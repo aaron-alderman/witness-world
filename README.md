@@ -17,9 +17,11 @@ The demo is a Todo app that is intentionally more complicated than a normal Todo
 - projected todo state
 - frontend/backend capability separation
 - widget definitions from DSL
+- witnessed traits, value types, and process specs
+- typed widget-editor flow through schema-driven value editors
 - versioned widgets and live activation
 - personal projections with private notes
-- a World Browser for graph, primitive, and source views
+- a World Browser for graph, thing, primitive, source, and process views
 
 ## Quick start
 
@@ -52,7 +54,7 @@ It includes:
 - actor selector
 - todos
 - private notes
-- widget editor
+- typed widget editor
 - version playground
 - witness inspector
 
@@ -62,9 +64,11 @@ The object browser / world inspector.
 
 It has first-class modes:
 
-- **Graph** — context/relationship map
-- **Primitive Browser** — browse primitive values such as strings, numbers, kinds, badges, unresolved refs
-- **Source Browser** — VS-Code-like source view of witnessed DSL files
+- **Graph** - context/relationship map
+- **Thing List** - browse witnessed objects grouped by inferred kind
+- **Primitive Browser** - browse primitive values such as strings, numbers, kinds, badges, unresolved refs
+- **Source Browser** - VS-Code-like source view of witnessed DSL files
+- **Process Explorer** - browse surfaced process and API nodes without expanding into step traces
 
 The left drawer shows selected object details:
 
@@ -73,6 +77,7 @@ The left drawer shows selected object details:
 - associations from/to the object
 - association properties
 - source definition provenance
+- typed process/type metadata when selecting `trait`, `valueType`, or `processSpec` objects
 
 ## DSL entry point
 
@@ -86,6 +91,11 @@ examples/demo/frontend.wtoml
 ```
 
 The main file imports the split files and spawns frontend/backend contexts.
+
+The type / trait model also lives in the demo DSL:
+
+- `examples/demo/common.wtoml` defines `trait`, `valueType`, and `processSpec` witnesses
+- `examples/demo/frontend.wtoml` uses `ValueEditor` widgets and schema-aware `readForm` for the widget editor
 
 ## Design notes
 

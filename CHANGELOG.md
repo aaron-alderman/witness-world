@@ -1,4 +1,16 @@
 
+## 0.36.0
+
+Type / trait model v1.
+
+- Added a witnessed type-model layer in `src/type-model.js` with first-class `trait`, `valueType`, and `processSpec` definitions plus transitive `compatibleWith` resolution.
+- Added typed validation helpers for flat process schemas and used them to make `widget.define` the first fully typed process.
+- `/api/widgets` now emits structured typed gate failures (`widget.define.blocked`) and typed output failures (`widget.define.failed`) with per-field compatibility witnesses.
+- Added the primitive `ValueEditor` widget and schema-aware `readForm(schema = "...")` support in the generated frontend runtime.
+- The demo widget editor on `/` now uses witnessed type metadata to choose controls for kind, text, parent, and order.
+- The world browser now surfaces `trait`, `valueType`, and `processSpec` nodes and their compatibility edges.
+- 170 passing tests.
+
 ## 0.35.0
 
 CANVAS-v2 phase 4: timeline, undo/redo, polish, live sync. This completes the CANVAS-v2 roadmap.

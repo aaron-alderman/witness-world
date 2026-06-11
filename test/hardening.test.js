@@ -79,14 +79,124 @@ test("widget editor creates stable thing-style ids rather than host timestamp id
   });
 
   try {
-    const created = await fetch(`${server.url}/api/widgets`, {
+    const response = await fetch(`${server.url}/api/widgets`, {
       method: "POST",
       headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
-      body: JSON.stringify({ kind: "Text", text: "Hello", parent: "todo_app_widget" })
-    }).then(r => r.json());
+      body: JSON.stringify({ kind: "Text", text: "Hello", parent: "todo_app_widget", order: 4 })
+    });
+    const created = await response.json();
 
     assert.match(created.widget.id, /^thing_[0-9a-f]{24}$/);
     assert.equal(created.widget.id.includes("widget-"), false);
+    assert.equal(created.widget.order, 4);
+    assert.equal(created.witness.process, "widget.define");
+  } finally {
+    await server.close();
+  }
+});
+
+test("typed widget.define rejects incompatible inputs with structured failures", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const server = await startTodoServer(world, {
+    actor: "adam",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    rootWidget: "todo_app_widget",
+    frontendProgram: "todo_frontend_program",
+    storePath: await tempStore()
+  });
+
+  try {
+    const response = await fetch(`${server.url}/api/widgets`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
+      body: JSON.stringify({ kind: "Nope", text: "Hello", order: "later" })
+    });
+    assert.equal(response.status, 400);
+    const body = await response.json();
+    assert.equal(body.witness.process, "widget.define.blocked");
+    assert.equal(body.witness.body.gate, "type.compatibility");
+    assert.equal(body.witness.body.failures.some(f => f.field === "kind"), true);
+    assert.equal(body.witness.body.failures.some(f => f.field === "order"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("typed widget.define emits failed witness when process spec output is incompatible", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  applyWitnessToml(world, `
+[[trait]]
+actor = "system"
+id = "textual"
+
+[[trait]]
+actor = "system"
+id = "numeric"
+
+[[valueType]]
+actor = "system"
+id = "widget.kind"
+compatibleWith = ["textual"]
+editor = { control = "text" }
+
+[[valueType]]
+actor = "system"
+id = "widget.text"
+compatibleWith = ["textual"]
+editor = { control = "text" }
+
+[[valueType]]
+actor = "system"
+id = "widget.parent"
+compatibleWith = ["textual"]
+editor = { control = "text" }
+
+[[valueType]]
+actor = "system"
+id = "widget.order"
+compatibleWith = ["numeric"]
+editor = { control = "number" }
+
+[[processSpec]]
+actor = "system"
+id = "widget_define_spec"
+process = "widget.define"
+inputs = [{ name = "kind", accepts = "widget.kind", required = true }, { name = "text", accepts = "widget.text", required = true }]
+outputs = [{ name = "id", accepts = "widget.text", required = true }, { name = "kind", accepts = "widget.order", required = true }, { name = "parent", accepts = "widget.parent", required = true }, { name = "text", accepts = "widget.text", required = true }, { name = "order", accepts = "widget.order", required = true }]
+
+[[widget]]
+actor = "adam"
+id = "todo_app_widget"
+kind = "Page"
+props = { title = "Witness Todo" }
+`);
+
+  const server = await startTodoServer(world, {
+    actor: "adam",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    rootWidget: "todo_app_widget",
+    storePath: await tempStore()
+  });
+
+  try {
+    const response = await fetch(`${server.url}/api/widgets`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
+      body: JSON.stringify({ kind: "Text", text: "Hello" })
+    });
+    assert.equal(response.status, 500);
+    const body = await response.json();
+    assert.equal(body.witness.process, "widget.define.failed");
+    assert.equal(body.witness.body.failures.some(f => f.field === "kind"), true);
   } finally {
     await server.close();
   }

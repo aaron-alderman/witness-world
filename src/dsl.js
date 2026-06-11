@@ -14,6 +14,7 @@ import {
   emitUserAction
 } from "./modules.js";
 import { defineWidget, defineWidgetVersion, activateWidgetVersion, attachWidget, defineFrontendProgram, defineFrontendStep } from "./widgets.js";
+import { defineTrait, defineValueType, defineProcessSpec } from "./type-model.js";
 
 // Tiny TOML-ish DSL parser. Intentional subset:
 //   [[section]]
@@ -294,6 +295,34 @@ function applyDoc(world, { kind, values }, context) {
         action: req(valuesWithDefaults, "id"),
         target: req(valuesWithDefaults, "target"),
         body: valuesWithDefaults.body ?? {}
+      });
+
+    case "trait":
+      return defineTrait(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        id: req(valuesWithDefaults, "id"),
+        label: valuesWithDefaults.label ?? valuesWithDefaults.id,
+        owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
+      });
+
+    case "valueType":
+      return defineValueType(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        id: req(valuesWithDefaults, "id"),
+        label: valuesWithDefaults.label ?? valuesWithDefaults.id,
+        editor: valuesWithDefaults.editor ?? null,
+        compatibleWith: valuesWithDefaults.compatibleWith ?? [],
+        owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
+      });
+
+    case "processSpec":
+      return defineProcessSpec(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        id: req(valuesWithDefaults, "id"),
+        process: req(valuesWithDefaults, "process"),
+        inputs: valuesWithDefaults.inputs ?? [],
+        outputs: valuesWithDefaults.outputs ?? [],
+        owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
       });
 
     case "widget":

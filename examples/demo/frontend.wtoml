@@ -165,23 +165,28 @@ level = 2
 
 [[form]]
 id = "todo_widget_editor_form"
-children = ["todo_widget_kind", "todo_widget_text", "todo_widget_parent", "todo_widget_editor_button"]
+children = ["todo_widget_kind", "todo_widget_text", "todo_widget_parent", "todo_widget_order", "todo_widget_editor_button"]
 role = "widget-editor-form"
 
-[[input]]
+[[widget]]
 id = "todo_widget_kind"
-name = "kind"
-placeholder = "Widget kind, e.g. Text or Heading"
+kind = "ValueEditor"
+props = { name = "kind", valueType = "widget.kind", label = "Kind", placeholder = "Choose a widget kind" }
 
-[[input]]
+[[widget]]
 id = "todo_widget_text"
-name = "text"
-placeholder = "Widget text"
+kind = "ValueEditor"
+props = { name = "text", valueType = "widget.text", label = "Text", placeholder = "Widget text" }
 
-[[input]]
+[[widget]]
 id = "todo_widget_parent"
-name = "parent"
-placeholder = "Parent widget id, blank = root"
+kind = "ValueEditor"
+props = { name = "parent", valueType = "widget.parent", label = "Parent", placeholder = "Parent widget id, blank = root" }
+
+[[widget]]
+id = "todo_widget_order"
+kind = "ValueEditor"
+props = { name = "order", valueType = "widget.order", label = "Order", placeholder = "Optional order" }
 
 [[button]]
 id = "todo_widget_editor_button"
@@ -403,6 +408,7 @@ op = "readForm"
 on = "submit:todo_widget_editor_form"
 widget = "todo_widget_editor_form"
 into = "widgetDraft"
+schema = "widget.define"
 
 [[step]]
 order = 1

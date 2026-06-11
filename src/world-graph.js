@@ -504,7 +504,7 @@ function looksLikeCapability(value) {
 }
 
 function looksLikeKind(value) {
-  return ["widget", "widgetVersion", "frontendProgram", "context", "app", "route", "serverRunner", "frontendRunner", "compiler", "description", "compiledArtifact"].includes(value);
+  return ["widget", "widgetVersion", "frontendProgram", "context", "app", "route", "serverRunner", "frontendRunner", "compiler", "description", "compiledArtifact", "trait", "valueType", "processSpec"].includes(value);
 }
 
 function capabilityContextFor(source, capability, nodeContext) {
@@ -530,6 +530,7 @@ function inferKind(id, relations) {
   if (id.startsWith("layout:")) return "layout";
   const moduleKind = relations.find(r => r.from === id && r.rel === "hasModuleKind")?.to;
   if (moduleKind === "context") return "context";
+  if (moduleKind === "trait" || moduleKind === "valueType" || moduleKind === "processSpec") return moduleKind;
   if (moduleKind?.includes("widget")) return "widget";
   if (moduleKind) return "module";
   return "thing";
@@ -540,7 +541,7 @@ function isGraphId(value) {
 }
 
 function rankKind(kind) {
-  return { context: 0, "context-ref": 1, thing: 1, module: 2, widget: 3, layout: 3, process: 4, step: 5, api: 5, capability: 5, vocabulary: 5, witness: 6 }[kind] ?? 9;
+  return { context: 0, "context-ref": 1, thing: 1, module: 2, trait: 2, valueType: 2, processSpec: 2, widget: 3, layout: 3, process: 4, step: 5, api: 5, capability: 5, vocabulary: 5, witness: 6 }[kind] ?? 9;
 }
 
 function shortWitness(w) {
@@ -606,7 +607,7 @@ function layout(nodes, edges, contexts) {
 
   const positioned = [];
   const groups = [];
-  const layerByKind = { context: 0, "context-ref": 0, thing: 1, module: 1, widget: 2, layout: 2, process: 3, step: 4, api: 4, capability: 4, vocabulary: 4, witness: 5 };
+  const layerByKind = { context: 0, "context-ref": 0, thing: 1, module: 1, trait: 1, valueType: 1, processSpec: 1, widget: 2, layout: 2, process: 3, step: 4, api: 4, capability: 4, vocabulary: 4, witness: 5 };
 
   function layoutContext(groupId, x, y) {
     const groupNodes = nodesByContext.get(groupId) ?? [];

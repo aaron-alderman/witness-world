@@ -199,11 +199,62 @@ order = 1
 test("widget editor operation is represented in generated frontend program", () => {
   const world = createWorld();
   const dsl = `
+[[trait]]
+actor = "adam"
+id = "textual"
+
+[[trait]]
+actor = "adam"
+id = "enumerated"
+
+[[valueType]]
+actor = "adam"
+id = "widget.kind"
+compatibleWith = ["textual", "enumerated"]
+editor = { control = "select", options = ["Text", "Heading"] }
+
+[[valueType]]
+actor = "adam"
+id = "widget.text"
+compatibleWith = ["textual"]
+editor = { control = "text" }
+
+[[processSpec]]
+actor = "adam"
+id = "widget_define_spec"
+process = "widget.define"
+inputs = [{ name = "kind", accepts = "widget.kind", required = true }, { name = "text", accepts = "widget.text", required = true }]
+outputs = [{ name = "id", accepts = "widget.text", required = true }]
+
 [[widget]]
 actor = "adam"
 id = "root"
 kind = "Page"
 props = { title = "Editor" }
+
+[[widget]]
+actor = "adam"
+id = "editor_kind"
+kind = "ValueEditor"
+props = { name = "kind", valueType = "widget.kind", label = "Kind" }
+
+[[widget]]
+actor = "adam"
+id = "editor_text"
+kind = "ValueEditor"
+props = { name = "text", valueType = "widget.text", label = "Text" }
+
+[[attachWidget]]
+actor = "adam"
+parent = "editor_form"
+child = "editor_kind"
+order = 0
+
+[[attachWidget]]
+actor = "adam"
+parent = "editor_form"
+child = "editor_text"
+order = 1
 
 [[widget]]
 actor = "adam"
@@ -227,15 +278,87 @@ actor = "adam"
 program = "program"
 event = "submit:editor_form"
 order = 0
+op = "readForm"
+params = { widget = "editor_form", into = "widgetDraft", schema = "widget.define" }
+
+[[frontendStep]]
+actor = "adam"
+program = "program"
+event = "submit:editor_form"
+order = 1
 op = "postWidgetDefinition"
 params = { from = "widgetDraft", into = "widgetCreated" }
 `;
   applyWitnessToml(world, dsl);
   const program = world.project(w => frontendProgram(w, "program"));
-  assert.equal(program.steps[0].op, "postWidgetDefinition");
+  assert.equal(program.steps[0].op, "readForm");
   const html = renderWidgetPage(world, { actor: "frontendHost", rootWidget: "root", frontendProgram: "program" });
   assert.match(html, /postWidgetDefinition/);
   assert.match(html, /\/api\/widgets/);
+  assert.match(html, /data-value-type="widget.kind"/);
+  assert.match(html, /data-editor-control="select"/);
+  assert.match(html, /widget\.define/);
+  assert.match(html, /readTypedForm/);
+});
+
+test("value editor renders controls chosen by value type metadata", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[trait]]
+actor = "adam"
+id = "textual"
+
+[[trait]]
+actor = "adam"
+id = "enumerated"
+
+[[valueType]]
+actor = "adam"
+id = "widget.kind"
+compatibleWith = ["textual", "enumerated"]
+editor = { control = "select", options = ["Text", "Heading"] }
+
+[[valueType]]
+actor = "adam"
+id = "widget.text"
+compatibleWith = ["textual"]
+editor = { control = "text" }
+
+[[widget]]
+actor = "adam"
+id = "root"
+kind = "Page"
+props = { title = "Typed" }
+
+[[widget]]
+actor = "adam"
+id = "kind_editor"
+kind = "ValueEditor"
+props = { name = "kind", valueType = "widget.kind", label = "Kind" }
+
+[[widget]]
+actor = "adam"
+id = "text_editor"
+kind = "ValueEditor"
+props = { name = "text", valueType = "widget.text", label = "Text", placeholder = "Widget text" }
+
+[[attachWidget]]
+actor = "adam"
+parent = "root"
+child = "kind_editor"
+order = 0
+
+[[attachWidget]]
+actor = "adam"
+parent = "root"
+child = "text_editor"
+order = 1
+`);
+
+  const html = renderWidgetPage(world, { actor: "frontendHost", rootWidget: "root" });
+  assert.match(html, /<select[^>]*data-value-type="widget.kind"[^>]*data-editor-control="select"/);
+  assert.match(html, /<option value="Text">Text<\/option>/);
+  assert.match(html, /<input[^>]*data-value-type="widget.text"[^>]*data-editor-control="text"[^>]*placeholder="Widget text"/);
 });
 
 test("versioned widget soul renders its active version and can flip versions", () => {

@@ -1,6 +1,7 @@
 import { thing, relation } from "./kernel.js";
 import { witnessRelations } from "./modules.js";
 import { stepGraphFromLinearSteps } from "./process-graph.js";
+import { typeModelProjection, editorForValueType } from "./type-model.js";
 
 export function defineWidget(world, { actor, id, kind, props = {}, owner = actor }) {
   return world.emit({
@@ -168,7 +169,8 @@ export function stableJson(value) {
 export function renderWidgetPage(world, { actor, rootWidget, frontendProgram: programId = null, appConfig = {} }) {
   const tree = world.project(w => widgetTree(w, rootWidget));
   const program = world.project(w => frontendProgram(w, programId));
-  const html = renderDocument(tree, program, appConfig);
+  const typeModel = world.project(typeModelProjection);
+  const html = renderDocument(tree, program, appConfig, typeModel);
 
   world.emit({
     process: "widget.renderHtml",
@@ -180,10 +182,10 @@ export function renderWidgetPage(world, { actor, rootWidget, frontendProgram: pr
   return html;
 }
 
-function renderDocument(root, program, appConfig = {}) {
+function renderDocument(root, program, appConfig = {}, typeModel = {}) {
   const title = root.props?.title ?? "Witness App";
   const bodyAttrs = appConfig.page ? ` data-page="${escapeAttr(appConfig.page)}"` : "";
-  return `<!doctype html>\n<html>\n${renderHead(title)}\n<body${bodyAttrs}>\n${renderWidget(root, { excludeRoles: new Set(appConfig.excludeWidgetRoles ?? []) })}\n${program ? renderClientEngine({ ...program, config: appConfig }) : ""}\n</body>\n</html>`;
+  return `<!doctype html>\n<html>\n${renderHead(title)}\n<body${bodyAttrs}>\n${renderWidget(root, { excludeRoles: new Set(appConfig.excludeWidgetRoles ?? []), typeModel })}\n${program ? renderClientEngine({ ...program, config: { ...appConfig, typeModel } }) : ""}\n</body>\n</html>`;
 }
 
 function renderHead(title) {
@@ -214,6 +216,7 @@ function renderHead(title) {
     .todo-actions { margin-left: auto; display: flex; gap: 6px; }
     .session-panel, .private-notes, .witness-inspector, .widget-editor { border: 1px solid #ddd; border-radius: 8px; padding: 12px; background: #fafafa; }
     .session-panel { border-left: 6px solid var(--accent, #ddd); }
+    .value-editor-field { display: grid; gap: 4px; min-width: 0; flex: 1; }
     .private-note-list { display: grid; gap: 6px; margin-top: 8px; }
     .private-note { padding: 8px; border-radius: 6px; background: #fff; border: 1px solid #eee; }
     .witness-inspector { }
@@ -269,6 +272,7 @@ function renderHead(title) {
     .world-node-context, .world-node-context-ref { border-color: #aaa; background: #f7f7f7; }
     .world-node-widget, .world-node-layout { border-color: #6ca278; background: #f4fff6; }
     .world-node-capability { border-color: #9a7cc0; background: #fbf7ff; }
+    .world-node-trait, .world-node-valueType, .world-node-processSpec { border-color: #4c8f8f; background: #f2fffe; }
     .world-node-vocabulary { border-color: #999; background: #f7f7f7; }
     .world-node a { color: var(--accent, #333); font-weight: 700; text-decoration: none; }
     .world-node-kind { color: #777; font-size: 11px; }
@@ -349,6 +353,8 @@ function renderWidget(widget, options = {}) {
       return `<input${attrs} name="${escapeAttr(widget.props.name ?? "value")}" placeholder="${escapeAttr(widget.props.placeholder ?? "")}" autocomplete="off" />`;
     case "Select":
       return `<select${attrs} name="${escapeAttr(widget.props.name ?? "value")}"></select>`;
+    case "ValueEditor":
+      return renderValueEditor(widget, options.typeModel ?? {}, attrs);
     case "Button": {
       const type = widget.props.type ?? "button";
       return `<button${attrs} type="${escapeAttr(type)}">${escapeHtml(widget.props.text ?? "Button")}</button>`;
@@ -360,6 +366,27 @@ function renderWidget(widget, options = {}) {
     default:
       return `<section${attrs} data-kind="${escapeAttr(widget.kind)}">${children}</section>`;
   }
+}
+
+function renderValueEditor(widget, typeModel, attrs) {
+  const valueType = widget.props.valueType ?? "textual";
+  const editor = editorForValueType(typeModel, valueType);
+  const name = escapeAttr(widget.props.name ?? "value");
+  const placeholder = escapeAttr(widget.props.placeholder ?? "");
+  const controlAttrs = `${attrs} name="${name}" data-value-type="${escapeAttr(valueType)}" data-editor-control="${escapeAttr(editor.control)}"`;
+  let control = "";
+  if (editor.control === "select") {
+    const options = Array.isArray(editor.options) ? editor.options : [];
+    const placeholderOption = widget.props.placeholder ? `<option value="">${escapeHtml(widget.props.placeholder)}</option>` : "";
+    control = `<select${controlAttrs}>${placeholderOption}${options.map(option => `<option value="${escapeAttr(option)}">${escapeHtml(option)}</option>`).join("")}</select>`;
+  } else if (editor.control === "checkbox") {
+    control = `<input${controlAttrs} type="checkbox" />`;
+  } else {
+    const inputType = editor.control === "number" ? "number" : editor.control === "color" ? "color" : "text";
+    control = `<input${controlAttrs} type="${escapeAttr(inputType)}" placeholder="${placeholder}" autocomplete="off" />`;
+  }
+  if (!widget.props.label) return control;
+  return `<label class="value-editor-field"><span>${escapeHtml(widget.props.label)}</span>${control}</label>`;
 }
 
 function renderAttrs(widget) {
@@ -392,6 +419,7 @@ function renderClientEngine(program) {
   const engine = String.raw`(async () => {
   const program = JSON.parse(document.getElementById('witness-frontend-program').textContent);
   const config = program.config || {};
+  const typeModel = config.typeModel || {};
   const state = Object.create(null);
   const byWidget = id => document.querySelector('[data-widget="' + CSS.escape(id) + '"]');
   const readPath = (value, path) => String(path || '').split('.').filter(Boolean).reduce((x, key) => x == null ? undefined : x[key], value);
@@ -803,11 +831,81 @@ function renderClientEngine(program) {
     if (!el) return null;
     return el.matches?.('form') ? el : el.querySelector?.('form') || null;
   };
-  const readForm = ({ widget, into }) => {
+  const compatibleWithType = (from, target) => {
+    if (!from || !target) return false;
+    if (from === target) return true;
+    const queue = [...(typeModel.compatibleWith?.[from] || [])];
+    const seen = new Set([from]);
+    while (queue.length) {
+      const current = queue.shift();
+      if (!current || seen.has(current)) continue;
+      if (current === target) return true;
+      seen.add(current);
+      queue.push(...(typeModel.compatibleWith?.[current] || []));
+    }
+    return false;
+  };
+  const editorForValueType = valueType => {
+    const exact = typeModel.valueTypesById?.[valueType];
+    if (exact?.editor?.control) return exact.editor;
+    if (compatibleWithType(valueType, 'numeric')) return { control: 'number' };
+    if (compatibleWithType(valueType, 'boolean')) return { control: 'checkbox' };
+    if (compatibleWithType(valueType, 'color')) return { control: 'color' };
+    if (compatibleWithType(valueType, 'enumerated')) return { control: 'select' };
+    return { control: 'text' };
+  };
+  const valueMatchesType = (typeId, value) => {
+    const editor = editorForValueType(typeId);
+    if (editor.control === 'number') return typeof value === 'number' && Number.isFinite(value);
+    if (editor.control === 'checkbox') return typeof value === 'boolean';
+    if (editor.control === 'color') return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+    if (editor.control === 'select') return typeof value === 'string' && Array.isArray(editor.options) && editor.options.includes(value);
+    return typeof value === 'string';
+  };
+  const matchingValueTypes = value => Object.values(typeModel.valueTypesById || {})
+    .filter(type => valueMatchesType(type.id, value))
+    .map(type => type.id);
+  const matchesAccepts = (accepts, value) => {
+    const candidates = matchingValueTypes(value);
+    if (typeModel.valueTypesById?.[accepts]) return candidates.some(typeId => compatibleWithType(typeId, accepts));
+    if (typeModel.traitsById?.[accepts]) return candidates.some(typeId => compatibleWithType(typeId, accepts));
+    return false;
+  };
+  const coerceDomValue = (accepts, raw) => {
+    if (typeof raw !== 'string') return raw;
+    const editor = typeModel.valueTypesById?.[accepts] ? editorForValueType(accepts) : compatibleWithType(accepts, 'boolean') ? { control: 'checkbox' } : compatibleWithType(accepts, 'numeric') ? { control: 'number' } : { control: 'text' };
+    if (editor.control === 'number') {
+      const value = Number(raw);
+      return Number.isFinite(value) ? value : raw;
+    }
+    if (editor.control === 'checkbox') {
+      if (['true', '1', 'on', 'yes'].includes(raw.toLowerCase())) return true;
+      if (['false', '0', 'off', 'no'].includes(raw.toLowerCase())) return false;
+    }
+    return raw;
+  };
+  const readTypedForm = (data, schema) => {
+    const spec = typeModel.processSpecsByProcess?.[schema];
+    if (!spec) throw new Error('unknown schema ' + schema);
+    const out = Object.create(null);
+    for (const field of spec.inputs || []) {
+      const key = field.source || field.name;
+      const raw = data[key];
+      if (raw == null || raw === '') {
+        if (field.required) throw new Error(field.name + ' required');
+        continue;
+      }
+      const value = coerceDomValue(field.accepts, raw);
+      if (!matchesAccepts(field.accepts, value)) throw new Error(field.name + ' expected ' + field.accepts);
+      out[field.name] = value;
+    }
+    return out;
+  };
+  const readForm = ({ widget, into, schema }) => {
     const form = formForWidget(widget);
     if (!form) throw new Error('widget ' + widget + ' does not contain a form');
     const data = Object.fromEntries(new FormData(form).entries());
-    state[into] = data;
+    state[into] = schema ? readTypedForm(data, schema) : data;
   };
   const clearForm = ({ widget }) => { formForWidget(widget)?.reset?.(); };
   const resolveBody = ({ from, pick, body }) => {

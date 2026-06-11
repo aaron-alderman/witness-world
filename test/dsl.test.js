@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorld, projectors } from "../src/kernel.js";
-import { parseWitnessToml, applyWitnessToml } from "../src/dsl.js";
+import { parseWitnessToml, applyWitnessToml, applyWitnessDocs } from "../src/dsl.js";
 import { moduleProjectors } from "../src/modules.js";
 
 const script = `
@@ -151,7 +151,38 @@ actor = "aaron"
 thing = "w"
 from = "aaron"
 to = "callan"
-`);
+  `);
   assert.equal(world.project(projectors.owners).get("w"), "callan");
   assert.equal(world.allWitnesses().some(w => w.process === "transferOwnership.failed"), false);
+});
+
+test("type-model DSL sections emit witnessed definitions and source annotations", () => {
+  const world = createWorld();
+  const docs = parseWitnessToml(`
+[[trait]]
+actor = "system"
+id = "textual"
+
+[[valueType]]
+actor = "system"
+id = "widget.text"
+compatibleWith = ["textual"]
+editor = { control = "text" }
+
+[[processSpec]]
+actor = "system"
+id = "widget_define_spec"
+process = "widget.define"
+inputs = [{ name = "text", accepts = "widget.text", required = true }]
+outputs = [{ name = "id", accepts = "widget.text", required = true }]
+`).map(doc => ({ ...doc, file: "C:/demo/types.wtoml" }));
+
+  applyWitnessDocs(world, docs);
+
+  assert.equal(world.allWitnesses().some(w => w.process === "defineTrait" && w.body.id === "textual"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "defineValueType" && w.body.id === "widget.text"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "defineProcessSpec" && w.body.process === "widget.define"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "dsl.source.annotate" && w.body.section === "trait" && w.body.target === "textual"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "dsl.source.annotate" && w.body.section === "valueType" && w.body.target === "widget.text"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "dsl.source.annotate" && w.body.section === "processSpec" && w.body.target === "widget_define_spec"), true);
 });

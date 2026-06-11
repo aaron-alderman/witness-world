@@ -104,6 +104,23 @@ test("world graph can include witness nodes when explicitly requested", () => {
   assert.equal(graph.nodes.some(n => n.kind === "witness"), true);
 });
 
+test("world graph surfaces trait, valueType, and processSpec nodes with compatibility edges", async () => {
+  const world = createWorld();
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const graph = worldGraphProjection(world.allWitnesses());
+  assert.equal(graph.nodes.some(n => n.kind === "trait" && n.id === "textual"), true);
+  assert.equal(graph.nodes.some(n => n.kind === "valueType" && n.id === "widget.kind"), true);
+  assert.equal(graph.nodes.some(n => n.kind === "processSpec" && n.id === "widget_define_spec"), true);
+  assert.equal(graph.edges.some(e => e.from === "widget.kind" && e.rel === "compatibleWith" && e.to === "enumerated"), true);
+
+  const specNode = graph.nodes.find(n => n.id === "widget_define_spec");
+  assert.ok(specNode);
+  assert.equal(specNode.values.some(v => v.key === "process" && v.value.type === "string" && v.value.value === "widget.define"), true);
+  assert.equal(specNode.values.some(v => v.key === "inputs" && v.value.type === "list"), true);
+});
+
 
 test("demo UI includes world graph widget and frontend render operation", async () => {
   const world = createWorld();

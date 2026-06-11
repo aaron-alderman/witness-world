@@ -13,6 +13,7 @@ import { canvasProcessHandlers, declareCanvasRoutes } from "./canvas-processes.j
 import { canvasProjection, perspectivesProjection } from "./canvas-projection.js";
 import { renderCanvasPage } from "./canvas-page.js";
 import { createLogger } from "./logger.js";
+import { typeModelProjection, validateProcessInput, validateProcessOutput } from "./type-model.js";
 
 export function declareBackendHost(world, { actor, id, owner = actor }) {
   world.emit({
@@ -423,15 +424,55 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
           return;
         }
         const body = await readJson(req);
-        const kind = typeof body.kind === "string" && body.kind.trim() ? body.kind.trim() : "Text";
-        const text = typeof body.text === "string" ? body.text.trim() : "New widget";
-        const parent = typeof body.parent === "string" && body.parent.trim() ? body.parent.trim() : rootWidget;
-        const id = thingId("widget", { actor: requestActor, parent, kind, text, ordinal: world.allWitnesses().length });
-        const order = Number.isFinite(Number(body.order)) ? Number(body.order) : 999;
-        defineWidget(world, { actor: requestActor, id, kind, props: { text, class: "user-widget" }, owner: requestActor });
-        attachWidget(world, { actor: requestActor, parent, child: id, order });
-        world.emit({ process: "widgetEditor.addWidget", actor: requestActor, claims: [relation(requestActor, "editedProjection", parent)], body: { id, kind, parent, text } });
-        sendJson(res, 201, { widget: { id, kind, parent, text } });
+        const typeModel = typeModelProjection(world.allWitnesses());
+        const validatedInput = validateProcessInput(typeModel, "widget.define", body);
+        if (!validatedInput.ok) {
+          const witness = world.emit({
+            process: "widget.define.blocked",
+            actor: requestActor,
+            claims: [],
+            body: {
+              gate: "type.compatibility",
+              failures: validatedInput.failures
+            }
+          });
+          sendJson(res, 400, { error: "typed validation failed", witness });
+          return;
+        }
+        const kind = validatedInput.value.kind;
+        const text = validatedInput.value.text.trim();
+        const parent = typeof validatedInput.value.parent === "string" && validatedInput.value.parent.trim() ? validatedInput.value.parent.trim() : rootWidget;
+        const order = Number.isFinite(Number(validatedInput.value.order)) ? Number(validatedInput.value.order) : 999;
+        const widget = {
+          id: thingId("widget", { actor: requestActor, parent, kind, text, ordinal: world.allWitnesses().length }),
+          kind,
+          parent,
+          text,
+          order
+        };
+        const validatedOutput = validateProcessOutput(typeModel, "widget.define", widget);
+        if (!validatedOutput.ok) {
+          const witness = world.emit({
+            process: "widget.define.failed",
+            actor: requestActor,
+            claims: [],
+            body: {
+              gate: "type.compatibility",
+              failures: validatedOutput.failures
+            }
+          });
+          sendJson(res, 500, { error: "typed output validation failed", witness });
+          return;
+        }
+        defineWidget(world, { actor: requestActor, id: widget.id, kind, props: { text, class: "user-widget" }, owner: requestActor });
+        attachWidget(world, { actor: requestActor, parent, child: widget.id, order });
+        const witness = world.emit({
+          process: "widget.define",
+          actor: requestActor,
+          claims: [relation(requestActor, "editedProjection", parent)],
+          body: { input: validatedInput.value, widget: validatedOutput.value }
+        });
+        sendJson(res, 201, { widget: validatedOutput.value, witness });
         return;
       }
 

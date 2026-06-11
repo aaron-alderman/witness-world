@@ -31,10 +31,10 @@ A reflective application environment where memory is executable, witnessed, comp
 
 ### Type / trait model
 
-- [ ] Traits as compatibility relations
-- [ ] Typed process inputs and outputs
-- [ ] Typed gate failures as witnesses
-- [ ] Value editor widgets chosen by type / trait
+- [x] Traits as compatibility relations
+- [x] Typed process inputs and outputs
+- [x] Typed gate failures as witnesses
+- [x] Value editor widgets chosen by type / trait
 
 ### Live hot-swap without reload
 

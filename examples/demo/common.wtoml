@@ -11,3 +11,70 @@ capabilities = ["http.serve", "fs.json.read", "fs.json.write"]
 [context.frontend]
 actor = "frontendHost"
 capabilities = ["dom.render", "http.fetch"]
+
+[[trait]]
+actor = "system"
+id = "textual"
+label = "Textual"
+
+[[trait]]
+actor = "system"
+id = "numeric"
+label = "Numeric"
+
+[[trait]]
+actor = "system"
+id = "boolean"
+label = "Boolean"
+
+[[trait]]
+actor = "system"
+id = "color"
+label = "Color"
+
+[[trait]]
+actor = "system"
+id = "enumerated"
+label = "Enumerated"
+
+[[valueType]]
+actor = "system"
+id = "widget.kind"
+label = "Widget Kind"
+compatibleWith = ["textual", "enumerated"]
+editor = { control = "select", options = ["Text", "Heading", "Button", "Input", "Select", "Form", "Box", "Section", "Link", "List", "ValueEditor"] }
+
+[[valueType]]
+actor = "system"
+id = "widget.text"
+label = "Widget Text"
+compatibleWith = ["textual"]
+editor = { control = "text" }
+
+[[valueType]]
+actor = "system"
+id = "widget.parent"
+label = "Parent Widget"
+compatibleWith = ["textual"]
+editor = { control = "text" }
+
+[[valueType]]
+actor = "system"
+id = "widget.order"
+label = "Widget Order"
+compatibleWith = ["numeric"]
+editor = { control = "number" }
+
+[[valueType]]
+actor = "system"
+id = "widget.id"
+label = "Widget Id"
+compatibleWith = ["textual"]
+editor = { control = "text" }
+
+[[processSpec]]
+actor = "system"
+id = "widget_define_spec"
+process = "widget.define"
+inputs = [{ name = "kind", accepts = "widget.kind", required = true }, { name = "text", accepts = "widget.text", required = true }, { name = "parent", accepts = "widget.parent", required = false }, { name = "order", accepts = "widget.order", required = false }]
+outputs = [{ name = "id", accepts = "widget.id", required = true }, { name = "kind", accepts = "widget.kind", required = true }, { name = "parent", accepts = "widget.parent", required = true }, { name = "text", accepts = "widget.text", required = true }, { name = "order", accepts = "widget.order", required = true }]
