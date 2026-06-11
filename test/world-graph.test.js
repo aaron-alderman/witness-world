@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createWorld, thing, relation } from "../src/kernel.js";
 import { worldGraphProjection } from "../src/world-graph.js";
-import { declareBackendHost, declareFrontendHost, startTodoServer } from "../src/host.js";
+import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
 import { applyWitnessDocs, loadWitnessTomlFile } from "../src/dsl.js";
 import { renderWidgetPage } from "../src/widgets.js";
 
@@ -130,15 +130,10 @@ test("demo UI includes world graph widget and frontend render operation", async 
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "todo_app_widget",
-    frontendProgram: "todo_frontend_program",
-    worldRootWidget: "world_graph_page",
-    worldFrontendProgram: "world_graph_program",
-    storePath: await tempStore()
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
   });
 
   try {
@@ -190,7 +185,7 @@ test("world graph projection skips malformed legacy relation witnesses", () => {
   assert.equal(graph.edges.some(e => e.to === "backendHost" && e.rel === "owns"), false);
 });
 
-test("todo server logs request start, projection, and finish for world graph", async () => {
+test("server logs request start, projection, and finish for world graph", async () => {
   const lines = [];
   const logger = {
     info: (event, fields) => lines.push({ level: "info", event, fields }),
@@ -205,13 +200,10 @@ test("todo server logs request start, projection, and finish for world graph", a
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "todo_app_widget",
-    frontendProgram: "todo_frontend_program",
-    storePath: await tempStore(),
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore()),
     logger
   });
 
@@ -321,7 +313,7 @@ test("world graph scopes runtime hosts, capabilities, and vocabulary", async () 
 
   assert.equal(graph.nodes.find(n => n.id === "backendHost")?.context, "backend/runtime");
   assert.equal(graph.nodes.find(n => n.id === "frontendHost")?.context, "frontend/runtime");
-  assert.equal(graph.nodes.find(n => n.id === "demo_todo_server")?.context, "backend/runtime");
+  assert.equal(graph.nodes.find(n => n.id === "demo_server")?.context, "backend/runtime");
   assert.equal(graph.nodes.find(n => n.id === "fs.json.read")?.context, "backend/capabilities");
   assert.equal(graph.nodes.find(n => n.id === "dom.render")?.context, "frontend/capabilities");
   assert.equal(graph.nodes.find(n => n.id === "widget")?.context, "system/vocabulary");
@@ -334,10 +326,10 @@ test("world graph exposes object properties, association metadata, and DSL sourc
   applyWitnessDocs(world, docs);
 
   const graph = worldGraphProjection(world.allWitnesses());
-  const app = graph.nodes.find(n => n.id === "demo_todo_server");
+  const app = graph.nodes.find(n => n.id === "demo_server");
   assert.ok(app);
-  assert.ok(app.values.some(p => p.key === "id" && p.value.type === "ref" && p.value.target === "demo_todo_server"));
-  assert.ok(app.sources?.some(s => s.file.endsWith("backend.wtoml") && s.section === "todoServer"));
+  assert.ok(app.values.some(p => p.key === "id" && p.value.type === "ref" && p.value.target === "demo_server"));
+  assert.ok(app.sources?.some(s => s.file.endsWith("backend.wtoml") && s.section === "serverRunner"));
 
   const edgeWithMeta = graph.edges.find(e => e.rel === "hasChildWidget" && e.properties?.some(p => p.key === "order"));
   assert.ok(edgeWithMeta);
@@ -366,7 +358,7 @@ test("world graph typed values preserve arrays and refs for inspector rendering"
   applyWitnessDocs(world, docs);
 
   const graph = worldGraphProjection(world.allWitnesses());
-  const app = graph.nodes.find(n => n.id === "demo_todo_server");
+  const app = graph.nodes.find(n => n.id === "demo_server");
   assert.ok(app);
 
   const appRoot = graph.nodes.find(n => n.id === "demo_todo_app");
@@ -411,15 +403,10 @@ test("source endpoint returns only witnessed imported DSL files", async () => {
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
   const storePath = await tempStore();
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    storePath,
-    rootWidget: "todo_app_widget",
-    frontendProgram: "todo_frontend_program",
-    worldRootWidget: "world_graph_page",
-    worldFrontendProgram: "world_graph_program"
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(storePath)
   });
 
   try {

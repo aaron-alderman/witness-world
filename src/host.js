@@ -1,19 +1,22 @@
 import http from "node:http";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { thing, relation } from "./kernel.js";
-import { todoState, privateNotesFor, publicWitnessesFor } from "./projections.js";
-import { actorRequired, runGates, textRequired } from "./gates.js";
-import { thingId } from "./ids.js";
 import { witnessRelations, moduleProjectors } from "./modules.js";
-import { defineWidget, attachWidget, activateWidgetVersion, renderWidgetPage } from "./widgets.js";
+import { renderWidgetPage } from "./widgets.js";
 import { worldGraphProjection, astNodesProjection } from "./world-graph.js";
-import { canvasProcessHandlers, declareCanvasRoutes } from "./canvas-processes.js";
+import { canvasProcessHandlers } from "./canvas-processes.js";
 import { canvasProjection, perspectivesProjection } from "./canvas-projection.js";
 import { renderCanvasPage } from "./canvas-page.js";
 import { createLogger } from "./logger.js";
-import { typeModelProjection, validateProcessInput, validateProcessOutput } from "./type-model.js";
+import { createDemoHandlerSet } from "./demo-handler-set.js";
+
+const DEFAULT_ACTORS = [{ id: "aaron", label: "Aaron" }, { id: "callan", label: "Callan" }];
+const HANDLER_SET_FACTORIES = {
+  demo: createDemoHandlerSet
+};
 
 export function declareBackendHost(world, { actor, id, owner = actor }) {
   world.emit({
@@ -49,50 +52,107 @@ export function hostCapabilities(world, hostId) {
   return new Set(rels.filter(r => r.from === hostId && (r.rel === "hostCapability" || r.rel === "contextCapability")).map(r => r.to));
 }
 
-export async function startTodoServer(world, { actor, backendHost, frontendHost, storePath, notesPath = `${storePath}.private-notes.json`, port = 0, rootWidget = "todo_app_widget", frontendProgram = null, worldRootWidget = null, worldFrontendProgram = null, actors = [{ id: "aaron", label: "Aaron" }, { id: "callan", label: "Callan" }], logger = createLogger() }) {
-  const backendCaps = hostCapabilities(world, backendHost);
-  const frontendCaps = hostCapabilities(world, frontendHost);
+export function resolveServerRunner(world, serverRunnerId = null) {
+  const runners = world.project(moduleProjectors.serverRunners);
+  if (serverRunnerId) {
+    const runner = runners.find(candidate => candidate.id === serverRunnerId);
+    if (!runner) return { ok: false, reason: "server runner not found", body: { serverRunnerId } };
+    return { ok: true, runner };
+  }
+  if (runners.length === 1) return { ok: true, runner: runners[0] };
+  if (runners.length === 0) return { ok: false, reason: "no server runners defined", body: {} };
+  return { ok: false, reason: "multiple server runners defined", body: { serverRunners: runners.map(runner => runner.id) } };
+}
 
-  const requiredBackend = ["http.serve", "fs.json.read", "fs.json.write"];
-  const requiredFrontend = ["dom.render", "http.fetch"];
-  const missingBackend = requiredBackend.filter(c => !backendCaps.has(c));
-  const missingFrontend = requiredFrontend.filter(c => !frontendCaps.has(c));
-
-  if (missingBackend.length || missingFrontend.length) {
+export async function startServer(world, {
+  actor,
+  serverRunnerId = null,
+  port = 0,
+  runtimeRoot = os.tmpdir(),
+  logger = createLogger()
+}) {
+  const resolved = resolveServerRunner(world, serverRunnerId);
+  if (!resolved.ok) {
     world.emit({
-      process: "todoServer.start.failed",
+      process: "server.start.failed",
       actor,
       claims: [],
-      body: { backendHost, frontendHost, missingBackend, missingFrontend }
+      body: resolved.body ?? { reason: resolved.reason }
+    });
+    return { ok: false, reason: resolved.reason };
+  }
+
+  const serverRunner = resolved.runner;
+  const backendHost = serverRunner.backendHost;
+  const frontendHost = serverRunner.frontendHost;
+  if (!backendHost || !frontendHost) {
+    world.emit({
+      process: "server.start.failed",
+      actor,
+      claims: [],
+      body: { serverRunner: serverRunner.id, backendHost, frontendHost, reason: "server runner host bindings incomplete" }
+    });
+    return { ok: false, reason: "server runner host bindings incomplete" };
+  }
+
+  const backendCaps = hostCapabilities(world, backendHost);
+  const frontendCaps = hostCapabilities(world, frontendHost);
+  const requiredBackend = ["http.serve", "fs.json.read", "fs.json.write"];
+  const requiredFrontend = ["dom.render", "http.fetch"];
+  const missingBackend = requiredBackend.filter(capability => !backendCaps.has(capability));
+  const missingFrontend = requiredFrontend.filter(capability => !frontendCaps.has(capability));
+  if (missingBackend.length || missingFrontend.length) {
+    world.emit({
+      process: "server.start.failed",
+      actor,
+      claims: [],
+      body: { serverRunner: serverRunner.id, backendHost, frontendHost, missingBackend, missingFrontend }
     });
     return { ok: false, reason: "missing host capabilities" };
   }
 
-  await ensureProjectionCache(storePath);
-  await ensureProjectionCache(notesPath);
-
-  const projectTodos = () => todoState(world.allWitnesses());
-  const writeTodoProjectionCache = () => writeProjectionCache(storePath, projectTodos());
-  const projectPrivateNotes = actor => privateNotesFor(world.allWitnesses(), actor);
-  const writePrivateNotesProjectionCache = () => writeProjectionCache(notesPath, world.allWitnesses().filter(w => w.process === "privateNote.create").map(w => w.body.note).filter(Boolean));
-
-  const rootExists = world.project(w => w.some(x => x.process === "defineWidget" && x.body.id === rootWidget));
-  if (!rootExists) {
+  const storage = resolveStorageConfig(serverRunner.storage, runtimeRoot);
+  const appContext = await createAppContext({
+    world,
+    serverRunner,
+    backendHost,
+    frontendHost,
+    runtimeRoot,
+    storage,
+    sendJson,
+    readJson
+  });
+  if (!appContext.ok) {
     world.emit({
-      process: "todoServer.start.failed",
+      process: "server.start.failed",
       actor,
       claims: [],
-      body: { rootWidget, reason: "root widget not defined" }
+      body: { serverRunner: serverRunner.id, reason: appContext.reason, handlerSet: serverRunner.handlerSet ?? null }
     });
-    return { ok: false, reason: "root widget not defined" };
+    return { ok: false, reason: appContext.reason };
   }
+
+  const visibleWitnesses = appContext.visibleWitnesses ?? (() => world.allWitnesses());
+  const routeHandlers = {
+    ...createGenericRouteHandlers({
+      world,
+      backendHost,
+      frontendHost,
+      actors: appContext.actors,
+      logger,
+      visibleWitnesses
+    }),
+    ...(appContext.handlers ?? {})
+  };
+  const routeTable = world.project(moduleProjectors.servedRoutes)
+    .filter(route => route.serverRunner === serverRunner.id)
+    .map(route => ({ ...route, matcher: compileRouteMatcher(route.path) }));
 
   const srcDir = path.dirname(fileURLToPath(import.meta.url));
   const canvasLibFiles = new Map([
     ["projectors-core.js", path.join(srcDir, "projectors-core.js")],
     ["canvas-projection.js", path.join(srcDir, "canvas-projection.js")]
   ]);
-
   const sseClients = new Set();
   let sseLastCount = world.allWitnesses().length;
   const sseWatcher = setInterval(() => {
@@ -104,28 +164,6 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
   }, 250);
   sseWatcher.unref();
 
-  declareCanvasRoutes(world, { actor });
-  const routeHandlers = createRouteHandlers({
-    world,
-    actor,
-    backendHost,
-    frontendHost,
-    rootWidget,
-    frontendProgram,
-    worldRootWidget,
-    worldFrontendProgram,
-    actors,
-    logger,
-    projectTodos,
-    writeTodoProjectionCache,
-    projectPrivateNotes,
-    writePrivateNotesProjectionCache
-  });
-  const routeTable = world.project(moduleProjectors.routes).map(route => ({
-    ...route,
-    matcher: compileRouteMatcher(route.path)
-  }));
-
   const server = http.createServer(async (req, res) => {
     const startedAt = Date.now();
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -133,17 +171,18 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
     res.on("finish", () => {
       logger.info("http.request.finish", { requestId, method: req.method, url: req.url, statusCode: res.statusCode, durationMs: Date.now() - startedAt });
     });
+
     try {
       if (req.method === "GET" && req.url?.startsWith("/canvas-lib/")) {
         const name = decodeURIComponent(req.url.slice("/canvas-lib/".length));
-        const resolved = canvasLibFiles.get(name);
-        if (!resolved) {
+        const resolvedFile = canvasLibFiles.get(name);
+        if (!resolvedFile) {
           world.observe({ process: "backend.readCanvasLib.failed", actor: backendHost, claims: [], body: { name, reason: "not in canvas-lib whitelist" } });
           sendJson(res, 404, { error: "unknown canvas-lib module", name });
           return;
         }
-        const text = await fs.readFile(resolved, "utf8");
-        world.observe({ process: "backend.readCanvasLib", actor: backendHost, claims: [relation(backendHost, "read", `source:${resolved}`)], body: { file: resolved, bytes: text.length } });
+        const text = await fs.readFile(resolvedFile, "utf8");
+        world.observe({ process: "backend.readCanvasLib", actor: backendHost, claims: [relation(backendHost, "read", `source:${resolvedFile}`)], body: { file: resolvedFile, bytes: text.length } });
         res.writeHead(200, { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-cache" });
         res.end(text);
         return;
@@ -158,10 +197,11 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
           process: "backend.eventsStream",
           actor: backendHost,
           claims: [relation(backendHost, "streams", "witnessLog")],
-          body: { clients: sseClients.size }
+          body: { clients: sseClients.size, serverRunner: serverRunner.id }
         });
         return;
       }
+
       const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
       const matched = matchDeclaredRoute(routeTable, req.method || "GET", requestUrl.pathname);
       if (!matched) {
@@ -179,6 +219,7 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
         sendJson(res, 500, { error: "route handler not configured", route: matched.route.id });
         return;
       }
+
       await handler({
         req,
         res,
@@ -188,15 +229,14 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
         params: matched.params,
         requestActor: actorFromRequest(req)
       });
-      return;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.error("http.request.failed", { requestId, method: req.method, url: req.url, actor: actorFromRequest(req), durationMs: Date.now() - startedAt, error: err });
       world.observe({
-        process: "todoServer.request.failed",
+        process: "server.request.failed",
         actor: backendHost,
         claims: [],
-        body: { requestId, method: req.method, url: req.url, message }
+        body: { requestId, method: req.method, url: req.url, message, serverRunner: serverRunner.id }
       });
       sendJson(res, 500, { error: "internal error", requestId });
     }
@@ -207,20 +247,23 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
   const url = `http://127.0.0.1:${address.port}`;
 
   world.emit({
-    process: "todoServer.start",
+    process: "server.start",
     actor,
     claims: [
-      thing("todoApp"),
-      thing("todoStore"),
-      relation(backendHost, "serves", "todoApp"),
-      relation(frontendHost, "renders", "todoAppView"),
-      relation("todoApp", "usesStore", "todoStore"),
-      relation("todoApp", "usesWidget", rootWidget),
-      ...(frontendProgram ? [relation("todoApp", "usesFrontendProgram", frontendProgram)] : []),
-      ...(worldRootWidget ? [relation("todoApp", "usesWorldWidget", worldRootWidget)] : []),
-      ...(worldFrontendProgram ? [relation("todoApp", "usesWorldFrontendProgram", worldFrontendProgram)] : [])
+      relation(backendHost, "serves", serverRunner.id),
+      relation(frontendHost, "renders", serverRunner.id),
+      ...routeTable.map(route => relation(serverRunner.id, "serves", route.id))
     ],
-    body: { url, storePath, notesPath, frontendProgram, worldRootWidget, worldFrontendProgram, actors }
+    body: {
+      url,
+      serverRunner: serverRunner.id,
+      backendHost,
+      frontendHost,
+      handlerSet: serverRunner.handlerSet ?? null,
+      actors: appContext.actors,
+      storage,
+      routeCount: routeTable.length
+    }
   });
 
   return {
@@ -236,62 +279,97 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
   };
 }
 
-function createRouteHandlers({
+async function createAppContext({
+  world,
+  serverRunner,
+  backendHost,
+  frontendHost,
+  runtimeRoot,
+  storage,
+  sendJson,
+  readJson
+}) {
+  const actors = Array.isArray(serverRunner.actors) && serverRunner.actors.length ? [...serverRunner.actors] : [...DEFAULT_ACTORS];
+  if (!serverRunner.handlerSet) {
+    return {
+      ok: true,
+      actors,
+      storage,
+      handlers: {},
+      visibleWitnesses: () => world.allWitnesses()
+    };
+  }
+
+  const factory = HANDLER_SET_FACTORIES[serverRunner.handlerSet];
+  if (!factory) return { ok: false, reason: "unknown handler set" };
+  const appContext = await factory({
+    world,
+    backendHost,
+    frontendHost,
+    runtimeRoot,
+    actors,
+    storage,
+    sendJson,
+    readJson
+  });
+  return {
+    ok: true,
+    actors: appContext.actors ?? actors,
+    storage,
+    handlers: appContext.handlers ?? {},
+    visibleWitnesses: appContext.visibleWitnesses ?? (() => world.allWitnesses())
+  };
+}
+
+function createGenericRouteHandlers({
   world,
   backendHost,
   frontendHost,
-  rootWidget,
-  frontendProgram,
-  worldRootWidget,
-  worldFrontendProgram,
   actors,
   logger,
-  projectTodos,
-  writeTodoProjectionCache,
-  projectPrivateNotes,
-  writePrivateNotesProjectionCache
+  visibleWitnesses
 }) {
-  const visibleWitnesses = requestActor => publicWitnessesFor(world.allWitnesses(), requestActor);
-
   return {
     "page.home": async ({ res, route }) => {
       const params = route.params ?? {};
-      const selectedRootWidget = params.rootWidget ?? rootWidget;
-      const selectedProgram = params.frontendProgram ?? frontendProgram;
+      const rootWidget = params.rootWidget ?? null;
+      if (!rootWidget) {
+        sendJson(res, 404, { error: "page not configured", route: route.id });
+        return;
+      }
       const page = params.page ?? "home";
       const excludeWidgetRoles = Array.isArray(params.excludeWidgetRoles) ? params.excludeWidgetRoles : ["world-graph-body"];
       world.observe({
         process: "frontend.render",
         actor: frontendHost,
-        claims: [relation(frontendHost, "rendered", "todoAppView")],
+        claims: [relation(frontendHost, "rendered", route.serves || rootWidget)],
         body: { route: route.path }
       });
       send(res, 200, "text/html", renderWidgetPage(world, {
         actor: frontendHost,
-        rootWidget: selectedRootWidget,
-        frontendProgram: selectedProgram,
+        rootWidget,
+        frontendProgram: params.frontendProgram ?? null,
         appConfig: { actors, page, excludeWidgetRoles }
       }));
     },
 
     "page.world": async ({ res, route }) => {
       const params = route.params ?? {};
-      const selectedRootWidget = params.rootWidget ?? worldRootWidget;
-      const selectedProgram = params.frontendProgram ?? worldFrontendProgram;
-      if (!selectedRootWidget) {
+      const rootWidget = params.rootWidget ?? null;
+      if (!rootWidget) {
         sendJson(res, 404, { error: "world graph page not configured" });
         return;
       }
       world.observe({
         process: "frontend.renderWorldPage",
         actor: frontendHost,
-        claims: [relation(frontendHost, "rendered", "worldGraphView")],
+        claims: [relation(frontendHost, "rendered", route.serves || rootWidget)],
         body: { route: route.path }
       });
       send(res, 200, "text/html", renderWidgetPage(world, {
         actor: frontendHost,
-        rootWidget: selectedRootWidget,
-        frontendProgram: selectedProgram,
+        rootWidget,
+        frontendProgram: params.frontendProgram ?? null,
         appConfig: { actors, page: params.page ?? "world" }
       }));
     },
@@ -300,222 +378,10 @@ function createRouteHandlers({
       world.observe({
         process: "frontend.renderCanvasPage",
         actor: frontendHost,
-        claims: [relation(frontendHost, "rendered", "canvasView")],
+        claims: [relation(frontendHost, "rendered", route.serves || "canvasView")],
         body: { route: route.path }
       });
       send(res, 200, "text/html", renderCanvasPage({ actors }));
-    },
-
-    "session.read": async ({ res }) => {
-      sendJson(res, 200, { actors });
-    },
-
-    "session.open": async ({ req, res }) => {
-      const body = await readJson(req);
-      const selected = actors.find(a => a.id === body.actor);
-      if (!selected) {
-        world.emit({ process: "session.login.failed", actor: backendHost, claims: [], body: { actor: body.actor, reason: "unknown actor" } });
-        sendJson(res, 400, { error: "unknown actor" });
-        return;
-      }
-      world.emit({ process: "session.login", actor: selected.id, claims: [relation(selected.id, "openedPerspective", `${selected.id}:personal`)], body: { actor: selected.id } });
-      sendJson(res, 200, { actor: selected });
-    },
-
-    "session.logout": async ({ res, requestActor }) => {
-      world.observe({ process: "session.logout", actor: requestActor || backendHost, claims: [], body: { actor: requestActor } });
-      sendJson(res, 200, { ok: true });
-    },
-
-    "privateNotes.list": async ({ res, requestActor }) => {
-      if (!requestActor) {
-        sendJson(res, 200, { notes: [] });
-        return;
-      }
-      const notes = projectPrivateNotes(requestActor);
-      world.observe({ process: "privateNotes.read", actor: requestActor, claims: [relation(requestActor, "read", `${requestActor}:privateNotes`)], body: { count: notes.length } });
-      sendJson(res, 200, { notes });
-    },
-
-    "privateNotes.create": async ({ req, res, requestActor }) => {
-      if (!requestActor) {
-        world.emit({ process: "privateNote.create.failed", actor: backendHost, claims: [], body: { reason: "no actor" } });
-        sendJson(res, 401, { error: "choose a perspective first" });
-        return;
-      }
-      const body = await readJson(req);
-      const text = typeof body.text === "string" ? body.text.trim() : "";
-      if (!text) {
-        world.emit({ process: "privateNote.create.failed", actor: requestActor, claims: [], body: { reason: "text required" } });
-        sendJson(res, 400, { error: "text required" });
-        return;
-      }
-      const gate = runGates(world, { actor: requestActor, process: "privateNote.create", gates: [actorRequired, textRequired("text")], context: { actor: requestActor, text } });
-      if (!gate.ok) {
-        sendJson(res, 400, { error: gate.reason });
-        return;
-      }
-      const note = { id: thingId("private-note", { actor: requestActor, text, ordinal: world.allWitnesses().length }), actor: requestActor, text };
-      world.emit({ process: "privateNote.create", actor: requestActor, claims: [thing(note.id), relation(note.id, "privateTo", requestActor)], body: { id: note.id, actor: requestActor, note } });
-      await writePrivateNotesProjectionCache();
-      sendJson(res, 201, { note });
-    },
-
-    "todos.list": async ({ res }) => {
-      const todos = projectTodos();
-      world.observe({
-        process: "backend.readTodos",
-        actor: backendHost,
-        claims: [relation(backendHost, "read", "todoStore")],
-        body: { count: todos.length }
-      });
-      sendJson(res, 200, { todos });
-    },
-
-    "todos.create": async ({ req, res, requestActor }) => {
-      const body = await readJson(req);
-      const title = typeof body.title === "string" ? body.title.trim() : "";
-      if (!title) {
-        world.emit({ process: "todo.create.failed", actor: backendHost, claims: [], body: { reason: "title required" } });
-        sendJson(res, 400, { error: "title required" });
-        return;
-      }
-      const gate = runGates(world, { actor: requestActor || backendHost, process: "todo.create", gates: [textRequired("title")], context: { title } });
-      if (!gate.ok) {
-        sendJson(res, 400, { error: gate.reason });
-        return;
-      }
-      const todo = { id: thingId("todo", { title, ordinal: world.allWitnesses().length }), title, done: false };
-      world.emit({
-        process: "todo.create",
-        actor: requestActor || backendHost,
-        claims: [thing(todo.id), relation("todoStore", "contains", todo.id), relation(todo.id, "hasTitle", title)],
-        body: { todo }
-      });
-      await writeTodoProjectionCache();
-      sendJson(res, 201, { todo });
-    },
-
-    "todos.update": async ({ req, res, params, requestActor }) => {
-      const id = params.id || "";
-      const body = await readJson(req);
-      const todos = projectTodos();
-      const todo = todos.find(item => item.id === id);
-      if (!todo) {
-        world.emit({ process: "todo.update.failed", actor: backendHost, claims: [], body: { id, reason: "not found" } });
-        sendJson(res, 404, { error: "not found" });
-        return;
-      }
-      if ("done" in body) todo.done = body.done === true || body.done === "true";
-      if (typeof body.title === "string") todo.title = body.title.trim();
-      world.emit({
-        process: "todo.update",
-        actor: requestActor || backendHost,
-        claims: [relation(todo.id, "hasDone", String(todo.done))],
-        body: { todo }
-      });
-      await writeTodoProjectionCache();
-      sendJson(res, 200, { todo });
-    },
-
-    "todos.delete": async ({ res, params, requestActor }) => {
-      const id = params.id || "";
-      const todos = projectTodos();
-      const next = todos.filter(item => item.id !== id);
-      if (next.length === todos.length) {
-        world.emit({ process: "todo.delete.failed", actor: backendHost, claims: [], body: { id, reason: "not found" } });
-        sendJson(res, 404, { error: "not found" });
-        return;
-      }
-      world.emit({
-        process: "todo.delete",
-        actor: requestActor || backendHost,
-        claims: [],
-        body: { id }
-      });
-      await writeTodoProjectionCache();
-      sendJson(res, 200, { ok: true, id });
-    },
-
-    "widgetVersions.activate": async ({ req, res, params, requestActor }) => {
-      if (!requestActor) {
-        world.emit({ process: "activateWidgetVersion.failed", actor: backendHost, claims: [], body: { reason: "no actor" } });
-        sendJson(res, 401, { error: "choose a perspective first" });
-        return;
-      }
-      const body = await readJson(req);
-      const version = typeof body.version === "string" ? body.version : null;
-      const witness = activateWidgetVersion(world, { actor: requestActor, soul: params.soul || "", version });
-      if (witness.process.endsWith(".failed")) {
-        sendJson(res, 400, { error: "unknown widget version", witness });
-        return;
-      }
-      sendJson(res, 200, { ok: true, soul: params.soul || "", version, witness });
-    },
-
-    "widgets.create": async ({ req, res, requestActor, route }) => {
-      if (!requestActor) {
-        world.emit({ process: "widget.define.failed", actor: backendHost, claims: [], body: { reason: "no actor" } });
-        sendJson(res, 401, { error: "choose a perspective first" });
-        return;
-      }
-      const body = await readJson(req);
-      const typeModel = typeModelProjection(world.allWitnesses());
-      const validatedInput = validateProcessInput(typeModel, "widget.define", body);
-      if (!validatedInput.ok) {
-        const witness = world.emit({
-          process: "widget.define.blocked",
-          actor: requestActor,
-          claims: [],
-          body: { gate: "type.compatibility", failures: validatedInput.failures }
-        });
-        sendJson(res, 400, { error: "typed validation failed", witness });
-        return;
-      }
-      const kind = validatedInput.value.kind;
-      const text = validatedInput.value.text.trim();
-      const parent = typeof validatedInput.value.parent === "string" && validatedInput.value.parent.trim()
-        ? validatedInput.value.parent.trim()
-        : (route.params?.rootWidget ?? rootWidget);
-      const order = Number.isFinite(Number(validatedInput.value.order)) ? Number(validatedInput.value.order) : 999;
-      const widget = {
-        id: thingId("widget", { actor: requestActor, parent, kind, text, ordinal: world.allWitnesses().length }),
-        kind,
-        parent,
-        text,
-        order
-      };
-      const validatedOutput = validateProcessOutput(typeModel, "widget.define", widget);
-      if (!validatedOutput.ok) {
-        const witness = world.emit({
-          process: "widget.define.failed",
-          actor: requestActor,
-          claims: [],
-          body: { gate: "type.compatibility", failures: validatedOutput.failures }
-        });
-        sendJson(res, 500, { error: "typed output validation failed", witness });
-        return;
-      }
-      defineWidget(world, { actor: requestActor, id: widget.id, kind, props: { text, class: "user-widget" }, owner: requestActor });
-      attachWidget(world, { actor: requestActor, parent, child: widget.id, order });
-      const witness = world.emit({
-        process: "widget.define",
-        actor: requestActor,
-        claims: [relation(requestActor, "editedProjection", parent)],
-        body: { input: validatedInput.value, widget: validatedOutput.value }
-      });
-      sendJson(res, 201, { widget: validatedOutput.value, witness });
-    },
-
-    "network.simulateError": async ({ res, requestActor }) => {
-      const actor = requestActor || frontendHost;
-      world.emit({
-        process: "network.simulated.failed",
-        actor,
-        claims: [relation(actor, "attempted", "simulatedNetworkRequest")],
-        body: { reason: "simulated network error", status: 503 }
-      });
-      sendJson(res, 503, { error: "simulated network error" });
     },
 
     "witnesses.list": async ({ res, requestUrl, requestActor }) => {
@@ -561,15 +427,15 @@ function createRouteHandlers({
       const allowed = new Set(world.allWitnesses()
         .filter(w => w.process === "dsl.source.annotate" && typeof w.body?.file === "string")
         .map(w => path.resolve(w.body.file)));
-      const resolved = path.resolve(requested);
-      if (!allowed.has(resolved)) {
+      const resolvedFile = path.resolve(requested);
+      if (!allowed.has(resolvedFile)) {
         world.observe({ process: "backend.readSource.failed", actor: backendHost, claims: [], body: { file: requested, reason: "source file not in witnessed imports" } });
         sendJson(res, 404, { error: "source file not available", file: requested });
         return;
       }
-      const text = await fs.readFile(resolved, "utf8");
-      world.observe({ process: "backend.readSource", actor: backendHost, claims: [relation(backendHost, "read", `source:${resolved}`)], body: { file: resolved, bytes: text.length } });
-      sendJson(res, 200, { file: resolved, text });
+      const text = await fs.readFile(resolvedFile, "utf8");
+      world.observe({ process: "backend.readSource", actor: backendHost, claims: [relation(backendHost, "read", `source:${resolvedFile}`)], body: { file: resolvedFile, bytes: text.length } });
+      sendJson(res, 200, { file: resolvedFile, text });
     },
 
     "canvas.perspectives.list": async ({ res, requestActor }) => {
@@ -623,6 +489,16 @@ function createRouteHandlers({
   };
 }
 
+function resolveStorageConfig(storage, runtimeRoot) {
+  const resolved = {};
+  if (!storage || typeof storage !== "object") return resolved;
+  for (const [key, value] of Object.entries(storage)) {
+    if (typeof value !== "string" || !value.trim()) continue;
+    resolved[key] = path.resolve(runtimeRoot, value);
+  }
+  return resolved;
+}
+
 function compileRouteMatcher(routePath) {
   const parts = String(routePath || "/").split("/").filter(Boolean);
   return pathname => {
@@ -657,19 +533,6 @@ function actorFromRequest(req) {
   return typeof raw === "string" && raw.trim() ? raw.trim() : null;
 }
 
-async function ensureProjectionCache(storePath) {
-  await fs.mkdir(path.dirname(storePath), { recursive: true });
-  try {
-    await fs.access(storePath);
-  } catch {
-    await writeProjectionCache(storePath, []);
-  }
-}
-
-async function writeProjectionCache(storePath, value) {
-  await fs.writeFile(storePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-}
-
 function send(res, status, type, body) {
   res.writeHead(status, { "content-type": type });
   res.end(body);
@@ -684,8 +547,11 @@ function readJson(req) {
     let data = "";
     req.on("data", chunk => { data += chunk; });
     req.on("end", () => {
-      try { resolve(data ? JSON.parse(data) : {}); }
-      catch (err) { reject(err); }
+      try {
+        resolve(data ? JSON.parse(data) : {});
+      } catch (err) {
+        reject(err);
+      }
     });
     req.on("error", reject);
   });

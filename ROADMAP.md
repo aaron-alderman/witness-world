@@ -10,10 +10,14 @@ A reflective application environment where memory is executable, witnessed, comp
 
 ### Address ASAP: remove architecture cheats from the runtime
 
-- [ ] Replace the todo-specific `renderList` behavior with DSL-driven row structure and row actions so list rendering is no longer hard-coded in the browser runtime
-- [ ] Move demo application behavior out of `startTodoServer` route switches and into witnessed/DSL-described route and process definitions
-- [ ] Retire legacy composite widget kinds (`TodoForm`, `TodoList`, `Status`, `LoginPanel`, `PrivateNotes`, `WitnessInspector`) instead of keeping them as long-lived compatibility shims
-- [ ] Remove hard-coded frontend failure sinks such as `todo_status` and make status/error targets explicit in the witnessed frontend program
+- [ ] Make sessions first-class runtime concepts tied to the application's identity model so `/api/session` is handled generically rather than through the demo handler set
+- [x] Replace the demo-specific `todoServer` runtime model with a generic app/server definition in the DSL so host startup and dispatch are not coupled to one demo domain
+- [x] Collapse toward a single generic CLI/runtime entrypoint and retire `src/demo-todo-server.js` as a long-lived architectural surface
+- [x] Move demo application behavior out of `startTodoServer` route switches and into witnessed/DSL-described route and process definitions
+- [x] Remove demo-specific world/runtime knowledge from generic surfaces such as `world-graph` and host defaults instead of renaming them in place
+- [x] Replace the todo-specific `renderList` behavior with DSL-driven row structure and row actions so list rendering is no longer hard-coded in the browser runtime
+- [x] Retire legacy composite widget kinds (`TodoForm`, `TodoList`, `Status`, `LoginPanel`, `PrivateNotes`, `WitnessInspector`) instead of keeping them as compatibility shims
+- [x] Remove hard-coded frontend failure sinks such as `todo_status` and make status/error targets explicit in the witnessed frontend program
 
 ### Browser-runtime tests
 
@@ -56,10 +60,11 @@ A reflective application environment where memory is executable, witnessed, comp
 
 ### Address in the next few sprints: make the witnessed model executable
 
-- [ ] Make witnessed route definitions executable so HTTP dispatch no longer depends on literal URL switches in `host.js`
+- [ ] Make witnessed route definitions executable so HTTP dispatch no longer depends on JS handler registries in `host.js`
+- [ ] Replace demo-owned session login/logout behavior with witnessed identity/session processes that generic hosts and apps can share
 - [ ] Move `widget.define` defaults and mutation semantics (parent fallback, ordering, generated props, identity policy) out of ad hoc JS and into witnessed process behavior
 - [ ] Stop duplicating type compatibility/coercion rules across browser and server runtimes; share one witnessed type-model execution path
-- [ ] Remove demo-specific world-browser knowledge such as todo badges and hard-coded op-to-API mappings, or make them explicit projection plugins/extensions
+- [ ] Move demo-specific projections such as `todoState` behind explicit app/demo boundaries or plugin-style extensions rather than treating them as runtime infrastructure
 
 ### Cross-cutting theming
 

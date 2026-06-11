@@ -41,13 +41,38 @@ test("compile fails if the compiler is not actually a compiler", () => {
 test("server runner serves a route that points at a frontend artifact", () => {
   const world = createWorld();
   createThing(world, { actor: "adam", id: "aaron" });
-  createServerRunner(world, { actor: "aaron", id: "server_runner" });
+  createServerRunner(world, {
+    actor: "aaron",
+    id: "server_runner",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    handlerSet: "demo",
+    actors: [{ id: "aaron", label: "Aaron" }],
+    storage: { todoProjection: "todos.json" }
+  });
   createThing(world, { actor: "aaron", id: "frontend_bundle" });
   defineRoute(world, { actor: "aaron", id: "root_route", path: "/", serves: "frontend_bundle" });
   const w = serveRoute(world, { actor: "aaron", serverRunner: "server_runner", route: "root_route" });
 
   assert.equal(w.process, "serveRoute");
   assert.equal(world.project(projectors.currentRelations).some(r => r.from === "server_runner" && r.rel === "serves" && r.to === "root_route"), true);
+  assert.deepEqual(world.project(moduleProjectors.serverRunners), [{
+    id: "server_runner",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    handlerSet: "demo",
+    actors: [{ id: "aaron", label: "Aaron" }],
+    storage: { todoProjection: "todos.json" }
+  }]);
+  assert.deepEqual(world.project(moduleProjectors.servedRoutes), [{
+    id: "root_route",
+    path: "/",
+    serves: "frontend_bundle",
+    method: "GET",
+    handler: null,
+    params: null,
+    serverRunner: "server_runner"
+  }]);
 });
 
 test("frontend runner renders a view and emits user action witnesses", () => {

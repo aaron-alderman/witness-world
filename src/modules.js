@@ -56,7 +56,16 @@ export function compileDescription(world, { actor, compiler, description, output
   });
 }
 
-export function createServerRunner(world, { actor, id, owner = actor }) {
+export function createServerRunner(world, {
+  actor,
+  id,
+  owner = actor,
+  backendHost = null,
+  frontendHost = null,
+  handlerSet = null,
+  actors = null,
+  storage = null
+}) {
   createThing(world, { actor, id, owner });
   return world.emit({
     process: "defineServerRunner",
@@ -64,9 +73,18 @@ export function createServerRunner(world, { actor, id, owner = actor }) {
     claims: [
       relation(id, "hasModuleKind", "serverRunner"),
       relation(id, "supportsProcess", "serveRoute"),
-      relation(id, "hostBoundary", "http")
+      relation(id, "hostBoundary", "http"),
+      ...(backendHost ? [relation(id, "usesBackendHost", backendHost)] : []),
+      ...(frontendHost ? [relation(id, "usesFrontendHost", frontendHost)] : [])
     ],
-    body: { id }
+    body: {
+      id,
+      backendHost: backendHost ? String(backendHost) : null,
+      frontendHost: frontendHost ? String(frontendHost) : null,
+      handlerSet: handlerSet ? String(handlerSet) : null,
+      actors: Array.isArray(actors) ? [...actors] : null,
+      storage: storage && typeof storage === "object" ? { ...storage } : null
+    }
   });
 }
 
@@ -198,5 +216,36 @@ export const moduleProjectors = {
       });
     }
     return [...routeMap.values()];
+  },
+
+  serverRunners(witnesses) {
+    const runnerMap = new Map();
+    for (const w of witnesses) {
+      if (w.process !== "defineServerRunner" || !w.body?.id) continue;
+      runnerMap.set(w.body.id, {
+        id: w.body.id,
+        backendHost: w.body.backendHost ? String(w.body.backendHost) : null,
+        frontendHost: w.body.frontendHost ? String(w.body.frontendHost) : null,
+        handlerSet: w.body.handlerSet ? String(w.body.handlerSet) : null,
+        actors: Array.isArray(w.body.actors) ? [...w.body.actors] : null,
+        storage: w.body.storage && typeof w.body.storage === "object" ? { ...w.body.storage } : null
+      });
+    }
+    return [...runnerMap.values()];
+  },
+
+  servedRoutes(witnesses) {
+    const routes = new Map(moduleProjectors.routes(witnesses).map(route => [route.id, route]));
+    const mounted = [];
+    for (const w of witnesses) {
+      if (w.process !== "serveRoute" || w.body?.ok === false) continue;
+      const route = routes.get(w.body?.route);
+      if (!route) continue;
+      mounted.push({
+        ...route,
+        serverRunner: w.body.serverRunner
+      });
+    }
+    return mounted;
   }
 };

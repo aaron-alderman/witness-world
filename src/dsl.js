@@ -247,6 +247,11 @@ function applyDoc(world, { kind, values }, context) {
       return createServerRunner(world, {
         actor: req(valuesWithDefaults, "actor"),
         id: req(valuesWithDefaults, "id"),
+        backendHost: valuesWithDefaults.backendHost ?? null,
+        frontendHost: valuesWithDefaults.frontendHost ?? null,
+        handlerSet: valuesWithDefaults.handlerSet ?? null,
+        actors: valuesWithDefaults.actors ?? null,
+        storage: valuesWithDefaults.storage ?? null,
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
       });
 
@@ -377,21 +382,6 @@ function applyDoc(world, { kind, values }, context) {
       return applyFrontendStep(world, {
         ...valuesWithDefaults,
         frontendEvent: valuesWithDefaults.on ?? valuesWithDefaults.event
-      });
-
-    case "todoServer":
-      return world.emit({
-        process: "dsl.todoServer.define",
-        actor: req(valuesWithDefaults, "actor"),
-        claims: [
-          relation(req(valuesWithDefaults, "id"), "usesBackendHost", req(valuesWithDefaults, "backendHost")),
-          relation(req(valuesWithDefaults, "id"), "usesFrontendHost", req(valuesWithDefaults, "frontendHost")),
-          relation(req(valuesWithDefaults, "id"), "usesRootWidget", req(valuesWithDefaults, "rootWidget")),
-          ...(valuesWithDefaults.frontendProgram ? [relation(req(valuesWithDefaults, "id"), "usesFrontendProgram", valuesWithDefaults.frontendProgram)] : []),
-          ...(valuesWithDefaults.worldRootWidget ? [relation(req(valuesWithDefaults, "id"), "usesWorldWidget", valuesWithDefaults.worldRootWidget)] : []),
-          ...(valuesWithDefaults.worldFrontendProgram ? [relation(req(valuesWithDefaults, "id"), "usesWorldFrontendProgram", valuesWithDefaults.worldFrontendProgram)] : [])
-        ],
-        body: valuesWithDefaults
       });
 
     case "clone":

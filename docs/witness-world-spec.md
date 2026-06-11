@@ -46,9 +46,9 @@
 - Import model:
   - `app.imports` recursively loads other DSL files (cycle-safe).
 - DSL sections are mapped to kernel/app operations:
-  - app/context/todoServer/thing/relation
+  - app/context/serverRunner/thing/relation
   - trait/valueType/processSpec
-  - compiler/description/compile/serverRunner/route/serve
+  - compiler/description/compile/route/serve
   - frontendRunner/view/render/action/widget/widgetVersion/activateWidgetVersion/attachWidget
   - frontendProgram/frontEndStep + ergonomic step syntax
 - Unknown sections emit `dsl.unknownSection` witnesses.
@@ -67,9 +67,10 @@
 - Frontend host must have:
   - `dom.render`, `http.fetch`
 - Required API routes:
-  - `/`, `/world`, `/api/session`, `/api/private-notes`, `/api/todos*`,
+  - `/`, `/world`, `/canvas`, `/api/session`, `/api/private-notes`, `/api/todos*`,
     `/api/widget-versions/:soul/activate`, `/api/widgets`,
-    `/api/simulate-network-error`, `/api/witnesses`, `/api/world-graph`, `/api/source`.
+    `/api/simulate-network-error`, `/api/witnesses`, `/api/world-graph`, `/api/source`,
+    `/api/canvas`, `/api/canvas/perspectives`, `/api/canvas/process`.
 - Request failures must emit witness records instead of silent errors.
 - Route handlers must gate operations with actor context (`x-witness-actor`) where applicable.
 - `/api/widgets` now uses the witnessed `widget.define` process spec for both input validation and output validation.

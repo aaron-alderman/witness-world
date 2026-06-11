@@ -4,8 +4,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createWorld } from "../src/kernel.js";
-import { declareBackendHost, declareFrontendHost, startTodoServer, hostCapabilities } from "../src/host.js";
-import { applyWitnessToml, applyWitnessDocs, loadWitnessTomlFile } from "../src/dsl.js";
+import { declareBackendHost, declareFrontendHost, startServer, hostCapabilities } from "../src/host.js";
+import { applyWitnessToml, applyWitnessDocs, loadWitnessTomlFile, parseWitnessToml } from "../src/dsl.js";
 
 async function tempStore() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "witness-todo-"));
@@ -19,6 +19,14 @@ actor = "adam"
 id = "todo_app_widget"
 kind = "Page"
 props = { title = "Witness Todo" }
+
+[[serverRunner]]
+actor = "adam"
+id = "server_runner"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+handlerSet = "demo"
+storage = { todoProjection = "todos.json", privateNotesProjection = "notes.json" }
 
 [[widget]]
 actor = "adam"
@@ -87,6 +95,12 @@ path = "/"
 serves = "page"
 method = "GET"
 handler = "page.home"
+params = { rootWidget = "todo_app_widget" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "home_route"
 
 [[route]]
 actor = "adam"
@@ -96,6 +110,11 @@ serves = "session"
 method = "GET"
 handler = "session.read"
 
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "session_read_route"
+
 [[route]]
 actor = "adam"
 id = "session_open_route"
@@ -103,6 +122,11 @@ path = "/api/session"
 serves = "session"
 method = "POST"
 handler = "session.open"
+
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "session_open_route"
 
 [[route]]
 actor = "adam"
@@ -112,6 +136,11 @@ serves = "session"
 method = "DELETE"
 handler = "session.logout"
 
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "session_logout_route"
+
 [[route]]
 actor = "adam"
 id = "todos_list_route"
@@ -119,6 +148,11 @@ path = "/api/todos"
 serves = "todos"
 method = "GET"
 handler = "todos.list"
+
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "todos_list_route"
 
 [[route]]
 actor = "adam"
@@ -128,6 +162,11 @@ serves = "todos"
 method = "POST"
 handler = "todos.create"
 
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "todos_create_route"
+
 [[route]]
 actor = "adam"
 id = "todos_update_route"
@@ -135,6 +174,11 @@ path = "/api/todos/:id"
 serves = "todos"
 method = "PATCH"
 handler = "todos.update"
+
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "todos_update_route"
 
 [[route]]
 actor = "adam"
@@ -144,6 +188,11 @@ serves = "todos"
 method = "DELETE"
 handler = "todos.delete"
 
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "todos_delete_route"
+
 [[route]]
 actor = "adam"
 id = "notes_list_route"
@@ -151,6 +200,11 @@ path = "/api/private-notes"
 serves = "privateNote"
 method = "GET"
 handler = "privateNotes.list"
+
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "notes_list_route"
 
 [[route]]
 actor = "adam"
@@ -160,6 +214,11 @@ serves = "privateNote"
 method = "POST"
 handler = "privateNotes.create"
 
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "notes_create_route"
+
 [[route]]
 actor = "adam"
 id = "witnesses_route"
@@ -168,6 +227,11 @@ serves = "witness"
 method = "GET"
 handler = "witnesses.list"
 
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "witnesses_route"
+
 [[route]]
 actor = "adam"
 id = "widget_versions_activate_route"
@@ -175,6 +239,25 @@ path = "/api/widget-versions/:soul/activate"
 serves = "widgetVersion"
 method = "POST"
 handler = "widgetVersions.activate"
+
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "widget_versions_activate_route"
+
+[[route]]
+actor = "adam"
+id = "widgets_create_route"
+path = "/api/widgets"
+serves = "widgetEditor"
+method = "POST"
+handler = "widgets.create"
+params = { rootWidget = "todo_app_widget" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "widgets_create_route"
 
 ${extra}
 `);
@@ -195,52 +278,61 @@ test("backend and frontend capabilities are split", () => {
   assert.equal(frontend.has("fs.json.write"), false);
 });
 
-test("todo server starts only with backend and frontend capability envelopes", async () => {
+test("server starts only with backend and frontend capability envelopes", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  applyMinimalTodoDsl(world);
 
-  const failed = await startTodoServer(world, {
+  const failed = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "missingFrontendHost",
-    storePath: await tempStore()
+    serverRunnerId: "server_runner",
+    runtimeRoot: path.dirname(await tempStore())
   });
 
   assert.equal(failed.ok, false);
-  assert.equal(world.allWitnesses().at(-1).process, "todoServer.start.failed");
+  assert.equal(world.allWitnesses().at(-1).process, "server.start.failed");
 });
 
-test("todo server starts only when the root widget is defined", async () => {
+test("server start requires an explicit runner when multiple server runners exist", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  const docs = parseWitnessToml(`
+[[serverRunner]]
+actor = "adam"
+id = "one"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
 
-  const failed = await startTodoServer(world, {
+[[serverRunner]]
+actor = "adam"
+id = "two"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+`);
+  applyWitnessDocs(world, docs);
+
+  const failed = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "missing_widget",
-    storePath: await tempStore()
+    runtimeRoot: path.dirname(await tempStore())
   });
 
   assert.equal(failed.ok, false);
-  assert.equal(world.allWitnesses().at(-1).process, "todoServer.start.failed");
-  assert.equal(world.allWitnesses().at(-1).body.reason, "root widget not defined");
+  assert.equal(world.allWitnesses().at(-1).process, "server.start.failed");
+  assert.deepEqual(world.allWitnesses().at(-1).body.serverRunners, ["one", "two"]);
 });
 
-test("todo app end-to-end: frontend request, backend json store, witnesses", async () => {
+test("demo app end-to-end: frontend request, backend json store, witnesses", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
   applyMinimalTodoDsl(world);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "todo_app_widget",
-    storePath: await tempStore()
+    serverRunnerId: "server_runner",
+    runtimeRoot: path.dirname(await tempStore())
   });
 
   try {
@@ -265,7 +357,7 @@ test("todo app end-to-end: frontend request, backend json store, witnesses", asy
 
     const processes = world.allWitnesses().map(w => w.process);
     const obsProcesses = world.allObservations().map(w => w.process);
-    assert.equal(processes.includes("todoServer.start"), true);
+    assert.equal(processes.includes("server.start"), true);
     assert.equal(obsProcesses.includes("frontend.render"), true);
     assert.equal(processes.includes("widget.renderHtml"), true);
     assert.equal(processes.includes("todo.create"), true);
@@ -276,7 +368,7 @@ test("todo app end-to-end: frontend request, backend json store, witnesses", asy
 });
 
 
-test("todo server supports done/delete actions and witness inspector data", async () => {
+test("demo server supports done/delete actions and witness inspector data", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
@@ -284,13 +376,10 @@ test("todo server supports done/delete actions and witness inspector data", asyn
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "todo_app_widget",
-    frontendProgram: "todo_frontend_program",
-    storePath: await tempStore()
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
   });
 
   try {
@@ -343,14 +432,10 @@ test("personal projections: actor session, themes, and private notes are actor-s
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "todo_app_widget",
-    frontendProgram: "todo_frontend_program",
-    storePath: await tempStore(),
-    actors: [{ id: "aaron", label: "Aaron" }, { id: "callan", label: "Callan" }]
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
   });
 
   try {
@@ -402,17 +487,26 @@ test("personal projections: actor session, themes, and private notes are actor-s
   }
 });
 
-test("todo server can activate widget versions through backend API", async () => {
+test("server can activate widget versions through backend API", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "witness-world-version-"));
   const world = createWorld();
-  declareBackendHost(world, { actor: "adam", id: "backend" });
-  declareFrontendHost(world, { actor: "adam", id: "frontend" });
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
   applyMinimalTodoDsl(world, `
 [[widget]]
 actor = "adam"
 id = "root"
 kind = "Page"
 props = { title = "Version API" }
+
+[[route]]
+actor = "adam"
+id = "home_route"
+path = "/"
+serves = "page"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "root" }
 
 [[widgetVersion]]
 actor = "adam"
@@ -442,12 +536,10 @@ child = "banner"
 order = 0
 `);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backend",
-    frontendHost: "frontend",
-    rootWidget: "root",
-    storePath: path.join(tmp, "todos.json")
+    serverRunnerId: "server_runner",
+    runtimeRoot: tmp
   });
 
   assert.equal(server.ok, true);
@@ -477,13 +569,10 @@ test("process graph lab exposes simulated network failure as a witnessed UI scen
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "todo_app_widget",
-    frontendProgram: "todo_frontend_program",
-    storePath: await tempStore()
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
   });
 
   try {
@@ -518,13 +607,10 @@ test("generated frontend engine is syntactically valid browser JavaScript", asyn
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "todo_app_widget",
-    frontendProgram: "todo_frontend_program",
-    storePath: await tempStore()
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
   });
 
   try {
@@ -549,13 +635,10 @@ test("world graph endpoint is reachable and includes projected nodes", async () 
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "todo_app_widget",
-    frontendProgram: "todo_frontend_program",
-    storePath: await tempStore()
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
   });
 
   try {
@@ -577,12 +660,10 @@ test("private notes endpoint returns empty list without request actor", async ()
 
   applyMinimalTodoDsl(world);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "todo_app_widget",
-    storePath: await tempStore()
+    serverRunnerId: "server_runner",
+    runtimeRoot: path.dirname(await tempStore())
   });
 
   try {
@@ -602,12 +683,10 @@ test("logout emits session.logout witness", async () => {
 
   applyMinimalTodoDsl(world);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "todo_app_widget",
-    storePath: await tempStore()
+    serverRunnerId: "server_runner",
+    runtimeRoot: path.dirname(await tempStore())
   });
 
   try {

@@ -1,6 +1,5 @@
 import { projectors } from "./kernel.js";
 import { witnessRelations } from "./modules.js";
-import { todoState } from "./projections.js";
 import { activeWidgetVersions, frontendProgram } from "./widgets.js";
 
 export function worldGraphProjection(witnesses, { includeWitnesses = false, limitWitnesses = 36 } = {}) {
@@ -10,7 +9,6 @@ export function worldGraphProjection(witnesses, { includeWitnesses = false, limi
   const owners = projectors.owners(witnesses);
   const main = projectors.main(witnesses);
   const activeVersions = activeWidgetVersions(witnesses);
-  const todos = todoState(witnesses);
   const contexts = contextProjection(relations);
   const nodeContext = projectedNodeContexts(witnesses, contexts);
   const semanticLayout = applySemanticLayoutContexts(relations, nodeContext, contexts);
@@ -56,8 +54,6 @@ export function worldGraphProjection(witnesses, { includeWitnesses = false, limi
     if (owner) badges.push({ label: `owner:${owner}` });
     const activeVersion = activeVersions.get(thing);
     if (activeVersion) badges.push({ label: `active:${activeVersion}` });
-    const todo = todos.find(t => t.id === thing);
-    if (todo) badges.push({ label: todo.done ? "done" : "open" });
     addNode(thing, inferKind(thing, relations), thing, badges, nodeContext.get(thing));
   }
 
@@ -401,7 +397,7 @@ function applySemanticLayoutContexts(relations, nodeContext, contexts) {
   const serverRunners = [...moduleKinds.entries()].filter(([, kind]) => kind === "serverRunner").map(([id]) => id);
   const backendHosts = [...new Set(relations.filter(r => r.rel === "hostCapability" && ["http.serve", "fs.json.read", "fs.json.write"].includes(r.to)).map(r => r.from))];
   const frontendHosts = [...new Set(relations.filter(r => r.rel === "hostCapability" && ["dom.render", "http.fetch"].includes(r.to)).map(r => r.from))];
-  const todoServers = [...new Set(relations.filter(r => r.rel === "usesBackendHost").map(r => r.from))];
+  const serverRunnerIds = [...moduleKinds.entries()].filter(([, kind]) => kind === "serverRunner").map(([id]) => id);
 
   const children = new Map();
   for (const r of relations.filter(r => r.rel === "hasChildWidget")) {
@@ -425,7 +421,7 @@ function applySemanticLayoutContexts(relations, nodeContext, contexts) {
   for (const id of serverRunners) nodeContext.set(id, "backend/runtime");
   for (const id of backendHosts) nodeContext.set(id, "backend/runtime");
   for (const id of frontendHosts) nodeContext.set(id, "frontend/runtime");
-  for (const id of todoServers) nodeContext.set(id, "backend/runtime");
+  for (const id of serverRunnerIds) nodeContext.set(id, "backend/runtime");
 
   return { layoutWidgets, children, roots };
 }
@@ -480,7 +476,7 @@ function projectedNodeContexts(witnesses, contexts) {
   const nodeContext = new Map();
 
   // First pass: module/thing definition witnesses own the primary context.
-  // Cross-context references such as backend.todoServer -> frontendProgram must not steal context.
+  // Cross-context references such as backend.serverRunner -> frontendProgram must not steal context.
   for (const w of witnesses) {
     const ctx = byActor.get(w.actor);
     if (!ctx) continue;

@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createWorld } from "../src/kernel.js";
-import { declareBackendHost, declareFrontendHost, startTodoServer } from "../src/host.js";
+import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
 import { applyWitnessToml } from "../src/dsl.js";
 
 async function tempStore() {
@@ -17,18 +17,87 @@ async function startCanvasServer() {
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
   applyWitnessToml(world, `
+[[serverRunner]]
+actor = "adam"
+id = "canvas_server"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
 [[widget]]
 actor = "adam"
 id = "todo_app_widget"
 kind = "Page"
 props = { title = "Witness Todo" }
+
+[[route]]
+actor = "adam"
+id = "canvas_page_route"
+method = "GET"
+path = "/canvas"
+serves = "canvasView"
+handler = "page.canvas"
+
+[[serve]]
+actor = "adam"
+serverRunner = "canvas_server"
+route = "canvas_page_route"
+
+[[route]]
+actor = "adam"
+id = "canvas_read_route"
+method = "GET"
+path = "/api/canvas"
+serves = "canvasView"
+handler = "canvas.read"
+
+[[serve]]
+actor = "adam"
+serverRunner = "canvas_server"
+route = "canvas_read_route"
+
+[[route]]
+actor = "adam"
+id = "canvas_perspectives_route"
+method = "GET"
+path = "/api/canvas/perspectives"
+serves = "canvasView"
+handler = "canvas.perspectives.list"
+
+[[serve]]
+actor = "adam"
+serverRunner = "canvas_server"
+route = "canvas_perspectives_route"
+
+[[route]]
+actor = "adam"
+id = "canvas_process_route"
+method = "POST"
+path = "/api/canvas/process"
+serves = "canvasView"
+handler = "canvas.process"
+
+[[serve]]
+actor = "adam"
+serverRunner = "canvas_server"
+route = "canvas_process_route"
+
+[[route]]
+actor = "adam"
+id = "witnesses_route"
+method = "GET"
+path = "/api/witnesses"
+serves = "witnessLog"
+handler = "witnesses.list"
+
+[[serve]]
+actor = "adam"
+serverRunner = "canvas_server"
+route = "witnesses_route"
 `);
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "todo_app_widget",
-    storePath: await tempStore()
+    serverRunnerId: "canvas_server",
+    runtimeRoot: path.dirname(await tempStore())
   });
   return { world, server };
 }

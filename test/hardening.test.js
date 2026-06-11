@@ -6,7 +6,7 @@ import test from "node:test";
 import { createWorld } from "../src/kernel.js";
 import { WitnessLog } from "../src/witness-log.js";
 import { todoState, privateNotesFor, publicWitnessesFor } from "../src/projections.js";
-import { declareBackendHost, declareFrontendHost, startTodoServer } from "../src/host.js";
+import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
 import { applyWitnessToml, applyWitnessDocs, loadWitnessTomlFile } from "../src/dsl.js";
 
 async function tempPath(name) {
@@ -69,13 +69,10 @@ test("widget editor creates stable thing-style ids rather than host timestamp id
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "todo_app_widget",
-    frontendProgram: "todo_frontend_program",
-    storePath: await tempStore()
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
   });
 
   try {
@@ -102,13 +99,10 @@ test("typed widget.define rejects incompatible inputs with structured failures",
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "todo_app_widget",
-    frontendProgram: "todo_frontend_program",
-    storePath: await tempStore()
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
   });
 
   try {
@@ -177,14 +171,33 @@ actor = "adam"
 id = "todo_app_widget"
 kind = "Page"
 props = { title = "Witness Todo" }
+
+[[serverRunner]]
+actor = "adam"
+id = "server_runner"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+handlerSet = "demo"
+
+[[route]]
+actor = "adam"
+id = "widgets_create_route"
+path = "/api/widgets"
+serves = "widgetEditor"
+method = "POST"
+handler = "widgets.create"
+params = { rootWidget = "todo_app_widget" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "widgets_create_route"
 `);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "todo_app_widget",
-    storePath: await tempStore()
+    serverRunnerId: "server_runner",
+    runtimeRoot: path.dirname(await tempStore())
   });
 
   try {
@@ -209,13 +222,10 @@ test("malformed JSON requests are witnessed as request failures", async () => {
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    rootWidget: "todo_app_widget",
-    frontendProgram: "todo_frontend_program",
-    storePath: await tempStore()
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
   });
 
   try {
@@ -226,7 +236,7 @@ test("malformed JSON requests are witnessed as request failures", async () => {
     });
 
     assert.equal(response.status, 500);
-    assert.equal(world.allObservations().at(-1).process, "todoServer.request.failed");
+    assert.equal(world.allObservations().at(-1).process, "server.request.failed");
   } finally {
     await server.close();
   }

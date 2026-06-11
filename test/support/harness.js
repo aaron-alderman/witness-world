@@ -4,25 +4,18 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { chromium } from "playwright";
 import { createWorld } from "../../src/kernel.js";
-import { declareBackendHost, declareFrontendHost, startTodoServer } from "../../src/host.js";
+import { declareBackendHost, declareFrontendHost, startServer } from "../../src/host.js";
 import { applyWitnessDocs, loadWitnessTomlFile } from "../../src/dsl.js";
 
-async function tempStorePath(prefix = "witness-world-ui-") {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
-  return path.join(dir, "todos.json");
+async function tempRuntimeRoot(prefix = "witness-world-ui-") {
+  return fs.mkdtemp(path.join(os.tmpdir(), prefix));
 }
 
 export async function startUiDemoServer({
-  rootWidget = "todo_app_widget",
-  frontendProgram = "todo_frontend_program",
-  worldRootWidget = "world_graph_page",
-  worldFrontendProgram = "world_graph_program",
-  storePath,
-  actors = [{ id: "aaron", label: "Aaron" }, { id: "callan", label: "Callan" }],
   dslPath = path.join(process.cwd(), "examples", "demo-todo-server.wtoml")
 } = {}) {
   const world = createWorld();
-  const resolvedStore = storePath || await tempStorePath();
+  const runtimeRoot = await tempRuntimeRoot();
 
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
@@ -30,20 +23,14 @@ export async function startUiDemoServer({
   const docs = await loadWitnessTomlFile(dslPath);
   applyWitnessDocs(world, docs);
 
-  const server = await startTodoServer(world, {
+  const server = await startServer(world, {
     actor: "adam",
-    backendHost: "backendHost",
-    frontendHost: "frontendHost",
-    storePath: resolvedStore,
-    rootWidget,
-    frontendProgram,
-    worldRootWidget,
-    worldFrontendProgram,
-    actors
+    serverRunnerId: "demo_server",
+    runtimeRoot
   });
 
   if (!server.ok) {
-    throw new Error(`failed to start todo server for UI tests: ${server.reason}`);
+    throw new Error(`failed to start demo server for UI tests: ${server.reason}`);
   }
 
   return {

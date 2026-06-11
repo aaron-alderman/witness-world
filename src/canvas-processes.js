@@ -1,7 +1,6 @@
 import { thing, relation, retract, projectors, canAcceptInto } from "./kernel.js";
 import { thingId } from "./ids.js";
 import { runGates, actorRequired, textRequired } from "./gates.js";
-import { defineRoute } from "./modules.js";
 import { compensationClaims, undoState } from "./canvas-undo.js";
 
 const DEFAULT_GEOMETRY = { x: 40, y: 40, w: 160, h: 56 };
@@ -471,10 +470,3 @@ export const canvasProcessHandlers = {
   "canvas.undo": undoLastAction,
   "canvas.redo": redoLastUndo
 };
-
-export function declareCanvasRoutes(world, { actor }) {
-  defineRoute(world, { actor, id: "canvas_page_route", method: "GET", path: "/canvas", serves: "canvasView", handler: "page.canvas" });
-  defineRoute(world, { actor, id: "canvas_api_route", method: "GET", path: "/api/canvas", serves: "canvasView", handler: "canvas.read" });
-  defineRoute(world, { actor, id: "canvas_perspectives_api_route", method: "GET", path: "/api/canvas/perspectives", serves: "canvasView", handler: "canvas.perspectives.list" });
-  defineRoute(world, { actor, id: "canvas_process_api_route", method: "POST", path: "/api/canvas/process", serves: "canvasView", handler: "canvas.process" });
-}
