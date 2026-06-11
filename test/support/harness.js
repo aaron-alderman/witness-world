@@ -43,7 +43,7 @@ export async function startUiDemoServer({
   };
 }
 
-export async function startBlankUiServer() {
+export async function startBlankUiServer({ logger } = {}) {
   const world = createWorld();
   const runtimeRoot = await tempRuntimeRoot("witness-world-bootstrap-ui-");
 
@@ -52,7 +52,8 @@ export async function startBlankUiServer() {
 
   const server = await startServer(world, {
     actor: "system",
-    runtimeRoot
+    runtimeRoot,
+    logger
   });
 
   if (!server.ok) {

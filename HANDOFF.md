@@ -15,8 +15,16 @@ Open:
 
 ```text
 http://127.0.0.1:3000/
+http://127.0.0.1:3000/_bootstrap
 http://127.0.0.1:3000/world
+http://127.0.0.1:3000/process
 http://127.0.0.1:3000/canvas
+```
+
+Generic CLI:
+
+```bash
+node src/cli.js serve <dslPath> [--server <id>] [--port <n>]
 ```
 
 ## Architecture summary
@@ -63,13 +71,13 @@ src/logger.js          structured backend logging
 
 ## Current world browser behavior
 
-`/world` has five modes:
+`/world` has object/world-focused modes:
 
 - Graph
 - Thing List
 - Primitive Browser
 - Source Browser
-- Process Explorer
+- links into the dedicated Process View at `/process`
 
 The source browser is intentionally VS-Code-like:
 
@@ -101,7 +109,7 @@ The first fully typed process is `widget.define`:
 
 `/canvas` is a witness-oriented diagram editor:
 
-- pick an actor and a Perspective (witnessed Things of kind `perspective`)
+- sign in through the same session model used by the rest of the app, then work within a chosen Perspective
 - place Things as draggable nodes; each node is a `projectionInstance` proxy Thing, so geometry/style live on the proxy via `hasGeometry`/`hasStyle` relations with mutable meta (latest triple wins in `currentRelations`)
 - connectors are real Relations between Things and show up in every perspective where both endpoints are placed
 - the inspector separates Thing properties (reality: name, relations) from Projection properties (perspective: position, size, color)

@@ -40,6 +40,7 @@ function propsFromWidgetInput(input) {
   }
   if (typeof input.dataId === "string" && input.dataId !== "") props["data-id"] = input.dataId;
   if (typeof input.dataDone === "string" && input.dataDone !== "") props["data-done"] = input.dataDone;
+  if (typeof input.tutorialTarget === "string" && input.tutorialTarget !== "") props["data-tutorial-target"] = input.tutorialTarget;
   if (input.template === true) props.template = true;
   if (Number.isFinite(Number(input.level))) props.level = Number(input.level);
   return props;

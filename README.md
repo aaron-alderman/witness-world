@@ -16,12 +16,15 @@ The demo is a Todo app that is intentionally more complicated than a normal Todo
 - a canonical append-only witness log
 - projected todo state
 - frontend/backend capability separation
+- identity-backed session handling
 - widget definitions from DSL
 - witnessed traits, value types, and process specs
 - typed widget-editor flow through schema-driven value editors
 - versioned widgets and live activation
 - personal projections with private notes
-- a World Browser for graph, thing, primitive, source, and process views
+- a bootstrap seam that can recover a blank world into a runnable app
+- a guided tutorial that builds the Todo app through the real bootstrap surface
+- dedicated World and Process views
 
 ## Quick start
 
@@ -37,10 +40,28 @@ Then open:
 http://127.0.0.1:3000/
 ```
 
+Bootstrap seam:
+
+```text
+http://127.0.0.1:3000/_bootstrap
+```
+
 World Browser:
 
 ```text
 http://127.0.0.1:3000/world
+```
+
+Process View:
+
+```text
+http://127.0.0.1:3000/process
+```
+
+Canvas:
+
+```text
+http://127.0.0.1:3000/canvas
 ```
 
 ## Demo pages
@@ -51,12 +72,23 @@ The Todo app.
 
 It includes:
 
-- actor selector
+- login / logout
 - todos
 - private notes
 - typed widget editor
 - version playground
 - witness inspector
+
+### `/_bootstrap`
+
+The semi-internal bootstrap seam.
+
+It includes:
+
+- focused builders for identities, widgets, programs, routes, mounts, and server runners
+- blank-world recovery when no reachable home app route exists
+- a first-class guided tutorial that walks through building the Todo app from scratch
+- a de-emphasized fast path for experienced users
 
 ### `/world`
 
@@ -68,7 +100,7 @@ It has first-class modes:
 - **Thing List** - browse witnessed objects grouped by inferred kind
 - **Primitive Browser** - browse primitive values such as strings, numbers, kinds, badges, unresolved refs
 - **Source Browser** - VS-Code-like source view of witnessed DSL files
-- **Process Explorer** - browse surfaced process and API nodes without expanding into step traces
+- links into dedicated process inspection where appropriate
 
 The left drawer shows selected object details:
 
@@ -78,6 +110,23 @@ The left drawer shows selected object details:
 - association properties
 - source definition provenance
 - typed process/type metadata when selecting `trait`, `valueType`, or `processSpec` objects
+
+### `/process`
+
+The process-centric execution view.
+
+It focuses on:
+
+- authored frontend process graphs
+- recent runs and recorded traces
+- inline failures and async boundaries
+- read-only replay of recorded runs
+
+### `/canvas`
+
+The canvas projection surface.
+
+It uses the same session model as the main app in normal browser use, while still exposing canvas-specific projection and process APIs.
 
 ## DSL entry point
 
@@ -114,6 +163,38 @@ npm test      # run all tests (unit + integration, no browser required)
 npm run demo  # start the demo server
 ```
 
+## CLI
+
+The runtime starts through one generic CLI entrypoint:
+
+```bash
+node src/cli.js serve <dslPath> [--server <id>] [--port <n>]
+```
+
+Examples:
+
+```bash
+node src/cli.js serve examples/demo-todo-server.wtoml --server demo_server
+node src/cli.js serve examples/demo-todo-server.wtoml --port 4000
+```
+
+Notes:
+
+- `--server` is optional only when the DSL resolves to exactly one `serverRunner`
+- `npm run demo` is a convenience wrapper around the generic CLI
+- if the selected runner exposes a reachable home route, `/` serves the app
+- if no served home route exists yet, `/` falls back to `/_bootstrap`
+
+Useful environment variables:
+
+```bash
+RUNTIME_ROOT=/tmp/witness-runtime
+WITNESS_LOG=/tmp/witness-world.witnesses.jsonl
+OBSERVATION_LOG=/tmp/witness-world.observations.jsonl
+```
+
+The CLI prints the resolved server URL, definition path, selected runner, and log locations on startup.
+
 ## Browser / UI tests
 
 The UI tests use Playwright and require Chromium to be installed once:
@@ -133,4 +214,4 @@ npm run test:all  # unit + integration + browser
 
 This is not a production framework. It is a working architecture probe.
 
-The most important current behavior is that the app is increasingly described by witnessed data rather than hand-written special cases.
+The most important current behavior is that the app is increasingly described by witnessed data rather than hand-written special cases, and that a blank world can now recover into a bootstrap seam that teaches and assembles a runnable app through the real product surface.

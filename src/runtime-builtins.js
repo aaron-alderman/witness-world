@@ -27,6 +27,7 @@ const VALUE_TYPES = [
   { id: "widget.valueType", label: "Widget Value Type", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "widget.dataId", label: "Widget Data Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "widget.dataDone", label: "Widget Data Done", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "widget.tutorialTarget", label: "Widget Tutorial Target", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "widget.eventSoul", label: "Widget Event Soul", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "widget.eventVersion", label: "Widget Event Version", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "widget.template", label: "Widget Template", compatibleWith: ["boolean"], editor: { control: "checkbox" } },
@@ -76,6 +77,7 @@ const PROCESS_SPECS = [
       { name: "valueType", accepts: "widget.valueType", required: false },
       { name: "dataId", accepts: "widget.dataId", required: false },
       { name: "dataDone", accepts: "widget.dataDone", required: false },
+      { name: "tutorialTarget", accepts: "widget.tutorialTarget", required: false },
       { name: "eventSoul", accepts: "widget.eventSoul", required: false },
       { name: "eventVersion", accepts: "widget.eventVersion", required: false },
       { name: "template", accepts: "widget.template", required: false },
@@ -189,4 +191,3 @@ export function ensureRuntimeBuiltins(world, { actor = "system" } = {}) {
     defineProcessSpec(world, { actor, id: spec.id, process: spec.process, inputs: spec.inputs, outputs: spec.outputs, owner: actor });
   }
 }
-

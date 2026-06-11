@@ -33,6 +33,7 @@ import {
 } from "./bootstrap-authoring.js";
 import { ensureRuntimeBuiltins } from "./runtime-builtins.js";
 import { renderBootstrapPage } from "./bootstrap-shell.js";
+import { TODO_TUTORIAL_ID, tutorialDefinition } from "./tutorials.js";
 
 const HANDLER_SET_FACTORIES = {
   demo: createDemoHandlerSet
@@ -338,9 +339,9 @@ export async function startServer(world, {
         return;
       }
 
-      const bootstrapEndpoint = matchBootstrapEndpoint(req.method || "GET", requestUrl.pathname);
-      if (bootstrapEndpoint) {
-        const handler = genericHandlers[bootstrapEndpoint];
+      const genericEndpoint = matchGenericEndpoint(req.method || "GET", requestUrl.pathname);
+      if (genericEndpoint) {
+        const handler = genericHandlers[genericEndpoint.handler];
         const mounted = matchDeclaredRoute(mountedRoutesFor(runtime.runner.id), req.method || "GET", requestUrl.pathname);
         await handler({
           req,
@@ -348,7 +349,7 @@ export async function startServer(world, {
           requestId,
           requestUrl,
           route: mounted?.route ?? null,
-          params: mounted?.params ?? {},
+          params: { ...(mounted?.params ?? {}), ...(genericEndpoint.params ?? {}) },
           requestActor: requestContext.actor,
           requestIdentity: requestContext.identity,
           requestSession: requestContext.session,
@@ -619,6 +620,15 @@ function createGenericRouteHandlers({
     const frontendSteps = frontendStepsProjection(world.allWitnesses());
     return { identities, widgets, frontendPrograms, frontendSteps, routes, servedRoutes, serverRunners };
   };
+  const tutorialProgressFor = (requestSession, tutorialId) => requestSession?.tutorialProgress?.[tutorialId] ?? null;
+  const setTutorialProgress = (requestSession, tutorialId, progress) => {
+    if (!requestSession?.id) return null;
+    requestSession.tutorialProgress = requestSession.tutorialProgress ?? {};
+    if (progress == null) delete requestSession.tutorialProgress[tutorialId];
+    else requestSession.tutorialProgress[tutorialId] = progress;
+    sessionStore.set(requestSession.id, requestSession);
+    return requestSession.tutorialProgress[tutorialId] ?? null;
+  };
   const handlers = {
     __sessionStore: sessionStore,
     "bootstrap.model.read": async ({ res }) => {
@@ -631,6 +641,50 @@ function createGenericRouteHandlers({
 
     "bootstrap.page": async ({ res }) => {
       send(res, 200, "text/html; charset=utf-8", renderBootstrapPage());
+    },
+
+    "tutorial.progress.read": async ({ res, params, requestSession }) => {
+      const tutorialId = params.tutorialId || "";
+      sendJson(res, 200, { tutorialId, progress: tutorialProgressFor(requestSession, tutorialId) });
+    },
+
+    "tutorial.progress.write": async ({ req, res, params, requestSession }) => {
+      const tutorialId = params.tutorialId || "";
+      if (!requestSession?.id) {
+        sendJson(res, 200, { tutorialId, progress: null, localOnly: true });
+        return;
+      }
+      const definition = tutorialDefinition(tutorialId);
+      if (!definition) {
+        sendJson(res, 404, { error: "tutorial not found", tutorialId });
+        return;
+      }
+      const body = await readJson(req);
+      const progress = body && typeof body === "object" ? {
+        tutorialId,
+        chapterId: typeof body.chapterId === "string" ? body.chapterId : null,
+        stepId: typeof body.stepId === "string" ? body.stepId : null,
+        chapterStatus: typeof body.chapterStatus === "string" ? body.chapterStatus : "in_progress",
+        draftInputs: body.draftInputs && typeof body.draftInputs === "object" ? body.draftInputs : {},
+        completedAt: typeof body.completedAt === "string" ? body.completedAt : null,
+        hidden: body.hidden === true
+      } : null;
+      if (progress?.stepId && !definition.steps.some(step => step.id === progress.stepId)) {
+        sendJson(res, 400, { error: "unknown tutorial step", tutorialId, stepId: progress.stepId });
+        return;
+      }
+      setTutorialProgress(requestSession, tutorialId, progress);
+      sendJson(res, 200, { tutorialId, progress: tutorialProgressFor(requestSession, tutorialId) });
+    },
+
+    "tutorial.progress.delete": async ({ res, params, requestSession }) => {
+      const tutorialId = params.tutorialId || "";
+      if (!requestSession?.id) {
+        sendJson(res, 200, { tutorialId, ok: true, localOnly: true });
+        return;
+      }
+      setTutorialProgress(requestSession, tutorialId, null);
+      sendJson(res, 200, { tutorialId, ok: true });
     },
 
     "identity.create": async ({ req, res, requestActor }) => {
@@ -765,7 +819,8 @@ function createGenericRouteHandlers({
         identity: identity.id,
         actor: identity.actor,
         label: identity.label,
-        perspective: identity.homePerspective ?? null
+        perspective: identity.homePerspective ?? null,
+        tutorialProgress: {}
       };
       sessionStore.set(sessionId, session);
       world.emit({
@@ -865,7 +920,7 @@ function createGenericRouteHandlers({
       sendJson(res, result.status, { widget: result.widget, witness: result.witness });
     },
 
-    "page.home": async ({ res, route, appContext }) => {
+    "page.home": async ({ res, route, appContext, requestSession }) => {
       const params = route.params ?? {};
       const rootWidget = params.rootWidget ?? null;
       if (!rootWidget) {
@@ -884,7 +939,13 @@ function createGenericRouteHandlers({
         actor: frontendHost,
         rootWidget,
         frontendProgram: params.frontendProgram ?? null,
-        appConfig: { actors: requestActors(appContext), page, excludeWidgetRoles, liveProjection: params.liveProjection !== false }
+        appConfig: {
+          actors: requestActors(appContext),
+          page,
+          excludeWidgetRoles,
+          liveProjection: params.liveProjection !== false,
+          tutorial: tutorialProgressFor(requestSession, TODO_TUTORIAL_ID) ? { id: TODO_TUTORIAL_ID } : null
+        }
       }));
     },
 
@@ -1130,23 +1191,30 @@ function hasReachableHomeRoute(world, routeTable) {
   return world.project(projectors.things).has(rootWidget);
 }
 
-function matchBootstrapEndpoint(method, pathname) {
+function matchGenericEndpoint(method, pathname) {
   const targetMethod = String(method || "GET").toUpperCase();
-  if (targetMethod === "GET" && pathname === "/_bootstrap") return "bootstrap.page";
-  if (targetMethod === "GET" && pathname === "/api/bootstrap-model") return "bootstrap.model.read";
-  if (targetMethod === "GET" && pathname === "/api/bootstrap-state") return "bootstrap.state.read";
-  if (pathname === "/api/session") {
-    if (targetMethod === "GET") return "session.read";
-    if (targetMethod === "POST") return "session.open";
-    if (targetMethod === "DELETE") return "session.logout";
+  if (targetMethod === "GET" && pathname === "/_bootstrap") return { handler: "bootstrap.page", params: {} };
+  if (targetMethod === "GET" && pathname === "/api/bootstrap-model") return { handler: "bootstrap.model.read", params: {} };
+  if (targetMethod === "GET" && pathname === "/api/bootstrap-state") return { handler: "bootstrap.state.read", params: {} };
+  const tutorialProgress = pathname.match(/^\/api\/tutorial-progress\/([^/]+)$/);
+  if (tutorialProgress) {
+    const params = { tutorialId: decodeURIComponent(tutorialProgress[1] || "") };
+    if (targetMethod === "GET") return { handler: "tutorial.progress.read", params };
+    if (targetMethod === "PUT") return { handler: "tutorial.progress.write", params };
+    if (targetMethod === "DELETE") return { handler: "tutorial.progress.delete", params };
   }
-  if (targetMethod === "POST" && pathname === "/api/widgets") return "widgets.create";
-  if (targetMethod === "POST" && pathname === "/api/identities") return "identity.create";
-  if (targetMethod === "POST" && pathname === "/api/frontend-programs") return "frontendProgram.create";
-  if (targetMethod === "POST" && pathname === "/api/frontend-steps") return "frontendStep.create";
-  if (targetMethod === "POST" && pathname === "/api/routes") return "route.create";
-  if (targetMethod === "POST" && pathname === "/api/serve-mounts") return "serve.create";
-  if (targetMethod === "POST" && pathname === "/api/server-runners") return "serverRunner.create";
+  if (pathname === "/api/session") {
+    if (targetMethod === "GET") return { handler: "session.read", params: {} };
+    if (targetMethod === "POST") return { handler: "session.open", params: {} };
+    if (targetMethod === "DELETE") return { handler: "session.logout", params: {} };
+  }
+  if (targetMethod === "POST" && pathname === "/api/widgets") return { handler: "widgets.create", params: {} };
+  if (targetMethod === "POST" && pathname === "/api/identities") return { handler: "identity.create", params: {} };
+  if (targetMethod === "POST" && pathname === "/api/frontend-programs") return { handler: "frontendProgram.create", params: {} };
+  if (targetMethod === "POST" && pathname === "/api/frontend-steps") return { handler: "frontendStep.create", params: {} };
+  if (targetMethod === "POST" && pathname === "/api/routes") return { handler: "route.create", params: {} };
+  if (targetMethod === "POST" && pathname === "/api/serve-mounts") return { handler: "serve.create", params: {} };
+  if (targetMethod === "POST" && pathname === "/api/server-runners") return { handler: "serverRunner.create", params: {} };
   return null;
 }
 

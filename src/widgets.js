@@ -18,6 +18,7 @@ import {
   jsTypeOf,
   previewValue
 } from "./type-model.js";
+import { tutorialDefinition } from "./tutorials.js";
 
 export function defineWidget(world, { actor, id, kind, props = {}, owner = actor }) {
   return world.emit({
@@ -425,7 +426,7 @@ function renderDocument(root, program, appConfig = {}, typeModel = {}, templates
   const title = root.props?.title ?? "Witness App";
   const bodyAttrs = appConfig.page ? ` data-page="${escapeAttr(appConfig.page)}"` : "";
   const options = { excludeRoles: new Set(appConfig.excludeWidgetRoles ?? []), typeModel };
-  return `<!doctype html>\n<html>\n${renderHead(title)}\n<body${bodyAttrs}>\n${renderWidget(root, options)}\n${templates.map(template => renderWidgetTemplate(template, options)).join("\n")}\n${program ? renderClientEngine({ ...program, config: { ...appConfig, typeModel } }) : ""}\n</body>\n</html>`;
+  return `<!doctype html>\n<html>\n${renderHead(title)}\n<body${bodyAttrs}>\n${renderWidget(root, options)}\n${templates.map(template => renderWidgetTemplate(template, options)).join("\n")}\n${program ? renderClientEngine({ ...program, config: { ...appConfig, typeModel } }) : ""}\n${appConfig.tutorial ? renderTutorialClient(appConfig.tutorial) : ""}\n</body>\n</html>`;
 }
 
 function renderHead(title) {
@@ -531,6 +532,13 @@ function renderHead(title) {
     .world-edge-capability { stroke: #777; stroke-dasharray: 2 3; }
     .world-edge-relation { stroke: #ddd; }
     [data-widget-version] { border-left: 8px solid var(--version-color, #ddd); padding-left: 12px; border-radius: 8px; }
+    [data-tutorial-current] { outline: 3px solid var(--accent, #333); outline-offset: 4px; border-radius: 8px; scroll-margin-top: 60px; }
+    .tutorial-overlay { position: fixed; width: 300px; max-width: calc(100vw - 24px); z-index: 8; background: rgba(255,255,255,.98); border: 1px solid #ddd; border-radius: 14px; padding: 14px; box-shadow: 0 16px 36px rgba(0,0,0,.18); pointer-events: none; }
+    .tutorial-overlay h3 { margin: 0 0 8px; font-size: 1rem; }
+    .tutorial-overlay p { margin: 0 0 10px; color: #555; line-height: 1.45; }
+    .tutorial-overlay-meta { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #777; margin-bottom: 6px; }
+    .tutorial-overlay button { pointer-events: auto; }
+    .tutorial-resume { position: fixed; right: 16px; bottom: 16px; z-index: 8; }
   </style>
 </head>`;
 }
@@ -1423,6 +1431,214 @@ function renderClientEngine(program) {
   function escapeHtml(value) { return String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 })();`;
   return `<script type="application/json" id="witness-frontend-program">${json}</script>\n<script>\n${engine}\n</script>`;
+}
+
+function renderTutorialClient(tutorialConfig) {
+  const tutorial = tutorialDefinition(tutorialConfig?.id);
+  if (!tutorial) return "";
+  const json = JSON.stringify(tutorial).replace(/</g, "\\u003c");
+  const engine = String.raw`(() => {
+  const tutorial = ${json};
+  const stepIndex = new Map(tutorial.steps.map((step, index) => [step.id, index]));
+  const byTarget = target => document.querySelector('[data-tutorial-target="' + CSS.escape(target) + '"]');
+  const overlay = document.createElement('aside');
+  overlay.className = 'tutorial-overlay';
+  overlay.hidden = true;
+  overlay.innerHTML = '<div class="tutorial-overlay-meta" id="tutorial-overlay-meta"></div><h3 id="tutorial-overlay-title"></h3><p id="tutorial-overlay-body"></p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="tutorial-next">Next</button><button type="button" id="tutorial-back">Back</button><button type="button" id="tutorial-exit">Exit</button><button type="button" id="tutorial-reset">Reset</button></div>';
+  document.body.appendChild(overlay);
+  const resumeButton = document.createElement('button');
+  resumeButton.type = 'button';
+  resumeButton.textContent = 'Resume Tutorial';
+  resumeButton.className = 'tutorial-resume';
+  resumeButton.hidden = true;
+  document.body.appendChild(resumeButton);
+  let progress = null;
+  let lastRenderedStepId = null;
+  const api = async (method, body = null) => {
+    const options = { method };
+    if (body != null) {
+      options.headers = { 'content-type': 'application/json' };
+      options.body = JSON.stringify(body);
+    }
+    const res = await fetch('/api/tutorial-progress/' + encodeURIComponent(tutorial.id), options);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'tutorial request failed');
+    return data;
+  };
+  const currentStep = () => tutorial.steps.find(step => step.id === progress?.stepId) || null;
+  const currentStepIndex = () => stepIndex.get(progress?.stepId || '') ?? -1;
+  const clearHighlight = () => document.querySelectorAll('[data-tutorial-current]').forEach(node => node.removeAttribute('data-tutorial-current'));
+  const previousStep = () => {
+    const index = currentStepIndex();
+    return index > 0 ? tutorial.steps[index - 1] : null;
+  };
+  const saveProgress = async next => {
+    progress = next;
+    if (!next) await api('DELETE');
+    else await api('PUT', next);
+  };
+  const readTodos = async () => fetch('/api/todos').then(res => res.json().catch(() => ({ todos: [] })));
+  const readNotes = async () => fetch('/api/private-notes').then(res => res.json().catch(() => ({ notes: [] })));
+  const fillForm = (target, payload) => {
+    const form = target?.matches?.('form') ? target : target?.closest?.('form') || target?.querySelector?.('form');
+    if (!form || !payload) return;
+    for (const [key, value] of Object.entries(payload)) {
+      const field = form.elements.namedItem(key) || form.querySelector('[name="' + CSS.escape(key) + '"]');
+      if (!field) continue;
+      if (field.type === 'checkbox') field.checked = value === true;
+      else field.value = value == null ? '' : String(value);
+    }
+  };
+  const isComplete = async step => {
+    const check = step?.completeWhen || {};
+    switch (check.kind) {
+      case 'manualAdvance':
+      case 'complete':
+        return false;
+      case 'todoExists': {
+        const todos = await readTodos();
+        return Array.isArray(todos.todos) && todos.todos.some(todo => todo.title === check.title);
+      }
+      case 'todoDone': {
+        const todos = await readTodos();
+        return Array.isArray(todos.todos) && todos.todos.some(todo => todo.title === check.title && todo.done === true);
+      }
+      case 'todoMissing': {
+        const todos = await readTodos();
+        return !(Array.isArray(todos.todos) && todos.todos.some(todo => todo.title === check.title));
+      }
+      case 'noteExists': {
+        const notes = await readNotes();
+        return Array.isArray(notes.notes) && notes.notes.some(note => note.text === check.text);
+      }
+      default:
+        return false;
+    }
+  };
+  const position = target => {
+    if (!target) {
+      overlay.style.top = '16px';
+      overlay.style.right = '16px';
+      overlay.style.left = 'auto';
+      return;
+    }
+    const rect = target.getBoundingClientRect();
+    const top = Math.max(14, Math.min(window.innerHeight - overlay.offsetHeight - 14, rect.bottom + 12));
+    const left = rect.left + overlay.offsetWidth + 18 > window.innerWidth ? Math.max(12, rect.right - overlay.offsetWidth) : Math.max(12, rect.left);
+    overlay.style.top = top + 'px';
+    overlay.style.left = left + 'px';
+    overlay.style.right = 'auto';
+  };
+  const render = () => {
+    clearHighlight();
+    const step = currentStep();
+    if (!progress || progress.completedAt || !step || step.page !== 'app') {
+      overlay.hidden = true;
+      resumeButton.hidden = true;
+      return;
+    }
+    if (progress.hidden) {
+      overlay.hidden = true;
+      resumeButton.hidden = false;
+      return;
+    }
+    resumeButton.hidden = true;
+    const target = step.target ? byTarget(step.target) : null;
+    if (target) {
+      target.setAttribute('data-tutorial-current', 'true');
+      if (lastRenderedStepId !== step.id) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+    document.getElementById('tutorial-overlay-meta').textContent = step.chapterId.toUpperCase();
+    document.getElementById('tutorial-overlay-title').textContent = step.title;
+    document.getElementById('tutorial-overlay-body').textContent = step.body;
+    document.getElementById('tutorial-next').textContent = step.nextLabel || 'Next';
+    document.getElementById('tutorial-back').disabled = !previousStep();
+    overlay.hidden = false;
+    position(target);
+    lastRenderedStepId = step.id;
+  };
+  const advance = async () => {
+    const index = currentStepIndex();
+    const next = tutorial.steps[index + 1] || null;
+    if (!next) {
+      await saveProgress({ ...progress, chapterStatus: 'completed', completedAt: new Date().toISOString(), hidden: false });
+    } else {
+      await saveProgress({ ...progress, chapterId: next.chapterId, stepId: next.id, chapterStatus: 'in_progress', completedAt: null, hidden: false });
+    }
+    render();
+  };
+  const maybeAdvance = async () => {
+    let step = currentStep();
+    while (progress && step && !progress.hidden && !progress.completedAt && step.page === 'app' && await isComplete(step)) {
+      await advance();
+      step = currentStep();
+    }
+  };
+  const alignProgressToAppPage = async () => {
+    let step = currentStep();
+    while (progress && step && !progress.completedAt && step.page !== 'app') {
+      const next = tutorial.steps[currentStepIndex() + 1] || null;
+      if (!next || next.page !== 'app') break;
+      await saveProgress({ ...progress, chapterId: next.chapterId, stepId: next.id, chapterStatus: 'in_progress', completedAt: null });
+      step = currentStep();
+    }
+  };
+  resumeButton.addEventListener('click', async () => {
+    if (!progress) return;
+    await saveProgress({ ...progress, hidden: false });
+    render();
+  });
+  document.getElementById('tutorial-next').addEventListener('click', async () => {
+    const step = currentStep();
+    if (!step) return;
+    if (step.completeWhen?.kind === 'manualAdvance') {
+      await advance();
+      return;
+    }
+    const target = step.target ? byTarget(step.target) : null;
+    if (step.payload && target) {
+      fillForm(target, step.payload);
+      await saveProgress({ ...progress, draftInputs: step.payload, hidden: false });
+      render();
+      return;
+    }
+  });
+  document.getElementById('tutorial-back').addEventListener('click', async () => {
+    const step = previousStep();
+    if (!step || !progress) return;
+    await saveProgress({ ...progress, chapterId: step.chapterId, stepId: step.id, completedAt: null, hidden: false });
+    render();
+  });
+  document.getElementById('tutorial-exit').addEventListener('click', async () => {
+    if (!progress) return;
+    await saveProgress({ ...progress, hidden: true });
+    render();
+  });
+  document.getElementById('tutorial-reset').addEventListener('click', async () => {
+    progress = null;
+    await api('DELETE');
+    render();
+  });
+  const boot = async () => {
+    const data = await api('GET');
+    progress = data.progress || null;
+    await alignProgressToAppPage();
+    render();
+    await maybeAdvance();
+    render();
+    window.__witnessTutorialApp = {
+      get currentStepId() { return progress?.stepId || null; },
+      get completedAt() { return progress?.completedAt || null; }
+    };
+  };
+  document.addEventListener('click', () => setTimeout(() => maybeAdvance().catch(() => {}), 150));
+  document.addEventListener('submit', () => setTimeout(() => maybeAdvance().catch(() => {}), 150), true);
+  window.addEventListener('resize', render);
+  window.addEventListener('scroll', render, { passive: true });
+  setInterval(() => { void maybeAdvance().catch(() => {}); }, 1200);
+  void boot();
+})();`;
+  return `\n<script>\n${engine}\n</script>`;
 }
 
 function escapeHtml(value) {

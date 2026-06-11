@@ -26,6 +26,8 @@ The project now has a credible runtime spine:
 - identity-backed session handling on the main app path
 - live projection refresh without full page reload
 - dedicated Process View and generic frontend execution tracing
+- a bootstrap seam that can recover a blank world into a runnable app
+- a guided tutorial that teaches real app assembly through that seam
 
 Phase 1 has established most of the runtime baseline:
 
@@ -73,6 +75,23 @@ Related handoffs:
 
 - [PHASE1.md](C:\Users\aaron\Documents\world\PHASE1.md)
 - [BASELINE.md](C:\Users\aaron\Documents\world\BASELINE.md)
+
+---
+
+## Post-Phase-1 Learning Surface
+
+Status: active
+
+Phase 1 is complete, but the platform still needs a clear way to teach the real assembly surface without exposing compiler/primitives as the default user experience.
+
+- [x] Add a dedicated `/_bootstrap` seam that is hidden by default but intentionally reachable.
+- [x] Keep raw typed builders visible so the tutorial uses the real product surface rather than a fake wizard.
+- [x] Add a guided Todo tutorial that pre-fills and highlights the real forms, waits for real submissions, and continues onto `/` for live app usage.
+- [x] Persist tutorial progress locally before auth and in the session after auth.
+- [x] Make tutorial resume survive seam transitions between `/_bootstrap` and `/`.
+- [ ] Generalize the tutorial system beyond the Todo tutorial once the next authoring milestones settle.
+
+This learning surface is distinct from bootstrap recovery, normal app usage, and deeper self-hosting. It exists to teach the real app boundary honestly.
 
 ---
 

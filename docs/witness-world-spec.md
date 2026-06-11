@@ -3,7 +3,7 @@
 ## 1. Purpose
 - Provide a minimal witness-oriented runtime where canonical state is immutable witness log history.
 - Model runtime behavior through things, relations, processes, and witnesses.
-- Build projections (todo list, widgets, permissions, world graph) from witnesses.
+- Build projections (todo list, widgets, identity/session state, world graph, process view) from witnesses.
 
 ## 2. Canonical State
 - Canonical persistence is only the witness log (`src/witness-log.js`).
@@ -46,10 +46,10 @@
 - Import model:
   - `app.imports` recursively loads other DSL files (cycle-safe).
 - DSL sections are mapped to kernel/app operations:
-  - app/context/serverRunner/thing/relation
+  - app/context/serverRunner/identity/thing/relation
   - trait/valueType/processSpec
   - compiler/description/compile/route/serve
-  - frontendRunner/view/render/action/widget/widgetVersion/activateWidgetVersion/attachWidget
+  - frontendRunner/view/render/action/widget/widgetVersion/widgetVersionTransition/activateWidgetVersion/attachWidget
   - frontendProgram/frontEndStep + ergonomic step syntax
 - Unknown sections emit `dsl.unknownSection` witnesses.
 - Source witnesses are emitted for provenance and browser source mode.
@@ -66,26 +66,68 @@
   - `http.serve`, `fs.json.read`, `fs.json.write`
 - Frontend host must have:
   - `dom.render`, `http.fetch`
-- Required API routes:
-  - `/`, `/world`, `/canvas`, `/api/session`, `/api/private-notes`, `/api/todos*`,
-    `/api/widget-versions/:soul/activate`, `/api/widgets`,
-    `/api/simulate-network-error`, `/api/witnesses`, `/api/world-graph`, `/api/source`,
-    `/api/canvas`, `/api/canvas/perspectives`, `/api/canvas/process`.
+- Canonical startup path is the generic CLI:
+  - `node src/cli.js serve <dslPath> [--server <id>] [--port <n>]`
+  - `npm run demo` is a convenience wrapper around that CLI for the demo DSL
+- Runtime selection is driven by authored `serverRunner` + `serve` definitions.
+- Current public/runtime surface includes:
+  - pages:
+    - `/`
+    - `/_bootstrap`
+    - `/world`
+    - `/process`
+    - `/canvas`
+  - bootstrap and authoring APIs:
+    - `/api/bootstrap-model`
+    - `/api/bootstrap-state`
+    - `/api/identities`
+    - `/api/frontend-programs`
+    - `/api/frontend-steps`
+    - `/api/routes`
+    - `/api/serve-mounts`
+    - `/api/server-runners`
+    - `/api/tutorial-progress/:tutorialId`
+  - session and app APIs:
+    - `/api/session`
+    - `/api/private-notes`
+    - `/api/todos`
+    - `/api/todos/:id`
+    - `/api/widgets`
+    - `/api/widget-versions/:soul/activate`
+    - `/api/widget-versions/:soul/rollback`
+  - inspection and runtime APIs:
+    - `/api/witnesses`
+    - `/api/world-graph`
+    - `/api/process-view`
+    - `/api/process-runs/:runId`
+    - `/api/process-events`
+    - `/api/source`
+    - `/api/events`
+  - canvas APIs:
+    - `/api/canvas`
+    - `/api/canvas/perspectives`
+    - `/api/canvas/process`
+- When no served home page exists yet, `/` falls back to the bootstrap seam instead of hard failing.
 - Request failures must emit witness records instead of silent errors.
-- Route handlers must gate operations with actor context (`x-witness-actor`) where applicable.
+- Cookie-backed session identity is the canonical auth transport for normal browser use.
+- `x-witness-actor` is a dev-only escape hatch and is ignored unless a runner explicitly allows it.
 - `/api/widgets` now uses the witnessed `widget.define` process spec for both input validation and output validation.
 
 ## 7. Modules, Widgets, and Process Engine
 - Module operations emit witnesses and gate on `supportsProcess` relations.
 - Widget definitions project to render trees via attachment graph.
 - `ValueEditor` is a primitive widget kind that chooses a concrete HTML control from value-type / trait metadata.
+- Template widgets can render as inert DOM `<template>` sources and can be consumed by `renderCollection`.
 - Frontend steps compile into process graphs with:
   - ordering by event + order
   - dependency edges and concurrent-ready execution
   - predicates (`equals`, `notEquals`, `truthy`, `falsy`)
   - repeat semantics (`while`, `forEach`)
+- generic collection rendering and interpolation through `renderCollection`
+- synthetic `error` dispatch for uncaught runtime step failures
 - `readForm(schema = "...")` can coerce and filter flat form payloads through a witnessed `processSpec`.
 - Versioned widget rendering resolves through active version claims.
+- Process execution tracing is recorded through `frontend.process.*` and `frontend.step.*`, and Process View consumes those traces.
 
 ## 8. World Browser
 - Produces deterministic positioned nodes and context groups.

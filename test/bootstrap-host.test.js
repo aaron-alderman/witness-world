@@ -131,3 +131,63 @@ test("a bootstrap-authored runner and home route take over without restarting th
     await server.close();
   }
 });
+
+test("tutorial progress syncs into the authenticated session store", async () => {
+  const { server } = await startBlankServer();
+  try {
+    await fetch(`${server.url}/api/identities`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: "identity.aaron",
+        actor: "aaron",
+        label: "Aaron",
+        username: "aaron",
+        password: "aaron",
+        homePerspective: "aaron:personal"
+      })
+    });
+
+    const login = await openSession(server.url);
+    assert.equal(login.response.status, 200);
+
+    const empty = await fetch(`${server.url}/api/tutorial-progress/todo-from-scratch`, {
+      headers: { cookie: login.cookie }
+    }).then(response => response.json());
+    assert.equal(empty.progress, null);
+
+    const written = await fetch(`${server.url}/api/tutorial-progress/todo-from-scratch`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: login.cookie },
+      body: JSON.stringify({
+        tutorialId: "todo-from-scratch",
+        chapterId: "identity",
+        stepId: "identity:create",
+        chapterStatus: "in_progress",
+        draftInputs: { id: "identity.aaron" },
+        completedAt: null,
+        hidden: false
+      })
+    }).then(response => response.json());
+    assert.equal(written.progress.stepId, "identity:create");
+
+    const readBack = await fetch(`${server.url}/api/tutorial-progress/todo-from-scratch`, {
+      headers: { cookie: login.cookie }
+    }).then(response => response.json());
+    assert.equal(readBack.progress.chapterId, "identity");
+    assert.deepEqual(readBack.progress.draftInputs, { id: "identity.aaron" });
+
+    const cleared = await fetch(`${server.url}/api/tutorial-progress/todo-from-scratch`, {
+      method: "DELETE",
+      headers: { cookie: login.cookie }
+    }).then(response => response.json());
+    assert.equal(cleared.ok, true);
+
+    const emptyAgain = await fetch(`${server.url}/api/tutorial-progress/todo-from-scratch`, {
+      headers: { cookie: login.cookie }
+    }).then(response => response.json());
+    assert.equal(emptyAgain.progress, null);
+  } finally {
+    await server.close();
+  }
+});
