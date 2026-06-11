@@ -1,9 +1,23 @@
 export const TODO_TUTORIAL_ID = "todo-from-scratch";
 
+function tutorialConcept(id, label, summary) {
+  return { id, label, summary };
+}
+
+function tutorialStepWithConcepts(step, concepts) {
+  return { ...step, concepts: Array.isArray(concepts) ? [...concepts] : [] };
+}
+
+function tutorialStepsWithConcepts(steps, concepts) {
+  return steps.map(step => tutorialStepWithConcepts(step, concepts));
+}
+
 export function todoStarterBlueprint() {
   const runner = {
     id: "demo_server",
     handlerSet: "demo",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
     todoProjection: "witness-world-bootstrap-todos.json",
     privateNotesProjection: "witness-world-bootstrap-private-notes.json"
   };
@@ -46,8 +60,24 @@ export function todoStarterBlueprint() {
     { id: "private_note_template", kind: "Text", attach: false, template: true, class: "private-note", text: "${item.text}" },
     { id: "private_note_empty_template", kind: "Text", attach: false, template: true, class: "private-note", text: "Sign in to see private notes." }
   ];
+  const operatingWidgets = [
+    { id: "world_graph_page", kind: "Page", title: "Witness World Graph", attach: false },
+    { id: "world_graph_back_link", kind: "Link", parent: "world_graph_page", order: 0, href: "/", text: "< Back to Todo", class: "world-graph-link" },
+    { id: "world_graph_process_link", kind: "Link", parent: "world_graph_page", order: 1, href: "/process", text: "Open Process View", class: "world-graph-link" },
+    { id: "world_session", kind: "Box", parent: "world_graph_page", order: 2, class: "session-panel", role: "session-panel" },
+    { id: "world_session_title", kind: "Text", parent: "world_session", order: 0, text: "Personal Projection" },
+    { id: "world_session_form", kind: "Form", parent: "world_session", order: 1, role: "login-form" },
+    { id: "world_username_input", kind: "Input", parent: "world_session_form", order: 0, name: "username", placeholder: "Username", autocomplete: "username" },
+    { id: "world_password_input", kind: "Input", parent: "world_session_form", order: 1, name: "password", placeholder: "Password", type: "password", autocomplete: "current-password" },
+    { id: "world_open_button", kind: "Button", parent: "world_session_form", order: 2, text: "Sign in", type: "submit" },
+    { id: "world_logout_button", kind: "Button", parent: "world_session_form", order: 3, text: "Logout", type: "button", action: "logout" },
+    { id: "world_session_status", kind: "Text", parent: "world_session", order: 2, text: "Not signed in", role: "session-status" },
+    { id: "world_graph_title", kind: "Heading", parent: "world_graph_page", order: 3, text: "World Graph", level: 1 },
+    { id: "world_graph_canvas", kind: "Box", parent: "world_graph_page", order: 4, class: "world-graph-body", role: "world-graph-body" }
+  ];
 
   const program = { id: "todo_frontend_program", rootWidget: "todo_app_widget" };
+  const operatingPrograms = [{ id: "world_graph_program", rootWidget: "world_graph_page" }];
 
   const steps = [
     { program: "todo_frontend_program", event: "load", op: "initSession", order: 0, paramsJson: "{}" },
@@ -84,6 +114,17 @@ export function todoStarterBlueprint() {
     { program: "todo_frontend_program", event: "submit:todo_widget_editor_form", op: "run", order: 3, paramsJson: JSON.stringify({ event: "load" }) },
     { program: "todo_frontend_program", event: "error", op: "setText", order: 0, paramsJson: JSON.stringify({ widget: "todo_status", text: "Failed: ${event.message}" }) }
   ];
+  const operatingSteps = [
+    { program: "world_graph_program", event: "load", op: "initSession", order: 0, paramsJson: "{}" },
+    { program: "world_graph_program", event: "load", op: "setText", order: 1, paramsJson: JSON.stringify({ widget: "world_session_status", text: "${state.session && state.session.authenticated ? 'Signed in as ' + state.session.label + ' (' + state.session.actor + ')' + (state.session.perspective ? ' in ' + state.session.perspective : '') : 'Not signed in'}" }) },
+    { program: "world_graph_program", event: "load", op: "fetchJson", order: 2, paramsJson: JSON.stringify({ url: "/api/world-graph", into: "worldGraphResponse" }) },
+    { program: "world_graph_program", event: "load", op: "renderWorldGraph", order: 3, paramsJson: JSON.stringify({ widget: "world_graph_canvas", from: "worldGraphResponse.graph" }) },
+    { program: "world_graph_program", event: "submit:world_session_form", op: "readForm", order: 0, paramsJson: JSON.stringify({ widget: "world_session_form", into: "worldSessionDraft" }) },
+    { program: "world_graph_program", event: "submit:world_session_form", op: "setSession", order: 1, paramsJson: JSON.stringify({ from: "worldSessionDraft" }) },
+    { program: "world_graph_program", event: "submit:world_session_form", op: "run", order: 2, paramsJson: JSON.stringify({ event: "load" }) },
+    { program: "world_graph_program", event: "click:logout", op: "logout", order: 0, paramsJson: "{}" },
+    { program: "world_graph_program", event: "click:logout", op: "run", order: 1, paramsJson: JSON.stringify({ event: "load" }) }
+  ];
 
   const routes = [
     { id: "home_page_route", path: "/", serves: "todoAppView", method: "GET", handler: "page.home", rootWidget: "todo_app_widget", frontendProgram: "todo_frontend_program", page: "home", liveProjection: true },
@@ -99,9 +140,14 @@ export function todoStarterBlueprint() {
     { id: "widgets_create_route", path: "/api/widgets", serves: "widgetEditor", method: "POST", handler: "widgets.create", rootWidget: "todo_app_widget" },
     { id: "process_events_route", path: "/api/process-events", serves: "processEvents", method: "POST", handler: "processEvents.record" }
   ];
+  const operatingRoutes = [
+    { id: "world_page_route", path: "/world", serves: "worldGraphView", method: "GET", handler: "page.world", rootWidget: "world_graph_page", frontendProgram: "world_graph_program", page: "world" },
+    { id: "world_graph_read_route", path: "/api/world-graph", serves: "worldGraph", method: "GET", handler: "worldGraph.read" },
+    { id: "process_page_route", path: "/process", serves: "processView", method: "GET", handler: "page.process" }
+  ];
 
-  const serves = routes.map(route => ({ serverRunner: "demo_server", route: route.id }));
-  return { runner, widgets, program, steps, routes, serves };
+  const serves = [...routes, ...operatingRoutes].map(route => ({ serverRunner: "demo_server", route: route.id }));
+  return { runner, widgets, operatingWidgets, program, operatingPrograms, steps, operatingSteps, routes, operatingRoutes, serves };
 }
 
 function bootstrapStep(id, chapterId, title, body, target, payload, completeWhen, nextLabel = "Next") {
@@ -112,9 +158,25 @@ function appStep(id, chapterId, title, body, target, payload, completeWhen, next
   return { id, chapterId, page: "app", title, body, target, payload, completeWhen, nextLabel };
 }
 
+function worldStep(id, chapterId, title, body, target, payload, completeWhen, nextLabel = "Next") {
+  return { id, chapterId, page: "world", title, body, target, payload, completeWhen, nextLabel };
+}
+
 export function todoTutorialDefinition() {
   const blueprint = todoStarterBlueprint();
-  const widgetSteps = blueprint.widgets.map(definition => bootstrapStep(
+  const concepts = [
+    tutorialConcept("identity-principal", "Identity And Principal", "Real work runs as an identity-backed actor, not anonymous edits."),
+    tutorialConcept("session-auth", "Session Gate", "After identities exist, writes go through the same authenticated session path as the app."),
+    tutorialConcept("runtime-wiring", "Runtime Wiring", "A server runner binds handler logic to backend and frontend hosts so routes can execute."),
+    tutorialConcept("widget-tree", "Widget Tree", "The visible page is explicit authored widget structure rather than hidden templates."),
+    tutorialConcept("frontend-program", "Frontend Program", "UI behavior comes from authored frontend steps wired to events."),
+    tutorialConcept("route-mounts", "Routes And Mounts", "Routes define surfaces and serve mounts attach them to a concrete runner."),
+    tutorialConcept("app-boundary", "App Boundary", "Crossing into the live route means using the exact app you assembled through bootstrap."),
+    tutorialConcept("witnessed-app-state", "Witnessed App State", "Todo actions operate through real requests and witnessed state changes."),
+    tutorialConcept("perspective-data", "Perspective Data", "Private notes belong to the signed-in perspective rather than the shared app view."),
+    tutorialConcept("operating-surface", "Operating Surface", "The world page is a real surface for inspecting authored objects, witnessed execution, and hidden modes without leaving the product.")
+  ];
+  const widgetSteps = tutorialStepsWithConcepts(blueprint.widgets.map(definition => bootstrapStep(
     `widgets:${definition.id}`,
     "widgets",
     "Create the widget tree",
@@ -122,9 +184,9 @@ export function todoTutorialDefinition() {
     "widget-form",
     { ...definition },
     { kind: "widgetExists", id: definition.id }
-  ));
+  )), ["widget-tree"]);
   const programSteps = [
-    bootstrapStep(
+    tutorialStepWithConcepts(bootstrapStep(
       "program:create",
       "program",
       "Create the frontend program",
@@ -132,8 +194,8 @@ export function todoTutorialDefinition() {
       "program-form",
       { ...blueprint.program },
       { kind: "programExists", id: blueprint.program.id }
-    ),
-    ...blueprint.steps.map(definition => bootstrapStep(
+    ), ["frontend-program"]),
+    ...tutorialStepsWithConcepts(blueprint.steps.map(definition => bootstrapStep(
       `program-step:${definition.event}:${definition.order}:${definition.op}`,
       "program",
       "Add program behavior",
@@ -141,10 +203,10 @@ export function todoTutorialDefinition() {
       "step-form",
       { ...definition },
       { kind: "frontendStepExists", program: definition.program, event: definition.event, op: definition.op, order: definition.order }
-    ))
+    )), ["frontend-program"])
   ];
   const routeSteps = [
-    ...blueprint.routes.map(definition => bootstrapStep(
+    ...tutorialStepsWithConcepts(blueprint.routes.map(definition => bootstrapStep(
       `route:${definition.id}`,
       "routes",
       "Define routes",
@@ -152,8 +214,8 @@ export function todoTutorialDefinition() {
       "route-form",
       { ...definition },
       { kind: "routeExists", id: definition.id }
-    )),
-    ...blueprint.serves.map(definition => bootstrapStep(
+    )), ["route-mounts"]),
+    ...tutorialStepsWithConcepts(blueprint.serves.map(definition => bootstrapStep(
       `serve:${definition.route}`,
       "routes",
       "Mount routes",
@@ -161,10 +223,10 @@ export function todoTutorialDefinition() {
       "serve-form",
       { ...definition },
       { kind: "serveExists", serverRunner: definition.serverRunner, route: definition.route }
-    ))
+    )), ["route-mounts"])
   ];
   const steps = [
-    bootstrapStep(
+    tutorialStepWithConcepts(bootstrapStep(
       "identity:create",
       "identity",
       "Create the first identity",
@@ -172,8 +234,8 @@ export function todoTutorialDefinition() {
       "identity-form",
       { id: "identity.aaron", actor: "aaron", label: "Aaron", username: "aaron", password: "aaron", homePerspective: "aaron:personal" },
       { kind: "identityExists", id: "identity.aaron" }
-    ),
-    bootstrapStep(
+    ), ["identity-principal"]),
+    tutorialStepWithConcepts(bootstrapStep(
       "session:signin",
       "session",
       "Sign in to keep authoring",
@@ -181,8 +243,8 @@ export function todoTutorialDefinition() {
       "session-form",
       { username: "aaron", password: "aaron" },
       { kind: "sessionAuthenticated", actor: "aaron" }
-    ),
-    bootstrapStep(
+    ), ["session-auth"]),
+    tutorialStepWithConcepts(bootstrapStep(
       "runner:create",
       "runner",
       "Create the runtime wiring",
@@ -190,11 +252,11 @@ export function todoTutorialDefinition() {
       "runner-form",
       { ...blueprint.runner },
       { kind: "serverRunnerExists", id: blueprint.runner.id }
-    ),
+    ), ["runtime-wiring"]),
     ...widgetSteps,
     ...programSteps,
     ...routeSteps,
-    bootstrapStep(
+    tutorialStepWithConcepts(bootstrapStep(
       "open-app",
       "verify",
       "Open the app you just wired",
@@ -203,8 +265,8 @@ export function todoTutorialDefinition() {
       null,
       { kind: "manualAdvance" },
       "Open App"
-    ),
-    appStep(
+    ), ["app-boundary"]),
+    tutorialStepWithConcepts(appStep(
       "app:intro",
       "use-app",
       "You are now using the real app",
@@ -212,8 +274,8 @@ export function todoTutorialDefinition() {
       "app-title",
       null,
       { kind: "manualAdvance" }
-    ),
-    appStep(
+    ), ["app-boundary"]),
+    tutorialStepWithConcepts(appStep(
       "app:create-todo",
       "use-app",
       "Create a todo",
@@ -221,8 +283,8 @@ export function todoTutorialDefinition() {
       "todo-form",
       { title: "Tutorial todo" },
       { kind: "todoExists", title: "Tutorial todo" }
-    ),
-    appStep(
+    ), ["witnessed-app-state"]),
+    tutorialStepWithConcepts(appStep(
       "app:toggle-todo",
       "use-app",
       "Toggle the todo",
@@ -230,8 +292,8 @@ export function todoTutorialDefinition() {
       "todo-toggle",
       null,
       { kind: "todoDone", title: "Tutorial todo" }
-    ),
-    appStep(
+    ), ["witnessed-app-state"]),
+    tutorialStepWithConcepts(appStep(
       "app:delete-todo",
       "use-app",
       "Delete the todo",
@@ -239,8 +301,8 @@ export function todoTutorialDefinition() {
       "todo-delete",
       null,
       { kind: "todoMissing", title: "Tutorial todo" }
-    ),
-    appStep(
+    ), ["witnessed-app-state"]),
+    tutorialStepWithConcepts(appStep(
       "app:create-note",
       "use-app",
       "Create a private note",
@@ -248,21 +310,22 @@ export function todoTutorialDefinition() {
       "note-form",
       { text: "Tutorial private note" },
       { kind: "noteExists", text: "Tutorial private note" }
-    ),
-    appStep(
-      "app:done",
-      "done",
-      "Tutorial complete",
-      "You created the todo app from scratch through the real platform surface. You can now keep exploring, or return to the bootstrap seam to inspect the authored wiring.",
-      "app-title",
+    ), ["perspective-data"]),
+    tutorialStepWithConcepts(worldStep(
+      "world:inspect",
+      "inspect-world",
+      "Inspect the world surface",
+      "Open `/world` and use the operating surface to inspect the app as authored objects, witnesses, and real product handoffs. Click Finish when you are ready to keep exploring on your own.",
+      "world-command-toggle",
       null,
       { kind: "manualAdvance" },
       "Finish"
-    )
+    ), ["app-boundary", "witnessed-app-state", "perspective-data", "operating-surface"])
   ];
   return {
     id: TODO_TUTORIAL_ID,
     title: "Build The Todo App From Scratch",
+    concepts,
     steps
   };
 }
@@ -280,7 +343,88 @@ export function createTutorialProgress(tutorial, stepId = tutorial?.steps?.[0]?.
     chapterStatus: step ? "in_progress" : "idle",
     draftInputs: {},
     completedAt: null,
-    hidden: false
+    hidden: false,
+    disabledPages: [],
+    replayStepId: null
+  };
+}
+
+export function tutorialPages(tutorial) {
+  const pages = [];
+  for (const step of tutorial?.steps ?? []) {
+    if (typeof step?.page !== "string" || !step.page.trim() || pages.includes(step.page)) continue;
+    pages.push(step.page);
+  }
+  return pages;
+}
+
+export function normalizeTutorialDisabledPages(tutorial, disabledPages = []) {
+  const knownPages = new Set(tutorialPages(tutorial));
+  return [...new Set((Array.isArray(disabledPages) ? disabledPages : []).map(String).filter(page => knownPages.has(page)))];
+}
+
+export function tutorialStepPage(tutorial, stepId) {
+  return tutorialStep(tutorial, stepId)?.page ?? null;
+}
+
+export function normalizeTutorialReplayStep(tutorial, replayStepId) {
+  const id = typeof replayStepId === "string" ? replayStepId : "";
+  return tutorialStep(tutorial, id)?.id ?? null;
+}
+
+export function tutorialStepConcepts(tutorial, stepId) {
+  const concepts = new Map((tutorial?.concepts ?? []).map(concept => [concept.id, concept]));
+  return [...new Set((tutorialStep(tutorial, stepId)?.concepts ?? []).map(String))]
+    .map(id => concepts.get(id))
+    .filter(Boolean);
+}
+
+export function tutorialRevealedConcepts(tutorial, progressOrStepId) {
+  const stepId = typeof progressOrStepId === "string" ? progressOrStepId : progressOrStepId?.stepId;
+  const currentIndex = progressOrStepId?.completedAt
+    ? ((tutorial?.steps?.length ?? 1) - 1)
+    : tutorialStepIndex(tutorial, stepId);
+  if (currentIndex < 0) return [];
+  const concepts = new Map((tutorial?.concepts ?? []).map(concept => [concept.id, concept]));
+  const revealedIds = [];
+  for (const step of tutorial?.steps?.slice(0, currentIndex + 1) ?? []) {
+    for (const conceptId of [...new Set((step?.concepts ?? []).map(String))]) {
+      if (!revealedIds.includes(conceptId) && concepts.has(conceptId)) revealedIds.push(conceptId);
+    }
+  }
+  return revealedIds.map(id => concepts.get(id)).filter(Boolean);
+}
+
+export function isTutorialPageDisabled(tutorial, progress, page) {
+  if (!(typeof page === "string" && page.trim())) return false;
+  return normalizeTutorialDisabledPages(tutorial, progress?.disabledPages).includes(page);
+}
+
+export function setTutorialPageDisabled(tutorial, progress, page, disabled = true) {
+  if (!progress) return null;
+  const targetPage = typeof page === "string" && page.trim() ? page.trim() : "";
+  if (!targetPage) return { ...progress, disabledPages: normalizeTutorialDisabledPages(tutorial, progress.disabledPages) };
+  const disabledPages = new Set(normalizeTutorialDisabledPages(tutorial, progress.disabledPages));
+  if (disabled) disabledPages.add(targetPage);
+  else disabledPages.delete(targetPage);
+  return {
+    ...progress,
+    disabledPages: normalizeTutorialDisabledPages(tutorial, [...disabledPages])
+  };
+}
+
+export function restartTutorialFromHere(tutorial, progress, stepId = progress?.stepId) {
+  const current = tutorialStep(tutorial, stepId);
+  if (!current) return createTutorialProgress(tutorial);
+  return {
+    ...(progress ?? createTutorialProgress(tutorial, current.id)),
+    chapterId: current.chapterId,
+    stepId: current.id,
+    chapterStatus: "in_progress",
+    completedAt: null,
+    hidden: false,
+    draftInputs: {},
+    replayStepId: current.id
   };
 }
 
@@ -304,27 +448,33 @@ export function previousTutorialStep(tutorial, stepId) {
   return tutorial.steps[index - 1] ?? null;
 }
 
+export function firstTutorialStepInChapter(tutorial, chapterId) {
+  if (!tutorial?.steps?.length || !chapterId) return null;
+  return tutorial.steps.find(step => step.chapterId === chapterId) ?? null;
+}
+
 export function skipTutorialChapter(tutorial, progress) {
   const current = tutorialStep(tutorial, progress?.stepId);
   if (!current) return createTutorialProgress(tutorial);
   const next = tutorial.steps.find(step => step.chapterId !== current.chapterId && tutorialStepIndex(tutorial, step.id) > tutorialStepIndex(tutorial, current.id));
   if (!next) {
-    return { ...progress, chapterStatus: "completed", completedAt: progress.completedAt || new Date().toISOString() };
+    return { ...progress, chapterStatus: "completed", completedAt: progress.completedAt || new Date().toISOString(), replayStepId: null };
   }
-  return { ...progress, chapterId: next.chapterId, stepId: next.id, chapterStatus: "in_progress" };
+  return { ...progress, chapterId: next.chapterId, stepId: next.id, chapterStatus: "in_progress", replayStepId: null };
 }
 
 export function advanceTutorialProgress(tutorial, progress) {
   const next = nextTutorialStep(tutorial, progress?.stepId);
   if (!next) {
-    return { ...progress, chapterStatus: "completed", completedAt: progress?.completedAt || new Date().toISOString() };
+    return { ...progress, chapterStatus: "completed", completedAt: progress?.completedAt || new Date().toISOString(), replayStepId: null };
   }
   return {
     ...progress,
     chapterId: next.chapterId,
     stepId: next.id,
     chapterStatus: "in_progress",
-    completedAt: null
+    completedAt: null,
+    replayStepId: null
   };
 }
 
@@ -336,7 +486,23 @@ export function retreatTutorialProgress(tutorial, progress) {
     chapterId: previous.chapterId,
     stepId: previous.id,
     chapterStatus: "in_progress",
-    completedAt: null
+    completedAt: null,
+    replayStepId: null
+  };
+}
+
+export function restartTutorialChapter(tutorial, progress, chapterId = progress?.chapterId) {
+  const first = firstTutorialStepInChapter(tutorial, chapterId);
+  if (!first) return createTutorialProgress(tutorial);
+  return {
+    ...(progress ?? createTutorialProgress(tutorial, first.id)),
+    chapterId: first.chapterId,
+    stepId: first.id,
+    chapterStatus: "in_progress",
+    completedAt: null,
+    hidden: false,
+    draftInputs: {},
+    replayStepId: null
   };
 }
 
@@ -349,6 +515,20 @@ export function mergeTutorialProgress(tutorial, localProgress, remoteProgress) {
   if (localIndex > remoteIndex) return localProgress;
   if (!localProgress) return remoteProgress ?? null;
   if (!remoteProgress) return localProgress ?? null;
-  if (localProgress.hidden === false && remoteProgress.hidden === true) return localProgress;
-  return remoteProgress;
+  const localDisabledPages = normalizeTutorialDisabledPages(tutorial, localProgress.disabledPages);
+  const remoteDisabledPages = normalizeTutorialDisabledPages(tutorial, remoteProgress.disabledPages);
+  const localReplayStepId = normalizeTutorialReplayStep(tutorial, localProgress.replayStepId);
+  const remoteReplayStepId = normalizeTutorialReplayStep(tutorial, remoteProgress.replayStepId);
+  if (localProgress.hidden === false && remoteProgress.hidden === true) {
+    return { ...localProgress, disabledPages: localDisabledPages, replayStepId: localReplayStepId };
+  }
+  if (remoteProgress.hidden === false && localProgress.hidden === true) {
+    return { ...remoteProgress, disabledPages: remoteDisabledPages, replayStepId: remoteReplayStepId };
+  }
+  const replayStepId = localReplayStepId || remoteReplayStepId || null;
+  return {
+    ...remoteProgress,
+    disabledPages: [...new Set([...remoteDisabledPages, ...localDisabledPages])],
+    replayStepId: replayStepId && replayStepId === remoteProgress.stepId ? replayStepId : null
+  };
 }

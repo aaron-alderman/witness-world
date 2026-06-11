@@ -304,6 +304,26 @@ test("world graph stops at action nodes and leaves process step detail to proces
   assert.equal(graph.edges.some(e => e.from === actionNode.id && e.rel === "requests" && e.style === "api"), true);
 });
 
+test("world graph exposes process handoff metadata for frontend program and action nodes", async () => {
+  const world = createWorld();
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const graph = worldGraphProjection(world.allWitnesses());
+  const programNode = graph.nodes.find(node => node.id === "todo_frontend_program");
+  const actionNode = graph.nodes.find(node => node.id === "ctx:frontend/execution/program=todo_frontend_program/trigger=click/action=activateWidgetVersion");
+
+  assert.ok(programNode);
+  assert.equal(Array.isArray(programNode.processEvents), true);
+  assert.equal(programNode.processEvents.some(entry => entry.event === "click:activateWidgetVersion"), true);
+
+  assert.ok(actionNode);
+  assert.deepEqual(actionNode.processSelection, {
+    program: "todo_frontend_program",
+    event: "click:activateWidgetVersion"
+  });
+});
+
 test("world graph scopes runtime hosts, capabilities, and vocabulary", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
@@ -320,6 +340,24 @@ test("world graph scopes runtime hosts, capabilities, and vocabulary", async () 
   assert.equal(graph.nodes.find(n => n.id === "dom.render")?.context, "frontend/capabilities");
   assert.equal(graph.nodes.find(n => n.id === "widget")?.context, "system/vocabulary");
   assert.equal(graph.nodes.some(n => n.context === "unscoped" && ["widget", "frontendProgram", "fs.json.read"].includes(n.id)), false);
+});
+
+test("world graph classifies app routes versus harness and internal operating surfaces", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const graph = worldGraphProjection(world.allWitnesses());
+  const homeRoute = graph.nodes.find(node => node.id === "home_page_route");
+  const worldRoute = graph.nodes.find(node => node.id === "world_page_route");
+  const processRoute = graph.nodes.find(node => node.id === "process_page_route");
+
+  assert.equal(homeRoute?.surfaceTier, "app");
+  assert.equal(homeRoute?.badges?.some(entry => entry.label === "surface:app"), true);
+  assert.equal(worldRoute?.surfaceTier, "internal");
+  assert.equal(processRoute?.surfaceTier, "internal");
 });
 
 test("world graph renders explicit capability install and dependency edges", () => {
@@ -375,6 +413,80 @@ test("world graph exposes object properties, association metadata, and DSL sourc
   assert.ok(edgeWithMeta);
 });
 
+test("world graph exposes recent witness history for objects and process nodes", async () => {
+  const world = createWorld();
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const graph = worldGraphProjection(world.allWitnesses());
+  const runner = graph.nodes.find(n => n.id === "demo_server");
+
+  assert.ok(runner);
+  assert.ok(Array.isArray(runner.recentWitnesses));
+  assert.equal(runner.recentWitnesses.length > 0, true);
+
+  const recentProcess = runner.recentWitnesses[0]?.process;
+  const processNode = graph.nodes.find(n => n.id === `process:${recentProcess}`);
+
+  assert.ok(processNode);
+  assert.ok(Array.isArray(processNode.recentWitnesses));
+  assert.equal(processNode.recentWitnesses.some(w => w.process === recentProcess), true);
+});
+
+test("world graph exposes widget version state on the active widget soul", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[defaults]]
+actor = "adam"
+
+[[widgetVersion]]
+soul = "banner"
+version = "banner_v1"
+kind = "Text"
+index = 0
+props = { text = "Banner v1" }
+
+[[widgetVersion]]
+soul = "banner"
+version = "banner_v2"
+kind = "Text"
+index = 1
+props = { text = "Banner v2" }
+
+[[widgetVersionTransition]]
+soul = "banner"
+from = "banner_v1"
+to = "banner_v2"
+strategy = "compatible"
+
+[[widgetVersionTransition]]
+soul = "banner"
+from = "banner_v2"
+to = "banner_v1"
+strategy = "compatible"
+
+[[activateWidgetVersion]]
+soul = "banner"
+version = "banner_v1"
+
+[[activateWidgetVersion]]
+soul = "banner"
+version = "banner_v2"
+`);
+
+  const graph = worldGraphProjection(world.allWitnesses());
+  const banner = graph.nodes.find(node => node.id === "banner");
+
+  assert.ok(banner);
+  assert.equal(banner.badges.some(badge => badge.label === "active:banner_v2"), true);
+  assert.ok(Array.isArray(banner.widgetVersions));
+  assert.equal(banner.widgetVersions.some(row => row.version === "banner_v1" && row.transitionFromActive === "compatible"), true);
+  assert.equal(banner.widgetVersions.some(row => row.version === "banner_v2" && row.isActive === true), true);
+  assert.equal(banner.widgetVersionState.activeVersion, "banner_v2");
+  assert.equal(banner.widgetVersionState.rollbackAvailable, true);
+  assert.equal(banner.widgetVersionState.rollbackVersion, "banner_v1");
+});
+
 test("world page selected object inspector includes properties, associations, association properties, and source definition sections", async () => {
   const world = createWorld();
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
@@ -389,6 +501,9 @@ test("world page selected object inspector includes properties, associations, as
   assert.match(html, /world-value-type/);
   assert.match(html, /Associations from this object/);
   assert.match(html, /Association properties/);
+  assert.match(html, /Recent witnesses/);
+  assert.match(html, /Widget versions/);
+  assert.match(html, /data-world-widget-activate/);
   assert.match(html, /Source definition/);
   assert.match(html, /world-source-ast/);
 });
@@ -436,6 +551,7 @@ test("world page supports source document and primitive browser UI modes", async
   assert.match(html, /world-document-view/);
   assert.match(html, /data-world-source-file/);
   assert.match(html, /world-primitive-browser/);
+  assert.match(html, /world-witness-browser/);
   assert.match(html, /data-world-primitive-kind/);
   assert.match(html, /world-graph-canvas/);
 });
@@ -478,6 +594,7 @@ test("world browser exposes first-class graph primitive and source modes", async
   const html = renderWidgetPage(world, { actor: "frontendHost", rootWidget: "world_graph_page", frontendProgram: "world_graph_program", appConfig: { page: "world" } });
   assert.match(html, /modeButton\('graph', 'Graph'\)/);
   assert.match(html, /modeButton\('primitive', 'Primitive Browser'\)/);
+  assert.match(html, /modeButton\('witness', 'Witness Browser'\)/);
   assert.match(html, /modeButton\('source', 'Source Browser'\)/);
   assert.match(html, /world-source-workbench/);
   assert.match(html, /world-source-highlight/);

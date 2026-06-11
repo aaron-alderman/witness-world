@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createWorld } from "../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
+import { defineWidgetVersion, activateWidgetVersion } from "../src/widgets.js";
 
 async function tempRuntimeRoot() {
   return fs.mkdtemp(path.join(os.tmpdir(), "witness-bootstrap-host-"));
@@ -51,6 +52,39 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
     assert.equal(model.appReady, false);
     assert(model.supportedHandlers.includes("page.home"));
     assert(model.supportedFrontendOps.includes("renderCollection"));
+  } finally {
+    await server.close();
+  }
+});
+
+test("bootstrap server runner authoring accepts runtimeConfigJson and preserves config structure", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const post = (pathname, body) => fetch(`${server.url}${pathname}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    const createdRunner = await post("/api/server-runners", {
+      id: "config_runner",
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      runtimeConfigJson: JSON.stringify({
+        publicBaseUrl: { value: "https://world.test" },
+        serviceToken: { secret: "WITNESS_RUNTIME_SECRET" }
+      })
+    });
+    assert.equal(createdRunner.status, 201);
+    const createdBody = await createdRunner.json();
+    assert.equal(createdBody.serverRunner.runtimeConfig.publicBaseUrl.value, "https://world.test");
+    assert.equal(createdBody.serverRunner.runtimeConfig.serviceToken.secret, "WITNESS_RUNTIME_SECRET");
+
+    const state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    const runner = state.serverRunners.find(row => row.id === "config_runner");
+    assert.ok(runner);
+    assert.equal(runner.runtimeConfig.publicBaseUrl.value, "https://world.test");
+    assert.equal(runner.runtimeConfig.serviceToken.secret, "WITNESS_RUNTIME_SECRET");
   } finally {
     await server.close();
   }
@@ -166,7 +200,9 @@ test("tutorial progress syncs into the authenticated session store", async () =>
         chapterStatus: "in_progress",
         draftInputs: { id: "identity.aaron" },
         completedAt: null,
-        hidden: false
+        hidden: false,
+        disabledPages: ["app", "unknown"],
+        replayStepId: "identity:create"
       })
     }).then(response => response.json());
     assert.equal(written.progress.stepId, "identity:create");
@@ -176,6 +212,8 @@ test("tutorial progress syncs into the authenticated session store", async () =>
     }).then(response => response.json());
     assert.equal(readBack.progress.chapterId, "identity");
     assert.deepEqual(readBack.progress.draftInputs, { id: "identity.aaron" });
+    assert.deepEqual(readBack.progress.disabledPages, ["app"]);
+    assert.equal(readBack.progress.replayStepId, "identity:create");
 
     const cleared = await fetch(`${server.url}/api/tutorial-progress/todo-from-scratch`, {
       method: "DELETE",
@@ -353,6 +391,198 @@ test("unauthorized scoped writes return 403 and proposals can be approved exactl
     assert.equal(Array.isArray(proposal.executedWitnessIds), true);
     assert.equal(proposal.executedWitnessIds.length > 0, true);
     assert.equal(state.widgets.some(row => row.id === "proposed_root" && row.context === "ctx.platform"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("widget update writes real save-back witnesses and blocks versioned widget souls", async () => {
+  const { world, server } = await startBlankServer();
+  try {
+    const request = (pathname, body, cookie = "", method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify(body)
+    });
+
+    await request("/api/identities", {
+      id: "identity.aaron",
+      actor: "aaron",
+      label: "Aaron",
+      username: "aaron",
+      password: "aaron",
+      homePerspective: "aaron:personal"
+    });
+    const aaron = await openSession(server.url);
+
+    assert.equal((await request("/api/widgets", {
+      id: "editable_page",
+      kind: "Page",
+      title: "Original title",
+      attach: false
+    }, aaron.cookie)).status, 201);
+
+    defineWidgetVersion(world, {
+      actor: "system",
+      owner: "aaron",
+      soul: "versioned_banner",
+      version: "versioned_banner_v1",
+      kind: "Text",
+      props: { text: "Versioned banner" }
+    });
+    activateWidgetVersion(world, { actor: "system", soul: "versioned_banner", version: "versioned_banner_v1" });
+
+    const updated = await request("/api/widgets/editable_page", { title: "Updated title" }, aaron.cookie, "PATCH");
+    assert.equal(updated.status, 200);
+    const updatedBody = await updated.json();
+    assert.equal(updatedBody.widget.props.title, "Updated title");
+
+    const state = await fetch(`${server.url}/api/bootstrap-state`, { headers: { cookie: aaron.cookie } }).then(r => r.json());
+    assert.equal(state.widgets.some(row => row.id === "editable_page" && row.props?.title === "Updated title"), true);
+    assert.equal(world.allWitnesses().some(w => w.process === "widget.update" && w.body?.widget?.id === "editable_page"), true);
+    assert.equal(world.allWitnesses().some(w => w.process === "updateWidget" && w.body?.id === "editable_page"), true);
+
+    const blocked = await request("/api/widgets/versioned_banner", { text: "Nope" }, aaron.cookie, "PATCH");
+    assert.equal(blocked.status, 409);
+    const blockedBody = await blocked.json();
+    assert.equal(blockedBody.error, "versioned widgets must be edited through widget versions");
+  } finally {
+    await server.close();
+  }
+});
+
+test("bootstrap context composition endpoints expose scope state and lower contextual refs across covered authoring flows", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const post = (pathname, body, method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const model = await fetch(`${server.url}/api/bootstrap-model`).then(response => response.json());
+    const backendHost = model.backendHosts[0]?.id;
+    const frontendHost = model.frontendHosts[0]?.id;
+
+    assert.equal((await post("/api/contexts", { id: "ctx.source", label: "Source" })).status, 201);
+    assert.equal((await post("/api/contexts", { id: "ctx.target", label: "Target", parent: "ctx.source" })).status, 201);
+    assert.equal((await post("/api/widgets", { id: "page_root", kind: "Page", title: "Home", attach: false, context: "ctx.source" })).status, 201);
+    assert.equal((await post("/api/widgets", { id: "shell_box", kind: "Box", attach: false, context: "ctx.target" })).status, 201);
+    assert.equal((await post("/api/widgets", { id: "legacy_shell", kind: "Box", attach: false })).status, 201);
+    assert.equal((await post("/api/widgets", { id: "local_note", kind: "Text", text: "Note", attach: false })).status, 201);
+
+    assert.equal((await post("/api/context-bindings", { context: "ctx.source", name: "homePage", target: "page_root" })).status, 201);
+    assert.equal((await post("/api/context-bindings", { context: "ctx.source", name: "backendNode", target: backendHost })).status, 201);
+    assert.equal((await post("/api/context-bindings", { context: "ctx.source", name: "frontendNode", target: frontendHost })).status, 201);
+    assert.equal((await post("/api/context-exports", { context: "ctx.source", name: "homePage", target: "page_root" })).status, 201);
+    assert.equal((await post("/api/context-exports", { context: "ctx.source", name: "backendNode", target: backendHost })).status, 201);
+    assert.equal((await post("/api/context-exports", { context: "ctx.source", name: "frontendNode", target: frontendHost })).status, 201);
+    assert.equal((await post("/api/context-imports", { context: "ctx.target", sourceContext: "ctx.source", exportName: "homePage", name: "landingPage" })).status, 201);
+    assert.equal((await post("/api/context-imports", { context: "ctx.target", sourceContext: "ctx.source", exportName: "backendNode", name: "backendAlias" })).status, 201);
+    assert.equal((await post("/api/context-imports", { context: "ctx.target", sourceContext: "ctx.source", exportName: "frontendNode", name: "frontendAlias" })).status, 201);
+    assert.equal((await post("/api/context-bindings", { context: "ctx.target", name: "shellBox", target: "shell_box" })).status, 201);
+    assert.equal((await post("/api/context-bindings", { context: "ctx.target", name: "legacyShell", target: "legacy_shell" })).status, 201);
+
+    const childWidget = await post("/api/widgets", {
+      id: "shell_child",
+      kind: "Text",
+      context: "ctx.target",
+      parentRef: "shellBox",
+      text: "Child"
+    });
+    assert.equal(childWidget.status, 201);
+    const childWidgetBody = await childWidget.json();
+    assert.equal(childWidgetBody.widget.parent, "shell_box");
+    const legacyChildWidget = await post("/api/widgets", {
+      id: "legacy_child",
+      kind: "Text",
+      context: "ctx.target",
+      parentRef: "legacyShell",
+      text: "Legacy Child"
+    });
+    assert.equal(legacyChildWidget.status, 201);
+    const legacyChildWidgetBody = await legacyChildWidget.json();
+    assert.equal(legacyChildWidgetBody.widget.parent, "legacy_shell");
+
+    const createdProgram = await post("/api/frontend-programs", {
+      id: "landing_program",
+      context: "ctx.target",
+      rootWidgetRef: "landingPage"
+    });
+    assert.equal(createdProgram.status, 201);
+    const canonicalProgram = await post("/api/frontend-programs", {
+      id: "canonical_program",
+      context: "ctx.target",
+      rootWidget: "page_root"
+    });
+    assert.equal(canonicalProgram.status, 201);
+    assert.equal((await post("/api/context-bindings", { context: "ctx.target", name: "landingProgram", target: "landing_program" })).status, 201);
+
+    const createdRunner = await post("/api/server-runners", {
+      id: "demo_server",
+      context: "ctx.target",
+      backendHostRef: "backendAlias",
+      frontendHostRef: "frontendAlias"
+    });
+    assert.equal(createdRunner.status, 201);
+    assert.equal((await post("/api/context-bindings", { context: "ctx.target", name: "runnerNode", target: "demo_server" })).status, 201);
+
+    const createdRoute = await post("/api/routes", {
+      id: "landing_route",
+      context: "ctx.target",
+      path: "/landing",
+      method: "GET",
+      handler: "page.home",
+      servesRef: "landingProgram",
+      rootWidgetRef: "landingPage"
+    });
+    assert.equal(createdRoute.status, 201);
+    assert.equal((await post("/api/context-bindings", { context: "ctx.target", name: "landingRoute", target: "landing_route" })).status, 201);
+
+    const createdServe = await post("/api/serve-mounts", {
+      context: "ctx.target",
+      serverRunnerRef: "runnerNode",
+      routeRef: "landingRoute"
+    });
+    assert.equal(createdServe.status, 201);
+
+    const unresolved = await post("/api/frontend-programs", {
+      id: "broken_program",
+      context: "ctx.target",
+      rootWidgetRef: "missingPage"
+    });
+    assert.equal(unresolved.status, 400);
+    const unresolvedParent = await post("/api/widgets", {
+      id: "broken_child",
+      kind: "Text",
+      context: "ctx.target",
+      parentRef: "missingShell",
+      text: "Broken"
+    });
+    assert.equal(unresolvedParent.status, 400);
+
+    const collision = await post("/api/context-bindings", { context: "ctx.target", name: "landingPage", target: "local_note" });
+    assert.equal(collision.status, 409);
+    const foreignScopedBind = await post("/api/context-bindings", { context: "ctx.target", name: "foreignPage", target: "page_root" });
+    assert.equal(foreignScopedBind.status, 400);
+
+    const state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(state.contextBindings.some(row => row.context === "ctx.source" && row.name === "homePage" && row.target === "page_root"), true);
+    assert.equal(state.contextExports.some(row => row.context === "ctx.source" && row.name === "homePage" && row.target === "page_root"), true);
+    assert.equal(state.contextImports.some(row => row.context === "ctx.target" && row.sourceContext === "ctx.source" && row.exportName === "homePage" && row.name === "landingPage"), true);
+    assert.equal(state.contextScopes.some(row => row.context === "ctx.target" && row.name === "landingPage" && row.target === "page_root" && row.sourceKind === "import" && row.sourceContext === "ctx.source" && row.exportName === "homePage"), true);
+    assert.equal(state.contextScopes.some(row => row.context === "ctx.target" && row.name === "homePage"), false);
+    assert.equal(state.contextScopes.some(row => row.context === "ctx.target" && row.name === "backendAlias" && row.target === backendHost && row.sourceKind === "import"), true);
+    assert.equal(state.widgets.some(row => row.id === "shell_child" && row.context === "ctx.target"), true);
+    assert.equal(state.widgets.some(row => row.id === "legacy_child" && row.context === "ctx.target"), true);
+    assert.equal(state.frontendPrograms.some(row => row.id === "landing_program" && row.rootWidget === "page_root"), true);
+    assert.equal(state.frontendPrograms.some(row => row.id === "canonical_program" && row.rootWidget === "page_root"), true);
+    assert.equal(state.serverRunners.some(row => row.id === "demo_server" && row.backendHost === backendHost && row.frontendHost === frontendHost), true);
+    assert.equal(state.routes.some(row => row.id === "landing_route" && row.serves === "landing_program" && row.params?.rootWidget === "page_root"), true);
+    assert.equal(state.servedRoutes.some(row => row.id === "landing_route" && row.serverRunner === "demo_server"), true);
+
+    assert.equal((await post("/api/context-imports", { context: "ctx.target", sourceContext: "ctx.source", exportName: "homePage", name: "landingPage" }, "DELETE")).status, 200);
+    assert.equal((await post("/api/context-exports", { context: "ctx.source", name: "homePage", target: "page_root" }, "DELETE")).status, 200);
+    assert.equal((await post("/api/context-bindings", { context: "ctx.source", name: "homePage", target: "page_root" }, "DELETE")).status, 200);
   } finally {
     await server.close();
   }

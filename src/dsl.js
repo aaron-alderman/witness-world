@@ -10,10 +10,17 @@ import {
   grantStewardship,
   revokeStewardship,
   createProposal,
+  bindContextName,
+  exportContextName,
   defineCapability,
   ensureCapabilityDefinition,
+  importContextName,
   installCapability,
   removeCapability,
+  validateContextBinding,
+  validateContextExport,
+  validateContextImport,
+  resolveContextualRef,
   createServerRunner,
   createIdentity,
   defineRoute,
@@ -117,6 +124,22 @@ export function applyWitnessDocs(world, docs) {
   return witnesses;
 }
 
+function resolveDocRef(world, values, {
+  contextField = "context",
+  idField,
+  refField,
+  label
+}) {
+  const resolved = resolveContextualRef(world.allWitnesses(), {
+    context: values[contextField] ?? null,
+    id: values[idField] ?? null,
+    ref: values[refField] ?? null,
+    label
+  });
+  if (!resolved.ok) throw new Error(resolved.error);
+  return resolved.target;
+}
+
 function annotateSource(world, doc, context) {
   if (!doc.file) return [];
   const values = { ...(context.defaults ?? {}), ...(doc.values ?? {}) };
@@ -155,6 +178,18 @@ function sourceTargets(kind, values) {
   if (kind === "capabilityInstall") {
     if (values.capability) ids.push(values.capability);
     if (values.target) ids.push(values.target);
+  }
+  if (kind === "contextBinding") {
+    if (values.context) ids.push(values.context);
+    if (values.target) ids.push(values.target);
+  }
+  if (kind === "contextExport") {
+    if (values.context) ids.push(values.context);
+    if (values.target) ids.push(values.target);
+  }
+  if (kind === "contextImport") {
+    if (values.context) ids.push(values.context);
+    if (values.sourceContext) ids.push(values.sourceContext);
   }
   if (kind === "perspective" && values.context) ids.push(values.context);
   if (kind === "stewardship" && values.target) ids.push(values.target);
@@ -265,6 +300,58 @@ function applyDoc(world, { kind, values }, context) {
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
       });
 
+    case "contextBinding":
+      {
+        const binding = {
+          context: req(valuesWithDefaults, "context"),
+          name: req(valuesWithDefaults, "name"),
+          target: req(valuesWithDefaults, "target")
+        };
+        const validation = validateContextBinding(world.allWitnesses(), binding);
+        if (!validation.ok) throw new Error(validation.error);
+      }
+      return bindContextName(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        context: req(valuesWithDefaults, "context"),
+        name: req(valuesWithDefaults, "name"),
+        target: req(valuesWithDefaults, "target")
+      });
+
+    case "contextExport":
+      {
+        const contextExport = {
+          context: req(valuesWithDefaults, "context"),
+          name: req(valuesWithDefaults, "name"),
+          target: req(valuesWithDefaults, "target")
+        };
+        const validation = validateContextExport(world.allWitnesses(), contextExport);
+        if (!validation.ok) throw new Error(validation.error);
+      }
+      return exportContextName(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        context: req(valuesWithDefaults, "context"),
+        name: req(valuesWithDefaults, "name"),
+        target: req(valuesWithDefaults, "target")
+      });
+
+    case "contextImport": {
+      const contextImport = {
+        context: req(valuesWithDefaults, "context"),
+        sourceContext: req(valuesWithDefaults, "sourceContext"),
+        exportName: req(valuesWithDefaults, "exportName"),
+        name: valuesWithDefaults.name ?? valuesWithDefaults.exportName
+      };
+      const validation = validateContextImport(world.allWitnesses(), contextImport);
+      if (!validation.ok) throw new Error(validation.error);
+      return importContextName(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        context: contextImport.context,
+        sourceContext: contextImport.sourceContext,
+        exportName: contextImport.exportName,
+        name: validation.name ?? contextImport.name
+      });
+    }
+
     case "stewardship":
       return (valuesWithDefaults.revoke === true ? revokeStewardship : grantStewardship)(world, {
         actor: req(valuesWithDefaults, "actor"),
@@ -297,6 +384,8 @@ function applyDoc(world, { kind, values }, context) {
         config: valuesWithDefaults.config ?? [],
         internals: valuesWithDefaults.internals ?? [],
         authority: valuesWithDefaults.authority ?? [],
+        providerAdapters: valuesWithDefaults.providerAdapters ?? [],
+        witnessContract: valuesWithDefaults.witnessContract ?? null,
         placement: valuesWithDefaults.placement ?? [],
         context: valuesWithDefaults.context ?? null,
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
@@ -362,11 +451,20 @@ function applyDoc(world, { kind, values }, context) {
       return createServerRunner(world, {
         actor: req(valuesWithDefaults, "actor"),
         id: req(valuesWithDefaults, "id"),
-        backendHost: valuesWithDefaults.backendHost ?? null,
-        frontendHost: valuesWithDefaults.frontendHost ?? null,
+        backendHost: resolveDocRef(world, valuesWithDefaults, {
+          idField: "backendHost",
+          refField: "backendHostRef",
+          label: "backend host"
+        }) ?? null,
+        frontendHost: resolveDocRef(world, valuesWithDefaults, {
+          idField: "frontendHost",
+          refField: "frontendHostRef",
+          label: "frontend host"
+        }) ?? null,
         handlerSet: valuesWithDefaults.handlerSet ?? null,
         actors: valuesWithDefaults.actors ?? null,
         storage: valuesWithDefaults.storage ?? null,
+        runtimeConfig: valuesWithDefaults.runtimeConfig ?? null,
         allowActorHeader: valuesWithDefaults.allowActorHeader === true,
         context: valuesWithDefaults.context ?? null,
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
@@ -395,10 +493,14 @@ function applyDoc(world, { kind, values }, context) {
         actor: req(valuesWithDefaults, "actor"),
         id: req(valuesWithDefaults, "id"),
         path: req(valuesWithDefaults, "path"),
-        serves: req(valuesWithDefaults, "serves"),
+        serves: resolveDocRef(world, valuesWithDefaults, {
+          idField: "serves",
+          refField: "servesRef",
+          label: "route target"
+        }) ?? req(valuesWithDefaults, "serves"),
         method: valuesWithDefaults.method ?? "GET",
         handler: valuesWithDefaults.handler ?? null,
-        params: valuesWithDefaults.params ?? null,
+        params: routeParams(world, valuesWithDefaults),
         context: valuesWithDefaults.context ?? null,
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
       });
@@ -406,8 +508,16 @@ function applyDoc(world, { kind, values }, context) {
     case "serve":
       return serveRoute(world, {
         actor: req(valuesWithDefaults, "actor"),
-        serverRunner: req(valuesWithDefaults, "serverRunner"),
-        route: req(valuesWithDefaults, "route")
+        serverRunner: resolveDocRef(world, valuesWithDefaults, {
+          idField: "serverRunner",
+          refField: "serverRunnerRef",
+          label: "server runner"
+        }) ?? req(valuesWithDefaults, "serverRunner"),
+        route: resolveDocRef(world, valuesWithDefaults, {
+          idField: "route",
+          refField: "routeRef",
+          label: "route"
+        }) ?? req(valuesWithDefaults, "route")
       });
 
     case "frontendRunner":
@@ -515,7 +625,11 @@ function applyDoc(world, { kind, values }, context) {
       return defineFrontendProgram(world, {
         actor: req(valuesWithDefaults, "actor"),
         id: req(valuesWithDefaults, "id"),
-        rootWidget: req(valuesWithDefaults, "rootWidget"),
+        rootWidget: resolveDocRef(world, valuesWithDefaults, {
+          idField: "rootWidget",
+          refField: "rootWidgetRef",
+          label: "root widget"
+        }) ?? req(valuesWithDefaults, "rootWidget"),
         context: valuesWithDefaults.context ?? null,
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
       });
@@ -561,18 +675,26 @@ function applyWidgetLike(world, values, kind) {
   const actor = req(values, "actor");
   const id = req(values, "id");
   const children = values.children ?? [];
+  const parent = resolveDocRef(world, values, {
+    idField: "parent",
+    refField: "parentRef",
+    label: "parent widget"
+  });
   const define = defineWidget(world, {
     actor,
     id,
     kind,
-    props: collectProps(values, ["actor", "owner", "context", "id", "kind", "children", "slot", "order", "program"]),
+    props: collectProps(values, ["actor", "owner", "context", "id", "kind", "children", "slot", "order", "program", "parent", "parentRef"]),
     context: values.context ?? null,
     owner: values.owner ?? values.actor
   });
+  const parentAttachment = parent
+    ? [attachWidget(world, { actor, parent, child: id, slot: values.slot ?? "children", order: Number.isFinite(Number(values.order)) ? Number(values.order) : 0 })]
+    : [];
   const attachments = children.map((child, order) =>
     attachWidget(world, { actor, parent: id, child, slot: values.slot ?? "children", order })
   );
-  return [define, ...attachments];
+  return [define, ...parentAttachment, ...attachments];
 }
 
 function applyFrontendStep(world, values) {
@@ -591,6 +713,20 @@ function applyFrontendStep(world, values) {
     repeat: values.repeat ?? null,
     after: Array.isArray(values.after) ? values.after : null
   });
+}
+
+function routeParams(world, values) {
+  const params = values.params && typeof values.params === "object" ? { ...values.params } : {};
+  const rootWidget = resolveDocRef(world, values, {
+    idField: "rootWidget",
+    refField: "rootWidgetRef",
+    label: "root widget"
+  });
+  if (rootWidget) params.rootWidget = rootWidget;
+  if (values.page != null) params.page = values.page;
+  if (values.frontendProgram != null) params.frontendProgram = values.frontendProgram;
+  if (values.liveProjection === true) params.liveProjection = true;
+  return Object.keys(params).length ? params : null;
 }
 
 function collectProps(values, reserved) {

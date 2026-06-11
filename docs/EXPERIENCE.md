@@ -83,6 +83,10 @@ The system should not collapse into one global namespace.
 
 Contexts are how the user understands what belongs together and what has authority to act together.
 
+The first honest slice now exists through explicit local bindings plus explicit export/import edges.
+What is still missing is the stronger product-wide rule where contexts become hard naming boundaries rather than a composition layer that still coexists with canonical-id compatibility.
+In practice today that means contextual naming is real on the covered bootstrap/DSL surfaces, but it is still a first slice with bounded ref-lowering coverage and an explicit compatibility bypass through canonical ids.
+
 Contexts should eventually carry:
 
 - names
@@ -347,6 +351,25 @@ The guided path and the pro path should both lead to the same worldview.
 
 Sourcery should evolve from a bootstrap tutorial into a first-class contextual companion.
 
+The first real contextual slice now exists at page scope:
+
+- bootstrap and the live app can tell when the current guidance belongs on the other surface
+- the shipped Todo path now also hands off into the real `/world` operating surface rather than ending at the app page
+- the world page now hosts its own guidance panel backed by the same persisted tutorial progress model
+- guidance can be disabled and re-enabled per page on those three real surfaces
+- bootstrap can now keep those disabled guidance surfaces visible and directly recoverable even when the disabled page is not currently open
+- the current authored step can be replayed from here on those surfaces, and backing onto an already-complete step now pins replay instead of immediately skipping forward again
+- authored tutorial concepts are revealed progressively on those surfaces as the relevant steps become current
+- bootstrap now surfaces suggested next moves from actual world, session, and tutorial state without replacing the underlying controls
+
+The current concept slice is still intentionally narrow:
+
+- concepts are authored on the tutorial rather than inferred from arbitrary world state
+- reveal order follows real tutorial progress rather than a broader concept graph
+- ambient curation is still bootstrap-first rather than a cross-surface recommendation layer
+- restart-from-here only replays guidance for the authored step; it does not roll back live app state or witnessed authored state
+- the world-page slice is still page-scoped guidance on one operating surface, not true world/section/widget scope semantics
+
 ### Desired properties
 
 - always truthful
@@ -406,6 +429,17 @@ The system should eventually have the search/command layer old desktop operating
 - search commands/actions
 - search hidden/disabled surfaces
 
+The first real shared slice now exists on the world page and on rendered app pages:
+
+- projected graph objects are searchable
+- current rendered widgets are searchable on the live page and can be inspected in place
+- real surface handoffs are searchable
+- disabled tutorial guidance can now stay visible there as recovery commands derived from persisted tutorial state
+- the same world surface can now also host the tutorial's final real guidance handoff instead of acting only as a secondary inspector
+- live-page results are backed by rendered widget ancestry plus the same projected world graph, not by a second command registry
+
+What is still missing is the universal version of this idea across every shell, page, widget, and plugin surface.
+
 ### Live editable inspector
 
 The long-term direction includes a devtools-like inspector that is not merely observational.
@@ -416,6 +450,19 @@ It should:
 - map visible elements back to authored widgets/definitions
 - edit those structures live
 - save them back into the world
+
+The first honest slice now exists on rendered app pages:
+
+- `Inspect Page` can be toggled directly on the live surface
+- right-clicking a rendered widget can select and highlight it
+- the inspector can explain the selected widget and hand off into world, witness, source, and process views
+- versioned widgets can be activated or rolled back in place from that live inspector
+
+What is still missing is the actual editable-everywhere part:
+
+- hide/replace/widget-structure mutation
+- property editing with save-back into the world
+- broader shell coverage beyond the current rendered app surfaces
 
 ### Multi-shell environment
 
@@ -455,3 +502,30 @@ See also:
 
 - [ACADEMY.md](/C:/Users/aaron/Documents/world/docs/ACADEMY.md)
 - [FIRST-5-MINUTES.md](/C:/Users/aaron/Documents/world/docs/FIRST-5-MINUTES.md)
+
+---
+
+## Eden Canvas Roadmap
+
+### Shipped now
+
+- [X] the Todo facade now has a concrete spatial counterpart in `/eden-canvas`
+- [X] the first reveal is physical: the user lands on the Todo board, sees the zoom-out prompt, and discovers the neighborhood by camera movement
+- [X] the first adjacent truths are present around the board: Tree, Personal Box, Edit Page, Process View, Versions, World Graph, and `goto` transports
+- [X] the first-agency layer is visible through action chips and locked gates rather than hidden future promises
+- [X] the starter board remains a real live surface hosted inside the neighborhood instead of a hand-waved mock projection
+- [X] first-session chapter/checkpoint copy is now authored and rendered from projected data
+- [X] the Personal Box is now a real first-owned patch where the user can sign in and add, edit, and delete local widgets inside Eden
+- [X] `Edit Page` now mutates a real page chrome/theme model for the live Todo surface, including theme, material, and typography changes from inside Eden
+- [X] `Versions` now drives real published/draft/last-good actions for the canonical starter seam inside the live Todo board, including open draft, publish current, and restore last good
+
+### Next slices
+
+- [ ] map the live Todo board into stable projected sub-surfaces so list, form, witnesses, and notes can pop into authored relief
+- [ ] expose editable-everywhere right-click inspection and page/widget mutation directly from Eden
+
+### Later slices
+
+- [ ] add the direct expert shortcut (`F1`, `whoami`, edit the user identity, reveal `sourcerer = true`)
+- [ ] add in-context plugin/capability install flows from the page where the need is discovered
+- [ ] deepen shell transitions so page-to-page travel feels like movement inside one continuous world

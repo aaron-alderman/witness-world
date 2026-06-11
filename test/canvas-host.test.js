@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createWorld } from "../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
+import { moduleProjectors, removeCapability } from "../src/modules.js";
 import { applyWitnessToml } from "../src/dsl.js";
 
 async function tempStore() {
@@ -29,7 +30,7 @@ async function openSession(serverUrl, { username = "aaron", password = username 
   };
 }
 
-async function startCanvasServer() {
+async function startCanvasServer({ extra = "", runtimeRoot = null, runtimeConfig = null, aaronHomeContext = null, callanHomeContext = null } = {}) {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
@@ -40,6 +41,7 @@ id = "canvas_server"
 backendHost = "backendHost"
 frontendHost = "frontendHost"
 allowActorHeader = true
+${runtimeConfig ? `runtimeConfig = { ${runtimeConfig} }` : ""}
 
 [[widget]]
 actor = "adam"
@@ -53,6 +55,7 @@ id = "identity.aaron"
 label = "Aaron"
 username = "aaron"
 password = "aaron"
+${aaronHomeContext ? `homeContext = "${aaronHomeContext}"` : ""}
 homePerspective = "aaron:personal"
 
 [[identity]]
@@ -61,6 +64,7 @@ id = "identity.callan"
 label = "Callan"
 username = "callan"
 password = "callan"
+${callanHomeContext ? `homeContext = "${callanHomeContext}"` : ""}
 homePerspective = "callan:personal"
 
 [[route]]
@@ -166,13 +170,15 @@ handler = "witnesses.list"
 actor = "adam"
 serverRunner = "canvas_server"
 route = "witnesses_route"
+${extra}
 `);
+  const root = runtimeRoot || path.dirname(await tempStore());
   const server = await startServer(world, {
     actor: "adam",
     serverRunnerId: "canvas_server",
-    runtimeRoot: path.dirname(await tempStore())
+    runtimeRoot: root
   });
-  return { world, server };
+  return { world, server, runtimeRoot: root };
 }
 
 const asAaron = { "x-witness-actor": "aaron", "content-type": "application/json" };
@@ -182,6 +188,103 @@ function postProcess(server, process, params, headers = asAaron) {
     method: "POST",
     headers,
     body: JSON.stringify({ process, params })
+  });
+}
+
+function uploadAsset(server, {
+  perspective,
+  bytes = Buffer.from("hello world"),
+  fileName = "hello.txt",
+  contentType = "text/plain",
+  headers = {},
+  multipart = false,
+  fields = {}
+} = {}) {
+  if (multipart) {
+    const form = new FormData();
+    const file = new File([bytes], fileName, { type: contentType });
+    form.set("file", file, fileName);
+    form.set("perspective", perspective || "");
+    for (const [key, value] of Object.entries(fields)) {
+      if (value != null) form.set(key, String(value));
+    }
+    return fetch(`${server.url}/api/assets?perspective=${encodeURIComponent(perspective || "")}`, {
+      method: "POST",
+      headers,
+      body: form
+    });
+  }
+  return fetch(`${server.url}/api/assets?perspective=${encodeURIComponent(perspective || "")}`, {
+    method: "POST",
+    headers: {
+      "content-type": contentType,
+      "x-witness-file-name": fileName,
+      ...headers
+    },
+    body: bytes
+  });
+}
+
+function attachAssetToTarget(server, {
+  assetId,
+  target,
+  perspective = null,
+  headers = {}
+} = {}) {
+  return fetch(`${server.url}/api/assets/${encodeURIComponent(assetId)}/attachments`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...headers
+    },
+    body: JSON.stringify({ target, perspective })
+  });
+}
+
+function detachAssetFromTarget(server, {
+  assetId,
+  target,
+  headers = {}
+} = {}) {
+  return fetch(`${server.url}/api/assets/${encodeURIComponent(assetId)}/attachments?target=${encodeURIComponent(target || "")}`, {
+    method: "DELETE",
+    headers
+  });
+}
+
+function blobRequest(server, {
+  pathname = "/api/fs/blobs/content",
+  method = "GET",
+  query = {},
+  bytes = null,
+  headers = {}
+} = {}) {
+  const url = new URL(`${server.url}${pathname}`);
+  for (const [key, value] of Object.entries(query)) {
+    if (value != null) url.searchParams.set(key, String(value));
+  }
+  return fetch(url, {
+    method,
+    headers,
+    body: bytes
+  });
+}
+
+function streamRequest(server, {
+  pathname = "/api/fs/streams/content",
+  method = "GET",
+  query = {},
+  body = null,
+  headers = {}
+} = {}) {
+  const url = new URL(`${server.url}${pathname}`);
+  for (const [key, value] of Object.entries(query)) {
+    if (value != null) url.searchParams.set(key, String(value));
+  }
+  return fetch(url, {
+    method,
+    headers,
+    body
   });
 }
 
@@ -228,6 +331,837 @@ test("canvas routes are themselves witnessed as route things", async () => {
     const routePaths = witnesses.filter(w => w.process === "defineRoute").map(w => w.body.path);
     assert(routePaths.includes("/canvas"));
     assert(routePaths.includes("/api/canvas/process"));
+  } finally {
+    await server.close();
+  }
+});
+
+test("asset upload stores bytes, projects metadata, and serves private content", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-assets-explicit-"));
+  const { world, server } = await startCanvasServer({
+    runtimeRoot,
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:projects"
+label = "Projects"
+
+[[perspective]]
+actor = "aaron"
+id = "projects:view"
+title = "Projects View"
+context = "context:projects"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const uploaded = await uploadAsset(server, {
+      perspective: "projects:view",
+      bytes: Buffer.from("alpha file"),
+      fileName: "brief.txt",
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(uploaded.status, 201);
+    const body = await uploaded.json();
+    assert.equal(body.asset.title, "brief.txt");
+    assert.equal(body.asset.mimeType, "text/plain");
+    assert.equal(body.asset.context, "context:projects");
+    assert.equal(world.project(moduleProjectors.assets).find(row => row.id === body.asset.id).storageKey, body.asset.storageKey);
+    assert.equal(world.project(moduleProjectors.assets).find(row => row.id === body.asset.id).downloadUrl, body.asset.downloadUrl);
+
+    const stored = await fs.readFile(path.join(runtimeRoot, "assets", encodeURIComponent(body.asset.id), "blob"), "utf8");
+    assert.equal(stored, "alpha file");
+
+    const content = await fetch(`${server.url}${body.asset.contentUrl}`, { headers: { cookie: login.cookie } });
+    assert.equal(content.status, 200);
+    assert.equal(content.headers.get("content-type"), "text/plain");
+    assert.match(content.headers.get("content-disposition") || "", /^inline;/);
+    assert.equal(await content.text(), "alpha file");
+
+    const download = await fetch(`${server.url}${body.asset.downloadUrl}`, { headers: { cookie: login.cookie } });
+    assert.equal(download.status, 200);
+    assert.match(download.headers.get("content-disposition") || "", /^attachment;/);
+    assert.equal(await download.text(), "alpha file");
+
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+    const forbidden = await fetch(`${server.url}${body.asset.contentUrl}`, { headers: { cookie: callan.cookie } });
+    assert.equal(forbidden.status, 403);
+  } finally {
+    await server.close();
+  }
+});
+
+test("asset attachments can be created, inspected, projected, and removed over HTTP", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-assets-attach-"));
+  const { world, server } = await startCanvasServer({
+    runtimeRoot,
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:projects"
+label = "Projects"
+
+[[perspective]]
+actor = "aaron"
+id = "projects:view"
+title = "Projects View"
+context = "context:projects"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const createdThing = await postProcess(server, "canvas.createThing", {
+      perspective: "projects:view",
+      name: "Proposal",
+      x: 120,
+      y: 140
+    }, { cookie: login.cookie, "content-type": "application/json" });
+    assert.equal(createdThing.status, 200);
+    const proposalThing = (await createdThing.json()).witness.body.thing;
+
+    const uploaded = await uploadAsset(server, {
+      perspective: "projects:view",
+      bytes: Buffer.from("attach me"),
+      fileName: "attach.txt",
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(uploaded.status, 201);
+    const uploadedBody = await uploaded.json();
+
+    const attached = await attachAssetToTarget(server, {
+      assetId: uploadedBody.asset.id,
+      target: proposalThing,
+      perspective: "projects:view",
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(attached.status, 201);
+
+    const listed = await fetch(`${server.url}/api/assets/${encodeURIComponent(uploadedBody.asset.id)}/attachments`, {
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(listed.status, 200);
+    const listedBody = await listed.json();
+    assert.equal(listedBody.attachments.length, 1);
+    assert.equal(listedBody.attachments[0].id, proposalThing);
+    assert.equal(listedBody.attachments[0].kind, null);
+
+    const assetRow = world.project(moduleProjectors.assets).find(row => row.id === uploadedBody.asset.id);
+    assert.deepEqual(assetRow.attachedTo, [proposalThing]);
+    assert.equal(assetRow.attachmentCount, 1);
+
+    const canvas = await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent("projects:view")}`, {
+      headers: { cookie: login.cookie }
+    }).then(response => response.json());
+    const proposalNode = canvas.canvas.instances.find(row => row.thing === proposalThing);
+    assert.equal(proposalNode.attachedAssets.length, 1);
+    assert.equal(proposalNode.attachedAssets[0].id, uploadedBody.asset.id);
+
+    const duplicate = await attachAssetToTarget(server, {
+      assetId: uploadedBody.asset.id,
+      target: proposalThing,
+      perspective: "projects:view",
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(duplicate.status, 409);
+    assert.equal((await duplicate.json()).error, "asset already attached to target");
+
+    const detached = await detachAssetFromTarget(server, {
+      assetId: uploadedBody.asset.id,
+      target: proposalThing,
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(detached.status, 200);
+
+    const afterDetach = world.project(moduleProjectors.assets).find(row => row.id === uploadedBody.asset.id);
+    assert.deepEqual(afterDetach.attachedTo, []);
+    assert.equal(afterDetach.attachmentCount, 0);
+  } finally {
+    await server.close();
+  }
+});
+
+test("asset upload accepts multipart form-data and witnesses multipart stream metrics", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-assets-multipart-"));
+  const { world, server } = await startCanvasServer({
+    runtimeRoot,
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:projects"
+label = "Projects"
+
+[[perspective]]
+actor = "aaron"
+id = "projects:view"
+title = "Projects View"
+context = "context:projects"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const uploaded = await uploadAsset(server, {
+      perspective: "projects:view",
+      bytes: Buffer.from("multipart body"),
+      fileName: "multipart.txt",
+      contentType: "text/plain",
+      multipart: true,
+      fields: { dropContext: "context:projects" },
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(uploaded.status, 201);
+    const body = await uploaded.json();
+    assert.equal(body.asset.title, "multipart.txt");
+    assert.equal(body.asset.mimeType, "text/plain");
+
+    const assetWitness = world.allWitnesses().find(witness => witness.process === "asset.upload" && witness.body?.id === body.asset.id);
+    assert(assetWitness);
+    assert.equal(assetWitness.body.uploadKind, "multipart");
+    assert.equal(assetWitness.body.declaredSizeBytes, Buffer.byteLength("multipart body"));
+    assert.equal(assetWitness.body.chunkCount >= 1, true);
+    assert.equal(assetWitness.body.maxChunkBytes >= Buffer.byteLength("multipart body"), true);
+    assert.equal(Number.isFinite(assetWitness.body.writeHighWaterMarkBytes), true);
+
+    const diagnostics = await fetch(`${server.url}/api/backend-seams`, {
+      headers: { cookie: login.cookie }
+    }).then(response => response.json());
+    assert.equal(diagnostics.assets.multipartUploadCount, 1);
+    assert.equal(diagnostics.assets.rawUploadCount, 0);
+    assert.equal(diagnostics.assets.totalBytes, Buffer.byteLength("multipart body"));
+    assert.equal(diagnostics.streams.maxChunkBytes >= Buffer.byteLength("multipart body"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("asset upload rejects missing filename and empty bodies with witnessed failures", async () => {
+  const { world, server } = await startCanvasServer({
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:projects"
+label = "Projects"
+
+[[perspective]]
+actor = "aaron"
+id = "projects:view"
+title = "Projects View"
+context = "context:projects"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const missingName = await fetch(`${server.url}/api/assets?perspective=${encodeURIComponent("projects:view")}`, {
+      method: "POST",
+      headers: {
+        cookie: login.cookie,
+        "content-type": "text/plain"
+      },
+      body: Buffer.from("unnamed")
+    });
+    assert.equal(missingName.status, 400);
+    assert.equal((await missingName.json()).error, "missing x-witness-file-name header");
+
+    const empty = await uploadAsset(server, {
+      perspective: "projects:view",
+      bytes: Buffer.alloc(0),
+      fileName: "empty.txt",
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(empty.status, 400);
+    assert.equal((await empty.json()).error, "empty upload body");
+
+    assert(world.allWitnesses().some(w => w.process === "asset.upload.failed" && w.body.reason === "missing filename header"));
+    assert(world.allWitnesses().some(w => w.process === "asset.upload.failed" && w.body.reason === "empty upload body"));
+  } finally {
+    await server.close();
+  }
+});
+
+test("asset upload rejects mismatched explicit drop context and missing backend capabilities", async () => {
+  const { world, server } = await startCanvasServer({
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:projects"
+label = "Projects"
+
+[[context]]
+actor = "aaron"
+id = "context:other"
+label = "Other"
+
+[[perspective]]
+actor = "aaron"
+id = "projects:view"
+title = "Projects View"
+context = "context:projects"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const mismatched = await uploadAsset(server, {
+      perspective: "projects:view",
+      bytes: Buffer.from("bad context"),
+      fileName: "wrong.txt",
+      headers: {
+        cookie: login.cookie,
+        "x-witness-drop-context": "context:other"
+      }
+    });
+    assert.equal(mismatched.status, 409);
+    assert.equal((await mismatched.json()).error, "drop context does not match perspective context");
+
+    removeCapability(world, {
+      actor: "adam",
+      capability: "upload.asset",
+      target: "backendHost",
+      targetKind: "host"
+    });
+    const missingCapability = await uploadAsset(server, {
+      perspective: "projects:view",
+      bytes: Buffer.from("after remove"),
+      fileName: "missing.txt",
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(missingCapability.status, 503);
+    const body = await missingCapability.json();
+    assert.equal(body.error, "missing backend capabilities");
+    assert.deepEqual(body.missing, ["upload.asset"]);
+
+    assert(world.allWitnesses().some(w => w.process === "asset.upload.failed" && w.body.reason === "drop context does not match perspective context"));
+    assert(world.allWitnesses().some(w => w.process === "asset.upload.failed" && w.body.reason === "missing backend capabilities"));
+  } finally {
+    await server.close();
+  }
+});
+
+test("fs.blob supports scoped write, folder metadata, listing, read, and recursive delete with stable refs", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-fs-blob-context-"));
+  const { world, server } = await startCanvasServer({
+    runtimeRoot,
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:projects"
+label = "Projects"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const headers = { cookie: login.cookie, "content-type": "text/plain" };
+
+    const write = await blobRequest(server, {
+      method: "PUT",
+      query: { context: "context:projects", path: "docs/brief.txt" },
+      headers,
+      bytes: Buffer.from("brief body")
+    });
+    assert.equal(write.status, 201);
+    const writeBody = await write.json();
+    assert.equal(writeBody.item.path, "docs/brief.txt");
+    assert.equal(writeBody.item.mimeType, "text/plain");
+    assert.equal(writeBody.item.blobRef, "blob:context:context%3Aprojects:docs/brief.txt");
+    assert.equal(writeBody.item.storageKey, "contexts/context%3Aprojects/docs/brief.txt");
+
+    const stored = await fs.readFile(path.join(runtimeRoot, "blobs", "contexts", encodeURIComponent("context:projects"), "docs", "brief.txt", "blob"), "utf8");
+    assert.equal(stored, "brief body");
+
+    const folderMeta = await blobRequest(server, {
+      pathname: "/api/fs/blobs/meta",
+      query: { context: "context:projects", path: "docs" },
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(folderMeta.status, 200);
+    assert.equal((await folderMeta.json()).item.kind, "folder");
+
+    const fileMeta = await blobRequest(server, {
+      pathname: "/api/fs/blobs/meta",
+      query: { context: "context:projects", path: "docs/brief.txt" },
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(fileMeta.status, 200);
+    const fileMetaBody = await fileMeta.json();
+    assert.equal(fileMetaBody.item.contentUrl, "/api/fs/blobs/content?context=context%3Aprojects&path=docs%2Fbrief.txt");
+
+    const list = await blobRequest(server, {
+      pathname: "/api/fs/blobs",
+      query: { context: "context:projects", path: "docs" },
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(list.status, 200);
+    const listed = await list.json();
+    assert.equal(listed.items.length, 1);
+    assert.equal(listed.items[0].name, "brief.txt");
+
+    const read = await blobRequest(server, {
+      query: { context: "context:projects", path: "docs/brief.txt" },
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(read.status, 200);
+    assert.equal(read.headers.get("content-type"), "text/plain");
+    assert.equal(await read.text(), "brief body");
+
+    const deleted = await blobRequest(server, {
+      pathname: "/api/fs/blobs",
+      method: "DELETE",
+      query: { context: "context:projects", path: "docs", recursive: "true" },
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(deleted.status, 200);
+    const afterDelete = await blobRequest(server, {
+      pathname: "/api/fs/blobs/meta",
+      query: { context: "context:projects", path: "docs/brief.txt" },
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(afterDelete.status, 404);
+  } finally {
+    await server.close();
+  }
+});
+
+test("fs.blob rejects path traversal and enforces context authority", async () => {
+  const { world, server } = await startCanvasServer({
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:projects"
+label = "Projects"
+`
+  });
+  try {
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const traversal = await blobRequest(server, {
+      method: "PUT",
+      query: { context: "context:projects", path: "../secret.txt" },
+      headers: { cookie: aaron.cookie, "content-type": "text/plain" },
+      bytes: Buffer.from("nope")
+    });
+    assert.equal(traversal.status, 400);
+    assert.equal((await traversal.json()).error, "blob path traversal is not allowed");
+
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+    const forbidden = await blobRequest(server, {
+      pathname: "/api/fs/blobs",
+      query: { context: "context:projects" },
+      headers: { cookie: callan.cookie }
+    });
+    assert.equal(forbidden.status, 403);
+    assert(world.allObservations().some(w => w.process === "fs.blob.list.failed" && w.body.reason === "actor lacks authority for context"));
+  } finally {
+    await server.close();
+  }
+});
+
+test("fs.blob supports serverRunner-scoped storage for the owning actor", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-fs-blob-runner-"));
+  const { server } = await startCanvasServer({ runtimeRoot });
+  try {
+    const write = await blobRequest(server, {
+      method: "PUT",
+      query: { serverRunner: "canvas_server", path: "ops/log.txt" },
+      headers: { "x-witness-actor": "adam", "content-type": "text/plain" },
+      bytes: Buffer.from("runner log")
+    });
+    assert.equal(write.status, 201);
+    const body = await write.json();
+    assert.equal(body.item.blobRef, "blob:serverRunner:canvas_server:ops/log.txt");
+
+    const meta = await blobRequest(server, {
+      pathname: "/api/fs/blobs/meta",
+      query: { serverRunner: "canvas_server", path: "ops/log.txt" },
+      headers: { "x-witness-actor": "adam" }
+    });
+    assert.equal(meta.status, 200);
+    assert.equal((await meta.json()).item.scopeKind, "serverRunner");
+
+    const read = await blobRequest(server, {
+      query: { serverRunner: "canvas_server", path: "ops/log.txt" },
+      headers: { "x-witness-actor": "adam" }
+    });
+    assert.equal(read.status, 200);
+    assert.equal(await read.text(), "runner log");
+  } finally {
+    await server.close();
+  }
+});
+
+test("fs.stream supports large streamed write, read, and copy without changing blob scope semantics", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-fs-stream-context-"));
+  const { world, server } = await startCanvasServer({
+    runtimeRoot,
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:projects"
+label = "Projects"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const payload = Buffer.alloc(1024 * 1024 + 321, 65);
+
+    const write = await streamRequest(server, {
+      method: "PUT",
+      query: { context: "context:projects", path: "streams/big.bin" },
+      headers: { cookie: login.cookie, "content-type": "application/octet-stream" },
+      body: payload
+    });
+    assert.equal(write.status, 201);
+    const writeBody = await write.json();
+    assert.equal(writeBody.item.sizeBytes, payload.length);
+    const writeWitness = world.allWitnesses().find(witness => witness.process === "fs.stream.write" && witness.body?.path === "streams/big.bin");
+    assert(writeWitness);
+    assert.equal(writeWitness.body.sizeBytes, payload.length);
+    assert.equal(writeWitness.body.chunkCount >= 1, true);
+    assert.equal(writeWitness.body.maxChunkBytes >= 1, true);
+    assert.equal(Number.isFinite(writeWitness.body.writeHighWaterMarkBytes), true);
+
+    const read = await streamRequest(server, {
+      query: { context: "context:projects", path: "streams/big.bin" },
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(read.status, 200);
+    const roundTrip = Buffer.from(await read.arrayBuffer());
+    assert.equal(roundTrip.length, payload.length);
+    assert.equal(roundTrip.compare(payload), 0);
+
+    const copy = await streamRequest(server, {
+      pathname: "/api/fs/streams/copy",
+      method: "POST",
+      query: { context: "context:projects" },
+      headers: { cookie: login.cookie, "content-type": "application/json" },
+      body: JSON.stringify({ fromPath: "streams/big.bin", toPath: "streams/big-copy.bin" })
+    });
+    assert.equal(copy.status, 201);
+    const copiedMeta = await blobRequest(server, {
+      pathname: "/api/fs/blobs/meta",
+      query: { context: "context:projects", path: "streams/big-copy.bin" },
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(copiedMeta.status, 200);
+    assert.equal((await copiedMeta.json()).item.sizeBytes, payload.length);
+    const copyWitness = world.allWitnesses().find(witness => witness.process === "fs.stream.copy" && witness.body?.toPath === "streams/big-copy.bin");
+    assert(copyWitness);
+    assert.equal(copyWitness.body.sizeBytes, payload.length);
+    assert.equal(copyWitness.body.chunkCount >= 1, true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("fs.stream failure injection tears down partial writes", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-fs-stream-failure-"));
+  const { world, server } = await startCanvasServer({
+    runtimeRoot,
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:projects"
+label = "Projects"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const response = await streamRequest(server, {
+      method: "PUT",
+      query: { context: "context:projects", path: "streams/fail.bin" },
+      headers: {
+        cookie: login.cookie,
+        "content-type": "application/octet-stream",
+        "x-witness-stream-fail-after-bytes": "65536"
+      },
+      body: Buffer.alloc(200000, 90)
+    });
+    assert.equal(response.status, 500);
+    assert.equal((await response.json()).error, "stream failure injected");
+
+    const missing = await blobRequest(server, {
+      pathname: "/api/fs/blobs/meta",
+      query: { context: "context:projects", path: "streams/fail.bin" },
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(missing.status, 404);
+    assert(world.allWitnesses().some(w => w.process === "fs.stream.write.failed" && w.body.reason === "stream failure injected"));
+  } finally {
+    await server.close();
+  }
+});
+
+test("asset upload rejects public visibility requests when public mode is not enabled", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-assets-private-only-"));
+  const { world, server } = await startCanvasServer({
+    runtimeRoot,
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:public"
+label = "Public"
+
+[[perspective]]
+actor = "aaron"
+id = "public:view"
+title = "Public View"
+context = "context:public"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const uploaded = await uploadAsset(server, {
+      perspective: "public:view",
+      bytes: Buffer.from("public body"),
+      fileName: "share.txt",
+      headers: {
+        cookie: login.cookie,
+        "x-witness-visibility": "public"
+      }
+    });
+    assert.equal(uploaded.status, 400);
+    assert.equal((await uploaded.json()).error, "public asset hosting is not enabled for this runner");
+    assert(world.allWitnesses().some(w => w.process === "asset.upload.failed" && w.body.reason === "public asset hosting is not enabled for this runner"));
+  } finally {
+    await server.close();
+  }
+});
+
+test("asset upload can create public assets and public content reads do not require a session when enabled", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-assets-public-enabled-"));
+  const { world, server } = await startCanvasServer({
+    runtimeRoot,
+    runtimeConfig: `"upload.asset.publicEnabled" = true`,
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:public"
+label = "Public"
+
+[[perspective]]
+actor = "aaron"
+id = "public:view"
+title = "Public View"
+context = "context:public"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const uploaded = await uploadAsset(server, {
+      perspective: "public:view",
+      bytes: Buffer.from("public body"),
+      fileName: "share.txt",
+      headers: {
+        cookie: login.cookie,
+        "x-witness-visibility": "public"
+      }
+    });
+    assert.equal(uploaded.status, 201);
+    const body = await uploaded.json();
+    assert.equal(body.asset.visibility, "public");
+    assert.equal(world.project(moduleProjectors.assets).find(row => row.id === body.asset.id)?.visibility, "public");
+
+    const anonymous = await fetch(`${server.url}${body.asset.contentUrl}`);
+    assert.equal(anonymous.status, 200);
+    assert.equal(anonymous.headers.get("cache-control"), "public, max-age=60");
+    assert.equal(await anonymous.text(), "public body");
+
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+    const otherActor = await fetch(`${server.url}${body.asset.contentUrl}`, { headers: { cookie: callan.cookie } });
+    assert.equal(otherActor.status, 200);
+    assert.equal(await otherActor.text(), "public body");
+  } finally {
+    await server.close();
+  }
+});
+
+test("contextless uploads create and reuse the actor files context under homeContext", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-assets-fallback-"));
+  const { world, server } = await startCanvasServer({
+    runtimeRoot,
+    aaronHomeContext: "context:aaron-home",
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:aaron-home"
+label = "Aaron Home"
+
+[[perspective]]
+actor = "aaron"
+id = "aaron:dropbox"
+title = "Dropbox"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const first = await uploadAsset(server, {
+      perspective: "aaron:dropbox",
+      bytes: Buffer.from("one"),
+      fileName: "one.txt",
+      headers: { cookie: login.cookie }
+    });
+    const second = await uploadAsset(server, {
+      perspective: "aaron:dropbox",
+      bytes: Buffer.from("two"),
+      fileName: "two.txt",
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(first.status, 201);
+    assert.equal(second.status, 201);
+    const firstBody = await first.json();
+    const secondBody = await second.json();
+    const filesContextId = "context:context:aaron-home:files";
+    assert.equal(firstBody.asset.context, filesContextId);
+    assert.equal(secondBody.asset.context, filesContextId);
+
+    const contexts = world.project(moduleProjectors.contexts).filter(row => row.id === filesContextId);
+    assert.equal(contexts.length, 1);
+    assert.equal(contexts[0].label, "Files");
+    assert.equal(contexts[0].parent, "context:aaron-home");
+  } finally {
+    await server.close();
+  }
+});
+
+test("contextless uploads fail clearly when the actor has no homeContext", async () => {
+  const { server } = await startCanvasServer({
+    extra: `
+[[perspective]]
+actor = "aaron"
+id = "aaron:dropbox"
+title = "Dropbox"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const response = await uploadAsset(server, {
+      perspective: "aaron:dropbox",
+      bytes: Buffer.from("no home"),
+      fileName: "orphan.txt",
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).error, "actor has no homeContext for file drops");
+  } finally {
+    await server.close();
+  }
+});
+
+test("backend seam diagnostics report asset storage, capability status, and recent failures", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-assets-diagnostics-"));
+  const { world, server } = await startCanvasServer({
+    runtimeRoot,
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:projects"
+label = "Projects"
+
+[[perspective]]
+actor = "aaron"
+id = "projects:view"
+title = "Projects View"
+context = "context:projects"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const uploaded = await uploadAsset(server, {
+      perspective: "projects:view",
+      bytes: Buffer.from("diag body"),
+      fileName: "diag.txt",
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(uploaded.status, 201);
+
+    const missingFilename = await fetch(`${server.url}/api/assets?perspective=${encodeURIComponent("projects:view")}`, {
+      method: "POST",
+      headers: {
+        cookie: login.cookie,
+        "content-type": "text/plain"
+      },
+      body: Buffer.from("no filename")
+    });
+    assert.equal(missingFilename.status, 400);
+
+    const unknownContent = await fetch(`${server.url}/api/assets/ghost/content`, {
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(unknownContent.status, 404);
+
+    const blobFailure = await blobRequest(server, {
+      method: "PUT",
+      query: { context: "context:projects", path: "../bad.txt" },
+      headers: { cookie: login.cookie, "content-type": "text/plain" },
+      bytes: Buffer.from("bad")
+    });
+    assert.equal(blobFailure.status, 400);
+
+    const streamFailure = await streamRequest(server, {
+      method: "PUT",
+      query: { context: "context:projects", path: "streams/fail.bin" },
+      headers: {
+        cookie: login.cookie,
+        "content-type": "application/octet-stream",
+        "x-witness-stream-fail-after-bytes": "16"
+      },
+      body: Buffer.alloc(128, 7)
+    });
+    assert.equal(streamFailure.status, 500);
+
+    const diagnosticsResponse = await fetch(`${server.url}/api/backend-seams`, {
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(diagnosticsResponse.status, 200);
+    const diagnostics = await diagnosticsResponse.json();
+    assert.equal(diagnostics.backendHost, "backendHost");
+    assert(diagnostics.capabilities.includes("upload.asset"));
+    assert(diagnostics.capabilities.includes("fs.blob"));
+    const uploadCapability = diagnostics.backendCapabilities.find(row => row.id === "upload.asset");
+    assert.ok(uploadCapability);
+    assert.deepEqual(uploadCapability.dependsOn, ["fs.blob", "fs.stream"]);
+    assert.equal(uploadCapability.providerAdapters.some(row => row.id === "local-disk" && row.status === "shipped" && row.default === true), true);
+    assert.deepEqual(uploadCapability.witnessContract.externalRefs, ["storageKey", "contentUrl"]);
+    const outboundCapability = diagnostics.backendCapabilities.find(row => row.id === "http.outbound");
+    assert.ok(outboundCapability);
+    assert.deepEqual(outboundCapability.witnessContract.externalRefs, ["externalRefId", "correlationId"]);
+    assert.equal(diagnostics.storage.assetsRoot, path.join(runtimeRoot, "assets"));
+    assert.equal(diagnostics.storage.assetsRootExists, true);
+    assert.equal(diagnostics.storage.blobsRoot, path.join(runtimeRoot, "blobs"));
+    assert.equal(diagnostics.assets.total, 1);
+    assert.equal(diagnostics.assets.privateCount, 1);
+    assert.equal(diagnostics.assets.totalBytes, Buffer.byteLength("diag body"));
+    assert.equal(diagnostics.assets.rawUploadCount, 1);
+    assert.equal(diagnostics.assets.multipartUploadCount, 0);
+    assert.deepEqual(diagnostics.assets.contexts, ["context:projects"]);
+    assert.equal(diagnostics.filesContexts.length, 0);
+    assert.equal(diagnostics.streams.writeCount, 0);
+    assert.equal(diagnostics.streams.copyCount, 0);
+    assert.equal(diagnostics.streams.maxChunkBytes >= Buffer.byteLength("diag body"), true);
+    assert.equal(diagnostics.notifications.providerMessageCount, 0);
+    assert.equal(diagnostics.outbound.externalRefCount, 0);
+    assert.equal(diagnostics.oauth.providerAccountCount, 0);
+    assert.equal(diagnostics.webhooks.deliveryRefCount, 0);
+    assert(diagnostics.failures.assetUploadFailed.some(row => row.body.reason === "missing filename header"));
+    assert(diagnostics.failures.assetContentReadFailed.some(row => row.body.reason === "unknown asset"));
+    assert(diagnostics.failures.fsBlobFailed.some(row => row.body.reason === "blob path traversal is not allowed"));
+    assert(diagnostics.failures.fsStreamFailed.some(row => row.body.reason === "stream failure injected"));
+    assert(world.allObservations().some(w => w.process === "backend.readBackendSeams"));
+  } finally {
+    await server.close();
+  }
+});
+
+test("backend seam inspection page renders diagnostics HTML for signed-in operators", async () => {
+  const { world, server } = await startCanvasServer();
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const response = await fetch(`${server.url}/backend-seams`, {
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type"), /text\/html/);
+    const html = await response.text();
+    assert.match(html, /<h1>Backend Seams<\/h1>/);
+    assert.match(html, /\/api\/backend-seams/);
+    assert.match(html, /backend-seams-json/);
+    assert(world.allObservations().some(w => w.process === "frontend.renderBackendSeamsPage"));
   } finally {
     await server.close();
   }
@@ -415,6 +1349,14 @@ test("canvas-lib serves the real projection modules and rejects unknown names", 
     const core = await fetch(`${server.url}/canvas-lib/projectors-core.js`);
     assert.equal(core.status, 200);
     assert.match(await core.text(), /currentRelations/);
+
+    const edenPersonalBox = await fetch(`${server.url}/canvas-lib/eden-personal-box.js`);
+    assert.equal(edenPersonalBox.status, 200);
+    assert.match(await edenPersonalBox.text(), /projectEdenPersonalBoxItems/);
+
+    const edenPageTheme = await fetch(`${server.url}/canvas-lib/eden-page-theme.js`);
+    assert.equal(edenPageTheme.status, 200);
+    assert.match(await edenPageTheme.text(), /projectEdenPageTheme/);
 
     assert.equal((await fetch(`${server.url}/canvas-lib/kernel.js`)).status, 404);
     assert.equal((await fetch(`${server.url}/canvas-lib/..%2Fpackage.json`)).status, 404);

@@ -53,8 +53,10 @@ const VALUE_TYPES = [
   { id: "serverRunner.handlerSet", label: "Handler Set", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "serverRunner.host", label: "Host Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "serverRunner.storage", label: "Storage Path", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "serverRunner.runtimeConfig", label: "Runtime Config JSON", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "context.id", label: "Context Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "context.label", label: "Context Label", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "context.name", label: "Context Name", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "perspective.id", label: "Perspective Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "perspective.title", label: "Perspective Title", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "capability.id", label: "Capability Id", compatibleWith: ["textual"], editor: { control: "text" } },
@@ -80,6 +82,7 @@ const PROCESS_SPECS = [
       { name: "id", accepts: "widget.id", required: false },
       { name: "kind", accepts: "widget.kind", required: true },
       { name: "parent", accepts: "widget.parent", required: false },
+      { name: "parentRef", accepts: "context.name", required: false },
       { name: "order", accepts: "widget.order", required: false },
       { name: "text", accepts: "widget.text", required: false },
       { name: "title", accepts: "widget.title", required: false },
@@ -109,6 +112,22 @@ const PROCESS_SPECS = [
       { name: "parent", accepts: "widget.parent", required: false },
       { name: "order", accepts: "widget.order", required: false },
       { name: "text", accepts: "widget.text", required: false }
+    ]
+  },
+  {
+    id: "widget_update_spec",
+    process: "widget.update",
+    inputs: [
+      { name: "id", accepts: "widget.id", required: true },
+      { name: "text", accepts: "widget.text", required: false },
+      { name: "title", accepts: "widget.title", required: false },
+      { name: "class", accepts: "widget.class", required: false }
+    ],
+    outputs: [
+      { name: "id", accepts: "widget.id", required: true },
+      { name: "text", accepts: "widget.text", required: false },
+      { name: "title", accepts: "widget.title", required: false },
+      { name: "class", accepts: "widget.class", required: false }
     ]
   },
   {
@@ -202,7 +221,8 @@ const PROCESS_SPECS = [
     process: "frontendProgram.define",
     inputs: [
       { name: "id", accepts: "program.id", required: true },
-      { name: "rootWidget", accepts: "widget.id", required: true },
+      { name: "rootWidget", accepts: "widget.id", required: false },
+      { name: "rootWidgetRef", accepts: "context.name", required: false },
       { name: "context", accepts: "context.id", required: false }
     ],
     outputs: [{ name: "id", accepts: "program.id", required: true }]
@@ -228,9 +248,11 @@ const PROCESS_SPECS = [
     inputs: [
       { name: "id", accepts: "route.id", required: true },
       { name: "path", accepts: "route.path", required: true },
-      { name: "serves", accepts: "route.serves", required: true },
+      { name: "serves", accepts: "route.serves", required: false },
+      { name: "servesRef", accepts: "context.name", required: false },
       { name: "method", accepts: "route.method", required: true },
       { name: "handler", accepts: "route.handler", required: true },
+      { name: "rootWidgetRef", accepts: "context.name", required: false },
       { name: "context", accepts: "context.id", required: false }
     ],
     outputs: [{ name: "id", accepts: "route.id", required: true }]
@@ -239,8 +261,11 @@ const PROCESS_SPECS = [
     id: "serve_define_spec",
     process: "serve.define",
     inputs: [
-      { name: "serverRunner", accepts: "serverRunner.id", required: true },
-      { name: "route", accepts: "route.id", required: true }
+      { name: "serverRunner", accepts: "serverRunner.id", required: false },
+      { name: "serverRunnerRef", accepts: "context.name", required: false },
+      { name: "route", accepts: "route.id", required: false },
+      { name: "routeRef", accepts: "context.name", required: false },
+      { name: "context", accepts: "context.id", required: false }
     ],
     outputs: [{ name: "route", accepts: "route.id", required: true }]
   },
@@ -249,15 +274,80 @@ const PROCESS_SPECS = [
     process: "serverRunner.define",
     inputs: [
       { name: "id", accepts: "serverRunner.id", required: true },
-      { name: "backendHost", accepts: "serverRunner.host", required: true },
-      { name: "frontendHost", accepts: "serverRunner.host", required: true },
+      { name: "backendHost", accepts: "serverRunner.host", required: false },
+      { name: "backendHostRef", accepts: "context.name", required: false },
+      { name: "frontendHost", accepts: "serverRunner.host", required: false },
+      { name: "frontendHostRef", accepts: "context.name", required: false },
       { name: "handlerSet", accepts: "serverRunner.handlerSet", required: false },
       { name: "todoProjection", accepts: "serverRunner.storage", required: false },
       { name: "privateNotesProjection", accepts: "serverRunner.storage", required: false },
+      { name: "runtimeConfigJson", accepts: "json.text", required: false },
       { name: "allowActorHeader", accepts: "widget.attach", required: false },
       { name: "context", accepts: "context.id", required: false }
     ],
     outputs: [{ name: "id", accepts: "serverRunner.id", required: true }]
+  },
+  {
+    id: "context_bind_spec",
+    process: "context.bind",
+    inputs: [
+      { name: "context", accepts: "context.id", required: true },
+      { name: "name", accepts: "context.name", required: true },
+      { name: "target", accepts: "authority.id", required: true }
+    ],
+    outputs: [{ name: "target", accepts: "authority.id", required: true }]
+  },
+  {
+    id: "context_unbind_spec",
+    process: "context.unbind",
+    inputs: [
+      { name: "context", accepts: "context.id", required: true },
+      { name: "name", accepts: "context.name", required: true },
+      { name: "target", accepts: "authority.id", required: true }
+    ],
+    outputs: [{ name: "target", accepts: "authority.id", required: true }]
+  },
+  {
+    id: "context_export_spec",
+    process: "context.export",
+    inputs: [
+      { name: "context", accepts: "context.id", required: true },
+      { name: "name", accepts: "context.name", required: true },
+      { name: "target", accepts: "authority.id", required: true }
+    ],
+    outputs: [{ name: "target", accepts: "authority.id", required: true }]
+  },
+  {
+    id: "context_unexport_spec",
+    process: "context.unexport",
+    inputs: [
+      { name: "context", accepts: "context.id", required: true },
+      { name: "name", accepts: "context.name", required: true },
+      { name: "target", accepts: "authority.id", required: true }
+    ],
+    outputs: [{ name: "target", accepts: "authority.id", required: true }]
+  },
+  {
+    id: "context_import_spec",
+    process: "context.import",
+    inputs: [
+      { name: "context", accepts: "context.id", required: true },
+      { name: "sourceContext", accepts: "context.id", required: true },
+      { name: "exportName", accepts: "context.name", required: true },
+      { name: "name", accepts: "context.name", required: false }
+    ],
+    outputs: [{ name: "context", accepts: "context.id", required: true }]
+  },
+  {
+    id: "context_unimport_spec",
+    process: "context.unimport",
+    inputs: [
+      { name: "context", accepts: "context.id", required: true },
+      { name: "sourceContext", accepts: "context.id", required: true },
+      { name: "exportName", accepts: "context.name", required: true },
+      { name: "name", accepts: "context.name", required: false }
+    ],
+    outputs: [{ name: "context", accepts: "context.id", required: true }]
   },
   {
     id: "capability_define_spec",
@@ -309,6 +399,23 @@ const BUILTIN_CAPABILITIES = [
     placement: ["context", "serverRunner"]
   },
   {
+    id: "runtime.config",
+    label: "Runtime Config",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    providerAdapters: [
+      { id: "inline", label: "Inline Config", kind: "local", status: "shipped", default: true },
+      { id: "env-secret-ref", label: "Environment Secret Ref", kind: "environment", status: "shipped", requires: ["secret.access"] }
+    ],
+    witnessContract: {
+      read: ["runtimeConfig.read", "runtimeConfig.read.failed"],
+      failure: ["server.start.failed"],
+      externalRefs: ["secretRef"]
+    },
+    authority: [{ name: "secret.access", accepts: "authority.id", required: true }],
+    placement: ["serverRunner"]
+  },
+  {
     id: "fs.json.read",
     label: "JSON File Read",
     version: "builtin",
@@ -322,6 +429,274 @@ const BUILTIN_CAPABILITIES = [
     version: "builtin",
     provenance: { source: "runtime", builtin: true },
     authority: [{ name: "filesystem.write", accepts: "authority.id", required: true }],
+    placement: ["context", "serverRunner"]
+  },
+  {
+    id: "fs.blob",
+    label: "Blob File Storage",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    providerAdapters: [
+      { id: "local-disk", label: "Local Disk", kind: "local", status: "shipped", default: true, requires: ["filesystem.read", "filesystem.write"] },
+      { id: "hosted-object-store", label: "Hosted Object Store", kind: "hosted", status: "contract" }
+    ],
+    witnessContract: {
+      processes: {
+        read: ["fs.blob.list", "fs.blob.meta", "fs.blob.read", "fs.blob.list.failed", "fs.blob.meta.failed", "fs.blob.read.failed"],
+        success: ["fs.blob.write", "fs.blob.delete"],
+        failure: ["fs.blob.write.failed", "fs.blob.delete.failed"]
+      },
+      externalRefs: ["storageKey", "blobRef", "contentUrl"]
+    },
+    authority: [
+      { name: "filesystem.read", accepts: "authority.id", required: true },
+      { name: "filesystem.write", accepts: "authority.id", required: true }
+    ],
+    placement: ["context", "serverRunner"]
+  },
+  {
+    id: "fs.stream",
+    label: "Stream File Storage",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    providerAdapters: [
+      { id: "local-disk", label: "Local Disk", kind: "local", status: "shipped", default: true, requires: ["filesystem.read", "filesystem.write"] },
+      { id: "hosted-object-store", label: "Hosted Object Store", kind: "hosted", status: "contract" }
+    ],
+    witnessContract: {
+      processes: {
+        read: ["fs.stream.read", "fs.stream.read.failed"],
+        success: ["fs.stream.write", "fs.stream.copy"],
+        failure: ["fs.stream.write.failed", "fs.stream.copy.failed"]
+      }
+    },
+    authority: [
+      { name: "filesystem.read", accepts: "authority.id", required: true },
+      { name: "filesystem.write", accepts: "authority.id", required: true }
+    ],
+    placement: ["context", "serverRunner"]
+  },
+  {
+    id: "upload.asset",
+    label: "Asset Upload",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    dependsOn: ["fs.blob", "fs.stream"],
+    providerAdapters: [
+      { id: "local-disk", label: "Local Disk", kind: "local", status: "shipped", default: true, requires: ["filesystem.write"] },
+      { id: "hosted-object-store", label: "Hosted Object Store", kind: "hosted", status: "contract" }
+    ],
+    witnessContract: {
+      processes: {
+        read: ["asset.content.read", "asset.content.read.failed"],
+        success: ["asset.upload"],
+        failure: ["asset.upload.failed"]
+      },
+      externalRefs: ["storageKey", "contentUrl"]
+    },
+    authority: [
+      { name: "filesystem.write", accepts: "authority.id", required: true },
+      { name: "network.listen", accepts: "authority.id", required: true }
+    ],
+    placement: ["serverRunner"]
+  },
+  {
+    id: "jobs.queue",
+    label: "Jobs Queue",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    providerAdapters: [
+      { id: "in-process", label: "In-Process Worker", kind: "local", status: "shipped", default: true },
+      { id: "external-queue", label: "External Queue", kind: "hosted", status: "contract" }
+    ],
+    witnessContract: {
+      processes: {
+        intent: ["jobs.queue.enqueue", "jobs.queue.enqueue.failed"],
+        attempt: ["jobs.queue.start"],
+        retry: ["jobs.queue.retry"],
+        success: ["jobs.queue.succeeded"],
+        failure: ["jobs.queue.deadLetter"]
+      },
+      externalRefs: ["idempotencyKey"]
+    },
+    authority: [{ name: "runtime.schedule", accepts: "authority.id", required: true }],
+    placement: ["serverRunner"]
+  },
+  {
+    id: "db.sql",
+    label: "SQL Database",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    dependsOn: ["runtime.config"],
+    providerAdapters: [
+      { id: "sqlite", label: "SQLite", kind: "local", status: "shipped", default: true, requires: ["filesystem.read", "filesystem.write"] },
+      { id: "postgres", label: "Postgres", kind: "hosted", status: "contract", requires: ["network.fetch", "secret.access"] },
+      { id: "mysql", label: "MySQL", kind: "hosted", status: "contract", requires: ["network.fetch", "secret.access"] }
+    ],
+    witnessContract: {
+      processes: {
+        read: ["db.sql.inspect", "db.sql.inspect.failed"],
+        attempt: ["db.sql.datasource.resolve", "db.sql.migrate", "db.sql.query", "db.sql.command", "db.sql.transaction"],
+        success: ["db.sql.datasource.resolve", "db.sql.migrate", "db.sql.query", "db.sql.command", "db.sql.transaction"],
+        failure: ["db.sql.datasource.resolve.failed", "db.sql.migrate.failed", "db.sql.query.failed", "db.sql.command.failed", "db.sql.transaction.failed"]
+      },
+      externalRefs: ["datasource", "provider"]
+    },
+    authority: [
+      { name: "secret.access", accepts: "authority.id", required: true },
+      { name: "filesystem.read", accepts: "authority.id", required: false },
+      { name: "filesystem.write", accepts: "authority.id", required: false },
+      { name: "network.fetch", accepts: "authority.id", required: false }
+    ],
+    placement: ["context", "serverRunner"]
+  },
+  {
+    id: "auth.oauth",
+    label: "OAuth Authentication",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    dependsOn: ["runtime.config"],
+    providerAdapters: [
+      { id: "stub", label: "Stub Provider", kind: "stub", status: "shipped", default: true },
+      { id: "oauth-provider", label: "Hosted OAuth Provider", kind: "hosted", status: "contract", requires: ["network.fetch", "secret.access"] }
+    ],
+    witnessContract: {
+      processes: {
+        intent: ["auth.oauth.start", "auth.oauth.start.failed"],
+        attempt: ["auth.oauth.callback", "auth.oauth.callback.failed"],
+        success: ["auth.oauth.link", "auth.oauth.session"],
+        failure: ["auth.oauth.link.failed", "auth.oauth.session.failed"]
+      },
+      externalRefs: ["providerAccountId", "state"]
+    },
+    authority: [
+      { name: "secret.access", accepts: "authority.id", required: true },
+      { name: "network.fetch", accepts: "authority.id", required: true }
+    ],
+    placement: ["serverRunner"]
+  },
+  {
+    id: "search.index",
+    label: "Search Index",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    providerAdapters: [
+      { id: "local-text", label: "Local Text Index", kind: "local", status: "shipped", default: true, requires: ["filesystem.read", "filesystem.write"] },
+      { id: "hosted-search", label: "Hosted Search", kind: "hosted", status: "contract" }
+    ],
+    witnessContract: {
+      processes: {
+        read: ["search.index.inspect", "search.index.inspect.failed", "search.index.query", "search.index.query.failed"],
+        attempt: ["search.index.build", "search.index.reindex"],
+        success: ["search.index.build", "search.index.reindex"],
+        failure: ["search.index.build.failed", "search.index.reindex.failed"]
+      }
+    },
+    authority: [
+      { name: "filesystem.read", accepts: "authority.id", required: true },
+      { name: "filesystem.write", accepts: "authority.id", required: true }
+    ],
+    placement: ["context", "serverRunner"]
+  },
+  {
+    id: "http.outbound",
+    label: "HTTP Outbound",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    dependsOn: ["runtime.config"],
+    providerAdapters: [
+      { id: "native-fetch", label: "Native Fetch", kind: "network", status: "shipped", default: true, requires: ["network.fetch"] },
+      { id: "stub", label: "Stub Transport", kind: "stub", status: "shipped" }
+    ],
+    witnessContract: {
+      processes: {
+        intent: ["http.outbound.request", "http.outbound.request.failed"],
+        attempt: ["http.outbound.attempt"],
+        retry: ["http.outbound.retry"],
+        success: ["http.outbound.succeeded"],
+        failure: ["http.outbound.failed"]
+      },
+      externalRefs: ["externalRefId", "correlationId"]
+    },
+    authority: [
+      { name: "network.fetch", accepts: "authority.id", required: true },
+      { name: "secret.access", accepts: "authority.id", required: true }
+    ],
+    placement: ["context", "serverRunner"]
+  },
+  {
+    id: "webhook.inbound",
+    label: "Webhook Inbound",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    dependsOn: ["runtime.config", "jobs.queue"],
+    providerAdapters: [
+      { id: "hmac-shared-secret", label: "HMAC Shared Secret", kind: "local", status: "shipped", default: true, requires: ["network.listen", "secret.access"] },
+      { id: "provider-signature-scheme", label: "Provider Signature Scheme", kind: "hosted", status: "contract" }
+    ],
+    witnessContract: {
+      processes: {
+        intent: ["webhook.inbound.receive", "webhook.inbound.receive.failed"],
+        attempt: ["webhook.inbound.accepted"],
+        success: ["webhook.inbound.processed"],
+        failure: ["webhook.inbound.verify.failed", "webhook.inbound.replay.failed", "webhook.inbound.accept.failed", "webhook.inbound.process.failed"]
+      },
+      externalRefs: ["deliveryId", "correlationId"]
+    },
+    authority: [
+      { name: "network.listen", accepts: "authority.id", required: true },
+      { name: "secret.access", accepts: "authority.id", required: true }
+    ],
+    placement: ["serverRunner"]
+  },
+  {
+    id: "notify.email",
+    label: "Email Notifications",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    dependsOn: ["jobs.queue", "runtime.config"],
+    providerAdapters: [
+      { id: "stub", label: "Stub Email", kind: "stub", status: "shipped", default: true },
+      { id: "hosted-email-provider", label: "Hosted Email Provider", kind: "hosted", status: "contract", requires: ["network.fetch", "secret.access"] }
+    ],
+    witnessContract: {
+      processes: {
+        intent: ["notify.email.enqueue", "notify.email.enqueue.failed"],
+        retry: ["jobs.queue.retry"],
+        success: ["notify.email.send"],
+        failure: ["notify.email.render.failed", "jobs.queue.deadLetter"]
+      },
+      externalRefs: ["providerMessageId"]
+    },
+    authority: [
+      { name: "secret.access", accepts: "authority.id", required: true },
+      { name: "network.fetch", accepts: "authority.id", required: true }
+    ],
+    placement: ["context", "serverRunner"]
+  },
+  {
+    id: "notify.sms",
+    label: "SMS Notifications",
+    version: "builtin",
+    provenance: { source: "runtime", builtin: true },
+    dependsOn: ["jobs.queue", "runtime.config"],
+    providerAdapters: [
+      { id: "stub", label: "Stub SMS", kind: "stub", status: "shipped", default: true },
+      { id: "hosted-sms-provider", label: "Hosted SMS Provider", kind: "hosted", status: "contract", requires: ["network.fetch", "secret.access"] }
+    ],
+    witnessContract: {
+      processes: {
+        intent: ["notify.sms.enqueue", "notify.sms.enqueue.failed"],
+        retry: ["jobs.queue.retry"],
+        success: ["notify.sms.send"],
+        failure: ["notify.sms.render.failed", "jobs.queue.deadLetter"]
+      },
+      externalRefs: ["providerMessageId"]
+    },
+    authority: [
+      { name: "secret.access", accepts: "authority.id", required: true },
+      { name: "network.fetch", accepts: "authority.id", required: true }
+    ],
     placement: ["context", "serverRunner"]
   },
   {

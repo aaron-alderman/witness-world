@@ -369,6 +369,103 @@ frontendHost = "frontendHost"
   assert.deepEqual(world.allWitnesses().at(-1).body.serverRunners, ["one", "two"]);
 });
 
+test("runtime.config resolves runner config bindings and redacts secret values from inspection", async () => {
+  const originalSecret = process.env.WITNESS_RUNTIME_SECRET;
+  const originalMissing = process.env.WITNESS_RUNTIME_MISSING;
+  process.env.WITNESS_RUNTIME_SECRET = "super-secret-token";
+  delete process.env.WITNESS_RUNTIME_MISSING;
+
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  applyMinimalTodoDsl(world, `
+[[serverRunner]]
+actor = "adam"
+id = "config_runner"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+handlerSet = "demo"
+storage = { todoProjection = "todos-alt.json", privateNotesProjection = "notes-alt.json" }
+runtimeConfig = { publicBaseUrl = { value = "https://world.test" }, mode = { default = "local" }, serviceToken = { secret = "WITNESS_RUNTIME_SECRET" }, fallbackMode = { secret = "WITNESS_RUNTIME_MISSING", default = "fallback" } }
+allowActorHeader = true
+`);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "config_runner",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    assert.equal(server.ok, true);
+    const response = await fetch(`${server.url}/api/runtime-config`, {
+      headers: { "x-witness-actor": "adam" }
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.serverRunner, "config_runner");
+    assert.equal(body.values.publicBaseUrl, "https://world.test");
+    assert.equal(body.values.mode, "local");
+    assert.equal(Object.prototype.hasOwnProperty.call(body.values, "serviceToken"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(body.values, "fallbackMode"), false);
+    assert.equal(body.fields.find(field => field.name === "serviceToken").secret, true);
+    assert.equal(body.fields.find(field => field.name === "serviceToken").redacted, true);
+    assert.equal(body.fields.find(field => field.name === "serviceToken").secretRef, "WITNESS_RUNTIME_SECRET");
+    assert.equal(body.fields.find(field => field.name === "fallbackMode").source, "default");
+    assert.equal(body.fields.find(field => field.name === "fallbackMode").secret, true);
+    assert.equal(JSON.stringify(body).includes("super-secret-token"), false);
+
+    const diagnostics = await fetch(`${server.url}/api/backend-seams`, {
+      headers: { "x-witness-actor": "adam" }
+    });
+    assert.equal(diagnostics.status, 200);
+    const diagnosticsBody = await diagnostics.json();
+    assert.equal(diagnosticsBody.runtimeConfig.fieldCount, 4);
+    assert.equal(diagnosticsBody.runtimeConfig.missingCount, 0);
+    assert.equal(JSON.stringify(diagnosticsBody).includes("super-secret-token"), false);
+  } finally {
+    await server.close();
+    if (originalSecret === undefined) delete process.env.WITNESS_RUNTIME_SECRET;
+    else process.env.WITNESS_RUNTIME_SECRET = originalSecret;
+    if (originalMissing === undefined) delete process.env.WITNESS_RUNTIME_MISSING;
+    else process.env.WITNESS_RUNTIME_MISSING = originalMissing;
+  }
+});
+
+test("runtime.config blocks server start when a required secret reference is missing", async () => {
+  const originalMissing = process.env.WITNESS_REQUIRED_SECRET;
+  delete process.env.WITNESS_REQUIRED_SECRET;
+
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  applyWitnessToml(world, `
+[[serverRunner]]
+actor = "adam"
+id = "config_runner"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+runtimeConfig = { serviceToken = { secret = "WITNESS_REQUIRED_SECRET" } }
+`);
+
+  try {
+    const failed = await startServer(world, {
+      actor: "adam",
+      serverRunnerId: "config_runner",
+      runtimeRoot: path.dirname(await tempStore())
+    });
+    assert.equal(failed.ok, false);
+    assert.equal(failed.reason, "runtime config unresolved");
+    assert.equal(world.allWitnesses().at(-1).process, "server.start.failed");
+    assert.equal(world.allWitnesses().at(-1).body.reason, "runtime config unresolved");
+    assert.equal(world.allWitnesses().at(-1).body.runtimeConfigFailures[0].field, "serviceToken");
+    assert.equal(world.allWitnesses().at(-1).body.runtimeConfigFailures[0].secretRef, "WITNESS_REQUIRED_SECRET");
+  } finally {
+    if (originalMissing === undefined) delete process.env.WITNESS_REQUIRED_SECRET;
+    else process.env.WITNESS_REQUIRED_SECRET = originalMissing;
+  }
+});
+
 test("session api authenticates authored identities and cookie actor wins over request header", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });

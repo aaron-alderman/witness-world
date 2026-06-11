@@ -7,12 +7,17 @@ import {
   compileDescription,
   createServerRunner,
   createIdentity,
+  defineContext,
   defineRoute,
   serveRoute,
   createFrontendRunner,
   createViewDescription,
   renderView,
   emitUserAction,
+  bindContextName,
+  exportContextName,
+  importContextName,
+  resolveContextualName,
   moduleProjectors
 } from "../src/modules.js";
 
@@ -64,6 +69,7 @@ test("server runner serves a route that points at a frontend artifact", () => {
     handlerSet: "demo",
     actors: [{ id: "aaron", label: "Aaron" }],
     storage: { todoProjection: "todos.json" },
+    runtimeConfig: null,
     allowActorHeader: false,
     context: null
   }]);
@@ -118,4 +124,41 @@ test("identity projector indexes authored identities by id, username, and actor"
   assert.equal(index.byId["identity.aaron"].username, "aaron");
   assert.equal(index.byUsername.aaron.id, "identity.aaron");
   assert.equal(index.byActor.aaron[0].homePerspective, "aaron:personal");
+});
+
+test("context composition projectors expose local bindings, exports, imports, and visible scope", () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "system" });
+  defineContext(world, { actor: "system", id: "ctx.source", label: "Source" });
+  defineContext(world, { actor: "system", id: "ctx.target", label: "Target", parent: "ctx.source" });
+  createThing(world, { actor: "system", id: "page.root" });
+
+  bindContextName(world, { actor: "system", context: "ctx.source", name: "homePage", target: "page.root" });
+  exportContextName(world, { actor: "system", context: "ctx.source", name: "homePage", target: "page.root" });
+  importContextName(world, { actor: "system", context: "ctx.target", sourceContext: "ctx.source", exportName: "homePage", name: "landingPage" });
+
+  assert.deepEqual(world.project(moduleProjectors.contextBindings), [
+    { context: "ctx.source", name: "homePage", target: "page.root", witness: world.project(moduleProjectors.contextBindings)[0].witness }
+  ]);
+  assert.deepEqual(world.project(moduleProjectors.contextExports), [
+    { context: "ctx.source", name: "homePage", target: "page.root", witness: world.project(moduleProjectors.contextExports)[0].witness }
+  ]);
+  assert.deepEqual(world.project(moduleProjectors.contextImports), [
+    {
+      context: "ctx.target",
+      sourceContext: "ctx.source",
+      exportName: "homePage",
+      name: "landingPage",
+      witness: world.project(moduleProjectors.contextImports)[0].witness
+    }
+  ]);
+
+  const scopes = world.project(moduleProjectors.contextScopes);
+  assert.equal(scopes.some(row => row.context === "ctx.source" && row.name === "homePage" && row.target === "page.root" && row.sourceKind === "local"), true);
+  assert.equal(scopes.some(row => row.context === "ctx.target" && row.name === "landingPage" && row.target === "page.root" && row.sourceKind === "import" && row.sourceContext === "ctx.source" && row.exportName === "homePage"), true);
+  assert.equal(scopes.some(row => row.context === "ctx.target" && row.name === "homePage"), false);
+
+  const resolved = resolveContextualName(world.allWitnesses(), { context: "ctx.target", name: "landingPage" });
+  assert.equal(resolved.ok, true);
+  assert.equal(resolved.target, "page.root");
 });

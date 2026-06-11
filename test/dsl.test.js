@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createWorld, projectors } from "../src/kernel.js";
+import { createWorld, createThing, projectors } from "../src/kernel.js";
 import { parseWitnessToml, applyWitnessToml, applyWitnessDocs } from "../src/dsl.js";
 import { moduleProjectors } from "../src/modules.js";
+import { frontendProgramsProjection, widgetTree } from "../src/widgets.js";
 
 const script = `
 # Compiler ladder
@@ -218,6 +219,8 @@ publicApi = [{ name = "mount", accepts = "widget.id", required = true }]
 config = [{ name = "title", accepts = "widget.text", required = false }]
 internals = []
 authority = [{ name = "browser.dom", accepts = "authority.id", required = true }]
+providerAdapters = [{ id = "dom", label = "DOM", kind = "local", status = "shipped", default = true }]
+witnessContract = { success = ["notes.sidebar.mount"], failure = ["notes.sidebar.mount.failed"], externalRefs = ["domNodeId"] }
 placement = ["context", "routePage"]
 
 [[capabilityInstall]]
@@ -233,7 +236,396 @@ targetKind = "context"
   assert.ok(custom);
   assert.deepEqual(custom.placement, ["context", "routePage"]);
   assert.deepEqual(custom.dependsOn, ["dom.render"]);
+  assert.deepEqual(custom.providerAdapters, [
+    {
+      id: "dom",
+      label: "DOM",
+      kind: "local",
+      status: "shipped",
+      default: true,
+      requires: []
+    }
+  ]);
+  assert.deepEqual(custom.witnessContract, {
+    phases: ["success", "failure"],
+    processes: {
+      success: ["notes.sidebar.mount"],
+      failure: ["notes.sidebar.mount.failed"]
+    },
+    externalRefs: ["domNodeId"]
+  });
   assert.equal(capabilities.some(row => row.id === "dom.render"), true);
   assert.equal(installs.some(row => row.capability === "dom.render" && row.target === "frontend" && row.targetKind === "context"), true);
   assert.equal(installs.some(row => row.capability === "notes.sidebar" && row.target === "frontend" && row.targetKind === "context"), true);
+});
+
+test("context composition DSL sections project bindings and lower contextual refs to canonical ids across covered surfaces", () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "backendHost" });
+  createThing(world, { actor: "system", id: "frontendHost" });
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+parent = "ctx.source"
+
+[[widget]]
+actor = "system"
+id = "page_root"
+kind = "Page"
+context = "ctx.source"
+
+[[widget]]
+actor = "system"
+id = "shell_box"
+kind = "Box"
+context = "ctx.target"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "homePage"
+target = "page_root"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "homePage"
+target = "page_root"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "homePage"
+name = "landingPage"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "backendNode"
+target = "backendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "frontendNode"
+target = "frontendHost"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "backendNode"
+target = "backendHost"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "frontendNode"
+target = "frontendHost"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "backendNode"
+name = "backendAlias"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "frontendNode"
+name = "frontendAlias"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "shellBox"
+target = "shell_box"
+
+[[widget]]
+actor = "system"
+id = "shell_child"
+kind = "Text"
+context = "ctx.target"
+parentRef = "shellBox"
+text = "Child"
+
+[[frontendProgram]]
+actor = "system"
+id = "landing_program"
+context = "ctx.target"
+rootWidgetRef = "landingPage"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "landingProgram"
+target = "landing_program"
+
+[[serverRunner]]
+actor = "system"
+id = "demo_server"
+context = "ctx.target"
+backendHostRef = "backendAlias"
+frontendHostRef = "frontendAlias"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "runnerNode"
+target = "demo_server"
+
+[[route]]
+actor = "system"
+id = "landing_route"
+context = "ctx.target"
+path = "/landing"
+method = "GET"
+handler = "page.home"
+servesRef = "landingProgram"
+rootWidgetRef = "landingPage"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "landingRoute"
+target = "landing_route"
+
+[[serve]]
+actor = "system"
+context = "ctx.target"
+serverRunnerRef = "runnerNode"
+routeRef = "landingRoute"
+`);
+
+  const program = frontendProgramsProjection(world.allWitnesses()).find(row => row.id === "landing_program");
+  assert.ok(program);
+  assert.equal(program.rootWidget, "page_root");
+  const child = world.project(w => widgetTree(w, "shell_box")).children.find(row => row.id === "shell_child");
+  assert.ok(child);
+  assert.equal(child.props.text, "Child");
+  const runner = world.project(moduleProjectors.serverRunners).find(row => row.id === "demo_server");
+  assert.ok(runner);
+  assert.equal(runner.backendHost, "backendHost");
+  assert.equal(runner.frontendHost, "frontendHost");
+  const route = world.project(moduleProjectors.routes).find(row => row.id === "landing_route");
+  assert.ok(route);
+  assert.equal(route.serves, "landing_program");
+  assert.equal(route.params?.rootWidget, "page_root");
+  assert.equal(world.project(moduleProjectors.servedRoutes).some(row => row.id === "landing_route" && row.serverRunner === "demo_server"), true);
+  assert.equal(world.project(moduleProjectors.contextScopes).some(row => row.context === "ctx.target" && row.name === "landingPage" && row.target === "page_root" && row.sourceKind === "import"), true);
+  assert.equal(world.project(moduleProjectors.contextScopes).some(row => row.context === "ctx.target" && row.name === "homePage"), false);
+});
+
+test("context composition DSL rejects duplicate visible names in one context", () => {
+  const world = createWorld();
+  assert.throws(() => {
+    applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[widget]]
+actor = "system"
+id = "page_root"
+kind = "Page"
+context = "ctx.source"
+
+[[widget]]
+actor = "system"
+id = "local_note"
+kind = "Text"
+context = "ctx.target"
+text = "Note"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "homePage"
+target = "page_root"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "homePage"
+target = "page_root"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "homePage"
+name = "landingPage"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "landingPage"
+target = "local_note"
+`);
+  }, /name already visible in context/);
+});
+
+test("context composition DSL rejects missing exported names on import", () => {
+  const world = createWorld();
+  assert.throws(() => {
+    applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "missingPage"
+name = "landingPage"
+`);
+  }, /exported name not found/);
+});
+
+test("context composition DSL does not inherit parent visibility without explicit import", () => {
+  const world = createWorld();
+  assert.throws(() => {
+    applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+parent = "ctx.source"
+
+[[widget]]
+actor = "system"
+id = "page_root"
+kind = "Page"
+context = "ctx.source"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "homePage"
+target = "page_root"
+
+[[frontendProgram]]
+actor = "system"
+id = "landing_program"
+context = "ctx.target"
+rootWidgetRef = "homePage"
+`);
+  }, /root widget ref name not visible in context: homePage/);
+});
+
+test("context composition DSL rejects exporting imported names without a local binding", () => {
+  const world = createWorld();
+  assert.throws(() => {
+    applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[widget]]
+actor = "system"
+id = "page_root"
+kind = "Page"
+context = "ctx.source"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "homePage"
+target = "page_root"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "homePage"
+target = "page_root"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "homePage"
+name = "landingPage"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.target"
+name = "landingPage"
+target = "page_root"
+`);
+  }, /target is not locally bound in context/);
+});
+
+test("context composition DSL keeps canonical ids valid and allows unscoped legacy objects to be locally bound", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[widget]]
+actor = "system"
+id = "page_root"
+kind = "Page"
+context = "ctx.source"
+
+[[widget]]
+actor = "system"
+id = "legacy_shell"
+kind = "Box"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "legacyShell"
+target = "legacy_shell"
+
+[[widget]]
+actor = "system"
+id = "legacy_child"
+kind = "Text"
+context = "ctx.target"
+parentRef = "legacyShell"
+text = "Child"
+
+[[frontendProgram]]
+actor = "system"
+id = "canonical_program"
+context = "ctx.target"
+rootWidget = "page_root"
+`);
+
+  const child = world.project(w => widgetTree(w, "legacy_shell")).children.find(row => row.id === "legacy_child");
+  assert.ok(child);
+  assert.equal(child.props.text, "Child");
+  const program = frontendProgramsProjection(world.allWitnesses()).find(row => row.id === "canonical_program");
+  assert.ok(program);
+  assert.equal(program.rootWidget, "page_root");
+  assert.equal(world.project(moduleProjectors.contextScopes).some(row => row.context === "ctx.target" && row.name === "legacyShell" && row.target === "legacy_shell" && row.sourceKind === "local"), true);
 });

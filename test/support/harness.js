@@ -5,14 +5,15 @@ import fs from "node:fs/promises";
 import { chromium } from "playwright";
 import { createWorld } from "../../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../../src/host.js";
-import { applyWitnessDocs, loadWitnessTomlFile } from "../../src/dsl.js";
+import { applyWitnessDocs, applyWitnessToml, loadWitnessTomlFile } from "../../src/dsl.js";
 
 async function tempRuntimeRoot(prefix = "witness-world-ui-") {
   return fs.mkdtemp(path.join(os.tmpdir(), prefix));
 }
 
 export async function startUiDemoServer({
-  dslPath = path.join(process.cwd(), "examples", "demo-todo-server.wtoml")
+  dslPath = path.join(process.cwd(), "examples", "demo-todo-server.wtoml"),
+  extraWitnessToml = ""
 } = {}) {
   const world = createWorld();
   const runtimeRoot = await tempRuntimeRoot();
@@ -22,6 +23,7 @@ export async function startUiDemoServer({
 
   const docs = await loadWitnessTomlFile(dslPath);
   applyWitnessDocs(world, docs);
+  if (extraWitnessToml.trim()) applyWitnessToml(world, extraWitnessToml);
 
   const server = await startServer(world, {
     actor: "adam",

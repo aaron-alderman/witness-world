@@ -47,6 +47,8 @@ Use a simple authored canvas coordinate system.
 - units: canvas units, not screen pixels
 - positive `x`: east/right
 - positive `y`: south/down
+- current authored WTOML stores each surface as a rectangle using top-left `x`,`y` plus `w`,`h`
+- the prose diagram below still describes the emotional/map centers of each landmark
 
 Suggested v1 camera assumptions:
 
@@ -842,3 +844,29 @@ The answer should be:
 - the paths that lead elsewhere
 
 That is enough for v1.
+
+---
+
+## Eden Canvas Roadmap
+
+### Shipped now
+
+- [X] `/eden-canvas` exists as a separate route while `/` stays unchanged
+- [X] the live Todo app is the center surface rather than a fake canvas redraw
+- [X] the Tree, Personal Box, Edit Page, Process View, Versions, World Graph, and `goto` markers are authored neighborhood surfaces
+- [X] the neighborhood reveals in zoom bands and now exposes chapter/checkpoint copy in-scene
+- [X] wires, pipes, and paths are projected as typed connections
+- [X] visible power chips now show early actions and later locked gates on the relevant surfaces
+- [X] surface relief and chrome metadata are authored and projected into the Eden shell
+- [X] the Personal Box now supports direct in-scene sign-in plus local widget add/edit/delete without handing off to broader tools
+- [X] the `Edit Page` surface now writes to a real page chrome/theme model for the embedded Todo board
+- [X] the `Versions` surface now drives real published/draft/last-good actions for the embedded Todo board's current version seam
+
+### Next slices
+
+- [ ] add section-level Todo relief that maps the embedded board's internal sections to stable surface ids
+
+### Later slices
+
+- [ ] add richer departure/arrival motion on `goto` transport beyond the current camera-and-navigate transition
+- [ ] render `DESIRE` playback/edit tokens inside the scene

@@ -3,8 +3,8 @@ import test from "node:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createWorld, createThing } from "../src/kernel.js";
-import { createPerspective, placeThing, moveInstance, moveManyInstances, relateThings, removeInstance, duplicateInstance, setGrid, batchApply } from "../src/canvas-processes.js";
+import { createWorld, createThing, thing, relation } from "../src/kernel.js";
+import { createPerspective, placeThing, moveInstance, moveManyInstances, relateThings, removeInstance, duplicateInstance, setGrid, batchApply, attachAsset } from "../src/canvas-processes.js";
 import { canvasProjection, perspectivesProjection, thingDetails } from "../src/canvas-projection.js";
 
 function seededWorld({ witnessLogPath = null } = {}) {
@@ -195,4 +195,87 @@ test("thingDetails lists reality relations without perspective geometry", () => 
   const details = thingDetails(world.allWitnesses(), "customer");
   assert(details.relations.some(r => r.rel === "references"));
   assert.equal(details.relations.some(r => r.rel === "hasGeometry"), false);
+});
+
+test("asset things project as first-class canvas nodes with metadata and context", () => {
+  const world = seededWorld();
+  world.emit({
+    process: "defineContext",
+    actor: "aaron",
+    claims: [
+      thing("context:files"),
+      relation("aaron", "owns", "context:files"),
+      relation("context:files", "hasModuleKind", "context"),
+      relation("context:files", "contextActor", "aaron")
+    ],
+    body: { id: "context:files", label: "Files", actor: "aaron", parent: null, owner: "aaron", stewards: [] }
+  });
+  const perspective = createPerspective(world, { actor: "aaron", title: "Files View", context: "context:files" }).body.id;
+  world.emit({
+    process: "asset.upload",
+    actor: "aaron",
+    claims: [
+      thing("asset:brief"),
+      relation("aaron", "owns", "asset:brief"),
+      relation("asset:brief", "hasModuleKind", "asset"),
+      relation("asset:brief", "hasTitle", "brief.pdf"),
+      relation("asset:brief", "inContext", "context:files")
+    ],
+    body: {
+      id: "asset:brief",
+      originalName: "brief.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 4096,
+      storageKey: "asset:brief/blob",
+      visibility: "private",
+      context: "context:files",
+      contentUrl: "/api/assets/asset%3Abrief/content"
+    }
+  });
+  placeThing(world, { actor: "aaron", perspective, thing: "asset:brief", x: 12, y: 34 });
+
+  const canvas = canvasProjection(world.allWitnesses(), perspective);
+  assert.equal(canvas.perspective.context, "context:files");
+  assert.equal(canvas.instances[0].kind, "asset");
+  assert.equal(canvas.instances[0].asset.mimeType, "application/pdf");
+  assert.equal(canvas.instances[0].asset.context, "context:files");
+  assert.equal(canvas.availableThings.find(row => row.id === "asset:brief").kind, "asset");
+
+  const details = thingDetails(world.allWitnesses(), "asset:brief");
+  assert.equal(details.kind, "asset");
+  assert.equal(details.context, "context:files");
+  assert.equal(details.asset.storageKey, "asset:brief/blob");
+});
+
+test("asset attachments project on both the target thing and the asset", () => {
+  const world = seededWorld();
+  world.emit({
+    process: "asset.upload",
+    actor: "aaron",
+    claims: [
+      thing("asset:brief"),
+      relation("aaron", "owns", "asset:brief"),
+      relation("asset:brief", "hasModuleKind", "asset"),
+      relation("asset:brief", "hasTitle", "brief.pdf")
+    ],
+    body: {
+      id: "asset:brief",
+      originalName: "brief.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 4096,
+      storageKey: "asset:brief/blob",
+      visibility: "private",
+      context: null,
+      contentUrl: "/api/assets/asset%3Abrief/content"
+    }
+  });
+  attachAsset(world, { actor: "aaron", asset: "asset:brief", target: "proposal" });
+
+  const details = thingDetails(world.allWitnesses(), "proposal");
+  assert.equal(details.attachedAssets.length, 1);
+  assert.equal(details.attachedAssets[0].id, "asset:brief");
+
+  const assetDetails = thingDetails(world.allWitnesses(), "asset:brief");
+  assert.deepEqual(assetDetails.attachedTo, ["proposal"]);
+  assert.equal(assetDetails.asset.attachmentCount, 1);
 });

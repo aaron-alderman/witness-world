@@ -227,3 +227,128 @@ test("bootstrap UI can create governance objects and approve a guarded proposal"
     await closeServer();
   }
 });
+
+test("bootstrap UI can bind, export, import, and consume contextual names", async () => {
+  const { server, close: closeServer } = await startBlankUiServer();
+  const { page, close: closeBrowser } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await page.waitForFunction(() => document.body.textContent.includes("Recover And Author The App Boundary"));
+
+    await page.fill('#identity-form input[name="id"]', "identity.aaron");
+    await page.fill('#identity-form input[name="actor"]', "aaron");
+    await page.fill('#identity-form input[name="label"]', "Aaron");
+    await page.fill('#identity-form input[name="username"]', "aaron");
+    await page.fill('#identity-form input[name="password"]', "aaron");
+    await page.fill('#identity-form input[name="homePerspective"]', "aaron:personal");
+    await page.locator('#identity-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("identity-status")?.textContent.includes("Identity created."));
+
+    await page.fill('#session-form input[name="username"]', "aaron");
+    await page.fill('#session-form input[name="password"]', "aaron");
+    await page.locator('#session-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Signed in as Aaron"));
+
+    await page.fill('#context-form input[name="id"]', "ctx.source");
+    await page.fill('#context-form input[name="label"]', "Source");
+    await page.locator('#context-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("state-contexts")?.textContent.includes("ctx.source"));
+
+    await page.fill('#context-form input[name="id"]', "ctx.target");
+    await page.fill('#context-form input[name="label"]', "Target");
+    await page.selectOption('#context-parent', "ctx.source");
+    await page.locator('#context-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("state-contexts")?.textContent.includes("ctx.target"));
+
+    await page.fill('#widget-form input[name="id"]', "page_root");
+    await page.selectOption('#widget-kind', "Page");
+    await page.selectOption('#widget-context', "ctx.source");
+    await page.fill('#widget-form input[name="title"]', "Home");
+    await page.locator('#widget-form input[name="attach"]').uncheck();
+    await page.locator('#widget-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("state-widgets")?.textContent.includes("page_root (Page)"));
+
+    await page.locator('summary').filter({ hasText: "Naming And Scope" }).click();
+    await page.selectOption('#context-binding-context', "ctx.source");
+    await page.fill('#context-binding-form input[name="name"]', "homePage");
+    await page.selectOption('#context-binding-target', "page_root");
+    await page.locator('#context-binding-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("state-context-bindings")?.textContent.includes("ctx.source :: homePage -> page_root"));
+
+    await page.selectOption('#context-export-context', "ctx.source");
+    await page.fill('#context-export-form input[name="name"]', "homePage");
+    await page.selectOption('#context-export-target', "page_root");
+    await page.locator('#context-export-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("state-context-exports")?.textContent.includes("ctx.source :: homePage -> page_root"));
+
+    await page.selectOption('#context-import-context', "ctx.target");
+    await page.selectOption('#context-import-source-context', "ctx.source");
+    await page.selectOption('#context-import-export-name', "homePage");
+    await page.fill('#context-import-form input[name="name"]', "landingPage");
+    await page.locator('#context-import-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("state-context-imports")?.textContent.includes("ctx.target <- ctx.source :: landingPage => homePage"));
+
+    await page.locator('summary').filter({ hasText: "Frontend Programs" }).click();
+    await page.fill('#program-form input[name="id"]', "landing_program");
+    await page.selectOption('#program-context', "ctx.target");
+    await page.fill('#program-form input[name="rootWidgetRef"]', "landingPage");
+    await page.locator('#program-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("state-programs")?.textContent.includes("landing_program -> page_root"));
+    await page.waitForFunction(() => document.getElementById("state-context-scopes")?.textContent.includes("ctx.target :: landingPage -> page_root [import]"));
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("bootstrap UI surfaces truthful next-step suggestions from real world state", async () => {
+  const { server, close: closeServer } = await startBlankUiServer();
+  const { page, close: closeBrowser } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await page.waitForFunction(() => document.body.textContent.includes("Recover And Author The App Boundary"));
+
+    await page.waitForFunction(() => {
+      const suggestions = window.__witnessTutorial?.suggestions || [];
+      return suggestions.some(row => row.id === "create-first-identity")
+        && document.getElementById("tutorial-suggestions")?.textContent.includes("Create The First Identity");
+    });
+
+    await page.fill('#identity-form input[name="id"]', "identity.aaron");
+    await page.fill('#identity-form input[name="actor"]', "aaron");
+    await page.fill('#identity-form input[name="label"]', "Aaron");
+    await page.fill('#identity-form input[name="username"]', "aaron");
+    await page.fill('#identity-form input[name="password"]', "aaron");
+    await page.fill('#identity-form input[name="homePerspective"]', "aaron:personal");
+    await page.locator('#identity-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("identity-status")?.textContent.includes("Identity created."));
+
+    await page.fill('#session-form input[name="username"]', "aaron");
+    await page.fill('#session-form input[name="password"]', "aaron");
+    await page.locator('#session-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Signed in as Aaron"));
+    await page.waitForFunction(() => {
+      const suggestions = window.__witnessTutorial?.suggestions || [];
+      return suggestions.some(row => row.id === "starter-shortcut")
+        && document.getElementById("tutorial-suggestions")?.textContent.includes("Show Starter Control");
+    });
+
+    await page.locator('details').last().evaluate(node => { node.open = true; });
+    await page.locator('#create-todo-starter').click();
+    await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
+    await page.waitForFunction(() => {
+      const suggestions = window.__witnessTutorial?.suggestions || [];
+      return suggestions.some(row => row.id === "open-live-app")
+        && document.getElementById("tutorial-suggestions")?.textContent.includes("Open The Live App");
+    });
+
+    await page.locator('#tutorial-suggestions button[data-suggestion-id="open-live-app"]').click();
+    await waitForAppReady(page);
+    await page.waitForFunction(() => document.body.textContent.includes("Witness Todo"));
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});

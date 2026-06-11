@@ -1,0 +1,753 @@
+[[route]]
+actor = "adam"
+id = "eden_canvas_route"
+method = "GET"
+path = "/eden-canvas"
+serves = "edenCanvasView"
+handler = "page.edenCanvas"
+params = { neighborhood = "eden.neighborhood.home" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_canvas_route"
+
+[[route]]
+actor = "adam"
+id = "eden_personal_box_read_route"
+method = "GET"
+path = "/api/eden/personal-box"
+serves = "edenPersonalBox"
+handler = "edenPersonalBox.read"
+params = { surfaceId = "eden.surface.personal" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_personal_box_read_route"
+
+[[route]]
+actor = "adam"
+id = "eden_personal_box_create_route"
+method = "POST"
+path = "/api/eden/personal-box/items"
+serves = "edenPersonalBox"
+handler = "edenPersonalBox.create"
+params = { surfaceId = "eden.surface.personal" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_personal_box_create_route"
+
+[[route]]
+actor = "adam"
+id = "eden_personal_box_update_route"
+method = "PATCH"
+path = "/api/eden/personal-box/items/:id"
+serves = "edenPersonalBox"
+handler = "edenPersonalBox.update"
+params = { surfaceId = "eden.surface.personal" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_personal_box_update_route"
+
+[[route]]
+actor = "adam"
+id = "eden_personal_box_delete_route"
+method = "DELETE"
+path = "/api/eden/personal-box/items/:id"
+serves = "edenPersonalBox"
+handler = "edenPersonalBox.delete"
+params = { surfaceId = "eden.surface.personal" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_personal_box_delete_route"
+
+[[route]]
+actor = "adam"
+id = "eden_page_theme_read_route"
+method = "GET"
+path = "/api/eden/page-theme"
+serves = "edenPageTheme"
+handler = "edenPageTheme.read"
+params = { pageId = "todo_app_widget" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_page_theme_read_route"
+
+[[route]]
+actor = "adam"
+id = "eden_page_theme_write_route"
+method = "PUT"
+path = "/api/eden/page-theme"
+serves = "edenPageTheme"
+handler = "edenPageTheme.write"
+params = { pageId = "todo_app_widget" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_page_theme_write_route"
+
+[[route]]
+actor = "adam"
+id = "eden_versions_read_route"
+method = "GET"
+path = "/api/eden/versions"
+serves = "edenVersions"
+handler = "edenVersions.read"
+params = { surfaceId = "eden.surface.versions", soul = "todo_versioned_banner", publishedVersion = "todo_versioned_banner_v1", draftVersion = "todo_versioned_banner_v2" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_versions_read_route"
+
+[[route]]
+actor = "adam"
+id = "eden_versions_activate_route"
+method = "POST"
+path = "/api/eden/versions/activate"
+serves = "edenVersions"
+handler = "edenVersions.activate"
+params = { surfaceId = "eden.surface.versions", soul = "todo_versioned_banner", publishedVersion = "todo_versioned_banner_v1", draftVersion = "todo_versioned_banner_v2" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_versions_activate_route"
+
+[[route]]
+actor = "adam"
+id = "eden_versions_rollback_route"
+method = "POST"
+path = "/api/eden/versions/rollback"
+serves = "edenVersions"
+handler = "edenVersions.rollback"
+params = { surfaceId = "eden.surface.versions", soul = "todo_versioned_banner", publishedVersion = "todo_versioned_banner_v1", draftVersion = "todo_versioned_banner_v2" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_versions_rollback_route"
+
+[[route]]
+actor = "adam"
+id = "eden_versions_publish_route"
+method = "POST"
+path = "/api/eden/versions/publish"
+serves = "edenVersions"
+handler = "edenVersions.publish"
+params = { surfaceId = "eden.surface.versions", soul = "todo_versioned_banner", publishedVersion = "todo_versioned_banner_v1", draftVersion = "todo_versioned_banner_v2" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_versions_publish_route"
+
+[[thing]]
+actor = "adam"
+id = "eden.neighborhood.home"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "hasModuleKind"
+to = "edenNeighborhood"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "hasTitle"
+to = "First Neighbourhood"
+
+[[thing]]
+actor = "adam"
+id = "eden.prompt.zoom"
+
+[[relation]]
+actor = "adam"
+from = "eden.prompt.zoom"
+rel = "hasModuleKind"
+to = "edenPrompt"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenPrompt"
+to = "eden.prompt.zoom"
+meta = { id = "zoom_hint", text = "Use the mouse wheel to zoom out", zoomMin = 0.82, zoomMax = 1.6 }
+
+[[thing]]
+actor = "adam"
+id = "eden.prompt.truth"
+
+[[relation]]
+actor = "adam"
+from = "eden.prompt.truth"
+rel = "hasModuleKind"
+to = "edenPrompt"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenPrompt"
+to = "eden.prompt.truth"
+meta = { id = "truth_hint", text = "What you see is real. What you change is modeled.", zoomMin = 0.48, zoomMax = 0.82 }
+
+[[thing]]
+actor = "adam"
+id = "eden.prompt.routes"
+
+[[relation]]
+actor = "adam"
+from = "eden.prompt.routes"
+rel = "hasModuleKind"
+to = "edenPrompt"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenPrompt"
+to = "eden.prompt.routes"
+meta = { id = "routes_hint", text = "The signposts are real exits. Follow them when you are ready.", zoomMin = 0.2, zoomMax = 0.48 }
+
+[[thing]]
+actor = "adam"
+id = "eden.checkpoint.arrival"
+
+[[relation]]
+actor = "adam"
+from = "eden.checkpoint.arrival"
+rel = "hasModuleKind"
+to = "edenCheckpoint"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenCheckpoint"
+to = "eden.checkpoint.arrival"
+meta = { id = "arrival", order = 1, title = "Act 1: Arrival", description = "The Todo board lands first as a truthful app, not a fake onboarding shell.", zoomMin = 0.82, zoomMax = 1.6, unlocks = ["Witness Todo", "Use the mouse wheel to zoom out"] }
+
+[[thing]]
+actor = "adam"
+id = "eden.checkpoint.orientation"
+
+[[relation]]
+actor = "adam"
+from = "eden.checkpoint.orientation"
+rel = "hasModuleKind"
+to = "edenCheckpoint"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenCheckpoint"
+to = "eden.checkpoint.orientation"
+meta = { id = "orientation", order = 2, title = "Act 2: Orientation", description = "The board pulls back and the first neighbourhood becomes legible: growth, ownership, editing, and flow.", zoomMin = 0.48, zoomMax = 0.82, unlocks = ["The Tree", "Personal Box", "Edit Page", "Process View"] }
+
+[[thing]]
+actor = "adam"
+id = "eden.checkpoint.structure"
+
+[[relation]]
+actor = "adam"
+from = "eden.checkpoint.structure"
+rel = "hasModuleKind"
+to = "edenCheckpoint"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenCheckpoint"
+to = "eden.checkpoint.structure"
+meta = { id = "structure", order = 3, title = "Act 3: Structural Reading", description = "Recovery, world structure, and capability thresholds become visible before mastery arrives.", zoomMin = 0.34, zoomMax = 0.48, unlocks = ["World Graph", "Versions", "Visible capability gates"] }
+
+[[thing]]
+actor = "adam"
+id = "eden.checkpoint.routes"
+
+[[relation]]
+actor = "adam"
+from = "eden.checkpoint.routes"
+rel = "hasModuleKind"
+to = "edenCheckpoint"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenCheckpoint"
+to = "eden.checkpoint.routes"
+meta = { id = "routes", order = 4, title = "Act 4: World Routing", description = "The district stops reading like one app with extras and starts reading like a world with exits.", zoomMin = 0.2, zoomMax = 0.34, unlocks = ["Goto World", "Goto Process", "Goto Canvas"] }
+
+[[thing]]
+actor = "adam"
+id = "eden.surface.todo"
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "hasModuleKind"
+to = "edenSurface"
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "hasTitle"
+to = "Witness Todo"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "contains"
+to = "eden.surface.todo"
+meta = { x = -420, y = -410, w = 840, h = 820, surfaceKind = "embeddedPage", title = "Witness Todo", subtitle = "The live board at the heart of the neighbourhood", body = "Todo: be a sourcerer. The first app is real, useful, and eventually editable.", src = "/", href = "/", district = "arrival", tags = ["starter app", "shared surface"], zoomMin = 0.55, zoomMax = 2.2, chromeKind = "tray", reliefBase = 4, reliefHover = 4, reliefFocus = 4 }
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenDefaultCameraTarget"
+to = "eden.surface.todo"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenCameraTarget"
+to = "eden.surface.todo"
+meta = { id = "home", zoom = 1.0 }
+
+[[thing]]
+actor = "adam"
+id = "eden.surface.tree"
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.tree"
+rel = "hasModuleKind"
+to = "edenSurface"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "contains"
+to = "eden.surface.tree"
+meta = { x = -700, y = -420, w = 320, h = 320, surfaceKind = "tree", title = "The Tree", subtitle = "Orientation, growth, and return", body = "The academy begins here: claim your room, practice care, then grow into stewardship.", district = "academy", tags = ["landmark", "growth"], zoomMin = 0.52, zoomMax = 2.4, reliefBase = 2, reliefHover = 3, reliefFocus = 3 }
+
+[[thing]]
+actor = "adam"
+id = "eden.surface.personal"
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.personal"
+rel = "hasModuleKind"
+to = "edenSurface"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "contains"
+to = "eden.surface.personal"
+meta = { x = -1080, y = 540, w = 360, h = 330, surfaceKind = "panel", panelKind = "personalBox", title = "Personal Box", subtitle = "Your first owned patch", body = "A safe place for your first widgets and experiments.", district = "personal", tags = ["owned patch"], zoomMin = 0.48, zoomMax = 1.2, chromeKind = "tray", reliefBase = 2, reliefHover = 3, reliefFocus = 4 }
+
+[[thing]]
+actor = "adam"
+id = "eden.surface.edit"
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.edit"
+rel = "hasModuleKind"
+to = "edenSurface"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "contains"
+to = "eden.surface.edit"
+meta = { x = 260, y = 640, w = 360, h = 360, surfaceKind = "panel", panelKind = "editPage", pageId = "todo_app_widget", title = "Edit Page", subtitle = "The first gentle authoring seam", body = "Theme, light, typography, and page mood begin here before shared structure opens.", district = "authoring", tags = ["theme", "page chrome"], zoomMin = 0.48, zoomMax = 1.2, chromeKind = "tray", reliefBase = 2, reliefHover = 3, reliefFocus = 4, cameraTargetId = "focus.edit" }
+
+[[thing]]
+actor = "adam"
+id = "eden.surface.process"
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.process"
+rel = "hasModuleKind"
+to = "edenSurface"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "contains"
+to = "eden.surface.process"
+meta = { x = 1100, y = 120, w = 340, h = 240, surfaceKind = "panel", title = "Process View", subtitle = "Watch the machine room breathe", body = "Events, flows, and process runs gather here.", district = "runtime", tags = ["events", "pipes"], href = "/process", zoomMin = 0.48, zoomMax = 1.25, chromeKind = "machinePlate", reliefBase = 2, reliefHover = 3, reliefFocus = 4, cameraTargetId = "focus.process" }
+
+[[thing]]
+actor = "adam"
+id = "eden.surface.versions"
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.versions"
+rel = "hasModuleKind"
+to = "edenSurface"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "contains"
+to = "eden.surface.versions"
+meta = { x = 1120, y = 760, w = 360, h = 420, surfaceKind = "panel", panelKind = "versions", versionSoul = "todo_versioned_banner", publishedVersion = "todo_versioned_banner_v1", draftVersion = "todo_versioned_banner_v2", title = "Versions", subtitle = "Published, draft, and last good", body = "Recovery keeps experimentation humane. The versioned seam inside the live Todo board can move between draft, published, and the last good state from here.", district = "recovery", tags = ["drafts", "rollback"], zoomMin = 0.34, zoomMax = 0.96, chromeKind = "shelf", reliefBase = 2, reliefHover = 3, reliefFocus = 4, cameraTargetId = "focus.versions" }
+
+[[thing]]
+actor = "adam"
+id = "eden.surface.world"
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.world"
+rel = "hasModuleKind"
+to = "edenSurface"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "contains"
+to = "eden.surface.world"
+meta = { x = 980, y = -760, w = 360, h = 240, surfaceKind = "panel", title = "World Graph", subtitle = "The map behind the page", body = "Structure, context, and capability truth become visible here.", district = "structure", tags = ["contexts", "capabilities"], href = "/world", zoomMin = 0.34, zoomMax = 0.92, chromeKind = "mapWall", reliefBase = 2, reliefHover = 3, reliefFocus = 4, cameraTargetId = "focus.world" }
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenCameraTarget"
+to = "eden.surface.personal"
+meta = { id = "focus.personal", zoom = 0.9 }
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenCameraTarget"
+to = "eden.surface.edit"
+meta = { id = "focus.edit", zoom = 0.92 }
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenCameraTarget"
+to = "eden.surface.process"
+meta = { id = "focus.process", zoom = 0.92 }
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenCameraTarget"
+to = "eden.surface.versions"
+meta = { id = "focus.versions", zoom = 0.86 }
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenCameraTarget"
+to = "eden.surface.world"
+meta = { id = "focus.world", zoom = 0.82 }
+
+[[thing]]
+actor = "adam"
+id = "eden.goto.home"
+
+[[relation]]
+actor = "adam"
+from = "eden.goto.home"
+rel = "hasModuleKind"
+to = "edenSurface"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "contains"
+to = "eden.goto.home"
+meta = { x = -1280, y = -40, w = 220, h = 110, surfaceKind = "goto", title = "Goto Home", subtitle = "Recenter the workbench", body = "Return to the first frame.", cameraTargetId = "home", zoomMin = 0.2, zoomMax = 0.86, reliefBase = 1, reliefHover = 2, reliefFocus = 2 }
+
+[[thing]]
+actor = "adam"
+id = "eden.goto.world"
+
+[[relation]]
+actor = "adam"
+from = "eden.goto.world"
+rel = "hasModuleKind"
+to = "edenSurface"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "contains"
+to = "eden.goto.world"
+meta = { x = 0, y = -980, w = 240, h = 120, surfaceKind = "goto", title = "Goto World", subtitle = "Step into structure", body = "Travel to the broader world graph.", href = "/world", zoomMin = 0.2, zoomMax = 0.48, reliefBase = 1, reliefHover = 2, reliefFocus = 2 }
+
+[[thing]]
+actor = "adam"
+id = "eden.goto.process"
+
+[[relation]]
+actor = "adam"
+from = "eden.goto.process"
+rel = "hasModuleKind"
+to = "edenSurface"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "contains"
+to = "eden.goto.process"
+meta = { x = 1540, y = 120, w = 240, h = 120, surfaceKind = "goto", title = "Goto Process", subtitle = "Follow the living flow", body = "Travel to the process district.", href = "/process", zoomMin = 0.2, zoomMax = 0.48, reliefBase = 1, reliefHover = 2, reliefFocus = 2 }
+
+[[thing]]
+actor = "adam"
+id = "eden.goto.canvas"
+
+[[relation]]
+actor = "adam"
+from = "eden.goto.canvas"
+rel = "hasModuleKind"
+to = "edenSurface"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "contains"
+to = "eden.goto.canvas"
+meta = { x = 0, y = 1180, w = 240, h = 120, surfaceKind = "goto", title = "Goto Canvas", subtitle = "Enter the wider authoring world", body = "Travel to the witnessed canvas.", href = "/canvas", zoomMin = 0.2, zoomMax = 0.48, reliefBase = 1, reliefHover = 2, reliefFocus = 2 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.tree"
+rel = "edenPath"
+to = "eden.surface.todo"
+meta = { label = "orientation" }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.tree"
+rel = "edenPath"
+to = "eden.surface.personal"
+meta = { label = "ownership" }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenWire"
+to = "eden.surface.edit"
+meta = { label = "authorship" }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenPipe"
+to = "eden.surface.process"
+meta = { label = "events/data" }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenWire"
+to = "eden.surface.world"
+meta = { label = "structure" }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenWire"
+to = "eden.surface.versions"
+meta = { label = "recovery" }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenAction"
+to = "eden.action.todo.home"
+meta = { id = "todo_home", label = "Recenter Board", state = "open", cameraTargetId = "home", order = 1 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenAction"
+to = "eden.action.todo.open"
+meta = { id = "todo_open", label = "Open Todo App", state = "open", href = "/", order = 2 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenAction"
+to = "eden.action.todo.canvas"
+meta = { id = "todo_canvas", label = "Open Canvas Editor", state = "open", href = "/canvas", order = 3 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenAction"
+to = "eden.action.todo.pro"
+meta = { id = "todo_pro", label = "Expert Shortcut: F1 → whoami", state = "locked", requires = "Command surface comes later", order = 4 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.tree"
+rel = "edenAction"
+to = "eden.action.tree.room"
+meta = { id = "tree_room", label = "Claim Your Room", state = "open", cameraTargetId = "focus.personal", order = 1 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.tree"
+rel = "edenAction"
+to = "eden.action.tree.shared"
+meta = { id = "tree_shared", label = "Shared Table", state = "locked", requires = "Later chapter", order = 2 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.tree"
+rel = "edenAction"
+to = "eden.action.tree.trade"
+meta = { id = "tree_trade", label = "Run A Stall", state = "locked", requires = "Trade and livelihood", order = 3 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.tree"
+rel = "edenAction"
+to = "eden.action.tree.saas"
+meta = { id = "tree_saas", label = "Ship A Tiny SaaS", state = "locked", requires = "Sourcerer path", order = 4 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.tree"
+rel = "edenAction"
+to = "eden.action.tree.theory"
+meta = { id = "tree_theory", label = "Theory Annex", state = "locked", requires = "Optional trained mark", order = 5 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.personal"
+rel = "edenAction"
+to = "eden.action.personal.add"
+meta = { id = "personal_add", label = "Add Widget", state = "open", cameraTargetId = "focus.personal", order = 1 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.personal"
+rel = "edenAction"
+to = "eden.action.personal.edit"
+meta = { id = "personal_edit", label = "Edit Widget", state = "open", cameraTargetId = "focus.personal", order = 2 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.personal"
+rel = "edenAction"
+to = "eden.action.personal.delete"
+meta = { id = "personal_delete", label = "Delete Widget", state = "open", cameraTargetId = "focus.personal", order = 3 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.personal"
+rel = "edenAction"
+to = "eden.action.personal.shared"
+meta = { id = "personal_shared", label = "Edit Shared Surface", state = "locked", requires = "Earn shared stewardship", order = 4 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.edit"
+rel = "edenAction"
+to = "eden.action.edit.theme"
+meta = { id = "edit_theme", label = "Change Theme", state = "open", cameraTargetId = "focus.edit", order = 1 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.edit"
+rel = "edenAction"
+to = "eden.action.edit.type"
+meta = { id = "edit_type", label = "Adjust Typography", state = "open", cameraTargetId = "focus.edit", order = 2 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.edit"
+rel = "edenAction"
+to = "eden.action.edit.mood"
+meta = { id = "edit_mood", label = "Set Mood & Material", state = "open", cameraTargetId = "focus.edit", order = 3 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.edit"
+rel = "edenAction"
+to = "eden.action.edit.shared"
+meta = { id = "edit_shared", label = "Edit Shared Surface", state = "locked", requires = "Earn shared stewardship", order = 4 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.process"
+rel = "edenAction"
+to = "eden.action.process.inspect"
+meta = { id = "process_inspect", label = "Inspect Flow", state = "open", href = "/process", order = 1 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.process"
+rel = "edenAction"
+to = "eden.action.process.center"
+meta = { id = "process_center", label = "Center Machine Room", state = "open", cameraTargetId = "focus.process", order = 2 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.process"
+rel = "edenAction"
+to = "eden.action.process.alter"
+meta = { id = "process_alter", label = "Alter Runtime", state = "locked", requires = "Operator chapter", order = 3 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.versions"
+rel = "edenAction"
+to = "eden.action.versions.compare"
+meta = { id = "versions_compare", label = "Compare Current Edits", state = "open", cameraTargetId = "focus.versions", description = "Open the recovery shelf and inspect the current draft/published diff.", order = 1 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.versions"
+rel = "edenAction"
+to = "eden.action.versions.published"
+meta = { id = "versions_published", label = "View Published Version", state = "open", cameraTargetId = "focus.versions", description = "Move the live board back to the published cut.", order = 2 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.versions"
+rel = "edenAction"
+to = "eden.action.versions.restore"
+meta = { id = "versions_restore", label = "Restore Last Good", state = "open", cameraTargetId = "focus.versions", description = "Return the live board to the last healthy version.", order = 3 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.world"
+rel = "edenAction"
+to = "eden.action.world.inspect"
+meta = { id = "world_inspect", label = "Inspect Structure", state = "open", href = "/world", order = 1 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.world"
+rel = "edenAction"
+to = "eden.action.world.contexts"
+meta = { id = "world_contexts", label = "Inspect Contexts", state = "open", href = "/world", order = 2 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.world"
+rel = "edenAction"
+to = "eden.action.world.capability"
+meta = { id = "world_capability", label = "Install Capability", state = "locked", requires = "Contextual capability install", order = 3 }

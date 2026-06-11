@@ -325,3 +325,28 @@ It turns:
 The result should be a user who has not merely "learned the product" but has practiced how to build, govern, share, recover, and care inside a truthful world.
 
 See also: [FIRST-5-MINUTES.md](/C:/Users/aaron/Documents/world/docs/FIRST-5-MINUTES.md)
+
+---
+
+## Eden Canvas Roadmap
+
+### Shipped now
+
+- [X] the first academy arc is represented inside Eden through the Tree, the chapter/checkpoint rail, and the surrounding neighborhood surfaces
+- [X] capability gates are visible before they are unlocked on Personal Box, Edit Page, Process View, Versions, and World Graph
+- [X] the academy remains optional: Eden currently frames it as visible pathways rather than mandatory blocking steps
+- [X] quest-family direction is now hinted in-scene from the Tree instead of living only in prose
+- [X] the first owned artifact loop now exists in the Personal Box: sign in, claim the patch, and add/edit/delete local widgets in-world
+- [X] `Edit Page` now gives the first real shared-surface practice loop: the user can restyle the live Todo surface in-world through theme, material, and typography changes
+- [X] `Versions` now gives the next practical recovery loop: the user can open the draft, publish the current live cut, and restore the last good version from inside Eden
+
+### Next slices
+
+- [ ] turn the first academy arc into real quest instances with completion state, unlock transitions, and practiced-responsibility tracking
+- [ ] turn Todo sections into stable projected relief surfaces so the academy can teach local stewardship before whole-page authority
+- [ ] turn visible capability gates into earned unlocks that move the user from personal authorship into safe shared-surface stewardship
+
+### Later slices
+
+- [ ] expand quest-family artifacts and handoff loops across the wider academy taxonomy
+- [ ] add the `trained` mark and optional theory-annex assessment path

@@ -2,5 +2,5 @@
 
 [app]
 id = "demo_todo_app"
-imports = ["./demo/common.wtoml", "./demo/backend.wtoml", "./demo/frontend.wtoml"]
+imports = ["./demo/common.wtoml", "./demo/backend.wtoml", "./demo/frontend.wtoml", "./demo/eden.wtoml"]
 spawn = ["backend", "frontend"]

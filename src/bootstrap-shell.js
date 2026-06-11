@@ -58,6 +58,18 @@ export function renderBootstrapPage() {
     .chapter-active .chapter-dot { background: var(--accent); border-color: var(--accent); }
     .chapter-done .chapter-dot { background: #3f7d47; border-color: #3f7d47; }
     .chapter-active strong, .chapter-done strong { color: var(--ink); }
+    .tutorial-concept-list { display: grid; gap: 8px; margin-top: 8px; }
+    .tutorial-concept { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: rgba(255,255,255,.72); }
+    .tutorial-concept strong { display: block; margin-bottom: 4px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); font-family: var(--mono); }
+    .tutorial-concept span { display: block; font-size: 13px; line-height: 1.45; color: var(--muted); }
+    .tutorial-suggestion-list { display: grid; gap: 10px; margin-top: 8px; }
+    .tutorial-suggestion { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: rgba(255,255,255,.82); display: grid; gap: 8px; }
+    .tutorial-suggestion strong { display: block; font-size: 14px; color: var(--ink); }
+    .tutorial-suggestion p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+    .tutorial-disabled-list { display: grid; gap: 10px; margin-top: 8px; }
+    .tutorial-disabled-item { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: rgba(255,255,255,.82); display: grid; gap: 8px; }
+    .tutorial-disabled-item strong { display: block; font-size: 14px; color: var(--ink); }
+    .tutorial-disabled-item p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
     [data-tutorial-focus-scope="true"], [data-tutorial-current] { position: relative; z-index: 7; }
     [data-tutorial-current] { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 8px; scroll-margin-top: 130px; animation: tutorial-focus-pulse 1.35s ease-in-out infinite; }
     [data-tutorial-changed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(122, 77, 42, .18); animation: tutorial-changed-pulse 1.15s ease-in-out 2; }
@@ -121,11 +133,32 @@ export function renderBootstrapPage() {
         <p>This tutorial uses the real bootstrap builders and the real runtime. It teaches identities, runner wiring, widgets, programs, routes, mounts, and then continues into the live app to exercise real behavior.</p>
         <div class="chapter-list" id="tutorial-chapters"></div>
         <p class="muted" id="tutorial-summary">Loading tutorial status...</p>
+        <div class="grid two">
+          <div>
+            <div class="kicker">Current Concepts</div>
+            <div class="tutorial-concept-list" id="tutorial-current-concepts"></div>
+          </div>
+          <div>
+            <div class="kicker">Revealed Concepts</div>
+            <div class="tutorial-concept-list" id="tutorial-revealed-concepts"></div>
+          </div>
+        </div>
+        <div>
+          <div class="kicker">Suggested Next Moves</div>
+          <div class="tutorial-suggestion-list" id="tutorial-suggestions"></div>
+        </div>
+        <div>
+          <div class="kicker">Disabled Guidance Surfaces</div>
+          <div class="tutorial-disabled-list" id="tutorial-disabled-pages"></div>
+        </div>
         <div class="actions">
           <button type="button" id="tutorial-start">Start Tutorial</button>
           <button type="button" id="tutorial-resume" class="secondary">Resume Tutorial</button>
+          <button type="button" id="tutorial-restart-chapter" class="secondary">Restart Chapter</button>
+          <button type="button" id="tutorial-restart-from-here" class="secondary">Restart From Here</button>
           <button type="button" id="tutorial-back" class="secondary">Back</button>
           <button type="button" id="tutorial-skip" class="secondary">Skip Chapter</button>
+          <button type="button" id="tutorial-disable-page" class="secondary">Disable On This Page</button>
           <button type="button" id="tutorial-exit" class="secondary">Exit</button>
           <button type="button" id="tutorial-reset" class="secondary">Reset Tutorial</button>
         </div>
@@ -220,6 +253,87 @@ export function renderBootstrapPage() {
         </details>
 
         <details>
+          <summary><strong>Naming And Scope</strong></summary>
+          <form id="context-binding-form" class="stack">
+            <div class="grid two">
+              <label>Context<select id="context-binding-context" name="context"></select></label>
+              <label>Name<input name="name" placeholder="homePage" /></label>
+            </div>
+            <div class="grid two">
+              <label>Target<select id="context-binding-target" name="target"></select></label>
+              <label></label>
+            </div>
+            <div class="actions"><button type="submit">Bind Name</button></div>
+          </form>
+          <p class="status" id="context-binding-status"></p>
+
+          <form id="context-binding-remove-form" class="stack">
+            <div class="grid two">
+              <label>Context<select id="context-binding-remove-context" name="context"></select></label>
+              <label>Name<input name="name" placeholder="homePage" /></label>
+            </div>
+            <div class="grid two">
+              <label>Target<select id="context-binding-remove-target" name="target"></select></label>
+              <label></label>
+            </div>
+            <div class="actions"><button type="submit">Remove Binding</button></div>
+          </form>
+          <p class="status" id="context-binding-remove-status"></p>
+
+          <form id="context-export-form" class="stack">
+            <div class="grid two">
+              <label>Context<select id="context-export-context" name="context"></select></label>
+              <label>Export Name<input name="name" placeholder="homePage" /></label>
+            </div>
+            <div class="grid two">
+              <label>Target<select id="context-export-target" name="target"></select></label>
+              <label></label>
+            </div>
+            <div class="actions"><button type="submit">Export Name</button></div>
+          </form>
+          <p class="status" id="context-export-status"></p>
+
+          <form id="context-export-remove-form" class="stack">
+            <div class="grid two">
+              <label>Context<select id="context-export-remove-context" name="context"></select></label>
+              <label>Export Name<input name="name" placeholder="homePage" /></label>
+            </div>
+            <div class="grid two">
+              <label>Target<select id="context-export-remove-target" name="target"></select></label>
+              <label></label>
+            </div>
+            <div class="actions"><button type="submit">Remove Export</button></div>
+          </form>
+          <p class="status" id="context-export-remove-status"></p>
+
+          <form id="context-import-form" class="stack">
+            <div class="grid two">
+              <label>Target Context<select id="context-import-context" name="context"></select></label>
+              <label>Source Context<select id="context-import-source-context" name="sourceContext"></select></label>
+            </div>
+            <div class="grid two">
+              <label>Export Name<select id="context-import-export-name" name="exportName"></select></label>
+              <label>Local Alias<input name="name" placeholder="optional alias" /></label>
+            </div>
+            <div class="actions"><button type="submit">Import Name</button></div>
+          </form>
+          <p class="status" id="context-import-status"></p>
+
+          <form id="context-import-remove-form" class="stack">
+            <div class="grid two">
+              <label>Target Context<select id="context-import-remove-context" name="context"></select></label>
+              <label>Source Context<select id="context-import-remove-source-context" name="sourceContext"></select></label>
+            </div>
+            <div class="grid two">
+              <label>Export Name<select id="context-import-remove-export-name" name="exportName"></select></label>
+              <label>Local Alias<input name="name" placeholder="optional alias" /></label>
+            </div>
+            <div class="actions"><button type="submit">Remove Import</button></div>
+          </form>
+          <p class="status" id="context-import-remove-status"></p>
+        </details>
+
+        <details>
           <summary><strong>Stewardship</strong></summary>
           <form id="stewardship-form" class="stack">
             <div class="grid two">
@@ -299,7 +413,11 @@ export function renderBootstrapPage() {
             </div>
             <div class="grid two">
               <label>Parent<select id="widget-parent" name="parent" data-tutorial-target="widget-parent"></select></label>
+              <label>Parent Ref<input name="parentRef" placeholder="context name" /></label>
+            </div>
+            <div class="grid two">
               <label>Order<input name="order" type="number" placeholder="0" data-tutorial-target="widget-order" /></label>
+              <label></label>
             </div>
             <div class="grid two">
               <label>Context<select id="widget-context" name="context"></select></label>
@@ -358,6 +476,10 @@ export function renderBootstrapPage() {
               <label>Root Widget<select id="program-root-widget" name="rootWidget" data-tutorial-target="program-root-widget"></select></label>
             </div>
             <div class="grid two">
+              <label>Root Widget Ref<input name="rootWidgetRef" placeholder="context name" /></label>
+              <label></label>
+            </div>
+            <div class="grid two">
               <label>Context<select id="program-context" name="context"></select></label>
               <label></label>
             </div>
@@ -396,7 +518,11 @@ export function renderBootstrapPage() {
             </div>
             <div class="grid two">
               <label>Serves<input name="serves" data-tutorial-target="route-serves" /></label>
+              <label>Serves Ref<input name="servesRef" placeholder="context name" /></label>
+            </div>
+            <div class="grid two">
               <label>Method<select id="route-method" name="method" data-tutorial-target="route-method"></select></label>
+              <label></label>
             </div>
             <div class="grid two">
               <label>Handler<select id="route-handler" name="handler" data-tutorial-target="route-handler"></select></label>
@@ -404,7 +530,11 @@ export function renderBootstrapPage() {
             </div>
             <div class="grid two">
               <label>Root Widget<select id="route-root-widget" name="rootWidget" data-tutorial-target="route-root-widget"></select></label>
+              <label>Root Widget Ref<input name="rootWidgetRef" placeholder="context name" /></label>
+            </div>
+            <div class="grid two">
               <label>Frontend Program<select id="route-frontend-program" name="frontendProgram" data-tutorial-target="route-frontend-program"></select></label>
+              <label></label>
             </div>
             <label><span class="kicker">Live Projection</span><input name="liveProjection" type="checkbox" checked data-tutorial-target="route-live-projection" /></label>
             <div class="actions"><button type="submit" data-tutorial-target="route-submit">Create Route</button></div>
@@ -415,6 +545,14 @@ export function renderBootstrapPage() {
             <div class="grid two">
               <label>Server Runner<select id="serve-server-runner" name="serverRunner" data-tutorial-target="serve-server-runner"></select></label>
               <label>Route<select id="serve-route" name="route" data-tutorial-target="serve-route"></select></label>
+            </div>
+            <div class="grid two">
+              <label>Context<select id="serve-context" name="context"></select></label>
+              <label></label>
+            </div>
+            <div class="grid two">
+              <label>Server Runner Ref<input name="serverRunnerRef" placeholder="context name" /></label>
+              <label>Route Ref<input name="routeRef" placeholder="context name" /></label>
             </div>
             <div class="actions"><button type="submit" data-tutorial-target="serve-submit">Create Serve Mount</button></div>
           </form>
@@ -435,6 +573,10 @@ export function renderBootstrapPage() {
             <div class="grid two">
               <label>Backend Host<select id="runner-backend-host" name="backendHost" data-tutorial-target="runner-backend-host"></select></label>
               <label>Frontend Host<select id="runner-frontend-host" name="frontendHost" data-tutorial-target="runner-frontend-host"></select></label>
+            </div>
+            <div class="grid two">
+              <label>Backend Host Ref<input name="backendHostRef" placeholder="context name" /></label>
+              <label>Frontend Host Ref<input name="frontendHostRef" placeholder="context name" /></label>
             </div>
             <div class="grid two">
               <label>Todo Projection<input name="todoProjection" value="witness-world-bootstrap-todos.json" data-tutorial-target="runner-todo-projection" /></label>
@@ -498,7 +640,7 @@ export function renderBootstrapPage() {
           <summary><strong>Advanced Shortcut</strong></summary>
           <p class="note">This remains available as a quick seam for experienced users. It is not used by the tutorial.</p>
           <div class="actions">
-            <button type="button" id="create-todo-starter">Create Todo Starter</button>
+            <button type="button" id="create-todo-starter" data-tutorial-target="create-todo-starter">Create Todo Starter</button>
           </div>
           <p class="status" id="starter-status"></p>
         </details>
@@ -506,7 +648,7 @@ export function renderBootstrapPage() {
     </section>
 
     <aside class="column">
-      <article class="card">
+      <article class="card" data-tutorial-target="authored-state">
         <div class="badge">Current World</div>
         <h2>Authored State</h2>
         <p>The tutorial uses the same authored structures shown here. Nothing is hidden behind a fake wizard layer.</p>
@@ -514,6 +656,22 @@ export function renderBootstrapPage() {
           <section>
             <h3>Contexts</h3>
             <div id="state-contexts" class="state-list"></div>
+          </section>
+          <section>
+            <h3>Context Bindings</h3>
+            <div id="state-context-bindings" class="state-list"></div>
+          </section>
+          <section>
+            <h3>Context Exports</h3>
+            <div id="state-context-exports" class="state-list"></div>
+          </section>
+          <section>
+            <h3>Context Imports</h3>
+            <div id="state-context-imports" class="state-list"></div>
+          </section>
+          <section>
+            <h3>Context Scope</h3>
+            <div id="state-context-scopes" class="state-list"></div>
           </section>
           <section>
             <h3>Perspectives</h3>
@@ -582,9 +740,13 @@ export function renderBootstrapPage() {
     </div>
     <h3 id="tutorial-overlay-title"></h3>
     <p id="tutorial-overlay-body"></p>
+    <div class="tutorial-concept-list" id="tutorial-overlay-concepts"></div>
     <div class="actions">
       <button type="button" id="tutorial-next">Next</button>
+      <button type="button" class="secondary" id="tutorial-restart-current">Restart Chapter</button>
+      <button type="button" class="secondary" id="tutorial-replay-current">Restart From Here</button>
       <button type="button" class="secondary" id="tutorial-finish-chapter">Finish Chapter For Me</button>
+      <button type="button" class="secondary" id="tutorial-disable-current-page">Disable On This Page</button>
       <button type="button" class="secondary" id="tutorial-overlay-resume">Resume</button>
     </div>
   </aside>
@@ -592,6 +754,7 @@ export function renderBootstrapPage() {
   (() => {
     const tutorial = ${jsonForScript(tutorial)};
     const blueprint = ${jsonForScript(blueprint)};
+    const currentSurfacePage = "bootstrap";
     const localProgressKey = "witness.tutorial." + tutorial.id;
     const state = { model: null, bootstrapState: null, session: null, tutorialProgress: null };
     const stepIndex = new Map(tutorial.steps.map((step, index) => [step.id, index]));
@@ -639,11 +802,29 @@ export function renderBootstrapPage() {
       if (kind === "routePage") return targets.routePages || [];
       return [];
     };
+    const contextBindableTargets = contextId => (state.model?.contextBindableTargets || []).filter(row => !row.context || row.context === contextId);
+    const contextScopeRows = (contextId, sourceKind = null) => (state.bootstrapState?.contextScopes || []).filter(row => row.context === contextId && (!sourceKind || row.sourceKind === sourceKind));
+    const contextExportRows = contextId => (state.bootstrapState?.contextExports || []).filter(row => row.context === contextId);
     const refreshCapabilityTargetOptions = (kindSelectId, targetSelectId) => {
       const kind = byId(kindSelectId)?.value || "";
       const rows = capabilityTargetsFor(kind);
       const label = row => kind === "routePage" ? row.id + " " + (row.path || "") : row.id;
       fillSelect(targetSelectId, rows, row => row.id, label, { includeBlank: false });
+    };
+    const refreshContextBindingTargetOptions = (contextSelectId, targetSelectId) => {
+      const contextId = byId(contextSelectId)?.value || "";
+      const rows = contextId ? contextBindableTargets(contextId) : [];
+      fillSelect(targetSelectId, rows, row => row.id, row => row.id + (row.context ? " @" + row.context : ""), { includeBlank: false });
+    };
+    const refreshContextExportTargetOptions = (contextSelectId, targetSelectId) => {
+      const contextId = byId(contextSelectId)?.value || "";
+      const rows = contextId ? contextScopeRows(contextId, "local") : [];
+      fillSelect(targetSelectId, rows, row => row.target, row => row.name + " -> " + row.target, { includeBlank: false });
+    };
+    const refreshContextImportExportOptions = (sourceContextSelectId, exportNameSelectId) => {
+      const contextId = byId(sourceContextSelectId)?.value || "";
+      const rows = contextId ? contextExportRows(contextId) : [];
+      fillSelect(exportNameSelectId, rows, row => row.name, row => row.name + " -> " + row.target, { includeBlank: false });
     };
     const renderStateList = (id, rows, label) => {
       const root = byId(id);
@@ -686,11 +867,52 @@ export function renderBootstrapPage() {
       const index = stepIndex.get(state.tutorialProgress?.stepId ?? "") ?? -1;
       return index > 0 ? tutorial.steps[index - 1] : null;
     };
+    const firstTutorialStepInChapter = chapterId => tutorial.steps.find(step => step.chapterId === chapterId) || null;
     const nextTutorialStep = () => {
       const index = stepIndex.get(state.tutorialProgress?.stepId ?? "") ?? -1;
       return index >= 0 ? (tutorial.steps[index + 1] || null) : (tutorial.steps[0] || null);
     };
     const currentStepIndex = progress => stepIndex.get(progress?.stepId ?? "") ?? -1;
+    const currentSuggestions = [];
+    const conceptMap = new Map((tutorial.concepts || []).map(concept => [concept.id, concept]));
+    const knownTutorialPages = [...new Set(tutorial.steps.map(step => typeof step.page === "string" ? step.page : "").filter(Boolean))];
+    const tutorialDisabledPages = progress => [...new Set((Array.isArray(progress?.disabledPages) ? progress.disabledPages : []).map(String).filter(page => knownTutorialPages.includes(page)))];
+    const tutorialReplayStepId = progress => {
+      const id = typeof progress?.replayStepId === "string" ? progress.replayStepId : "";
+      return tutorial.steps.some(step => step.id === id) ? id : null;
+    };
+    const tutorialPageLabel = page => page === "app" ? "App" : (page === "bootstrap" ? "Bootstrap" : (page === "world" ? "World" : String(page || "")));
+    const tutorialStepConcepts = step => [...new Set((step?.concepts || []).map(String))].map(id => conceptMap.get(id)).filter(Boolean);
+    const tutorialRevealedConcepts = progress => {
+      const lastIndex = progress?.completedAt ? ((tutorial.steps?.length || 1) - 1) : currentStepIndex(progress);
+      if (lastIndex < 0) return [];
+      const conceptIds = [];
+      for (const step of tutorial.steps.slice(0, lastIndex + 1)) {
+        for (const concept of tutorialStepConcepts(step)) {
+          if (!conceptIds.includes(concept.id)) conceptIds.push(concept.id);
+        }
+      }
+      return conceptIds.map(id => conceptMap.get(id)).filter(Boolean);
+    };
+    const tutorialSurfaceState = () => {
+      const progress = state.tutorialProgress;
+      const current = tutorialStep();
+      if (!progress || !current) return { kind: "idle", page: null };
+      if (progress.completedAt) return { kind: "completed", page: current.page || null };
+      if (progress.hidden) return { kind: "hidden", page: current.page || null };
+      if ((current.page || null) !== currentSurfacePage) return { kind: "offpage", page: current.page || null };
+      if (tutorialDisabledPages(progress).includes(currentSurfacePage)) return { kind: "disabled", page: current.page || null };
+      return { kind: "active", page: current.page || null };
+    };
+    const clearTutorialPageDisabled = (progress, page = currentSurfacePage) => ({
+      ...progress,
+      disabledPages: tutorialDisabledPages(progress).filter(candidate => candidate !== page)
+    });
+    const disableTutorialOnCurrentPage = progress => ({
+      ...progress,
+      hidden: false,
+      disabledPages: [...new Set([...tutorialDisabledPages(progress), currentSurfacePage])]
+    });
     const mergeProgress = (localProgress, remoteProgress) => {
       if (!localProgress) return remoteProgress || null;
       if (!remoteProgress) return localProgress || null;
@@ -700,7 +922,12 @@ export function renderBootstrapPage() {
       const remoteIndex = currentStepIndex(remoteProgress);
       if (localIndex > remoteIndex) return localProgress;
       if (remoteIndex > localIndex) return remoteProgress;
-      return localProgress.hidden === false && remoteProgress.hidden === true ? localProgress : remoteProgress;
+      const merged = localProgress.hidden === false && remoteProgress.hidden === true ? localProgress : remoteProgress;
+      return {
+        ...merged,
+        disabledPages: [...new Set([...tutorialDisabledPages(localProgress), ...tutorialDisabledPages(remoteProgress)])],
+        replayStepId: tutorialReplayStepId(localProgress) || tutorialReplayStepId(remoteProgress) || null
+      };
     };
     const readLocalProgress = () => {
       try {
@@ -753,8 +980,64 @@ export function renderBootstrapPage() {
       chapterStatus: tutorial.steps.length ? "in_progress" : "idle",
       draftInputs: {},
       completedAt: null,
-      hidden: false
+      hidden: false,
+      disabledPages: [],
+      replayStepId: null
     });
+    const restartCurrentChapter = async () => {
+      const chapterId = state.tutorialProgress?.chapterId || tutorialStep()?.chapterId || null;
+      const first = firstTutorialStepInChapter(chapterId);
+      if (!state.tutorialProgress || !first) return;
+      await persistTutorialProgress({
+        ...state.tutorialProgress,
+        chapterId: first.chapterId,
+        stepId: first.id,
+        chapterStatus: "in_progress",
+        draftInputs: {},
+        completedAt: null,
+        hidden: false,
+        replayStepId: null
+      });
+      render();
+    };
+    const restartFromHere = async () => {
+      const current = tutorialStep();
+      if (!state.tutorialProgress || !current) return;
+      await persistTutorialProgress({
+        ...state.tutorialProgress,
+        chapterId: current.chapterId,
+        stepId: current.id,
+        chapterStatus: "in_progress",
+        draftInputs: {},
+        completedAt: null,
+        hidden: false,
+        replayStepId: current.id
+      });
+      render();
+    };
+    const continueTutorialOnPage = async page => {
+      if (page === "app") {
+        await openAppHome(byId("open-app-link").href, { advance: false });
+        return;
+      }
+      if (page === "bootstrap") {
+        const target = new URL("/_bootstrap", window.location.href);
+        if (window.location.pathname === target.pathname) {
+          window.location.reload();
+          return;
+        }
+        window.location.assign(target.toString());
+        return;
+      }
+      if (page === "world") {
+        const target = new URL("/world", window.location.href);
+        if (window.location.pathname === target.pathname) {
+          window.location.reload();
+          return;
+        }
+        window.location.assign(target.toString());
+      }
+    };
     const setFieldValue = (field, value) => {
       if (!field) return;
       if (field.type === "checkbox") field.checked = value === true;
@@ -769,6 +1052,213 @@ export function renderBootstrapPage() {
         if (!field) continue;
         setFieldValue(field, value);
         pulseNode(field, 960);
+      }
+    };
+    const focusTutorialTarget = targetName => {
+      const target = byTarget(targetName);
+      if (!target) return false;
+      revealTarget(target);
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+      pulseNode(target, 1200);
+      const focusable = target.matches?.("input,select,textarea,button,a,summary")
+        ? target
+        : target.querySelector?.("input,select,textarea,button,a,summary,[tabindex]");
+      focusable?.focus?.({ preventScroll: true });
+      return true;
+    };
+    const renderConceptList = (id, concepts, emptyText) => {
+      const root = byId(id);
+      if (!root) return;
+      root.innerHTML = "";
+      if (!concepts.length) {
+        const empty = document.createElement("div");
+        empty.className = "tutorial-concept";
+        const label = document.createElement("span");
+        label.textContent = emptyText;
+        empty.append(label);
+        root.append(empty);
+        return;
+      }
+      for (const concept of concepts) {
+        const item = document.createElement("div");
+        item.className = "tutorial-concept";
+        const title = document.createElement("strong");
+        title.textContent = concept.label;
+        const summary = document.createElement("span");
+        summary.textContent = concept.summary;
+        item.append(title, summary);
+        root.append(item);
+      }
+    };
+    const setSuggestionRows = suggestions => {
+      currentSuggestions.splice(0, currentSuggestions.length, ...suggestions);
+      const root = byId("tutorial-suggestions");
+      if (!root) return;
+      root.innerHTML = "";
+      if (!suggestions.length) {
+        const empty = document.createElement("div");
+        empty.className = "tutorial-suggestion";
+        const copy = document.createElement("p");
+        copy.textContent = "No extra curation yet. The visible controls remain the source of truth.";
+        empty.append(copy);
+        root.append(empty);
+        return;
+      }
+      for (const suggestion of suggestions) {
+        const item = document.createElement("div");
+        item.className = "tutorial-suggestion";
+        const title = document.createElement("strong");
+        title.textContent = suggestion.title;
+        const body = document.createElement("p");
+        body.textContent = suggestion.body;
+        const actions = document.createElement("div");
+        actions.className = "actions";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "secondary";
+        button.dataset.suggestionId = suggestion.id;
+        button.textContent = suggestion.buttonLabel;
+        actions.append(button);
+        item.append(title, body, actions);
+        root.append(item);
+      }
+    };
+    const tutorialDisabledPageRows = progress => {
+      const current = tutorialStep();
+      return tutorialDisabledPages(progress).map(page => ({
+        page,
+        label: tutorialPageLabel(page),
+        currentStepTitle: current?.page === page ? current.title : null,
+        isCurrentSurface: page === currentSurfacePage
+      }));
+    };
+    const setDisabledPageRows = rows => {
+      const root = byId("tutorial-disabled-pages");
+      if (!root) return;
+      root.innerHTML = "";
+      if (!rows.length) {
+        const empty = document.createElement("div");
+        empty.className = "tutorial-disabled-item";
+        const body = document.createElement("p");
+        body.textContent = "No guidance surfaces are currently disabled.";
+        empty.append(body);
+        root.append(empty);
+        return;
+      }
+      for (const row of rows) {
+        const item = document.createElement("div");
+        item.className = "tutorial-disabled-item";
+        const title = document.createElement("strong");
+        title.textContent = row.label;
+        const body = document.createElement("p");
+        body.textContent = row.currentStepTitle
+          ? ("Current step there: " + row.currentStepTitle + ".")
+          : "Guidance is disabled on this surface, but you can re-enable it without losing progress.";
+        const actions = document.createElement("div");
+        actions.className = "actions";
+        const enableButton = document.createElement("button");
+        enableButton.type = "button";
+        enableButton.className = "secondary";
+        enableButton.dataset.disabledEnable = row.page;
+        enableButton.textContent = row.isCurrentSurface ? "Enable Here" : "Enable Guidance";
+        actions.append(enableButton);
+        if (!row.isCurrentSurface) {
+          const openButton = document.createElement("button");
+          openButton.type = "button";
+          openButton.className = "secondary";
+          openButton.dataset.disabledOpen = row.page;
+          openButton.textContent = "Open " + row.label;
+          actions.append(openButton);
+        }
+        item.append(title, body, actions);
+        root.append(item);
+      }
+    };
+    const tutorialSuggestions = () => {
+      const suggestions = [];
+      const current = tutorialStep();
+      const progress = state.tutorialProgress;
+      const surface = tutorialSurfaceState();
+      const appReady = state.model?.appReady === true;
+      const identityCount = (state.bootstrapState?.identities || []).length;
+      const add = (id, title, body, buttonLabel, action) => suggestions.push({ id, title, body, buttonLabel, action });
+      if (!progress) {
+        add("start-tutorial", "Start The Guided Build", "Follow the same real bootstrap and app surfaces step by step.", "Start Tutorial", { kind: "startTutorial" });
+        if (!identityCount) {
+          add("create-first-identity", "Create The First Identity", "A real actor is the first boundary. The identity form below is the next concrete move.", "Show Identity Form", { kind: "focusTarget", target: "identity-form" });
+        } else if (!state.session?.authenticated) {
+          add("sign-in", "Sign In To Keep Editing", "Identities already exist, so bootstrap writes now go through the normal session path.", "Show Session Form", { kind: "focusTarget", target: "session-form" });
+        } else if (!appReady) {
+          add("starter-shortcut", "Use The Fast Path Or Keep Building", "The starter shortcut uses the same authored structures as the tutorial. You can inspect or trigger it directly.", "Show Starter Control", { kind: "focusTarget", target: "create-todo-starter" });
+        } else {
+          add("open-live-app", "Open The Live App", "A served home route exists now, so the next truthful move is to use the app boundary itself.", "Open App", { kind: "openApp" });
+        }
+        return suggestions;
+      }
+      if (progress.completedAt) {
+        if (appReady) {
+          add("open-live-app", "Open The Live App", "The tutorial is complete and the route is live. Use the app directly.", "Open App", { kind: "openApp" });
+        }
+        add("inspect-authored-state", "Inspect The Authored World", "The bootstrap state panel shows the exact authored structures the tutorial built.", "Show Authored State", { kind: "focusTarget", target: "authored-state" });
+        return suggestions;
+      }
+      if (surface.kind === "hidden") {
+        add("resume-tutorial", "Resume The Current Tutorial Step", "The tutorial is paused but the current step and its real controls remain available.", "Resume Tutorial", { kind: "resumeTutorial" });
+        return suggestions;
+      }
+      if (surface.kind === "disabled") {
+        add("enable-current-page", "Re-Enable Guidance On This Page", "Guidance is disabled here, but the current step is still recoverable without resetting progress.", "Enable Guidance", { kind: "enableCurrentPage" });
+        return suggestions;
+      }
+      if (surface.kind === "offpage") {
+        if (surface.page && tutorialDisabledPages(progress).includes(surface.page)) {
+          add("enable-offpage-surface", "Re-Enable Guidance On " + tutorialPageLabel(surface.page), "The current step belongs on the " + tutorialPageLabel(surface.page) + " surface, but guidance is disabled there until you turn it back on.", "Enable Guidance", { kind: "enablePage", page: surface.page });
+        }
+        add("continue-surface", "Continue On The Relevant Surface", "The current step belongs on the " + tutorialPageLabel(surface.page) + " surface, not this page.", "Continue On " + tutorialPageLabel(surface.page), { kind: "continueSurface", page: surface.page });
+        return suggestions.slice(0, 2);
+      }
+      if (current?.id === "open-app") {
+        add("open-live-app", "Cross The App Boundary", "This step becomes real by opening the live app you just wired.", "Open App", { kind: "openApp" });
+        return suggestions;
+      }
+      if (current?.target) {
+        add("show-current-control", "Use The Current Real Control", "The tutorial is pointing at a real authored control on this page. Work through that exact surface.", "Show Current Control", { kind: "focusTarget", target: current.target });
+      }
+      if (!appReady && state.session?.authenticated) {
+        add("starter-shortcut", "Inspect The Fast Path", "If you want a denser path, the starter shortcut remains available and uses the same underlying structures.", "Show Starter Control", { kind: "focusTarget", target: "create-todo-starter" });
+      }
+      return suggestions.slice(0, 2);
+    };
+    const runSuggestion = async suggestion => {
+      if (!suggestion?.action) return;
+      if (suggestion.action.kind === "startTutorial") {
+        byId("tutorial-start").click();
+        return;
+      }
+      if (suggestion.action.kind === "resumeTutorial") {
+        byId("tutorial-resume").click();
+        return;
+      }
+      if (suggestion.action.kind === "enableCurrentPage") {
+        await persistTutorialProgress(clearTutorialPageDisabled(state.tutorialProgress));
+        render();
+        return;
+      }
+      if (suggestion.action.kind === "enablePage") {
+        await persistTutorialProgress(clearTutorialPageDisabled(state.tutorialProgress, suggestion.action.page));
+        render();
+        return;
+      }
+      if (suggestion.action.kind === "continueSurface") {
+        await continueTutorialOnPage(suggestion.action.page);
+        return;
+      }
+      if (suggestion.action.kind === "openApp") {
+        await openAppHome(byId("open-app-link").href, { advance: false });
+        return;
+      }
+      if (suggestion.action.kind === "focusTarget") {
+        focusTutorialTarget(suggestion.action.target);
       }
     };
     const tutorialChapters = () => {
@@ -790,6 +1280,11 @@ export function renderBootstrapPage() {
     const renderTutorialCard = () => {
       const current = tutorialStep();
       const progress = state.tutorialProgress;
+      const surface = tutorialSurfaceState();
+      const currentConcepts = current ? tutorialStepConcepts(current) : [];
+      const revealedConcepts = tutorialRevealedConcepts(progress);
+      const suggestions = tutorialSuggestions();
+      const disabledPages = tutorialDisabledPageRows(progress);
       const chapters = tutorialChapters();
       byId("tutorial-chapters").innerHTML = chapters.map(chapterId => {
         const chapterSteps = tutorial.steps.filter(step => step.chapterId === chapterId);
@@ -797,17 +1292,37 @@ export function renderBootstrapPage() {
         const status = chapterState(chapterId);
         return '<div class="chapter-item chapter-' + status + '"><div class="chapter-dot"></div><div><strong>' + escapeHtml(title) + '</strong><div>' + escapeHtml(chapterId) + '</div></div></div>';
       }).join("");
+      renderConceptList("tutorial-current-concepts", currentConcepts, progress ? "No concept tagged on this step yet." : "Start the tutorial to reveal concepts.");
+      renderConceptList("tutorial-revealed-concepts", revealedConcepts, "No concepts revealed yet.");
+      setSuggestionRows(suggestions);
+      setDisabledPageRows(disabledPages);
       byId("tutorial-start").disabled = Boolean(progress) || tutorialAutoRunning;
-      byId("tutorial-resume").disabled = !(progress && progress.hidden === true) || tutorialAutoRunning;
+      byId("tutorial-resume").disabled = !progress || Boolean(progress.completedAt) || tutorialAutoRunning || surface.kind === "active";
+      byId("tutorial-resume").textContent = surface.kind === "offpage"
+        ? ("Continue On " + tutorialPageLabel(surface.page))
+        : (surface.kind === "disabled" ? "Enable On This Page" : "Resume Tutorial");
       byId("tutorial-back").disabled = !previousTutorialStep() || tutorialAutoRunning;
       byId("tutorial-skip").disabled = !progress || Boolean(progress.completedAt) || tutorialAutoRunning;
       byId("tutorial-exit").disabled = !progress || Boolean(progress.hidden) || Boolean(progress.completedAt) || tutorialAutoRunning;
       byId("tutorial-reset").disabled = !progress || tutorialAutoRunning;
+      byId("tutorial-restart-from-here").disabled = !progress || !current || Boolean(progress.completedAt) || tutorialAutoRunning;
+      byId("tutorial-disable-page").disabled = !progress || !current || Boolean(progress.completedAt) || tutorialAutoRunning || current.page !== currentSurfacePage;
+      byId("tutorial-restart-chapter").disabled = !progress || !current || Boolean(progress.completedAt) || tutorialAutoRunning;
       byId("tutorial-summary").textContent = !progress
         ? "Start the guided build to learn the platform through the real bootstrap seam."
         : progress.completedAt
           ? "Tutorial complete. The app is wired and you have used the real surface."
-          : (current ? current.title + " (" + current.chapterId + ")" : "Tutorial in progress.");
+          : surface.kind === "offpage"
+            ? (surface.page && tutorialDisabledPages(progress).includes(surface.page)
+                ? ("Current guidance continues on the " + tutorialPageLabel(surface.page) + " surface, but guidance is disabled there until you re-enable it. Current step: " + (current?.title || "Tutorial in progress.") + ".")
+                : ("Current guidance continues on the " + tutorialPageLabel(surface.page) + " surface: " + (current?.title || "Tutorial in progress.") + "."))
+            : surface.kind === "disabled"
+              ? ("Guidance is disabled on this page. " + (current ? current.title + " stays available on the " + tutorialPageLabel(current.page) + " surface." : ""))
+              : surface.kind === "hidden"
+                ? ("Tutorial paused. Resume to continue with " + (current?.title || "the next step") + ".")
+                : tutorialReplayStepId(progress) === current?.id
+                  ? ("Replaying this step from here: " + current.title + ". This replays guidance only and does not roll back authored state.")
+                  : (current ? current.title + " (" + current.chapterId + " / " + current.page + ")" : "Tutorial in progress.");
     };
     const canAutoFinishChapter = current => Boolean(current && current.page === "bootstrap" && autoCompletableChapters.has(current.chapterId) && !state.tutorialProgress?.completedAt);
     const clearTutorialScope = () => {
@@ -877,8 +1392,9 @@ export function renderBootstrapPage() {
       const overlay = byId("tutorial-overlay");
       const dimmer = byId("tutorial-dimmer");
       const current = tutorialStep();
+      const surface = tutorialSurfaceState();
       clearTutorialHighlight();
-      if (!state.tutorialProgress || state.tutorialProgress.hidden || state.tutorialProgress.completedAt || !current) {
+      if (!state.tutorialProgress || state.tutorialProgress.completedAt || !current || surface.kind !== "active") {
         overlay.classList.add("tutorial-hidden");
         dimmer.classList.add("tutorial-hidden");
         return;
@@ -899,10 +1415,14 @@ export function renderBootstrapPage() {
       byId("tutorial-overlay-meta").textContent = current.chapterId.toUpperCase();
       byId("tutorial-overlay-title").textContent = current.title;
       byId("tutorial-overlay-body").textContent = current.body;
+      renderConceptList("tutorial-overlay-concepts", tutorialStepConcepts(current), "This step uses the current structure without unlocking a new concept.");
       byId("tutorial-next").textContent = current.nextLabel || "Next";
       byId("tutorial-next").disabled = tutorialAutoRunning;
+      byId("tutorial-restart-current").disabled = tutorialAutoRunning;
+      byId("tutorial-replay-current").disabled = tutorialAutoRunning;
       byId("tutorial-finish-chapter").disabled = tutorialAutoRunning || !canAutoFinishChapter(current);
       byId("tutorial-finish-chapter").classList.toggle("tutorial-hidden", !canAutoFinishChapter(current));
+      byId("tutorial-disable-current-page").disabled = tutorialAutoRunning;
       byId("tutorial-overlay-resume").classList.toggle("tutorial-hidden", true);
       dimmer.classList.remove("tutorial-hidden");
       overlay.classList.remove("tutorial-hidden");
@@ -944,7 +1464,7 @@ export function renderBootstrapPage() {
       const currentIndex = currentStepIndex(state.tutorialProgress);
       const next = tutorial.steps[currentIndex + 1] || null;
       if (!next) {
-        await persistTutorialProgress({ ...state.tutorialProgress, chapterStatus: "completed", completedAt: new Date().toISOString() });
+        await persistTutorialProgress({ ...state.tutorialProgress, chapterStatus: "completed", completedAt: new Date().toISOString(), replayStepId: null });
       } else {
         await persistTutorialProgress({
           ...state.tutorialProgress,
@@ -952,7 +1472,8 @@ export function renderBootstrapPage() {
           stepId: next.id,
           chapterStatus: "in_progress",
           completedAt: null,
-          hidden: false
+          hidden: false,
+          replayStepId: null
         });
       }
       renderTutorialCard();
@@ -960,9 +1481,26 @@ export function renderBootstrapPage() {
     };
     const maybeAdvanceTutorial = async () => {
       let current = tutorialStep();
-      while (state.tutorialProgress && current && !state.tutorialProgress.hidden && !state.tutorialProgress.completedAt && isStepComplete(current)) {
+      while (state.tutorialProgress && current && !state.tutorialProgress.hidden && !state.tutorialProgress.completedAt && tutorialReplayStepId(state.tutorialProgress) !== current.id && isStepComplete(current)) {
         await advanceTutorial();
         current = tutorialStep();
+      }
+    };
+    let tutorialAdvanceRunning = false;
+    let tutorialAdvanceQueued = false;
+    const requestMaybeAdvanceTutorial = async () => {
+      if (tutorialAdvanceRunning) {
+        tutorialAdvanceQueued = true;
+        return;
+      }
+      tutorialAdvanceRunning = true;
+      try {
+        do {
+          tutorialAdvanceQueued = false;
+          await maybeAdvanceTutorial();
+        } while (tutorialAdvanceQueued);
+      } finally {
+        tutorialAdvanceRunning = false;
       }
     };
     const waitFor = async (check, timeout = 15000, interval = 80) => {
@@ -997,7 +1535,7 @@ export function renderBootstrapPage() {
         const target = byTarget(current.target);
         if (!target) throw new Error("Missing tutorial target for " + current.id + ".");
         fillForm(target, current.payload);
-        await persistTutorialProgress({ ...state.tutorialProgress, draftInputs: current.payload, hidden: false });
+        await persistTutorialProgress({ ...state.tutorialProgress, draftInputs: current.payload, hidden: false, replayStepId: null });
         renderTutorialOverlay();
         await sleep(180);
         await submitTutorialForm(target);
@@ -1005,6 +1543,16 @@ export function renderBootstrapPage() {
         await waitFor(() => (state.tutorialProgress?.stepId !== previousStepId) || Boolean(state.tutorialProgress?.completedAt));
         await sleep(120);
       }
+    };
+    const clearReplayForInteraction = async eventTarget => {
+      const current = tutorialStep();
+      const replayStepId = tutorialReplayStepId(state.tutorialProgress);
+      if (!current || replayStepId !== current.id) return;
+      const target = current.target ? byTarget(current.target) : null;
+      const element = eventTarget?.nodeType === Node.ELEMENT_NODE ? eventTarget : eventTarget?.parentElement || null;
+      if (!target || !element) return;
+      if (!(element === target || target.contains(element) || element.closest?.('[data-tutorial-target="' + CSS.escape(current.target) + '"]'))) return;
+      await persistTutorialProgress({ ...state.tutorialProgress, replayStepId: null });
     };
     const openAppHome = async (href, { advance = false } = {}) => {
       if (state.model?.appReady !== true) {
@@ -1026,7 +1574,7 @@ export function renderBootstrapPage() {
       state.session = await request("/api/session");
       await loadTutorialProgress();
       render();
-      await maybeAdvanceTutorial();
+      await requestMaybeAdvanceTutorial();
       render();
     };
     const render = () => {
@@ -1046,9 +1594,17 @@ export function renderBootstrapPage() {
       fillSelect("identity-home-context", authored.contexts || [], x => x.id, x => x.id);
       fillSelect("context-parent", authored.contexts || [], x => x.id, x => x.id);
       fillSelect("perspective-context", authored.contexts || [], x => x.id, x => x.id);
+      fillSelect("context-binding-context", authored.contexts || [], x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("context-binding-remove-context", authored.contexts || [], x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("context-export-context", authored.contexts || [], x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("context-export-remove-context", authored.contexts || [], x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("context-import-context", authored.contexts || [], x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("context-import-remove-context", authored.contexts || [], x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("context-import-source-context", authored.contexts || [], x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("context-import-remove-source-context", authored.contexts || [], x => x.id, x => x.id, { includeBlank: false });
       fillSelect("widget-context", authored.contexts || [], x => x.id, x => x.id);
       fillSelect("widget-parent", authored.widgets || [], x => x.id, x => x.id);
-      fillSelect("program-root-widget", authored.widgets || [], x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("program-root-widget", authored.widgets || [], x => x.id, x => x.id);
       fillSelect("program-context", authored.contexts || [], x => x.id, x => x.id);
       fillSelect("route-root-widget", authored.widgets || [], x => x.id, x => x.id);
       fillSelect("route-frontend-program", authored.frontendPrograms || [], x => x.id, x => x.id);
@@ -1057,12 +1613,13 @@ export function renderBootstrapPage() {
       fillSelect("step-op", model.supportedFrontendOps || [], x => x, x => x, { includeBlank: false });
       fillSelect("route-method", model.supportedMethods || [], x => x, x => x, { includeBlank: false });
       fillSelect("route-handler", model.supportedHandlers || [], x => x, x => x, { includeBlank: false });
-      fillSelect("serve-route", authored.routes || [], x => x.id, x => x.id, { includeBlank: false });
-      fillSelect("serve-server-runner", authored.serverRunners || [], x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("serve-route", authored.routes || [], x => x.id, x => x.id);
+      fillSelect("serve-server-runner", authored.serverRunners || [], x => x.id, x => x.id);
+      fillSelect("serve-context", authored.contexts || [], x => x.id, x => x.id);
       fillSelect("runner-handler-set", model.supportedHandlerSets || [], x => x, x => x);
       fillSelect("runner-context", authored.contexts || [], x => x.id, x => x.id);
-      fillSelect("runner-backend-host", model.backendHosts || [], x => x.id, x => x.id, { includeBlank: false });
-      fillSelect("runner-frontend-host", model.frontendHosts || [], x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("runner-backend-host", model.backendHosts || [], x => x.id, x => x.id);
+      fillSelect("runner-frontend-host", model.frontendHosts || [], x => x.id, x => x.id);
       fillSelect("capability-context", authored.contexts || [], x => x.id, x => x.id);
       fillSelect("capability-install-capability", authored.capabilityCatalog || [], x => x.id, x => x.id + (x.version ? " [" + x.version + "]" : ""), { includeBlank: false });
       fillSelect("capability-remove-capability", authored.capabilityCatalog || [], x => x.id, x => x.id + (x.version ? " [" + x.version + "]" : ""), { includeBlank: false });
@@ -1077,8 +1634,18 @@ export function renderBootstrapPage() {
       fillSelect("proposal-reject-id", (authored.proposals || []).filter(row => row.status === "open"), x => x.id, x => x.id, { includeBlank: false });
       refreshCapabilityTargetOptions("capability-install-kind", "capability-install-target");
       refreshCapabilityTargetOptions("capability-remove-kind", "capability-remove-target");
+      refreshContextBindingTargetOptions("context-binding-context", "context-binding-target");
+      refreshContextBindingTargetOptions("context-binding-remove-context", "context-binding-remove-target");
+      refreshContextExportTargetOptions("context-export-context", "context-export-target");
+      refreshContextExportTargetOptions("context-export-remove-context", "context-export-remove-target");
+      refreshContextImportExportOptions("context-import-source-context", "context-import-export-name");
+      refreshContextImportExportOptions("context-import-remove-source-context", "context-import-remove-export-name");
 
       renderStateList("state-contexts", authored.contexts || [], row => row.id + (row.parent ? " <- " + row.parent : "") + ((row.capabilities || []).length ? " -> " + row.capabilities.join(", ") : ""));
+      renderStateList("state-context-bindings", authored.contextBindings || [], row => row.context + " :: " + row.name + " -> " + row.target);
+      renderStateList("state-context-exports", authored.contextExports || [], row => row.context + " :: " + row.name + " -> " + row.target);
+      renderStateList("state-context-imports", authored.contextImports || [], row => row.context + " <- " + row.sourceContext + " :: " + row.name + " => " + row.exportName);
+      renderStateList("state-context-scopes", authored.contextScopes || [], row => row.context + " :: " + row.name + " -> " + row.target + (row.sourceKind === "import" ? " [import]" : " [local]"));
       renderStateList("state-perspectives", authored.perspectives || [], row => row.id + (row.context ? " @" + row.context : ""));
       renderStateList("state-stewardships", authored.stewardships || [], row => row.steward + " -> " + row.target);
       renderStateList("state-proposals", authored.proposals || [], row => row.id + " [" + row.status + "] " + row.targetProcess);
@@ -1097,7 +1664,7 @@ export function renderBootstrapPage() {
       renderStateList("state-capability-installs", authored.capabilityInstalls || [], row => row.targetKind + " " + row.target + " -> " + row.capability);
 
       const editingEnabled = session.authenticated || !(authored.identities || []).length;
-      for (const formId of ["context-form", "perspective-form", "stewardship-form", "stewardship-remove-form", "proposal-form", "proposal-approve-form", "proposal-reject-form", "widget-form", "program-form", "step-form", "route-form", "serve-form", "runner-form", "capability-form", "capability-install-form", "capability-remove-form"]) {
+      for (const formId of ["context-form", "perspective-form", "context-binding-form", "context-binding-remove-form", "context-export-form", "context-export-remove-form", "context-import-form", "context-import-remove-form", "stewardship-form", "stewardship-remove-form", "proposal-form", "proposal-approve-form", "proposal-reject-form", "widget-form", "program-form", "step-form", "route-form", "serve-form", "runner-form", "capability-form", "capability-install-form", "capability-remove-form"]) {
         const form = byId(formId);
         if (!form) continue;
         form.querySelectorAll("input,select,textarea,button").forEach(el => { el.disabled = !editingEnabled; });
@@ -1108,8 +1675,16 @@ export function renderBootstrapPage() {
       window.__witnessTutorial = {
         currentStepId: state.tutorialProgress?.stepId || null,
         currentChapterId: state.tutorialProgress?.chapterId || null,
+        currentPage: tutorialStep()?.page || null,
+        currentConceptIds: tutorialStepConcepts(tutorialStep()).map(concept => concept.id),
+        revealedConceptIds: tutorialRevealedConcepts(state.tutorialProgress).map(concept => concept.id),
+        suggestions: currentSuggestions.map(suggestion => ({ id: suggestion.id, title: suggestion.title, actionKind: suggestion.action?.kind || null })),
+        replayStepId: tutorialReplayStepId(state.tutorialProgress),
         completedAt: state.tutorialProgress?.completedAt || null,
-        hidden: state.tutorialProgress?.hidden === true
+        hidden: state.tutorialProgress?.hidden === true,
+        disabledPages: tutorialDisabledPages(state.tutorialProgress),
+        surfacePage: currentSurfacePage,
+        surfaceStatus: tutorialSurfaceState().kind
       };
     };
     const widget = overrides => postJson("/api/widgets", overrides);
@@ -1132,9 +1707,13 @@ export function renderBootstrapPage() {
         await runner({ ...blueprint.runner, backendHost, frontendHost });
       }
       for (const definition of blueprint.widgets) await widget(definition);
+      for (const definition of blueprint.operatingWidgets || []) await widget(definition);
       await program({ ...blueprint.program });
+      for (const definition of blueprint.operatingPrograms || []) await program({ ...definition });
       for (const definition of blueprint.steps) await step(definition);
+      for (const definition of blueprint.operatingSteps || []) await step(definition);
       for (const definition of blueprint.routes) await route(definition);
+      for (const definition of blueprint.operatingRoutes || []) await route(definition);
       for (const definition of blueprint.serves) await serve(definition);
     }
 
@@ -1155,6 +1734,35 @@ export function renderBootstrapPage() {
     };
 
     byId("refresh-bootstrap").addEventListener("click", () => refresh().catch(error => setStatus("bootstrap-status", error.message)));
+    byId("tutorial-suggestions").addEventListener("click", async event => {
+      const button = event.target.closest("button[data-suggestion-id]");
+      if (!button) return;
+      const suggestion = currentSuggestions.find(row => row.id === button.dataset.suggestionId);
+      if (!suggestion) return;
+      try {
+        await runSuggestion(suggestion);
+      } catch (error) {
+        setStatus("tutorial-status", error.message);
+      }
+    });
+    byId("tutorial-disabled-pages").addEventListener("click", async event => {
+      const enableButton = event.target.closest("button[data-disabled-enable]");
+      const openButton = event.target.closest("button[data-disabled-open]");
+      try {
+        if (enableButton) {
+          if (!state.tutorialProgress) return;
+          await persistTutorialProgress(clearTutorialPageDisabled(state.tutorialProgress, enableButton.dataset.disabledEnable));
+          setStatus("tutorial-status", "Guidance re-enabled on " + tutorialPageLabel(enableButton.dataset.disabledEnable) + ".");
+          render();
+          return;
+        }
+        if (openButton) {
+          await continueTutorialOnPage(openButton.dataset.disabledOpen);
+        }
+      } catch (error) {
+        setStatus("tutorial-status", error.message);
+      }
+    });
     byId("identity-form").addEventListener("submit", async event => {
       event.preventDefault();
       const form = event.currentTarget;
@@ -1193,7 +1801,7 @@ export function renderBootstrapPage() {
       setStatus("starter-status", "Creating minimal todo app...");
       try {
         await createTodoStarter();
-        setStatus("starter-status", "Todo starter created. Open the app at /.");
+        setStatus("starter-status", "Todo starter created. Open the app at / and inspect it at /world.");
         await refresh();
       } catch (error) {
         setStatus("starter-status", error.message);
@@ -1214,6 +1822,9 @@ export function renderBootstrapPage() {
     }));
     bindCreate("context-form", "context-status", "/api/contexts", data => data);
     bindCreate("perspective-form", "perspective-status", "/api/perspectives", data => data);
+    bindCreate("context-binding-form", "context-binding-status", "/api/context-bindings", data => data);
+    bindCreate("context-export-form", "context-export-status", "/api/context-exports", data => data);
+    bindCreate("context-import-form", "context-import-status", "/api/context-imports", data => data);
     bindCreate("stewardship-form", "stewardship-status", "/api/stewardships", data => data);
     bindCreate("program-form", "program-status", "/api/frontend-programs", data => data);
     bindCreate("step-form", "step-status", "/api/frontend-steps", data => ({
@@ -1229,6 +1840,42 @@ export function renderBootstrapPage() {
     bindCreate("capability-form", "capability-status", "/api/capabilities", data => data);
     bindCreate("capability-install-form", "capability-install-status", "/api/capability-installs", data => data);
     bindCreate("proposal-form", "proposal-status", "/api/proposals", data => data);
+    byId("context-binding-remove-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      try {
+        const data = readForm(form);
+        await postJson("/api/context-bindings", data, "DELETE");
+        setStatus("context-binding-remove-status", "Removed.");
+        await refresh();
+      } catch (error) {
+        setStatus("context-binding-remove-status", error.message);
+      }
+    });
+    byId("context-export-remove-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      try {
+        const data = readForm(form);
+        await postJson("/api/context-exports", data, "DELETE");
+        setStatus("context-export-remove-status", "Removed.");
+        await refresh();
+      } catch (error) {
+        setStatus("context-export-remove-status", error.message);
+      }
+    });
+    byId("context-import-remove-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      try {
+        const data = readForm(form);
+        await postJson("/api/context-imports", data, "DELETE");
+        setStatus("context-import-remove-status", "Removed.");
+        await refresh();
+      } catch (error) {
+        setStatus("context-import-remove-status", error.message);
+      }
+    });
     byId("proposal-approve-form").addEventListener("submit", async event => {
       event.preventDefault();
       const form = event.currentTarget;
@@ -1279,6 +1926,12 @@ export function renderBootstrapPage() {
     });
     byId("capability-install-kind").addEventListener("change", () => refreshCapabilityTargetOptions("capability-install-kind", "capability-install-target"));
     byId("capability-remove-kind").addEventListener("change", () => refreshCapabilityTargetOptions("capability-remove-kind", "capability-remove-target"));
+    byId("context-binding-context").addEventListener("change", () => refreshContextBindingTargetOptions("context-binding-context", "context-binding-target"));
+    byId("context-binding-remove-context").addEventListener("change", () => refreshContextBindingTargetOptions("context-binding-remove-context", "context-binding-remove-target"));
+    byId("context-export-context").addEventListener("change", () => refreshContextExportTargetOptions("context-export-context", "context-export-target"));
+    byId("context-export-remove-context").addEventListener("change", () => refreshContextExportTargetOptions("context-export-remove-context", "context-export-remove-target"));
+    byId("context-import-source-context").addEventListener("change", () => refreshContextImportExportOptions("context-import-source-context", "context-import-export-name"));
+    byId("context-import-remove-source-context").addEventListener("change", () => refreshContextImportExportOptions("context-import-remove-source-context", "context-import-remove-export-name"));
 
     byId("tutorial-overlay-handle").addEventListener("pointerdown", event => {
       const overlay = byId("tutorial-overlay");
@@ -1301,6 +1954,12 @@ export function renderBootstrapPage() {
       overlayDrag.active = false;
       document.body.classList.remove("tutorial-dragging");
     });
+    document.addEventListener("click", event => {
+      void clearReplayForInteraction(event.target).catch(() => {});
+    });
+    document.addEventListener("submit", event => {
+      void clearReplayForInteraction(event.target).catch(() => {});
+    }, true);
 
     byId("tutorial-start").addEventListener("click", async () => {
       overlayDrag.manual = false;
@@ -1310,13 +1969,29 @@ export function renderBootstrapPage() {
     });
     byId("tutorial-resume").addEventListener("click", async () => {
       if (!state.tutorialProgress) return;
-      await persistTutorialProgress({ ...state.tutorialProgress, hidden: false });
+      const surface = tutorialSurfaceState();
+      if (surface.kind === "offpage") {
+        await continueTutorialOnPage(surface.page);
+        return;
+      }
+      if (surface.kind === "disabled") {
+        await persistTutorialProgress(clearTutorialPageDisabled(state.tutorialProgress));
+      } else {
+        await persistTutorialProgress({ ...state.tutorialProgress, hidden: false });
+      }
       render();
     });
     byId("tutorial-back").addEventListener("click", async () => {
       const previous = previousTutorialStep();
       if (!state.tutorialProgress || !previous) return;
-      await persistTutorialProgress({ ...state.tutorialProgress, chapterId: previous.chapterId, stepId: previous.id, hidden: false, completedAt: null });
+      await persistTutorialProgress({
+        ...state.tutorialProgress,
+        chapterId: previous.chapterId,
+        stepId: previous.id,
+        hidden: false,
+        completedAt: null,
+        replayStepId: isStepComplete(previous) ? previous.id : null
+      });
       render();
     });
     byId("tutorial-skip").addEventListener("click", async () => {
@@ -1324,15 +1999,22 @@ export function renderBootstrapPage() {
       if (!state.tutorialProgress || !current) return;
       const next = tutorial.steps.find(step => step.chapterId !== current.chapterId && (stepIndex.get(step.id) > stepIndex.get(current.id)));
       if (!next) {
-        await persistTutorialProgress({ ...state.tutorialProgress, completedAt: new Date().toISOString(), chapterStatus: "completed" });
+        await persistTutorialProgress({ ...state.tutorialProgress, completedAt: new Date().toISOString(), chapterStatus: "completed", replayStepId: null });
       } else {
-        await persistTutorialProgress({ ...state.tutorialProgress, chapterId: next.chapterId, stepId: next.id, hidden: false });
+        await persistTutorialProgress({ ...state.tutorialProgress, chapterId: next.chapterId, stepId: next.id, hidden: false, replayStepId: null });
       }
       render();
     });
     byId("tutorial-exit").addEventListener("click", async () => {
       if (!state.tutorialProgress) return;
-      await persistTutorialProgress({ ...state.tutorialProgress, hidden: true });
+      await persistTutorialProgress({ ...state.tutorialProgress, hidden: true, replayStepId: null });
+      render();
+    });
+    byId("tutorial-disable-page").addEventListener("click", async () => {
+      const current = tutorialStep();
+      if (!state.tutorialProgress || !current || current.page !== currentSurfacePage) return;
+      await persistTutorialProgress(disableTutorialOnCurrentPage(state.tutorialProgress));
+      setStatus("tutorial-status", "Guidance disabled on the Bootstrap page.");
       render();
     });
     byId("tutorial-reset").addEventListener("click", async () => {
@@ -1340,6 +2022,34 @@ export function renderBootstrapPage() {
       await persistTutorialProgress(null);
       setStatus("tutorial-status", "Tutorial progress cleared.");
       render();
+    });
+    byId("tutorial-restart-from-here").addEventListener("click", async () => {
+      overlayDrag.manual = false;
+      await restartFromHere();
+      setStatus("tutorial-status", "Restarted this step from here. Guidance was replayed without rolling back authored state.");
+    });
+    byId("tutorial-restart-chapter").addEventListener("click", async () => {
+      overlayDrag.manual = false;
+      await restartCurrentChapter();
+      setStatus("tutorial-status", "Chapter restarted from its first step.");
+    });
+    byId("tutorial-restart-current").addEventListener("click", async () => {
+      overlayDrag.manual = false;
+      await restartCurrentChapter();
+      setStatus("tutorial-status", "Chapter restarted from its first step.");
+    });
+    byId("tutorial-replay-current").addEventListener("click", async () => {
+      overlayDrag.manual = false;
+      await restartFromHere();
+      setStatus("tutorial-status", "Restarted this step from here. Guidance was replayed without rolling back authored state.");
+    });
+    byId("tutorial-disable-current-page").addEventListener("click", async () => {
+      const current = tutorialStep();
+      if (!state.tutorialProgress || !current || current.page !== currentSurfacePage) return;
+      await persistTutorialProgress(disableTutorialOnCurrentPage(state.tutorialProgress));
+      setStatus("tutorial-status", "Guidance disabled on the Bootstrap page.");
+      renderTutorialCard();
+      renderTutorialOverlay();
     });
     byId("tutorial-finish-chapter").addEventListener("click", async () => {
       const current = tutorialStep();

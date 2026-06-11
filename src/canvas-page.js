@@ -1,3 +1,5 @@
+import { renderCanvasCorePrelude } from "./canvas-core.js";
+
 const CANVAS_CSS = `
   :root { --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
   * { box-sizing: border-box; }
@@ -15,6 +17,8 @@ const CANVAS_CSS = `
   .canvas-shell { display: flex; flex: 1; min-height: 0; }
   .canvas-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
   .canvas-stage { position: relative; flex: 1; min-width: 0; min-height: 0; border: 2px inset #fff; margin: 6px; background: #f4f4f1; }
+  .canvas-stage.drop-ready { background: #eef6df; box-shadow: inset 0 0 0 2px #5f8f2b; }
+  .canvas-stage.drop-disabled { background: #f6e7e7; box-shadow: inset 0 0 0 2px #a34444; }
   #history-banner { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 5; background: #fff8d8; border: 1px solid #b89c2a; padding: 3px 8px; display: flex; align-items: center; gap: 8px; box-shadow: 1px 1px 4px rgba(0,0,0,0.25); }
   #timeline-panel { flex: none; margin: 0 6px 6px; padding: 6px; background: #d4d0c8; border: 2px outset #fff; }
   .timeline-controls { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -37,11 +41,16 @@ const CANVAS_CSS = `
   .palette-item:hover { background: #c0d4ec; }
   .placed-badge { color: #666; margin-left: 4px; font-weight: 600; font-family: var(--mono); }
   .inspector-empty { color: #555; font-style: italic; margin: 4px 0; }
+  .asset-preview { margin: 6px 0 2px; padding: 6px; background: #f3f0e8; border: 1px solid #9f998c; }
+  .asset-preview pre { margin: 0; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-family: var(--mono); }
+  .asset-preview img { display: block; max-width: 100%; max-height: 220px; border: 1px solid #8c8677; background: #fff; }
   .danger { color: #7a0000; }
   #status, #history-label, #timeline-pos, .timeline-tick, .timeline-older { font-family: var(--mono); }
 `;
 
 const CANVAS_CLIENT_JS = `(async () => {
+  ${renderCanvasCorePrelude()}
+  const core = __canvasCore;
   const MIN_W = 40, MIN_H = 24;
   const FLUSH_DELAY_MS = 1500;
   const PLAY_INTERVAL_MS = 150;
@@ -56,7 +65,7 @@ const CANVAS_CLIENT_JS = `(async () => {
     session: { authenticated: false, identity: null, actor: null, label: null, perspective: null },
     perspective: localStorage.getItem('witness.canvasPerspective') || '',
     model: null,
-    camera: { x: 0, y: 0, zoom: 1 },
+    camera: core.createCameraState(),
     cameraPerspective: null,
     selected: new Set(),
     selectedConnector: null,
@@ -66,13 +75,15 @@ const CANVAS_CLIENT_JS = `(async () => {
     drag: null,
     rubber: null,
     dirty: true,
-    history: { witnesses: [], playhead: null, filter: 'all', playing: null, open: false }
+    history: core.createReplayState(),
+    assetPreviewCache: new Map()
   };
   const outbox = { perspective: '', moves: new Map(), styles: new Map(), camera: null, grid: null };
   let flushTimer = null;
   let flushInFlight = null;
   let overlayCommit = null;
   let projectionModule = null;
+  let dropDepth = 0;
 
   const isLive = () => state.history.playhead === null;
 
@@ -162,6 +173,29 @@ const CANVAS_CLIENT_JS = `(async () => {
     return body;
   }
 
+  const canAcceptFileDrop = () => isLive() && isAuthenticated() && Boolean(state.perspective);
+
+  function updateDropState(active) {
+    stage.classList.toggle('drop-ready', active && canAcceptFileDrop());
+    stage.classList.toggle('drop-disabled', active && !canAcceptFileDrop());
+  }
+
+  async function uploadAssetFile(file) {
+    const form = new FormData();
+    form.set('file', file, file.name || 'upload.bin');
+    form.set('perspective', state.perspective || '');
+    if (state.model?.perspective?.context) form.set('dropContext', state.model.perspective.context);
+    const response = await fetch('/api/assets?perspective=' + encodeURIComponent(state.perspective), {
+      method: 'POST',
+      body: form
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { ok: false, error: body.error || ('upload failed (' + response.status + ')') };
+    }
+    return { ok: true, asset: body.asset, witness: body.witness };
+  }
+
   async function loadPerspectives() {
     const body = await fetch('/api/canvas/perspectives', { headers: headers() }).then(r => r.json());
     const select = el('perspective-select');
@@ -191,8 +225,8 @@ const CANVAS_CLIENT_JS = `(async () => {
       if (state.cameraPerspective !== state.perspective) {
         state.cameraPerspective = state.perspective;
         const camera = model.perspective.camera;
-        if (camera) state.camera = { x: camera.x || 0, y: camera.y || 0, zoom: camera.zoom || 1 };
-        else state.camera = { x: 0, y: 0, zoom: 1 };
+        if (camera) state.camera = core.createCameraState(camera);
+        else state.camera = core.createCameraState();
       }
       const grid = model.perspective.grid;
       if (grid && !outbox.grid) state.grid = { snap: grid.snap === true, size: grid.size || 20 };
@@ -229,7 +263,7 @@ const CANVAS_CLIENT_JS = `(async () => {
 
   const refresh = () => loadCanvas();
   const findInstance = id => (state.model ? state.model.instances.find(i => i.id === id) : null);
-  const connectorKey = c => c.from + ' ' + c.rel + ' ' + c.to + ' ' + c.fromInstance + ' ' + c.toInstance;
+  const connectorKey = c => core.connectorKey(c);
   const findConnector = key => (state.model ? state.model.connectors.find(c => connectorKey(c) === key) : null);
 
   const outboxSize = () => outbox.moves.size + outbox.styles.size + (outbox.camera ? 1 : 0) + (outbox.grid ? 1 : 0);
@@ -425,7 +459,7 @@ const CANVAS_CLIENT_JS = `(async () => {
     markDirty();
   }
 
-  const screenToWorld = (px, py) => ({ x: (px - state.camera.x) / state.camera.zoom, y: (py - state.camera.y) / state.camera.zoom });
+  const screenToWorld = (px, py) => core.screenToWorld(state.camera, px, py);
 
   function pointerPosition(event) {
     const rect = canvas.getBoundingClientRect();
@@ -442,7 +476,7 @@ const CANVAS_CLIENT_JS = `(async () => {
     return null;
   }
 
-  const center = n => ({ x: n.x + n.w / 2, y: n.y + n.h / 2 });
+  const center = n => core.centerOfRect(n);
 
   function handlePositions(n) {
     return [
@@ -461,17 +495,7 @@ const CANVAS_CLIENT_JS = `(async () => {
   }
 
   function selectionBounds() {
-    let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
-    for (const id of state.selected) {
-      const n = findInstance(id);
-      if (!n) continue;
-      left = Math.min(left, n.x);
-      top = Math.min(top, n.y);
-      right = Math.max(right, n.x + n.w);
-      bottom = Math.max(bottom, n.y + n.h);
-    }
-    if (left === Infinity) return null;
-    return { x: left, y: top, w: right - left, h: bottom - top };
+    return core.selectionBounds([...state.selected].map(findInstance));
   }
 
   function groupCorners(bounds) {
@@ -499,49 +523,40 @@ const CANVAS_CLIENT_JS = `(async () => {
     return null;
   }
 
-  function segmentDistance(px, py, ax, ay, bx, by) {
-    const dx = bx - ax, dy = by - ay;
-    const lengthSq = dx * dx + dy * dy;
-    const t = lengthSq ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSq)) : 0;
-    const cx = ax + t * dx, cy = ay + t * dy;
-    return Math.hypot(px - cx, py - cy);
-  }
-
   function hitConnector(wx, wy) {
     if (!state.model) return null;
     for (const c of state.model.connectors) {
       const a = findInstance(c.fromInstance), b = findInstance(c.toInstance);
       if (!a || !b) continue;
-      const ca = center(a), cb = center(b);
-      if (segmentDistance(wx, wy, ca.x, ca.y, cb.x, cb.y) <= 6 / state.camera.zoom) return c;
+      const { start, end } = core.layoutConnector(a, b);
+      if (core.segmentDistance(wx, wy, start.x, start.y, end.x, end.y) <= 6 / state.camera.zoom) return c;
     }
     return null;
   }
 
-  function rectEdgePoint(node, towards) {
-    const c = center(node);
-    const dx = towards.x - c.x, dy = towards.y - c.y;
-    if (!dx && !dy) return c;
-    const sx = dx ? (node.w / 2) / Math.abs(dx) : Infinity;
-    const sy = dy ? (node.h / 2) / Math.abs(dy) : Infinity;
-    const s = Math.min(sx, sy);
-    return { x: c.x + dx * s, y: c.y + dy * s };
-  }
-
   function drawNode(n) {
     const selected = state.selected.has(n.id);
+    const isAsset = n.kind === 'asset';
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(n.x, n.y, n.w, n.h, 6); else ctx.rect(n.x, n.y, n.w, n.h);
-    ctx.fillStyle = (n.style && n.style.color) || '#ffffff';
+    ctx.fillStyle = (n.style && n.style.color) || (isAsset ? '#fff3cf' : '#ffffff');
     ctx.fill();
     ctx.lineWidth = (selected ? 2.5 : 1.2) / state.camera.zoom;
-    ctx.strokeStyle = selected ? '#0a52c8' : '#55524c';
+    ctx.strokeStyle = selected ? '#0a52c8' : (isAsset ? '#8f6a18' : '#55524c');
     ctx.stroke();
     ctx.fillStyle = (n.style && n.style.textColor) || '#1c1c1c';
     ctx.font = '13px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(n.label, n.x + n.w / 2, n.y + n.h / 2, n.w - 12);
+    if (isAsset && n.asset) {
+      ctx.textBaseline = 'middle';
+      ctx.fillText(n.label, n.x + n.w / 2, n.y + n.h / 2 - 8, n.w - 12);
+      ctx.fillStyle = '#5f5b52';
+      ctx.font = '11px "Segoe UI", sans-serif';
+      ctx.fillText(n.asset.mimeType || 'file', n.x + n.w / 2, n.y + n.h / 2 + 10, n.w - 14);
+    } else {
+      ctx.textBaseline = 'middle';
+      ctx.fillText(n.label, n.x + n.w / 2, n.y + n.h / 2, n.w - 12);
+    }
   }
 
   function drawHandles(n) {
@@ -580,8 +595,7 @@ const CANVAS_CLIENT_JS = `(async () => {
   function drawConnector(c) {
     const a = findInstance(c.fromInstance), b = findInstance(c.toInstance);
     if (!a || !b) return;
-    const start = rectEdgePoint(a, center(b));
-    const end = rectEdgePoint(b, center(a));
+    const { start, end } = core.layoutConnector(a, b);
     const selected = state.selectedConnector === connectorKey(c);
     ctx.beginPath();
     ctx.moveTo(start.x, start.y);
@@ -928,10 +942,7 @@ const CANVAS_CLIENT_JS = `(async () => {
     event.preventDefault();
     const { px, py } = pointerPosition(event);
     const factor = event.deltaY < 0 ? 1.1 : 1 / 1.1;
-    const zoom = Math.max(0.2, Math.min(4, state.camera.zoom * factor));
-    state.camera.x = px - ((px - state.camera.x) / state.camera.zoom) * zoom;
-    state.camera.y = py - ((py - state.camera.y) / state.camera.zoom) * zoom;
-    state.camera.zoom = zoom;
+    state.camera = core.zoomCameraAt(state.camera, px, py, factor);
     queueCamera();
     markDirty();
   }, { passive: false });
@@ -946,6 +957,66 @@ const CANVAS_CLIENT_JS = `(async () => {
       await post('canvas.createThing', { perspective: state.perspective, name: name, x: snapValue(w.x), y: snapValue(w.y) });
       await refresh();
     });
+  });
+
+  stage.addEventListener('dragenter', event => {
+    if (!event.dataTransfer || !event.dataTransfer.types.includes('Files')) return;
+    dropDepth += 1;
+    updateDropState(true);
+    event.preventDefault();
+  });
+
+  stage.addEventListener('dragover', event => {
+    if (!event.dataTransfer || !event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = canAcceptFileDrop() ? 'copy' : 'none';
+    updateDropState(true);
+  });
+
+  stage.addEventListener('dragleave', event => {
+    if (!event.dataTransfer || !event.dataTransfer.types.includes('Files')) return;
+    dropDepth = Math.max(0, dropDepth - 1);
+    if (!dropDepth) updateDropState(false);
+  });
+
+  stage.addEventListener('drop', async event => {
+    if (!event.dataTransfer) return;
+    const files = [...event.dataTransfer.files || []];
+    dropDepth = 0;
+    updateDropState(false);
+    if (!files.length) return;
+    event.preventDefault();
+    if (!isLive()) { setStatus('read-only: history view'); return; }
+    if (!isAuthenticated()) { setStatus('sign in first'); return; }
+    if (!state.perspective) { setStatus('choose a perspective first'); return; }
+    const { px, py } = pointerPosition(event);
+    const start = screenToWorld(px, py);
+    let placedAny = false;
+    for (let index = 0; index < files.length; index += 1) {
+      const file = files[index];
+      setStatus('uploading ' + file.name + '...');
+      const uploaded = await uploadAssetFile(file);
+      if (!uploaded.ok) {
+        setStatus('upload failed for ' + file.name + ': ' + uploaded.error);
+        continue;
+      }
+      const offset = index * 24;
+      const placed = await post('canvas.place', {
+        perspective: state.perspective,
+        thing: uploaded.asset.id,
+        x: snapValue(start.x + offset),
+        y: snapValue(start.y + offset)
+      });
+      if (!placed) {
+        setStatus('placement failed for ' + file.name + ' after upload');
+        continue;
+      }
+      const placedInstance = placed?.witness?.body?.instance;
+      if (placedInstance) selectOnly(placedInstance);
+      placedAny = true;
+      setStatus('uploaded ' + file.name);
+    }
+    if (placedAny) await refresh();
   });
 
   window.addEventListener('keydown', async event => {
@@ -1029,6 +1100,169 @@ const CANVAS_CLIENT_JS = `(async () => {
     return input;
   }
 
+  function appendReadonlyText(parent, labelText, value) {
+    const input = textInput(value == null ? '' : String(value), () => {});
+    input.readOnly = true;
+    parent.appendChild(propRow(labelText, input));
+  }
+
+  function appendLinkRow(parent, labelText, href, text) {
+    const row = document.createElement('div');
+    row.className = 'prop-row';
+    const label = document.createElement('label');
+    label.textContent = labelText;
+    const link = document.createElement('a');
+    link.href = href;
+    link.textContent = text || href;
+    link.target = '_blank';
+    link.rel = 'noreferrer';
+    row.appendChild(label);
+    row.appendChild(link);
+    parent.appendChild(row);
+  }
+
+  function appendPreviewRow(parent, labelText, builder) {
+    const row = document.createElement('div');
+    row.className = 'prop-row';
+    const label = document.createElement('label');
+    label.textContent = labelText;
+    const box = document.createElement('div');
+    box.className = 'asset-preview';
+    builder(box);
+    row.appendChild(label);
+    row.appendChild(box);
+    parent.appendChild(row);
+  }
+
+  function selectInput(options, value) {
+    const input = document.createElement('select');
+    for (const optionRow of options) {
+      const option = document.createElement('option');
+      option.value = optionRow.value;
+      option.textContent = optionRow.label;
+      input.appendChild(option);
+    }
+    input.value = value || (options[0]?.value || '');
+    return input;
+  }
+
+  function thingCatalog() {
+    const rows = new Map();
+    const add = row => {
+      if (!row || !row.id) return;
+      if (rows.has(row.id)) return;
+      rows.set(row.id, {
+        id: row.id,
+        label: row.label || row.id,
+        kind: row.kind || null,
+        context: row.context || null,
+        asset: row.asset || null,
+        attachedAssets: row.attachedAssets || [],
+        attachedTo: row.attachedTo || []
+      });
+    };
+    for (const row of state.model?.instances || []) add({ id: row.thing, label: row.label, kind: row.kind, context: row.context, asset: row.asset, attachedAssets: row.attachedAssets, attachedTo: row.attachedTo });
+    for (const row of state.model?.availableThings || []) add(row);
+    return [...rows.values()].sort((a, b) => String(a.label || a.id).localeCompare(String(b.label || b.id)));
+  }
+
+  function attachmentCandidatesForTarget(node) {
+    const attached = new Set((node?.attachedAssets || []).map(row => row.id));
+    return thingCatalog().filter(row => row.asset && row.id !== node?.thing && !attached.has(row.id));
+  }
+
+  function attachmentTargetsForAsset(node) {
+    const attached = new Set(node?.attachedTo || []);
+    return thingCatalog().filter(row => !row.asset && row.id !== node?.thing && !attached.has(row.id));
+  }
+
+  async function attachAsset(assetId, targetId) {
+    const response = await fetch('/api/assets/' + encodeURIComponent(assetId) + '/attachments', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ target: targetId, perspective: state.perspective || null })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) return { ok: false, error: body.error || ('attach failed (' + response.status + ')') };
+    return { ok: true, witness: body.witness };
+  }
+
+  async function detachAsset(assetId, targetId) {
+    const response = await fetch('/api/assets/' + encodeURIComponent(assetId) + '/attachments?target=' + encodeURIComponent(targetId), {
+      method: 'DELETE'
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) return { ok: false, error: body.error || ('detach failed (' + response.status + ')') };
+    return { ok: true, witness: body.witness };
+  }
+
+  function formatBytes(size) {
+    const bytes = Number(size);
+    if (!Number.isFinite(bytes) || bytes < 0) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function assetDownloadUrl(asset) {
+    if (!asset) return '';
+    if (asset.downloadUrl) return asset.downloadUrl;
+    const contentUrl = asset.contentUrl || '';
+    if (!contentUrl) return '';
+    return contentUrl.includes('?') ? contentUrl + '&download=1' : contentUrl + '?download=1';
+  }
+
+  function assetPreviewMode(asset) {
+    const mimeType = String(asset?.mimeType || '').toLowerCase();
+    const sizeBytes = Number(asset?.sizeBytes);
+    if (!asset?.contentUrl || !mimeType) return { kind: 'none', reason: 'Preview unavailable.' };
+    if (mimeType.startsWith('image/')) return { kind: 'image' };
+    const isTextLike = mimeType.startsWith('text/')
+      || mimeType.includes('json')
+      || mimeType.includes('xml')
+      || mimeType.includes('javascript')
+      || mimeType.includes('svg')
+      || mimeType.endsWith('+json');
+    if (!isTextLike) return { kind: 'none', reason: 'Preview unavailable for this file type.' };
+    if (Number.isFinite(sizeBytes) && sizeBytes > 128 * 1024) {
+      return { kind: 'none', reason: 'Inline preview is limited to text files up to 128 KB.' };
+    }
+    return { kind: 'text' };
+  }
+
+  function ensureAssetPreview(asset) {
+    const mode = assetPreviewMode(asset);
+    if (mode.kind === 'none') return { status: 'none', reason: mode.reason };
+    if (mode.kind === 'image') return { status: 'image', src: asset.contentUrl };
+    const cacheKey = asset.id + '|' + asset.contentUrl;
+    const cached = state.assetPreviewCache.get(cacheKey);
+    if (cached) return cached;
+    const loading = { status: 'loading' };
+    state.assetPreviewCache.set(cacheKey, loading);
+    fetch(asset.contentUrl)
+      .then(async response => {
+        if (!response.ok) throw new Error('preview request failed (' + response.status + ')');
+        const text = await response.text();
+        const truncated = text.length > 12000;
+        state.assetPreviewCache.set(cacheKey, {
+          status: 'ready',
+          text: truncated ? text.slice(0, 12000) + '\\n…' : text,
+          truncated
+        });
+      })
+      .catch(error => {
+        state.assetPreviewCache.set(cacheKey, {
+          status: 'error',
+          reason: error?.message || 'preview failed'
+        });
+      })
+      .finally(() => {
+        const selected = soleSelected();
+        if (selected?.asset?.id === asset.id) renderInspector();
+      });
+    return loading;
+  }
+
   function renderInspector() {
     const thingProps = el('thing-props');
     const projectionProps = el('projection-props');
@@ -1078,6 +1312,176 @@ const CANVAS_CLIENT_JS = `(async () => {
           await post('canvas.thing.setTitle', { thing: node.thing, title: value, perspective: state.perspective });
           await refresh();
         })));
+        if (node.kind) {
+          appendReadonlyText(thingProps, 'Kind', node.kind);
+        }
+        if (!node.asset && node.attachedAssets?.length) {
+          for (const asset of node.attachedAssets) {
+            const row = document.createElement('div');
+            row.className = 'relation-row';
+            row.textContent = 'attached ' + (asset.title || asset.id) + ' [' + (asset.mimeType || 'file') + ']';
+            if (asset.contentUrl) {
+              const link = document.createElement('a');
+              link.href = asset.contentUrl;
+              link.textContent = ' open';
+              link.target = '_blank';
+              link.rel = 'noreferrer';
+              row.appendChild(link);
+            }
+            if (isLive()) {
+              const removeAttachment = document.createElement('button');
+              removeAttachment.type = 'button';
+              removeAttachment.textContent = 'Detach';
+              removeAttachment.dataset.assetDetachButton = asset.id;
+              removeAttachment.addEventListener('click', async () => {
+                const removed = await detachAsset(asset.id, node.thing);
+                if (!removed.ok) {
+                  setStatus('detach failed: ' + removed.error);
+                  return;
+                }
+                setStatus('detached ' + (asset.title || asset.id));
+                await refresh();
+              });
+              row.appendChild(document.createTextNode(' '));
+              row.appendChild(removeAttachment);
+            }
+            thingProps.appendChild(row);
+          }
+        }
+        if (node.asset) {
+          appendReadonlyText(thingProps, 'Type', node.asset.mimeType || '');
+          appendReadonlyText(thingProps, 'Size', formatBytes(node.asset.sizeBytes));
+          appendReadonlyText(thingProps, 'Context', node.asset.context || node.context || '');
+          appendReadonlyText(thingProps, 'Access', node.asset.visibility || 'private');
+          appendReadonlyText(thingProps, 'Store', node.asset.storageKey || '');
+          if (node.asset.attachedTo?.length) {
+            for (const targetId of node.asset.attachedTo) {
+              const row = document.createElement('div');
+              row.className = 'relation-row';
+              row.textContent = 'attached to ' + targetId;
+              if (isLive()) {
+                const removeAttachment = document.createElement('button');
+                removeAttachment.type = 'button';
+                removeAttachment.textContent = 'Detach';
+                removeAttachment.dataset.assetDetachButton = targetId;
+                removeAttachment.addEventListener('click', async () => {
+                  const removed = await detachAsset(node.asset.id, targetId);
+                  if (!removed.ok) {
+                    setStatus('detach failed: ' + removed.error);
+                    return;
+                  }
+                  setStatus('detached from ' + targetId);
+                  await refresh();
+                });
+                row.appendChild(document.createTextNode(' '));
+                row.appendChild(removeAttachment);
+              }
+              thingProps.appendChild(row);
+            }
+          }
+          if (node.asset.contentUrl) {
+            appendLinkRow(thingProps, 'Content', node.asset.contentUrl, 'Open file');
+            appendLinkRow(thingProps, 'Download', assetDownloadUrl(node.asset), 'Download file');
+          }
+          const preview = ensureAssetPreview(node.asset);
+          if (preview.status === 'image') {
+            appendPreviewRow(thingProps, 'Preview', box => {
+              const image = document.createElement('img');
+              image.src = preview.src;
+              image.alt = node.label || node.asset.originalName || node.asset.id || 'asset preview';
+              box.appendChild(image);
+            });
+          } else if (preview.status === 'loading') {
+            appendPreviewRow(thingProps, 'Preview', box => {
+              box.textContent = 'Loading preview...';
+            });
+          } else if (preview.status === 'ready') {
+            appendPreviewRow(thingProps, 'Preview', box => {
+              const pre = document.createElement('pre');
+              pre.textContent = preview.text;
+              box.appendChild(pre);
+            });
+          } else if (preview.status === 'error') {
+            appendPreviewRow(thingProps, 'Preview', box => {
+              box.textContent = 'Preview failed: ' + preview.reason;
+            });
+          } else if (preview.status === 'none' && preview.reason) {
+            appendPreviewRow(thingProps, 'Preview', box => {
+              box.textContent = preview.reason;
+            });
+          }
+          if (isLive()) {
+            const targets = attachmentTargetsForAsset(node);
+            if (targets.length) {
+              const attachRow = document.createElement('div');
+              attachRow.className = 'prop-row';
+              const label = document.createElement('label');
+              label.textContent = 'Attach to';
+              const controls = document.createElement('div');
+              controls.style.display = 'flex';
+              controls.style.gap = '6px';
+              controls.style.flex = '1';
+              const picker = selectInput(targets.map(target => ({
+                value: target.id,
+                label: (target.label || target.id) + ' [' + (target.kind || 'thing') + ']'
+              })), targets[0]?.id || '');
+              picker.dataset.assetAttachTarget = 'true';
+              const button = document.createElement('button');
+              button.type = 'button';
+              button.textContent = 'Attach';
+              button.dataset.assetAttachButton = node.asset.id;
+              button.addEventListener('click', async () => {
+                const attached = await attachAsset(node.asset.id, picker.value);
+                if (!attached.ok) {
+                  setStatus('attach failed: ' + attached.error);
+                  return;
+                }
+                setStatus('attached ' + (node.label || node.asset.id));
+                await refresh();
+              });
+              controls.appendChild(picker);
+              controls.appendChild(button);
+              attachRow.appendChild(label);
+              attachRow.appendChild(controls);
+              thingProps.appendChild(attachRow);
+            }
+          }
+        } else if (isLive()) {
+          const candidates = attachmentCandidatesForTarget(node);
+          if (candidates.length) {
+            const attachRow = document.createElement('div');
+            attachRow.className = 'prop-row';
+            const label = document.createElement('label');
+            label.textContent = 'Attach file';
+            const controls = document.createElement('div');
+            controls.style.display = 'flex';
+            controls.style.gap = '6px';
+            controls.style.flex = '1';
+            const picker = selectInput(candidates.map(asset => ({
+              value: asset.id,
+              label: (asset.label || asset.id) + ' [' + (asset.asset?.mimeType || 'file') + ']'
+            })), candidates[0]?.id || '');
+            picker.dataset.attachAssetSelect = 'true';
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = 'Attach';
+            button.dataset.attachAssetButton = node.thing;
+            button.addEventListener('click', async () => {
+              const attached = await attachAsset(picker.value, node.thing);
+              if (!attached.ok) {
+                setStatus('attach failed: ' + attached.error);
+                return;
+              }
+              setStatus('attached file to ' + (node.label || node.thing));
+              await refresh();
+            });
+            controls.appendChild(picker);
+            controls.appendChild(button);
+            attachRow.appendChild(label);
+            attachRow.appendChild(controls);
+            thingProps.appendChild(attachRow);
+          }
+        }
         for (const r of node.relations || []) {
           const row = document.createElement('div');
           row.className = 'relation-row';

@@ -51,6 +51,13 @@
   - compiler/description/compile/route/serve
   - frontendRunner/view/render/action/widget/widgetVersion/widgetVersionTransition/activateWidgetVersion/attachWidget
   - frontendProgram/frontEndStep + ergonomic step syntax
+- Context-composition-specific sections now include:
+  - `[[contextBinding]]`
+  - `[[contextExport]]`
+  - `[[contextImport]]`
+- Covered authoring surfaces may also accept explicit contextual ref fields in parallel with canonical ids.
+  Current first-slice ref fields are `parentRef`, `rootWidgetRef`, `servesRef`, `serverRunnerRef`, `routeRef`, `backendHostRef`, and `frontendHostRef`.
+  These resolve against authored `contextBinding` / `contextImport` visibility before witnesses are stored, but the stored witness truth remains canonical ids.
 - Capability-specific sections now include:
   - `[[capability]]`
   - `[[capabilityInstall]]`
@@ -92,8 +99,22 @@
   - bootstrap and authoring APIs:
     - `/api/bootstrap-model`
     - `/api/bootstrap-state`
+    - `/api/contexts`
+    - `/api/perspectives`
+    - `/api/context-bindings`
+    - `DELETE /api/context-bindings`
+    - `/api/context-exports`
+    - `DELETE /api/context-exports`
+    - `/api/context-imports`
+    - `DELETE /api/context-imports`
+    - `/api/stewardships`
+    - `DELETE /api/stewardships`
+    - `/api/proposals`
+    - `/api/proposals/:id/approve`
+    - `/api/proposals/:id/reject`
     - `/api/capabilities`
     - `/api/capability-installs`
+    - `DELETE /api/capability-installs`
     - `/api/identities`
     - `/api/frontend-programs`
     - `/api/frontend-steps`
@@ -126,7 +147,15 @@
 - Cookie-backed session identity is the canonical auth transport for normal browser use.
 - `x-witness-actor` is a dev-only escape hatch and is ignored unless a runner explicitly allows it.
 - `/api/widgets` now uses the witnessed `widget.define` process spec for both input validation and output validation.
+- `/api/context-bindings`, `/api/context-exports`, and `/api/context-imports` project explicit local naming and import/export rows while preserving canonical ids as stored witness truth.
+- Bootstrap model/state now also expose explanatory composition metadata such as `contextBindableTargets`, `contextScopes`, and source-context export choices so the product surface can explain what is visible in a context and why.
+- Canonical-id authoring remains a compatibility path beside contextual `*Ref` authoring.
+  That keeps older worlds and older write paths valid, but it is not yet a hard context-boundary enforcement story.
 - `/api/capabilities` and `/api/capability-installs` now use witnessed `capability.define`, `capability.install`, and `capability.remove` process specs for typed validation.
+- `/api/tutorial-progress/:tutorialId` now persists tutorial hidden-state, explicit page-disabled state, and authored-step replay pins for the currently shipped bootstrap/app/world Sourcery surfaces. The world-page guidance panel and world-page recovery commands consume that same persisted state directly rather than introducing a second onboarding-only model.
+- The shipped Todo tutorial definition now also carries authored concept metadata, and bootstrap/live-app tutorial UI reveal those concepts directly from real progress through that authored sequence.
+- The shipped Todo starter blueprint now also authors the `/world` operating surface, its supporting program, and its routes so the tutorial's final inspection handoff lands on a real starter-authored page rather than a demo-only surface.
+- The bootstrap tutorial shell now also derives a small ambient next-step suggestion list from visible world/session/tutorial state and only routes those suggestions into real controls or real surface handoffs.
 
 ## 7. Modules, Widgets, and Process Engine
 - Module operations emit witnesses and gate on `supportsProcess` relations.
@@ -154,6 +183,16 @@
   - association metadata
   - source annotations
   - typed process/type metadata for `trait`, `valueType`, and `processSpec` objects
+- Rendered app pages now also expose a first live surface-inspector slice:
+  - explicit `Inspect Page` toggle
+  - right-click widget selection through rendered `data-widget` ancestry
+  - live selection highlight and widget metadata panel
+  - truthful deep-link handoff into `/world`, witnesses, source, and process view
+  - widget-version activate/rollback actions where versioned widgets exist
+- Rendered app pages also expose a shared search/command slice:
+  - current rendered widgets can be searched and inspected in place
+  - projected capability/route/source/process objects can be handed off through the same command surface
+  - hidden real surfaces such as `/world`, `/_bootstrap`, and `/process` remain explicit route handoffs rather than registry-only commands
 
 ## 9. Observability and Privacy
 - Logging should include request lifecycle + projection metrics.

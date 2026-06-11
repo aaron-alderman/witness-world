@@ -1,4 +1,4 @@
-import { thing, relation, retract, projectors, canAcceptInto } from "./kernel.js";
+import { thing, relation, retract, projectors, canAcceptInto, canMutateTarget } from "./kernel.js";
 import { thingId } from "./ids.js";
 import { runGates, actorRequired, textRequired } from "./gates.js";
 import { compensationClaims, undoState } from "./canvas-undo.js";
@@ -51,10 +51,18 @@ function perspectiveContains(world, perspective, instance) {
     .some(r => r.from === perspective && r.rel === "contains" && r.to === instance);
 }
 
-export function createPerspective(world, { actor, title }) {
-  const blocked = blockedWitness(world, { actor, process: "canvas.perspective.create", gates: [actorRequired, textRequired("title")], context: { actor, title } });
+function moduleKindOf(world, id) {
+  return world
+    .project(projectors.currentRelations)
+    .find(r => r.from === id && r.rel === "hasModuleKind")
+    ?.to ?? null;
+}
+
+export function createPerspective(world, { actor, title, context = null }) {
+  const blocked = blockedWitness(world, { actor, process: "canvas.perspective.create", gates: [actorRequired, textRequired("title")], context: { actor, title, context } });
   if (blocked) return blocked;
   const id = thingId("perspective", { actor, title, ordinal: world.allWitnesses().length });
+  const normalizedContext = typeof context === "string" && context.trim() ? context.trim() : null;
   return world.emit({
     process: "canvas.perspective.create",
     actor,
@@ -63,9 +71,10 @@ export function createPerspective(world, { actor, title }) {
       relation(actor, "owns", id),
       relation(actor, "created", id),
       relation(id, "hasModuleKind", "perspective"),
-      relation(id, "hasTitle", title.trim())
+      relation(id, "hasTitle", title.trim()),
+      ...(normalizedContext ? [relation(id, "inContext", normalizedContext)] : [])
     ],
-    body: { id, title: title.trim() }
+    body: { id, title: title.trim(), context: normalizedContext }
   });
 }
 
@@ -325,6 +334,72 @@ export function setThingTitle(world, { actor, thing: target, title, perspective 
   });
 }
 
+export function attachAsset(world, { actor, asset, target, perspective = null }) {
+  const process = "asset.attach";
+  const blocked = blockedWitness(world, { actor, process, gates: [actorRequired], context: { actor, asset, target } });
+  if (blocked) return blocked;
+  const things = world.project(projectors.things);
+  if (!things.has(asset) || !things.has(target)) {
+    return failed(world, { process, actor, body: { asset, target, perspective, reason: "unknown thing" } });
+  }
+  if (asset === target) {
+    return failed(world, { process, actor, body: { asset, target, perspective, reason: "asset cannot attach to itself" } });
+  }
+  if (moduleKindOf(world, asset) !== "asset") {
+    return failed(world, { process, actor, body: { asset, target, perspective, reason: "asset id is not an asset" } });
+  }
+  const targetKind = moduleKindOf(world, target);
+  if (targetKind === "asset" || targetKind === "projectionInstance" || targetKind === "perspective") {
+    return failed(world, { process, actor, body: { asset, target, perspective, reason: "target cannot hold asset attachments" } });
+  }
+  const assetGate = canMutateTarget(world, actor, asset);
+  if (!assetGate.ok) {
+    return failed(world, { process, actor, body: { asset, target, perspective, reason: assetGate.reason, blockedTarget: asset } });
+  }
+  const targetGate = canMutateTarget(world, actor, target);
+  if (!targetGate.ok) {
+    return failed(world, { process, actor, body: { asset, target, perspective, reason: targetGate.reason, blockedTarget: target } });
+  }
+  const exists = world
+    .project(projectors.currentRelations)
+    .some(r => r.from === target && r.rel === "attachedAsset" && r.to === asset);
+  if (exists) {
+    return failed(world, { process, actor, body: { asset, target, perspective, reason: "asset already attached to target" } });
+  }
+  return world.emit({
+    process,
+    actor,
+    claims: [relation(target, "attachedAsset", asset)],
+    body: { asset, target, perspective }
+  });
+}
+
+export function detachAsset(world, { actor, asset, target, perspective = null }) {
+  const process = "asset.detach";
+  const blocked = blockedWitness(world, { actor, process, gates: [actorRequired], context: { actor, asset, target } });
+  if (blocked) return blocked;
+  const exists = world
+    .project(projectors.currentRelations)
+    .some(r => r.from === target && r.rel === "attachedAsset" && r.to === asset);
+  if (!exists) {
+    return failed(world, { process, actor, body: { asset, target, perspective, reason: "asset attachment not current" } });
+  }
+  const assetGate = canMutateTarget(world, actor, asset);
+  if (!assetGate.ok) {
+    return failed(world, { process, actor, body: { asset, target, perspective, reason: assetGate.reason, blockedTarget: asset } });
+  }
+  const targetGate = canMutateTarget(world, actor, target);
+  if (!targetGate.ok) {
+    return failed(world, { process, actor, body: { asset, target, perspective, reason: targetGate.reason, blockedTarget: target } });
+  }
+  return world.emit({
+    process,
+    actor,
+    claims: [retract(target, "attachedAsset", asset)],
+    body: { asset, target, perspective }
+  });
+}
+
 export function setCamera(world, { actor, perspective, x, y, zoom }) {
   const process = "canvas.camera";
   const blocked = blockedWitness(world, { actor, process, gates: [actorRequired], context: { actor } });
@@ -464,6 +539,8 @@ export const canvasProcessHandlers = {
   "canvas.relate": relateThings,
   "canvas.unrelate": unrelateThings,
   "canvas.thing.setTitle": setThingTitle,
+  "asset.attach": attachAsset,
+  "asset.detach": detachAsset,
   "canvas.camera": setCamera,
   "canvas.grid": setGrid,
   "canvas.batch": batchApply,

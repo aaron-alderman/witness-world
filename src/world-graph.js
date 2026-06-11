@@ -1,5 +1,7 @@
 import { projectors } from "./kernel.js";
-import { activeWidgetVersions, frontendProgram } from "./widgets.js";
+import { activeWidgetVersions, frontendProgram, widgetVersions, widgetVersionTransitions, widgetVersionActivationHistory } from "./widgets.js";
+
+const ASYNC_FRONTEND_OPS = new Set(["fetchJson", "postJson", "patchJson", "deleteJson", "initSession", "setSession", "logout", "refreshProjection"]);
 
 export function worldGraphProjection(witnesses, { includeWitnesses = false, limitWitnesses = 36 } = {}) {
   const nodeMap = new Map();
@@ -123,7 +125,7 @@ export function worldGraphProjection(witnesses, { includeWitnesses = false, limi
   }
 
   const details = nodeDetails(witnesses, relations, new Set(nodeMap.keys()));
-  const nodes = [...nodeMap.values()].map(node => ({ ...node, ...(details.get(node.id) ?? {}) }));
+  const nodes = [...nodeMap.values()].map(node => classifySurfaceNode({ ...node, ...(details.get(node.id) ?? {}) }));
   const edges = [...edgeMap.values()].filter(e => nodeMap.has(e.from) && nodeMap.has(e.to));
   const { nodes: positioned, groups } = layout(nodes, edges, contexts);
   return { nodes: positioned, edges, groups, stats: { nodes: positioned.length, edges: edges.length, groups: groups.length, witnesses: witnesses.length } };
@@ -131,8 +133,12 @@ export function worldGraphProjection(witnesses, { includeWitnesses = false, limi
 
 function nodeDetails(witnesses, relations, knownIds = new Set()) {
   const map = new Map();
+  const versionRows = widgetVersions(witnesses);
+  const activeVersions = activeWidgetVersions(witnesses);
+  const transitionRows = widgetVersionTransitions(witnesses);
+  const activationHistory = widgetVersionActivationHistory(witnesses);
   const ensure = id => {
-    if (!map.has(id)) map.set(id, { properties: [], values: [], sources: [], associationProperties: [] });
+    if (!map.has(id)) map.set(id, { properties: [], values: [], sources: [], associationProperties: [], recentWitnesses: [] });
     return map.get(id);
   };
 
@@ -174,7 +180,216 @@ function nodeDetails(witnesses, relations, knownIds = new Set()) {
     }
   }
 
+  const transitionsByFromTo = new Map();
+  for (const row of transitionRows) transitionsByFromTo.set(`${row.soul}\u0000${row.from}\u0000${row.to}`, row.strategy);
+  const versionsBySoul = new Map();
+  for (const row of versionRows) {
+    if (!versionsBySoul.has(row.soul)) versionsBySoul.set(row.soul, []);
+    versionsBySoul.get(row.soul).push(row);
+  }
+  for (const [soul, rows] of versionsBySoul.entries()) {
+    const detail = ensure(soul);
+    const activeVersion = activeVersions.get(soul) ?? null;
+    const history = activationHistory.get(soul) ?? [];
+    const rollbackVersion = previousDistinctVersion(history, activeVersion);
+    detail.widgetVersions = rows
+      .slice()
+      .sort((a, b) => Number(a.index ?? 0) - Number(b.index ?? 0) || String(a.version).localeCompare(String(b.version)))
+      .map(row => ({
+        soul,
+        version: row.version,
+        kind: row.kind,
+        index: row.index ?? 0,
+        isActive: activeVersion === row.version,
+        transitionFromActive: activeVersion && activeVersion !== row.version
+          ? (transitionsByFromTo.get(`${soul}\u0000${activeVersion}\u0000${row.version}`) ?? null)
+          : null,
+        transitionToActive: activeVersion && activeVersion !== row.version
+          ? (transitionsByFromTo.get(`${soul}\u0000${row.version}\u0000${activeVersion}`) ?? null)
+          : null,
+        propsPreview: compactValue(row.props ?? {})
+      }));
+    detail.widgetVersionState = {
+      soul,
+      activeVersion,
+      rollbackVersion,
+      rollbackAvailable: Boolean(rollbackVersion),
+      history: history.map(entry => ({
+        witnessId: entry.witnessId,
+        actor: entry.actor,
+        version: entry.version
+      }))
+    };
+  }
+
+  const frontendProgramIds = [...new Set(
+    relations
+      .filter(row => row.rel === "hasModuleKind" && row.to === "frontendProgram")
+      .map(row => row.from)
+  )];
+  for (const programId of frontendProgramIds) {
+    const program = frontendProgram(witnesses, programId);
+    if (!program?.graph?.length) continue;
+    const byEvent = new Map();
+    for (const step of program.graph) {
+      const event = typeof step.event === "string" && step.event.trim() ? step.event.trim() : "";
+      if (!event) continue;
+      const entry = byEvent.get(event) ?? { event, stepCount: 0, asyncCount: 0 };
+      entry.stepCount += 1;
+      if (ASYNC_FRONTEND_OPS.has(String(step.op || ""))) entry.asyncCount += 1;
+      byEvent.set(event, entry);
+    }
+    const detail = ensure(programId);
+    detail.processEvents = [...byEvent.values()]
+      .sort((a, b) => String(a.event).localeCompare(String(b.event)));
+    if (detail.processEvents.length === 1) {
+      detail.processSelection = { program: programId, event: detail.processEvents[0].event };
+    }
+  }
+
+  for (const id of knownIds) {
+    const selection = frontendProcessSelectionForNode(id);
+    if (!selection) continue;
+    const detail = ensure(id);
+    detail.processSelection = selection;
+  }
+
+  const recent = [...witnesses].reverse();
+  for (const w of recent) {
+    const summary = summarizeWitnessForGraph(w);
+    const targets = witnessTargetsForGraph(w, knownIds);
+    for (const target of targets) {
+      const detail = ensure(target);
+      if (!detail.recentWitnesses.some(entry => entry.id === summary.id) && detail.recentWitnesses.length < 8) {
+        detail.recentWitnesses.push(summary);
+      }
+    }
+    const processId = `process:${w.process}`;
+    if (knownIds.has(processId)) {
+      const detail = ensure(processId);
+      if (!detail.recentWitnesses.some(entry => entry.id === summary.id) && detail.recentWitnesses.length < 8) {
+        detail.recentWitnesses.push(summary);
+      }
+    }
+  }
+
   return map;
+}
+
+function previousDistinctVersion(history, activeVersion) {
+  if (!Array.isArray(history) || history.length < 2) return null;
+  for (let index = history.length - 2; index >= 0; index -= 1) {
+    if (history[index]?.version && history[index].version !== activeVersion) return history[index].version;
+  }
+  return null;
+}
+
+function frontendProcessSelectionForNode(nodeId) {
+  if (typeof nodeId !== "string") return null;
+  const contextId = nodeId.startsWith("ctx:") ? nodeId.slice(4) : nodeId;
+  if (!contextId.startsWith("frontend/execution/")) return null;
+  const segments = contextId.split("/");
+  let program = null;
+  let trigger = null;
+  let action = null;
+  for (const segment of segments) {
+    if (segment.startsWith("program=")) program = decodeProcessContextSegment(segment.slice("program=".length));
+    if (segment.startsWith("trigger=")) trigger = decodeProcessContextSegment(segment.slice("trigger=".length));
+    if (segment.startsWith("action=")) action = decodeProcessContextSegment(segment.slice("action=".length));
+  }
+  const event = trigger && action ? `${trigger}:${action}` : trigger;
+  if (!program || !event) return null;
+  return { program, event };
+}
+
+function decodeProcessContextSegment(value) {
+  try {
+    return decodeURIComponent(String(value || ""));
+  } catch {
+    return String(value || "");
+  }
+}
+
+function classifySurfaceNode(node) {
+  const surface = inferSurfaceTier(node);
+  if (!surface) return node;
+  const badges = normalizeBadges([...(node.badges || []), { label: `surface:${surface.id}` }]);
+  return {
+    ...node,
+    surfaceTier: surface.id,
+    surfaceLabel: surface.label,
+    badges
+  };
+}
+
+function inferSurfaceTier(node) {
+  if (!node || typeof node !== "object") return null;
+  const id = String(node.id || "");
+  const kind = String(node.kind || "");
+  const path = nodeTypedString(node, "path");
+  const handler = nodeTypedString(node, "handler");
+  const method = nodeTypedString(node, "method");
+  const routeLike = Boolean(path && (handler || method || nodeHasBadge(node, "kind:route") || kind === "route"));
+
+  if (id === "__bootstrap__" || path === "/_bootstrap" || handler === "bootstrap.page") {
+    return { id: "harness", label: "Harness / recovery surface" };
+  }
+
+  if (
+    path === "/world"
+    || path === "/process"
+    || path === "/canvas"
+    || path === "/backend-seams"
+    || handler === "page.world"
+    || handler === "page.process"
+    || handler === "page.canvas"
+    || handler === "page.edenCanvas"
+    || handler === "page.backendSeams"
+  ) {
+    return { id: "internal", label: "Internal / operator surface" };
+  }
+
+  if (routeLike) {
+    return { id: "app", label: "App surface" };
+  }
+
+  return null;
+}
+
+function nodeTypedString(node, key) {
+  const row = [...(node?.values || []), ...(node?.properties || [])]
+    .find(entry => entry?.key === key);
+  if (!row?.value || typeof row.value !== "object") return null;
+  if (row.value.type === "string") return String(row.value.value || "");
+  if (row.value.type === "ref") return String(row.value.target || "");
+  return null;
+}
+
+function nodeHasBadge(node, label) {
+  return (node?.badges || []).some(entry => String(entry?.label || entry) === label);
+}
+
+function witnessTargetsForGraph(witness, knownIds = new Set()) {
+  const targets = new Set();
+  for (const claim of witness.claims ?? []) {
+    if (claim.op === "thing" && claim.id) targets.add(claim.id);
+    if (claim.op === "relation" && claim.from) targets.add(claim.from);
+    if (claim.op === "relation" && claim.to && knownIds.has(claim.to)) targets.add(claim.to);
+  }
+  if (witness.process === "dsl.source.annotate" && witness.body?.target && knownIds.has(witness.body.target)) {
+    targets.add(witness.body.target);
+  }
+  return targets;
+}
+
+function summarizeWitnessForGraph(witness) {
+  return {
+    id: witness.id,
+    process: witness.process,
+    actor: witness.actor,
+    cause: witness.cause ?? null,
+    body: compactValue(witness.body ?? {})
+  };
 }
 
 function normalizeValues(value, knownIds = new Set()) {

@@ -401,12 +401,18 @@ Current molecules:
 - first-class authored `context` objects with `owner`, optional `parent`, and optional initial stewards
 - bootstrap read/write support for context creation
 - optional `context` attachment on governed authored objects in the bootstrap slice
+- explicit local alias rows through `contextBinding`
+- explicit cross-context export/import rows through `contextExport` and `contextImport`
+- explanatory `contextScopes` read models showing local vs imported visibility
+- shared contextual resolution and first-slice scope validation on the bootstrap/DSL authoring paths while preserving canonical stored ids
+  Covered first-slice refs are `parentRef`, `rootWidgetRef`, `servesRef`, `serverRunnerRef`, `routeRef`, `backendHostRef`, and `frontendHostRef`.
 
 Missing molecules:
 
-- local naming/import/export mechanics
-- broader context composition semantics beyond bootstrap governance
+- broader context composition semantics beyond the covered first-slice surfaces
+- richer package-like behavior: wildcard imports, namespace imports, re-export chains, and transitive import reasoning
 - clearer long-term context-aware capability/store semantics
+- context-aware composition across canvas and app-specific handler-set behaviors
 
 Do:
 
@@ -415,6 +421,19 @@ Do:
 Do not:
 
 - keep adding globally-scoped ids and relationships when the real semantics are local
+
+Honest caveats:
+
+- Parent context is still an authority/inheritance relation only; it does not imply name visibility.
+- Imports are named-import only and visibility is intentionally explicit rather than automatic.
+- The current slice only lowers contextual refs for a bounded set of authoring fields.
+- Canonical-id authoring is still a compatibility bypass around contextual visibility on those covered surfaces.
+  The parallel canonical id fields remain valid and can still point at foreign scoped objects directly until the platform has a stricter migration story.
+- The low-level JS helper functions still expose permissive witness emitters.
+  The honest guardrails for duplicate names, bad exports, and bad imports live on the bootstrap and DSL authoring paths rather than every internal helper call.
+- Some read surfaces still lag behind the write semantics.
+  Widget parenting can now be authored through `parentRef`, but the bootstrap widget read model is still mostly a flat list rather than a full attachment/placement explanation surface.
+- Capability installs, proposal targets, stewardship targets, and most app-specific runtime actions still primarily use canonical ids.
 
 ### 4.3 Authority, delegation, stewardship, proposals
 
@@ -490,7 +509,7 @@ Do not:
 
 ### 5.2 Editable-everywhere page grammar
 
-Status: `missing`
+Status: `partial`
 
 What it is:
 
@@ -506,12 +525,23 @@ Why it accelerates:
 
 - makes discovery local and action immediate
 
+Current molecules:
+
+- world-surface object inspection through the graph inspector
+- live-page right-click inspection on rendered app widgets through the surface inspector
+- widget version upgrade and rollback from the operating surface
+- widget version activate/rollback from the live-page inspector
+- source-definition handoff for selected/source-backed objects
+- witness-browser handoff for the selected object
+- process-view handoff for frontend programs and semantic execution/action nodes
+- live-page world/source/witness/process handoff from a selected rendered widget
+
 Missing molecules:
 
-- stable context menus/selection grammar
-- widget-to-definition mapping in live surfaces
+- hide/replace editing actions
 - page-local edit affordances
 - save/apply flows that write back to the world
+- a universal object-to-process mapping beyond the current frontend-program/event handoff
 
 Do:
 
@@ -521,24 +551,42 @@ Do not:
 
 - force every structural edit through a detached admin page if the live surface could own the action
 
+Honest caveats:
+
+- The current slice is no longer world-surface only, but it is still far from editable-everywhere.
+- Live-page inspection currently depends on rendered `[data-widget]` ancestry and projected world-graph metadata rather than a deeper universal page/entity editing contract.
+- `show process` is a deep-link handoff into the dedicated process page, not an in-place process editor.
+- The current live-page process handoff is grounded in authored frontend-program/event structure around the selected widget, not arbitrary generic process inference for every object.
+- `hide`, `replace`, and live save-back editing are still missing.
+
 ### 5.3 Search and command surface
 
-Status: `missing`
+Status: `partial`
 
 What it is:
 
-- one universal search/command layer across the world
+- first slice today: a world-page command palette over projected objects and real surface handoffs
+- intended: one universal search/command layer across the world
 
 Why it accelerates:
 
 - reduces friction between discovery and action
 
+Current molecules:
+
+- world-page command palette over graph nodes including widgets, capabilities, routes, processes, and source-backed objects
+- live-page command palette over current rendered widgets plus world-graph-backed capability/source/world/process handoffs
+- command entries for real hidden browser modes such as source browser, primitive browser, and process explorer
+- direct handoff commands into real product surfaces such as `/process`, `/_bootstrap`, and `/backend-seams`
+- recovery commands for disabled tutorial guidance on the world page, derived from persisted tutorial progress rather than a fake command registry
+- explicit app / harness / internal surface-tier labels on command entries and route-backed operating surfaces
+
 Missing molecules:
 
-- indexed search over pages/widgets/plugins/witnesses/processes
-- command palette/action model
-- hidden/disabled surface discovery
+- universal indexing across pages/widgets/plugins/witnesses/processes in every shell, not only the world page
+- disabled-surface discovery and recovery beyond the current builtin handoffs and tutorial-page recovery state
 - context-aware ranking without dishonesty
+- deeper action semantics beyond navigation, selection, and mode switching
 
 Do:
 
@@ -548,9 +596,18 @@ Do not:
 
 - relegate navigation/discovery to manually browsing ever-growing sidebars
 
+Honest caveats:
+
+- The current slice is no longer world-surface only.
+- Results come from the truthful projected graph, current rendered widget ancestry, and a small set of explicit real surfaces and tutorial recovery state, not from a hidden assistant-owned registry.
+- Surface-tier classification is still narrow and explicit.
+  Today it covers route-backed operating surfaces plus builtin handoffs such as home, bootstrap, process, and backend seams; it is not yet a universal content-boundary model for every widget or shell surface.
+- The command surface is still not universal across every shell or plugin-owned surface.
+  It now spans `/world` plus rendered app pages, but it does not yet index every disabled surface, every shell-local action, or every capability-owned page.
+
 ### 5.4 Live editable inspector
 
-Status: `missing`
+Status: `partial`
 
 What it is:
 
@@ -560,12 +617,20 @@ Why it accelerates:
 
 - collapses the gap between seeing, understanding, and changing
 
+Current molecules:
+
+- live-page inspect toggle plus right-click selection grammar on rendered app pages
+- DOM-to-widget mapping through rendered `data-widget` ancestry
+- selected-widget highlight and side-panel metadata
+- truthful handoff from a live selection into `/world`, witnesses, source, and process view
+- in-place widget version activate/rollback actions for versioned widgets
+
 Missing molecules:
 
-- DOM-to-widget mapping
-- live selection/highlight mechanics
 - editable property/schema panels
 - safe save/apply/rollback behavior
+- hide/replace/widget-structure mutation from the live page
+- broader shell/page coverage beyond the currently supported rendered app surfaces
 
 Do:
 
@@ -574,6 +639,12 @@ Do:
 Do not:
 
 - build a fake DOM-only editor that cannot explain or persist its changes truthfully
+
+Honest caveats:
+
+- The current inspector is a first live-page operating slice, not yet a full live editor.
+- It can inspect, explain, hand off, and drive widget version changes, but it cannot yet mutate arbitrary widget properties or structure and save those edits back into the world.
+- Its process mapping is intentionally narrow and derived from selected-widget context, nearest form context, and root load behavior rather than a full generic execution-model explanation layer.
 
 ---
 
@@ -743,18 +814,26 @@ Status: `partial`
 
 What it is:
 
-- today: bootstrap tutorial
+- today: bootstrap tutorial, live-app overlay, and world-page guidance panel, with persisted chapter restart, step-level restart-from-here replay pins, page-aware continuation across those real surfaces, and per-page disable/re-enable on those real surfaces
 - intended: contextual guide across world/page/section/widget/chapter scopes
 
 Why it accelerates:
 
 - converts complexity into learnable adventure without hiding the real system
 
+Current molecules:
+
+- page-aware continuation between bootstrap, the live app, and the real `/world` operating surface
+- per-page disable/re-enable on those three shipped surfaces
+- bootstrap-visible disabled-surface rows so guidance that was turned off elsewhere stays visible and recoverable without resetting progress
+- authored-step replay pins for restart-from-here on those same surfaces
+- a shipped Todo tutorial path that now ends on the real `/world` surface with a world-page guidance panel driven by the same persisted tutorial progress state
+
 Missing molecules:
 
-- per-scope enable/disable
-- restart from current context
-- page-aware/section-aware state
+- broader per-scope enable/disable beyond the current bootstrap/app/world page slice
+- restart from current context beyond authored-step replay
+- section-aware/widget-aware/world-aware state
 - world-level "where is Sourcery active/disabled" view
 
 Do:
@@ -765,23 +844,40 @@ Do not:
 
 - let it become a fake simplified product that users later "graduate out of"
 
+Honest caveats:
+
+- The current contextual slice is page-aware only for the real bootstrap, live-app, and `/world` surfaces.
+- It can now say "this step belongs on the other page" and can disable guidance per page on those surfaces, but it still does not understand section/widget/world-as-scope semantics.
+- Bootstrap can now show disabled guidance surfaces and re-enable them directly, but this is still recovery around page-disabled state, not a richer general scope model.
+- Restart now supports chapter rewind plus authored-step replay pins on the shipped surfaces.
+  That replay is guidance-only, does not roll back app/world state, and does not yet imply true page-level, section-level, or widget-level restart-from-here semantics.
+
 ### 7.2 Concept-aware guidance
 
-Status: `missing`
+Status: `partial`
 
 What it is:
 
-- teaching concepts when they become relevant
+- today: authored concept metadata on tutorial steps, revealed on the bootstrap card and live-app overlay as progress reaches them
+- intended: teaching concepts when they become relevant across broader product surfaces
 
 Why it accelerates:
 
 - users learn composition in the order it becomes real
 
+Current molecules:
+
+- authored concept definitions on the Todo tutorial itself
+- per-step concept tags for identity, session, runtime wiring, widget structure, frontend programs, routes/mounts, app boundary, witnessed app state, and perspective-bound data
+- progressive concept reveal derived from real tutorial progress rather than hidden inference
+- concept explanation surfaces on both bootstrap and live-app tutorial UI
+
 Missing molecules:
 
-- concept graph
-- trigger conditions based on authored/runtime state
-- explanation surfaces tied to concrete visible structures
+- broader concept graphs beyond one authored tutorial
+- trigger conditions based on arbitrary authored/runtime state rather than tutorial step progress alone
+- explanation surfaces tied to concrete visible structures outside the tutorial shell
+- cross-world and cross-surface concept reuse rather than one tutorial-local catalog
 
 Do:
 
@@ -791,24 +887,39 @@ Do not:
 
 - front-load implementation nouns before the user has a reason to care
 
+Honest caveats:
+
+- The current concept slice is tutorial-authored and progress-derived.
+- It is not yet a general semantic layer that discovers concepts automatically across arbitrary worlds, pages, widgets, or capabilities.
+- Concepts are currently revealed in the authored step order of the Todo tutorial.
+  That is truthful for now, but broader Sourcery curation will need a richer model than one linear tutorial sequence.
+
 ### 7.3 Ambient assistance and curation
 
 Status: `missing`
 
 What it is:
 
-- suggestions and ranking without deception
+- today: bootstrap-first next-step suggestions derived from real tutorial, session, and world state and wired to visible controls or real surface handoffs
+- intended: broader suggestions and ranking without deception
 
 Why it accelerates:
 
 - good things surface, bad things remain available, the user stays in control
 
+Current molecules:
+
+- deterministic next-step suggestions on the bootstrap tutorial card
+- suggestion explanations tied to concrete visible conditions such as missing identity, missing session, starter-ready world, active tutorial step, off-page continuation, or completed tutorial state
+- suggestion actions constrained to real controls (`identity-form`, `session-form`, starter button, authored-state view) or real surface handoffs (`Open App`, continue on the relevant surface)
+
 Missing molecules:
 
 - usage-driven ranking
-- local-context recommendation model
-- explanation of why something is surfaced
+- cross-surface and live-app ambient curation beyond the bootstrap-first slice
+- broader local-context recommendation models beyond the current hand-authored derivation
 - filters for universal/advanced/disabled/internal things
+- richer explanation/debug surfaces for why one suggestion outranked another
 
 Do:
 
@@ -817,6 +928,13 @@ Do:
 Do not:
 
 - hide real capabilities because the assistant decided they were not fashionable
+
+Honest caveats:
+
+- The current ambient slice is bootstrap-first, not product-wide.
+- Suggestions come from a small deterministic derivation over visible tutorial/session/world state, not from learned ranking or opaque assistant judgement.
+- Suggestion actions are intentionally narrow.
+  They point at real controls or real page handoffs rather than executing hidden authoring flows on the user's behalf.
 
 ---
 

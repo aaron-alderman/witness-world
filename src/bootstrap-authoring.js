@@ -10,6 +10,9 @@ import {
   unexportContextName,
   importContextName,
   unimportContextName,
+  validateContextBinding,
+  validateContextExport,
+  validateContextImport,
   resolveContextualRef,
   grantStewardship,
   revokeStewardship,
@@ -24,7 +27,7 @@ import {
   removeCapability,
   moduleProjectors
 } from "./modules.js";
-import { defineFrontendProgram, defineFrontendStep, defineWidget, attachWidget, widgetDefinitions } from "./widgets.js";
+import { defineFrontendProgram, defineFrontendStep, defineWidget, updateWidget, attachWidget, widgetDefinitions, widgetVersions } from "./widgets.js";
 import { typeModelProjection, validateProcessInput, validateProcessOutput } from "./type-model.js";
 
 function fail(world, { process, actor, body }) {
@@ -90,23 +93,6 @@ function installExists(world, { capability, target, targetKind }) {
     .some(row => row.capability === capability && row.target === target && row.targetKind === targetKind);
 }
 
-function scopedTargetIds(world) {
-  const rows = world.project(moduleProjectors.objectContexts);
-  return new Map(rows);
-}
-
-function visibleNameCollision(world, { context, name, ignore = [] }) {
-  const ignored = new Set(ignore.map(value => `${value.context}\u0000${value.name}\u0000${value.target}`));
-  return world.project(moduleProjectors.contextScopes)
-    .filter(row => row.context === context && row.name === name)
-    .filter(row => !ignored.has(`${row.context}\u0000${row.name}\u0000${row.target}`));
-}
-
-function locallyBoundTarget(world, { context, target }) {
-  return world.project(moduleProjectors.contextBindings)
-    .some(row => row.context === context && row.target === target);
-}
-
 function exportedTarget(world, { context, name, target }) {
   return world.project(moduleProjectors.contextExports)
     .some(row => row.context === context && row.name === name && row.target === target);
@@ -148,6 +134,14 @@ function propsFromWidgetInput(input) {
   if (input.template === true) props.template = true;
   if (Number.isFinite(Number(input.level))) props.level = Number(input.level);
   return props;
+}
+
+function patchFromWidgetUpdateInput(input, body) {
+  const patch = {};
+  for (const key of ["text", "title", "class"]) {
+    if (Object.prototype.hasOwnProperty.call(body ?? {}, key) && typeof input[key] === "string") patch[key] = input[key];
+  }
+  return patch;
 }
 
 export function requestBootstrapIdentityDefine(world, {
@@ -313,49 +307,14 @@ export function requestBootstrapContextBindingCreate(world, {
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
   const input = validated.value;
-  if (!world.project(moduleProjectors.contexts).some(row => row.id === input.context)) {
+  const bindingValidation = validateContextBinding(world.allWitnesses(), input);
+  if (!bindingValidation.ok) {
     const witness = fail(world, {
       process: "context.bind.failed",
       actor: actor || backendHost,
-      body: { reason: "context not found", context: input.context }
+      body: { reason: bindingValidation.error, ...(bindingValidation.details ?? {}) }
     });
-    return { ok: false, status: 404, error: "context not found", witness };
-  }
-  if (!exists(world, input.target)) {
-    const witness = fail(world, {
-      process: "context.bind.failed",
-      actor: actor || backendHost,
-      body: { reason: "target not found", target: input.target }
-    });
-    return { ok: false, status: 404, error: "target not found", witness };
-  }
-  const targetContext = world.project(moduleProjectors.objectContexts).get(input.target) ?? null;
-  if (targetContext && targetContext !== input.context) {
-    const witness = fail(world, {
-      process: "context.bind.failed",
-      actor: actor || backendHost,
-      body: { reason: "target belongs to a different context", target: input.target, targetContext, context: input.context }
-    });
-    return { ok: false, status: 400, error: "target belongs to a different context", witness };
-  }
-  const conflicts = visibleNameCollision(world, { context: input.context, name: input.name });
-  if (conflicts.length) {
-    const witness = fail(world, {
-      process: "context.bind.failed",
-      actor: actor || backendHost,
-      body: { reason: "name already visible in context", context: input.context, name: input.name }
-    });
-    return { ok: false, status: 409, error: "name already visible in context", witness };
-  }
-  const existing = world.project(moduleProjectors.contextBindings)
-    .find(row => row.context === input.context && row.name === input.name && row.target === input.target);
-  if (existing) {
-    const witness = fail(world, {
-      process: "context.bind.failed",
-      actor: actor || backendHost,
-      body: { reason: "binding already exists", context: input.context, name: input.name, target: input.target }
-    });
-    return { ok: false, status: 409, error: "binding already exists", witness };
+    return { ok: false, status: bindingValidation.status ?? 400, error: bindingValidation.error, witness };
   }
   const witness = bindContextName(world, {
     actor: actor || backendHost,
@@ -417,37 +376,14 @@ export function requestBootstrapContextExportCreate(world, {
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
   const input = validated.value;
-  if (!world.project(moduleProjectors.contexts).some(row => row.id === input.context)) {
+  const exportValidation = validateContextExport(world.allWitnesses(), input);
+  if (!exportValidation.ok) {
     const witness = fail(world, {
       process: "context.export.failed",
       actor: actor || backendHost,
-      body: { reason: "context not found", context: input.context }
+      body: { reason: exportValidation.error, ...(exportValidation.details ?? {}) }
     });
-    return { ok: false, status: 404, error: "context not found", witness };
-  }
-  if (!exists(world, input.target)) {
-    const witness = fail(world, {
-      process: "context.export.failed",
-      actor: actor || backendHost,
-      body: { reason: "target not found", target: input.target }
-    });
-    return { ok: false, status: 404, error: "target not found", witness };
-  }
-  if (!locallyBoundTarget(world, { context: input.context, target: input.target })) {
-    const witness = fail(world, {
-      process: "context.export.failed",
-      actor: actor || backendHost,
-      body: { reason: "target is not locally bound in context", context: input.context, target: input.target }
-    });
-    return { ok: false, status: 400, error: "target is not locally bound in context", witness };
-  }
-  if (world.project(moduleProjectors.contextExports).some(row => row.context === input.context && row.name === input.name)) {
-    const witness = fail(world, {
-      process: "context.export.failed",
-      actor: actor || backendHost,
-      body: { reason: "export name already exists", context: input.context, name: input.name }
-    });
-    return { ok: false, status: 409, error: "export name already exists", witness };
+    return { ok: false, status: exportValidation.status ?? 400, error: exportValidation.error, witness };
   }
   const witness = exportContextName(world, {
     actor: actor || backendHost,
@@ -507,50 +443,16 @@ export function requestBootstrapContextImportCreate(world, {
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
   const input = validated.value;
-  const localName = input.name ?? input.exportName;
-  if (!world.project(moduleProjectors.contexts).some(row => row.id === input.context)) {
+  const importValidation = validateContextImport(world.allWitnesses(), input);
+  if (!importValidation.ok) {
     const witness = fail(world, {
       process: "context.import.failed",
       actor: actor || backendHost,
-      body: { reason: "context not found", context: input.context }
+      body: { reason: importValidation.error, ...(importValidation.details ?? {}) }
     });
-    return { ok: false, status: 404, error: "context not found", witness };
+    return { ok: false, status: importValidation.status ?? 400, error: importValidation.error, witness };
   }
-  if (!world.project(moduleProjectors.contexts).some(row => row.id === input.sourceContext)) {
-    const witness = fail(world, {
-      process: "context.import.failed",
-      actor: actor || backendHost,
-      body: { reason: "source context not found", sourceContext: input.sourceContext }
-    });
-    return { ok: false, status: 404, error: "source context not found", witness };
-  }
-  const exported = world.project(moduleProjectors.contextExports)
-    .find(row => row.context === input.sourceContext && row.name === input.exportName);
-  if (!exported) {
-    const witness = fail(world, {
-      process: "context.import.failed",
-      actor: actor || backendHost,
-      body: { reason: "exported name not found", sourceContext: input.sourceContext, exportName: input.exportName }
-    });
-    return { ok: false, status: 400, error: "exported name not found", witness };
-  }
-  const conflicts = visibleNameCollision(world, { context: input.context, name: localName });
-  if (conflicts.length) {
-    const witness = fail(world, {
-      process: "context.import.failed",
-      actor: actor || backendHost,
-      body: { reason: "name already visible in context", context: input.context, name: localName }
-    });
-    return { ok: false, status: 409, error: "name already visible in context", witness };
-  }
-  if (importedNameExists(world, { context: input.context, sourceContext: input.sourceContext, exportName: input.exportName, name: localName })) {
-    const witness = fail(world, {
-      process: "context.import.failed",
-      actor: actor || backendHost,
-      body: { reason: "import already exists", context: input.context, sourceContext: input.sourceContext, exportName: input.exportName, name: localName }
-    });
-    return { ok: false, status: 409, error: "import already exists", witness };
-  }
+  const localName = importValidation.name ?? input.name ?? input.exportName;
   const witness = importContextName(world, {
     actor: actor || backendHost,
     context: input.context,
@@ -780,8 +682,16 @@ export function requestBootstrapServerRunnerDefine(world, {
     const witness = fail(world, { process: "serverRunner.define.failed", actor: actor || backendHost, body: { reason: frontendHostResolved.error } });
     return { ok: false, status: 400, error: frontendHostResolved.error, witness };
   }
-  const resolvedBackendHost = backendHostResolved.target ?? input.backendHost;
-  const resolvedFrontendHost = frontendHostResolved.target ?? input.frontendHost;
+  const resolvedBackendHost = backendHostResolved.target ?? input.backendHost ?? null;
+  const resolvedFrontendHost = frontendHostResolved.target ?? input.frontendHost ?? null;
+  if (!resolvedBackendHost || !resolvedFrontendHost) {
+    const witness = fail(world, {
+      process: "serverRunner.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "backendHost and frontendHost are required" }
+    });
+    return { ok: false, status: 400, error: "backendHost and frontendHost are required", witness };
+  }
   if (!exists(world, resolvedBackendHost) || !exists(world, resolvedFrontendHost)) {
     const witness = fail(world, {
       process: "serverRunner.define.failed",
@@ -798,6 +708,15 @@ export function requestBootstrapServerRunnerDefine(world, {
     });
     return { ok: false, status: 400, error: "unknown handler set", witness };
   }
+  const runtimeConfigParsed = normalizeJsonObject(parseJsonField(body.runtimeConfigJson, "runtimeConfigJson"), "runtimeConfigJson");
+  if (!runtimeConfigParsed.ok) {
+    const witness = fail(world, {
+      process: "serverRunner.define.failed",
+      actor: actor || backendHost,
+      body: { reason: runtimeConfigParsed.error }
+    });
+    return { ok: false, status: 400, error: runtimeConfigParsed.error, witness };
+  }
   const storage = {};
   if (input.todoProjection) storage.todoProjection = input.todoProjection;
   if (input.privateNotesProjection) storage.privateNotesProjection = input.privateNotesProjection;
@@ -808,6 +727,7 @@ export function requestBootstrapServerRunnerDefine(world, {
     frontendHost: resolvedFrontendHost,
     handlerSet: input.handlerSet || null,
     storage: Object.keys(storage).length ? storage : null,
+    runtimeConfig: runtimeConfigParsed.value,
     allowActorHeader: input.allowActorHeader === true,
     context: input.context ?? null,
     owner: actor || backendHost
@@ -818,6 +738,7 @@ export function requestBootstrapServerRunnerDefine(world, {
     frontendHost: resolvedFrontendHost,
     handlerSet: input.handlerSet || null,
     storage: Object.keys(storage).length ? storage : null,
+    runtimeConfig: runtimeConfigParsed.value,
     allowActorHeader: input.allowActorHeader === true,
     context: input.context ?? null
   };
@@ -889,6 +810,15 @@ export function requestBootstrapRouteDefine(world, {
   if (body.liveProjection === true) params.liveProjection = true;
   if (Array.isArray(body.excludeWidgetRoles) && body.excludeWidgetRoles.length) params.excludeWidgetRoles = [...body.excludeWidgetRoles];
   if (typeof body.defaultRootWidget === "string" && body.defaultRootWidget.trim()) params.rootWidget = body.defaultRootWidget.trim();
+  const resolvedServes = servesResolved.target ?? input.serves ?? null;
+  if (!resolvedServes) {
+    const witness = fail(world, {
+      process: "route.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "route serves target is required" }
+    });
+    return { ok: false, status: 400, error: "route serves target is required", witness };
+  }
   if ((input.handler === "page.home" || input.handler === "page.world") && !params.rootWidget) {
     const witness = fail(world, {
       process: "route.define.failed",
@@ -901,7 +831,7 @@ export function requestBootstrapRouteDefine(world, {
     actor: actor || backendHost,
     id: input.id,
     path: input.path,
-    serves: servesResolved.target ?? input.serves,
+    serves: resolvedServes,
     method: input.method,
     handler: input.handler,
     params: Object.keys(params).length ? params : null,
@@ -911,7 +841,7 @@ export function requestBootstrapRouteDefine(world, {
   const route = {
     id: input.id,
     path: input.path,
-    serves: servesResolved.target ?? input.serves,
+    serves: resolvedServes,
     method: input.method,
     handler: input.handler,
     params: Object.keys(params).length ? params : null,
@@ -961,8 +891,16 @@ export function requestBootstrapServeDefine(world, {
     const witness = fail(world, { process: "serve.define.failed", actor: actor || backendHost, body: { reason: routeResolved.error } });
     return { ok: false, status: 400, error: routeResolved.error, witness };
   }
-  const resolvedServerRunner = serverRunnerResolved.target ?? input.serverRunner;
-  const resolvedRoute = routeResolved.target ?? input.route;
+  const resolvedServerRunner = serverRunnerResolved.target ?? input.serverRunner ?? null;
+  const resolvedRoute = routeResolved.target ?? input.route ?? null;
+  if (!resolvedServerRunner || !resolvedRoute) {
+    const witness = fail(world, {
+      process: "serve.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "serverRunner and route are required", serverRunner: resolvedServerRunner, route: resolvedRoute }
+    });
+    return { ok: false, status: 400, error: "serverRunner and route are required", witness };
+  }
   if (!exists(world, resolvedServerRunner) || !exists(world, resolvedRoute)) {
     const witness = fail(world, {
       process: "serve.define.failed",
@@ -1262,7 +1200,24 @@ export function requestBootstrapFrontendProgramDefine(world, {
     });
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
-  const input = validated.value;
+  const resolvedRootWidget = resolveBodyRef(world, body, {
+    contextField: "context",
+    idField: "rootWidget",
+    refField: "rootWidgetRef",
+    label: "root widget"
+  });
+  if (!resolvedRootWidget.ok) {
+    const witness = fail(world, {
+      process: "frontendProgram.define.failed",
+      actor: actor || backendHost,
+      body: { reason: resolvedRootWidget.error }
+    });
+    return { ok: false, status: 400, error: resolvedRootWidget.error, witness };
+  }
+  const input = {
+    ...validated.value,
+    ...(resolvedRootWidget.target ? { rootWidget: resolvedRootWidget.target } : {})
+  };
   if (exists(world, input.id)) {
     const witness = fail(world, {
       process: "frontendProgram.define.failed",
@@ -1407,7 +1362,25 @@ export function requestWidgetDefine(world, {
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
 
-  const input = validatedInput.value;
+  const resolvedParent = resolveBodyRef(world, body, {
+    contextField: "context",
+    idField: "parent",
+    refField: "parentRef",
+    label: "parent widget"
+  });
+  if (!resolvedParent.ok) {
+    const witness = fail(world, {
+      process: "widget.define.failed",
+      actor: actor || backendHost,
+      body: { reason: resolvedParent.error }
+    });
+    return { ok: false, status: 400, error: resolvedParent.error, witness };
+  }
+
+  const input = {
+    ...validatedInput.value,
+    ...(resolvedParent.target ? { parent: resolvedParent.target } : {})
+  };
   const attach = input.attach !== false;
   const parent = typeof input.parent === "string" && input.parent.trim()
     ? input.parent.trim()
@@ -1488,6 +1461,87 @@ export function requestWidgetDefine(world, {
     body: { input, widget }
   });
   return { ok: true, status: 201, widget, witness };
+}
+
+export function requestWidgetUpdate(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  const validatedInput = validateInput(world, "widget.update", body);
+  if (!validatedInput.ok) {
+    const witness = fail(world, {
+      process: "widget.update.blocked",
+      actor: actor || backendHost,
+      body: { gate: "type.compatibility", failures: validatedInput.failures }
+    });
+    return { ok: false, status: 400, error: "typed validation failed", witness };
+  }
+  const input = validatedInput.value;
+  const current = widgetDefinitions(world.allWitnesses()).find(row => row.id === input.id) ?? null;
+  if (!current) {
+    const witness = fail(world, {
+      process: "widget.update.failed",
+      actor: actor || backendHost,
+      body: { reason: "widget not found", id: input.id }
+    });
+    return { ok: false, status: 404, error: "widget not found", witness };
+  }
+  if (widgetVersions(world.allWitnesses()).some(row => row.soul === input.id)) {
+    const witness = fail(world, {
+      process: "widget.update.failed",
+      actor: actor || backendHost,
+      body: { reason: "versioned widgets must be edited through widget versions", id: input.id }
+    });
+    return { ok: false, status: 409, error: "versioned widgets must be edited through widget versions", witness };
+  }
+  const patch = patchFromWidgetUpdateInput(input, body);
+  if (!Object.keys(patch).length) {
+    const witness = fail(world, {
+      process: "widget.update.failed",
+      actor: actor || backendHost,
+      body: { reason: "no editable widget fields provided", id: input.id }
+    });
+    return { ok: false, status: 400, error: "no editable widget fields provided", witness };
+  }
+  const nextProps = { ...(current.props ?? {}) };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === "") delete nextProps[key];
+    else nextProps[key] = value;
+  }
+  const output = { id: current.id };
+  if (typeof nextProps.text === "string") output.text = nextProps.text;
+  if (typeof nextProps.title === "string") output.title = nextProps.title;
+  if (typeof nextProps.class === "string") output.class = nextProps.class;
+  const validatedOutput = validateOutput(world, "widget.update", output);
+  if (!validatedOutput.ok) {
+    const witness = fail(world, {
+      process: "widget.update.failed",
+      actor: actor || backendHost,
+      body: { failures: validatedOutput.failures, id: input.id }
+    });
+    return { ok: false, status: 500, error: "widget.update output failed typed validation", witness };
+  }
+  updateWidget(world, {
+    actor: actor || backendHost,
+    id: current.id,
+    kind: current.kind,
+    props: nextProps,
+    context: current.context ?? null
+  });
+  const widget = {
+    id: current.id,
+    kind: current.kind,
+    props: nextProps,
+    context: current.context ?? null
+  };
+  const witness = world.emit({
+    process: "widget.update",
+    actor: actor || backendHost,
+    claims: [relation(actor || backendHost, "editedProjection", current.id)],
+    body: { input, patch, previous: { props: current.props ?? {} }, widget }
+  });
+  return { ok: true, status: 200, widget, witness };
 }
 
 export function requestBootstrapProposalApprove(world, {
