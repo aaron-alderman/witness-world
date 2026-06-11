@@ -173,6 +173,7 @@ export function renderProcessPage(model, { currentPath = "/process" } = {}) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Process View</title>
   <style>
+    :root { --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
     body { margin: 0; font-family: system-ui, sans-serif; color: #1f2937; background: #f7f7f5; }
     a { color: inherit; text-decoration: none; }
     .process-header { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid #ddd; background: #fff; }
@@ -185,7 +186,8 @@ export function renderProcessPage(model, { currentPath = "/process" } = {}) {
     .process-list { display: grid; gap: 6px; padding: 0 12px 12px; }
     .process-list-item { display: grid; gap: 3px; padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fafafa; font-size: 13px; }
     .process-list-item.selected { border-color: #375a7f; box-shadow: 0 0 0 2px rgba(55,90,127,.12); background: #f4f8fc; }
-    .process-list-item span { color: #666; font-size: 12px; }
+    .process-list-item strong, .process-list-item span { color: #666; font-size: 12px; font-family: var(--mono); }
+    .process-list-item strong { color: inherit; font-size: 13px; }
     .process-main { overflow: auto; padding: 16px; }
     .process-graph { display: grid; gap: 12px; }
     .process-graph-summary { display: flex; gap: 10px; flex-wrap: wrap; color: #555; font-size: 13px; }
@@ -201,17 +203,17 @@ export function renderProcessPage(model, { currentPath = "/process" } = {}) {
     .process-node.status-failed { border-left: 6px solid #b53a30; background: #fff5f5; }
     .process-node.status-pending { border-left: 6px solid #d2d2d2; }
     .process-node-title { font-weight: 700; }
-    .process-node-op { color: #375a7f; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-    .process-node-meta, .process-node-rule { color: #666; font-size: 12px; }
+    .process-node-op { color: #375a7f; font-family: var(--mono); font-size: 12px; }
+    .process-node-meta, .process-node-rule { color: #666; font-size: 12px; font-family: var(--mono); }
     .process-badges { display: flex; gap: 6px; flex-wrap: wrap; }
-    .process-badge { padding: 2px 6px; border-radius: 999px; background: #eef2f7; font-size: 11px; }
+    .process-badge { padding: 2px 6px; border-radius: 999px; background: #eef2f7; font-size: 11px; font-family: var(--mono); }
     .process-inspector { padding: 12px 14px 20px; display: grid; gap: 12px; }
     .process-card { border: 1px solid #ddd; border-radius: 10px; background: #fafafa; padding: 10px; display: grid; gap: 8px; }
-    .process-card pre { margin: 0; white-space: pre-wrap; overflow: auto; font-size: 12px; }
-    .process-card code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    .process-card pre { margin: 0; white-space: pre-wrap; overflow: auto; font-size: 12px; font-family: var(--mono); }
+    .process-card code { font-family: var(--mono); font-size: 12px; }
     .process-replay-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .process-replay-controls a { color: #375a7f; text-decoration: underline; font-size: 13px; }
-    .process-request, .process-timeline-item { border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; padding: 8px; display: grid; gap: 4px; font-size: 12px; }
+    .process-replay-controls a { color: #375a7f; text-decoration: underline; font-size: 13px; font-family: var(--mono); }
+    .process-request, .process-timeline-item { border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; padding: 8px; display: grid; gap: 4px; font-size: 12px; font-family: var(--mono); }
     .process-request.failed, .process-timeline-item.failed { border-color: #e3b0ac; background: #fff5f5; }
     .process-empty { color: #666; font-size: 13px; padding: 0 14px 14px; }
   </style>

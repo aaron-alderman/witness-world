@@ -18,7 +18,7 @@ export function renderBootstrapPage() {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Witness Bootstrap</title>
   <style>
-    :root { --bg: #f4f1ea; --card: #fffdf8; --line: #d9d2c7; --ink: #1f1b17; --muted: #6a635b; --accent: #7a4d2a; --accent-soft: #efe1d3; }
+    :root { --bg: #f4f1ea; --card: #fffdf8; --line: #d9d2c7; --ink: #1f1b17; --muted: #6a635b; --accent: #7a4d2a; --accent-soft: #efe1d3; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
     * { box-sizing: border-box; }
     body { margin: 0; font-family: Georgia, "Times New Roman", serif; background: linear-gradient(180deg, #f7f2eb 0%, #efe9df 100%); color: var(--ink); }
     header { padding: 28px 32px 20px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.7); backdrop-filter: blur(6px); position: sticky; top: 0; z-index: 4; }
@@ -37,7 +37,7 @@ export function renderBootstrapPage() {
     label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
     input, select, textarea, button { font: inherit; }
     input, select, textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: white; color: var(--ink); }
-    textarea { min-height: 96px; resize: vertical; }
+    textarea { min-height: 96px; resize: vertical; font-family: var(--mono); font-size: 12px; line-height: 1.45; }
     button { border: 1px solid #734e31; background: #7a4d2a; color: white; border-radius: 10px; padding: 10px 14px; cursor: pointer; }
     button.secondary { background: white; color: var(--accent); }
     button:disabled { opacity: .55; cursor: default; }
@@ -45,12 +45,12 @@ export function renderBootstrapPage() {
     .status { min-height: 1.2em; color: var(--accent); }
     .muted { color: var(--muted); }
     .state-list { display: grid; gap: 8px; max-height: 340px; overflow: auto; }
-    .state-item { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; }
-    .state-item strong { display: block; margin-bottom: 3px; }
-    .state-item code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--muted); white-space: pre-wrap; }
+    .state-item { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: #fff; transition: box-shadow .24s ease, transform .24s ease, border-color .24s ease; }
+    .state-item strong { display: block; margin-bottom: 3px; font-family: var(--mono); font-size: 12px; }
+    .state-item code { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: pre-wrap; }
     .hide { display: none !important; }
     .note { border-left: 4px solid var(--accent); padding-left: 10px; }
-    .kicker { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+    .kicker { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); font-family: var(--mono); }
     .chapter-list { display: grid; gap: 6px; margin: 12px 0; }
     .chapter-item { display: grid; grid-template-columns: 18px 1fr; gap: 8px; align-items: start; font-size: 13px; color: var(--muted); }
     .chapter-item strong { color: var(--ink); }
@@ -58,14 +58,52 @@ export function renderBootstrapPage() {
     .chapter-active .chapter-dot { background: var(--accent); border-color: var(--accent); }
     .chapter-done .chapter-dot { background: #3f7d47; border-color: #3f7d47; }
     .chapter-active strong, .chapter-done strong { color: var(--ink); }
-    [data-tutorial-current] { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 8px; scroll-margin-top: 130px; }
-    #tutorial-overlay { position: fixed; width: 320px; max-width: calc(100vw - 24px); z-index: 6; background: rgba(255,253,248,.98); border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: 0 16px 40px rgba(35, 21, 8, .2); pointer-events: none; }
+    [data-tutorial-focus-scope="true"], [data-tutorial-current] { position: relative; z-index: 7; }
+    [data-tutorial-current] { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 8px; scroll-margin-top: 130px; animation: tutorial-focus-pulse 1.35s ease-in-out infinite; }
+    [data-tutorial-changed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(122, 77, 42, .18); animation: tutorial-changed-pulse 1.15s ease-in-out 2; }
+    [data-tutorial-changed="true"] strong { animation: tutorial-text-pulse 1.15s ease-in-out 2; }
+    #tutorial-dimmer { position: fixed; inset: 0; z-index: 5; background: rgba(31, 27, 23, .44); backdrop-filter: blur(2px); pointer-events: none; }
+    #tutorial-overlay { position: fixed; width: 360px; max-width: calc(100vw - 24px); z-index: 8; background: rgba(255,253,248,.98); border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: 0 16px 40px rgba(35, 21, 8, .2); pointer-events: none; }
     #tutorial-overlay h3 { margin: 0 0 8px; font-size: 1.05rem; }
     #tutorial-overlay p { margin: 0 0 10px; font-size: 14px; line-height: 1.5; color: var(--muted); }
     #tutorial-overlay .tutorial-meta { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 6px; }
-    #tutorial-overlay button { pointer-events: auto; }
+    #tutorial-overlay button, #tutorial-overlay-handle { pointer-events: auto; }
+    #tutorial-overlay-handle { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin: -4px -4px 10px; padding: 4px; cursor: grab; user-select: none; }
+    #tutorial-overlay-handle:active { cursor: grabbing; }
+    .tutorial-handle-copy { min-width: 0; }
+    .tutorial-handle-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: var(--muted); font-family: var(--mono); }
+    .tutorial-handle-grip { color: var(--muted); font-size: 18px; line-height: 1; padding-top: 2px; }
+    .tutorial-click-pulse { position: fixed; width: 22px; height: 22px; margin-left: -11px; margin-top: -11px; border-radius: 999px; border: 2px solid rgba(122, 77, 42, .65); background: rgba(122, 77, 42, .12); z-index: 9; pointer-events: none; animation: tutorial-click-pulse .55s ease-out forwards; }
+    .tutorial-auto-click { animation: tutorial-button-click .5s ease-out; }
     .tutorial-hidden { display: none !important; }
+    body.tutorial-dragging { user-select: none; }
+    .badge, #tutorial-overlay .tutorial-meta, .chapter-item div:last-child, #tutorial-summary, .state-list, #bootstrap-summary, #session-summary, #tutorial-status, #bootstrap-status,
+    #identity-form input, #session-form input, #widget-form input, #widget-form select, #program-form input, #program-form select, #step-form input, #step-form select,
+    #route-form input, #route-form select, #serve-form select, #runner-form input, #runner-form select {
+      font-family: var(--mono);
+    }
     details summary { cursor: pointer; }
+    @keyframes tutorial-focus-pulse {
+      0%, 100% { outline-color: rgba(122, 77, 42, 1); box-shadow: 0 0 0 0 rgba(122, 77, 42, .08); }
+      50% { outline-color: rgba(122, 77, 42, .65); box-shadow: 0 0 0 10px rgba(122, 77, 42, .12); }
+    }
+    @keyframes tutorial-changed-pulse {
+      0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(122, 77, 42, .18); }
+      45% { transform: scale(1.01); box-shadow: 0 0 0 6px rgba(122, 77, 42, .12); }
+    }
+    @keyframes tutorial-text-pulse {
+      0%, 100% { font-weight: 600; opacity: 1; }
+      50% { font-weight: 400; opacity: .82; }
+    }
+    @keyframes tutorial-click-pulse {
+      0% { transform: scale(.35); opacity: 1; }
+      100% { transform: scale(2.6); opacity: 0; }
+    }
+    @keyframes tutorial-button-click {
+      0% { transform: scale(1); }
+      35% { transform: scale(.95); }
+      100% { transform: scale(1); }
+    }
     @media (max-width: 1100px) { main { grid-template-columns: 1fr; } }
   </style>
 </head>
@@ -339,12 +377,20 @@ export function renderBootstrapPage() {
       </article>
     </aside>
   </main>
+  <div id="tutorial-dimmer" class="tutorial-hidden" aria-hidden="true"></div>
   <aside id="tutorial-overlay" class="tutorial-hidden" aria-live="polite">
-    <div class="tutorial-meta" id="tutorial-overlay-meta"></div>
+    <div id="tutorial-overlay-handle">
+      <div class="tutorial-handle-copy">
+        <div class="tutorial-meta" id="tutorial-overlay-meta"></div>
+        <div class="tutorial-handle-kicker">Drag tutorial window</div>
+      </div>
+      <div class="tutorial-handle-grip" aria-hidden="true">::</div>
+    </div>
     <h3 id="tutorial-overlay-title"></h3>
     <p id="tutorial-overlay-body"></p>
     <div class="actions">
       <button type="button" id="tutorial-next">Next</button>
+      <button type="button" class="secondary" id="tutorial-finish-chapter">Finish Chapter For Me</button>
       <button type="button" class="secondary" id="tutorial-overlay-resume">Resume</button>
     </div>
   </aside>
@@ -355,7 +401,14 @@ export function renderBootstrapPage() {
     const localProgressKey = "witness.tutorial." + tutorial.id;
     const state = { model: null, bootstrapState: null, session: null, tutorialProgress: null };
     const stepIndex = new Map(tutorial.steps.map((step, index) => [step.id, index]));
+    const autoCompletableChapters = new Set(["widgets", "program", "routes"]);
+    const stateSnapshots = new Map();
+    const pulseTimers = new WeakMap();
+    const overlayDrag = { active: false, manual: false, left: 24, top: 24, offsetX: 0, offsetY: 0 };
     let lastRenderedStepId = null;
+    let tutorialAutoRunning = false;
+    let activeFocusScope = null;
+    let activeHighlightTarget = null;
     const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const byId = id => document.getElementById(id);
     const byTarget = target => document.querySelector('[data-tutorial-target="' + CSS.escape(target) + '"]');
@@ -363,6 +416,8 @@ export function renderBootstrapPage() {
     const readForm = form => Object.fromEntries(new FormData(form).entries());
     const boolValue = formData => formData === "on";
     const formField = (form, name) => form?.elements?.namedItem(name) || form?.querySelector?.('[name="' + CSS.escape(name) + '"]') || null;
+    const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+    const rowKey = row => row?.id || [row?.program, row?.event, row?.op, row?.order, row?.serverRunner, row?.path, row?.method, row?.actor, row?.label].filter(value => value != null && value !== "").join("\u0000") || JSON.stringify(row);
     const request = async (url, options = {}) => {
       const res = await fetch(url, options);
       const data = await res.json().catch(() => ({}));
@@ -386,17 +441,23 @@ export function renderBootstrapPage() {
     const renderStateList = (id, rows, label) => {
       const root = byId(id);
       if (!root) return;
+      const previousKeys = stateSnapshots.get(id) || new Set();
+      const nextKeys = new Set();
       root.innerHTML = "";
       if (!rows.length) {
         const empty = document.createElement("div");
         empty.className = "state-item muted";
         empty.textContent = "None yet.";
         root.append(empty);
+        stateSnapshots.set(id, nextKeys);
         return;
       }
       for (const row of rows) {
+        const key = rowKey(row);
+        nextKeys.add(key);
         const item = document.createElement("div");
         item.className = "state-item";
+        if (previousKeys.size && !previousKeys.has(key)) item.setAttribute("data-tutorial-changed", "true");
         const title = document.createElement("strong");
         title.textContent = label(row);
         const code = document.createElement("code");
@@ -404,6 +465,7 @@ export function renderBootstrapPage() {
         item.append(title, code);
         root.append(item);
       }
+      stateSnapshots.set(id, nextKeys);
     };
     const tutorialStep = () => tutorial.steps.find(step => step.id === state.tutorialProgress?.stepId) || null;
     const revealTarget = target => {
@@ -499,6 +561,7 @@ export function renderBootstrapPage() {
         const field = formField(form, key);
         if (!field) continue;
         setFieldValue(field, value);
+        pulseNode(field, 960);
       }
     };
     const tutorialChapters = () => {
@@ -527,55 +590,114 @@ export function renderBootstrapPage() {
         const status = chapterState(chapterId);
         return '<div class="chapter-item chapter-' + status + '"><div class="chapter-dot"></div><div><strong>' + escapeHtml(title) + '</strong><div>' + escapeHtml(chapterId) + '</div></div></div>';
       }).join("");
-      byId("tutorial-start").disabled = Boolean(progress);
-      byId("tutorial-resume").disabled = !(progress && progress.hidden === true);
-      byId("tutorial-back").disabled = !previousTutorialStep();
-      byId("tutorial-skip").disabled = !progress || Boolean(progress.completedAt);
-      byId("tutorial-exit").disabled = !progress || Boolean(progress.hidden) || Boolean(progress.completedAt);
-      byId("tutorial-reset").disabled = !progress;
+      byId("tutorial-start").disabled = Boolean(progress) || tutorialAutoRunning;
+      byId("tutorial-resume").disabled = !(progress && progress.hidden === true) || tutorialAutoRunning;
+      byId("tutorial-back").disabled = !previousTutorialStep() || tutorialAutoRunning;
+      byId("tutorial-skip").disabled = !progress || Boolean(progress.completedAt) || tutorialAutoRunning;
+      byId("tutorial-exit").disabled = !progress || Boolean(progress.hidden) || Boolean(progress.completedAt) || tutorialAutoRunning;
+      byId("tutorial-reset").disabled = !progress || tutorialAutoRunning;
       byId("tutorial-summary").textContent = !progress
         ? "Start the guided build to learn the platform through the real bootstrap seam."
         : progress.completedAt
           ? "Tutorial complete. The app is wired and you have used the real surface."
           : (current ? current.title + " (" + current.chapterId + ")" : "Tutorial in progress.");
     };
+    const canAutoFinishChapter = current => Boolean(current && current.page === "bootstrap" && autoCompletableChapters.has(current.chapterId) && !state.tutorialProgress?.completedAt);
+    const clearTutorialScope = () => {
+      if (activeHighlightTarget?.isConnected) activeHighlightTarget.removeAttribute("data-tutorial-current");
+      if (activeFocusScope?.isConnected) activeFocusScope.removeAttribute("data-tutorial-focus-scope");
+      activeHighlightTarget = null;
+      activeFocusScope = null;
+    };
     const clearTutorialHighlight = () => {
+      clearTutorialScope();
       document.querySelectorAll("[data-tutorial-current]").forEach(node => node.removeAttribute("data-tutorial-current"));
+      document.querySelectorAll("[data-tutorial-focus-scope]").forEach(node => node.removeAttribute("data-tutorial-focus-scope"));
+    };
+    const pulseNode = (node, duration = 1400) => {
+      if (!node) return;
+      node.setAttribute("data-tutorial-changed", "true");
+      const pending = pulseTimers.get(node);
+      if (pending) clearTimeout(pending);
+      pulseTimers.set(node, setTimeout(() => {
+        if (node.isConnected) node.removeAttribute("data-tutorial-changed");
+      }, duration));
+    };
+    const flashAutoClick = node => {
+      if (!node) return;
+      pulseNode(node, 720);
+      node.classList.add("tutorial-auto-click");
+      setTimeout(() => node.classList.remove("tutorial-auto-click"), 520);
+      const rect = node.getBoundingClientRect();
+      const pulse = document.createElement("div");
+      pulse.className = "tutorial-click-pulse";
+      pulse.style.left = (rect.left + (rect.width / 2)) + "px";
+      pulse.style.top = (rect.top + (rect.height / 2)) + "px";
+      document.body.append(pulse);
+      setTimeout(() => pulse.remove(), 620);
+    };
+    const focusScopeFor = target => target?.matches?.("form,details,.card") ? target : target?.closest?.("form,details,.card") || target || null;
+    const setOverlayPosition = (left, top, { manual = false } = {}) => {
+      const overlay = byId("tutorial-overlay");
+      if (!overlay) return;
+      const maxLeft = Math.max(12, window.innerWidth - overlay.offsetWidth - 12);
+      const maxTop = Math.max(12, window.innerHeight - overlay.offsetHeight - 12);
+      const nextLeft = Math.max(12, Math.min(maxLeft, left));
+      const nextTop = Math.max(12, Math.min(maxTop, top));
+      overlay.style.left = nextLeft + "px";
+      overlay.style.top = nextTop + "px";
+      overlay.style.right = "auto";
+      overlayDrag.left = nextLeft;
+      overlayDrag.top = nextTop;
+      if (manual) overlayDrag.manual = true;
     };
     const positionOverlay = target => {
       const overlay = byId("tutorial-overlay");
+      if (overlayDrag.manual) {
+        setOverlayPosition(overlayDrag.left, overlayDrag.top);
+        return;
+      }
       if (!target) {
-        overlay.style.top = "24px";
-        overlay.style.right = "24px";
-        overlay.style.left = "auto";
+        setOverlayPosition(window.innerWidth - overlay.offsetWidth - 24, 24);
         return;
       }
       const rect = target.getBoundingClientRect();
       const top = Math.max(18, Math.min(window.innerHeight - overlay.offsetHeight - 18, rect.bottom + 12));
       const left = rect.left + overlay.offsetWidth + 18 > window.innerWidth ? Math.max(12, rect.right - overlay.offsetWidth) : Math.max(12, rect.left);
-      overlay.style.top = top + "px";
-      overlay.style.left = left + "px";
-      overlay.style.right = "auto";
+      setOverlayPosition(left, top);
     };
     const renderTutorialOverlay = () => {
       const overlay = byId("tutorial-overlay");
+      const dimmer = byId("tutorial-dimmer");
       const current = tutorialStep();
       clearTutorialHighlight();
       if (!state.tutorialProgress || state.tutorialProgress.hidden || state.tutorialProgress.completedAt || !current) {
         overlay.classList.add("tutorial-hidden");
+        dimmer.classList.add("tutorial-hidden");
         return;
       }
       const target = current.target ? byTarget(current.target) : null;
+      const focusScope = focusScopeFor(target);
+      if (focusScope) {
+        revealTarget(focusScope);
+        focusScope.setAttribute("data-tutorial-focus-scope", "true");
+        activeFocusScope = focusScope;
+      }
       if (target) {
         revealTarget(target);
         target.setAttribute("data-tutorial-current", "true");
+        activeHighlightTarget = target;
         if (lastRenderedStepId !== current.id) target.scrollIntoView({ block: "center", behavior: "smooth" });
       }
       byId("tutorial-overlay-meta").textContent = current.chapterId.toUpperCase();
       byId("tutorial-overlay-title").textContent = current.title;
       byId("tutorial-overlay-body").textContent = current.body;
       byId("tutorial-next").textContent = current.nextLabel || "Next";
+      byId("tutorial-next").disabled = tutorialAutoRunning;
+      byId("tutorial-finish-chapter").disabled = tutorialAutoRunning || !canAutoFinishChapter(current);
+      byId("tutorial-finish-chapter").classList.toggle("tutorial-hidden", !canAutoFinishChapter(current));
       byId("tutorial-overlay-resume").classList.toggle("tutorial-hidden", true);
+      dimmer.classList.remove("tutorial-hidden");
       overlay.classList.remove("tutorial-hidden");
       positionOverlay(target);
       lastRenderedStepId = current.id;
@@ -635,6 +757,61 @@ export function renderBootstrapPage() {
         await advanceTutorial();
         current = tutorialStep();
       }
+    };
+    const waitFor = async (check, timeout = 15000, interval = 80) => {
+      const deadline = Date.now() + timeout;
+      while (Date.now() < deadline) {
+        if (await check()) return true;
+        await sleep(interval);
+      }
+      throw new Error("Timed out waiting for tutorial state.");
+    };
+    const submitTutorialForm = async target => {
+      const form = target?.matches?.("form") ? target : target?.closest?.("form") || target?.querySelector?.("form");
+      if (!form) throw new Error("Tutorial target is not a form.");
+      const submitter = form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+      if (!submitter) throw new Error("Tutorial form has no submit control.");
+      flashAutoClick(submitter);
+      await sleep(120);
+      submitter.click();
+    };
+    const autoCompleteCurrentChapter = async () => {
+      const startingStep = tutorialStep();
+      const chapterId = startingStep?.chapterId;
+      if (!chapterId) return;
+      while (state.tutorialProgress && tutorialStep()?.chapterId === chapterId && !state.tutorialProgress.completedAt) {
+        const current = tutorialStep();
+        if (!current) break;
+        if (isStepComplete(current)) {
+          await advanceTutorial();
+          continue;
+        }
+        if (!current.target || !current.payload) throw new Error("Step " + current.id + " cannot be auto-completed.");
+        const target = byTarget(current.target);
+        if (!target) throw new Error("Missing tutorial target for " + current.id + ".");
+        fillForm(target, current.payload);
+        await persistTutorialProgress({ ...state.tutorialProgress, draftInputs: current.payload, hidden: false });
+        renderTutorialOverlay();
+        await sleep(180);
+        await submitTutorialForm(target);
+        const previousStepId = current.id;
+        await waitFor(() => (state.tutorialProgress?.stepId !== previousStepId) || Boolean(state.tutorialProgress?.completedAt));
+        await sleep(120);
+      }
+    };
+    const openAppHome = async (href, { advance = false } = {}) => {
+      if (state.model?.appReady !== true) {
+        setStatus("bootstrap-status", "Home route is not ready yet.");
+        return;
+      }
+      if (advance) await advanceTutorial();
+      const target = new URL(href, window.location.href);
+      const current = new URL(window.location.href);
+      if (target.origin === current.origin && target.pathname === current.pathname && target.search === current.search && target.hash === current.hash) {
+        window.location.reload();
+        return;
+      }
+      window.location.assign(target.toString());
     };
     const refresh = async () => {
       state.model = await request("/api/bootstrap-model");
@@ -782,10 +959,8 @@ export function renderBootstrapPage() {
     });
     byId("open-app-link").addEventListener("click", async event => {
       const current = tutorialStep();
-      if (current?.id !== "open-app") return;
       event.preventDefault();
-      await advanceTutorial();
-      window.location.href = event.currentTarget.href;
+      await openAppHome(event.currentTarget.href, { advance: current?.id === "open-app" });
     });
 
     bindCreate("widget-form", "widget-status", "/api/widgets", data => ({
@@ -807,7 +982,30 @@ export function renderBootstrapPage() {
     bindCreate("serve-form", "serve-status", "/api/serve-mounts", data => data);
     bindCreate("runner-form", "runner-status", "/api/server-runners", data => data);
 
+    byId("tutorial-overlay-handle").addEventListener("pointerdown", event => {
+      const overlay = byId("tutorial-overlay");
+      if (overlay.classList.contains("tutorial-hidden")) return;
+      const rect = overlay.getBoundingClientRect();
+      overlayDrag.active = true;
+      overlayDrag.manual = true;
+      overlayDrag.left = rect.left;
+      overlayDrag.top = rect.top;
+      overlayDrag.offsetX = event.clientX - rect.left;
+      overlayDrag.offsetY = event.clientY - rect.top;
+      document.body.classList.add("tutorial-dragging");
+      event.preventDefault();
+    });
+    window.addEventListener("pointermove", event => {
+      if (!overlayDrag.active) return;
+      setOverlayPosition(event.clientX - overlayDrag.offsetX, event.clientY - overlayDrag.offsetY, { manual: true });
+    });
+    window.addEventListener("pointerup", () => {
+      overlayDrag.active = false;
+      document.body.classList.remove("tutorial-dragging");
+    });
+
     byId("tutorial-start").addEventListener("click", async () => {
+      overlayDrag.manual = false;
       await persistTutorialProgress(defaultProgress());
       setStatus("tutorial-status", "Tutorial started.");
       render();
@@ -840,9 +1038,28 @@ export function renderBootstrapPage() {
       render();
     });
     byId("tutorial-reset").addEventListener("click", async () => {
+      overlayDrag.manual = false;
       await persistTutorialProgress(null);
       setStatus("tutorial-status", "Tutorial progress cleared.");
       render();
+    });
+    byId("tutorial-finish-chapter").addEventListener("click", async () => {
+      const current = tutorialStep();
+      if (!canAutoFinishChapter(current) || tutorialAutoRunning) return;
+      tutorialAutoRunning = true;
+      setStatus("tutorial-status", "Completing this chapter through the real builders...");
+      renderTutorialCard();
+      renderTutorialOverlay();
+      try {
+        await autoCompleteCurrentChapter();
+        setStatus("tutorial-status", "Chapter completed.");
+      } catch (error) {
+        setStatus("tutorial-status", error.message);
+      } finally {
+        tutorialAutoRunning = false;
+        renderTutorialCard();
+        renderTutorialOverlay();
+      }
     });
     byId("tutorial-next").addEventListener("click", async () => {
       const current = tutorialStep();
@@ -860,8 +1077,15 @@ export function renderBootstrapPage() {
       if (current.payload && target) {
         fillForm(target, current.payload);
         await persistTutorialProgress({ ...state.tutorialProgress, draftInputs: current.payload, hidden: false });
-        setStatus("tutorial-status", "Prefilled the real control. Use it to continue.");
+        setStatus("tutorial-status", "Prefilled and submitting the real control...");
         renderTutorialOverlay();
+        const form = target?.matches?.("form") ? target : target?.closest?.("form") || target?.querySelector?.("form");
+        if (form) {
+          await sleep(120);
+          await submitTutorialForm(target);
+          return;
+        }
+        setStatus("tutorial-status", "Prefilled the real control. Use it to continue.");
         return;
       }
       setStatus("tutorial-status", "Use the highlighted control to continue.");

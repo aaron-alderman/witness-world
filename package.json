@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
+    "bootstrap": "node src/cli.js bootstrap",
     "demo": "node src/cli.js serve examples/demo-todo-server.wtoml --server demo_server",
     "test:ui": "node --test test/ui*.test.js",
     "test:all": "npm test && npm run test:ui"

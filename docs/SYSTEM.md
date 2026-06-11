@@ -510,3 +510,70 @@ Projections derive meaning.
 Authority derives from witnessed chains back to Genesis.
 
 Everything else is composition.
+
+---
+
+# 19. Product Direction
+
+The system is not only a runtime architecture. It is also aiming at a coherent product experience.
+
+The intended product shape is:
+
+* one world model
+* many expression surfaces
+* truthful inspection
+* guided but non-coercive composition
+
+This has several consequences.
+
+## Sourcery
+
+Sourcery should be understood as a process/context companion, not as a second hidden system.
+
+It may:
+
+* explain
+* suggest
+* prefill
+* reveal
+* step back
+
+It must not:
+
+* hide real modeled structure
+* mutate the world through secret backdoors
+* replace the actual authoring surfaces with a fake simplified one
+
+## Plugins and Capabilities
+
+Capabilities should become first-class expressed structures in the world.
+
+A capability should remain inspectable as:
+
+* public API
+* configuration surface
+* internals
+* context boundary
+* authority requirements
+
+The system should avoid the black-box pattern where user intent results in hidden runtime structures that are not represented in the world.
+
+## Context
+
+Context is not mere presentation metadata.
+
+Context is how the system should eventually bound:
+
+* names
+* composition
+* authority
+* stewardship
+* perspective-local meaning
+
+## Shells
+
+Desktop, browser, and hosted/server operation should be treated as shell adapters over the same world model rather than separate products with incompatible truths.
+
+The desktop shell proves ownership.
+The web shell proves reachability.
+The shared world model proves coherence.

@@ -11,6 +11,15 @@ Witnesses record what happened.
 Projections render meaning for a context.
 ```
 
+This repository is not only exploring a Todo demo. The broader direction is a truthful composition environment where:
+
+- apps, editors, plugins, and inspectors all operate over the same witnessed world
+- Sourcery can guide without becoming a fake abstraction layer
+- capabilities remain inspectable instead of disappearing into hidden runtime magic
+- desktop, browser, and hosted shells can sit over the same core model
+
+See [docs/EXPERIENCE.md](C:\Users\aaron\Documents\world\docs\EXPERIENCE.md) for the wider product direction.
+
 The demo is a Todo app that is intentionally more complicated than a normal Todo app because it exercises the architecture:
 
 - a canonical append-only witness log
@@ -31,6 +40,7 @@ The demo is a Todo app that is intentionally more complicated than a normal Todo
 ```bash
 npm install
 npm test
+npm run bootstrap
 npm run demo
 ```
 
@@ -160,6 +170,7 @@ The project deliberately avoids TypeScript for now. Instead it relies on:
 
 ```bash
 npm test      # run all tests (unit + integration, no browser required)
+npm run bootstrap # start a blank-world bootstrap server
 npm run demo  # start the demo server
 ```
 
@@ -169,11 +180,13 @@ The runtime starts through one generic CLI entrypoint:
 
 ```bash
 node src/cli.js serve <dslPath> [--server <id>] [--port <n>]
+node src/cli.js bootstrap [--port <n>]
 ```
 
 Examples:
 
 ```bash
+node src/cli.js bootstrap
 node src/cli.js serve examples/demo-todo-server.wtoml --server demo_server
 node src/cli.js serve examples/demo-todo-server.wtoml --port 4000
 ```
@@ -181,9 +194,13 @@ node src/cli.js serve examples/demo-todo-server.wtoml --port 4000
 Notes:
 
 - `--server` is optional only when the DSL resolves to exactly one `serverRunner`
+- `bootstrap` starts a blank-world authoring server and treats `/_bootstrap` as the primary seam
+- `bootstrap` now starts from a fresh temp runtime root by default, so prior todo/private-note projection files are not reused across runs
 - `npm run demo` is a convenience wrapper around the generic CLI
+- `npm run bootstrap` is a convenience wrapper around `node src/cli.js bootstrap`
 - if the selected runner exposes a reachable home route, `/` serves the app
 - if no served home route exists yet, `/` falls back to `/_bootstrap`
+- set `RUNTIME_ROOT` explicitly only when you intentionally want a warm/persistent bootstrap restart
 
 Useful environment variables:
 
@@ -215,3 +232,10 @@ npm run test:all  # unit + integration + browser
 This is not a production framework. It is a working architecture probe.
 
 The most important current behavior is that the app is increasingly described by witnessed data rather than hand-written special cases, and that a blank world can now recover into a bootstrap seam that teaches and assembles a runnable app through the real product surface.
+
+The current Todo/bootstrap path should be read as a proving ground, not the final product shape. The longer arc is to keep building out:
+
+- truthful plugin/capability composition
+- contextual Sourcery guidance
+- editable-everywhere product surfaces
+- coherent desktop/web/hosted shells over the same world model

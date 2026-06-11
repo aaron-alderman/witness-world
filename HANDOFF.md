@@ -8,6 +8,7 @@
 
 ```bash
 npm test
+npm run bootstrap
 npm run demo
 ```
 
@@ -24,6 +25,7 @@ http://127.0.0.1:3000/canvas
 Generic CLI:
 
 ```bash
+node src/cli.js bootstrap [--port <n>]
 node src/cli.js serve <dslPath> [--server <id>] [--port <n>]
 ```
 

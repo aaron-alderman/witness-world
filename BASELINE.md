@@ -123,11 +123,14 @@ This is a supported baseline behavior, but broader live runtime migration remain
 
 Canonical startup path:
 
+- `node src/cli.js bootstrap [--port <n>]`
 - `node src/cli.js serve <dslPath> [--server <id>] [--port <n>]`
+- `npm run bootstrap` is a convenience wrapper over the dedicated bootstrap command
 - `npm run demo` is a convenience wrapper over that generic CLI
+- `bootstrap` is a separate blank-world authoring path, not just a variant of the demo app
 - the CLI resolves one authored `serverRunner` and then starts the generic host through `startServer(...)`
 - if `--server` is omitted, startup succeeds only when exactly one authored `serverRunner` exists
-- if no authored runner exists, the host can still expose the bootstrap fallback when started programmatically
+- if no authored runner exists, the host can expose the bootstrap fallback directly through the dedicated bootstrap command or when started programmatically
 
 Useful startup environment:
 

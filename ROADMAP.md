@@ -14,6 +14,27 @@ The platform should eventually support:
 
 This roadmap tracks the current path forward. Recent work that directly changes the active baseline should be marked explicitly so progress and remaining gaps stay visible.
 
+Related direction:
+
+- [docs/EXPERIENCE.md](C:\Users\aaron\Documents\world\docs\EXPERIENCE.md)
+
+---
+
+## Experience Thesis
+
+The project is not only trying to prove a runtime. It is trying to become a truthful composition environment.
+
+That broader product direction currently looks like:
+
+- Sourcery as a truthful companion rather than a fake wizard
+- plugins/capabilities as first-class, inspectable "glass atoms"
+- contexts as the boundary for names, authority, and local composition
+- pages that are inspectable and increasingly editable in place
+- code, canvas, builders, and inspectors as different expressions over one world
+- desktop, browser, and hosted shells over the same core model
+
+The straight-line Todo/bootstrap work remains useful, but it is only one proving path through this larger shape.
+
 ---
 
 ## Current Position
@@ -90,8 +111,30 @@ Phase 1 is complete, but the platform still needs a clear way to teach the real 
 - [x] Persist tutorial progress locally before auth and in the session after auth.
 - [x] Make tutorial resume survive seam transitions between `/_bootstrap` and `/`.
 - [ ] Generalize the tutorial system beyond the Todo tutorial once the next authoring milestones settle.
+- [ ] Add console-owned account recovery for persisted worlds, including an explicit password-reset path that does not depend on the browser UI.
 
 This learning surface is distinct from bootstrap recovery, normal app usage, and deeper self-hosting. It exists to teach the real app boundary honestly.
+
+---
+
+## Cross-Cutting Track: Sourcery and Composition Experience
+
+Status: active
+
+This track is intentionally wider than the baseline Todo/tutorial flow. It captures the experience work needed so the product teaches composition honestly without hiding the machine.
+
+- [ ] Evolve Sourcery from a guided Todo tutorial into a contextual companion that can operate at world, page, section, and widget scope.
+- [ ] Let the user restart guidance from the beginning of the relevant scope: widget, section, page, chapter, or full first-run path.
+- [ ] Allow Sourcery to be disabled per context while remaining discoverable and re-enableable from a central view.
+- [ ] Introduce a first-class contextual plugin/capability model where installed capabilities expose public API, configuration surface, internals, context, and authority requirements.
+- [ ] Make plugin/capability installation feel local to the point of need rather than only a detached setup flow.
+- [ ] Continue moving toward editable-everywhere pages with context actions such as inspect, hide, replace, upgrade, and show witnesses/processes.
+- [ ] Add a true search/command surface spanning pages, widgets, capabilities, commands, hidden surfaces, and witnessed execution.
+- [ ] Add a devtools-like live inspector that can map rendered elements back to authored widgets and save edits into the world.
+- [ ] Clarify how the bootstrap seam, normal app pages, and future meta-editor surfaces fit together without becoming contradictory products.
+- [ ] Keep the product truthful: curation and guidance may rank, collapse, and explain, but must not hide real modeled structure.
+
+This is the main bridge from the current bootstrap/tutorial work toward a world where users keep building and keep composing rather than graduating out of the product.
 
 ---
 
@@ -115,6 +158,7 @@ Once the runtime boundary is stable, identity and authority need to become fully
 
 - [ ] Deepen identity into first-class witnessed things, relations, and perspective-aware authority.
 - [ ] Model authority and stewardship explicitly rather than treating runtime permission as an implementation detail.
+- [ ] Define operator-owned recovery semantics for identity bootstrap and password reset once warm/persistent worlds are a supported runtime mode.
 - [ ] Add proposal things and witnessed propose / accept / reject flows.
 - [ ] Use proposals and authority gates for projection edits, widget edits, and application mutations where direct mutation is no longer appropriate.
 - [ ] Clarify how personal, shared, and delegated perspectives interact with identity and authority.
@@ -145,6 +189,8 @@ The runtime now spans multiple surfaces. Those surfaces still need cleaner separ
 - [ ] Formalize what belongs to the shell, what belongs to product apps, and what belongs to extensions/plugins.
 - [ ] Clarify which projections are generic platform projections and which are app-specific.
 - [ ] Make extension/app boundaries visible in both code structure and runtime execution contracts.
+- [ ] Define desktop-shell-specific capabilities as explicit capabilities/plugins rather than hidden core behavior.
+- [ ] Prove the same world can be owned locally and reached remotely without splitting the model.
 
 This is where theming belongs. It should be deferred until the runtime baseline is coherent, but not ignored indefinitely.
 

@@ -435,6 +435,7 @@ function renderHead(title) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)}</title>
   <style>
+    :root { --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
     body { font-family: system-ui, sans-serif; max-width: 920px; margin: 40px auto; padding: 0 24px; color: #222; }
     body[data-page="world"] { max-width: none; margin: 0; padding: 0; overflow: hidden; }
     body[data-page="world"] main { height: 100vh; display: grid; grid-template-rows: auto 1fr; gap: 0; overflow: hidden; }
@@ -462,11 +463,14 @@ function renderHead(title) {
     .private-note { padding: 8px; border-radius: 6px; background: #fff; border: 1px solid #eee; }
     .witness-inspector { }
     .witness-inspector h2 { font-size: 1rem; margin: 0 0 8px; }
-    .witness-list { max-height: 260px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    code, pre, textarea { font-family: var(--mono); }
+    textarea { font-size: 12px; line-height: 1.45; }
+    .witness-list { max-height: 260px; overflow: auto; font-family: var(--mono); font-size: 12px; }
     .witness { display: grid; grid-template-columns: 150px 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px solid #eee; }
     .witness-process { font-weight: 700; }
     .witness-body { color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .widget-editor, .version-playground { border-left: 6px solid #ddd; }
+    .widget-editor input, .widget-editor select, .widget-editor textarea, [data-role="widget-editor-form"] input, [data-role="widget-editor-form"] select, [data-role="widget-editor-form"] textarea { font-family: var(--mono); }
     .world-graph { border: 0; border-radius: 0; padding: 0; background: #fafafa; height: 100%; min-height: 0; overflow: hidden; }
     .world-graph h2 { font-size: 1rem; margin: 0 0 8px; }
     .world-graph-shell { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 0; align-items: stretch; height: 100%; max-height: 100%; overflow: hidden; border-top: 1px solid #e5e5e5; }
@@ -487,12 +491,12 @@ function renderHead(title) {
     .world-document-view, .world-primitive-browser { height: 100%; overflow: auto; box-sizing: border-box; padding: 16px; background: #fff; }
     .world-source-workbench { display: grid; grid-template-columns: 260px minmax(0, 1fr); height: 100%; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #1e1e1e; color: #d4d4d4; }
     .world-source-sidebar { background: #252526; border-right: 1px solid #333; padding: 10px; overflow: auto; }
-    .world-source-file-button { display: block; width: 100%; text-align: left; border: 0; border-radius: 4px; background: transparent; color: #ccc; padding: 6px 8px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; }
+    .world-source-file-button { display: block; width: 100%; text-align: left; border: 0; border-radius: 4px; background: transparent; color: #ccc; padding: 6px 8px; font: 12px var(--mono); cursor: pointer; }
     .world-source-file-button:hover, .world-source-file-active { background: #37373d; color: #f2f2f2; }
     .world-source-ref:hover { color: #dcdcaa; background: #2a2d2e; }
     .world-source-editor { overflow: auto; min-width: 0; }
-    .world-source-title { position: sticky; top: 0; z-index: 2; background: #2d2d2d; color: #eee; padding: 8px 12px; border-bottom: 1px solid #3a3a3a; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .world-source-code { display: table; width: 100%; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .world-source-title { position: sticky; top: 0; z-index: 2; background: #2d2d2d; color: #eee; padding: 8px 12px; border-bottom: 1px solid #3a3a3a; font: 12px var(--mono); }
+    .world-source-code { display: table; width: 100%; font: 12px/1.5 var(--mono); }
     .world-source-line { display: table-row; }
     .world-source-line-number { display: table-cell; width: 44px; padding: 0 10px; text-align: right; color: #858585; background: #1e1e1e; user-select: none; border-right: 1px solid #2a2a2a; }
     .world-source-line-code { display: table-cell; white-space: pre-wrap; padding: 0 12px; }
@@ -525,20 +529,57 @@ function renderHead(title) {
     .world-value-type { color: #777; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
     .world-value-record { display: grid; gap: 4px; }
     .world-value-record-row { display: grid; grid-template-columns: 72px 1fr; gap: 6px; }
-    .world-source-ast { margin: 6px 0 0; max-height: 180px; overflow: auto; white-space: pre-wrap; background: #fff; border: 1px solid #eee; border-radius: 6px; padding: 6px; font-size: 11px; }
+    .world-source-ast { margin: 6px 0 0; max-height: 180px; overflow: auto; white-space: pre-wrap; background: #fff; border: 1px solid #eee; border-radius: 6px; padding: 6px; font-size: 11px; font-family: var(--mono); }
     .world-edge-label { font-size: 10px; fill: #777; }
     .world-edge-ownership { stroke: #c7352f; stroke-width: 2.5; }
     .world-edge-process { stroke: #5577aa; stroke-dasharray: 4 3; }
     .world-edge-capability { stroke: #777; stroke-dasharray: 2 3; }
     .world-edge-relation { stroke: #ddd; }
     [data-widget-version] { border-left: 8px solid var(--version-color, #ddd); padding-left: 12px; border-radius: 8px; }
-    [data-tutorial-current] { outline: 3px solid var(--accent, #333); outline-offset: 4px; border-radius: 8px; scroll-margin-top: 60px; }
-    .tutorial-overlay { position: fixed; width: 300px; max-width: calc(100vw - 24px); z-index: 8; background: rgba(255,255,255,.98); border: 1px solid #ddd; border-radius: 14px; padding: 14px; box-shadow: 0 16px 36px rgba(0,0,0,.18); pointer-events: none; }
+    [data-tutorial-focus-scope="true"], [data-tutorial-current] { position: relative; z-index: 9; }
+    [data-tutorial-current] { outline: 3px solid var(--accent, #333); outline-offset: 4px; border-radius: 8px; scroll-margin-top: 60px; animation: tutorial-focus-pulse 1.35s ease-in-out infinite; }
+    [data-tutorial-changed="true"] { box-shadow: 0 0 0 3px rgba(51, 51, 51, .12); animation: tutorial-changed-pulse 1.1s ease-in-out 2; }
+    [data-tutorial-changed="true"] strong { animation: tutorial-text-pulse 1.1s ease-in-out 2; }
+    .tutorial-dimmer { position: fixed; inset: 0; z-index: 7; background: rgba(17, 17, 17, .38); backdrop-filter: blur(2px); pointer-events: none; }
+    .tutorial-overlay { position: fixed; width: 340px; max-width: calc(100vw - 24px); z-index: 10; background: rgba(255,255,255,.98); border: 1px solid #ddd; border-radius: 14px; padding: 14px; box-shadow: 0 16px 36px rgba(0,0,0,.18); pointer-events: none; }
     .tutorial-overlay h3 { margin: 0 0 8px; font-size: 1rem; }
     .tutorial-overlay p { margin: 0 0 10px; color: #555; line-height: 1.45; }
     .tutorial-overlay-meta { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #777; margin-bottom: 6px; }
-    .tutorial-overlay button { pointer-events: auto; }
-    .tutorial-resume { position: fixed; right: 16px; bottom: 16px; z-index: 8; }
+    .tutorial-overlay button, .tutorial-overlay-handle { pointer-events: auto; }
+    .tutorial-overlay-handle { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin: -4px -4px 10px; padding: 4px; cursor: grab; user-select: none; }
+    .tutorial-overlay-handle:active { cursor: grabbing; }
+    .tutorial-handle-copy { min-width: 0; }
+    .tutorial-handle-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: #777; }
+    .tutorial-handle-grip { color: #777; font-size: 18px; line-height: 1; padding-top: 2px; }
+    .tutorial-click-pulse { position: fixed; width: 22px; height: 22px; margin-left: -11px; margin-top: -11px; border-radius: 999px; border: 2px solid rgba(51, 51, 51, .55); background: rgba(51, 51, 51, .12); z-index: 11; pointer-events: none; animation: tutorial-click-pulse .55s ease-out forwards; }
+    .tutorial-auto-click { animation: tutorial-button-click .5s ease-out; }
+    .tutorial-resume { position: fixed; right: 16px; bottom: 16px; z-index: 10; }
+    body.tutorial-dragging { user-select: none; }
+    @keyframes tutorial-focus-pulse {
+      0%, 100% { outline-color: rgba(51, 51, 51, 1); box-shadow: 0 0 0 0 rgba(51, 51, 51, .08); }
+      50% { outline-color: rgba(51, 51, 51, .65); box-shadow: 0 0 0 10px rgba(51, 51, 51, .1); }
+    }
+    @keyframes tutorial-changed-pulse {
+      0%, 100% { transform: scale(1); }
+      45% { transform: scale(1.01); }
+    }
+    @keyframes tutorial-text-pulse {
+      0%, 100% { font-weight: 600; opacity: 1; }
+      50% { font-weight: 400; opacity: .82; }
+    }
+    @keyframes tutorial-click-pulse {
+      0% { transform: scale(.35); opacity: 1; }
+      100% { transform: scale(2.6); opacity: 0; }
+    }
+    @keyframes tutorial-button-click {
+      0% { transform: scale(1); }
+      35% { transform: scale(.95); }
+      100% { transform: scale(1); }
+    }
+    .world-inspector-key, .world-inspector-item, .world-badge, .world-value-list, .world-value-type, .world-value-record-row,
+    .world-context-label, .world-node-kind, .world-node a, .world-source-ref, .tutorial-overlay-meta, .tutorial-handle-kicker {
+      font-family: var(--mono);
+    }
   </style>
 </head>`;
 }
@@ -1441,10 +1482,14 @@ function renderTutorialClient(tutorialConfig) {
   const tutorial = ${json};
   const stepIndex = new Map(tutorial.steps.map((step, index) => [step.id, index]));
   const byTarget = target => document.querySelector('[data-tutorial-target="' + CSS.escape(target) + '"]');
+  const dimmer = document.createElement('div');
+  dimmer.className = 'tutorial-dimmer';
+  dimmer.hidden = true;
+  document.body.appendChild(dimmer);
   const overlay = document.createElement('aside');
   overlay.className = 'tutorial-overlay';
   overlay.hidden = true;
-  overlay.innerHTML = '<div class="tutorial-overlay-meta" id="tutorial-overlay-meta"></div><h3 id="tutorial-overlay-title"></h3><p id="tutorial-overlay-body"></p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="tutorial-next">Next</button><button type="button" id="tutorial-back">Back</button><button type="button" id="tutorial-exit">Exit</button><button type="button" id="tutorial-reset">Reset</button></div>';
+  overlay.innerHTML = '<div class="tutorial-overlay-handle" id="tutorial-overlay-handle"><div class="tutorial-handle-copy"><div class="tutorial-overlay-meta" id="tutorial-overlay-meta"></div><div class="tutorial-handle-kicker">Drag tutorial window</div></div><div class="tutorial-handle-grip" aria-hidden="true">::</div></div><h3 id="tutorial-overlay-title"></h3><p id="tutorial-overlay-body"></p><div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" id="tutorial-next">Next</button><button type="button" id="tutorial-back">Back</button><button type="button" id="tutorial-exit">Exit</button><button type="button" id="tutorial-reset">Reset</button></div>';
   document.body.appendChild(overlay);
   const resumeButton = document.createElement('button');
   resumeButton.type = 'button';
@@ -1452,8 +1497,12 @@ function renderTutorialClient(tutorialConfig) {
   resumeButton.className = 'tutorial-resume';
   resumeButton.hidden = true;
   document.body.appendChild(resumeButton);
+  const overlayDrag = { active: false, manual: false, left: 16, top: 16, offsetX: 0, offsetY: 0 };
+  const pulseTimers = new WeakMap();
   let progress = null;
   let lastRenderedStepId = null;
+  let activeHighlightTarget = null;
+  let activeFocusScope = null;
   const api = async (method, body = null) => {
     const options = { method };
     if (body != null) {
@@ -1467,18 +1516,40 @@ function renderTutorialClient(tutorialConfig) {
   };
   const currentStep = () => tutorial.steps.find(step => step.id === progress?.stepId) || null;
   const currentStepIndex = () => stepIndex.get(progress?.stepId || '') ?? -1;
-  const clearHighlight = () => document.querySelectorAll('[data-tutorial-current]').forEach(node => node.removeAttribute('data-tutorial-current'));
+  const clearHighlight = () => {
+    if (activeHighlightTarget?.isConnected) activeHighlightTarget.removeAttribute('data-tutorial-current');
+    if (activeFocusScope?.isConnected) activeFocusScope.removeAttribute('data-tutorial-focus-scope');
+    activeHighlightTarget = null;
+    activeFocusScope = null;
+    document.querySelectorAll('[data-tutorial-current]').forEach(node => node.removeAttribute('data-tutorial-current'));
+    document.querySelectorAll('[data-tutorial-focus-scope]').forEach(node => node.removeAttribute('data-tutorial-focus-scope'));
+  };
   const previousStep = () => {
     const index = currentStepIndex();
     return index > 0 ? tutorial.steps[index - 1] : null;
   };
-  const saveProgress = async next => {
-    progress = next;
-    if (!next) await api('DELETE');
-    else await api('PUT', next);
+  const flashAutoClick = node => {
+    if (!node) return;
+    pulseNode(node, 720);
+    node.classList.add('tutorial-auto-click');
+    setTimeout(() => node.classList.remove('tutorial-auto-click'), 520);
+    const rect = node.getBoundingClientRect();
+    const pulse = document.createElement('div');
+    pulse.className = 'tutorial-click-pulse';
+    pulse.style.left = (rect.left + (rect.width / 2)) + 'px';
+    pulse.style.top = (rect.top + (rect.height / 2)) + 'px';
+    document.body.appendChild(pulse);
+    setTimeout(() => pulse.remove(), 620);
   };
-  const readTodos = async () => fetch('/api/todos').then(res => res.json().catch(() => ({ todos: [] })));
-  const readNotes = async () => fetch('/api/private-notes').then(res => res.json().catch(() => ({ notes: [] })));
+  const pulseNode = (node, duration = 1200) => {
+    if (!node) return;
+    node.setAttribute('data-tutorial-changed', 'true');
+    const pending = pulseTimers.get(node);
+    if (pending) clearTimeout(pending);
+    pulseTimers.set(node, setTimeout(() => {
+      if (node.isConnected) node.removeAttribute('data-tutorial-changed');
+    }, duration));
+  };
   const fillForm = (target, payload) => {
     const form = target?.matches?.('form') ? target : target?.closest?.('form') || target?.querySelector?.('form');
     if (!form || !payload) return;
@@ -1487,8 +1558,39 @@ function renderTutorialClient(tutorialConfig) {
       if (!field) continue;
       if (field.type === 'checkbox') field.checked = value === true;
       else field.value = value == null ? '' : String(value);
+      pulseNode(field, 900);
     }
   };
+  const submitTutorialForm = async target => {
+    const form = target?.matches?.('form') ? target : target?.closest?.('form') || target?.querySelector?.('form');
+    if (!form) return false;
+    const submitter = form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
+    if (!submitter) return false;
+    flashAutoClick(submitter);
+    await new Promise(resolve => setTimeout(resolve, 120));
+    submitter.click();
+    return true;
+  };
+  const focusScopeFor = target => target?.matches?.('form,section,main') ? target : target?.closest?.('form,section,main') || target || null;
+  const setOverlayPosition = (left, top, manual = false) => {
+    const maxLeft = Math.max(12, window.innerWidth - overlay.offsetWidth - 12);
+    const maxTop = Math.max(12, window.innerHeight - overlay.offsetHeight - 12);
+    const nextLeft = Math.max(12, Math.min(maxLeft, left));
+    const nextTop = Math.max(12, Math.min(maxTop, top));
+    overlay.style.left = nextLeft + 'px';
+    overlay.style.top = nextTop + 'px';
+    overlay.style.right = 'auto';
+    overlayDrag.left = nextLeft;
+    overlayDrag.top = nextTop;
+    if (manual) overlayDrag.manual = true;
+  };
+  const saveProgress = async next => {
+    progress = next;
+    if (!next) await api('DELETE');
+    else await api('PUT', next);
+  };
+  const readTodos = async () => fetch('/api/todos').then(res => res.json().catch(() => ({ todos: [] })));
+  const readNotes = async () => fetch('/api/private-notes').then(res => res.json().catch(() => ({ notes: [] })));
   const isComplete = async step => {
     const check = step?.completeWhen || {};
     switch (check.kind) {
@@ -1516,36 +1618,44 @@ function renderTutorialClient(tutorialConfig) {
     }
   };
   const position = target => {
+    if (overlayDrag.manual) {
+      setOverlayPosition(overlayDrag.left, overlayDrag.top);
+      return;
+    }
     if (!target) {
-      overlay.style.top = '16px';
-      overlay.style.right = '16px';
-      overlay.style.left = 'auto';
+      setOverlayPosition(window.innerWidth - overlay.offsetWidth - 16, 16);
       return;
     }
     const rect = target.getBoundingClientRect();
     const top = Math.max(14, Math.min(window.innerHeight - overlay.offsetHeight - 14, rect.bottom + 12));
     const left = rect.left + overlay.offsetWidth + 18 > window.innerWidth ? Math.max(12, rect.right - overlay.offsetWidth) : Math.max(12, rect.left);
-    overlay.style.top = top + 'px';
-    overlay.style.left = left + 'px';
-    overlay.style.right = 'auto';
+    setOverlayPosition(left, top);
   };
   const render = () => {
     clearHighlight();
     const step = currentStep();
     if (!progress || progress.completedAt || !step || step.page !== 'app') {
       overlay.hidden = true;
+      dimmer.hidden = true;
       resumeButton.hidden = true;
       return;
     }
     if (progress.hidden) {
       overlay.hidden = true;
+      dimmer.hidden = true;
       resumeButton.hidden = false;
       return;
     }
     resumeButton.hidden = true;
     const target = step.target ? byTarget(step.target) : null;
+    const scope = focusScopeFor(target);
+    if (scope) {
+      scope.setAttribute('data-tutorial-focus-scope', 'true');
+      activeFocusScope = scope;
+    }
     if (target) {
       target.setAttribute('data-tutorial-current', 'true');
+      activeHighlightTarget = target;
       if (lastRenderedStepId !== step.id) target.scrollIntoView({ block: 'center', behavior: 'smooth' });
     }
     document.getElementById('tutorial-overlay-meta').textContent = step.chapterId.toUpperCase();
@@ -1553,6 +1663,7 @@ function renderTutorialClient(tutorialConfig) {
     document.getElementById('tutorial-overlay-body').textContent = step.body;
     document.getElementById('tutorial-next').textContent = step.nextLabel || 'Next';
     document.getElementById('tutorial-back').disabled = !previousStep();
+    dimmer.hidden = false;
     overlay.hidden = false;
     position(target);
     lastRenderedStepId = step.id;
@@ -1588,6 +1699,26 @@ function renderTutorialClient(tutorialConfig) {
     await saveProgress({ ...progress, hidden: false });
     render();
   });
+  document.getElementById('tutorial-overlay-handle').addEventListener('pointerdown', event => {
+    if (overlay.hidden) return;
+    const rect = overlay.getBoundingClientRect();
+    overlayDrag.active = true;
+    overlayDrag.manual = true;
+    overlayDrag.left = rect.left;
+    overlayDrag.top = rect.top;
+    overlayDrag.offsetX = event.clientX - rect.left;
+    overlayDrag.offsetY = event.clientY - rect.top;
+    document.body.classList.add('tutorial-dragging');
+    event.preventDefault();
+  });
+  window.addEventListener('pointermove', event => {
+    if (!overlayDrag.active) return;
+    setOverlayPosition(event.clientX - overlayDrag.offsetX, event.clientY - overlayDrag.offsetY, true);
+  });
+  window.addEventListener('pointerup', () => {
+    overlayDrag.active = false;
+    document.body.classList.remove('tutorial-dragging');
+  });
   document.getElementById('tutorial-next').addEventListener('click', async () => {
     const step = currentStep();
     if (!step) return;
@@ -1599,6 +1730,8 @@ function renderTutorialClient(tutorialConfig) {
     if (step.payload && target) {
       fillForm(target, step.payload);
       await saveProgress({ ...progress, draftInputs: step.payload, hidden: false });
+      const submitted = await submitTutorialForm(target);
+      if (submitted) return;
       render();
       return;
     }
@@ -1615,6 +1748,7 @@ function renderTutorialClient(tutorialConfig) {
     render();
   });
   document.getElementById('tutorial-reset').addEventListener('click', async () => {
+    overlayDrag.manual = false;
     progress = null;
     await api('DELETE');
     render();

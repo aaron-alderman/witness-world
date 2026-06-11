@@ -67,7 +67,9 @@
 - Frontend host must have:
   - `dom.render`, `http.fetch`
 - Canonical startup path is the generic CLI:
+  - `node src/cli.js bootstrap [--port <n>]`
   - `node src/cli.js serve <dslPath> [--server <id>] [--port <n>]`
+  - `npm run bootstrap` is a convenience wrapper around the dedicated blank-world bootstrap command
   - `npm run demo` is a convenience wrapper around that CLI for the demo DSL
 - Runtime selection is driven by authored `serverRunner` + `serve` definitions.
 - Current public/runtime surface includes:

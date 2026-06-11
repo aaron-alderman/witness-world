@@ -1,4 +1,5 @@
 const CANVAS_CSS = `
+  :root { --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
   * { box-sizing: border-box; }
   body { margin: 0; font-family: "Segoe UI", Tahoma, sans-serif; font-size: 12px; background: #d4d0c8; color: #1c1c1c; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
   header.canvas-toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: #d4d0c8; border-bottom: 2px solid #808080; flex: none; flex-wrap: wrap; }
@@ -30,13 +31,14 @@ const CANVAS_CSS = `
   .prop-row { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
   .prop-row label { width: 64px; flex: none; color: #333; }
   .prop-row input { flex: 1; min-width: 0; }
-  .prop-id { color: #555; word-break: break-all; margin: 4px 0; }
-  .relation-row { padding: 2px 4px; margin: 2px 0; background: #e8e6e1; border: 1px solid #aaa; word-break: break-all; }
-  .palette-item { padding: 3px 6px; margin: 3px 0; background: #fff; border: 1px solid #888; cursor: pointer; word-break: break-all; }
+  .prop-id { color: #555; word-break: break-all; margin: 4px 0; font-family: var(--mono); }
+  .relation-row { padding: 2px 4px; margin: 2px 0; background: #e8e6e1; border: 1px solid #aaa; word-break: break-all; font-family: var(--mono); }
+  .palette-item { padding: 3px 6px; margin: 3px 0; background: #fff; border: 1px solid #888; cursor: pointer; word-break: break-all; font-family: var(--mono); }
   .palette-item:hover { background: #c0d4ec; }
-  .placed-badge { color: #666; margin-left: 4px; font-weight: 600; }
+  .placed-badge { color: #666; margin-left: 4px; font-weight: 600; font-family: var(--mono); }
   .inspector-empty { color: #555; font-style: italic; margin: 4px 0; }
   .danger { color: #7a0000; }
+  #status, #history-label, #timeline-pos, .timeline-tick, .timeline-older { font-family: var(--mono); }
 `;
 
 const CANVAS_CLIENT_JS = `(async () => {

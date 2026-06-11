@@ -50,7 +50,7 @@ test("blank world can bootstrap into a working todo app purely through the UI", 
     await page.locator('#create-todo-starter').click();
     await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
 
-    await page.goto(`${server.url}/`);
+    await page.locator("#open-app-link").click();
     await waitForAppReady(page);
     await page.waitForFunction(() => {
       const status = document.querySelector('[data-widget="todo_session_status"]');

@@ -28,35 +28,27 @@ async function completeStep(page, serverUrl) {
   switch (true) {
     case stepId === "identity:create":
       await page.locator("#tutorial-next").click();
-      await page.locator('[data-tutorial-target="identity-submit"]').click();
       break;
     case stepId === "session:signin":
       await page.locator("#tutorial-next").click();
-      await page.locator('[data-tutorial-target="session-submit"]').click();
       break;
     case stepId === "runner:create":
       await page.locator("#tutorial-next").click();
-      await page.locator('[data-tutorial-target="runner-submit"]').click();
       break;
     case stepId.startsWith("widgets:"):
       await page.locator("#tutorial-next").click();
-      await page.locator('[data-tutorial-target="widget-submit"]').click();
       break;
     case stepId === "program:create":
       await page.locator("#tutorial-next").click();
-      await page.locator('[data-tutorial-target="program-submit"]').click();
       break;
     case stepId.startsWith("program-step:"):
       await page.locator("#tutorial-next").click();
-      await page.locator('[data-tutorial-target="step-submit"]').click();
       break;
     case stepId.startsWith("route:"):
       await page.locator("#tutorial-next").click();
-      await page.locator('[data-tutorial-target="route-submit"]').click();
       break;
     case stepId.startsWith("serve:"):
       await page.locator("#tutorial-next").click();
-      await page.locator('[data-tutorial-target="serve-submit"]').click();
       break;
     case stepId === "open-app":
       await page.locator("#open-app-link").click();
@@ -68,7 +60,6 @@ async function completeStep(page, serverUrl) {
       break;
     case stepId === "app:create-todo":
       await page.locator("#tutorial-next").click();
-      await page.locator('[data-tutorial-target="todo-submit"]').click();
       break;
     case stepId === "app:toggle-todo":
       await page.locator('[data-tutorial-target="todo-toggle"]').click();
@@ -78,7 +69,6 @@ async function completeStep(page, serverUrl) {
       break;
     case stepId === "app:create-note":
       await page.locator("#tutorial-next").click();
-      await page.locator('[data-tutorial-target="note-submit"]').click();
       break;
     case stepId === "app:done":
       await page.locator("#tutorial-next").click();
@@ -126,6 +116,35 @@ test("guided tutorial persists, resumes, and completes on the live app", async (
     const finalStep = await currentTutorialStep(page);
     const finalCompletedAt = await tutorialCompletedAt(page);
     assert.ok(finalCompletedAt, `tutorial did not complete; step=${finalStep}`);
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("guided tutorial can auto-finish the widget chapter through the real builders", { timeout: 60000 }, async () => {
+  const silentLogger = { info() {}, error() {} };
+  const { server, close: closeServer } = await startBlankUiServer({ logger: silentLogger });
+  const { page, runtime, close: closeBrowser } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await page.waitForFunction(() => document.body.textContent.includes("Build The Todo App From Scratch"));
+
+    await page.locator("#tutorial-start").click();
+    await waitForStep(page, "identity:create");
+    await completeStep(page, server.url);
+    await waitForStep(page, "session:signin");
+    await completeStep(page, server.url);
+    await waitForStep(page, "runner:create");
+    await completeStep(page, server.url);
+    await waitForStep(page, "widgets:todo_app_widget");
+
+    await page.locator("#tutorial-finish-chapter").click();
+    await waitForStep(page, "program:create");
+    await page.waitForFunction(() => document.getElementById("state-widgets")?.textContent.includes("private_note_empty_template"));
+
     await expectNoRuntimeErrors(runtime);
   } finally {
     await closeBrowser();
