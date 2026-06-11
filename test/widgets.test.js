@@ -3,7 +3,15 @@ import path from "node:path";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
 import { applyWitnessToml, applyWitnessDocs, loadWitnessTomlFile } from "../src/dsl.js";
-import { widgetTree, renderWidgetPage, frontendProgram, templateWidgetTrees } from "../src/widgets.js";
+import {
+  widgetTree,
+  renderWidgetPage,
+  frontendProgram,
+  templateWidgetTrees,
+  widgetVersionTransitions,
+  requestWidgetVersionActivation,
+  rollbackWidgetVersion
+} from "../src/widgets.js";
 
 test("todo UI is generated from primitive widgets, template widgets, and credential-backed session steps", async () => {
   const world = createWorld();
@@ -34,6 +42,7 @@ test("todo UI is generated from primitive widgets, template widgets, and credent
   assert.match(html, /data-widget="todo_password_input"/);
   assert.match(html, /renderCollection/);
   assert.match(html, /safeRun\('load'\)/);
+  assert.match(html, /refreshProjection/);
   assert.doesNotMatch(html, /TodoForm|TodoList|LoginPanel|PrivateNotes|WitnessInspector/);
   assert.doesNotMatch(html, /run\('load'\)\.catch\(err => setText\('todo_status'/);
   assert.equal(world.allWitnesses().at(-1).process, "widget.renderHtml");
@@ -202,6 +211,13 @@ kind = "Text"
 index = 1
 props = { text = "Banner v2" }
 
+[[widgetVersionTransition]]
+actor = "adam"
+soul = "banner"
+from = "banner_v1"
+to = "banner_v2"
+strategy = "compatible"
+
 [[activateWidgetVersion]]
 actor = "adam"
 soul = "banner"
@@ -220,16 +236,95 @@ order = 0
   assert.doesNotMatch(html, /Banner v2/);
 
   applyWitnessToml(world, `
-[[activateWidgetVersion]]
+[[widgetVersionTransition]]
 actor = "adam"
 soul = "banner"
-version = "banner_v2"
+from = "banner_v2"
+to = "banner_v1"
+strategy = "compatible"
 `);
+  requestWidgetVersionActivation(world, { actor: "adam", soul: "banner", version: "banner_v2" });
 
   html = renderWidgetPage(world, { actor: "frontendHost", rootWidget: "root" });
   assert.match(html, /Banner v2/);
   assert.match(html, /data-widget-version="banner_v2"/);
   assert.doesNotMatch(html, /Banner v1/);
+});
+
+test("widget version transitions default to block and authored strategies drive activation and rollback", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[widget]]
+actor = "adam"
+id = "root"
+kind = "Page"
+props = { title = "Transitions" }
+
+[[widgetVersion]]
+actor = "adam"
+soul = "banner"
+version = "banner_v1"
+kind = "Text"
+props = { text = "Banner v1" }
+
+[[widgetVersion]]
+actor = "adam"
+soul = "banner"
+version = "banner_v2"
+kind = "Text"
+props = { text = "Banner v2" }
+
+[[widgetVersion]]
+actor = "adam"
+soul = "banner"
+version = "banner_v3"
+kind = "Text"
+props = { text = "Banner v3" }
+
+[[widgetVersionTransition]]
+actor = "adam"
+soul = "banner"
+from = "banner_v1"
+to = "banner_v2"
+strategy = "migrate"
+
+[[widgetVersionTransition]]
+actor = "adam"
+soul = "banner"
+from = "banner_v2"
+to = "banner_v3"
+strategy = "fork"
+
+[[activateWidgetVersion]]
+actor = "adam"
+soul = "banner"
+version = "banner_v1"
+`);
+
+  const transitions = widgetVersionTransitions(world.allWitnesses());
+  assert.equal(transitions.length, 2);
+  assert.equal(transitions[0].strategy, "migrate");
+
+  const migrated = requestWidgetVersionActivation(world, { actor: "adam", soul: "banner", version: "banner_v2" });
+  assert.equal(migrated.ok, true);
+  assert.equal(migrated.status, "migrated");
+  assert.equal(world.allWitnesses().some(w => w.process === "widgetVersion.migrate"), true);
+
+  const blocked = requestWidgetVersionActivation(world, { actor: "adam", soul: "banner", version: "banner_v1" });
+  assert.equal(blocked.ok, false);
+  assert.equal(blocked.status, "blocked");
+  assert.equal(blocked.witness.process, "activateWidgetVersion.blocked");
+
+  const forkRequired = requestWidgetVersionActivation(world, { actor: "adam", soul: "banner", version: "banner_v3" });
+  assert.equal(forkRequired.ok, false);
+  assert.equal(forkRequired.status, "forkRequired");
+  assert.equal(world.allWitnesses().some(w => w.process === "widgetVersion.fork.requested"), true);
+
+  const rolledBack = rollbackWidgetVersion(world, { actor: "adam", soul: "banner" });
+  assert.equal(rolledBack.ok, true);
+  assert.equal(rolledBack.status, "rolledBack");
+  assert.equal(rolledBack.version, "banner_v1");
+  assert.equal(world.allWitnesses().some(w => w.process === "widgetVersion.rollback"), true);
 });
 
 test("widget tree projection is idempotent when DSL is reapplied", () => {

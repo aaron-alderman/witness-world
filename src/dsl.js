@@ -14,7 +14,7 @@ import {
   renderView,
   emitUserAction
 } from "./modules.js";
-import { defineWidget, defineWidgetVersion, activateWidgetVersion, attachWidget, defineFrontendProgram, defineFrontendStep } from "./widgets.js";
+import { defineWidget, defineWidgetVersion, defineWidgetVersionTransition, activateWidgetVersion, attachWidget, defineFrontendProgram, defineFrontendStep } from "./widgets.js";
 import { defineTrait, defineValueType, defineProcessSpec } from "./type-model.js";
 
 // Tiny TOML-ish DSL parser. Intentional subset:
@@ -133,6 +133,12 @@ function sourceTargets(kind, values) {
   if (kind === "widgetVersion") {
     if (values.soul) ids.push(values.soul);
     if (values.version) ids.push(values.version);
+  }
+  if (kind === "widgetVersionTransition") {
+    if (values.id) ids.push(values.id);
+    if (values.soul) ids.push(values.soul);
+    if (values.from) ids.push(values.from);
+    if (values.to) ids.push(values.to);
   }
   if (kind === "activateWidgetVersion" && values.soul) ids.push(values.soul);
   if ((kind === "frontendStep" || kind === "step") && values.program) ids.push(values.program);
@@ -363,6 +369,17 @@ function applyDoc(world, { kind, values }, context) {
         kind: req(valuesWithDefaults, "kind"),
         props: collectProps(valuesWithDefaults, ["actor", "owner", "context", "soul", "version", "kind", "index", "program"]),
         index: valuesWithDefaults.index ?? 0,
+        owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
+      });
+
+    case "widgetVersionTransition":
+      return defineWidgetVersionTransition(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        id: valuesWithDefaults.id ?? `widgetVersionTransition:${req(valuesWithDefaults, "soul")}:${req(valuesWithDefaults, "from")}:${req(valuesWithDefaults, "to")}`,
+        soul: req(valuesWithDefaults, "soul"),
+        from: req(valuesWithDefaults, "from"),
+        to: req(valuesWithDefaults, "to"),
+        strategy: req(valuesWithDefaults, "strategy"),
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
       });
 

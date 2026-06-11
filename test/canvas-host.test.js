@@ -387,11 +387,11 @@ test("SSE stream signals witness growth and the server still closes cleanly", as
     };
 
     const initial = await readFrame();
-    assert.match(initial, /data: \{"count":\d+\}/);
+    assert.match(initial, /data: \{"count":\d+,"id":.+,"process":.+\}/);
 
     await postProcess(server, "canvas.perspective.create", { title: "Streamed" });
     const update = await readFrame();
-    assert.match(update, /data: \{"count":\d+\}/);
+    assert.match(update, /data: \{"count":\d+,"id":.+,"process":".+"\}/);
 
     controller.abort();
   } catch (err) {

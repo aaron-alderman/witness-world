@@ -2,7 +2,7 @@ import { projectors } from "./projectors-core.js";
 
 const DEFAULT_GEOMETRY = { x: 40, y: 40, w: 160, h: 56 };
 const CANVAS_VOCABULARY_RELS = new Set(["contains", "proxies", "cloneOf", "hasGeometry", "hasStyle", "hasCamera", "hasGrid", "hasModuleKind", "hasTitle", "hasDone"]);
-const HIDDEN_THING_KINDS = new Set(["projectionInstance", "perspective", "widget", "widgetVersion", "frontendProgram", "route", "description", "compiledArtifact", "context"]);
+const HIDDEN_THING_KINDS = new Set(["projectionInstance", "perspective", "widget", "widgetVersion", "widgetVersionTransition", "frontendProgram", "route", "description", "compiledArtifact", "context"]);
 
 const byId = key => (a, b) => (a[key] < b[key] ? -1 : a[key] > b[key] ? 1 : 0);
 

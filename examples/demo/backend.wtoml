@@ -16,7 +16,7 @@ method = "GET"
 path = "/"
 serves = "todoAppView"
 handler = "page.home"
-params = { rootWidget = "todo_app_widget", frontendProgram = "todo_frontend_program", page = "home", excludeWidgetRoles = ["world-graph-body"] }
+params = { rootWidget = "todo_app_widget", frontendProgram = "todo_frontend_program", page = "home", excludeWidgetRoles = ["world-graph-body"], liveProjection = true }
 
 [[serve]]
 serverRunner = "demo_server"
@@ -28,7 +28,7 @@ method = "GET"
 path = "/world"
 serves = "worldGraphView"
 handler = "page.world"
-params = { rootWidget = "world_graph_page", frontendProgram = "world_graph_program", page = "world" }
+params = { rootWidget = "world_graph_page", frontendProgram = "world_graph_program", page = "world", liveProjection = true }
 
 [[serve]]
 serverRunner = "demo_server"
@@ -166,6 +166,17 @@ handler = "widgetVersions.activate"
 [[serve]]
 serverRunner = "demo_server"
 route = "widget_versions_activate_route"
+
+[[route]]
+id = "widget_versions_rollback_route"
+method = "POST"
+path = "/api/widget-versions/:soul/rollback"
+serves = "widgetVersion"
+handler = "widgetVersions.rollback"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "widget_versions_rollback_route"
 
 [[route]]
 id = "network_simulate_route"

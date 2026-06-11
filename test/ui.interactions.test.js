@@ -42,6 +42,11 @@ test("frontend form and click interactions mutate rendered state and witnesses",
   } = await launchBrowser();
 
   try {
+    let navigationCount = 0;
+    page.on("framenavigated", frame => {
+      if (frame === page.mainFrame()) navigationCount += 1;
+    });
+
     const baselineTodos = await readTodos(server.url);
     if (!Array.isArray(baselineTodos.todos) || baselineTodos.todos.length === 0) {
       await createTodo(server.url, "Seeded todo");
@@ -67,6 +72,24 @@ test("frontend form and click interactions mutate rendered state and witnesses",
       return Boolean(sessionStatus && sessionStatus.textContent.includes("Signed in as Aaron") && bodyActor === "aaron");
     });
     const sessionCookie = await cookieHeaderFor(page.context(), server.url);
+    const navigationsAfterLogin = navigationCount;
+
+    await page.locator('[data-widget="todo_activate_v2"]').click();
+    await page.waitForFunction(() => {
+      const banner = document.querySelector('[data-widget="todo_versioned_banner"]');
+      return Boolean(banner && banner.textContent && banner.textContent.includes("Versioned widget: v2"));
+    });
+    assert.equal(navigationCount, navigationsAfterLogin, "widget activation should not trigger a page navigation");
+
+    const rollbackResponse = await fetch(`${server.url}/api/widget-versions/todo_versioned_banner/rollback`, {
+      method: "POST",
+      headers: { cookie: sessionCookie }
+    });
+    assert.equal(rollbackResponse.status, 200);
+    await page.waitForFunction(() => {
+      const banner = document.querySelector('[data-widget="todo_versioned_banner"]');
+      return Boolean(banner && banner.textContent && banner.textContent.includes("Versioned widget: v1"));
+    });
 
     await page.fill('[data-widget="todo_input"]', "Write harness tests");
     await page.locator('[data-widget="todo_add_button"]').click();

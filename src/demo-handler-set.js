@@ -4,7 +4,7 @@ import { thing, relation } from "./kernel.js";
 import { todoState, privateNotesFor, publicWitnessesFor } from "./projections.js";
 import { actorRequired, runGates, textRequired } from "./gates.js";
 import { thingId } from "./ids.js";
-import { defineWidget, attachWidget, activateWidgetVersion } from "./widgets.js";
+import { defineWidget, attachWidget } from "./widgets.js";
 import { typeModelProjection, validateProcessInput, validateProcessOutput } from "./type-model.js";
 
 export async function createDemoHandlerSet({
@@ -141,22 +141,6 @@ export async function createDemoHandlerSet({
         });
         await writeTodoProjectionCache();
         sendJson(res, 200, { ok: true, id });
-      },
-
-      "widgetVersions.activate": async ({ req, res, params, requestActor }) => {
-        if (!requestActor) {
-          world.emit({ process: "activateWidgetVersion.failed", actor: backendHost, claims: [], body: { reason: "no actor" } });
-          sendJson(res, 401, { error: "choose a perspective first" });
-          return;
-        }
-        const body = await readJson(req);
-        const version = typeof body.version === "string" ? body.version : null;
-        const witness = activateWidgetVersion(world, { actor: requestActor, soul: params.soul || "", version });
-        if (witness.process.endsWith(".failed")) {
-          sendJson(res, 400, { error: "unknown widget version", witness });
-          return;
-        }
-        sendJson(res, 200, { ok: true, soul: params.soul || "", version, witness });
       },
 
       "widgets.create": async ({ req, res, requestActor, route }) => {

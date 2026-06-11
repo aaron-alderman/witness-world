@@ -49,10 +49,10 @@ A reflective application environment where memory is executable, witnessed, comp
 
 ### Live hot-swap without reload
 
-- [ ] Live projection swap without page reload
-- [ ] Version compatibility gates
-- [ ] Rollback witness
-- [ ] Migration / fork / block semantics
+- [x] Live projection swap without page reload
+- [x] Version compatibility gates
+- [x] Rollback witness
+- [x] Migration / fork / block semantics
 
 ---
 

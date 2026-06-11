@@ -35,6 +35,31 @@ export function defineWidgetVersion(world, { actor, soul, version, kind, props =
   });
 }
 
+export function defineWidgetVersionTransition(world, {
+  actor,
+  soul,
+  from,
+  to,
+  strategy,
+  id = `widgetVersionTransition:${soul}:${from}:${to}`,
+  owner = actor
+}) {
+  return world.emit({
+    process: "defineWidgetVersionTransition",
+    actor,
+    claims: [
+      thing(id),
+      relation(owner, "owns", id),
+      relation(id, "hasModuleKind", "widgetVersionTransition"),
+      relation(id, "widgetVersionTransitionOf", soul),
+      relation(id, "transitionFrom", from),
+      relation(id, "transitionTo", to),
+      relation(id, "transitionStrategy", strategy)
+    ],
+    body: { id, soul, from, to, strategy }
+  });
+}
+
 export function activateWidgetVersion(world, { actor, soul, version }) {
   const versions = widgetVersions(world.allWitnesses());
   const allowed = versions.some(v => v.soul === soul && v.version === version);
@@ -44,6 +69,150 @@ export function activateWidgetVersion(world, { actor, soul, version }) {
     claims: allowed ? [relation(soul, "activeWidgetVersion", version)] : [],
     body: { soul, version, ok: allowed }
   });
+}
+
+export function widgetVersionTransitions(witnesses) {
+  return witnesses
+    .filter(w => w.process === "defineWidgetVersionTransition")
+    .map(w => ({
+      id: w.body.id,
+      soul: w.body.soul,
+      from: w.body.from,
+      to: w.body.to,
+      strategy: w.body.strategy
+    }));
+}
+
+export function widgetVersionTransitionIndex(witnesses) {
+  const index = new Map();
+  for (const row of widgetVersionTransitions(witnesses)) {
+    index.set(`${row.soul}\u0000${row.from}\u0000${row.to}`, row);
+  }
+  return index;
+}
+
+export function widgetVersionActivationHistory(witnesses) {
+  const history = new Map();
+  for (const w of witnesses) {
+    if (w.process !== "activateWidgetVersion") continue;
+    if (w.body?.ok === false) continue;
+    const soul = w.body?.soul;
+    const version = w.body?.version;
+    if (!soul || !version) continue;
+    if (!history.has(soul)) history.set(soul, []);
+    history.get(soul).push({
+      witnessId: w.id,
+      actor: w.actor,
+      soul,
+      version
+    });
+  }
+  return history;
+}
+
+export function requestWidgetVersionActivation(world, { actor, soul, version }) {
+  const witnesses = world.allWitnesses();
+  const versions = widgetVersions(witnesses);
+  const target = versions.find(candidate => candidate.soul === soul && candidate.version === version);
+  if (!target) {
+    const witness = world.emit({
+      process: "activateWidgetVersion.failed",
+      actor,
+      claims: [],
+      body: { soul, version, ok: false, reason: "unknown widget version" }
+    });
+    return { ok: false, status: "failed", soul, version, witness, witnesses: [witness] };
+  }
+
+  const current = activeWidgetVersions(witnesses).get(soul) ?? null;
+  if (!current) {
+    const witness = activateWidgetVersion(world, { actor, soul, version });
+    return { ok: true, status: "activated", soul, version, witness, witnesses: [witness] };
+  }
+
+  if (current === version) {
+    const witness = activateWidgetVersion(world, { actor, soul, version });
+    return { ok: true, status: "activated", soul, version, witness, witnesses: [witness] };
+  }
+
+  const transition = widgetVersionTransitionIndex(witnesses).get(`${soul}\u0000${current}\u0000${version}`) ?? null;
+  const strategy = transition?.strategy ?? "block";
+  if (strategy === "compatible") {
+    const witness = activateWidgetVersion(world, { actor, soul, version });
+    return { ok: true, status: "activated", soul, version, witness, witnesses: [witness] };
+  }
+  if (strategy === "migrate") {
+    const migration = world.emit({
+      process: "widgetVersion.migrate",
+      actor,
+      claims: [],
+      body: { soul, from: current, to: version, strategy }
+    });
+    const activation = activateWidgetVersion(world, { actor, soul, version });
+    return { ok: true, status: "migrated", soul, version, witness: activation, witnesses: [migration, activation] };
+  }
+  if (strategy === "fork") {
+    const requested = world.emit({
+      process: "widgetVersion.fork.requested",
+      actor,
+      claims: [],
+      body: { soul, from: current, to: version, strategy }
+    });
+    const blocked = world.emit({
+      process: "activateWidgetVersion.blocked",
+      actor,
+      claims: [],
+      body: { soul, from: current, version, strategy, reason: "fork required" }
+    });
+    return { ok: false, status: "forkRequired", soul, version, witness: blocked, witnesses: [requested, blocked] };
+  }
+  const blocked = world.emit({
+    process: "activateWidgetVersion.blocked",
+    actor,
+    claims: [],
+    body: { soul, from: current, version, strategy, reason: transition ? "transition blocked" : "no authored transition" }
+  });
+  return { ok: false, status: "blocked", soul, version, witness: blocked, witnesses: [blocked] };
+}
+
+export function rollbackWidgetVersion(world, { actor, soul }) {
+  const history = widgetVersionActivationHistory(world.allWitnesses()).get(soul) ?? [];
+  if (history.length < 2) {
+    const witness = world.emit({
+      process: "widgetVersion.rollback.failed",
+      actor,
+      claims: [],
+      body: { soul, reason: "no previous active version" }
+    });
+    return { ok: false, status: "failed", soul, version: null, witness, witnesses: [witness] };
+  }
+
+  const current = history[history.length - 1]?.version ?? null;
+  let target = null;
+  for (let index = history.length - 2; index >= 0; index -= 1) {
+    if (history[index].version !== current) {
+      target = history[index].version;
+      break;
+    }
+  }
+  if (!target) {
+    const witness = world.emit({
+      process: "widgetVersion.rollback.failed",
+      actor,
+      claims: [],
+      body: { soul, reason: "no previous distinct active version" }
+    });
+    return { ok: false, status: "failed", soul, version: null, witness, witnesses: [witness] };
+  }
+
+  const rollback = world.emit({
+    process: "widgetVersion.rollback",
+    actor,
+    claims: [],
+    body: { soul, from: current, to: target }
+  });
+  const activation = activateWidgetVersion(world, { actor, soul, version: target });
+  return { ok: true, status: "rolledBack", soul, version: target, witness: activation, witnesses: [rollback, activation] };
 }
 
 export function attachWidget(world, { actor, parent, child, slot = "children", order = 0 }) {
@@ -429,10 +598,13 @@ function clamp(value, min, max) {
 function renderClientEngine(program) {
   const json = JSON.stringify(program).replace(/</g, "\\u003c");
   const engine = String.raw`(async () => {
-  const program = JSON.parse(document.getElementById('witness-frontend-program').textContent);
-  const config = program.config || {};
-  const typeModel = config.typeModel || {};
+  let program = JSON.parse(document.getElementById('witness-frontend-program').textContent);
+  let config = program.config || {};
+  let typeModel = config.typeModel || {};
   const state = Object.create(null);
+  const liveProjectionProcesses = new Set(['defineWidget', 'attachWidget', 'defineWidgetVersion', 'activateWidgetVersion', 'widgetVersion.migrate', 'widgetVersion.rollback']);
+  let refreshInFlight = null;
+  let liveProjectionStarted = false;
   const byWidget = id => document.querySelector('[data-widget="' + CSS.escape(id) + '"]');
   const byTemplate = id => document.querySelector('[data-widget-template="' + CSS.escape(id) + '"]');
   const readPath = (value, path) => String(path || '').split('.').filter(Boolean).reduce((x, key) => x == null ? undefined : x[key], value);
@@ -1000,6 +1172,63 @@ function renderClientEngine(program) {
     state[into] = schema ? readTypedForm(data, schema) : data;
   };
   const clearForm = ({ widget }) => { formForWidget(widget)?.reset?.(); };
+  const bindSubmitHandlers = () => {
+    for (const step of program.steps.filter(s => s.event && s.event.startsWith('submit:'))) {
+      const widget = step.event.slice('submit:'.length);
+      const form = byWidget(widget);
+      if (form && !form.__witnessBound) {
+        form.__witnessBound = true;
+        form.addEventListener('submit', event => { event.preventDefault(); safeRun('submit:' + widget); });
+      }
+    }
+  };
+  const refreshProjection = async () => {
+    if (refreshInFlight) return refreshInFlight;
+    refreshInFlight = (async () => {
+      const res = await fetch(window.location.href, requestOptions());
+      if (!res.ok) throw new Error('projection refresh failed');
+      const html = await res.text();
+      const nextDocument = new DOMParser().parseFromString(html, 'text/html');
+      const nextProgramEl = nextDocument.getElementById('witness-frontend-program');
+      if (nextProgramEl?.textContent) {
+        program = JSON.parse(nextProgramEl.textContent);
+        config = program.config || {};
+        typeModel = config.typeModel || {};
+      }
+      const nextRoot = nextDocument.querySelector('[data-widget="' + CSS.escape(program.rootWidget) + '"]');
+      const currentRoot = byWidget(program.rootWidget);
+      if (!nextRoot || !currentRoot) throw new Error('projection root not found');
+      currentRoot.replaceWith(nextRoot);
+      document.querySelectorAll('[data-widget-template]').forEach(node => node.remove());
+      const currentProgramEl = document.getElementById('witness-frontend-program');
+      const templateAnchor = currentProgramEl || document.body.lastChild;
+      nextDocument.querySelectorAll('[data-widget-template]').forEach(template => {
+        const clone = template.cloneNode(true);
+        if (templateAnchor?.parentNode) templateAnchor.parentNode.insertBefore(clone, templateAnchor);
+        else document.body.appendChild(clone);
+      });
+      if (currentProgramEl && nextProgramEl?.textContent) currentProgramEl.textContent = nextProgramEl.textContent;
+      bindSubmitHandlers();
+      await safeRun('load');
+    })();
+    try {
+      await refreshInFlight;
+    } finally {
+      refreshInFlight = null;
+    }
+  };
+  const bootLiveProjection = () => {
+    if (!config.liveProjection || liveProjectionStarted) return;
+    liveProjectionStarted = true;
+    const stream = new EventSource('/api/events');
+    stream.onmessage = event => {
+      try {
+        const payload = JSON.parse(event.data || '{}');
+        if (!liveProjectionProcesses.has(payload.process)) return;
+        void refreshProjection();
+      } catch {}
+    };
+  };
   const resolveBody = ({ from, pick, body }) => {
     if (body) return interpolateValue(body, scopeFor({}));
     const source = state[from] || {};
@@ -1071,6 +1300,7 @@ function renderClientEngine(program) {
     if (step.op === 'renderCollection') renderCollection(p);
     if (step.op === 'renderWorldGraph') renderWorldGraph(p);
     if (step.op === 'readForm') readForm(p);
+    if (step.op === 'refreshProjection') await refreshProjection();
     if (step.op === 'reloadPage') window.location.reload();
     if (step.op === 'postJson' || step.op === 'patchJson' || step.op === 'deleteJson') {
       const method = step.op === 'postJson' ? (p.method || 'POST') : step.op === 'patchJson' ? (p.method || 'PATCH') : (p.method || 'DELETE');
@@ -1083,20 +1313,14 @@ function renderClientEngine(program) {
     if (step.op === 'clearForm') clearForm(p);
     if (step.op === 'run') await run(p.event, state.event);
   }
-  for (const step of program.steps.filter(s => s.event && s.event.startsWith('submit:'))) {
-    const widget = step.event.slice('submit:'.length);
-    const form = byWidget(widget);
-    if (form && !form.__witnessBound) {
-      form.__witnessBound = true;
-      form.addEventListener('submit', event => { event.preventDefault(); safeRun('submit:' + widget); });
-    }
-  }
+  bindSubmitHandlers();
   document.addEventListener('click', event => {
     const button = event.target.closest('[data-action]');
     if (!button) return;
     event.preventDefault();
     safeRun('click:' + button.dataset.action, { ...button.dataset, done: button.dataset.done === 'true' });
   });
+  bootLiveProjection();
   safeRun('load');
   function escapeHtml(value) { return String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 })();`;

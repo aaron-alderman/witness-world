@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { thing, relation } from "./kernel.js";
 import { witnessRelations, moduleProjectors } from "./modules.js";
-import { renderWidgetPage } from "./widgets.js";
+import { renderWidgetPage, requestWidgetVersionActivation, rollbackWidgetVersion } from "./widgets.js";
 import { worldGraphProjection, astNodesProjection } from "./world-graph.js";
 import { canvasProcessHandlers } from "./canvas-processes.js";
 import { canvasProjection, perspectivesProjection } from "./canvas-projection.js";
@@ -161,7 +161,8 @@ export async function startServer(world, {
     const count = world.allWitnesses().length;
     if (count <= sseLastCount) return;
     sseLastCount = count;
-    const frame = `data: {"count":${count}}\n\n`;
+    const witness = world.allWitnesses()[count - 1] ?? null;
+    const frame = sseFrame(count, witness);
     for (const client of sseClients) client.write(frame);
   }, 250);
   sseWatcher.unref();
@@ -193,7 +194,7 @@ export async function startServer(world, {
 
       if (req.method === "GET" && req.url === "/api/events") {
         res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
-        res.write(`data: {"count":${world.allWitnesses().length}}\n\n`);
+        res.write(sseFrame(world.allWitnesses().length, world.allWitnesses().at(-1) ?? null));
         sseClients.add(res);
         req.on("close", () => sseClients.delete(res));
         world.observe({
@@ -430,6 +431,40 @@ function createGenericRouteHandlers({
       sendJson(res, 200, { ok: true }, { "set-cookie": clearSessionCookieHeader() });
     },
 
+    "widgetVersions.activate": async ({ req, res, params, requestActor }) => {
+      if (!requestActor) {
+        world.emit({ process: "activateWidgetVersion.failed", actor: backendHost, claims: [], body: { soul: params.soul || "", reason: "no actor" } });
+        sendJson(res, 401, { error: "choose a perspective first" });
+        return;
+      }
+      const body = await readJson(req);
+      const version = typeof body.version === "string" ? body.version : null;
+      const result = requestWidgetVersionActivation(world, { actor: requestActor, soul: params.soul || "", version });
+      if (result.status === "failed") {
+        sendJson(res, 400, { error: result.witness.body?.reason || "unknown widget version", status: result.status, soul: result.soul, version, witness: result.witness });
+        return;
+      }
+      if (!result.ok) {
+        sendJson(res, 409, { error: result.witness.body?.reason || "widget version transition blocked", status: result.status, soul: result.soul, version, witnesses: result.witnesses, witness: result.witness });
+        return;
+      }
+      sendJson(res, 200, { ok: true, status: result.status, soul: result.soul, version, witnesses: result.witnesses, witness: result.witness });
+    },
+
+    "widgetVersions.rollback": async ({ res, params, requestActor }) => {
+      if (!requestActor) {
+        world.emit({ process: "widgetVersion.rollback.failed", actor: backendHost, claims: [], body: { soul: params.soul || "", reason: "no actor" } });
+        sendJson(res, 401, { error: "choose a perspective first" });
+        return;
+      }
+      const result = rollbackWidgetVersion(world, { actor: requestActor, soul: params.soul || "" });
+      if (!result.ok) {
+        sendJson(res, 409, { error: result.witness.body?.reason || "rollback unavailable", status: result.status, soul: result.soul, witness: result.witness });
+        return;
+      }
+      sendJson(res, 200, { ok: true, status: result.status, soul: result.soul, version: result.version, witnesses: result.witnesses, witness: result.witness });
+    },
+
     "page.home": async ({ res, route }) => {
       const params = route.params ?? {};
       const rootWidget = params.rootWidget ?? null;
@@ -449,7 +484,7 @@ function createGenericRouteHandlers({
         actor: frontendHost,
         rootWidget,
         frontendProgram: params.frontendProgram ?? null,
-        appConfig: { actors, page, excludeWidgetRoles }
+        appConfig: { actors, page, excludeWidgetRoles, liveProjection: params.liveProjection === true }
       }));
     },
 
@@ -470,7 +505,7 @@ function createGenericRouteHandlers({
         actor: frontendHost,
         rootWidget,
         frontendProgram: params.frontendProgram ?? null,
-        appConfig: { actors, page: params.page ?? "world" }
+        appConfig: { actors, page: params.page ?? "world", liveProjection: params.liveProjection === true }
       }));
     },
 
@@ -598,6 +633,10 @@ function resolveStorageConfig(storage, runtimeRoot) {
     resolved[key] = path.resolve(runtimeRoot, value);
   }
   return resolved;
+}
+
+function sseFrame(count, witness) {
+  return `data: ${JSON.stringify({ count, id: witness?.id ?? null, process: witness?.process ?? null })}\n\n`;
 }
 
 function compileRouteMatcher(routePath) {

@@ -216,13 +216,25 @@ index = 1
 text = "Versioned widget: v2"
 class = "versioned-banner"
 
+[[widgetVersionTransition]]
+soul = "todo_versioned_banner"
+from = "todo_versioned_banner_v1"
+to = "todo_versioned_banner_v2"
+strategy = "compatible"
+
+[[widgetVersionTransition]]
+soul = "todo_versioned_banner"
+from = "todo_versioned_banner_v2"
+to = "todo_versioned_banner_v1"
+strategy = "compatible"
+
 [[activateWidgetVersion]]
 soul = "todo_versioned_banner"
 version = "todo_versioned_banner_v1"
 
 [[box]]
 id = "todo_version_playground"
-children = ["todo_version_title", "todo_versioned_banner", "todo_activate_v1", "todo_activate_v2"]
+children = ["todo_version_title", "todo_versioned_banner", "todo_activate_v1", "todo_activate_v2", "todo_rollback_version"]
 class = "version-playground"
 
 [[heading]]
@@ -245,6 +257,13 @@ type = "button"
 action = "activateWidgetVersion"
 eventSoul = "todo_versioned_banner"
 eventVersion = "todo_versioned_banner_v2"
+
+[[button]]
+id = "todo_rollback_version"
+text = "Rollback"
+type = "button"
+action = "rollbackWidgetVersion"
+eventSoul = "todo_versioned_banner"
 
 [[frontendProgram]]
 id = "todo_frontend_program"
@@ -610,8 +629,28 @@ into = "activatedWidgetVersion"
 
 [[step]]
 order = 2
-op = "reloadPage"
+op = "refreshProjection"
 on = "click:activateWidgetVersion"
+
+[[step]]
+order = 0
+op = "setText"
+on = "click:rollbackWidgetVersion"
+widget = "todo_status"
+text = "Rolling back widget version..."
+
+[[step]]
+order = 1
+op = "postJson"
+on = "click:rollbackWidgetVersion"
+url = "/api/widget-versions/${event.soul}/rollback"
+method = "POST"
+into = "rolledBackWidgetVersion"
+
+[[step]]
+order = 2
+op = "refreshProjection"
+on = "click:rollbackWidgetVersion"
 
 [[step]]
 order = 0

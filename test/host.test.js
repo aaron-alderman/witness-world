@@ -128,7 +128,7 @@ path = "/"
 serves = "page"
 method = "GET"
 handler = "page.home"
-params = { rootWidget = "todo_app_widget" }
+params = { rootWidget = "todo_app_widget", liveProjection = true }
 
 [[serve]]
 actor = "adam"
@@ -277,6 +277,19 @@ handler = "widgetVersions.activate"
 actor = "adam"
 serverRunner = "server_runner"
 route = "widget_versions_activate_route"
+
+[[route]]
+actor = "adam"
+id = "widget_versions_rollback_route"
+path = "/api/widget-versions/:soul/rollback"
+serves = "widgetVersion"
+method = "POST"
+handler = "widgetVersions.rollback"
+
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "widget_versions_rollback_route"
 
 [[route]]
 actor = "adam"
@@ -608,6 +621,20 @@ kind = "Text"
 index = 1
 props = { text = "Banner v2" }
 
+[[widgetVersionTransition]]
+actor = "adam"
+soul = "banner"
+from = "banner_v1"
+to = "banner_v2"
+strategy = "compatible"
+
+[[widgetVersionTransition]]
+actor = "adam"
+soul = "banner"
+from = "banner_v2"
+to = "banner_v1"
+strategy = "compatible"
+
 [[activateWidgetVersion]]
 actor = "adam"
 soul = "banner"
@@ -636,6 +663,7 @@ order = 0
     body: JSON.stringify({ version: "banner_v2" })
   });
   assert.equal(res.status, 200);
+  assert.equal((await res.json()).status, "activated");
 
   html = await (await fetch(server.url)).text();
   assert.match(html, /Banner v2/);
@@ -643,6 +671,128 @@ order = 0
   assert(world.allWitnesses().some(w => w.process === "activateWidgetVersion" && w.actor === "aaron"));
 
   await server.close();
+});
+
+test("widget version api blocks by default, surfaces forkRequired, and rolls back to the previous version", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "witness-world-version-policy-"));
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  applyMinimalTodoDsl(world, `
+[[widget]]
+actor = "adam"
+id = "root"
+kind = "Page"
+props = { title = "Version API" }
+
+[[route]]
+actor = "adam"
+id = "home_route"
+path = "/"
+serves = "page"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "root", liveProjection = true }
+
+[[widgetVersion]]
+actor = "adam"
+soul = "banner"
+version = "banner_v1"
+kind = "Text"
+index = 0
+props = { text = "Banner v1" }
+
+[[widgetVersion]]
+actor = "adam"
+soul = "banner"
+version = "banner_v2"
+kind = "Text"
+index = 1
+props = { text = "Banner v2" }
+
+[[widgetVersion]]
+actor = "adam"
+soul = "banner"
+version = "banner_v3"
+kind = "Text"
+index = 2
+props = { text = "Banner v3" }
+
+[[widgetVersionTransition]]
+actor = "adam"
+soul = "banner"
+from = "banner_v1"
+to = "banner_v2"
+strategy = "migrate"
+
+[[widgetVersionTransition]]
+actor = "adam"
+soul = "banner"
+from = "banner_v2"
+to = "banner_v3"
+strategy = "fork"
+
+[[activateWidgetVersion]]
+actor = "adam"
+soul = "banner"
+version = "banner_v1"
+
+[[attachWidget]]
+actor = "adam"
+parent = "root"
+child = "banner"
+order = 0
+`);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: tmp
+  });
+
+  try {
+    const blocked = await fetch(`${server.url}/api/widget-versions/banner/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
+      body: JSON.stringify({ version: "banner_v3" })
+    });
+    assert.equal(blocked.status, 409);
+    const blockedBody = await blocked.json();
+    assert.equal(blockedBody.status, "blocked");
+    assert.equal(blockedBody.witness.process, "activateWidgetVersion.blocked");
+
+    const migrated = await fetch(`${server.url}/api/widget-versions/banner/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
+      body: JSON.stringify({ version: "banner_v2" })
+    });
+    assert.equal(migrated.status, 200);
+    const migratedBody = await migrated.json();
+    assert.equal(migratedBody.status, "migrated");
+    assert.equal(world.allWitnesses().some(w => w.process === "widgetVersion.migrate"), true);
+
+    const forkRequired = await fetch(`${server.url}/api/widget-versions/banner/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
+      body: JSON.stringify({ version: "banner_v3" })
+    });
+    assert.equal(forkRequired.status, 409);
+    const forkBody = await forkRequired.json();
+    assert.equal(forkBody.status, "forkRequired");
+    assert.equal(world.allWitnesses().some(w => w.process === "widgetVersion.fork.requested"), true);
+
+    const rollback = await fetch(`${server.url}/api/widget-versions/banner/rollback`, {
+      method: "POST",
+      headers: { "x-witness-actor": "aaron" }
+    });
+    assert.equal(rollback.status, 200);
+    const rollbackBody = await rollback.json();
+    assert.equal(rollbackBody.status, "rolledBack");
+    assert.equal(rollbackBody.version, "banner_v1");
+    assert.equal(world.allWitnesses().some(w => w.process === "widgetVersion.rollback"), true);
+  } finally {
+    await server.close();
+  }
 });
 
 test("process graph lab exposes simulated network failure as a witnessed UI scenario", async () => {
