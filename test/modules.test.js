@@ -64,7 +64,8 @@ test("server runner serves a route that points at a frontend artifact", () => {
     handlerSet: "demo",
     actors: [{ id: "aaron", label: "Aaron" }],
     storage: { todoProjection: "todos.json" },
-    allowActorHeader: false
+    allowActorHeader: false,
+    context: null
   }]);
   assert.deepEqual(world.project(moduleProjectors.servedRoutes), [{
     id: "root_route",
@@ -73,6 +74,7 @@ test("server runner serves a route that points at a frontend artifact", () => {
     method: "GET",
     handler: null,
     params: null,
+    context: null,
     serverRunner: "server_runner"
   }]);
 });
@@ -109,6 +111,7 @@ test("identity projector indexes authored identities by id, username, and actor"
     label: "Aaron",
     username: "aaron",
     password: "aaron",
+    homeContext: null,
     homePerspective: "aaron:personal"
   }]);
   const index = world.project(moduleProjectors.identityIndex);

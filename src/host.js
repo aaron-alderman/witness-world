@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { thing, relation, projectors } from "./kernel.js";
+import { thing, relation, projectors, authorityForActor, canCreateInContext, canManageContext, canMutateTarget } from "./kernel.js";
 import { witnessRelations, moduleProjectors, ensureCapabilityDefinition, installCapability } from "./modules.js";
 import {
   renderWidgetPage,
@@ -24,6 +24,13 @@ import { createDemoHandlerSet } from "./demo-handler-set.js";
 import { typeModelProjection } from "./type-model.js";
 import {
   requestBootstrapIdentityDefine,
+  requestBootstrapContextDefine,
+  requestBootstrapPerspectiveDefine,
+  requestBootstrapStewardshipGrant,
+  requestBootstrapStewardshipRevoke,
+  requestBootstrapProposalCreate,
+  requestBootstrapProposalApprove,
+  requestBootstrapProposalReject,
   requestBootstrapServerRunnerDefine,
   requestBootstrapRouteDefine,
   requestBootstrapServeDefine,
@@ -638,10 +645,13 @@ function createGenericRouteHandlers({
   const frontendHosts = hostIdsByCapability(world, "dom.render");
   const bootstrapAuthAllowed = () => currentIdentityIndex().rows.length === 0;
   const requireBootstrapActor = requestActor => {
-    if (requestActor) return { ok: true, actor: requestActor };
-    if (bootstrapAuthAllowed()) return { ok: true, actor: backendHost };
-    return { ok: false };
+    if (requestActor) return { ok: true, actor: requestActor, bootstrapException: false };
+    if (bootstrapAuthAllowed()) return { ok: true, actor: backendHost, bootstrapException: true };
+    return { ok: false, status: 401, reason: "sign in to edit bootstrap state" };
   };
+  const ensureContextAuthority = (actor, contextId) => contextId ? canCreateInContext(world, actor, contextId) : { ok: true, status: 200, reason: null };
+  const ensureTargetAuthority = (actor, targetId) => canMutateTarget(world, actor, targetId);
+  const sendGateFailure = (res, gate) => sendJson(res, gate.status || 403, { error: gate.reason || "forbidden" });
   const bootstrapModel = () => {
     const authored = bootstrapState();
     const homeRoute = authored.servedRoutes.find(route => route.method === "GET" && route.path === "/" && route.handler === "page.home");
@@ -666,18 +676,38 @@ function createGenericRouteHandlers({
       frontendHosts: frontendHosts.map(id => ({ id })),
       processSpecs: Object.values(typeModel.processSpecsByProcess ?? {}),
       capabilityTargetKinds: ["context", "serverRunner", "routePage"],
+      stewardshipTargetKinds: ["context", "perspective"],
       capabilityTargets: {
         contexts: authored.contexts || [],
         serverRunners: authored.serverRunners || [],
         routePages: pageRoutes
-      }
+      },
+      attachableContexts: authored.contexts || [],
+      proposalTargetProcesses: [
+        "context.define",
+        "perspective.define",
+        "stewardship.grant",
+        "stewardship.revoke",
+        "widget.define",
+        "frontendProgram.define",
+        "frontendStep.define",
+        "route.define",
+        "serve.define",
+        "serverRunner.define",
+        "capability.define",
+        "capability.install",
+        "capability.remove"
+      ]
     };
   };
-  const bootstrapState = () => {
+  const bootstrapState = (requestActor = null) => {
     const routes = world.project(moduleProjectors.routes);
     const servedRoutes = world.project(moduleProjectors.servedRoutes);
     const serverRunners = world.project(moduleProjectors.serverRunners);
     const contexts = world.project(moduleProjectors.contexts);
+    const perspectives = world.project(moduleProjectors.perspectives);
+    const stewardships = world.project(moduleProjectors.stewardships);
+    const proposals = world.project(moduleProjectors.proposals);
     const capabilities = world.project(moduleProjectors.capabilities);
     const capabilityCatalog = world.project(moduleProjectors.capabilityCatalog);
     const capabilityInstalls = world.project(moduleProjectors.capabilityInstalls);
@@ -687,6 +717,10 @@ function createGenericRouteHandlers({
     const frontendSteps = frontendStepsProjection(world.allWitnesses());
     return {
       contexts,
+      perspectives,
+      stewardships,
+      authority: authorityForActor(world, requestActor),
+      proposals,
       capabilities,
       capabilityCatalog,
       capabilityInstalls,
@@ -708,14 +742,100 @@ function createGenericRouteHandlers({
     sessionStore.set(requestSession.id, requestSession);
     return requestSession.tutorialProgress[tutorialId] ?? null;
   };
+  const executeBootstrapProposal = actor => proposal => {
+    const body = proposal.body ?? {};
+    switch (proposal.targetProcess) {
+      case "context.define": {
+        const gate = body.parent ? ensureTargetAuthority(actor, body.parent) : { ok: true };
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapContextDefine(world, { actor, backendHost, body });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "perspective.define": {
+        const gate = ensureContextAuthority(actor, body.context ?? null);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapPerspectiveDefine(world, { actor, backendHost, body });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "stewardship.grant": {
+        const gate = ensureTargetAuthority(actor, body.target);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapStewardshipGrant(world, { actor, backendHost, body });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "stewardship.revoke": {
+        const gate = ensureTargetAuthority(actor, body.target);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapStewardshipRevoke(world, { actor, backendHost, body });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "widget.define": {
+        const gate = body.context ? ensureContextAuthority(actor, body.context) : (body.parent ? ensureTargetAuthority(actor, body.parent) : { ok: true });
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestWidgetDefine(world, { actor, backendHost, body });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "frontendProgram.define": {
+        const gate = ensureContextAuthority(actor, body.context ?? null);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapFrontendProgramDefine(world, { actor, backendHost, body });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "frontendStep.define": {
+        const gate = ensureTargetAuthority(actor, body.program);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapFrontendStepDefine(world, { actor, backendHost, body, allowedOps: SUPPORTED_FRONTEND_OPS });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "route.define": {
+        const gate = ensureContextAuthority(actor, body.context ?? null);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapRouteDefine(world, { actor, backendHost, body, allowedHandlers: supportedHandlers });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "serve.define": {
+        const gate = ensureTargetAuthority(actor, body.serverRunner);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapServeDefine(world, { actor, backendHost, body });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "serverRunner.define": {
+        const gate = ensureContextAuthority(actor, body.context ?? null);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapServerRunnerDefine(world, { actor, backendHost, body, allowedHandlerSets: supportedHandlerSets });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "capability.define": {
+        const gate = ensureContextAuthority(actor, body.context ?? null);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapCapabilityDefine(world, { actor, backendHost, body });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "capability.install": {
+        const target = body.targetKind === "routePage" ? body.target : body.target;
+        const gate = ensureTargetAuthority(actor, target);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapCapabilityInstall(world, { actor, backendHost, body });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "capability.remove": {
+        const gate = ensureTargetAuthority(actor, body.target);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapCapabilityRemove(world, { actor, backendHost, body });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      default:
+        return { ok: false, status: 400, error: "proposal target process not supported" };
+    }
+  };
   const handlers = {
     __sessionStore: sessionStore,
     "bootstrap.model.read": async ({ res }) => {
       sendJson(res, 200, bootstrapModel());
     },
 
-    "bootstrap.state.read": async ({ res }) => {
-      sendJson(res, 200, bootstrapState());
+    "bootstrap.state.read": async ({ res, requestActor }) => {
+      sendJson(res, 200, bootstrapState(requestActor));
     },
 
     "bootstrap.page": async ({ res }) => {
@@ -769,7 +889,7 @@ function createGenericRouteHandlers({
     "identity.create": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
-        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        sendGateFailure(res, gate);
         return;
       }
       const body = await readJson(req);
@@ -781,13 +901,152 @@ function createGenericRouteHandlers({
       sendJson(res, result.status, { identity: result.identity, witness: result.witness });
     },
 
-    "capability.create": async ({ req, res, requestActor }) => {
+    "context.create": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
-        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        sendGateFailure(res, gate);
         return;
       }
       const body = await readJson(req);
+      const auth = body.parent ? ensureTargetAuthority(gate.actor, body.parent) : { ok: true };
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestBootstrapContextDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { context: result.context, witness: result.witness });
+    },
+
+    "perspective.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const auth = ensureContextAuthority(gate.actor, body.context ?? null);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestBootstrapPerspectiveDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { perspective: result.perspective, witness: result.witness });
+    },
+
+    "stewardship.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const auth = ensureTargetAuthority(gate.actor, body.target);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestBootstrapStewardshipGrant(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { stewardship: result.stewardship, witness: result.witness });
+    },
+
+    "stewardship.remove": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const auth = ensureTargetAuthority(gate.actor, body.target);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestBootstrapStewardshipRevoke(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { stewardship: result.stewardship, witness: result.witness });
+    },
+
+    "proposal.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const result = requestBootstrapProposalCreate(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { proposal: result.proposal, witness: result.witness });
+    },
+
+    "proposal.approve": async ({ res, params, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const result = requestBootstrapProposalApprove(world, {
+        actor: gate.actor,
+        backendHost,
+        proposalId: params.id || "",
+        executeTarget: executeBootstrapProposal(gate.actor)
+      });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { proposal: result.proposal, witness: result.witness });
+    },
+
+    "proposal.reject": async ({ req, res, params, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = req ? await readJson(req) : {};
+      const result = requestBootstrapProposalReject(world, {
+        actor: gate.actor,
+        backendHost,
+        proposalId: params.id || "",
+        reason: typeof body.reason === "string" ? body.reason : null
+      });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { proposal: result.proposal, witness: result.witness });
+    },
+
+    "capability.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const auth = ensureContextAuthority(gate.actor, body.context ?? null);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
       const result = requestBootstrapCapabilityDefine(world, { actor: gate.actor, backendHost, body });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
@@ -799,10 +1058,15 @@ function createGenericRouteHandlers({
     "capability.install": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
-        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        sendGateFailure(res, gate);
         return;
       }
       const body = await readJson(req);
+      const auth = ensureTargetAuthority(gate.actor, body.target);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
       const result = requestBootstrapCapabilityInstall(world, { actor: gate.actor, backendHost, body });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
@@ -814,10 +1078,15 @@ function createGenericRouteHandlers({
     "capability.remove": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
-        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        sendGateFailure(res, gate);
         return;
       }
       const body = await readJson(req);
+      const auth = ensureTargetAuthority(gate.actor, body.target);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
       const result = requestBootstrapCapabilityRemove(world, { actor: gate.actor, backendHost, body });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
@@ -829,10 +1098,15 @@ function createGenericRouteHandlers({
     "serverRunner.create": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
-        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        sendGateFailure(res, gate);
         return;
       }
       const body = await readJson(req);
+      const auth = ensureContextAuthority(gate.actor, body.context ?? null);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
       const result = requestBootstrapServerRunnerDefine(world, { actor: gate.actor, backendHost, body, allowedHandlerSets: supportedHandlerSets });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
@@ -844,10 +1118,15 @@ function createGenericRouteHandlers({
     "route.create": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
-        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        sendGateFailure(res, gate);
         return;
       }
       const body = await readJson(req);
+      const auth = ensureContextAuthority(gate.actor, body.context ?? null);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
       const result = requestBootstrapRouteDefine(world, { actor: gate.actor, backendHost, body, allowedHandlers: supportedHandlers });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
@@ -859,10 +1138,15 @@ function createGenericRouteHandlers({
     "serve.create": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
-        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        sendGateFailure(res, gate);
         return;
       }
       const body = await readJson(req);
+      const auth = ensureTargetAuthority(gate.actor, body.serverRunner);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
       const result = requestBootstrapServeDefine(world, { actor: gate.actor, backendHost, body });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
@@ -874,10 +1158,15 @@ function createGenericRouteHandlers({
     "frontendProgram.create": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
-        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        sendGateFailure(res, gate);
         return;
       }
       const body = await readJson(req);
+      const auth = ensureContextAuthority(gate.actor, body.context ?? null);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
       const result = requestBootstrapFrontendProgramDefine(world, { actor: gate.actor, backendHost, body });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
@@ -889,10 +1178,15 @@ function createGenericRouteHandlers({
     "frontendStep.create": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
-        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        sendGateFailure(res, gate);
         return;
       }
       const body = await readJson(req);
+      const auth = ensureTargetAuthority(gate.actor, body.program);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
       const result = requestBootstrapFrontendStepDefine(world, { actor: gate.actor, backendHost, body, allowedOps: SUPPORTED_FRONTEND_OPS });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
@@ -909,7 +1203,7 @@ function createGenericRouteHandlers({
         body: { authenticated: Boolean(requestSession), identity: requestIdentity || null, actor: requestActor || null }
       });
       if (!requestSession) {
-        sendJson(res, 200, { authenticated: false, identity: null, actor: null, label: null, perspective: null });
+        sendJson(res, 200, { authenticated: false, identity: null, actor: null, label: null, homeContext: null, perspective: null });
         return;
       }
       sendJson(res, 200, {
@@ -917,6 +1211,7 @@ function createGenericRouteHandlers({
         identity: requestSession.identity,
         actor: requestSession.actor,
         label: requestSession.label,
+        homeContext: requestSession.homeContext ?? null,
         perspective: requestSession.perspective
       });
     },
@@ -943,6 +1238,7 @@ function createGenericRouteHandlers({
         identity: identity.id,
         actor: identity.actor,
         label: identity.label,
+        homeContext: identity.homeContext ?? null,
         perspective: identity.homePerspective ?? null,
         tutorialProgress: {}
       };
@@ -958,6 +1254,7 @@ function createGenericRouteHandlers({
           identity: identity.id,
           actor: identity.actor,
           label: identity.label,
+          homeContext: identity.homeContext ?? null,
           perspective: identity.homePerspective ?? null
         }
       });
@@ -969,6 +1266,7 @@ function createGenericRouteHandlers({
           identity: identity.id,
           actor: identity.actor,
           label: identity.label,
+          homeContext: identity.homeContext ?? null,
           perspective: identity.homePerspective ?? null
         },
         { "set-cookie": sessionCookieHeader(sessionId) }
@@ -1027,10 +1325,15 @@ function createGenericRouteHandlers({
     "widgets.create": async ({ req, res, requestActor, route }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
-        sendJson(res, 401, { error: "sign in to edit bootstrap state" });
+        sendGateFailure(res, gate);
         return;
       }
       const body = await readJson(req);
+      const auth = body.context ? ensureContextAuthority(gate.actor, body.context) : (body.parent ? ensureTargetAuthority(gate.actor, body.parent) : { ok: true });
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
       const result = requestWidgetDefine(world, {
         actor: gate.actor,
         backendHost,
@@ -1332,6 +1635,15 @@ function matchGenericEndpoint(method, pathname) {
     if (targetMethod === "POST") return { handler: "session.open", params: {} };
     if (targetMethod === "DELETE") return { handler: "session.logout", params: {} };
   }
+  if (targetMethod === "POST" && pathname === "/api/contexts") return { handler: "context.create", params: {} };
+  if (targetMethod === "POST" && pathname === "/api/perspectives") return { handler: "perspective.create", params: {} };
+  if (targetMethod === "POST" && pathname === "/api/stewardships") return { handler: "stewardship.create", params: {} };
+  if (targetMethod === "DELETE" && pathname === "/api/stewardships") return { handler: "stewardship.remove", params: {} };
+  if (targetMethod === "POST" && pathname === "/api/proposals") return { handler: "proposal.create", params: {} };
+  const proposalApprove = pathname.match(/^\/api\/proposals\/([^/]+)\/approve$/);
+  if (proposalApprove && targetMethod === "POST") return { handler: "proposal.approve", params: { id: decodeURIComponent(proposalApprove[1] || "") } };
+  const proposalReject = pathname.match(/^\/api\/proposals\/([^/]+)\/reject$/);
+  if (proposalReject && targetMethod === "POST") return { handler: "proposal.reject", params: { id: decodeURIComponent(proposalReject[1] || "") } };
   if (targetMethod === "POST" && pathname === "/api/widgets") return { handler: "widgets.create", params: {} };
   if (targetMethod === "POST" && pathname === "/api/identities") return { handler: "identity.create", params: {} };
   if (targetMethod === "POST" && pathname === "/api/capabilities") return { handler: "capability.create", params: {} };

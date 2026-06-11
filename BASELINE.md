@@ -63,7 +63,7 @@ Canonical session model:
 
 - identities are authored through `[[identity]]`
 - `POST /api/session` opens a cookie-backed session from `{ username, password }`
-- `GET /api/session` returns the authenticated identity/session state
+- `GET /api/session` returns the authenticated identity/session state, including `homePerspective` and `homeContext` when present
 - `DELETE /api/session` logs out and clears the cookie
 - the HTTP-only cookie is the canonical auth transport
 - raw `x-witness-actor` headers are ignored by default
@@ -154,6 +154,7 @@ The generic runtime currently owns these categories:
 - the semi-internal bootstrap shell at `/_bootstrap`
 - typed bootstrap authoring endpoints for identities, widgets, frontend programs/steps, routes, `serve` mounts, and `serverRunner` wiring
 - typed bootstrap capability authoring/install/remove endpoints plus local catalog/install read models
+- typed bootstrap governance endpoints for contexts, perspectives, stewardships, and proposals
 - method/path route matching, including named params
 - page rendering for widget pages, world page, process page, and canvas page
 - session open/read/logout
@@ -186,6 +187,12 @@ The current demo baseline expects these routes/surfaces to remain reachable:
 - `/api/capability-installs`
 - `/api/session`
 - `/api/identities`
+- `/api/contexts`
+- `/api/perspectives`
+- `/api/stewardships`
+- `/api/proposals`
+- `/api/proposals/:id/approve`
+- `/api/proposals/:id/reject`
 - `/api/frontend-programs`
 - `/api/frontend-steps`
 - `/api/routes`

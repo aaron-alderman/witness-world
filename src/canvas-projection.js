@@ -18,12 +18,13 @@ function indexCurrentRelations(witnesses) {
 }
 
 export function perspectivesProjection(witnesses) {
-  const { kinds, titles } = indexCurrentRelations(witnesses);
+  const { current, kinds, titles } = indexCurrentRelations(witnesses);
   const owners = projectors.owners(witnesses);
+  const contexts = new Map(current.filter(r => r.rel === "inContext").map(r => [r.from, r.to]));
   const perspectives = [];
   for (const [id, kind] of kinds) {
     if (kind !== "perspective") continue;
-    perspectives.push({ id, title: titles.get(id) ?? id, owner: owners.get(id) ?? null });
+    perspectives.push({ id, title: titles.get(id) ?? id, owner: owners.get(id) ?? null, context: contexts.get(id) ?? null });
   }
   return perspectives.sort(byId("id"));
 }

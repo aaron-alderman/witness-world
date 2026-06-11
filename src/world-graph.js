@@ -487,6 +487,9 @@ function ensureContext(map, id) {
 function projectedNodeContexts(witnesses, contexts) {
   const byActor = new Map([...contexts.values()].filter(c => c.actor).map(c => [c.actor, c.id]));
   const nodeContext = new Map();
+  const explicit = new Map(projectors.currentRelations(witnesses).filter(r => r.rel === "inContext").map(r => [r.from, r.to]));
+
+  for (const [id, contextId] of explicit.entries()) nodeContext.set(id, contextId);
 
   // First pass: module/thing definition witnesses own the primary context.
   // Cross-context references such as backend.serverRunner -> frontendProgram must not steal context.
@@ -518,7 +521,7 @@ function projectedNodeContexts(witnesses, contexts) {
 function shouldAssignRelationTargetContext(c) {
   if (!c.to || looksLikeCapability(c.to) || looksLikeKind(c.to)) return false;
   // These are cross-context references; target context should come from its own definition.
-  if (["usesFrontendProgram", "usesFrontendHost", "usesBackendHost", "usesRootWidget", "installsCapability", "dependsOnCapability"].includes(c.rel)) return false;
+  if (["usesFrontendProgram", "usesFrontendHost", "usesBackendHost", "usesRootWidget", "installsCapability", "dependsOnCapability", "inContext"].includes(c.rel)) return false;
   return true;
 }
 
@@ -531,7 +534,7 @@ function looksLikeCapability(value) {
 }
 
 function looksLikeKind(value) {
-  return ["widget", "widgetVersion", "widgetVersionTransition", "frontendProgram", "context", "capability", "app", "route", "serverRunner", "frontendRunner", "compiler", "description", "compiledArtifact", "trait", "valueType", "processSpec"].includes(value);
+  return ["widget", "widgetVersion", "widgetVersionTransition", "frontendProgram", "context", "perspective", "proposal", "capability", "app", "route", "serverRunner", "frontendRunner", "compiler", "description", "compiledArtifact", "trait", "valueType", "processSpec"].includes(value);
 }
 
 function capabilityContextFor(source, capability, nodeContext, meta = {}) {
@@ -558,6 +561,8 @@ function inferKind(id, relations) {
   if (id.startsWith("layout:")) return "layout";
   const moduleKind = relations.find(r => r.from === id && r.rel === "hasModuleKind")?.to;
   if (moduleKind === "context") return "context";
+  if (moduleKind === "perspective") return "module";
+  if (moduleKind === "proposal") return "module";
   if (moduleKind === "capability") return "capability";
   if (moduleKind === "trait" || moduleKind === "valueType" || moduleKind === "processSpec") return moduleKind;
   if (moduleKind?.includes("widget")) return "widget";

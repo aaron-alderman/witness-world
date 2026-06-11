@@ -402,6 +402,7 @@ test("session api authenticates authored identities and cookie actor wins over r
       identity: "identity.aaron",
       actor: "aaron",
       label: "Aaron",
+      homeContext: null,
       perspective: "aaron:personal"
     });
 
@@ -674,7 +675,7 @@ test("personal projections: identity session, themes, and private notes are sess
     assert.match(html, /renderCollection/);
 
     const session = await fetch(`${server.url}/api/session`).then(r => r.json());
-    assert.deepEqual(session, { authenticated: false, identity: null, actor: null, label: null, perspective: null });
+    assert.deepEqual(session, { authenticated: false, identity: null, actor: null, label: null, homeContext: null, perspective: null });
 
     const login = await openSession(server.url, { username: "aaron", password: "aaron" });
     assert.equal(login.response.status, 200);

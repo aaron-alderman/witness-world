@@ -160,6 +160,10 @@ export function renderBootstrapPage() {
             <label>Password<input name="password" placeholder="aaron" data-tutorial-target="identity-password" /></label>
             <label>Home Perspective<input name="homePerspective" placeholder="aaron:personal" data-tutorial-target="identity-perspective" /></label>
           </div>
+          <div class="grid two">
+            <label>Home Context<select id="identity-home-context" name="homeContext"></select></label>
+            <label></label>
+          </div>
           <div class="actions"><button type="submit" data-tutorial-target="identity-submit">Create Identity</button></div>
         </form>
         <p class="status" id="identity-status"></p>
@@ -182,6 +186,106 @@ export function renderBootstrapPage() {
       </article>
 
       <article class="card">
+        <div class="badge">Governance</div>
+        <h2>Contexts, Stewardship, And Proposals</h2>
+        <p>This slice makes authority explicit. Scoped objects can be authored under a context, stewardship can be delegated, and guarded writes can be proposed for later approval.</p>
+
+        <details open>
+          <summary><strong>Contexts</strong></summary>
+          <form id="context-form" class="stack">
+            <div class="grid two">
+              <label>Context Id<input name="id" placeholder="team.platform" /></label>
+              <label>Label<input name="label" placeholder="Platform Team" /></label>
+            </div>
+            <div class="grid two">
+              <label>Parent<select id="context-parent" name="parent"></select></label>
+              <label>Initial Stewards JSON<textarea name="stewardsJson">[]</textarea></label>
+            </div>
+            <div class="actions"><button type="submit">Create Context</button></div>
+          </form>
+          <p class="status" id="context-status"></p>
+
+          <form id="perspective-form" class="stack">
+            <div class="grid two">
+              <label>Perspective Id<input name="id" placeholder="aaron:workspace" /></label>
+              <label>Title<input name="title" placeholder="Aaron Workspace" /></label>
+            </div>
+            <div class="grid two">
+              <label>Context<select id="perspective-context" name="context"></select></label>
+              <label></label>
+            </div>
+            <div class="actions"><button type="submit">Create Perspective</button></div>
+          </form>
+          <p class="status" id="perspective-status"></p>
+        </details>
+
+        <details>
+          <summary><strong>Stewardship</strong></summary>
+          <form id="stewardship-form" class="stack">
+            <div class="grid two">
+              <label>Steward Actor<input name="steward" placeholder="callan" /></label>
+              <label>Target<select id="stewardship-target" name="target"></select></label>
+            </div>
+            <div class="grid two">
+              <label>Target Kind<select id="stewardship-target-kind" name="targetKind"></select></label>
+              <label></label>
+            </div>
+            <div class="actions"><button type="submit">Grant Stewardship</button></div>
+          </form>
+          <p class="status" id="stewardship-status"></p>
+
+          <form id="stewardship-remove-form" class="stack">
+            <div class="grid two">
+              <label>Steward Actor<input name="steward" placeholder="callan" /></label>
+              <label>Target<select id="stewardship-remove-target" name="target"></select></label>
+            </div>
+            <div class="grid two">
+              <label>Target Kind<select id="stewardship-remove-target-kind" name="targetKind"></select></label>
+              <label></label>
+            </div>
+            <div class="actions"><button type="submit">Revoke Stewardship</button></div>
+          </form>
+          <p class="status" id="stewardship-remove-status"></p>
+        </details>
+
+        <details>
+          <summary><strong>Proposals</strong></summary>
+          <form id="proposal-form" class="stack">
+            <div class="grid two">
+              <label>Proposal Id<input name="id" placeholder="proposal.route.home" /></label>
+              <label>Target Process<select id="proposal-target-process" name="targetProcess"></select></label>
+            </div>
+            <div class="grid two">
+              <label>Target Kind<input name="targetKind" placeholder="route" /></label>
+              <label>Target Id<input name="targetId" placeholder="home_route" /></label>
+            </div>
+            <label>Body JSON<textarea name="bodyJson">{}</textarea></label>
+            <label>Reason<input name="reason" placeholder="why this should be approved" /></label>
+            <div class="actions"><button type="submit">Create Proposal</button></div>
+          </form>
+          <p class="status" id="proposal-status"></p>
+
+          <form id="proposal-approve-form" class="stack">
+            <div class="grid two">
+              <label>Open Proposal<select id="proposal-approve-id" name="id"></select></label>
+              <label></label>
+            </div>
+            <div class="actions"><button type="submit">Approve Proposal</button></div>
+          </form>
+          <p class="status" id="proposal-approve-status"></p>
+
+          <form id="proposal-reject-form" class="stack">
+            <div class="grid two">
+              <label>Open Proposal<select id="proposal-reject-id" name="id"></select></label>
+              <label>Reason<input name="reason" placeholder="optional rejection reason" /></label>
+            </div>
+            <div class="actions"><button type="submit">Reject Proposal</button></div>
+          </form>
+          <p class="status" id="proposal-reject-status"></p>
+        </details>
+      </article>
+
+      <article class="card">
         <div class="badge">App Surface</div>
         <h2>Focused Builders</h2>
         <p>These forms edit app-visible structures. Advanced step conditions and params use JSON when needed, but the main surface stays oriented around the app rather than the substrate.</p>
@@ -196,6 +300,10 @@ export function renderBootstrapPage() {
             <div class="grid two">
               <label>Parent<select id="widget-parent" name="parent" data-tutorial-target="widget-parent"></select></label>
               <label>Order<input name="order" type="number" placeholder="0" data-tutorial-target="widget-order" /></label>
+            </div>
+            <div class="grid two">
+              <label>Context<select id="widget-context" name="context"></select></label>
+              <label></label>
             </div>
             <div class="grid two">
               <label>Text<input name="text" data-tutorial-target="widget-text" /></label>
@@ -249,6 +357,10 @@ export function renderBootstrapPage() {
               <label>Program Id<input name="id" data-tutorial-target="program-id" /></label>
               <label>Root Widget<select id="program-root-widget" name="rootWidget" data-tutorial-target="program-root-widget"></select></label>
             </div>
+            <div class="grid two">
+              <label>Context<select id="program-context" name="context"></select></label>
+              <label></label>
+            </div>
             <div class="actions"><button type="submit" data-tutorial-target="program-submit">Create Program</button></div>
           </form>
           <p class="status" id="program-status"></p>
@@ -277,6 +389,10 @@ export function renderBootstrapPage() {
             <div class="grid two">
               <label>Route Id<input name="id" data-tutorial-target="route-id" /></label>
               <label>Path<input name="path" placeholder="/" data-tutorial-target="route-path" /></label>
+            </div>
+            <div class="grid two">
+              <label>Context<select id="route-context" name="context"></select></label>
+              <label></label>
             </div>
             <div class="grid two">
               <label>Serves<input name="serves" data-tutorial-target="route-serves" /></label>
@@ -313,6 +429,10 @@ export function renderBootstrapPage() {
               <label>Handler Set<select id="runner-handler-set" name="handlerSet" data-tutorial-target="runner-handler-set"></select></label>
             </div>
             <div class="grid two">
+              <label>Context<select id="runner-context" name="context"></select></label>
+              <label></label>
+            </div>
+            <div class="grid two">
               <label>Backend Host<select id="runner-backend-host" name="backendHost" data-tutorial-target="runner-backend-host"></select></label>
               <label>Frontend Host<select id="runner-frontend-host" name="frontendHost" data-tutorial-target="runner-frontend-host"></select></label>
             </div>
@@ -335,6 +455,10 @@ export function renderBootstrapPage() {
             <div class="grid two">
               <label>Version<input name="version" placeholder="0.1.0" /></label>
               <label>Placement JSON<textarea name="placementJson">["context"]</textarea></label>
+            </div>
+            <div class="grid two">
+              <label>Context<select id="capability-context" name="context"></select></label>
+              <label></label>
             </div>
             <label>Depends On JSON<textarea name="dependsOnJson">[]</textarea></label>
             <label>Provenance JSON<textarea name="provenanceJson">{"source":"local"}</textarea></label>
@@ -390,6 +514,22 @@ export function renderBootstrapPage() {
           <section>
             <h3>Contexts</h3>
             <div id="state-contexts" class="state-list"></div>
+          </section>
+          <section>
+            <h3>Perspectives</h3>
+            <div id="state-perspectives" class="state-list"></div>
+          </section>
+          <section>
+            <h3>Stewardships</h3>
+            <div id="state-stewardships" class="state-list"></div>
+          </section>
+          <section>
+            <h3>Proposals</h3>
+            <div id="state-proposals" class="state-list"></div>
+          </section>
+          <section>
+            <h3>Authority</h3>
+            <div id="state-authority" class="state-list"></div>
           </section>
           <section>
             <h3>Identities</h3>
@@ -899,14 +1039,20 @@ export function renderBootstrapPage() {
         : "No reachable app home route exists yet. Bootstrap owns the landing experience until the app boundary is wired.";
       byId("open-app-link").href = "/";
       byId("session-summary").textContent = session.authenticated
-        ? "Signed in as " + session.label + " (" + session.actor + ")" + (session.perspective ? " in " + session.perspective : "")
+        ? "Signed in as " + session.label + " (" + session.actor + ")" + (session.homeContext ? " / " + session.homeContext : "") + (session.perspective ? " in " + session.perspective : "")
         : ((authored.identities || []).length ? "Sign in to continue editing the bootstrap seam." : "No identities yet. Create the first identity to continue.");
 
       fillSelect("widget-kind", model.widgetKinds || [], x => x, x => x, { includeBlank: false });
+      fillSelect("identity-home-context", authored.contexts || [], x => x.id, x => x.id);
+      fillSelect("context-parent", authored.contexts || [], x => x.id, x => x.id);
+      fillSelect("perspective-context", authored.contexts || [], x => x.id, x => x.id);
+      fillSelect("widget-context", authored.contexts || [], x => x.id, x => x.id);
       fillSelect("widget-parent", authored.widgets || [], x => x.id, x => x.id);
       fillSelect("program-root-widget", authored.widgets || [], x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("program-context", authored.contexts || [], x => x.id, x => x.id);
       fillSelect("route-root-widget", authored.widgets || [], x => x.id, x => x.id);
       fillSelect("route-frontend-program", authored.frontendPrograms || [], x => x.id, x => x.id);
+      fillSelect("route-context", authored.contexts || [], x => x.id, x => x.id);
       fillSelect("step-program", authored.frontendPrograms || [], x => x.id, x => x.id, { includeBlank: false });
       fillSelect("step-op", model.supportedFrontendOps || [], x => x, x => x, { includeBlank: false });
       fillSelect("route-method", model.supportedMethods || [], x => x, x => x, { includeBlank: false });
@@ -914,16 +1060,32 @@ export function renderBootstrapPage() {
       fillSelect("serve-route", authored.routes || [], x => x.id, x => x.id, { includeBlank: false });
       fillSelect("serve-server-runner", authored.serverRunners || [], x => x.id, x => x.id, { includeBlank: false });
       fillSelect("runner-handler-set", model.supportedHandlerSets || [], x => x, x => x);
+      fillSelect("runner-context", authored.contexts || [], x => x.id, x => x.id);
       fillSelect("runner-backend-host", model.backendHosts || [], x => x.id, x => x.id, { includeBlank: false });
       fillSelect("runner-frontend-host", model.frontendHosts || [], x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("capability-context", authored.contexts || [], x => x.id, x => x.id);
       fillSelect("capability-install-capability", authored.capabilityCatalog || [], x => x.id, x => x.id + (x.version ? " [" + x.version + "]" : ""), { includeBlank: false });
       fillSelect("capability-remove-capability", authored.capabilityCatalog || [], x => x.id, x => x.id + (x.version ? " [" + x.version + "]" : ""), { includeBlank: false });
       fillSelect("capability-install-kind", model.capabilityTargetKinds || [], x => x, x => x, { includeBlank: false });
       fillSelect("capability-remove-kind", model.capabilityTargetKinds || [], x => x, x => x, { includeBlank: false });
+      fillSelect("stewardship-target-kind", model.stewardshipTargetKinds || [], x => x, x => x, { includeBlank: false });
+      fillSelect("stewardship-remove-target-kind", model.stewardshipTargetKinds || [], x => x, x => x, { includeBlank: false });
+      fillSelect("stewardship-target", [...(authored.contexts || []), ...(authored.perspectives || [])], x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("stewardship-remove-target", [...(authored.contexts || []), ...(authored.perspectives || [])], x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("proposal-target-process", model.proposalTargetProcesses || [], x => x, x => x, { includeBlank: false });
+      fillSelect("proposal-approve-id", (authored.proposals || []).filter(row => row.status === "open"), x => x.id, x => x.id, { includeBlank: false });
+      fillSelect("proposal-reject-id", (authored.proposals || []).filter(row => row.status === "open"), x => x.id, x => x.id, { includeBlank: false });
       refreshCapabilityTargetOptions("capability-install-kind", "capability-install-target");
       refreshCapabilityTargetOptions("capability-remove-kind", "capability-remove-target");
 
-      renderStateList("state-contexts", authored.contexts || [], row => row.id + ((row.capabilities || []).length ? " -> " + row.capabilities.join(", ") : ""));
+      renderStateList("state-contexts", authored.contexts || [], row => row.id + (row.parent ? " <- " + row.parent : "") + ((row.capabilities || []).length ? " -> " + row.capabilities.join(", ") : ""));
+      renderStateList("state-perspectives", authored.perspectives || [], row => row.id + (row.context ? " @" + row.context : ""));
+      renderStateList("state-stewardships", authored.stewardships || [], row => row.steward + " -> " + row.target);
+      renderStateList("state-proposals", authored.proposals || [], row => row.id + " [" + row.status + "] " + row.targetProcess);
+      renderStateList("state-authority", authored.authority ? [
+        "actor: " + (authored.authority.actor || "(none)"),
+        "contexts: " + (authored.authority.mutationContexts || []).join(", ")
+      ] : [], row => row);
       renderStateList("state-identities", authored.identities || [], row => row.id + " -> " + row.actor);
       renderStateList("state-widgets", authored.widgets || [], row => row.id + " (" + row.kind + ")");
       renderStateList("state-programs", authored.frontendPrograms || [], row => row.id + " -> " + row.rootWidget);
@@ -935,7 +1097,7 @@ export function renderBootstrapPage() {
       renderStateList("state-capability-installs", authored.capabilityInstalls || [], row => row.targetKind + " " + row.target + " -> " + row.capability);
 
       const editingEnabled = session.authenticated || !(authored.identities || []).length;
-      for (const formId of ["widget-form", "program-form", "step-form", "route-form", "serve-form", "runner-form", "capability-form", "capability-install-form", "capability-remove-form"]) {
+      for (const formId of ["context-form", "perspective-form", "stewardship-form", "stewardship-remove-form", "proposal-form", "proposal-approve-form", "proposal-reject-form", "widget-form", "program-form", "step-form", "route-form", "serve-form", "runner-form", "capability-form", "capability-install-form", "capability-remove-form"]) {
         const form = byId(formId);
         if (!form) continue;
         form.querySelectorAll("input,select,textarea,button").forEach(el => { el.disabled = !editingEnabled; });
@@ -956,6 +1118,10 @@ export function renderBootstrapPage() {
     const program = overrides => postJson("/api/frontend-programs", overrides);
     const step = overrides => postJson("/api/frontend-steps", overrides);
     const runner = overrides => postJson("/api/server-runners", overrides);
+    const contextCreate = overrides => postJson("/api/contexts", overrides);
+    const perspectiveCreate = overrides => postJson("/api/perspectives", overrides);
+    const stewardshipCreate = overrides => postJson("/api/stewardships", overrides);
+    const proposalCreate = overrides => postJson("/api/proposals", overrides);
 
     async function createTodoStarter() {
       const model = state.model || {};
@@ -1046,6 +1212,9 @@ export function renderBootstrapPage() {
       order: data.order ? Number(data.order) : undefined,
       level: data.level ? Number(data.level) : undefined
     }));
+    bindCreate("context-form", "context-status", "/api/contexts", data => data);
+    bindCreate("perspective-form", "perspective-status", "/api/perspectives", data => data);
+    bindCreate("stewardship-form", "stewardship-status", "/api/stewardships", data => data);
     bindCreate("program-form", "program-status", "/api/frontend-programs", data => data);
     bindCreate("step-form", "step-status", "/api/frontend-steps", data => ({
       ...data,
@@ -1059,6 +1228,43 @@ export function renderBootstrapPage() {
     bindCreate("runner-form", "runner-status", "/api/server-runners", data => data);
     bindCreate("capability-form", "capability-status", "/api/capabilities", data => data);
     bindCreate("capability-install-form", "capability-install-status", "/api/capability-installs", data => data);
+    bindCreate("proposal-form", "proposal-status", "/api/proposals", data => data);
+    byId("proposal-approve-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      try {
+        const data = readForm(form);
+        await postJson("/api/proposals/" + encodeURIComponent(data.id) + "/approve", {});
+        setStatus("proposal-approve-status", "Approved.");
+        await refresh();
+      } catch (error) {
+        setStatus("proposal-approve-status", error.message);
+      }
+    });
+    byId("proposal-reject-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      try {
+        const data = readForm(form);
+        await postJson("/api/proposals/" + encodeURIComponent(data.id) + "/reject", { reason: data.reason || "" });
+        setStatus("proposal-reject-status", "Rejected.");
+        await refresh();
+      } catch (error) {
+        setStatus("proposal-reject-status", error.message);
+      }
+    });
+    byId("stewardship-remove-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      try {
+        const data = readForm(form);
+        await postJson("/api/stewardships", data, "DELETE");
+        setStatus("stewardship-remove-status", "Removed.");
+        await refresh();
+      } catch (error) {
+        setStatus("stewardship-remove-status", error.message);
+      }
+    });
     byId("capability-remove-form").addEventListener("submit", async event => {
       event.preventDefault();
       const form = event.currentTarget;

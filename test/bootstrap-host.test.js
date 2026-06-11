@@ -254,3 +254,106 @@ test("bootstrap capability catalog and install lifecycle are exposed through the
     await server.close();
   }
 });
+
+test("context, perspective, and stewardship flows expose authority through bootstrap state", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const post = (pathname, body, cookie = "") => fetch(`${server.url}${pathname}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify(body)
+    });
+
+    await post("/api/identities", {
+      id: "identity.aaron",
+      actor: "aaron",
+      label: "Aaron",
+      username: "aaron",
+      password: "aaron",
+      homeContext: "ctx.platform",
+      homePerspective: "aaron:personal"
+    });
+    await post("/api/identities", {
+      id: "identity.callan",
+      actor: "callan",
+      label: "Callan",
+      username: "callan",
+      password: "callan",
+      homePerspective: "callan:personal"
+    }, (await openSession(server.url)).cookie);
+
+    const aaron = await openSession(server.url);
+    assert.equal((await post("/api/contexts", { id: "ctx.platform", label: "Platform" }, aaron.cookie)).status, 201);
+    assert.equal((await post("/api/perspectives", { id: "platform.board", title: "Platform Board", context: "ctx.platform" }, aaron.cookie)).status, 201);
+    assert.equal((await post("/api/stewardships", { steward: "callan", target: "ctx.platform", targetKind: "context" }, aaron.cookie)).status, 201);
+
+    const session = await fetch(`${server.url}/api/session`, { headers: { cookie: aaron.cookie } }).then(r => r.json());
+    assert.equal(session.homeContext, "ctx.platform");
+
+    const state = await fetch(`${server.url}/api/bootstrap-state`, { headers: { cookie: aaron.cookie } }).then(r => r.json());
+    assert.equal(state.contexts.some(row => row.id === "ctx.platform"), true);
+    assert.equal(state.perspectives.some(row => row.id === "platform.board" && row.context === "ctx.platform"), true);
+    assert.equal(state.stewardships.some(row => row.steward === "callan" && row.target === "ctx.platform"), true);
+    assert.equal(state.authority.mutationContexts.includes("ctx.platform"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("unauthorized scoped writes return 403 and proposals can be approved exactly once", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const post = (pathname, body, cookie = "", method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify(body)
+    });
+
+    await post("/api/identities", {
+      id: "identity.aaron",
+      actor: "aaron",
+      label: "Aaron",
+      username: "aaron",
+      password: "aaron",
+      homePerspective: "aaron:personal"
+    });
+    const aaron = await openSession(server.url);
+    await post("/api/identities", {
+      id: "identity.callan",
+      actor: "callan",
+      label: "Callan",
+      username: "callan",
+      password: "callan",
+      homePerspective: "callan:personal"
+    }, aaron.cookie);
+    assert.equal((await post("/api/contexts", { id: "ctx.platform", label: "Platform" }, aaron.cookie)).status, 201);
+
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+    const denied = await post("/api/widgets", { id: "blocked_root", kind: "Page", title: "Blocked", attach: false, context: "ctx.platform" }, callan.cookie);
+    assert.equal(denied.status, 403);
+
+    const proposed = await post("/api/proposals", {
+      id: "proposal.widget.root",
+      targetProcess: "widget.define",
+      targetKind: "widget",
+      targetId: "blocked_root",
+      bodyJson: JSON.stringify({ id: "proposed_root", kind: "Page", title: "Proposed", attach: false, context: "ctx.platform" }),
+      reason: "Need a root page"
+    }, callan.cookie);
+    assert.equal(proposed.status, 201);
+
+    const approved = await post("/api/proposals/proposal.widget.root/approve", {}, aaron.cookie);
+    assert.equal(approved.status, 200);
+    const approveAgain = await post("/api/proposals/proposal.widget.root/approve", {}, aaron.cookie);
+    assert.equal(approveAgain.status, 409);
+
+    const state = await fetch(`${server.url}/api/bootstrap-state`, { headers: { cookie: aaron.cookie } }).then(r => r.json());
+    const proposal = state.proposals.find(row => row.id === "proposal.widget.root");
+    assert.equal(proposal.status, "approved");
+    assert.equal(Array.isArray(proposal.executedWitnessIds), true);
+    assert.equal(proposal.executedWitnessIds.length > 0, true);
+    assert.equal(state.widgets.some(row => row.id === "proposed_root" && row.context === "ctx.platform"), true);
+  } finally {
+    await server.close();
+  }
+});

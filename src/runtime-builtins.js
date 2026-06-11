@@ -39,6 +39,7 @@ const VALUE_TYPES = [
   { id: "identity.label", label: "Identity Label", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "identity.username", label: "Identity Username", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "identity.password", label: "Identity Password", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "identity.context", label: "Identity Home Context", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "identity.perspective", label: "Identity Perspective", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "program.id", label: "Program Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "program.event", label: "Program Event", compatibleWith: ["textual"], editor: { control: "text" } },
@@ -53,11 +54,20 @@ const VALUE_TYPES = [
   { id: "serverRunner.host", label: "Host Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "serverRunner.storage", label: "Storage Path", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "context.id", label: "Context Id", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "context.label", label: "Context Label", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "perspective.id", label: "Perspective Id", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "perspective.title", label: "Perspective Title", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "capability.id", label: "Capability Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "capability.label", label: "Capability Label", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "capability.version", label: "Capability Version", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "capability.target", label: "Capability Install Target", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "capability.targetKind", label: "Capability Install Target Kind", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["context", "serverRunner", "routePage"] } },
+  { id: "stewardship.actor", label: "Steward Actor", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "stewardship.target", label: "Stewardship Target", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "stewardship.targetKind", label: "Stewardship Target Kind", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "proposal.id", label: "Proposal Id", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "proposal.process", label: "Proposal Target Process", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "proposal.kind", label: "Proposal Target Kind", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "authority.id", label: "Authority Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "json.text", label: "JSON Text", compatibleWith: ["textual"], editor: { control: "text" } }
 ];
@@ -88,6 +98,7 @@ const PROCESS_SPECS = [
       { name: "tutorialTarget", accepts: "widget.tutorialTarget", required: false },
       { name: "eventSoul", accepts: "widget.eventSoul", required: false },
       { name: "eventVersion", accepts: "widget.eventVersion", required: false },
+      { name: "context", accepts: "context.id", required: false },
       { name: "template", accepts: "widget.template", required: false },
       { name: "attach", accepts: "widget.attach", required: false },
       { name: "level", accepts: "widget.level", required: false }
@@ -109,16 +120,90 @@ const PROCESS_SPECS = [
       { name: "label", accepts: "identity.label", required: true },
       { name: "username", accepts: "identity.username", required: true },
       { name: "password", accepts: "identity.password", required: true },
+      { name: "homeContext", accepts: "identity.context", required: false },
       { name: "homePerspective", accepts: "identity.perspective", required: false }
     ],
     outputs: [{ name: "id", accepts: "identity.id", required: true }]
+  },
+  {
+    id: "context_define_spec",
+    process: "context.define",
+    inputs: [
+      { name: "id", accepts: "context.id", required: true },
+      { name: "label", accepts: "context.label", required: false },
+      { name: "parent", accepts: "context.id", required: false },
+      { name: "owner", accepts: "authority.id", required: false },
+      { name: "stewardsJson", accepts: "json.text", required: false }
+    ],
+    outputs: [{ name: "id", accepts: "context.id", required: true }]
+  },
+  {
+    id: "perspective_define_spec",
+    process: "perspective.define",
+    inputs: [
+      { name: "id", accepts: "perspective.id", required: true },
+      { name: "title", accepts: "perspective.title", required: true },
+      { name: "context", accepts: "context.id", required: false }
+    ],
+    outputs: [{ name: "id", accepts: "perspective.id", required: true }]
+  },
+  {
+    id: "stewardship_grant_spec",
+    process: "stewardship.grant",
+    inputs: [
+      { name: "steward", accepts: "stewardship.actor", required: true },
+      { name: "target", accepts: "stewardship.target", required: true },
+      { name: "targetKind", accepts: "stewardship.targetKind", required: false }
+    ],
+    outputs: [{ name: "target", accepts: "stewardship.target", required: true }]
+  },
+  {
+    id: "stewardship_revoke_spec",
+    process: "stewardship.revoke",
+    inputs: [
+      { name: "steward", accepts: "stewardship.actor", required: true },
+      { name: "target", accepts: "stewardship.target", required: true },
+      { name: "targetKind", accepts: "stewardship.targetKind", required: false }
+    ],
+    outputs: [{ name: "target", accepts: "stewardship.target", required: true }]
+  },
+  {
+    id: "proposal_create_spec",
+    process: "proposal.create",
+    inputs: [
+      { name: "id", accepts: "proposal.id", required: true },
+      { name: "targetProcess", accepts: "proposal.process", required: true },
+      { name: "targetKind", accepts: "proposal.kind", required: true },
+      { name: "targetId", accepts: "stewardship.target", required: false },
+      { name: "bodyJson", accepts: "json.text", required: true },
+      { name: "reason", accepts: "widget.text", required: false }
+    ],
+    outputs: [{ name: "id", accepts: "proposal.id", required: true }]
+  },
+  {
+    id: "proposal_approve_spec",
+    process: "proposal.approve",
+    inputs: [
+      { name: "id", accepts: "proposal.id", required: true }
+    ],
+    outputs: [{ name: "id", accepts: "proposal.id", required: true }]
+  },
+  {
+    id: "proposal_reject_spec",
+    process: "proposal.reject",
+    inputs: [
+      { name: "id", accepts: "proposal.id", required: true },
+      { name: "reason", accepts: "widget.text", required: false }
+    ],
+    outputs: [{ name: "id", accepts: "proposal.id", required: true }]
   },
   {
     id: "frontend_program_define_spec",
     process: "frontendProgram.define",
     inputs: [
       { name: "id", accepts: "program.id", required: true },
-      { name: "rootWidget", accepts: "widget.id", required: true }
+      { name: "rootWidget", accepts: "widget.id", required: true },
+      { name: "context", accepts: "context.id", required: false }
     ],
     outputs: [{ name: "id", accepts: "program.id", required: true }]
   },
@@ -145,7 +230,8 @@ const PROCESS_SPECS = [
       { name: "path", accepts: "route.path", required: true },
       { name: "serves", accepts: "route.serves", required: true },
       { name: "method", accepts: "route.method", required: true },
-      { name: "handler", accepts: "route.handler", required: true }
+      { name: "handler", accepts: "route.handler", required: true },
+      { name: "context", accepts: "context.id", required: false }
     ],
     outputs: [{ name: "id", accepts: "route.id", required: true }]
   },
@@ -168,7 +254,8 @@ const PROCESS_SPECS = [
       { name: "handlerSet", accepts: "serverRunner.handlerSet", required: false },
       { name: "todoProjection", accepts: "serverRunner.storage", required: false },
       { name: "privateNotesProjection", accepts: "serverRunner.storage", required: false },
-      { name: "allowActorHeader", accepts: "widget.attach", required: false }
+      { name: "allowActorHeader", accepts: "widget.attach", required: false },
+      { name: "context", accepts: "context.id", required: false }
     ],
     outputs: [{ name: "id", accepts: "serverRunner.id", required: true }]
   },
@@ -185,7 +272,8 @@ const PROCESS_SPECS = [
       { name: "configJson", accepts: "json.text", required: false },
       { name: "internalsJson", accepts: "json.text", required: false },
       { name: "authorityJson", accepts: "json.text", required: false },
-      { name: "placementJson", accepts: "json.text", required: false }
+      { name: "placementJson", accepts: "json.text", required: false },
+      { name: "context", accepts: "context.id", required: false }
     ],
     outputs: [{ name: "id", accepts: "capability.id", required: true }]
   },

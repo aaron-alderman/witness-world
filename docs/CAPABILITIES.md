@@ -373,7 +373,7 @@ Missing molecules:
 
 - better persistent-world recovery/admin flows
 - password reset/operator recovery
-- stronger identity-to-perspective authoring
+- deeper identity lifecycle and recovery semantics beyond `homePerspective` + `homeContext`
 
 Do:
 
@@ -396,11 +396,17 @@ Why it accelerates:
 - avoids one global soup
 - makes plugins and worlds understandable
 
+Current molecules:
+
+- first-class authored `context` objects with `owner`, optional `parent`, and optional initial stewards
+- bootstrap read/write support for context creation
+- optional `context` attachment on governed authored objects in the bootstrap slice
+
 Missing molecules:
 
-- explicit first-class context objects/boundaries in the product model
 - local naming/import/export mechanics
-- clearer context-aware capability placement
+- broader context composition semantics beyond bootstrap governance
+- clearer long-term context-aware capability/store semantics
 
 Do:
 
@@ -412,7 +418,7 @@ Do not:
 
 ### 4.3 Authority, delegation, stewardship, proposals
 
-Status: `missing`
+Status: `partial`
 
 What it is:
 
@@ -422,12 +428,19 @@ Why it accelerates:
 
 - allows plugins, editing, and world changes to scale beyond a single trusted operator
 
+Current molecules:
+
+- shared authority derivation for bootstrap mutation handlers
+- explicit stewardship grant/revoke flows
+- proposal create/approve/reject flows for generic bootstrap/world-authoring mutations
+- direct `403` enforcement for unauthorized scoped bootstrap writes
+
 Missing molecules:
 
-- proposal things/processes
-- authority derivation surfaces
-- stewardship delegation flows
-- explicit mutation gates over authored world changes
+- authority coverage outside the generic bootstrap mutation surface
+- broader principal/role/group semantics
+- richer proposal queue/review/workflow behavior
+- proposal coverage for app-specific handler-set actions
 
 Do:
 
@@ -436,6 +449,12 @@ Do:
 Do not:
 
 - hard-code long-term authority decisions into host checks alone
+
+Honest caveats:
+
+- stewardship is currently actor-string based, not yet a richer principal model
+- proposals execute a fixed supported set of bootstrap target processes, not arbitrary world mutations
+- older worlds remain valid with many unscoped objects, so direct ownership is still a compatibility path alongside context governance
 
 ---
 

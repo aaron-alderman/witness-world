@@ -152,3 +152,78 @@ test("bootstrap UI can define, install, and remove a route-page capability", asy
     await closeServer();
   }
 });
+
+test("bootstrap UI can create governance objects and approve a guarded proposal", async () => {
+  const { server, close: closeServer } = await startBlankUiServer();
+  const { page, close: closeBrowser } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await page.waitForFunction(() => document.body.textContent.includes("Recover And Author The App Boundary"));
+
+    await page.fill('#identity-form input[name="id"]', "identity.aaron");
+    await page.fill('#identity-form input[name="actor"]', "aaron");
+    await page.fill('#identity-form input[name="label"]', "Aaron");
+    await page.fill('#identity-form input[name="username"]', "aaron");
+    await page.fill('#identity-form input[name="password"]', "aaron");
+    await page.fill('#identity-form input[name="homePerspective"]', "aaron:personal");
+    await page.locator('#identity-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("identity-status")?.textContent.includes("Identity created."));
+
+    await page.fill('#session-form input[name="username"]', "aaron");
+    await page.fill('#session-form input[name="password"]', "aaron");
+    await page.locator('#session-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Signed in as Aaron"));
+
+    await page.fill('#identity-form input[name="id"]', "identity.callan");
+    await page.fill('#identity-form input[name="actor"]', "callan");
+    await page.fill('#identity-form input[name="label"]', "Callan");
+    await page.fill('#identity-form input[name="username"]', "callan");
+    await page.fill('#identity-form input[name="password"]', "callan");
+    await page.fill('#identity-form input[name="homePerspective"]', "callan:personal");
+    await page.locator('#identity-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("state-identities")?.textContent.includes("identity.callan"));
+
+    await page.fill('#context-form input[name="id"]', "ctx.platform");
+    await page.fill('#context-form input[name="label"]', "Platform");
+    await page.locator('#context-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("context-status")?.textContent.includes("Saved."));
+    await page.waitForFunction(() => document.getElementById("state-contexts")?.textContent.includes("ctx.platform"));
+
+    await page.fill('#perspective-form input[name="id"]', "platform.board");
+    await page.fill('#perspective-form input[name="title"]', "Platform Board");
+    await page.selectOption('#perspective-context', "ctx.platform");
+    await page.locator('#perspective-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("perspective-status")?.textContent.includes("Saved."));
+    await page.waitForFunction(() => document.getElementById("state-perspectives")?.textContent.includes("platform.board"));
+
+    await page.locator('summary').filter({ hasText: "Stewardship" }).click();
+    await page.selectOption('#stewardship-target-kind', "context");
+    await page.selectOption('#stewardship-target', "ctx.platform");
+    await page.fill('#stewardship-form input[name="steward"]', "callan");
+    await page.locator('#stewardship-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("stewardship-status")?.textContent.includes("Saved."));
+    await page.waitForFunction(() => document.getElementById("state-stewardships")?.textContent.includes("callan -> ctx.platform"));
+
+    await page.locator('summary').filter({ hasText: "Proposals" }).click();
+    await page.fill('#proposal-form input[name="id"]', "proposal.widget.platform-home");
+    await page.selectOption('#proposal-target-process', "widget.define");
+    await page.fill('#proposal-form input[name="targetKind"]', "widget");
+    await page.fill('#proposal-form input[name="targetId"]', "platform_home");
+    await page.fill('#proposal-form textarea[name="bodyJson"]', '{"id":"platform_home","kind":"Page","title":"Platform Home","attach":false,"context":"ctx.platform"}');
+    await page.fill('#proposal-form input[name="reason"]', "Need a governed home page");
+    await page.locator('#proposal-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("proposal-status")?.textContent.includes("Saved."));
+    await page.waitForFunction(() => document.getElementById("state-proposals")?.textContent.includes("proposal.widget.platform-home [open] widget.define"));
+
+    await page.selectOption('#proposal-approve-id', "proposal.widget.platform-home");
+    await page.locator('#proposal-approve-form button[type="submit"]').click();
+    await page.waitForFunction(() => document.getElementById("proposal-approve-status")?.textContent.includes("Approved."));
+    await page.waitForFunction(() => document.getElementById("state-proposals")?.textContent.includes("proposal.widget.platform-home [approved] widget.define"));
+    await page.waitForFunction(() => document.getElementById("state-widgets")?.textContent.includes("platform_home (Page)"));
+    await page.waitForFunction(() => document.getElementById("state-authority")?.textContent.includes("ctx.platform"));
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});

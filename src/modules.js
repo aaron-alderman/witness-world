@@ -2,6 +2,19 @@ import { thing, relation, retract, createThing, projectors } from "./kernel.js";
 import { normalizeFields } from "./type-model.js";
 
 const CAPABILITY_INSTALL_TARGET_KINDS = new Set(["context", "serverRunner", "routePage", "host"]);
+const NAME_REL_PREFIX = "bindsName:";
+const EXPORT_REL_PREFIX = "exportsName:";
+const IMPORT_REL_PREFIX = "importsName:";
+const CONTEXT_REF_SEP = "\u0000";
+
+function latestBodiesByProcess(witnesses, process) {
+  const rows = new Map();
+  for (const witness of witnesses) {
+    if (witness.process !== process || !witness.body?.id) continue;
+    rows.set(witness.body.id, witness.body);
+  }
+  return rows;
+}
 
 function normalizeCapabilityDefinition({
   id,
@@ -13,7 +26,8 @@ function normalizeCapabilityDefinition({
   config = [],
   internals = [],
   authority = [],
-  placement = []
+  placement = [],
+  context = null
 }) {
   return {
     id: String(id),
@@ -25,12 +39,45 @@ function normalizeCapabilityDefinition({
     config: normalizeFields(config),
     internals: normalizeFields(internals),
     authority: normalizeFields(authority),
-    placement: [...new Set((Array.isArray(placement) ? placement : []).map(String).filter(Boolean))]
+    placement: [...new Set((Array.isArray(placement) ? placement : []).map(String).filter(Boolean))],
+    context: typeof context === "string" && context.trim() ? context.trim() : null
   };
 }
 
 function currentRelations(witnesses) {
   return projectors.currentRelations(witnesses);
+}
+
+function localNameRel(name) {
+  return `${NAME_REL_PREFIX}${String(name)}`;
+}
+
+function exportNameRel(name) {
+  return `${EXPORT_REL_PREFIX}${String(name)}`;
+}
+
+function importNameRel(name) {
+  return `${IMPORT_REL_PREFIX}${String(name)}`;
+}
+
+function parseNamedRelation(prefix, rel) {
+  if (typeof rel !== "string" || !rel.startsWith(prefix)) return null;
+  const name = rel.slice(prefix.length);
+  return name ? name : null;
+}
+
+function importTargetValue(sourceContext, exportName) {
+  return `${String(sourceContext)}${CONTEXT_REF_SEP}${String(exportName)}`;
+}
+
+function parseImportTargetValue(value) {
+  if (typeof value !== "string") return null;
+  const index = value.indexOf(CONTEXT_REF_SEP);
+  if (index <= 0) return null;
+  const sourceContext = value.slice(0, index);
+  const exportName = value.slice(index + CONTEXT_REF_SEP.length);
+  if (!sourceContext || !exportName) return null;
+  return { sourceContext, exportName };
 }
 
 function capabilityDefinitionsById(witnesses) {
@@ -54,6 +101,7 @@ export function ensureCapabilityDefinition(world, {
   internals = [],
   authority = [],
   placement = [],
+  context = null,
   owner = actor
 }) {
   if (capabilityDefinitionsById(world.allWitnesses()).has(id)) return null;
@@ -69,6 +117,7 @@ export function ensureCapabilityDefinition(world, {
     internals,
     authority,
     placement,
+    context,
     owner
   });
 }
@@ -85,6 +134,7 @@ export function defineCapability(world, {
   internals = [],
   authority = [],
   placement = [],
+  context = null,
   owner = actor
 }) {
   createThing(world, { actor, id, owner });
@@ -105,9 +155,10 @@ export function defineCapability(world, {
     actor,
     claims: [
       relation(id, "hasModuleKind", "capability"),
+      ...(context ? [relation(id, "inContext", context)] : []),
       ...normalized.dependsOn.map(target => relation(id, "dependsOnCapability", target))
     ],
-    body: normalized
+    body: { ...normalized, context: context ? String(context) : null }
   });
 }
 
@@ -245,7 +296,8 @@ export function createServerRunner(world, {
   handlerSet = null,
   actors = null,
   storage = null,
-  allowActorHeader = false
+  allowActorHeader = false,
+  context = null
 }) {
   createThing(world, { actor, id, owner });
   return world.emit({
@@ -255,6 +307,7 @@ export function createServerRunner(world, {
       relation(id, "hasModuleKind", "serverRunner"),
       relation(id, "supportsProcess", "serveRoute"),
       relation(id, "hostBoundary", "http"),
+      ...(context ? [relation(id, "inContext", context)] : []),
       ...(backendHost ? [relation(id, "usesBackendHost", backendHost)] : []),
       ...(frontendHost ? [relation(id, "usesFrontendHost", frontendHost)] : [])
     ],
@@ -265,7 +318,8 @@ export function createServerRunner(world, {
       handlerSet: handlerSet ? String(handlerSet) : null,
       actors: Array.isArray(actors) ? [...actors] : null,
       storage: storage && typeof storage === "object" ? { ...storage } : null,
-      allowActorHeader: allowActorHeader === true
+      allowActorHeader: allowActorHeader === true,
+      context: context ? String(context) : null
     }
   });
 }
@@ -278,6 +332,7 @@ export function createIdentity(world, {
   username,
   password,
   homePerspective = null,
+  homeContext = null,
   owner = actor
 }) {
   createThing(world, { actor, id, owner });
@@ -287,6 +342,7 @@ export function createIdentity(world, {
     claims: [
       relation(id, "hasModuleKind", "identity"),
       relation(id, "identityActor", identityActor),
+      ...(homeContext ? [relation(id, "homeContext", homeContext)] : []),
       ...(homePerspective ? [relation(id, "homePerspective", homePerspective)] : [])
     ],
     body: {
@@ -295,12 +351,387 @@ export function createIdentity(world, {
       label: String(label),
       username: String(username),
       password: String(password),
+      homeContext: homeContext ? String(homeContext) : null,
       homePerspective: homePerspective ? String(homePerspective) : null
     }
   });
 }
 
-export function defineRoute(world, { actor, id, path, serves, method = "GET", handler = null, params = null, owner = actor }) {
+export function defineContext(world, {
+  actor,
+  id,
+  label = id,
+  parent = null,
+  owner = actor,
+  stewards = []
+}) {
+  createThing(world, { actor, id, owner });
+  return world.emit({
+    process: "defineContext",
+    actor,
+    claims: [
+      relation(id, "hasModuleKind", "context"),
+      relation(id, "contextActor", actor),
+      ...(parent ? [relation(id, "parentContext", parent)] : []),
+      ...[...new Set((Array.isArray(stewards) ? stewards : []).map(String).filter(Boolean))].map(steward => relation(steward, "stewards", id, { targetKind: "context" }))
+    ],
+    body: {
+      id: String(id),
+      label: String(label ?? id),
+      actor: String(actor),
+      parent: parent ? String(parent) : null,
+      owner: String(owner ?? actor),
+      stewards: [...new Set((Array.isArray(stewards) ? stewards : []).map(String).filter(Boolean))]
+    }
+  });
+}
+
+export function definePerspective(world, {
+  actor,
+  id,
+  title,
+  context = null,
+  owner = actor
+}) {
+  createThing(world, { actor, id, owner });
+  return world.emit({
+    process: "definePerspective",
+    actor,
+    claims: [
+      relation(id, "hasModuleKind", "perspective"),
+      relation(id, "hasTitle", title),
+      ...(context ? [relation(id, "inContext", context)] : [])
+    ],
+    body: {
+      id: String(id),
+      title: String(title),
+      context: context ? String(context) : null
+    }
+  });
+}
+
+export function grantStewardship(world, {
+  actor,
+  steward,
+  target,
+  targetKind = null
+}) {
+  return world.emit({
+    process: "grantStewardship",
+    actor,
+    claims: [relation(steward, "stewards", target, targetKind ? { targetKind: String(targetKind) } : {})],
+    body: {
+      steward: String(steward),
+      target: String(target),
+      targetKind: targetKind ? String(targetKind) : null
+    }
+  });
+}
+
+export function revokeStewardship(world, {
+  actor,
+  steward,
+  target,
+  targetKind = null
+}) {
+  return world.emit({
+    process: "revokeStewardship",
+    actor,
+    claims: [retract(steward, "stewards", target)],
+    body: {
+      steward: String(steward),
+      target: String(target),
+      targetKind: targetKind ? String(targetKind) : null
+    }
+  });
+}
+
+export function createProposal(world, {
+  actor,
+  id,
+  targetProcess,
+  targetKind,
+  targetId = null,
+  body,
+  reason = null,
+  owner = actor
+}) {
+  createThing(world, { actor, id, owner });
+  return world.emit({
+    process: "createProposal",
+    actor,
+    claims: [relation(id, "hasModuleKind", "proposal")],
+    body: {
+      id: String(id),
+      proposer: String(actor),
+      targetProcess: String(targetProcess),
+      targetKind: String(targetKind),
+      targetId: targetId ? String(targetId) : null,
+      body: body && typeof body === "object" ? body : {},
+      reason: typeof reason === "string" && reason.trim() ? reason.trim() : null,
+      status: "open"
+    }
+  });
+}
+
+export function approveProposal(world, {
+  actor,
+  id,
+  executedWitnessIds = []
+}) {
+  return world.emit({
+    process: "approveProposal",
+    actor,
+    claims: [],
+    body: {
+      id: String(id),
+      approver: String(actor),
+      status: "approved",
+      executedWitnessIds: [...new Set((Array.isArray(executedWitnessIds) ? executedWitnessIds : []).map(String).filter(Boolean))]
+    }
+  });
+}
+
+export function rejectProposal(world, {
+  actor,
+  id,
+  reason = null
+}) {
+  return world.emit({
+    process: "rejectProposal",
+    actor,
+    claims: [],
+    body: {
+      id: String(id),
+      reviewer: String(actor),
+      status: "rejected",
+      reason: typeof reason === "string" && reason.trim() ? reason.trim() : null
+    }
+  });
+}
+
+export function bindContextName(world, {
+  actor,
+  context,
+  name,
+  target
+}) {
+  return world.emit({
+    process: "context.bind",
+    actor,
+    claims: [relation(String(context), localNameRel(name), String(target))],
+    body: {
+      context: String(context),
+      name: String(name),
+      target: String(target)
+    }
+  });
+}
+
+export function unbindContextName(world, {
+  actor,
+  context,
+  name,
+  target
+}) {
+  return world.emit({
+    process: "context.unbind",
+    actor,
+    claims: [retract(String(context), localNameRel(name), String(target))],
+    body: {
+      context: String(context),
+      name: String(name),
+      target: String(target)
+    }
+  });
+}
+
+export function exportContextName(world, {
+  actor,
+  context,
+  name,
+  target
+}) {
+  return world.emit({
+    process: "context.export",
+    actor,
+    claims: [relation(String(context), exportNameRel(name), String(target))],
+    body: {
+      context: String(context),
+      name: String(name),
+      target: String(target)
+    }
+  });
+}
+
+export function unexportContextName(world, {
+  actor,
+  context,
+  name,
+  target
+}) {
+  return world.emit({
+    process: "context.unexport",
+    actor,
+    claims: [retract(String(context), exportNameRel(name), String(target))],
+    body: {
+      context: String(context),
+      name: String(name),
+      target: String(target)
+    }
+  });
+}
+
+export function importContextName(world, {
+  actor,
+  context,
+  sourceContext,
+  exportName,
+  name = exportName
+}) {
+  return world.emit({
+    process: "context.import",
+    actor,
+    claims: [relation(String(context), importNameRel(name), importTargetValue(sourceContext, exportName))],
+    body: {
+      context: String(context),
+      sourceContext: String(sourceContext),
+      exportName: String(exportName),
+      name: String(name ?? exportName)
+    }
+  });
+}
+
+export function unimportContextName(world, {
+  actor,
+  context,
+  sourceContext,
+  exportName,
+  name = exportName
+}) {
+  return world.emit({
+    process: "context.unimport",
+    actor,
+    claims: [retract(String(context), importNameRel(name), importTargetValue(sourceContext, exportName))],
+    body: {
+      context: String(context),
+      sourceContext: String(sourceContext),
+      exportName: String(exportName),
+      name: String(name ?? exportName)
+    }
+  });
+}
+
+function contextBindingRows(witnesses) {
+  const rows = [];
+  for (const row of currentRelations(witnesses)) {
+    const name = parseNamedRelation(NAME_REL_PREFIX, row.rel);
+    if (!name) continue;
+    rows.push({
+      context: row.from,
+      name,
+      target: row.to,
+      witness: row.witness
+    });
+  }
+  return rows.sort((a, b) =>
+    String(a.context).localeCompare(String(b.context))
+    || String(a.name).localeCompare(String(b.name))
+    || String(a.target).localeCompare(String(b.target))
+  );
+}
+
+function contextExportRows(witnesses) {
+  const rows = [];
+  for (const row of currentRelations(witnesses)) {
+    const name = parseNamedRelation(EXPORT_REL_PREFIX, row.rel);
+    if (!name) continue;
+    rows.push({
+      context: row.from,
+      name,
+      target: row.to,
+      witness: row.witness
+    });
+  }
+  return rows.sort((a, b) =>
+    String(a.context).localeCompare(String(b.context))
+    || String(a.name).localeCompare(String(b.name))
+    || String(a.target).localeCompare(String(b.target))
+  );
+}
+
+function contextImportRows(witnesses) {
+  const rows = [];
+  for (const row of currentRelations(witnesses)) {
+    const name = parseNamedRelation(IMPORT_REL_PREFIX, row.rel);
+    if (!name) continue;
+    const parsed = parseImportTargetValue(row.to);
+    if (!parsed) continue;
+    rows.push({
+      context: row.from,
+      name,
+      sourceContext: parsed.sourceContext,
+      exportName: parsed.exportName,
+      witness: row.witness
+    });
+  }
+  return rows.sort((a, b) =>
+    String(a.context).localeCompare(String(b.context))
+    || String(a.name).localeCompare(String(b.name))
+    || String(a.sourceContext).localeCompare(String(b.sourceContext))
+    || String(a.exportName).localeCompare(String(b.exportName))
+  );
+}
+
+function exportIndex(witnesses) {
+  const map = new Map();
+  for (const row of contextExportRows(witnesses)) {
+    map.set(`${row.context}${CONTEXT_REF_SEP}${row.name}`, row);
+  }
+  return map;
+}
+
+export function resolveContextualName(witnesses, {
+  context,
+  name
+}) {
+  const wantedContext = typeof context === "string" && context.trim() ? context.trim() : "";
+  const wantedName = typeof name === "string" && name.trim() ? name.trim() : "";
+  if (!wantedContext || !wantedName) return { ok: false, error: "context and name are required for contextual resolution" };
+  const matches = moduleProjectors.contextScopes(witnesses)
+    .filter(row => row.context === wantedContext && row.name === wantedName);
+  if (matches.length === 0) {
+    return { ok: false, error: `name not visible in context: ${wantedName}` };
+  }
+  const targets = [...new Set(matches.map(row => row.target).filter(Boolean))];
+  if (targets.length !== 1) {
+    return { ok: false, error: `name resolves ambiguously in context: ${wantedName}` };
+  }
+  return { ok: true, target: targets[0], row: matches[0] };
+}
+
+export function resolveContextualRef(witnesses, {
+  context,
+  id = null,
+  ref = null,
+  label = "reference"
+}) {
+  const canonical = typeof id === "string" && id.trim() ? id.trim() : null;
+  const contextual = typeof ref === "string" && ref.trim() ? ref.trim() : null;
+  if (canonical && contextual) {
+    return { ok: false, error: `provide either ${label} id or ${label} ref, not both` };
+  }
+  if (canonical) return { ok: true, target: canonical, source: "canonical" };
+  if (!contextual) return { ok: true, target: null, source: "empty" };
+  if (!(typeof context === "string" && context.trim())) {
+    return { ok: false, error: `${label} ref requires an explicit authoring context` };
+  }
+  const resolved = resolveContextualName(witnesses, { context, name: contextual });
+  if (!resolved.ok) return { ok: false, error: `${label} ref ${resolved.error}` };
+  return { ok: true, target: resolved.target, source: "contextual", row: resolved.row };
+}
+
+export function defineRoute(world, { actor, id, path, serves, method = "GET", handler = null, params = null, owner = actor, context = null }) {
   createThing(world, { actor, id, owner });
   return world.emit({
     process: "defineRoute",
@@ -308,9 +739,10 @@ export function defineRoute(world, { actor, id, path, serves, method = "GET", ha
     claims: [
       relation(id, "hasModuleKind", "route"),
       relation(id, "serves", serves),
-      relation(id, "path", path)
+      relation(id, "path", path),
+      ...(context ? [relation(id, "inContext", context)] : [])
     ],
-    body: { id, path, serves, method: String(method || "GET").toUpperCase(), handler: handler ? String(handler) : null, params: params && typeof params === "object" ? params : null }
+    body: { id, path, serves, method: String(method || "GET").toUpperCase(), handler: handler ? String(handler) : null, params: params && typeof params === "object" ? params : null, context: context ? String(context) : null }
   });
 }
 
@@ -399,14 +831,25 @@ export const moduleProjectors = {
     return modules;
   },
 
+  objectContexts(witnesses) {
+    const map = new Map();
+    for (const row of currentRelations(witnesses)) {
+      if (row.rel === "inContext") map.set(row.from, row.to);
+    }
+    return map;
+  },
+
   contexts(witnesses) {
     const map = new Map();
     const rels = currentRelations(witnesses);
+    const owners = projectors.owners(witnesses);
+    const stewards = projectors.stewards(witnesses);
+    const bodies = latestBodiesByProcess(witnesses, "defineContext");
     const installs = moduleProjectors.capabilityInstalls(witnesses)
       .filter(row => row.targetKind === "context");
     for (const r of rels) {
       if (r.rel === "hasModuleKind" && r.to === "context") {
-        if (!map.has(r.from)) map.set(r.from, { id: r.from, actor: null, parent: null, capabilities: [] });
+        if (!map.has(r.from)) map.set(r.from, { id: r.from, label: r.from, actor: null, parent: null, owner: owners.get(r.from) ?? null, stewards: [...(stewards.get(r.from) ?? [])].sort(), capabilities: [] });
       }
     }
     for (const r of rels) {
@@ -422,8 +865,106 @@ export const moduleProjectors = {
       if (!ctx.capabilities.includes(row.capability)) ctx.capabilities.push(row.capability);
     }
     return [...map.values()]
-      .map(row => ({ ...row, capabilities: [...new Set(row.capabilities)].sort() }))
+      .map(row => {
+        const body = bodies.get(row.id) ?? {};
+        return {
+          ...row,
+          label: typeof body.label === "string" && body.label.trim() ? body.label.trim() : row.label,
+          capabilities: [...new Set(row.capabilities)].sort()
+        };
+      })
       .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  },
+
+  perspectives(witnesses) {
+    const rows = new Map();
+    const owners = projectors.owners(witnesses);
+    const stewards = projectors.stewards(witnesses);
+    const contexts = moduleProjectors.objectContexts(witnesses);
+    for (const row of currentRelations(witnesses)) {
+      if (row.rel === "hasModuleKind" && row.to === "perspective") {
+        rows.set(row.from, {
+          id: row.from,
+          title: row.from,
+          owner: owners.get(row.from) ?? null,
+          context: contexts.get(row.from) ?? null,
+          stewards: [...(stewards.get(row.from) ?? [])].sort()
+        });
+      }
+    }
+    for (const row of currentRelations(witnesses)) {
+      if (row.rel !== "hasTitle" || !rows.has(row.from)) continue;
+      rows.get(row.from).title = row.to;
+    }
+    return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  },
+
+  contextBindings(witnesses) {
+    return contextBindingRows(witnesses);
+  },
+
+  contextExports(witnesses) {
+    return contextExportRows(witnesses);
+  },
+
+  contextImports(witnesses) {
+    return contextImportRows(witnesses);
+  },
+
+  contextScopes(witnesses) {
+    const rows = [];
+    const exportsByName = exportIndex(witnesses);
+
+    for (const row of contextBindingRows(witnesses)) {
+      rows.push({
+        context: row.context,
+        name: row.name,
+        target: row.target,
+        sourceKind: "local",
+        sourceContext: null,
+        exportName: null,
+        witness: row.witness
+      });
+    }
+
+    for (const row of contextImportRows(witnesses)) {
+      const exported = exportsByName.get(`${row.sourceContext}${CONTEXT_REF_SEP}${row.exportName}`) ?? null;
+      if (!exported) continue;
+      rows.push({
+        context: row.context,
+        name: row.name,
+        target: exported.target,
+        sourceKind: "import",
+        sourceContext: row.sourceContext,
+        exportName: row.exportName,
+        witness: row.witness
+      });
+    }
+
+    return rows.sort((a, b) =>
+      String(a.context).localeCompare(String(b.context))
+      || String(a.name).localeCompare(String(b.name))
+      || String(a.sourceKind).localeCompare(String(b.sourceKind))
+      || String(a.target).localeCompare(String(b.target))
+    );
+  },
+
+  stewardships(witnesses) {
+    const rows = [];
+    const kinds = moduleProjectors.modules(witnesses);
+    for (const row of currentRelations(witnesses)) {
+      if (row.rel !== "stewards") continue;
+      rows.push({
+        steward: row.from,
+        target: row.to,
+        targetKind: row.meta?.targetKind ? String(row.meta.targetKind) : (kinds.get(row.to) ?? null),
+        witness: row.witness
+      });
+    }
+    return rows.sort((a, b) =>
+      String(a.steward).localeCompare(String(b.steward))
+      || String(a.target).localeCompare(String(b.target))
+    );
   },
 
   capabilities(witnesses) {
@@ -514,6 +1055,7 @@ export const moduleProjectors = {
   },
 
   routes(witnesses) {
+    const contexts = moduleProjectors.objectContexts(witnesses);
     const routeMap = new Map();
     for (const w of witnesses) {
       if (w.process !== "defineRoute" || !w.body?.id || !w.body?.path) continue;
@@ -523,13 +1065,15 @@ export const moduleProjectors = {
         serves: w.body.serves,
         method: String(w.body.method || "GET").toUpperCase(),
         handler: w.body.handler ? String(w.body.handler) : null,
-        params: w.body.params && typeof w.body.params === "object" ? { ...w.body.params } : null
+        params: w.body.params && typeof w.body.params === "object" ? { ...w.body.params } : null,
+        context: contexts.get(w.body.id) ?? (w.body.context ? String(w.body.context) : null)
       });
     }
     return [...routeMap.values()];
   },
 
   serverRunners(witnesses) {
+    const contexts = moduleProjectors.objectContexts(witnesses);
     const runnerMap = new Map();
     for (const w of witnesses) {
       if (w.process !== "defineServerRunner" || !w.body?.id) continue;
@@ -540,7 +1084,8 @@ export const moduleProjectors = {
         handlerSet: w.body.handlerSet ? String(w.body.handlerSet) : null,
         actors: Array.isArray(w.body.actors) ? [...w.body.actors] : null,
         storage: w.body.storage && typeof w.body.storage === "object" ? { ...w.body.storage } : null,
-        allowActorHeader: w.body.allowActorHeader === true
+        allowActorHeader: w.body.allowActorHeader === true,
+        context: contexts.get(w.body.id) ?? (w.body.context ? String(w.body.context) : null)
       });
     }
     return [...runnerMap.values()];
@@ -556,10 +1101,44 @@ export const moduleProjectors = {
         label: String(w.body.label || ""),
         username: String(w.body.username || ""),
         password: String(w.body.password || ""),
+        homeContext: w.body.homeContext ? String(w.body.homeContext) : null,
         homePerspective: w.body.homePerspective ? String(w.body.homePerspective) : null
       });
     }
     return [...identityMap.values()];
+  },
+
+  proposals(witnesses) {
+    const rows = new Map();
+    for (const witness of witnesses) {
+      if (witness.process === "createProposal" && witness.body?.id) {
+        rows.set(witness.body.id, {
+          id: witness.body.id,
+          proposer: witness.body.proposer ?? witness.actor,
+          targetProcess: witness.body.targetProcess ?? null,
+          targetKind: witness.body.targetKind ?? null,
+          targetId: witness.body.targetId ?? null,
+          body: witness.body.body && typeof witness.body.body === "object" ? { ...witness.body.body } : {},
+          reason: witness.body.reason ?? null,
+          status: witness.body.status ?? "open",
+          executedWitnessIds: [],
+          reviewer: null
+        });
+      }
+      if (witness.process === "approveProposal" && witness.body?.id && rows.has(witness.body.id)) {
+        const row = rows.get(witness.body.id);
+        row.status = "approved";
+        row.reviewer = witness.body.approver ?? witness.actor;
+        row.executedWitnessIds = [...new Set((witness.body.executedWitnessIds ?? []).map(String).filter(Boolean))];
+      }
+      if (witness.process === "rejectProposal" && witness.body?.id && rows.has(witness.body.id)) {
+        const row = rows.get(witness.body.id);
+        row.status = "rejected";
+        row.reviewer = witness.body.reviewer ?? witness.actor;
+        row.reviewReason = witness.body.reason ?? null;
+      }
+    }
+    return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
   },
 
   identityIndex(witnesses) {

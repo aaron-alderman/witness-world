@@ -451,4 +451,7 @@ The Todo app in particular should now be treated as:
 - the first academy quest surface
 - the first shared/canonical page the user eventually earns the right to edit
 
-See also: [ACADEMY.md](/C:/Users/aaron/Documents/world/docs/ACADEMY.md)
+See also:
+
+- [ACADEMY.md](/C:/Users/aaron/Documents/world/docs/ACADEMY.md)
+- [FIRST-5-MINUTES.md](/C:/Users/aaron/Documents/world/docs/FIRST-5-MINUTES.md)

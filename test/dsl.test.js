@@ -88,7 +88,7 @@ test("applies witness DSL to build compiler and browser runner ladder", () => {
   const world = createWorld();
   const witnesses = applyWitnessToml(world, script);
 
-  assert.equal(witnesses.length, 13);
+  assert.equal(witnesses.length, 14);
   assert.deepEqual(world.project(moduleProjectors.compiledArtifacts), [
     { artifact: "compiler_1_artifact", source: "compiler_1_description", compiler: "compiler_0" }
   ]);

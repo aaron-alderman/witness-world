@@ -5,6 +5,11 @@ import {
   createCompiler,
   createDescription,
   compileDescription,
+  defineContext,
+  definePerspective,
+  grantStewardship,
+  revokeStewardship,
+  createProposal,
   defineCapability,
   ensureCapabilityDefinition,
   installCapability,
@@ -151,6 +156,9 @@ function sourceTargets(kind, values) {
     if (values.capability) ids.push(values.capability);
     if (values.target) ids.push(values.target);
   }
+  if (kind === "perspective" && values.context) ids.push(values.context);
+  if (kind === "stewardship" && values.target) ids.push(values.target);
+  if (kind === "proposal" && values.targetId) ids.push(values.targetId);
   if (kind === "attachWidget") {
     if (values.parent) ids.push(values.parent);
     if (values.child) ids.push(values.child);
@@ -207,15 +215,27 @@ function applyDoc(world, { kind, values }, context) {
       const actor = valuesWithDefaults.actor ?? id;
       const capabilities = valuesWithDefaults.capabilities ?? [];
       context.contexts[id] = { ...valuesWithDefaults, id, actor, capabilities };
+      const base = defineContext(world, {
+        actor,
+        id,
+        label: valuesWithDefaults.label ?? id,
+        parent: valuesWithDefaults.parent ?? null,
+        owner: valuesWithDefaults.owner ?? actor,
+        stewards: valuesWithDefaults.stewards ?? valuesWithDefaults.initialStewards ?? []
+      });
       const define = world.emit({
         process: "context.define",
         actor,
-        claims: [
-          thing(id),
-          relation(id, "hasModuleKind", "context"),
-          relation(id, "contextActor", actor)
-        ],
-        body: { id, actor, capabilities }
+        claims: [],
+        body: {
+          id,
+          label: valuesWithDefaults.label ?? id,
+          actor,
+          owner: valuesWithDefaults.owner ?? actor,
+          parent: valuesWithDefaults.parent ?? null,
+          stewards: valuesWithDefaults.stewards ?? valuesWithDefaults.initialStewards ?? [],
+          capabilities
+        }
       });
       const sugar = [];
       for (const capability of capabilities) {
@@ -233,8 +253,37 @@ function applyDoc(world, { kind, values }, context) {
           targetKind: "context"
         }));
       }
-      return [define, ...sugar];
+      return [base, define, ...sugar];
     }
+
+    case "perspective":
+      return definePerspective(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        id: req(valuesWithDefaults, "id"),
+        title: valuesWithDefaults.title ?? valuesWithDefaults.label ?? valuesWithDefaults.id,
+        context: valuesWithDefaults.context ?? null,
+        owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
+      });
+
+    case "stewardship":
+      return (valuesWithDefaults.revoke === true ? revokeStewardship : grantStewardship)(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        steward: req(valuesWithDefaults, "steward"),
+        target: req(valuesWithDefaults, "target"),
+        targetKind: valuesWithDefaults.targetKind ?? null
+      });
+
+    case "proposal":
+      return createProposal(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        id: req(valuesWithDefaults, "id"),
+        targetProcess: req(valuesWithDefaults, "targetProcess"),
+        targetKind: req(valuesWithDefaults, "targetKind"),
+        targetId: valuesWithDefaults.targetId ?? null,
+        body: valuesWithDefaults.body ?? {},
+        reason: valuesWithDefaults.reason ?? null,
+        owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
+      });
 
     case "capability":
       return defineCapability(world, {
@@ -249,6 +298,7 @@ function applyDoc(world, { kind, values }, context) {
         internals: valuesWithDefaults.internals ?? [],
         authority: valuesWithDefaults.authority ?? [],
         placement: valuesWithDefaults.placement ?? [],
+        context: valuesWithDefaults.context ?? null,
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
       });
 
@@ -318,6 +368,7 @@ function applyDoc(world, { kind, values }, context) {
         actors: valuesWithDefaults.actors ?? null,
         storage: valuesWithDefaults.storage ?? null,
         allowActorHeader: valuesWithDefaults.allowActorHeader === true,
+        context: valuesWithDefaults.context ?? null,
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
       });
 
@@ -333,6 +384,7 @@ function applyDoc(world, { kind, values }, context) {
         label: req(valuesWithDefaults, "label"),
         username: req(valuesWithDefaults, "username"),
         password: req(valuesWithDefaults, "password"),
+        homeContext: valuesWithDefaults.homeContext ?? null,
         homePerspective: valuesWithDefaults.homePerspective ?? null,
         owner: valuesWithDefaults.owner ?? authorActor
       });
@@ -347,6 +399,7 @@ function applyDoc(world, { kind, values }, context) {
         method: valuesWithDefaults.method ?? "GET",
         handler: valuesWithDefaults.handler ?? null,
         params: valuesWithDefaults.params ?? null,
+        context: valuesWithDefaults.context ?? null,
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
       });
 
@@ -463,6 +516,7 @@ function applyDoc(world, { kind, values }, context) {
         actor: req(valuesWithDefaults, "actor"),
         id: req(valuesWithDefaults, "id"),
         rootWidget: req(valuesWithDefaults, "rootWidget"),
+        context: valuesWithDefaults.context ?? null,
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
       });
 
@@ -512,6 +566,7 @@ function applyWidgetLike(world, values, kind) {
     id,
     kind,
     props: collectProps(values, ["actor", "owner", "context", "id", "kind", "children", "slot", "order", "program"]),
+    context: values.context ?? null,
     owner: values.owner ?? values.actor
   });
   const attachments = children.map((child, order) =>

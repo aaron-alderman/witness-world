@@ -18,6 +18,7 @@ Related direction:
 
 - [docs/EXPERIENCE.md](C:\Users\aaron\Documents\world\docs\EXPERIENCE.md)
 - [docs/CAPABILITIES.md](C:\Users\aaron\Documents\world\docs\CAPABILITIES.md)
+- [docs/BACKEND-SEAMS.md](C:\Users\aaron\Documents\world\docs\BACKEND-SEAMS.md)
 
 ---
 
@@ -91,18 +92,43 @@ Honest caveats / rollback watch:
 
 ### 2. Context, Identity, and Authority
 
-Status: active
+Status: partial
 
 The runtime now has identity/session basics, but context and authority are still under-modeled relative to the product direction.
 
-- [ ] Make context first-class as the boundary for names, local composition, imports/exports, and perspective-local meaning.
+- [x] Make context first-class enough to act as an authored authority boundary with owner, optional parent, optional stewards, and bootstrap read/write support.
+- [ ] Make context the full boundary for names, local composition, imports/exports, and perspective-local meaning.
 - [ ] Introduce local naming and cross-context reference semantics so the system stops depending on one global soup.
-- [ ] Deepen identity into first-class witnessed things, relations, and identity-to-perspective structure.
-- [ ] Model authority, delegation, and stewardship explicitly rather than leaving them as implied runtime behavior.
-- [ ] Introduce proposal/gate flows for world mutation where direct mutation should no longer be the whole story.
+- [x] Deepen identity enough for real home-scope attachment through `homePerspective` plus optional `homeContext`.
+- [x] Model authority, delegation, and stewardship explicitly for the generic bootstrap mutation surface.
+- [x] Introduce proposal create/approve/reject flows for guarded generic bootstrap/world-authoring mutations.
+- [ ] Extend those authority/proposal rules beyond the bootstrap authoring surface into broader operating surfaces and app behaviors.
 - [ ] Define operator-owned recovery semantics for persistent worlds, including password reset and identity bootstrap recovery.
 
 This seam is what lets composition scale beyond a single trusted operator and a single flat namespace.
+
+Current authority-first bootstrap slice now exists:
+
+- first-class authored `context`, `perspective`, `stewardship`, and `proposal` objects in the model/DSL/projections
+- optional `context` attachment on widgets, frontend programs, routes, server runners, and capabilities
+- shared authority derivation for bootstrap mutation handlers
+- inherited parent-context stewardship for scoped bootstrap writes
+- bootstrap read models for `contexts`, `perspectives`, `stewardships`, `authority`, and `proposals`
+- bootstrap UI for context creation, perspective creation, stewardship grant/revoke, and proposal approve/reject
+- cookie-backed session reads now surface `homeContext` when present
+
+Honest caveats / rollback watch:
+
+- This is an authority-first governance slice, not the full context-composition slice.
+  Context exists as a real boundary for bootstrap governance, but naming/import/export semantics are still deferred.
+- Authority derivation currently governs the generic bootstrap mutation surface, not arbitrary app-specific handler-set actions.
+  If broader world editing later reuses different flows, this derivation layer should become the shared rule rather than another special case.
+- Stewardship is currently actor-string based, not a richer principal/group model.
+  If identity-backed principals become stricter later, grant semantics may need tightening rather than quiet extension.
+- Proposal execution is a fixed supported-process executor, not a general workflow engine.
+  It is honest for this slice, but it should not be mistaken for a complete review/queue system.
+- Older authored objects may remain unscoped.
+  That compatibility path is deliberate, but it means direct ownership is still part of the mutation model and some worlds will stay partially outside context governance until migrated.
 
 ### 3. Operating Surface
 
@@ -149,7 +175,60 @@ The baseline runtime is coherent, but more of the system still needs to become h
 
 This seam is about making execution and live change trustworthy rather than merely declarative-looking.
 
-### 6. Shells, Persistence, and Ecosystem
+### 6. Practical Backend Capabilities
+
+Status: active
+
+This seam is about practical app capability rather than platform purity.
+
+Roadmap boxes in this section turn `[X]` only when runtime behavior, tests, and honest capability boundaries exist.
+
+The current starting slice is Files + Uploads because it most quickly makes the product feel real while exercising storage, authority, hosting, and async seams.
+
+#### Foundation Contracts
+
+- [ ] Define `runtime.config` as the backend capability that owns config schema, secret references, local defaults, and runtime binding.
+- [ ] Define the provider-adapter contract for practical backend capabilities so one product seam can support many concrete providers.
+- [ ] Define the witness contract for external side effects: intent, attempt, success/failure, and external reference ids.
+- [ ] Define authority expectations for backend capabilities so filesystem, network, secret, and provider powers stay explicit.
+
+#### Files And Uploads First Slice
+
+- [ ] Add `fs.blob` capability for folder-aware file operations, metadata, scoped paths, and stable asset references.
+- [ ] Add `fs.stream` capability for streaming reads/writes and upload/download primitives.
+- [ ] Add `upload.asset` capability for browser upload intake, validation, persistence, and hosted asset references.
+- [ ] Add a local-disk provider path for `fs` and upload capabilities so the first slice is runnable without cloud dependencies.
+- [ ] Add private and public asset hosting behavior through the generic host without collapsing uploads back into route glue.
+- [ ] Add deterministic test and stub flows for file and upload behavior.
+
+#### Data And Async Substrate
+
+- [ ] Add `db.sql` as one relational-data seam with provider adapters for SQLite, Postgres, and MySQL.
+- [ ] Add `jobs.queue` for async work, retries, delayed jobs, dead-letter state, and idempotency keys.
+- [ ] Add `search.index` for indexing and reindex flows once stored records and assets exist.
+
+#### Identity And External Integrations
+
+- [ ] Add `auth.oauth` layered over the existing identity and session model rather than replacing it.
+- [ ] Add `http.outbound` for signed requests, retries, and provider-bound external calls.
+- [ ] Add `webhook.inbound` for verified inbound events, replay protection, and handoff into jobs or processes.
+- [ ] Add `notify.email` as a stub-first outbox-backed notification seam.
+- [ ] Add `notify.sms` as a stub-first outbox-backed notification seam.
+
+#### Product Honesty And Operability
+
+- [ ] Keep external systems modeled as proxies with witnessed external ids rather than hidden truth stores.
+- [ ] Keep backend seams stub-first where external vendors would otherwise block product work.
+- [ ] Add operator-visible diagnostics for capability config, provider status, and failed side effects.
+- [ ] Add bootstrap or inspection surfaces for practical backend capabilities once the first runtime slice exists.
+
+This seam is the difference between a runtime that can host a demo and a runtime that can support ordinary serious applications.
+
+Detailed spike:
+
+- [docs/BACKEND-SEAMS.md](C:\Users\aaron\Documents\world\docs\BACKEND-SEAMS.md)
+
+### 7. Shells, Persistence, and Ecosystem
 
 Status: active
 

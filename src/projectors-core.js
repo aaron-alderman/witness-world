@@ -69,13 +69,10 @@ export const projectors = {
 
   stewards(witnesses) {
     const map = new Map();
-    for (const w of witnesses) {
-      for (const c of w.claims) {
-        if (c.op === "relation" && c.rel === "stewards") {
-          if (!map.has(c.to)) map.set(c.to, new Set());
-          map.get(c.to).add(c.from);
-        }
-      }
+    for (const row of projectors.currentRelations(witnesses)) {
+      if (row.rel !== "stewards") continue;
+      if (!map.has(row.to)) map.set(row.to, new Set());
+      map.get(row.to).add(row.from);
     }
     return map;
   },

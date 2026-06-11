@@ -323,3 +323,5 @@ It turns:
 - stewardship into mastery
 
 The result should be a user who has not merely "learned the product" but has practiced how to build, govern, share, recover, and care inside a truthful world.
+
+See also: [FIRST-5-MINUTES.md](/C:/Users/aaron/Documents/world/docs/FIRST-5-MINUTES.md)

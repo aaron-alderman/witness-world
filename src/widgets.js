@@ -20,7 +20,7 @@ import {
 } from "./type-model.js";
 import { tutorialDefinition } from "./tutorials.js";
 
-export function defineWidget(world, { actor, id, kind, props = {}, owner = actor }) {
+export function defineWidget(world, { actor, id, kind, props = {}, owner = actor, context = null }) {
   return world.emit({
     process: "defineWidget",
     actor,
@@ -28,9 +28,10 @@ export function defineWidget(world, { actor, id, kind, props = {}, owner = actor
       thing(id),
       relation(owner, "owns", id),
       relation(id, "hasModuleKind", "widget"),
-      relation(id, "widgetKind", kind)
+      relation(id, "widgetKind", kind),
+      ...(context ? [relation(id, "inContext", context)] : [])
     ],
-    body: { id, kind, props }
+    body: { id, kind, props, context: context ? String(context) : null }
   });
 }
 
@@ -241,7 +242,7 @@ export function attachWidget(world, { actor, parent, child, slot = "children", o
   });
 }
 
-export function defineFrontendProgram(world, { actor, id, rootWidget, owner = actor }) {
+export function defineFrontendProgram(world, { actor, id, rootWidget, owner = actor, context = null }) {
   return world.emit({
     process: "defineFrontendProgram",
     actor,
@@ -249,9 +250,10 @@ export function defineFrontendProgram(world, { actor, id, rootWidget, owner = ac
       thing(id),
       relation(owner, "owns", id),
       relation(id, "hasModuleKind", "frontendProgram"),
-      relation(id, "targetsRootWidget", rootWidget)
+      relation(id, "targetsRootWidget", rootWidget),
+      ...(context ? [relation(id, "inContext", context)] : [])
     ],
-    body: { id, rootWidget }
+    body: { id, rootWidget, context: context ? String(context) : null }
   });
 }
 
@@ -333,10 +335,11 @@ export function widgetTree(witnesses, root) {
 }
 
 export function widgetDefinitions(witnesses) {
+  const contexts = new Map(witnessRelations(witnesses).filter(row => row.rel === "inContext").map(row => [row.from, row.to]));
   const state = projectWidgetState(witnesses);
   return [...state.widgets.values()]
     .sort((a, b) => String(a.id).localeCompare(String(b.id)))
-    .map(widget => ({ id: widget.id, kind: widget.kind, props: { ...(widget.props ?? {}) } }));
+    .map(widget => ({ id: widget.id, kind: widget.kind, props: { ...(widget.props ?? {}) }, context: contexts.get(widget.id) ?? null }));
 }
 
 export function templateWidgetTrees(witnesses) {
@@ -372,11 +375,12 @@ export function frontendProgram(witnesses, programId) {
 }
 
 export function frontendProgramsProjection(witnesses) {
+  const contexts = new Map(witnessRelations(witnesses).filter(row => row.rel === "inContext").map(row => [row.from, row.to]));
   const rows = [];
   for (const witness of witnesses) {
     if (witness.process !== "defineFrontendProgram" || !witness.body?.id) continue;
     if (rows.some(row => row.id === witness.body.id)) continue;
-    rows.push({ id: witness.body.id, rootWidget: witness.body.rootWidget });
+    rows.push({ id: witness.body.id, rootWidget: witness.body.rootWidget, context: contexts.get(witness.body.id) ?? (witness.body.context ? String(witness.body.context) : null) });
   }
   return rows.sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
