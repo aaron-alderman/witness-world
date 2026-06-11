@@ -1,4 +1,5 @@
 import http from "node:http";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -13,7 +14,6 @@ import { renderCanvasPage } from "./canvas-page.js";
 import { createLogger } from "./logger.js";
 import { createDemoHandlerSet } from "./demo-handler-set.js";
 
-const DEFAULT_ACTORS = [{ id: "aaron", label: "Aaron" }, { id: "callan", label: "Callan" }];
 const HANDLER_SET_FACTORIES = {
   demo: createDemoHandlerSet
 };
@@ -139,6 +139,8 @@ export async function startServer(world, {
       backendHost,
       frontendHost,
       actors: appContext.actors,
+      identityIndex: appContext.identityIndex,
+      sessionStore: new Map(),
       logger,
       visibleWitnesses
     }),
@@ -167,7 +169,8 @@ export async function startServer(world, {
   const server = http.createServer(async (req, res) => {
     const startedAt = Date.now();
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    logger.info("http.request.start", { requestId, method: req.method, url: req.url, actor: actorFromRequest(req) });
+    const requestContext = resolveRequestContext(req, routeHandlers.__sessionStore);
+    logger.info("http.request.start", { requestId, method: req.method, url: req.url, actor: requestContext.actor });
     res.on("finish", () => {
       logger.info("http.request.finish", { requestId, method: req.method, url: req.url, statusCode: res.statusCode, durationMs: Date.now() - startedAt });
     });
@@ -227,11 +230,13 @@ export async function startServer(world, {
         requestUrl,
         route: matched.route,
         params: matched.params,
-        requestActor: actorFromRequest(req)
+        requestActor: requestContext.actor,
+        requestIdentity: requestContext.identity,
+        requestSession: requestContext.session
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      logger.error("http.request.failed", { requestId, method: req.method, url: req.url, actor: actorFromRequest(req), durationMs: Date.now() - startedAt, error: err });
+      logger.error("http.request.failed", { requestId, method: req.method, url: req.url, actor: requestContext.actor, durationMs: Date.now() - startedAt, error: err });
       world.observe({
         process: "server.request.failed",
         actor: backendHost,
@@ -289,11 +294,15 @@ async function createAppContext({
   sendJson,
   readJson
 }) {
-  const actors = Array.isArray(serverRunner.actors) && serverRunner.actors.length ? [...serverRunner.actors] : [...DEFAULT_ACTORS];
+  const identityIndex = world.project(moduleProjectors.identityIndex);
+  const actors = Array.isArray(serverRunner.actors) && serverRunner.actors.length
+    ? [...serverRunner.actors]
+    : actorsFromIdentities(identityIndex.rows);
   if (!serverRunner.handlerSet) {
     return {
       ok: true,
       actors,
+      identityIndex,
       storage,
       handlers: {},
       visibleWitnesses: () => world.allWitnesses()
@@ -315,6 +324,7 @@ async function createAppContext({
   return {
     ok: true,
     actors: appContext.actors ?? actors,
+    identityIndex,
     storage,
     handlers: appContext.handlers ?? {},
     visibleWitnesses: appContext.visibleWitnesses ?? (() => world.allWitnesses())
@@ -326,10 +336,100 @@ function createGenericRouteHandlers({
   backendHost,
   frontendHost,
   actors,
+  identityIndex,
+  sessionStore,
   logger,
   visibleWitnesses
 }) {
-  return {
+  const handlers = {
+    __sessionStore: sessionStore,
+    "session.read": async ({ res, requestActor, requestIdentity, requestSession }) => {
+      world.observe({
+        process: "session.read",
+        actor: requestActor || backendHost,
+        claims: [],
+        body: { authenticated: Boolean(requestSession), identity: requestIdentity || null, actor: requestActor || null }
+      });
+      if (!requestSession) {
+        sendJson(res, 200, { authenticated: false, identity: null, actor: null, label: null, perspective: null });
+        return;
+      }
+      sendJson(res, 200, {
+        authenticated: true,
+        identity: requestSession.identity,
+        actor: requestSession.actor,
+        label: requestSession.label,
+        perspective: requestSession.perspective
+      });
+    },
+
+    "session.open": async ({ req, res }) => {
+      const body = await readJson(req);
+      const username = typeof body.username === "string" ? body.username.trim() : "";
+      const password = typeof body.password === "string" ? body.password : "";
+      const identity = username ? identityIndex.byUsername[username] ?? null : null;
+      if (!identity || identity.password !== password) {
+        world.emit({
+          process: "session.open.failed",
+          actor: backendHost,
+          claims: [],
+          body: { username, reason: !identity ? "unknown username" : "invalid password" }
+        });
+        sendJson(res, 401, { error: "invalid credentials" });
+        return;
+      }
+      const sessionId = randomUUID();
+      const session = {
+        id: sessionId,
+        identity: identity.id,
+        actor: identity.actor,
+        label: identity.label,
+        perspective: identity.homePerspective ?? null
+      };
+      sessionStore.set(sessionId, session);
+      world.emit({
+        process: "session.open",
+        actor: identity.actor,
+        claims: [
+          relation(identity.id, "authenticatedAs", identity.actor),
+          ...(identity.homePerspective ? [relation(identity.id, "openedPerspective", identity.homePerspective)] : [])
+        ],
+        body: {
+          identity: identity.id,
+          actor: identity.actor,
+          label: identity.label,
+          perspective: identity.homePerspective ?? null
+        }
+      });
+      sendJson(
+        res,
+        200,
+        {
+          authenticated: true,
+          identity: identity.id,
+          actor: identity.actor,
+          label: identity.label,
+          perspective: identity.homePerspective ?? null
+        },
+        { "set-cookie": sessionCookieHeader(sessionId) }
+      );
+    },
+
+    "session.logout": async ({ res, requestSession, requestActor }) => {
+      if (requestSession?.id) sessionStore.delete(requestSession.id);
+      world.emit({
+        process: "session.logout",
+        actor: requestActor || backendHost,
+        claims: [],
+        body: {
+          identity: requestSession?.identity ?? null,
+          actor: requestActor || null,
+          perspective: requestSession?.perspective ?? null
+        }
+      });
+      sendJson(res, 200, { ok: true }, { "set-cookie": clearSessionCookieHeader() });
+    },
+
     "page.home": async ({ res, route }) => {
       const params = route.params ?? {};
       const rootWidget = params.rootWidget ?? null;
@@ -487,6 +587,7 @@ function createGenericRouteHandlers({
       sendJson(res, 200, { ok: true, witness });
     }
   };
+  return handlers;
 }
 
 function resolveStorageConfig(storage, runtimeRoot) {
@@ -528,18 +629,65 @@ function matchDeclaredRoute(routeTable, method, pathname) {
   return null;
 }
 
-function actorFromRequest(req) {
-  const raw = req.headers["x-witness-actor"];
-  return typeof raw === "string" && raw.trim() ? raw.trim() : null;
+function actorsFromIdentities(identities) {
+  const seen = new Set();
+  const actors = [];
+  for (const identity of identities ?? []) {
+    const actor = typeof identity?.actor === "string" ? identity.actor.trim() : "";
+    if (!actor || seen.has(actor)) continue;
+    seen.add(actor);
+    actors.push({ id: actor, label: identity.label || actor });
+  }
+  return actors;
 }
 
-function send(res, status, type, body) {
-  res.writeHead(status, { "content-type": type });
+function resolveRequestContext(req, sessionStore) {
+  const cookies = parseCookies(req);
+  const sessionId = cookies.witness_session || "";
+  const session = sessionId ? sessionStore?.get(sessionId) ?? null : null;
+  if (session) {
+    return {
+      actor: session.actor,
+      identity: session.identity,
+      session
+    };
+  }
+  const raw = req.headers["x-witness-actor"];
+  const headerActor = typeof raw === "string" && raw.trim() ? raw.trim() : null;
+  return {
+    actor: headerActor,
+    identity: null,
+    session: null
+  };
+}
+
+function parseCookies(req) {
+  const header = req.headers.cookie;
+  if (typeof header !== "string" || !header.trim()) return {};
+  const cookies = {};
+  for (const part of header.split(";")) {
+    const [name, ...rest] = part.trim().split("=");
+    if (!name) continue;
+    cookies[name] = decodeURIComponent(rest.join("=") || "");
+  }
+  return cookies;
+}
+
+function sessionCookieHeader(sessionId) {
+  return `witness_session=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; SameSite=Lax`;
+}
+
+function clearSessionCookieHeader() {
+  return "witness_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
+}
+
+function send(res, status, type, body, headers = {}) {
+  res.writeHead(status, { "content-type": type, ...headers });
   res.end(body);
 }
 
-function sendJson(res, status, body) {
-  send(res, status, "application/json", JSON.stringify(body));
+function sendJson(res, status, body, headers = {}) {
+  send(res, status, "application/json", JSON.stringify(body), headers);
 }
 
 function readJson(req) {

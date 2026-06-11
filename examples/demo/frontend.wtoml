@@ -21,17 +21,25 @@ text = "Personal Projection"
 
 [[form]]
 id = "todo_session_form"
-children = ["todo_actor_select", "todo_open_button", "todo_logout_button"]
+children = ["todo_username_input", "todo_password_input", "todo_open_button", "todo_logout_button"]
 role = "login-form"
 
-[[select]]
-id = "todo_actor_select"
-name = "actor"
-role = "actor-select"
+[[input]]
+id = "todo_username_input"
+name = "username"
+placeholder = "Username"
+autocomplete = "username"
+
+[[input]]
+id = "todo_password_input"
+name = "password"
+placeholder = "Password"
+type = "password"
+autocomplete = "current-password"
 
 [[button]]
 id = "todo_open_button"
-text = "Open"
+text = "Sign in"
 type = "submit"
 
 [[button]]
@@ -42,7 +50,7 @@ action = "logout"
 
 [[text]]
 id = "todo_session_status"
-text = "No personal projection selected"
+text = "Not signed in"
 role = "session-status"
 
 [[heading]]
@@ -242,13 +250,6 @@ eventVersion = "todo_versioned_banner_v2"
 id = "todo_frontend_program"
 rootWidget = "todo_app_widget"
 
-[[option]]
-id = "actor_option_template"
-template = true
-value = "${item.id}"
-text = "${item.label}"
-selected = "${state.actor === item.id}"
-
 [[box]]
 id = "todo_item_template"
 template = true
@@ -294,7 +295,7 @@ text = "${item.text}"
 id = "private_note_empty_template"
 template = true
 class = "private-note"
-text = "Choose a perspective to see private notes."
+text = "Sign in to see private notes."
 
 [[box]]
 id = "witness_item_template"
@@ -321,42 +322,27 @@ on = "load"
 
 [[step]]
 order = 1
-op = "fetchJson"
-on = "load"
-url = "/api/session"
-into = "sessionResponse"
-
-[[step]]
-order = 2
-op = "renderCollection"
-on = "load"
-widget = "todo_actor_select"
-from = "sessionResponse.actors"
-template = "actor_option_template"
-
-[[step]]
-order = 3
 op = "setText"
 on = "load"
 widget = "todo_session_status"
-text = "${state.actor ? 'Personal projection: ' + state.actor : 'No personal projection selected'}"
+text = "${state.session && state.session.authenticated ? 'Signed in as ' + state.session.label + ' (' + state.session.actor + ')' + (state.session.perspective ? ' in ' + state.session.perspective : '') : 'Not signed in'}"
 
 [[step]]
-order = 4
+order = 2
 op = "setText"
 on = "load"
 widget = "todo_status"
 text = "Loading..."
 
 [[step]]
-order = 5
+order = 3
 op = "fetchJson"
 on = "load"
 url = "/api/todos"
 into = "todoResponse"
 
 [[step]]
-order = 6
+order = 4
 op = "renderCollection"
 on = "load"
 widget = "todo_list"
@@ -364,14 +350,14 @@ from = "todoResponse.todos"
 template = "todo_item_template"
 
 [[step]]
-order = 7
+order = 5
 op = "fetchJson"
 on = "load"
 url = "/api/witnesses"
 into = "witnessResponse"
 
 [[step]]
-order = 8
+order = 6
 op = "renderCollection"
 on = "load"
 widget = "todo_witness_list"
@@ -381,14 +367,14 @@ reverse = true
 limit = 80
 
 [[step]]
-order = 9
+order = 7
 op = "fetchJson"
 on = "load"
 url = "/api/private-notes"
 into = "privateNotesResponse"
 
 [[step]]
-order = 10
+order = 8
 op = "renderCollection"
 on = "load"
 widget = "todo_private_note_list"
@@ -397,7 +383,7 @@ template = "private_note_template"
 emptyWidget = "private_note_empty_template"
 
 [[step]]
-order = 11
+order = 9
 op = "setText"
 on = "load"
 widget = "todo_status"
@@ -492,7 +478,6 @@ order = 1
 op = "setSession"
 on = "submit:todo_session_form"
 from = "sessionDraft"
-path = "actor"
 
 [[step]]
 order = 2

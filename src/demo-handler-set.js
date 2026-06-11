@@ -33,27 +33,6 @@ export async function createDemoHandlerSet({
     actors,
     visibleWitnesses: requestActor => publicWitnessesFor(world.allWitnesses(), requestActor),
     handlers: {
-      "session.read": async ({ res }) => {
-        sendJson(res, 200, { actors });
-      },
-
-      "session.open": async ({ req, res }) => {
-        const body = await readJson(req);
-        const selected = actors.find(candidate => candidate.id === body.actor);
-        if (!selected) {
-          world.emit({ process: "session.login.failed", actor: backendHost, claims: [], body: { actor: body.actor, reason: "unknown actor" } });
-          sendJson(res, 400, { error: "unknown actor" });
-          return;
-        }
-        world.emit({ process: "session.login", actor: selected.id, claims: [relation(selected.id, "openedPerspective", `${selected.id}:personal`)], body: { actor: selected.id } });
-        sendJson(res, 200, { actor: selected });
-      },
-
-      "session.logout": async ({ res, requestActor }) => {
-        world.observe({ process: "session.logout", actor: requestActor || backendHost, claims: [], body: { actor: requestActor } });
-        sendJson(res, 200, { ok: true });
-      },
-
       "privateNotes.list": async ({ res, requestActor }) => {
         if (!requestActor) {
           sendJson(res, 200, { notes: [] });

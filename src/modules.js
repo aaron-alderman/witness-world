@@ -88,6 +88,36 @@ export function createServerRunner(world, {
   });
 }
 
+export function createIdentity(world, {
+  actor,
+  id,
+  identityActor,
+  label,
+  username,
+  password,
+  homePerspective = null,
+  owner = actor
+}) {
+  createThing(world, { actor, id, owner });
+  return world.emit({
+    process: "defineIdentity",
+    actor,
+    claims: [
+      relation(id, "hasModuleKind", "identity"),
+      relation(id, "identityActor", identityActor),
+      ...(homePerspective ? [relation(id, "homePerspective", homePerspective)] : [])
+    ],
+    body: {
+      id,
+      actor: String(identityActor),
+      label: String(label),
+      username: String(username),
+      password: String(password),
+      homePerspective: homePerspective ? String(homePerspective) : null
+    }
+  });
+}
+
 export function defineRoute(world, { actor, id, path, serves, method = "GET", handler = null, params = null, owner = actor }) {
   createThing(world, { actor, id, owner });
   return world.emit({
@@ -232,6 +262,36 @@ export const moduleProjectors = {
       });
     }
     return [...runnerMap.values()];
+  },
+
+  identities(witnesses) {
+    const identityMap = new Map();
+    for (const w of witnesses) {
+      if (w.process !== "defineIdentity" || !w.body?.id) continue;
+      identityMap.set(w.body.id, {
+        id: w.body.id,
+        actor: String(w.body.actor || ""),
+        label: String(w.body.label || ""),
+        username: String(w.body.username || ""),
+        password: String(w.body.password || ""),
+        homePerspective: w.body.homePerspective ? String(w.body.homePerspective) : null
+      });
+    }
+    return [...identityMap.values()];
+  },
+
+  identityIndex(witnesses) {
+    const identities = moduleProjectors.identities(witnesses);
+    const byId = Object.create(null);
+    const byUsername = Object.create(null);
+    const byActor = Object.create(null);
+    for (const identity of identities) {
+      byId[identity.id] = identity;
+      byUsername[identity.username] = identity;
+      if (!byActor[identity.actor]) byActor[identity.actor] = [];
+      byActor[identity.actor].push(identity);
+    }
+    return { rows: identities, byId, byUsername, byActor };
   },
 
   servedRoutes(witnesses) {

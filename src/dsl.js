@@ -6,6 +6,7 @@ import {
   createDescription,
   compileDescription,
   createServerRunner,
+  createIdentity,
   defineRoute,
   serveRoute,
   createFrontendRunner,
@@ -254,6 +255,23 @@ function applyDoc(world, { kind, values }, context) {
         storage: valuesWithDefaults.storage ?? null,
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
       });
+
+    case "identity": {
+      const contextActor = valuesWithDefaults.context && context.contexts[valuesWithDefaults.context]
+        ? context.contexts[valuesWithDefaults.context].actor
+        : null;
+      const authorActor = valuesWithDefaults.author ?? contextActor ?? req(valuesWithDefaults, "actor");
+      return createIdentity(world, {
+        actor: authorActor,
+        id: req(valuesWithDefaults, "id"),
+        identityActor: req(valuesWithDefaults, "actor"),
+        label: req(valuesWithDefaults, "label"),
+        username: req(valuesWithDefaults, "username"),
+        password: req(valuesWithDefaults, "password"),
+        homePerspective: valuesWithDefaults.homePerspective ?? null,
+        owner: valuesWithDefaults.owner ?? authorActor
+      });
+    }
 
     case "route":
       return defineRoute(world, {

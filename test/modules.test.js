@@ -6,6 +6,7 @@ import {
   createDescription,
   compileDescription,
   createServerRunner,
+  createIdentity,
   defineRoute,
   serveRoute,
   createFrontendRunner,
@@ -86,4 +87,31 @@ test("frontend runner renders a view and emits user action witnesses", () => {
 
   assert.deepEqual(world.project(moduleProjectors.renderedFrames), [{ frame: "frame_1", view: "aaron_canvas_view", runner: "frontend_runner" }]);
   assert.equal(world.allWitnesses().some(w => w.process === "emitUserAction" && w.body.x === 120), true);
+});
+
+test("identity projector indexes authored identities by id, username, and actor", () => {
+  const world = createWorld();
+  createThing(world, { actor: "adam", id: "aaron" });
+  createIdentity(world, {
+    actor: "system",
+    id: "identity.aaron",
+    identityActor: "aaron",
+    label: "Aaron",
+    username: "aaron",
+    password: "aaron",
+    homePerspective: "aaron:personal"
+  });
+
+  assert.deepEqual(world.project(moduleProjectors.identities), [{
+    id: "identity.aaron",
+    actor: "aaron",
+    label: "Aaron",
+    username: "aaron",
+    password: "aaron",
+    homePerspective: "aaron:personal"
+  }]);
+  const index = world.project(moduleProjectors.identityIndex);
+  assert.equal(index.byId["identity.aaron"].username, "aaron");
+  assert.equal(index.byUsername.aaron.id, "identity.aaron");
+  assert.equal(index.byActor.aaron[0].homePerspective, "aaron:personal");
 });

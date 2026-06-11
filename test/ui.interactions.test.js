@@ -28,6 +28,11 @@ async function createTodo(serverUrl, title, actor) {
   return response.json();
 }
 
+async function cookieHeaderFor(context, url) {
+  const cookies = await context.cookies(url);
+  return cookies.map(cookie => `${cookie.name}=${cookie.value}`).join("; ");
+}
+
 test("frontend form and click interactions mutate rendered state and witnesses", async () => {
   const { server, close: closeServer } = await startUiDemoServer({});
   const {
@@ -37,28 +42,31 @@ test("frontend form and click interactions mutate rendered state and witnesses",
   } = await launchBrowser();
 
   try {
-    const baselineTodos = await readTodos(server.url, { "x-witness-actor": "aaron" });
+    const baselineTodos = await readTodos(server.url);
     if (!Array.isArray(baselineTodos.todos) || baselineTodos.todos.length === 0) {
-      await createTodo(server.url, "Seeded todo", "aaron");
+      await createTodo(server.url, "Seeded todo");
     }
-    const seededTodos = await readTodos(server.url, { "x-witness-actor": "aaron" });
+    const seededTodos = await readTodos(server.url);
     const baselineTodoCount = Array.isArray(seededTodos.todos) ? seededTodos.todos.length : 0;
     assert.ok(baselineTodoCount > 0);
 
     await page.goto(`${server.url}/`);
     await waitForAppReady(page);
     await page.waitForFunction(() => {
-      const select = document.querySelector('[data-widget="todo_actor_select"]');
-      return Boolean(select && select.querySelector('option[value="aaron"]'));
+      const username = document.querySelector('[data-widget="todo_username_input"]');
+      const password = document.querySelector('[data-widget="todo_password_input"]');
+      return Boolean(username && password);
     });
 
-    await page.selectOption('[data-widget="todo_actor_select"]', "aaron");
+    await page.fill('[data-widget="todo_username_input"]', "aaron");
+    await page.fill('[data-widget="todo_password_input"]', "aaron");
     await page.locator('[data-widget="todo_open_button"]').click();
     await page.waitForFunction(() => {
-      const sessionRoot = document.querySelector('[data-widget="todo_session"]');
+      const sessionStatus = document.querySelector('[data-widget="todo_session_status"]');
       const bodyActor = document.body.dataset.actor;
-      return Boolean(sessionRoot && bodyActor === "aaron" && window.localStorage.getItem("witness.actor") === "aaron");
+      return Boolean(sessionStatus && sessionStatus.textContent.includes("Signed in as Aaron") && bodyActor === "aaron");
     });
+    const sessionCookie = await cookieHeaderFor(page.context(), server.url);
 
     await page.fill('[data-widget="todo_input"]', "Write harness tests");
     await page.locator('[data-widget="todo_add_button"]').click();
@@ -84,7 +92,7 @@ test("frontend form and click interactions mutate rendered state and witnesses",
       return status && status.textContent.includes("Updating...");
     });
     await waitUntil(async () => {
-      const updatedTodos = await readTodos(server.url, { "x-witness-actor": "aaron" });
+      const updatedTodos = await readTodos(server.url, { cookie: sessionCookie });
       const updated = updatedTodos.todos?.find(todo => todo.id === targetTodoId);
       return updated && updated.done !== targetTodoOriginalDone;
     }, { message: "todo toggled via api response" });
@@ -95,7 +103,7 @@ test("frontend form and click interactions mutate rendered state and witnesses",
       return status && status.textContent.includes("Deleting...");
     });
     await waitUntil(async () => {
-      const updatedTodos = await readTodos(server.url, { "x-witness-actor": "aaron" });
+      const updatedTodos = await readTodos(server.url, { cookie: sessionCookie });
       return !updatedTodos.todos?.some(todo => todo.id === targetTodoId);
     }, { message: "todo removed from api store" });
 
@@ -105,13 +113,13 @@ test("frontend form and click interactions mutate rendered state and witnesses",
       return status && status.textContent.includes("Simulated network failure witnessed.");
     });
 
-    const witnessResponse = await fetch(`${server.url}/api/witnesses`, { headers: { "x-witness-actor": "aaron" }}).then(r => r.json());
+    const witnessResponse = await fetch(`${server.url}/api/witnesses`, { headers: { cookie: sessionCookie }}).then(r => r.json());
     assert.equal(witnessResponse.witnesses.some(w => w.process === "network.simulated.failed"), true);
 
     await page.locator('[data-widget="todo_logout_button"]').click();
     await page.waitForFunction(() => {
       const status = document.querySelector('[data-widget="todo_session_status"]');
-      return status && status.textContent.includes("No personal projection selected");
+      return status && status.textContent.includes("Not signed in");
     });
 
     await page.fill('[data-widget="todo_private_note_input"]', "should fail without actor");

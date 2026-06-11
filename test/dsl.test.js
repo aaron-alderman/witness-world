@@ -31,6 +31,18 @@ output = "compiler_1_artifact"
 actor = "aaron"
 id = "server_runner"
 
+[context.common]
+actor = "system"
+
+[[identity]]
+context = "common"
+id = "identity.aaron"
+actor = "aaron"
+label = "Aaron"
+username = "aaron"
+password = "aaron"
+homePerspective = "aaron:personal"
+
 [[frontendRunner]]
 actor = "aaron"
 id = "frontend_runner"
@@ -67,16 +79,16 @@ body = { x = 12, y = 34 }
 
 test("parses TOML-ish witness DSL into ordered documents", () => {
   const docs = parseWitnessToml(script);
-  assert.equal(docs.length, 11);
+  assert.equal(docs.length, 13);
   assert.equal(docs[1].kind, "compiler");
-  assert.deepEqual(docs.at(-1).values.body, { x: 12, y: 34 });
+  assert.deepEqual(docs.find(doc => doc.kind === "action")?.values.body, { x: 12, y: 34 });
 });
 
 test("applies witness DSL to build compiler and browser runner ladder", () => {
   const world = createWorld();
   const witnesses = applyWitnessToml(world, script);
 
-  assert.equal(witnesses.length, 11);
+  assert.equal(witnesses.length, 13);
   assert.deepEqual(world.project(moduleProjectors.compiledArtifacts), [
     { artifact: "compiler_1_artifact", source: "compiler_1_description", compiler: "compiler_0" }
   ]);
@@ -87,6 +99,7 @@ test("applies witness DSL to build compiler and browser runner ladder", () => {
     world.project(projectors.currentRelations).some(r => r.from === "server_runner" && r.rel === "serves" && r.to === "root_route"),
     true
   );
+  assert.equal(world.project(moduleProjectors.identityIndex).byUsername.aaron.id, "identity.aaron");
   assert.equal(world.allWitnesses().some(w => w.process === "emitUserAction" && w.body.x === 12), true);
 });
 

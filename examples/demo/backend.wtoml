@@ -8,7 +8,6 @@ id = "demo_server"
 backendHost = "backendHost"
 frontendHost = "frontendHost"
 handlerSet = "demo"
-actors = [{ id = "aaron", label = "Aaron" }, { id = "callan", label = "Callan" }]
 storage = { todoProjection = "witness-world-demo-todos.json", privateNotesProjection = "witness-world-demo-todos.private-notes.json" }
 
 [[route]]

@@ -5,7 +5,7 @@ import { createWorld } from "../src/kernel.js";
 import { applyWitnessToml, applyWitnessDocs, loadWitnessTomlFile } from "../src/dsl.js";
 import { widgetTree, renderWidgetPage, frontendProgram, templateWidgetTrees } from "../src/widgets.js";
 
-test("todo UI is generated from primitive widgets, template widgets, and renderCollection steps", async () => {
+test("todo UI is generated from primitive widgets, template widgets, and credential-backed session steps", async () => {
   const world = createWorld();
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
@@ -17,7 +17,7 @@ test("todo UI is generated from primitive widgets, template widgets, and renderC
 
   const templates = world.project(templateWidgetTrees).map(widget => widget.id);
   assert.equal(templates.includes("todo_item_template"), true);
-  assert.equal(templates.includes("actor_option_template"), true);
+  assert.equal(templates.includes("private_note_template"), true);
 
   const program = world.project(w => frontendProgram(w, "todo_frontend_program"));
   assert.equal(program.steps.some(step => step.op === "renderCollection"), true);
@@ -30,7 +30,8 @@ test("todo UI is generated from primitive widgets, template widgets, and renderC
   const html = renderWidgetPage(world, { actor: "frontendHost", rootWidget: "todo_app_widget", frontendProgram: "todo_frontend_program" });
   assert.match(html, /data-widget="todo_form"/);
   assert.match(html, /data-widget-template="todo_item_template"/);
-  assert.match(html, /data-widget-template="actor_option_template"/);
+  assert.match(html, /data-widget="todo_username_input"/);
+  assert.match(html, /data-widget="todo_password_input"/);
   assert.match(html, /renderCollection/);
   assert.match(html, /safeRun\('load'\)/);
   assert.doesNotMatch(html, /TodoForm|TodoList|LoginPanel|PrivateNotes|WitnessInspector/);
@@ -38,7 +39,7 @@ test("todo UI is generated from primitive widgets, template widgets, and renderC
   assert.equal(world.allWitnesses().at(-1).process, "widget.renderHtml");
 });
 
-test("template widgets render as inert templates and options are primitive widgets", () => {
+test("template widgets render as inert templates without actor-select composites", () => {
   const world = createWorld();
   applyWitnessToml(world, `
 [[widget]]
@@ -47,31 +48,16 @@ id = "root"
 kind = "Page"
 props = { title = "Templates" }
 
-[[widget]]
+[[text]]
 actor = "adam"
-id = "select"
-kind = "Select"
-props = { name = "actor", role = "actor-select" }
-
-[[attachWidget]]
-actor = "adam"
-parent = "root"
-child = "select"
-order = 0
-
-[[option]]
-actor = "adam"
-id = "actor_option_template"
+id = "row_template"
 template = true
-value = "\${item.id}"
 text = "\${item.label}"
-selected = "\${state.actor === item.id}"
 `);
 
   const html = renderWidgetPage(world, { actor: "frontendHost", rootWidget: "root" });
-  assert.match(html, /<select[^>]*data-role="actor-select"/);
-  assert.match(html, /<template data-widget-template="actor_option_template">/);
-  assert.match(html, /<option[^>]*value="\$\{item\.id\}">/);
+  assert.match(html, /<template data-widget-template="row_template">/);
+  assert.match(html, /\$\{item\.label\}/);
 });
 
 test("frontend form interpreter reads forms and collection templates without hard-coded status fallback", () => {

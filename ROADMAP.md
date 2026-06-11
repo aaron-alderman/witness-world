@@ -10,7 +10,7 @@ A reflective application environment where memory is executable, witnessed, comp
 
 ### Address ASAP: remove architecture cheats from the runtime
 
-- [ ] Make sessions first-class runtime concepts tied to the application's identity model so `/api/session` is handled generically rather than through the demo handler set
+- [x] Make sessions first-class runtime concepts tied to the application's identity model so `/api/session` is handled generically rather than through the demo handler set
 - [x] Replace the demo-specific `todoServer` runtime model with a generic app/server definition in the DSL so host startup and dispatch are not coupled to one demo domain
 - [x] Collapse toward a single generic CLI/runtime entrypoint and retire `src/demo-todo-server.js` as a long-lived architectural surface
 - [x] Move demo application behavior out of `startTodoServer` route switches and into witnessed/DSL-described route and process definitions
@@ -61,7 +61,7 @@ A reflective application environment where memory is executable, witnessed, comp
 ### Address in the next few sprints: make the witnessed model executable
 
 - [ ] Make witnessed route definitions executable so HTTP dispatch no longer depends on JS handler registries in `host.js`
-- [ ] Replace demo-owned session login/logout behavior with witnessed identity/session processes that generic hosts and apps can share
+- [ ] Deepen the new identity/session layer into fully witnessed identity things, relations, authority, and perspective-aware session processes instead of the current dev-auth host implementation
 - [ ] Move `widget.define` defaults and mutation semantics (parent fallback, ordering, generated props, identity policy) out of ad hoc JS and into witnessed process behavior
 - [ ] Stop duplicating type compatibility/coercion rules across browser and server runtimes; share one witnessed type-model execution path
 - [ ] Move demo-specific projections such as `todoState` behind explicit app/demo boundaries or plugin-style extensions rather than treating them as runtime infrastructure

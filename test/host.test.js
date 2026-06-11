@@ -12,6 +12,23 @@ async function tempStore() {
   return path.join(dir, "todos.json");
 }
 
+function cookieHeader(setCookie) {
+  return (setCookie || "").split(";")[0];
+}
+
+async function openSession(serverUrl, { username = "aaron", password = username } = {}) {
+  const response = await fetch(`${serverUrl}/api/session`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username, password })
+  });
+  return {
+    response,
+    body: await response.json(),
+    cookie: cookieHeader(response.headers.get("set-cookie"))
+  };
+}
+
 function applyMinimalTodoDsl(world, extra = "") {
   applyWitnessToml(world, `
 [[widget]]
@@ -27,6 +44,22 @@ backendHost = "backendHost"
 frontendHost = "frontendHost"
 handlerSet = "demo"
 storage = { todoProjection = "todos.json", privateNotesProjection = "notes.json" }
+
+[[identity]]
+actor = "aaron"
+id = "identity.aaron"
+label = "Aaron"
+username = "aaron"
+password = "aaron"
+homePerspective = "aaron:personal"
+
+[[identity]]
+actor = "callan"
+id = "identity.callan"
+label = "Callan"
+username = "callan"
+password = "callan"
+homePerspective = "callan:personal"
 
 [[widget]]
 actor = "adam"
@@ -322,6 +355,58 @@ frontendHost = "frontendHost"
   assert.deepEqual(world.allWitnesses().at(-1).body.serverRunners, ["one", "two"]);
 });
 
+test("session api authenticates authored identities and cookie actor wins over request header", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  applyMinimalTodoDsl(world);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const failed = await fetch(`${server.url}/api/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: "aaron", password: "wrong" })
+    });
+    assert.equal(failed.status, 401);
+    assert.equal(world.allWitnesses().some(w => w.process === "session.open.failed"), true);
+
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    assert.equal(login.response.status, 200);
+    assert.equal(login.body.perspective, "aaron:personal");
+
+    const session = await fetch(`${server.url}/api/session`, {
+      headers: { cookie: login.cookie }
+    }).then(r => r.json());
+    assert.deepEqual(session, {
+      authenticated: true,
+      identity: "identity.aaron",
+      actor: "aaron",
+      label: "Aaron",
+      perspective: "aaron:personal"
+    });
+
+    const note = await fetch(`${server.url}/api/private-notes`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: login.cookie,
+        "x-witness-actor": "callan"
+      },
+      body: JSON.stringify({ text: "cookie beats header" })
+    }).then(r => r.json());
+    assert.equal(note.note.actor, "aaron");
+    assert.equal(world.allWitnesses().at(-1).actor, "aaron");
+  } finally {
+    await server.close();
+  }
+});
+
 test("demo app end-to-end: frontend request, backend json store, witnesses", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
@@ -424,7 +509,7 @@ test("demo server supports done/delete actions and witness inspector data", asyn
   }
 });
 
-test("personal projections: actor session, themes, and private notes are actor-scoped", async () => {
+test("personal projections: identity session, themes, and private notes are session-scoped", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
@@ -446,24 +531,23 @@ test("personal projections: actor session, themes, and private notes are actor-s
     assert.match(html, /renderCollection/);
 
     const session = await fetch(`${server.url}/api/session`).then(r => r.json());
-    assert.deepEqual(session.actors.map(a => a.id), ["aaron", "callan"]);
+    assert.deepEqual(session, { authenticated: false, identity: null, actor: null, label: null, perspective: null });
 
-    const login = await fetch(`${server.url}/api/session`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
-      body: JSON.stringify({ actor: "aaron" })
-    }).then(r => r.json());
-    assert.equal(login.actor.id, "aaron");
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    assert.equal(login.response.status, 200);
+    assert.equal(login.body.identity, "identity.aaron");
+    assert.equal(login.body.actor, "aaron");
+    assert.ok(login.cookie);
 
     const note = await fetch(`${server.url}/api/private-notes`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
+      headers: { "content-type": "application/json", cookie: login.cookie },
       body: JSON.stringify({ text: "Aaron-only thought" })
     }).then(r => r.json());
     assert.equal(note.note.text, "Aaron-only thought");
 
     const aaronNotes = await fetch(`${server.url}/api/private-notes`, {
-      headers: { "x-witness-actor": "aaron" }
+      headers: { cookie: login.cookie }
     }).then(r => r.json());
     const callanNotes = await fetch(`${server.url}/api/private-notes`, {
       headers: { "x-witness-actor": "callan" }
@@ -473,7 +557,7 @@ test("personal projections: actor session, themes, and private notes are actor-s
     assert.deepEqual(callanNotes.notes, []);
 
     const aaronWitnesses = await fetch(`${server.url}/api/witnesses`, {
-      headers: { "x-witness-actor": "aaron" }
+      headers: { cookie: login.cookie }
     }).then(r => r.json());
     const callanWitnesses = await fetch(`${server.url}/api/witnesses`, {
       headers: { "x-witness-actor": "callan" }
@@ -481,7 +565,7 @@ test("personal projections: actor session, themes, and private notes are actor-s
 
     assert.equal(aaronWitnesses.witnesses.some(w => w.process === "privateNote.create"), true);
     assert.equal(callanWitnesses.witnesses.some(w => w.process === "privateNote.create"), false);
-    assert.equal(world.allWitnesses().some(w => w.process === "session.login" && w.actor === "aaron"), true);
+    assert.equal(world.allWitnesses().some(w => w.process === "session.open" && w.actor === "aaron"), true);
   } finally {
     await server.close();
   }
@@ -690,17 +774,12 @@ test("logout emits session.logout witness", async () => {
   });
 
   try {
-    await fetch(`${server.url}/api/session`, {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
-      body: JSON.stringify({ actor: "aaron" })
-    }).then(r => r.json());
-
-    const response = await fetch(`${server.url}/api/session`, { method: "DELETE", headers: { "x-witness-actor": "aaron" } });
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const response = await fetch(`${server.url}/api/session`, { method: "DELETE", headers: { cookie: login.cookie } });
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.deepEqual(body, { ok: true });
-    assert.equal(world.allObservations().some(w => w.process === "session.logout" && w.actor === "aaron"), true);
+    assert.equal(world.allWitnesses().some(w => w.process === "session.logout" && w.actor === "aaron"), true);
   } finally {
     await server.close();
   }

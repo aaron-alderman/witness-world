@@ -444,9 +444,15 @@ function renderClientEngine(program) {
     if ('value' in el) el.value = value ?? '';
     else el.textContent = value ?? '';
   };
-  const currentActor = () => state.actor || localStorage.getItem('witness.actor') || '';
-  const actorHeaders = () => currentActor() ? { 'x-witness-actor': currentActor() } : {};
+  const currentActor = () => state.session?.actor || state.actor || '';
   const applyTheme = () => { document.body.dataset.actor = currentActor() || ''; };
+  const syncSession = session => {
+    const authenticated = Boolean(session?.authenticated);
+    state.session = authenticated ? session : { authenticated: false, identity: null, actor: null, label: null, perspective: null };
+    state.actor = state.session.actor || '';
+    applyTheme();
+  };
+  const requestOptions = options => ({ credentials: 'same-origin', ...(options || {}) });
   const scopeFor = extra => ({ state, event: state.event || {}, ...extra });
   const evaluateExpression = (expression, scope) => {
     const names = Object.keys(scope);
@@ -790,7 +796,7 @@ function renderClientEngine(program) {
     const openSourceFile = async (file, focusId = selectedId) => {
       if (!file) return;
       state.worldGraphSourceFocus = focusId || selectedId;
-      const res = await fetch('/api/source?file=' + encodeURIComponent(file), { headers: actorHeaders() });
+      const res = await fetch('/api/source?file=' + encodeURIComponent(file), requestOptions());
       state.worldGraphSource = await res.json().catch(() => ({ file, text: 'Failed to load source' }));
       state.worldGraphMode = 'source';
       state.worldGraphPrimitiveMode = false;
@@ -884,21 +890,33 @@ function renderClientEngine(program) {
     };
     draw();
   };
-  const initSession = () => { state.actor = localStorage.getItem('witness.actor') || ''; applyTheme(); };
-  const setSession = async ({ from, path = 'actor' }) => {
-    const actor = textAt(state[from] || {}, path);
-    if (actor) {
-      localStorage.setItem('witness.actor', actor);
-      state.actor = actor;
-      applyTheme();
-      await fetch('/api/session', { method: 'POST', headers: { 'content-type': 'application/json', ...actorHeaders() }, body: JSON.stringify({ actor }) }).catch(() => null);
-    }
+  const initSession = async () => {
+    const res = await fetch('/api/session', requestOptions());
+    const body = await res.json().catch(() => ({ authenticated: false }));
+    if (!res.ok) throw new Error(body?.error || 'session request failed');
+    syncSession(body);
+  };
+  const setSession = async ({ from }) => {
+    const credentials = state[from] || {};
+    const res = await fetch('/api/session', requestOptions({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        username: credentials.username || '',
+        password: credentials.password || ''
+      })
+    }));
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.error || 'session request failed');
+    syncSession(body);
   };
   const logout = async () => {
-    await fetch('/api/session', { method: 'DELETE', headers: actorHeaders() }).catch(() => null);
-    localStorage.removeItem('witness.actor');
-    state.actor = '';
-    applyTheme();
+    const res = await fetch('/api/session', requestOptions({ method: 'DELETE' }));
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body?.error || 'logout failed');
+    }
+    syncSession({ authenticated: false, identity: null, actor: null, label: null, perspective: null });
   };
   const formForWidget = widget => {
     const el = byWidget(widget);
@@ -1040,13 +1058,13 @@ function renderClientEngine(program) {
   }
   async function executeStep(step) {
     const p = interpolateValue(step.params || {}, scopeFor({}));
-    if (step.op === 'initSession') initSession(p);
+    if (step.op === 'initSession') await initSession(p);
     if (step.op === 'setSession') await setSession(p);
     if (step.op === 'logout') await logout(p);
     if (step.op === 'setText') setText(p.widget, p.text || '');
     if (step.op === 'setValue') setValue(p.widget, p.value ?? '');
     if (step.op === 'fetchJson') {
-      const res = await fetch(p.url, { headers: actorHeaders() });
+      const res = await fetch(p.url, requestOptions());
       state[p.into] = await res.json().catch(() => ({}));
       if (!res.ok && !p.allowFailure) throw new Error(state[p.into]?.error || 'request failed');
     }
@@ -1056,7 +1074,7 @@ function renderClientEngine(program) {
     if (step.op === 'reloadPage') window.location.reload();
     if (step.op === 'postJson' || step.op === 'patchJson' || step.op === 'deleteJson') {
       const method = step.op === 'postJson' ? (p.method || 'POST') : step.op === 'patchJson' ? (p.method || 'PATCH') : (p.method || 'DELETE');
-      const options = { method, headers: { 'content-type': 'application/json', ...actorHeaders() } };
+      const options = requestOptions({ method, headers: { 'content-type': 'application/json' } });
       if (step.op !== 'deleteJson') options.body = JSON.stringify(resolveBody(p));
       const res = await fetch(p.url, options);
       state[p.into || 'lastResponse'] = await res.json().catch(() => ({}));

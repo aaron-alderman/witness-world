@@ -12,6 +12,24 @@ capabilities = ["http.serve", "fs.json.read", "fs.json.write"]
 actor = "frontendHost"
 capabilities = ["dom.render", "http.fetch"]
 
+[[identity]]
+context = "common"
+id = "identity.aaron"
+actor = "aaron"
+label = "Aaron"
+username = "aaron"
+password = "aaron"
+homePerspective = "aaron:personal"
+
+[[identity]]
+context = "common"
+id = "identity.callan"
+actor = "callan"
+label = "Callan"
+username = "callan"
+password = "callan"
+homePerspective = "callan:personal"
+
 [[trait]]
 actor = "system"
 id = "textual"
