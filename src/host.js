@@ -6,7 +6,7 @@ import { thing, relation } from "./kernel.js";
 import { todoState, privateNotesFor, publicWitnessesFor } from "./projections.js";
 import { actorRequired, runGates, textRequired } from "./gates.js";
 import { thingId } from "./ids.js";
-import { witnessRelations } from "./modules.js";
+import { witnessRelations, moduleProjectors } from "./modules.js";
 import { defineWidget, attachWidget, activateWidgetVersion, renderWidgetPage } from "./widgets.js";
 import { worldGraphProjection, astNodesProjection } from "./world-graph.js";
 import { canvasProcessHandlers, declareCanvasRoutes } from "./canvas-processes.js";
@@ -104,6 +104,28 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
   }, 250);
   sseWatcher.unref();
 
+  declareCanvasRoutes(world, { actor });
+  const routeHandlers = createRouteHandlers({
+    world,
+    actor,
+    backendHost,
+    frontendHost,
+    rootWidget,
+    frontendProgram,
+    worldRootWidget,
+    worldFrontendProgram,
+    actors,
+    logger,
+    projectTodos,
+    writeTodoProjectionCache,
+    projectPrivateNotes,
+    writePrivateNotesProjectionCache
+  });
+  const routeTable = world.project(moduleProjectors.routes).map(route => ({
+    ...route,
+    matcher: compileRouteMatcher(route.path)
+  }));
+
   const server = http.createServer(async (req, res) => {
     const startedAt = Date.now();
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -112,32 +134,6 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
       logger.info("http.request.finish", { requestId, method: req.method, url: req.url, statusCode: res.statusCode, durationMs: Date.now() - startedAt });
     });
     try {
-      if (req.method === "GET" && req.url === "/") {
-        world.observe({
-          process: "frontend.render",
-          actor: frontendHost,
-          claims: [relation(frontendHost, "rendered", "todoAppView")],
-          body: { route: "/" }
-        });
-        send(res, 200, "text/html", renderWidgetPage(world, { actor: frontendHost, rootWidget, frontendProgram, appConfig: { actors, page: "home", excludeWidgetRoles: ["world-graph-body"] } }));
-        return;
-      }
-
-      if (req.method === "GET" && req.url === "/world") {
-        if (!worldRootWidget) {
-          sendJson(res, 404, { error: "world graph page not configured" });
-          return;
-        }
-        world.observe({
-          process: "frontend.renderWorldPage",
-          actor: frontendHost,
-          claims: [relation(frontendHost, "rendered", "worldGraphView")],
-          body: { route: "/world" }
-        });
-        send(res, 200, "text/html", renderWidgetPage(world, { actor: frontendHost, rootWidget: worldRootWidget, frontendProgram: worldFrontendProgram, appConfig: { actors, page: "world" } }));
-        return;
-      }
-
       if (req.method === "GET" && req.url?.startsWith("/canvas-lib/")) {
         const name = decodeURIComponent(req.url.slice("/canvas-lib/".length));
         const resolved = canvasLibFiles.get(name);
@@ -166,387 +162,33 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
         });
         return;
       }
-
-      if (req.method === "GET" && req.url === "/canvas") {
-        world.observe({
-          process: "frontend.renderCanvasPage",
-          actor: frontendHost,
-          claims: [relation(frontendHost, "rendered", "canvasView")],
-          body: { route: "/canvas" }
-        });
-        send(res, 200, "text/html", renderCanvasPage({ actors }));
+      const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
+      const matched = matchDeclaredRoute(routeTable, req.method || "GET", requestUrl.pathname);
+      if (!matched) {
+        sendJson(res, 404, { error: "not found" });
         return;
       }
-
-      if (req.method === "GET" && req.url === "/api/canvas/perspectives") {
-        const perspectives = perspectivesProjection(publicWitnessesFor(world.allWitnesses(), actorFromRequest(req)));
+      const handler = matched.route.handler ? routeHandlers[matched.route.handler] : null;
+      if (!handler) {
         world.observe({
-          process: "backend.readPerspectives",
+          process: "backend.route.failed",
           actor: backendHost,
-          claims: [relation(backendHost, "projected", "canvasView")],
-          body: { count: perspectives.length }
-        });
-        sendJson(res, 200, { perspectives });
-        return;
-      }
-
-      if (req.method === "GET" && req.url?.startsWith("/api/canvas?")) {
-        const url = new URL(req.url, "http://127.0.0.1");
-        const perspective = url.searchParams.get("perspective") || "";
-        const canvas = canvasProjection(publicWitnessesFor(world.allWitnesses(), actorFromRequest(req)), perspective);
-        if (!canvas) {
-          world.observe({ process: "backend.readCanvas.failed", actor: backendHost, claims: [], body: { perspective, reason: "unknown perspective" } });
-          sendJson(res, 404, { error: "unknown perspective", perspective });
-          return;
-        }
-        world.observe({
-          process: "backend.readCanvas",
-          actor: backendHost,
-          claims: [relation(backendHost, "projected", "canvasView")],
-          body: { perspective, instances: canvas.instances.length, connectors: canvas.connectors.length }
-        });
-        sendJson(res, 200, { canvas });
-        return;
-      }
-
-      if (req.method === "POST" && req.url === "/api/canvas/process") {
-        const requestActor = actorFromRequest(req);
-        if (!requestActor) {
-          world.emit({ process: "canvas.process.failed", actor: backendHost, claims: [], body: { reason: "no actor" } });
-          sendJson(res, 401, { error: "choose a perspective first" });
-          return;
-        }
-        const body = await readJson(req);
-        const handler = canvasProcessHandlers[body.process];
-        if (!handler) {
-          world.emit({ process: "canvas.process.failed", actor: requestActor, claims: [], body: { process: body.process, reason: "unknown canvas process" } });
-          sendJson(res, 400, { error: "unknown canvas process", process: body.process });
-          return;
-        }
-        const witness = handler(world, { actor: requestActor, ...(body.params ?? {}) });
-        if (witness.process.endsWith(".failed") || witness.process.endsWith(".blocked")) {
-          sendJson(res, 400, { error: witness.body.reason ?? "rejected", witness });
-          return;
-        }
-        sendJson(res, 200, { ok: true, witness });
-        return;
-      }
-
-      if (req.method === "GET" && req.url === "/api/session") {
-        sendJson(res, 200, { actors });
-        return;
-      }
-
-      if (req.method === "POST" && req.url === "/api/session") {
-        const body = await readJson(req);
-        const selected = actors.find(a => a.id === body.actor);
-        if (!selected) {
-          world.emit({ process: "session.login.failed", actor: backendHost, claims: [], body: { actor: body.actor, reason: "unknown actor" } });
-          sendJson(res, 400, { error: "unknown actor" });
-          return;
-        }
-        world.emit({ process: "session.login", actor: selected.id, claims: [relation(selected.id, "openedPerspective", `${selected.id}:personal`)], body: { actor: selected.id } });
-        sendJson(res, 200, { actor: selected });
-        return;
-      }
-
-      if (req.method === "DELETE" && req.url === "/api/session") {
-        const requestActor = actorFromRequest(req);
-        world.observe({ process: "session.logout", actor: requestActor || backendHost, claims: [], body: { actor: requestActor } });
-        sendJson(res, 200, { ok: true });
-        return;
-      }
-
-      if (req.method === "GET" && req.url === "/api/private-notes") {
-        const requestActor = actorFromRequest(req);
-        if (!requestActor) {
-          sendJson(res, 200, { notes: [] });
-          return;
-        }
-        const notes = projectPrivateNotes(requestActor);
-        world.observe({ process: "privateNotes.read", actor: requestActor, claims: [relation(requestActor, "read", `${requestActor}:privateNotes`)], body: { count: notes.length } });
-        sendJson(res, 200, { notes });
-        return;
-      }
-
-      if (req.method === "POST" && req.url === "/api/private-notes") {
-        const requestActor = actorFromRequest(req);
-        if (!requestActor) {
-          world.emit({ process: "privateNote.create.failed", actor: backendHost, claims: [], body: { reason: "no actor" } });
-          sendJson(res, 401, { error: "choose a perspective first" });
-          return;
-        }
-        const body = await readJson(req);
-        const text = typeof body.text === "string" ? body.text.trim() : "";
-        if (!text) {
-          world.emit({ process: "privateNote.create.failed", actor: requestActor, claims: [], body: { reason: "text required" } });
-          sendJson(res, 400, { error: "text required" });
-          return;
-        }
-        const gate = runGates(world, { actor: requestActor, process: "privateNote.create", gates: [actorRequired, textRequired("text")], context: { actor: requestActor, text } });
-        if (!gate.ok) {
-          sendJson(res, 400, { error: gate.reason });
-          return;
-        }
-        const note = { id: thingId("private-note", { actor: requestActor, text, ordinal: world.allWitnesses().length }), actor: requestActor, text };
-        world.emit({ process: "privateNote.create", actor: requestActor, claims: [thing(note.id), relation(note.id, "privateTo", requestActor)], body: { id: note.id, actor: requestActor, note } });
-        await writePrivateNotesProjectionCache();
-        sendJson(res, 201, { note });
-        return;
-      }
-
-      if (req.method === "GET" && req.url === "/api/todos") {
-        const todos = projectTodos();
-        world.observe({
-          process: "backend.readTodos",
-          actor: backendHost,
-          claims: [relation(backendHost, "read", "todoStore")],
-          body: { count: todos.length }
-        });
-        sendJson(res, 200, { todos });
-        return;
-      }
-
-      if (req.method === "POST" && req.url === "/api/todos") {
-        const body = await readJson(req);
-        const title = typeof body.title === "string" ? body.title.trim() : "";
-
-        if (!title) {
-          world.emit({
-            process: "todo.create.failed",
-            actor: backendHost,
-            claims: [],
-            body: { reason: "title required" }
-          });
-          sendJson(res, 400, { error: "title required" });
-          return;
-        }
-
-        const gate = runGates(world, { actor: actorFromRequest(req) || backendHost, process: "todo.create", gates: [textRequired("title")], context: { title } });
-        if (!gate.ok) {
-          sendJson(res, 400, { error: gate.reason });
-          return;
-        }
-
-        const todo = { id: thingId("todo", { title, ordinal: world.allWitnesses().length }), title, done: false };
-
-        world.emit({
-          process: "todo.create",
-          actor: actorFromRequest(req) || backendHost,
-          claims: [
-            thing(todo.id),
-            relation("todoStore", "contains", todo.id),
-            relation(todo.id, "hasTitle", title)
-          ],
-          body: { todo }
-        });
-
-        await writeTodoProjectionCache();
-        sendJson(res, 201, { todo });
-        return;
-      }
-
-
-      if (req.method === "PATCH" && req.url?.startsWith("/api/todos/")) {
-        const id = decodeURIComponent(req.url.slice("/api/todos/".length));
-        const body = await readJson(req);
-        const todos = projectTodos();
-        const todo = todos.find(t => t.id === id);
-
-        if (!todo) {
-          world.emit({ process: "todo.update.failed", actor: backendHost, claims: [], body: { id, reason: "not found" } });
-          sendJson(res, 404, { error: "not found" });
-          return;
-        }
-
-        if ("done" in body) todo.done = body.done === true || body.done === "true";
-        if (typeof body.title === "string") todo.title = body.title.trim();
-        world.emit({
-          process: "todo.update",
-          actor: actorFromRequest(req) || backendHost,
-          claims: [relation(todo.id, "hasDone", String(todo.done))],
-          body: { todo }
-        });
-
-        await writeTodoProjectionCache();
-        sendJson(res, 200, { todo });
-        return;
-      }
-
-      if (req.method === "DELETE" && req.url?.startsWith("/api/todos/")) {
-        const id = decodeURIComponent(req.url.slice("/api/todos/".length));
-        const todos = projectTodos();
-        const next = todos.filter(t => t.id !== id);
-
-        if (next.length === todos.length) {
-          world.emit({ process: "todo.delete.failed", actor: backendHost, claims: [], body: { id, reason: "not found" } });
-          sendJson(res, 404, { error: "not found" });
-          return;
-        }
-
-        world.emit({
-          process: "todo.delete",
-          actor: actorFromRequest(req) || backendHost,
           claims: [],
-          body: { id }
+          body: { route: matched.route.id, method: matched.route.method, path: matched.route.path, reason: "no handler" }
         });
-
-        await writeTodoProjectionCache();
-        sendJson(res, 200, { ok: true, id });
+        sendJson(res, 500, { error: "route handler not configured", route: matched.route.id });
         return;
       }
-
-      const activationMatch = req.url?.match(/^\/api\/widget-versions\/([^/]+)\/activate$/);
-      if (req.method === "POST" && activationMatch) {
-        const requestActor = actorFromRequest(req);
-        if (!requestActor) {
-          world.emit({ process: "activateWidgetVersion.failed", actor: backendHost, claims: [], body: { reason: "no actor" } });
-          sendJson(res, 401, { error: "choose a perspective first" });
-          return;
-        }
-        const soul = decodeURIComponent(activationMatch[1]);
-        const body = await readJson(req);
-        const version = typeof body.version === "string" ? body.version : null;
-        const w = activateWidgetVersion(world, { actor: requestActor, soul, version });
-        if (w.process.endsWith(".failed")) {
-          sendJson(res, 400, { error: "unknown widget version", witness: w });
-          return;
-        }
-        sendJson(res, 200, { ok: true, soul, version, witness: w });
-        return;
-      }
-
-      if (req.method === "POST" && req.url === "/api/widgets") {
-        const requestActor = actorFromRequest(req);
-        if (!requestActor) {
-          world.emit({ process: "widget.define.failed", actor: backendHost, claims: [], body: { reason: "no actor" } });
-          sendJson(res, 401, { error: "choose a perspective first" });
-          return;
-        }
-        const body = await readJson(req);
-        const typeModel = typeModelProjection(world.allWitnesses());
-        const validatedInput = validateProcessInput(typeModel, "widget.define", body);
-        if (!validatedInput.ok) {
-          const witness = world.emit({
-            process: "widget.define.blocked",
-            actor: requestActor,
-            claims: [],
-            body: {
-              gate: "type.compatibility",
-              failures: validatedInput.failures
-            }
-          });
-          sendJson(res, 400, { error: "typed validation failed", witness });
-          return;
-        }
-        const kind = validatedInput.value.kind;
-        const text = validatedInput.value.text.trim();
-        const parent = typeof validatedInput.value.parent === "string" && validatedInput.value.parent.trim() ? validatedInput.value.parent.trim() : rootWidget;
-        const order = Number.isFinite(Number(validatedInput.value.order)) ? Number(validatedInput.value.order) : 999;
-        const widget = {
-          id: thingId("widget", { actor: requestActor, parent, kind, text, ordinal: world.allWitnesses().length }),
-          kind,
-          parent,
-          text,
-          order
-        };
-        const validatedOutput = validateProcessOutput(typeModel, "widget.define", widget);
-        if (!validatedOutput.ok) {
-          const witness = world.emit({
-            process: "widget.define.failed",
-            actor: requestActor,
-            claims: [],
-            body: {
-              gate: "type.compatibility",
-              failures: validatedOutput.failures
-            }
-          });
-          sendJson(res, 500, { error: "typed output validation failed", witness });
-          return;
-        }
-        defineWidget(world, { actor: requestActor, id: widget.id, kind, props: { text, class: "user-widget" }, owner: requestActor });
-        attachWidget(world, { actor: requestActor, parent, child: widget.id, order });
-        const witness = world.emit({
-          process: "widget.define",
-          actor: requestActor,
-          claims: [relation(requestActor, "editedProjection", parent)],
-          body: { input: validatedInput.value, widget: validatedOutput.value }
-        });
-        sendJson(res, 201, { widget: validatedOutput.value, witness });
-        return;
-      }
-
-      if (req.method === "GET" && req.url === "/api/simulate-network-error") {
-        const requestActor = actorFromRequest(req) || frontendHost;
-        world.emit({
-          process: "network.simulated.failed",
-          actor: requestActor,
-          claims: [relation(requestActor, "attempted", "simulatedNetworkRequest")],
-          body: { reason: "simulated network error", status: 503 }
-        });
-        sendJson(res, 503, { error: "simulated network error" });
-        return;
-      }
-
-      if (req.method === "GET" && (req.url === "/api/witnesses" || req.url?.startsWith("/api/witnesses?"))) {
-        const url = new URL(req.url, "http://127.0.0.1");
-        const rawOffset = url.searchParams.get("offset");
-        const visible = publicWitnessesFor(world.allWitnesses(), actorFromRequest(req));
-        if (rawOffset === null) {
-          world.observe({
-            process: "backend.readWitnesses",
-            actor: backendHost,
-            claims: [relation(backendHost, "read", "witnessLog")],
-            body: { count: world.allWitnesses().length }
-          });
-          sendJson(res, 200, { witnesses: visible, offset: 0, total: visible.length });
-          return;
-        }
-        // Incremental polls are NOT witnessed: the SSE-driven refetch loop would otherwise
-        // grow the log on every read, which re-triggers the SSE signal forever.
-        const offset = Math.max(0, Math.min(visible.length, Number(rawOffset) || 0));
-        sendJson(res, 200, { witnesses: visible.slice(offset), offset, total: visible.length });
-        return;
-      }
-
-      if (req.method === "GET" && req.url === "/api/world-graph") {
-        world.observe({
-          process: "backend.readWorldGraph",
-          actor: backendHost,
-          claims: [relation(backendHost, "projected", "worldGraph")],
-          body: { count: world.allWitnesses().length }
-        });
-        const visible = publicWitnessesFor(world.allWitnesses(), actorFromRequest(req));
-        const graph = worldGraphProjection(visible);
-        const ast = astNodesProjection(visible);
-        const astNodes = {
-          byFile: Object.fromEntries([...ast.byFile.entries()].map(([f, nodes]) => [f, nodes])),
-          byTarget: Object.fromEntries([...ast.byTarget.entries()].map(([t, nodes]) => [t, nodes]))
-        };
-        logger.info("worldGraph.projected", { requestId, witnesses: visible.length, nodes: graph.nodes.length, edges: graph.edges.length });
-        sendJson(res, 200, { graph, astNodes });
-        return;
-      }
-
-      if (req.method === "GET" && req.url?.startsWith("/api/source?")) {
-        const url = new URL(req.url, "http://127.0.0.1");
-        const requested = url.searchParams.get("file") || "";
-        const allowed = new Set(world.allWitnesses()
-          .filter(w => w.process === "dsl.source.annotate" && typeof w.body?.file === "string")
-          .map(w => path.resolve(w.body.file)));
-        const resolved = path.resolve(requested);
-        if (!allowed.has(resolved)) {
-          world.observe({ process: "backend.readSource.failed", actor: backendHost, claims: [], body: { file: requested, reason: "source file not in witnessed imports" } });
-          sendJson(res, 404, { error: "source file not available", file: requested });
-          return;
-        }
-        const text = await fs.readFile(resolved, "utf8");
-        world.observe({ process: "backend.readSource", actor: backendHost, claims: [relation(backendHost, "read", `source:${resolved}`)], body: { file: resolved, bytes: text.length } });
-        sendJson(res, 200, { file: resolved, text });
-        return;
-      }
-
-      sendJson(res, 404, { error: "not found" });
+      await handler({
+        req,
+        res,
+        requestId,
+        requestUrl,
+        route: matched.route,
+        params: matched.params,
+        requestActor: actorFromRequest(req)
+      });
+      return;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logger.error("http.request.failed", { requestId, method: req.method, url: req.url, actor: actorFromRequest(req), durationMs: Date.now() - startedAt, error: err });
@@ -559,8 +201,6 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
       sendJson(res, 500, { error: "internal error", requestId });
     }
   });
-
-  declareCanvasRoutes(world, { actor });
 
   await new Promise(resolve => server.listen(port, "127.0.0.1", resolve));
   const address = server.address();
@@ -594,6 +234,422 @@ export async function startTodoServer(world, { actor, backendHost, frontendHost,
       return new Promise(resolve => server.close(resolve));
     }
   };
+}
+
+function createRouteHandlers({
+  world,
+  backendHost,
+  frontendHost,
+  rootWidget,
+  frontendProgram,
+  worldRootWidget,
+  worldFrontendProgram,
+  actors,
+  logger,
+  projectTodos,
+  writeTodoProjectionCache,
+  projectPrivateNotes,
+  writePrivateNotesProjectionCache
+}) {
+  const visibleWitnesses = requestActor => publicWitnessesFor(world.allWitnesses(), requestActor);
+
+  return {
+    "page.home": async ({ res, route }) => {
+      const params = route.params ?? {};
+      const selectedRootWidget = params.rootWidget ?? rootWidget;
+      const selectedProgram = params.frontendProgram ?? frontendProgram;
+      const page = params.page ?? "home";
+      const excludeWidgetRoles = Array.isArray(params.excludeWidgetRoles) ? params.excludeWidgetRoles : ["world-graph-body"];
+      world.observe({
+        process: "frontend.render",
+        actor: frontendHost,
+        claims: [relation(frontendHost, "rendered", "todoAppView")],
+        body: { route: route.path }
+      });
+      send(res, 200, "text/html", renderWidgetPage(world, {
+        actor: frontendHost,
+        rootWidget: selectedRootWidget,
+        frontendProgram: selectedProgram,
+        appConfig: { actors, page, excludeWidgetRoles }
+      }));
+    },
+
+    "page.world": async ({ res, route }) => {
+      const params = route.params ?? {};
+      const selectedRootWidget = params.rootWidget ?? worldRootWidget;
+      const selectedProgram = params.frontendProgram ?? worldFrontendProgram;
+      if (!selectedRootWidget) {
+        sendJson(res, 404, { error: "world graph page not configured" });
+        return;
+      }
+      world.observe({
+        process: "frontend.renderWorldPage",
+        actor: frontendHost,
+        claims: [relation(frontendHost, "rendered", "worldGraphView")],
+        body: { route: route.path }
+      });
+      send(res, 200, "text/html", renderWidgetPage(world, {
+        actor: frontendHost,
+        rootWidget: selectedRootWidget,
+        frontendProgram: selectedProgram,
+        appConfig: { actors, page: params.page ?? "world" }
+      }));
+    },
+
+    "page.canvas": async ({ res, route }) => {
+      world.observe({
+        process: "frontend.renderCanvasPage",
+        actor: frontendHost,
+        claims: [relation(frontendHost, "rendered", "canvasView")],
+        body: { route: route.path }
+      });
+      send(res, 200, "text/html", renderCanvasPage({ actors }));
+    },
+
+    "session.read": async ({ res }) => {
+      sendJson(res, 200, { actors });
+    },
+
+    "session.open": async ({ req, res }) => {
+      const body = await readJson(req);
+      const selected = actors.find(a => a.id === body.actor);
+      if (!selected) {
+        world.emit({ process: "session.login.failed", actor: backendHost, claims: [], body: { actor: body.actor, reason: "unknown actor" } });
+        sendJson(res, 400, { error: "unknown actor" });
+        return;
+      }
+      world.emit({ process: "session.login", actor: selected.id, claims: [relation(selected.id, "openedPerspective", `${selected.id}:personal`)], body: { actor: selected.id } });
+      sendJson(res, 200, { actor: selected });
+    },
+
+    "session.logout": async ({ res, requestActor }) => {
+      world.observe({ process: "session.logout", actor: requestActor || backendHost, claims: [], body: { actor: requestActor } });
+      sendJson(res, 200, { ok: true });
+    },
+
+    "privateNotes.list": async ({ res, requestActor }) => {
+      if (!requestActor) {
+        sendJson(res, 200, { notes: [] });
+        return;
+      }
+      const notes = projectPrivateNotes(requestActor);
+      world.observe({ process: "privateNotes.read", actor: requestActor, claims: [relation(requestActor, "read", `${requestActor}:privateNotes`)], body: { count: notes.length } });
+      sendJson(res, 200, { notes });
+    },
+
+    "privateNotes.create": async ({ req, res, requestActor }) => {
+      if (!requestActor) {
+        world.emit({ process: "privateNote.create.failed", actor: backendHost, claims: [], body: { reason: "no actor" } });
+        sendJson(res, 401, { error: "choose a perspective first" });
+        return;
+      }
+      const body = await readJson(req);
+      const text = typeof body.text === "string" ? body.text.trim() : "";
+      if (!text) {
+        world.emit({ process: "privateNote.create.failed", actor: requestActor, claims: [], body: { reason: "text required" } });
+        sendJson(res, 400, { error: "text required" });
+        return;
+      }
+      const gate = runGates(world, { actor: requestActor, process: "privateNote.create", gates: [actorRequired, textRequired("text")], context: { actor: requestActor, text } });
+      if (!gate.ok) {
+        sendJson(res, 400, { error: gate.reason });
+        return;
+      }
+      const note = { id: thingId("private-note", { actor: requestActor, text, ordinal: world.allWitnesses().length }), actor: requestActor, text };
+      world.emit({ process: "privateNote.create", actor: requestActor, claims: [thing(note.id), relation(note.id, "privateTo", requestActor)], body: { id: note.id, actor: requestActor, note } });
+      await writePrivateNotesProjectionCache();
+      sendJson(res, 201, { note });
+    },
+
+    "todos.list": async ({ res }) => {
+      const todos = projectTodos();
+      world.observe({
+        process: "backend.readTodos",
+        actor: backendHost,
+        claims: [relation(backendHost, "read", "todoStore")],
+        body: { count: todos.length }
+      });
+      sendJson(res, 200, { todos });
+    },
+
+    "todos.create": async ({ req, res, requestActor }) => {
+      const body = await readJson(req);
+      const title = typeof body.title === "string" ? body.title.trim() : "";
+      if (!title) {
+        world.emit({ process: "todo.create.failed", actor: backendHost, claims: [], body: { reason: "title required" } });
+        sendJson(res, 400, { error: "title required" });
+        return;
+      }
+      const gate = runGates(world, { actor: requestActor || backendHost, process: "todo.create", gates: [textRequired("title")], context: { title } });
+      if (!gate.ok) {
+        sendJson(res, 400, { error: gate.reason });
+        return;
+      }
+      const todo = { id: thingId("todo", { title, ordinal: world.allWitnesses().length }), title, done: false };
+      world.emit({
+        process: "todo.create",
+        actor: requestActor || backendHost,
+        claims: [thing(todo.id), relation("todoStore", "contains", todo.id), relation(todo.id, "hasTitle", title)],
+        body: { todo }
+      });
+      await writeTodoProjectionCache();
+      sendJson(res, 201, { todo });
+    },
+
+    "todos.update": async ({ req, res, params, requestActor }) => {
+      const id = params.id || "";
+      const body = await readJson(req);
+      const todos = projectTodos();
+      const todo = todos.find(item => item.id === id);
+      if (!todo) {
+        world.emit({ process: "todo.update.failed", actor: backendHost, claims: [], body: { id, reason: "not found" } });
+        sendJson(res, 404, { error: "not found" });
+        return;
+      }
+      if ("done" in body) todo.done = body.done === true || body.done === "true";
+      if (typeof body.title === "string") todo.title = body.title.trim();
+      world.emit({
+        process: "todo.update",
+        actor: requestActor || backendHost,
+        claims: [relation(todo.id, "hasDone", String(todo.done))],
+        body: { todo }
+      });
+      await writeTodoProjectionCache();
+      sendJson(res, 200, { todo });
+    },
+
+    "todos.delete": async ({ res, params, requestActor }) => {
+      const id = params.id || "";
+      const todos = projectTodos();
+      const next = todos.filter(item => item.id !== id);
+      if (next.length === todos.length) {
+        world.emit({ process: "todo.delete.failed", actor: backendHost, claims: [], body: { id, reason: "not found" } });
+        sendJson(res, 404, { error: "not found" });
+        return;
+      }
+      world.emit({
+        process: "todo.delete",
+        actor: requestActor || backendHost,
+        claims: [],
+        body: { id }
+      });
+      await writeTodoProjectionCache();
+      sendJson(res, 200, { ok: true, id });
+    },
+
+    "widgetVersions.activate": async ({ req, res, params, requestActor }) => {
+      if (!requestActor) {
+        world.emit({ process: "activateWidgetVersion.failed", actor: backendHost, claims: [], body: { reason: "no actor" } });
+        sendJson(res, 401, { error: "choose a perspective first" });
+        return;
+      }
+      const body = await readJson(req);
+      const version = typeof body.version === "string" ? body.version : null;
+      const witness = activateWidgetVersion(world, { actor: requestActor, soul: params.soul || "", version });
+      if (witness.process.endsWith(".failed")) {
+        sendJson(res, 400, { error: "unknown widget version", witness });
+        return;
+      }
+      sendJson(res, 200, { ok: true, soul: params.soul || "", version, witness });
+    },
+
+    "widgets.create": async ({ req, res, requestActor, route }) => {
+      if (!requestActor) {
+        world.emit({ process: "widget.define.failed", actor: backendHost, claims: [], body: { reason: "no actor" } });
+        sendJson(res, 401, { error: "choose a perspective first" });
+        return;
+      }
+      const body = await readJson(req);
+      const typeModel = typeModelProjection(world.allWitnesses());
+      const validatedInput = validateProcessInput(typeModel, "widget.define", body);
+      if (!validatedInput.ok) {
+        const witness = world.emit({
+          process: "widget.define.blocked",
+          actor: requestActor,
+          claims: [],
+          body: { gate: "type.compatibility", failures: validatedInput.failures }
+        });
+        sendJson(res, 400, { error: "typed validation failed", witness });
+        return;
+      }
+      const kind = validatedInput.value.kind;
+      const text = validatedInput.value.text.trim();
+      const parent = typeof validatedInput.value.parent === "string" && validatedInput.value.parent.trim()
+        ? validatedInput.value.parent.trim()
+        : (route.params?.rootWidget ?? rootWidget);
+      const order = Number.isFinite(Number(validatedInput.value.order)) ? Number(validatedInput.value.order) : 999;
+      const widget = {
+        id: thingId("widget", { actor: requestActor, parent, kind, text, ordinal: world.allWitnesses().length }),
+        kind,
+        parent,
+        text,
+        order
+      };
+      const validatedOutput = validateProcessOutput(typeModel, "widget.define", widget);
+      if (!validatedOutput.ok) {
+        const witness = world.emit({
+          process: "widget.define.failed",
+          actor: requestActor,
+          claims: [],
+          body: { gate: "type.compatibility", failures: validatedOutput.failures }
+        });
+        sendJson(res, 500, { error: "typed output validation failed", witness });
+        return;
+      }
+      defineWidget(world, { actor: requestActor, id: widget.id, kind, props: { text, class: "user-widget" }, owner: requestActor });
+      attachWidget(world, { actor: requestActor, parent, child: widget.id, order });
+      const witness = world.emit({
+        process: "widget.define",
+        actor: requestActor,
+        claims: [relation(requestActor, "editedProjection", parent)],
+        body: { input: validatedInput.value, widget: validatedOutput.value }
+      });
+      sendJson(res, 201, { widget: validatedOutput.value, witness });
+    },
+
+    "network.simulateError": async ({ res, requestActor }) => {
+      const actor = requestActor || frontendHost;
+      world.emit({
+        process: "network.simulated.failed",
+        actor,
+        claims: [relation(actor, "attempted", "simulatedNetworkRequest")],
+        body: { reason: "simulated network error", status: 503 }
+      });
+      sendJson(res, 503, { error: "simulated network error" });
+    },
+
+    "witnesses.list": async ({ res, requestUrl, requestActor }) => {
+      const rawOffset = requestUrl.searchParams.get("offset");
+      const visible = visibleWitnesses(requestActor).map(witness => ({
+        ...witness,
+        bodyJson: JSON.stringify(witness.body ?? {})
+      }));
+      if (rawOffset === null) {
+        world.observe({
+          process: "backend.readWitnesses",
+          actor: backendHost,
+          claims: [relation(backendHost, "read", "witnessLog")],
+          body: { count: world.allWitnesses().length }
+        });
+        sendJson(res, 200, { witnesses: visible, offset: 0, total: visible.length });
+        return;
+      }
+      const offset = Math.max(0, Math.min(visible.length, Number(rawOffset) || 0));
+      sendJson(res, 200, { witnesses: visible.slice(offset), offset, total: visible.length });
+    },
+
+    "worldGraph.read": async ({ res, requestActor, requestId }) => {
+      world.observe({
+        process: "backend.readWorldGraph",
+        actor: backendHost,
+        claims: [relation(backendHost, "projected", "worldGraph")],
+        body: { count: world.allWitnesses().length }
+      });
+      const visible = visibleWitnesses(requestActor);
+      const graph = worldGraphProjection(visible);
+      const ast = astNodesProjection(visible);
+      const astNodes = {
+        byFile: Object.fromEntries([...ast.byFile.entries()].map(([file, nodes]) => [file, nodes])),
+        byTarget: Object.fromEntries([...ast.byTarget.entries()].map(([target, nodes]) => [target, nodes]))
+      };
+      logger.info("worldGraph.projected", { requestId, witnesses: visible.length, nodes: graph.nodes.length, edges: graph.edges.length });
+      sendJson(res, 200, { graph, astNodes });
+    },
+
+    "source.read": async ({ res, requestUrl }) => {
+      const requested = requestUrl.searchParams.get("file") || "";
+      const allowed = new Set(world.allWitnesses()
+        .filter(w => w.process === "dsl.source.annotate" && typeof w.body?.file === "string")
+        .map(w => path.resolve(w.body.file)));
+      const resolved = path.resolve(requested);
+      if (!allowed.has(resolved)) {
+        world.observe({ process: "backend.readSource.failed", actor: backendHost, claims: [], body: { file: requested, reason: "source file not in witnessed imports" } });
+        sendJson(res, 404, { error: "source file not available", file: requested });
+        return;
+      }
+      const text = await fs.readFile(resolved, "utf8");
+      world.observe({ process: "backend.readSource", actor: backendHost, claims: [relation(backendHost, "read", `source:${resolved}`)], body: { file: resolved, bytes: text.length } });
+      sendJson(res, 200, { file: resolved, text });
+    },
+
+    "canvas.perspectives.list": async ({ res, requestActor }) => {
+      const perspectives = perspectivesProjection(visibleWitnesses(requestActor));
+      world.observe({
+        process: "backend.readPerspectives",
+        actor: backendHost,
+        claims: [relation(backendHost, "projected", "canvasView")],
+        body: { count: perspectives.length }
+      });
+      sendJson(res, 200, { perspectives });
+    },
+
+    "canvas.read": async ({ res, requestUrl, requestActor }) => {
+      const perspective = requestUrl.searchParams.get("perspective") || "";
+      const canvas = canvasProjection(visibleWitnesses(requestActor), perspective);
+      if (!canvas) {
+        world.observe({ process: "backend.readCanvas.failed", actor: backendHost, claims: [], body: { perspective, reason: "unknown perspective" } });
+        sendJson(res, 404, { error: "unknown perspective", perspective });
+        return;
+      }
+      world.observe({
+        process: "backend.readCanvas",
+        actor: backendHost,
+        claims: [relation(backendHost, "projected", "canvasView")],
+        body: { perspective, instances: canvas.instances.length, connectors: canvas.connectors.length }
+      });
+      sendJson(res, 200, { canvas });
+    },
+
+    "canvas.process": async ({ req, res, requestActor }) => {
+      if (!requestActor) {
+        world.emit({ process: "canvas.process.failed", actor: backendHost, claims: [], body: { reason: "no actor" } });
+        sendJson(res, 401, { error: "choose a perspective first" });
+        return;
+      }
+      const body = await readJson(req);
+      const handler = canvasProcessHandlers[body.process];
+      if (!handler) {
+        world.emit({ process: "canvas.process.failed", actor: requestActor, claims: [], body: { process: body.process, reason: "unknown canvas process" } });
+        sendJson(res, 400, { error: "unknown canvas process", process: body.process });
+        return;
+      }
+      const witness = handler(world, { actor: requestActor, ...(body.params ?? {}) });
+      if (witness.process.endsWith(".failed") || witness.process.endsWith(".blocked")) {
+        sendJson(res, 400, { error: witness.body.reason ?? "rejected", witness });
+        return;
+      }
+      sendJson(res, 200, { ok: true, witness });
+    }
+  };
+}
+
+function compileRouteMatcher(routePath) {
+  const parts = String(routePath || "/").split("/").filter(Boolean);
+  return pathname => {
+    const targetParts = String(pathname || "/").split("/").filter(Boolean);
+    if (parts.length !== targetParts.length) return null;
+    const params = Object.create(null);
+    for (let i = 0; i < parts.length; i++) {
+      const expected = parts[i];
+      const actual = targetParts[i];
+      if (expected.startsWith(":")) {
+        params[expected.slice(1)] = decodeURIComponent(actual);
+        continue;
+      }
+      if (expected !== actual) return null;
+    }
+    return params;
+  };
+}
+
+function matchDeclaredRoute(routeTable, method, pathname) {
+  const targetMethod = String(method || "GET").toUpperCase();
+  for (const route of routeTable) {
+    if (route.method !== targetMethod) continue;
+    const params = route.matcher(pathname);
+    if (params) return { route, params };
+  }
+  return null;
 }
 
 function actorFromRequest(req) {

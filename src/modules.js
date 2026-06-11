@@ -70,7 +70,7 @@ export function createServerRunner(world, { actor, id, owner = actor }) {
   });
 }
 
-export function defineRoute(world, { actor, id, path, serves, owner = actor }) {
+export function defineRoute(world, { actor, id, path, serves, method = "GET", handler = null, params = null, owner = actor }) {
   createThing(world, { actor, id, owner });
   return world.emit({
     process: "defineRoute",
@@ -80,7 +80,7 @@ export function defineRoute(world, { actor, id, path, serves, owner = actor }) {
       relation(id, "serves", serves),
       relation(id, "path", path)
     ],
-    body: { id, path, serves }
+    body: { id, path, serves, method: String(method || "GET").toUpperCase(), handler: handler ? String(handler) : null, params: params && typeof params === "object" ? params : null }
   });
 }
 
@@ -182,5 +182,21 @@ export const moduleProjectors = {
   renderedFrames(witnesses) {
     const rels = witnessRelations(witnesses);
     return rels.filter(r => r.rel === "renders").map(r => ({ frame: r.from, view: r.to, runner: rels.find(x => x.from === r.from && x.rel === "renderedBy")?.to ?? null }));
+  },
+
+  routes(witnesses) {
+    const routeMap = new Map();
+    for (const w of witnesses) {
+      if (w.process !== "defineRoute" || !w.body?.id || !w.body?.path) continue;
+      routeMap.set(w.body.id, {
+        id: w.body.id,
+        path: w.body.path,
+        serves: w.body.serves,
+        method: String(w.body.method || "GET").toUpperCase(),
+        handler: w.body.handler ? String(w.body.handler) : null,
+        params: w.body.params && typeof w.body.params === "object" ? { ...w.body.params } : null
+      });
+    }
+    return [...routeMap.values()];
   }
 };

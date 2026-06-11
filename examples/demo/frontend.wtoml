@@ -42,7 +42,7 @@ action = "logout"
 
 [[text]]
 id = "todo_session_status"
-text = ""
+text = "No personal projection selected"
 role = "session-status"
 
 [[heading]]
@@ -69,8 +69,9 @@ type = "submit"
 id = "todo_status"
 text = ""
 class = "status"
+role = "app-status"
 
-[[list]]
+[[box]]
 id = "todo_list"
 role = "todo-list"
 
@@ -105,7 +106,6 @@ id = "todo_private_note_list"
 class = "private-note-list"
 role = "private-note-list"
 
-
 [[box]]
 id = "todo_process_graph_lab"
 children = ["todo_process_graph_title", "todo_simulate_network_button"]
@@ -122,7 +122,6 @@ id = "todo_simulate_network_button"
 text = "Simulate network error"
 type = "button"
 action = "simulateNetworkError"
-
 
 [[link]]
 id = "todo_world_link"
@@ -193,9 +192,127 @@ id = "todo_widget_editor_button"
 text = "Add widget"
 type = "submit"
 
+[[widgetVersion]]
+soul = "todo_versioned_banner"
+version = "todo_versioned_banner_v1"
+kind = "Text"
+index = 0
+text = "Versioned widget: v1"
+class = "versioned-banner"
+
+[[widgetVersion]]
+soul = "todo_versioned_banner"
+version = "todo_versioned_banner_v2"
+kind = "Text"
+index = 1
+text = "Versioned widget: v2"
+class = "versioned-banner"
+
+[[activateWidgetVersion]]
+soul = "todo_versioned_banner"
+version = "todo_versioned_banner_v1"
+
+[[box]]
+id = "todo_version_playground"
+children = ["todo_version_title", "todo_versioned_banner", "todo_activate_v1", "todo_activate_v2"]
+class = "version-playground"
+
+[[heading]]
+id = "todo_version_title"
+text = "Live Widget Versions"
+level = 2
+
+[[button]]
+id = "todo_activate_v1"
+text = "Activate v1"
+type = "button"
+action = "activateWidgetVersion"
+eventSoul = "todo_versioned_banner"
+eventVersion = "todo_versioned_banner_v1"
+
+[[button]]
+id = "todo_activate_v2"
+text = "Activate v2"
+type = "button"
+action = "activateWidgetVersion"
+eventSoul = "todo_versioned_banner"
+eventVersion = "todo_versioned_banner_v2"
+
 [[frontendProgram]]
 id = "todo_frontend_program"
 rootWidget = "todo_app_widget"
+
+[[option]]
+id = "actor_option_template"
+template = true
+value = "${item.id}"
+text = "${item.label}"
+selected = "${state.actor === item.id}"
+
+[[box]]
+id = "todo_item_template"
+template = true
+children = ["todo_item_title_template", "todo_item_actions_template"]
+class = "${item.done ? 'todo-row done' : 'todo-row'}"
+
+[[text]]
+id = "todo_item_title_template"
+template = true
+text = "${item.title}"
+class = "todo-title"
+
+[[box]]
+id = "todo_item_actions_template"
+template = true
+children = ["todo_item_toggle_template", "todo_item_delete_template"]
+class = "todo-actions"
+
+[[button]]
+id = "todo_item_toggle_template"
+template = true
+text = "${item.done ? 'Undo' : 'Done'}"
+type = "button"
+action = "toggleTodo"
+data-id = "${item.id}"
+data-done = "${!item.done}"
+
+[[button]]
+id = "todo_item_delete_template"
+template = true
+text = "Delete"
+type = "button"
+action = "deleteTodo"
+data-id = "${item.id}"
+
+[[text]]
+id = "private_note_template"
+template = true
+class = "private-note"
+text = "${item.text}"
+
+[[text]]
+id = "private_note_empty_template"
+template = true
+class = "private-note"
+text = "Choose a perspective to see private notes."
+
+[[box]]
+id = "witness_item_template"
+template = true
+children = ["witness_process_template", "witness_body_template"]
+class = "witness"
+
+[[text]]
+id = "witness_process_template"
+template = true
+text = "${item.process || ''}"
+class = "witness-process"
+
+[[text]]
+id = "witness_body_template"
+template = true
+text = "${item.bodyJson || ''}"
+class = "witness-body"
 
 [[step]]
 order = 0
@@ -204,63 +321,83 @@ on = "load"
 
 [[step]]
 order = 1
-op = "renderSession"
+op = "fetchJson"
 on = "load"
-widget = "todo_session"
+url = "/api/session"
+into = "sessionResponse"
 
 [[step]]
 order = 2
+op = "renderCollection"
+on = "load"
+widget = "todo_actor_select"
+from = "sessionResponse.actors"
+template = "actor_option_template"
+
+[[step]]
+order = 3
+op = "setText"
+on = "load"
+widget = "todo_session_status"
+text = "${state.actor ? 'Personal projection: ' + state.actor : 'No personal projection selected'}"
+
+[[step]]
+order = 4
 op = "setText"
 on = "load"
 widget = "todo_status"
 text = "Loading..."
 
 [[step]]
-order = 3
+order = 5
 op = "fetchJson"
 on = "load"
 url = "/api/todos"
 into = "todoResponse"
 
 [[step]]
-order = 4
-op = "renderList"
+order = 6
+op = "renderCollection"
 on = "load"
 widget = "todo_list"
 from = "todoResponse.todos"
-itemTextPath = "title"
+template = "todo_item_template"
 
 [[step]]
-order = 5
+order = 7
 op = "fetchJson"
 on = "load"
 url = "/api/witnesses"
 into = "witnessResponse"
 
 [[step]]
-order = 6
-op = "renderWitnesses"
+order = 8
+op = "renderCollection"
 on = "load"
-widget = "todo_witnesses"
+widget = "todo_witness_list"
 from = "witnessResponse.witnesses"
-
+template = "witness_item_template"
+reverse = true
+limit = 80
 
 [[step]]
-order = 7
+order = 9
 op = "fetchJson"
 on = "load"
 url = "/api/private-notes"
 into = "privateNotesResponse"
 
 [[step]]
-order = 8
-op = "renderPrivateNotes"
+order = 10
+op = "renderCollection"
 on = "load"
-widget = "todo_private_notes"
+widget = "todo_private_note_list"
 from = "privateNotesResponse.notes"
+template = "private_note_template"
+emptyWidget = "private_note_empty_template"
 
 [[step]]
-order = 9
+order = 11
 op = "setText"
 on = "load"
 widget = "todo_status"
@@ -412,8 +549,10 @@ schema = "widget.define"
 
 [[step]]
 order = 1
-op = "postWidgetDefinition"
+op = "postJson"
 on = "submit:todo_widget_editor_form"
+url = "/api/widgets"
+method = "POST"
 from = "widgetDraft"
 into = "widgetCreated"
 
@@ -428,53 +567,6 @@ order = 3
 op = "run"
 on = "submit:todo_widget_editor_form"
 event = "load"
-
-[[widgetVersion]]
-soul = "todo_versioned_banner"
-version = "todo_versioned_banner_v1"
-kind = "Text"
-index = 0
-text = "Versioned widget: v1"
-class = "versioned-banner"
-
-[[widgetVersion]]
-soul = "todo_versioned_banner"
-version = "todo_versioned_banner_v2"
-kind = "Text"
-index = 1
-text = "Versioned widget: v2"
-class = "versioned-banner"
-
-[[activateWidgetVersion]]
-soul = "todo_versioned_banner"
-version = "todo_versioned_banner_v1"
-
-[[box]]
-id = "todo_version_playground"
-children = ["todo_version_title", "todo_versioned_banner", "todo_activate_v1", "todo_activate_v2"]
-class = "version-playground"
-
-[[heading]]
-id = "todo_version_title"
-text = "Live Widget Versions"
-level = 2
-
-[[button]]
-id = "todo_activate_v1"
-text = "Activate v1"
-type = "button"
-action = "activateWidgetVersion"
-eventSoul = "todo_versioned_banner"
-eventVersion = "todo_versioned_banner_v1"
-
-[[button]]
-id = "todo_activate_v2"
-text = "Activate v2"
-type = "button"
-action = "activateWidgetVersion"
-eventSoul = "todo_versioned_banner"
-eventVersion = "todo_versioned_banner_v2"
-
 
 [[step]]
 order = 0
@@ -500,10 +592,13 @@ into = "witnessResponse"
 
 [[step]]
 order = 3
-op = "renderWitnesses"
+op = "renderCollection"
 on = "click:simulateNetworkError"
-widget = "todo_witnesses"
+widget = "todo_witness_list"
 from = "witnessResponse.witnesses"
+template = "witness_item_template"
+reverse = true
+limit = 80
 
 [[step]]
 order = 4
@@ -521,10 +616,11 @@ text = "Activating widget version..."
 
 [[step]]
 order = 1
-op = "activateWidgetVersion"
+op = "postJson"
 on = "click:activateWidgetVersion"
-soul = "${event.soul}"
-version = "${event.version}"
+url = "/api/widget-versions/${event.soul}/activate"
+method = "POST"
+body = { version = "${event.version}" }
 into = "activatedWidgetVersion"
 
 [[step]]
@@ -532,7 +628,12 @@ order = 2
 op = "reloadPage"
 on = "click:activateWidgetVersion"
 
-
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+widget = "todo_status"
+text = "Failed: ${event.message}"
 
 # Dedicated world graph page. This is a separate perspective, not embedded in the todo UI.
 [[page]]

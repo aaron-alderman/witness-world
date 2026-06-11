@@ -230,6 +230,7 @@ function dedupeObjects(items, keyFn) {
 
 function addFrontendProcessGraphs(witnesses, relations, addNode, addEdge, nodeContext, contexts) {
   const programs = relations.filter(r => r.rel === "hasModuleKind" && r.to === "frontendProgram").map(r => r.from);
+  const routeLookup = buildRouteLookup(witnesses);
   const apiContext = ensureContext(contexts, "api");
   apiContext.label = "API Boundary";
   apiContext.kind = "api";
@@ -258,7 +259,7 @@ function addFrontendProcessGraphs(witnesses, relations, addNode, addEdge, nodeCo
 
       if (semantic.actionNode) actionNodes.set(actionKey(step.path ?? []), semantic.actionNode);
 
-      const api = apiCallForStep(step);
+      const api = apiCallForStep(step, routeLookup);
       if (api) {
         const source = semantic.actionNode ?? previousSemanticNode;
         addNode(api.id, "api", api.label, [{ label: api.method }], "api");
@@ -274,25 +275,42 @@ function semanticContextNodeId(contextId) {
   return `ctx:${contextId}`;
 }
 
-function apiCallForStep(step) {
+function apiCallForStep(step, routeLookup) {
   const p = step.params ?? {};
-  if (step.op === "fetchJson") return apiCall("GET", p.url, "backend.http.get");
-  if (step.op === "postJson") return apiCall(p.method ?? "POST", p.url, "backend.http.post");
-  if (step.op === "patchJson") return apiCall(p.method ?? "PATCH", p.url, "backend.http.patch");
-  if (step.op === "deleteJson") return apiCall(p.method ?? "DELETE", p.url, "backend.http.delete");
-  if (step.op === "postWidgetDefinition") return apiCall("POST", "/api/widgets", "backend.widgets.create");
-  if (step.op === "activateWidgetVersion") return apiCall("POST", "/api/widget-versions/:soul/activate", "backend.widgetVersion.activate");
+  if (step.op === "fetchJson") return apiCall("GET", p.url, routeLookup);
+  if (step.op === "postJson") return apiCall(p.method ?? "POST", p.url, routeLookup);
+  if (step.op === "patchJson") return apiCall(p.method ?? "PATCH", p.url, routeLookup);
+  if (step.op === "deleteJson") return apiCall(p.method ?? "DELETE", p.url, routeLookup);
   return null;
 }
 
-function apiCall(method, url, handler) {
+function apiCall(method, url, routeLookup) {
   const safeUrl = String(url || "unknown").replace(/\$\{[^}]+\}/g, ":param");
+  const normalized = normalizeRoutePath(safeUrl);
+  const route = routeLookup.get(`${String(method || "GET").toUpperCase()} ${normalized}`);
   return {
     id: `api:${method}:${safeUrl}`,
     method,
     label: `${method} ${safeUrl}`,
-    handler
+    handler: route?.handler ?? fallbackHandlerForMethod(method)
   };
+}
+
+function buildRouteLookup(witnesses) {
+  const map = new Map();
+  for (const w of witnesses) {
+    if (w.process !== "defineRoute" || !w.body?.path || !w.body?.method) continue;
+    map.set(`${String(w.body.method).toUpperCase()} ${normalizeRoutePath(w.body.path)}`, { id: w.body.id, handler: w.body.handler ?? "backend.http" });
+  }
+  return map;
+}
+
+function normalizeRoutePath(path) {
+  return String(path || "/").replace(/:[^/]+/g, ":param");
+}
+
+function fallbackHandlerForMethod(method) {
+  return `backend.http.${String(method || "get").toLowerCase()}`;
 }
 
 function semanticActionContexts(path, parentContext) {

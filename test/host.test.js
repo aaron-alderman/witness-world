@@ -12,6 +12,174 @@ async function tempStore() {
   return path.join(dir, "todos.json");
 }
 
+function applyMinimalTodoDsl(world, extra = "") {
+  applyWitnessToml(world, `
+[[widget]]
+actor = "adam"
+id = "todo_app_widget"
+kind = "Page"
+props = { title = "Witness Todo" }
+
+[[widget]]
+actor = "adam"
+id = "todo_form"
+kind = "Form"
+props = {}
+
+[[widget]]
+actor = "adam"
+id = "todo_input"
+kind = "TextInput"
+props = { name = "title", placeholder = "New todo" }
+
+[[widget]]
+actor = "adam"
+id = "todo_add_button"
+kind = "Button"
+props = { text = "Add", type = "submit" }
+
+[[widget]]
+actor = "adam"
+id = "todo_status"
+kind = "Text"
+props = { text = "", role = "app-status" }
+
+[[widget]]
+actor = "adam"
+id = "todo_list"
+kind = "Box"
+props = {}
+
+[[attachWidget]]
+actor = "adam"
+parent = "todo_form"
+child = "todo_input"
+order = 0
+
+[[attachWidget]]
+actor = "adam"
+parent = "todo_form"
+child = "todo_add_button"
+order = 1
+
+[[attachWidget]]
+actor = "adam"
+parent = "todo_app_widget"
+child = "todo_form"
+order = 0
+
+[[attachWidget]]
+actor = "adam"
+parent = "todo_app_widget"
+child = "todo_status"
+order = 1
+
+[[attachWidget]]
+actor = "adam"
+parent = "todo_app_widget"
+child = "todo_list"
+order = 2
+
+[[route]]
+actor = "adam"
+id = "home_route"
+path = "/"
+serves = "page"
+method = "GET"
+handler = "page.home"
+
+[[route]]
+actor = "adam"
+id = "session_read_route"
+path = "/api/session"
+serves = "session"
+method = "GET"
+handler = "session.read"
+
+[[route]]
+actor = "adam"
+id = "session_open_route"
+path = "/api/session"
+serves = "session"
+method = "POST"
+handler = "session.open"
+
+[[route]]
+actor = "adam"
+id = "session_logout_route"
+path = "/api/session"
+serves = "session"
+method = "DELETE"
+handler = "session.logout"
+
+[[route]]
+actor = "adam"
+id = "todos_list_route"
+path = "/api/todos"
+serves = "todos"
+method = "GET"
+handler = "todos.list"
+
+[[route]]
+actor = "adam"
+id = "todos_create_route"
+path = "/api/todos"
+serves = "todos"
+method = "POST"
+handler = "todos.create"
+
+[[route]]
+actor = "adam"
+id = "todos_update_route"
+path = "/api/todos/:id"
+serves = "todos"
+method = "PATCH"
+handler = "todos.update"
+
+[[route]]
+actor = "adam"
+id = "todos_delete_route"
+path = "/api/todos/:id"
+serves = "todos"
+method = "DELETE"
+handler = "todos.delete"
+
+[[route]]
+actor = "adam"
+id = "notes_list_route"
+path = "/api/private-notes"
+serves = "privateNote"
+method = "GET"
+handler = "privateNotes.list"
+
+[[route]]
+actor = "adam"
+id = "notes_create_route"
+path = "/api/private-notes"
+serves = "privateNote"
+method = "POST"
+handler = "privateNotes.create"
+
+[[route]]
+actor = "adam"
+id = "witnesses_route"
+path = "/api/witnesses"
+serves = "witness"
+method = "GET"
+handler = "witnesses.list"
+
+[[route]]
+actor = "adam"
+id = "widget_versions_activate_route"
+path = "/api/widget-versions/:soul/activate"
+serves = "widgetVersion"
+method = "POST"
+handler = "widgetVersions.activate"
+
+${extra}
+`);
+}
+
 test("backend and frontend capabilities are split", () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
@@ -65,49 +233,7 @@ test("todo app end-to-end: frontend request, backend json store, witnesses", asy
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  applyWitnessToml(world, `
-[[widget]]
-actor = "adam"
-id = "todo_app_widget"
-kind = "Page"
-props = { title = "Witness Todo" }
-
-[[widget]]
-actor = "adam"
-id = "todo_form"
-kind = "TodoForm"
-props = { inputPlaceholder = "New todo", buttonText = "Add" }
-
-[[widget]]
-actor = "adam"
-id = "todo_status"
-kind = "Status"
-props = { text = "" }
-
-[[widget]]
-actor = "adam"
-id = "todo_list"
-kind = "TodoList"
-props = { source = "/api/todos" }
-
-[[attachWidget]]
-actor = "adam"
-parent = "todo_app_widget"
-child = "todo_form"
-order = 0
-
-[[attachWidget]]
-actor = "adam"
-parent = "todo_app_widget"
-child = "todo_status"
-order = 1
-
-[[attachWidget]]
-actor = "adam"
-parent = "todo_app_widget"
-child = "todo_list"
-order = 2
-`);
+  applyMinimalTodoDsl(world);
 
   const server = await startTodoServer(world, {
     actor: "adam",
@@ -123,7 +249,8 @@ order = 2
     const html = await fetch(server.url).then(r => r.text());
     assert.match(html, /Witness Todo/);
     assert.match(html, /data-widget="todo_app_widget"/);
-    assert.match(html, /data-todo-form/);
+    assert.match(html, /data-widget="todo_form"/);
+    assert.doesNotMatch(html, /data-todo-form/);
 
     const created = await fetch(`${server.url}/api/todos`, {
       method: "POST",
@@ -171,7 +298,7 @@ test("todo server supports done/delete actions and witness inspector data", asyn
 
     const html = await fetch(server.url).then(r => r.text());
     assert.match(html, /Witness Inspector/);
-    assert.match(html, /renderWitnesses/);
+    assert.match(html, /renderCollection/);
     assert.match(html, /patchJson/);
     assert.match(html, /deleteJson/);
 
@@ -231,7 +358,7 @@ test("personal projections: actor session, themes, and private notes are actor-s
     assert.match(html, /Personal Projection/);
     assert.match(html, /Private Notes/);
     assert.match(html, /initSession/);
-    assert.match(html, /renderPrivateNotes/);
+    assert.match(html, /renderCollection/);
 
     const session = await fetch(`${server.url}/api/session`).then(r => r.json());
     assert.deepEqual(session.actors.map(a => a.id), ["aaron", "callan"]);
@@ -280,7 +407,7 @@ test("todo server can activate widget versions through backend API", async () =>
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backend" });
   declareFrontendHost(world, { actor: "adam", id: "frontend" });
-  applyWitnessToml(world, `
+  applyMinimalTodoDsl(world, `
 [[widget]]
 actor = "adam"
 id = "root"
@@ -448,13 +575,7 @@ test("private notes endpoint returns empty list without request actor", async ()
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  applyWitnessToml(world, `
-[[widget]]
-actor = "adam"
-id = "todo_app_widget"
-kind = "Page"
-props = { title = "Witness Todo" }
-`);
+  applyMinimalTodoDsl(world);
 
   const server = await startTodoServer(world, {
     actor: "adam",
@@ -479,13 +600,7 @@ test("logout emits session.logout witness", async () => {
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  applyWitnessToml(world, `
-[[widget]]
-actor = "adam"
-id = "todo_app_widget"
-kind = "Page"
-props = { title = "Witness Todo" }
-`);
+  applyMinimalTodoDsl(world);
 
   const server = await startTodoServer(world, {
     actor: "adam",

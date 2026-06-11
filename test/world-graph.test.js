@@ -284,12 +284,12 @@ test("world graph renders explicit API boundary for frontend to backend communic
   const activateAction = graph.nodes.find(n => n.id === "ctx:frontend/execution/program=todo_frontend_program/trigger=click/action=activateWidgetVersion");
   assert.ok(activateAction);
 
-  const apiNode = graph.nodes.find(n => n.kind === "api" && n.label === "POST /api/widget-versions/:soul/activate");
+  const apiNode = graph.nodes.find(n => n.kind === "api" && n.label === "POST /api/widget-versions/:param/activate");
   assert.ok(apiNode);
   assert.equal(apiNode.context, "api");
 
   assert.equal(graph.edges.some(e => e.from === activateAction.id && e.to === apiNode.id && e.rel === "requests" && e.style === "api"), true);
-  assert.equal(graph.edges.some(e => e.from === apiNode.id && e.to === "backend.widgetVersion.activate" && e.rel === "handled by" && e.style === "api"), true);
+  assert.equal(graph.edges.some(e => e.from === apiNode.id && e.to === "widgetVersions.activate" && e.rel === "handled by" && e.style === "api"), true);
 });
 
 

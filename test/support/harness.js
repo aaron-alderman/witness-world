@@ -108,7 +108,7 @@ export function expectNoRuntimeErrors(runtime) {
   assert.equal(messages.length, 0, `runtime errors detected:\n${messages.join("\n")}`);
 }
 
-export async function waitForAppReady(page, { selector = '[data-widget="todo_status"]', text = "Ready", timeout = 5000 } = {}) {
+export async function waitForAppReady(page, { selector = '[data-role="app-status"]', text = "Ready", timeout = 5000 } = {}) {
   await page.waitForLoadState("domcontentloaded");
   await page.waitForFunction(
     ({ readySelector, readyText }) => {

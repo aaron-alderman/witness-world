@@ -13,3 +13,124 @@ worldRootWidget = "world_graph_page"
 worldFrontendProgram = "world_graph_program"
 storeName = "witness-world-demo-todos.json"
 actors = [{ id = "aaron", label = "Aaron" }, { id = "callan", label = "Callan" }]
+
+[[route]]
+id = "home_page_route"
+method = "GET"
+path = "/"
+serves = "todoAppView"
+handler = "page.home"
+params = { rootWidget = "todo_app_widget", frontendProgram = "todo_frontend_program", page = "home", excludeWidgetRoles = ["world-graph-body"] }
+
+[[route]]
+id = "world_page_route"
+method = "GET"
+path = "/world"
+serves = "worldGraphView"
+handler = "page.world"
+params = { rootWidget = "world_graph_page", frontendProgram = "world_graph_program", page = "world" }
+
+[[route]]
+id = "session_read_route"
+method = "GET"
+path = "/api/session"
+serves = "session"
+handler = "session.read"
+
+[[route]]
+id = "session_open_route"
+method = "POST"
+path = "/api/session"
+serves = "session"
+handler = "session.open"
+
+[[route]]
+id = "session_logout_route"
+method = "DELETE"
+path = "/api/session"
+serves = "session"
+handler = "session.logout"
+
+[[route]]
+id = "todos_list_route"
+method = "GET"
+path = "/api/todos"
+serves = "todoStore"
+handler = "todos.list"
+
+[[route]]
+id = "todos_create_route"
+method = "POST"
+path = "/api/todos"
+serves = "todoStore"
+handler = "todos.create"
+
+[[route]]
+id = "todos_update_route"
+method = "PATCH"
+path = "/api/todos/:id"
+serves = "todoStore"
+handler = "todos.update"
+
+[[route]]
+id = "todos_delete_route"
+method = "DELETE"
+path = "/api/todos/:id"
+serves = "todoStore"
+handler = "todos.delete"
+
+[[route]]
+id = "private_notes_list_route"
+method = "GET"
+path = "/api/private-notes"
+serves = "privateNotes"
+handler = "privateNotes.list"
+
+[[route]]
+id = "private_notes_create_route"
+method = "POST"
+path = "/api/private-notes"
+serves = "privateNotes"
+handler = "privateNotes.create"
+
+[[route]]
+id = "widgets_create_route"
+method = "POST"
+path = "/api/widgets"
+serves = "widgetEditor"
+handler = "widgets.create"
+
+[[route]]
+id = "widget_versions_activate_route"
+method = "POST"
+path = "/api/widget-versions/:soul/activate"
+serves = "widgetVersion"
+handler = "widgetVersions.activate"
+
+[[route]]
+id = "network_simulate_route"
+method = "GET"
+path = "/api/simulate-network-error"
+serves = "networkFailure"
+handler = "network.simulateError"
+
+[[route]]
+id = "witnesses_list_route"
+method = "GET"
+path = "/api/witnesses"
+serves = "witnessLog"
+handler = "witnesses.list"
+
+[[route]]
+id = "world_graph_read_route"
+method = "GET"
+path = "/api/world-graph"
+serves = "worldGraph"
+handler = "worldGraph.read"
+
+[[route]]
+id = "source_read_route"
+method = "GET"
+path = "/api/source"
+serves = "sourceFile"
+handler = "source.read"

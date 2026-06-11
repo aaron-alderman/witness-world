@@ -17,10 +17,9 @@ test("generated UI boots, renders core widgets, and is executable", async () => 
     const appRoot = page.locator('[data-widget="todo_app_widget"]');
     await appRoot.waitFor();
     assert.equal(await page.locator('[data-widget="todo_form"]').count() > 0, true);
-    assert.equal(await page.locator('[data-todo-form]').count() > 0, true);
     assert.equal(await page.locator('[data-widget="todo_list"]').count() > 0, true);
-    assert.equal(await page.locator('[data-todo-list]').count() > 0, true);
-    assert.equal(await page.locator('[data-widget="todo_status"]').count(), 1);
+    assert.equal(await page.locator('[data-widget-template="todo_item_template"]').count(), 1);
+    assert.equal(await page.locator('[data-role="app-status"]').count(), 1);
     assert.equal(await page.locator('[data-widget="todo_session"]').count() > 0, true);
 
     await expectNoRuntimeErrors(runtime);

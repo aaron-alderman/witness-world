@@ -151,6 +151,7 @@ const WIDGET_KIND_BY_SECTION = new Map([
   ["form", "Form"],
   ["input", "Input"],
   ["select", "Select"],
+  ["option", "Option"],
   ["button", "Button"],
   ["link", "Link"],
   ["list", "List"]
@@ -255,6 +256,9 @@ function applyDoc(world, { kind, values }, context) {
         id: req(valuesWithDefaults, "id"),
         path: req(valuesWithDefaults, "path"),
         serves: req(valuesWithDefaults, "serves"),
+        method: valuesWithDefaults.method ?? "GET",
+        handler: valuesWithDefaults.handler ?? null,
+        params: valuesWithDefaults.params ?? null,
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
       });
 
@@ -364,10 +368,16 @@ function applyDoc(world, { kind, values }, context) {
       });
 
     case "frontendStep":
-      return applyFrontendStep(world, valuesWithDefaults);
+      return applyFrontendStep(world, {
+        ...valuesWithDefaults,
+        frontendEvent: valuesWithDefaults.frontendEvent ?? valuesWithDefaults.on ?? valuesWithDefaults.event
+      });
 
     case "step":
-      return applyFrontendStep(world, { ...valuesWithDefaults, event: valuesWithDefaults.event ?? valuesWithDefaults.on });
+      return applyFrontendStep(world, {
+        ...valuesWithDefaults,
+        frontendEvent: valuesWithDefaults.on ?? valuesWithDefaults.event
+      });
 
     case "todoServer":
       return world.emit({
@@ -427,14 +437,17 @@ function applyWidgetLike(world, values, kind) {
 }
 
 function applyFrontendStep(world, values) {
-  const reserved = ["actor", "context", "program", "event", "on", "op", "order", "params"];
+  const triggerEvent = req(values, "frontendEvent");
+  const paramValues = { ...values };
+  if (!("on" in values) && values.event === triggerEvent) delete paramValues.event;
+  const reserved = ["actor", "context", "program", "frontendEvent", "on", "op", "order", "params"];
   return defineFrontendStep(world, {
     actor: req(values, "actor"),
     program: req(values, "program"),
-    event: req(values, "event"),
+    event: triggerEvent,
     op: req(values, "op"),
     order: values.order ?? 0,
-    params: { ...(values.params ?? {}), ...collectProps(values, reserved) }
+    params: { ...(paramValues.params ?? {}), ...collectProps(paramValues, reserved) }
   });
 }
 

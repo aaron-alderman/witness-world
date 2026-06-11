@@ -94,7 +94,7 @@ export function activeWidgetVersions(witnesses) {
   return active;
 }
 
-export function widgetTree(witnesses, root) {
+function projectWidgetState(witnesses) {
   const widgets = new Map();
   const children = new Map();
   const rels = witnessRelations(witnesses);
@@ -139,7 +139,19 @@ export function widgetTree(witnesses, root) {
     return { ...node, children: kids };
   }
 
-  return build(root);
+  return { widgets, children, build };
+}
+
+export function widgetTree(witnesses, root) {
+  return projectWidgetState(witnesses).build(root);
+}
+
+export function templateWidgetTrees(witnesses) {
+  const state = projectWidgetState(witnesses);
+  return [...state.widgets.values()]
+    .filter(widget => widget.props?.template === true)
+    .sort((a, b) => String(a.id).localeCompare(String(b.id)))
+    .map(widget => state.build(widget.id));
 }
 
 export function frontendProgram(witnesses, programId) {
@@ -170,7 +182,8 @@ export function renderWidgetPage(world, { actor, rootWidget, frontendProgram: pr
   const tree = world.project(w => widgetTree(w, rootWidget));
   const program = world.project(w => frontendProgram(w, programId));
   const typeModel = world.project(typeModelProjection);
-  const html = renderDocument(tree, program, appConfig, typeModel);
+  const templates = world.project(templateWidgetTrees);
+  const html = renderDocument(tree, program, appConfig, typeModel, templates);
 
   world.emit({
     process: "widget.renderHtml",
@@ -182,10 +195,11 @@ export function renderWidgetPage(world, { actor, rootWidget, frontendProgram: pr
   return html;
 }
 
-function renderDocument(root, program, appConfig = {}, typeModel = {}) {
+function renderDocument(root, program, appConfig = {}, typeModel = {}, templates = []) {
   const title = root.props?.title ?? "Witness App";
   const bodyAttrs = appConfig.page ? ` data-page="${escapeAttr(appConfig.page)}"` : "";
-  return `<!doctype html>\n<html>\n${renderHead(title)}\n<body${bodyAttrs}>\n${renderWidget(root, { excludeRoles: new Set(appConfig.excludeWidgetRoles ?? []), typeModel })}\n${program ? renderClientEngine({ ...program, config: { ...appConfig, typeModel } }) : ""}\n</body>\n</html>`;
+  const options = { excludeRoles: new Set(appConfig.excludeWidgetRoles ?? []), typeModel };
+  return `<!doctype html>\n<html>\n${renderHead(title)}\n<body${bodyAttrs}>\n${renderWidget(root, options)}\n${templates.map(template => renderWidgetTemplate(template, options)).join("\n")}\n${program ? renderClientEngine({ ...program, config: { ...appConfig, typeModel } }) : ""}\n</body>\n</html>`;
 }
 
 function renderHead(title) {
@@ -210,8 +224,8 @@ function renderHead(title) {
     button { padding: 8px 12px; cursor: pointer; border: 1px solid #999; border-radius: 6px; background: #f8f8f8; }
     button:hover { background: #eee; }
     ul { list-style: none; padding: 0; margin: 0; }
-    li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #eee; }
-    li.done .todo-title { text-decoration: line-through; color: #777; }
+    li, .todo-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #eee; }
+    li.done .todo-title, .todo-row.done .todo-title { text-decoration: line-through; color: #777; }
     .status { min-height: 1.5em; color: #555; }
     .todo-actions { margin-left: auto; display: flex; gap: 6px; }
     .session-panel, .private-notes, .witness-inspector, .widget-editor { border: 1px solid #ddd; border-radius: 8px; padding: 12px; background: #fafafa; }
@@ -295,47 +309,25 @@ function renderHead(title) {
 </head>`;
 }
 
+function renderWidgetTemplate(widget, options = {}) {
+  const content = renderWidget(widget, { ...options, templateContent: true });
+  if (widget.kind === "Option") {
+    // Browsers do not consistently preserve top-level <option> nodes inside a
+    // parsed template fragment. Keep the authored widget declarative, but wrap
+    // it in a temporary <select> so the parser creates a real option element.
+    return `<template data-widget-template="${escapeAttr(widget.id)}"><select data-template-wrapper="option">${content}</select></template>`;
+  }
+  return `<template data-widget-template="${escapeAttr(widget.id)}">${content}</template>`;
+}
+
 function renderWidget(widget, options = {}) {
   const role = widget.props?.role ?? widget.props?.["data-role"];
   if (role && options.excludeRoles?.has(role)) return "";
+  if (widget.props?.template === true && !options.templateContent) return "";
   const children = widget.children.map(child => renderWidget(child, options)).join("\n");
   const attrs = renderAttrs(widget);
 
   switch (widget.kind) {
-    // Legacy composite kinds remain as compatibility shims; the demo DSL now uses primitive widgets.
-    case "TodoForm":
-      return `<form data-widget="${escapeAttr(widget.id)}" data-todo-form>
-  <input name="title" placeholder="${escapeAttr(widget.props.inputPlaceholder ?? "New todo")}" autocomplete="off" />
-  <button>${escapeHtml(widget.props.buttonText ?? "Add")}</button>
-</form>`;
-    case "TodoList":
-      return `<ul data-widget="${escapeAttr(widget.id)}" data-todo-list></ul>`;
-    case "Status":
-      return `<div data-widget="${escapeAttr(widget.id)}" class="status">${escapeHtml(widget.props.text ?? "")}</div>`;
-    case "LoginPanel":
-      return `<section class="session-panel" data-widget="${escapeAttr(widget.id)}" data-session-panel>
-  <strong>${escapeHtml(widget.props.title ?? "Session")}</strong>
-  <form data-widget="${escapeAttr(widget.id)}" data-login-form>
-    <select name="actor" data-actor-select></select>
-    <button>${escapeHtml(widget.props.buttonText ?? "Use perspective")}</button>
-    <button type="button" data-action="logout">Logout</button>
-  </form>
-  <div data-session-status></div>
-</section>`;
-    case "PrivateNotes":
-      return `<section class="private-notes" data-widget="${escapeAttr(widget.id)}" data-private-notes>
-  <h2>${escapeHtml(widget.props.title ?? "Private Notes")}</h2>
-  <form data-widget="${escapeAttr(widget.id)}" data-private-note-form>
-    <input name="text" placeholder="${escapeAttr(widget.props.inputPlaceholder ?? "Private note")}" autocomplete="off" />
-    <button>${escapeHtml(widget.props.buttonText ?? "Save private note")}</button>
-  </form>
-  <div class="private-note-list" data-private-note-list></div>
-</section>`;
-    case "WitnessInspector":
-      return `<section class="witness-inspector" data-widget="${escapeAttr(widget.id)}" data-witness-inspector>
-  <h2>${escapeHtml(widget.props.title ?? "Witnesses")}</h2>
-  <div class="witness-list" data-witness-list></div>
-</section>`;
     case "Page":
       return `<main${attrs}>\n${children}\n</main>`;
     case "Box":
@@ -350,17 +342,19 @@ function renderWidget(widget, options = {}) {
     case "Form":
       return `<form${attrs}>\n${children}\n</form>`;
     case "Input":
-      return `<input${attrs} name="${escapeAttr(widget.props.name ?? "value")}" placeholder="${escapeAttr(widget.props.placeholder ?? "")}" autocomplete="off" />`;
+      return `<input${attrs}${renderExtraAttrs(widget, ["name", "placeholder", "type", "valueType", "label", "template"])} name="${escapeAttr(widget.props.name ?? "value")}" placeholder="${escapeAttr(widget.props.placeholder ?? "")}" autocomplete="off" />`;
     case "Select":
-      return `<select${attrs} name="${escapeAttr(widget.props.name ?? "value")}"></select>`;
+      return `<select${attrs}${renderExtraAttrs(widget, ["name", "template"])} name="${escapeAttr(widget.props.name ?? "value")}">${children}</select>`;
+    case "Option":
+      return `<option${attrs}${renderExtraAttrs(widget, ["text", "value", "template"])} value="${escapeAttr(widget.props.value ?? "")}">${escapeHtml(widget.props.text ?? "")}</option>`;
     case "ValueEditor":
       return renderValueEditor(widget, options.typeModel ?? {}, attrs);
     case "Button": {
       const type = widget.props.type ?? "button";
-      return `<button${attrs} type="${escapeAttr(type)}">${escapeHtml(widget.props.text ?? "Button")}</button>`;
+      return `<button${attrs}${renderExtraAttrs(widget, ["text", "type", "template"])} type="${escapeAttr(type)}">${escapeHtml(widget.props.text ?? "Button")}</button>`;
     }
     case "Link":
-      return `<a${attrs} href="${escapeAttr(widget.props.href ?? "#")}">${escapeHtml(widget.props.text ?? widget.props.href ?? "Link")}</a>`;
+      return `<a${attrs}${renderExtraAttrs(widget, ["text", "href", "template"])} href="${escapeAttr(widget.props.href ?? "#")}">${escapeHtml(widget.props.text ?? widget.props.href ?? "Link")}</a>`;
     case "List":
       return `<ul${attrs}></ul>`;
     default:
@@ -393,14 +387,32 @@ function renderAttrs(widget) {
   const parts = [`data-widget="${escapeAttr(widget.id)}"`];
   if (widget.version) parts.push(`data-widget-version="${escapeAttr(widget.version)}"`);
   if (widget.props.class) parts.push(`class="${escapeAttr(widget.props.class)}"`);
-  if (widget.props.role) parts.push(`data-${escapeAttr(widget.props.role)}`);
+  if (widget.props.role) {
+    parts.push(`data-role="${escapeAttr(widget.props.role)}"`);
+    parts.push(`data-${escapeAttr(widget.props.role)}`);
+  }
   if (widget.props.action) parts.push(`data-action="${escapeAttr(widget.props.action)}"`);
-  if (widget.props.eventId) parts.push(`data-id="${escapeAttr(widget.props.eventId)}"`);
-  if (widget.props.eventSoul) parts.push(`data-soul="${escapeAttr(widget.props.eventSoul)}"`);
-  if (widget.props.eventVersion) parts.push(`data-version="${escapeAttr(widget.props.eventVersion)}"`);
   if (widget.props.type && widget.kind !== "Button") parts.push(`type="${escapeAttr(widget.props.type)}"`);
   if (widget.versionIndex != null) parts.push(`style="--version-color: ${escapeAttr(versionColor(widget.versionIndex))}"`);
+  for (const [key, value] of Object.entries(widget.props || {})) {
+    if (key.startsWith("event") && key.length > 5 && value != null) {
+      parts.push(`data-${escapeAttr(camelToKebab(key.slice(5)))}="${escapeAttr(value)}"`);
+    }
+    if ((key.startsWith("data-") || key.startsWith("aria-")) && value != null) parts.push(`${escapeAttr(key)}="${escapeAttr(value)}"`);
+  }
   return " " + parts.join(" ");
+}
+
+function renderExtraAttrs(widget, consumed = []) {
+  const consumedSet = new Set(["class", "role", "action", "template", ...consumed]);
+  const entries = Object.entries(widget.props || {})
+    .filter(([key, value]) => !consumedSet.has(key) && !key.startsWith("event") && !key.startsWith("data-") && !key.startsWith("aria-") && value != null && typeof value !== "object");
+  if (entries.length === 0) return "";
+  return " " + entries.map(([key, value]) => `${escapeAttr(key)}="${escapeAttr(value)}"`).join(" ");
+}
+
+function camelToKebab(value) {
+  return String(value || "").replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
 }
 
 function versionColor(index) {
@@ -422,39 +434,120 @@ function renderClientEngine(program) {
   const typeModel = config.typeModel || {};
   const state = Object.create(null);
   const byWidget = id => document.querySelector('[data-widget="' + CSS.escape(id) + '"]');
+  const byTemplate = id => document.querySelector('[data-widget-template="' + CSS.escape(id) + '"]');
   const readPath = (value, path) => String(path || '').split('.').filter(Boolean).reduce((x, key) => x == null ? undefined : x[key], value);
   const textAt = (value, path) => String(readPath(value, path) ?? '');
   const setText = (id, text) => { const el = byWidget(id); if (el) el.textContent = text; };
+  const setValue = (id, value) => {
+    const el = byWidget(id);
+    if (!el) return;
+    if ('value' in el) el.value = value ?? '';
+    else el.textContent = value ?? '';
+  };
   const currentActor = () => state.actor || localStorage.getItem('witness.actor') || '';
   const actorHeaders = () => currentActor() ? { 'x-witness-actor': currentActor() } : {};
   const applyTheme = () => { document.body.dataset.actor = currentActor() || ''; };
-  const replaceParams = value => {
-    if (typeof value === 'string') return value.replace(/\$\{event\.([^}]+)\}/g, (_, path) => encodeURIComponent(textAt(state.event || {}, path)));
-    if (Array.isArray(value)) return value.map(replaceParams);
-    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, replaceParams(v)]));
+  const scopeFor = extra => ({ state, event: state.event || {}, ...extra });
+  const evaluateExpression = (expression, scope) => {
+    const names = Object.keys(scope);
+    const values = Object.values(scope);
+    return Function(...names, 'return (' + expression + ');')(...values);
+  };
+  const interpolateString = (value, scope) => {
+    const text = String(value ?? '');
+    const exact = text.match(/^\$\{([^}]+)\}$/);
+    if (exact) {
+      try { return evaluateExpression(exact[1], scope); }
+      catch { return ''; }
+    }
+    return text.replace(/\$\{([^}]+)\}/g, (_, expression) => {
+      try {
+        const result = evaluateExpression(expression, scope);
+        return result == null ? '' : String(result);
+      } catch {
+        return '';
+      }
+    });
+  };
+  const interpolateValue = (value, scope) => {
+    if (typeof value === 'string') return interpolateString(value, scope);
+    if (Array.isArray(value)) return value.map(item => interpolateValue(item, scope));
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, interpolateValue(item, scope)]));
     return value;
   };
-  const renderList = ({ widget, from, itemTextPath }) => {
-    const el = byWidget(widget);
-    const value = readPath(state, from);
-    const items = Array.isArray(value) ? value : [];
-    if (el) el.innerHTML = items.map(item => {
-      const done = !!item.done;
-      const label = done ? 'Undo' : 'Done';
-      return '<li class="' + (done ? 'done' : '') + '">' +
-        '<span class="todo-title">' + escapeHtml(textAt(item, itemTextPath || 'title')) + '</span>' +
-        '<span class="todo-actions">' +
-        '<button data-action="toggleTodo" data-id="' + escapeHtml(item.id) + '" data-done="' + String(!done) + '">' + label + '</button>' +
-        '<button data-action="deleteTodo" data-id="' + escapeHtml(item.id) + '">Delete</button>' +
-        '</span></li>';
-    }).join('');
+  const applyInterpolations = (root, scope) => {
+    const applyElementAttrs = element => {
+      for (const attr of [...element.attributes]) {
+        if (!attr.value.includes('\${')) continue;
+        const value = interpolateString(attr.value, scope);
+        if (attr.name === 'selected' || attr.name === 'checked' || attr.name === 'disabled') {
+          if (value === false || value === '' || value === 'false' || value == null) element.removeAttribute(attr.name);
+          else element.setAttribute(attr.name, attr.name);
+        } else if (value == null || value === false) {
+          element.removeAttribute(attr.name);
+        } else {
+          element.setAttribute(attr.name, String(value));
+        }
+      }
+    };
+    if (root?.nodeType === Node.ELEMENT_NODE) applyElementAttrs(root);
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    let current;
+    while ((current = walker.nextNode())) {
+      if (current.nodeType === Node.TEXT_NODE) {
+        if (current.textContent && current.textContent.includes('\${')) current.textContent = interpolateString(current.textContent, scope);
+        continue;
+      }
+      applyElementAttrs(current);
+    }
   };
-  const renderWitnesses = ({ widget, from }) => {
-    const root = byWidget(widget);
-    const el = root?.querySelector('[data-witness-list]') || root;
+  const instantiateTemplate = (templateId, scope) => {
+    const template = byTemplate(templateId);
+    if (!template) throw new Error('unknown template ' + templateId);
+    const fragment = template.content.cloneNode(true);
+    applyInterpolations(fragment, scope);
+    return fragment;
+  };
+  const instantiateSelectOption = (templateId, scope) => {
+    const template = byTemplate(templateId);
+    if (!template) throw new Error('unknown template ' + templateId);
+    const option = template.content.querySelector('option')?.cloneNode(true);
+    if (!option) throw new Error('option template ' + templateId + ' did not yield an option');
+    applyInterpolations(option, scope);
+    return option;
+  };
+  const appendTemplateInstance = (target, instance) => {
+    const wrapper = instance.firstElementChild;
+    if (wrapper?.getAttribute?.('data-template-wrapper') === 'option') {
+      while (wrapper.firstChild) target.appendChild(wrapper.firstChild);
+      return;
+    }
+    target.appendChild(instance);
+  };
+  const renderCollection = ({ widget, from, template, itemAs = 'item', indexAs = 'index', emptyWidget = null, limit = null, reverse = false }) => {
+    const el = byWidget(widget);
+    if (!el) return;
     const value = readPath(state, from);
-    const items = Array.isArray(value) ? value : [];
-    if (el) el.innerHTML = items.slice(-80).reverse().map(w => '<div class="witness"><span class="witness-process">' + escapeHtml(w.process || '') + '</span><span class="witness-body">' + escapeHtml(JSON.stringify(w.body || {})) + '</span></div>').join('');
+    let items = Array.isArray(value) ? [...value] : [];
+    if (reverse) items.reverse();
+    if (limit != null && Number.isFinite(Number(limit))) items = items.slice(0, Number(limit));
+    el.innerHTML = '';
+    const fragment = document.createDocumentFragment();
+    const target = el.tagName === 'SELECT' ? el : fragment;
+    if (items.length === 0) {
+      if (emptyWidget) appendTemplateInstance(target, instantiateTemplate(emptyWidget, scopeFor({ item: null, index: 0 })));
+      if (target !== el) el.appendChild(fragment);
+      return;
+    }
+    items.forEach((item, index) => {
+      const scope = scopeFor({ item, index, [itemAs]: item, [indexAs]: index });
+      if (el.tagName === 'SELECT') {
+        el.appendChild(instantiateSelectOption(template, scope));
+        return;
+      }
+      appendTemplateInstance(target, instantiateTemplate(template, scope));
+    });
+    if (target !== el) el.appendChild(fragment);
   };
   const renderWorldGraph = ({ widget, from }) => {
     const root = byWidget(widget);
@@ -792,18 +885,6 @@ function renderClientEngine(program) {
     draw();
   };
   const initSession = () => { state.actor = localStorage.getItem('witness.actor') || ''; applyTheme(); };
-  const renderSession = ({ widget }) => {
-    const root = byWidget(widget);
-    if (!root) return;
-    const select = root.querySelector('[data-actor-select]');
-    const actors = config.actors || [];
-    if (select) {
-      select.innerHTML = '<option value="">Choose perspective...</option>' + actors.map(a => '<option value="' + escapeHtml(a.id) + '">' + escapeHtml(a.label || a.id) + '</option>').join('');
-      select.value = currentActor();
-    }
-    const status = root.querySelector('[data-session-status]');
-    if (status) status.textContent = currentActor() ? 'Personal projection: ' + currentActor() : 'No personal projection selected';
-  };
   const setSession = async ({ from, path = 'actor' }) => {
     const actor = textAt(state[from] || {}, path);
     if (actor) {
@@ -818,13 +899,6 @@ function renderClientEngine(program) {
     localStorage.removeItem('witness.actor');
     state.actor = '';
     applyTheme();
-  };
-  const renderPrivateNotes = ({ widget, from }) => {
-    const root = byWidget(widget);
-    const el = root?.querySelector('[data-private-note-list]') || root;
-    const value = readPath(state, from);
-    const items = Array.isArray(value) ? value : [];
-    if (el) el.innerHTML = currentActor() ? items.map(n => '<div class="private-note">' + escapeHtml(n.text || '') + '</div>').join('') : '<div class="private-note">Choose a perspective to see private notes.</div>';
   };
   const formForWidget = widget => {
     const el = byWidget(widget);
@@ -909,23 +983,12 @@ function renderClientEngine(program) {
   };
   const clearForm = ({ widget }) => { formForWidget(widget)?.reset?.(); };
   const resolveBody = ({ from, pick, body }) => {
-    if (body) return replaceParams(body);
+    if (body) return interpolateValue(body, scopeFor({}));
     const source = state[from] || {};
     if (!pick) return source;
     const out = {};
     for (const key of pick) out[key] = source[key];
     return out;
-  };
-  const postWidgetDefinition = async ({ from, into }) => {
-    const body = resolveBody({ from });
-    const res = await fetch('/api/widgets', { method: 'POST', headers: { 'content-type': 'application/json', ...actorHeaders() }, body: JSON.stringify(body) });
-    state[into || 'widgetCreated'] = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(state[into || 'widgetCreated'].error || 'widget request failed');
-  };
-  const activateWidgetVersion = async ({ soul, version, into }) => {
-    const res = await fetch('/api/widget-versions/' + encodeURIComponent(soul) + '/activate', { method: 'POST', headers: { 'content-type': 'application/json', ...actorHeaders() }, body: JSON.stringify({ version }) });
-    state[into || 'activation'] = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(state[into || 'activation'].error || 'activation failed');
   };
   async function run(event, eventData = {}) {
     state.event = eventData;
@@ -948,6 +1011,24 @@ function renderClientEngine(program) {
       }));
     }
   }
+  const hasEventHandlers = event => (program.steps || []).some(step => step.event === event);
+  async function dispatchError(error, event, step = null) {
+    if (event === 'error') throw error;
+    if (!hasEventHandlers('error')) throw error;
+    await run('error', {
+      message: error instanceof Error ? error.message : String(error),
+      event,
+      stepId: step?.id || '',
+      op: step?.op || ''
+    });
+  }
+  async function safeRun(event, eventData = {}, step = null) {
+    try {
+      await run(event, eventData);
+    } catch (error) {
+      await dispatchError(error, event, step);
+    }
+  }
   function clientPredicatePasses(predicate) {
     if (!predicate) return true;
     const value = readPath(state, predicate.path);
@@ -958,24 +1039,20 @@ function renderClientEngine(program) {
     return true;
   }
   async function executeStep(step) {
-    const p = replaceParams(step.params || {});
+    const p = interpolateValue(step.params || {}, scopeFor({}));
     if (step.op === 'initSession') initSession(p);
-    if (step.op === 'renderSession') renderSession(p);
     if (step.op === 'setSession') await setSession(p);
     if (step.op === 'logout') await logout(p);
     if (step.op === 'setText') setText(p.widget, p.text || '');
+    if (step.op === 'setValue') setValue(p.widget, p.value ?? '');
     if (step.op === 'fetchJson') {
       const res = await fetch(p.url, { headers: actorHeaders() });
       state[p.into] = await res.json().catch(() => ({}));
       if (!res.ok && !p.allowFailure) throw new Error(state[p.into]?.error || 'request failed');
     }
-    if (step.op === 'renderList') renderList(p);
-    if (step.op === 'renderWitnesses') renderWitnesses(p);
+    if (step.op === 'renderCollection') renderCollection(p);
     if (step.op === 'renderWorldGraph') renderWorldGraph(p);
-    if (step.op === 'renderPrivateNotes') renderPrivateNotes(p);
     if (step.op === 'readForm') readForm(p);
-    if (step.op === 'postWidgetDefinition') await postWidgetDefinition(p);
-    if (step.op === 'activateWidgetVersion') await activateWidgetVersion(p);
     if (step.op === 'reloadPage') window.location.reload();
     if (step.op === 'postJson' || step.op === 'patchJson' || step.op === 'deleteJson') {
       const method = step.op === 'postJson' ? (p.method || 'POST') : step.op === 'patchJson' ? (p.method || 'PATCH') : (p.method || 'DELETE');
@@ -993,16 +1070,16 @@ function renderClientEngine(program) {
     const form = byWidget(widget);
     if (form && !form.__witnessBound) {
       form.__witnessBound = true;
-      form.addEventListener('submit', event => { event.preventDefault(); run('submit:' + widget).catch(err => setText('todo_status', 'Failed: ' + err.message)); });
+      form.addEventListener('submit', event => { event.preventDefault(); safeRun('submit:' + widget); });
     }
   }
   document.addEventListener('click', event => {
     const button = event.target.closest('[data-action]');
     if (!button) return;
     event.preventDefault();
-    run('click:' + button.dataset.action, { ...button.dataset, done: button.dataset.done === 'true' }).catch(err => setText('todo_status', 'Failed: ' + err.message));
+    safeRun('click:' + button.dataset.action, { ...button.dataset, done: button.dataset.done === 'true' });
   });
-  run('load').catch(err => setText('todo_status', 'Failed: ' + err.message));
+  safeRun('load');
   function escapeHtml(value) { return String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 })();`;
   return `<script type="application/json" id="witness-frontend-program">${json}</script>\n<script>\n${engine}\n</script>`;

@@ -8,6 +8,13 @@ A reflective application environment where memory is executable, witnessed, comp
 
 ## Near-term hardening
 
+### Address ASAP: remove architecture cheats from the runtime
+
+- [ ] Replace the todo-specific `renderList` behavior with DSL-driven row structure and row actions so list rendering is no longer hard-coded in the browser runtime
+- [ ] Move demo application behavior out of `startTodoServer` route switches and into witnessed/DSL-described route and process definitions
+- [ ] Retire legacy composite widget kinds (`TodoForm`, `TodoList`, `Status`, `LoginPanel`, `PrivateNotes`, `WitnessInspector`) instead of keeping them as long-lived compatibility shims
+- [ ] Remove hard-coded frontend failure sinks such as `todo_status` and make status/error targets explicit in the witnessed frontend program
+
 ### Browser-runtime tests
 
 - [x] Set up a small DOM execution harness (no full browser automation required)
@@ -46,6 +53,17 @@ A reflective application environment where memory is executable, witnessed, comp
 ---
 
 ## Medium-term features
+
+### Address in the next few sprints: make the witnessed model executable
+
+- [ ] Make witnessed route definitions executable so HTTP dispatch no longer depends on literal URL switches in `host.js`
+- [ ] Move `widget.define` defaults and mutation semantics (parent fallback, ordering, generated props, identity policy) out of ad hoc JS and into witnessed process behavior
+- [ ] Stop duplicating type compatibility/coercion rules across browser and server runtimes; share one witnessed type-model execution path
+- [ ] Remove demo-specific world-browser knowledge such as todo badges and hard-coded op-to-API mappings, or make them explicit projection plugins/extensions
+
+### Cross-cutting theming
+
+- [ ] Introduce witnessed theme boundaries so shell and product surfaces can carry distinct themes without CSS collisions across runtime boundaries
 
 ### Governance and proposal flow
 

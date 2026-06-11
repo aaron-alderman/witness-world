@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { expectNoRuntimeErrors, launchBrowser, startUiDemoServer } from "./support/harness.js";
+import { expectNoRuntimeErrors, launchBrowser, startUiDemoServer, waitForAppReady } from "./support/harness.js";
 
 async function waitUntil(predicate, { timeoutMs = 5000, stepMs = 50, message = "condition not met" } = {}) {
   const start = Date.now();
@@ -46,6 +46,11 @@ test("frontend form and click interactions mutate rendered state and witnesses",
     assert.ok(baselineTodoCount > 0);
 
     await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await page.waitForFunction(() => {
+      const select = document.querySelector('[data-widget="todo_actor_select"]');
+      return Boolean(select && select.querySelector('option[value="aaron"]'));
+    });
 
     await page.selectOption('[data-widget="todo_actor_select"]', "aaron");
     await page.locator('[data-widget="todo_open_button"]').click();
@@ -58,7 +63,7 @@ test("frontend form and click interactions mutate rendered state and witnesses",
     await page.fill('[data-widget="todo_input"]', "Write harness tests");
     await page.locator('[data-widget="todo_add_button"]').click();
     await page.waitForFunction(() => {
-      const status = document.querySelector('[data-widget="todo_status"]');
+      const status = document.querySelector('[data-role="app-status"]');
       return status && status.textContent.includes("Saving...");
     });
     await waitUntil(async () => {
@@ -75,7 +80,7 @@ test("frontend form and click interactions mutate rendered state and witnesses",
 
     await firstToggle.click();
     await page.waitForFunction(() => {
-      const status = document.querySelector('[data-widget="todo_status"]');
+      const status = document.querySelector('[data-role="app-status"]');
       return status && status.textContent.includes("Updating...");
     });
     await waitUntil(async () => {
@@ -86,7 +91,7 @@ test("frontend form and click interactions mutate rendered state and witnesses",
 
     await page.locator(`[data-action="deleteTodo"][data-id="${targetTodoId}"]`).first().click();
     await page.waitForFunction(() => {
-      const status = document.querySelector('[data-widget="todo_status"]');
+      const status = document.querySelector('[data-role="app-status"]');
       return status && status.textContent.includes("Deleting...");
     });
     await waitUntil(async () => {
@@ -96,7 +101,7 @@ test("frontend form and click interactions mutate rendered state and witnesses",
 
     await page.locator('[data-widget="todo_simulate_network_button"]').click();
     await page.waitForFunction(() => {
-      const status = document.querySelector('[data-widget="todo_status"]');
+      const status = document.querySelector('[data-role="app-status"]');
       return status && status.textContent.includes("Simulated network failure witnessed.");
     });
 
@@ -112,10 +117,10 @@ test("frontend form and click interactions mutate rendered state and witnesses",
     await page.fill('[data-widget="todo_private_note_input"]', "should fail without actor");
     await page.locator('[data-widget="todo_private_note_button"]').click();
     await page.waitForFunction(() => {
-      const status = document.querySelector('[data-widget="todo_status"]');
+      const status = document.querySelector('[data-role="app-status"]');
       return status && status.textContent.startsWith("Failed:");
     });
-    assert.match((await page.locator('[data-widget="todo_status"]').textContent()) || "", /Failed:/);
+    assert.match((await page.locator('[data-role="app-status"]').textContent()) || "", /Failed:/);
 
     const runtimeMessages = [
       ...runtime.pageErrors.map(error => error.message),

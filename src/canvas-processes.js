@@ -473,8 +473,8 @@ export const canvasProcessHandlers = {
 };
 
 export function declareCanvasRoutes(world, { actor }) {
-  defineRoute(world, { actor, id: "canvas_page_route", path: "/canvas", serves: "canvasView" });
-  defineRoute(world, { actor, id: "canvas_api_route", path: "/api/canvas", serves: "canvasView" });
-  defineRoute(world, { actor, id: "canvas_perspectives_api_route", path: "/api/canvas/perspectives", serves: "canvasView" });
-  defineRoute(world, { actor, id: "canvas_process_api_route", path: "/api/canvas/process", serves: "canvasView" });
+  defineRoute(world, { actor, id: "canvas_page_route", method: "GET", path: "/canvas", serves: "canvasView", handler: "page.canvas" });
+  defineRoute(world, { actor, id: "canvas_api_route", method: "GET", path: "/api/canvas", serves: "canvasView", handler: "canvas.read" });
+  defineRoute(world, { actor, id: "canvas_perspectives_api_route", method: "GET", path: "/api/canvas/perspectives", serves: "canvasView", handler: "canvas.perspectives.list" });
+  defineRoute(world, { actor, id: "canvas_process_api_route", method: "POST", path: "/api/canvas/process", serves: "canvasView", handler: "canvas.process" });
 }
