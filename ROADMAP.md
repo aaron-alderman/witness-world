@@ -12,219 +12,136 @@ The platform should eventually support:
 - clear product, shell, and extension boundaries
 - witnessed execution and inspection across the same world model
 
-This roadmap tracks the current path forward. Recent work that directly changes the active baseline should be marked explicitly so progress and remaining gaps stay visible.
+This roadmap is now organized around the major missing seams rather than historical implementation phases. It is the short operational view of what matters next.
 
 Related direction:
 
 - [docs/EXPERIENCE.md](C:\Users\aaron\Documents\world\docs\EXPERIENCE.md)
+- [docs/CAPABILITIES.md](C:\Users\aaron\Documents\world\docs\CAPABILITIES.md)
 
 ---
 
-## Experience Thesis
-
-The project is not only trying to prove a runtime. It is trying to become a truthful composition environment.
-
-That broader product direction currently looks like:
-
-- Sourcery as a truthful companion rather than a fake wizard
-- plugins/capabilities as first-class, inspectable "glass atoms"
-- contexts as the boundary for names, authority, and local composition
-- pages that are inspectable and increasingly editable in place
-- code, canvas, builders, and inspectors as different expressions over one world
-- desktop, browser, and hosted shells over the same core model
-
-The straight-line Todo/bootstrap work remains useful, but it is only one proving path through this larger shape.
-
----
-
-## Current Position
+## Current Baseline
 
 The project now has a credible runtime spine:
 
 - witnessed state and replayable projections
 - declarative routes, widgets, frontend programs, and widget version transitions
 - generic host startup through `serverRunner` + `serve`
-- identity-backed session handling on the main app path
+- identity-backed session handling on the main browser surfaces
 - live projection refresh without full page reload
 - dedicated Process View and generic frontend execution tracing
 - a bootstrap seam that can recover a blank world into a runnable app
-- a guided tutorial that teaches real app assembly through that seam
+- a guided Todo assembly path that uses the real bootstrap surface
 
-Phase 1 has established most of the runtime baseline:
+The baseline, bootstrap seam, and blank-to-Todo UI assembly path are done. The current runtime can honestly claim a coherent baseline without depending on hidden demo-only cheats at the core layer.
 
-- one real executable frontend process model
-- one canonical identity/session model across the public browser surfaces
-- one shared type execution path across browser and server
-- one explicit app/plugin execution boundary for runtime behavior
-- one explicit baseline contract with tests mapped to the supported surface
-- one blank-world bootstrap seam that can recover into a runnable app
-- one browser-proven path that recreates the todo app purely through the UI against the current runtime boundary
-
----
-
-## Phase 1: Stable Baseline
-
-Status: complete
-
-This phase is about reaching the point where the runtime is coherent, testable, explicit about its real boundaries, and authorable enough from inside the product to recreate the baseline demo without dropping back to source files.
-
-- [x] Make frontend runtime execution honor the full authored process model, not just the projected graph.
-- [x] Support `when`, `after`, `repeat.while`, and `repeat.forEach` in the real browser execution path.
-- [x] Unify identity and session behavior across `/`, `/world`, and `/canvas`.
-- [x] Remove raw actor/session escape hatches as normal app behavior.
-- [x] Replace the `/canvas` actor selector with the same session-backed login/logout model used by the main app, keeping any raw actor path dev-only.
-- [x] Share one type compatibility, coercion, and validation path across browser and server.
-- [x] Extract browser-safe shared type helpers from the type model so browser form coercion and validation stop re-implementing server semantics.
-- [x] Make the route/handler execution boundary explicit.
-- [x] Decide whether more route/process behavior becomes executable from witnessed definitions or remains an explicit app/plugin boundary in JS.
-- [x] Move `widget.define` defaults and mutation semantics out of demo-owned ad hoc logic.
-- [x] Define and test the stable baseline contract so the supported runtime surface is explicit.
-- [x] Make it possible to start from a blank world and recreate the todo app purely through the UI.
-- [x] Add a blank-world bootstrap editing shell so the product is usable before any app routes have been authored.
-- [x] Keep that bootstrap shell in a semi-internal seam: hidden by default, easy to reveal, and clearly separate from normal app content.
-- [x] Provide first-class UI authoring for the missing baseline structures: identities, widgets, frontend programs, routes, `serve` mounts, and `serverRunner` runtime wiring.
-- [x] Make those authoring flows compose through projected references and supported handler selection rather than brittle copied ids.
-- [x] Keep the current explicit app/plugin handler boundary, but make it selectable and wireable through the UI for baseline app assembly.
-- [x] Keep compiler/primitives and deep runtime machinery hidden by default so the default authoring surface stays focused on "your app" rather than substrate.
-- [x] Prove the blank-to-todo flow with an end-to-end test rather than manual source edits.
-
-Phase 1 now means the platform can honestly say it is no longer papering over core architectural choices at the baseline layer and the demo can be rebuilt from inside the product rather than by editing WTOML by hand.
-
-For this phase, "purely through the UI" means wiring the app from a blank world against the existing runtime and explicit handler/plugin boundary. It does not require authoring new backend JS handler implementations in-product.
-
-Related handoffs:
+Completed baseline detail lives here:
 
 - [PHASE1.md](C:\Users\aaron\Documents\world\PHASE1.md)
 - [BASELINE.md](C:\Users\aaron\Documents\world\BASELINE.md)
 
----
-
-## Post-Phase-1 Learning Surface
-
-Status: active
-
-Phase 1 is complete, but the platform still needs a clear way to teach the real assembly surface without exposing compiler/primitives as the default user experience.
-
-- [x] Add a dedicated `/_bootstrap` seam that is hidden by default but intentionally reachable.
-- [x] Keep raw typed builders visible so the tutorial uses the real product surface rather than a fake wizard.
-- [x] Add a guided Todo tutorial that pre-fills and highlights the real forms, waits for real submissions, and continues onto `/` for live app usage.
-- [x] Persist tutorial progress locally before auth and in the session after auth.
-- [x] Make tutorial resume survive seam transitions between `/_bootstrap` and `/`.
-- [ ] Generalize the tutorial system beyond the Todo tutorial once the next authoring milestones settle.
-- [ ] Add console-owned account recovery for persisted worlds, including an explicit password-reset path that does not depend on the browser UI.
-
-This learning surface is distinct from bootstrap recovery, normal app usage, and deeper self-hosting. It exists to teach the real app boundary honestly.
+The active question is no longer "can the baseline work?" It is "what seams most accelerate composition from here?"
 
 ---
 
-## Cross-Cutting Track: Sourcery and Composition Experience
+## Primary Missing Seams
+
+### 1. Capability Core
 
 Status: active
 
-This track is intentionally wider than the baseline Todo/tutorial flow. It captures the experience work needed so the product teaches composition honestly without hiding the machine.
+This is the highest-leverage missing seam. The platform needs first-class capability/plugin objects rather than a world where composition still bottoms out in hidden wiring.
 
-- [ ] Evolve Sourcery from a guided Todo tutorial into a contextual companion that can operate at world, page, section, and widget scope.
-- [ ] Let the user restart guidance from the beginning of the relevant scope: widget, section, page, chapter, or full first-run path.
-- [ ] Allow Sourcery to be disabled per context while remaining discoverable and re-enableable from a central view.
-- [ ] Introduce a first-class contextual plugin/capability model where installed capabilities expose public API, configuration surface, internals, context, and authority requirements.
-- [ ] Make plugin/capability installation feel local to the point of need rather than only a detached setup flow.
-- [ ] Continue moving toward editable-everywhere pages with context actions such as inspect, hide, replace, upgrade, and show witnesses/processes.
+- [ ] Make capability/plugin objects first-class in the model and DSL.
+- [ ] Define capability surfaces explicitly: public API, configuration, internals, context, and authority requirements.
+- [ ] Make capability installation and placement first-class rather than a detached setup ritual.
+- [ ] Make capability authoring part of the product story, not a privileged side channel.
+- [ ] Introduce a capability catalog/store model with install/update/remove lifecycle, provenance, and compatibility surfaces.
+- [ ] Keep the core engineering rule explicit: do not hide app semantics in JS unless they are universal runtime/shell behavior or explicit plugin implementation code.
+
+This seam is the main transition from "wiring one app" to "assembling many capabilities."
+
+### 2. Context, Identity, and Authority
+
+Status: active
+
+The runtime now has identity/session basics, but context and authority are still under-modeled relative to the product direction.
+
+- [ ] Make context first-class as the boundary for names, local composition, imports/exports, and perspective-local meaning.
+- [ ] Introduce local naming and cross-context reference semantics so the system stops depending on one global soup.
+- [ ] Deepen identity into first-class witnessed things, relations, and identity-to-perspective structure.
+- [ ] Model authority, delegation, and stewardship explicitly rather than leaving them as implied runtime behavior.
+- [ ] Introduce proposal/gate flows for world mutation where direct mutation should no longer be the whole story.
+- [ ] Define operator-owned recovery semantics for persistent worlds, including password reset and identity bootstrap recovery.
+
+This seam is what lets composition scale beyond a single trusted operator and a single flat namespace.
+
+### 3. Operating Surface
+
+Status: active
+
+The product still needs a real operating surface, not only bootstrap forms and inspector pages.
+
+- [ ] Make editable-everywhere pages a first-class product rule.
+- [ ] Define the page/widget/section editing grammar: inspect, hide, replace, upgrade, show process, show witnesses, show source.
 - [ ] Add a true search/command surface spanning pages, widgets, capabilities, commands, hidden surfaces, and witnessed execution.
-- [ ] Add a devtools-like live inspector that can map rendered elements back to authored widgets and save edits into the world.
-- [ ] Clarify how the bootstrap seam, normal app pages, and future meta-editor surfaces fit together without becoming contradictory products.
-- [ ] Keep the product truthful: curation and guidance may rank, collapse, and explain, but must not hide real modeled structure.
+- [ ] Add a live editable inspector that maps rendered elements back to authored structures and can save changes into the world.
+- [ ] Clarify and enforce the distinction between app content, harness/bootstrap content, and deep internals.
+- [ ] Expand the base UI primitive vocabulary where needed so the operating surface does not stall on missing HTML/CSS-level building blocks.
 
-This is the main bridge from the current bootstrap/tutorial work toward a world where users keep building and keep composing rather than graduating out of the product.
+This seam is what turns the system from "coherent architecture" into "a place you can actually operate."
 
----
+### 4. Sourcery
 
-## Phase 2: Executable Runtime Model
+Status: active
 
-This phase follows once Phase 1's authoring baseline is finished. The next step is to reduce how much of the platform is merely declarative-looking versus actually executable from the model.
+Sourcery should evolve from a single guided Todo tutorial into the truthful companion layer over the system.
 
-- [ ] Make route behavior more directly executable from witnessed/runtime-authored definitions.
-- [ ] Extend execution beyond frontend graphs into a more generic witnessed backend/process model.
+- [ ] Make Sourcery contextual at world, page, section, widget, and chapter scope.
+- [ ] Support restart-from-here behavior for the relevant scope rather than only full tutorial restart.
+- [ ] Support per-context enable/disable while keeping disabled guidance visible and recoverable.
+- [ ] Introduce concept-aware guidance that reveals ideas as they become relevant.
+- [ ] Introduce ambient, truthful curation that can surface good next steps without hiding the machine.
+- [ ] Keep Sourcery constrained to real product surfaces rather than letting it become a second fake authoring system.
+
+This seam is about teaching, stewarding, and assisting without losing truthfulness or user agency.
+
+### 5. Executable Runtime and Live Evolution
+
+Status: active
+
+The baseline runtime is coherent, but more of the system still needs to become honestly executable from the model and safely evolvable while live.
+
+- [ ] Make more route/backend behavior directly executable from witnessed/runtime-authored definitions where that can be done honestly.
 - [ ] Model cross-context request/response as one witnessed pattern across frontend, backend, compiler, human, and agent contexts.
-- [ ] Replace remaining hidden runtime conventions with explicit runtime contracts or extension points.
-- [ ] Remove any remaining demo-shaped behavior from generic runtime surfaces.
+- [ ] Remove remaining hidden runtime conventions by replacing them with explicit contracts or extension points.
+- [ ] Extend live evolution beyond widget subtree refresh toward broader runtime/process evolution.
+- [ ] Strengthen compatibility, migration, fork, block, and rollback semantics at the runtime level.
+- [ ] Expand rollback/recovery beyond same-soul widget version rollback.
 
-This phase should deepen execution, not add another layer of registries that only rename existing cheats.
+This seam is about making execution and live change trustworthy rather than merely declarative-looking.
 
----
+### 6. Shells, Persistence, and Ecosystem
 
-## Phase 3: Identity, Authority, and Proposals
+Status: active
 
-Once the runtime boundary is stable, identity and authority need to become fully native to the model rather than thin runtime support.
+The system is heading toward a real operating environment with multiple shells and a broader capability exchange layer.
 
-- [ ] Deepen identity into first-class witnessed things, relations, and perspective-aware authority.
-- [ ] Model authority and stewardship explicitly rather than treating runtime permission as an implementation detail.
-- [ ] Define operator-owned recovery semantics for identity bootstrap and password reset once warm/persistent worlds are a supported runtime mode.
-- [ ] Add proposal things and witnessed propose / accept / reject flows.
-- [ ] Use proposals and authority gates for projection edits, widget edits, and application mutations where direct mutation is no longer appropriate.
-- [ ] Clarify how personal, shared, and delegated perspectives interact with identity and authority.
+- [ ] Define the shell contract cleanly: what belongs to the core, what belongs to shells, and what belongs to capabilities/plugins.
+- [ ] Make desktop-shell capabilities explicit rather than letting them leak into the core model.
+- [ ] Introduce a first-class desktop shell that proves local ownership without forking the world model.
+- [ ] Make persistence, backup, import/export, and operator lifecycle first-class product concerns.
+- [ ] Define the capability/store ecosystem direction: provenance, trust, compatibility, install/update channels, and review/report surfaces.
+- [ ] Keep theming visible but subordinate here as a shell/product boundary problem rather than a top-level driver.
 
-This is the point where governance becomes part of the world model rather than sitting beside it.
-
----
-
-## Phase 4: Live Evolution
-
-The first pass of live widget hot-swap exists. The next phase is safe evolution of running systems.
-
-- [ ] Move from widget subtree refresh toward broader live runtime/process evolution.
-- [ ] Strengthen compatibility gates beyond first-pass widget-version transitions.
-- [ ] Make migration semantics capable of doing real state/projection transitions where required.
-- [ ] Expand rollback and recovery beyond same-soul widget version rollback.
-- [ ] Define fork/block/migrate semantics at a broader runtime level where version boundaries affect running systems.
-
-This phase should make live evolution trustworthy rather than merely impressive.
+This seam is what turns the prototype into something ownable locally, reachable remotely, and extensible across worlds.
 
 ---
 
-## Phase 5: Product, Shell, and Extension Boundaries
+## Secondary / Ongoing
 
-The runtime now spans multiple surfaces. Those surfaces still need cleaner separation.
-
-- [ ] Introduce explicit theme boundaries so shell and product surfaces can diverge without CSS conflict.
-- [ ] Formalize what belongs to the shell, what belongs to product apps, and what belongs to extensions/plugins.
-- [ ] Clarify which projections are generic platform projections and which are app-specific.
-- [ ] Make extension/app boundaries visible in both code structure and runtime execution contracts.
-- [ ] Define desktop-shell-specific capabilities as explicit capabilities/plugins rather than hidden core behavior.
-- [ ] Prove the same world can be owned locally and reached remotely without splitting the model.
-
-This is where theming belongs. It should be deferred until the runtime baseline is coherent, but not ignored indefinitely.
-
----
-
-## Phase 6: Self-Editing and Self-Hosting
-
-This is the transition from prototype platform to platform that can meaningfully define and evolve itself.
-
-- [ ] Make the UI edit the witnessed graph that defines the UI.
-- [ ] Represent compiler/runtime artifacts as witnessed, versioned things inside the same world.
-- [ ] Support self-upgrade of the editor/runtime through witnessed proposals, transitions, and rollback.
-- [ ] Make core editing, projection, and execution flows operable from within the platform itself.
-
-This phase should only begin once the lower-level execution and authority model is stable enough to trust.
-
----
-
-## Phase 7: Multi-Context and Distributed Operation
-
-The long-term model should work across more than one machine, one user, or one execution context.
-
-- [ ] Treat agents as perspective-bound contexts that emit proposals and witnesses, never canonical truth.
-- [ ] Support witnessed exchange across multiple machines and people.
-- [ ] Derive authority from witnessed chains back to genesis across distributed contexts.
-- [ ] Clarify replication, merge, and conflict semantics for distributed witnessed worlds.
-
-This is long-range work. It should not distort near-term runtime decisions, but near-term runtime decisions should avoid foreclosing it.
-
----
-
-## Ongoing but Secondary
-
-These items matter, but they should not take priority over the phase structure above.
+These items matter, but they should not visually compete with the primary missing seams above.
 
 ### Canvas and Interaction
 
@@ -234,6 +151,15 @@ These items matter, but they should not take priority over the phase structure a
 - [ ] Bring perspective layouts into the World Graph view.
 - [ ] Allow manual override of auto-layout in the World Graph.
 
-### Graph Layout
+### Layout and Rendering
 
 - [ ] Evaluate stronger layout/routing approaches when the lightweight graph layout stops being adequate.
+- [ ] Improve the base styling/layout vocabulary needed for richer app surfaces without reintroducing one-off widget cheats.
+
+---
+
+## Notes
+
+- [docs/CAPABILITIES.md](C:\Users\aaron\Documents\world\docs\CAPABILITIES.md) is the detailed inventory of missing reusable molecules.
+- [docs/EXPERIENCE.md](C:\Users\aaron\Documents\world\docs\EXPERIENCE.md) is the broader product-experience thesis.
+- This roadmap is intentionally not a full history log. Completed baseline detail belongs in the phase/baseline handoff documents, while this file stays focused on what matters next.

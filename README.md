@@ -19,6 +19,7 @@ This repository is not only exploring a Todo demo. The broader direction is a tr
 - desktop, browser, and hosted shells can sit over the same core model
 
 See [docs/EXPERIENCE.md](C:\Users\aaron\Documents\world\docs\EXPERIENCE.md) for the wider product direction.
+See [docs/CAPABILITIES.md](C:\Users\aaron\Documents\world\docs\CAPABILITIES.md) for the detailed capability breakdown and current do/don't rules.
 
 The demo is a Todo app that is intentionally more complicated than a normal Todo app because it exercises the architecture:
 
@@ -239,3 +240,5 @@ The current Todo/bootstrap path should be read as a proving ground, not the fina
 - contextual Sourcery guidance
 - editable-everywhere product surfaces
 - coherent desktop/web/hosted shells over the same world model
+
+The detailed capability inventory for that longer arc lives in [docs/CAPABILITIES.md](C:\Users\aaron\Documents\world\docs\CAPABILITIES.md).
