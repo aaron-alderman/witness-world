@@ -8,6 +8,8 @@ const CANVAS_CSS = `
   button { border: 2px outset #fff; background: #d4d0c8; padding: 2px 10px; cursor: pointer; }
   button:active { border-style: inset; }
   button.mode-active { border-style: inset; background: #c0d4ec; }
+  .canvas-session { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .canvas-session-status { color: #333; min-width: 180px; }
   #status { margin-left: auto; color: #444; max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .canvas-shell { display: flex; flex: 1; min-height: 0; }
   .canvas-main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
@@ -38,7 +40,6 @@ const CANVAS_CSS = `
 `;
 
 const CANVAS_CLIENT_JS = `(async () => {
-  const actors = window.__CANVAS_ACTORS__ || [];
   const MIN_W = 40, MIN_H = 24;
   const FLUSH_DELAY_MS = 1500;
   const PLAY_INTERVAL_MS = 150;
@@ -50,7 +51,7 @@ const CANVAS_CLIENT_JS = `(async () => {
   const statusEl = el('status');
 
   const state = {
-    actor: localStorage.getItem('witness.actor') || '',
+    session: { authenticated: false, identity: null, actor: null, label: null, perspective: null },
     perspective: localStorage.getItem('witness.canvasPerspective') || '',
     model: null,
     camera: { x: 0, y: 0, zoom: 1 },
@@ -86,14 +87,64 @@ const CANVAS_CLIENT_JS = `(async () => {
   };
   const soleSelected = () => selectionSize() === 1 ? findInstance([...state.selected][0]) : null;
 
-  const headers = () => {
-    const h = { 'content-type': 'application/json' };
-    if (state.actor) h['x-witness-actor'] = state.actor;
-    return h;
+  const currentActor = () => state.session?.actor || '';
+  const isAuthenticated = () => Boolean(state.session?.authenticated && currentActor());
+  const headers = () => ({ 'content-type': 'application/json' });
+  const syncSession = session => {
+    state.session = session?.authenticated
+      ? {
+          authenticated: true,
+          identity: session.identity || null,
+          actor: session.actor || null,
+          label: session.label || session.actor || null,
+          perspective: session.perspective || null
+        }
+      : { authenticated: false, identity: null, actor: null, label: null, perspective: null };
+    renderSessionStatus();
+    updateUndoButtons();
+    markDirty();
   };
+  const renderSessionStatus = () => {
+    const sessionStatus = el('session-status');
+    if (!sessionStatus) return;
+    sessionStatus.textContent = isAuthenticated()
+      ? 'Signed in as ' + (state.session.label || currentActor()) + ' (' + currentActor() + ')' + (state.session.perspective ? ' in ' + state.session.perspective : '')
+      : 'Not signed in';
+    const loginButton = el('session-open-btn');
+    const logoutButton = el('session-logout-btn');
+    if (loginButton) loginButton.disabled = false;
+    if (logoutButton) logoutButton.disabled = !isAuthenticated();
+  };
+  async function initSession() {
+    const response = await fetch('/api/session');
+    const body = await response.json().catch(() => ({ authenticated: false }));
+    if (!response.ok) throw new Error(body?.error || 'session request failed');
+    syncSession(body);
+  }
+  async function openSession() {
+    const username = (el('session-username')?.value || '').trim();
+    const password = el('session-password')?.value || '';
+    const response = await fetch('/api/session', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ username, password })
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body?.error || 'session request failed');
+    syncSession(body);
+    setStatus('signed in as ' + (body.label || body.actor || body.identity));
+  }
+  async function logoutSession() {
+    const response = await fetch('/api/session', { method: 'DELETE' });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body?.error || 'logout failed');
+    syncSession({ authenticated: false, identity: null, actor: null, label: null, perspective: null });
+    setStatus('signed out');
+  }
 
   async function post(process, params) {
     if (!isLive()) { setStatus('read-only: history view'); return null; }
+    if (!isAuthenticated()) { setStatus('sign in first'); return null; }
     if (process !== 'canvas.batch') await flushOutbox(true);
     const response = await fetch('/api/canvas/process', {
       method: 'POST',
@@ -217,7 +268,7 @@ const CANVAS_CLIENT_JS = `(async () => {
 
   function queueCamera() {
     if (!isLive()) return;
-    if (!state.perspective || !state.actor) return;
+    if (!state.perspective || !isAuthenticated()) return;
     outbox.perspective = state.perspective;
     outbox.camera = { x: state.camera.x, y: state.camera.y, zoom: state.camera.zoom };
     scheduleFlush();
@@ -287,7 +338,7 @@ const CANVAS_CLIENT_JS = `(async () => {
   }
 
   function updateUndoButtons() {
-    const enabled = isLive() && !!state.actor && !!state.perspective;
+    const enabled = isLive() && isAuthenticated() && !!state.perspective;
     el('undo-btn').disabled = !enabled;
     el('redo-btn').disabled = !enabled;
   }
@@ -588,7 +639,7 @@ const CANVAS_CLIENT_JS = `(async () => {
       ctx.fillStyle = '#777';
       ctx.font = '14px "Segoe UI", sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(state.actor ? 'Create or choose a perspective to begin.' : 'Choose an actor, then a perspective.', widthPx / 2, heightPx / 2);
+      ctx.fillText(isAuthenticated() ? 'Create or choose a perspective to begin.' : 'Sign in, then choose a perspective.', widthPx / 2, heightPx / 2);
       return;
     }
     ctx.setTransform(dpr * state.camera.zoom, 0, 0, dpr * state.camera.zoom, dpr * state.camera.x, dpr * state.camera.y);
@@ -1122,37 +1173,34 @@ const CANVAS_CLIENT_JS = `(async () => {
   }
 
   function initToolbar() {
-    const actorSelect = el('actor-select');
-    actorSelect.innerHTML = '';
-    const blank = document.createElement('option');
-    blank.value = '';
-    blank.textContent = '(no actor)';
-    actorSelect.appendChild(blank);
-    for (const a of actors) {
-      const option = document.createElement('option');
-      option.value = a.id;
-      option.textContent = a.label || a.id;
-      actorSelect.appendChild(option);
-    }
-    actorSelect.value = state.actor;
-    actorSelect.addEventListener('change', async () => {
+    const beginSessionTransition = async action => {
       stopPlayback();
       state.history.playhead = null;
       setHistoryBanner();
       await flushOutbox(true);
-      state.actor = actorSelect.value;
       state.history.witnesses = [];
-      if (state.actor) {
-        localStorage.setItem('witness.actor', state.actor);
-        await fetch('/api/session', { method: 'POST', headers: headers(), body: JSON.stringify({ actor: state.actor }) });
-        setStatus('perspective opened as ' + state.actor);
-      } else {
-        localStorage.removeItem('witness.actor');
-      }
+      await action();
       if (state.history.open) { await fetchWitnesses(); renderTimeline(); }
+      clearSelection();
+      await loadPerspectives();
+      await loadCanvas();
       updateUndoButtons();
       markDirty();
+    };
+
+    el('session-open-btn').addEventListener('click', async () => {
+      await beginSessionTransition(() => openSession());
     });
+    el('session-logout-btn').addEventListener('click', async () => {
+      await beginSessionTransition(() => logoutSession());
+    });
+    for (const sessionField of ['session-username', 'session-password']) {
+      el(sessionField).addEventListener('keydown', async event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        await beginSessionTransition(() => openSession());
+      });
+    }
 
     el('perspective-select').addEventListener('change', async event => {
       stopPlayback();
@@ -1242,8 +1290,10 @@ const CANVAS_CLIENT_JS = `(async () => {
     setStatus('projection module failed to load - timeline disabled');
   }
   initToolbar();
+  renderSessionStatus();
   setMode('select');
   resize();
+  await initSession();
   updateUndoButtons();
   await loadPerspectives();
   await loadCanvas();
@@ -1274,8 +1324,15 @@ export function renderCanvasPage({ actors = [] } = {}) {
 </head>
 <body>
 <header class="canvas-toolbar">
-  <label for="actor-select">Actor</label>
-  <select id="actor-select"></select>
+  <div class="canvas-session">
+    <label for="session-username">Username</label>
+    <input id="session-username" type="text" autocomplete="username">
+    <label for="session-password">Password</label>
+    <input id="session-password" type="password" autocomplete="current-password">
+    <button id="session-open-btn" type="button">Sign in</button>
+    <button id="session-logout-btn" type="button">Sign out</button>
+    <span id="session-status" class="canvas-session-status">Not signed in</span>
+  </div>
   <label for="perspective-select">Perspective</label>
   <select id="perspective-select"></select>
   <button id="new-perspective-btn" type="button">New perspective</button>
@@ -1319,7 +1376,6 @@ export function renderCanvasPage({ actors = [] } = {}) {
     <div id="palette"></div>
   </aside>
 </div>
-<script>window.__CANVAS_ACTORS__ = ${JSON.stringify(actors)};</script>
 <script>${CANVAS_CLIENT_JS}</script>
 </body>
 </html>`;

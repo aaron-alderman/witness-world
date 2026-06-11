@@ -259,6 +259,7 @@ function applyDoc(world, { kind, values }, context) {
         handlerSet: valuesWithDefaults.handlerSet ?? null,
         actors: valuesWithDefaults.actors ?? null,
         storage: valuesWithDefaults.storage ?? null,
+        allowActorHeader: valuesWithDefaults.allowActorHeader === true,
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
       });
 

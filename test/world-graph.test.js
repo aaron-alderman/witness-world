@@ -144,6 +144,8 @@ test("demo UI includes world graph widget and frontend render operation", async 
 
     const html = await fetch(`${server.url}/world`).then(r => r.text());
     assert.match(html, /World Graph/);
+    assert.match(html, /Personal Projection/);
+    assert.match(html, /world_session_form/);
     assert.match(html, /renderWorldGraph/);
     assert.match(html, /world-graph-inspector/);
     assert.match(html, /world-ref-button/);
@@ -341,6 +343,8 @@ test("world page selected object inspector includes properties, associations, as
   applyWitnessDocs(world, docs);
   const html = renderWidgetPage(world, { rootWidget: "world_graph_page", frontendProgram: "world_graph_program", appConfig: { page: "world" } });
 
+  assert.match(html, /world_session_status/);
+  assert.match(html, /initSession/);
   assert.match(html, /Object properties/);
   assert.match(html, /Values/);
   assert.match(html, /world-value-widget/);
@@ -389,6 +393,8 @@ test("world page supports source document and primitive browser UI modes", async
   applyWitnessDocs(world, docs);
   const html = renderWidgetPage(world, { rootWidget: "world_graph_page", frontendProgram: "world_graph_program", appConfig: { page: "world" } });
 
+  assert.match(html, /submit:world_session_form/);
+  assert.match(html, /click:logout/);
   assert.match(html, /world-document-view/);
   assert.match(html, /data-world-source-file/);
   assert.match(html, /world-primitive-browser/);

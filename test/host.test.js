@@ -29,7 +29,7 @@ async function openSession(serverUrl, { username = "aaron", password = username 
   };
 }
 
-function applyMinimalTodoDsl(world, extra = "") {
+function applyMinimalTodoDsl(world, extra = "", { allowActorHeader = false } = {}) {
   applyWitnessToml(world, `
 [[widget]]
 actor = "adam"
@@ -44,6 +44,7 @@ backendHost = "backendHost"
 frontendHost = "frontendHost"
 handlerSet = "demo"
 storage = { todoProjection = "todos.json", privateNotesProjection = "notes.json" }
+allowActorHeader = ${allowActorHeader ? "true" : "false"}
 
 [[identity]]
 actor = "aaron"
@@ -128,7 +129,7 @@ path = "/"
 serves = "page"
 method = "GET"
 handler = "page.home"
-params = { rootWidget = "todo_app_widget", liveProjection = true }
+params = { rootWidget = "todo_app_widget" }
 
 [[serve]]
 actor = "adam"
@@ -420,6 +421,54 @@ test("session api authenticates authored identities and cookie actor wins over r
   }
 });
 
+test("raw actor headers are ignored by default and only work for runners that opt in", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  applyMinimalTodoDsl(world);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const rejected = await fetch(`${server.url}/api/private-notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
+      body: JSON.stringify({ text: "should not authenticate" })
+    });
+    assert.equal(rejected.status, 401);
+  } finally {
+    await server.close();
+  }
+
+  const worldWithOptIn = createWorld();
+  declareBackendHost(worldWithOptIn, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(worldWithOptIn, { actor: "adam", id: "frontendHost" });
+  applyMinimalTodoDsl(worldWithOptIn, "", { allowActorHeader: true });
+
+  const optedIn = await startServer(worldWithOptIn, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const accepted = await fetch(`${optedIn.url}/api/private-notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
+      body: JSON.stringify({ text: "explicit dev actor path" })
+    });
+    assert.equal(accepted.status, 201);
+    const body = await accepted.json();
+    assert.equal(body.note.actor, "aaron");
+  } finally {
+    await optedIn.close();
+  }
+});
+
 test("demo app end-to-end: frontend request, backend json store, witnesses", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
@@ -460,6 +509,87 @@ test("demo app end-to-end: frontend request, backend json store, witnesses", asy
     assert.equal(processes.includes("widget.renderHtml"), true);
     assert.equal(processes.includes("todo.create"), true);
     assert.equal(obsProcesses.includes("backend.readTodos"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("widget pages default live projection on and allow explicit opt-out", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  applyMinimalTodoDsl(world, `
+[[widget]]
+actor = "adam"
+id = "static_root"
+kind = "Page"
+props = { title = "Static" }
+
+[[frontendProgram]]
+actor = "adam"
+id = "static_program"
+rootWidget = "static_root"
+
+[[step]]
+actor = "adam"
+program = "static_program"
+event = "load"
+op = "setText"
+params = { widget = "static_status", text = "loaded" }
+
+[[widget]]
+actor = "adam"
+id = "static_status"
+kind = "Text"
+props = { text = "" }
+
+[[attachWidget]]
+actor = "adam"
+parent = "static_root"
+child = "static_status"
+order = 0
+
+[[route]]
+actor = "adam"
+id = "static_route"
+path = "/static"
+serves = "page"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "static_root", frontendProgram = "static_program", liveProjection = false }
+
+[[route]]
+actor = "adam"
+id = "dynamic_route"
+path = "/dynamic"
+serves = "page"
+method = "GET"
+handler = "page.home"
+params = { rootWidget = "static_root", frontendProgram = "static_program" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "static_route"
+
+[[serve]]
+actor = "adam"
+serverRunner = "server_runner"
+route = "dynamic_route"
+`);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const defaultHtml = await fetch(`${server.url}/dynamic`).then(r => r.text());
+    assert.match(defaultHtml, /"liveProjection":true/);
+
+    const staticHtml = await fetch(`${server.url}/static`).then(r => r.text());
+    assert.match(staticHtml, /"liveProjection":false/);
   } finally {
     await server.close();
   }
@@ -562,8 +692,9 @@ test("personal projections: identity session, themes, and private notes are sess
     const aaronNotes = await fetch(`${server.url}/api/private-notes`, {
       headers: { cookie: login.cookie }
     }).then(r => r.json());
+    const callanLogin = await openSession(server.url, { username: "callan", password: "callan" });
     const callanNotes = await fetch(`${server.url}/api/private-notes`, {
-      headers: { "x-witness-actor": "callan" }
+      headers: { cookie: callanLogin.cookie }
     }).then(r => r.json());
 
     assert.deepEqual(aaronNotes.notes.map(n => n.text), ["Aaron-only thought"]);
@@ -573,7 +704,7 @@ test("personal projections: identity session, themes, and private notes are sess
       headers: { cookie: login.cookie }
     }).then(r => r.json());
     const callanWitnesses = await fetch(`${server.url}/api/witnesses`, {
-      headers: { "x-witness-actor": "callan" }
+      headers: { cookie: callanLogin.cookie }
     }).then(r => r.json());
 
     assert.equal(aaronWitnesses.witnesses.some(w => w.process === "privateNote.create"), true);
@@ -656,10 +787,11 @@ order = 0
   assert.equal(server.ok, true);
   let html = await (await fetch(server.url)).text();
   assert.match(html, /Banner v1/);
+  const login = await openSession(server.url, { username: "aaron", password: "aaron" });
 
   const res = await fetch(`${server.url}/api/widget-versions/banner/activate`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
+    headers: { "content-type": "application/json", cookie: login.cookie },
     body: JSON.stringify({ version: "banner_v2" })
   });
   assert.equal(res.status, 200);
@@ -692,7 +824,7 @@ path = "/"
 serves = "page"
 method = "GET"
 handler = "page.home"
-params = { rootWidget = "root", liveProjection = true }
+params = { rootWidget = "root" }
 
 [[widgetVersion]]
 actor = "adam"
@@ -751,9 +883,10 @@ order = 0
   });
 
   try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
     const blocked = await fetch(`${server.url}/api/widget-versions/banner/activate`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
+      headers: { "content-type": "application/json", cookie: login.cookie },
       body: JSON.stringify({ version: "banner_v3" })
     });
     assert.equal(blocked.status, 409);
@@ -763,7 +896,7 @@ order = 0
 
     const migrated = await fetch(`${server.url}/api/widget-versions/banner/activate`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
+      headers: { "content-type": "application/json", cookie: login.cookie },
       body: JSON.stringify({ version: "banner_v2" })
     });
     assert.equal(migrated.status, 200);
@@ -773,7 +906,7 @@ order = 0
 
     const forkRequired = await fetch(`${server.url}/api/widget-versions/banner/activate`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
+      headers: { "content-type": "application/json", cookie: login.cookie },
       body: JSON.stringify({ version: "banner_v3" })
     });
     assert.equal(forkRequired.status, 409);
@@ -783,7 +916,7 @@ order = 0
 
     const rollback = await fetch(`${server.url}/api/widget-versions/banner/rollback`, {
       method: "POST",
-      headers: { "x-witness-actor": "aaron" }
+      headers: { cookie: login.cookie }
     });
     assert.equal(rollback.status, 200);
     const rollbackBody = await rollback.json();
@@ -815,16 +948,17 @@ test("process graph lab exposes simulated network failure as a witnessed UI scen
     assert.match(html, /Simulate network error/);
     assert.match(html, /simulateNetworkError/);
     assert.match(html, /allowFailure/);
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
 
     const res = await fetch(`${server.url}/api/simulate-network-error`, {
-      headers: { "x-witness-actor": "aaron" }
+      headers: { cookie: login.cookie }
     });
     assert.equal(res.status, 503);
     const body = await res.json();
     assert.equal(body.error, "simulated network error");
 
     const witnesses = await fetch(`${server.url}/api/witnesses`, {
-      headers: { "x-witness-actor": "aaron" }
+      headers: { cookie: login.cookie }
     }).then(r => r.json());
     assert.equal(witnesses.witnesses.some(w => w.process === "network.simulated.failed"), true);
     assert.equal(world.allWitnesses().some(w => w.process === "network.simulated.failed" && w.actor === "aaron"), true);
@@ -876,9 +1010,7 @@ test("world graph endpoint is reachable and includes projected nodes", async () 
   });
 
   try {
-    const body = await fetch(`${server.url}/api/world-graph`, {
-      headers: { "x-witness-actor": "aaron" }
-    }).then(r => r.json());
+    const body = await fetch(`${server.url}/api/world-graph`).then(r => r.json());
     assert(Array.isArray(body.graph.nodes));
     assert(Array.isArray(body.graph.edges));
     assert(body.graph.nodes.some(n => n.id === "todo_app_widget"));

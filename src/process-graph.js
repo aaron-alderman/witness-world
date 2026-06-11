@@ -73,7 +73,7 @@ function parseEvent(event) {
   return { trigger, target, targetKind };
 }
 
-export async function runProcessGraph(nodes, event, execute, state = {}) {
+export async function runProcessGraph(nodes, event, execute, state = {}, hooks = {}) {
   const eventNodes = nodes.filter(n => n.event === event);
   const done = new Set();
   const skipped = new Set();
@@ -97,14 +97,19 @@ export async function runProcessGraph(nodes, event, execute, state = {}) {
       if (!predicatePasses(node.when, state)) {
         skipped.add(node.id);
         trace.push({ node: node.id, status: "skipped" });
+        await hooks.onNodeSkipped?.(node, { status: "skipped" });
         return;
       }
       try {
-        await runNode(node, execute, state, trace);
+        await hooks.onNodeStart?.(node, { status: "start" });
+        const meta = await runNode(node, execute, state);
         done.add(node.id);
+        trace.push({ node: node.id, status: "done", ...meta });
+        await hooks.onNodeDone?.(node, { status: "done", ...meta });
       } catch (error) {
         failed.add(node.id);
         trace.push({ node: node.id, status: "failed", error: error.message });
+        await hooks.onNodeFailed?.(node, error, { status: "failed" });
         throw error;
       }
     }));
@@ -113,14 +118,13 @@ export async function runProcessGraph(nodes, event, execute, state = {}) {
   return { state, trace };
 }
 
-async function runNode(node, execute, state, trace) {
+export async function runNode(node, execute, state) {
   const repeat = node.repeat ?? null;
   if (repeat?.forEach) {
     const items = readPath(state, repeat.forEach.from);
     const list = Array.isArray(items) ? items : [];
     await Promise.all(list.map((item, index) => execute(node, state, { item, index, as: repeat.forEach.as ?? "item" })));
-    trace.push({ node: node.id, status: "done", mode: "forEach", count: list.length });
-    return;
+    return { mode: "forEach", count: list.length };
   }
 
   if (repeat?.while) {
@@ -130,15 +134,14 @@ async function runNode(node, execute, state, trace) {
       if (count++ >= max) throw new Error(`process graph loop exceeded max iterations at ${node.id}`);
       await execute(node, state, { iteration: count });
     }
-    trace.push({ node: node.id, status: "done", mode: "while", count });
-    return;
+    return { mode: "while", count };
   }
 
   await execute(node, state, {});
-  trace.push({ node: node.id, status: "done" });
+  return { mode: null, count: null };
 }
 
-function predicatePasses(predicate, state) {
+export function predicatePasses(predicate, state) {
   if (!predicate) return true;
   const value = readPath(state, predicate.path);
   if ("equals" in predicate) return value === predicate.equals;
@@ -148,7 +151,7 @@ function predicatePasses(predicate, state) {
   return true;
 }
 
-function readPath(value, path) {
+export function readPath(value, path) {
   return String(path || "").split(".").filter(Boolean).reduce((x, key) => x == null ? undefined : x[key], value);
 }
 

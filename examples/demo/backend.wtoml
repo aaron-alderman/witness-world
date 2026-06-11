@@ -16,7 +16,7 @@ method = "GET"
 path = "/"
 serves = "todoAppView"
 handler = "page.home"
-params = { rootWidget = "todo_app_widget", frontendProgram = "todo_frontend_program", page = "home", excludeWidgetRoles = ["world-graph-body"], liveProjection = true }
+params = { rootWidget = "todo_app_widget", frontendProgram = "todo_frontend_program", page = "home", excludeWidgetRoles = ["world-graph-body"] }
 
 [[serve]]
 serverRunner = "demo_server"
@@ -28,7 +28,7 @@ method = "GET"
 path = "/world"
 serves = "worldGraphView"
 handler = "page.world"
-params = { rootWidget = "world_graph_page", frontendProgram = "world_graph_program", page = "world", liveProjection = true }
+params = { rootWidget = "world_graph_page", frontendProgram = "world_graph_program", page = "world" }
 
 [[serve]]
 serverRunner = "demo_server"

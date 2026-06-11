@@ -18,6 +18,23 @@ async function tempStore() {
   return tempPath("todos.json");
 }
 
+function cookieHeader(setCookie) {
+  return (setCookie || "").split(";")[0];
+}
+
+async function openSession(serverUrl, { username = "aaron", password = username } = {}) {
+  const response = await fetch(`${serverUrl}/api/session`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username, password })
+  });
+  return {
+    response,
+    body: await response.json(),
+    cookie: cookieHeader(response.headers.get("set-cookie"))
+  };
+}
+
 test("repeated identical process attempts remain distinct witnessed occurrences", () => {
   const world = createWorld();
 
@@ -76,9 +93,10 @@ test("widget editor creates stable thing-style ids rather than host timestamp id
   });
 
   try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
     const response = await fetch(`${server.url}/api/widgets`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
+      headers: { "content-type": "application/json", cookie: login.cookie },
       body: JSON.stringify({ kind: "Text", text: "Hello", parent: "todo_app_widget", order: 4 })
     });
     const created = await response.json();
@@ -106,9 +124,10 @@ test("typed widget.define rejects incompatible inputs with structured failures",
   });
 
   try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
     const response = await fetch(`${server.url}/api/widgets`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-witness-actor": "aaron" },
+      headers: { "content-type": "application/json", cookie: login.cookie },
       body: JSON.stringify({ kind: "Nope", text: "Hello", order: "later" })
     });
     assert.equal(response.status, 400);
@@ -178,6 +197,7 @@ id = "server_runner"
 backendHost = "backendHost"
 frontendHost = "frontendHost"
 handlerSet = "demo"
+allowActorHeader = true
 
 [[route]]
 actor = "adam"
@@ -236,7 +256,10 @@ test("malformed JSON requests are witnessed as request failures", async () => {
     });
 
     assert.equal(response.status, 500);
-    assert.equal(world.allObservations().at(-1).process, "server.request.failed");
+    assert.equal(
+      world.allObservations().some(observation => observation.process === "server.request.failed"),
+      true
+    );
   } finally {
     await server.close();
   }

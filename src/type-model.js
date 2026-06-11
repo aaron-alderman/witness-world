@@ -1,6 +1,6 @@
 import { thing, relation } from "./kernel.js";
 
-const FALLBACK_EDITOR_BY_TRAIT = {
+export const FALLBACK_EDITOR_BY_TRAIT = {
   numeric: { control: "number" },
   boolean: { control: "checkbox" },
   color: { control: "color" },
@@ -184,7 +184,7 @@ export function validateFlatRecord(model, spec, value, { coerceStrings = false, 
   return { ok: failures.length === 0, value: output, failures, spec };
 }
 
-function matchAccepts(model, value, accepts) {
+export function matchAccepts(model, value, accepts) {
   const candidates = matchingValueTypes(model, value);
   if (model?.valueTypesById?.[accepts]) {
     const matched = candidates.find(typeId => compatibleWithType(model, typeId, accepts));
@@ -211,14 +211,14 @@ function matchAccepts(model, value, accepts) {
   };
 }
 
-function matchingValueTypes(model, value) {
+export function matchingValueTypes(model, value) {
   return Object.values(model?.valueTypesById ?? {})
     .filter(type => valueMatchesType(model, type.id, value))
     .map(type => type.id)
     .sort();
 }
 
-function valueMatchesType(model, typeId, value) {
+export function valueMatchesType(model, typeId, value) {
   const editor = editorForValueType(model, typeId);
   if (editor.control === "number") return typeof value === "number" && Number.isFinite(value);
   if (editor.control === "checkbox") return typeof value === "boolean";
@@ -227,7 +227,7 @@ function valueMatchesType(model, typeId, value) {
   return typeof value === "string";
 }
 
-function coerceDomValue(model, accepts, raw) {
+export function coerceDomValue(model, accepts, raw) {
   if (typeof raw !== "string") return raw;
   const editor = model?.valueTypesById?.[accepts] ? editorForValueType(model, accepts) : inferTraitEditor(model, accepts);
   if (editor.control === "number") {
@@ -241,7 +241,7 @@ function coerceDomValue(model, accepts, raw) {
   return raw;
 }
 
-function inferTraitEditor(model, accepts) {
+export function inferTraitEditor(model, accepts) {
   if (FALLBACK_EDITOR_BY_TRAIT[accepts]) return FALLBACK_EDITOR_BY_TRAIT[accepts];
   for (const [trait, editor] of Object.entries(FALLBACK_EDITOR_BY_TRAIT)) {
     if (model?.traitsById?.[accepts] && accepts === trait) return editor;
@@ -249,7 +249,7 @@ function inferTraitEditor(model, accepts) {
   return { control: "text" };
 }
 
-function normalizeFields(fields) {
+export function normalizeFields(fields) {
   return Array.isArray(fields)
     ? fields
       .filter(Boolean)
@@ -272,13 +272,13 @@ function normalizeEditor(editor) {
   return normalized;
 }
 
-function jsTypeOf(value) {
+export function jsTypeOf(value) {
   if (value === null) return "null";
   if (Array.isArray(value)) return "array";
   return typeof value;
 }
 
-function previewValue(value) {
+export function previewValue(value) {
   if (typeof value === "string") return JSON.stringify(value.length > 36 ? `${value.slice(0, 33)}...` : value);
   if (typeof value === "number" || typeof value === "boolean") return String(value);
   if (value === null || value === undefined) return String(value);

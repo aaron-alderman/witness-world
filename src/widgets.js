@@ -1,7 +1,23 @@
 import { thing, relation } from "./kernel.js";
 import { witnessRelations } from "./modules.js";
-import { stepGraphFromLinearSteps } from "./process-graph.js";
-import { typeModelProjection, editorForValueType } from "./type-model.js";
+import { stepGraphFromLinearSteps, runProcessGraph, runNode, predicatePasses } from "./process-graph.js";
+import {
+  FALLBACK_EDITOR_BY_TRAIT,
+  typeModelProjection,
+  editorForValueType,
+  processSpecFor,
+  validateFlatRecord,
+  validateProcessInput,
+  compatibleWithType,
+  matchAccepts,
+  matchingValueTypes,
+  valueMatchesType,
+  coerceDomValue,
+  inferTraitEditor,
+  normalizeFields,
+  jsTypeOf,
+  previewValue
+} from "./type-model.js";
 
 export function defineWidget(world, { actor, id, kind, props = {}, owner = actor }) {
   return world.emit({
@@ -616,6 +632,23 @@ function renderClientEngine(program) {
   const byWidget = id => document.querySelector('[data-widget="' + CSS.escape(id) + '"]');
   const byTemplate = id => document.querySelector('[data-widget-template="' + CSS.escape(id) + '"]');
   const readPath = (value, path) => String(path || '').split('.').filter(Boolean).reduce((x, key) => x == null ? undefined : x[key], value);
+  const FALLBACK_EDITOR_BY_TRAIT = ${JSON.stringify(FALLBACK_EDITOR_BY_TRAIT)};
+  const predicatePasses = ${predicatePasses.toString()};
+  const runNode = ${runNode.toString()};
+  const runProcessGraph = ${runProcessGraph.toString()};
+  const compatibleWithType = ${compatibleWithType.toString()};
+  const editorForValueType = ${editorForValueType.toString()};
+  const processSpecFor = ${processSpecFor.toString()};
+  const normalizeFields = ${normalizeFields.toString()};
+  const jsTypeOf = ${jsTypeOf.toString()};
+  const previewValue = ${previewValue.toString()};
+  const inferTraitEditor = ${inferTraitEditor.toString()};
+  const coerceDomValue = ${coerceDomValue.toString()};
+  const valueMatchesType = ${valueMatchesType.toString()};
+  const matchingValueTypes = ${matchingValueTypes.toString()};
+  const matchAccepts = ${matchAccepts.toString()};
+  const validateFlatRecord = ${validateFlatRecord.toString()};
+  const validateProcessInput = ${validateProcessInput.toString()};
   const textAt = (value, path) => String(readPath(value, path) ?? '');
   const setText = (id, text) => { const el = byWidget(id); if (el) el.textContent = text; };
   const setValue = (id, value) => {
@@ -1149,75 +1182,11 @@ function renderClientEngine(program) {
     if (!el) return null;
     return el.matches?.('form') ? el : el.querySelector?.('form') || null;
   };
-  const compatibleWithType = (from, target) => {
-    if (!from || !target) return false;
-    if (from === target) return true;
-    const queue = [...(typeModel.compatibleWith?.[from] || [])];
-    const seen = new Set([from]);
-    while (queue.length) {
-      const current = queue.shift();
-      if (!current || seen.has(current)) continue;
-      if (current === target) return true;
-      seen.add(current);
-      queue.push(...(typeModel.compatibleWith?.[current] || []));
-    }
-    return false;
-  };
-  const editorForValueType = valueType => {
-    const exact = typeModel.valueTypesById?.[valueType];
-    if (exact?.editor?.control) return exact.editor;
-    if (compatibleWithType(valueType, 'numeric')) return { control: 'number' };
-    if (compatibleWithType(valueType, 'boolean')) return { control: 'checkbox' };
-    if (compatibleWithType(valueType, 'color')) return { control: 'color' };
-    if (compatibleWithType(valueType, 'enumerated')) return { control: 'select' };
-    return { control: 'text' };
-  };
-  const valueMatchesType = (typeId, value) => {
-    const editor = editorForValueType(typeId);
-    if (editor.control === 'number') return typeof value === 'number' && Number.isFinite(value);
-    if (editor.control === 'checkbox') return typeof value === 'boolean';
-    if (editor.control === 'color') return typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
-    if (editor.control === 'select') return typeof value === 'string' && Array.isArray(editor.options) && editor.options.includes(value);
-    return typeof value === 'string';
-  };
-  const matchingValueTypes = value => Object.values(typeModel.valueTypesById || {})
-    .filter(type => valueMatchesType(type.id, value))
-    .map(type => type.id);
-  const matchesAccepts = (accepts, value) => {
-    const candidates = matchingValueTypes(value);
-    if (typeModel.valueTypesById?.[accepts]) return candidates.some(typeId => compatibleWithType(typeId, accepts));
-    if (typeModel.traitsById?.[accepts]) return candidates.some(typeId => compatibleWithType(typeId, accepts));
-    return false;
-  };
-  const coerceDomValue = (accepts, raw) => {
-    if (typeof raw !== 'string') return raw;
-    const editor = typeModel.valueTypesById?.[accepts] ? editorForValueType(accepts) : compatibleWithType(accepts, 'boolean') ? { control: 'checkbox' } : compatibleWithType(accepts, 'numeric') ? { control: 'number' } : { control: 'text' };
-    if (editor.control === 'number') {
-      const value = Number(raw);
-      return Number.isFinite(value) ? value : raw;
-    }
-    if (editor.control === 'checkbox') {
-      if (['true', '1', 'on', 'yes'].includes(raw.toLowerCase())) return true;
-      if (['false', '0', 'off', 'no'].includes(raw.toLowerCase())) return false;
-    }
-    return raw;
-  };
   const readTypedForm = (data, schema) => {
-    const spec = typeModel.processSpecsByProcess?.[schema];
-    if (!spec) throw new Error('unknown schema ' + schema);
-    const out = Object.create(null);
-    for (const field of spec.inputs || []) {
-      const key = field.source || field.name;
-      const raw = data[key];
-      if (raw == null || raw === '') {
-        if (field.required) throw new Error(field.name + ' required');
-        continue;
-      }
-      const value = coerceDomValue(field.accepts, raw);
-      if (!matchesAccepts(field.accepts, value)) throw new Error(field.name + ' expected ' + field.accepts);
-      out[field.name] = value;
-    }
-    return out;
+    const result = validateProcessInput(typeModel, schema, data, { coerceStrings: true });
+    if (result.ok) return result.value;
+    const first = result.failures?.[0];
+    throw new Error(first?.reason || ('typed validation failed for ' + schema));
   };
   const readForm = ({ widget, into, schema }) => {
     const form = formForWidget(widget);
@@ -1304,8 +1273,6 @@ function renderClientEngine(program) {
   async function run(event, eventData = {}, { runId = makeRunId() } = {}) {
     state.event = eventData;
     const nodes = (program.graph || program.steps || []).filter(s => s.event === event);
-    const done = new Set();
-    const skipped = new Set();
     await recordProcessEvent('frontend.process.start', {
       runId,
       program: program.id || '',
@@ -1314,22 +1281,34 @@ function renderClientEngine(program) {
       eventData
     });
     try {
-      while (done.size + skipped.size < nodes.length) {
-        const ready = nodes.filter(node => {
-          if (done.has(node.id) || skipped.has(node.id)) return false;
-          return (node.after || []).every(dep => done.has(dep) || skipped.has(dep));
-        });
-        if (ready.length === 0) throw new Error('frontend process graph stalled for ' + event);
-        await Promise.all(ready.map(async node => {
-          if (!clientPredicatePasses(node.when)) {
-            skipped.add(node.id);
+      await runProcessGraph(
+        nodes,
+        event,
+        async (node, nextState, executionScope) => {
+          await executeStep(node, { runId, stateRef: nextState, executionScope });
+        },
+        state,
+        {
+          onNodeStart: async node => {
+            await recordProcessEvent('frontend.step.start', stepTraceMeta(node, event, runId, { status: 'start' }));
+          },
+          onNodeSkipped: async node => {
             await recordProcessEvent('frontend.step.skipped', stepTraceMeta(node, event, runId, { status: 'skipped' }));
-            return;
+          },
+          onNodeDone: async (node, meta) => {
+            await recordProcessEvent('frontend.step.done', stepTraceMeta(node, event, runId, {
+              status: 'done',
+              repeatCount: meta.count ?? null
+            }));
+          },
+          onNodeFailed: async (node, error) => {
+            await recordProcessEvent('frontend.step.failed', stepTraceMeta(node, event, runId, {
+              status: 'failed',
+              message: error instanceof Error ? error.message : String(error)
+            }));
           }
-          await executeStep(node, { event, runId });
-          done.add(node.id);
-        }));
-      }
+        }
+      );
       await recordProcessEvent('frontend.process.done', {
         runId,
         program: program.id || '',
@@ -1365,18 +1344,8 @@ function renderClientEngine(program) {
       await dispatchError(error, event, step);
     }
   }
-  function clientPredicatePasses(predicate) {
-    if (!predicate) return true;
-    const value = readPath(state, predicate.path);
-    if ('equals' in predicate) return value === predicate.equals;
-    if ('notEquals' in predicate) return value !== predicate.notEquals;
-    if (predicate.truthy) return !!value;
-    if (predicate.falsy) return !value;
-    return true;
-  }
-  async function executeStep(step, { event, runId }) {
-    const p = interpolateValue(step.params || {}, scopeFor({}));
-    await recordProcessEvent('frontend.step.start', stepTraceMeta(step, event, runId, { status: 'start' }));
+  async function executeStep(step, { runId, stateRef = state, executionScope = {} }) {
+    const p = interpolateValue(step.params || {}, scopeFor(executionScope));
     try {
       await withTraceContext(runId, step.id, async () => {
         if (step.op === 'initSession') await initSession(p);
@@ -1386,8 +1355,8 @@ function renderClientEngine(program) {
         if (step.op === 'setValue') setValue(p.widget, p.value ?? '');
         if (step.op === 'fetchJson') {
           const res = await fetch(p.url, requestOptions({}, { url: p.url }));
-          state[p.into] = await res.json().catch(() => ({}));
-          if (!res.ok && !p.allowFailure) throw new Error(state[p.into]?.error || 'request failed');
+          stateRef[p.into] = await res.json().catch(() => ({}));
+          if (!res.ok && !p.allowFailure) throw new Error(stateRef[p.into]?.error || 'request failed');
         }
         if (step.op === 'renderCollection') renderCollection(p);
         if (step.op === 'renderWorldGraph') renderWorldGraph(p);
@@ -1399,21 +1368,13 @@ function renderClientEngine(program) {
           const options = requestOptions({ method, headers: { 'content-type': 'application/json' } }, { url: p.url });
           if (step.op !== 'deleteJson') options.body = JSON.stringify(resolveBody(p));
           const res = await fetch(p.url, options);
-          state[p.into || 'lastResponse'] = await res.json().catch(() => ({}));
-          if (!res.ok) throw new Error(state[p.into || 'lastResponse'].error || 'request failed');
+          stateRef[p.into || 'lastResponse'] = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(stateRef[p.into || 'lastResponse'].error || 'request failed');
         }
         if (step.op === 'clearForm') clearForm(p);
-        if (step.op === 'run') await run(p.event, state.event);
+        if (step.op === 'run') await run(p.event, stateRef.event);
       });
-      await recordProcessEvent('frontend.step.done', stepTraceMeta(step, event, runId, {
-        status: 'done',
-        repeatCount: Array.isArray(readPath(state, step.repeat?.forEach?.from)) ? readPath(state, step.repeat?.forEach?.from).length : null
-      }));
     } catch (error) {
-      await recordProcessEvent('frontend.step.failed', stepTraceMeta(step, event, runId, {
-        status: 'failed',
-        message: error instanceof Error ? error.message : String(error)
-      }));
       throw error;
     }
   }

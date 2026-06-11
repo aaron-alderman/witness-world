@@ -14,6 +14,16 @@ test("world browser supports graph/primitive/source mode transitions and interac
     await page.goto(`${server.url}/world`);
     await page.waitForLoadState("domcontentloaded");
     await page.locator('[data-widget="world_graph_page"]').waitFor();
+    await page.locator('[data-widget="world_session_status"]').waitFor();
+    assert.match((await page.locator('[data-widget="world_session_status"]').textContent()) || "", /Not signed in/);
+
+    await page.fill('[data-widget="world_username_input"]', "aaron");
+    await page.fill('[data-widget="world_password_input"]', "aaron");
+    await page.locator('[data-widget="world_open_button"]').click();
+    await page.waitForFunction(() => {
+      const status = document.querySelector('[data-widget="world_session_status"]');
+      return Boolean(status && status.textContent && status.textContent.includes("Signed in as Aaron"));
+    });
 
     const modeCount = await page.locator('[data-world-mode]').count();
     assert.equal(modeCount >= 3, true);

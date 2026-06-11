@@ -4,7 +4,7 @@
 
 This document is the handoff guide for **Phase 1: Stable Baseline**.
 
-It should be read alongside [ROADMAP.md](C:\Users\aaron\Documents\world\ROADMAP.md), but it is intentionally narrower.
+It should be read alongside [ROADMAP.md](C:\Users\aaron\Documents\world\ROADMAP.md) and [BASELINE.md](C:\Users\aaron\Documents\world\BASELINE.md), but it is intentionally narrower.
 
 - `ROADMAP.md` answers: what comes next overall
 - `PHASE1.md` answers: what must be made true before the platform can honestly claim a stable baseline
@@ -32,33 +32,19 @@ The project has already cleared the obvious near-term architecture cheats:
 - source AST / world graph / process graph inspection
 - test coverage across unit, integration, and browser paths
 
-What remains is more dangerous because it is easier to miss.
+The core execution/stability gaps have now been closed:
 
-The current tree contains several places where the architecture **looks** more unified than it really is:
+- frontend runtime execution matches the authored process model, including `repeat.while` and `repeat.forEach`
+- `/`, `/world`, and `/canvas` now share the same cookie-backed identity/session model in normal browser use
+- raw actor headers are no longer a normal app auth path; they require explicit runner opt-in for dev/test use
+- browser and server now share the same type compatibility/coercion/validation path
+- `widget.define` defaults and mutation semantics have been extracted out of demo route code into [src/widget-define.js](C:\Users\aaron\Documents\world\src\widget-define.js)
 
-1. **Process semantics are richer in projection than in runtime execution.**
-   - Authored graph semantics exist in [src/process-graph.js](C:\Users\aaron\Documents\world\src\process-graph.js:76).
-   - The real browser runtime in [src/widgets.js](C:\Users\aaron\Documents\world\src\widgets.js:1361) still executes a simpler step runner and does not honor full repeat semantics.
-   - Process View can therefore render behavior the runtime does not honor.
+The main remaining gap is no longer hidden runtime contradiction. It is that the current baseline still depends on off-platform authored source files for major application structures.
 
-2. **Identity/session is generic on the main app, but not across all public surfaces.**
-   - Generic host session logic now lives in [src/host.js](C:\Users\aaron\Documents\world\src\host.js:424).
-   - Canvas still uses raw actor headers in [src/canvas-page.js](C:\Users\aaron\Documents\world\src\canvas-page.js:91).
-   - That means the project still has more than one session model in practice.
+By the stricter Phase 1 bar now in force, the phase is not complete until the platform can start from a blank world and recreate the todo app purely through the UI.
 
-3. **Type execution is duplicated.**
-   - Browser-side compatibility/coercion logic lives in [src/widgets.js](C:\Users\aaron\Documents\world\src\widgets.js:1152).
-   - Server-side canonical type validation lives in [src/type-model.js](C:\Users\aaron\Documents\world\src\type-model.js:113).
-   - Duplication here is not cosmetic. It is a future drift bug.
-
-4. **Route mounting is declarative, but execution still depends on JS handler registries and demo handler sets.**
-   - Registry / app-context selection still exists in [src/host.js](C:\Users\aaron\Documents\world\src\host.js:16) and [src/host.js](C:\Users\aaron\Documents\world\src\host.js:348).
-   - Demo behavior still lives behind [src/demo-handler-set.js](C:\Users\aaron\Documents\world\src\demo-handler-set.js:10).
-   - This may be acceptable, but only if it becomes an explicit boundary rather than an unexamined cheat.
-
-5. **`widget.define` behavior is still hidden in app-specific JS.**
-   - Parent fallback, ordering, identity policy, generated props, and validation flow still live in [src/demo-handler-set.js](C:\Users\aaron\Documents\world\src\demo-handler-set.js:146).
-   - If self-editing is core, this cannot remain a silent implementation detail forever.
+The current boundary and baseline contract are now recorded in [BASELINE.md](C:\Users\aaron\Documents\world\BASELINE.md).
 
 ---
 
@@ -71,13 +57,15 @@ At the end of Phase 1, the project should have:
 - one real type execution model
 - one explicit runtime execution boundary
 - one explicit baseline contract with tests proving it
+- enough first-class in-product authoring to recreate the baseline todo app from blank without hand-editing WTOML
 
-This phase is successful when the runtime is boring in the right ways:
+This phase is successful when the runtime is boring in the right ways and the baseline app can be rebuilt from inside the product:
 
 - fewer hidden exceptions
 - fewer mirrored implementations
 - fewer demo-only escape hatches
 - fewer places where the inspection model is ahead of the execution model
+- fewer places where the architecture only exists in external source files instead of first-class product editing flows
 
 ---
 
@@ -100,6 +88,8 @@ Phase 1 is about stability and coherence, not capability growth.
 ## Workstreams
 
 ### 1. Make Frontend Process Execution Real
+
+Status: complete
 
 #### Problem
 
@@ -146,6 +136,8 @@ Make the browser runtime honor the same authored semantics that the process grap
 
 ### 2. Unify Identity and Session Across Public Surfaces
 
+Status: complete
+
 #### Problem
 
 The main app now uses generic identity-backed session behavior through [src/host.js](C:\Users\aaron\Documents\world\src\host.js:424).
@@ -184,6 +176,8 @@ Do not regress developer ergonomics so badly that basic canvas work becomes impo
 ---
 
 ### 3. Share One Type Execution Path
+
+Status: complete
 
 #### Problem
 
@@ -226,6 +220,8 @@ Do not solve this by copying more of `type-model.js` into `widgets.js`.
 ---
 
 ### 4. Decide the Runtime Execution Boundary
+
+Status: complete
 
 #### Problem
 
@@ -280,6 +276,8 @@ This workstream must end with a short explicit boundary record in code or docs t
 
 ### 5. Move `widget.define` Semantics Out of Demo Ad Hoc Logic
 
+Status: complete
+
 #### Problem
 
 `widgets.create` currently bakes real semantics into demo-specific JS in [src/demo-handler-set.js](C:\Users\aaron\Documents\world\src\demo-handler-set.js:146):
@@ -314,6 +312,8 @@ If the same hidden semantics still live in a slightly more abstract JS helper, P
 
 ### 6. Define the Stable Baseline Contract
 
+Status: partially complete
+
 #### Problem
 
 Right now "stable baseline" is a judgment call.
@@ -323,6 +323,11 @@ That is not good enough for handoff.
 #### Required outcome
 
 Write down the baseline contract and prove it with tests.
+
+That contract is necessary, but no longer sufficient for overall Phase 1 completion. The final sign-off requirement is now:
+
+- the todo app can be recreated from a blank world purely through the UI
+- this flow is tested end-to-end
 
 #### The contract should answer
 
@@ -351,6 +356,151 @@ The end state should include one compact baseline contract document or section t
 
 ---
 
+### 7. Blank-World Authoring to a Working Todo App
+
+Status: not started
+
+#### Problem
+
+The platform can now execute the demo coherently, but it still cannot *author* that demo coherently from inside itself.
+
+The missing gap is not just "more forms." It is a complete bootstrap path:
+
+- from a blank world, there is no authored app route to land on
+- major authored structures still live in WTOML:
+  - `[[identity]]`
+  - widgets and template widgets
+  - `[[frontendProgram]]` and steps
+  - `[[route]]`
+  - `[[serve]]`
+  - `[[serverRunner]]`
+- a user can mutate some runtime state through the UI, but cannot assemble a runnable application boundary from inside the product
+
+That means the platform still depends on off-platform authorship for the structures that actually make an app exist.
+
+#### Required outcome
+
+Make it possible to start from a blank world and recreate the todo app purely through the UI, using first-class authoring flows for the missing baseline structures.
+
+#### Scope guard
+
+This does **not** require Phase 1 to solve all future self-hosting problems.
+
+It is enough if the platform can:
+
+- bootstrap into a generic editing shell without app-specific WTOML
+- author the todo app against the existing runtime and explicit handler/plugin boundary
+- wire routes to existing supported handler ids without hand-editing source files
+
+Phase 1 does **not** require:
+
+- authoring new backend JS handler implementations through the UI
+- eliminating the current explicit `handlerSet` boundary
+- building a general-purpose compiler or package manager inside the product
+- exposing compiler internals or primitive/runtime internals as normal user-facing editing surfaces
+
+#### Seam model
+
+Phase 1 should treat the product as having three layers of visibility:
+
+1. **User app surface**
+   - This is what should feel like "your app":
+     - identities
+     - widgets/templates
+     - frontend programs
+     - routes
+     - `serve` mounts
+     - runtime wiring needed to make the app reachable
+
+2. **Semi-internal bootstrap seam**
+   - This is necessary to prevent the platform from bricking itself when no app exists yet.
+   - It should be:
+     - hidden by default
+     - easy to reveal intentionally
+     - clearly presented as platform/bootstrap wiring rather than normal app content
+   - This seam is where blank-world setup and recovery tooling should live.
+
+3. **Deep internal seam**
+   - Compiler internals, primitive machinery, and lower-level runtime substrate should remain hidden by default in Phase 1.
+   - They may be inspectable in advanced/internal views, but they should not be the default authoring surface for users trying to build an app.
+
+The point of this split is to help the user understand:
+
+- what is really their application
+- what is platform harness needed for safe bootstrap/recovery
+- what is deep internal machinery that should not dominate the default experience
+
+#### Required sub-outcomes
+
+1. **Bootstrap editing entry**
+   - A blank world must still expose a generic editor shell or fallback route so the user can begin authoring without first creating an app page by hand.
+   - This should live in the semi-internal bootstrap seam, not as ordinary app content.
+
+2. **First-class structure editors**
+   - The UI must support creation and editing of:
+     - identities
+     - widgets and template widgets
+     - frontend programs and steps
+     - routes
+     - `serve` mounts
+     - `serverRunner` runtime wiring
+
+3. **Reference-safe composition**
+   - Those editors must compose by reference rather than by fragile free-text copying wherever practical:
+     - select a root widget for a page
+     - select a frontend program for a page route
+     - select a route for a `serve` mount
+     - select a handler id from the supported runtime/plugin surface
+     - select identities/perspectives/parents/templates from projected data
+
+4. **Runnable app assembly**
+   - The authored structures must be sufficient to expose:
+     - `/`
+     - `/api/session`
+     - `/api/todos`
+     - `/api/private-notes`
+     - any additional routes needed for the recognizable todo demo
+
+5. **Proof by recreation**
+   - The todo app must be rebuilt from blank through the UI in an end-to-end test.
+
+6. **Visibility discipline**
+   - The bootstrap seam must be hidden by default but intentionally revealable.
+   - Deep internal compiler/primitive machinery must remain hidden by default.
+   - The default editing experience should emphasize app-authored structures over platform substrate.
+
+#### Minimum acceptance
+
+- starting from a blank world, the user can reach a generic authoring UI
+- the user can create at least one identity through that UI and log in through the resulting app
+- the user can author the widget/page structure for the todo app through the UI
+- the user can author the frontend program flow for load, submit, update, delete, and logout through the UI
+- the user can author the required routes, `serve` mounts, and `serverRunner` wiring through the UI
+- the resulting app is reachable and performs todo CRUD without hand-editing WTOML
+- the whole flow is proven by automated end-to-end coverage
+
+#### Recommended implementation direction
+
+- Treat this as a **product-authoring flow**, not a source-text editor milestone.
+- Prefer generic projection-edit APIs for each missing module kind rather than one giant "import app definition" backdoor.
+- Reuse the shared type model and process specs for these editors so the authoring UI is constrained by the same runtime rules.
+- Keep handler selection explicit:
+  - generic runtime handlers should come from the runtime surface
+  - app/plugin handlers should come from the active explicit extension boundary
+- Add a generic bootstrap shell that exists even when no user-authored app route exists yet.
+- Keep bootstrap and recovery affordances visibly separate from ordinary app editing so users can tell when they are editing platform harness rather than app behavior.
+
+#### Recommended proving artifact
+
+Add one browser/integration test that starts from a blank world, drives the authoring UI, publishes the todo app wiring, then verifies:
+
+- login works
+- todo create works
+- todo toggle/delete works
+- the resulting world contains the expected authored structures and runtime witnesses
+
+---
+
 ## Recommended Order of Work
 
 This is the recommended sequence. It reduces the chance of rework.
@@ -371,8 +521,14 @@ This is the recommended sequence. It reduces the chance of rework.
 5. **`widget.define` semantics extraction**
    - Once the execution boundary is clear, move widget mutation semantics to the right layer.
 
-6. **Baseline contract + final tests**
-   - Lock the resulting shape down explicitly.
+6. **Baseline contract**
+   - Lock the resulting runtime shape down explicitly.
+
+7. **Blank-to-app UI authoring**
+   - Add a blank-world bootstrap editing shell.
+   - Add the missing first-class editing flows for identities, widgets, frontend programs, routes, `serve`, and runtime mounting.
+   - Make those editors compose through projected references rather than raw copied ids where practical.
+   - Prove that the todo app can be recreated from blank through the product UI itself.
 
 ---
 

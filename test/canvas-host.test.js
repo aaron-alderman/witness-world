@@ -12,6 +12,23 @@ async function tempStore() {
   return path.join(dir, "todos.json");
 }
 
+function cookieHeader(setCookie) {
+  return (setCookie || "").split(";")[0];
+}
+
+async function openSession(serverUrl, { username = "aaron", password = username } = {}) {
+  const response = await fetch(`${serverUrl}/api/session`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username, password })
+  });
+  return {
+    response,
+    body: await response.json(),
+    cookie: cookieHeader(response.headers.get("set-cookie"))
+  };
+}
+
 async function startCanvasServer() {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
@@ -22,12 +39,68 @@ actor = "adam"
 id = "canvas_server"
 backendHost = "backendHost"
 frontendHost = "frontendHost"
+allowActorHeader = true
 
 [[widget]]
 actor = "adam"
 id = "todo_app_widget"
 kind = "Page"
 props = { title = "Witness Todo" }
+
+[[identity]]
+actor = "aaron"
+id = "identity.aaron"
+label = "Aaron"
+username = "aaron"
+password = "aaron"
+homePerspective = "aaron:personal"
+
+[[identity]]
+actor = "callan"
+id = "identity.callan"
+label = "Callan"
+username = "callan"
+password = "callan"
+homePerspective = "callan:personal"
+
+[[route]]
+actor = "adam"
+id = "session_read_route"
+method = "GET"
+path = "/api/session"
+serves = "session"
+handler = "session.read"
+
+[[serve]]
+actor = "adam"
+serverRunner = "canvas_server"
+route = "session_read_route"
+
+[[route]]
+actor = "adam"
+id = "session_open_route"
+method = "POST"
+path = "/api/session"
+serves = "session"
+handler = "session.open"
+
+[[serve]]
+actor = "adam"
+serverRunner = "canvas_server"
+route = "session_open_route"
+
+[[route]]
+actor = "adam"
+id = "session_logout_route"
+method = "DELETE"
+path = "/api/session"
+serves = "session"
+handler = "session.logout"
+
+[[serve]]
+actor = "adam"
+serverRunner = "canvas_server"
+route = "session_logout_route"
 
 [[route]]
 actor = "adam"
@@ -121,6 +194,8 @@ test("canvas page renders with inspector sections and parseable scripts", async 
     assert.match(html, /canvas-surface/);
     assert.match(html, /Thing properties/);
     assert.match(html, /Projection properties/);
+    assert.match(html, /session-username/);
+    assert.match(html, /session-status/);
     assert.match(html, /mode-pan-btn/);
     assert.match(html, /snap-toggle-btn/);
     assert.match(html, /canvas\.batch/);
@@ -161,23 +236,25 @@ test("canvas routes are themselves witnessed as route things", async () => {
 test("end-to-end: perspective, things, placement, move, and relation over HTTP", async () => {
   const { server } = await startCanvasServer();
   try {
-    const created = await postProcess(server, "canvas.perspective.create", { title: "Aaron Workspace" });
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const asAaron = { cookie: login.cookie, "content-type": "application/json" };
+    const created = await postProcess(server, "canvas.perspective.create", { title: "Aaron Workspace" }, asAaron);
     assert.equal(created.status, 200);
     const perspective = (await created.json()).witness.body.id;
 
-    const perspectives = await fetch(`${server.url}/api/canvas/perspectives`).then(r => r.json());
+    const perspectives = await fetch(`${server.url}/api/canvas/perspectives`, { headers: { cookie: login.cookie } }).then(r => r.json());
     assert(perspectives.perspectives.some(p => p.id === perspective && p.title === "Aaron Workspace"));
 
-    const first = await postProcess(server, "canvas.createThing", { perspective, name: "Customer", x: 100, y: 100 }).then(r => r.json());
-    const second = await postProcess(server, "canvas.createThing", { perspective, name: "Proposal", x: 400, y: 220 }).then(r => r.json());
+    const first = await postProcess(server, "canvas.createThing", { perspective, name: "Customer", x: 100, y: 100 }, asAaron).then(r => r.json());
+    const second = await postProcess(server, "canvas.createThing", { perspective, name: "Proposal", x: 400, y: 220 }, asAaron).then(r => r.json());
 
-    const moved = await postProcess(server, "canvas.move", { perspective, instance: first.witness.body.instance, x: 150, y: 175 });
+    const moved = await postProcess(server, "canvas.move", { perspective, instance: first.witness.body.instance, x: 150, y: 175 }, asAaron);
     assert.equal(moved.status, 200);
 
-    const related = await postProcess(server, "canvas.relate", { from: first.witness.body.thing, rel: "references", to: second.witness.body.thing, perspective });
+    const related = await postProcess(server, "canvas.relate", { from: first.witness.body.thing, rel: "references", to: second.witness.body.thing, perspective }, asAaron);
     assert.equal(related.status, 200);
 
-    const canvas = (await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent(perspective)}`, { headers: asAaron }).then(r => r.json())).canvas;
+    const canvas = (await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent(perspective)}`, { headers: { cookie: login.cookie } }).then(r => r.json())).canvas;
     assert.equal(canvas.instances.length, 2);
     const customer = canvas.instances.find(i => i.label === "Customer");
     assert.equal(customer.x, 150);
@@ -192,12 +269,14 @@ test("end-to-end: perspective, things, placement, move, and relation over HTTP",
 test("placing the same thing twice over HTTP yields two instances", async () => {
   const { server } = await startCanvasServer();
   try {
-    const created = await postProcess(server, "canvas.perspective.create", { title: "Dupes" }).then(r => r.json());
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const asAaron = { cookie: login.cookie, "content-type": "application/json" };
+    const created = await postProcess(server, "canvas.perspective.create", { title: "Dupes" }, asAaron).then(r => r.json());
     const perspective = created.witness.body.id;
-    const thing = (await postProcess(server, "canvas.createThing", { perspective, name: "Customer", x: 0, y: 0 }).then(r => r.json())).witness.body.thing;
-    const again = await postProcess(server, "canvas.place", { perspective, thing, x: 300, y: 300 });
+    const thing = (await postProcess(server, "canvas.createThing", { perspective, name: "Customer", x: 0, y: 0 }, asAaron).then(r => r.json())).witness.body.thing;
+    const again = await postProcess(server, "canvas.place", { perspective, thing, x: 300, y: 300 }, asAaron);
     assert.equal(again.status, 200);
-    const canvas = (await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent(perspective)}`, { headers: asAaron }).then(r => r.json())).canvas;
+    const canvas = (await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent(perspective)}`, { headers: { cookie: login.cookie } }).then(r => r.json())).canvas;
     assert.equal(canvas.instances.length, 2);
     assert.equal(canvas.availableThings.find(t => t.id === thing).placed, 2);
   } finally {

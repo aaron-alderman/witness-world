@@ -726,7 +726,7 @@ repeat = { while = { path = "session.authenticated", falsy = true }, max = 2 }
 # Dedicated world graph page. This is a separate perspective, not embedded in the todo UI.
 [[page]]
 id = "world_graph_page"
-children = ["world_graph_back_link", "world_graph_process_link", "world_graph_title", "world_graph_canvas"]
+children = ["world_graph_back_link", "world_graph_process_link", "world_session", "world_graph_title", "world_graph_canvas"]
 title = "Witness World Graph"
 
 [[link]]
@@ -740,6 +740,50 @@ id = "world_graph_process_link"
 href = "/process"
 text = "Open Process View"
 class = "world-graph-link"
+
+[[box]]
+id = "world_session"
+children = ["world_session_title", "world_session_form", "world_session_status"]
+class = "session-panel"
+role = "session-panel"
+
+[[text]]
+id = "world_session_title"
+text = "Personal Projection"
+
+[[form]]
+id = "world_session_form"
+children = ["world_username_input", "world_password_input", "world_open_button", "world_logout_button"]
+role = "login-form"
+
+[[input]]
+id = "world_username_input"
+name = "username"
+placeholder = "Username"
+autocomplete = "username"
+
+[[input]]
+id = "world_password_input"
+name = "password"
+placeholder = "Password"
+type = "password"
+autocomplete = "current-password"
+
+[[button]]
+id = "world_open_button"
+text = "Sign in"
+type = "submit"
+
+[[button]]
+id = "world_logout_button"
+text = "Logout"
+type = "button"
+action = "logout"
+
+[[text]]
+id = "world_session_status"
+text = "Not signed in"
+role = "session-status"
 
 [[heading]]
 id = "world_graph_title"
@@ -758,6 +802,20 @@ rootWidget = "world_graph_page"
 [[step]]
 program = "world_graph_program"
 order = 0
+op = "initSession"
+on = "load"
+
+[[step]]
+program = "world_graph_program"
+order = 1
+op = "setText"
+on = "load"
+widget = "world_session_status"
+text = "${state.session && state.session.authenticated ? 'Signed in as ' + state.session.label + ' (' + state.session.actor + ')' + (state.session.perspective ? ' in ' + state.session.perspective : '') : 'Not signed in'}"
+
+[[step]]
+program = "world_graph_program"
+order = 2
 op = "fetchJson"
 on = "load"
 url = "/api/world-graph"
@@ -765,8 +823,43 @@ into = "worldGraphResponse"
 
 [[step]]
 program = "world_graph_program"
-order = 1
+order = 3
 op = "renderWorldGraph"
 on = "load"
 widget = "world_graph_canvas"
 from = "worldGraphResponse.graph"
+
+[[step]]
+program = "world_graph_program"
+order = 0
+op = "readForm"
+on = "submit:world_session_form"
+widget = "world_session_form"
+into = "worldSessionDraft"
+
+[[step]]
+program = "world_graph_program"
+order = 1
+op = "setSession"
+on = "submit:world_session_form"
+from = "worldSessionDraft"
+
+[[step]]
+program = "world_graph_program"
+order = 2
+op = "run"
+on = "submit:world_session_form"
+event = "load"
+
+[[step]]
+program = "world_graph_program"
+order = 0
+op = "logout"
+on = "click:logout"
+
+[[step]]
+program = "world_graph_program"
+order = 1
+op = "run"
+on = "click:logout"
+event = "load"

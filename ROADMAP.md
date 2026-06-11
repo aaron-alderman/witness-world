@@ -12,7 +12,7 @@ The platform should eventually support:
 - clear product, shell, and extension boundaries
 - witnessed execution and inspection across the same world model
 
-This roadmap lists **unfinished work only**. Completed cleanup and earlier cheat-removal passes are intentionally omitted.
+This roadmap tracks the current path forward. Recent work that directly changes the active baseline should be marked explicitly so progress and remaining gaps stay visible.
 
 ---
 
@@ -27,33 +27,58 @@ The project now has a credible runtime spine:
 - live projection refresh without full page reload
 - dedicated Process View and generic frontend execution tracing
 
-What is still missing is a stable baseline. The main risk now is not obvious cheats. It is contradictions between what the architecture appears to support and what the runtime actually does.
+Phase 1 has established most of the runtime baseline:
+
+- one real executable frontend process model
+- one canonical identity/session model across the public browser surfaces
+- one shared type execution path across browser and server
+- one explicit app/plugin execution boundary for runtime behavior
+- one explicit baseline contract with tests mapped to the supported surface
+
+What is still missing for a true Phase 1 sign-off is first-class in-product authoring. The platform cannot yet start from a blank world and recreate the todo app purely through the UI; key authored structures still live outside the UI in WTOML.
 
 ---
 
 ## Phase 1: Stable Baseline
 
-This is the immediate priority. The goal is to reach a point where the runtime is coherent, testable, and explicit about its real boundaries.
+Status: in progress
 
-- [ ] Make frontend runtime execution honor the full authored process model, not just the projected graph.
-- [ ] Support `when`, `after`, `repeat.while`, and `repeat.forEach` in the real browser execution path.
-- [ ] Unify identity and session behavior across `/`, `/world`, and `/canvas`.
-- [ ] Remove raw actor/session escape hatches as normal app behavior.
-- [ ] Share one type compatibility, coercion, and validation path across browser and server.
-- [ ] Make the route/handler execution boundary explicit.
-- [ ] Decide whether more route/process behavior becomes executable from witnessed definitions or remains an explicit app/plugin boundary in JS.
-- [ ] Move `widget.define` defaults and mutation semantics out of demo-owned ad hoc logic.
-- [ ] Define and test the stable baseline contract so the supported runtime surface is explicit.
+This phase is about reaching the point where the runtime is coherent, testable, explicit about its real boundaries, and authorable enough from inside the product to recreate the baseline demo without dropping back to source files.
 
-Phase 1 is the line where we should be able to say the platform is no longer papering over core architectural choices.
+- [x] Make frontend runtime execution honor the full authored process model, not just the projected graph.
+- [x] Support `when`, `after`, `repeat.while`, and `repeat.forEach` in the real browser execution path.
+- [x] Unify identity and session behavior across `/`, `/world`, and `/canvas`.
+- [x] Remove raw actor/session escape hatches as normal app behavior.
+- [x] Replace the `/canvas` actor selector with the same session-backed login/logout model used by the main app, keeping any raw actor path dev-only.
+- [x] Share one type compatibility, coercion, and validation path across browser and server.
+- [x] Extract browser-safe shared type helpers from the type model so browser form coercion and validation stop re-implementing server semantics.
+- [x] Make the route/handler execution boundary explicit.
+- [x] Decide whether more route/process behavior becomes executable from witnessed definitions or remains an explicit app/plugin boundary in JS.
+- [x] Move `widget.define` defaults and mutation semantics out of demo-owned ad hoc logic.
+- [x] Define and test the stable baseline contract so the supported runtime surface is explicit.
+- [ ] Make it possible to start from a blank world and recreate the todo app purely through the UI.
+- [ ] Add a blank-world bootstrap editing shell so the product is usable before any app routes have been authored.
+- [ ] Keep that bootstrap shell in a semi-internal seam: hidden by default, easy to reveal, and clearly separate from normal app content.
+- [ ] Provide first-class UI authoring for the missing baseline structures: identities, widgets, frontend programs, routes, `serve` mounts, and `serverRunner` runtime wiring.
+- [ ] Make those authoring flows compose through projected references and supported handler selection rather than brittle copied ids.
+- [ ] Keep the current explicit app/plugin handler boundary, but make it selectable and wireable through the UI for baseline app assembly.
+- [ ] Keep compiler/primitives and deep runtime machinery hidden by default so the default authoring surface stays focused on "your app" rather than substrate.
+- [ ] Prove the blank-to-todo flow with an end-to-end test rather than manual source edits.
 
-Related handoff: [PHASE1.md](C:\Users\aaron\Documents\world\PHASE1.md)
+Phase 1 is only complete when the platform can honestly say it is no longer papering over core architectural choices and the baseline demo can be rebuilt from inside the product rather than by editing WTOML by hand.
+
+For this phase, "purely through the UI" means wiring the app from a blank world against the existing runtime and explicit handler/plugin boundary. It does not require authoring new backend JS handler implementations in-product.
+
+Related handoffs:
+
+- [PHASE1.md](C:\Users\aaron\Documents\world\PHASE1.md)
+- [BASELINE.md](C:\Users\aaron\Documents\world\BASELINE.md)
 
 ---
 
 ## Phase 2: Executable Runtime Model
 
-Once the baseline is stable, the next step is to reduce how much of the platform is merely declarative-looking versus actually executable from the model.
+This phase follows once Phase 1's authoring baseline is finished. The next step is to reduce how much of the platform is merely declarative-looking versus actually executable from the model.
 
 - [ ] Make route behavior more directly executable from witnessed/runtime-authored definitions.
 - [ ] Extend execution beyond frontend graphs into a more generic witnessed backend/process model.
@@ -147,4 +172,3 @@ These items matter, but they should not take priority over the phase structure a
 ### Graph Layout
 
 - [ ] Evaluate stronger layout/routing approaches when the lightweight graph layout stops being adequate.
-

@@ -63,7 +63,8 @@ test("server runner serves a route that points at a frontend artifact", () => {
     frontendHost: "frontendHost",
     handlerSet: "demo",
     actors: [{ id: "aaron", label: "Aaron" }],
-    storage: { todoProjection: "todos.json" }
+    storage: { todoProjection: "todos.json" },
+    allowActorHeader: false
   }]);
   assert.deepEqual(world.project(moduleProjectors.servedRoutes), [{
     id: "root_route",

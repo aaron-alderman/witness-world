@@ -181,7 +181,7 @@ export async function startServer(world, {
   const server = http.createServer(async (req, res) => {
     const startedAt = Date.now();
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-    const requestContext = resolveRequestContext(req, routeHandlers.__sessionStore);
+    const requestContext = resolveRequestContext(req, routeHandlers.__sessionStore, { allowActorHeader: serverRunner.allowActorHeader === true });
     const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
     let matchedRoute = null;
     const witnessCountBefore = world.allWitnesses().length;
@@ -541,7 +541,7 @@ function createGenericRouteHandlers({
         actor: frontendHost,
         rootWidget,
         frontendProgram: params.frontendProgram ?? null,
-        appConfig: { actors, page, excludeWidgetRoles, liveProjection: params.liveProjection === true }
+        appConfig: { actors, page, excludeWidgetRoles, liveProjection: params.liveProjection !== false }
       }));
     },
 
@@ -562,7 +562,7 @@ function createGenericRouteHandlers({
         actor: frontendHost,
         rootWidget,
         frontendProgram: params.frontendProgram ?? null,
-        appConfig: { actors, page: params.page ?? "world", liveProjection: params.liveProjection === true }
+        appConfig: { actors, page: params.page ?? "world", liveProjection: params.liveProjection !== false }
       }));
     },
 
@@ -791,7 +791,7 @@ function actorsFromIdentities(identities) {
   return actors;
 }
 
-function resolveRequestContext(req, sessionStore) {
+function resolveRequestContext(req, sessionStore, { allowActorHeader = false } = {}) {
   const cookies = parseCookies(req);
   const sessionId = cookies.witness_session || "";
   const session = sessionId ? sessionStore?.get(sessionId) ?? null : null;
@@ -800,6 +800,13 @@ function resolveRequestContext(req, sessionStore) {
       actor: session.actor,
       identity: session.identity,
       session
+    };
+  }
+  if (!allowActorHeader) {
+    return {
+      actor: null,
+      identity: null,
+      session: null
     };
   }
   const raw = req.headers["x-witness-actor"];

@@ -1,11 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { thing, relation } from "./kernel.js";
+import { thingId } from "./ids.js";
 import { todoState, privateNotesFor, publicWitnessesFor } from "./projections.js";
 import { actorRequired, runGates, textRequired } from "./gates.js";
-import { thingId } from "./ids.js";
-import { defineWidget, attachWidget } from "./widgets.js";
-import { typeModelProjection, validateProcessInput, validateProcessOutput } from "./type-model.js";
+import { requestWidgetDefine } from "./widget-define.js";
 
 export async function createDemoHandlerSet({
   world,
@@ -144,62 +143,18 @@ export async function createDemoHandlerSet({
       },
 
       "widgets.create": async ({ req, res, requestActor, route }) => {
-        if (!requestActor) {
-          world.emit({ process: "widget.define.failed", actor: backendHost, claims: [], body: { reason: "no actor" } });
-          sendJson(res, 401, { error: "choose a perspective first" });
-          return;
-        }
         const body = await readJson(req);
-        const typeModel = typeModelProjection(world.allWitnesses());
-        const validatedInput = validateProcessInput(typeModel, "widget.define", body);
-        if (!validatedInput.ok) {
-          const witness = world.emit({
-            process: "widget.define.blocked",
-            actor: requestActor,
-            claims: [],
-            body: { gate: "type.compatibility", failures: validatedInput.failures }
-          });
-          sendJson(res, 400, { error: "typed validation failed", witness });
-          return;
-        }
-        const kind = validatedInput.value.kind;
-        const text = validatedInput.value.text.trim();
-        const parent = typeof validatedInput.value.parent === "string" && validatedInput.value.parent.trim()
-          ? validatedInput.value.parent.trim()
-          : route.params?.rootWidget;
-        if (!parent) {
-          world.emit({ process: "widget.define.failed", actor: requestActor, claims: [], body: { reason: "root widget not configured" } });
-          sendJson(res, 400, { error: "root widget not configured" });
-          return;
-        }
-        const order = Number.isFinite(Number(validatedInput.value.order)) ? Number(validatedInput.value.order) : 999;
-        const widget = {
-          id: thingId("widget", { actor: requestActor, parent, kind, text, ordinal: world.allWitnesses().length }),
-          kind,
-          parent,
-          text,
-          order
-        };
-        const validatedOutput = validateProcessOutput(typeModel, "widget.define", widget);
-        if (!validatedOutput.ok) {
-          const witness = world.emit({
-            process: "widget.define.failed",
-            actor: requestActor,
-            claims: [],
-            body: { gate: "type.compatibility", failures: validatedOutput.failures }
-          });
-          sendJson(res, 500, { error: "typed output validation failed", witness });
-          return;
-        }
-        defineWidget(world, { actor: requestActor, id: widget.id, kind, props: { text, class: "user-widget" }, owner: requestActor });
-        attachWidget(world, { actor: requestActor, parent, child: widget.id, order });
-        const witness = world.emit({
-          process: "widget.define",
+        const result = requestWidgetDefine(world, {
           actor: requestActor,
-          claims: [relation(requestActor, "editedProjection", parent)],
-          body: { input: validatedInput.value, widget: validatedOutput.value }
+          backendHost,
+          body,
+          defaultParent: route.params?.rootWidget
         });
-        sendJson(res, 201, { widget: validatedOutput.value, witness });
+        if (!result.ok) {
+          sendJson(res, result.status, { error: result.error, witness: result.witness });
+          return;
+        }
+        sendJson(res, result.status, { widget: result.widget, witness: result.witness });
       },
 
       "network.simulateError": async ({ res, requestActor }) => {

@@ -64,7 +64,8 @@ export function createServerRunner(world, {
   frontendHost = null,
   handlerSet = null,
   actors = null,
-  storage = null
+  storage = null,
+  allowActorHeader = false
 }) {
   createThing(world, { actor, id, owner });
   return world.emit({
@@ -83,7 +84,8 @@ export function createServerRunner(world, {
       frontendHost: frontendHost ? String(frontendHost) : null,
       handlerSet: handlerSet ? String(handlerSet) : null,
       actors: Array.isArray(actors) ? [...actors] : null,
-      storage: storage && typeof storage === "object" ? { ...storage } : null
+      storage: storage && typeof storage === "object" ? { ...storage } : null,
+      allowActorHeader: allowActorHeader === true
     }
   });
 }
@@ -258,7 +260,8 @@ export const moduleProjectors = {
         frontendHost: w.body.frontendHost ? String(w.body.frontendHost) : null,
         handlerSet: w.body.handlerSet ? String(w.body.handlerSet) : null,
         actors: Array.isArray(w.body.actors) ? [...w.body.actors] : null,
-        storage: w.body.storage && typeof w.body.storage === "object" ? { ...w.body.storage } : null
+        storage: w.body.storage && typeof w.body.storage === "object" ? { ...w.body.storage } : null,
+        allowActorHeader: w.body.allowActorHeader === true
       });
     }
     return [...runnerMap.values()];
