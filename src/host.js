@@ -8,6 +8,7 @@ import { thing, relation } from "./kernel.js";
 import { witnessRelations, moduleProjectors } from "./modules.js";
 import { renderWidgetPage, requestWidgetVersionActivation, rollbackWidgetVersion } from "./widgets.js";
 import { worldGraphProjection, astNodesProjection } from "./world-graph.js";
+import { processRunProjection, processViewProjection, renderProcessPage } from "./process-view.js";
 import { canvasProcessHandlers } from "./canvas-processes.js";
 import { canvasProjection, perspectivesProjection } from "./canvas-projection.js";
 import { renderCanvasPage } from "./canvas-page.js";
@@ -17,6 +18,16 @@ import { createDemoHandlerSet } from "./demo-handler-set.js";
 const HANDLER_SET_FACTORIES = {
   demo: createDemoHandlerSet
 };
+
+const FRONTEND_TRACE_PROCESSES = new Set([
+  "frontend.process.start",
+  "frontend.process.done",
+  "frontend.process.failed",
+  "frontend.step.start",
+  "frontend.step.done",
+  "frontend.step.skipped",
+  "frontend.step.failed"
+]);
 
 export function declareBackendHost(world, { actor, id, owner = actor }) {
   world.emit({
@@ -171,6 +182,9 @@ export async function startServer(world, {
     const startedAt = Date.now();
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const requestContext = resolveRequestContext(req, routeHandlers.__sessionStore);
+    const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
+    let matchedRoute = null;
+    const witnessCountBefore = world.allWitnesses().length;
     logger.info("http.request.start", { requestId, method: req.method, url: req.url, actor: requestContext.actor });
     res.on("finish", () => {
       logger.info("http.request.finish", { requestId, method: req.method, url: req.url, statusCode: res.statusCode, durationMs: Date.now() - startedAt });
@@ -206,12 +220,12 @@ export async function startServer(world, {
         return;
       }
 
-      const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
       const matched = matchDeclaredRoute(routeTable, req.method || "GET", requestUrl.pathname);
       if (!matched) {
         sendJson(res, 404, { error: "not found" });
         return;
       }
+      matchedRoute = matched.route;
       const handler = matched.route.handler ? routeHandlers[matched.route.handler] : null;
       if (!handler) {
         world.observe({
@@ -245,6 +259,27 @@ export async function startServer(world, {
         body: { requestId, method: req.method, url: req.url, message, serverRunner: serverRunner.id }
       });
       sendJson(res, 500, { error: "internal error", requestId });
+    } finally {
+      const emittedWitnesses = world.allWitnesses().slice(witnessCountBefore);
+      const failedWitnesses = emittedWitnesses.filter(witness => witness.process.endsWith(".failed") || witness.process.endsWith(".blocked"));
+      world.observe({
+        process: "backend.request.finish",
+        actor: requestContext.actor || backendHost,
+        claims: matchedRoute ? [relation(backendHost, "handled", matchedRoute.id)] : [],
+        body: {
+          requestId,
+          method: req.method || "GET",
+          url: req.url || "/",
+          statusCode: res.statusCode || 0,
+          durationMs: Date.now() - startedAt,
+          route: matchedRoute?.id ?? null,
+          handler: matchedRoute?.handler ?? null,
+          runId: headerValue(req.headers["x-witness-process-run"]),
+          stepId: headerValue(req.headers["x-witness-step-id"]),
+          emittedWitnessIds: emittedWitnesses.map(witness => witness.id),
+          failureWitnessIds: failedWitnesses.map(witness => witness.id)
+        }
+      });
     }
   });
 
@@ -342,6 +377,28 @@ function createGenericRouteHandlers({
   logger,
   visibleWitnesses
 }) {
+  const processViewInputs = requestActor => {
+    const witnesses = visibleWitnesses(requestActor);
+    const visibleIds = new Set(witnesses.map(witness => witness.id));
+    const observations = world.allObservations()
+      .filter(observation => observation.process === "backend.request.finish")
+      .map(observation => ({
+        ...observation,
+        body: {
+          ...(observation.body ?? {}),
+          emittedWitnessIds: (observation.body?.emittedWitnessIds ?? []).filter(id => visibleIds.has(id)),
+          failureWitnessIds: (observation.body?.failureWitnessIds ?? []).filter(id => visibleIds.has(id))
+        }
+      }));
+    return { witnesses, observations };
+  };
+  const processSelection = requestUrl => ({
+    program: requestUrl.searchParams.get("program") || null,
+    event: requestUrl.searchParams.get("event") || null,
+    runId: requestUrl.searchParams.get("runId") || null,
+    nodeId: requestUrl.searchParams.get("node") || null,
+    replay: requestUrl.searchParams.get("replay")
+  });
   const handlers = {
     __sessionStore: sessionStore,
     "session.read": async ({ res, requestActor, requestIdentity, requestSession }) => {
@@ -509,6 +566,11 @@ function createGenericRouteHandlers({
       }));
     },
 
+    "page.process": async ({ res, route, requestUrl, requestActor }) => {
+      const model = processViewProjection(processViewInputs(requestActor), processSelection(requestUrl));
+      send(res, 200, "text/html", renderProcessPage(model, { currentPath: route.path || "/process" }));
+    },
+
     "page.canvas": async ({ res, route }) => {
       world.observe({
         process: "frontend.renderCanvasPage",
@@ -555,6 +617,50 @@ function createGenericRouteHandlers({
       };
       logger.info("worldGraph.projected", { requestId, witnesses: visible.length, nodes: graph.nodes.length, edges: graph.edges.length });
       sendJson(res, 200, { graph, astNodes });
+    },
+
+    "processView.read": async ({ res, requestUrl, requestActor }) => {
+      const model = processViewProjection(processViewInputs(requestActor), processSelection(requestUrl));
+      sendJson(res, 200, model);
+    },
+
+    "processRun.read": async ({ res, requestUrl, requestActor, params }) => {
+      const replay = requestUrl.searchParams.get("replay");
+      const run = processRunProjection(processViewInputs(requestActor), { runId: params.runId || "", replay });
+      if (!run) {
+        sendJson(res, 404, { error: "process run not found", runId: params.runId || "" });
+        return;
+      }
+      sendJson(res, 200, run);
+    },
+
+    "processEvents.record": async ({ req, res, requestActor }) => {
+      const body = await readJson(req);
+      const process = typeof body.process === "string" ? body.process : "";
+      if (!FRONTEND_TRACE_PROCESSES.has(process)) {
+        sendJson(res, 400, { error: "unknown process trace", process });
+        return;
+      }
+      const witness = world.emit({
+        process,
+        actor: requestActor || frontendHost,
+        claims: [],
+        body: {
+          runId: typeof body.runId === "string" ? body.runId : "",
+          program: typeof body.program === "string" ? body.program : "",
+          event: typeof body.event === "string" ? body.event : "",
+          nodeId: typeof body.nodeId === "string" ? body.nodeId : "",
+          op: typeof body.op === "string" ? body.op : "",
+          status: typeof body.status === "string" ? body.status : "",
+          frontier: Array.isArray(body.frontier) ? body.frontier : [],
+          repeat: body.repeat ?? null,
+          repeatCount: Number.isFinite(body.repeatCount) ? body.repeatCount : null,
+          message: typeof body.message === "string" ? body.message : "",
+          eventData: body.eventData ?? null,
+          timestamp: Number.isFinite(body.timestamp) ? body.timestamp : Date.now()
+        }
+      });
+      sendJson(res, 200, { ok: true, id: witness.id });
     },
 
     "source.read": async ({ res, requestUrl }) => {
@@ -656,6 +762,11 @@ function compileRouteMatcher(routePath) {
     }
     return params;
   };
+}
+
+function headerValue(value) {
+  if (Array.isArray(value)) return typeof value[0] === "string" ? value[0] : "";
+  return typeof value === "string" ? value : "";
 }
 
 function matchDeclaredRoute(routeTable, method, pathname) {

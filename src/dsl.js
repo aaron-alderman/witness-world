@@ -465,14 +465,17 @@ function applyFrontendStep(world, values) {
   const triggerEvent = req(values, "frontendEvent");
   const paramValues = { ...values };
   if (!("on" in values) && values.event === triggerEvent) delete paramValues.event;
-  const reserved = ["actor", "context", "program", "frontendEvent", "on", "op", "order", "params"];
+  const reserved = ["actor", "context", "program", "frontendEvent", "on", "op", "order", "params", "when", "repeat", "after"];
   return defineFrontendStep(world, {
     actor: req(values, "actor"),
     program: req(values, "program"),
     event: triggerEvent,
     op: req(values, "op"),
     order: values.order ?? 0,
-    params: { ...(paramValues.params ?? {}), ...collectProps(paramValues, reserved) }
+    params: { ...(paramValues.params ?? {}), ...collectProps(paramValues, reserved) },
+    when: values.when ?? null,
+    repeat: values.repeat ?? null,
+    after: Array.isArray(values.after) ? values.after : null
   });
 }
 

@@ -6,7 +6,7 @@ program = "todo_frontend_program"
 
 [[page]]
 id = "todo_app_widget"
-children = ["todo_session", "todo_title", "todo_form", "todo_status", "todo_list", "todo_private_notes", "todo_widget_editor", "todo_process_graph_lab", "todo_world_link", "todo_canvas_link", "todo_witnesses", "todo_version_playground"]
+children = ["todo_session", "todo_title", "todo_form", "todo_status", "todo_list", "todo_private_notes", "todo_widget_editor", "todo_process_graph_lab", "todo_world_link", "todo_process_link", "todo_canvas_link", "todo_witnesses", "todo_version_playground"]
 title = "Witness Todo"
 
 [[box]]
@@ -135,6 +135,12 @@ action = "simulateNetworkError"
 id = "todo_world_link"
 href = "/world"
 text = "Open World Graph"
+class = "world-graph-link"
+
+[[link]]
+id = "todo_process_link"
+href = "/process"
+text = "Open Process View"
 class = "world-graph-link"
 
 [[link]]
@@ -267,6 +273,10 @@ eventSoul = "todo_versioned_banner"
 
 [[frontendProgram]]
 id = "todo_frontend_program"
+rootWidget = "todo_app_widget"
+
+[[frontendProgram]]
+id = "process_lab_program"
 rootWidget = "todo_app_widget"
 
 [[box]]
@@ -659,16 +669,76 @@ on = "error"
 widget = "todo_status"
 text = "Failed: ${event.message}"
 
+[[step]]
+program = "process_lab_program"
+order = 0
+op = "fetchJson"
+on = "inspectProcessLab"
+url = "/api/witnesses"
+into = "labWitnesses"
+
+[[step]]
+program = "process_lab_program"
+order = 1
+op = "setText"
+on = "inspectProcessLab"
+widget = "todo_status"
+text = "Authenticated branch"
+when = { path = "session.authenticated", truthy = true }
+
+[[step]]
+program = "process_lab_program"
+order = 1
+op = "setText"
+on = "inspectProcessLab"
+widget = "todo_status"
+text = "Anonymous branch"
+when = { path = "session.authenticated", falsy = true }
+
+[[step]]
+program = "process_lab_program"
+order = 2
+op = "renderCollection"
+on = "inspectProcessLab"
+widget = "todo_witness_list"
+from = "labWitnesses.witnesses"
+template = "witness_item_template"
+repeat = { forEach = { from = "labWitnesses.witnesses", as = "witness" } }
+
+[[step]]
+program = "process_lab_program"
+order = 3
+op = "fetchJson"
+on = "inspectProcessLab"
+url = "/api/private-notes"
+into = "labNotes"
+after = ["program=process_lab_program/trigger=inspectProcessLab/step[2]/operation=renderCollection"]
+
+[[step]]
+program = "process_lab_program"
+order = 4
+op = "setText"
+on = "inspectProcessLab"
+widget = "todo_status"
+text = "Loop checkpoint"
+repeat = { while = { path = "session.authenticated", falsy = true }, max = 2 }
+
 # Dedicated world graph page. This is a separate perspective, not embedded in the todo UI.
 [[page]]
 id = "world_graph_page"
-children = ["world_graph_back_link", "world_graph_title", "world_graph_canvas"]
+children = ["world_graph_back_link", "world_graph_process_link", "world_graph_title", "world_graph_canvas"]
 title = "Witness World Graph"
 
 [[link]]
 id = "world_graph_back_link"
 href = "/"
 text = "← Back to Todo"
+class = "world-graph-link"
+
+[[link]]
+id = "world_graph_process_link"
+href = "/process"
+text = "Open Process View"
 class = "world-graph-link"
 
 [[heading]]

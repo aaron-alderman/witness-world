@@ -35,6 +35,17 @@ serverRunner = "demo_server"
 route = "world_page_route"
 
 [[route]]
+id = "process_page_route"
+method = "GET"
+path = "/process"
+serves = "processView"
+handler = "page.process"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "process_page_route"
+
+[[route]]
 id = "canvas_page_route"
 method = "GET"
 path = "/canvas"
@@ -210,6 +221,39 @@ handler = "worldGraph.read"
 [[serve]]
 serverRunner = "demo_server"
 route = "world_graph_read_route"
+
+[[route]]
+id = "process_view_read_route"
+method = "GET"
+path = "/api/process-view"
+serves = "processView"
+handler = "processView.read"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "process_view_read_route"
+
+[[route]]
+id = "process_run_read_route"
+method = "GET"
+path = "/api/process-runs/:runId"
+serves = "processRun"
+handler = "processRun.read"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "process_run_read_route"
+
+[[route]]
+id = "process_events_record_route"
+method = "POST"
+path = "/api/process-events"
+serves = "processTrace"
+handler = "processEvents.record"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "process_events_record_route"
 
 [[route]]
 id = "source_read_route"

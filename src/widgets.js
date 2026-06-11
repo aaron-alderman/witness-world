@@ -238,12 +238,12 @@ export function defineFrontendProgram(world, { actor, id, rootWidget, owner = ac
   });
 }
 
-export function defineFrontendStep(world, { actor, program, event, op, order = 0, params = {} }) {
+export function defineFrontendStep(world, { actor, program, event, op, order = 0, params = {}, when = null, repeat = null, after = null }) {
   return world.emit({
     process: "defineFrontendStep",
     actor,
     claims: [relation(program, "hasFrontendStep", `${program}:${event}:${order}:${op}`, { event, order, op })],
-    body: { program, event, op, order, params }
+    body: { program, event, op, order, params, when, repeat, after: Array.isArray(after) ? after : [] }
   });
 }
 
@@ -329,10 +329,18 @@ export function frontendProgram(witnesses, programId) {
   if (!program) return null;
   const stepMap = new Map();
   for (const w of witnesses.filter(w => w.process === "defineFrontendStep" && w.body.program === programId)) {
-    const step = { event: w.body.event, op: w.body.op, order: w.body.order ?? 0, params: w.body.params ?? {} };
+    const step = {
+      event: w.body.event,
+      op: w.body.op,
+      order: w.body.order ?? 0,
+      params: w.body.params ?? {},
+      when: w.body.when ?? null,
+      repeat: w.body.repeat ?? null,
+      after: Array.isArray(w.body.after) ? w.body.after : []
+    };
     // Idempotent projection for replayed/imported DSL. Same declared step should
     // execute once even if its defining witness appears multiple times.
-    const key = `${step.event}\u0000${step.order}\u0000${step.op}\u0000${stableJson(step.params)}`;
+    const key = `${step.event}\u0000${step.order}\u0000${step.op}\u0000${stableJson(step.params)}\u0000${stableJson(step.when)}\u0000${stableJson(step.repeat)}\u0000${stableJson(step.after)}`;
     stepMap.set(key, step);
   }
   const steps = [...stepMap.values()].sort((a, b) => a.order - b.order);
@@ -624,8 +632,57 @@ function renderClientEngine(program) {
     state.actor = state.session.actor || '';
     applyTheme();
   };
-  const requestOptions = options => ({ credentials: 'same-origin', ...(options || {}) });
+  const traceEndpoint = '/api/process-events';
+  const traceContext = { runId: null, stepId: null };
+  const makeRunId = () => (globalThis.crypto?.randomUUID?.() || ('run-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8)));
+  const withTraceContext = async (runId, stepId, fn) => {
+    const previous = { ...traceContext };
+    traceContext.runId = runId || previous.runId || null;
+    traceContext.stepId = stepId || null;
+    try {
+      return await fn();
+    } finally {
+      traceContext.runId = previous.runId;
+      traceContext.stepId = previous.stepId;
+    }
+  };
+  const requestOptions = (options, { url = '', disableTrace = false } = {}) => {
+    const next = { credentials: 'same-origin', ...(options || {}) };
+    if (!disableTrace && url !== traceEndpoint && traceContext.runId) {
+      next.headers = {
+        ...(next.headers || {}),
+        'x-witness-process-run': traceContext.runId,
+        'x-witness-step-id': traceContext.stepId || ''
+      };
+    }
+    return next;
+  };
   const scopeFor = extra => ({ state, event: state.event || {}, ...extra });
+  const traceStepBody = (process, body = {}) => ({
+    process,
+    runId: body.runId || '',
+    program: body.program || program.id || '',
+    event: body.event || '',
+    nodeId: body.nodeId || '',
+    op: body.op || '',
+    status: body.status || '',
+    frontier: Array.isArray(body.frontier) ? body.frontier : [],
+    repeat: body.repeat ?? null,
+    repeatCount: body.repeatCount ?? null,
+    message: body.message || '',
+    eventData: body.eventData ?? null,
+    actor: currentActor() || '',
+    timestamp: Date.now()
+  });
+  const recordProcessEvent = async (process, body = {}) => {
+    try {
+      await fetch(traceEndpoint, requestOptions({
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(traceStepBody(process, body))
+      }, { url: traceEndpoint, disableTrace: true }));
+    } catch {}
+  };
   const evaluateExpression = (expression, scope) => {
     const names = Object.keys(scope);
     const values = Object.values(scope);
@@ -927,10 +984,7 @@ function renderClientEngine(program) {
       const items = nodes.filter(n => (n.kind || 'thing') === selectedKind).sort((a, b) => String(a.label || a.id).localeCompare(String(b.label || b.id)));
       return '<div class="world-primitive-browser"><h2>Thing List</h2><div class="world-primitive-grid"><div class="world-primitive-list"><strong>Kinds</strong>' + kinds.map(k => '<button class="world-primitive-item" data-world-kind="' + escapeHtml(k) + '">' + escapeHtml(k) + ' <span class="world-node-kind">' + nodes.filter(n => (n.kind || 'thing') === k).length + '</span></button>').join('') + '</div><div class="world-primitive-list" style="grid-column: span 2"><strong>' + escapeHtml(selectedKind) + '</strong>' + items.map(n => '<button class="world-primitive-item" data-world-select="' + escapeHtml(n.id) + '"><strong>' + escapeHtml(n.label || n.id) + '</strong><br><span class="world-node-kind">' + escapeHtml(n.context || '') + '</span></button>').join('') + '</div></div></div>';
     };
-    const renderProcessExplorer = () => {
-      const processes = nodes.filter(n => (n.kind || '') === 'process' || (n.kind || '') === 'api').sort((a, b) => String(a.label || a.id).localeCompare(String(b.label || b.id)));
-      return '<div class="world-primitive-browser"><h2>Process Explorer</h2><div class="world-primitive-list">' + processes.map(n => '<button class="world-primitive-item" data-world-select="' + escapeHtml(n.id) + '"><strong>' + escapeHtml(n.label || n.id) + '</strong><br><span class="world-node-kind">' + escapeHtml(n.kind || '') + ' · ' + escapeHtml(n.context || '') + '</span></button>').join('') + '</div></div>';
-    };
+    const renderProcessExplorer = () => '<div class="world-primitive-browser"><h2>Process Explorer</h2><div class="world-primitive-list"><a class="world-primitive-item" href="/process"><strong>Open Process View</strong><br><span class="world-node-kind">Dedicated process graph, run inspector, and replay</span></a></div></div>';
     const renderPrimitiveBrowser = () => {
       const selectedKind = state.worldGraphSelectedPrimitiveKind || [...primitiveIndex.keys()][0] || '';
       const bucket = primitiveIndex.get(selectedKind) || new Map();
@@ -968,7 +1022,7 @@ function renderClientEngine(program) {
     const openSourceFile = async (file, focusId = selectedId) => {
       if (!file) return;
       state.worldGraphSourceFocus = focusId || selectedId;
-      const res = await fetch('/api/source?file=' + encodeURIComponent(file), requestOptions());
+      const res = await fetch('/api/source?file=' + encodeURIComponent(file), requestOptions({}, { url: '/api/source' }));
       state.worldGraphSource = await res.json().catch(() => ({ file, text: 'Failed to load source' }));
       state.worldGraphMode = 'source';
       state.worldGraphPrimitiveMode = false;
@@ -1063,7 +1117,7 @@ function renderClientEngine(program) {
     draw();
   };
   const initSession = async () => {
-    const res = await fetch('/api/session', requestOptions());
+    const res = await fetch('/api/session', requestOptions({}, { url: '/api/session' }));
     const body = await res.json().catch(() => ({ authenticated: false }));
     if (!res.ok) throw new Error(body?.error || 'session request failed');
     syncSession(body);
@@ -1077,13 +1131,13 @@ function renderClientEngine(program) {
         username: credentials.username || '',
         password: credentials.password || ''
       })
-    }));
+    }, { url: '/api/session' }));
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body?.error || 'session request failed');
     syncSession(body);
   };
   const logout = async () => {
-    const res = await fetch('/api/session', requestOptions({ method: 'DELETE' }));
+    const res = await fetch('/api/session', requestOptions({ method: 'DELETE' }, { url: '/api/session' }));
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body?.error || 'logout failed');
@@ -1185,7 +1239,7 @@ function renderClientEngine(program) {
   const refreshProjection = async () => {
     if (refreshInFlight) return refreshInFlight;
     refreshInFlight = (async () => {
-      const res = await fetch(window.location.href, requestOptions());
+      const res = await fetch(window.location.href, requestOptions({}, { url: window.location.pathname }));
       if (!res.ok) throw new Error('projection refresh failed');
       const html = await res.text();
       const nextDocument = new DOMParser().parseFromString(html, 'text/html');
@@ -1237,28 +1291,63 @@ function renderClientEngine(program) {
     for (const key of pick) out[key] = source[key];
     return out;
   };
-  async function run(event, eventData = {}) {
+  const stepTraceMeta = (step, event, runId, extra = {}) => ({
+    runId,
+    program: program.id || '',
+    event,
+    nodeId: step?.id || '',
+    op: step?.op || '',
+    frontier: Array.isArray(step?.after) ? [...step.after] : [],
+    repeat: step?.repeat ?? null,
+    ...extra
+  });
+  async function run(event, eventData = {}, { runId = makeRunId() } = {}) {
     state.event = eventData;
     const nodes = (program.graph || program.steps || []).filter(s => s.event === event);
     const done = new Set();
     const skipped = new Set();
-    while (done.size + skipped.size < nodes.length) {
-      const ready = nodes.filter(node => {
-        if (done.has(node.id) || skipped.has(node.id)) return false;
-        return (node.after || []).every(dep => done.has(dep) || skipped.has(dep));
+    await recordProcessEvent('frontend.process.start', {
+      runId,
+      program: program.id || '',
+      event,
+      status: 'start',
+      eventData
+    });
+    try {
+      while (done.size + skipped.size < nodes.length) {
+        const ready = nodes.filter(node => {
+          if (done.has(node.id) || skipped.has(node.id)) return false;
+          return (node.after || []).every(dep => done.has(dep) || skipped.has(dep));
+        });
+        if (ready.length === 0) throw new Error('frontend process graph stalled for ' + event);
+        await Promise.all(ready.map(async node => {
+          if (!clientPredicatePasses(node.when)) {
+            skipped.add(node.id);
+            await recordProcessEvent('frontend.step.skipped', stepTraceMeta(node, event, runId, { status: 'skipped' }));
+            return;
+          }
+          await executeStep(node, { event, runId });
+          done.add(node.id);
+        }));
+      }
+      await recordProcessEvent('frontend.process.done', {
+        runId,
+        program: program.id || '',
+        event,
+        status: 'done'
       });
-      if (ready.length === 0) throw new Error('frontend process graph stalled for ' + event);
-      await Promise.all(ready.map(async node => {
-        if (!clientPredicatePasses(node.when)) {
-          skipped.add(node.id);
-          return;
-        }
-        await executeStep(node);
-        done.add(node.id);
-      }));
+    } catch (error) {
+      await recordProcessEvent('frontend.process.failed', {
+        runId,
+        program: program.id || '',
+        event,
+        status: 'failed',
+        message: error instanceof Error ? error.message : String(error)
+      });
+      throw error;
     }
   }
-  const hasEventHandlers = event => (program.steps || []).some(step => step.event === event);
+  const hasEventHandlers = event => (program.graph || program.steps || []).some(step => step.event === event);
   async function dispatchError(error, event, step = null) {
     if (event === 'error') throw error;
     if (!hasEventHandlers('error')) throw error;
@@ -1285,33 +1374,48 @@ function renderClientEngine(program) {
     if (predicate.falsy) return !value;
     return true;
   }
-  async function executeStep(step) {
+  async function executeStep(step, { event, runId }) {
     const p = interpolateValue(step.params || {}, scopeFor({}));
-    if (step.op === 'initSession') await initSession(p);
-    if (step.op === 'setSession') await setSession(p);
-    if (step.op === 'logout') await logout(p);
-    if (step.op === 'setText') setText(p.widget, p.text || '');
-    if (step.op === 'setValue') setValue(p.widget, p.value ?? '');
-    if (step.op === 'fetchJson') {
-      const res = await fetch(p.url, requestOptions());
-      state[p.into] = await res.json().catch(() => ({}));
-      if (!res.ok && !p.allowFailure) throw new Error(state[p.into]?.error || 'request failed');
+    await recordProcessEvent('frontend.step.start', stepTraceMeta(step, event, runId, { status: 'start' }));
+    try {
+      await withTraceContext(runId, step.id, async () => {
+        if (step.op === 'initSession') await initSession(p);
+        if (step.op === 'setSession') await setSession(p);
+        if (step.op === 'logout') await logout(p);
+        if (step.op === 'setText') setText(p.widget, p.text || '');
+        if (step.op === 'setValue') setValue(p.widget, p.value ?? '');
+        if (step.op === 'fetchJson') {
+          const res = await fetch(p.url, requestOptions({}, { url: p.url }));
+          state[p.into] = await res.json().catch(() => ({}));
+          if (!res.ok && !p.allowFailure) throw new Error(state[p.into]?.error || 'request failed');
+        }
+        if (step.op === 'renderCollection') renderCollection(p);
+        if (step.op === 'renderWorldGraph') renderWorldGraph(p);
+        if (step.op === 'readForm') readForm(p);
+        if (step.op === 'refreshProjection') await refreshProjection();
+        if (step.op === 'reloadPage') window.location.reload();
+        if (step.op === 'postJson' || step.op === 'patchJson' || step.op === 'deleteJson') {
+          const method = step.op === 'postJson' ? (p.method || 'POST') : step.op === 'patchJson' ? (p.method || 'PATCH') : (p.method || 'DELETE');
+          const options = requestOptions({ method, headers: { 'content-type': 'application/json' } }, { url: p.url });
+          if (step.op !== 'deleteJson') options.body = JSON.stringify(resolveBody(p));
+          const res = await fetch(p.url, options);
+          state[p.into || 'lastResponse'] = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(state[p.into || 'lastResponse'].error || 'request failed');
+        }
+        if (step.op === 'clearForm') clearForm(p);
+        if (step.op === 'run') await run(p.event, state.event);
+      });
+      await recordProcessEvent('frontend.step.done', stepTraceMeta(step, event, runId, {
+        status: 'done',
+        repeatCount: Array.isArray(readPath(state, step.repeat?.forEach?.from)) ? readPath(state, step.repeat?.forEach?.from).length : null
+      }));
+    } catch (error) {
+      await recordProcessEvent('frontend.step.failed', stepTraceMeta(step, event, runId, {
+        status: 'failed',
+        message: error instanceof Error ? error.message : String(error)
+      }));
+      throw error;
     }
-    if (step.op === 'renderCollection') renderCollection(p);
-    if (step.op === 'renderWorldGraph') renderWorldGraph(p);
-    if (step.op === 'readForm') readForm(p);
-    if (step.op === 'refreshProjection') await refreshProjection();
-    if (step.op === 'reloadPage') window.location.reload();
-    if (step.op === 'postJson' || step.op === 'patchJson' || step.op === 'deleteJson') {
-      const method = step.op === 'postJson' ? (p.method || 'POST') : step.op === 'patchJson' ? (p.method || 'PATCH') : (p.method || 'DELETE');
-      const options = requestOptions({ method, headers: { 'content-type': 'application/json' } });
-      if (step.op !== 'deleteJson') options.body = JSON.stringify(resolveBody(p));
-      const res = await fetch(p.url, options);
-      state[p.into || 'lastResponse'] = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(state[p.into || 'lastResponse'].error || 'request failed');
-    }
-    if (step.op === 'clearForm') clearForm(p);
-    if (step.op === 'run') await run(p.event, state.event);
   }
   bindSubmitHandlers();
   document.addEventListener('click', event => {
