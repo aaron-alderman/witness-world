@@ -24,6 +24,32 @@ async function createFileTransfer(page, files) {
   return handle;
 }
 
+function samplePdfBody(text) {
+  return `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 1 /Kids [3 0 R] >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 39 >>
+stream
+BT
+/F1 12 Tf
+72 72 Td
+(${text}) Tj
+ET
+endstream
+endobj
+trailer
+<< /Root 1 0 R >>
+%%EOF`;
+}
+
 async function readCanvas(serverUrl, { perspectiveId, cookie }) {
   const response = await fetch(`${serverUrl}/api/canvas?perspective=${encodeURIComponent(perspectiveId)}`, {
     headers: cookie ? { cookie } : {}
@@ -43,20 +69,23 @@ async function waitForCanvas(serverUrl, { perspectiveId, cookie, until, timeoutM
   return readCanvas(serverUrl, { perspectiveId, cookie });
 }
 
-async function createCanvasThing(serverUrl, { perspectiveId, cookie, name, x = 120, y = 120 }) {
-  const response = await fetch(`${serverUrl}/api/canvas/process`, {
-    method: "POST",
-    headers: {
-      cookie,
-      "content-type": "application/json"
-    },
-    body: JSON.stringify({
-      process: "canvas.createThing",
-      params: { perspective: perspectiveId, name, x, y }
-    })
-  });
-  assert.equal(response.status, 200);
-  return response.json();
+async function createCanvasThing(page, { perspectiveId, name, x = 120, y = 120 }) {
+  const result = await page.evaluate(async ({ perspectiveId, name, x, y }) => {
+    const response = await fetch("/api/canvas/process", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        process: "canvas.createThing",
+        params: { perspective: perspectiveId, name, x, y }
+      })
+    });
+    return {
+      status: response.status,
+      body: await response.json().catch(() => ({}))
+    };
+  }, { perspectiveId, name, x, y });
+  assert.equal(result.status, 200);
+  return result.body;
 }
 
 test("canvas uses session-backed login before perspective creation", async () => {
@@ -367,9 +396,8 @@ test("canvas inspector can attach a dropped asset to another world thing", async
     await page.selectOption("#perspective-select", ids.perspectiveId);
     let cookie = await page.evaluate(() => document.cookie);
 
-    const created = await createCanvasThing(server.url, {
+    const created = await createCanvasThing(page, {
       perspectiveId: ids.perspectiveId,
-      cookie,
       name: "Proposal",
       x: 120,
       y: 120
@@ -391,6 +419,20 @@ test("canvas inspector can attach a dropped asset to another world thing", async
     await page.dispatchEvent("#canvas-stage", "dragover", { dataTransfer, clientX: 320, clientY: 220 });
     await page.dispatchEvent("#canvas-stage", "drop", { dataTransfer, clientX: 320, clientY: 220 });
 
+    const canvas = await waitForCanvas(server.url, {
+      perspectiveId: ids.perspectiveId,
+      cookie,
+      until: current => current.instances.some(instance => instance.label === "attachable.txt" && instance.kind === "asset")
+    });
+    const assetNode = canvas.instances.find(instance => instance.label === "attachable.txt" && instance.kind === "asset");
+    assert(assetNode);
+
+    await page.locator("#canvas-stage").click({
+      position: {
+        x: Math.max(8, Math.round(assetNode.x + Math.min(assetNode.w / 2, 40))),
+        y: Math.max(8, Math.round(assetNode.y + Math.min(assetNode.h / 2, 20)))
+      }
+    });
     await page.waitForFunction(() => {
       const select = document.querySelector('[data-asset-attach-target="true"]');
       return Boolean(select);
@@ -398,20 +440,111 @@ test("canvas inspector can attach a dropped asset to another world thing", async
     await page.selectOption('[data-asset-attach-target="true"]', proposalThing);
     await page.locator('[data-asset-attach-button]').click();
 
-    await page.waitForFunction(targetId => {
-      const panel = document.getElementById("thing-props");
-      return Boolean(panel && panel.textContent?.includes("attached to " + targetId));
-    }, proposalThing);
-
-    const canvas = await waitForCanvas(server.url, {
+    const updatedCanvas = await waitForCanvas(server.url, {
       perspectiveId: ids.perspectiveId,
       cookie,
       until: current => current.instances.some(instance => instance.thing === proposalThing && instance.attachedAssets?.length === 1)
     });
-    const proposalNode = canvas.instances.find(instance => instance.thing === proposalThing);
+    const updatedAssetNode = updatedCanvas.instances.find(instance => instance.label === "attachable.txt" && instance.kind === "asset");
+    const proposalNode = updatedCanvas.instances.find(instance => instance.thing === proposalThing);
+    assert(updatedAssetNode);
     assert(proposalNode);
+    await page.locator("#canvas-stage").click({
+      position: {
+        x: Math.max(8, Math.round(updatedAssetNode.x + Math.min(updatedAssetNode.w / 2, 40))),
+        y: Math.max(8, Math.round(updatedAssetNode.y + Math.min(updatedAssetNode.h / 2, 20)))
+      }
+    });
+    await page.waitForFunction(() => {
+      const panel = document.getElementById("thing-props");
+      const text = panel?.textContent || "";
+      return text.includes("attached to Proposal") && text.includes("UI Attach");
+    });
     assert.equal(proposalNode.attachedAssets.length, 1);
     assert.equal(proposalNode.attachedAssets[0].title, "attachable.txt");
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("canvas inspector previews derived PDF text for a dropped asset", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/canvas`);
+    await page.waitForLoadState("domcontentloaded");
+
+    await loginAsAaron(page);
+
+    const ids = await page.evaluate(async () => {
+      const contextId = "context:ui-pdf";
+      const perspectiveId = "perspective:ui-pdf";
+      await fetch("/api/contexts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: contextId, label: "UI PDF" })
+      });
+      await fetch("/api/perspectives", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: perspectiveId, title: "UI PDF Perspective", context: contextId })
+      });
+      return { contextId, perspectiveId };
+    });
+
+    await page.reload();
+    await page.waitForLoadState("domcontentloaded");
+    await loginAsAaron(page);
+    await page.selectOption("#perspective-select", ids.perspectiveId);
+    const cookie = await page.evaluate(() => document.cookie);
+
+    const dataTransfer = await createFileTransfer(page, [
+      { name: "brief.pdf", type: "application/pdf", body: samplePdfBody("Phase Six Preview") }
+    ]);
+    await page.dispatchEvent("#canvas-stage", "dragenter", { dataTransfer });
+    await page.waitForFunction(() => document.getElementById("canvas-stage")?.classList.contains("drop-ready") === true);
+    await page.dispatchEvent("#canvas-stage", "dragover", { dataTransfer, clientX: 280, clientY: 220 });
+    await page.dispatchEvent("#canvas-stage", "drop", { dataTransfer, clientX: 280, clientY: 220 });
+
+    const canvas = await waitForCanvas(server.url, {
+      perspectiveId: ids.perspectiveId,
+      cookie,
+      until: current => current.instances.some(instance => instance.label === "brief.pdf" && instance.asset?.processingStatus === "succeeded" && typeof instance.asset?.textUrl === "string")
+    });
+    const assetNode = canvas.instances.find(instance => instance.label === "brief.pdf");
+    assert(assetNode);
+    assert(assetNode.asset?.id);
+
+    await page.waitForFunction(assetThingId => {
+      const panel = document.getElementById("thing-props");
+      const selectedThing = panel?.querySelector(".prop-id")?.textContent;
+      const hasName = [...(panel?.querySelectorAll("input") || [])].some(input => input.value === "brief.pdf");
+      return Boolean(panel && selectedThing === assetThingId && hasName);
+    }, assetNode.thing);
+    await page.waitForFunction(assetId => {
+      const panel = document.getElementById("thing-props");
+      const link = panel?.querySelector(`a[href="/api/assets/${assetId}/text"]`);
+      return Boolean(panel && link && panel.textContent?.includes("Derived text"));
+    }, assetNode.asset.id);
+    await page.waitForFunction(() => {
+      const panel = document.getElementById("thing-props");
+      const preview = panel?.querySelector(".asset-preview");
+      return Boolean(preview && preview.textContent?.includes("Phase Six Preview"));
+    });
+    await page.waitForFunction(() => {
+      return [...document.querySelectorAll("#thing-props .prop-row")].some(row => {
+        return row.querySelector("label")?.textContent === "Pages"
+          && row.querySelector("input")?.value === "1";
+      });
+    });
+
     await expectNoRuntimeErrors(runtime);
   } finally {
     await closeBrowser();

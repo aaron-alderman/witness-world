@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
-import { createWorld } from "../src/kernel.js";
+import { createWorld, canMutateTarget } from "../src/kernel.js";
 import { applyWitnessToml, applyWitnessDocs, loadWitnessTomlFile } from "../src/dsl.js";
 import {
   widgetTree,
@@ -325,6 +325,30 @@ version = "banner_v1"
   assert.equal(rolledBack.status, "rolledBack");
   assert.equal(rolledBack.version, "banner_v1");
   assert.equal(world.allWitnesses().some(w => w.process === "widgetVersion.rollback"), true);
+});
+
+test("widget version souls and versions inherit authored context for stewardship-based mutation", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "adam"
+id = "ctx.shared"
+owner = "adam"
+stewards = ["aaron"]
+
+[[widgetVersion]]
+actor = "adam"
+context = "ctx.shared"
+soul = "banner"
+version = "banner_v1"
+kind = "Text"
+props = { text = "Banner v1" }
+`);
+
+  assert.equal(canMutateTarget(world, "aaron", "banner").ok, true);
+  assert.equal(canMutateTarget(world, "aaron", "banner_v1").ok, true);
+  assert.equal(canMutateTarget(world, "callan", "banner").ok, false);
+  assert.equal(canMutateTarget(world, "callan", "banner_v1").ok, false);
 });
 
 test("widget tree projection is idempotent when DSL is reapplied", () => {

@@ -44,6 +44,7 @@ The current backend slice is real but narrow:
   - `webhook.inbound`
   - `notify.email`
   - `notify.sms`
+- authored MCP transport and tool surfaces through `mcpServer` + `mcpToolInstall`
 - app-specific backend behavior still expressed through explicit handler sets
 
 That is an honest baseline.
@@ -111,6 +112,22 @@ Shipped runtime status so far:
   - rendered preview text in the local stub path
   - delivery through `jobs.queue` with retry and dead-letter behavior
   - operator-visible notification counts and render-failure diagnostics through `/api/backend-seams`
+- `POST /api/mcp-servers`, `POST /api/mcp-tool-installs`, `DELETE /api/mcp-tool-installs`, and `POST /mcp/:id` expose the first MCP operator/automation surface through the generic host
+- the shipped MCP slice currently supports:
+  - authored `mcpServer` definitions bound to an existing `serverRunner`
+  - authored `mcpToolInstall` rows that choose a tool family, acting mode, and optional `scopeContexts` / `scopeTargets`
+  - local-first `stdio` and HTTP transports
+  - delegated mode using the requesting actor and service mode using `mcpServer.serviceIdentity`
+  - runtime-config-backed bearer auth for HTTP service mode through `mcp.<serverId>.token`
+  - MCP lifecycle and tools methods for `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call`
+  - a first tool catalog over real witnessed seams such as world reads, authoring/proposals, canvas, blobs/streams/assets, runtime config, SQL, search, jobs, outbound HTTP, webhooks, and notifications
+  - tool visibility filtered by acting mode and current backend capability availability instead of pretending every server always exposes every tool
+  - local scope enforcement layered on top of normal world authority so an MCP install can be narrower than the underlying actor
+- the shipped MCP slice intentionally does not yet support:
+  - arbitrary shell or process execution
+  - prompts/resources/completions
+  - HTTP streaming GET/SSE transport
+  - OAuth discovery or broader remote authorization metadata
 - `PUT /api/fs/blobs/content`, `GET /api/fs/blobs/content`, `GET /api/fs/blobs`, `GET /api/fs/blobs/meta`, and `DELETE /api/fs/blobs` expose `fs.blob` through the generic host
 - blob writes persist to world-managed local storage at `<runtimeRoot>/blobs` unless `serverRunner.storage.blobsRoot` is configured
 - `fs.blob` supports:
@@ -126,18 +143,29 @@ Shipped runtime status so far:
 - `POST /api/assets` accepts either raw file bytes with filename/content-type headers or multipart form-data uploads with a file part
 - uploaded bytes persist to world-managed local storage at `<runtimeRoot>/assets` unless `serverRunner.storage.assetsRoot` is configured
 - `GET /api/assets/:id/content` serves private or public asset content back through the generic host
+- `GET /api/assets/:id/text` serves derived asset text back through the generic host when queued ingestion has produced it
+- `GET /api/assets/:id/thumbnail` serves derived thumbnail artifacts back through the same private/public host boundary when queued ingestion has produced them
+- `GET /api/assets/:id/content?download=1` serves the same asset through explicit attachment/download disposition
+- `GET /api/assets/:id/attachments`, `POST /api/assets/:id/attachments`, and `DELETE /api/assets/:id/attachments` expose first-class asset attachment semantics through the generic host
+- `POST /api/assets/:id/ingest/retry` exposes operator-visible asset-ingestion retry through the generic host
+- `POST /api/assets/:id/search/reindex` exposes operator-visible repair for stale asset-backed search refresh through the generic host
 - the shipped public-serving extension is explicit and opt-in through `upload.asset.publicEnabled`
 - `GET /api/backend-seams` and `GET /backend-seams` expose operator-visible inspection for the shipped asset seam:
   - installed backend capabilities
   - resolved asset storage root and whether it exists
   - current public/private asset counts and discovered `Files` contexts
+  - current attachment counts
   - raw versus multipart upload counts plus total stored asset bytes
   - stream write/copy counts, drain counts, and max observed chunk size
-  - recent `asset.upload.failed`, `asset.content.read.failed`, `fs.blob.*.failed`, and `fs.stream.*.failed` events
+  - recent `asset.upload.failed`, `asset.attach.failed`, `asset.content.read.failed`, `asset.text.read.failed`, `asset.thumbnail.read.failed`, `fs.blob.*.failed`, and `fs.stream.*.failed` events
 - dropping files on the canvas creates `asset` things, uploads bytes, and places standalone asset nodes
 - asset drops resolve context from the selected perspective first, then fall back to `homeContext -> Files`
 - if no surface context and no `homeContext` exist, the upload is rejected clearly
 - asset metadata, context, and placement are witnessed; bytes do not live in witnesses
+- assets can now attach to other world things through an explicit `attachedAsset` relation instead of ad hoc filename or path fields
+- queued asset ingestion now derives structured text, first-slice PDF text, image metadata, and local thumbnail artifacts for supported files instead of leaving uploads as raw blobs only
+- queued asset ingestion now also derives structured metadata summaries for supported document and structured-text uploads, including first-slice PDF page facts, CSV table facts, and markdown heading or frontmatter facts
+- the current canvas inspector slice exposes open/download links, derived-text links, honest typed preview for image, smaller text assets, derived asset text, derived metadata facts, plus attach/detach controls for other world things
 
 ---
 
@@ -275,6 +303,7 @@ Outputs:
 - diagnostics for backend capability config and provider status
 - diagnostics for failed side effects
 - bootstrap or inspection surfaces for practical backend capabilities
+- an explicit automation/operator transport that stays inside the same witnessed authority and capability model
 - explicit enforcement that external systems remain proxy-shaped rather than hidden truth stores
 
 ---
@@ -443,6 +472,7 @@ For `db.sql`, witness:
 For `fs.blob`, `fs.stream`, and `upload.asset`, witness:
 
 - requested path or logical asset target
+- attachment target when an existing asset is associated with another world thing
 - validation attempt and result
 - persistence attempt
 - success or failure
@@ -864,6 +894,8 @@ Slice status:
 - persist into a configured storage target
 - return asset reference
 - serve private or public URL through the host
+- serve explicit download disposition through the host
+- attach or detach an existing asset from another world thing through a first-class witnessed relation
 
 `config`
 
@@ -873,6 +905,8 @@ Slice status:
 - target storage binding
 - current shipped runtime config keys:
   - `upload.asset.publicEnabled`
+  - `upload.asset.thumbnailMaxSourceBytes`
+  - `upload.asset.thumbnailMaxEdgePx`
 - current shipped storage binding:
   - `serverRunner.storage.assetsRoot`
 
@@ -893,12 +927,64 @@ Current shipped runtime:
   - `x-witness-visibility: public` is accepted only when `upload.asset.publicEnabled` is true for the runner
   - streams request bytes to local storage through the `fs.stream` local provider path
   - witnesses upload kind, declared size, and stream metrics in addition to asset identity and storage refs
+  - queues `asset.ingest.process` through `jobs.queue` after the upload witness succeeds
+  - returns immediate processing state plus job id when async ingestion has been queued
 - `GET /api/assets/:id/content`
   - private by default
   - public assets can be read without a session through the same host content route
   - private assets still require authenticated access and target authority
+  - `?download=1` switches the response to attachment disposition without changing the asset id or storage key
+- `GET /api/assets/:id/text`
+  - serves derived text when queued ingestion has produced a `textRef`
+  - uses the same private/public access policy as asset content reads
+  - returns `404` when no derived text has been produced rather than pretending every asset is text-readable
+- `GET /api/assets/:id/thumbnail`
+  - serves a derived thumbnail artifact when queued ingestion has produced one
+  - uses the same private/public access policy as asset content reads
+  - the current shipped local thumbnail provider writes SVG-backed thumbnail artifacts for supported image uploads
+- `GET /api/assets/:id/attachments`
+  - lists the current world things attached to the asset
+  - requires authenticated authority over the asset
+- `POST /api/assets/:id/attachments`
+  - accepts a target thing id
+  - creates a witnessed `asset.attach` relation instead of stashing file references inside another record shape
+- `DELETE /api/assets/:id/attachments`
+  - removes the current attachment relation for a target thing id
+- `POST /api/assets/:id/ingest/retry`
+  - requires authenticated authority over the asset
+  - enqueues a fresh `asset.ingest.process` job when no current ingest job is already active
+  - keeps the retry action explicit instead of requiring an operator to hand-author a generic queue payload
+- `POST /api/assets/:id/search/reindex`
+  - requires authenticated mutation authority over the current `serverRunner`
+  - repairs a stale indexed asset through the existing `search.index` seam instead of a hidden side path
+  - rejects the request clearly when no index exists or the asset is not part of the current index
 - asset metadata is witnessed through `asset.upload`
+- queued text-first derived processing is witnessed through:
+  - `asset.ingest.enqueue`
+  - `asset.ingest.retry`
+  - `asset.ingest.start`
+  - `asset.ingest.succeeded`
+  - `asset.ingest.failed`
+- asset-specific operator repair is also witnessed through:
+  - `asset.search.reindex`
+  - `asset.search.reindex.failed`
 - asset content reads are observed through `asset.content.read`
+- derived text reads are observed through `asset.text.read`
+- thumbnail reads are observed through `asset.thumbnail.read`
+- asset attachment writes are witnessed through `asset.attach` and `asset.detach`
+- successful text-first ingestion writes derived text to local world-managed storage rather than putting extracted bytes into witnesses
+- successful text-first ingestion now also writes structured `derivedMetadata` facts into the ingest-success witness body so projections can expose them without introducing a side table
+- successful image ingestion now also writes derived thumbnail artifacts to local world-managed storage for supported image uploads
+- the current shipped structured extractors are:
+  - `json`
+  - `csv`
+  - `tsv`
+  - `pdf`
+  - markup-style text (`html`, `xml`, `svg`)
+  - plain-text fallback
+- the current shipped image metadata and thumbnail path supports:
+  - intrinsic width and height projection for `png`, `gif`, `jpeg`, and `svg`
+  - local SVG-backed thumbnail artifacts for supported images within the configured thumbnail source-size limit
 - asset operators can inspect the current slice through:
   - `GET /api/backend-seams`
   - `GET /backend-seams`
@@ -907,6 +993,29 @@ Current shipped runtime:
   - perspective context first
   - fallback `homeContext -> Files` context second
   - clear rejection if neither path resolves
+- asset projections now derive:
+  - stable `downloadUrl`
+  - optional `textUrl`
+  - optional `derivedMetadata`
+  - optional `thumbnailUrl` and `thumbnailRef`
+  - optional `imageWidth` and `imageHeight`
+  - `attachedTo` target ids on the asset
+  - attached-asset rows on other projected world things
+  - async processing state, derived text refs, and asset-backed search refresh status
+- the current canvas inspector exposes:
+  - file open/download links
+  - derived-text links when ingestion has produced a text artifact
+  - honest image preview and bounded text preview
+  - derived-text preview for non-text-native assets such as first-slice PDF extraction when the runtime can really serve it
+  - derived metadata facts such as PDF page count, CSV row and column counts, and JSON top-level shape when the current extractor can honestly derive them
+  - image dimensions and thumbnail-processing state when present
+  - attach/detach controls so uploaded files can become references on other world things without becoming hidden route glue
+  - current asset processing state, derived text status, and search refresh status when present
+  - human-readable processing and search summaries derived from those witnessed states
+  - asset-local `Retry ingest` and `Refresh search` actions when the current projected asset state makes repair honest
+- the current backend-seams page now also exposes:
+  - retryable asset-ingestion rows with direct retry actions
+  - stale asset-backed search rows with direct repair actions
 
 `authority`
 
@@ -929,6 +1038,8 @@ Current shipped runtime:
 - upload receive attempt
 - validation result
 - persistence attempt
+- content read attempt
+- asset attachment add/remove attempt
 - success or failure
 - asset id
 - visibility mode
@@ -937,15 +1048,20 @@ Current shipped runtime:
 
 - deterministic browser-to-host upload tests
 - raw and multipart upload tests plus raw upload failure tests for missing filename, empty body, and context-resolution rejection
+- asset attachment create/list/remove tests over the generic host
+- queued derived-text and image-thumbnail ingestion tests over upload and explicit queue handoff
+- derived-metadata tests for supported structured-text and document uploads
 - private hosted retrieval tests
+- private derived-text retrieval tests
+- private thumbnail retrieval tests
 - public mode tests for disabled and enabled runner configurations
-- browser drag-and-drop tests for single-file, multi-file, and fallback `Files` context flows
+- browser drag-and-drop tests for single-file, multi-file, fallback `Files` context flows, derived-text preview in the canvas inspector, and attachment from the canvas inspector
 
 `dependencies`
 
 - `fs.blob`
 - `fs.stream`
-- often `jobs.queue` for heavier deferred processing
+- `jobs.queue` for the shipped text-first async ingestion slice and later heavier deferred processing
 
 Completion criteria:
 
@@ -1492,7 +1608,7 @@ Slice status:
 
 `stub/test mode`
 
-- local preview and fake send path
+- local preview and stub delivery path
 - current shipped tests cover successful preview plus render failure with retry and dead-letter
 
 `dependencies`
@@ -1573,7 +1689,7 @@ Slice status:
 
 `stub/test mode`
 
-- local preview and fake send path
+- local preview and stub delivery path
 - current shipped tests cover successful stub delivery, and the render/retry path shares the same queue and renderer machinery as email
 
 `dependencies`
@@ -1599,6 +1715,7 @@ Slice status:
 
 - build index
 - reindex
+- reindex one stale indexed asset through the shared index
 - query index
 - inspect current index
 - current shipped host surface:
@@ -1606,6 +1723,7 @@ Slice status:
   - `POST /api/search/index/build`
   - `POST /api/search/index/reindex`
   - `POST /api/search/index/query`
+  - `POST /api/assets/:id/search/reindex`
 
 `config`
 
@@ -1616,6 +1734,7 @@ Slice status:
   - `search.index.provider`
   - `search.index.maxTextBytes`
   - `search.index.defaultLimit`
+  - `search.index.assetRefreshPolicy`
 - current shipped storage binding:
   - `serverRunner.storage.searchRoot`
 
@@ -1624,7 +1743,12 @@ Slice status:
 - index store
 - reindex worker
 - query bridge
-- current shipped runtime persists a local JSON-backed index state, stores source descriptors for later reindex, re-reads current asset bytes on reindex, and scores simple token matches locally
+- current shipped runtime persists a local JSON-backed index state, stores source descriptors for later reindex, prefers derived asset text when ingestion has produced it, and scores simple token matches locally
+- queued asset ingestion can refresh existing asset-backed index sources after derived text changes
+- the current shipped local ingestion path uses structured extractors for `json`, `csv`, `tsv`, first-slice PDF text, and markup-style text assets instead of only raw UTF-8 truncation
+- asset-backed refresh now obeys explicit `search.index.assetRefreshPolicy` values:
+  - `on-ingest`
+  - `manual`
 
 `authority`
 
@@ -1653,6 +1777,8 @@ Slice status:
   - `search.index.build.failed`
   - `search.index.reindex`
   - `search.index.reindex.failed`
+  - `asset.search.reindex`
+  - `asset.search.reindex.failed`
   - `search.index.query`
   - `search.index.query.failed`
 
@@ -1661,14 +1787,17 @@ Slice status:
 - deterministic local index fixtures
 - current shipped tests cover:
   - explicit-document query correctness
-  - asset-backed stale-index rebuild after stored asset bytes change
+  - structured extraction for `json` assets
+  - asset-backed stale-index rebuild after derived ingestion output changes
+  - queued asset-ingestion reindex after stored asset bytes change
+  - manual refresh policy that leaves indexed results stale until an explicit reindex
   - query failure when no index has been built yet
 
 `dependencies`
 
 - `db.sql` or another explicit record or asset source
 - often `jobs.queue` for reindex work
-- the current shipped slice uses explicit build-time documents and asset-backed sources without requiring queued background reindex yet
+- the current shipped slice now supports queued background refresh for asset-backed sources through `asset.ingest.process`
 
 Completion criteria:
 
@@ -1705,6 +1834,8 @@ Current honest status:
 - `jobs.queue` is shipped runtime behavior with a witnessed in-process worker, delayed execution, idempotent enqueue, retry/backoff, dead-letter state, generic host endpoints, and host tests
 - `db.sql` is shipped runtime behavior with generic host endpoints, a local SQLite provider path, witnessed datasource and operation boundaries, explicit unsupported Postgres/MySQL adapter boundaries, diagnostics, and host tests
 - `search.index` is shipped runtime behavior with generic host build, reindex, inspect, and query endpoints, a local-text provider path, asset-backed source support, diagnostics, and host tests
+- `search.index` now also exposes explicit `search.index.assetRefreshPolicy` behavior and structured local asset-text extraction through the queue-backed ingestion path
+- `search.index` now also exposes asset-scoped repair for stale indexed assets through `POST /api/assets/:id/search/reindex`, with host tests and explicit witness events
 - `auth.oauth` is shipped runtime behavior with a stub provider path, host start and callback endpoints, first-class OAuth link witnessing, session establishment through the existing identity model, diagnostics, and host tests
 - `notify.email` is shipped runtime behavior with a stub outbox, rendered preview, queue-backed delivery, retry/dead-letter integration, generic host endpoints, and host tests
 - `notify.sms` is shipped runtime behavior with a stub outbox, preview text, queue-backed delivery, generic host endpoints, and host tests
@@ -1713,11 +1844,28 @@ Current honest status:
 - `fs.stream` is shipped runtime behavior with host tests for large streamed write/read/copy flows and deterministic teardown on failure
 - `fs.stream` witnesses now expose chunk-count, max-chunk, drain-count, and write-high-water-mark metrics, and `/api/backend-seams` projects the corresponding stream diagnostics
 - `upload.asset` plus explicit private hosting and runner-gated public hosting are shipped runtime behavior with host and browser tests
-- `upload.asset` now accepts both raw and multipart upload paths, and witnesses upload kind plus declared-size and stream metrics for operator inspection
-- the current browser coverage includes drop-disabled state, single-file drop, multi-file drop with placement offsets, and contextless fallback into `homeContext -> Files`
-- the shipped upload slice now has an operator-visible inspection surface for storage status and recent upload/content-read failures
+- `upload.asset` now accepts both raw and multipart upload paths, witnesses upload kind plus declared-size and stream metrics for operator inspection, and exposes first-class asset attach/detach behavior through the generic host
+- `upload.asset` queued ingestion now also derives structured text, first-slice PDF text, intrinsic image metadata, and local SVG-backed thumbnail artifacts for supported image uploads, with private thumbnail hosting through the generic host
+- `upload.asset` now also exposes operator retry for failed or dead-letter asset ingestion through `POST /api/assets/:id/ingest/retry`, with host tests and backend-seams inspection visibility
+- `upload.asset` now also exposes asset-local repair affordances in the canvas inspector, including witnessed processing/search summaries plus direct retry and search-refresh actions when the projected asset state is retryable
+- the current browser coverage includes drop-disabled state, single-file drop, multi-file drop with placement offsets, contextless fallback into `homeContext -> Files`, and canvas-inspector attachment of an uploaded asset onto another world thing
+- the shipped upload slice now has an operator-visible inspection surface for storage status, attachment counts, and recent upload/attach/content-read/thumbnail-read failures
 - upload validation policy is intentionally narrow in the first slice: any file type is accepted and no MIME or size allowlist is enforced yet
 - richer stream transforms, hosted-provider large-payload verification, and stronger backpressure behavior against non-local providers remain open work
+
+### Immediate Asset Follow-On
+
+The logically next execution wave after drag-and-drop uploads is deeper asset understanding, not a second unrelated upload entry point.
+
+That means section 6 should prioritize:
+
+- broader queued ingestion behind `jobs.queue`, including richer document and binary extractors plus stronger rendition pipelines
+- richer product-visible derived structure, so search, inspection, and attachment surfaces can use more than filename plus raw bytes
+- deeper asset product surfaces after the now-shipped repair affordances, so dropped files feel like live world objects through stronger previews, derived representations, and clearer context or attachment-aware inspection
+
+This is still the same `upload.asset` seam working together with `jobs.queue` and `search.index`.
+
+It is not a separate product concept.
 
 ---
 

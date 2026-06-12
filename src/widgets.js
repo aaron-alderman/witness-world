@@ -50,7 +50,7 @@ export function updateWidget(world, { actor, id, kind, props = {}, context = nul
   });
 }
 
-export function defineWidgetVersion(world, { actor, soul, version, kind, props = {}, index = 0, owner = actor }) {
+export function defineWidgetVersion(world, { actor, soul, version, kind, props = {}, index = 0, owner = actor, context = null }) {
   return world.emit({
     process: "defineWidgetVersion",
     actor,
@@ -59,12 +59,14 @@ export function defineWidgetVersion(world, { actor, soul, version, kind, props =
       thing(version),
       relation(owner, "owns", soul),
       relation(soul, "hasModuleKind", "widget"),
+      ...(context ? [relation(soul, "inContext", context)] : []),
       relation(version, "hasModuleKind", "widgetVersion"),
+      ...(context ? [relation(version, "inContext", context)] : []),
       relation(version, "versionOf", soul),
       relation(soul, "hasWidgetVersion", version, { index }),
       relation(version, "widgetKind", kind)
     ],
-    body: { soul, version, kind, props, index }
+    body: { soul, version, kind, props, index, context: context ? String(context) : null }
   });
 }
 
@@ -356,10 +358,17 @@ export function widgetTree(witnesses, root) {
 
 export function widgetDefinitions(witnesses) {
   const contexts = new Map(witnessRelations(witnesses).filter(row => row.rel === "inContext").map(row => [row.from, row.to]));
+  const owners = new Map(witnessRelations(witnesses).filter(row => row.rel === "owns").map(row => [row.to, row.from]));
   const state = projectWidgetState(witnesses);
   return [...state.widgets.values()]
     .sort((a, b) => String(a.id).localeCompare(String(b.id)))
-    .map(widget => ({ id: widget.id, kind: widget.kind, props: { ...(widget.props ?? {}) }, context: contexts.get(widget.id) ?? null }));
+    .map(widget => ({
+      id: widget.id,
+      kind: widget.kind,
+      props: { ...(widget.props ?? {}) },
+      context: contexts.get(widget.id) ?? null,
+      owner: owners.get(widget.id) ?? null
+    }));
 }
 
 export function templateWidgetTrees(witnesses) {
@@ -552,6 +561,13 @@ function renderHead(title, pageTheme = resolveEdenPageTheme()) {
     .world-command-item { text-align: left; border: 1px solid #eee; border-radius: 8px; padding: 8px 10px; background: #fafafa; cursor: pointer; }
     .world-command-item strong { display: block; font-size: 13px; }
     .world-command-meta { color: #777; font-size: 11px; font-family: var(--mono); }
+    .world-command-result { border: 1px solid #e7ddc8; border-radius: 10px; padding: 10px 12px; background: #faf8f1; display: grid; gap: 8px; }
+    .world-command-result strong { font-size: 13px; }
+    .world-command-result-grid { display: grid; gap: 4px; }
+    .world-command-result-row { display: grid; grid-template-columns: 88px 1fr; gap: 8px; font-size: 12px; }
+    .world-command-result-key { color: #777; font-family: var(--mono); }
+    .world-command-result-value { overflow-wrap: anywhere; font-family: var(--mono); }
+    .world-command-result-actions { display: flex; flex-wrap: wrap; gap: 6px; }
     .world-command-empty { color: #777; font-size: 12px; padding: 6px 2px; }
     .world-graph-inspector { border-right: 1px solid #ddd; background: #fff; padding: 14px; min-height: 0; height: 100%; max-height: 100%; overflow-y: scroll; overflow-x: hidden; font-size: 12px; box-sizing: border-box; }
     .world-graph-inspector h2 { margin: 0 0 8px; font-size: 1rem; }
@@ -638,7 +654,7 @@ function renderHead(title, pageTheme = resolveEdenPageTheme()) {
     .surface-inspector-form { display: grid; gap: 8px; }
     .surface-inspector-field { display: grid; gap: 4px; font-size: 12px; color: #555; }
     .surface-inspector-field span { font-family: var(--mono); color: #777; }
-    .surface-inspector-field input, .surface-inspector-field textarea { width: 100%; box-sizing: border-box; border: 1px solid #ddd; border-radius: 8px; background: #fff; padding: 8px; font-family: var(--mono); font-size: 12px; }
+    .surface-inspector-field input, .surface-inspector-field textarea, .surface-inspector-field select { width: 100%; box-sizing: border-box; border: 1px solid #ddd; border-radius: 8px; background: #fff; padding: 8px; font-family: var(--mono); font-size: 12px; }
     .surface-inspector-field textarea { min-height: 72px; resize: vertical; }
     .surface-inspector-actions { display: flex; flex-wrap: wrap; gap: 6px; }
     .surface-inspector-actions button { font-size: 12px; }
@@ -787,6 +803,7 @@ function renderAttrs(widget) {
   const parts = [`data-widget="${escapeAttr(widget.id)}"`];
   if (widget.version) parts.push(`data-widget-version="${escapeAttr(widget.version)}"`);
   if (widget.props.class) parts.push(`class="${escapeAttr(widget.props.class)}"`);
+  if (widget.props.hidden === true) parts.push("hidden");
   if (widget.props.role) {
     parts.push(`data-role="${escapeAttr(widget.props.role)}"`);
     parts.push(`data-${escapeAttr(widget.props.role)}`);
@@ -804,7 +821,7 @@ function renderAttrs(widget) {
 }
 
 function renderExtraAttrs(widget, consumed = []) {
-  const consumedSet = new Set(["class", "role", "action", "template", ...consumed]);
+  const consumedSet = new Set(["class", "role", "action", "hidden", "template", ...consumed]);
   const entries = Object.entries(widget.props || {})
     .filter(([key, value]) => !consumedSet.has(key) && !key.startsWith("event") && !key.startsWith("data-") && !key.startsWith("aria-") && value != null && typeof value !== "object");
   if (entries.length === 0) return "";
@@ -901,12 +918,101 @@ function renderClientEngine(program) {
   };
   const selectedSurfaceWidgetNode = () => state.surfaceInspectorGraphById?.[selectedSurfaceWidgetId()] || null;
   const selectedSurfaceWidgetAuthored = () => state.surfaceInspectorWidgetsById?.[selectedSurfaceWidgetId()] || null;
+  const selectedSurfaceWidgetEditAuthority = () => {
+    const widget = selectedSurfaceWidgetAuthored();
+    if (!widget) return { ok: false, reason: 'This selected element is not currently backed by a directly editable authored widget row.' };
+    const actor = currentActor();
+    if (!actor) return { ok: false, reason: 'Sign in to edit bootstrap state.' };
+    if (widget.context) {
+      const mutationContexts = Array.isArray(state.authority?.mutationContexts) ? state.authority.mutationContexts : [];
+      if (mutationContexts.includes(widget.context)) return { ok: true, reason: '' };
+      return { ok: false, reason: 'Read-only: this widget lives in context ' + widget.context + ' and the current actor lacks authority for that context.' };
+    }
+    if (widget.owner && widget.owner === actor) return { ok: true, reason: '' };
+    if (widget.owner) return { ok: false, reason: 'Read-only: this unscoped widget is owned by ' + widget.owner + '.' };
+    return { ok: false, reason: 'Read-only: this widget is not owned by the current actor.' };
+  };
   const selectedSurfaceWidgetSource = () => {
     const node = selectedSurfaceWidgetNode();
     return (node?.sources || []).slice(-1)[0] || null;
   };
   const selectedSurfaceWidgetVersionState = () => selectedSurfaceWidgetNode()?.widgetVersionState || null;
   const selectedSurfaceWidgetVersions = () => selectedSurfaceWidgetNode()?.widgetVersions || [];
+  const currentSurfaceIdentityNode = () => {
+    const identityId = typeof state.session?.identity === 'string' ? state.session.identity : '';
+    return identityId ? (state.surfaceInspectorGraphById?.[identityId] || null) : null;
+  };
+  const currentSurfaceIdentityRecord = () => {
+    const identityId = typeof state.session?.identity === 'string' ? state.session.identity : '';
+    return identityId ? (state.surfaceBootstrapIdentitiesById?.[identityId] || null) : null;
+  };
+  const currentSurfaceIdentitySource = () => {
+    const node = currentSurfaceIdentityNode();
+    return (node?.sources || []).slice(-1)[0] || null;
+  };
+  const buildSurfaceWhoamiResult = () => {
+    const identityRecord = currentSurfaceIdentityRecord();
+    const identity = typeof state.session?.identity === 'string' ? state.session.identity : '';
+    const actor = typeof state.session?.actor === 'string' ? state.session.actor : '';
+    const label = typeof state.session?.label === 'string' ? state.session.label : '';
+    const homeContext = typeof (identityRecord?.homeContext ?? state.session?.homeContext) === 'string' ? (identityRecord?.homeContext ?? state.session?.homeContext) : '';
+    const perspective = typeof (identityRecord?.homePerspective ?? state.session?.perspective) === 'string' ? (identityRecord?.homePerspective ?? state.session?.perspective) : '';
+    const authenticated = Boolean(state.session?.authenticated && identity);
+    const title = authenticated ? (label || actor || identity) : 'user';
+    const subtitle = authenticated
+      ? ('Current signed-in identity / ' + identity)
+      : 'Anonymous principal / sign in if you want the world to remember your label.';
+    const rows = [
+      ['principal', title],
+      ['identity', identity || 'user'],
+      ['actor', actor || 'user'],
+      ['context', homeContext || ''],
+      ['perspective', perspective || ''],
+      ['sourcerer', 'TRUE']
+    ].filter(([, value]) => value);
+    return {
+      kind: 'whoami',
+      title,
+      subtitle,
+      rows,
+      authenticated,
+      identity,
+      username: typeof identityRecord?.username === 'string' ? identityRecord.username : '',
+      homeContextValue: homeContext || '',
+      homePerspectiveValue: perspective || '',
+      contextOptions: Array.isArray(state.surfaceBootstrapContexts) ? state.surfaceBootstrapContexts.map(row => row?.id).filter(Boolean) : [],
+      editorReady: Boolean(identityRecord),
+      editorLoading: authenticated && !identityRecord && !state.surfaceInspectorWidgetsError,
+      editorError: authenticated && !identityRecord ? state.surfaceInspectorWidgetsError : '',
+      bootstrapHref: authenticated && identity ? ('/_bootstrap?identity=' + encodeURIComponent(identity) + '#identity-form') : '',
+      source: currentSurfaceIdentitySource(),
+      note: authenticated
+        ? 'The shortcut reveals inspectability and authority-to-begin. From here you can inspect the real world record, edit the current identity inline through a real identity.update path, or open the bootstrap editor.'
+        : 'The shortcut reveals the deeper truth first. Sign in when you want this user to become a concrete identity record.'
+    };
+  };
+  const openSurfaceWhoami = () => {
+    state.surfaceCommandOpen = true;
+    state.surfaceCommandQuery = 'whoami';
+    state.surfaceCommandResult = buildSurfaceWhoamiResult();
+    state.surfaceCommandFocusRequested = true;
+    updateSurfaceInspectorUi();
+    if (state.session?.authenticated && state.session?.identity) {
+      void ensureSurfaceInspectorWidgets().then(() => {
+        if (state.surfaceCommandResult?.kind !== 'whoami') return;
+        state.surfaceCommandResult = buildSurfaceWhoamiResult();
+        updateSurfaceInspectorUi();
+      }).catch(error => {
+        if (state.surfaceCommandResult?.kind !== 'whoami') return;
+        state.surfaceCommandResult = {
+          ...buildSurfaceWhoamiResult(),
+          statusMessage: error instanceof Error ? error.message : String(error),
+          statusLevel: 'error'
+        };
+        updateSurfaceInspectorUi();
+      });
+    }
+  };
   const deriveSurfaceInspectorProcessSelection = widgetId => {
     if (!widgetId || !program?.graph?.length) return null;
     const element = byWidget(widgetId);
@@ -936,6 +1042,9 @@ function renderClientEngine(program) {
   const invalidateSurfaceInspectorWidgets = () => {
     state.surfaceInspectorWidgets = null;
     state.surfaceInspectorWidgetsById = null;
+    state.surfaceBootstrapIdentities = null;
+    state.surfaceBootstrapIdentitiesById = null;
+    state.surfaceBootstrapContexts = null;
     state.surfaceInspectorWidgetsLoaded = false;
     state.surfaceInspectorWidgetsError = null;
   };
@@ -994,8 +1103,14 @@ function renderClientEngine(program) {
         return { ok: false, error: state.surfaceInspectorWidgetsError, status: response.status };
       }
       const widgets = Array.isArray(body?.widgets) ? body.widgets : [];
+      const identities = Array.isArray(body?.identities) ? body.identities : [];
+      const contexts = Array.isArray(body?.contexts) ? body.contexts : [];
       state.surfaceInspectorWidgets = widgets;
       state.surfaceInspectorWidgetsById = Object.fromEntries(widgets.map(widget => [widget.id, widget]));
+      state.surfaceBootstrapIdentities = identities;
+      state.surfaceBootstrapIdentitiesById = Object.fromEntries(identities.map(identity => [identity.id, identity]));
+      state.surfaceBootstrapContexts = contexts;
+      state.authority = body?.authority && typeof body.authority === 'object' ? body.authority : state.authority;
       state.surfaceInspectorWidgetsLoaded = true;
       state.surfaceInspectorWidgetsError = null;
       return { ok: true, widgets, byId: state.surfaceInspectorWidgetsById };
@@ -1053,6 +1168,70 @@ function renderClientEngine(program) {
     const body = await response.json().catch(() => ({}));
     return { ok: response.ok, status: response.status, body };
   };
+  const patchSurfaceIdentity = async ({ id, patch }) => {
+    const url = '/api/identities/' + encodeURIComponent(id);
+    const response = await fetch(url, requestOptions({
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(patch || {})
+    }, { url }));
+    const body = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, body };
+  };
+  const proposalIdForSurfaceWidget = widgetId => {
+    const base = String(widgetId || 'widget').replace(/[^A-Za-z0-9_.:-]+/g, '-');
+    const suffix = typeof crypto?.randomUUID === 'function'
+      ? crypto.randomUUID().replace(/[^A-Za-z0-9_.:-]+/g, '-')
+      : String(Date.now());
+    return 'proposal.widget.update.' + base + '.' + suffix;
+  };
+  const proposalIdForSurfaceWidgetVersion = (processName, soul) => {
+    const processPart = String(processName || 'widgetVersion.action').replace(/[^A-Za-z0-9_.:-]+/g, '-');
+    const soulPart = String(soul || 'widget').replace(/[^A-Za-z0-9_.:-]+/g, '-');
+    const suffix = typeof crypto?.randomUUID === 'function'
+      ? crypto.randomUUID().replace(/[^A-Za-z0-9_.:-]+/g, '-')
+      : String(Date.now());
+    return 'proposal.' + processPart + '.' + soulPart + '.' + suffix;
+  };
+  const proposeSurfaceWidgetPatch = async ({ id, patch, reason = '' }) => {
+    const url = '/api/proposals';
+    const proposalId = proposalIdForSurfaceWidget(id);
+    const response = await fetch(url, requestOptions({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: proposalId,
+        targetProcess: 'widget.update',
+        targetKind: 'widget',
+        targetId: id,
+        bodyJson: JSON.stringify({ id, ...patch }),
+        reason: String(reason || '').trim()
+      })
+    }, { url }));
+    const body = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, body, proposalId };
+  };
+  const proposeSurfaceWidgetVersionAction = async ({ targetProcess, soul, version = '', reason = '' }) => {
+    const url = '/api/proposals';
+    const proposalId = proposalIdForSurfaceWidgetVersion(targetProcess, soul);
+    const proposalBody = targetProcess === 'widgetVersion.activate'
+      ? { soul, version }
+      : { soul };
+    const response = await fetch(url, requestOptions({
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        id: proposalId,
+        targetProcess,
+        targetKind: 'widget',
+        targetId: soul,
+        bodyJson: JSON.stringify(proposalBody),
+        reason: String(reason || '').trim()
+      })
+    }, { url }));
+    const body = await response.json().catch(() => ({}));
+    return { ok: response.ok, status: response.status, body, proposalId };
+  };
   const renderSurfaceInspectorEditor = () => {
     const widgetId = selectedSurfaceWidgetId();
     if (!widgetId) return '';
@@ -1070,15 +1249,35 @@ function renderClientEngine(program) {
     if (!authoredWidget) {
       return '<section><div class="surface-inspector-meta">Live Save-Back</div><div class="surface-inspector-summary">This selected element is not currently backed by a directly editable authored widget row.</div></section>';
     }
+    const authority = selectedSurfaceWidgetEditAuthority();
     const props = authoredWidget.props || {};
+    const hiddenChecked = props.hidden === true ? ' checked' : '';
+    if (!authority.ok) {
+      if (!currentActor()) {
+        return '<section><div class="surface-inspector-meta">Live Save-Back</div><div class="surface-inspector-summary">' + escapeHtml(authority.reason || 'This widget is read-only right now.') + '</div></section>';
+      }
+      return '<section><div class="surface-inspector-meta">Live Save-Back</div>'
+        + '<div class="surface-inspector-summary">' + escapeHtml(authority.reason || 'This widget is read-only right now.') + '</div>'
+        + '<form class="surface-inspector-form" data-surface-inspector-proposal-form data-widget-id="' + escapeHtml(widgetId) + '">'
+        + '<label class="surface-inspector-field"><span>Text</span><textarea name="text" rows="3">' + escapeHtml(String(props.text ?? '')) + '</textarea></label>'
+        + '<label class="surface-inspector-field"><span>Title</span><input name="title" value="' + escapeHtml(String(props.title ?? '')) + '" /></label>'
+        + '<label class="surface-inspector-field"><span>Class</span><input name="class" value="' + escapeHtml(String(props.class ?? '')) + '" /></label>'
+        + '<label class="surface-inspector-field"><span>Hidden</span><input name="hidden" type="checkbox"' + hiddenChecked + ' /></label>'
+        + '<label class="surface-inspector-field"><span>Reason</span><input name="reason" placeholder="Why should this shared widget change?" /></label>'
+        + '<div class="surface-inspector-actions"><button type="submit" data-surface-inspector-propose>Propose Save-Back</button></div>'
+        + '</form>'
+        + '<div class="surface-inspector-summary">Direct save is blocked here, but you can create a real <code>widget.update</code> proposal from this live surface for later approval.</div>'
+        + '</section>';
+    }
     return '<section><div class="surface-inspector-meta">Live Save-Back</div>'
-      + '<form class="surface-inspector-form" data-surface-inspector-edit-form data-widget-id="' + escapeAttr(widgetId) + '">'
+      + '<form class="surface-inspector-form" data-surface-inspector-edit-form data-widget-id="' + escapeHtml(widgetId) + '">'
       + '<label class="surface-inspector-field"><span>Text</span><textarea name="text" rows="3">' + escapeHtml(String(props.text ?? '')) + '</textarea></label>'
-      + '<label class="surface-inspector-field"><span>Title</span><input name="title" value="' + escapeAttr(String(props.title ?? '')) + '" /></label>'
-      + '<label class="surface-inspector-field"><span>Class</span><input name="class" value="' + escapeAttr(String(props.class ?? '')) + '" /></label>'
+      + '<label class="surface-inspector-field"><span>Title</span><input name="title" value="' + escapeHtml(String(props.title ?? '')) + '" /></label>'
+      + '<label class="surface-inspector-field"><span>Class</span><input name="class" value="' + escapeHtml(String(props.class ?? '')) + '" /></label>'
+      + '<label class="surface-inspector-field"><span>Hidden</span><input name="hidden" type="checkbox"' + hiddenChecked + ' /></label>'
       + '<div class="surface-inspector-actions"><button type="submit" data-surface-inspector-save>Save Widget</button></div>'
       + '</form>'
-      + '<div class="surface-inspector-summary">Writes a real <code>widget.update</code> witness for the selected widget. This first slice only edits <code>text</code>, <code>title</code>, and <code>class</code>.</div>'
+      + '<div class="surface-inspector-summary">Writes a real <code>widget.update</code> witness for the selected widget. This first slice edits <code>text</code>, <code>title</code>, <code>class</code>, and <code>hidden</code>.</div>'
       + '</section>';
   };
   const renderSurfaceInspectorPanel = () => {
@@ -1089,6 +1288,8 @@ function renderClientEngine(program) {
     const selectedSource = selectedSurfaceWidgetSource();
     const versionState = selectedSurfaceWidgetVersionState();
     const versionRows = selectedSurfaceWidgetVersions();
+    const versionAuthority = versionRows.length ? selectedSurfaceWidgetEditAuthority() : { ok: false, reason: '' };
+    const canProposeVersion = !versionAuthority.ok && Boolean(currentActor());
     const processSelection = selectedSurfaceInspectorProcessSelection();
     const summary = widgetId
       ? (selectedNode
@@ -1119,12 +1320,29 @@ function renderClientEngine(program) {
             + '<strong>' + escapeHtml(row.version || row.soul || '') + (row.isActive ? ' [active]' : '') + '</strong>'
             + (row.transitionFromActive ? '<div class="surface-inspector-summary">Transition: ' + escapeHtml(row.transitionFromActive) + '</div>' : '')
             + (!row.isActive
-              ? '<div class="surface-inspector-actions"><button type="button" data-surface-inspector-activate="' + escapeHtml(row.soul || '') + '" data-surface-inspector-version="' + escapeHtml(row.version || '') + '">Activate</button></div>'
+              ? (versionAuthority.ok
+                ? '<div class="surface-inspector-actions"><button type="button" data-surface-inspector-activate="' + escapeHtml(row.soul || '') + '" data-surface-inspector-version="' + escapeHtml(row.version || '') + '">Activate</button></div>'
+                : (canProposeVersion
+                  ? '<form class="surface-inspector-form" data-surface-inspector-version-proposal-form data-surface-inspector-proposal-process="widgetVersion.activate" data-surface-inspector-proposal-soul="' + escapeHtml(row.soul || '') + '" data-surface-inspector-proposal-version="' + escapeHtml(row.version || '') + '">'
+                    + '<label class="surface-inspector-field"><span>Reason</span><input name="reason" placeholder="Why should this version go live?" /></label>'
+                    + '<div class="surface-inspector-actions"><button type="submit" data-surface-inspector-propose-version="activate">Propose Activate</button></div>'
+                  + '</form>'
+                  : '<div class="surface-inspector-summary">' + escapeHtml(versionAuthority.reason || 'Sign in to propose version changes.') + '</div>'))
               : '')
           + '</div>'
         ).join('') + '</div>'
         + (versionState?.rollbackAvailable
-          ? '<div class="surface-inspector-actions"><button type="button" data-surface-inspector-rollback="' + escapeHtml(versionState.soul || '') + '">Rollback To ' + escapeHtml(versionState.rollbackVersion || 'previous') + '</button></div>'
+          ? (versionAuthority.ok
+            ? '<div class="surface-inspector-actions"><button type="button" data-surface-inspector-rollback="' + escapeHtml(versionState.soul || '') + '">Rollback To ' + escapeHtml(versionState.rollbackVersion || 'previous') + '</button></div>'
+            : (canProposeVersion
+              ? '<form class="surface-inspector-form" data-surface-inspector-version-proposal-form data-surface-inspector-proposal-process="widgetVersion.rollback" data-surface-inspector-proposal-soul="' + escapeHtml(versionState.soul || '') + '" data-surface-inspector-proposal-version="' + escapeHtml(versionState.rollbackVersion || '') + '">'
+                + '<label class="surface-inspector-field"><span>Reason</span><input name="reason" placeholder="Why should this version be restored?" /></label>'
+                + '<div class="surface-inspector-actions"><button type="submit" data-surface-inspector-propose-version="rollback">Propose Rollback To ' + escapeHtml(versionState.rollbackVersion || 'previous') + '</button></div>'
+              + '</form>'
+              : '<div class="surface-inspector-summary">' + escapeHtml(versionAuthority.reason || 'Sign in to propose version changes.') + '</div>'))
+          : '')
+        + (!versionAuthority.ok && canProposeVersion
+          ? '<div class="surface-inspector-summary">Direct version changes are blocked here, but you can create a real version-change proposal from this live surface for later approval.</div>'
           : '')
         + '</section>'
       : '';
@@ -1209,10 +1427,45 @@ function renderClientEngine(program) {
       ? state.surfaceInspectorGraph.nodes
       : Object.values(state.surfaceInspectorGraphById || {});
     const widgetIds = new Set(widgetRows.map(row => row.id));
+    const signedInIdentity = typeof state.session?.identity === 'string' ? state.session.identity : '';
+    const signedInActor = typeof state.session?.actor === 'string' ? state.session.actor : '';
+    const signedInLabel = typeof state.session?.label === 'string' ? state.session.label : '';
+    const currentIdentitySource = currentSurfaceIdentitySource();
     const routeValue = (node, key) => {
       const row = (node?.values || []).find(entry => entry.key === key);
       return row?.value?.type === 'string' ? String(row.value.value || '') : '';
     };
+    push({
+      id: 'surface-command:whoami',
+      type: 'command',
+      title: 'whoami',
+      subtitle: signedInIdentity || 'user',
+      search: 'whoami current user identity session sourcerer command surface',
+      priority: 320,
+      action: { kind: 'surface-whoami' }
+    });
+    if (signedInIdentity) {
+      push({
+        id: 'surface-command:identity-world',
+        type: 'identity',
+        title: 'Open Current User',
+        subtitle: signedInIdentity,
+        search: 'open current user identity world record session ' + signedInIdentity + ' ' + signedInActor + ' ' + signedInLabel,
+        priority: 318,
+        action: { kind: 'world-navigate', select: signedInIdentity }
+      });
+      if (currentIdentitySource?.file) {
+        push({
+          id: 'surface-command:identity-source',
+          type: 'source',
+          title: 'Open Current User Source',
+          subtitle: currentIdentitySource.file,
+          search: 'open current user identity source record ' + signedInIdentity + ' ' + currentIdentitySource.file,
+          priority: 317,
+          action: { kind: 'world-navigate', select: signedInIdentity, mode: 'source' }
+        });
+      }
+    }
     for (const row of widgetRows) {
       const keywords = [row.id, row.label, row.kind, row.context].filter(Boolean).join(' ');
       push({
@@ -1409,10 +1662,52 @@ function renderClientEngine(program) {
       .sort((a, b) => (b.score - a.score) || String(a.title).localeCompare(String(b.title)))
       .slice(0, query ? 24 : 12);
   };
+  const renderSurfaceWhoamiResult = whoami => {
+    if (!whoami) return '';
+    const contextOptions = [''].concat(
+      [...new Set([
+        whoami.homeContextValue || '',
+        ...((whoami.contextOptions || []).map(value => String(value || '')).filter(Boolean))
+      ])]
+    );
+    const editStatus = whoami.statusMessage
+      ? '<div class="surface-inspector-status" data-level="' + escapeHtml(whoami.statusLevel || 'ok') + '">' + escapeHtml(whoami.statusMessage) + '</div>'
+      : '';
+    const inlineEditor = whoami.authenticated
+      ? (whoami.editorReady
+          ? '<form class="surface-inspector-form" data-surface-command-identity-form data-identity-id="' + escapeHtml(whoami.identity || '') + '">'
+              + '<label class="surface-inspector-field"><span>Label</span><input name="label" value="' + escapeHtml(String(whoami.title || '')) + '" /></label>'
+              + '<label class="surface-inspector-field"><span>Username</span><input name="username" value="' + escapeHtml(String(whoami.username || '')) + '" /></label>'
+              + '<label class="surface-inspector-field"><span>New Password</span><input name="password" type="password" placeholder="leave unchanged" /></label>'
+              + '<label class="surface-inspector-field"><span>Home Context</span><select name="homeContext">' + contextOptions.map(value =>
+                  '<option value="' + escapeHtml(value) + '"' + (value === String(whoami.homeContextValue || '') ? ' selected' : '') + '>' + escapeHtml(value || '(none)') + '</option>'
+                ).join('') + '</select></label>'
+              + '<label class="surface-inspector-field"><span>Home Perspective</span><input name="homePerspective" value="' + escapeHtml(String(whoami.homePerspectiveValue || '')) + '" /></label>'
+              + '<div class="surface-inspector-actions"><button type="submit" data-surface-command-identity-save>Save Identity Here</button></div>'
+            + '</form>'
+          : '<div class="world-command-meta">' + escapeHtml(whoami.editorError || (whoami.editorLoading ? 'Loading inline identity editor...' : 'Inline identity editor is unavailable right now.')) + '</div>')
+      : '';
+    return '<section class="world-command-result" data-surface-command-result="whoami">'
+      + '<strong>' + escapeHtml(whoami.title) + '</strong>'
+      + '<div class="world-command-meta">' + escapeHtml(whoami.subtitle || '') + '</div>'
+      + '<div class="world-command-result-grid">' + (whoami.rows || []).map(([key, value]) =>
+          '<div class="world-command-result-row"><div class="world-command-result-key">' + escapeHtml(key) + '</div><div class="world-command-result-value">' + escapeHtml(value) + '</div></div>'
+        ).join('') + '</div>'
+      + '<div class="world-command-meta">' + escapeHtml(whoami.note || '') + '</div>'
+      + editStatus
+      + inlineEditor
+      + '<div class="world-command-result-actions">'
+        + (whoami.identity ? '<button type="button" data-surface-command-result-world>Open User</button>' : '')
+        + (whoami.source?.file ? '<button type="button" data-surface-command-result-source>Open Source</button>' : '')
+        + (whoami.bootstrapHref ? '<button type="button" data-surface-command-result-bootstrap>Edit In Bootstrap</button>' : '')
+      + '</div>'
+    + '</section>';
+  };
   const renderSurfaceCommandPalette = () => {
     if (!liveSurfaceInspectable || !state.surfaceCommandOpen) return '';
     const query = String(state.surfaceCommandQuery || '');
     const items = visibleSurfaceCommands();
+    const whoami = state.surfaceCommandResult?.kind === 'whoami' ? state.surfaceCommandResult : null;
     const graphNotice = state.surfaceInspectorGraphError
       ? '<div class="surface-inspector-status" data-level="error">' + escapeHtml(state.surfaceInspectorGraphError) + '</div>'
       : (!state.surfaceInspectorGraphLoaded
@@ -1424,6 +1719,7 @@ function renderClientEngine(program) {
     const results = items.length
       ? items.map((item, index) => '<button class="world-command-item" data-surface-command-run="' + index + '"><strong>' + escapeHtml(item.title) + '</strong><span class="world-command-meta">' + escapeHtml(item.type) + (item.subtitle ? ' / ' + escapeHtml(item.subtitle) : '') + '</span></button>').join('')
       : '<div class="world-command-empty">No matching pages, widgets, capabilities, or commands.</div>';
+    const resultCard = renderSurfaceWhoamiResult(whoami);
     return '<section class="surface-command-palette world-command-palette" data-surface-command-palette>'
       + '<div class="world-command-head">'
         + '<input class="world-command-input" data-surface-command-input placeholder="Search pages, widgets, capabilities, execution, commands..." value="' + escapeHtml(query) + '" />'
@@ -1431,6 +1727,7 @@ function renderClientEngine(program) {
       + '</div>'
       + currentSelection
       + graphNotice
+      + resultCard
       + '<div class="world-command-list">' + results + '</div>'
     + '</section>';
   };
@@ -1440,8 +1737,13 @@ function renderClientEngine(program) {
     state.surfaceCommandOpen = false;
     state.surfaceCommandQuery = '';
     state.surfaceCommandFocusRequested = false;
+    state.surfaceCommandResult = null;
     if (action.kind === 'navigate') {
       window.location.assign(action.href);
+      return;
+    }
+    if (action.kind === 'surface-whoami') {
+      openSurfaceWhoami();
       return;
     }
     if (action.kind === 'inspect-widget') {
@@ -1515,6 +1817,7 @@ function renderClientEngine(program) {
           void ensureSurfaceInspectorGraph().then(() => updateSurfaceInspectorUi()).catch(() => {});
         } else {
           state.surfaceCommandQuery = '';
+          state.surfaceCommandResult = null;
         }
         updateSurfaceInspectorUi();
       });
@@ -1524,12 +1827,14 @@ function renderClientEngine(program) {
         event.preventDefault();
         state.surfaceCommandOpen = false;
         state.surfaceCommandQuery = '';
+        state.surfaceCommandResult = null;
         updateSurfaceInspectorUi();
       });
     });
     overlay.querySelectorAll('[data-surface-command-input]').forEach(node => {
       node.addEventListener('input', () => {
         state.surfaceCommandQuery = node.value || '';
+        if (String(node.value || '').trim().toLowerCase() !== 'whoami') state.surfaceCommandResult = null;
         state.surfaceCommandFocusRequested = true;
         updateSurfaceInspectorUi();
       });
@@ -1546,6 +1851,103 @@ function renderClientEngine(program) {
         const index = Number(node.getAttribute('data-surface-command-run'));
         const items = visibleSurfaceCommands();
         if (Number.isFinite(index) && items[index]) await executeSurfaceCommand(items[index]);
+      });
+    });
+    overlay.querySelectorAll('[data-surface-command-result-world]').forEach(node => {
+      node.addEventListener('click', event => {
+        event.preventDefault();
+        const identity = state.surfaceCommandResult?.identity || '';
+        if (!identity) return;
+        window.location.assign(worldSurfaceHref({ select: identity }));
+      });
+    });
+    overlay.querySelectorAll('[data-surface-command-result-source]').forEach(node => {
+      node.addEventListener('click', event => {
+        event.preventDefault();
+        const identity = state.surfaceCommandResult?.identity || '';
+        if (!identity) return;
+        window.location.assign(worldSurfaceHref({ select: identity, mode: 'source' }));
+      });
+    });
+    overlay.querySelectorAll('[data-surface-command-result-bootstrap]').forEach(node => {
+      node.addEventListener('click', event => {
+        event.preventDefault();
+        const href = state.surfaceCommandResult?.bootstrapHref || '';
+        if (!href) return;
+        window.location.assign(href);
+      });
+    });
+    overlay.querySelectorAll('[data-surface-command-identity-form]').forEach(node => {
+      node.addEventListener('submit', async event => {
+        event.preventDefault();
+        const whoami = state.surfaceCommandResult?.kind === 'whoami' ? state.surfaceCommandResult : null;
+        const identityId = node.getAttribute('data-identity-id') || whoami?.identity || '';
+        const currentIdentity = currentSurfaceIdentityRecord();
+        if (!whoami?.authenticated || !identityId || !currentIdentity) {
+          state.surfaceCommandResult = {
+            ...buildSurfaceWhoamiResult(),
+            statusMessage: 'Inline identity editor is not ready yet.',
+            statusLevel: 'error'
+          };
+          updateSurfaceInspectorUi();
+          return;
+        }
+        const formData = new FormData(node);
+        const label = String(formData.get('label') ?? '').trim();
+        const username = String(formData.get('username') ?? '').trim();
+        const password = String(formData.get('password') ?? '');
+        const homeContext = String(formData.get('homeContext') ?? '').trim();
+        const homePerspective = String(formData.get('homePerspective') ?? '').trim();
+        const patch = {};
+        if (label !== String(currentIdentity.label ?? '')) patch.label = label;
+        if (username !== String(currentIdentity.username ?? '')) patch.username = username;
+        if (homeContext !== String(currentIdentity.homeContext ?? '')) patch.homeContext = homeContext;
+        if (homePerspective !== String(currentIdentity.homePerspective ?? '')) patch.homePerspective = homePerspective;
+        if (password) patch.password = password;
+        if (!Object.keys(patch).length) {
+          state.surfaceCommandResult = {
+            ...buildSurfaceWhoamiResult(),
+            statusMessage: 'No identity changes to save.',
+            statusLevel: 'ok'
+          };
+          updateSurfaceInspectorUi();
+          return;
+        }
+        state.surfaceCommandResult = {
+          ...buildSurfaceWhoamiResult(),
+          statusMessage: 'Saving ' + identityId + '...',
+          statusLevel: 'ok'
+        };
+        updateSurfaceInspectorUi();
+        const result = await patchSurfaceIdentity({ id: identityId, patch });
+        if (!result.ok) {
+          state.surfaceCommandResult = {
+            ...buildSurfaceWhoamiResult(),
+            statusMessage: result.body?.error || 'Identity save failed.',
+            statusLevel: 'error'
+          };
+          updateSurfaceInspectorUi();
+          return;
+        }
+        if (result.body?.session && typeof result.body.session === 'object') {
+          state.session = result.body.session;
+          applyTheme();
+        }
+        if (result.body?.identity && typeof result.body.identity === 'object') {
+          const identity = result.body.identity;
+          const identities = Array.isArray(state.surfaceBootstrapIdentities) ? state.surfaceBootstrapIdentities.slice() : [];
+          const index = identities.findIndex(row => row?.id === identity.id);
+          if (index >= 0) identities[index] = identity;
+          else identities.push(identity);
+          state.surfaceBootstrapIdentities = identities;
+          state.surfaceBootstrapIdentitiesById = Object.fromEntries(identities.map(row => [row.id, row]));
+        }
+        state.surfaceCommandResult = {
+          ...buildSurfaceWhoamiResult(),
+          statusMessage: 'Saved ' + identityId + '.',
+          statusLevel: 'ok'
+        };
+        updateSurfaceInspectorUi();
       });
     });
     overlay.querySelectorAll('[data-surface-inspector-toggle]').forEach(node => {
@@ -1683,14 +2085,27 @@ function renderClientEngine(program) {
           updateSurfaceInspectorUi();
           return;
         }
+        const authority = selectedSurfaceWidgetEditAuthority();
+        if (!authority.ok) {
+          setSurfaceInspectorStatus(authority.reason || 'This widget is read-only right now.', 'error');
+          updateSurfaceInspectorUi();
+          return;
+        }
         const formData = new FormData(node);
+        const hiddenField = node.querySelector('[name="hidden"]');
         const patch = {
           text: String(formData.get('text') ?? ''),
           title: String(formData.get('title') ?? ''),
-          class: String(formData.get('class') ?? '')
+          class: String(formData.get('class') ?? ''),
+          hidden: hiddenField instanceof HTMLInputElement ? hiddenField.checked : false
         };
         const currentProps = current.props || {};
-        if ((currentProps.text ?? '') === patch.text && (currentProps.title ?? '') === patch.title && (currentProps.class ?? '') === patch.class) {
+        if (
+          (currentProps.text ?? '') === patch.text
+          && (currentProps.title ?? '') === patch.title
+          && (currentProps.class ?? '') === patch.class
+          && Boolean(currentProps.hidden === true) === patch.hidden
+        ) {
           setSurfaceInspectorStatus('No widget changes to save.', 'ok');
           updateSurfaceInspectorUi();
           return;
@@ -1710,6 +2125,95 @@ function renderClientEngine(program) {
           refreshGraph: true,
           statusMessage: 'Saved ' + widgetId + '.'
         });
+      });
+    });
+    overlay.querySelectorAll('[data-surface-inspector-proposal-form]').forEach(node => {
+      node.addEventListener('submit', async event => {
+        event.preventDefault();
+        const widgetId = node.getAttribute('data-widget-id') || selectedSurfaceWidgetId();
+        if (!widgetId) return;
+        const current = selectedSurfaceWidgetAuthored();
+        if (!current) {
+          setSurfaceInspectorStatus('Authored widget state is not available for proposal.', 'error');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        const authority = selectedSurfaceWidgetEditAuthority();
+        if (authority.ok) {
+          setSurfaceInspectorStatus('You already have direct authority here. Save the widget instead of proposing it.', 'ok');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        if (!currentActor()) {
+          setSurfaceInspectorStatus(authority.reason || 'Sign in to propose changes.', 'error');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        const formData = new FormData(node);
+        const hiddenField = node.querySelector('[name="hidden"]');
+        const patch = {
+          text: String(formData.get('text') ?? ''),
+          title: String(formData.get('title') ?? ''),
+          class: String(formData.get('class') ?? ''),
+          hidden: hiddenField instanceof HTMLInputElement ? hiddenField.checked : false
+        };
+        const currentProps = current.props || {};
+        if (
+          (currentProps.text ?? '') === patch.text
+          && (currentProps.title ?? '') === patch.title
+          && (currentProps.class ?? '') === patch.class
+          && Boolean(currentProps.hidden === true) === patch.hidden
+        ) {
+          setSurfaceInspectorStatus('No widget changes to propose.', 'ok');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        const reason = String(formData.get('reason') ?? '');
+        setSurfaceInspectorStatus('Creating proposal for ' + widgetId + '...', 'ok');
+        updateSurfaceInspectorUi();
+        const result = await proposeSurfaceWidgetPatch({ id: widgetId, patch, reason });
+        if (!result.ok) {
+          setSurfaceInspectorStatus(result.body?.error || 'Proposal creation failed.', 'error');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        setSurfaceInspectorStatus('Proposed ' + widgetId + ' as ' + (result.body?.proposal?.id || result.proposalId) + '.', 'ok');
+        updateSurfaceInspectorUi();
+      });
+    });
+    overlay.querySelectorAll('[data-surface-inspector-version-proposal-form]').forEach(node => {
+      node.addEventListener('submit', async event => {
+        event.preventDefault();
+        const processName = node.getAttribute('data-surface-inspector-proposal-process') || '';
+        const soul = node.getAttribute('data-surface-inspector-proposal-soul') || '';
+        const version = node.getAttribute('data-surface-inspector-proposal-version') || '';
+        if (!processName || !soul) return;
+        const authority = selectedSurfaceWidgetEditAuthority();
+        if (authority.ok) {
+          setSurfaceInspectorStatus('You already have direct authority here. Apply the version change directly instead of proposing it.', 'ok');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        if (!currentActor()) {
+          setSurfaceInspectorStatus(authority.reason || 'Sign in to propose version changes.', 'error');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        const formData = new FormData(node);
+        const reason = String(formData.get('reason') ?? '');
+        const actionLabel = processName === 'widgetVersion.rollback'
+          ? ('rollback ' + soul)
+          : ('activate ' + version);
+        setSurfaceInspectorStatus('Creating proposal to ' + actionLabel + '...', 'ok');
+        updateSurfaceInspectorUi();
+        const result = await proposeSurfaceWidgetVersionAction({ targetProcess: processName, soul, version, reason });
+        if (!result.ok) {
+          setSurfaceInspectorStatus(result.body?.error || 'Version proposal creation failed.', 'error');
+          updateSurfaceInspectorUi();
+          return;
+        }
+        setSurfaceInspectorStatus('Proposed ' + actionLabel + ' as ' + (result.body?.proposal?.id || result.proposalId) + '.', 'ok');
+        updateSurfaceInspectorUi();
       });
     });
     if (state.surfaceCommandOpen && state.surfaceCommandFocusRequested !== false) {
@@ -1762,10 +2266,21 @@ function renderClientEngine(program) {
         updateSurfaceInspectorUi();
         return;
       }
+      if (event.key === 'F1') {
+        event.preventDefault();
+        void ensureSurfaceInspectorGraph().then(() => {
+          openSurfaceWhoami();
+        }).catch(error => {
+          setSurfaceInspectorStatus(error instanceof Error ? error.message : String(error), 'error');
+          openSurfaceWhoami();
+        });
+        return;
+      }
       if (event.key === 'Escape' && state.surfaceCommandOpen) {
         event.preventDefault();
         state.surfaceCommandOpen = false;
         state.surfaceCommandQuery = '';
+        state.surfaceCommandResult = null;
         updateSurfaceInspectorUi();
         return;
       }

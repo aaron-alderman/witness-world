@@ -861,10 +861,23 @@ That is enough for v1.
 - [X] the Personal Box now supports direct in-scene sign-in plus local widget add/edit/delete without handing off to broader tools
 - [X] the `Edit Page` surface now writes to a real page chrome/theme model for the embedded Todo board
 - [X] the `Versions` surface now drives real published/draft/last-good actions for the embedded Todo board's current version seam
+- [X] section-level Todo relief now maps the embedded board's internal sections to stable surface ids backed by real widget ids
+- [X] the embedded Todo board can now switch into inspect mode so the real right-click widget inspector and narrow save-back loop work inside Eden itself
+- [X] the live center board now supports the direct expert shortcut, so `F1` opens `whoami` on the shared command surface and reveals the current user truth in place
+- [X] the `WORLD_GRAPH` surface now hosts the first real in-context capability install panel, so the neighborhood can suggest and install missing powers from the actual discovery point
+- [X] the chapter/checkpoint rail now carries real quest-state progression for the first arc, driven by witnessed completion of the practical Personal Box, Edit Page, Versions, and World Graph loops
+- [X] the first visible power chips now unlock from real progression, so `Edit Shared Surface` and adjacent Tree gates can open from practiced work instead of staying static locked labels
+- [X] the `PROCESS_VIEW` surface now hosts the first real operator quest rail, so `Alter Runtime` unlocks from witnessed publish + process inspection practice and can run a real in-world failure drill
+- [X] the Tree now hosts a real optional `Theory Annex`, so the neighborhood can witness lesson study and award the `trained` mark from actual theory work instead of a decorative future chip
+- [X] the neighborhood now carries a first repeated-practice layer, so stewardship, operator work, and teaching show up as real responsibility tracks instead of only one-time arc completion
+- [X] the Tree now hosts a real `Teach Back` action after the `trained` mark, so teaching can be witnessed in-place as part of the neighborhood
+- [X] the shared Todo version seam is now explicitly bound to the `frontend` context, so the `VERSIONS` shelf obeys the same visible shared-surface authority boundary as the rest of the board
+- [X] the Tree and adjacent action surfaces now carry the first broader responsibility-family consequences, so repeated work can visibly unlock `Shared Table`, `Run A Stall`, and `Ship A Tiny SaaS` in the neighborhood itself
+- [X] the `Commons` surface now hosts a real governance loop, so `Start A Group`, `Set The Rules`, and `Run An Open Organization` complete from real context creation, stewardship delegation, and proposal approval inside the neighborhood
 
 ### Next slices
 
-- [ ] add section-level Todo relief that maps the embedded board's internal sections to stable surface ids
+- [ ] expand the neighborhood beyond this first responsibility family into broader academy districts, deeper thresholds, and stronger cross-surface unlock consequences
 
 ### Later slices
 

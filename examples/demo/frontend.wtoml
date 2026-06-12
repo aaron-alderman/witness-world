@@ -207,6 +207,7 @@ text = "Add widget"
 type = "submit"
 
 [[widgetVersion]]
+context = "frontend"
 soul = "todo_versioned_banner"
 version = "todo_versioned_banner_v1"
 kind = "Text"
@@ -215,6 +216,7 @@ text = "Versioned widget: v1"
 class = "versioned-banner"
 
 [[widgetVersion]]
+context = "frontend"
 soul = "todo_versioned_banner"
 version = "todo_versioned_banner_v2"
 kind = "Text"

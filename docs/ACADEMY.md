@@ -339,14 +339,23 @@ See also: [FIRST-5-MINUTES.md](/C:/Users/aaron/Documents/world/docs/FIRST-5-MINU
 - [X] the first owned artifact loop now exists in the Personal Box: sign in, claim the patch, and add/edit/delete local widgets in-world
 - [X] `Edit Page` now gives the first real shared-surface practice loop: the user can restyle the live Todo surface in-world through theme, material, and typography changes
 - [X] `Versions` now gives the next practical recovery loop: the user can open the draft, publish the current live cut, and restore the last good version from inside Eden
+- [X] Todo sections now lift as stable projected relief surfaces so the academy can point at real local stewardship seams like `todo_form`, `todo_list`, `todo_private_notes`, and `todo_version_playground`
+- [X] the live board can now enter inspect mode inside Eden, so local widget reading, process handoff, and narrow save-back practice happen without leaving the neighborhood
+- [X] the optional expert shortcut is now real inside Eden, so advanced users can press `F1`, run `whoami`, and see `sourcerer = true` without the academy pretending that revealed authority is the same thing as trained stewardship
+- [X] the World Graph now carries the first real in-context capability install practice loop, so the academy can teach "you discovered a missing power here; now install it here" without handing off to a fake external flow
+- [X] the first academy arc now has real quest instances in Eden, with completion derived from witnessed practice on Personal Box, Edit Page, Versions, and World Graph
+- [X] the first visible capability gates now become earned unlocks, so shared-surface stewardship opens only after the user has actually practiced the early loops rather than merely seeing locked copy
+- [X] the first operator quest chain now exists on `Process View`, with `Inspect The Machine Room`, `Publish The Current Cut`, and `Run A Failure Drill` completing from witnessed publish/process/runtime work and opening `Alter Runtime` as a real earned gate
+- [X] the optional `Theory Annex` now exists as a real Tree side path, with witnessed lesson study, a witnessed assessment, and a truthful `trained` mark earned from that work rather than from prose alone
+- [X] the first repeated-practice academy layer now exists, with real stewardship, operator, and teaching tracks derived from witnessed work instead of only first-pass quest completion
+- [X] `Teach Back` is now a real post-`trained` academy action in the Tree, so teaching can be witnessed as practical responsibility rather than implied by theory prose
+- [X] the first broader responsibility-family consequences now exist, so repeated practical work can actually unlock `Shared Table`, `Run A Stall`, and `Ship A Tiny SaaS` rather than leaving those quest families as static academy prose
+- [X] the first organization/stewardship family now exists as a real Eden commons loop, so `Start A Group`, `Set The Rules`, and `Run An Open Organization` complete from witnessed context, stewardship, and proposal work instead of staying as academy prose
 
 ### Next slices
 
-- [ ] turn the first academy arc into real quest instances with completion state, unlock transitions, and practiced-responsibility tracking
-- [ ] turn Todo sections into stable projected relief surfaces so the academy can teach local stewardship before whole-page authority
-- [ ] turn visible capability gates into earned unlocks that move the user from personal authorship into safe shared-surface stewardship
+- [ ] expand academy progression beyond this first responsibility family into wider quest-family artifacts, deeper thresholds, and stronger earned powers across the broader taxonomy
 
 ### Later slices
 
 - [ ] expand quest-family artifacts and handoff loops across the wider academy taxonomy
-- [ ] add the `trained` mark and optional theory-annex assessment path

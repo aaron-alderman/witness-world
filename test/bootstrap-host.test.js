@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createWorld } from "../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
-import { defineWidgetVersion, activateWidgetVersion } from "../src/widgets.js";
+import { defineWidgetVersion, defineWidgetVersionTransition, activateWidgetVersion } from "../src/widgets.js";
 
 async function tempRuntimeRoot() {
   return fs.mkdtemp(path.join(os.tmpdir(), "witness-bootstrap-host-"));
@@ -123,6 +123,73 @@ test("bootstrap write auth allows first identity unauthenticated and then requir
       body: JSON.stringify({ id: "root", kind: "Page", title: "Authorized", attach: false })
     });
     assert.equal(createdWidget.status, 201);
+  } finally {
+    await server.close();
+  }
+});
+
+test("identity update lets the signed-in actor edit their own record and refreshes the current session", async () => {
+  const { world, server } = await startBlankServer();
+  try {
+    const request = (pathname, body, cookie = "", method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify(body)
+    });
+
+    await request("/api/identities", {
+      id: "identity.aaron",
+      actor: "aaron",
+      label: "Aaron",
+      username: "aaron",
+      password: "aaron",
+      homePerspective: "aaron:personal"
+    });
+    const aaron = await openSession(server.url);
+    assert.equal((await request("/api/contexts", { id: "ctx.platform", label: "Platform" }, aaron.cookie)).status, 201);
+
+    const updated = await request("/api/identities/identity.aaron", {
+      label: "Aaron Updated",
+      username: "aaron-updated",
+      password: "newpass",
+      homeContext: "ctx.platform",
+      homePerspective: "aaron:workspace"
+    }, aaron.cookie, "PATCH");
+    assert.equal(updated.status, 200);
+    const updatedBody = await updated.json();
+    assert.equal(updatedBody.identity.label, "Aaron Updated");
+    assert.equal(updatedBody.identity.username, "aaron-updated");
+    assert.equal(updatedBody.identity.homeContext, "ctx.platform");
+    assert.equal(updatedBody.session.label, "Aaron Updated");
+    assert.equal(updatedBody.session.homeContext, "ctx.platform");
+    assert.equal(updatedBody.session.perspective, "aaron:workspace");
+
+    const session = await fetch(`${server.url}/api/session`, { headers: { cookie: aaron.cookie } }).then(r => r.json());
+    assert.equal(session.label, "Aaron Updated");
+    assert.equal(session.homeContext, "ctx.platform");
+    assert.equal(session.perspective, "aaron:workspace");
+
+    const oldLogin = await openSession(server.url, { username: "aaron", password: "aaron" });
+    assert.equal(oldLogin.response.status, 401);
+    const newLogin = await openSession(server.url, { username: "aaron-updated", password: "newpass" });
+    assert.equal(newLogin.response.status, 200);
+
+    await request("/api/identities", {
+      id: "identity.callan",
+      actor: "callan",
+      label: "Callan",
+      username: "callan",
+      password: "callan",
+      homePerspective: "callan:personal"
+    }, aaron.cookie);
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+    const denied = await request("/api/identities/identity.aaron", {
+      label: "Nope"
+    }, callan.cookie, "PATCH");
+    assert.equal(denied.status, 403);
+
+    assert.equal(world.allWitnesses().some(w => w.process === "updateIdentity" && w.body?.id === "identity.aaron"), true);
+    assert.equal(world.allWitnesses().some(w => w.process === "identity.update" && w.body?.identity?.id === "identity.aaron"), true);
   } finally {
     await server.close();
   }
@@ -396,6 +463,241 @@ test("unauthorized scoped writes return 403 and proposals can be approved exactl
   }
 });
 
+test("live-surface style widget.update proposals can be created without direct authority and approved once by an authorized actor", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const request = (pathname, body, cookie = "", method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify(body)
+    });
+
+    await request("/api/identities", {
+      id: "identity.aaron",
+      actor: "aaron",
+      label: "Aaron",
+      username: "aaron",
+      password: "aaron",
+      homePerspective: "aaron:personal"
+    });
+    const aaron = await openSession(server.url);
+
+    assert.equal((await request("/api/widgets", {
+      id: "shared_title",
+      kind: "Text",
+      text: "Original",
+      attach: false
+    }, aaron.cookie)).status, 201);
+
+    await request("/api/identities", {
+      id: "identity.callan",
+      actor: "callan",
+      label: "Callan",
+      username: "callan",
+      password: "callan",
+      homePerspective: "callan:personal"
+    }, aaron.cookie);
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+
+    const denied = await request("/api/widgets/shared_title", { text: "Denied" }, callan.cookie, "PATCH");
+    assert.equal(denied.status, 403);
+
+    const proposed = await request("/api/proposals", {
+      id: "proposal.widget.update.shared-title",
+      targetProcess: "widget.update",
+      targetKind: "widget",
+      targetId: "shared_title",
+      bodyJson: JSON.stringify({ id: "shared_title", text: "Proposed" }),
+      reason: "Need a wording change"
+    }, callan.cookie);
+    assert.equal(proposed.status, 201);
+
+    const approved = await request("/api/proposals/proposal.widget.update.shared-title/approve", {}, aaron.cookie);
+    assert.equal(approved.status, 200);
+    const approveAgain = await request("/api/proposals/proposal.widget.update.shared-title/approve", {}, aaron.cookie);
+    assert.equal(approveAgain.status, 409);
+
+    const state = await fetch(`${server.url}/api/bootstrap-state`, { headers: { cookie: aaron.cookie } }).then(r => r.json());
+    const proposal = state.proposals.find(row => row.id === "proposal.widget.update.shared-title");
+    assert.equal(proposal.status, "approved");
+    assert.equal(Array.isArray(proposal.executedWitnessIds), true);
+    assert.equal(proposal.executedWitnessIds.length > 0, true);
+    assert.equal(state.widgets.some(row => row.id === "shared_title" && row.props?.text === "Proposed"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("widgetVersion.activate proposals can be created without direct authority and approved once by an authorized steward", async () => {
+  const { world, server } = await startBlankServer();
+  try {
+    const request = (pathname, body, cookie = "", method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify(body)
+    });
+
+    await request("/api/identities", {
+      id: "identity.aaron",
+      actor: "aaron",
+      label: "Aaron",
+      username: "aaron",
+      password: "aaron",
+      homePerspective: "aaron:personal"
+    });
+    const aaron = await openSession(server.url);
+    assert.equal((await request("/api/contexts", { id: "ctx.shared", label: "Shared", stewards: ["aaron"] }, aaron.cookie)).status, 201);
+
+    await request("/api/identities", {
+      id: "identity.callan",
+      actor: "callan",
+      label: "Callan",
+      username: "callan",
+      password: "callan",
+      homePerspective: "callan:personal"
+    }, aaron.cookie);
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+
+    defineWidgetVersion(world, {
+      actor: "system",
+      owner: "system",
+      context: "ctx.shared",
+      soul: "shared_banner",
+      version: "shared_banner_v1",
+      kind: "Text",
+      props: { text: "Shared banner v1" },
+      index: 0
+    });
+    defineWidgetVersion(world, {
+      actor: "system",
+      owner: "system",
+      context: "ctx.shared",
+      soul: "shared_banner",
+      version: "shared_banner_v2",
+      kind: "Text",
+      props: { text: "Shared banner v2" },
+      index: 1
+    });
+    defineWidgetVersionTransition(world, {
+      actor: "system",
+      owner: "system",
+      soul: "shared_banner",
+      from: "shared_banner_v1",
+      to: "shared_banner_v2",
+      strategy: "compatible"
+    });
+    activateWidgetVersion(world, { actor: "system", soul: "shared_banner", version: "shared_banner_v1" });
+
+    const proposed = await request("/api/proposals", {
+      id: "proposal.widgetVersion.activate.shared-banner",
+      targetProcess: "widgetVersion.activate",
+      targetKind: "widget",
+      targetId: "shared_banner",
+      bodyJson: JSON.stringify({ soul: "shared_banner", version: "shared_banner_v2" }),
+      reason: "Promote the shared banner"
+    }, callan.cookie);
+    assert.equal(proposed.status, 201);
+
+    const approved = await request("/api/proposals/proposal.widgetVersion.activate.shared-banner/approve", {}, aaron.cookie);
+    assert.equal(approved.status, 200);
+
+    const state = await fetch(`${server.url}/api/bootstrap-state`, { headers: { cookie: aaron.cookie } }).then(r => r.json());
+    const proposal = state.proposals.find(row => row.id === "proposal.widgetVersion.activate.shared-banner");
+    assert.equal(proposal.status, "approved");
+    assert.equal(Array.isArray(proposal.executedWitnessIds), true);
+    assert.equal(proposal.executedWitnessIds.length > 0, true);
+    assert.equal(world.allWitnesses().some(w => w.process === "activateWidgetVersion" && w.actor === "aaron" && w.body?.soul === "shared_banner" && w.body?.version === "shared_banner_v2"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("widgetVersion.rollback proposals can be created without direct authority and approved once by an authorized steward", async () => {
+  const { world, server } = await startBlankServer();
+  try {
+    const request = (pathname, body, cookie = "", method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json", ...(cookie ? { cookie } : {}) },
+      body: JSON.stringify(body)
+    });
+
+    await request("/api/identities", {
+      id: "identity.aaron",
+      actor: "aaron",
+      label: "Aaron",
+      username: "aaron",
+      password: "aaron",
+      homePerspective: "aaron:personal"
+    });
+    const aaron = await openSession(server.url);
+    assert.equal((await request("/api/contexts", { id: "ctx.shared", label: "Shared", stewards: ["aaron"] }, aaron.cookie)).status, 201);
+
+    await request("/api/identities", {
+      id: "identity.callan",
+      actor: "callan",
+      label: "Callan",
+      username: "callan",
+      password: "callan",
+      homePerspective: "callan:personal"
+    }, aaron.cookie);
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+
+    defineWidgetVersion(world, {
+      actor: "system",
+      owner: "system",
+      context: "ctx.shared",
+      soul: "shared_banner",
+      version: "shared_banner_v1",
+      kind: "Text",
+      props: { text: "Shared banner v1" },
+      index: 0
+    });
+    defineWidgetVersion(world, {
+      actor: "system",
+      owner: "system",
+      context: "ctx.shared",
+      soul: "shared_banner",
+      version: "shared_banner_v2",
+      kind: "Text",
+      props: { text: "Shared banner v2" },
+      index: 1
+    });
+    defineWidgetVersionTransition(world, {
+      actor: "system",
+      owner: "system",
+      soul: "shared_banner",
+      from: "shared_banner_v1",
+      to: "shared_banner_v2",
+      strategy: "compatible"
+    });
+    activateWidgetVersion(world, { actor: "system", soul: "shared_banner", version: "shared_banner_v1" });
+    activateWidgetVersion(world, { actor: "system", soul: "shared_banner", version: "shared_banner_v2" });
+
+    const proposed = await request("/api/proposals", {
+      id: "proposal.widgetVersion.rollback.shared-banner",
+      targetProcess: "widgetVersion.rollback",
+      targetKind: "widget",
+      targetId: "shared_banner",
+      bodyJson: JSON.stringify({ soul: "shared_banner" }),
+      reason: "Restore the previous shared banner"
+    }, callan.cookie);
+    assert.equal(proposed.status, 201);
+
+    const approved = await request("/api/proposals/proposal.widgetVersion.rollback.shared-banner/approve", {}, aaron.cookie);
+    assert.equal(approved.status, 200);
+
+    const state = await fetch(`${server.url}/api/bootstrap-state`, { headers: { cookie: aaron.cookie } }).then(r => r.json());
+    const proposal = state.proposals.find(row => row.id === "proposal.widgetVersion.rollback.shared-banner");
+    assert.equal(proposal.status, "approved");
+    assert.equal(Array.isArray(proposal.executedWitnessIds), true);
+    assert.equal(proposal.executedWitnessIds.length > 0, true);
+    assert.equal(world.allWitnesses().some(w => w.process === "widgetVersion.rollback" && w.actor === "aaron" && w.body?.soul === "shared_banner" && w.body?.to === "shared_banner_v1"), true);
+    assert.equal(world.allWitnesses().some(w => w.process === "activateWidgetVersion" && w.actor === "aaron" && w.body?.soul === "shared_banner" && w.body?.version === "shared_banner_v1"), true);
+  } finally {
+    await server.close();
+  }
+});
+
 test("widget update writes real save-back witnesses and blocks versioned widget souls", async () => {
   const { world, server } = await startBlankServer();
   try {
@@ -437,9 +739,22 @@ test("widget update writes real save-back witnesses and blocks versioned widget 
     const updatedBody = await updated.json();
     assert.equal(updatedBody.widget.props.title, "Updated title");
 
+    const hidden = await request("/api/widgets/editable_page", { hidden: true }, aaron.cookie, "PATCH");
+    assert.equal(hidden.status, 200);
+    const hiddenBody = await hidden.json();
+    assert.equal(hiddenBody.widget.props.hidden, true);
+
+    const shown = await request("/api/widgets/editable_page", { hidden: false }, aaron.cookie, "PATCH");
+    assert.equal(shown.status, 200);
+    const shownBody = await shown.json();
+    assert.equal(Object.prototype.hasOwnProperty.call(shownBody.widget.props || {}, "hidden"), false);
+
     const state = await fetch(`${server.url}/api/bootstrap-state`, { headers: { cookie: aaron.cookie } }).then(r => r.json());
     assert.equal(state.widgets.some(row => row.id === "editable_page" && row.props?.title === "Updated title"), true);
+    assert.equal(state.widgets.some(row => row.id === "editable_page" && Object.prototype.hasOwnProperty.call(row.props || {}, "hidden")), false);
     assert.equal(world.allWitnesses().some(w => w.process === "widget.update" && w.body?.widget?.id === "editable_page"), true);
+    assert.equal(world.allWitnesses().some(w => w.process === "widget.update" && w.body?.patch?.hidden === true && w.body?.widget?.id === "editable_page"), true);
+    assert.equal(world.allWitnesses().some(w => w.process === "widget.update" && w.body?.patch?.hidden === false && w.body?.widget?.id === "editable_page"), true);
     assert.equal(world.allWitnesses().some(w => w.process === "updateWidget" && w.body?.id === "editable_page"), true);
 
     const blocked = await request("/api/widgets/versioned_banner", { text: "Nope" }, aaron.cookie, "PATCH");
@@ -466,6 +781,7 @@ test("bootstrap context composition endpoints expose scope state and lower conte
     assert.equal((await post("/api/contexts", { id: "ctx.source", label: "Source" })).status, 201);
     assert.equal((await post("/api/contexts", { id: "ctx.target", label: "Target", parent: "ctx.source" })).status, 201);
     assert.equal((await post("/api/widgets", { id: "page_root", kind: "Page", title: "Home", attach: false, context: "ctx.source" })).status, 201);
+    assert.equal((await post("/api/widgets", { id: "secret_page", kind: "Page", title: "Secret", attach: false, context: "ctx.source" })).status, 201);
     assert.equal((await post("/api/widgets", { id: "shell_box", kind: "Box", attach: false, context: "ctx.target" })).status, 201);
     assert.equal((await post("/api/widgets", { id: "legacy_shell", kind: "Box", attach: false })).status, 201);
     assert.equal((await post("/api/widgets", { id: "local_note", kind: "Text", text: "Note", attach: false })).status, 201);
@@ -515,6 +831,12 @@ test("bootstrap context composition endpoints expose scope state and lower conte
       rootWidget: "page_root"
     });
     assert.equal(canonicalProgram.status, 201);
+    const hiddenCanonicalProgram = await post("/api/frontend-programs", {
+      id: "hidden_canonical_program",
+      context: "ctx.target",
+      rootWidget: "secret_page"
+    });
+    assert.equal(hiddenCanonicalProgram.status, 400);
     assert.equal((await post("/api/context-bindings", { context: "ctx.target", name: "landingProgram", target: "landing_program" })).status, 201);
 
     const createdRunner = await post("/api/server-runners", {
@@ -576,6 +898,7 @@ test("bootstrap context composition endpoints expose scope state and lower conte
     assert.equal(state.widgets.some(row => row.id === "legacy_child" && row.context === "ctx.target"), true);
     assert.equal(state.frontendPrograms.some(row => row.id === "landing_program" && row.rootWidget === "page_root"), true);
     assert.equal(state.frontendPrograms.some(row => row.id === "canonical_program" && row.rootWidget === "page_root"), true);
+    assert.equal(state.frontendPrograms.some(row => row.id === "hidden_canonical_program"), false);
     assert.equal(state.serverRunners.some(row => row.id === "demo_server" && row.backendHost === backendHost && row.frontendHost === frontendHost), true);
     assert.equal(state.routes.some(row => row.id === "landing_route" && row.serves === "landing_program" && row.params?.rootWidget === "page_root"), true);
     assert.equal(state.servedRoutes.some(row => row.id === "landing_route" && row.serverRunner === "demo_server"), true);

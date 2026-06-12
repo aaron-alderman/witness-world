@@ -34,6 +34,37 @@ Status labels:
 - `partial`: enough exists to prove direction, but the capability is not yet composable or coherent
 - `missing`: not yet first-class in the product/runtime
 
+Cross-cutting honesty terms:
+
+- `fake`: a surface that claims a capability or behavior without grounding it in the real world model, runtime behavior, or witnessed persistence
+- `stub`: a real capability seam with a simplified local or deterministic provider path
+- `projection`: a real derived read model, not canonical truth
+- `real but narrow`: a truthful first slice with intentionally limited coverage or scope; not fake, but not yet the final general form
+- `compatibility bridge` or `compatibility sugar`: a transitional path that keeps older authored worlds or runtime behavior working while the first-class model catches up
+
+Current honesty snapshot:
+
+- the shared command surface is projection-backed rather than registry-backed
+- tutorial recovery commands come from persisted tutorial progress rather than a fake command registry
+- shipped backend provider seams such as OAuth, outbound HTTP, email, and SMS are stub-first rather than fake
+- legacy capability strings still synthesize placeholder capability objects as a compatibility bridge
+- contextual name resolution is real, and covered bootstrap/DSL authoring surfaces no longer allow hidden foreign-scoped canonical-id bypasses
+- canonical ids still remain as compatibility sugar for same-context targets, unscoped legacy targets, and foreign targets that are already explicitly visible
+- live-page proposal approval is real and now refreshes rendered pages through the witness stream, but the proposal path is still intentionally narrow
+- the main remaining gaps are migration and governance gaps, not a fake capability registry
+- capability installs are first-class now, widget-version routes now use shared authority derivation, the live inspector now has a first `widgetVersion.activate` / `widgetVersion.rollback` proposal fallback, Eden's versions panel now has a first `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish` proposal fallback, and Eden's capability shelf now has a first `capability.install` proposal fallback, but app-specific handler-set mutations still do not all use the same shared authority/proposal machinery
+
+Current honesty ledger:
+
+- `fake` at the current core capability/composition layer: none explicitly called out
+- `stub`: shipped backend/provider capability seams where realism is intentionally deferred
+- `projection but real`: command/search and tutorial recovery surfaces
+- `real but narrow`: route-root page placement, contextual name resolution coverage, current-identity editing, and live proposal flows
+- `compatibility bridge`: placeholder capability synthesis and the remaining canonical-id compatibility paths
+
+The main risk to watch is not hidden theatre.
+It is accidental normalization of placeholder capability definitions, shallow compatibility checks, compatibility-sugar authoring paths, and the remaining non-unified app-specific mutation flows as if they were the final capability model.
+
 ---
 
 ## Guiding Rule
@@ -362,12 +393,14 @@ Status: `present`
 What it is:
 
 - first identity creation
+- bootstrap identity update for the current authored record
 - login/logout
 - cookie-backed session transport
 
 Why it accelerates:
 
 - gives ownership and continuity immediately
+- lets truth-reveal handoffs land on a real edit path instead of stopping at read-only inspection
 
 Missing molecules:
 
@@ -382,6 +415,11 @@ Do:
 Do not:
 
 - regress to actor pickers or raw request headers as the normal mental model
+
+Honest caveats:
+
+- The current identity edit slice is real across bootstrap plus the live `F1 -> whoami` shortcut, but it is still intentionally narrow.
+- `identity.update` now truthfully edits `label`, `username`, `password`, `homeContext`, and `homePerspective`, but it still keeps identity `id` and `actor` fixed and does not yet cover broader recovery or principal-migration semantics.
 
 ### 4.2 Context
 
@@ -406,6 +444,7 @@ Current molecules:
 - explanatory `contextScopes` read models showing local vs imported visibility
 - shared contextual resolution and first-slice scope validation on the bootstrap/DSL authoring paths while preserving canonical stored ids
   Covered first-slice refs are `parentRef`, `rootWidgetRef`, `servesRef`, `serverRunnerRef`, `routeRef`, `backendHostRef`, and `frontendHostRef`.
+- covered bootstrap/DSL authoring surfaces now reject direct canonical references to foreign scoped targets that are not explicitly visible in the authoring context
 
 Missing molecules:
 
@@ -427,8 +466,8 @@ Honest caveats:
 - Parent context is still an authority/inheritance relation only; it does not imply name visibility.
 - Imports are named-import only and visibility is intentionally explicit rather than automatic.
 - The current slice only lowers contextual refs for a bounded set of authoring fields.
-- Canonical-id authoring is still a compatibility bypass around contextual visibility on those covered surfaces.
-  The parallel canonical id fields remain valid and can still point at foreign scoped objects directly until the platform has a stricter migration story.
+- Canonical-id authoring is still a compatibility path on those covered surfaces, but it no longer bypasses hidden foreign scoped targets.
+  The parallel canonical id fields remain valid for same-context targets, unscoped legacy targets, and foreign targets that are already explicitly visible through import/binding until the platform decides whether to narrow compatibility further.
 - The low-level JS helper functions still expose permissive witness emitters.
   The honest guardrails for duplicate names, bad exports, and bad imports live on the bootstrap and DSL authoring paths rather than every internal helper call.
 - Some read surfaces still lag behind the write semantics.
@@ -452,6 +491,7 @@ Current molecules:
 - shared authority derivation for bootstrap mutation handlers
 - explicit stewardship grant/revoke flows
 - proposal create/approve/reject flows for generic bootstrap/world-authoring mutations
+- a first operating-surface extension where signed-in live-inspector users without direct widget authority can create real `widget.update` proposals from the rendered page
 - direct `403` enforcement for unauthorized scoped bootstrap writes
 
 Missing molecules:
@@ -473,6 +513,8 @@ Honest caveats:
 
 - stewardship is currently actor-string based, not yet a richer principal model
 - proposals execute a fixed supported set of bootstrap target processes, not arbitrary world mutations
+- the first non-bootstrap proposal-authoring path is intentionally narrow
+  Today it exists on the live widget inspector for `widget.update` plus first-slice `widgetVersion.activate` / `widgetVersion.rollback` proposal creation, on the Eden versions panel for `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish`, and on the Eden capability shelf for `capability.install`; approval/rejection still runs through the generic proposal APIs and broader app-specific actions remain outside this slice.
 - older worlds remain valid with many unscoped objects, so direct ownership is still a compatibility path alongside context governance
 
 ---
@@ -529,6 +571,8 @@ Current molecules:
 
 - world-surface object inspection through the graph inspector
 - live-page right-click inspection on rendered app widgets through the surface inspector
+- live-page hide/show for supported non-versioned widgets through real `widget.update` save-back
+- live-page proposal creation for read-only widget edits through real `widget.update` proposals when the actor is signed in but lacks direct authority
 - widget version upgrade and rollback from the operating surface
 - widget version activate/rollback from the live-page inspector
 - source-definition handoff for selected/source-backed objects
@@ -538,9 +582,9 @@ Current molecules:
 
 Missing molecules:
 
-- hide/replace editing actions
+- replace editing actions
 - page-local edit affordances
-- save/apply flows that write back to the world
+- broader save/apply flows that write back to the world
 - a universal object-to-process mapping beyond the current frontend-program/event handoff
 
 Do:
@@ -557,7 +601,7 @@ Honest caveats:
 - Live-page inspection currently depends on rendered `[data-widget]` ancestry and projected world-graph metadata rather than a deeper universal page/entity editing contract.
 - `show process` is a deep-link handoff into the dedicated process page, not an in-place process editor.
 - The current live-page process handoff is grounded in authored frontend-program/event structure around the selected widget, not arbitrary generic process inference for every object.
-- `hide`, `replace`, and live save-back editing are still missing.
+- `hide` is no longer missing for supported non-versioned widgets with actor authority, and signed-in non-authoritative users now get a narrow proposal path instead of only a dead end, but `replace` and broader live save-back editing still are.
 
 ### 5.3 Search and command surface
 
@@ -576,6 +620,9 @@ Current molecules:
 
 - world-page command palette over graph nodes including widgets, capabilities, routes, processes, and source-backed objects
 - live-page command palette over current rendered widgets plus world-graph-backed capability/source/world/process handoffs
+- a first `F1 -> whoami` expert shortcut on live app pages and Eden's embedded board, revealing current-user truth through the same command surface
+- a first inline current-identity edit path from `whoami` on live app pages and Eden's embedded board, backed by real `identity.update` writes and active-session refresh
+- bootstrap identity edit handoff from `whoami`, backed by real `PATCH /api/identities/:id` updates and current-session refresh when the signed-in identity is edited
 - command entries for real hidden browser modes such as source browser, primitive browser, and process explorer
 - direct handoff commands into real product surfaces such as `/process`, `/_bootstrap`, and `/backend-seams`
 - recovery commands for disabled tutorial guidance on the world page, derived from persisted tutorial progress rather than a fake command registry
@@ -586,7 +633,7 @@ Missing molecules:
 - universal indexing across pages/widgets/plugins/witnesses/processes in every shell, not only the world page
 - disabled-surface discovery and recovery beyond the current builtin handoffs and tutorial-page recovery state
 - context-aware ranking without dishonesty
-- deeper action semantics beyond navigation, selection, and mode switching
+- deeper action semantics beyond navigation, selection, and the current narrow expert shortcut
 
 Do:
 
@@ -600,10 +647,14 @@ Honest caveats:
 
 - The current slice is no longer world-surface only.
 - Results come from the truthful projected graph, current rendered widget ancestry, and a small set of explicit real surfaces and tutorial recovery state, not from a hidden assistant-owned registry.
+- Because the surface is projection-backed rather than registry-backed, the honest limitation is coverage, not truthfulness.
 - Surface-tier classification is still narrow and explicit.
   Today it covers route-backed operating surfaces plus builtin handoffs such as home, bootstrap, process, and backend seams; it is not yet a universal content-boundary model for every widget or shell surface.
 - The command surface is still not universal across every shell or plugin-owned surface.
   It now spans `/world` plus rendered app pages, but it does not yet index every disabled surface, every shell-local action, or every capability-owned page.
+- The expert shortcut is still only a first truth-reveal slice.
+  `F1 -> whoami` can reveal the current user, edit the current signed-in identity inline, refresh the active session when that identity changes, and still hand off into real world/source views plus the bootstrap identity editor.
+  It still does not provide a broader expert transport grammar or a full identity lifecycle surface.
 
 ### 5.4 Live editable inspector
 
@@ -624,12 +675,15 @@ Current molecules:
 - selected-widget highlight and side-panel metadata
 - truthful handoff from a live selection into `/world`, witnesses, source, and process view
 - in-place widget version activate/rollback actions for versioned widgets
+- narrow real `widgetVersion.activate` / `widgetVersion.rollback` proposal creation for signed-in actors who can inspect shared versioned widgets but cannot change versions directly
+- narrow real `widget.update` save-back for non-versioned widget `text`, `title`, `class`, and `hidden`
+- narrow real `widget.update` proposal creation for signed-in actors who can inspect a shared widget but cannot save it directly
 
 Missing molecules:
 
 - editable property/schema panels
-- safe save/apply/rollback behavior
-- hide/replace/widget-structure mutation from the live page
+- broader safe save/apply/rollback behavior
+- replace/widget-structure mutation from the live page
 - broader shell/page coverage beyond the currently supported rendered app surfaces
 
 Do:
@@ -643,7 +697,13 @@ Do not:
 Honest caveats:
 
 - The current inspector is a first live-page operating slice, not yet a full live editor.
-- It can inspect, explain, hand off, and drive widget version changes, but it cannot yet mutate arbitrary widget properties or structure and save those edits back into the world.
+- It can inspect, explain, hand off, and drive widget version changes, and it now has a narrow real `widget.update` save-back path for non-versioned widget `text`, `title`, `class`, and `hidden`.
+- That save-back path is authority-bounded rather than universal.
+  The shipped demo world now explicitly grants `aaron` stewardship over the `frontend` context so the save-back path is demonstrable on real app chrome, while non-stewards such as `callan` do not get direct save and instead get a first narrow proposal path.
+- It still cannot mutate arbitrary widget properties or structure and save those edits back into the world.
+- The new `hidden` support makes hide/show truthful for supported widgets, but it is still not a general replace/restructure editing grammar.
+- That proposal path is still shallow.
+  Approval continues through the generic proposal API; both `widget.update` and the first verified `widgetVersion.activate` / `widgetVersion.rollback` proposal paths now refresh through the live witness stream, but the review/approval experience is still not in-surface or broadly generalized.
 - Its process mapping is intentionally narrow and derived from selected-widget context, nearest form context, and root load behavior rather than a full generic execution-model explanation layer.
 
 ---
@@ -796,9 +856,12 @@ The current capability slice is real, but a few parts are still bridge-quality r
 
 - Host capabilities currently travel through an internal `host` install target kind so startup and bootstrap compatibility continue to work.
 - Legacy `context.capabilities` arrays and legacy host capability strings synthesize placeholder capability objects rather than forcing an authored migration.
+- The world graph still carries legacy context capability strings as badges on context nodes even though capability nodes and install edges now exist.
 - `routePage` means the served route plus its root `Page` widget only; it is not a general page/entity/subtree placement model.
 - Validation is typed and dependency-aware, but not yet a deep semantic solver for version, authority, or cross-surface conflicts.
 - The local catalog behaves like a projected index, not yet like a full ecosystem/store protocol.
+- None of those caveats make the capability slice fake.
+  They mean the current slice still mixes real first-class behavior with compatibility bridges, narrow placement semantics, and projection-backed cataloging.
 
 These are acceptable for the first vertical slice, but they should stay visible so later work can tighten or replace them intentionally rather than accrete around them by accident.
 
@@ -949,25 +1012,37 @@ Status: `partial`
 What it is:
 
 - browser/hosted operation now
+- a first local MCP automation shell over the same world and runtime seams
 - future desktop shell alongside it
 
 Why it accelerates:
 
 - same world can be owned locally and reached remotely
+- the same witnessed authority model can serve people, browsers, and automation without inventing a second hidden control plane
 
-Missing molecules:
+Current molecules:
+
+- browser-hosted operation through `serverRunner`
+- first local MCP server model through authored `mcpServer`
+- per-server tool exposure, acting mode, and local scope through authored `mcpToolInstall`
+- stdio and local-first HTTP MCP transports over the real witnessed host/tool surface
+- delegated versus service identity execution instead of one implicit global automation identity
+
+Still missing:
 
 - explicit shell contract
-- shell-specific capability boundaries
+- broader shell-specific capability boundaries beyond the current MCP/browser split
 - desktop integration story
+- MCP prompts/resources/completions and richer remote auth/discovery semantics
 
 Do:
 
 - keep shell powers explicit and capability-shaped
+- make automation identity, transport, and scope as inspectable as any other world object
 
 Do not:
 
-- let Electron or browser APIs leak into the core model as hidden assumptions
+- let Electron, browser APIs, or automation transports leak into the core model as hidden assumptions
 
 ### 8.2 Desktop shell
 

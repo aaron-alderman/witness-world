@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { expectNoRuntimeErrors, launchBrowser, startUiDemoServer, waitForAppReady } from "./support/harness.js";
 
-async function signIn(page) {
-  await page.fill('[data-widget="todo_username_input"]', "aaron");
-  await page.fill('[data-widget="todo_password_input"]', "aaron");
+async function signIn(page, { username = "aaron", password = username, label = "Aaron" } = {}) {
+  await page.fill('[data-widget="todo_username_input"]', username);
+  await page.fill('[data-widget="todo_password_input"]', password);
   await page.locator('[data-widget="todo_open_button"]').click();
-  await page.waitForFunction(() => {
+  await page.waitForFunction(expected => {
     const sessionStatus = document.querySelector('[data-widget="todo_session_status"]');
-    return Boolean(sessionStatus && sessionStatus.textContent && sessionStatus.textContent.includes("Signed in as Aaron"));
-  });
+    return Boolean(sessionStatus && sessionStatus.textContent && sessionStatus.textContent.includes("Signed in as " + expected));
+  }, label, { timeout: 5000 });
 }
 
 test("live page inspector exposes right-click widget inspection, version activation, and world handoff", async () => {
@@ -110,7 +110,7 @@ test("live page inspector can derive a truthful process handoff from a live widg
   }
 });
 
-test("live page inspector can save a narrow widget edit back into the world", async () => {
+test("live page inspector can save a narrow widget edit back into the world when the actor stewards the frontend context", async () => {
   const { server, close: closeServer } = await startUiDemoServer({});
   const {
     page,
@@ -121,13 +121,29 @@ test("live page inspector can save a narrow widget edit back into the world", as
   try {
     await page.goto(`${server.url}/`);
     await waitForAppReady(page);
-    await signIn(page);
+    await signIn(page, { username: "aaron", password: "aaron", label: "Aaron" });
 
     await page.locator('[data-surface-inspector-toggle]').click();
     await page.locator('[data-widget="todo_title"]').click({ button: "right" });
-    await page.locator('.surface-inspector-panel').waitFor();
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("todo_title")
+        && inspector.textContent.includes("Live Save-Back")
+      );
+    });
     await page.locator('[data-surface-inspector-edit-form] textarea[name="text"]').fill("Witness Todo Edited");
+    const saveRequest = page.waitForResponse(response =>
+      response.request().method() === "PATCH"
+      && new URL(response.url()).pathname === "/api/widgets/todo_title"
+      && response.status() === 200
+    );
     await page.locator('[data-surface-inspector-save]').click();
+    await saveRequest;
 
     await page.waitForFunction(() => {
       const title = document.querySelector('[data-widget="todo_title"]');
@@ -142,8 +158,340 @@ test("live page inspector can save a narrow widget edit back into the world", as
       );
     });
 
+    assert.equal(await page.locator('[data-surface-inspector-edit-form]').count(), 1);
+
     await expectNoRuntimeErrors(runtime);
   } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("live page inspector can hide and show a rendered widget through real widget.update witnesses", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await signIn(page, { username: "aaron", password: "aaron", label: "Aaron" });
+
+    await page.locator('[data-surface-inspector-toggle]').click();
+    await page.locator('[data-widget="todo_title"]').click({ button: "right" });
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("todo_title")
+        && inspector.textContent.includes("hidden")
+      );
+    });
+
+    await page.locator('[data-surface-inspector-edit-form] input[name="hidden"]').check();
+    const hideRequest = page.waitForResponse(response =>
+      response.request().method() === "PATCH"
+      && new URL(response.url()).pathname === "/api/widgets/todo_title"
+      && response.status() === 200
+    );
+    await page.locator('[data-surface-inspector-save]').click();
+    await hideRequest;
+
+    await page.waitForFunction(() => {
+      const title = document.querySelector('[data-widget="todo_title"]');
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        title
+        && title.hidden === true
+        && inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Saved todo_title.")
+      );
+    });
+
+    await page.locator('[data-surface-inspector-edit-form] input[name="hidden"]').uncheck();
+    const showRequest = page.waitForResponse(response =>
+      response.request().method() === "PATCH"
+      && new URL(response.url()).pathname === "/api/widgets/todo_title"
+      && response.status() === 200
+    );
+    await page.locator('[data-surface-inspector-save]').click();
+    await showRequest;
+
+    await page.waitForFunction(() => {
+      const title = document.querySelector('[data-widget="todo_title"]');
+      return Boolean(title && title.hidden === false);
+    });
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("live page inspector can create a real widget.update proposal for a read-only widget and live-refresh after approval", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    browser,
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+  let approverContext = null;
+  let approverPage = null;
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await signIn(page, { username: "callan", password: "callan", label: "Callan" });
+
+    await page.locator('[data-surface-inspector-toggle]').click();
+    await page.locator('[data-widget="todo_title"]').click({ button: "right" });
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("todo_title")
+        && inspector.textContent.includes("Live Save-Back")
+        && inspector.textContent.includes("Read-only:")
+        && inspector.textContent.includes("context frontend")
+        && inspector.textContent.includes("Propose Save-Back")
+      );
+    });
+    assert.equal(await page.locator('[data-surface-inspector-edit-form]').count(), 0);
+    assert.equal(await page.locator('[data-surface-inspector-proposal-form]').count(), 1);
+
+    await page.locator('[data-surface-inspector-proposal-form] textarea[name="text"]').fill("Witness Todo Proposed");
+    await page.locator('[data-surface-inspector-proposal-form] input[name="reason"]').fill("Shared title should change");
+
+    const proposalResponse = page.waitForResponse(response =>
+      response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/proposals"
+      && response.status() === 201
+    );
+    await page.locator('[data-surface-inspector-propose]').click();
+    const proposalBody = await (await proposalResponse).json();
+    const proposalId = proposalBody?.proposal?.id || "";
+    assert.match(proposalId, /^proposal\.widget\.update\.todo_title\./);
+
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Proposed todo_title as proposal.widget.update.todo_title.")
+      );
+    });
+
+    approverContext = await browser.newContext();
+    approverPage = await approverContext.newPage();
+    await approverPage.goto(`${server.url}/`);
+    await waitForAppReady(approverPage);
+    await signIn(approverPage, { username: "aaron", password: "aaron", label: "Aaron" });
+
+    const approved = await approverPage.evaluate(async id => {
+      const response = await fetch(`/api/proposals/${encodeURIComponent(id)}/approve`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const body = await response.json().catch(() => ({}));
+      return { status: response.status, body };
+    }, proposalId);
+    assert.equal(approved.status, 200);
+
+    await page.waitForFunction(expected => {
+      const title = document.querySelector('[data-widget="todo_title"]');
+      return Boolean(title && title.textContent && title.textContent.includes(expected));
+    }, "Witness Todo Proposed");
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    if (approverContext) await approverContext.close();
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("live page inspector can create a real widgetVersion.activate proposal for a read-only shared versioned widget and live-refresh after approval", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    browser,
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+  let approverContext = null;
+  let approverPage = null;
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await signIn(page, { username: "callan", password: "callan", label: "Callan" });
+
+    await page.locator('[data-surface-inspector-toggle]').click();
+    await page.locator('[data-widget="todo_versioned_banner"]').click({ button: "right" });
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("todo_versioned_banner")
+        && inspector.textContent.includes("Widget Versions")
+        && inspector.textContent.includes("Propose Activate")
+      );
+    });
+
+    await page.locator('[data-surface-inspector-version-proposal-form][data-surface-inspector-proposal-process="widgetVersion.activate"] input[name="reason"]').fill("Promote the shared banner draft");
+
+    const proposalResponse = page.waitForResponse(response =>
+      response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/proposals"
+      && response.status() === 201
+    );
+    await page.locator('[data-surface-inspector-propose-version="activate"]').first().click();
+    const proposalBody = await (await proposalResponse).json();
+    const proposalId = proposalBody?.proposal?.id || "";
+    assert.match(proposalId, /^proposal\.widgetVersion\.activate\.todo_versioned_banner\./);
+
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Proposed activate todo_versioned_banner_v2 as proposal.widgetVersion.activate.todo_versioned_banner.")
+      );
+    });
+
+    approverContext = await browser.newContext();
+    approverPage = await approverContext.newPage();
+    await approverPage.goto(`${server.url}/`);
+    await waitForAppReady(approverPage);
+    await signIn(approverPage, { username: "aaron", password: "aaron", label: "Aaron" });
+
+    const approved = await approverPage.evaluate(async id => {
+      const response = await fetch(`/api/proposals/${encodeURIComponent(id)}/approve`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const body = await response.json().catch(() => ({}));
+      return { status: response.status, body };
+    }, proposalId);
+    assert.equal(approved.status, 200);
+
+    await page.waitForFunction(expected => {
+      const banner = document.querySelector('[data-widget="todo_versioned_banner"]');
+      return Boolean(banner && banner.textContent && banner.textContent.includes(expected));
+    }, "Versioned widget: v2");
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    if (approverContext) await approverContext.close();
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("live page inspector can create a real widgetVersion.rollback proposal for a read-only shared versioned widget and live-refresh after approval", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    browser,
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+  let approverContext = null;
+  let approverPage = null;
+
+  try {
+    approverContext = await browser.newContext();
+    approverPage = await approverContext.newPage();
+    await approverPage.goto(`${server.url}/`);
+    await waitForAppReady(approverPage);
+    await signIn(approverPage, { username: "aaron", password: "aaron", label: "Aaron" });
+
+    const activated = await approverPage.evaluate(async () => {
+      const response = await fetch("/api/widget-versions/todo_versioned_banner/activate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ version: "todo_versioned_banner_v2" })
+      });
+      const body = await response.json().catch(() => ({}));
+      return { status: response.status, body };
+    });
+    assert.equal(activated.status, 200);
+
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await signIn(page, { username: "callan", password: "callan", label: "Callan" });
+
+    await page.locator('[data-surface-inspector-toggle]').click();
+    await page.locator('[data-widget="todo_versioned_banner"]').click({ button: "right" });
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("todo_versioned_banner")
+        && inspector.textContent.includes("Propose Rollback To todo_versioned_banner_v1")
+      );
+    });
+
+    await page.locator('[data-surface-inspector-version-proposal-form][data-surface-inspector-proposal-process="widgetVersion.rollback"] input[name="reason"]').fill("Restore the previous shared banner");
+
+    const proposalResponse = page.waitForResponse(response =>
+      response.request().method() === "POST"
+      && new URL(response.url()).pathname === "/api/proposals"
+      && response.status() === 201
+    );
+    await page.locator('[data-surface-inspector-propose-version="rollback"]').first().click();
+    const proposalBody = await (await proposalResponse).json();
+    const proposalId = proposalBody?.proposal?.id || "";
+    assert.match(proposalId, /^proposal\.widgetVersion\.rollback\.todo_versioned_banner\./);
+
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("Proposed rollback todo_versioned_banner as proposal.widgetVersion.rollback.todo_versioned_banner.")
+      );
+    });
+
+    const approved = await approverPage.evaluate(async id => {
+      const response = await fetch(`/api/proposals/${encodeURIComponent(id)}/approve`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({})
+      });
+      const body = await response.json().catch(() => ({}));
+      return { status: response.status, body };
+    }, proposalId);
+    assert.equal(approved.status, 200);
+
+    await page.waitForFunction(expected => {
+      const banner = document.querySelector('[data-widget="todo_versioned_banner"]');
+      return Boolean(banner && banner.textContent && banner.textContent.includes(expected));
+    }, "Versioned widget: v1");
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    if (approverContext) await approverContext.close();
     await closeBrowser();
     await closeServer();
   }
@@ -185,6 +533,87 @@ test("live page command surface can inspect a current-page widget and open its r
       && url.searchParams.get("event") === "submit:todo_form"
     );
     await page.locator('[data-process-view]').waitFor();
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("live page command surface exposes the whoami shortcut, edits the current identity inline, and still hands off into bootstrap", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await signIn(page, { username: "aaron", password: "aaron", label: "Aaron" });
+
+    await page.evaluate(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F1', bubbles: true, cancelable: true }));
+    });
+
+    await page.waitForFunction(() => {
+      const input = document.querySelector('[data-surface-command-input]');
+      const result = document.querySelector('[data-surface-command-result="whoami"]');
+      return Boolean(
+        input
+        && input.value === 'whoami'
+        && result
+        && result.textContent
+        && result.textContent.includes('identity.aaron')
+        && result.textContent.includes('sourcerer')
+        && result.textContent.includes('TRUE')
+      );
+    });
+
+    await page.waitForFunction(() => Boolean(document.querySelector('[data-surface-command-identity-form]')));
+    await page.fill('[data-surface-command-identity-form] input[name="label"]', "Aaron Inline");
+    const inlineUpdate = page.waitForResponse(response =>
+      response.request().method() === "PATCH"
+      && new URL(response.url()).pathname === "/api/identities/identity.aaron"
+      && response.status() === 200
+    );
+    await page.locator('[data-surface-command-identity-form]').evaluate(form => form.requestSubmit());
+    await inlineUpdate;
+    await page.waitForFunction(() => {
+      const result = document.querySelector('[data-surface-command-result="whoami"]');
+      return Boolean(
+        result
+        && result.textContent
+        && result.textContent.includes("Aaron Inline")
+        && result.textContent.includes("Saved identity.aaron.")
+      );
+    });
+
+    await page.locator('[data-surface-command-result-bootstrap]').click();
+    await page.waitForURL(url => url.pathname === "/_bootstrap" && url.searchParams.get("identity") === "identity.aaron");
+    await page.waitForFunction(() => {
+      const heading = document.getElementById("identity-heading");
+      const submit = document.getElementById("identity-submit-button");
+      const idField = document.querySelector('#identity-form input[name="id"]');
+      const actorField = document.querySelector('#identity-form input[name="actor"]');
+      const labelField = document.querySelector('#identity-form input[name="label"]');
+      return Boolean(
+        heading
+        && heading.textContent.includes("Edit Identity")
+        && submit
+        && submit.textContent.includes("Save Identity")
+        && idField
+        && idField.value === "identity.aaron"
+        && idField.disabled === true
+        && actorField
+        && actorField.value === "aaron"
+        && actorField.disabled === true
+        && labelField
+        && labelField.value === "Aaron Inline"
+      );
+    });
 
     await expectNoRuntimeErrors(runtime);
   } finally {

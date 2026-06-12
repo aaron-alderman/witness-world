@@ -1,4 +1,4 @@
-import { thing, relation, retract, projectors, canAcceptInto, canMutateTarget } from "./kernel.js";
+import { thing, relation, retract, projectors, canAcceptInto, canCreateInContext, canMutateTarget } from "./kernel.js";
 import { thingId } from "./ids.js";
 import { runGates, actorRequired, textRequired } from "./gates.js";
 import { compensationClaims, undoState } from "./canvas-undo.js";
@@ -63,6 +63,16 @@ export function createPerspective(world, { actor, title, context = null }) {
   if (blocked) return blocked;
   const id = thingId("perspective", { actor, title, ordinal: world.allWitnesses().length });
   const normalizedContext = typeof context === "string" && context.trim() ? context.trim() : null;
+  if (normalizedContext) {
+    const gate = canCreateInContext(world, actor, normalizedContext);
+    if (!gate.ok) {
+      return failed(world, {
+        process: "canvas.perspective.create",
+        actor,
+        body: { title: title.trim(), context: normalizedContext, reason: gate.reason, status: gate.status || 403 }
+      });
+    }
+  }
   return world.emit({
     process: "canvas.perspective.create",
     actor,
@@ -289,6 +299,10 @@ export function relateThings(world, { actor, from, rel, to, perspective = null }
   if (!things.has(from) || !things.has(to)) {
     return failed(world, { process, actor, body: { from, rel, to, reason: "unknown thing" } });
   }
+  const gate = canMutateTarget(world, actor, from);
+  if (!gate.ok) {
+    return failed(world, { process, actor, body: { from, rel, to, perspective, reason: gate.reason, blockedTarget: from, status: gate.status || 403 } });
+  }
   return world.emit({
     process,
     actor,
@@ -301,6 +315,10 @@ export function unrelateThings(world, { actor, from, rel, to, perspective = null
   const process = "canvas.unrelate";
   const blocked = blockedWitness(world, { actor, process, gates: [actorRequired, textRequired("rel")], context: { actor, rel } });
   if (blocked) return blocked;
+  const gate = canMutateTarget(world, actor, from);
+  if (!gate.ok) {
+    return failed(world, { process, actor, body: { from, rel, to, perspective, reason: gate.reason, blockedTarget: from, status: gate.status || 403 } });
+  }
   const exists = world
     .project(projectors.currentRelations)
     .some(r => r.from === from && r.rel === rel && r.to === to);
@@ -321,6 +339,10 @@ export function setThingTitle(world, { actor, thing: target, title, perspective 
   if (blocked) return blocked;
   if (!world.project(projectors.things).has(target)) {
     return failed(world, { process, actor, body: { thing: target, reason: "unknown thing" } });
+  }
+  const gate = canMutateTarget(world, actor, target);
+  if (!gate.ok) {
+    return failed(world, { process, actor, body: { thing: target, title: title.trim(), perspective, reason: gate.reason, blockedTarget: target, status: gate.status || 403 } });
   }
   // titles live in the relation's `to`, so a new title is a new triple — retract the old ones
   const previous = world

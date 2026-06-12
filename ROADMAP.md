@@ -20,6 +20,39 @@ Related direction:
 - [docs/CAPABILITIES.md](C:\Users\aaron\Documents\world\docs\CAPABILITIES.md)
 - [docs/BACKEND-SEAMS.md](C:\Users\aaron\Documents\world\docs\BACKEND-SEAMS.md)
 
+Terminology used in this roadmap:
+
+- `fake`: a surface that pretends a behavior exists without deriving it from the real world model or persisting it truthfully
+- `stub`: a real seam with a deliberately simplified local or deterministic provider path
+- `projection`: a real derived read model; useful and inspectable, but not canonical truth
+- `real but narrow`: a truthful first slice with intentionally limited coverage or scope; not fake, but not yet the final general form
+- `compatibility bridge` or `compatibility sugar`: a transitional path that keeps older authored worlds or runtime behavior working while the first-class model catches up
+
+Current honesty snapshot:
+
+- The command/search surface is projection-backed, not registry-backed.
+- Tutorial recovery commands are derived from persisted tutorial progress, not from a fake command registry.
+- The shipped practical backend seams are mostly stub-first, not fake; provider realism is intentionally deferred there.
+- Legacy capability strings still synthesize placeholder capability objects, which is a compatibility bridge rather than a final authored migration story.
+- Contextual naming exists, and covered authoring surfaces no longer allow hidden foreign-scoped canonical-id bypasses.
+  Canonical ids still remain as a compatibility path for same-context, unscoped, and already-visible targets.
+- Live page proposal approval is real and now refreshes rendered pages through the witness stream, but the proposal path is still narrow and still depends on the generic proposal flow rather than a richer in-surface review model.
+- The next honesty risks are governance and migration gaps, not a secret command or registry layer.
+  The main ones today are placeholder capability synthesis, remaining canonical-id compatibility paths, and the still-unfinished push to bring every operating-surface or app-specific mutation route under one shared authority/proposal path.
+
+Current honesty ledger:
+
+- `fake` at the core seam level: none currently called out here.
+  The main current risks are not hidden theatre; they are narrow first slices, stubbed providers, and compatibility bridges that could calcify if left unattended.
+- `stub` today: practical backend provider seams.
+  Those surfaces are real runtime seams with simplified/local providers, and they are intentionally tracked outside this roadmap slice because other agents are already developing them.
+- `projection but real` today: command/search and tutorial recovery.
+  Those surfaces are derived read models, but they are still grounded in the world graph, witness log, and persisted tutorial progress rather than a hidden registry or assistant-only namespace.
+- `real but narrow` today: live proposal review, route-root page capability placement, current-identity editing, first-slice canvas authority-bound world mutation, and contextual naming coverage on the first covered authoring surfaces.
+  These are truthful slices with bounded scope, not product-complete general rules yet.
+- `compatibility bridge` today: legacy capability-string synthesis and the remaining same-context / unscoped / already-visible canonical-id authoring paths.
+  Those paths keep older worlds working, but they are not the intended final composition story.
+
 ---
 
 ## Current Baseline
@@ -61,6 +94,7 @@ This is the highest-leverage missing seam. The platform needs first-class capabi
 - [x] Introduce a local capability catalog/install surface with provenance and compatibility read models.
 - [ ] Turn the local catalog projection into a fuller catalog/store lifecycle with update flows, review surfaces, and remote provenance/trust channels.
 - [ ] Deepen compatibility beyond typed facet presence into stronger install-time compatibility reasoning across versions, authorities, and richer target semantics.
+- [ ] Replace legacy capability-string synthesis with an explicit authored migration path so old worlds stop depending on placeholder capability objects during projection/load.
 - [ ] Keep the core engineering rule explicit: do not hide app semantics in JS unless they are universal runtime/shell behavior or explicit plugin implementation code.
 
 This seam is the main transition from "wiring one app" to "assembling many capabilities."
@@ -81,6 +115,8 @@ Honest caveats / rollback watch:
   This is a pragmatic bridge for runtime startup compatibility, but if host capabilities later want a cleaner first-class public contract, this internal shape may need revision rather than being treated as final.
 - Legacy capability sugar currently synthesizes placeholder capability definitions during projection/load.
   That keeps old worlds working, but it is still a compatibility bridge rather than a principled authored migration format.
+- The world graph still shows legacy context capability strings as badges on context nodes alongside the new first-class capability/install edges.
+  That is helpful for continuity right now, but if the graph later wants one canonical capability story this duplicated presentation should be removed rather than normalized.
 - `routePage` placement is only route-root `Page` placement, not a true page entity or arbitrary widget-subtree placement model.
   If a stronger page concept lands later, this slice should be treated as intentionally narrow and replaceable.
 - Install validation is typed and dependency-aware, but it is still shallow.
@@ -102,7 +138,16 @@ The runtime now has identity/session basics, but context and authority are still
 - [x] Deepen identity enough for real home-scope attachment through `homePerspective` plus optional `homeContext`.
 - [x] Model authority, delegation, and stewardship explicitly for the generic bootstrap mutation surface.
 - [x] Introduce proposal create/approve/reject flows for guarded generic bootstrap/world-authoring mutations.
+- [x] Add a first operating-surface proposal path so signed-in live-inspector users without direct widget authority can create real `widget.update` proposals for later approval.
+- [x] Add a first live-page version proposal path so signed-in live-inspector users without direct version authority can create real `widgetVersion.activate` and `widgetVersion.rollback` proposals for later approval.
+- [x] Add a first Eden version proposal path so signed-in Eden users without direct version authority can create real `widgetVersion.activate`, `widgetVersion.rollback`, and `edenVersions.publish` proposals for later approval.
+- [x] Add a first Eden capability-install proposal path so signed-in Eden users without direct target authority can create real `capability.install` proposals for later approval.
+- [x] Tighten context-composition boundaries by phasing out hidden foreign-scoped canonical-id bypasses on covered bootstrap/DSL authoring surfaces while preserving local and legacy compatibility.
+- [x] Extend shared authority checks into a first non-bootstrap canvas world-mutation slice so context-scoped perspective creation and direct thing title/relation edits now respect context/target authority.
+- [x] Bring shared widget-version and Eden version mutation routes under the same authority derivation story by governing version souls through authored context.
+- [ ] Decide whether same-context and already-visible canonical-id authoring should remain permanent compatibility sugar or eventually yield to a stricter contextual-name-first product rule.
 - [ ] Extend those authority/proposal rules beyond the bootstrap authoring surface into broader operating surfaces and app behaviors.
+- [ ] Bring the remaining app-specific and other operating-surface mutation routes under the same shared authority/proposal derivation story instead of leaving them as adjacent special cases.
 - [ ] Define operator-owned recovery semantics for persistent worlds, including password reset and identity bootstrap recovery.
 
 This seam is what lets composition scale beyond a single trusted operator and a single flat namespace.
@@ -116,6 +161,11 @@ Current authority-first bootstrap slice now exists:
 - bootstrap read models for `contexts`, `perspectives`, `stewardships`, `authority`, and `proposals`
 - bootstrap UI for context creation, perspective creation, stewardship grant/revoke, and proposal approve/reject
 - cookie-backed session reads now surface `homeContext` when present
+- a first operating-surface extension: signed-in live-inspector users without direct widget authority can create real `widget.update` proposals from the rendered page
+- a first live-page version proposal extension: signed-in live-inspector users without direct version authority can create real `widgetVersion.activate` and `widgetVersion.rollback` proposals from the rendered page, with approval still flowing through the generic proposal APIs
+- a first Eden versions-panel proposal extension: signed-in Eden users without direct version authority can create real `widgetVersion.activate`, `widgetVersion.rollback`, and `edenVersions.publish` proposals from the versions surface, with approval still flowing through the generic proposal APIs
+- a first direct canvas authority extension: `canvas.perspective.create` now enforces context authority for scoped perspectives, and `canvas.thing.setTitle` / `canvas.relate` / `canvas.unrelate` now enforce target authority over the mutated source thing
+- a first version-governance extension: shared `/api/widget-versions/*` and Eden version mutation routes now respect the governing context of the versioned widget soul instead of acting like sign-in-only mutators
 
 Current context-composition first slice now exists:
 
@@ -131,12 +181,20 @@ Honest caveats / rollback watch:
 
 - This started as an authority-first governance slice, but it now includes a real first context-composition slice as well.
   What is still deferred is the full product-wide naming/package system, not the existence of bindings/exports/imports themselves.
-- Authority derivation currently governs the generic bootstrap mutation surface, not arbitrary app-specific handler-set actions.
+- Authority derivation now governs the generic bootstrap mutation surface plus a first direct canvas world-mutation slice, not arbitrary app-specific handler-set actions.
   If broader world editing later reuses different flows, this derivation layer should become the shared rule rather than another special case.
 - Stewardship is currently actor-string based, not a richer principal/group model.
   If identity-backed principals become stricter later, grant semantics may need tightening rather than quiet extension.
 - Proposal execution is a fixed supported-process executor, not a general workflow engine.
   It is honest for this slice, but it should not be mistaken for a complete review/queue system.
+- The first non-bootstrap proposal-authoring path is intentionally narrow.
+  It currently exists on the live widget inspector for `widget.update` plus first-slice `widgetVersion.activate` / `widgetVersion.rollback` proposal creation, on the Eden versions surface for `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish`, and on the Eden capability shelf for `capability.install`; approval/rejection still happens through the generic proposal APIs and broader app-specific actions are still outside this slice.
+- Canvas now has a first direct authority-bound world-mutation slice, but it still has no proposal fallback.
+  Scoped perspective creation and direct thing title/relation edits now reject unauthorized writes with real authority failures, yet broader canvas operations and app-specific handler-set CRUD still are not routed through a shared proposal/governance path.
+- Widget-version and Eden version mutation routes now use the same authority derivation path as the broader governance slice, but version proposal fallback is still only a narrow first slice.
+  The live inspector can now create real `widgetVersion.activate` and `widgetVersion.rollback` proposals for read-only shared versioned widgets, and the Eden versions panel can now create real `widgetVersion.activate`, `widgetVersion.rollback`, and `edenVersions.publish` proposals for that same shared seam, while broader version or app-specific mutation routes still remain outside that shared proposal/governance path.
+- Eden capability installs now also have a first proposal-aware fallback on the shared world surface, but it is still only a narrow first slice.
+  Signed-in Eden users without direct authority over the target can now create real `capability.install` proposals from the place the missing capability is discovered, while approval still runs through the generic proposal APIs and capability removal or richer review/package flows remain outside this slice.
 - Older authored objects may remain unscoped.
   That compatibility path is deliberate, but it means direct ownership is still part of the mutation model and some worlds will stay partially outside context governance until migrated.
 - Context composition is still a narrow first slice, not the full naming/package system.
@@ -149,8 +207,12 @@ Honest caveats / rollback watch:
   That keeps the model honest now, but if future package semantics want re-export or import-of-import behavior this slice may need a structural extension rather than incremental patching.
 - Contextual refs are parallel authoring fields, not a universal replacement for canonical ids.
   Capability installs, proposal targets, stewardship targets, and app-specific handler-set actions still mostly operate on canonical ids.
-- Canonical-id authoring is still a compatibility bypass around contextual visibility.
-  Covered surfaces now accept contextual `*Ref` fields, but their parallel canonical id fields can still reference foreign scoped objects directly. That is deliberate for first-slice compatibility, but if contexts later become hard composition boundaries this path will need an explicit migration/lockdown plan rather than quiet tightening.
+- Canonical-id authoring is still a compatibility path, but it no longer bypasses hidden foreign scoped targets on covered bootstrap/DSL authoring surfaces.
+  The parallel canonical id fields still work for same-context targets, unscoped legacy targets, and foreign targets that are already explicitly visible through import/binding.
+  If contexts later become stricter package boundaries, the remaining canonical-id compatibility should be decided explicitly rather than left to drift.
+- Identity editing is now real, but still only as a narrow current-identity slice.
+  The current `identity.update` path edits `label`, `username`, `password`, `homeContext`, and `homePerspective`, refreshes the active session when needed, and is now reachable both from bootstrap and from the live `F1 -> whoami` shortcut for the current signed-in identity.
+  It still intentionally keeps identity `id` plus `actor` immutable. If future identity lifecycle work wants principal migration, rename history, or stronger credential handling, this slice should be extended deliberately rather than treated as the final model.
 - The low-level JS helpers for `context.bind` / `context.export` / `context.import` remain permissive witness emitters.
   The first-slice guardrails are enforced on the real authoring paths (`DSL` and bootstrap APIs), not as a universal hard wall around every internal helper call.
 - Some explanatory read surfaces are still thinner than the write path.
@@ -169,6 +231,20 @@ The product still needs a real operating surface, not only bootstrap forms and i
 - [x] Extend the world-page command palette to expose disabled tutorial guidance recovery backed by real persisted tutorial state, not only graph objects and static surface links.
 - [x] Add a first live-page inspector slice with right-click widget inspection, truthful world/source/witness/process handoff, and in-place widget version activate/rollback on rendered app pages.
 - [x] Add a true search/command surface spanning pages, widgets, capabilities, commands, hidden surfaces, and witnessed execution.
+- [x] Add a first direct expert shortcut (`F1 -> whoami`) on live app surfaces and Eden, revealing current-user truth through the shared command surface.
+- [x] Add a first identity-edit handoff from `F1 -> whoami` into the real bootstrap identity editor.
+- [x] Add a first inline current-identity edit path on live app surfaces and Eden through `F1 -> whoami`, backed by real `identity.update` writes and active-session refresh.
+- [x] Add a first live-page hide/show mutation slice for non-versioned widgets through real `widget.update` save-back.
+- [x] Add a first live-page proposal path for read-only widget edits through real `widget.update` proposals.
+- [x] Add a first Eden world-surface proposal path for read-only capability installs through real `capability.install` proposals.
+- [x] Add a first Eden academy progression slice with witnessed quest completion, chapter-rail quest state, and earned shared-stewardship unlocks on the neighborhood action chips.
+- [x] Close the live proposal/live-refresh gap so approved page edits propagate without requiring a manual reload.
+- [X] Extend Eden progression into the first later operator/runtime gate so `Process View -> Alter Runtime` opens from real publish + process inspection practice and can run a witnessed failure drill in-world.
+- [x] Extend Eden progression into the optional `Tree -> Theory Annex` / `trained` side path.
+- [x] Add the first repeated-practice Eden layer so stewardship, operator work, and teaching are projected as real responsibility tracks rather than only one-off first-loop quest completion.
+- [x] Broaden those Eden responsibility tracks beyond the first stewardship/operator/teaching slice into the first wider quest-family consequences, including `Shared Table`, `Run A Stall`, and `Ship A Tiny SaaS` unlocks on Tree and adjacent action surfaces.
+- [x] Extend Eden into the first real commons/governance loop so `Start A Group`, `Set The Rules`, and `Run An Open Organization` complete from witnessed context, stewardship, and proposal practice on the `Commons` surface.
+- [ ] Expand Eden progression beyond this first responsibility family into broader academy taxonomies, deeper thresholds, and stronger cross-surface unlock consequences.
 - [ ] Make editable-everywhere pages a first-class product rule.
 - [ ] Define the page/widget/section editing grammar: inspect, hide, replace, upgrade, show process, show witnesses, show source.
 - [ ] Add a live editable inspector that maps rendered elements back to authored structures and can save changes into the world.
@@ -180,15 +256,34 @@ This seam is what turns the system from "coherent architecture" into "a place yo
 Honest caveats / rollback watch:
 
 - The editing grammar is no longer empty, but it is still only a first narrow subset.
-  Inspect, widget version upgrade/rollback, show source, show witnesses, and process-view handoff now exist on both the world surface and a first live-page inspector on rendered app pages, but hide/replace/live save-back editing do not.
+  Inspect, widget version upgrade/rollback, show source, show witnesses, process-view handoff, and a first real hide/show mutation now exist on both the world surface and a first live-page inspector on rendered app pages.
+- There is now a narrow real `widget.update` save-back path for non-versioned widgets, but it is not editable-everywhere.
+  The backend/API witness flow is real, yet the live inspector only exposes it when the current actor actually owns the unscoped widget or has authority over its governing context.
+- That narrow save-back path now includes `hidden` in addition to `text`, `title`, and `class`.
+  It is enough to make hide/show truthful on supported widgets, but not enough to claim general widget-structure editing, replace, or editable-everywhere coverage.
+- The shipped demo world now explicitly grants `aaron` stewardship over the `frontend` context so the first live save-back slice is actually usable on app chrome.
+  That is an honest governance choice in the demo world, not a general editable-everywhere rule; other actors such as `callan` do not get direct save and instead only get the new narrow proposal path.
+- The live inspector now has a first proposal-aware fallback for signed-in actors without direct authority.
+  It can create real `widget.update` proposals from the rendered page, and approved changes now refresh through the live witness stream without a manual reload, but approval still happens through the generic proposal flow rather than a richer in-surface review queue.
+- The operating surfaces now have two first version-proposal slices for read-only shared versioned widgets.
+  The live inspector covers real `widgetVersion.activate` and `widgetVersion.rollback` proposal creation plus generic approval and live witness-refresh after approval, while the Eden versions panel now covers real `widgetVersion.activate`, `widgetVersion.rollback`, and `edenVersions.publish` proposal creation with explicit refresh from the same truthful version state; broader version proposal coverage and in-surface review still remain open.
+- The Eden world surface now also has a first capability-install proposal slice for read-only shared targets.
+  Signed-in users without direct authority can create real `capability.install` proposals from the capability shelf, and approved installs show up again through the same truthful capability-state refresh, but review still happens through the generic proposal flow and capability remove/propose symmetry is still missing there.
 - The current command surface is world-page scoped, not universal.
   It now exists on both the real `/world` operating surface and rendered app pages, and it indexes projected world-graph objects, current-page widgets, real surface handoffs, and tutorial recovery commands derived from persisted tutorial state.
   It still does not cover every shell, plugin-owned surface, or arbitrary disabled surface in the product.
+- The new expert shortcut is truthful but narrow.
+  `F1 -> whoami` can now reveal the current user truth, edit the current signed-in identity inline, refresh the active session when that identity changes, and still hand off into real world/source/bootstrap views on live app pages and Eden's embedded board.
+  It is still only a first identity-edit slice rather than a broader expert transport grammar or full identity lifecycle surface.
+- The first Eden academy progression slices are now real, but still intentionally narrow.
+  The chapter rail now reads real quest completion, the first shared-stewardship gates open from practiced work, the first operator gate on `Process View` is real with a witnessed failure drill, the optional `Theory Annex` can now witness real lesson study plus the `trained` assessment path, the first stewardship/operator/teaching tracks are now projected from repeated work, and the first broader responsibility-family consequences now exist through `Shared Table`, `Run A Stall`, and `Ship A Tiny SaaS`.
+  What is still ahead is broadening that model into more academy families, deeper thresholds, and stronger unlock results derived from those tracks.
 - The new app/harness/internal distinction is only a first explicit surface-tier slice.
   It currently classifies route-backed operating surfaces and builtin handoffs on the world page; it is not yet a universal content-boundary model across every widget, page, shell, or capability surface.
 - Search ranking is still simple local matching over truthful labels and metadata.
   That is acceptable for a first operating slice, but if later ranking wants stronger context-awareness it should remain inspectable rather than becoming opaque assistant magic.
 - The shared command surface is projection-backed, not registry-backed.
+  That means it is real but derived, not fake; the remaining limitation is coverage, not truthfulness.
   Live-page results come from rendered `[data-widget]` ancestry, `/api/world-graph`, and explicit route/process/version endpoints, not from a second assistant-owned command namespace.
 - The live-page inspector currently depends on rendered `[data-widget]` ancestry plus projected world-graph metadata.
   That is a truthful first bridge, but it is not yet a universal page/entity editing contract across every rendered surface or shell.
@@ -257,7 +352,7 @@ This seam is about making execution and live change trustworthy rather than mere
 
 ### 6. Practical Backend Capabilities
 
-Status: complete
+Status: active
 
 This seam is about practical app capability rather than platform purity.
 
@@ -307,21 +402,42 @@ The current starting slice is Files + Uploads because it most quickly makes the 
 
 This seam is the difference between a runtime that can host a demo and a runtime that can support ordinary serious applications.
 
-The seam-definition program for section 6 is complete.
+The seam-definition program for section 6 is complete, but the next execution wave in this area is still active.
 
 The first asset-product follow-on slice is now shipped:
 
 - dropped files are more useful world objects through richer inspector affordances, open/download flows, and honest typed preview where the runtime can really support it
+- assets can now attach to other world things through first-class witnessed attachment semantics instead of ad hoc file-path glue
+- uploads now queue honest asset-ingestion work through `jobs.queue`, write derived text into world-managed storage, and reindex asset-backed search sources with visible processing state on the asset
+- queued asset ingestion now supports structured local extraction for `json`, `csv`, `tsv`, `yaml`, `toml`, markup-style text, and first-slice PDF text extraction, including extension-aware structured detection when MIME types are generic, plus an explicit `search.index.assetRefreshPolicy` instead of always forcing reindex on ingest
+- queued asset ingestion now derives image metadata plus local thumbnail artifacts for supported image uploads, with private thumbnail hosting through the same generic host boundary
+- derived asset text is now exposed through the generic host and the canvas inspector, so ingestion output is visible as a real asset surface rather than only as backend state
+- queued asset ingestion now derives and exposes richer structured asset metadata for supported document and structured-text uploads, including first-slice PDF page facts, CSV table facts, markdown heading or frontmatter facts, and initial YAML/TOML structure facts surfaced through projections and the canvas inspector
 
-The next execution order in this area should be:
+#### Current Execution Follow-On
 
-1. Add first-class asset reference or attachment semantics so files can be associated with notes, records, and other world objects without collapsing back into ad hoc file paths or handler-specific glue.
-2. Push heavier asset follow-on work behind `jobs.queue` and `search.index`: extraction, thumbnailing, reindex, and other async ingestion steps with witnessed processing state.
-3. Add a hosted provider path for `fs.stream` and `upload.asset`, then tighten larger-payload, multipart, and backpressure behavior against that provider boundary.
-4. Wire a real `db.sql` Postgres adapter before adding MySQL so the relational seam is proven against one serious hosted provider.
-5. Add one real `notify.email` provider path before attempting SMS-provider complexity.
-6. Add one real `auth.oauth` provider path to prove callback, secret, and account-link behavior against a live external provider.
-7. Shift the main adjacent emphasis to section 5 so more backend behavior becomes honestly executable from witnessed or runtime-authored definitions rather than remaining handler-set glue.
+The drag-and-drop, storage, context-association, placement, and private-hosting contract is now a stable base, and the first ingestion-derived asset surface is real through derived-text links and inspector preview. The logically next product wave in this area is deeper asset understanding through background ingestion, not a new upload surface or a second upload entry point. The remaining order is: keep broadening async ingestion, widen the product-visible derived surface, then harden hosted-provider and adjacent provider paths.
+
+The next concrete slice inside that wave is context-aware asset understanding: dropped files should become more useful through stronger context or attachment-aware inspection, richer derived metadata, and clearer processing state before this seam pivots to hosted providers or secondary backend capabilities.
+
+The execution order inside that slice is: make context and attachment state more legible on the asset itself, widen the product-visible derived surface, then keep broadening async extraction and rendition depth behind the same upload and ingestion seam.
+
+Completed base for this follow-on wave:
+
+- [X] Expose derived asset text as a first-class product surface through the generic host, search-backed asset projections, and canvas inspector preview so queued ingestion results are directly usable.
+
+Next execution steps:
+
+- [ ] Make context-aware asset understanding the active next slice for `upload.asset` + `jobs.queue` + `search.index`, with context resolution, attachment state, and background ingestion continuing to be the main product wave rather than introducing a separate upload surface.
+- [ ] Continue extending the asset product surface so ingestion results become more visible and useful: clearer processing and failure states, stronger context or attachment-aware asset inspection, broader derived metadata coverage beyond the shipped PDF, CSV, markdown, YAML, and TOML facts, and more useful structured facts in search and inspection surfaces.
+- [ ] Broaden asset background processing behind `jobs.queue` and `search.index`: richer document and binary extractors, stronger thumbnail and rendition pipelines, and other async ingestion steps beyond the shipped structured-text, extension-aware YAML/TOML, PDF-text, image-metadata, local-thumbnail, and first structured-facts slice.
+- [X] Add operator repair and retry flows for asset ingestion and asset-backed reindex so failed or stale derived outputs are inspectable and recoverable instead of remaining passive diagnostics.
+- [ ] Add richer first-class asset surfaces after ingestion succeeds: more honest previews, derived representations, and inspection affordances that let dropped files feel like live world objects instead of stored blobs with metadata.
+- [ ] Add a hosted provider path for `fs.stream` and `upload.asset`, then tighten larger-payload, multipart, and backpressure behavior against that provider boundary.
+- [ ] Wire a real `db.sql` Postgres adapter before adding MySQL so the relational seam is proven against one serious hosted provider.
+- [ ] Add one real `notify.email` provider path before attempting SMS-provider complexity.
+- [ ] Add one real `auth.oauth` provider path to prove callback, secret, and account-link behavior against a live external provider.
+- [ ] Shift the main adjacent emphasis to section 5 so more backend behavior becomes honestly executable from witnessed or runtime-authored definitions rather than remaining handler-set glue.
 
 Detailed spike:
 

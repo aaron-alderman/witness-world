@@ -121,6 +121,35 @@ test("world graph surfaces trait, valueType, and processSpec nodes with compatib
   assert.equal(specNode.values.some(v => v.key === "inputs" && v.value.type === "list"), true);
 });
 
+test("world graph places mcp servers in backend runtime contexts", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[thing]]
+actor = "system"
+id = "backendHost"
+
+[[thing]]
+actor = "system"
+id = "frontendHost"
+
+[[serverRunner]]
+actor = "system"
+id = "app_runner"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[mcpServer]]
+actor = "system"
+id = "project_mcp"
+label = "Project MCP"
+serverRunner = "app_runner"
+transports = ["http"]
+`);
+
+  const graph = worldGraphProjection(world.allWitnesses());
+  assert.equal(graph.nodes.some(node => node.id === "project_mcp" && node.badges.some(badge => badge.label === "kind:mcpServer")), true);
+});
+
 
 test("demo UI includes world graph widget and frontend render operation", async () => {
   const world = createWorld();

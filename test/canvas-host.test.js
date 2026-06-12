@@ -17,6 +17,25 @@ function cookieHeader(setCookie) {
   return (setCookie || "").split(";")[0];
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitFor(check, { timeoutMs = 2000, intervalMs = 15 } = {}) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const value = await check();
+    if (value) return value;
+    await sleep(intervalMs);
+  }
+  throw new Error("timed out waiting for condition");
+}
+
+const ONE_BY_ONE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+k2Z0AAAAASUVORK5CYII=",
+  "base64"
+);
+
 async function openSession(serverUrl, { username = "aaron", password = username } = {}) {
   const response = await fetch(`${serverUrl}/api/session`, {
     method: "POST",
@@ -386,6 +405,215 @@ context = "context:projects"
     const callan = await openSession(server.url, { username: "callan", password: "callan" });
     const forbidden = await fetch(`${server.url}${body.asset.contentUrl}`, { headers: { cookie: callan.cookie } });
     assert.equal(forbidden.status, 403);
+  } finally {
+    await server.close();
+  }
+});
+
+test("asset ingestion derives image thumbnail metadata and serves private thumbnails", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-assets-thumb-"));
+  const { world, server } = await startCanvasServer({
+    runtimeRoot,
+    runtimeConfig: `"jobs.queue.pollMs" = 10, "jobs.queue.retryDelayMs" = 20, "jobs.queue.maxAttempts" = 3`,
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:projects"
+label = "Projects"
+
+[[perspective]]
+actor = "aaron"
+id = "projects:view"
+title = "Projects View"
+context = "context:projects"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const uploaded = await uploadAsset(server, {
+      perspective: "projects:view",
+      bytes: ONE_BY_ONE_PNG,
+      fileName: "pixel.png",
+      contentType: "image/png",
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(uploaded.status, 201);
+    const body = await uploaded.json();
+
+    const asset = await waitFor(() => {
+      const row = world.project(moduleProjectors.assetIndex).byId[body.asset.id] ?? null;
+      return row?.processingStatus === "succeeded" ? row : null;
+    });
+
+    assert.equal(asset.thumbnailStatus, "ready");
+    assert.equal(asset.imageWidth, 1);
+    assert.equal(asset.imageHeight, 1);
+    assert.equal(asset.thumbnailRef, `${body.asset.id}/derived/thumbnail.svg`);
+    assert.equal(asset.thumbnailUrl, `/api/assets/${encodeURIComponent(body.asset.id)}/thumbnail`);
+
+    const storedThumbnail = await fs.readFile(path.join(runtimeRoot, "assets", encodeURIComponent(body.asset.id), "derived", "thumbnail.svg"), "utf8");
+    assert.match(storedThumbnail, /data:image\/png;base64,/);
+
+    const thumbnail = await fetch(`${server.url}${asset.thumbnailUrl}`, { headers: { cookie: login.cookie } });
+    assert.equal(thumbnail.status, 200);
+    assert.match(thumbnail.headers.get("content-type") || "", /^image\/svg\+xml/);
+    assert.match(await thumbnail.text(), /data:image\/png;base64,/);
+
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+    const forbidden = await fetch(`${server.url}${asset.thumbnailUrl}`, { headers: { cookie: callan.cookie } });
+    assert.equal(forbidden.status, 403);
+  } finally {
+    await server.close();
+  }
+});
+
+test("asset ingestion serves derived text for extracted assets with private access control", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-assets-text-"));
+  const { world, server } = await startCanvasServer({
+    runtimeRoot,
+    runtimeConfig: `"jobs.queue.pollMs" = 10, "jobs.queue.retryDelayMs" = 20, "jobs.queue.maxAttempts" = 3`,
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:projects"
+label = "Projects"
+
+[[perspective]]
+actor = "aaron"
+id = "projects:view"
+title = "Projects View"
+context = "context:projects"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const uploaded = await uploadAsset(server, {
+      perspective: "projects:view",
+      bytes: Buffer.from("%PDF-1.4\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n2 0 obj\n<< /Type /Pages /Count 1 /Kids [3 0 R] >>\nendobj\n3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R >>\nendobj\n4 0 obj\n<< /Length 39 >>\nstream\nBT\n/F1 12 Tf\n72 72 Td\n(Phase Six Preview) Tj\nET\nendstream\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF", "latin1"),
+      fileName: "brief.pdf",
+      contentType: "application/pdf",
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(uploaded.status, 201);
+    const body = await uploaded.json();
+
+    const asset = await waitFor(() => {
+      const row = world.project(moduleProjectors.assetIndex).byId[body.asset.id] ?? null;
+      return row?.processingStatus === "succeeded" ? row : null;
+    });
+
+    assert.equal(asset.textStatus, "extracted");
+    assert.equal(asset.textExtractor, "pdf");
+    assert.equal(asset.textRef, `${body.asset.id}/derived/text.txt`);
+    assert.equal(asset.textUrl, `/api/assets/${encodeURIComponent(body.asset.id)}/text`);
+    assert.equal(asset.derivedMetadata.kind, "pdf");
+    assert.equal(asset.derivedMetadata.pageCount, 1);
+    assert.equal(asset.derivedMetadata.lineCount, 1);
+    assert.equal(asset.derivedMetadata.wordCount, 3);
+
+    const textResponse = await fetch(`${server.url}${asset.textUrl}`, { headers: { cookie: login.cookie } });
+    assert.equal(textResponse.status, 200);
+    assert.match(textResponse.headers.get("content-type") || "", /^text\/plain/);
+    assert.match(await textResponse.text(), /Phase Six Preview/);
+
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+    const forbidden = await fetch(`${server.url}${asset.textUrl}`, { headers: { cookie: callan.cookie } });
+    assert.equal(forbidden.status, 403);
+  } finally {
+    await server.close();
+  }
+});
+
+test("asset ingestion derives structured metadata for csv uploads", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-assets-csv-meta-"));
+  const { world, server } = await startCanvasServer({
+    runtimeRoot,
+    runtimeConfig: `"jobs.queue.pollMs" = 10, "jobs.queue.retryDelayMs" = 20, "jobs.queue.maxAttempts" = 3`,
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:projects"
+label = "Projects"
+
+[[perspective]]
+actor = "aaron"
+id = "projects:view"
+title = "Projects View"
+context = "context:projects"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const uploaded = await uploadAsset(server, {
+      perspective: "projects:view",
+      bytes: Buffer.from("name,role\nAda,Engineer\nLin,Designer\n", "utf8"),
+      fileName: "team.csv",
+      contentType: "text/csv",
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(uploaded.status, 201);
+    const body = await uploaded.json();
+
+    const asset = await waitFor(() => {
+      const row = world.project(moduleProjectors.assetIndex).byId[body.asset.id] ?? null;
+      return row?.processingStatus === "succeeded" ? row : null;
+    });
+
+    assert.equal(asset.textExtractor, "csv");
+    assert.deepEqual(asset.derivedMetadata, {
+      kind: "csv",
+      rowCount: 3,
+      dataRowCount: 2,
+      columnCount: 2,
+      headers: ["name", "role"]
+    });
+  } finally {
+    await server.close();
+  }
+});
+
+test("asset ingestion derives structured metadata for markdown uploads", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-assets-md-meta-"));
+  const { world, server } = await startCanvasServer({
+    runtimeRoot,
+    runtimeConfig: `"jobs.queue.pollMs" = 10, "jobs.queue.retryDelayMs" = 20, "jobs.queue.maxAttempts" = 3`,
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:projects"
+label = "Projects"
+
+[[perspective]]
+actor = "aaron"
+id = "projects:view"
+title = "Projects View"
+context = "context:projects"
+`
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const uploaded = await uploadAsset(server, {
+      perspective: "projects:view",
+      bytes: Buffer.from("---\nauthor: Aaron\ntags: world\n---\n# Phase Six\n\n## Details\n\nBackend seam notes.\n", "utf8"),
+      fileName: "notes.md",
+      contentType: "text/markdown",
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(uploaded.status, 201);
+    const body = await uploaded.json();
+
+    const asset = await waitFor(() => {
+      const row = world.project(moduleProjectors.assetIndex).byId[body.asset.id] ?? null;
+      return row?.processingStatus === "succeeded" ? row : null;
+    });
+
+    assert.equal(asset.textExtractor, "markdown");
+    assert.equal(asset.derivedMetadata.kind, "markdown");
+    assert.equal(asset.derivedMetadata.title, "Phase Six");
+    assert.equal(asset.derivedMetadata.headingCount, 2);
+    assert.deepEqual(asset.derivedMetadata.headings, ["Phase Six", "Details"]);
+    assert.equal(asset.derivedMetadata.frontmatterKeyCount, 2);
+    assert.deepEqual(asset.derivedMetadata.frontmatterKeys, ["author", "tags"]);
   } finally {
     await server.close();
   }
@@ -1117,7 +1345,7 @@ context = "context:projects"
     assert.ok(uploadCapability);
     assert.deepEqual(uploadCapability.dependsOn, ["fs.blob", "fs.stream"]);
     assert.equal(uploadCapability.providerAdapters.some(row => row.id === "local-disk" && row.status === "shipped" && row.default === true), true);
-    assert.deepEqual(uploadCapability.witnessContract.externalRefs, ["storageKey", "contentUrl"]);
+    assert.deepEqual(uploadCapability.witnessContract.externalRefs, ["storageKey", "contentUrl", "textRef", "thumbnailRef", "thumbnailUrl"]);
     const outboundCapability = diagnostics.backendCapabilities.find(row => row.id === "http.outbound");
     assert.ok(outboundCapability);
     assert.deepEqual(outboundCapability.witnessContract.externalRefs, ["externalRefId", "correlationId"]);
@@ -1195,6 +1423,87 @@ test("end-to-end: perspective, things, placement, move, and relation over HTTP",
     assert.equal(customer.y, 175);
     assert.equal(canvas.connectors.length, 1);
     assert.equal(canvas.connectors[0].rel, "references");
+  } finally {
+    await server.close();
+  }
+});
+
+test("canvas process enforces context authority for scoped perspective creation", async () => {
+  const { world, server } = await startCanvasServer({
+    extra: `
+[[context]]
+actor = "adam"
+id = "ctx.shared"
+label = "Shared"
+owner = "aaron"
+`
+  });
+  try {
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+    const asAaron = { cookie: aaron.cookie, "content-type": "application/json" };
+    const asCallan = { cookie: callan.cookie, "content-type": "application/json" };
+
+    const allowed = await postProcess(server, "canvas.perspective.create", {
+      title: "Shared Board",
+      context: "ctx.shared"
+    }, asAaron);
+    assert.equal(allowed.status, 200);
+
+    const forbidden = await postProcess(server, "canvas.perspective.create", {
+      title: "Callan Board",
+      context: "ctx.shared"
+    }, asCallan);
+    assert.equal(forbidden.status, 403);
+    const forbiddenBody = await forbidden.json();
+    assert.equal(forbiddenBody.witness.process, "canvas.perspective.create.failed");
+
+    const perspectives = world.project(moduleProjectors.perspectives);
+    assert.equal(perspectives.some(row => row.title === "Shared Board" && row.context === "ctx.shared"), true);
+    assert.equal(perspectives.some(row => row.title === "Callan Board" && row.context === "ctx.shared"), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("canvas thing mutation processes require target authority over HTTP", async () => {
+  const { world, server } = await startCanvasServer();
+  try {
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+    const asAaron = { cookie: aaron.cookie, "content-type": "application/json" };
+    const asCallan = { cookie: callan.cookie, "content-type": "application/json" };
+
+    const perspective = (await postProcess(server, "canvas.perspective.create", { title: "Authority Board" }, asAaron).then(r => r.json())).witness.body.id;
+    const first = (await postProcess(server, "canvas.createThing", { perspective, name: "Customer", x: 100, y: 100 }, asAaron).then(r => r.json())).witness.body;
+    const second = (await postProcess(server, "canvas.createThing", { perspective, name: "Proposal", x: 400, y: 220 }, asAaron).then(r => r.json())).witness.body;
+
+    const rename = await postProcess(server, "canvas.thing.setTitle", {
+      thing: first.thing,
+      title: "Hijacked Customer",
+      perspective
+    }, asCallan);
+    assert.equal(rename.status, 403);
+    const renameBody = await rename.json();
+    assert.equal(renameBody.witness.process, "canvas.thing.setTitle.failed");
+
+    const relate = await postProcess(server, "canvas.relate", {
+      from: first.thing,
+      rel: "references",
+      to: second.thing,
+      perspective
+    }, asCallan);
+    assert.equal(relate.status, 403);
+    const relateBody = await relate.json();
+    assert.equal(relateBody.witness.process, "canvas.relate.failed");
+
+    const canvas = (await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent(perspective)}`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json())).canvas;
+    assert.equal(canvas.instances.some(instance => instance.label === "Hijacked Customer"), false);
+    assert.equal(canvas.connectors.length, 0);
+    assert.equal(world.allWitnesses().some(w => w.process === "canvas.thing.setTitle" && w.actor === "callan"), false);
+    assert.equal(world.allWitnesses().some(w => w.process === "canvas.relate" && w.actor === "callan"), false);
   } finally {
     await server.close();
   }

@@ -259,6 +259,52 @@ targetKind = "context"
   assert.equal(installs.some(row => row.capability === "notes.sidebar" && row.target === "frontend" && row.targetKind === "context"), true);
 });
 
+test("mcp server DSL sections emit first-class server and tool installs", () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "backendHost" });
+  createThing(world, { actor: "system", id: "frontendHost" });
+  applyWitnessToml(world, `
+[[serverRunner]]
+actor = "system"
+id = "app_runner"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[mcpServer]]
+actor = "system"
+id = "project_mcp"
+label = "Project MCP"
+serverRunner = "app_runner"
+serviceIdentity = "svc.project"
+transports = ["stdio", "http"]
+
+[[mcpToolInstall]]
+actor = "system"
+server = "project_mcp"
+tool = "world.read"
+actingMode = "service"
+scopeContexts = ["ctx.docs"]
+scopeTargets = ["page.root"]
+`);
+
+  assert.deepEqual(world.project(moduleProjectors.mcpServers), [{
+    id: "project_mcp",
+    label: "Project MCP",
+    serverRunner: "app_runner",
+    serviceIdentity: "svc.project",
+    transports: ["http", "stdio"],
+    context: null
+  }]);
+  assert.deepEqual(world.project(moduleProjectors.mcpToolInstalls), [{
+    server: "project_mcp",
+    tool: "world.read",
+    actingMode: "service",
+    scopeContexts: ["ctx.docs"],
+    scopeTargets: ["page.root"],
+    witness: world.project(moduleProjectors.mcpToolInstalls)[0].witness
+  }]);
+});
+
 test("context composition DSL sections project bindings and lower contextual refs to canonical ids across covered surfaces", () => {
   const world = createWorld();
   createThing(world, { actor: "system", id: "backendHost" });
@@ -578,9 +624,10 @@ target = "page_root"
   }, /target is not locally bound in context/);
 });
 
-test("context composition DSL keeps canonical ids valid and allows unscoped legacy objects to be locally bound", () => {
-  const world = createWorld();
-  applyWitnessToml(world, `
+test("context composition DSL keeps canonical ids valid for local targets, allows unscoped legacy objects to be locally bound, and rejects hidden foreign scoped canonical refs", () => {
+  const blockedWorld = createWorld();
+  assert.throws(() => {
+    applyWitnessToml(blockedWorld, `
 [[context]]
 actor = "system"
 id = "ctx.source"
@@ -620,12 +667,51 @@ id = "canonical_program"
 context = "ctx.target"
 rootWidget = "page_root"
 `);
+  }, /root widget id targets page_root in context ctx.source and is not visible in authoring context ctx.target/);
+
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[widget]]
+actor = "system"
+id = "local_page"
+kind = "Page"
+context = "ctx.target"
+
+[[widget]]
+actor = "system"
+id = "legacy_shell"
+kind = "Box"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "legacyShell"
+target = "legacy_shell"
+
+[[widget]]
+actor = "system"
+id = "legacy_child"
+kind = "Text"
+context = "ctx.target"
+parentRef = "legacyShell"
+text = "Child"
+
+[[frontendProgram]]
+actor = "system"
+id = "canonical_program"
+context = "ctx.target"
+rootWidget = "local_page"
+`);
 
   const child = world.project(w => widgetTree(w, "legacy_shell")).children.find(row => row.id === "legacy_child");
   assert.ok(child);
   assert.equal(child.props.text, "Child");
   const program = frontendProgramsProjection(world.allWitnesses()).find(row => row.id === "canonical_program");
   assert.ok(program);
-  assert.equal(program.rootWidget, "page_root");
+  assert.equal(program.rootWidget, "local_page");
   assert.equal(world.project(moduleProjectors.contextScopes).some(row => row.context === "ctx.target" && row.name === "legacyShell" && row.target === "legacy_shell" && row.sourceKind === "local"), true);
 });

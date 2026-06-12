@@ -232,6 +232,77 @@ test("asset things project as first-class canvas nodes with metadata and context
       contentUrl: "/api/assets/asset%3Abrief/content"
     }
   });
+  world.emit({
+    process: "asset.ingest.enqueue",
+    actor: "aaron",
+    claims: [],
+    body: {
+      id: "asset:brief",
+      serverRunner: "server.main",
+      jobId: "job:asset-brief"
+    }
+  });
+  world.emit({
+    process: "jobs.queue.enqueue",
+    actor: "aaron",
+    claims: [
+      thing("job:asset-brief"),
+      relation("job:asset-brief", "hasModuleKind", "job"),
+      relation("aaron", "owns", "job:asset-brief"),
+      relation("job:asset-brief", "hasTitle", "asset.ingest.process")
+    ],
+    body: {
+      id: "job:asset-brief",
+      serverRunner: "server.main",
+      actor: "aaron",
+      handler: "asset.ingest.process",
+      payload: { assetId: "asset:brief" },
+      createdAt: "2026-01-01T00:00:00.000Z",
+      availableAt: "2026-01-01T00:00:00.000Z",
+      maxAttempts: 3,
+      retryDelayMs: 50
+    }
+  });
+  world.emit({
+    process: "jobs.queue.succeeded",
+    actor: "aaron",
+    claims: [],
+    body: {
+      id: "job:asset-brief",
+      serverRunner: "server.main",
+      actor: "aaron",
+      handler: "asset.ingest.process",
+      attempt: 1,
+      completedAt: "2026-01-01T00:00:01.000Z"
+    }
+  });
+  world.emit({
+    process: "asset.ingest.succeeded",
+    actor: "aaron",
+    claims: [],
+    body: {
+      id: "asset:brief",
+      jobId: "job:asset-brief",
+      attempt: 1,
+      textStatus: "extracted",
+      textBytes: 1024,
+      textRef: "asset:brief/derived/text.txt",
+      derivedMetadata: {
+        kind: "pdf",
+        pageCount: 1,
+        lineCount: 1,
+        wordCount: 2,
+        charCount: 11
+      },
+      thumbnailStatus: "ready",
+      thumbnailRef: "asset:brief/derived/thumbnail.svg",
+      thumbnailUrl: "/api/assets/asset%3Abrief/thumbnail",
+      imageWidth: 640,
+      imageHeight: 480,
+      searchStatus: "not-built",
+      completedAt: "2026-01-01T00:00:01.000Z"
+    }
+  });
   placeThing(world, { actor: "aaron", perspective, thing: "asset:brief", x: 12, y: 34 });
 
   const canvas = canvasProjection(world.allWitnesses(), perspective);
@@ -239,12 +310,26 @@ test("asset things project as first-class canvas nodes with metadata and context
   assert.equal(canvas.instances[0].kind, "asset");
   assert.equal(canvas.instances[0].asset.mimeType, "application/pdf");
   assert.equal(canvas.instances[0].asset.context, "context:files");
+  assert.equal(canvas.instances[0].asset.contextTitle, "Files");
+  assert.equal(canvas.instances[0].asset.processingStatus, "succeeded");
+  assert.equal(canvas.instances[0].asset.textStatus, "extracted");
+  assert.equal(canvas.instances[0].asset.textUrl, "/api/assets/asset%3Abrief/text");
+  assert.equal(canvas.instances[0].asset.derivedMetadata.pageCount, 1);
+  assert.equal(canvas.instances[0].asset.derivedMetadata.kind, "pdf");
+  assert.equal(canvas.instances[0].asset.thumbnailUrl, "/api/assets/asset%3Abrief/thumbnail");
+  assert.equal(canvas.instances[0].asset.imageWidth, 640);
+  assert.equal(canvas.instances[0].asset.imageHeight, 480);
   assert.equal(canvas.availableThings.find(row => row.id === "asset:brief").kind, "asset");
 
   const details = thingDetails(world.allWitnesses(), "asset:brief");
   assert.equal(details.kind, "asset");
   assert.equal(details.context, "context:files");
+  assert.equal(details.asset.contextTitle, "Files");
   assert.equal(details.asset.storageKey, "asset:brief/blob");
+  assert.equal(details.asset.textRef, "asset:brief/derived/text.txt");
+  assert.equal(details.asset.textUrl, "/api/assets/asset%3Abrief/text");
+  assert.equal(details.asset.derivedMetadata.pageCount, 1);
+  assert.equal(details.asset.thumbnailRef, "asset:brief/derived/thumbnail.svg");
 });
 
 test("asset attachments project on both the target thing and the asset", () => {
@@ -277,5 +362,110 @@ test("asset attachments project on both the target thing and the asset", () => {
 
   const assetDetails = thingDetails(world.allWitnesses(), "asset:brief");
   assert.deepEqual(assetDetails.attachedTo, ["proposal"]);
+  assert.deepEqual(assetDetails.attachedToRows, [{
+    id: "proposal",
+    title: "proposal",
+    kind: null,
+    context: null,
+    contextTitle: null
+  }]);
+  assert.equal(assetDetails.asset.attachedToRows[0].title, "proposal");
   assert.equal(assetDetails.asset.attachmentCount, 1);
+});
+
+test("asset repair affordances project for retryable ingest and manual search refresh states", () => {
+  const world = seededWorld();
+  world.emit({
+    process: "asset.upload",
+    actor: "aaron",
+    claims: [
+      thing("asset:repairable"),
+      relation("aaron", "owns", "asset:repairable"),
+      relation("asset:repairable", "hasModuleKind", "asset"),
+      relation("asset:repairable", "hasTitle", "repairable.txt")
+    ],
+    body: {
+      id: "asset:repairable",
+      originalName: "repairable.txt",
+      mimeType: "text/plain",
+      sizeBytes: 64,
+      storageKey: "asset:repairable/blob",
+      visibility: "private",
+      context: "context:files",
+      contentUrl: "/api/assets/asset%3Arepairable/content"
+    }
+  });
+  world.emit({
+    process: "asset.ingest.enqueue.failed",
+    actor: "aaron",
+    claims: [],
+    body: {
+      id: "asset:repairable",
+      reason: "queue unavailable"
+    }
+  });
+  world.emit({
+    process: "asset.search.reindex.failed",
+    actor: "aaron",
+    claims: [],
+    body: {
+      id: "asset:repairable",
+      reason: "search index not built"
+    }
+  });
+  world.emit({
+    process: "asset.upload",
+    actor: "aaron",
+    claims: [
+      thing("asset:manual"),
+      relation("aaron", "owns", "asset:manual"),
+      relation("asset:manual", "hasModuleKind", "asset"),
+      relation("asset:manual", "hasTitle", "manual.txt")
+    ],
+    body: {
+      id: "asset:manual",
+      originalName: "manual.txt",
+      mimeType: "text/plain",
+      sizeBytes: 32,
+      storageKey: "asset:manual/blob",
+      visibility: "private",
+      context: "context:files",
+      contentUrl: "/api/assets/asset%3Amanual/content"
+    }
+  });
+  world.emit({
+    process: "asset.ingest.succeeded",
+    actor: "aaron",
+    claims: [],
+    body: {
+      id: "asset:manual",
+      textStatus: "extracted",
+      textRef: "asset:manual/derived/text.txt",
+      textExtractor: "text",
+      searchStatus: "manual",
+      searchPolicy: "manual",
+      completedAt: "2026-01-01T00:00:00.000Z"
+    }
+  });
+
+  const details = thingDetails(world.allWitnesses(), "asset:repairable");
+  assert.equal(details.asset.canRetryIngest, true);
+  assert.equal(details.asset.ingestRetryUrl, "/api/assets/asset%3Arepairable/ingest/retry");
+  assert.equal(details.asset.canRefreshSearch, true);
+  assert.equal(details.asset.searchReindexUrl, "/api/assets/asset%3Arepairable/search/reindex");
+  const manualDetails = thingDetails(world.allWitnesses(), "asset:manual");
+  assert.equal(manualDetails.asset.canRetryIngest, false);
+  assert.equal(manualDetails.asset.canRefreshSearch, true);
+  assert.equal(manualDetails.asset.searchReindexUrl, "/api/assets/asset%3Amanual/search/reindex");
+
+  const perspective = createPerspective(world, { actor: "aaron", title: "Repair View" }).body.id;
+  placeThing(world, { actor: "aaron", perspective, thing: "asset:repairable", x: 32, y: 48 });
+  placeThing(world, { actor: "aaron", perspective, thing: "asset:manual", x: 96, y: 48 });
+  const assetRow = canvasProjection(world.allWitnesses(), perspective).availableThings.find(row => row.id === "asset:repairable");
+  assert(assetRow);
+  assert.equal(assetRow.asset.canRetryIngest, true);
+  assert.equal(assetRow.asset.canRefreshSearch, true);
+  const manualRow = canvasProjection(world.allWitnesses(), perspective).availableThings.find(row => row.id === "asset:manual");
+  assert(manualRow);
+  assert.equal(manualRow.asset.canRefreshSearch, true);
 });

@@ -909,6 +909,12 @@ test("widget version api blocks by default, surfaces forkRequired, and rolls bac
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
   applyMinimalTodoDsl(world, `
+[[context]]
+actor = "adam"
+id = "ctx.shared"
+owner = "adam"
+stewards = ["aaron"]
+
 [[widget]]
 actor = "adam"
 id = "root"
@@ -926,6 +932,7 @@ params = { rootWidget = "root" }
 
 [[widgetVersion]]
 actor = "adam"
+context = "ctx.shared"
 soul = "banner"
 version = "banner_v1"
 kind = "Text"
@@ -934,6 +941,7 @@ props = { text = "Banner v1" }
 
 [[widgetVersion]]
 actor = "adam"
+context = "ctx.shared"
 soul = "banner"
 version = "banner_v2"
 kind = "Text"
@@ -942,6 +950,7 @@ props = { text = "Banner v2" }
 
 [[widgetVersion]]
 actor = "adam"
+context = "ctx.shared"
 soul = "banner"
 version = "banner_v3"
 kind = "Text"
@@ -1021,6 +1030,43 @@ order = 0
     assert.equal(rollbackBody.status, "rolledBack");
     assert.equal(rollbackBody.version, "banner_v1");
     assert.equal(world.allWitnesses().some(w => w.process === "widgetVersion.rollback"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("shared widget version APIs reject unauthorized actors", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+
+    const activate = await fetch(`${server.url}/api/widget-versions/todo_versioned_banner/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: callan.cookie },
+      body: JSON.stringify({ version: "todo_versioned_banner_v2" })
+    });
+    assert.equal(activate.status, 403);
+
+    const rollback = await fetch(`${server.url}/api/widget-versions/todo_versioned_banner/rollback`, {
+      method: "POST",
+      headers: { cookie: callan.cookie }
+    });
+    assert.equal(rollback.status, 403);
+
+    assert.equal(world.allWitnesses().some(w => w.process === "activateWidgetVersion" && w.actor === "callan"), false);
+    assert.equal(world.allWitnesses().some(w => w.process === "widgetVersion.rollback" && w.actor === "callan"), false);
   } finally {
     await server.close();
   }

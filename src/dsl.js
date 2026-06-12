@@ -16,7 +16,10 @@ import {
   ensureCapabilityDefinition,
   importContextName,
   installCapability,
+  installMcpTool,
+  createMcpServer,
   removeCapability,
+  removeMcpTool,
   validateContextBinding,
   validateContextExport,
   validateContextImport,
@@ -178,6 +181,12 @@ function sourceTargets(kind, values) {
   if (kind === "capabilityInstall") {
     if (values.capability) ids.push(values.capability);
     if (values.target) ids.push(values.target);
+  }
+  if (kind === "mcpServer") {
+    if (values.serverRunner) ids.push(values.serverRunner);
+  }
+  if (kind === "mcpToolInstall") {
+    if (values.server) ids.push(values.server);
   }
   if (kind === "contextBinding") {
     if (values.context) ids.push(values.context);
@@ -470,6 +479,39 @@ function applyDoc(world, { kind, values }, context) {
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
       });
 
+    case "mcpServer":
+      return createMcpServer(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        id: req(valuesWithDefaults, "id"),
+        label: valuesWithDefaults.label ?? valuesWithDefaults.id,
+        serverRunner: resolveDocRef(world, valuesWithDefaults, {
+          idField: "serverRunner",
+          refField: "serverRunnerRef",
+          label: "server runner"
+        }) ?? req(valuesWithDefaults, "serverRunner"),
+        serviceIdentity: valuesWithDefaults.serviceIdentity ?? null,
+        transports: valuesWithDefaults.transports ?? ["stdio", "http"],
+        context: valuesWithDefaults.context ?? null,
+        owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
+      });
+
+    case "mcpToolInstall":
+      return installMcpTool(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        server: req(valuesWithDefaults, "server"),
+        tool: req(valuesWithDefaults, "tool"),
+        actingMode: valuesWithDefaults.actingMode ?? "delegated",
+        scopeContexts: valuesWithDefaults.scopeContexts ?? [],
+        scopeTargets: valuesWithDefaults.scopeTargets ?? []
+      });
+
+    case "mcpToolRemove":
+      return removeMcpTool(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        server: req(valuesWithDefaults, "server"),
+        tool: req(valuesWithDefaults, "tool")
+      });
+
     case "identity": {
       const contextActor = valuesWithDefaults.context && context.contexts[valuesWithDefaults.context]
         ? context.contexts[valuesWithDefaults.context].actor
@@ -591,7 +633,8 @@ function applyDoc(world, { kind, values }, context) {
         kind: req(valuesWithDefaults, "kind"),
         props: collectProps(valuesWithDefaults, ["actor", "owner", "context", "soul", "version", "kind", "index", "program"]),
         index: valuesWithDefaults.index ?? 0,
-        owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
+        owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor,
+        context: valuesWithDefaults.context ?? null
       });
 
     case "widgetVersionTransition":

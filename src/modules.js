@@ -6,6 +6,8 @@ const NAME_REL_PREFIX = "bindsName:";
 const EXPORT_REL_PREFIX = "exportsName:";
 const IMPORT_REL_PREFIX = "importsName:";
 const CONTEXT_REF_SEP = "\u0000";
+const MCP_TOOL_ACTING_MODES = new Set(["delegated", "service"]);
+const MCP_SERVER_TRANSPORTS = new Set(["stdio", "http"]);
 
 function latestBodiesByProcess(witnesses, process) {
   const rows = new Map();
@@ -105,10 +107,22 @@ function currentRelations(witnesses) {
   return projectors.currentRelations(witnesses);
 }
 
-function assetAttachmentMaps(current, assetRows) {
+function thingReferenceRow(id, { titles, kinds, contexts }) {
+  const contextId = contexts.get(id) ?? null;
+  return {
+    id,
+    title: titles.get(id) ?? id,
+    kind: kinds.get(id) ?? null,
+    context: contextId,
+    contextTitle: contextId ? (titles.get(contextId) ?? contextId) : null
+  };
+}
+
+function assetAttachmentMaps(current, assetRows, { titles, kinds, contexts }) {
   const assetById = new Map(assetRows.map(row => [row.id, row]));
   const byTarget = new Map();
   const byAsset = new Map();
+  const byAssetRows = new Map();
   for (const row of current) {
     if (row.rel !== "attachedAsset") continue;
     const asset = assetById.get(row.to);
@@ -117,10 +131,31 @@ function assetAttachmentMaps(current, assetRows) {
     byTarget.get(row.from).push(asset);
     if (!byAsset.has(row.to)) byAsset.set(row.to, []);
     byAsset.get(row.to).push(row.from);
+    if (!byAssetRows.has(row.to)) byAssetRows.set(row.to, []);
+    byAssetRows.get(row.to).push(thingReferenceRow(row.from, { titles, kinds, contexts }));
   }
   for (const rows of byTarget.values()) rows.sort((a, b) => String(a.title || a.id).localeCompare(String(b.title || b.id)));
   for (const rows of byAsset.values()) rows.sort((a, b) => String(a).localeCompare(String(b)));
-  return { byTarget, byAsset };
+  for (const rows of byAssetRows.values()) rows.sort((a, b) => String(a.title || a.id).localeCompare(String(b.title || b.id)));
+  return { byTarget, byAsset, byAssetRows };
+}
+
+function assetIngestRetryUrl(assetId) {
+  return `/api/assets/${encodeURIComponent(assetId)}/ingest/retry`;
+}
+
+function assetSearchReindexUrl(assetId) {
+  return `/api/assets/${encodeURIComponent(assetId)}/search/reindex`;
+}
+
+function assetCanRetryIngest(row) {
+  const status = String(row?.processingStatus || "");
+  return status === "dead-letter" || status === "enqueue-failed";
+}
+
+function assetCanRefreshSearch(row) {
+  if (String(row?.searchStatus || "") === "manual") return true;
+  return typeof row?.searchError === "string" && row.searchError.trim().length > 0;
 }
 
 function localNameRel(name) {
@@ -409,6 +444,85 @@ export function createServerRunner(world, {
   });
 }
 
+export function createMcpServer(world, {
+  actor,
+  id,
+  label = id,
+  serverRunner,
+  serviceIdentity = null,
+  transports = ["stdio", "http"],
+  context = null,
+  owner = actor
+}) {
+  createThing(world, { actor, id, owner });
+  const normalizedTransports = [...new Set((Array.isArray(transports) ? transports : []).map(value => String(value).trim()).filter(Boolean))];
+  return world.emit({
+    process: "defineMcpServer",
+    actor,
+    claims: [
+      relation(id, "hasModuleKind", "mcpServer"),
+      relation(id, "usesServerRunner", serverRunner),
+      ...(context ? [relation(id, "inContext", context)] : []),
+      ...(serviceIdentity ? [relation(id, "serviceIdentity", serviceIdentity)] : []),
+      ...normalizedTransports.map(transport => relation(id, "supportsTransport", transport))
+    ],
+    body: {
+      id,
+      label: String(label ?? id),
+      serverRunner: String(serverRunner),
+      serviceIdentity: serviceIdentity ? String(serviceIdentity) : null,
+      transports: normalizedTransports,
+      context: context ? String(context) : null
+    }
+  });
+}
+
+export function installMcpTool(world, {
+  actor,
+  server,
+  tool,
+  actingMode = "delegated",
+  scopeContexts = [],
+  scopeTargets = []
+}) {
+  const normalizedScopeContexts = [...new Set((Array.isArray(scopeContexts) ? scopeContexts : []).map(String).filter(Boolean))];
+  const normalizedScopeTargets = [...new Set((Array.isArray(scopeTargets) ? scopeTargets : []).map(String).filter(Boolean))];
+  return world.emit({
+    process: "installMcpTool",
+    actor,
+    claims: [
+      relation(server, "exposesMcpTool", tool, {
+        actingMode: String(actingMode || "delegated"),
+        scopeContexts: normalizedScopeContexts,
+        scopeTargets: normalizedScopeTargets
+      })
+    ],
+    body: {
+      server: String(server),
+      tool: String(tool),
+      actingMode: String(actingMode || "delegated"),
+      scopeContexts: normalizedScopeContexts,
+      scopeTargets: normalizedScopeTargets
+    }
+  });
+}
+
+export function removeMcpTool(world, {
+  actor,
+  server,
+  tool
+}) {
+  return world.emit({
+    process: "removeMcpTool",
+    actor,
+    claims: [retract(server, "exposesMcpTool", tool)],
+    body: {
+      server: String(server),
+      tool: String(tool)
+    }
+  });
+}
+
 export function createIdentity(world, {
   actor,
   id,
@@ -438,6 +552,46 @@ export function createIdentity(world, {
       password: String(password),
       homeContext: homeContext ? String(homeContext) : null,
       homePerspective: homePerspective ? String(homePerspective) : null
+    }
+  });
+}
+
+export function updateIdentity(world, {
+  actor,
+  id,
+  label,
+  username,
+  password,
+  homeContext = null,
+  homePerspective = null
+}) {
+  const existing = moduleProjectors.identityIndex(world.allWitnesses()).byId[id] ?? null;
+  const nextHomeContext = homeContext ? String(homeContext) : null;
+  const nextHomePerspective = homePerspective ? String(homePerspective) : null;
+  const claims = [
+    relation(id, "hasModuleKind", "identity"),
+    ...(existing?.actor ? [relation(id, "identityActor", existing.actor)] : [])
+  ];
+  if (existing?.homeContext && existing.homeContext !== nextHomeContext) {
+    claims.push(retract(id, "homeContext", existing.homeContext));
+  }
+  if (nextHomeContext) claims.push(relation(id, "homeContext", nextHomeContext));
+  if (existing?.homePerspective && existing.homePerspective !== nextHomePerspective) {
+    claims.push(retract(id, "homePerspective", existing.homePerspective));
+  }
+  if (nextHomePerspective) claims.push(relation(id, "homePerspective", nextHomePerspective));
+  return world.emit({
+    process: "updateIdentity",
+    actor,
+    claims,
+    body: {
+      id: String(id),
+      actor: String(existing?.actor || ""),
+      label: String(label),
+      username: String(username),
+      password: String(password),
+      homeContext: nextHomeContext,
+      homePerspective: nextHomePerspective
     }
   });
 }
@@ -948,7 +1102,21 @@ export function resolveContextualRef(witnesses, {
   if (canonical && contextual) {
     return { ok: false, error: `provide either ${label} id or ${label} ref, not both` };
   }
-  if (canonical) return { ok: true, target: canonical, source: "canonical" };
+  if (canonical) {
+    const authoringContext = typeof context === "string" && context.trim() ? context.trim() : null;
+    if (!authoringContext) return { ok: true, target: canonical, source: "canonical" };
+    const targetContext = moduleProjectors.objectContexts(witnesses).get(canonical) ?? null;
+    if (!targetContext || targetContext === authoringContext) {
+      return { ok: true, target: canonical, source: "canonical" };
+    }
+    const visible = moduleProjectors.contextScopes(witnesses)
+      .some(row => row.context === authoringContext && row.target === canonical);
+    if (visible) return { ok: true, target: canonical, source: "canonical" };
+    return {
+      ok: false,
+      error: `${label} id targets ${canonical} in context ${targetContext} and is not visible in authoring context ${authoringContext}`
+    };
+  }
   if (!contextual) return { ok: true, target: null, source: "empty" };
   if (!(typeof context === "string" && context.trim())) {
     return { ok: false, error: `${label} ref requires an explicit authoring context` };
@@ -1266,12 +1434,89 @@ export const moduleProjectors = {
     }));
   },
 
-  assets(witnesses) {
-    const assetDownloadUrl = contentUrl => {
-      if (typeof contentUrl !== "string" || !contentUrl) return null;
-      return contentUrl.includes("?") ? `${contentUrl}&download=1` : `${contentUrl}?download=1`;
-    };
+  mcpServers(witnesses) {
+    const contexts = moduleProjectors.objectContexts(witnesses);
     const rows = new Map();
+    const rels = currentRelations(witnesses);
+    for (const witness of witnesses) {
+      if (witness.process !== "defineMcpServer" || !witness.body?.id) continue;
+      rows.set(witness.body.id, {
+        id: witness.body.id,
+        label: typeof witness.body.label === "string" && witness.body.label.trim() ? witness.body.label.trim() : witness.body.id,
+        serverRunner: witness.body.serverRunner ? String(witness.body.serverRunner) : null,
+        serviceIdentity: witness.body.serviceIdentity ? String(witness.body.serviceIdentity) : null,
+        transports: Array.isArray(witness.body.transports) ? [...new Set(witness.body.transports.map(String).filter(Boolean))] : [],
+        context: contexts.get(witness.body.id) ?? (witness.body.context ? String(witness.body.context) : null)
+      });
+    }
+    for (const row of rels) {
+      if (!rows.has(row.from)) continue;
+      const current = rows.get(row.from);
+      if (row.rel === "usesServerRunner") current.serverRunner = row.to;
+      if (row.rel === "serviceIdentity") current.serviceIdentity = row.to;
+      if (row.rel === "supportsTransport" && !current.transports.includes(String(row.to))) current.transports.push(String(row.to));
+    }
+    return [...rows.values()]
+      .map(row => ({
+        ...row,
+        transports: row.transports.filter(transport => MCP_SERVER_TRANSPORTS.has(transport)).sort()
+      }))
+      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
+  },
+
+  mcpServerIndex(witnesses) {
+    const rows = moduleProjectors.mcpServers(witnesses);
+    const byId = Object.create(null);
+    for (const row of rows) byId[row.id] = row;
+    return { rows, byId };
+  },
+
+  mcpToolInstalls(witnesses) {
+    const rows = [];
+    const seen = new Set();
+    for (const row of currentRelations(witnesses)) {
+      if (row.rel !== "exposesMcpTool") continue;
+      const key = `${row.from}\u0000${row.to}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({
+        server: row.from,
+        tool: String(row.to),
+        actingMode: MCP_TOOL_ACTING_MODES.has(String(row.meta?.actingMode || ""))
+          ? String(row.meta.actingMode)
+          : "delegated",
+        scopeContexts: Array.isArray(row.meta?.scopeContexts)
+          ? [...new Set(row.meta.scopeContexts.map(String).filter(Boolean))].sort()
+          : [],
+        scopeTargets: Array.isArray(row.meta?.scopeTargets)
+          ? [...new Set(row.meta.scopeTargets.map(String).filter(Boolean))].sort()
+          : [],
+        witness: row.witness
+      });
+    }
+    return rows.sort((a, b) =>
+      String(a.server).localeCompare(String(b.server))
+      || String(a.tool).localeCompare(String(b.tool))
+    );
+  },
+
+  mcpToolInstallIndex(witnesses) {
+    const rows = moduleProjectors.mcpToolInstalls(witnesses);
+    const byServer = Object.create(null);
+    for (const row of rows) {
+      if (!byServer[row.server]) byServer[row.server] = [];
+      byServer[row.server].push(row);
+    }
+    return { rows, byServer };
+  },
+
+    assets(witnesses) {
+      const assetDownloadUrl = contentUrl => {
+        if (typeof contentUrl !== "string" || !contentUrl) return null;
+        return contentUrl.includes("?") ? `${contentUrl}&download=1` : `${contentUrl}?download=1`;
+      };
+      const assetTextUrl = assetId => `/api/assets/${encodeURIComponent(assetId)}/text`;
+      const rows = new Map();
     const owners = projectors.owners(witnesses);
     const contexts = moduleProjectors.objectContexts(witnesses);
     const modules = moduleProjectors.modules(witnesses);
@@ -1280,44 +1525,57 @@ export const moduleProjectors = {
         .filter(row => row.rel === "hasTitle")
         .map(row => [row.from, row.to])
     );
+    const defaultRow = id => ({
+      id,
+      title: titles.get(id) ?? id,
+      owner: owners.get(id) ?? null,
+      mimeType: null,
+      sizeBytes: null,
+      storageKey: null,
+      visibility: "private",
+      context: contexts.get(id) ?? null,
+      contextTitle: null,
+      contentUrl: null,
+      downloadUrl: null,
+      textUrl: null,
+      originalName: null,
+      processingStatus: null,
+      processingJobId: null,
+      processingAttempt: 0,
+      processingUpdatedAt: null,
+      processingError: null,
+      derivedMetadata: null,
+      textStatus: null,
+      textBytes: null,
+      textRef: null,
+      textExtractor: null,
+      thumbnailStatus: null,
+      thumbnailRef: null,
+      thumbnailUrl: null,
+      imageWidth: null,
+      imageHeight: null,
+      searchStatus: null,
+      searchError: null,
+      searchPolicy: null,
+      reindexedIndexId: null,
+      canRetryIngest: false,
+      ingestRetryUrl: null,
+      canRefreshSearch: false,
+      searchReindexUrl: null,
+      attachedTo: [],
+      attachedToRows: [],
+      attachmentCount: 0
+    });
 
     for (const [id, kind] of modules) {
       if (kind !== "asset") continue;
-      rows.set(id, {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        mimeType: null,
-        sizeBytes: null,
-        storageKey: null,
-        visibility: "private",
-        context: contexts.get(id) ?? null,
-        contentUrl: null,
-        downloadUrl: null,
-        originalName: null,
-        attachedTo: [],
-        attachmentCount: 0
-      });
+      rows.set(id, defaultRow(id));
     }
 
     for (const witness of witnesses) {
       if (witness.process !== "asset.upload" || !witness.body?.id) continue;
       const id = String(witness.body.id);
-      const row = rows.get(id) ?? {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        mimeType: null,
-        sizeBytes: null,
-        storageKey: null,
-        visibility: "private",
-        context: contexts.get(id) ?? null,
-        contentUrl: null,
-        downloadUrl: null,
-        originalName: null,
-        attachedTo: [],
-        attachmentCount: 0
-      };
+      const row = rows.get(id) ?? defaultRow(id);
       row.originalName = typeof witness.body.originalName === "string" ? witness.body.originalName : row.originalName;
       row.title = titles.get(id) ?? row.originalName ?? row.title;
       row.mimeType = typeof witness.body.mimeType === "string" ? witness.body.mimeType : row.mimeType;
@@ -1332,14 +1590,135 @@ export const moduleProjectors = {
       rows.set(id, row);
     }
 
-    for (const row of rows.values()) {
-      if (!row.downloadUrl) row.downloadUrl = assetDownloadUrl(row.contentUrl);
+    const jobsByAsset = new Map();
+    const assetIdByJobId = new Map();
+    for (const witness of witnesses) {
+      if (!witness.process.startsWith("jobs.queue.") || !witness.body?.id) continue;
+      if (witness.body.handler !== "asset.ingest.process") continue;
+      const jobId = String(witness.body.id);
+      const assetId = typeof witness.body.payload?.assetId === "string"
+        ? witness.body.payload.assetId
+        : assetIdByJobId.get(jobId) || "";
+      if (!assetId) continue;
+      assetIdByJobId.set(jobId, assetId);
+      const row = jobsByAsset.get(assetId) ?? {
+        assetId,
+        id: jobId,
+        status: "queued",
+        attempt: 0,
+        createdAt: null,
+        availableAt: null,
+        completedAt: null,
+        lastError: null
+      };
+      row.id = jobId;
+      if (Number.isFinite(witness.body.attempt)) row.attempt = witness.body.attempt;
+      if (typeof witness.body.createdAt === "string") row.createdAt = witness.body.createdAt;
+      if (typeof witness.body.availableAt === "string") row.availableAt = witness.body.availableAt;
+      if (typeof witness.body.nextAvailableAt === "string") row.availableAt = witness.body.nextAvailableAt;
+      if (typeof witness.body.completedAt === "string") row.completedAt = witness.body.completedAt;
+      if (typeof witness.body.reason === "string") row.lastError = witness.body.reason;
+      if (witness.process === "jobs.queue.enqueue") row.status = "queued";
+      if (witness.process === "jobs.queue.start") row.status = "running";
+      if (witness.process === "jobs.queue.retry") row.status = "queued";
+      if (witness.process === "jobs.queue.succeeded") row.status = "succeeded";
+      if (witness.process === "jobs.queue.deadLetter") row.status = "dead-letter";
+      jobsByAsset.set(assetId, row);
     }
 
+    for (const witness of witnesses) {
+      if (!witness.body?.id) continue;
+      if (![
+        "asset.ingest.enqueue",
+        "asset.ingest.enqueue.failed",
+        "asset.ingest.start",
+        "asset.ingest.succeeded",
+        "asset.ingest.failed",
+        "asset.search.reindex",
+        "asset.search.reindex.failed"
+      ].includes(witness.process)) continue;
+      const id = String(witness.body.id);
+      const row = rows.get(id) ?? defaultRow(id);
+      if (witness.process === "asset.ingest.enqueue") {
+        row.processingStatus = "queued";
+        row.processingJobId = typeof witness.body.jobId === "string" ? witness.body.jobId : row.processingJobId;
+      }
+      if (witness.process === "asset.ingest.enqueue.failed") {
+        row.processingStatus = "enqueue-failed";
+        row.processingError = typeof witness.body.reason === "string" ? witness.body.reason : row.processingError;
+      }
+      if (witness.process === "asset.ingest.start") {
+        row.processingStatus = "running";
+        row.processingJobId = typeof witness.body.jobId === "string" ? witness.body.jobId : row.processingJobId;
+        row.processingAttempt = Number.isFinite(witness.body.attempt) ? witness.body.attempt : row.processingAttempt;
+      }
+        if (witness.process === "asset.ingest.succeeded") {
+        row.processingStatus = "succeeded";
+        row.processingJobId = typeof witness.body.jobId === "string" ? witness.body.jobId : row.processingJobId;
+        row.processingAttempt = Number.isFinite(witness.body.attempt) ? witness.body.attempt : row.processingAttempt;
+        row.processingUpdatedAt = typeof witness.body.completedAt === "string" ? witness.body.completedAt : row.processingUpdatedAt;
+        row.processingError = null;
+          row.derivedMetadata = witness.body.derivedMetadata && typeof witness.body.derivedMetadata === "object" && !Array.isArray(witness.body.derivedMetadata)
+            ? witness.body.derivedMetadata
+            : row.derivedMetadata;
+          row.textStatus = typeof witness.body.textStatus === "string" ? witness.body.textStatus : row.textStatus;
+          row.textBytes = Number.isFinite(witness.body.textBytes) ? witness.body.textBytes : row.textBytes;
+          row.textRef = typeof witness.body.textRef === "string" ? witness.body.textRef : row.textRef;
+          row.textUrl = row.textRef ? assetTextUrl(id) : row.textUrl;
+          row.textExtractor = typeof witness.body.textExtractor === "string" ? witness.body.textExtractor : row.textExtractor;
+        row.thumbnailStatus = typeof witness.body.thumbnailStatus === "string" ? witness.body.thumbnailStatus : row.thumbnailStatus;
+        row.thumbnailRef = typeof witness.body.thumbnailRef === "string" ? witness.body.thumbnailRef : row.thumbnailRef;
+        row.thumbnailUrl = typeof witness.body.thumbnailUrl === "string" ? witness.body.thumbnailUrl : row.thumbnailUrl;
+        row.imageWidth = Number.isFinite(witness.body.imageWidth) ? witness.body.imageWidth : row.imageWidth;
+        row.imageHeight = Number.isFinite(witness.body.imageHeight) ? witness.body.imageHeight : row.imageHeight;
+        row.searchStatus = typeof witness.body.searchStatus === "string" ? witness.body.searchStatus : row.searchStatus;
+        row.searchPolicy = typeof witness.body.searchPolicy === "string" ? witness.body.searchPolicy : row.searchPolicy;
+        row.reindexedIndexId = typeof witness.body.reindexedIndexId === "string" ? witness.body.reindexedIndexId : row.reindexedIndexId;
+        row.searchError = null;
+      }
+      if (witness.process === "asset.ingest.failed") {
+        row.processingJobId = typeof witness.body.jobId === "string" ? witness.body.jobId : row.processingJobId;
+        row.processingAttempt = Number.isFinite(witness.body.attempt) ? witness.body.attempt : row.processingAttempt;
+        row.processingError = typeof witness.body.reason === "string" ? witness.body.reason : row.processingError;
+      }
+      if (witness.process === "asset.search.reindex") {
+        row.searchStatus = typeof witness.body.searchStatus === "string" ? witness.body.searchStatus : "reindexed";
+        row.searchPolicy = typeof witness.body.searchPolicy === "string" ? witness.body.searchPolicy : row.searchPolicy;
+        row.reindexedIndexId = typeof witness.body.reindexedIndexId === "string" ? witness.body.reindexedIndexId : row.reindexedIndexId;
+        row.searchError = null;
+      }
+      if (witness.process === "asset.search.reindex.failed") {
+        row.searchError = typeof witness.body.reason === "string" ? witness.body.reason : row.searchError;
+      }
+      rows.set(id, row);
+    }
+
+    for (const [assetId, job] of jobsByAsset) {
+      const row = rows.get(assetId) ?? defaultRow(assetId);
+      row.processingJobId = job.id;
+      row.processingStatus = job.status;
+      row.processingAttempt = Number.isFinite(job.attempt) ? job.attempt : row.processingAttempt;
+      row.processingUpdatedAt = job.completedAt ?? job.availableAt ?? job.createdAt ?? row.processingUpdatedAt;
+      if (job.status === "succeeded") row.processingError = null;
+      else if (typeof job.lastError === "string") row.processingError = job.lastError;
+      rows.set(assetId, row);
+    }
+
+      for (const row of rows.values()) {
+        if (!row.downloadUrl) row.downloadUrl = assetDownloadUrl(row.contentUrl);
+        if (!row.textUrl && row.textRef) row.textUrl = assetTextUrl(row.id);
+        row.canRetryIngest = assetCanRetryIngest(row);
+        row.ingestRetryUrl = row.canRetryIngest ? assetIngestRetryUrl(row.id) : null;
+        row.canRefreshSearch = assetCanRefreshSearch(row);
+        row.searchReindexUrl = row.canRefreshSearch ? assetSearchReindexUrl(row.id) : null;
+        row.contextTitle = row.context ? (titles.get(row.context) ?? row.context) : null;
+      }
+
     const assetRows = [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
-    const attachments = assetAttachmentMaps(currentRelations(witnesses), assetRows);
+    const attachments = assetAttachmentMaps(currentRelations(witnesses), assetRows, { titles, kinds: modules, contexts });
     for (const row of assetRows) {
       row.attachedTo = attachments.byAsset.get(row.id) ?? [];
+      row.attachedToRows = attachments.byAssetRows.get(row.id) ?? [];
       row.attachmentCount = row.attachedTo.length;
     }
     return assetRows;
@@ -2075,13 +2454,14 @@ export const moduleProjectors = {
   identities(witnesses) {
     const identityMap = new Map();
     for (const w of witnesses) {
-      if (w.process !== "defineIdentity" || !w.body?.id) continue;
+      if ((w.process !== "defineIdentity" && w.process !== "updateIdentity") || !w.body?.id) continue;
+      const previous = identityMap.get(w.body.id) ?? null;
       identityMap.set(w.body.id, {
         id: w.body.id,
-        actor: String(w.body.actor || ""),
-        label: String(w.body.label || ""),
-        username: String(w.body.username || ""),
-        password: String(w.body.password || ""),
+        actor: String(w.body.actor || previous?.actor || ""),
+        label: String(w.body.label || previous?.label || ""),
+        username: String(w.body.username || previous?.username || ""),
+        password: String(w.body.password || previous?.password || ""),
         homeContext: w.body.homeContext ? String(w.body.homeContext) : null,
         homePerspective: w.body.homePerspective ? String(w.body.homePerspective) : null
       });

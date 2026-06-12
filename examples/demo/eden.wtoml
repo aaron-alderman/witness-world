@@ -1,3 +1,6 @@
+[[defaults]]
+context = "backend"
+
 [[route]]
 actor = "adam"
 id = "eden_canvas_route"
@@ -98,6 +101,76 @@ route = "eden_page_theme_write_route"
 
 [[route]]
 actor = "adam"
+id = "eden_academy_read_route"
+method = "GET"
+path = "/api/eden/academy"
+serves = "edenAcademy"
+handler = "edenAcademy.read"
+params = { neighborhood = "eden.neighborhood.home" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_academy_read_route"
+
+[[route]]
+actor = "adam"
+id = "eden_theory_read_route"
+method = "GET"
+path = "/api/eden/theory"
+serves = "edenTheory"
+handler = "edenTheory.read"
+params = { neighborhood = "eden.neighborhood.home", surfaceId = "eden.surface.tree" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_theory_read_route"
+
+[[route]]
+actor = "adam"
+id = "eden_theory_study_route"
+method = "POST"
+path = "/api/eden/theory/lessons/:id/study"
+serves = "edenTheory"
+handler = "edenTheory.study"
+params = { neighborhood = "eden.neighborhood.home", surfaceId = "eden.surface.tree" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_theory_study_route"
+
+[[route]]
+actor = "adam"
+id = "eden_theory_assess_route"
+method = "POST"
+path = "/api/eden/theory/assessment"
+serves = "edenTheory"
+handler = "edenTheory.assess"
+params = { neighborhood = "eden.neighborhood.home", surfaceId = "eden.surface.tree" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_theory_assess_route"
+
+[[route]]
+actor = "adam"
+id = "eden_theory_teach_back_route"
+method = "POST"
+path = "/api/eden/theory/teach-back"
+serves = "edenTheory"
+handler = "edenTheory.teachBack"
+params = { neighborhood = "eden.neighborhood.home", surfaceId = "eden.surface.tree" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_theory_teach_back_route"
+
+[[route]]
+actor = "adam"
 id = "eden_versions_read_route"
 method = "GET"
 path = "/api/eden/versions"
@@ -151,6 +224,136 @@ params = { surfaceId = "eden.surface.versions", soul = "todo_versioned_banner", 
 actor = "adam"
 serverRunner = "demo_server"
 route = "eden_versions_publish_route"
+
+[[route]]
+actor = "adam"
+id = "eden_capability_install_read_route"
+method = "GET"
+path = "/api/eden/capability-installs"
+serves = "edenCapabilityInstall"
+handler = "edenCapabilityInstall.read"
+params = { surfaceId = "eden.surface.world", target = "frontend", targetKind = "context", targetLabel = "frontend context", recommendedCapabilities = ["notes.sidebar", "calendar.board"] }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_capability_install_read_route"
+
+[[route]]
+actor = "adam"
+id = "eden_capability_install_write_route"
+method = "POST"
+path = "/api/eden/capability-installs"
+serves = "edenCapabilityInstall"
+handler = "edenCapabilityInstall.install"
+params = { surfaceId = "eden.surface.world", target = "frontend", targetKind = "context", targetLabel = "frontend context", recommendedCapabilities = ["notes.sidebar", "calendar.board"] }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_capability_install_write_route"
+
+[[route]]
+actor = "adam"
+id = "eden_organization_read_route"
+method = "GET"
+path = "/api/eden/organization"
+serves = "edenOrganization"
+handler = "edenOrganization.read"
+params = { neighborhood = "eden.neighborhood.home", surfaceId = "eden.surface.commons" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_organization_read_route"
+
+[[route]]
+actor = "adam"
+id = "eden_organization_context_route"
+method = "POST"
+path = "/api/eden/organization/context"
+serves = "edenOrganization"
+handler = "edenOrganization.createContext"
+params = { neighborhood = "eden.neighborhood.home", surfaceId = "eden.surface.commons" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_organization_context_route"
+
+[[route]]
+actor = "adam"
+id = "eden_organization_stewardship_route"
+method = "POST"
+path = "/api/eden/organization/stewardship"
+serves = "edenOrganization"
+handler = "edenOrganization.grantStewardship"
+params = { neighborhood = "eden.neighborhood.home", surfaceId = "eden.surface.commons" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_organization_stewardship_route"
+
+[[route]]
+actor = "adam"
+id = "eden_organization_proposal_route"
+method = "POST"
+path = "/api/eden/organization/proposals"
+serves = "edenOrganization"
+handler = "edenOrganization.createProposal"
+params = { neighborhood = "eden.neighborhood.home", surfaceId = "eden.surface.commons" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_organization_proposal_route"
+
+[[route]]
+actor = "adam"
+id = "eden_organization_proposal_approve_route"
+method = "POST"
+path = "/api/eden/organization/proposals/approve"
+serves = "edenOrganization"
+handler = "edenOrganization.approveProposal"
+params = { neighborhood = "eden.neighborhood.home", surfaceId = "eden.surface.commons" }
+
+[[serve]]
+actor = "adam"
+serverRunner = "demo_server"
+route = "eden_organization_proposal_approve_route"
+
+[[capability]]
+actor = "adam"
+context = "frontend"
+id = "notes.sidebar"
+label = "Notes Sidebar"
+version = "0.1.0"
+provenance = { source = "academy.frontend" }
+dependsOn = ["dom.render"]
+publicApi = [{ name = "mount", accepts = "widget.id", required = true }]
+config = [{ name = "title", accepts = "widget.text", required = false }]
+internals = []
+authority = [{ name = "browser.dom", accepts = "authority.id", required = true }]
+providerAdapters = [{ id = "dom", label = "DOM", kind = "local", status = "shipped", default = true }]
+witnessContract = { success = ["notes.sidebar.mount"], failure = ["notes.sidebar.mount.failed"], externalRefs = ["domNodeId"] }
+placement = ["context", "routePage"]
+
+[[capability]]
+actor = "adam"
+context = "frontend"
+id = "calendar.board"
+label = "Calendar Board"
+version = "0.1.0"
+provenance = { source = "community.scheduling" }
+dependsOn = ["dom.render", "http.fetch"]
+publicApi = [{ name = "hydrate", accepts = "widget.id", required = true }]
+config = [{ name = "feedUrl", accepts = "widget.text", required = true }]
+internals = []
+authority = [{ name = "network.fetch", accepts = "authority.id", required = true }]
+providerAdapters = [{ id = "web", label = "Web Feed", kind = "hosted", status = "contract", default = true, requires = ["http.fetch"] }]
+witnessContract = { success = ["calendar.board.sync"], failure = ["calendar.board.sync.failed"], externalRefs = ["feedUrl"] }
+placement = ["context"]
 
 [[thing]]
 actor = "adam"
@@ -251,7 +454,7 @@ actor = "adam"
 from = "eden.neighborhood.home"
 rel = "edenCheckpoint"
 to = "eden.checkpoint.orientation"
-meta = { id = "orientation", order = 2, title = "Act 2: Orientation", description = "The board pulls back and the first neighbourhood becomes legible: growth, ownership, editing, and flow.", zoomMin = 0.48, zoomMax = 0.82, unlocks = ["The Tree", "Personal Box", "Edit Page", "Process View"] }
+meta = { id = "orientation", order = 2, title = "Act 2: Orientation", description = "The board pulls back and the first neighbourhood becomes legible: growth, ownership, editing, and flow.", zoomMin = 0.48, zoomMax = 0.82, unlocks = ["The Tree", "Personal Box", "Edit Page", "Process View"], questIds = ["claim_room", "restyle_page"] }
 
 [[thing]]
 actor = "adam"
@@ -268,7 +471,7 @@ actor = "adam"
 from = "eden.neighborhood.home"
 rel = "edenCheckpoint"
 to = "eden.checkpoint.structure"
-meta = { id = "structure", order = 3, title = "Act 3: Structural Reading", description = "Recovery, world structure, and capability thresholds become visible before mastery arrives.", zoomMin = 0.34, zoomMax = 0.48, unlocks = ["World Graph", "Versions", "Visible capability gates"] }
+meta = { id = "structure", order = 3, title = "Act 3: Structural Reading", description = "Recovery, world structure, and capability thresholds become visible before mastery arrives.", zoomMin = 0.34, zoomMax = 0.48, unlocks = ["World Graph", "Versions", "Visible capability gates"], questIds = ["restore_last_good", "install_missing_power"] }
 
 [[thing]]
 actor = "adam"
@@ -285,7 +488,347 @@ actor = "adam"
 from = "eden.neighborhood.home"
 rel = "edenCheckpoint"
 to = "eden.checkpoint.routes"
-meta = { id = "routes", order = 4, title = "Act 4: World Routing", description = "The district stops reading like one app with extras and starts reading like a world with exits.", zoomMin = 0.2, zoomMax = 0.34, unlocks = ["Goto World", "Goto Process", "Goto Canvas"] }
+meta = { id = "routes", order = 4, title = "Act 4: World Routing", description = "The district stops reading like one app with extras and starts reading like a world with exits, operator seams, and runtime drills.", zoomMin = 0.2, zoomMax = 0.34, unlocks = ["Goto World", "Goto Process", "Goto Canvas", "Operator gate"], questIds = ["inspect_machine_room", "publish_current_cut", "run_failure_drill"] }
+
+[[thing]]
+actor = "adam"
+id = "eden.checkpoint.responsibility"
+
+[[relation]]
+actor = "adam"
+from = "eden.checkpoint.responsibility"
+rel = "hasModuleKind"
+to = "edenCheckpoint"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenCheckpoint"
+to = "eden.checkpoint.responsibility"
+meta = { id = "responsibility", order = 5, title = "Act 5: Responsibility", description = "Repeated care turns first permissions into stewardship you can trust, trade you can run, and software you can begin to hand to other people.", zoomMin = 0.1, zoomMax = 0.2, unlocks = ["Shared Table", "Run A Stall", "Ship A Tiny SaaS", "Responsibility tracks"], questIds = ["shared_table", "run_a_stall", "ship_tiny_saas"] }
+
+[[thing]]
+actor = "adam"
+id = "eden.checkpoint.commons"
+
+[[relation]]
+actor = "adam"
+from = "eden.checkpoint.commons"
+rel = "hasModuleKind"
+to = "edenCheckpoint"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenCheckpoint"
+to = "eden.checkpoint.commons"
+meta = { id = "commons", order = 6, title = "Act 6: Commons", description = "Stewardship grows into organization: start a group, delegate care, and run a witnessed governance loop before the world trusts you with wider shared consequence.", zoomMin = 0.04, zoomMax = 0.1, unlocks = ["Start A Group", "Set The Rules", "Run An Open Organization", "Governance track"], questIds = ["start_a_group", "set_the_rules", "run_open_organization"] }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.claim_room"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.claim_room"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.claim_room"
+meta = { id = "claim_room", chapterId = "orientation", order = 1, title = "Claim Your Room", description = "Sign in and plant your first widget in the Personal Box.", completionSignals = ["practice.personal_box.claimed"], unlocks = ["Personal Box authorship"], availableLabel = "Claim the patch", completedLabel = "Room claimed" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.restyle_page"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.restyle_page"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.restyle_page"
+meta = { id = "restyle_page", chapterId = "orientation", order = 2, title = "Restyle The Page", description = "Change the live Todo board's theme, material, or typography from inside Eden.", completionSignals = ["practice.edit_page.styled"], unlocks = ["Page chrome stewardship"], availableLabel = "Restyle the board", completedLabel = "Page restyled" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.restore_last_good"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.restore_last_good"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.restore_last_good"
+meta = { id = "restore_last_good", chapterId = "structure", order = 3, title = "Restore Last Good", description = "Practice recovery by bringing the live board back from a draft into the last good version.", completionSignals = ["practice.versions.restored"], unlocks = ["Shared stewardship confidence"], availableLabel = "Practice recovery", completedLabel = "Recovery practiced" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.install_missing_power"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.install_missing_power"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.install_missing_power"
+meta = { id = "install_missing_power", chapterId = "structure", order = 4, title = "Install A Missing Power", description = "Use the World Graph shelf to install one real capability onto the live frontend context.", completionSignals = ["practice.capability.frontend_installed"], unlocks = ["Capability progression"], availableLabel = "Install one power", completedLabel = "Power installed" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.inspect_machine_room"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.inspect_machine_room"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.inspect_machine_room"
+meta = { id = "inspect_machine_room", chapterId = "routes", order = 5, title = "Inspect The Machine Room", description = "Read the real process graph for the Todo program from the Eden Process View seam.", dependsOnQuests = ["restore_last_good"], completionSignals = ["practice.process.inspected"], unlocks = ["Operator sight"], availableLabel = "Inspect the flow", completedLabel = "Machine room inspected" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.publish_current_cut"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.publish_current_cut"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.publish_current_cut"
+meta = { id = "publish_current_cut", chapterId = "routes", order = 6, title = "Publish Current Cut", description = "Practice shipping by publishing the current live Todo version from the Eden recovery shelf.", dependsOnQuests = ["restore_last_good"], completionSignals = ["practice.versions.published"], unlocks = ["Release discipline"], availableLabel = "Publish once", completedLabel = "Version published" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.run_failure_drill"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.run_failure_drill"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.run_failure_drill"
+meta = { id = "run_failure_drill", chapterId = "routes", order = 7, title = "Run A Failure Drill", description = "Once the operator gate opens, trigger the simulated network failure from Eden and watch the runtime answer honestly.", dependsOnQuests = ["inspect_machine_room", "publish_current_cut"], completionSignals = ["practice.runtime.drilled"], unlocks = ["Runtime drill witnessed"], availableLabel = "Run the drill", completedLabel = "Failure drill witnessed" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.shared_table"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.shared_table"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.shared_table"
+meta = { id = "shared_table", chapterId = "responsibility", order = 8, title = "Shared Table", description = "Practice the shared loops until page care becomes steady enough to hold a surface other people can rely on.", dependsOnQuests = ["claim_room", "restyle_page", "restore_last_good"], completionSignals = ["practice.stewardship.steady"], unlocks = ["Steady shared stewardship"], availableLabel = "Steady the table", completedLabel = "Shared table practiced", lockedLabel = "Repeat the shared loops until stewardship is steady" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.run_a_stall"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.run_a_stall"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.run_a_stall"
+meta = { id = "run_a_stall", chapterId = "responsibility", order = 9, title = "Run A Stall", description = "Install a real power, publish it, and keep the machine room legible until the trade loop stops feeling theoretical.", dependsOnQuests = ["shared_table", "install_missing_power", "publish_current_cut"], completionSignals = ["practice.stewardship.steady", "practice.operator.first"], unlocks = ["Trade loop practiced"], availableLabel = "Run the stall", completedLabel = "Stall run once", lockedLabel = "Steady stewardship and one operator loop first" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.ship_tiny_saas"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.ship_tiny_saas"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.ship_tiny_saas"
+meta = { id = "ship_tiny_saas", chapterId = "responsibility", order = 10, title = "Ship A Tiny SaaS", description = "Keep publishing, recovering, and reading the machine room until the world can honestly treat this as software you could hand to someone else.", dependsOnQuests = ["run_a_stall", "run_failure_drill"], completionSignals = ["practice.stewardship.trusted", "practice.operator.steady"], unlocks = ["Tiny SaaS path"], availableLabel = "Ship the tiny SaaS", completedLabel = "Tiny SaaS shipped", lockedLabel = "Trusted stewardship and steady operator work first" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.start_a_group"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.start_a_group"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.start_a_group"
+meta = { id = "start_a_group", chapterId = "commons", order = 11, title = "Start A Group", description = "Create a real practice context so shared work has a named boundary, owner, and future stewards.", dependsOnQuests = ["ship_tiny_saas"], completionSignals = ["practice.organization.context_started"], unlocks = ["Group context"], availableLabel = "Start the group", completedLabel = "Group started", lockedLabel = "Ship the first tiny SaaS path before widening the commons" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.set_the_rules"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.set_the_rules"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.set_the_rules"
+meta = { id = "set_the_rules", chapterId = "commons", order = 12, title = "Set The Rules", description = "Grant another steward real care over the group context so authority becomes something explicit and shared.", dependsOnQuests = ["start_a_group"], completionSignals = ["practice.organization.steward_granted"], unlocks = ["Shared stewardship roster"], availableLabel = "Share stewardship", completedLabel = "Rules set", lockedLabel = "Start the group before you delegate care" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.run_open_organization"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.run_open_organization"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.run_open_organization"
+meta = { id = "run_open_organization", chapterId = "commons", order = 13, title = "Run An Open Organization", description = "Open a witnessed proposal inside the new group and approve it so governance becomes a practiced loop rather than a slogan.", dependsOnQuests = ["set_the_rules"], completionSignals = ["practice.organization.proposal_approved"], unlocks = ["Open governance loop"], availableLabel = "Run the governance loop", completedLabel = "Open organization practiced", lockedLabel = "Delegate stewardship before you run the governance loop" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.theory_contexts"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.theory_contexts"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.theory_contexts"
+meta = { id = "theory_contexts", chapterId = "theory", order = 14, title = "Why Contexts Exist", description = "Study the annex note on local meaning, boundaries, and imports so the world stops reading like one flat namespace.", dependsOnQuests = ["claim_room", "restyle_page", "restore_last_good", "install_missing_power"], completionSignals = ["practice.theory.why_contexts"], unlocks = ["Context literacy"], availableLabel = "Study contexts", completedLabel = "Contexts studied" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.theory_witnesses"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.theory_witnesses"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.theory_witnesses"
+meta = { id = "theory_witnesses", chapterId = "theory", order = 15, title = "Witnesses And Truth", description = "Study how witnessed history differs from projection so replay and inspection stay honest.", dependsOnQuests = ["theory_contexts"], completionSignals = ["practice.theory.witnesses_truth"], unlocks = ["Witness literacy"], availableLabel = "Study witnesses", completedLabel = "Witnesses studied" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.theory_authority"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.theory_authority"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.theory_authority"
+meta = { id = "theory_authority", chapterId = "theory", order = 16, title = "Authority Without Illusion", description = "Study why stewardship, proposals, and guarded mutation are named explicitly instead of being hidden trust assumptions.", dependsOnQuests = ["theory_witnesses"], completionSignals = ["practice.theory.authority_without_illusion"], unlocks = ["Authority literacy"], availableLabel = "Study authority", completedLabel = "Authority studied" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.theory_shells"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.theory_shells"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.theory_shells"
+meta = { id = "theory_shells", chapterId = "theory", order = 17, title = "Shells And Expressions", description = "Study why desktop, browser, canvas, code, and assistants are expressions over one world instead of separate products.", dependsOnQuests = ["theory_authority"], completionSignals = ["practice.theory.shells_and_expressions"], unlocks = ["Shell literacy"], availableLabel = "Study shells", completedLabel = "Shells studied" }
+
+[[thing]]
+actor = "adam"
+id = "eden.quest.trained_mark"
+
+[[relation]]
+actor = "adam"
+from = "eden.quest.trained_mark"
+rel = "hasModuleKind"
+to = "edenQuest"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenQuest"
+to = "eden.quest.trained_mark"
+meta = { id = "trained_mark", chapterId = "theory", order = 18, title = "Earn The Trained Mark", description = "After finishing the annex, take the witnessed theory assessment and receive the optional trained mark.", dependsOnQuests = ["theory_contexts", "theory_witnesses", "theory_authority", "theory_shells"], completionSignals = ["practice.theory.assessed"], grantsSignals = ["academy.trained"], unlocks = ["trained"], availableLabel = "Take the assessment", completedLabel = "trained mark earned" }
 
 [[thing]]
 actor = "adam"
@@ -308,7 +851,70 @@ actor = "adam"
 from = "eden.neighborhood.home"
 rel = "contains"
 to = "eden.surface.todo"
-meta = { x = -420, y = -410, w = 840, h = 820, surfaceKind = "embeddedPage", title = "Witness Todo", subtitle = "The live board at the heart of the neighbourhood", body = "Todo: be a sourcerer. The first app is real, useful, and eventually editable.", src = "/", href = "/", district = "arrival", tags = ["starter app", "shared surface"], zoomMin = 0.55, zoomMax = 2.2, chromeKind = "tray", reliefBase = 4, reliefHover = 4, reliefFocus = 4 }
+meta = { x = -420, y = -410, w = 840, h = 820, surfaceKind = "embeddedPage", pageId = "todo_app_widget", title = "Witness Todo", subtitle = "The live board at the heart of the neighbourhood", body = "Todo: be a sourcerer. The first app is real, useful, and eventually editable.", src = "/", href = "/", district = "arrival", tags = ["starter app", "shared surface"], zoomMin = 0.55, zoomMax = 2.2, chromeKind = "tray", reliefBase = 4, reliefHover = 4, reliefFocus = 4 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenSurfaceRelief"
+to = "todo_session"
+meta = { title = "Session Plate", role = "session-panel", chromeKind = "plate", order = 1, reliefBase = 1, reliefHover = 2, reliefFocus = 3, reliefActive = 3, meaning = "Identity is currently relevant.", signals = ["session.authenticated"] }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenSurfaceRelief"
+to = "todo_title"
+meta = { title = "Title Inscription", chromeKind = "ink", order = 2, reliefBase = 0, reliefHover = 1, reliefFocus = 2, reliefActive = 1, meaning = "Atmosphere and naming sit above the work." }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenSurfaceRelief"
+to = "todo_form"
+meta = { title = "Todo Form Tray", role = "todo-form", chromeKind = "tray", order = 3, reliefBase = 2, reliefHover = 3, reliefFocus = 4, reliefActive = 3, meaning = "This is where action enters the system." }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenSurfaceRelief"
+to = "todo_list"
+meta = { title = "Live Work Rail", role = "todo-list", chromeKind = "well", order = 4, reliefBase = 2, reliefHover = 3, reliefFocus = 4, reliefActive = 3, meaning = "Live work is happening here." }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenSurfaceRelief"
+to = "todo_private_notes"
+meta = { title = "Private Notes Drawer", role = "private-notes", chromeKind = "drawer", order = 5, reliefBase = 1, reliefHover = 2, reliefFocus = 3, reliefActive = 3, meaning = "A more personal compartment sits alongside the shared surface.", signals = ["session.authenticated"] }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenSurfaceRelief"
+to = "todo_witnesses"
+meta = { title = "Witness Ledger", role = "witness-inspector", chromeKind = "ledger", order = 6, reliefBase = 1, reliefHover = 2, reliefFocus = 3, reliefActive = 2, meaning = "The system is showing memory and evidence." }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenSurfaceRelief"
+to = "todo_widget_editor"
+meta = { title = "Widget Tool Drawer", role = "widget-editor", chromeKind = "drawer", order = 7, reliefBase = 1, reliefHover = 2, reliefFocus = 3, reliefActive = 2, meaning = "Authoring tools are nearby but still bounded." }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenSurfaceRelief"
+to = "todo_process_graph_lab"
+meta = { title = "Process Plate", role = "process-graph-lab", chromeKind = "machinePlate", order = 8, reliefBase = 2, reliefHover = 3, reliefFocus = 4, reliefActive = 3, meaning = "Hidden flow is being surfaced." }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.todo"
+rel = "edenSurfaceRelief"
+to = "todo_version_playground"
+meta = { title = "Recovery Shelf", chromeKind = "shelf", order = 9, reliefBase = 2, reliefHover = 3, reliefFocus = 4, reliefActive = 4, meaning = "History and recovery are currently relevant.", signals = ["versions.draftDiff", "versions.liveDiff", "versions.rollbackAvailable"] }
 
 [[relation]]
 actor = "adam"
@@ -338,7 +944,7 @@ actor = "adam"
 from = "eden.neighborhood.home"
 rel = "contains"
 to = "eden.surface.tree"
-meta = { x = -700, y = -420, w = 320, h = 320, surfaceKind = "tree", title = "The Tree", subtitle = "Orientation, growth, and return", body = "The academy begins here: claim your room, practice care, then grow into stewardship.", district = "academy", tags = ["landmark", "growth"], zoomMin = 0.52, zoomMax = 2.4, reliefBase = 2, reliefHover = 3, reliefFocus = 3 }
+meta = { x = -700, y = -420, w = 320, h = 320, surfaceKind = "tree", title = "The Tree", subtitle = "Orientation, growth, return, theory, and commons", body = "The academy begins here: claim your room, practice care, then grow into stewardship, trade, governance, and software you can responsibly hand off. The optional annex explains why the world is shaped this way.", district = "academy", tags = ["landmark", "growth"], questIds = ["shared_table", "run_a_stall", "ship_tiny_saas", "start_a_group", "set_the_rules", "run_open_organization", "theory_contexts", "theory_witnesses", "theory_authority", "theory_shells", "trained_mark"], theoryLessons = [{ id = "why_contexts", title = "Why Contexts Exist", summary = "Meaning lives inside boundaries. Study how names, ownership, and imports stay local before they travel.", concept = "context", order = 1 }, { id = "witnesses_truth", title = "Witnesses And Truth", summary = "The world does not hide its history. Study how witnessed claims differ from projection and why replay matters.", concept = "witness", order = 2 }, { id = "authority_without_illusion", title = "Authority Without Illusion", summary = "Power must be named. Study how stewardship, proposals, and guarded mutation keep the world honest.", concept = "authority", order = 3 }, { id = "shells_and_expressions", title = "Shells And Expressions", summary = "Desktop, browser, canvas, code, and assistants are expressions over one world, not separate truths.", concept = "shell", order = 4 }], zoomMin = 0.52, zoomMax = 2.4, reliefBase = 2, reliefHover = 3, reliefFocus = 3 }
 
 [[thing]]
 actor = "adam"
@@ -389,7 +995,7 @@ actor = "adam"
 from = "eden.neighborhood.home"
 rel = "contains"
 to = "eden.surface.process"
-meta = { x = 1100, y = 120, w = 340, h = 240, surfaceKind = "panel", title = "Process View", subtitle = "Watch the machine room breathe", body = "Events, flows, and process runs gather here.", district = "runtime", tags = ["events", "pipes"], href = "/process", zoomMin = 0.48, zoomMax = 1.25, chromeKind = "machinePlate", reliefBase = 2, reliefHover = 3, reliefFocus = 4, cameraTargetId = "focus.process" }
+meta = { x = 1100, y = 120, w = 340, h = 280, surfaceKind = "panel", panelKind = "processView", processProgram = "todo_frontend_program", processEvent = "load", title = "Process View", subtitle = "Watch the machine room breathe", body = "Events, flows, and process runs gather here. Inspect the live process, then open the operator gate and run a failure drill.", district = "runtime", tags = ["events", "pipes"], questIds = ["inspect_machine_room", "publish_current_cut", "run_failure_drill"], href = "/process", zoomMin = 0.48, zoomMax = 1.25, chromeKind = "machinePlate", reliefBase = 2, reliefHover = 3, reliefFocus = 4, cameraTargetId = "focus.process" }
 
 [[thing]]
 actor = "adam"
@@ -423,7 +1029,24 @@ actor = "adam"
 from = "eden.neighborhood.home"
 rel = "contains"
 to = "eden.surface.world"
-meta = { x = 980, y = -760, w = 360, h = 240, surfaceKind = "panel", title = "World Graph", subtitle = "The map behind the page", body = "Structure, context, and capability truth become visible here.", district = "structure", tags = ["contexts", "capabilities"], href = "/world", zoomMin = 0.34, zoomMax = 0.92, chromeKind = "mapWall", reliefBase = 2, reliefHover = 3, reliefFocus = 4, cameraTargetId = "focus.world" }
+meta = { x = 980, y = -760, w = 360, h = 300, surfaceKind = "panel", panelKind = "capabilityInstall", capabilityTarget = "frontend", capabilityTargetKind = "context", capabilityTargetLabel = "frontend context", recommendedCapabilities = ["notes.sidebar", "calendar.board"], title = "World Graph", subtitle = "The map behind the page", body = "Structure, context, and capability truth become visible here. When a power is missing, this is where you can install it onto the live frontend context.", district = "structure", tags = ["contexts", "capabilities"], href = "/world", zoomMin = 0.34, zoomMax = 0.92, chromeKind = "mapWall", reliefBase = 2, reliefHover = 3, reliefFocus = 4, cameraTargetId = "focus.world" }
+
+[[thing]]
+actor = "adam"
+id = "eden.surface.commons"
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.commons"
+rel = "hasModuleKind"
+to = "edenSurface"
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "contains"
+to = "eden.surface.commons"
+meta = { x = 1460, y = -620, w = 380, h = 340, surfaceKind = "panel", panelKind = "organization", contextParent = "frontend", guestSteward = "callan", proposalTargetProcess = "widget.define", proposalTargetKind = "widget", title = "Commons", subtitle = "Practice explicit governance", body = "Start a real group context, delegate stewardship, and run one witnessed proposal loop so organization becomes practical instead of decorative.", district = "governance", tags = ["contexts", "stewardship", "proposals"], questIds = ["start_a_group", "set_the_rules", "run_open_organization"], zoomMin = 0.08, zoomMax = 0.56, chromeKind = "councilTable", reliefBase = 2, reliefHover = 3, reliefFocus = 4, cameraTargetId = "focus.commons" }
 
 [[relation]]
 actor = "adam"
@@ -431,6 +1054,13 @@ from = "eden.neighborhood.home"
 rel = "edenCameraTarget"
 to = "eden.surface.personal"
 meta = { id = "focus.personal", zoom = 0.9 }
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenCameraTarget"
+to = "eden.surface.tree"
+meta = { id = "focus.tree", zoom = 0.94 }
 
 [[relation]]
 actor = "adam"
@@ -459,6 +1089,13 @@ from = "eden.neighborhood.home"
 rel = "edenCameraTarget"
 to = "eden.surface.world"
 meta = { id = "focus.world", zoom = 0.82 }
+
+[[relation]]
+actor = "adam"
+from = "eden.neighborhood.home"
+rel = "edenCameraTarget"
+to = "eden.surface.commons"
+meta = { id = "focus.commons", zoom = 0.72 }
 
 [[thing]]
 actor = "adam"
@@ -565,6 +1202,20 @@ meta = { label = "structure" }
 
 [[relation]]
 actor = "adam"
+from = "eden.surface.world"
+rel = "edenWire"
+to = "eden.surface.commons"
+meta = { label = "governance" }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.tree"
+rel = "edenPath"
+to = "eden.surface.commons"
+meta = { label = "commons" }
+
+[[relation]]
+actor = "adam"
 from = "eden.surface.todo"
 rel = "edenWire"
 to = "eden.surface.versions"
@@ -596,7 +1247,7 @@ actor = "adam"
 from = "eden.surface.todo"
 rel = "edenAction"
 to = "eden.action.todo.pro"
-meta = { id = "todo_pro", label = "Expert Shortcut: F1 → whoami", state = "locked", requires = "Command surface comes later", order = 4 }
+meta = { id = "todo_pro", label = "Expert Shortcut: F1 → whoami", state = "open", commandQuery = "whoami", commandSurfaceId = "eden.surface.todo", order = 4 }
 
 [[relation]]
 actor = "adam"
@@ -610,28 +1261,35 @@ actor = "adam"
 from = "eden.surface.tree"
 rel = "edenAction"
 to = "eden.action.tree.shared"
-meta = { id = "tree_shared", label = "Shared Table", state = "locked", requires = "Later chapter", order = 2 }
+meta = { id = "tree_shared", label = "Shared Table", state = "locked", requires = "Practice steady shared stewardship", requiresSignals = ["quest.shared_table.completed"], cameraTargetId = "focus.edit", order = 2 }
 
 [[relation]]
 actor = "adam"
 from = "eden.surface.tree"
 rel = "edenAction"
 to = "eden.action.tree.trade"
-meta = { id = "tree_trade", label = "Run A Stall", state = "locked", requires = "Trade and livelihood", order = 3 }
+meta = { id = "tree_trade", label = "Run A Stall", state = "locked", requires = "Steady the table, install a power, and run one operator loop", requiresSignals = ["quest.run_a_stall.completed"], cameraTargetId = "focus.world", order = 3 }
 
 [[relation]]
 actor = "adam"
 from = "eden.surface.tree"
 rel = "edenAction"
 to = "eden.action.tree.saas"
-meta = { id = "tree_saas", label = "Ship A Tiny SaaS", state = "locked", requires = "Sourcerer path", order = 4 }
+meta = { id = "tree_saas", label = "Ship A Tiny SaaS", state = "locked", requires = "Trusted stewardship and steady operator work", requiresSignals = ["quest.ship_tiny_saas.completed"], href = "/canvas", order = 4 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.tree"
+rel = "edenAction"
+to = "eden.action.tree.commons"
+meta = { id = "tree_commons", label = "Run An Open Organization", state = "locked", requires = "Practice the commons until governance is witnessed", requiresSignals = ["quest.run_open_organization.completed"], cameraTargetId = "focus.commons", order = 5 }
 
 [[relation]]
 actor = "adam"
 from = "eden.surface.tree"
 rel = "edenAction"
 to = "eden.action.tree.theory"
-meta = { id = "tree_theory", label = "Theory Annex", state = "locked", requires = "Optional trained mark", order = 5 }
+meta = { id = "tree_theory", label = "Theory Annex", state = "locked", requires = "Finish the practical first arc", requiresSignals = ["quest.claim_room.completed", "quest.restyle_page.completed", "quest.restore_last_good.completed", "quest.install_missing_power.completed"], cameraTargetId = "focus.tree", order = 6 }
 
 [[relation]]
 actor = "adam"
@@ -659,7 +1317,7 @@ actor = "adam"
 from = "eden.surface.personal"
 rel = "edenAction"
 to = "eden.action.personal.shared"
-meta = { id = "personal_shared", label = "Edit Shared Surface", state = "locked", requires = "Earn shared stewardship", order = 4 }
+meta = { id = "personal_shared", label = "Edit Shared Surface", state = "locked", requires = "Earn shared stewardship", requiresSignals = ["quest.claim_room.completed", "quest.restyle_page.completed", "quest.restore_last_good.completed"], cameraTargetId = "focus.edit", order = 4 }
 
 [[relation]]
 actor = "adam"
@@ -687,7 +1345,7 @@ actor = "adam"
 from = "eden.surface.edit"
 rel = "edenAction"
 to = "eden.action.edit.shared"
-meta = { id = "edit_shared", label = "Edit Shared Surface", state = "locked", requires = "Earn shared stewardship", order = 4 }
+meta = { id = "edit_shared", label = "Edit Shared Surface", state = "locked", requires = "Earn shared stewardship", requiresSignals = ["quest.claim_room.completed", "quest.restyle_page.completed", "quest.restore_last_good.completed"], cameraTargetId = "focus.edit", order = 4 }
 
 [[relation]]
 actor = "adam"
@@ -708,7 +1366,14 @@ actor = "adam"
 from = "eden.surface.process"
 rel = "edenAction"
 to = "eden.action.process.alter"
-meta = { id = "process_alter", label = "Alter Runtime", state = "locked", requires = "Operator chapter", order = 3 }
+meta = { id = "process_alter", label = "Alter Runtime", state = "locked", requires = "Inspect flow and publish first", requiresSignals = ["quest.inspect_machine_room.completed", "quest.publish_current_cut.completed"], cameraTargetId = "focus.process", order = 3 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.process"
+rel = "edenAction"
+to = "eden.action.process.shared"
+meta = { id = "process_shared", label = "Run Shared Operations", state = "locked", requires = "Practice one open governance loop first", requiresSignals = ["quest.run_open_organization.completed"], cameraTargetId = "focus.process", order = 4 }
 
 [[relation]]
 actor = "adam"
@@ -750,4 +1415,11 @@ actor = "adam"
 from = "eden.surface.world"
 rel = "edenAction"
 to = "eden.action.world.capability"
-meta = { id = "world_capability", label = "Install Capability", state = "locked", requires = "Contextual capability install", order = 3 }
+meta = { id = "world_capability", label = "Install Capability", state = "open", cameraTargetId = "focus.world", description = "Open the capability shelf for the live frontend context and install a curated power.", order = 3 }
+
+[[relation]]
+actor = "adam"
+from = "eden.surface.world"
+rel = "edenAction"
+to = "eden.action.world.commons"
+meta = { id = "world_commons", label = "Practice Governance", state = "locked", requires = "Ship the first responsibility family before widening the commons", requiresSignals = ["quest.ship_tiny_saas.completed"], cameraTargetId = "focus.commons", description = "Open the Commons panel and practice context, stewardship, and proposal loops.", order = 4 }

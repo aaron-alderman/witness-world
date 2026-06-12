@@ -24,6 +24,37 @@ The platform should feel like an old "real program" in the best sense:
 - something you can inspect all the way down
 - something that is batteries-included but never dishonest about how it works
 
+Terminology discipline matters here:
+
+- `fake` should mean theatre: a surface that claims a capability without grounding it in the real world model, runtime, or witnessed persistence
+- `stub` should mean a real seam with a simplified local or deterministic provider path
+- `projection` should mean a real derived view rather than canonical truth
+- `real but narrow` should mean a truthful first slice with intentionally limited coverage or scope
+- `compatibility bridge` should mean a deliberate transition path that keeps older worlds or behavior working while first-class modeling catches up
+
+Current honesty snapshot:
+
+- the command/search surface is projection-backed, not a hidden registry
+- tutorial recovery commands are derived from persisted tutorial progress rather than a fake onboarding-only command layer
+- shipped backend provider seams remain stub-first where vendor realism is intentionally deferred
+- capability placeholder synthesis is a compatibility bridge, not a final composition rule
+- same-context and unscoped canonical-id authoring still acts as compatibility sugar, but hidden foreign-scoped canonical-id bypasses on covered bootstrap/DSL surfaces are now blocked
+- some live editing and proposal flows are real but narrow, even where ambient refresh now works
+- the next real honesty risks are migration and governance seams, not a fake command product
+- widget-version routes and Eden version routes now do flow through shared authority derivation, the live inspector now has a first `widgetVersion.activate` / `widgetVersion.rollback` proposal fallback, the Eden versions panel now has a first `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish` proposal fallback, and the Eden capability shelf now has a first `capability.install` proposal fallback, but app-specific handler-set mutations still do not all flow through one shared authority/proposal path
+
+Current honesty ledger:
+
+- `fake` at the core product layer: none currently called out
+- `stub`: practical backend provider seams with intentionally simplified transports
+- `projection but real`: the command/search surface and tutorial recovery surfaces
+- `real but narrow`: current live editing, live proposal, current-identity editing, first-slice canvas authority-bound world mutation, and first-slice contextual naming coverage
+- `compatibility bridge`: capability placeholder synthesis plus the remaining allowed canonical-id authoring paths
+
+The main product honesty risk right now is not a fake command system or a fake registry.
+It is letting narrow truthful slices or compatibility bridges harden into the permanent product rule without an explicit migration or replacement story.
+The sharpest examples today are placeholder capability synthesis, remaining canonical-id compatibility, and the app-specific mutation routes that still sit beside rather than inside the shared governance model.
+
 ---
 
 ## Product Laws
@@ -326,6 +357,8 @@ The user should become braver because the world has a path back.
 The main path to authorship is long, practical, and guided.
 But the system should also contain a compact pro path.
 
+That pro path now exists on the live Todo board and on the embedded center board inside `/eden-canvas`.
+
 The starting Todo item can be:
 
 - `Todo: be a sourcerer`
@@ -335,13 +368,15 @@ Then an experienced user can:
 - press `F1`
 - run `whoami`
 - open `user`
-- enter the identity record directly
 - see `sourcerer = true`
 
 This should not confer practical mastery.
 It reveals a deeper truth:
 
 - the power was always there
+
+Today that shortcut can edit the current signed-in identity inline, refresh the active session when that identity changes, and still hand off into the real bootstrap identity editor as well as real world/source views.
+It remains a narrow current-identity slice rather than a broader expert transport or full identity lifecycle surface.
 - the system never lied about inspectability
 - permission-to-begin is different from learned stewardship
 
@@ -451,18 +486,24 @@ It should:
 - edit those structures live
 - save them back into the world
 
-The first honest slice now exists on rendered app pages:
+The first honest slice now exists on rendered app pages and inside Eden's embedded Todo board:
 
 - `Inspect Page` can be toggled directly on the live surface
 - right-clicking a rendered widget can select and highlight it
 - the inspector can explain the selected widget and hand off into world, witness, source, and process views
 - versioned widgets can be activated or rolled back in place from that live inspector
+- non-versioned widgets can now save back `text`, `title`, `class`, and `hidden` through a real `widget.update` witness path when the current actor has authority
+  The shipped demo world makes that path visible by explicitly granting `aaron` stewardship over the `frontend` context.
+- signed-in actors without direct authority can now use that same live inspector to create a real `widget.update` proposal instead of hitting a dead end
+  Approval still happens through the generic proposal flow, but the approved change now flows back onto the rendered page through the same live witness-refresh path instead of requiring a manual reload.
+- signed-in actors without direct version authority can now use that same live inspector to create real `widgetVersion.activate` and `widgetVersion.rollback` proposals for shared versioned widgets
+  That version-proposal path is still intentionally narrow: approval still happens through the generic proposal flow, and while Eden's versions panel now also covers read-only `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish` proposal creation and Eden's capability shelf now covers read-only `capability.install` proposal creation, broader version governance and broader app-specific review still remain open.
 
 What is still missing is the actual editable-everywhere part:
 
-- hide/replace/widget-structure mutation
-- property editing with save-back into the world
-- broader shell coverage beyond the current rendered app surfaces
+- replace/widget-structure mutation
+- wider property editing and broader editable coverage across authored app chrome
+- broader shell coverage beyond the current rendered app surfaces and Eden's embedded Todo board
 
 ### Multi-shell environment
 
@@ -518,14 +559,25 @@ See also:
 - [X] the Personal Box is now a real first-owned patch where the user can sign in and add, edit, and delete local widgets inside Eden
 - [X] `Edit Page` now mutates a real page chrome/theme model for the live Todo surface, including theme, material, and typography changes from inside Eden
 - [X] `Versions` now drives real published/draft/last-good actions for the canonical starter seam inside the live Todo board, including open draft, publish current, and restore last good
+- [X] the live Todo board is now mapped into stable projected sub-surfaces so real widget ids like `todo_form`, `todo_list`, `todo_private_notes`, and `todo_version_playground` can lift as authored relief inside Eden
+- [X] the live Todo board can now switch from map mode into inspect mode inside Eden so the real right-click inspector, process/world handoffs, and narrow widget save-back work without leaving `/eden-canvas`
+- [X] the direct expert shortcut now works on the live board and inside Eden: `F1` opens `whoami`, reveals the current user truth, and shows `sourcerer = TRUE` without pretending that mastery has already been earned
+- [X] the first in-context capability install flow now exists inside Eden on the World Graph surface, so missing page powers can be discovered and installed from the place they are needed
+- [X] that Eden capability shelf now also has a first read-only proposal fallback, so signed-in users without direct target authority can still open a real `capability.install` proposal from the place the missing power is discovered
+- [X] the first Eden chapter rail now reads real quest progression from witnessed practice, so `Claim Your Room`, `Restyle The Page`, `Restore Last Good`, and `Install A Missing Power` complete from actual work rather than static copy
+- [X] the first visible capability gates now unlock from that practiced work, so shared-surface stewardship chips stop being decorative locks and open only after the user has actually exercised the first practical loops
+- [X] the first later operator gate is now real on `Process View`, where local operator quests, real process inspection, and a witnessed failure drill unlock and prove `Alter Runtime` from actual practice instead of route-local theater
+- [X] the Tree's optional `Theory Annex` is now a real Eden side path, where lesson study and the witnessed assessment earn a truthful `trained` mark instead of leaving theory as a decorative promise
+- [X] the first repeated-practice layer now exists inside Eden, so stewardship, operator work, and teaching are tracked as real responsibility bands rather than only one-time quest flips
+- [X] Tree teach-back is now a real post-`trained` action, so the world can witness explanation and carry teaching forward as practiced work instead of decorative copy
+- [X] the shared Todo version seam is now explicitly governed by the `frontend` context, so Eden recovery actions follow the same visible authority boundary as the rest of the shared page
+- [X] the first broader responsibility-family consequences now exist inside Eden, so repeated work can open `Shared Table`, `Run A Stall`, and `Ship A Tiny SaaS` as real Tree-facing powers rather than leaving trade and tiny-SaaS growth as prose
+- [X] the first Commons governance loop now exists inside Eden, so `Start A Group`, `Set The Rules`, and `Run An Open Organization` complete from real context creation, stewardship delegation, proposal opening, and proposal approval rather than static future copy
 
 ### Next slices
 
-- [ ] map the live Todo board into stable projected sub-surfaces so list, form, witnesses, and notes can pop into authored relief
-- [ ] expose editable-everywhere right-click inspection and page/widget mutation directly from Eden
+- [ ] expand Eden progression beyond the first responsibility family into wider academy taxonomies, deeper thresholds, and stronger cross-surface unlock consequences on Tree, Process View, and shared-surface chips
 
 ### Later slices
 
-- [ ] add the direct expert shortcut (`F1`, `whoami`, edit the user identity, reveal `sourcerer = true`)
-- [ ] add in-context plugin/capability install flows from the page where the need is discovered
 - [ ] deepen shell transitions so page-to-page travel feels like movement inside one continuous world

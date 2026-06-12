@@ -10,6 +10,7 @@ capabilities = ["http.serve", "fs.json.read", "fs.json.write"]
 
 [context.frontend]
 actor = "frontendHost"
+initialStewards = ["aaron"]
 capabilities = ["dom.render", "http.fetch"]
 
 [[identity]]

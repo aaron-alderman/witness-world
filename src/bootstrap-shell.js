@@ -178,8 +178,8 @@ export function renderBootstrapPage() {
 
       <article class="card">
         <div class="badge">Identity</div>
-        <h2>Create First Identity</h2>
-        <p>Create the first user when the world is blank. After identities exist, normal session auth is required for bootstrap edits.</p>
+        <h2 id="identity-heading">Create First Identity</h2>
+        <p id="identity-copy">Create the first user when the world is blank. After identities exist, normal session auth is required for bootstrap edits.</p>
         <form id="identity-form" class="stack" data-tutorial-target="identity-form">
           <div class="grid two">
             <label>Identity Id<input name="id" placeholder="identity.aaron" data-tutorial-target="identity-id" /></label>
@@ -197,7 +197,10 @@ export function renderBootstrapPage() {
             <label>Home Context<select id="identity-home-context" name="homeContext"></select></label>
             <label></label>
           </div>
-          <div class="actions"><button type="submit" data-tutorial-target="identity-submit">Create Identity</button></div>
+          <div class="actions">
+            <button type="submit" id="identity-submit-button" data-tutorial-target="identity-submit">Create Identity</button>
+            <button type="button" class="secondary" id="identity-create-new" hidden>New Identity</button>
+          </div>
         </form>
         <p class="status" id="identity-status"></p>
       </article>
@@ -773,6 +776,17 @@ export function renderBootstrapPage() {
     const readForm = form => Object.fromEntries(new FormData(form).entries());
     const boolValue = formData => formData === "on";
     const formField = (form, name) => form?.elements?.namedItem(name) || form?.querySelector?.('[name="' + CSS.escape(name) + '"]') || null;
+    const currentUrl = () => new URL(window.location.href);
+    const currentIdentityEditId = () => {
+      const value = currentUrl().searchParams.get("identity");
+      return typeof value === "string" && value.trim() ? value.trim() : "";
+    };
+    const setIdentityEditId = id => {
+      const url = currentUrl();
+      if (typeof id === "string" && id.trim()) url.searchParams.set("identity", id.trim());
+      else url.searchParams.delete("identity");
+      window.history.replaceState({}, "", url.toString());
+    };
     const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
     const rowKey = row => row?.id || [row?.program, row?.event, row?.op, row?.order, row?.serverRunner, row?.path, row?.method, row?.actor, row?.label].filter(value => value != null && value !== "").join("\u0000") || JSON.stringify(row);
     const request = async (url, options = {}) => {
@@ -1582,6 +1596,12 @@ export function renderBootstrapPage() {
       const authored = state.bootstrapState || {};
       const session = state.session || {};
       const appReady = model.appReady === true;
+      const identityForm = byId("identity-form");
+      const identityHeading = byId("identity-heading");
+      const identityCopy = byId("identity-copy");
+      const identitySubmitButton = byId("identity-submit-button");
+      const identityCreateNewButton = byId("identity-create-new");
+      const editingIdentity = (authored.identities || []).find(row => row.id === currentIdentityEditId()) || null;
       byId("bootstrap-summary").textContent = appReady
         ? "The app route exists. This seam remains available for recovery and harness edits."
         : "No reachable app home route exists yet. Bootstrap owns the landing experience until the app boundary is wired.";
@@ -1662,6 +1682,39 @@ export function renderBootstrapPage() {
       renderStateList("state-runners", authored.serverRunners || [], row => row.id + (row.handlerSet ? " [" + row.handlerSet + "]" : ""));
       renderStateList("state-capabilities", authored.capabilityCatalog || [], row => row.id + (row.placement?.length ? " -> " + row.placement.join(", ") : ""));
       renderStateList("state-capability-installs", authored.capabilityInstalls || [], row => row.targetKind + " " + row.target + " -> " + row.capability);
+
+      const identityPrefillKey = editingIdentity
+        ? JSON.stringify([editingIdentity.id, editingIdentity.label, editingIdentity.username, editingIdentity.password, editingIdentity.homeContext, editingIdentity.homePerspective])
+        : "";
+      if (editingIdentity) {
+        identityHeading.textContent = "Edit Identity";
+        identityCopy.textContent = "This handoff edits the real authored identity through bootstrap. Identity id and actor stay fixed in this first slice.";
+        identitySubmitButton.textContent = "Save Identity";
+        identityCreateNewButton.hidden = false;
+        if (identityForm.dataset.identityPrefillKey !== identityPrefillKey) {
+          formField(identityForm, "id").value = editingIdentity.id || "";
+          formField(identityForm, "actor").value = editingIdentity.actor || "";
+          formField(identityForm, "label").value = editingIdentity.label || "";
+          formField(identityForm, "username").value = editingIdentity.username || "";
+          formField(identityForm, "password").value = editingIdentity.password || "";
+          formField(identityForm, "homePerspective").value = editingIdentity.homePerspective || "";
+          formField(identityForm, "homeContext").value = editingIdentity.homeContext || "";
+          identityForm.dataset.identityPrefillKey = identityPrefillKey;
+        }
+      } else {
+        identityHeading.textContent = "Create First Identity";
+        identityCopy.textContent = "Create the first user when the world is blank. After identities exist, normal session auth is required for bootstrap edits.";
+        identitySubmitButton.textContent = "Create Identity";
+        identityCreateNewButton.hidden = true;
+        if (identityForm.dataset.identityPrefillKey) {
+          identityForm.reset();
+          identityForm.dataset.identityPrefillKey = "";
+        }
+      }
+      const identityIdField = formField(identityForm, "id");
+      const identityActorField = formField(identityForm, "actor");
+      if (identityIdField) identityIdField.disabled = Boolean(editingIdentity);
+      if (identityActorField) identityActorField.disabled = Boolean(editingIdentity);
 
       const editingEnabled = session.authenticated || !(authored.identities || []).length;
       for (const formId of ["context-form", "perspective-form", "context-binding-form", "context-binding-remove-form", "context-export-form", "context-export-remove-form", "context-import-form", "context-import-remove-form", "stewardship-form", "stewardship-remove-form", "proposal-form", "proposal-approve-form", "proposal-reject-form", "widget-form", "program-form", "step-form", "route-form", "serve-form", "runner-form", "capability-form", "capability-install-form", "capability-remove-form"]) {
@@ -1768,14 +1821,28 @@ export function renderBootstrapPage() {
       const form = event.currentTarget;
       try {
         const data = readForm(form);
-        if (!data.id && data.username) data.id = "identity." + data.username.trim();
-        await postJson("/api/identities", data);
-        setStatus("identity-status", "Identity created.");
-        form.reset();
+        const editId = currentIdentityEditId();
+        if (editId) {
+          await postJson("/api/identities/" + encodeURIComponent(editId), data, "PATCH");
+          setStatus("identity-status", "Identity updated.");
+        } else {
+          if (!data.id && data.username) data.id = "identity." + data.username.trim();
+          await postJson("/api/identities", data);
+          setStatus("identity-status", "Identity created.");
+          form.reset();
+        }
         await refresh();
       } catch (error) {
         setStatus("identity-status", error.message);
       }
+    });
+    byId("identity-create-new").addEventListener("click", () => {
+      setIdentityEditId("");
+      setStatus("identity-status", "");
+      const form = byId("identity-form");
+      form.reset();
+      form.dataset.identityPrefillKey = "";
+      render();
     });
     byId("session-form").addEventListener("submit", async event => {
       event.preventDefault();

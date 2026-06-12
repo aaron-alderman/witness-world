@@ -616,6 +616,7 @@ function applySemanticLayoutContexts(relations, nodeContext, contexts) {
   const frontendPrograms = [...moduleKinds.entries()].filter(([, kind]) => kind === "frontendProgram").map(([id]) => id);
   const routes = [...moduleKinds.entries()].filter(([, kind]) => kind === "route").map(([id]) => id);
   const serverRunners = [...moduleKinds.entries()].filter(([, kind]) => kind === "serverRunner").map(([id]) => id);
+  const mcpServers = [...moduleKinds.entries()].filter(([, kind]) => kind === "mcpServer").map(([id]) => id);
   const backendHosts = [...new Set(relations.filter(r =>
     (r.rel === "hostCapability" || (r.rel === "installsCapability" && r.meta?.targetKind === "host"))
     && ["http.serve", "fs.json.read", "fs.json.write"].includes(r.to)
@@ -647,6 +648,7 @@ function applySemanticLayoutContexts(relations, nodeContext, contexts) {
   for (const id of frontendPrograms) nodeContext.set(id, "frontend/execution");
   for (const id of routes) nodeContext.set(id, "backend/routes");
   for (const id of serverRunners) nodeContext.set(id, "backend/runtime");
+  for (const id of mcpServers) nodeContext.set(id, "backend/runtime");
   for (const id of backendHosts) nodeContext.set(id, "backend/runtime");
   for (const id of frontendHosts) nodeContext.set(id, "frontend/runtime");
   for (const id of serverRunnerIds) nodeContext.set(id, "backend/runtime");
@@ -749,7 +751,7 @@ function looksLikeCapability(value) {
 }
 
 function looksLikeKind(value) {
-  return ["widget", "widgetVersion", "widgetVersionTransition", "frontendProgram", "context", "perspective", "proposal", "capability", "app", "route", "serverRunner", "frontendRunner", "compiler", "description", "compiledArtifact", "trait", "valueType", "processSpec"].includes(value);
+  return ["widget", "widgetVersion", "widgetVersionTransition", "frontendProgram", "context", "perspective", "proposal", "capability", "app", "route", "serverRunner", "mcpServer", "frontendRunner", "compiler", "description", "compiledArtifact", "trait", "valueType", "processSpec"].includes(value);
 }
 
 function capabilityContextFor(source, capability, nodeContext, meta = {}) {

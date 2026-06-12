@@ -17,6 +17,7 @@ const VALUE_TYPES = [
   { id: "widget.text", label: "Widget Text", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "widget.title", label: "Widget Title", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "widget.class", label: "Widget Class", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "widget.hidden", label: "Widget Hidden", compatibleWith: ["boolean"], editor: { control: "checkbox" } },
   { id: "widget.role", label: "Widget Role", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "widget.href", label: "Widget Href", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "widget.name", label: "Widget Name", compatibleWith: ["textual"], editor: { control: "text" } },
@@ -54,6 +55,12 @@ const VALUE_TYPES = [
   { id: "serverRunner.host", label: "Host Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "serverRunner.storage", label: "Storage Path", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "serverRunner.runtimeConfig", label: "Runtime Config JSON", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "mcpServer.id", label: "MCP Server Id", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "mcpServer.label", label: "MCP Server Label", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "mcpServer.transport", label: "MCP Transport", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["stdio", "http"] } },
+  { id: "mcpServer.tool", label: "MCP Tool Name", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "mcpServer.actingMode", label: "MCP Tool Acting Mode", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["delegated", "service"] } },
+  { id: "mcpServer.identity", label: "MCP Service Identity", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "context.id", label: "Context Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "context.label", label: "Context Label", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "context.name", label: "Context Name", compatibleWith: ["textual"], editor: { control: "text" } },
@@ -121,13 +128,15 @@ const PROCESS_SPECS = [
       { name: "id", accepts: "widget.id", required: true },
       { name: "text", accepts: "widget.text", required: false },
       { name: "title", accepts: "widget.title", required: false },
-      { name: "class", accepts: "widget.class", required: false }
+      { name: "class", accepts: "widget.class", required: false },
+      { name: "hidden", accepts: "widget.hidden", required: false }
     ],
     outputs: [
       { name: "id", accepts: "widget.id", required: true },
       { name: "text", accepts: "widget.text", required: false },
       { name: "title", accepts: "widget.title", required: false },
-      { name: "class", accepts: "widget.class", required: false }
+      { name: "class", accepts: "widget.class", required: false },
+      { name: "hidden", accepts: "widget.hidden", required: false }
     ]
   },
   {
@@ -139,6 +148,19 @@ const PROCESS_SPECS = [
       { name: "label", accepts: "identity.label", required: true },
       { name: "username", accepts: "identity.username", required: true },
       { name: "password", accepts: "identity.password", required: true },
+      { name: "homeContext", accepts: "identity.context", required: false },
+      { name: "homePerspective", accepts: "identity.perspective", required: false }
+    ],
+    outputs: [{ name: "id", accepts: "identity.id", required: true }]
+  },
+  {
+    id: "identity_update_spec",
+    process: "identity.update",
+    inputs: [
+      { name: "id", accepts: "identity.id", required: true },
+      { name: "label", accepts: "identity.label", required: false },
+      { name: "username", accepts: "identity.username", required: false },
+      { name: "password", accepts: "identity.password", required: false },
       { name: "homeContext", accepts: "identity.context", required: false },
       { name: "homePerspective", accepts: "identity.perspective", required: false }
     ],
@@ -286,6 +308,41 @@ const PROCESS_SPECS = [
       { name: "context", accepts: "context.id", required: false }
     ],
     outputs: [{ name: "id", accepts: "serverRunner.id", required: true }]
+  },
+  {
+    id: "mcp_server_define_spec",
+    process: "mcpServer.define",
+    inputs: [
+      { name: "id", accepts: "mcpServer.id", required: true },
+      { name: "label", accepts: "mcpServer.label", required: false },
+      { name: "serverRunner", accepts: "serverRunner.id", required: false },
+      { name: "serverRunnerRef", accepts: "context.name", required: false },
+      { name: "serviceIdentity", accepts: "mcpServer.identity", required: false },
+      { name: "transportsJson", accepts: "json.text", required: false },
+      { name: "context", accepts: "context.id", required: false }
+    ],
+    outputs: [{ name: "id", accepts: "mcpServer.id", required: true }]
+  },
+  {
+    id: "mcp_tool_install_spec",
+    process: "mcpTool.install",
+    inputs: [
+      { name: "server", accepts: "mcpServer.id", required: true },
+      { name: "tool", accepts: "mcpServer.tool", required: true },
+      { name: "actingMode", accepts: "mcpServer.actingMode", required: false },
+      { name: "scopeContextsJson", accepts: "json.text", required: false },
+      { name: "scopeTargetsJson", accepts: "json.text", required: false }
+    ],
+    outputs: [{ name: "server", accepts: "mcpServer.id", required: true }]
+  },
+  {
+    id: "mcp_tool_remove_spec",
+    process: "mcpTool.remove",
+    inputs: [
+      { name: "server", accepts: "mcpServer.id", required: true },
+      { name: "tool", accepts: "mcpServer.tool", required: true }
+    ],
+    outputs: [{ name: "server", accepts: "mcpServer.id", required: true }]
   },
   {
     id: "context_bind_spec",
@@ -488,11 +545,12 @@ const BUILTIN_CAPABILITIES = [
     ],
     witnessContract: {
       processes: {
-        read: ["asset.content.read", "asset.content.read.failed"],
-        success: ["asset.upload"],
-        failure: ["asset.upload.failed"]
+        read: ["asset.content.read", "asset.content.read.failed", "asset.thumbnail.read", "asset.thumbnail.read.failed", "asset.attachments.read", "asset.attachments.read.failed"],
+        attempt: ["asset.ingest.enqueue", "asset.ingest.retry", "asset.ingest.start"],
+        success: ["asset.upload", "asset.ingest.succeeded", "asset.attach", "asset.detach"],
+        failure: ["asset.upload.failed", "asset.ingest.enqueue.failed", "asset.ingest.retry.failed", "asset.ingest.failed", "asset.attach.failed", "asset.detach.failed"]
       },
-      externalRefs: ["storageKey", "contentUrl"]
+      externalRefs: ["storageKey", "contentUrl", "textRef", "thumbnailRef", "thumbnailUrl"]
     },
     authority: [
       { name: "filesystem.write", accepts: "authority.id", required: true },
@@ -587,9 +645,9 @@ const BUILTIN_CAPABILITIES = [
     witnessContract: {
       processes: {
         read: ["search.index.inspect", "search.index.inspect.failed", "search.index.query", "search.index.query.failed"],
-        attempt: ["search.index.build", "search.index.reindex"],
-        success: ["search.index.build", "search.index.reindex"],
-        failure: ["search.index.build.failed", "search.index.reindex.failed"]
+        attempt: ["search.index.build", "search.index.reindex", "asset.search.reindex"],
+        success: ["search.index.build", "search.index.reindex", "asset.search.reindex"],
+        failure: ["search.index.build.failed", "search.index.reindex.failed", "asset.search.reindex.failed"]
       }
     },
     authority: [

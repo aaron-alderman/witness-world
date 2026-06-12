@@ -1106,6 +1106,21 @@ const CANVAS_CLIENT_JS = `(async () => {
     parent.appendChild(propRow(labelText, input));
   }
 
+  function appendReadonlyValue(parent, labelText, value) {
+    const row = document.createElement('div');
+    row.className = 'prop-row';
+    const label = document.createElement('label');
+    label.textContent = labelText;
+    const text = document.createElement('div');
+    text.style.flex = '1';
+    text.style.minWidth = '0';
+    text.style.wordBreak = 'break-word';
+    text.textContent = value == null ? '' : String(value);
+    row.appendChild(label);
+    row.appendChild(text);
+    parent.appendChild(row);
+  }
+
   function appendLinkRow(parent, labelText, href, text) {
     const row = document.createElement('div');
     row.className = 'prop-row';
@@ -1134,6 +1149,66 @@ const CANVAS_CLIENT_JS = `(async () => {
     parent.appendChild(row);
   }
 
+  function appendActionRow(parent, labelText, buttons) {
+    if (!buttons.length) return;
+    const row = document.createElement('div');
+    row.className = 'prop-row';
+    const label = document.createElement('label');
+    label.textContent = labelText;
+    const controls = document.createElement('div');
+    controls.style.display = 'flex';
+    controls.style.gap = '6px';
+    controls.style.flexWrap = 'wrap';
+    controls.style.flex = '1';
+    for (const button of buttons) controls.appendChild(button);
+    row.appendChild(label);
+    row.appendChild(controls);
+    parent.appendChild(row);
+  }
+
+  function derivedMetadataValue(value) {
+    if (Array.isArray(value)) return value.join(', ');
+    if (value == null) return '';
+    return String(value);
+  }
+
+  function appendAssetDerivedMetadata(parent, metadata) {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return;
+    const fields = [
+      ['kind', 'Derived kind'],
+      ['pageCount', 'Pages'],
+      ['rowCount', 'Rows'],
+      ['dataRowCount', 'Data rows'],
+      ['columnCount', 'Columns'],
+      ['headers', 'Headers'],
+      ['headingCount', 'Headings'],
+      ['headings', 'Heading list'],
+      ['frontmatterKeyCount', 'Frontmatter keys'],
+      ['frontmatterKeys', 'Frontmatter list'],
+      ['sectionCount', 'Sections'],
+      ['sections', 'Section list'],
+      ['arrayTableCount', 'Array tables'],
+      ['listCount', 'List items'],
+      ['rootKind', 'Root kind'],
+      ['entryCount', 'Entries'],
+      ['topLevelKeyCount', 'Top-level keys'],
+      ['topLevelKeys', 'Key list'],
+      ['rootTag', 'Root tag'],
+      ['title', 'Document title'],
+      ['author', 'Author'],
+      ['subject', 'Subject'],
+      ['lineCount', 'Lines'],
+      ['wordCount', 'Words'],
+      ['charCount', 'Characters']
+    ];
+    for (const [key, label] of fields) {
+      const value = metadata[key];
+      if (value == null) continue;
+      if (Array.isArray(value) && !value.length) continue;
+      appendReadonlyText(parent, label, derivedMetadataValue(value));
+    }
+  }
+
   function selectInput(options, value) {
     const input = document.createElement('select');
     for (const optionRow of options) {
@@ -1146,6 +1221,11 @@ const CANVAS_CLIENT_JS = `(async () => {
     return input;
   }
 
+  function formatThingReference(id, title, kind) {
+    const base = title && title !== id ? title + ' (' + id + ')' : (title || id || '');
+    return kind ? base + ' [' + kind + ']' : base;
+  }
+
   function thingCatalog() {
     const rows = new Map();
     const add = row => {
@@ -1156,12 +1236,14 @@ const CANVAS_CLIENT_JS = `(async () => {
         label: row.label || row.id,
         kind: row.kind || null,
         context: row.context || null,
+        contextTitle: row.contextTitle || null,
         asset: row.asset || null,
         attachedAssets: row.attachedAssets || [],
-        attachedTo: row.attachedTo || []
+        attachedTo: row.attachedTo || [],
+        attachedToRows: row.attachedToRows || []
       });
     };
-    for (const row of state.model?.instances || []) add({ id: row.thing, label: row.label, kind: row.kind, context: row.context, asset: row.asset, attachedAssets: row.attachedAssets, attachedTo: row.attachedTo });
+    for (const row of state.model?.instances || []) add({ id: row.thing, label: row.label, kind: row.kind, context: row.context, contextTitle: row.contextTitle, asset: row.asset, attachedAssets: row.attachedAssets, attachedTo: row.attachedTo, attachedToRows: row.attachedToRows });
     for (const row of state.model?.availableThings || []) add(row);
     return [...rows.values()].sort((a, b) => String(a.label || a.id).localeCompare(String(b.label || b.id)));
   }
@@ -1196,6 +1278,26 @@ const CANVAS_CLIENT_JS = `(async () => {
     return { ok: true, witness: body.witness };
   }
 
+  async function retryAssetIngest(assetId) {
+    const response = await fetch('/api/assets/' + encodeURIComponent(assetId) + '/ingest/retry', {
+      method: 'POST',
+      headers: headers()
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) return { ok: false, error: body.error || ('ingest retry failed (' + response.status + ')') };
+    return { ok: true, asset: body.asset || null, job: body.job || null, witness: body.witness || null };
+  }
+
+  async function refreshAssetSearch(assetId) {
+    const response = await fetch('/api/assets/' + encodeURIComponent(assetId) + '/search/reindex', {
+      method: 'POST',
+      headers: headers()
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) return { ok: false, error: body.error || ('search refresh failed (' + response.status + ')') };
+    return { ok: true, asset: body.asset || null, index: body.index || null, witness: body.witness || null };
+  }
+
   function formatBytes(size) {
     const bytes = Number(size);
     if (!Number.isFinite(bytes) || bytes < 0) return '';
@@ -1212,34 +1314,83 @@ const CANVAS_CLIENT_JS = `(async () => {
     return contentUrl.includes('?') ? contentUrl + '&download=1' : contentUrl + '?download=1';
   }
 
+  function assetCanRetryIngest(asset) {
+    if (asset?.canRetryIngest === true) return true;
+    const status = String(asset?.processingStatus || '');
+    return status === 'dead-letter' || status === 'enqueue-failed';
+  }
+
+  function assetCanRefreshSearch(asset) {
+    if (asset?.canRefreshSearch === true) return true;
+    if (String(asset?.searchStatus || '') === 'manual') return true;
+    return typeof asset?.searchError === 'string' && asset.searchError.trim().length > 0;
+  }
+
+  function assetProcessingSummary(asset) {
+    const status = String(asset?.processingStatus || '');
+    const attempt = Number(asset?.processingAttempt || 0);
+    if (!status) return 'No background ingest has run yet.';
+    if (status === 'queued') return attempt > 0 ? 'Queued for background ingest retry.' : 'Queued for background ingest.';
+    if (status === 'running') return attempt > 1 ? 'Background ingest is retrying now.' : 'Background ingest is running.';
+    if (status === 'succeeded') return 'Background ingest completed.';
+    if (status === 'dead-letter') return 'Background ingest failed and needs operator retry.';
+    if (status === 'enqueue-failed') return 'Background ingest could not be queued.';
+    return status;
+  }
+
+  function assetSearchSummary(asset) {
+    const status = String(asset?.searchStatus || '');
+    if (!status) return 'Search state unknown.';
+    if (status === 'manual') return 'Search refresh is manual for this asset.';
+    if (status === 'reindexed') return 'Search index is refreshed.';
+    if (status === 'not-built') return 'No search index has been built yet.';
+    if (status === 'not-indexed') return 'This asset is not indexed in the current search build.';
+    return status;
+  }
+
   function assetPreviewMode(asset) {
     const mimeType = String(asset?.mimeType || '').toLowerCase();
     const sizeBytes = Number(asset?.sizeBytes);
-    if (!asset?.contentUrl || !mimeType) return { kind: 'none', reason: 'Preview unavailable.' };
+    if ((!asset?.contentUrl && !asset?.thumbnailUrl && !asset?.textUrl) || !mimeType) return { kind: 'none', reason: 'Preview unavailable.' };
     if (mimeType.startsWith('image/')) return { kind: 'image' };
+    if (asset?.textUrl) return { kind: 'text', source: 'derived' };
     const isTextLike = mimeType.startsWith('text/')
       || mimeType.includes('json')
       || mimeType.includes('xml')
       || mimeType.includes('javascript')
       || mimeType.includes('svg')
       || mimeType.endsWith('+json');
-    if (!isTextLike) return { kind: 'none', reason: 'Preview unavailable for this file type.' };
+    if (!isTextLike) {
+      if (asset?.processingStatus === 'queued' || asset?.processingStatus === 'running') {
+        return { kind: 'none', reason: 'Preview will appear after processing completes.' };
+      }
+      if (asset?.textStatus === 'empty') return { kind: 'none', reason: 'No extracted text is available for this file.' };
+      return { kind: 'none', reason: 'Preview unavailable for this file type.' };
+    }
     if (Number.isFinite(sizeBytes) && sizeBytes > 128 * 1024) {
       return { kind: 'none', reason: 'Inline preview is limited to text files up to 128 KB.' };
     }
-    return { kind: 'text' };
+    return { kind: 'text', source: 'content' };
+  }
+
+  function assetPreviewSource(asset, mode) {
+    if (mode?.kind === 'image') return asset?.thumbnailUrl || asset?.contentUrl || '';
+    if (mode?.kind === 'text' && mode?.source === 'derived') return asset?.textUrl || '';
+    return asset?.contentUrl || asset?.textUrl || '';
   }
 
   function ensureAssetPreview(asset) {
     const mode = assetPreviewMode(asset);
     if (mode.kind === 'none') return { status: 'none', reason: mode.reason };
-    if (mode.kind === 'image') return { status: 'image', src: asset.contentUrl };
-    const cacheKey = asset.id + '|' + asset.contentUrl;
+    if (mode.kind === 'image') return { status: 'image', src: assetPreviewSource(asset, mode) };
+    const previewUrl = assetPreviewSource(asset, mode);
+    if (!previewUrl) return { status: 'none', reason: 'Preview unavailable.' };
+    const cacheKey = asset.id + '|' + previewUrl;
     const cached = state.assetPreviewCache.get(cacheKey);
     if (cached) return cached;
     const loading = { status: 'loading' };
     state.assetPreviewCache.set(cacheKey, loading);
-    fetch(asset.contentUrl)
+    fetch(previewUrl)
       .then(async response => {
         if (!response.ok) throw new Error('preview request failed (' + response.status + ')');
         const text = await response.text();
@@ -1351,26 +1502,51 @@ const CANVAS_CLIENT_JS = `(async () => {
         if (node.asset) {
           appendReadonlyText(thingProps, 'Type', node.asset.mimeType || '');
           appendReadonlyText(thingProps, 'Size', formatBytes(node.asset.sizeBytes));
-          appendReadonlyText(thingProps, 'Context', node.asset.context || node.context || '');
+          if (node.asset.imageWidth && node.asset.imageHeight) appendReadonlyText(thingProps, 'Dimensions', node.asset.imageWidth + ' x ' + node.asset.imageHeight);
+          appendReadonlyValue(
+            thingProps,
+            'Context',
+            node.asset.context
+              ? formatThingReference(node.asset.context, node.asset.contextTitle, 'context')
+              : (node.context || '')
+          );
           appendReadonlyText(thingProps, 'Access', node.asset.visibility || 'private');
           appendReadonlyText(thingProps, 'Store', node.asset.storageKey || '');
-          if (node.asset.attachedTo?.length) {
-            for (const targetId of node.asset.attachedTo) {
+          if (node.asset.processingStatus) appendReadonlyText(thingProps, 'Processing', assetProcessingSummary(node.asset));
+          if (node.asset.processingStatus) appendReadonlyText(thingProps, 'Processing status', node.asset.processingStatus);
+          if (node.asset.processingAttempt) appendReadonlyText(thingProps, 'Processing attempt', node.asset.processingAttempt);
+          if (node.asset.textStatus) appendReadonlyText(thingProps, 'Text ingest', node.asset.textStatus + (node.asset.textBytes ? ' (' + formatBytes(node.asset.textBytes) + ')' : ''));
+          if (node.asset.textExtractor) appendReadonlyText(thingProps, 'Extractor', node.asset.textExtractor);
+          appendAssetDerivedMetadata(thingProps, node.asset.derivedMetadata);
+          if (node.asset.thumbnailStatus) appendReadonlyText(thingProps, 'Thumbnail', node.asset.thumbnailStatus);
+          if (node.asset.searchStatus) appendReadonlyText(thingProps, 'Search', assetSearchSummary(node.asset));
+          if (node.asset.searchStatus) appendReadonlyText(thingProps, 'Search status', node.asset.searchStatus);
+          if (node.asset.searchPolicy) appendReadonlyText(thingProps, 'Search policy', node.asset.searchPolicy);
+          if (node.asset.searchError) appendReadonlyText(thingProps, 'Search error', node.asset.searchError);
+          if (node.asset.processingError) appendReadonlyText(thingProps, 'Last error', node.asset.processingError);
+          if (node.attachedTo?.length) {
+            const attachedTargets = node.asset.attachedToRows?.length
+              ? node.asset.attachedToRows
+              : node.attachedTo.map(targetId => ({ id: targetId, title: targetId, kind: null, context: null, contextTitle: null }));
+            for (const target of attachedTargets) {
               const row = document.createElement('div');
               row.className = 'relation-row';
-              row.textContent = 'attached to ' + targetId;
+              row.textContent = 'attached to ' + formatThingReference(target.id, target.title, target.kind);
+              if (target.context) {
+                row.textContent += ' in ' + formatThingReference(target.context, target.contextTitle, 'context');
+              }
               if (isLive()) {
                 const removeAttachment = document.createElement('button');
                 removeAttachment.type = 'button';
                 removeAttachment.textContent = 'Detach';
-                removeAttachment.dataset.assetDetachButton = targetId;
+                removeAttachment.dataset.assetDetachButton = target.id;
                 removeAttachment.addEventListener('click', async () => {
-                  const removed = await detachAsset(node.asset.id, targetId);
+                  const removed = await detachAsset(node.asset.id, target.id);
                   if (!removed.ok) {
                     setStatus('detach failed: ' + removed.error);
                     return;
                   }
-                  setStatus('detached from ' + targetId);
+                  setStatus('detached from ' + (target.title || target.id));
                   await refresh();
                 });
                 row.appendChild(document.createTextNode(' '));
@@ -1382,6 +1558,45 @@ const CANVAS_CLIENT_JS = `(async () => {
           if (node.asset.contentUrl) {
             appendLinkRow(thingProps, 'Content', node.asset.contentUrl, 'Open file');
             appendLinkRow(thingProps, 'Download', assetDownloadUrl(node.asset), 'Download file');
+          }
+          if (node.asset.textUrl) appendLinkRow(thingProps, 'Derived text', node.asset.textUrl, 'Open derived text');
+          if (isLive() && (assetCanRetryIngest(node.asset) || assetCanRefreshSearch(node.asset))) {
+            const actions = [];
+            if (assetCanRetryIngest(node.asset)) {
+              const retryButton = document.createElement('button');
+              retryButton.type = 'button';
+              retryButton.textContent = 'Retry ingest';
+              retryButton.dataset.assetRetryIngestButton = node.asset.id;
+              retryButton.addEventListener('click', async () => {
+                setStatus('retrying ingest for ' + (node.label || node.asset.id) + '...');
+                const retried = await retryAssetIngest(node.asset.id);
+                if (!retried.ok) {
+                  setStatus('ingest retry failed for ' + (node.label || node.asset.id) + ': ' + retried.error);
+                  return;
+                }
+                setStatus('requeued ingest for ' + (node.label || node.asset.id));
+                await refresh();
+              });
+              actions.push(retryButton);
+            }
+            if (assetCanRefreshSearch(node.asset)) {
+              const refreshButton = document.createElement('button');
+              refreshButton.type = 'button';
+              refreshButton.textContent = 'Refresh search';
+              refreshButton.dataset.assetRefreshSearchButton = node.asset.id;
+              refreshButton.addEventListener('click', async () => {
+                setStatus('refreshing search for ' + (node.label || node.asset.id) + '...');
+                const refreshed = await refreshAssetSearch(node.asset.id);
+                if (!refreshed.ok) {
+                  setStatus('search refresh failed for ' + (node.label || node.asset.id) + ': ' + refreshed.error);
+                  return;
+                }
+                setStatus('refreshed search for ' + (node.label || node.asset.id));
+                await refresh();
+              });
+              actions.push(refreshButton);
+            }
+            appendActionRow(thingProps, 'Repair', actions);
           }
           const preview = ensureAssetPreview(node.asset);
           if (preview.status === 'image') {
@@ -1708,10 +1923,7 @@ const CANVAS_CLIENT_JS = `(async () => {
     events.onmessage = async () => {
       await fetchWitnesses();
       if (isLive()) {
-        if (state.perspective && projectionModule) {
-          const projected = projectionModule.canvasProjection(state.history.witnesses, state.perspective);
-          if (projected) adoptModel(projected, false);
-        }
+        if (state.perspective) await loadCanvas();
       }
       renderTimeline();
     };
