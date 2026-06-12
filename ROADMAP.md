@@ -32,6 +32,7 @@ Current honesty snapshot:
 
 - The command/search surface is projection-backed, not registry-backed.
 - Tutorial recovery commands are derived from persisted tutorial progress, not from a fake command registry.
+- Internal runtime bundle/profile composition is now explicit and inspectable through startup reporting plus `/api/runtime/diagnostics`; it is no longer only an internal convention.
 - The shipped practical backend seams are mostly stub-first, not fake; provider realism is intentionally deferred there.
 - Legacy capability strings still synthesize placeholder capability objects, which is a compatibility bridge rather than a final authored migration story.
 - Contextual naming exists, and covered authoring surfaces no longer allow hidden foreign-scoped canonical-id bypasses.
@@ -77,6 +78,12 @@ Completed baseline detail lives here:
 
 The active question is no longer "can the baseline work?" It is "what seams most accelerate composition from here?"
 
+The immediate runtime follow-up is now clear:
+
+- make profile-specific compositions operationally real rather than `full`-by-default habits
+- use the new runtime diagnostics surface to prove what is active under each profile
+- keep pushing toward explicit plugin/store contracts without pretending the internal bundle model is already an external ecosystem
+
 ---
 
 ## Primary Missing Seams
@@ -108,6 +115,7 @@ Current first slice now exists:
 - local catalog/read-model exposure through bootstrap APIs
 - world graph capability nodes plus install/dependency edges
 - compatibility projection from legacy `context.capabilities` and host capability strings
+- internal runtime bundles/profiles with strict operator-facing profile selection and a shared runtime diagnostics endpoint
 
 Honest caveats / rollback watch:
 
@@ -123,6 +131,8 @@ Honest caveats / rollback watch:
   It checks placement, dependency existence, and duplicate installs, but it does not yet perform deeper semantic compatibility checks, version negotiation, or authority conflict analysis.
 - The current catalog is a local projection, not yet a real package/store protocol.
   The naming is directionally correct, but the implementation is still closer to a local indexed read model than a mature install ecosystem.
+- Internal bundle manifests now carry enough metadata to point toward plugins, but they are still runtime-owned internal contracts.
+  Version distribution, trust, install/update lifecycle, and remote provenance are still future store work, not already-shipped platform behavior.
 - The bootstrap capability authoring surface is intentionally minimal and JSON-heavy.
   It is truthful, but not yet a strong product-quality authoring experience.
 

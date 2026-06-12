@@ -7,13 +7,25 @@ import { createWorld } from "../../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../../src/host.js";
 import { applyWitnessDocs, applyWitnessToml, loadWitnessTomlFile } from "../../src/dsl.js";
 
+const silentLogger = {
+  error() {},
+  warn() {},
+  info() {},
+  debug() {}
+};
+
+let sharedBrowserPromise = null;
+let sharedBrowserActiveContexts = 0;
+let sharedBrowserCloseTimer = null;
+
 async function tempRuntimeRoot(prefix = "witness-world-ui-") {
   return fs.mkdtemp(path.join(os.tmpdir(), prefix));
 }
 
 export async function startUiDemoServer({
   dslPath = path.join(process.cwd(), "examples", "demo-todo-server.wtoml"),
-  extraWitnessToml = ""
+  extraWitnessToml = "",
+  logger = silentLogger
 } = {}) {
   const world = createWorld();
   const runtimeRoot = await tempRuntimeRoot();
@@ -28,7 +40,8 @@ export async function startUiDemoServer({
   const server = await startServer(world, {
     actor: "adam",
     serverRunnerId: "demo_server",
-    runtimeRoot
+    runtimeRoot,
+    logger
   });
 
   if (!server.ok) {
@@ -45,7 +58,7 @@ export async function startUiDemoServer({
   };
 }
 
-export async function startBlankUiServer({ logger } = {}) {
+export async function startBlankUiServer({ logger = silentLogger } = {}) {
   const world = createWorld();
   const runtimeRoot = await tempRuntimeRoot("witness-world-bootstrap-ui-");
 
@@ -72,11 +85,23 @@ export async function startBlankUiServer({ logger } = {}) {
   };
 }
 
+async function getSharedBrowser({ headless }) {
+  if (sharedBrowserCloseTimer) {
+    clearTimeout(sharedBrowserCloseTimer);
+    sharedBrowserCloseTimer = null;
+  }
+  if (!sharedBrowserPromise) {
+    sharedBrowserPromise = chromium.launch({ headless });
+  }
+  return sharedBrowserPromise;
+}
+
 export async function launchBrowser({
   headless = true,
   viewport = { width: 1280, height: 900 }
 } = {}) {
-  const browser = await chromium.launch({ headless });
+  const browser = await getSharedBrowser({ headless });
+  sharedBrowserActiveContexts += 1;
   const context = await browser.newContext({ viewport });
   const page = await context.newPage();
   const runtime = createRuntimeCollector(page);
@@ -90,7 +115,15 @@ export async function launchBrowser({
     api,
     close: async () => {
       await context.close();
-      await browser.close();
+      sharedBrowserActiveContexts = Math.max(0, sharedBrowserActiveContexts - 1);
+      if (sharedBrowserActiveContexts === 0 && sharedBrowserPromise) {
+        sharedBrowserCloseTimer = setTimeout(() => {
+          const pendingBrowser = sharedBrowserPromise;
+          sharedBrowserPromise = null;
+          sharedBrowserCloseTimer = null;
+          void pendingBrowser?.then(activeBrowser => activeBrowser.close().catch(() => {})).catch(() => {});
+        }, 100);
+      }
     }
   };
 }

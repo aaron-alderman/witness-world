@@ -34,6 +34,10 @@ test("bootstrap CLI starts a blank-world bootstrap server", async () => {
   assert.ok(runtimeRoot, "expected bootstrap CLI to print runtime root");
   assert.notEqual(path.resolve(runtimeRoot), path.resolve(os.tmpdir()));
   assert.match(stdout, /Persistence:\s+cold start from a fresh temp runtime root/);
+  assert.match(stdout, /Runtime profile:\s+full/);
+  assert.match(stdout, /Active bundles:\s+bundle-core-runtime, bundle-tutorial, bundle-authoring, bundle-inspect, bundle-canvas, bundle-mcp, bundle-practical-backend, bundle-demo, bundle-eden/);
+  assert.match(stdout, /Bundle counts:\s+capabilities=\d+ routes=\d+ surfaces=\d+/);
+  assert.match(stdout, /Runtime diagnostics:\s+http:\/\/[^\s]+\/api\/runtime\/diagnostics/);
 });
 
 test("mcp CLI bridges stdio JSON-RPC to the local MCP endpoint without stdout noise", async () => {
@@ -115,6 +119,27 @@ actingMode = "service"
   assert.equal(normalizeCliStderr(stderr), "");
 });
 
+test("bootstrap CLI rejects explicitly unknown runtime profiles", async () => {
+  const child = spawn(process.execPath, ["src/cli.js", "bootstrap", "--runtime-profile", "nope"], {
+    cwd: process.cwd(),
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", chunk => { stdout += chunk; });
+  child.stderr.on("data", chunk => { stderr += chunk; });
+
+  const exitCode = await onceExitCode(child);
+
+  assert.equal(exitCode, 1);
+  assert.equal(stdout.trim(), "");
+  assert.match(stderr, /Unknown runtime profile:\s+nope/);
+  assert.match(stderr, /Valid runtime profiles:\s+minimal, authoring, inspect, practical-backend, full/);
+});
+
 async function waitForServerUrl(readStdout, { timeoutMs = 10000 } = {}) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
@@ -155,4 +180,9 @@ function normalizeCliStderr(stderr) {
 async function onceExit(child) {
   if (child.exitCode != null) return;
   await new Promise(resolve => child.once("exit", resolve));
+}
+
+async function onceExitCode(child) {
+  if (child.exitCode != null) return child.exitCode;
+  return new Promise(resolve => child.once("exit", code => resolve(code)));
 }

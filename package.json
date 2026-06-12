@@ -3,11 +3,11 @@
   "version": "0.36.0",
   "type": "module",
   "scripts": {
-    "test": "node --test",
+    "test": "node scripts/run-tests.mjs",
     "bootstrap": "node src/cli.js bootstrap",
     "demo": "node src/cli.js serve examples/demo-todo-server.wtoml --server demo_server",
-    "test:ui": "node --test test/ui*.test.js",
-    "test:all": "npm test && npm run test:ui"
+    "test:ui": "node scripts/run-tests.mjs ui",
+    "test:all": "node scripts/run-tests.mjs all"
   },
   "devDependencies": {
     "playwright": "^1.54.0"

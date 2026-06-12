@@ -1,4 +1,12 @@
-import { TODO_TUTORIAL_ID, todoStarterBlueprint, todoTutorialDefinition } from "./tutorials.js";
+import { TODO_TUTORIAL_ID } from "./tutorials.js";
+import { bootstrapTutorialPageData } from "./tutorial-runtime-ui.js";
+import {
+  renderBootstrapTutorialStyles,
+  renderBootstrapTutorialCard,
+  renderBootstrapTutorialOverlay
+} from "./tutorial-bootstrap-ui.js";
+import { renderBootstrapTutorialStateFactory } from "./tutorial-bootstrap-client.js";
+import { renderBootstrapTutorialControllerFactory } from "./tutorial-bootstrap-controller-client.js";
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -9,8 +17,7 @@ function jsonForScript(value) {
 }
 
 export function renderBootstrapPage() {
-  const tutorial = todoTutorialDefinition();
-  const blueprint = todoStarterBlueprint();
+  const { tutorial, blueprint } = bootstrapTutorialPageData();
   return `<!doctype html>
 <html>
 <head>
@@ -58,37 +65,7 @@ export function renderBootstrapPage() {
     .chapter-active .chapter-dot { background: var(--accent); border-color: var(--accent); }
     .chapter-done .chapter-dot { background: #3f7d47; border-color: #3f7d47; }
     .chapter-active strong, .chapter-done strong { color: var(--ink); }
-    .tutorial-concept-list { display: grid; gap: 8px; margin-top: 8px; }
-    .tutorial-concept { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: rgba(255,255,255,.72); }
-    .tutorial-concept strong { display: block; margin-bottom: 4px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); font-family: var(--mono); }
-    .tutorial-concept span { display: block; font-size: 13px; line-height: 1.45; color: var(--muted); }
-    .tutorial-suggestion-list { display: grid; gap: 10px; margin-top: 8px; }
-    .tutorial-suggestion { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: rgba(255,255,255,.82); display: grid; gap: 8px; }
-    .tutorial-suggestion strong { display: block; font-size: 14px; color: var(--ink); }
-    .tutorial-suggestion p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
-    .tutorial-disabled-list { display: grid; gap: 10px; margin-top: 8px; }
-    .tutorial-disabled-item { border: 1px solid var(--line); border-radius: 12px; padding: 12px; background: rgba(255,255,255,.82); display: grid; gap: 8px; }
-    .tutorial-disabled-item strong { display: block; font-size: 14px; color: var(--ink); }
-    .tutorial-disabled-item p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
-    [data-tutorial-focus-scope="true"], [data-tutorial-current] { position: relative; z-index: 7; }
-    [data-tutorial-current] { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 8px; scroll-margin-top: 130px; animation: tutorial-focus-pulse 1.35s ease-in-out infinite; }
-    [data-tutorial-changed="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(122, 77, 42, .18); animation: tutorial-changed-pulse 1.15s ease-in-out 2; }
-    [data-tutorial-changed="true"] strong { animation: tutorial-text-pulse 1.15s ease-in-out 2; }
-    #tutorial-dimmer { position: fixed; inset: 0; z-index: 5; background: rgba(31, 27, 23, .44); backdrop-filter: blur(2px); pointer-events: none; }
-    #tutorial-overlay { position: fixed; width: 360px; max-width: calc(100vw - 24px); z-index: 8; background: rgba(255,253,248,.98); border: 1px solid var(--line); border-radius: 16px; padding: 16px; box-shadow: 0 16px 40px rgba(35, 21, 8, .2); pointer-events: none; }
-    #tutorial-overlay h3 { margin: 0 0 8px; font-size: 1.05rem; }
-    #tutorial-overlay p { margin: 0 0 10px; font-size: 14px; line-height: 1.5; color: var(--muted); }
-    #tutorial-overlay .tutorial-meta { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 6px; }
-    #tutorial-overlay button, #tutorial-overlay-handle { pointer-events: auto; }
-    #tutorial-overlay-handle { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin: -4px -4px 10px; padding: 4px; cursor: grab; user-select: none; }
-    #tutorial-overlay-handle:active { cursor: grabbing; }
-    .tutorial-handle-copy { min-width: 0; }
-    .tutorial-handle-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: var(--muted); font-family: var(--mono); }
-    .tutorial-handle-grip { color: var(--muted); font-size: 18px; line-height: 1; padding-top: 2px; }
-    .tutorial-click-pulse { position: fixed; width: 22px; height: 22px; margin-left: -11px; margin-top: -11px; border-radius: 999px; border: 2px solid rgba(122, 77, 42, .65); background: rgba(122, 77, 42, .12); z-index: 9; pointer-events: none; animation: tutorial-click-pulse .55s ease-out forwards; }
-    .tutorial-auto-click { animation: tutorial-button-click .5s ease-out; }
-    .tutorial-hidden { display: none !important; }
-    body.tutorial-dragging { user-select: none; }
+${renderBootstrapTutorialStyles()}
     .badge, #tutorial-overlay .tutorial-meta, .chapter-item div:last-child, #tutorial-summary, .state-list, #bootstrap-summary, #session-summary, #tutorial-status, #bootstrap-status,
     #identity-form input, #session-form input, #widget-form input, #widget-form select, #program-form input, #program-form select, #step-form input, #step-form select,
     #route-form input, #route-form select, #serve-form select, #runner-form input, #runner-form select {
@@ -127,43 +104,7 @@ export function renderBootstrapPage() {
   </header>
   <main>
     <section class="column">
-      <article class="card" id="tutorial-card" data-tutorial-target="tutorial-card">
-        <div class="badge">Guided Tutorial</div>
-        <h2>Build The Todo App From Scratch</h2>
-        <p>This tutorial uses the real bootstrap builders and the real runtime. It teaches identities, runner wiring, widgets, programs, routes, mounts, and then continues into the live app to exercise real behavior.</p>
-        <div class="chapter-list" id="tutorial-chapters"></div>
-        <p class="muted" id="tutorial-summary">Loading tutorial status...</p>
-        <div class="grid two">
-          <div>
-            <div class="kicker">Current Concepts</div>
-            <div class="tutorial-concept-list" id="tutorial-current-concepts"></div>
-          </div>
-          <div>
-            <div class="kicker">Revealed Concepts</div>
-            <div class="tutorial-concept-list" id="tutorial-revealed-concepts"></div>
-          </div>
-        </div>
-        <div>
-          <div class="kicker">Suggested Next Moves</div>
-          <div class="tutorial-suggestion-list" id="tutorial-suggestions"></div>
-        </div>
-        <div>
-          <div class="kicker">Disabled Guidance Surfaces</div>
-          <div class="tutorial-disabled-list" id="tutorial-disabled-pages"></div>
-        </div>
-        <div class="actions">
-          <button type="button" id="tutorial-start">Start Tutorial</button>
-          <button type="button" id="tutorial-resume" class="secondary">Resume Tutorial</button>
-          <button type="button" id="tutorial-restart-chapter" class="secondary">Restart Chapter</button>
-          <button type="button" id="tutorial-restart-from-here" class="secondary">Restart From Here</button>
-          <button type="button" id="tutorial-back" class="secondary">Back</button>
-          <button type="button" id="tutorial-skip" class="secondary">Skip Chapter</button>
-          <button type="button" id="tutorial-disable-page" class="secondary">Disable On This Page</button>
-          <button type="button" id="tutorial-exit" class="secondary">Exit</button>
-          <button type="button" id="tutorial-reset" class="secondary">Reset Tutorial</button>
-        </div>
-        <p class="status" id="tutorial-status"></p>
-      </article>
+${renderBootstrapTutorialCard()}
 
       <article class="card">
         <div class="badge">Platform Harness</div>
@@ -732,29 +673,11 @@ export function renderBootstrapPage() {
       </article>
     </aside>
   </main>
-  <div id="tutorial-dimmer" class="tutorial-hidden" aria-hidden="true"></div>
-  <aside id="tutorial-overlay" class="tutorial-hidden" aria-live="polite">
-    <div id="tutorial-overlay-handle">
-      <div class="tutorial-handle-copy">
-        <div class="tutorial-meta" id="tutorial-overlay-meta"></div>
-        <div class="tutorial-handle-kicker">Drag tutorial window</div>
-      </div>
-      <div class="tutorial-handle-grip" aria-hidden="true">::</div>
-    </div>
-    <h3 id="tutorial-overlay-title"></h3>
-    <p id="tutorial-overlay-body"></p>
-    <div class="tutorial-concept-list" id="tutorial-overlay-concepts"></div>
-    <div class="actions">
-      <button type="button" id="tutorial-next">Next</button>
-      <button type="button" class="secondary" id="tutorial-restart-current">Restart Chapter</button>
-      <button type="button" class="secondary" id="tutorial-replay-current">Restart From Here</button>
-      <button type="button" class="secondary" id="tutorial-finish-chapter">Finish Chapter For Me</button>
-      <button type="button" class="secondary" id="tutorial-disable-current-page">Disable On This Page</button>
-      <button type="button" class="secondary" id="tutorial-overlay-resume">Resume</button>
-    </div>
-  </aside>
+${renderBootstrapTutorialOverlay()}
   <script>
   (() => {
+${renderBootstrapTutorialStateFactory()}
+${renderBootstrapTutorialControllerFactory()}
     const tutorial = ${jsonForScript(tutorial)};
     const blueprint = ${jsonForScript(blueprint)};
     const currentSurfacePage = "bootstrap";
@@ -763,12 +686,6 @@ export function renderBootstrapPage() {
     const stepIndex = new Map(tutorial.steps.map((step, index) => [step.id, index]));
     const autoCompletableChapters = new Set(["widgets", "program", "routes"]);
     const stateSnapshots = new Map();
-    const pulseTimers = new WeakMap();
-    const overlayDrag = { active: false, manual: false, left: 24, top: 24, offsetX: 0, offsetY: 0 };
-    let lastRenderedStepId = null;
-    let tutorialAutoRunning = false;
-    let activeFocusScope = null;
-    let activeHighlightTarget = null;
     const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const byId = id => document.getElementById(id);
     const byTarget = target => document.querySelector('[data-tutorial-target="' + CSS.escape(target) + '"]');
@@ -869,7 +786,6 @@ export function renderBootstrapPage() {
       }
       stateSnapshots.set(id, nextKeys);
     };
-    const tutorialStep = () => tutorial.steps.find(step => step.id === state.tutorialProgress?.stepId) || null;
     const revealTarget = target => {
       let current = target?.parentElement || null;
       while (current) {
@@ -877,158 +793,26 @@ export function renderBootstrapPage() {
         current = current.parentElement;
       }
     };
-    const previousTutorialStep = () => {
-      const index = stepIndex.get(state.tutorialProgress?.stepId ?? "") ?? -1;
-      return index > 0 ? tutorial.steps[index - 1] : null;
-    };
-    const firstTutorialStepInChapter = chapterId => tutorial.steps.find(step => step.chapterId === chapterId) || null;
-    const nextTutorialStep = () => {
-      const index = stepIndex.get(state.tutorialProgress?.stepId ?? "") ?? -1;
-      return index >= 0 ? (tutorial.steps[index + 1] || null) : (tutorial.steps[0] || null);
-    };
-    const currentStepIndex = progress => stepIndex.get(progress?.stepId ?? "") ?? -1;
-    const currentSuggestions = [];
-    const conceptMap = new Map((tutorial.concepts || []).map(concept => [concept.id, concept]));
-    const knownTutorialPages = [...new Set(tutorial.steps.map(step => typeof step.page === "string" ? step.page : "").filter(Boolean))];
-    const tutorialDisabledPages = progress => [...new Set((Array.isArray(progress?.disabledPages) ? progress.disabledPages : []).map(String).filter(page => knownTutorialPages.includes(page)))];
-    const tutorialReplayStepId = progress => {
-      const id = typeof progress?.replayStepId === "string" ? progress.replayStepId : "";
-      return tutorial.steps.some(step => step.id === id) ? id : null;
-    };
-    const tutorialPageLabel = page => page === "app" ? "App" : (page === "bootstrap" ? "Bootstrap" : (page === "world" ? "World" : String(page || "")));
-    const tutorialStepConcepts = step => [...new Set((step?.concepts || []).map(String))].map(id => conceptMap.get(id)).filter(Boolean);
-    const tutorialRevealedConcepts = progress => {
-      const lastIndex = progress?.completedAt ? ((tutorial.steps?.length || 1) - 1) : currentStepIndex(progress);
-      if (lastIndex < 0) return [];
-      const conceptIds = [];
-      for (const step of tutorial.steps.slice(0, lastIndex + 1)) {
-        for (const concept of tutorialStepConcepts(step)) {
-          if (!conceptIds.includes(concept.id)) conceptIds.push(concept.id);
-        }
-      }
-      return conceptIds.map(id => conceptMap.get(id)).filter(Boolean);
-    };
-    const tutorialSurfaceState = () => {
-      const progress = state.tutorialProgress;
-      const current = tutorialStep();
-      if (!progress || !current) return { kind: "idle", page: null };
-      if (progress.completedAt) return { kind: "completed", page: current.page || null };
-      if (progress.hidden) return { kind: "hidden", page: current.page || null };
-      if ((current.page || null) !== currentSurfacePage) return { kind: "offpage", page: current.page || null };
-      if (tutorialDisabledPages(progress).includes(currentSurfacePage)) return { kind: "disabled", page: current.page || null };
-      return { kind: "active", page: current.page || null };
-    };
-    const clearTutorialPageDisabled = (progress, page = currentSurfacePage) => ({
-      ...progress,
-      disabledPages: tutorialDisabledPages(progress).filter(candidate => candidate !== page)
+    const tutorialState = createBootstrapTutorialStateRuntime({
+      tutorial,
+      state,
+      stepIndex,
+      currentSurfacePage,
+      localProgressKey,
+      request,
+      byId,
+      renderPage: () => render()
     });
-    const disableTutorialOnCurrentPage = progress => ({
-      ...progress,
-      hidden: false,
-      disabledPages: [...new Set([...tutorialDisabledPages(progress), currentSurfacePage])]
-    });
-    const mergeProgress = (localProgress, remoteProgress) => {
-      if (!localProgress) return remoteProgress || null;
-      if (!remoteProgress) return localProgress || null;
-      if (localProgress.completedAt && !remoteProgress.completedAt) return localProgress;
-      if (remoteProgress.completedAt && !localProgress.completedAt) return remoteProgress;
-      const localIndex = currentStepIndex(localProgress);
-      const remoteIndex = currentStepIndex(remoteProgress);
-      if (localIndex > remoteIndex) return localProgress;
-      if (remoteIndex > localIndex) return remoteProgress;
-      const merged = localProgress.hidden === false && remoteProgress.hidden === true ? localProgress : remoteProgress;
-      return {
-        ...merged,
-        disabledPages: [...new Set([...tutorialDisabledPages(localProgress), ...tutorialDisabledPages(remoteProgress)])],
-        replayStepId: tutorialReplayStepId(localProgress) || tutorialReplayStepId(remoteProgress) || null
-      };
-    };
-    const readLocalProgress = () => {
-      try {
-        const raw = localStorage.getItem(localProgressKey);
-        return raw ? JSON.parse(raw) : null;
-      } catch {
-        return null;
-      }
-    };
-    const writeLocalProgress = progress => {
-      if (!progress) localStorage.removeItem(localProgressKey);
-      else localStorage.setItem(localProgressKey, JSON.stringify(progress));
-    };
-    const tutorialApi = async (method, body = null) => {
-      const options = { method };
-      if (body != null) {
-        options.headers = { "content-type": "application/json" };
-        options.body = JSON.stringify(body);
-      }
-      return request("/api/tutorial-progress/" + encodeURIComponent(tutorial.id), options);
-    };
-    const persistTutorialProgress = async progress => {
-      state.tutorialProgress = progress;
-      if (!progress) {
-        writeLocalProgress(null);
-        if (state.session?.authenticated) await tutorialApi("DELETE");
-        return;
-      }
-      if (state.session?.authenticated) {
-        await tutorialApi("PUT", progress);
-        writeLocalProgress(null);
-      } else {
-        writeLocalProgress(progress);
-      }
-    };
-    const loadTutorialProgress = async () => {
-      const localProgress = readLocalProgress();
-      const remote = state.session?.authenticated ? await tutorialApi("GET").catch(() => ({ progress: null })) : { progress: null };
-      const merged = mergeProgress(localProgress, remote.progress);
-      state.tutorialProgress = merged;
-      if (state.session?.authenticated && merged) {
-        await tutorialApi("PUT", merged).catch(() => {});
-        writeLocalProgress(null);
-      }
-    };
-    const defaultProgress = () => ({
-      tutorialId: tutorial.id,
-      chapterId: tutorial.steps[0]?.chapterId || null,
-      stepId: tutorial.steps[0]?.id || null,
-      chapterStatus: tutorial.steps.length ? "in_progress" : "idle",
-      draftInputs: {},
-      completedAt: null,
-      hidden: false,
-      disabledPages: [],
-      replayStepId: null
-    });
-    const restartCurrentChapter = async () => {
-      const chapterId = state.tutorialProgress?.chapterId || tutorialStep()?.chapterId || null;
-      const first = firstTutorialStepInChapter(chapterId);
-      if (!state.tutorialProgress || !first) return;
-      await persistTutorialProgress({
-        ...state.tutorialProgress,
-        chapterId: first.chapterId,
-        stepId: first.id,
-        chapterStatus: "in_progress",
-        draftInputs: {},
-        completedAt: null,
-        hidden: false,
-        replayStepId: null
-      });
-      render();
-    };
-    const restartFromHere = async () => {
-      const current = tutorialStep();
-      if (!state.tutorialProgress || !current) return;
-      await persistTutorialProgress({
-        ...state.tutorialProgress,
-        chapterId: current.chapterId,
-        stepId: current.id,
-        chapterStatus: "in_progress",
-        draftInputs: {},
-        completedAt: null,
-        hidden: false,
-        replayStepId: current.id
-      });
-      render();
-    };
+    const {
+      currentSuggestions,
+      tutorialStep,
+      tutorialDisabledPages,
+      tutorialReplayStepId,
+      tutorialStepConcepts,
+      tutorialRevealedConcepts,
+      tutorialSurfaceState,
+      loadTutorialProgress,
+    } = tutorialState;
     const continueTutorialOnPage = async page => {
       if (page === "app") {
         await openAppHome(byId("open-app-link").href, { advance: false });
@@ -1052,522 +836,6 @@ export function renderBootstrapPage() {
         window.location.assign(target.toString());
       }
     };
-    const setFieldValue = (field, value) => {
-      if (!field) return;
-      if (field.type === "checkbox") field.checked = value === true;
-      else field.value = value == null ? "" : String(value);
-    };
-    const fillForm = (target, payload) => {
-      revealTarget(target);
-      const form = target?.matches?.("form") ? target : target?.closest?.("form") || target?.querySelector?.("form");
-      if (!form || !payload) return;
-      for (const [key, value] of Object.entries(payload)) {
-        const field = formField(form, key);
-        if (!field) continue;
-        setFieldValue(field, value);
-        pulseNode(field, 960);
-      }
-    };
-    const focusTutorialTarget = targetName => {
-      const target = byTarget(targetName);
-      if (!target) return false;
-      revealTarget(target);
-      target.scrollIntoView({ block: "center", behavior: "smooth" });
-      pulseNode(target, 1200);
-      const focusable = target.matches?.("input,select,textarea,button,a,summary")
-        ? target
-        : target.querySelector?.("input,select,textarea,button,a,summary,[tabindex]");
-      focusable?.focus?.({ preventScroll: true });
-      return true;
-    };
-    const renderConceptList = (id, concepts, emptyText) => {
-      const root = byId(id);
-      if (!root) return;
-      root.innerHTML = "";
-      if (!concepts.length) {
-        const empty = document.createElement("div");
-        empty.className = "tutorial-concept";
-        const label = document.createElement("span");
-        label.textContent = emptyText;
-        empty.append(label);
-        root.append(empty);
-        return;
-      }
-      for (const concept of concepts) {
-        const item = document.createElement("div");
-        item.className = "tutorial-concept";
-        const title = document.createElement("strong");
-        title.textContent = concept.label;
-        const summary = document.createElement("span");
-        summary.textContent = concept.summary;
-        item.append(title, summary);
-        root.append(item);
-      }
-    };
-    const setSuggestionRows = suggestions => {
-      currentSuggestions.splice(0, currentSuggestions.length, ...suggestions);
-      const root = byId("tutorial-suggestions");
-      if (!root) return;
-      root.innerHTML = "";
-      if (!suggestions.length) {
-        const empty = document.createElement("div");
-        empty.className = "tutorial-suggestion";
-        const copy = document.createElement("p");
-        copy.textContent = "No extra curation yet. The visible controls remain the source of truth.";
-        empty.append(copy);
-        root.append(empty);
-        return;
-      }
-      for (const suggestion of suggestions) {
-        const item = document.createElement("div");
-        item.className = "tutorial-suggestion";
-        const title = document.createElement("strong");
-        title.textContent = suggestion.title;
-        const body = document.createElement("p");
-        body.textContent = suggestion.body;
-        const actions = document.createElement("div");
-        actions.className = "actions";
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "secondary";
-        button.dataset.suggestionId = suggestion.id;
-        button.textContent = suggestion.buttonLabel;
-        actions.append(button);
-        item.append(title, body, actions);
-        root.append(item);
-      }
-    };
-    const tutorialDisabledPageRows = progress => {
-      const current = tutorialStep();
-      return tutorialDisabledPages(progress).map(page => ({
-        page,
-        label: tutorialPageLabel(page),
-        currentStepTitle: current?.page === page ? current.title : null,
-        isCurrentSurface: page === currentSurfacePage
-      }));
-    };
-    const setDisabledPageRows = rows => {
-      const root = byId("tutorial-disabled-pages");
-      if (!root) return;
-      root.innerHTML = "";
-      if (!rows.length) {
-        const empty = document.createElement("div");
-        empty.className = "tutorial-disabled-item";
-        const body = document.createElement("p");
-        body.textContent = "No guidance surfaces are currently disabled.";
-        empty.append(body);
-        root.append(empty);
-        return;
-      }
-      for (const row of rows) {
-        const item = document.createElement("div");
-        item.className = "tutorial-disabled-item";
-        const title = document.createElement("strong");
-        title.textContent = row.label;
-        const body = document.createElement("p");
-        body.textContent = row.currentStepTitle
-          ? ("Current step there: " + row.currentStepTitle + ".")
-          : "Guidance is disabled on this surface, but you can re-enable it without losing progress.";
-        const actions = document.createElement("div");
-        actions.className = "actions";
-        const enableButton = document.createElement("button");
-        enableButton.type = "button";
-        enableButton.className = "secondary";
-        enableButton.dataset.disabledEnable = row.page;
-        enableButton.textContent = row.isCurrentSurface ? "Enable Here" : "Enable Guidance";
-        actions.append(enableButton);
-        if (!row.isCurrentSurface) {
-          const openButton = document.createElement("button");
-          openButton.type = "button";
-          openButton.className = "secondary";
-          openButton.dataset.disabledOpen = row.page;
-          openButton.textContent = "Open " + row.label;
-          actions.append(openButton);
-        }
-        item.append(title, body, actions);
-        root.append(item);
-      }
-    };
-    const tutorialSuggestions = () => {
-      const suggestions = [];
-      const current = tutorialStep();
-      const progress = state.tutorialProgress;
-      const surface = tutorialSurfaceState();
-      const appReady = state.model?.appReady === true;
-      const identityCount = (state.bootstrapState?.identities || []).length;
-      const add = (id, title, body, buttonLabel, action) => suggestions.push({ id, title, body, buttonLabel, action });
-      if (!progress) {
-        add("start-tutorial", "Start The Guided Build", "Follow the same real bootstrap and app surfaces step by step.", "Start Tutorial", { kind: "startTutorial" });
-        if (!identityCount) {
-          add("create-first-identity", "Create The First Identity", "A real actor is the first boundary. The identity form below is the next concrete move.", "Show Identity Form", { kind: "focusTarget", target: "identity-form" });
-        } else if (!state.session?.authenticated) {
-          add("sign-in", "Sign In To Keep Editing", "Identities already exist, so bootstrap writes now go through the normal session path.", "Show Session Form", { kind: "focusTarget", target: "session-form" });
-        } else if (!appReady) {
-          add("starter-shortcut", "Use The Fast Path Or Keep Building", "The starter shortcut uses the same authored structures as the tutorial. You can inspect or trigger it directly.", "Show Starter Control", { kind: "focusTarget", target: "create-todo-starter" });
-        } else {
-          add("open-live-app", "Open The Live App", "A served home route exists now, so the next truthful move is to use the app boundary itself.", "Open App", { kind: "openApp" });
-        }
-        return suggestions;
-      }
-      if (progress.completedAt) {
-        if (appReady) {
-          add("open-live-app", "Open The Live App", "The tutorial is complete and the route is live. Use the app directly.", "Open App", { kind: "openApp" });
-        }
-        add("inspect-authored-state", "Inspect The Authored World", "The bootstrap state panel shows the exact authored structures the tutorial built.", "Show Authored State", { kind: "focusTarget", target: "authored-state" });
-        return suggestions;
-      }
-      if (surface.kind === "hidden") {
-        add("resume-tutorial", "Resume The Current Tutorial Step", "The tutorial is paused but the current step and its real controls remain available.", "Resume Tutorial", { kind: "resumeTutorial" });
-        return suggestions;
-      }
-      if (surface.kind === "disabled") {
-        add("enable-current-page", "Re-Enable Guidance On This Page", "Guidance is disabled here, but the current step is still recoverable without resetting progress.", "Enable Guidance", { kind: "enableCurrentPage" });
-        return suggestions;
-      }
-      if (surface.kind === "offpage") {
-        if (surface.page && tutorialDisabledPages(progress).includes(surface.page)) {
-          add("enable-offpage-surface", "Re-Enable Guidance On " + tutorialPageLabel(surface.page), "The current step belongs on the " + tutorialPageLabel(surface.page) + " surface, but guidance is disabled there until you turn it back on.", "Enable Guidance", { kind: "enablePage", page: surface.page });
-        }
-        add("continue-surface", "Continue On The Relevant Surface", "The current step belongs on the " + tutorialPageLabel(surface.page) + " surface, not this page.", "Continue On " + tutorialPageLabel(surface.page), { kind: "continueSurface", page: surface.page });
-        return suggestions.slice(0, 2);
-      }
-      if (current?.id === "open-app") {
-        add("open-live-app", "Cross The App Boundary", "This step becomes real by opening the live app you just wired.", "Open App", { kind: "openApp" });
-        return suggestions;
-      }
-      if (current?.target) {
-        add("show-current-control", "Use The Current Real Control", "The tutorial is pointing at a real authored control on this page. Work through that exact surface.", "Show Current Control", { kind: "focusTarget", target: current.target });
-      }
-      if (!appReady && state.session?.authenticated) {
-        add("starter-shortcut", "Inspect The Fast Path", "If you want a denser path, the starter shortcut remains available and uses the same underlying structures.", "Show Starter Control", { kind: "focusTarget", target: "create-todo-starter" });
-      }
-      return suggestions.slice(0, 2);
-    };
-    const runSuggestion = async suggestion => {
-      if (!suggestion?.action) return;
-      if (suggestion.action.kind === "startTutorial") {
-        byId("tutorial-start").click();
-        return;
-      }
-      if (suggestion.action.kind === "resumeTutorial") {
-        byId("tutorial-resume").click();
-        return;
-      }
-      if (suggestion.action.kind === "enableCurrentPage") {
-        await persistTutorialProgress(clearTutorialPageDisabled(state.tutorialProgress));
-        render();
-        return;
-      }
-      if (suggestion.action.kind === "enablePage") {
-        await persistTutorialProgress(clearTutorialPageDisabled(state.tutorialProgress, suggestion.action.page));
-        render();
-        return;
-      }
-      if (suggestion.action.kind === "continueSurface") {
-        await continueTutorialOnPage(suggestion.action.page);
-        return;
-      }
-      if (suggestion.action.kind === "openApp") {
-        await openAppHome(byId("open-app-link").href, { advance: false });
-        return;
-      }
-      if (suggestion.action.kind === "focusTarget") {
-        focusTutorialTarget(suggestion.action.target);
-      }
-    };
-    const tutorialChapters = () => {
-      const ids = [];
-      for (const step of tutorial.steps) {
-        if (!ids.includes(step.chapterId)) ids.push(step.chapterId);
-      }
-      return ids;
-    };
-    const chapterState = chapterId => {
-      const currentIndex = currentStepIndex(state.tutorialProgress);
-      const chapterSteps = tutorial.steps.filter(step => step.chapterId === chapterId);
-      const firstIndex = chapterSteps.length ? currentStepIndex({ stepId: chapterSteps[0].id }) : -1;
-      const lastIndex = chapterSteps.length ? currentStepIndex({ stepId: chapterSteps[chapterSteps.length - 1].id }) : -1;
-      if (state.tutorialProgress?.completedAt || currentIndex > lastIndex) return "done";
-      if (currentIndex >= firstIndex && currentIndex <= lastIndex) return "active";
-      return "todo";
-    };
-    const renderTutorialCard = () => {
-      const current = tutorialStep();
-      const progress = state.tutorialProgress;
-      const surface = tutorialSurfaceState();
-      const currentConcepts = current ? tutorialStepConcepts(current) : [];
-      const revealedConcepts = tutorialRevealedConcepts(progress);
-      const suggestions = tutorialSuggestions();
-      const disabledPages = tutorialDisabledPageRows(progress);
-      const chapters = tutorialChapters();
-      byId("tutorial-chapters").innerHTML = chapters.map(chapterId => {
-        const chapterSteps = tutorial.steps.filter(step => step.chapterId === chapterId);
-        const title = chapterSteps[0]?.title || chapterId;
-        const status = chapterState(chapterId);
-        return '<div class="chapter-item chapter-' + status + '"><div class="chapter-dot"></div><div><strong>' + escapeHtml(title) + '</strong><div>' + escapeHtml(chapterId) + '</div></div></div>';
-      }).join("");
-      renderConceptList("tutorial-current-concepts", currentConcepts, progress ? "No concept tagged on this step yet." : "Start the tutorial to reveal concepts.");
-      renderConceptList("tutorial-revealed-concepts", revealedConcepts, "No concepts revealed yet.");
-      setSuggestionRows(suggestions);
-      setDisabledPageRows(disabledPages);
-      byId("tutorial-start").disabled = Boolean(progress) || tutorialAutoRunning;
-      byId("tutorial-resume").disabled = !progress || Boolean(progress.completedAt) || tutorialAutoRunning || surface.kind === "active";
-      byId("tutorial-resume").textContent = surface.kind === "offpage"
-        ? ("Continue On " + tutorialPageLabel(surface.page))
-        : (surface.kind === "disabled" ? "Enable On This Page" : "Resume Tutorial");
-      byId("tutorial-back").disabled = !previousTutorialStep() || tutorialAutoRunning;
-      byId("tutorial-skip").disabled = !progress || Boolean(progress.completedAt) || tutorialAutoRunning;
-      byId("tutorial-exit").disabled = !progress || Boolean(progress.hidden) || Boolean(progress.completedAt) || tutorialAutoRunning;
-      byId("tutorial-reset").disabled = !progress || tutorialAutoRunning;
-      byId("tutorial-restart-from-here").disabled = !progress || !current || Boolean(progress.completedAt) || tutorialAutoRunning;
-      byId("tutorial-disable-page").disabled = !progress || !current || Boolean(progress.completedAt) || tutorialAutoRunning || current.page !== currentSurfacePage;
-      byId("tutorial-restart-chapter").disabled = !progress || !current || Boolean(progress.completedAt) || tutorialAutoRunning;
-      byId("tutorial-summary").textContent = !progress
-        ? "Start the guided build to learn the platform through the real bootstrap seam."
-        : progress.completedAt
-          ? "Tutorial complete. The app is wired and you have used the real surface."
-          : surface.kind === "offpage"
-            ? (surface.page && tutorialDisabledPages(progress).includes(surface.page)
-                ? ("Current guidance continues on the " + tutorialPageLabel(surface.page) + " surface, but guidance is disabled there until you re-enable it. Current step: " + (current?.title || "Tutorial in progress.") + ".")
-                : ("Current guidance continues on the " + tutorialPageLabel(surface.page) + " surface: " + (current?.title || "Tutorial in progress.") + "."))
-            : surface.kind === "disabled"
-              ? ("Guidance is disabled on this page. " + (current ? current.title + " stays available on the " + tutorialPageLabel(current.page) + " surface." : ""))
-              : surface.kind === "hidden"
-                ? ("Tutorial paused. Resume to continue with " + (current?.title || "the next step") + ".")
-                : tutorialReplayStepId(progress) === current?.id
-                  ? ("Replaying this step from here: " + current.title + ". This replays guidance only and does not roll back authored state.")
-                  : (current ? current.title + " (" + current.chapterId + " / " + current.page + ")" : "Tutorial in progress.");
-    };
-    const canAutoFinishChapter = current => Boolean(current && current.page === "bootstrap" && autoCompletableChapters.has(current.chapterId) && !state.tutorialProgress?.completedAt);
-    const clearTutorialScope = () => {
-      if (activeHighlightTarget?.isConnected) activeHighlightTarget.removeAttribute("data-tutorial-current");
-      if (activeFocusScope?.isConnected) activeFocusScope.removeAttribute("data-tutorial-focus-scope");
-      activeHighlightTarget = null;
-      activeFocusScope = null;
-    };
-    const clearTutorialHighlight = () => {
-      clearTutorialScope();
-      document.querySelectorAll("[data-tutorial-current]").forEach(node => node.removeAttribute("data-tutorial-current"));
-      document.querySelectorAll("[data-tutorial-focus-scope]").forEach(node => node.removeAttribute("data-tutorial-focus-scope"));
-    };
-    const pulseNode = (node, duration = 1400) => {
-      if (!node) return;
-      node.setAttribute("data-tutorial-changed", "true");
-      const pending = pulseTimers.get(node);
-      if (pending) clearTimeout(pending);
-      pulseTimers.set(node, setTimeout(() => {
-        if (node.isConnected) node.removeAttribute("data-tutorial-changed");
-      }, duration));
-    };
-    const flashAutoClick = node => {
-      if (!node) return;
-      pulseNode(node, 720);
-      node.classList.add("tutorial-auto-click");
-      setTimeout(() => node.classList.remove("tutorial-auto-click"), 520);
-      const rect = node.getBoundingClientRect();
-      const pulse = document.createElement("div");
-      pulse.className = "tutorial-click-pulse";
-      pulse.style.left = (rect.left + (rect.width / 2)) + "px";
-      pulse.style.top = (rect.top + (rect.height / 2)) + "px";
-      document.body.append(pulse);
-      setTimeout(() => pulse.remove(), 620);
-    };
-    const focusScopeFor = target => target?.matches?.("form,details,.card") ? target : target?.closest?.("form,details,.card") || target || null;
-    const setOverlayPosition = (left, top, { manual = false } = {}) => {
-      const overlay = byId("tutorial-overlay");
-      if (!overlay) return;
-      const maxLeft = Math.max(12, window.innerWidth - overlay.offsetWidth - 12);
-      const maxTop = Math.max(12, window.innerHeight - overlay.offsetHeight - 12);
-      const nextLeft = Math.max(12, Math.min(maxLeft, left));
-      const nextTop = Math.max(12, Math.min(maxTop, top));
-      overlay.style.left = nextLeft + "px";
-      overlay.style.top = nextTop + "px";
-      overlay.style.right = "auto";
-      overlayDrag.left = nextLeft;
-      overlayDrag.top = nextTop;
-      if (manual) overlayDrag.manual = true;
-    };
-    const positionOverlay = target => {
-      const overlay = byId("tutorial-overlay");
-      if (overlayDrag.manual) {
-        setOverlayPosition(overlayDrag.left, overlayDrag.top);
-        return;
-      }
-      if (!target) {
-        setOverlayPosition(window.innerWidth - overlay.offsetWidth - 24, 24);
-        return;
-      }
-      const rect = target.getBoundingClientRect();
-      const top = Math.max(18, Math.min(window.innerHeight - overlay.offsetHeight - 18, rect.bottom + 12));
-      const left = rect.left + overlay.offsetWidth + 18 > window.innerWidth ? Math.max(12, rect.right - overlay.offsetWidth) : Math.max(12, rect.left);
-      setOverlayPosition(left, top);
-    };
-    const renderTutorialOverlay = () => {
-      const overlay = byId("tutorial-overlay");
-      const dimmer = byId("tutorial-dimmer");
-      const current = tutorialStep();
-      const surface = tutorialSurfaceState();
-      clearTutorialHighlight();
-      if (!state.tutorialProgress || state.tutorialProgress.completedAt || !current || surface.kind !== "active") {
-        overlay.classList.add("tutorial-hidden");
-        dimmer.classList.add("tutorial-hidden");
-        return;
-      }
-      const target = current.target ? byTarget(current.target) : null;
-      const focusScope = focusScopeFor(target);
-      if (focusScope) {
-        revealTarget(focusScope);
-        focusScope.setAttribute("data-tutorial-focus-scope", "true");
-        activeFocusScope = focusScope;
-      }
-      if (target) {
-        revealTarget(target);
-        target.setAttribute("data-tutorial-current", "true");
-        activeHighlightTarget = target;
-        if (lastRenderedStepId !== current.id) target.scrollIntoView({ block: "center", behavior: "smooth" });
-      }
-      byId("tutorial-overlay-meta").textContent = current.chapterId.toUpperCase();
-      byId("tutorial-overlay-title").textContent = current.title;
-      byId("tutorial-overlay-body").textContent = current.body;
-      renderConceptList("tutorial-overlay-concepts", tutorialStepConcepts(current), "This step uses the current structure without unlocking a new concept.");
-      byId("tutorial-next").textContent = current.nextLabel || "Next";
-      byId("tutorial-next").disabled = tutorialAutoRunning;
-      byId("tutorial-restart-current").disabled = tutorialAutoRunning;
-      byId("tutorial-replay-current").disabled = tutorialAutoRunning;
-      byId("tutorial-finish-chapter").disabled = tutorialAutoRunning || !canAutoFinishChapter(current);
-      byId("tutorial-finish-chapter").classList.toggle("tutorial-hidden", !canAutoFinishChapter(current));
-      byId("tutorial-disable-current-page").disabled = tutorialAutoRunning;
-      byId("tutorial-overlay-resume").classList.toggle("tutorial-hidden", true);
-      dimmer.classList.remove("tutorial-hidden");
-      overlay.classList.remove("tutorial-hidden");
-      positionOverlay(target);
-      lastRenderedStepId = current.id;
-    };
-    const isStepComplete = current => {
-      if (!current) return false;
-      const check = current.completeWhen || {};
-      const authored = state.bootstrapState || {};
-      switch (check.kind) {
-        case "identityExists":
-          return (authored.identities || []).some(row => row.id === check.id);
-        case "sessionAuthenticated":
-          return state.session?.authenticated === true && state.session?.actor === check.actor;
-        case "serverRunnerExists":
-          return (authored.serverRunners || []).some(row => row.id === check.id);
-        case "widgetExists":
-          return (authored.widgets || []).some(row => row.id === check.id);
-        case "programExists":
-          return (authored.frontendPrograms || []).some(row => row.id === check.id);
-        case "frontendStepExists":
-          return (authored.frontendSteps || []).some(row => row.program === check.program && row.event === check.event && row.op === check.op && Number(row.order) === Number(check.order));
-        case "routeExists":
-          return (authored.routes || []).some(row => row.id === check.id);
-        case "serveExists":
-          return (authored.servedRoutes || []).some(row => row.id === check.route && row.serverRunner === check.serverRunner);
-        case "appRouteReady":
-          return state.model?.appReady === true;
-        case "manualAdvance":
-        case "complete":
-        default:
-          return false;
-      }
-    };
-    const advanceTutorial = async () => {
-      const current = tutorialStep();
-      if (!current) return;
-      const currentIndex = currentStepIndex(state.tutorialProgress);
-      const next = tutorial.steps[currentIndex + 1] || null;
-      if (!next) {
-        await persistTutorialProgress({ ...state.tutorialProgress, chapterStatus: "completed", completedAt: new Date().toISOString(), replayStepId: null });
-      } else {
-        await persistTutorialProgress({
-          ...state.tutorialProgress,
-          chapterId: next.chapterId,
-          stepId: next.id,
-          chapterStatus: "in_progress",
-          completedAt: null,
-          hidden: false,
-          replayStepId: null
-        });
-      }
-      renderTutorialCard();
-      renderTutorialOverlay();
-    };
-    const maybeAdvanceTutorial = async () => {
-      let current = tutorialStep();
-      while (state.tutorialProgress && current && !state.tutorialProgress.hidden && !state.tutorialProgress.completedAt && tutorialReplayStepId(state.tutorialProgress) !== current.id && isStepComplete(current)) {
-        await advanceTutorial();
-        current = tutorialStep();
-      }
-    };
-    let tutorialAdvanceRunning = false;
-    let tutorialAdvanceQueued = false;
-    const requestMaybeAdvanceTutorial = async () => {
-      if (tutorialAdvanceRunning) {
-        tutorialAdvanceQueued = true;
-        return;
-      }
-      tutorialAdvanceRunning = true;
-      try {
-        do {
-          tutorialAdvanceQueued = false;
-          await maybeAdvanceTutorial();
-        } while (tutorialAdvanceQueued);
-      } finally {
-        tutorialAdvanceRunning = false;
-      }
-    };
-    const waitFor = async (check, timeout = 15000, interval = 80) => {
-      const deadline = Date.now() + timeout;
-      while (Date.now() < deadline) {
-        if (await check()) return true;
-        await sleep(interval);
-      }
-      throw new Error("Timed out waiting for tutorial state.");
-    };
-    const submitTutorialForm = async target => {
-      const form = target?.matches?.("form") ? target : target?.closest?.("form") || target?.querySelector?.("form");
-      if (!form) throw new Error("Tutorial target is not a form.");
-      const submitter = form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
-      if (!submitter) throw new Error("Tutorial form has no submit control.");
-      flashAutoClick(submitter);
-      await sleep(120);
-      submitter.click();
-    };
-    const autoCompleteCurrentChapter = async () => {
-      const startingStep = tutorialStep();
-      const chapterId = startingStep?.chapterId;
-      if (!chapterId) return;
-      while (state.tutorialProgress && tutorialStep()?.chapterId === chapterId && !state.tutorialProgress.completedAt) {
-        const current = tutorialStep();
-        if (!current) break;
-        if (isStepComplete(current)) {
-          await advanceTutorial();
-          continue;
-        }
-        if (!current.target || !current.payload) throw new Error("Step " + current.id + " cannot be auto-completed.");
-        const target = byTarget(current.target);
-        if (!target) throw new Error("Missing tutorial target for " + current.id + ".");
-        fillForm(target, current.payload);
-        await persistTutorialProgress({ ...state.tutorialProgress, draftInputs: current.payload, hidden: false, replayStepId: null });
-        renderTutorialOverlay();
-        await sleep(180);
-        await submitTutorialForm(target);
-        const previousStepId = current.id;
-        await waitFor(() => (state.tutorialProgress?.stepId !== previousStepId) || Boolean(state.tutorialProgress?.completedAt));
-        await sleep(120);
-      }
-    };
-    const clearReplayForInteraction = async eventTarget => {
-      const current = tutorialStep();
-      const replayStepId = tutorialReplayStepId(state.tutorialProgress);
-      if (!current || replayStepId !== current.id) return;
-      const target = current.target ? byTarget(current.target) : null;
-      const element = eventTarget?.nodeType === Node.ELEMENT_NODE ? eventTarget : eventTarget?.parentElement || null;
-      if (!target || !element) return;
-      if (!(element === target || target.contains(element) || element.closest?.('[data-tutorial-target="' + CSS.escape(current.target) + '"]'))) return;
-      await persistTutorialProgress({ ...state.tutorialProgress, replayStepId: null });
-    };
     const openAppHome = async (href, { advance = false } = {}) => {
       if (state.model?.appReady !== true) {
         setStatus("bootstrap-status", "Home route is not ready yet.");
@@ -1582,6 +850,30 @@ export function renderBootstrapPage() {
       }
       window.location.assign(target.toString());
     };
+    const tutorialController = createBootstrapTutorialController({
+      tutorial,
+      state,
+      currentSurfacePage,
+      autoCompletableChapters,
+      escapeHtml,
+      byId,
+      byTarget,
+      setStatus,
+      formField,
+      sleep,
+      revealTarget,
+      renderPage: () => render(),
+      openAppHome,
+      continueTutorialOnPage,
+      tutorialState
+    });
+    const {
+      advanceTutorial,
+      renderTutorialCard,
+      renderTutorialOverlay,
+      requestMaybeAdvanceTutorial,
+      bindTutorialInteractions
+    } = tutorialController;
     const refresh = async () => {
       state.model = await request("/api/bootstrap-model");
       state.bootstrapState = await request("/api/bootstrap-state");
@@ -1787,35 +1079,6 @@ export function renderBootstrapPage() {
     };
 
     byId("refresh-bootstrap").addEventListener("click", () => refresh().catch(error => setStatus("bootstrap-status", error.message)));
-    byId("tutorial-suggestions").addEventListener("click", async event => {
-      const button = event.target.closest("button[data-suggestion-id]");
-      if (!button) return;
-      const suggestion = currentSuggestions.find(row => row.id === button.dataset.suggestionId);
-      if (!suggestion) return;
-      try {
-        await runSuggestion(suggestion);
-      } catch (error) {
-        setStatus("tutorial-status", error.message);
-      }
-    });
-    byId("tutorial-disabled-pages").addEventListener("click", async event => {
-      const enableButton = event.target.closest("button[data-disabled-enable]");
-      const openButton = event.target.closest("button[data-disabled-open]");
-      try {
-        if (enableButton) {
-          if (!state.tutorialProgress) return;
-          await persistTutorialProgress(clearTutorialPageDisabled(state.tutorialProgress, enableButton.dataset.disabledEnable));
-          setStatus("tutorial-status", "Guidance re-enabled on " + tutorialPageLabel(enableButton.dataset.disabledEnable) + ".");
-          render();
-          return;
-        }
-        if (openButton) {
-          await continueTutorialOnPage(openButton.dataset.disabledOpen);
-        }
-      } catch (error) {
-        setStatus("tutorial-status", error.message);
-      }
-    });
     byId("identity-form").addEventListener("submit", async event => {
       event.preventDefault();
       const form = event.currentTarget;
@@ -1999,176 +1262,7 @@ export function renderBootstrapPage() {
     byId("context-export-remove-context").addEventListener("change", () => refreshContextExportTargetOptions("context-export-remove-context", "context-export-remove-target"));
     byId("context-import-source-context").addEventListener("change", () => refreshContextImportExportOptions("context-import-source-context", "context-import-export-name"));
     byId("context-import-remove-source-context").addEventListener("change", () => refreshContextImportExportOptions("context-import-remove-source-context", "context-import-remove-export-name"));
-
-    byId("tutorial-overlay-handle").addEventListener("pointerdown", event => {
-      const overlay = byId("tutorial-overlay");
-      if (overlay.classList.contains("tutorial-hidden")) return;
-      const rect = overlay.getBoundingClientRect();
-      overlayDrag.active = true;
-      overlayDrag.manual = true;
-      overlayDrag.left = rect.left;
-      overlayDrag.top = rect.top;
-      overlayDrag.offsetX = event.clientX - rect.left;
-      overlayDrag.offsetY = event.clientY - rect.top;
-      document.body.classList.add("tutorial-dragging");
-      event.preventDefault();
-    });
-    window.addEventListener("pointermove", event => {
-      if (!overlayDrag.active) return;
-      setOverlayPosition(event.clientX - overlayDrag.offsetX, event.clientY - overlayDrag.offsetY, { manual: true });
-    });
-    window.addEventListener("pointerup", () => {
-      overlayDrag.active = false;
-      document.body.classList.remove("tutorial-dragging");
-    });
-    document.addEventListener("click", event => {
-      void clearReplayForInteraction(event.target).catch(() => {});
-    });
-    document.addEventListener("submit", event => {
-      void clearReplayForInteraction(event.target).catch(() => {});
-    }, true);
-
-    byId("tutorial-start").addEventListener("click", async () => {
-      overlayDrag.manual = false;
-      await persistTutorialProgress(defaultProgress());
-      setStatus("tutorial-status", "Tutorial started.");
-      render();
-    });
-    byId("tutorial-resume").addEventListener("click", async () => {
-      if (!state.tutorialProgress) return;
-      const surface = tutorialSurfaceState();
-      if (surface.kind === "offpage") {
-        await continueTutorialOnPage(surface.page);
-        return;
-      }
-      if (surface.kind === "disabled") {
-        await persistTutorialProgress(clearTutorialPageDisabled(state.tutorialProgress));
-      } else {
-        await persistTutorialProgress({ ...state.tutorialProgress, hidden: false });
-      }
-      render();
-    });
-    byId("tutorial-back").addEventListener("click", async () => {
-      const previous = previousTutorialStep();
-      if (!state.tutorialProgress || !previous) return;
-      await persistTutorialProgress({
-        ...state.tutorialProgress,
-        chapterId: previous.chapterId,
-        stepId: previous.id,
-        hidden: false,
-        completedAt: null,
-        replayStepId: isStepComplete(previous) ? previous.id : null
-      });
-      render();
-    });
-    byId("tutorial-skip").addEventListener("click", async () => {
-      const current = tutorialStep();
-      if (!state.tutorialProgress || !current) return;
-      const next = tutorial.steps.find(step => step.chapterId !== current.chapterId && (stepIndex.get(step.id) > stepIndex.get(current.id)));
-      if (!next) {
-        await persistTutorialProgress({ ...state.tutorialProgress, completedAt: new Date().toISOString(), chapterStatus: "completed", replayStepId: null });
-      } else {
-        await persistTutorialProgress({ ...state.tutorialProgress, chapterId: next.chapterId, stepId: next.id, hidden: false, replayStepId: null });
-      }
-      render();
-    });
-    byId("tutorial-exit").addEventListener("click", async () => {
-      if (!state.tutorialProgress) return;
-      await persistTutorialProgress({ ...state.tutorialProgress, hidden: true, replayStepId: null });
-      render();
-    });
-    byId("tutorial-disable-page").addEventListener("click", async () => {
-      const current = tutorialStep();
-      if (!state.tutorialProgress || !current || current.page !== currentSurfacePage) return;
-      await persistTutorialProgress(disableTutorialOnCurrentPage(state.tutorialProgress));
-      setStatus("tutorial-status", "Guidance disabled on the Bootstrap page.");
-      render();
-    });
-    byId("tutorial-reset").addEventListener("click", async () => {
-      overlayDrag.manual = false;
-      await persistTutorialProgress(null);
-      setStatus("tutorial-status", "Tutorial progress cleared.");
-      render();
-    });
-    byId("tutorial-restart-from-here").addEventListener("click", async () => {
-      overlayDrag.manual = false;
-      await restartFromHere();
-      setStatus("tutorial-status", "Restarted this step from here. Guidance was replayed without rolling back authored state.");
-    });
-    byId("tutorial-restart-chapter").addEventListener("click", async () => {
-      overlayDrag.manual = false;
-      await restartCurrentChapter();
-      setStatus("tutorial-status", "Chapter restarted from its first step.");
-    });
-    byId("tutorial-restart-current").addEventListener("click", async () => {
-      overlayDrag.manual = false;
-      await restartCurrentChapter();
-      setStatus("tutorial-status", "Chapter restarted from its first step.");
-    });
-    byId("tutorial-replay-current").addEventListener("click", async () => {
-      overlayDrag.manual = false;
-      await restartFromHere();
-      setStatus("tutorial-status", "Restarted this step from here. Guidance was replayed without rolling back authored state.");
-    });
-    byId("tutorial-disable-current-page").addEventListener("click", async () => {
-      const current = tutorialStep();
-      if (!state.tutorialProgress || !current || current.page !== currentSurfacePage) return;
-      await persistTutorialProgress(disableTutorialOnCurrentPage(state.tutorialProgress));
-      setStatus("tutorial-status", "Guidance disabled on the Bootstrap page.");
-      renderTutorialCard();
-      renderTutorialOverlay();
-    });
-    byId("tutorial-finish-chapter").addEventListener("click", async () => {
-      const current = tutorialStep();
-      if (!canAutoFinishChapter(current) || tutorialAutoRunning) return;
-      tutorialAutoRunning = true;
-      setStatus("tutorial-status", "Completing this chapter through the real builders...");
-      renderTutorialCard();
-      renderTutorialOverlay();
-      try {
-        await autoCompleteCurrentChapter();
-        setStatus("tutorial-status", "Chapter completed.");
-      } catch (error) {
-        setStatus("tutorial-status", error.message);
-      } finally {
-        tutorialAutoRunning = false;
-        renderTutorialCard();
-        renderTutorialOverlay();
-      }
-    });
-    byId("tutorial-next").addEventListener("click", async () => {
-      const current = tutorialStep();
-      if (!current) return;
-      if (!state.tutorialProgress) {
-        await persistTutorialProgress(defaultProgress());
-        render();
-        return;
-      }
-      if (current.completeWhen?.kind === "manualAdvance") {
-        await advanceTutorial();
-        return;
-      }
-      const target = current.target ? byTarget(current.target) : null;
-      if (current.payload && target) {
-        fillForm(target, current.payload);
-        await persistTutorialProgress({ ...state.tutorialProgress, draftInputs: current.payload, hidden: false });
-        setStatus("tutorial-status", "Prefilled and submitting the real control...");
-        renderTutorialOverlay();
-        const form = target?.matches?.("form") ? target : target?.closest?.("form") || target?.querySelector?.("form");
-        if (form) {
-          await sleep(120);
-          await submitTutorialForm(target);
-          return;
-        }
-        setStatus("tutorial-status", "Prefilled the real control. Use it to continue.");
-        return;
-      }
-      setStatus("tutorial-status", "Use the highlighted control to continue.");
-      renderTutorialOverlay();
-    });
-
-    window.addEventListener("resize", () => renderTutorialOverlay());
-    window.addEventListener("scroll", () => renderTutorialOverlay(), { passive: true });
+    bindTutorialInteractions();
     refresh().catch(error => setStatus("bootstrap-status", error.message));
   })();
   </script>

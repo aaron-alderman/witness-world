@@ -158,7 +158,7 @@ test("setCamera clamps zoom and latest camera wins", () => {
   assert.deepEqual(camera, { x: 7, y: 8, zoom: 2 });
 });
 
-test("every canvas process is reachable through the handler map", () => {
+test("every exported canvas and asset process is reachable through the handler map", () => {
   const expected = [
     "canvas.perspective.create",
     "canvas.place",
@@ -172,6 +172,8 @@ test("every canvas process is reachable through the handler map", () => {
     "canvas.relate",
     "canvas.unrelate",
     "canvas.thing.setTitle",
+    "asset.attach",
+    "asset.detach",
     "canvas.camera",
     "canvas.grid",
     "canvas.batch",

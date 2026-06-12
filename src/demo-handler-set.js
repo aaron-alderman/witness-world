@@ -6,6 +6,31 @@ import { todoState, privateNotesFor, publicWitnessesFor } from "./projections.js
 import { actorRequired, runGates, textRequired } from "./gates.js";
 import { requestWidgetDefine } from "./widget-define.js";
 
+export const DEMO_HANDLER_SET_DEFINITION = Object.freeze({
+  handlers: Object.freeze([
+    "privateNotes.list",
+    "privateNotes.create",
+    "todos.list",
+    "todos.create",
+    "todos.update",
+    "todos.delete",
+    "widgets.create",
+    "network.simulateError"
+  ]),
+  jobHandlers: Object.freeze([
+    "demo.echo",
+    "demo.failOnce",
+    "demo.alwaysFail"
+  ])
+});
+
+export const DEMO_HANDLER_SET_PROVIDER = Object.freeze({
+  kind: "handlerSet",
+  id: "demo",
+  definition: DEMO_HANDLER_SET_DEFINITION,
+  factory: createDemoHandlerSet
+});
+
 export async function createDemoHandlerSet({
   world,
   backendHost,

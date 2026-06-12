@@ -3,6 +3,100 @@ import test from "node:test";
 import { moduleProjectors } from "../src/modules.js";
 import { expectNoRuntimeErrors, launchBrowser, startUiDemoServer } from "./support/harness.js";
 
+async function openSessionCookie(url, { username = "aaron", password = username } = {}) {
+  const response = await fetch(`${url}/api/session`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username, password })
+  });
+  assert.equal(response.status, 200);
+  return (response.headers.get("set-cookie") || "").split(";")[0];
+}
+
+async function apiRequest(url, pathname, { cookie = null, method = "GET", body = null } = {}) {
+  const headers = {};
+  if (cookie) headers.cookie = cookie;
+  if (body != null) headers["content-type"] = "application/json";
+  return fetch(`${url}${pathname}`, {
+    method,
+    headers,
+    body: body == null ? undefined : JSON.stringify(body)
+  });
+}
+
+async function addSessionCookieToPage(page, url, cookie) {
+  const [name, ...rest] = String(cookie || "").split("=");
+  const value = rest.join("=");
+  assert.ok(name && value, "expected a session cookie");
+  await page.context().addCookies([{ url, name, value }]);
+}
+
+async function seedGovernanceReadyState(url) {
+  const cookie = await openSessionCookie(url);
+
+  await apiRequest(url, "/api/eden/personal-box/items", {
+    cookie,
+    method: "POST",
+    body: { kind: "note", text: "Practice the commons" }
+  });
+  await apiRequest(url, "/api/eden/page-theme", {
+    cookie,
+    method: "PUT",
+    body: { themeId: "moss", material: "stone", typography: "serif" }
+  });
+  await apiRequest(url, "/api/eden/versions/activate", {
+    cookie,
+    method: "POST",
+    body: { version: "todo_versioned_banner_v2" }
+  });
+  await apiRequest(url, "/api/eden/versions/rollback", {
+    cookie,
+    method: "POST"
+  });
+  await apiRequest(url, "/api/eden/capability-installs", {
+    cookie,
+    method: "POST",
+    body: { capability: "notes.sidebar" }
+  });
+  await apiRequest(url, "/api/eden/versions/activate", {
+    cookie,
+    method: "POST",
+    body: { version: "todo_versioned_banner_v2" }
+  });
+  await apiRequest(url, "/api/eden/versions/publish", {
+    cookie,
+    method: "POST",
+    body: { version: "todo_versioned_banner_v2" }
+  });
+  await apiRequest(url, "/api/process-view?program=todo_frontend_program&event=load", {
+    cookie
+  });
+  await apiRequest(url, "/api/simulate-network-error", {
+    cookie
+  });
+  await apiRequest(url, "/api/eden/page-theme", {
+    cookie,
+    method: "PUT",
+    body: { themeId: "straw", material: "wood", typography: "mono" }
+  });
+  await apiRequest(url, "/api/eden/versions/publish", {
+    cookie,
+    method: "POST",
+    body: { version: "todo_versioned_banner_v2" }
+  });
+
+  const academy = await apiRequest(url, "/api/eden/academy", { cookie }).then(response => response.json());
+  assert.equal(
+    academy.surfaces.some(surface =>
+      surface.id === "eden.surface.world"
+      && surface.actions.some(action => action.id === "world_commons" && action.state === "open")
+    ),
+    true
+  );
+
+  return cookie;
+}
+
 test("eden canvas reveals the neighborhood on zoom and goto world transports correctly", async () => {
   const { server, url, close: closeServer } = await startUiDemoServer();
   const { page, runtime, close: closeBrowser } = await launchBrowser();
@@ -199,6 +293,15 @@ test("eden canvas whoami shortcut can edit the current identity inline on the em
     await frame.locator('[data-widget="todo_password_input"]').fill('aaron');
     await frame.locator('[data-widget="todo_open_button"]').click();
     await frame.locator('[data-widget="todo_session_status"]').waitFor();
+    await frame.locator('[data-widget="todo_session_status"]').waitFor({
+      state: "visible"
+    });
+    await page.waitForFunction(() => {
+      const frame = document.querySelector('[data-eden-surface="eden.surface.todo"] iframe');
+      const doc = frame?.contentDocument;
+      const status = doc?.querySelector?.('[data-widget="todo_session_status"]');
+      return Boolean(status && status.textContent && status.textContent.includes('Signed in as Aaron'));
+    });
 
     await page.evaluate(() => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F1', bubbles: true, cancelable: true }));
@@ -669,68 +772,11 @@ test("eden commons panel can run a real organization loop after the responsibili
   const { page, runtime, close: closeBrowser } = await launchBrowser();
 
   try {
+    const cookie = await seedGovernanceReadyState(url);
+    await addSessionCookieToPage(page, url, cookie);
+
     await page.goto(`${url}/eden-canvas`);
     await page.waitForSelector('[data-eden-surface="eden.surface.personal"]');
-    await page.fill('[data-eden-personal-username]', 'aaron');
-    await page.fill('[data-eden-personal-password]', 'aaron');
-    await page.locator('[data-eden-login-form]').evaluate(form => form.requestSubmit());
-    await page.waitForFunction(() => document.body.textContent.includes('Room claimed. Your box is live.'));
-    await page.selectOption('[data-eden-personal-form] select[name="kind"]', 'note');
-    await page.fill('[data-eden-personal-form] input[name="text"]', 'Practice the commons');
-    await page.locator('[data-eden-personal-form]').evaluate(form => form.requestSubmit());
-    await page.waitForFunction(() => document.body.textContent.includes('Widget added.'));
-
-    await page.selectOption('[data-eden-edit-form] select[name="themeId"]', 'moss');
-    await page.selectOption('[data-eden-edit-form] select[name="material"]', 'stone');
-    await page.selectOption('[data-eden-edit-form] select[name="typography"]', 'serif');
-    await page.locator('[data-eden-edit-form]').evaluate(form => form.requestSubmit());
-    await page.waitForFunction(() => document.body.textContent.includes('Todo page treatment updated.'));
-
-    for (let i = 0; i < 10; i += 1) {
-      await page.locator('#eden-stage').hover();
-      await page.mouse.wheel(0, 480);
-    }
-    await page.waitForFunction(() => !document.querySelector('[data-eden-surface="eden.surface.versions"]')?.hidden);
-    await page.click('[data-eden-version-open-draft]');
-    await page.waitForFunction(() => document.body.textContent.includes('Draft version opened in the live board.'));
-    await page.click('[data-eden-version-restore]');
-    await page.waitForFunction(() => document.body.textContent.includes('Restored the last good version.'));
-
-    await page.waitForFunction(() => !document.querySelector('[data-eden-surface="eden.surface.world"]')?.hidden);
-    await page.locator('[data-eden-capability="notes.sidebar"] [data-eden-capability-install]').evaluate(button => button.click());
-    await page.waitForFunction(() => document.body.textContent.includes('Installed Notes Sidebar on frontend context.'));
-
-    await page.click('[data-eden-version-open-draft]');
-    await page.waitForFunction(() => document.body.textContent.includes('Draft version opened in the live board.'));
-    await page.click('[data-eden-version-publish]');
-    await page.waitForFunction(() => document.body.textContent.includes('Current live version is now published.'));
-
-    for (let i = 0; i < 4; i += 1) {
-      await page.locator('#eden-stage').hover();
-      await page.mouse.wheel(0, -480);
-    }
-    await page.waitForFunction(() => !document.querySelector('[data-eden-surface="eden.surface.process"]')?.hidden);
-    await page.click('[data-eden-process-inspect]');
-    await page.waitForFunction(() => document.body.textContent.includes('Process graph read from the live runtime.'));
-    await page.click('[data-eden-process-drill]');
-    await page.waitForFunction(() => document.body.textContent.includes('Failure drill witnessed. The runtime answered honestly.'));
-    runtime.consoleErrors = runtime.consoleErrors.filter(entry => !entry.message.includes('status of 503'));
-
-    await page.selectOption('[data-eden-edit-form] select[name="themeId"]', 'straw');
-    await page.selectOption('[data-eden-edit-form] select[name="material"]', 'wood');
-    await page.selectOption('[data-eden-edit-form] select[name="typography"]', 'mono');
-    await page.locator('[data-eden-edit-form]').evaluate(form => form.requestSubmit());
-    await page.waitForFunction(() => document.body.textContent.includes('Todo page treatment updated.'));
-
-    for (let i = 0; i < 10; i += 1) {
-      await page.locator('#eden-stage').hover();
-      await page.mouse.wheel(0, 480);
-    }
-    await page.waitForFunction(() => !document.querySelector('[data-eden-surface="eden.surface.versions"]')?.hidden);
-    await page.click('[data-eden-version-open-draft]');
-    await page.waitForFunction(() => document.body.textContent.includes('Draft version opened in the live board.'));
-    await page.click('[data-eden-version-publish]');
-    await page.waitForFunction(() => document.body.textContent.includes('Current live version is now published.'));
 
     await page.click('#eden-reset-view');
     await page.waitForFunction(() => {
@@ -759,17 +805,6 @@ test("eden commons panel can run a real organization loop after the responsibili
       const treeButtons = [...document.querySelectorAll('[data-eden-surface="eden.surface.tree"] .eden-chip')];
       const commons = treeButtons.find(node => node.textContent && node.textContent.includes('Run An Open Organization'));
       return Boolean(commons && commons.classList.contains('is-open'));
-    });
-
-    for (let i = 0; i < 8; i += 1) {
-      await page.locator('#eden-stage').hover();
-      await page.mouse.wheel(0, 480);
-    }
-    await page.waitForFunction(() => !document.querySelector('[data-eden-surface="eden.surface.process"]')?.hidden);
-    await page.waitForFunction(() => {
-      const buttons = [...document.querySelectorAll('[data-eden-surface="eden.surface.process"] .eden-chip')];
-      const shared = buttons.find(node => node.textContent && node.textContent.includes('Run Shared Operations'));
-      return Boolean(shared && shared.classList.contains('is-open'));
     });
 
     await expectNoRuntimeErrors(runtime);

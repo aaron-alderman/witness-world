@@ -775,7 +775,45 @@ const BUILTIN_CAPABILITIES = [
   }
 ];
 
-export function ensureRuntimeBuiltins(world, { actor = "system" } = {}) {
+export const CORE_RUNTIME_CAPABILITY_IDS = Object.freeze([
+  "http.serve",
+  "runtime.config",
+  "dom.render",
+  "http.fetch"
+]);
+
+export const PRACTICAL_BACKEND_CAPABILITY_IDS = Object.freeze([
+  "fs.json.read",
+  "fs.json.write",
+  "fs.blob",
+  "fs.stream",
+  "upload.asset",
+  "jobs.queue",
+  "db.sql",
+  "auth.oauth",
+  "search.index",
+  "http.outbound",
+  "webhook.inbound",
+  "notify.email",
+  "notify.sms"
+]);
+
+const BUILTIN_CAPABILITY_BY_ID = new Map(BUILTIN_CAPABILITIES.map(capability => [capability.id, capability]));
+
+function cloneCapabilityDefinition(capability) {
+  return capability ? JSON.parse(JSON.stringify(capability)) : null;
+}
+
+export function builtinCapabilityDefinitions(capabilityIds = null) {
+  const selectedIds = capabilityIds == null
+    ? BUILTIN_CAPABILITIES.map(capability => capability.id)
+    : [...new Set((capabilityIds ?? []).map(id => String(id || "")).filter(Boolean))];
+  return selectedIds
+    .map(id => cloneCapabilityDefinition(BUILTIN_CAPABILITY_BY_ID.get(id)))
+    .filter(Boolean);
+}
+
+export function ensureRuntimeBuiltins(world, { actor = "system", capabilityIds = null } = {}) {
   const witnesses = world.allWitnesses();
   const definedTraits = new Set(
     witnesses.filter(w => w.process === "defineTrait" && w.body?.id).map(w => w.body.id)
@@ -802,7 +840,7 @@ export function ensureRuntimeBuiltins(world, { actor = "system" } = {}) {
     if (definedProcessSpecs.has(spec.id)) continue;
     defineProcessSpec(world, { actor, id: spec.id, process: spec.process, inputs: spec.inputs, outputs: spec.outputs, owner: actor });
   }
-  for (const capability of BUILTIN_CAPABILITIES) {
+  for (const capability of builtinCapabilityDefinitions(capabilityIds)) {
     if (definedCapabilities.has(capability.id)) continue;
     defineCapability(world, { actor, ...capability, owner: actor });
   }

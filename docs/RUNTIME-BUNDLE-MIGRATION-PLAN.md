@@ -4,6 +4,98 @@
 
 Reduce the default runtime to a narrow executable core, while preserving today's behavior behind a compatibility profile during migration.
 
+## Implementation Status
+
+Updated: `2026-06-12`
+
+### Completed
+
+- [x] Added the runtime bundle manifest contract with contribution groups for capabilities, providers, routes, and surfaces.
+- [x] Added the internal bundle registry and runtime profile resolver in core startup code.
+- [x] Added internal manifests for `bundle-authoring`, `bundle-inspect`, `bundle-canvas`, `bundle-mcp`, `bundle-practical-backend`, `bundle-demo`, and `bundle-eden`.
+- [x] Added a dedicated `bundle-tutorial` manifest so tutorial-progress routing/execution stops pretending to be part of the executable core runtime.
+- [x] Added runtime profiles for `minimal`, `authoring`, `inspect`, `practical-backend`, and `full`, with `full` still the default compatibility profile.
+- [x] Made bundle/profile queries the source of truth for provided capabilities, contributed routes, contributed surfaces, and bundle diagnostics.
+- [x] Split universal runtime capabilities from bundle-provided practical-backend capabilities.
+- [x] Replaced hardcoded default host capability installation with profile-driven installation from active bundle providers.
+- [x] Made generic route presence honest by matching bundle-contributed routes instead of relying on a single hardcoded feature table.
+- [x] Moved runtime surface visibility for bootstrap, inspect, and backend seams behind bundle surface contributions.
+- [x] Extracted executable handler ownership for the first bundle slices out of the central `src/host.js` dispatch table and into bundle-provided factories: all current `bundle-authoring` bootstrap/CRUD/proposal/widget handlers, `bundle-inspect`, `bundle-canvas`, and `bundle-mcp`.
+- [x] Completed `bundle-practical-backend` executable extraction by moving `page.backendSeams`, `backendSeams.read`, `auth.oauth.start`, `auth.oauth.callback`, `auth.oauth.links.list`, `auth.oauth.links.read`, `runtimeConfig.read`, `jobs.queue.enqueue`, `jobs.queue.list`, `jobs.queue.read`, `http.outbound.send`, `http.outbound.list`, `http.outbound.read`, `notify.email.enqueue`, `notify.sms.enqueue`, `notifications.list`, `notifications.read`, `webhook.inbound.receive`, `webhook.inbound.list`, `webhook.inbound.read`, `db.sql.inspect`, `db.sql.migrate`, `db.sql.query`, `db.sql.command`, `db.sql.transaction`, `search.index.inspect`, `search.index.build`, `search.index.reindex`, `search.index.query`, `fs.blob.list`, `fs.blob.meta`, `fs.blob.read`, `fs.blob.write`, `fs.blob.delete`, `fs.stream.read`, `fs.stream.write`, `fs.stream.copy`, `asset.content.read`, `asset.text.read`, `asset.thumbnail.read`, `asset.attachments.list`, `asset.attach`, `asset.detach`, `asset.upload`, `asset.ingest.retry`, and `asset.search.reindex` behind bundle-provided handler factories.
+- [x] Moved `bundle-core-runtime` executable session and home-page handlers behind a core runtime bundle factory so `src/host.js` no longer imports tutorial definitions, Eden page-theme projection, or Eden version-publish operations directly.
+- [x] Reclassified tutorial-progress route and handler ownership out of `bundle-core-runtime` and into `bundle-tutorial`, leaving session and home-page behavior as the actual core runtime surface.
+- [x] Moved `bundle-inspect` widget-version activation and rollback execution behind the inspect bundle factory, and moved session/tutorial endpoint matching into bundle-contributed core runtime routes instead of host path special cases.
+- [x] Moved bootstrap-authoring imports and proposal execution construction behind the authoring bundle path so `src/host.js` no longer imports `bootstrap-authoring.js` directly or owns the proposal switchboard.
+- [x] Extracted runtime route-matching and bootstrap-fallback decision primitives from `src/host.js` into a shared runtime routing module so fallback remains bundle/profile-driven instead of host-local control flow.
+- [x] Extracted bootstrap-only live-runner takeover and runtime-context caching into an internal runtime context resolver so `src/host.js` no longer owns that state machine directly.
+- [x] Extracted authoring access gates and runtime session/tutorial session-state helpers out of `src/host.js` into dedicated runtime service modules, narrowing the remaining host-to-authoring service boundary.
+- [x] Extracted runtime app-context assembly and unavailable-context fallback composition out of `src/host.js` into a dedicated runtime app-context module, so live runtime construction and degraded-context behavior no longer live inline in the host startup path.
+- [x] Collapsed shared authority gating for inspect and practical-backend bundle handlers behind a named runtime authority service boundary so `src/host.js` no longer fans out raw target/context/identity gate callbacks into those bundle factories individually.
+- [x] Extracted runtime bundle-handler factory resolution and composed-handler assembly out of `src/host.js` into a dedicated runtime handler-assembly module, so bundle factory expansion and handler-diagnostics plumbing no longer live inline in the host.
+- [x] Extracted bundle support helpers for projection-scoped request views and MCP runtime support out of `src/host.js` into a dedicated runtime support-services module, so those request helper/service closures are no longer defined inline in the host.
+- [x] Extracted practical-backend runner-scoped selectors, backend diagnostics shaping, and notification enqueue support out of `src/host.js` into a dedicated runtime practical-backend support module, so those backend helper closures are no longer owned inline by the host.
+- [x] Extracted OAuth config normalization, callback URL derivation, read-shaping, and witness emission support out of `src/host.js` into a dedicated runtime OAuth support module, so practical-backend OAuth handler dependencies no longer rely on host-local helper construction.
+- [x] Extracted practical-backend SQL/search read-shaping and witness emission support out of `src/host.js` into a dedicated runtime DB/search support module, so those backend handler dependencies no longer rely on host-local helper construction.
+- [x] Extracted practical-backend outbound/webhook/blob normalization and IO helper support out of `src/host.js` into a dedicated runtime IO support module, so those backend handler dependencies and builtin webhook-processing paths no longer rely on host-local helper construction.
+- [x] Extracted practical-backend asset upload/read support out of `src/host.js` into a dedicated runtime asset support module, so asset parsing, URL/path helpers, visibility gating, and drop-context resolution no longer rely on host-local helper construction.
+- [x] Extracted builtin notification/webhook/asset background job handlers out of `src/host.js` into a dedicated runtime job-handlers module, so runtime-app-context now consumes host-bound factories instead of host-local executable handler bodies.
+- [x] Extracted startup-side runtime app-context binding and runtime-resolver assembly out of `src/host.js` into a dedicated runtime startup-services module, so the duplicated live-runner context construction path no longer lives inline in the host startup flow.
+- [x] Extracted the remaining host-local provider runtimes for `db.sql`, `search.index`, and `jobs.queue` out of `src/host.js` into a dedicated runtime provider-runtimes module, so runtime-app-context now consumes provider factories without depending on host-local runtime implementations.
+- [x] Extracted the top-level server startup/request orchestration out of `src/host.js` into a dedicated runtime server module, so runtime-profile startup validation, runtime-context assembly, HTTP dispatch, SSE wiring, and server lifecycle closing no longer live inline in the host export.
+- [x] Extracted the remaining generic route-handler composition and dependency fan-out out of `src/host.js` into a dedicated runtime route-handlers module, so bundle/generic handler assembly and its large factory-dependency graph no longer live inline in the host.
+- [x] Extracted shared HTTP/session/request utility primitives out of `src/host.js` into a dedicated runtime HTTP utilities module, so request-body parsing, JSON sending, cookie/header/session helpers, and SSE framing no longer remain duplicated as host-local glue across runtime modules.
+- [x] Extracted active-path runtime config resolution, asset-derived search/thumbnail helpers, streamed file utilities, and default builtin job-handler wiring into dedicated runtime modules, so runtime server/startup/route execution now consumes those seams from shared modules instead of relying on host-local implementations.
+- [x] Removed the retired host-local helper copies after the active-path extractions, so `src/host.js` no longer keeps stale config/asset-derivation/job-handler/stream implementations around after those seams moved into dedicated runtime modules.
+- [x] Extracted host declaration/capability lookup, runner resolution, storage resolution, and generic route-handler factory wiring into dedicated runtime host utility modules, so `src/host.js` now acts primarily as the public host API facade instead of owning those runtime seams directly.
+- [x] Moved the remaining startup wrapper behind a dedicated runtime host-entry module while keeping `src/host.js` as the stable compatibility facade, so the residual public host boundary is explicit instead of accidental.
+- [x] Moved the live-app tutorial client engine out of `src/widgets.js` and into a dedicated tutorial UI module so the generic widget runtime no longer embeds that tutorial flow directly.
+- [x] Moved live app tutorial attachment for `page.home` behind a dedicated tutorial UI helper so the core runtime bundle no longer toggles tutorial presence inline while rendering authored app pages.
+- [x] Moved bootstrap tutorial presentation chrome and bootstrap tutorial page-data assembly behind dedicated tutorial modules so `src/bootstrap-shell.js` no longer owns that tutorial markup/CSS inline.
+- [x] Moved bootstrap tutorial progress/state, suggestion sourcing, and disabled-surface rendering behind a dedicated tutorial client runtime factory so `src/bootstrap-shell.js` no longer owns that client model inline.
+- [x] Moved bootstrap tutorial overlay/highlight behavior, auto-advance and chapter automation, and tutorial event wiring behind a dedicated tutorial controller runtime so `src/bootstrap-shell.js` no longer owns bootstrap-specific tutorial control flow inline.
+- [x] Added profile-matrix and bundle-diagnostics tests that prove inactive bundles remove capabilities, routes, and operator surfaces under non-`full` profiles.
+
+### Architecture-First Checklist
+
+- [x] Extract the remaining `bundle-authoring` executable CRUD and proposal handlers from `src/host.js` into bundle-provided factories or provider-owned modules.
+- [x] Extract the remaining `bundle-practical-backend` executable handlers from `src/host.js` so backend APIs are bundle-owned in execution, not only in route metadata.
+  Practical-backend handler execution is now bundle-provided end to end; new backend APIs should follow the same factory path instead of expanding the central host dispatch table.
+- [x] Extract `bundle-eden` executable handlers from `src/host.js`.
+  Eden runtime execution now resolves through bundle-provided handler factories instead of the central host dispatch table.
+- [x] Move demo handler-set registration fully behind bundle-driven host assembly and remove remaining host knowledge of product/example imports where practical.
+  The demo handler-set definition/provider now lives with the demo module and is consumed through the bundle provider contract instead of being re-described inline in the central runtime bundle registry.
+- [x] Finish moving operator/command palette data sourcing off generic widget/runtime internals where any hardcoded surface knowledge remains.
+  World/operator palette mode entries now come from bundle-contributed surfaces with explicit actions, and the widget runtime treats bundle surface actions generically instead of hardcoding inspect-mode menu entries.
+- [x] Keep expanding profile-specific tests so each extracted bundle proves both presence under `full` and absence under inactive profiles.
+  Coverage now includes authoring bootstrap and CRUD route absence under `minimal`, inspect route/surface absence plus world-mode surface presence under `full`, practical-backend route/capability absence under inactive profiles, MCP route absence under `minimal`, tutorial route absence under `minimal` and presence under authoring/full, demo handler-set definition presence under `full` and absence under `minimal`, session-vs-tutorial route ownership coverage, and inactive Eden/MCP dispatch-handler exclusion.
+- [x] Decide whether the remaining `src/host.js` startup wrapper should stay as the stable public facade or move behind a dedicated runtime host-entry module, so the residual ownership is explicit rather than accidental.
+  The concrete implementation now lives in `src/runtime-host-entry.js`, while `src/host.js` remains the stable compatibility/public export surface.
+
+### Verification Snapshot
+
+Fast verification for the architecture-first tranche is complete.
+
+- `node --test test/runtime-*.test.js`
+- `node --test test/runtime-profile.test.js`
+- `node --test test/architecture.test.js`
+- `node --test test/host.test.js test/jobs-host.test.js test/db-sql-host.test.js test/search-index-host.test.js --test-name-pattern "server starts only with backend and frontend capability envelopes|server start requires an explicit runner when multiple server runners exist|demo app end-to-end: frontend request, backend json store, witnesses|jobs.queue executes a queued job and exposes succeeded status through the host|db.sql supports SQLite datasource inspection, migration apply, query, command, transaction, and diagnostics|search.index builds from explicit documents, answers queries, and exposes diagnostics"`
+- `node --test test/auth-oauth-host.test.js test/http-outbound.test.js test/notify-host.test.js test/webhook-host.test.js test/mcp-host.test.js`
+- `node --test test/bootstrap-host.test.js test/canvas-host.test.js test/process-view.test.js test/world-graph.test.js test/eden-host.test.js`
+
+These suites keep the default `full` profile honest across bundle diagnostics, capability provisioning, route ownership, operator surfaces, authoring/bootstrap flows, inspect/world/process surfaces, practical-backend APIs, MCP seams, canvas behavior, and Eden flows without relying on the slower full-repository test pass.
+
+### Operational Profile Diagnostics
+
+- [x] Made the internal bundle manifest contract explicit enough to carry stable bundle metadata such as `kind`, `displayName`, and `description` in addition to contribution groups.
+- [x] Added strict operator-facing runtime-profile validation for explicit CLI `--runtime-profile` input, while keeping implicit default startup on `full`.
+- [x] Added `GET /api/runtime/diagnostics` as a core-runtime route so every valid profile can explain its active composition over HTTP.
+- [x] Added a shared runtime diagnostics read-model covering requested profile, active profile, available profiles, active bundles, provided capabilities, host capability defaults, installed host capabilities, routes, surfaces, handler ownership, and handler sets.
+- [x] Expanded CLI startup reporting so runtime composition is visible immediately, including active bundle ids, route/capability/surface counts, and the runtime diagnostics endpoint URL.
+
+### Current Rule
+
+The architecture-first checklist above is complete, the fast compatibility verification sweep passes under the default `full` profile, and runtime composition is now visible through strict CLI profile selection plus `GET /api/runtime/diagnostics`. Any further migration work should change shipped surface area only through explicit profile/bundle decisions rather than leftover host ownership.
+
 The current codebase already has the right concepts:
 
 - explicit capability objects and installs
@@ -13,10 +105,9 @@ The current codebase already has the right concepts:
 The main remaining problem is operational coupling:
 
 - capability definitions are centralized in `src/runtime-builtins.js`
-- default backend/frontend capability installation is hardcoded in `src/host.js`
-- generic endpoint routing is still a large hardcoded table in `src/host.js`
-- operator surfaces are still hardcoded in `src/widgets.js`
-- product/example code is still imported directly by the host
+- `src/host.js` now serves as a deliberate compatibility/public facade over dedicated runtime host-entry and host-utility modules instead of carrying accidental runtime ownership
+- bundle handlers now consume shared runtime authority services and dedicated support-service modules, provider runtime ownership lives in dedicated runtime modules, server orchestration lives in a dedicated runtime server module, generic handler composition lives in a dedicated runtime route-handlers module, shared HTTP/session/request primitives live in a dedicated runtime HTTP utilities module, active-path runtime config/stream/default job-handler seams flow through dedicated runtime modules, and host declaration/runner/storage/route-factory seams now live in dedicated runtime host modules rather than `src/host.js`
+- tutorial API ownership is now bundle-scoped, the live-app tutorial client plus home-page tutorial attachment have moved out of generic runtime flow ownership, and bootstrap tutorial page chrome, page-data assembly, progress/state handling, overlay/automation behavior, and event wiring now flow through dedicated tutorial modules rather than staying embedded inline in `src/bootstrap-shell.js`
 
 This plan separates those concerns without requiring a big-bang rewrite.
 

@@ -208,7 +208,8 @@ test("a bootstrap-authored runner and home route take over without restarting th
     assert.equal((await post("/api/server-runners", {
       id: "demo_server",
       backendHost: "backendHost",
-      frontendHost: "frontendHost"
+      frontendHost: "frontendHost",
+      handlerSet: "demo"
     })).status, 201);
     assert.equal((await post("/api/routes", {
       id: "home_route",
