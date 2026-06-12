@@ -349,6 +349,70 @@ export function removeCapability(world, {
   });
 }
 
+export function installRuntimePlugin(world, {
+  actor,
+  serverRunner,
+  plugin
+}) {
+  const runnerExists = world.project(projectors.things).has(serverRunner)
+    && moduleProjectors.modules(world.allWitnesses()).get(serverRunner) === "serverRunner";
+  if (!runnerExists) {
+    return world.emit({
+      process: "installRuntimePlugin.failed",
+      actor,
+      claims: [],
+      body: {
+        serverRunner,
+        plugin,
+        ok: false,
+        reason: "server runner not found"
+      }
+    });
+  }
+  return world.emit({
+    process: "installRuntimePlugin",
+    actor,
+    claims: [relation(serverRunner, "installsRuntimePlugin", plugin)],
+    body: {
+      serverRunner,
+      plugin,
+      ok: true
+    }
+  });
+}
+
+export function removeRuntimePlugin(world, {
+  actor,
+  serverRunner,
+  plugin
+}) {
+  const current = currentRelations(world.allWitnesses());
+  const installed = current.some(r => r.from === serverRunner && r.rel === "installsRuntimePlugin" && r.to === plugin);
+  if (!installed) {
+    return world.emit({
+      process: "removeRuntimePlugin.failed",
+      actor,
+      claims: [],
+      body: {
+        serverRunner,
+        plugin,
+        ok: false,
+        reason: "runtime plugin install not found"
+      }
+    });
+  }
+  return world.emit({
+    process: "removeRuntimePlugin",
+    actor,
+    claims: [retract(serverRunner, "installsRuntimePlugin", plugin)],
+    body: {
+      serverRunner,
+      plugin,
+      ok: true
+    }
+  });
+}
+
 export function createCompiler(world, { actor, id, owner = actor }) {
   const w = createThing(world, { actor, id, owner });
   world.emit({
@@ -1432,6 +1496,38 @@ export const moduleProjectors = {
       ...row,
       installCount: installCounts.get(row.id) ?? 0
     }));
+  },
+
+  runtimePluginInstalls(witnesses) {
+    const rows = [];
+    const seen = new Set();
+    for (const row of currentRelations(witnesses)) {
+      if (row.rel !== "installsRuntimePlugin") continue;
+      const key = `${row.from}\u0000${row.to}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({
+        serverRunner: row.from,
+        plugin: String(row.to),
+        witness: row.witness
+      });
+    }
+    return rows.sort((a, b) =>
+      String(a.serverRunner).localeCompare(String(b.serverRunner))
+      || String(a.plugin).localeCompare(String(b.plugin))
+    );
+  },
+
+  runtimePluginInstallIndex(witnesses) {
+    const rows = moduleProjectors.runtimePluginInstalls(witnesses);
+    const byServerRunner = Object.create(null);
+    const byServerRunnerPlugin = Object.create(null);
+    for (const row of rows) {
+      if (!byServerRunner[row.serverRunner]) byServerRunner[row.serverRunner] = [];
+      byServerRunner[row.serverRunner].push(row);
+      byServerRunnerPlugin[`${row.serverRunner}\u0000${row.plugin}`] = row;
+    }
+    return { rows, byServerRunner, byServerRunnerPlugin };
   },
 
   mcpServers(witnesses) {

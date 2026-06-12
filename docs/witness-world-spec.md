@@ -25,7 +25,7 @@ Current honesty notes:
 - tutorial recovery commands derive from persisted tutorial state rather than a second onboarding-only model
 - stub-provider paths remain real runtime behavior with deterministic or local transports
 - legacy capability-string lowering and covered canonical-id authoring bypasses remain compatibility paths rather than final composition rules
-- widget-version routes and Eden version routes now use shared authority derivation, the live inspector now has a first `widgetVersion.activate` / `widgetVersion.rollback` proposal fallback, the Eden versions panel now has a first `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish` proposal fallback, and the Eden capability shelf now has a first `capability.install` proposal fallback, but app-specific handler-set mutations still are not all under one shared authority/proposal derivation path
+- widget-version routes and Eden version routes now use shared authority derivation, the live inspector now has a first `widgetVersion.activate` / `widgetVersion.rollback` proposal fallback, the Eden versions panel now has a first `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish` proposal fallback, and the Eden capability shelf now has a first `capability.install` proposal fallback, but remaining app-specific and other operating-surface mutation actions still are not all under one shared authority/proposal derivation path
 
 Current honesty ledger:
 
@@ -61,7 +61,7 @@ The adjacent risk is "one more special route" gradually avoiding the shared gove
   - `cloneThing`
   - `transferOwnership`
   - `canAcceptInto`
-  - built-in projectors
+  - shipped projection modules
 - Ownership/stewardship are projection-based, not stored as mutable tables.
 
 ## 5. DSL

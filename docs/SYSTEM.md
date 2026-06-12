@@ -574,6 +574,6 @@ Context is how the system should eventually bound:
 
 Desktop, browser, and hosted/server operation should be treated as shell adapters over the same world model rather than separate products with incompatible truths.
 
-The desktop shell proves ownership.
+The first shipped desktop shell now proves ownership in a narrow but real way.
 The web shell proves reachability.
 The shared world model proves coherence.

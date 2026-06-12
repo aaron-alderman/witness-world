@@ -1,17 +1,21 @@
 import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { authorityForActor, relation, thing } from "./kernel.js";
+import { authorityForActor, relation, thing, projectors } from "./kernel.js";
 import {
   renderWidgetPage,
   requestWidgetVersionActivation,
   rollbackWidgetVersion,
   widgetDefinitions,
+  widgetVersions,
+  widgetVersionTransitions,
+  widgetVersionActivationHistory,
   frontendProgramsProjection,
   frontendStepsProjection
 } from "./widgets.js";
 import { worldGraphProjection, astNodesProjection } from "./world-graph.js";
 import { processRunProjection, processViewProjection, renderProcessPage } from "./process-view.js";
+import { runProcessGraph } from "./process-graph.js";
 import { canvasProcessHandlers } from "./canvas-processes.js";
 import { canvasProjection, perspectivesProjection, edenNeighborhoodProjection } from "./canvas-projection.js";
 import { renderCanvasPage } from "./canvas-page.js";
@@ -38,18 +42,35 @@ import {
   requestBootstrapCapabilityDefine,
   requestBootstrapCapabilityInstall,
   requestBootstrapCapabilityRemove,
+  requestBootstrapRuntimePluginInstall,
+  requestBootstrapRuntimePluginRemove,
   requestBootstrapMcpServerDefine,
   requestBootstrapMcpToolInstall,
   requestBootstrapMcpToolRemove,
   requestBootstrapFrontendProgramDefine,
   requestBootstrapFrontendStepDefine,
+  requestBootstrapBackendProgramDefine,
+  requestBootstrapBackendProgramVersionDefine,
+  requestBootstrapBackendStepDefine,
+  requestBootstrapBackendProgramVersionActivate,
+  requestBootstrapBackendProgramVersionRollback,
   requestWidgetDefine,
   requestWidgetUpdate
 } from "./bootstrap-authoring.js";
 import { listSupportedMcpTools } from "./mcp.js";
 import { moduleProjectors } from "./modules.js";
+import {
+  SUPPORTED_BACKEND_OPS,
+  activeBackendProgramDefinition,
+  backendProgramsProjection,
+  backendProgramVersionDefinition,
+  backendProgramVersionTransitions,
+  backendProgramActivationHistory,
+  backendProgramVersionsProjection,
+  backendStepsProjection
+} from "./backend-programs.js";
 import { renderEdenPage } from "./eden-page.js";
-import { tutorialDefinition, normalizeTutorialDisabledPages } from "./tutorials.js";
+import { tutorialDefinition, normalizeTutorialProgress } from "./tutorials.js";
 import { appTutorialConfigForSession } from "./tutorial-runtime-ui.js";
 import {
   projectEdenPersonalBoxItems,
@@ -79,7 +100,35 @@ import {
   requestEdenVersionPublish,
   requestEdenVersionRollback
 } from "./eden-versions.js";
+import {
+  ensureTodoTargetAuthority,
+  requestTodoCreate,
+  requestTodoDelete,
+  requestTodoUpdate
+} from "./todo-runtime.js";
 import { typeModelProjection } from "./type-model.js";
+
+function widgetPageTutorialSurface(world, {
+  route = null,
+  rootWidget = null,
+  frontendProgramId = null,
+  tutorialPage = null
+} = {}) {
+  const witnesses = world.allWitnesses();
+  const routeRows = new Map(moduleProjectors.routes(witnesses).map(row => [row.id, row]));
+  const widgetRows = new Map(widgetDefinitions(witnesses).map(row => [row.id, row]));
+  const programRows = new Map(frontendProgramsProjection(witnesses).map(row => [row.id, row]));
+  const routeRow = route?.id ? routeRows.get(route.id) ?? route : route;
+  const programRow = frontendProgramId ? programRows.get(frontendProgramId) ?? null : null;
+  const widgetRow = rootWidget ? widgetRows.get(rootWidget) ?? null : null;
+  return {
+    page: typeof tutorialPage === "string" && tutorialPage.trim() ? tutorialPage.trim() : null,
+    context: programRow?.context ?? widgetRow?.context ?? routeRow?.context ?? null,
+    routeId: routeRow?.id ?? route?.id ?? null,
+    rootWidgetId: widgetRow?.id ?? rootWidget ?? null,
+    frontendProgramId: programRow?.id ?? frontendProgramId ?? null
+  };
+}
 
 export function createCoreRuntimeBundleHandlers({
   world,
@@ -102,8 +151,256 @@ export function createCoreRuntimeBundleHandlers({
   currentBackendCapabilities,
   currentFrontendCapabilities,
   handlerSetDefinitions = {},
-  buildRuntimeDiagnosticsForProfile
+  buildRuntimeDiagnosticsForProfile,
+  getRuntimePluginCatalog,
+  getRuntimePluginReviews,
+  invokeRouteHandler,
+  supportedBackendOps = SUPPORTED_BACKEND_OPS
 }) {
+  const lowerCaseHeaders = headers => Object.fromEntries(
+    Object.entries(headers ?? {}).map(([key, value]) => [String(key).toLowerCase(), Array.isArray(value) ? value.map(String) : String(value ?? "")])
+  );
+  const readPath = (value, path) => String(path || "").split(".").filter(Boolean).reduce((current, key) => current == null ? undefined : current[key], value);
+  const writePath = (target, path, value) => {
+    const parts = String(path || "").split(".").filter(Boolean);
+    if (!parts.length) return;
+    let cursor = target;
+    for (let index = 0; index < parts.length - 1; index += 1) {
+      const key = parts[index];
+      if (!cursor[key] || typeof cursor[key] !== "object" || Array.isArray(cursor[key])) cursor[key] = {};
+      cursor = cursor[key];
+    }
+    cursor[parts.at(-1)] = value;
+  };
+  const interpolateString = (value, scope) => {
+    const text = String(value ?? "");
+    const exact = text.match(/^\$\{([A-Za-z0-9_.-]+)\}$/);
+    if (exact) return readPath(scope, exact[1]);
+    return text.replace(/\$\{([A-Za-z0-9_.-]+)\}/g, (_, expression) => {
+      const resolved = readPath(scope, expression);
+      return resolved == null ? "" : String(resolved);
+    });
+  };
+  const interpolateValue = (value, scope) => {
+    if (typeof value === "string") return interpolateString(value, scope);
+    if (Array.isArray(value)) return value.map(item => interpolateValue(item, scope));
+    if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, interpolateValue(item, scope)]));
+    return value;
+  };
+  const backendSessionShape = requestSession => requestSession
+    ? {
+        authenticated: true,
+        actor: requestSession.actor ?? null,
+        identity: requestSession.identity ?? null,
+        label: requestSession.label ?? null,
+        perspective: requestSession.perspective ?? null
+      }
+    : {
+        authenticated: false,
+        actor: null,
+        identity: null,
+        label: null,
+        perspective: null
+      };
+  const executeBackendProgramRoute = async ({
+    req,
+    res,
+    params,
+    route,
+    requestUrl,
+    requestActor,
+    requestIdentity,
+    requestSession,
+    appContext
+  }) => {
+    const soul = route?.params?.backendProgramSoul ?? null;
+    const program = soul ? activeBackendProgramDefinition(world.allWitnesses(), soul) : null;
+    if (!program) {
+      sendJson(res, 404, { error: "active backend program not configured", backendProgramSoul: soul });
+      return;
+    }
+    const runId = `backend-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const state = {
+      request: {
+        method: req.method || "GET",
+        path: requestUrl?.pathname ?? route?.path ?? "/",
+        params: { ...(params ?? {}) },
+        query: Object.fromEntries(requestUrl?.searchParams?.entries?.() ?? []),
+        headers: lowerCaseHeaders(req.headers)
+      },
+      session: backendSessionShape(requestSession),
+      actor: requestActor ?? null,
+      identity: requestIdentity ?? null,
+      route: {
+        id: route?.id ?? null,
+        path: route?.path ?? null,
+        handler: route?.handler ?? null,
+        params: { ...(route?.params ?? {}) }
+      },
+      event: {}
+    };
+    const scopeFor = extra => ({ state, event: state.event || {}, ...extra });
+    const responseState = { sent: false };
+    const recordTrace = (process, body = {}) => world.observe({
+      process,
+      actor: requestActor || backendHost,
+      claims: [],
+      body: {
+        runId,
+        program: program.id,
+        event: "request",
+        timestamp: Date.now(),
+        ...body
+      }
+    });
+    const executeStep = async (step, stateRef, executionScope = {}) => {
+      const params = interpolateValue(step.params || {}, scopeFor(executionScope));
+      if (step.op === "request.readJson") {
+        const into = typeof params.into === "string" && params.into.trim() ? params.into.trim() : "requestBody";
+        writePath(stateRef, into, await readJson(req));
+        return;
+      }
+      if (step.op === "state.assign") {
+        const into = typeof params.into === "string" && params.into.trim() ? params.into.trim() : "";
+        if (!into) throw new Error("state.assign requires into");
+        const nextValue = Object.prototype.hasOwnProperty.call(params, "value")
+          ? params.value
+          : (typeof params.from === "string" ? readPath(stateRef, params.from) : null);
+        writePath(stateRef, into, nextValue);
+        return;
+      }
+      if (step.op === "handler.invoke") {
+        const handler = typeof params.handler === "string" && params.handler.trim() ? params.handler.trim() : "";
+        if (!handler) throw new Error("handler.invoke requires handler");
+        const requestPath = typeof params.path === "string" && params.path.trim()
+          ? params.path.trim()
+          : `/__backend-program/${encodeURIComponent(program.soul)}/${encodeURIComponent(handler)}`;
+        const requestBody = Object.prototype.hasOwnProperty.call(params, "body")
+          ? params.body
+          : (typeof params.from === "string" && params.from.trim() ? readPath(stateRef, params.from.trim()) : null);
+        const witnessCountBefore = world.allWitnesses().length;
+        const result = await invokeRouteHandler({
+          handler,
+          method: typeof params.method === "string" && params.method.trim() ? params.method.trim().toUpperCase() : "POST",
+          path: requestPath,
+          query: params.query && typeof params.query === "object" ? params.query : {},
+          params: params.params && typeof params.params === "object" ? params.params : {},
+          body: requestBody,
+          requestActor,
+          requestIdentity,
+          requestSession,
+          appContext,
+          route: {
+            id: `${route?.id || "backend-program-route"}:${handler}`,
+            path: requestPath,
+            handler,
+            params: params.params && typeof params.params === "object" ? params.params : {}
+          }
+        });
+        const emittedWitnesses = world.allWitnesses().slice(witnessCountBefore);
+        const failedWitnesses = emittedWitnesses.filter(witness => witness.process.endsWith(".failed") || witness.process.endsWith(".blocked"));
+        world.observe({
+          process: "backend.request.finish",
+          actor: requestActor || backendHost,
+          claims: [],
+          body: {
+            requestId: `${runId}:${step.id}:${handler}`,
+            method: typeof params.method === "string" && params.method.trim() ? params.method.trim().toUpperCase() : "POST",
+            url: requestPath,
+            statusCode: result.status || 0,
+            route: null,
+            handler,
+            runId,
+            stepId: step.id,
+            emittedWitnessIds: emittedWitnesses.map(witness => witness.id),
+            failureWitnessIds: failedWitnesses.map(witness => witness.id)
+          }
+        });
+        const into = typeof params.into === "string" && params.into.trim() ? params.into.trim() : "lastResponse";
+        writePath(stateRef, into, result.body ?? null);
+        if ((result.status || 500) >= 400 && params.allowFailure !== true) {
+          throw new Error(result.body?.error || `handler ${handler} failed`);
+        }
+        return;
+      }
+      if (step.op === "response.json") {
+        const status = Number.isFinite(Number(params.status))
+          ? Number(params.status)
+          : (typeof params.statusFrom === "string" && params.statusFrom.trim()
+              ? Number(readPath(stateRef, params.statusFrom.trim()) ?? 200)
+              : 200);
+        const body = Object.prototype.hasOwnProperty.call(params, "body")
+          ? params.body
+          : (typeof params.from === "string" && params.from.trim() ? readPath(stateRef, params.from.trim()) : null);
+        responseState.sent = true;
+        sendJson(res, status, body ?? {});
+        return;
+      }
+      if (step.op === "response.error") {
+        const status = Number.isFinite(Number(params.status))
+          ? Number(params.status)
+          : (typeof params.statusFrom === "string" && params.statusFrom.trim()
+              ? Number(readPath(stateRef, params.statusFrom.trim()) ?? 400)
+              : 400);
+        const error = typeof params.message === "string" && params.message.trim()
+          ? params.message.trim()
+          : (typeof params.messageFrom === "string" && params.messageFrom.trim()
+              ? String(readPath(stateRef, params.messageFrom.trim()) ?? "backend program error")
+              : "backend program error");
+        const body = params.body && typeof params.body === "object"
+          ? { ...params.body }
+          : (typeof params.bodyFrom === "string" && params.bodyFrom.trim()
+              ? { ...(readPath(stateRef, params.bodyFrom.trim()) ?? {}) }
+              : {});
+        responseState.sent = true;
+        sendJson(res, status, { error, ...body });
+        return;
+      }
+      if (step.op === "run") {
+        const eventName = typeof params.event === "string" && params.event.trim() ? params.event.trim() : "";
+        if (!eventName) throw new Error("run requires event");
+        await runEvent(eventName, stateRef);
+        return;
+      }
+      throw new Error(`unsupported backend op ${step.op}`);
+    };
+    const runEvent = async (eventName, stateRef = state) => {
+      state.event = { name: eventName };
+      const nodes = (program.graph || program.steps || []).filter(step => step.event === eventName);
+      if (!nodes.length) return;
+      await runProcessGraph(
+        nodes,
+        eventName,
+        async (node, nextState, executionScope) => {
+          await executeStep(node, nextState, executionScope);
+        },
+        stateRef,
+        {
+          onNodeStart: async node => {
+            recordTrace("backend.step.start", { nodeId: node.id || "", op: node.op || "" });
+          },
+          onNodeSkipped: async node => {
+            recordTrace("backend.step.skipped", { nodeId: node.id || "", op: node.op || "" });
+          },
+          onNodeDone: async node => {
+            recordTrace("backend.step.done", { nodeId: node.id || "", op: node.op || "" });
+          },
+          onNodeFailed: async (node, error) => {
+            recordTrace("backend.step.failed", { nodeId: node.id || "", op: node.op || "", message: error instanceof Error ? error.message : String(error) });
+          }
+        }
+      );
+    };
+    recordTrace("backend.process.start", { actor: requestActor ?? null });
+    try {
+      await runEvent("request");
+      recordTrace("backend.process.done", {});
+      if (!responseState.sent) sendJson(res, 500, { error: "backend program produced no response", backendProgramSoul: soul, program: program.id });
+    } catch (error) {
+      recordTrace("backend.process.failed", { message: error instanceof Error ? error.message : String(error) });
+      if (!responseState.sent) sendJson(res, 500, { error: error instanceof Error ? error.message : String(error), backendProgramSoul: soul, program: program.id });
+    }
+  };
   return {
     "session.read": async ({ res, requestActor, requestIdentity, requestSession }) => {
       world.observe({
@@ -169,6 +466,10 @@ export function createCoreRuntimeBundleHandlers({
       sendJson(res, 200, { ok: true }, { "set-cookie": clearSessionCookieHeader() });
     },
 
+    "backendProgram.run": async args => {
+      await executeBackendProgramRoute(args);
+    },
+
     "page.home": async ({ res, route, appContext, requestSession }) => {
       const params = route.params ?? {};
       const rootWidget = params.rootWidget ?? null;
@@ -188,6 +489,12 @@ export function createCoreRuntimeBundleHandlers({
         actor: requestSession?.actor || null,
         pageId: rootWidget
       });
+      const tutorialSurface = widgetPageTutorialSurface(world, {
+        route,
+        rootWidget,
+        frontendProgramId: params.frontendProgram ?? null,
+        tutorialPage: "app"
+      });
       send(res, 200, "text/html", renderWidgetPage(world, {
         actor: frontendHost,
         rootWidget,
@@ -199,15 +506,25 @@ export function createCoreRuntimeBundleHandlers({
           pageChrome: pageTheme,
           liveProjection: params.liveProjection !== false,
           runtimeSurfaces: appContext.runtimeSurfaceEntries ?? [],
-          tutorial: appTutorialConfigForSession({ requestSession, tutorialProgressFor })
+          surfaceContext: tutorialSurface.context,
+          surfaceRouteId: tutorialSurface.routeId,
+          surfaceRootWidgetId: tutorialSurface.rootWidgetId,
+          surfaceProgramId: tutorialSurface.frontendProgramId,
+          tutorial: appTutorialConfigForSession({ requestSession, tutorialProgressFor, surface: tutorialSurface })
         }
       }));
     },
 
     "runtime.diagnostics.read": async ({ res, appContext }) => {
+      const pluginCatalog = await getRuntimePluginCatalog({
+        activeProfile: appContext?.runtimeProfile ?? runtimeProfile,
+        serverRunnerId: appContext?.serverRunnerId ?? null
+      });
+      const operatorState = await appContext?.runtimeOperatorService?.state?.();
       const diagnostics = buildRuntimeDiagnosticsForProfile({
         requestedProfile: appContext?.requestedRuntimeProfile ?? requestedRuntimeProfile ?? runtimeProfile,
         profileName: appContext?.runtimeProfile ?? runtimeProfile,
+        additionalBundleIds: appContext?.runtimeAdditionalBundleIds ?? pluginCatalog.addedBundleIds,
         startupRunner: {
           id: appContext?.serverRunnerId ?? null,
           backendHost,
@@ -215,11 +532,22 @@ export function createCoreRuntimeBundleHandlers({
           handlerSet: appContext?.handlerSet ?? null,
           bootstrapOnly: appContext?.bootstrapOnly === true
         },
+        startupMode: appContext?.runtimeStartupMode ?? "serve",
         installedHostCapabilities: {
           backend: [...currentBackendCapabilities()],
           frontend: [...currentFrontendCapabilities()]
         },
-        handlerSetDefinitions
+        handlerSetDefinitions,
+        operatorContract: appContext?.runtimeOperatorContract ?? null,
+        operatorState,
+        pluginCatalogSummary: pluginCatalog.summary,
+        authoredPluginIds: pluginCatalog.authoredPluginIds,
+        operatorPluginIds: pluginCatalog.operatorPluginIds,
+        effectivePluginIds: pluginCatalog.effectivePluginIds,
+        configuredPluginIds: pluginCatalog.configuredPluginIds,
+        activePluginIds: pluginCatalog.activePluginIds,
+        rejectedPlugins: pluginCatalog.rejectedPlugins,
+        pluginAddedBundleIds: pluginCatalog.addedBundleIds
       });
       world.observe({
         process: "runtime.diagnostics.read",
@@ -234,6 +562,53 @@ export function createCoreRuntimeBundleHandlers({
         }
       });
       sendJson(res, 200, diagnostics);
+    },
+
+    "runtime.plugins.read": async ({ res, appContext }) => {
+      const pluginCatalog = await getRuntimePluginCatalog({
+        activeProfile: appContext?.runtimeProfile ?? runtimeProfile,
+        serverRunnerId: appContext?.serverRunnerId ?? null
+      });
+      world.observe({
+        process: "runtime.plugins.read",
+        actor: backendHost,
+        claims: [relation(backendHost, "projected", "runtimePlugins")],
+        body: {
+          activeProfile: pluginCatalog.activeProfile,
+          discoveredCount: pluginCatalog.summary.discoveredCount,
+          validCount: pluginCatalog.summary.validCount,
+          invalidCount: pluginCatalog.summary.invalidCount
+        }
+      });
+      sendJson(res, 200, pluginCatalog);
+    },
+
+    "runtime.pluginReviews.read": async ({ res, requestUrl, appContext }) => {
+      const serverRunnerId = requestUrl?.searchParams?.get("serverRunner") || "";
+      const pluginId = requestUrl?.searchParams?.get("plugin") || "";
+      const serverRunner = world.project(moduleProjectors.serverRunners)
+        .find(row => row.id === serverRunnerId) ?? null;
+      if (!serverRunner) {
+        sendJson(res, 404, { error: "server runner not found", serverRunner: serverRunnerId || null });
+        return;
+      }
+      const review = await getRuntimePluginReviews({
+        activeProfile: appContext?.runtimeProfile ?? runtimeProfile,
+        serverRunnerId,
+        pluginId
+      });
+      world.observe({
+        process: "runtime.pluginReviews.read",
+        actor: backendHost,
+        claims: [relation(backendHost, "projected", "runtimePluginReviews")],
+        body: {
+          serverRunner: serverRunnerId,
+          plugin: pluginId || null,
+          packageCount: review.packages.length,
+          authoredPluginCount: review.authoredPluginIds.length
+        }
+      });
+      sendJson(res, 200, review);
     }
   };
 }
@@ -247,7 +622,9 @@ export function createTutorialBundleHandlers({
   return {
     "tutorial.progress.read": async ({ res, params, requestSession }) => {
       const tutorialId = params.tutorialId || "";
-      sendJson(res, 200, { tutorialId, progress: tutorialProgressFor(requestSession, tutorialId) });
+      const definition = tutorialDefinition(tutorialId);
+      const stored = tutorialProgressFor(requestSession, tutorialId);
+      sendJson(res, 200, { tutorialId, progress: definition ? normalizeTutorialProgress(definition, stored) : stored });
     },
 
     "tutorial.progress.write": async ({ req, res, params, requestSession }) => {
@@ -262,19 +639,7 @@ export function createTutorialBundleHandlers({
         return;
       }
       const body = await readJson(req);
-      const progress = body && typeof body === "object"
-        ? {
-            tutorialId,
-            chapterId: typeof body.chapterId === "string" ? body.chapterId : null,
-            stepId: typeof body.stepId === "string" ? body.stepId : null,
-            chapterStatus: typeof body.chapterStatus === "string" ? body.chapterStatus : "in_progress",
-            draftInputs: body.draftInputs && typeof body.draftInputs === "object" ? body.draftInputs : {},
-            completedAt: typeof body.completedAt === "string" ? body.completedAt : null,
-            hidden: body.hidden === true,
-            disabledPages: normalizeTutorialDisabledPages(definition, body.disabledPages),
-            replayStepId: definition.steps.some(step => step.id === body.replayStepId) ? body.replayStepId : null
-          }
-        : null;
+      const progress = body && typeof body === "object" ? normalizeTutorialProgress(definition, { tutorialId, ...body }) : null;
       if (progress?.stepId && !definition.steps.some(step => step.id === progress.stepId)) {
         sendJson(res, 400, { error: "unknown tutorial step", tutorialId, stepId: progress.stepId });
         return;
@@ -300,13 +665,107 @@ export function createAuthoringBootstrapReadModels({
   runtimeProfile,
   runtimeBundleSummary,
   supportedHandlers,
+  supportedHandlerMetadata = {},
   supportedPageHandlers,
   supportedHandlerSets,
   supportedFrontendOps,
+  supportedBackendOps,
   backendHosts,
-  frontendHosts
+  frontendHosts,
+  getRuntimePluginCatalog,
+  buildPluginCapabilitySourceIndex,
+  getRuntimeOperatorState = async () => null
 }) {
-  const bootstrapState = (requestActor = null) => {
+  const runtimePluginAvailabilityRows = ({
+    serverRunners = [],
+    runtimePluginInstalls = [],
+    pluginPackages = []
+  }) => {
+    const installedIndex = new Set(
+      runtimePluginInstalls.map(row => `${row.serverRunner}\u0000${row.plugin}`)
+    );
+    return serverRunners.flatMap(serverRunner => pluginPackages.map(pluginPackage => {
+      const key = `${serverRunner.id}\u0000${pluginPackage.id}`;
+      const installed = installedIndex.has(key);
+      const dependsOnPlugins = [...(pluginPackage.metadata?.dependsOnPlugins ?? [])];
+      const missingDependencies = dependsOnPlugins.filter(pluginId => !installedIndex.has(`${serverRunner.id}\u0000${pluginId}`));
+      const reasons = [];
+      if (installed) reasons.push("already installed on server runner");
+      if (!pluginPackage.validation?.ok) reasons.push(...(pluginPackage.validation?.errors ?? []));
+      if (!pluginPackage.execution?.executable) reasons.push("plugin package is metadata-only");
+      if (!pluginPackage.compatibility?.compatible) {
+        reasons.push(...((pluginPackage.compatibility?.reasons ?? []).map(reason =>
+          reason === "runtime-profile-incompatible"
+            ? "runtime profile incompatible"
+            : reason
+        )));
+      }
+      if (missingDependencies.length) {
+        reasons.push(`missing plugin dependencies: ${missingDependencies.join(", ")}`);
+      }
+      return {
+        serverRunner: serverRunner.id,
+        plugin: pluginPackage.id,
+        displayName: pluginPackage.metadata?.displayName ?? pluginPackage.id,
+        version: pluginPackage.metadata?.version ?? null,
+        description: pluginPackage.metadata?.description ?? null,
+        discoveryPath: pluginPackage.discoveryPath,
+        installed,
+        executable: pluginPackage.execution?.executable === true,
+        compatible: pluginPackage.compatibility?.compatible === true,
+        installable: !installed
+          && pluginPackage.validation?.ok === true
+          && pluginPackage.execution?.executable === true
+          && pluginPackage.compatibility?.compatible === true
+          && missingDependencies.length === 0,
+        reasons,
+        dependsOnPlugins,
+        missingDependencies,
+        validationErrors: [...(pluginPackage.validation?.errors ?? [])],
+        compatibilityReasons: [...(pluginPackage.compatibility?.reasons ?? [])],
+        executionMode: pluginPackage.execution?.mode ?? null,
+        executionReason: pluginPackage.execution?.reason ?? null
+      };
+    })).sort((left, right) =>
+      String(left.serverRunner).localeCompare(String(right.serverRunner))
+      || String(left.plugin).localeCompare(String(right.plugin))
+    );
+  };
+
+  const mcpBootstrapState = ({
+    mcpServers = [],
+    mcpToolInstalls = [],
+    appContext = null
+  }) => {
+    const supportedToolMap = new Map(
+      listSupportedMcpTools().map(tool => [tool.name, tool])
+    );
+    const activeServerRunner = appContext?.serverRunnerId ?? null;
+    const servers = mcpServers.map(server => {
+      const tools = mcpToolInstalls
+        .filter(row => row.server === server.id)
+        .map(row => ({
+          ...row,
+          definition: supportedToolMap.get(row.tool) ?? null
+        }));
+      return {
+        ...server,
+        attachedToActiveRuntime: Boolean(server.serverRunner && activeServerRunner && server.serverRunner === activeServerRunner),
+        transportVisibility: {
+          stdio: server.transports.includes("stdio"),
+          http: server.transports.includes("http")
+        },
+        httpPath: server.transports.includes("http") ? `/mcp/${encodeURIComponent(server.id)}` : null,
+        tools
+      };
+    });
+    return {
+      activeServerRunner,
+      servers
+    };
+  };
+
+  const bootstrapState = async (requestActor = null, appContext = null) => {
     const routes = world.project(moduleProjectors.routes);
     const servedRoutes = world.project(moduleProjectors.servedRoutes);
     const serverRunners = world.project(moduleProjectors.serverRunners);
@@ -321,12 +780,37 @@ export function createAuthoringBootstrapReadModels({
     const capabilities = world.project(moduleProjectors.capabilities);
     const capabilityCatalog = world.project(moduleProjectors.capabilityCatalog);
     const capabilityInstalls = world.project(moduleProjectors.capabilityInstalls);
+    const runtimePluginInstalls = world.project(moduleProjectors.runtimePluginInstalls);
     const mcpServers = world.project(moduleProjectors.mcpServers);
     const mcpToolInstalls = world.project(moduleProjectors.mcpToolInstalls);
     const identities = world.project(moduleProjectors.identities);
     const widgets = widgetDefinitions(world.allWitnesses());
+    const widgetVersionRows = widgetVersions(world.allWitnesses());
+    const widgetTransitions = widgetVersionTransitions(world.allWitnesses());
+    const widgetActivationHistoryRows = [...widgetVersionActivationHistory(world.allWitnesses()).values()].flat();
     const frontendPrograms = frontendProgramsProjection(world.allWitnesses());
     const frontendSteps = frontendStepsProjection(world.allWitnesses());
+    const backendPrograms = backendProgramsProjection(world.allWitnesses());
+    const backendProgramVersions = backendProgramVersionsProjection(world.allWitnesses());
+    const backendProgramTransitions = backendProgramVersionTransitions(world.allWitnesses());
+    const backendProgramActivationRows = [...backendProgramActivationHistory(world.allWitnesses()).values()].flat();
+    const backendSteps = backendStepsProjection(world.allWitnesses());
+    const pluginCatalog = await getRuntimePluginCatalog({
+      activeProfile: runtimeProfile,
+      serverRunnerId: null,
+      configuredPluginIds: [],
+      authoredPluginIds: []
+    });
+    const capabilityPluginSources = buildPluginCapabilitySourceIndex({
+      capabilityCatalog,
+      pluginPackages: pluginCatalog.packages
+    });
+    const runtimePluginAvailability = runtimePluginAvailabilityRows({
+      serverRunners,
+      runtimePluginInstalls,
+      pluginPackages: pluginCatalog.packages
+    });
+    const operator = await getRuntimeOperatorState(appContext);
     return {
       contexts,
       contextBindings,
@@ -338,22 +822,36 @@ export function createAuthoringBootstrapReadModels({
       authority: authorityForActor(world, requestActor),
       proposals,
       capabilities,
-      capabilityCatalog,
+      capabilityCatalog: capabilityPluginSources.capabilityCatalog,
+      capabilityPackageSources: capabilityPluginSources.capabilityPackageSources,
       capabilityInstalls,
+      runtimePluginInstalls,
+      runtimePluginAvailability,
+      pluginCatalog,
+      operator,
+      mcp: mcpBootstrapState({ mcpServers, mcpToolInstalls, appContext }),
       mcpServers,
       mcpToolInstalls,
       identities,
       widgets,
+      widgetVersions: widgetVersionRows,
+      widgetVersionTransitions: widgetTransitions,
+      widgetVersionActivationHistory: widgetActivationHistoryRows,
       frontendPrograms,
       frontendSteps,
+      backendPrograms,
+      backendProgramVersions,
+      backendProgramTransitions,
+      backendProgramActivationHistory: backendProgramActivationRows,
+      backendSteps,
       routes,
       servedRoutes,
       serverRunners
     };
   };
 
-  const bootstrapModel = () => {
-    const authored = bootstrapState();
+  const bootstrapModel = async () => {
+    const authored = await bootstrapState();
     const homeRoute = authored.servedRoutes.find(route => route.method === "GET" && route.path === "/" && route.handler === "page.home");
     const appReady = Boolean(homeRoute && homeRoute.params?.rootWidget);
     const typeModel = world.project(typeModelProjection);
@@ -369,9 +867,11 @@ export function createAuthoringBootstrapReadModels({
       widgetKinds: ["Page", "Box", "Section", "Heading", "Text", "Form", "Input", "Select", "Option", "Button", "Link", "List", "ValueEditor"],
       supportedMethods: ["GET", "POST", "PATCH", "DELETE"],
       supportedHandlers,
+      supportedHandlerMetadata,
       supportedPageHandlers,
       supportedHandlerSets,
       supportedFrontendOps,
+      supportedBackendOps,
       supportedMcpTransports: ["stdio", "http"],
       supportedMcpActingModes: ["delegated", "service"],
       supportedMcpTools: listSupportedMcpTools(),
@@ -382,6 +882,7 @@ export function createAuthoringBootstrapReadModels({
       providedRuntimeCapabilities: runtimeBundleSummary?.capabilities ?? [],
       backendHosts: backendHosts.map(id => ({ id })),
       frontendHosts: frontendHosts.map(id => ({ id })),
+      pluginExecutionMode: "bundle-bridge",
       processSpecs: Object.values(typeModel.processSpecsByProcess ?? {}),
       capabilityTargetKinds: ["context", "serverRunner", "routePage"],
       stewardshipTargetKinds: ["context", "perspective"],
@@ -396,6 +897,8 @@ export function createAuthoringBootstrapReadModels({
         ...(authored.perspectives || []),
         ...(authored.widgets || []),
         ...(authored.frontendPrograms || []),
+        ...(authored.backendPrograms || []),
+        ...(authored.backendProgramVersions || []),
         ...(authored.routes || []),
         ...(authored.serverRunners || []),
         ...(authored.mcpServers || []),
@@ -404,6 +907,26 @@ export function createAuthoringBootstrapReadModels({
       attachableContexts: authored.contexts || [],
       proposalTargetProcesses: [
         "identity.update",
+        "todo.create",
+        "todo.update",
+        "todo.delete",
+        "canvas.place",
+        "canvas.move",
+        "canvas.moveMany",
+        "canvas.style",
+        "canvas.remove",
+        "canvas.removeMany",
+        "canvas.duplicate",
+        "canvas.camera",
+        "canvas.grid",
+        "canvas.batch",
+        "canvas.createThing",
+        "canvas.perspective.create",
+        "canvas.thing.setTitle",
+        "canvas.relate",
+        "canvas.unrelate",
+        "asset.attach",
+        "asset.detach",
         "context.define",
         "context.bind",
         "context.unbind",
@@ -421,6 +944,11 @@ export function createAuthoringBootstrapReadModels({
         "edenVersions.publish",
         "frontendProgram.define",
         "frontendStep.define",
+        "backendProgram.define",
+        "backendProgramVersion.define",
+        "backendStep.define",
+        "backendProgramVersion.activate",
+        "backendProgramVersion.rollback",
         "route.define",
         "serve.define",
         "serverRunner.define",
@@ -428,6 +956,8 @@ export function createAuthoringBootstrapReadModels({
         "capability.define",
         "capability.install",
         "capability.remove",
+        "runtimePlugin.install",
+        "runtimePlugin.remove",
         "mcpTool.install",
         "mcpTool.remove"
       ]
@@ -471,12 +1001,30 @@ export function createAuthoringProposalExecutor({
   supportedHandlerSets,
   supportedHandlers,
   supportedFrontendOps,
+  supportedBackendOps,
   ensureIdentityAuthority,
   ensureTargetAuthority,
   ensureContextAuthority,
-  mcpToolNames
+  mcpToolNames,
+  getRuntimePluginCatalog
 }) {
-  return actor => proposal => {
+  const canvasProposalResult = witness => {
+    if (witness?.process?.endsWith(".failed") || witness?.process?.endsWith(".blocked")) {
+      return {
+        ok: false,
+        status: Number.isInteger(witness.body?.status) ? witness.body.status : 400,
+        error: witness.body?.reason || "canvas proposal execution failed",
+        witness
+      };
+    }
+    return { ok: true, witnessIds: [witness.id].filter(Boolean) };
+  };
+  const runContextCanvasProposal = (actor, process, body) => {
+    const gate = body.context ? ensureContextAuthority(actor, body.context) : { ok: true };
+    if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+    return canvasProposalResult(canvasProcessHandlers[process](world, { actor, ...body }));
+  };
+  return actor => async proposal => {
     const body = proposal.body ?? {};
     switch (proposal.targetProcess) {
       case "identity.update": {
@@ -488,6 +1036,85 @@ export function createAuthoringProposalExecutor({
           body: { ...body, id: body.id || proposal.targetId || "" }
         });
         return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "todo.create": {
+        const gate = ensureContextAuthority(actor, proposal.targetId || body.context || "frontend");
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestTodoCreate(world, {
+          actor,
+          backendHost,
+          body
+        });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "todo.update": {
+        const gate = ensureTodoTargetAuthority(world, actor, body.id || proposal.targetId || "");
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestTodoUpdate(world, {
+          actor,
+          backendHost,
+          body: { ...body, id: body.id || proposal.targetId || "" }
+        });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "todo.delete": {
+        const gate = ensureTodoTargetAuthority(world, actor, body.id || proposal.targetId || "");
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestTodoDelete(world, {
+          actor,
+          backendHost,
+          body: { ...body, id: body.id || proposal.targetId || "" }
+        });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "canvas.place":
+      case "canvas.move":
+      case "canvas.moveMany":
+      case "canvas.style":
+      case "canvas.remove":
+      case "canvas.removeMany":
+      case "canvas.duplicate":
+      case "canvas.camera":
+      case "canvas.grid":
+      case "canvas.batch":
+      case "canvas.createThing":
+      case "canvas.perspective.create":
+        return runContextCanvasProposal(actor, proposal.targetProcess, body);
+      case "canvas.thing.setTitle": {
+        const thingId = body.thing || proposal.targetId || "";
+        const gate = ensureTargetAuthority(actor, thingId);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        return canvasProposalResult(canvasProcessHandlers["canvas.thing.setTitle"](world, { actor, ...body, thing: thingId }));
+      }
+      case "canvas.relate": {
+        const from = body.from || proposal.targetId || "";
+        const gate = ensureTargetAuthority(actor, from);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        return canvasProposalResult(canvasProcessHandlers["canvas.relate"](world, { actor, ...body, from }));
+      }
+      case "canvas.unrelate": {
+        const from = body.from || proposal.targetId || "";
+        const gate = ensureTargetAuthority(actor, from);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        return canvasProposalResult(canvasProcessHandlers["canvas.unrelate"](world, { actor, ...body, from }));
+      }
+      case "asset.attach": {
+        const assetId = body.asset || proposal.targetId || "";
+        const targetId = body.target || "";
+        const assetGate = ensureTargetAuthority(actor, assetId);
+        if (!assetGate.ok) return { ok: false, status: assetGate.status, error: assetGate.reason };
+        const targetGate = ensureTargetAuthority(actor, targetId);
+        if (!targetGate.ok) return { ok: false, status: targetGate.status, error: targetGate.reason };
+        return canvasProposalResult(canvasProcessHandlers["asset.attach"](world, { actor, ...body, asset: assetId, target: targetId }));
+      }
+      case "asset.detach": {
+        const assetId = body.asset || proposal.targetId || "";
+        const targetId = body.target || "";
+        const assetGate = ensureTargetAuthority(actor, assetId);
+        if (!assetGate.ok) return { ok: false, status: assetGate.status, error: assetGate.reason };
+        const targetGate = ensureTargetAuthority(actor, targetId);
+        if (!targetGate.ok) return { ok: false, status: targetGate.status, error: targetGate.reason };
+        return canvasProposalResult(canvasProcessHandlers["asset.detach"](world, { actor, ...body, asset: assetId, target: targetId }));
       }
       case "context.define": {
         const gate = body.parent ? ensureTargetAuthority(actor, body.parent) : { ok: true };
@@ -605,10 +1232,44 @@ export function createAuthoringProposalExecutor({
         const result = requestBootstrapFrontendStepDefine(world, { actor, backendHost, body, allowedOps: supportedFrontendOps });
         return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
       }
+      case "backendProgram.define": {
+        const gate = ensureContextAuthority(actor, body.context ?? null);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapBackendProgramDefine(world, { actor, backendHost, body });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "backendProgramVersion.define": {
+        const gate = ensureTargetAuthority(actor, body.soul);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapBackendProgramVersionDefine(world, { actor, backendHost, body });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "backendStep.define": {
+        const gate = ensureTargetAuthority(actor, body.version);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapBackendStepDefine(world, { actor, backendHost, body, allowedOps: supportedBackendOps });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "backendProgramVersion.activate": {
+        const gate = ensureTargetAuthority(actor, body.soul || "");
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapBackendProgramVersionActivate(world, { actor, backendHost, body });
+        return result.ok
+          ? { ok: true, witnessIds: (result.witnesses || [result.witness]).map(entry => entry?.id).filter(Boolean) }
+          : result;
+      }
+      case "backendProgramVersion.rollback": {
+        const gate = ensureTargetAuthority(actor, body.soul || "");
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapBackendProgramVersionRollback(world, { actor, backendHost, body });
+        return result.ok
+          ? { ok: true, witnessIds: (result.witnesses || [result.witness]).map(entry => entry?.id).filter(Boolean) }
+          : result;
+      }
       case "route.define": {
         const gate = ensureContextAuthority(actor, body.context ?? null);
         if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
-        const result = requestBootstrapRouteDefine(world, { actor, backendHost, body, allowedHandlers: supportedHandlers });
+        const result = requestBootstrapRouteDefine(world, { actor, backendHost, body, allowedHandlers: supportedHandlers, handlerMetadataById: supportedHandlerMetadata });
         return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
       }
       case "serve.define": {
@@ -651,6 +1312,27 @@ export function createAuthoringProposalExecutor({
         const result = requestBootstrapCapabilityRemove(world, { actor, backendHost, body });
         return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
       }
+      case "runtimePlugin.install": {
+        const gate = ensureTargetAuthority(actor, body.serverRunner);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const pluginCatalog = await getRuntimePluginCatalog({
+          activeProfile: body.runtimeProfile ?? null,
+          serverRunnerId: body.serverRunner ?? null
+        });
+        const result = requestBootstrapRuntimePluginInstall(world, {
+          actor,
+          backendHost,
+          body,
+          pluginCatalog
+        });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
+      case "runtimePlugin.remove": {
+        const gate = ensureTargetAuthority(actor, body.serverRunner);
+        if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+        const result = requestBootstrapRuntimePluginRemove(world, { actor, backendHost, body });
+        return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
+      }
       case "mcpTool.install": {
         const gate = ensureTargetAuthority(actor, body.server);
         if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
@@ -682,12 +1364,17 @@ export function createAuthoringBundleHandlers({
   supportedPageHandlers,
   supportedHandlerSets,
   supportedHandlers,
+  supportedHandlerMetadata = {},
   supportedFrontendOps,
+  supportedBackendOps,
   backendHosts,
   frontendHosts,
   mcpToolNames,
   send,
-  sendJson
+  sendJson,
+  getRuntimePluginCatalog,
+  buildPluginCapabilitySourceIndex,
+  getRuntimeOperatorState = async () => null
 }) {
   const {
     requireBootstrapActor,
@@ -701,23 +1388,120 @@ export function createAuthoringBundleHandlers({
     runtimeProfile,
     runtimeBundleSummary,
     supportedHandlers,
+    supportedHandlerMetadata,
     supportedPageHandlers,
     supportedHandlerSets,
     supportedFrontendOps,
+    supportedBackendOps,
     backendHosts,
-    frontendHosts
+    frontendHosts,
+    getRuntimePluginCatalog,
+    buildPluginCapabilitySourceIndex,
+    getRuntimeOperatorState
   });
+  const sendOperatorError = (res, error) => {
+    const status = Number.isInteger(error?.status) ? error.status : 500;
+    sendJson(res, status, {
+      error: error instanceof Error ? error.message : String(error),
+      ...(error?.details ? { details: error.details } : {}),
+      ...(error?.summary ? { artifact: error.summary } : {})
+    });
+  };
   return {
     "bootstrap.model.read": async ({ res }) => {
-      sendJson(res, 200, getBootstrapModel());
+      sendJson(res, 200, await getBootstrapModel());
     },
 
-    "bootstrap.state.read": async ({ res, requestActor }) => {
-      sendJson(res, 200, getBootstrapState(requestActor));
+    "bootstrap.state.read": async ({ res, requestActor, appContext }) => {
+      sendJson(res, 200, await getBootstrapState(requestActor, appContext));
     },
 
     "bootstrap.page": async ({ res }) => {
       send(res, 200, "text/html; charset=utf-8", renderBootstrapPage());
+    },
+
+    "operator.state.read": async ({ res, requestActor, appContext }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      sendJson(res, 200, await getRuntimeOperatorState(appContext));
+    },
+
+    "operator.backup": async ({ req, res, requestActor, appContext }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      try {
+        const body = await readJson(req);
+        const artifact = await appContext?.runtimeOperatorService?.backup?.({
+          label: body?.label ?? "",
+          includeDerived: body?.includeDerived === true,
+          actor: gate.actor
+        });
+        sendJson(res, 201, { artifact, operator: await getRuntimeOperatorState(appContext) });
+      } catch (error) {
+        sendOperatorError(res, error);
+      }
+    },
+
+    "operator.export": async ({ req, res, requestActor, appContext }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      try {
+        const body = await readJson(req);
+        const artifact = await appContext?.runtimeOperatorService?.exportWorld?.({
+          label: body?.label ?? "",
+          actor: gate.actor
+        });
+        sendJson(res, 201, { artifact, operator: await getRuntimeOperatorState(appContext) });
+      } catch (error) {
+        sendOperatorError(res, error);
+      }
+    },
+
+    "operator.restore": async ({ req, res, requestActor, appContext }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      try {
+        const body = await readJson(req);
+        const result = await appContext?.runtimeOperatorService?.restore?.({
+          artifactId: body?.artifactId ?? "",
+          preserveCurrent: body?.preserveCurrent === true,
+          actor: gate.actor
+        });
+        sendJson(res, 200, { ...result, operator: await getRuntimeOperatorState(appContext) });
+      } catch (error) {
+        sendOperatorError(res, error);
+      }
+    },
+
+    "operator.import": async ({ req, res, requestActor, appContext }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      try {
+        const body = await readJson(req);
+        const result = await appContext?.runtimeOperatorService?.importWorld?.({
+          artifactId: body?.artifactId ?? "",
+          preserveCurrent: body?.preserveCurrent === true,
+          actor: gate.actor
+        });
+        sendJson(res, 200, { ...result, operator: await getRuntimeOperatorState(appContext) });
+      } catch (error) {
+        sendOperatorError(res, error);
+      }
     },
 
     "identity.create": async ({ req, res, requestActor }) => {
@@ -986,7 +1770,7 @@ export function createAuthoringBundleHandlers({
         sendGateFailure(res, gate);
         return;
       }
-      const result = requestBootstrapProposalApprove(world, {
+      const result = await requestBootstrapProposalApprove(world, {
         actor: gate.actor,
         backendHost,
         proposalId: params.id || "",
@@ -1077,6 +1861,55 @@ export function createAuthoringBundleHandlers({
         return;
       }
       sendJson(res, result.status, { capabilityInstall: result.capabilityInstall, witness: result.witness });
+    },
+
+    "runtimePlugin.install": async ({ req, res, requestActor, appContext }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const auth = ensureTargetAuthority(gate.actor, body.serverRunner);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const pluginCatalog = await getRuntimePluginCatalog({
+        activeProfile: appContext?.runtimeProfile ?? runtimeProfile,
+        serverRunnerId: body.serverRunner ?? null
+      });
+      const result = requestBootstrapRuntimePluginInstall(world, {
+        actor: gate.actor,
+        backendHost,
+        body,
+        pluginCatalog
+      });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { runtimePluginInstall: result.runtimePluginInstall, witness: result.witness });
+    },
+
+    "runtimePlugin.remove": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const auth = ensureTargetAuthority(gate.actor, body.serverRunner);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestBootstrapRuntimePluginRemove(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { runtimePluginInstall: result.runtimePluginInstall, witness: result.witness });
     },
 
     "serverRunner.create": async ({ req, res, requestActor }) => {
@@ -1173,7 +2006,7 @@ export function createAuthoringBundleHandlers({
         sendGateFailure(res, auth);
         return;
       }
-      const result = requestBootstrapRouteDefine(world, { actor: gate.actor, backendHost, body, allowedHandlers: supportedHandlers });
+      const result = requestBootstrapRouteDefine(world, { actor: gate.actor, backendHost, body, allowedHandlers: supportedHandlers, handlerMetadataById: supportedHandlerMetadata });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;
@@ -1241,6 +2074,118 @@ export function createAuthoringBundleHandlers({
         return;
       }
       sendJson(res, result.status, { step: result.step, witness: result.witness });
+    },
+
+    "backendProgram.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const auth = ensureContextAuthority(gate.actor, body.context ?? null);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestBootstrapBackendProgramDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { backendProgram: result.backendProgram, witness: result.witness });
+    },
+
+    "backendProgramVersion.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const auth = ensureTargetAuthority(gate.actor, body.soul);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestBootstrapBackendProgramVersionDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { backendProgramVersion: result.backendProgramVersion, witness: result.witness });
+    },
+
+    "backendStep.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const auth = ensureTargetAuthority(gate.actor, body.version);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestBootstrapBackendStepDefine(world, { actor: gate.actor, backendHost, body, allowedOps: supportedBackendOps });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, { step: result.step, witness: result.witness });
+    },
+
+    "backendProgramVersions.activate": async ({ req, res, params, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const soul = params?.soul || body.soul || "";
+      const auth = ensureTargetAuthority(gate.actor, soul);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestBootstrapBackendProgramVersionActivate(world, { actor: gate.actor, backendHost, body: { ...body, soul } });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, {
+        ok: true,
+        status: result.activationStatus,
+        backendProgramVersion: result.backendProgramVersion,
+        witness: result.witness
+      });
+    },
+
+    "backendProgramVersions.rollback": async ({ req, res, params, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = req ? await readJson(req) : {};
+      const soul = params?.soul || body.soul || "";
+      const auth = ensureTargetAuthority(gate.actor, soul);
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestBootstrapBackendProgramVersionRollback(world, { actor: gate.actor, backendHost, body: { ...body, soul } });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness });
+        return;
+      }
+      sendJson(res, result.status, {
+        ok: true,
+        status: result.rollbackStatus,
+        backendProgramVersion: result.backendProgramVersion,
+        witness: result.witness
+      });
     },
 
     "widgets.create": async ({ req, res, requestActor, route }) => {
@@ -3809,6 +4754,50 @@ export function createPracticalBackendAssetSurfaceHandlers({
   runAssetDetach
 }) {
   const { ensureTargetAuthority } = authorityServices;
+  const assetAttachmentProposalId = (process, assetId, targetId) => {
+    const processPart = String(process || "asset.attachment").replace(/[^A-Za-z0-9_.:-]+/g, "-");
+    const assetPart = String(assetId || "asset").replace(/[^A-Za-z0-9_.:-]+/g, "-");
+    const targetPart = String(targetId || "target").replace(/[^A-Za-z0-9_.:-]+/g, "-");
+    return `proposal.${processPart}.${assetPart}.${targetPart}`;
+  };
+  const assetAttachmentProposalConfig = ({ process, assetId, targetId }) => {
+    if (!assetId || !targetId) return null;
+    if (process === "asset.attach") {
+      return {
+        targetProcess: process,
+        targetKind: "thing",
+        targetId: assetId,
+        reason: "Attach a shared asset through witnessed proposal",
+        statusMessage: "Proposed asset attachment for review."
+      };
+    }
+    if (process === "asset.detach") {
+      return {
+        targetProcess: process,
+        targetKind: "thing",
+        targetId: assetId,
+        reason: "Remove a shared asset attachment through witnessed proposal",
+        statusMessage: "Proposed asset detachment for review."
+      };
+    }
+    return null;
+  };
+  const createAssetAttachmentProposal = ({ actor, process, assetId, targetId, perspective = null }) => {
+    const config = assetAttachmentProposalConfig({ process, assetId, targetId });
+    if (!config) return null;
+    return requestBootstrapProposalCreate(world, {
+      actor,
+      backendHost,
+      body: {
+        id: assetAttachmentProposalId(config.targetProcess, assetId, targetId),
+        targetProcess: config.targetProcess,
+        targetKind: config.targetKind,
+        targetId: config.targetId,
+        bodyJson: JSON.stringify({ asset: assetId, target: targetId, perspective }),
+        reason: config.reason
+      }
+    });
+  };
   return {
     "asset.content.read": async ({ res, params, requestActor, requestUrl, appContext }) => {
       const asset = currentAssetById(params.id || "");
@@ -4046,12 +5035,56 @@ export function createPracticalBackendAssetSurfaceHandlers({
       }
       const assetGate = ensureTargetAuthority(requestActor, asset.id);
       if (!assetGate.ok) {
+        if (assetGate.status === 403) {
+          const proposal = createAssetAttachmentProposal({
+            actor: requestActor,
+            process: "asset.attach",
+            assetId: asset.id,
+            targetId: target,
+            perspective
+          });
+          if (!proposal?.ok) {
+            sendJson(res, proposal?.status || 400, { error: proposal?.error || "proposal creation failed", witness: proposal?.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            attachment: { asset: asset.id, target, perspective },
+            statusMessage: assetAttachmentProposalConfig({ process: "asset.attach", assetId: asset.id, targetId: target })?.statusMessage || "Proposed change for review."
+          });
+          return;
+        }
         world.emit({ process: "asset.attach.failed", actor: requestActor, claims: [], body: { asset: asset.id, target, perspective, reason: assetGate.reason, blockedTarget: asset.id } });
         sendGateFailure(res, assetGate);
         return;
       }
       const targetGate = ensureTargetAuthority(requestActor, target);
       if (!targetGate.ok) {
+        if (targetGate.status === 403) {
+          const proposal = createAssetAttachmentProposal({
+            actor: requestActor,
+            process: "asset.attach",
+            assetId: asset.id,
+            targetId: target,
+            perspective
+          });
+          if (!proposal?.ok) {
+            sendJson(res, proposal?.status || 400, { error: proposal?.error || "proposal creation failed", witness: proposal?.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            attachment: { asset: asset.id, target, perspective },
+            statusMessage: assetAttachmentProposalConfig({ process: "asset.attach", assetId: asset.id, targetId: target })?.statusMessage || "Proposed change for review."
+          });
+          return;
+        }
         world.emit({ process: "asset.attach.failed", actor: requestActor, claims: [], body: { asset: asset.id, target, perspective, reason: targetGate.reason, blockedTarget: target } });
         sendGateFailure(res, targetGate);
         return;
@@ -4099,12 +5132,56 @@ export function createPracticalBackendAssetSurfaceHandlers({
       }
       const assetGate = ensureTargetAuthority(requestActor, asset.id);
       if (!assetGate.ok) {
+        if (assetGate.status === 403) {
+          const proposal = createAssetAttachmentProposal({
+            actor: requestActor,
+            process: "asset.detach",
+            assetId: asset.id,
+            targetId: target,
+            perspective
+          });
+          if (!proposal?.ok) {
+            sendJson(res, proposal?.status || 400, { error: proposal?.error || "proposal creation failed", witness: proposal?.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            attachment: { asset: asset.id, target, perspective },
+            statusMessage: assetAttachmentProposalConfig({ process: "asset.detach", assetId: asset.id, targetId: target })?.statusMessage || "Proposed change for review."
+          });
+          return;
+        }
         world.emit({ process: "asset.detach.failed", actor: requestActor, claims: [], body: { asset: asset.id, target, perspective, reason: assetGate.reason, blockedTarget: asset.id } });
         sendGateFailure(res, assetGate);
         return;
       }
       const targetGate = ensureTargetAuthority(requestActor, target);
       if (!targetGate.ok) {
+        if (targetGate.status === 403) {
+          const proposal = createAssetAttachmentProposal({
+            actor: requestActor,
+            process: "asset.detach",
+            assetId: asset.id,
+            targetId: target,
+            perspective
+          });
+          if (!proposal?.ok) {
+            sendJson(res, proposal?.status || 400, { error: proposal?.error || "proposal creation failed", witness: proposal?.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            attachment: { asset: asset.id, target, perspective },
+            statusMessage: assetAttachmentProposalConfig({ process: "asset.detach", assetId: asset.id, targetId: target })?.statusMessage || "Proposed change for review."
+          });
+          return;
+        }
         world.emit({ process: "asset.detach.failed", actor: requestActor, claims: [], body: { asset: asset.id, target, perspective, reason: targetGate.reason, blockedTarget: target } });
         sendGateFailure(res, targetGate);
         return;
@@ -4897,7 +5974,7 @@ export function createEdenBundleHandlers({
         sendJson(res, 404, { error: "no open organization proposal", organizationState: surface.runtime });
         return;
       }
-      const result = requestBootstrapProposalApprove(world, {
+      const result = await requestBootstrapProposalApprove(world, {
         actor: gate.actor,
         backendHost,
         proposalId,
@@ -5287,7 +6364,105 @@ export function createInspectBundleHandlers({
   processViewInputs,
   frontendTraceProcesses
 }) {
-  const { ensureTargetAuthority } = authorityServices;
+  const { ensureTargetAuthority, ensureContextAuthority } = authorityServices;
+  const widgetVersionProposalId = (targetProcess, soul) => {
+    const processPart = String(targetProcess || "widgetVersion.action").replace(/[^A-Za-z0-9_.:-]+/g, "-");
+    const soulPart = String(soul || "widget").replace(/[^A-Za-z0-9_.:-]+/g, "-");
+    return `proposal.${processPart}.${soulPart}.${world.allWitnesses().length + 1}`;
+  };
+  const createWidgetVersionProposal = ({ actor, targetProcess, soul, version = null }) => {
+    const body = targetProcess === "widgetVersion.activate"
+      ? { soul, version }
+      : { soul };
+    const reason = targetProcess === "widgetVersion.activate"
+      ? `Request activation of ${version || "a shared widget version"} on ${soul || "the shared widget"}`
+      : `Request rollback of ${soul || "the shared widget"} to its previous version`;
+    return requestBootstrapProposalCreate(world, {
+      actor,
+      backendHost,
+      body: {
+        id: widgetVersionProposalId(targetProcess, soul),
+        targetProcess,
+        targetKind: "widget",
+        targetId: soul || null,
+        bodyJson: JSON.stringify(body),
+        reason
+      }
+    });
+  };
+  const widgetVersionProposalStatusMessage = targetProcess => targetProcess === "widgetVersion.rollback"
+    ? "Proposed widget version rollback for review."
+    : "Proposed widget version activation for review.";
+  const widgetVersionDirectStatusMessage = ({ targetProcess, version = null, rolledBackTo = null }) => targetProcess === "widgetVersion.rollback"
+    ? `Rolled back to ${rolledBackTo || "the previous version"}.`
+    : `Activated ${version || "the requested version"}.`;
+  const canvasProposalId = (targetProcess, targetId) => {
+    const processPart = String(targetProcess || "canvas.action").replace(/[^A-Za-z0-9_.:-]+/g, "-");
+    const targetPart = String(targetId || "canvas").replace(/[^A-Za-z0-9_.:-]+/g, "-");
+    return `proposal.${processPart}.${targetPart}.${world.allWitnesses().length + 1}`;
+  };
+  const canvasProposalConfig = ({ process, params = {} }) => {
+    switch (process) {
+      case "canvas.perspective.create":
+        return params.context
+          ? {
+              targetProcess: process,
+              targetKind: "context",
+              targetId: params.context,
+              reason: "Create a shared canvas perspective through witnessed proposal",
+              statusMessage: "Proposed canvas perspective for review."
+            }
+          : null;
+      case "canvas.thing.setTitle":
+        return params.thing
+          ? {
+              targetProcess: process,
+              targetKind: "thing",
+              targetId: params.thing,
+              reason: "Rename a shared canvas thing through witnessed proposal",
+              statusMessage: "Proposed canvas title update for review."
+            }
+          : null;
+      case "canvas.relate":
+        return params.from
+          ? {
+              targetProcess: process,
+              targetKind: "thing",
+              targetId: params.from,
+              reason: "Create a shared canvas relation through witnessed proposal",
+              statusMessage: "Proposed canvas relation for review."
+            }
+          : null;
+      case "canvas.unrelate":
+        return params.from
+          ? {
+              targetProcess: process,
+              targetKind: "thing",
+              targetId: params.from,
+              reason: "Remove a shared canvas relation through witnessed proposal",
+              statusMessage: "Proposed canvas relation removal for review."
+            }
+          : null;
+      default:
+        return null;
+    }
+  };
+  const createCanvasProposal = ({ actor, process, params = {} }) => {
+    const config = canvasProposalConfig({ process, params });
+    if (!config) return null;
+    return requestBootstrapProposalCreate(world, {
+      actor,
+      backendHost,
+      body: {
+        id: canvasProposalId(config.targetProcess, config.targetId),
+        targetProcess: config.targetProcess,
+        targetKind: config.targetKind,
+        targetId: config.targetId,
+        bodyJson: JSON.stringify(params),
+        reason: config.reason
+      }
+    });
+  };
   return {
     "widgetVersions.activate": async ({ req, res, params, requestActor }) => {
       if (!requestActor) {
@@ -5295,13 +6470,35 @@ export function createInspectBundleHandlers({
         sendJson(res, 401, { error: "choose a perspective first" });
         return;
       }
+      const body = await readJson(req);
+      const version = typeof body.version === "string" ? body.version : null;
       const auth = ensureTargetAuthority(requestActor, params.soul || "");
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = createWidgetVersionProposal({
+            actor: requestActor,
+            targetProcess: "widgetVersion.activate",
+            soul: params.soul || "",
+            version
+          });
+          if (!proposal.ok) {
+            sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            soul: params.soul || "",
+            version,
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            statusMessage: widgetVersionProposalStatusMessage("widgetVersion.activate")
+          });
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
-      const body = await readJson(req);
-      const version = typeof body.version === "string" ? body.version : null;
       const result = requestWidgetVersionActivation(world, { actor: requestActor, soul: params.soul || "", version });
       if (result.status === "failed") {
         sendJson(res, 400, { error: result.witness.body?.reason || "unknown widget version", status: result.status, soul: result.soul, version, witness: result.witness });
@@ -5311,7 +6508,15 @@ export function createInspectBundleHandlers({
         sendJson(res, 409, { error: result.witness.body?.reason || "widget version transition blocked", status: result.status, soul: result.soul, version, witnesses: result.witnesses, witness: result.witness });
         return;
       }
-      sendJson(res, 200, { ok: true, status: result.status, soul: result.soul, version, witnesses: result.witnesses, witness: result.witness });
+      sendJson(res, 200, {
+        ok: true,
+        status: result.status,
+        soul: result.soul,
+        version,
+        witnesses: result.witnesses,
+        witness: result.witness,
+        statusMessage: widgetVersionDirectStatusMessage({ targetProcess: "widgetVersion.activate", version })
+      });
     },
 
     "widgetVersions.rollback": async ({ res, params, requestActor }) => {
@@ -5322,6 +6527,26 @@ export function createInspectBundleHandlers({
       }
       const auth = ensureTargetAuthority(requestActor, params.soul || "");
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = createWidgetVersionProposal({
+            actor: requestActor,
+            targetProcess: "widgetVersion.rollback",
+            soul: params.soul || ""
+          });
+          if (!proposal.ok) {
+            sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            soul: params.soul || "",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            statusMessage: widgetVersionProposalStatusMessage("widgetVersion.rollback")
+          });
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -5330,7 +6555,15 @@ export function createInspectBundleHandlers({
         sendJson(res, 409, { error: result.witness.body?.reason || "rollback unavailable", status: result.status, soul: result.soul, witness: result.witness });
         return;
       }
-      sendJson(res, 200, { ok: true, status: result.status, soul: result.soul, version: result.version, witnesses: result.witnesses, witness: result.witness });
+      sendJson(res, 200, {
+        ok: true,
+        status: result.status,
+        soul: result.soul,
+        version: result.version,
+        witnesses: result.witnesses,
+        witness: result.witness,
+        statusMessage: widgetVersionDirectStatusMessage({ targetProcess: "widgetVersion.rollback", rolledBackTo: result.version })
+      });
     },
 
     "page.world": async ({ res, route, appContext }) => {
@@ -5346,6 +6579,12 @@ export function createInspectBundleHandlers({
         claims: [relation(frontendHost, "rendered", route.serves || rootWidget)],
         body: { route: route.path }
       });
+      const tutorialSurface = widgetPageTutorialSurface(world, {
+        route,
+        rootWidget,
+        frontendProgramId: params.frontendProgram ?? null,
+        tutorialPage: "world"
+      });
       send(res, 200, "text/html", renderWidgetPage(world, {
         actor: frontendHost,
         rootWidget,
@@ -5354,7 +6593,11 @@ export function createInspectBundleHandlers({
           actors: requestActors(appContext),
           page: params.page ?? "world",
           liveProjection: params.liveProjection !== false,
-          runtimeSurfaces: appContext.runtimeSurfaceEntries ?? []
+          runtimeSurfaces: appContext.runtimeSurfaceEntries ?? [],
+          surfaceContext: tutorialSurface.context,
+          surfaceRouteId: tutorialSurface.routeId,
+          surfaceRootWidgetId: tutorialSurface.rootWidgetId,
+          surfaceProgramId: tutorialSurface.frontendProgramId
         }
       }));
     },
@@ -5432,6 +6675,24 @@ export function createInspectBundleHandlers({
       sendJson(res, 200, run);
     },
 
+    "events.stream": async ({ req, res, requestActor, appContext }) => {
+      const stream = appContext?.eventsStream;
+      if (!stream || typeof stream.open !== "function") {
+        sendJson(res, 503, { error: "events stream unavailable" });
+        return;
+      }
+      const opened = stream.open(res, req) ?? {};
+      world.observe({
+        process: "backend.eventsStream",
+        actor: requestActor || backendHost,
+        claims: [relation(backendHost, "streams", "witnessLog")],
+        body: {
+          clients: Number.isFinite(opened.clients) ? opened.clients : null,
+          serverRunner: opened.serverRunner ?? appContext?.serverRunnerId ?? null
+        }
+      });
+    },
+
     "processEvents.record": async ({ req, res, requestActor }) => {
       const body = await readJson(req);
       const process = typeof body.process === "string" ? body.process : "";
@@ -5486,9 +6747,161 @@ export function createCanvasBundleHandlers({
   send,
   sendJson,
   readJson,
+  authorityServices,
   requestActors,
   requestVisibleWitnesses
 }) {
+  const { ensureTargetAuthority, ensureContextAuthority } = authorityServices;
+  const perspectiveContextId = perspectiveId => world
+    .project(projectors.currentRelations)
+    .find(row => row.from === perspectiveId && row.rel === "inContext")
+    ?.to ?? null;
+  const canvasProposalId = (process, targetId) => `proposal.${process}.${targetId}`;
+  const canvasProposalConfig = ({ process, params = {} }) => {
+    switch (process) {
+      case "canvas.move":
+      case "canvas.moveMany":
+      case "canvas.batch":
+        return params.context
+          ? {
+              targetProcess: process,
+              targetKind: "context",
+              targetId: params.context,
+              reason: "Change shared canvas layout through witnessed proposal",
+              statusMessage: "Proposed canvas layout change for review."
+            }
+          : null;
+      case "canvas.place":
+        return params.context
+          ? {
+              targetProcess: process,
+              targetKind: "context",
+              targetId: params.context,
+              reason: "Place an existing thing on a shared canvas through witnessed proposal",
+              statusMessage: "Proposed canvas placement for review."
+            }
+          : null;
+      case "canvas.style":
+        return params.context
+          ? {
+              targetProcess: process,
+              targetKind: "context",
+              targetId: params.context,
+              reason: "Change shared canvas styling through witnessed proposal",
+              statusMessage: "Proposed canvas style change for review."
+            }
+          : null;
+      case "canvas.remove":
+        return params.context
+          ? {
+              targetProcess: process,
+              targetKind: "context",
+              targetId: params.context,
+              reason: "Remove a shared canvas item through witnessed proposal",
+              statusMessage: "Proposed canvas removal for review."
+            }
+          : null;
+      case "canvas.removeMany":
+        return params.context
+          ? {
+              targetProcess: process,
+              targetKind: "context",
+              targetId: params.context,
+              reason: "Remove shared canvas items through witnessed proposal",
+              statusMessage: "Proposed canvas removals for review."
+            }
+          : null;
+      case "canvas.duplicate":
+        return params.context
+          ? {
+              targetProcess: process,
+              targetKind: "context",
+              targetId: params.context,
+              reason: "Duplicate a shared canvas item through witnessed proposal",
+              statusMessage: "Proposed canvas duplicate for review."
+            }
+          : null;
+      case "canvas.camera":
+      case "canvas.grid":
+        return params.context
+          ? {
+              targetProcess: process,
+              targetKind: "context",
+              targetId: params.context,
+              reason: "Adjust shared canvas view settings through witnessed proposal",
+              statusMessage: "Proposed canvas view change for review."
+            }
+          : null;
+      case "canvas.createThing":
+        return params.context
+          ? {
+              targetProcess: process,
+              targetKind: "context",
+              targetId: params.context,
+              reason: "Create a shared canvas thing through witnessed proposal",
+              statusMessage: "Proposed canvas thing for review."
+            }
+          : null;
+      case "canvas.perspective.create":
+        return params.context
+          ? {
+              targetProcess: process,
+              targetKind: "context",
+              targetId: params.context,
+              reason: "Create a shared canvas perspective through witnessed proposal",
+              statusMessage: "Proposed canvas perspective for review."
+            }
+          : null;
+      case "canvas.thing.setTitle":
+        return params.thing
+          ? {
+              targetProcess: process,
+              targetKind: "thing",
+              targetId: params.thing,
+              reason: "Rename a shared canvas thing through witnessed proposal",
+              statusMessage: "Proposed canvas title update for review."
+            }
+          : null;
+      case "canvas.relate":
+        return params.from
+          ? {
+              targetProcess: process,
+              targetKind: "thing",
+              targetId: params.from,
+              reason: "Create a shared canvas relation through witnessed proposal",
+              statusMessage: "Proposed canvas relation for review."
+            }
+          : null;
+      case "canvas.unrelate":
+        return params.from
+          ? {
+              targetProcess: process,
+              targetKind: "thing",
+              targetId: params.from,
+              reason: "Remove a shared canvas relation through witnessed proposal",
+              statusMessage: "Proposed canvas relation removal for review."
+            }
+          : null;
+      default:
+        return null;
+    }
+  };
+  const createCanvasProposal = ({ actor, process, params = {} }) => {
+    const config = canvasProposalConfig({ process, params });
+    if (!config) return null;
+    return requestBootstrapProposalCreate(world, {
+      actor,
+      backendHost,
+      body: {
+        id: canvasProposalId(config.targetProcess, config.targetId),
+        targetProcess: config.targetProcess,
+        targetKind: config.targetKind,
+        targetId: config.targetId,
+        bodyJson: JSON.stringify(params),
+        reason: config.reason
+      }
+    });
+  };
   return {
     "page.canvas": async ({ res, route, appContext }) => {
       world.observe({
@@ -5540,6 +6953,99 @@ export function createCanvasBundleHandlers({
         world.emit({ process: "canvas.process.failed", actor: requestActor, claims: [], body: { process: body.process, reason: "unknown canvas process" } });
         sendJson(res, 400, { error: "unknown canvas process", process: body.process });
         return;
+      }
+      if (body.process === "canvas.perspective.create") {
+        const contextId = typeof body.params?.context === "string" && body.params.context.trim() ? body.params.context.trim() : null;
+        const gate = contextId ? ensureContextAuthority(requestActor, contextId) : { ok: true };
+        if (!gate.ok && gate.status === 403) {
+          const proposal = createCanvasProposal({ actor: requestActor, process: body.process, params: body.params ?? {} });
+          if (!proposal?.ok) {
+            sendJson(res, proposal?.status || 400, { error: proposal?.error || "proposal creation failed", witness: proposal?.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            statusMessage: canvasProposalConfig({ process: body.process, params: body.params ?? {} })?.statusMessage || "Proposed change for review."
+          });
+          return;
+        }
+      }
+      if (body.process === "canvas.createThing") {
+        const perspectiveId = typeof body.params?.perspective === "string" && body.params.perspective.trim() ? body.params.perspective.trim() : "";
+        const contextId = perspectiveId ? perspectiveContextId(perspectiveId) : null;
+        const gate = contextId ? ensureContextAuthority(requestActor, contextId) : { ok: true };
+        if (!gate.ok && gate.status === 403) {
+          const proposalParams = contextId ? { ...(body.params ?? {}), context: contextId } : (body.params ?? {});
+          const proposal = createCanvasProposal({ actor: requestActor, process: body.process, params: proposalParams });
+          if (!proposal?.ok) {
+            sendJson(res, proposal?.status || 400, { error: proposal?.error || "proposal creation failed", witness: proposal?.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            statusMessage: canvasProposalConfig({ process: body.process, params: proposalParams })?.statusMessage || "Proposed change for review."
+          });
+          return;
+        }
+      }
+      if ([
+        "canvas.place",
+        "canvas.move",
+        "canvas.moveMany",
+        "canvas.style",
+        "canvas.remove",
+        "canvas.removeMany",
+        "canvas.duplicate",
+        "canvas.camera",
+        "canvas.grid",
+        "canvas.batch"
+      ].includes(body.process)) {
+        const perspectiveId = typeof body.params?.perspective === "string" && body.params.perspective.trim() ? body.params.perspective.trim() : "";
+        const contextId = perspectiveId ? perspectiveContextId(perspectiveId) : null;
+        const gate = contextId ? ensureContextAuthority(requestActor, contextId) : { ok: true };
+        if (!gate.ok && gate.status === 403) {
+          const proposalParams = contextId ? { ...(body.params ?? {}), context: contextId } : (body.params ?? {});
+          const proposal = createCanvasProposal({ actor: requestActor, process: body.process, params: proposalParams });
+          if (!proposal?.ok) {
+            sendJson(res, proposal?.status || 400, { error: proposal?.error || "proposal creation failed", witness: proposal?.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            statusMessage: canvasProposalConfig({ process: body.process, params: proposalParams })?.statusMessage || "Proposed change for review."
+          });
+          return;
+        }
+      }
+      if (body.process === "canvas.thing.setTitle" || body.process === "canvas.relate" || body.process === "canvas.unrelate") {
+        const targetId = body.process === "canvas.thing.setTitle"
+          ? String(body.params?.thing || "").trim()
+          : String(body.params?.from || "").trim();
+        const gate = targetId ? ensureTargetAuthority(requestActor, targetId) : { ok: true };
+        if (!gate.ok && gate.status === 403) {
+          const proposal = createCanvasProposal({ actor: requestActor, process: body.process, params: body.params ?? {} });
+          if (!proposal?.ok) {
+            sendJson(res, proposal?.status || 400, { error: proposal?.error || "proposal creation failed", witness: proposal?.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            statusMessage: canvasProposalConfig({ process: body.process, params: body.params ?? {} })?.statusMessage || "Proposed change for review."
+          });
+          return;
+        }
       }
       const witness = handler(world, { actor: requestActor, ...(body.params ?? {}) });
       if (witness.process.endsWith(".failed") || witness.process.endsWith(".blocked")) {

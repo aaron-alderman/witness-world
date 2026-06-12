@@ -14,6 +14,7 @@ id = "todo_session"
 children = ["todo_session_title", "todo_session_form", "todo_session_status"]
 class = "session-panel"
 role = "session-panel"
+tutorialTarget = "app-session-panel"
 
 [[text]]
 id = "todo_session_title"
@@ -85,14 +86,22 @@ role = "todo-list"
 
 [[box]]
 id = "todo_private_notes"
-children = ["todo_private_notes_title", "todo_private_notes_form", "todo_private_note_list"]
+children = ["todo_private_notes_title", "todo_private_notes_status", "todo_private_notes_form", "todo_private_note_list"]
 class = "private-notes"
 role = "private-notes"
+tutorialTarget = "private-notes-section"
+tutorialTarget = "private-notes-section"
 
 [[heading]]
 id = "todo_private_notes_title"
 text = "Private Notes"
 level = 2
+
+[[text]]
+id = "todo_private_notes_status"
+text = "Sign in to see and save notes that belong only to you."
+class = "status"
+role = "private-notes-status"
 
 [[form]]
 id = "todo_private_notes_form"
@@ -170,6 +179,7 @@ id = "todo_widget_editor"
 children = ["todo_widget_editor_title", "todo_widget_editor_form"]
 class = "widget-editor"
 role = "widget-editor"
+tutorialTarget = "widget-editor"
 
 [[heading]]
 id = "todo_widget_editor_title"
@@ -205,6 +215,8 @@ props = { name = "order", valueType = "widget.order", label = "Order", placehold
 id = "todo_widget_editor_button"
 text = "Add widget"
 type = "submit"
+tutorialTarget = "widget-editor-submit"
+tutorialTarget = "widget-editor-submit"
 
 [[widgetVersion]]
 context = "frontend"
@@ -302,7 +314,7 @@ class = "todo-actions"
 [[button]]
 id = "todo_item_toggle_template"
 template = true
-text = "${item.done ? 'Undo' : 'Done'}"
+text = "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? (item.done ? 'Propose Undo' : 'Propose Done') : (item.done ? 'Undo' : 'Done')}"
 type = "button"
 action = "toggleTodo"
 data-id = "${item.id}"
@@ -311,7 +323,7 @@ data-done = "${!item.done}"
 [[button]]
 id = "todo_item_delete_template"
 template = true
-text = "Delete"
+text = "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Propose Delete' : 'Delete'}"
 type = "button"
 action = "deleteTodo"
 data-id = "${item.id}"
@@ -374,6 +386,13 @@ into = "todoResponse"
 
 [[step]]
 order = 4
+op = "setText"
+on = "load"
+widget = "todo_add_button"
+text = "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Propose Add' : 'Add'}"
+
+[[step]]
+order = 5
 op = "renderCollection"
 on = "load"
 widget = "todo_list"
@@ -381,14 +400,14 @@ from = "todoResponse.todos"
 template = "todo_item_template"
 
 [[step]]
-order = 5
+order = 6
 op = "fetchJson"
 on = "load"
 url = "/api/witnesses"
 into = "witnessResponse"
 
 [[step]]
-order = 6
+order = 7
 op = "renderCollection"
 on = "load"
 widget = "todo_witness_list"
@@ -398,14 +417,21 @@ reverse = true
 limit = 80
 
 [[step]]
-order = 7
+order = 8
 op = "fetchJson"
 on = "load"
 url = "/api/private-notes"
 into = "privateNotesResponse"
 
 [[step]]
-order = 8
+order = 9
+op = "setText"
+on = "load"
+widget = "todo_private_notes_status"
+text = "${state.privateNotesResponse && state.privateNotesResponse.privacy && state.privateNotesResponse.privacy.mode === 'private' ? 'Only you can see these notes in your current perspective.' : 'Sign in to see and save notes that belong only to you.'}"
+
+[[step]]
+order = 10
 op = "renderCollection"
 on = "load"
 widget = "todo_private_note_list"
@@ -414,11 +440,39 @@ template = "private_note_template"
 emptyWidget = "private_note_empty_template"
 
 [[step]]
-order = 9
+order = 11
 op = "setText"
 on = "load"
 widget = "todo_status"
-text = "Ready"
+text = "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Ready. Shared app changes are read-only here. Todo, widget, and version changes will be proposed for review.' : (state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'signin' ? 'Ready. Sign in to change shared app state.' : 'Ready')}"
+
+[[step]]
+order = 12
+op = "setText"
+on = "load"
+widget = "todo_activate_v1"
+text = "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Propose Activate v1' : 'Activate v1'}"
+
+[[step]]
+order = 13
+op = "setText"
+on = "load"
+widget = "todo_activate_v2"
+text = "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Propose Activate v2' : 'Activate v2'}"
+
+[[step]]
+order = 14
+op = "setText"
+on = "load"
+widget = "todo_rollback_version"
+text = "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Propose Rollback' : 'Rollback'}"
+
+[[step]]
+order = 15
+op = "setText"
+on = "load"
+widget = "todo_widget_editor_button"
+text = "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Propose Add Widget' : 'Add Widget'}"
 
 [[step]]
 order = 0
@@ -432,7 +486,7 @@ order = 1
 op = "setText"
 on = "submit:todo_form"
 widget = "todo_status"
-text = "Saving..."
+text = "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Proposing add...' : 'Saving...'}"
 
 [[step]]
 order = 2
@@ -457,11 +511,18 @@ on = "submit:todo_form"
 event = "load"
 
 [[step]]
+order = 5
+op = "setText"
+on = "submit:todo_form"
+widget = "todo_status"
+text = "${state.createdTodo && state.createdTodo.statusMessage ? state.createdTodo.statusMessage : 'Saved.'}"
+
+[[step]]
 order = 0
 op = "setText"
 on = "click:toggleTodo"
 widget = "todo_status"
-text = "Updating..."
+text = "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Proposing update...' : 'Updating...'}"
 
 [[step]]
 order = 1
@@ -478,11 +539,18 @@ on = "click:toggleTodo"
 event = "load"
 
 [[step]]
+order = 3
+op = "setText"
+on = "click:toggleTodo"
+widget = "todo_status"
+text = "${state.updatedTodo && state.updatedTodo.statusMessage ? state.updatedTodo.statusMessage : 'Saved.'}"
+
+[[step]]
 order = 0
 op = "setText"
 on = "click:deleteTodo"
 widget = "todo_status"
-text = "Deleting..."
+text = "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Proposing delete...' : 'Deleting...'}"
 
 [[step]]
 order = 1
@@ -496,6 +564,13 @@ order = 2
 op = "run"
 on = "click:deleteTodo"
 event = "load"
+
+[[step]]
+order = 3
+op = "setText"
+on = "click:deleteTodo"
+widget = "todo_status"
+text = "${state.deletedTodo && state.deletedTodo.statusMessage ? state.deletedTodo.statusMessage : 'Deleted.'}"
 
 [[step]]
 order = 0
@@ -565,6 +640,13 @@ schema = "widget.define"
 
 [[step]]
 order = 1
+op = "setText"
+on = "submit:todo_widget_editor_form"
+widget = "todo_status"
+text = "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Proposing widget...' : 'Saving widget...'}"
+
+[[step]]
+order = 2
 op = "postJson"
 on = "submit:todo_widget_editor_form"
 url = "/api/widgets"
@@ -573,16 +655,23 @@ from = "widgetDraft"
 into = "widgetCreated"
 
 [[step]]
-order = 2
+order = 3
 op = "clearForm"
 on = "submit:todo_widget_editor_form"
 widget = "todo_widget_editor_form"
 
 [[step]]
-order = 3
+order = 4
 op = "run"
 on = "submit:todo_widget_editor_form"
 event = "load"
+
+[[step]]
+order = 5
+op = "setText"
+on = "submit:todo_widget_editor_form"
+widget = "todo_status"
+text = "${state.widgetCreated && state.widgetCreated.statusMessage ? state.widgetCreated.statusMessage : 'Saved widget.'}"
 
 [[step]]
 order = 0
@@ -628,7 +717,7 @@ order = 0
 op = "setText"
 on = "click:activateWidgetVersion"
 widget = "todo_status"
-text = "Activating widget version..."
+text = "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Proposing widget version activation...' : 'Activating widget version...'}"
 
 [[step]]
 order = 1
@@ -645,11 +734,18 @@ op = "refreshProjection"
 on = "click:activateWidgetVersion"
 
 [[step]]
+order = 3
+op = "setText"
+on = "click:activateWidgetVersion"
+widget = "todo_status"
+text = "${state.activatedWidgetVersion && state.activatedWidgetVersion.statusMessage ? state.activatedWidgetVersion.statusMessage : 'Saved.'}"
+
+[[step]]
 order = 0
 op = "setText"
 on = "click:rollbackWidgetVersion"
 widget = "todo_status"
-text = "Rolling back widget version..."
+text = "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Proposing widget version rollback...' : 'Rolling back widget version...'}"
 
 [[step]]
 order = 1
@@ -663,6 +759,13 @@ into = "rolledBackWidgetVersion"
 order = 2
 op = "refreshProjection"
 on = "click:rollbackWidgetVersion"
+
+[[step]]
+order = 3
+op = "setText"
+on = "click:rollbackWidgetVersion"
+widget = "todo_status"
+text = "${state.rolledBackWidgetVersion && state.rolledBackWidgetVersion.statusMessage ? state.rolledBackWidgetVersion.statusMessage : 'Saved.'}"
 
 [[step]]
 order = 0
@@ -734,12 +837,14 @@ title = "Witness World Graph"
 [[link]]
 id = "world_graph_back_link"
 href = "/"
+tutorialTarget = "world-back-link"
 text = "← Back to Todo"
 class = "world-graph-link"
 
 [[link]]
 id = "world_graph_process_link"
 href = "/process"
+tutorialTarget = "world-process-link"
 text = "Open Process View"
 class = "world-graph-link"
 
@@ -748,6 +853,8 @@ id = "world_session"
 children = ["world_session_title", "world_session_form", "world_session_status"]
 class = "session-panel"
 role = "session-panel"
+tutorialTarget = "world-session-panel"
+tutorialTarget = "world-session-panel"
 
 [[text]]
 id = "world_session_title"

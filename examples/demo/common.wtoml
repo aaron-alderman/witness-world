@@ -6,6 +6,7 @@ capabilities = []
 
 [context.backend]
 actor = "backendHost"
+initialStewards = ["aaron"]
 capabilities = ["http.serve", "fs.json.read", "fs.json.write"]
 
 [context.frontend]

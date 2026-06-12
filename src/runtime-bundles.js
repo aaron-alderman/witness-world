@@ -26,6 +26,7 @@ import {
   CORE_RUNTIME_CAPABILITY_IDS,
   PRACTICAL_BACKEND_CAPABILITY_IDS
 } from "./runtime-builtins.js";
+import { buildRuntimeShellDiagnostics } from "./runtime-shell-contract.js";
 
 export const DEFAULT_RUNTIME_PROFILE = "full";
 
@@ -83,13 +84,15 @@ function surfaceEntry({
 function handlerCatalog({
   authorableHandlers = [],
   pageHandlers = [],
-  dispatchHandlers = []
+  dispatchHandlers = [],
+  handlerMetadata = {}
 }) {
   return {
     kind: "handlerCatalog",
     authorableHandlers,
     pageHandlers,
-    dispatchHandlers
+    dispatchHandlers,
+    handlerMetadata
   };
 }
 
@@ -142,7 +145,9 @@ const INTERNAL_BUNDLE_MANIFESTS = [
         exactRoute("GET", "/api/session", "session.read"),
         exactRoute("POST", "/api/session", "session.open"),
         exactRoute("DELETE", "/api/session", "session.logout"),
-        exactRoute("GET", "/api/runtime/diagnostics", "runtime.diagnostics.read")
+        exactRoute("GET", "/api/runtime/diagnostics", "runtime.diagnostics.read"),
+        exactRoute("GET", "/api/runtime/plugins", "runtime.plugins.read"),
+        exactRoute("GET", "/api/runtime/plugin-reviews", "runtime.pluginReviews.read")
       ],
       surfaces: [
         surfaceEntry({
@@ -189,6 +194,11 @@ const INTERNAL_BUNDLE_MANIFESTS = [
         exactRoute("GET", "/_bootstrap", "bootstrap.page"),
         exactRoute("GET", "/api/bootstrap-model", "bootstrap.model.read"),
         exactRoute("GET", "/api/bootstrap-state", "bootstrap.state.read"),
+        exactRoute("GET", "/api/operator/state", "operator.state.read"),
+        exactRoute("POST", "/api/operator/backups", "operator.backup"),
+        exactRoute("POST", "/api/operator/exports", "operator.export"),
+        exactRoute("POST", "/api/operator/restores", "operator.restore"),
+        exactRoute("POST", "/api/operator/imports", "operator.import"),
         exactRoute("POST", "/api/contexts", "context.create"),
         exactRoute("POST", "/api/context-bindings", "contextBinding.create"),
         exactRoute("DELETE", "/api/context-bindings", "contextBinding.remove"),
@@ -212,8 +222,15 @@ const INTERNAL_BUNDLE_MANIFESTS = [
         exactRoute("POST", "/api/capabilities", "capability.create"),
         exactRoute("POST", "/api/capability-installs", "capability.install"),
         exactRoute("DELETE", "/api/capability-installs", "capability.remove"),
+        exactRoute("POST", "/api/runtime-plugin-installs", "runtimePlugin.install"),
+        exactRoute("DELETE", "/api/runtime-plugin-installs", "runtimePlugin.remove"),
         exactRoute("POST", "/api/frontend-programs", "frontendProgram.create"),
         exactRoute("POST", "/api/frontend-steps", "frontendStep.create"),
+        exactRoute("POST", "/api/backend-programs", "backendProgram.create"),
+        exactRoute("POST", "/api/backend-program-versions", "backendProgramVersion.create"),
+        exactRoute("POST", "/api/backend-steps", "backendStep.create"),
+        patternRoute("POST", /^\/api\/backend-program-versions\/([^/]+)\/activate$/, "backendProgramVersions.activate", ["soul"]),
+        patternRoute("POST", /^\/api\/backend-program-versions\/([^/]+)\/rollback$/, "backendProgramVersions.rollback", ["soul"]),
         exactRoute("POST", "/api/routes", "route.create"),
         exactRoute("POST", "/api/serve-mounts", "serve.create"),
         exactRoute("POST", "/api/server-runners", "serverRunner.create")
@@ -240,7 +257,9 @@ const INTERNAL_BUNDLE_MANIFESTS = [
         bundleHandlerCatalog("bundle-inspect"),
         genericHandlerFactory(createInspectBundleHandlers)
       ],
-      routes: [],
+      routes: [
+        exactRoute("GET", "/api/events", "events.stream")
+      ],
       surfaces: [
         surfaceEntry({
           id: "surface:world",
@@ -441,6 +460,11 @@ const INTERNAL_BUNDLE_MANIFESTS = [
       providers: [
         DEMO_HANDLER_SET_PROVIDER,
         {
+          kind: "defaultHostCapabilities",
+          hostKind: "backend",
+          capabilities: ["fs.json.read", "fs.json.write"]
+        },
+        {
           kind: "startupRequiredHostCapabilities",
           hostKind: "backend",
           capabilities: ["fs.json.read", "fs.json.write"]
@@ -494,27 +518,89 @@ export function availableRuntimeProfiles() {
   return Object.keys(RUNTIME_PROFILES);
 }
 
-export function runtimeBundleManifests() {
-  return INTERNAL_BUNDLE_MANIFESTS.map(bundle => ({
+export function availableRuntimeBundleIds() {
+  return INTERNAL_BUNDLE_MANIFESTS.map(bundle => bundle.id);
+}
+
+export function runtimeBundleManifest(bundleId) {
+  const bundle = BUNDLE_BY_ID.get(String(bundleId || ""));
+  if (!bundle) return null;
+  const handlerCatalog = runtimeBundleHandlerCatalog(bundle.id);
+  return {
     ...bundle,
+    handlerCatalog: {
+      authorableHandlers: [...handlerCatalog.authorableHandlers],
+      pageHandlers: [...handlerCatalog.pageHandlers],
+      dispatchHandlers: [...handlerCatalog.dispatchHandlers],
+      handlerMetadata: Object.fromEntries(
+        Object.entries(handlerCatalog.handlerMetadata ?? {})
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([handlerId, entry]) => [
+            handlerId,
+            {
+              ...(entry || {}),
+              methods: Array.isArray(entry?.methods) ? [...entry.methods] : undefined
+            }
+          ])
+      )
+    },
     contributes: {
       capabilities: [...bundle.contributes.capabilities],
       providers: [...bundle.contributes.providers],
-      routes: [...bundle.contributes.routes],
+      routes: bundle.contributes.routes.map(route => ({
+        ...route,
+        handlerMetadata: handlerCatalog.handlerMetadata?.[String(route.handler)] ? {
+          ...(handlerCatalog.handlerMetadata[String(route.handler)] || {}),
+          methods: Array.isArray(handlerCatalog.handlerMetadata[String(route.handler)]?.methods)
+            ? [...handlerCatalog.handlerMetadata[String(route.handler)].methods]
+            : undefined
+        } : undefined
+      })),
       surfaces: bundle.contributes.surfaces.map(cloneSurface)
     },
     dependsOn: [...bundle.dependsOn]
-  }));
+  };
 }
 
-export function resolveRuntimeProfile(profileName = DEFAULT_RUNTIME_PROFILE) {
+export function runtimeBundleManifests() {
+  return INTERNAL_BUNDLE_MANIFESTS.map(bundle => runtimeBundleManifest(bundle.id));
+}
+
+export function resolveRuntimeComposition({
+  profileName = DEFAULT_RUNTIME_PROFILE,
+  additionalBundleIds = []
+} = {}) {
   const id = normalizeProfileName(profileName);
-  const bundleIds = [...RUNTIME_PROFILES[id]];
+  const bundleIds = [];
+  const seen = new Set();
+  for (const bundleId of [...RUNTIME_PROFILES[id], ...additionalBundleIds.map(String)]) {
+    if (!BUNDLE_BY_ID.has(bundleId) || seen.has(bundleId)) continue;
+    seen.add(bundleId);
+    bundleIds.push(bundleId);
+  }
   return {
     id,
     bundleIds,
     bundles: bundleIds.map(bundleId => BUNDLE_BY_ID.get(bundleId)).filter(Boolean)
   };
+}
+
+function compositionOptions(options = {}) {
+  return {
+    additionalBundleIds: [...(options.additionalBundleIds ?? [])].map(String)
+  };
+}
+
+function selectedComposition(profileName, options = {}) {
+  const resolved = resolveRuntimeComposition({
+    profileName,
+    additionalBundleIds: compositionOptions(options).additionalBundleIds
+  });
+  return resolved;
+}
+
+export function resolveRuntimeProfile(profileName = DEFAULT_RUNTIME_PROFILE) {
+  return resolveRuntimeComposition({ profileName });
 }
 
 export function resolveRuntimeProfileStrict(profileName = DEFAULT_RUNTIME_PROFILE) {
@@ -532,17 +618,17 @@ export function resolveRuntimeProfileStrict(profileName = DEFAULT_RUNTIME_PROFIL
   };
 }
 
-export function providedCapabilityIdsForProfile(profileName = DEFAULT_RUNTIME_PROFILE) {
+export function providedCapabilityIdsForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
   const ids = new Set();
-  for (const bundle of resolveRuntimeProfile(profileName).bundles) {
+  for (const bundle of selectedComposition(profileName, options).bundles) {
     for (const capabilityId of bundle.contributes.capabilities) ids.add(String(capabilityId));
   }
   return [...ids];
 }
 
-export function defaultHostCapabilitiesForProfile(profileName = DEFAULT_RUNTIME_PROFILE, hostKind = "backend") {
+export function defaultHostCapabilitiesForProfile(profileName = DEFAULT_RUNTIME_PROFILE, hostKind = "backend", options = {}) {
   const ids = new Set();
-  for (const bundle of resolveRuntimeProfile(profileName).bundles) {
+  for (const bundle of selectedComposition(profileName, options).bundles) {
     for (const provider of bundle.contributes.providers) {
       if (provider?.kind !== "defaultHostCapabilities" || provider.hostKind !== hostKind) continue;
       for (const capabilityId of provider.capabilities ?? []) ids.add(String(capabilityId));
@@ -551,9 +637,9 @@ export function defaultHostCapabilitiesForProfile(profileName = DEFAULT_RUNTIME_
   return [...ids];
 }
 
-export function startupRequiredHostCapabilitiesForProfile(profileName = DEFAULT_RUNTIME_PROFILE, hostKind = "backend") {
+export function startupRequiredHostCapabilitiesForProfile(profileName = DEFAULT_RUNTIME_PROFILE, hostKind = "backend", options = {}) {
   const ids = new Set();
-  for (const bundle of resolveRuntimeProfile(profileName).bundles) {
+  for (const bundle of selectedComposition(profileName, options).bundles) {
     for (const provider of bundle.contributes.providers) {
       if (provider?.kind !== "startupRequiredHostCapabilities" || provider.hostKind !== hostKind) continue;
       for (const capabilityId of provider.capabilities ?? []) ids.add(String(capabilityId));
@@ -562,9 +648,9 @@ export function startupRequiredHostCapabilitiesForProfile(profileName = DEFAULT_
   return [...ids];
 }
 
-export function runtimeSurfaceEntriesForProfile(profileName = DEFAULT_RUNTIME_PROFILE, context = null) {
+export function runtimeSurfaceEntriesForProfile(profileName = DEFAULT_RUNTIME_PROFILE, context = null, options = {}) {
   const seen = new Map();
-  for (const bundle of resolveRuntimeProfile(profileName).bundles) {
+  for (const bundle of selectedComposition(profileName, options).bundles) {
     for (const surface of bundle.contributes.surfaces) {
       if (context && Array.isArray(surface.contexts) && !surface.contexts.includes(context)) continue;
       seen.set(surface.id, cloneSurface(surface));
@@ -573,14 +659,14 @@ export function runtimeSurfaceEntriesForProfile(profileName = DEFAULT_RUNTIME_PR
   return [...seen.values()];
 }
 
-export function runtimeRouteEntriesForProfile(profileName = DEFAULT_RUNTIME_PROFILE) {
-  return resolveRuntimeProfile(profileName).bundles.flatMap(bundle => bundle.contributes.routes);
+export function runtimeRouteEntriesForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
+  return selectedComposition(profileName, options).bundles.flatMap(bundle => bundle.contributes.routes);
 }
 
-export function matchRuntimeBundleRoute(profileName = DEFAULT_RUNTIME_PROFILE, method, pathname) {
+export function matchRuntimeBundleRoute(profileName = DEFAULT_RUNTIME_PROFILE, method, pathname, options = {}) {
   const targetMethod = String(method || "GET").toUpperCase();
   const targetPath = String(pathname || "");
-  for (const route of runtimeRouteEntriesForProfile(profileName)) {
+  for (const route of runtimeRouteEntriesForProfile(profileName, options)) {
     if (String(route.method || "GET").toUpperCase() !== targetMethod) continue;
     if (route.kind === "exact") {
       if (route.path !== targetPath) continue;
@@ -599,9 +685,9 @@ export function matchRuntimeBundleRoute(profileName = DEFAULT_RUNTIME_PROFILE, m
   return null;
 }
 
-export function handlerSetFactoriesForProfile(profileName = DEFAULT_RUNTIME_PROFILE) {
+export function handlerSetFactoriesForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
   const factories = Object.create(null);
-  for (const bundle of resolveRuntimeProfile(profileName).bundles) {
+  for (const bundle of selectedComposition(profileName, options).bundles) {
     for (const provider of bundle.contributes.providers) {
       if (provider?.kind !== "handlerSet" || !provider.id || typeof provider.factory !== "function") continue;
       factories[provider.id] = provider.factory;
@@ -610,9 +696,9 @@ export function handlerSetFactoriesForProfile(profileName = DEFAULT_RUNTIME_PROF
   return factories;
 }
 
-export function handlerSetDefinitionsForProfile(profileName = DEFAULT_RUNTIME_PROFILE) {
+export function handlerSetDefinitionsForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
   const definitions = Object.create(null);
-  for (const bundle of resolveRuntimeProfile(profileName).bundles) {
+  for (const bundle of selectedComposition(profileName, options).bundles) {
     for (const provider of bundle.contributes.providers) {
       if (provider?.kind !== "handlerSet" || !provider.id || !provider.definition) continue;
       definitions[provider.id] = provider.definition;
@@ -621,9 +707,27 @@ export function handlerSetDefinitionsForProfile(profileName = DEFAULT_RUNTIME_PR
   return definitions;
 }
 
-export function genericHandlerFactoriesForProfile(profileName = DEFAULT_RUNTIME_PROFILE) {
+export function bundleIdsForHandlerSet(handlerSetId = "") {
+  const targetId = String(handlerSetId || "").trim();
+  if (!targetId) return [];
+  const bundleIds = [];
+  for (const bundle of INTERNAL_BUNDLE_MANIFESTS) {
+    if (bundle.contributes.providers.some(provider => provider?.kind === "handlerSet" && provider.id === targetId)) {
+      bundleIds.push(bundle.id);
+    }
+  }
+  return bundleIds;
+}
+
+export function genericHandlerFactoriesForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
+  return genericHandlerFactoriesForBundleIds(selectedComposition(profileName, options).bundleIds);
+}
+
+export function genericHandlerFactoriesForBundleIds(bundleIds = []) {
   const factories = [];
-  for (const bundle of resolveRuntimeProfile(profileName).bundles) {
+  for (const bundleId of bundleIds) {
+    const bundle = BUNDLE_BY_ID.get(String(bundleId || ""));
+    if (!bundle) continue;
     for (const provider of bundle.contributes.providers) {
       if (provider?.kind !== "genericHandlerFactory" || typeof provider.factory !== "function") continue;
       factories.push({ bundleId: bundle.id, factory: provider.factory });
@@ -632,9 +736,9 @@ export function genericHandlerFactoriesForProfile(profileName = DEFAULT_RUNTIME_
   return factories;
 }
 
-function collectHandlerCatalogEntries(profileName, selector) {
+function collectHandlerCatalogEntries(profileName, selector, options = {}) {
   const ids = new Set();
-  for (const bundle of resolveRuntimeProfile(profileName).bundles) {
+  for (const bundle of selectedComposition(profileName, options).bundles) {
     for (const provider of bundle.contributes.providers) {
       if (provider?.kind !== "handlerCatalog") continue;
       for (const handlerId of selector(provider) ?? []) ids.add(String(handlerId || ""));
@@ -647,17 +751,17 @@ function collectHandlerCatalogEntries(profileName, selector) {
   return [...ids].filter(Boolean);
 }
 
-export function authorableHandlerIdsForProfile(profileName = DEFAULT_RUNTIME_PROFILE) {
-  return collectHandlerCatalogEntries(profileName, provider => provider.authorableHandlers);
+export function authorableHandlerIdsForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
+  return collectHandlerCatalogEntries(profileName, provider => provider.authorableHandlers, options);
 }
 
-export function pageHandlerIdsForProfile(profileName = DEFAULT_RUNTIME_PROFILE) {
-  return collectHandlerCatalogEntries(profileName, provider => provider.pageHandlers);
+export function pageHandlerIdsForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
+  return collectHandlerCatalogEntries(profileName, provider => provider.pageHandlers, options);
 }
 
-export function dispatchHandlerIdsForProfile(profileName = DEFAULT_RUNTIME_PROFILE) {
+export function dispatchHandlerIdsForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
   const ids = new Set();
-  const resolved = resolveRuntimeProfile(profileName);
+  const resolved = selectedComposition(profileName, options);
   for (const bundle of resolved.bundles) {
     for (const route of bundle.contributes.routes) ids.add(String(route.handler || ""));
     for (const provider of bundle.contributes.providers) {
@@ -674,10 +778,26 @@ export function dispatchHandlerIdsForProfile(profileName = DEFAULT_RUNTIME_PROFI
   return [...ids].filter(Boolean);
 }
 
-export function runtimeBundleSummaryForProfile(profileName = DEFAULT_RUNTIME_PROFILE) {
-  const resolved = resolveRuntimeProfile(profileName);
+export function handlerMetadataForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
+  const metadata = Object.create(null);
+  const resolved = selectedComposition(profileName, options);
+  for (const bundle of resolved.bundles) {
+    for (const provider of bundle.contributes.providers) {
+      if (provider?.kind !== "handlerCatalog") continue;
+      for (const [handlerId, entry] of Object.entries(provider.handlerMetadata ?? {})) {
+        metadata[String(handlerId)] = { ...(entry || {}) };
+      }
+    }
+  }
+  return metadata;
+}
+
+export function runtimeBundleSummaryForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
+  const resolved = selectedComposition(profileName, options);
+  const handlerMetadata = handlerMetadataForProfile(resolved.id, options);
   return {
     profile: resolved.id,
+    bundleIds: [...resolved.bundleIds],
     bundles: resolved.bundles.map(bundle => ({
       id: bundle.id,
       kind: bundle.kind,
@@ -689,16 +809,23 @@ export function runtimeBundleSummaryForProfile(profileName = DEFAULT_RUNTIME_PRO
       routeCount: bundle.contributes.routes.length,
       surfaceCount: bundle.contributes.surfaces.length
     })),
-    capabilities: providedCapabilityIdsForProfile(resolved.id).sort(),
-    authorableHandlers: authorableHandlerIdsForProfile(resolved.id),
-    pageHandlers: pageHandlerIdsForProfile(resolved.id),
-    dispatchHandlers: dispatchHandlerIdsForProfile(resolved.id),
-    routes: runtimeRouteEntriesForProfile(resolved.id).map(route => ({
+    capabilities: providedCapabilityIdsForProfile(resolved.id, options).sort(),
+    authorableHandlers: authorableHandlerIdsForProfile(resolved.id, options),
+    pageHandlers: pageHandlerIdsForProfile(resolved.id, options),
+    dispatchHandlers: dispatchHandlerIdsForProfile(resolved.id, options),
+    handlerMetadata,
+    routes: runtimeRouteEntriesForProfile(resolved.id, options).map(route => ({
       method: route.method,
       matcher: route.kind === "exact" ? route.path : String(route.pattern),
-      handler: route.handler
+      handler: route.handler,
+      handlerMetadata: handlerMetadata[String(route.handler)] ? {
+        ...(handlerMetadata[String(route.handler)] || {}),
+        methods: Array.isArray(handlerMetadata[String(route.handler)]?.methods)
+          ? [...handlerMetadata[String(route.handler)].methods]
+          : undefined
+      } : undefined
     })),
-    surfaces: runtimeSurfaceEntriesForProfile(resolved.id).map(surface => ({
+    surfaces: runtimeSurfaceEntriesForProfile(resolved.id, null, options).map(surface => ({
       id: surface.id,
       href: surface.href,
       action: surface.action ? { ...surface.action } : null,
@@ -711,11 +838,23 @@ export function runtimeBundleSummaryForProfile(profileName = DEFAULT_RUNTIME_PRO
 export function buildRuntimeDiagnosticsForProfile({
   requestedProfile = null,
   profileName = DEFAULT_RUNTIME_PROFILE,
+  additionalBundleIds = [],
   startupRunner = null,
+  startupMode = "serve",
   installedHostCapabilities = {},
-  handlerSetDefinitions = {}
+  handlerSetDefinitions = {},
+  operatorContract = null,
+  operatorState = null,
+  pluginCatalogSummary = null,
+  configuredPluginIds = [],
+  authoredPluginIds = [],
+  operatorPluginIds = [],
+  effectivePluginIds = [],
+  activePluginIds = [],
+  rejectedPlugins = [],
+  pluginAddedBundleIds = []
 } = {}) {
-  const summary = runtimeBundleSummaryForProfile(profileName);
+  const summary = runtimeBundleSummaryForProfile(profileName, { additionalBundleIds });
   return {
     requestedProfile: requestedProfile ?? profileName,
     activeProfile: summary.profile,
@@ -740,12 +879,12 @@ export function buildRuntimeDiagnosticsForProfile({
     })),
     providedCapabilities: [...summary.capabilities],
     defaultHostCapabilities: {
-      backend: defaultHostCapabilitiesForProfile(summary.profile, "backend").sort(),
-      frontend: defaultHostCapabilitiesForProfile(summary.profile, "frontend").sort()
+      backend: defaultHostCapabilitiesForProfile(summary.profile, "backend", { additionalBundleIds }).sort(),
+      frontend: defaultHostCapabilitiesForProfile(summary.profile, "frontend", { additionalBundleIds }).sort()
     },
     startupRequiredHostCapabilities: {
-      backend: startupRequiredHostCapabilitiesForProfile(summary.profile, "backend").sort(),
-      frontend: startupRequiredHostCapabilitiesForProfile(summary.profile, "frontend").sort()
+      backend: startupRequiredHostCapabilitiesForProfile(summary.profile, "backend", { additionalBundleIds }).sort(),
+      frontend: startupRequiredHostCapabilitiesForProfile(summary.profile, "frontend", { additionalBundleIds }).sort()
     },
     installedHostCapabilities: {
       backend: [...(installedHostCapabilities.backend ?? [])].map(String).sort(),
@@ -760,11 +899,88 @@ export function buildRuntimeDiagnosticsForProfile({
     authorableHandlers: [...summary.authorableHandlers].sort(),
     pageHandlers: [...summary.pageHandlers].sort(),
     dispatchHandlers: [...summary.dispatchHandlers].sort(),
+    handlerMetadata: Object.fromEntries(
+      Object.entries(summary.handlerMetadata ?? {})
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([handlerId, metadata]) => [
+          handlerId,
+          {
+            ...(metadata || {}),
+            methods: Array.isArray(metadata?.methods) ? [...metadata.methods] : undefined
+          }
+        ])
+    ),
     handlerSets: Object.entries(handlerSetDefinitions)
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([id, definition]) => ({
         id,
         handlers: [...(definition?.handlers ?? [])].map(String).sort()
-      }))
+      })),
+    shells: buildRuntimeShellDiagnostics({
+      activeBundleIds: summary.bundleIds,
+      startupMode
+    }),
+    operator: operatorContract
+      ? {
+          ...operatorContract,
+          persistence: {
+            ...(operatorContract.persistence ?? {}),
+            notes: [...(operatorContract.persistence?.notes ?? [])]
+          },
+          canonicalTruth: { ...(operatorContract.canonicalTruth ?? {}) },
+          directories: { ...(operatorContract.directories ?? {}) },
+          lifecycle: {
+            ...(operatorContract.lifecycle ?? {}),
+            supportedFlows: [...(operatorContract.lifecycle?.supportedFlows ?? [])],
+            canonicalTruthKinds: [...(operatorContract.lifecycle?.canonicalTruthKinds ?? [])],
+            derivedKinds: [...(operatorContract.lifecycle?.derivedKinds ?? [])]
+          },
+          mutations: operatorState?.mutations
+            ? { ...operatorState.mutations }
+            : null,
+          artifacts: operatorState?.inventory
+            ? {
+                backups: (operatorState.inventory.backups ?? []).length,
+                exports: (operatorState.inventory.exports ?? []).length,
+                imports: (operatorState.inventory.imports ?? []).length
+              }
+            : null,
+          recentActivity: (operatorState?.recentActivity ?? []).map(entry => ({
+            id: entry.id,
+            process: entry.process,
+            actor: entry.actor,
+            body: { ...(entry.body ?? {}) }
+          }))
+        }
+      : null,
+    plugins: pluginCatalogSummary
+        ? {
+          pluginRoot: pluginCatalogSummary.pluginRoot,
+          activeProfile: pluginCatalogSummary.activeProfile,
+          authoredPluginIds: [...authoredPluginIds],
+          operatorPluginIds: [...operatorPluginIds],
+          effectivePluginIds: [...effectivePluginIds],
+          configuredPluginIds: [...configuredPluginIds],
+          activePluginIds: [...activePluginIds],
+          rejectedPlugins: rejectedPlugins.map(entry => ({
+            id: entry.id,
+            reasons: [...(entry.reasons ?? [])],
+            requestedSources: [...(entry.requestedSources ?? [])]
+          })),
+          addedBundleIds: [...pluginAddedBundleIds],
+          discoveredCount: pluginCatalogSummary.discoveredCount,
+          validCount: pluginCatalogSummary.validCount,
+          invalidCount: pluginCatalogSummary.invalidCount,
+          ignoredCount: pluginCatalogSummary.ignoredCount,
+          compatibleCount: pluginCatalogSummary.compatibleCount,
+          installableCount: pluginCatalogSummary.installableCount,
+          executableCount: pluginCatalogSummary.executableCount,
+          requestedCount: pluginCatalogSummary.requestedCount ?? 0,
+          eligibleCount: pluginCatalogSummary.eligibleCount ?? 0,
+          activeCount: pluginCatalogSummary.activeCount ?? 0,
+          rejectedCount: pluginCatalogSummary.rejectedCount ?? 0,
+          trustStateCounts: { ...(pluginCatalogSummary.trustStateCounts ?? {}) }
+        }
+      : null
   };
 }

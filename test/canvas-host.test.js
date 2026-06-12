@@ -3,7 +3,7 @@ import test from "node:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createWorld } from "../src/kernel.js";
+import { createWorld, projectors } from "../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
 import { moduleProjectors, removeCapability } from "../src/modules.js";
 import { applyWitnessToml } from "../src/dsl.js";
@@ -703,6 +703,87 @@ context = "context:projects"
     const afterDetach = world.project(moduleProjectors.assets).find(row => row.id === uploadedBody.asset.id);
     assert.deepEqual(afterDetach.attachedTo, []);
     assert.equal(afterDetach.attachmentCount, 0);
+  } finally {
+    await server.close();
+  }
+});
+
+test("asset attachment routes return proposals for signed-in unauthorized actors", async () => {
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-assets-attach-proposal-"));
+  const { world, server } = await startCanvasServer({
+    runtimeRoot,
+    extra: `
+[[context]]
+actor = "aaron"
+id = "context:shared"
+label = "Shared"
+
+[[perspective]]
+actor = "aaron"
+id = "shared:view"
+title = "Shared View"
+context = "context:shared"
+`
+  });
+  try {
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+    const createdThing = await postProcess(server, "canvas.createThing", {
+      perspective: "shared:view",
+      name: "Shared Proposal Thing",
+      x: 120,
+      y: 140
+    }, { cookie: aaron.cookie, "content-type": "application/json" });
+    assert.equal(createdThing.status, 200);
+    const proposalThing = (await createdThing.json()).witness.body.thing;
+
+    const uploaded = await uploadAsset(server, {
+      perspective: "shared:view",
+      bytes: Buffer.from("attach me"),
+      fileName: "shared-attach.txt",
+      headers: { cookie: aaron.cookie }
+    });
+    assert.equal(uploaded.status, 201);
+    const uploadedBody = await uploaded.json();
+
+    const proposedAttach = await attachAssetToTarget(server, {
+      assetId: uploadedBody.asset.id,
+      target: proposalThing,
+      perspective: "shared:view",
+      headers: { cookie: callan.cookie }
+    });
+    assert.equal(proposedAttach.status, 202);
+    const proposedAttachBody = await proposedAttach.json();
+    assert.equal(proposedAttachBody.status, "proposed");
+    assert.equal(proposedAttachBody.proposal.targetProcess, "asset.attach");
+    assert.equal(proposedAttachBody.proposal.targetId, uploadedBody.asset.id);
+    assert.equal(proposedAttachBody.statusMessage, "Proposed asset attachment for review.");
+    assert.equal(world.project(moduleProjectors.assets).find(row => row.id === uploadedBody.asset.id)?.attachmentCount, 0);
+    assert.equal(world.allWitnesses().some(w => w.process === "asset.attach" && w.actor === "callan"), false);
+
+    const allowedAttach = await attachAssetToTarget(server, {
+      assetId: uploadedBody.asset.id,
+      target: proposalThing,
+      perspective: "shared:view",
+      headers: { cookie: aaron.cookie }
+    });
+    assert.equal(allowedAttach.status, 201);
+    assert.equal(world.project(moduleProjectors.assets).find(row => row.id === uploadedBody.asset.id)?.attachmentCount, 1);
+
+    const proposedDetach = await detachAssetFromTarget(server, {
+      assetId: uploadedBody.asset.id,
+      target: proposalThing,
+      headers: { cookie: callan.cookie }
+    });
+    assert.equal(proposedDetach.status, 202);
+    const proposedDetachBody = await proposedDetach.json();
+    assert.equal(proposedDetachBody.status, "proposed");
+    assert.equal(proposedDetachBody.proposal.targetProcess, "asset.detach");
+    assert.equal(proposedDetachBody.proposal.targetId, uploadedBody.asset.id);
+    assert.equal(proposedDetachBody.statusMessage, "Proposed asset detachment for review.");
+    assert.equal(world.project(moduleProjectors.assets).find(row => row.id === uploadedBody.asset.id)?.attachmentCount, 1);
+    assert.equal(world.allWitnesses().some(w => w.process === "asset.detach" && w.actor === "callan"), false);
+    assert.equal(world.allWitnesses().some(w => w.process === "proposal.create" && w.actor === "callan"), true);
   } finally {
     await server.close();
   }
@@ -1428,7 +1509,7 @@ test("end-to-end: perspective, things, placement, move, and relation over HTTP",
   }
 });
 
-test("canvas process enforces context authority for scoped perspective creation", async () => {
+test("canvas process returns proposals for signed-in unauthorized scoped perspective creation", async () => {
   const { world, server } = await startCanvasServer({
     extra: `
 [[context]]
@@ -1454,19 +1535,79 @@ owner = "aaron"
       title: "Callan Board",
       context: "ctx.shared"
     }, asCallan);
-    assert.equal(forbidden.status, 403);
+    assert.equal(forbidden.status, 202);
     const forbiddenBody = await forbidden.json();
-    assert.equal(forbiddenBody.witness.process, "canvas.perspective.create.failed");
+    assert.equal(forbiddenBody.status, "proposed");
+    assert.equal(forbiddenBody.proposal.targetProcess, "canvas.perspective.create");
+    assert.equal(forbiddenBody.proposal.targetKind, "context");
+    assert.equal(forbiddenBody.proposal.targetId, "ctx.shared");
+    assert.equal(forbiddenBody.statusMessage, "Proposed canvas perspective for review.");
 
     const perspectives = world.project(moduleProjectors.perspectives);
     assert.equal(perspectives.some(row => row.title === "Shared Board" && row.context === "ctx.shared"), true);
     assert.equal(perspectives.some(row => row.title === "Callan Board" && row.context === "ctx.shared"), false);
+    assert.equal(world.allWitnesses().some(w => w.process === "proposal.create" && w.actor === "callan"), true);
+    assert.equal(world.allWitnesses().some(w => w.process === "canvas.perspective.create" && w.actor === "callan"), false);
   } finally {
     await server.close();
   }
 });
 
-test("canvas thing mutation processes require target authority over HTTP", async () => {
+test("canvas createThing on shared perspectives returns proposals for signed-in unauthorized actors and stamps context on direct creates", async () => {
+  const { world, server } = await startCanvasServer({
+    extra: `
+[[context]]
+actor = "aaron"
+id = "ctx.shared"
+label = "Shared"
+
+[[perspective]]
+actor = "aaron"
+id = "perspective.shared"
+title = "Shared Perspective"
+context = "ctx.shared"
+`
+  });
+  try {
+    const asAaron = { cookie: (await openSession(server.url, { username: "aaron", password: "aaron" })).cookie, "content-type": "application/json" };
+    const asCallan = { cookie: (await openSession(server.url, { username: "callan", password: "callan" })).cookie, "content-type": "application/json" };
+
+    const allowed = await postProcess(server, "canvas.createThing", {
+      perspective: "perspective.shared",
+      name: "Shared Customer",
+      x: 100,
+      y: 100
+    }, asAaron);
+    assert.equal(allowed.status, 200);
+    const allowedBody = await allowed.json();
+    assert.equal(allowedBody.witness.body.context, "ctx.shared");
+    assert.equal(world.project(projectors.currentRelations).some(r => r.from === allowedBody.witness.body.thing && r.rel === "inContext" && r.to === "ctx.shared"), true);
+
+    const proposed = await postProcess(server, "canvas.createThing", {
+      perspective: "perspective.shared",
+      name: "Hijacked Customer",
+      x: 220,
+      y: 180
+    }, asCallan);
+    assert.equal(proposed.status, 202);
+    const proposedBody = await proposed.json();
+    assert.equal(proposedBody.status, "proposed");
+    assert.equal(proposedBody.proposal.targetProcess, "canvas.createThing");
+    assert.equal(proposedBody.proposal.targetKind, "context");
+    assert.equal(proposedBody.proposal.targetId, "ctx.shared");
+    assert.equal(proposedBody.statusMessage, "Proposed canvas thing for review.");
+    const canvas = await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent("perspective.shared")}`, {
+      headers: { cookie: asAaron.cookie }
+    }).then(response => response.json());
+    assert.equal(canvas.canvas.instances.some(instance => instance.label === "Hijacked Customer"), false);
+    assert.equal(world.allWitnesses().some(w => w.process === "canvas.createThing" && w.actor === "callan"), false);
+    assert.equal(world.allWitnesses().some(w => w.process === "proposal.create" && w.actor === "callan"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("canvas thing mutation processes return proposals for signed-in unauthorized actors", async () => {
   const { world, server } = await startCanvasServer();
   try {
     const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
@@ -1483,9 +1624,11 @@ test("canvas thing mutation processes require target authority over HTTP", async
       title: "Hijacked Customer",
       perspective
     }, asCallan);
-    assert.equal(rename.status, 403);
+    assert.equal(rename.status, 202);
     const renameBody = await rename.json();
-    assert.equal(renameBody.witness.process, "canvas.thing.setTitle.failed");
+    assert.equal(renameBody.status, "proposed");
+    assert.equal(renameBody.proposal.targetProcess, "canvas.thing.setTitle");
+    assert.equal(renameBody.proposal.targetId, first.thing);
 
     const relate = await postProcess(server, "canvas.relate", {
       from: first.thing,
@@ -1493,17 +1636,41 @@ test("canvas thing mutation processes require target authority over HTTP", async
       to: second.thing,
       perspective
     }, asCallan);
-    assert.equal(relate.status, 403);
+    assert.equal(relate.status, 202);
     const relateBody = await relate.json();
-    assert.equal(relateBody.witness.process, "canvas.relate.failed");
+    assert.equal(relateBody.status, "proposed");
+    assert.equal(relateBody.proposal.targetProcess, "canvas.relate");
+    assert.equal(relateBody.proposal.targetId, first.thing);
+
+    const allowedRelate = await postProcess(server, "canvas.relate", {
+      from: first.thing,
+      rel: "references",
+      to: second.thing,
+      perspective
+    }, asAaron);
+    assert.equal(allowedRelate.status, 200);
+
+    const unrelate = await postProcess(server, "canvas.unrelate", {
+      from: first.thing,
+      rel: "references",
+      to: second.thing,
+      perspective
+    }, asCallan);
+    assert.equal(unrelate.status, 202);
+    const unrelateBody = await unrelate.json();
+    assert.equal(unrelateBody.status, "proposed");
+    assert.equal(unrelateBody.proposal.targetProcess, "canvas.unrelate");
+    assert.equal(unrelateBody.proposal.targetId, first.thing);
 
     const canvas = (await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent(perspective)}`, {
       headers: { cookie: aaron.cookie }
     }).then(r => r.json())).canvas;
     assert.equal(canvas.instances.some(instance => instance.label === "Hijacked Customer"), false);
-    assert.equal(canvas.connectors.length, 0);
+    assert.equal(canvas.connectors.length, 1);
     assert.equal(world.allWitnesses().some(w => w.process === "canvas.thing.setTitle" && w.actor === "callan"), false);
     assert.equal(world.allWitnesses().some(w => w.process === "canvas.relate" && w.actor === "callan"), false);
+    assert.equal(world.allWitnesses().some(w => w.process === "canvas.unrelate" && w.actor === "callan"), false);
+    assert.equal(world.allWitnesses().some(w => w.process === "proposal.create" && w.actor === "callan"), true);
   } finally {
     await server.close();
   }
@@ -1593,6 +1760,183 @@ test("canvas.batch applies moves, style, camera, and grid in exactly one witness
     assert.equal(canvas.instances.find(i => i.id === a).style.color, "#ffcc00");
     assert.deepEqual(canvas.perspective.camera, { x: 5, y: 6, zoom: 2 });
     assert.deepEqual(canvas.perspective.grid, { snap: true, size: 20 });
+  } finally {
+    await server.close();
+  }
+});
+
+test("canvas.batch on shared perspectives returns proposals for signed-in unauthorized actors", async () => {
+  const { world, server } = await startCanvasServer({
+    extra: `
+[[context]]
+actor = "aaron"
+id = "ctx.shared"
+label = "Shared"
+
+[[perspective]]
+actor = "aaron"
+id = "perspective.shared.batch"
+title = "Shared Batch Perspective"
+context = "ctx.shared"
+`
+  });
+  try {
+    const asAaron = { cookie: (await openSession(server.url, { username: "aaron", password: "aaron" })).cookie, "content-type": "application/json" };
+    const asCallan = { cookie: (await openSession(server.url, { username: "callan", password: "callan" })).cookie, "content-type": "application/json" };
+    const created = await postProcess(server, "canvas.createThing", {
+      perspective: "perspective.shared.batch",
+      name: "Shared Batch Node",
+      x: 0,
+      y: 0
+    }, asAaron);
+    assert.equal(created.status, 200);
+    const createdBody = await created.json();
+
+    const proposed = await postProcess(server, "canvas.batch", {
+      perspective: "perspective.shared.batch",
+      moves: [{ instance: createdBody.witness.body.instance, x: 100, y: 120 }]
+    }, asCallan);
+    assert.equal(proposed.status, 202);
+    const proposedBody = await proposed.json();
+    assert.equal(proposedBody.status, "proposed");
+    assert.equal(proposedBody.proposal.targetProcess, "canvas.batch");
+    assert.equal(proposedBody.proposal.targetKind, "context");
+    assert.equal(proposedBody.proposal.targetId, "ctx.shared");
+    assert.equal(proposedBody.statusMessage, "Proposed canvas layout change for review.");
+
+    const canvas = await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent("perspective.shared.batch")}`, {
+      headers: { cookie: asAaron.cookie }
+    }).then(response => response.json());
+    assert.equal(canvas.canvas.instances.find(instance => instance.id === createdBody.witness.body.instance)?.x, 0);
+    assert.equal(world.allWitnesses().some(w => w.process === "canvas.batch" && w.actor === "callan"), false);
+    assert.equal(world.allWitnesses().some(w => w.process === "proposal.create" && w.actor === "callan"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("shared canvas duplicate and removeMany routes return proposals for signed-in unauthorized actors", async () => {
+  const { world, server } = await startCanvasServer({
+    extra: `
+[[context]]
+actor = "aaron"
+id = "ctx.shared"
+label = "Shared"
+
+[[perspective]]
+actor = "aaron"
+id = "perspective.shared.instances"
+title = "Shared Instance Perspective"
+context = "ctx.shared"
+`
+  });
+  try {
+    const asAaron = { cookie: (await openSession(server.url, { username: "aaron", password: "aaron" })).cookie, "content-type": "application/json" };
+    const asCallan = { cookie: (await openSession(server.url, { username: "callan", password: "callan" })).cookie, "content-type": "application/json" };
+    const created = await postProcess(server, "canvas.createThing", {
+      perspective: "perspective.shared.instances",
+      name: "Shared Instance Node",
+      x: 0,
+      y: 0
+    }, asAaron).then(r => r.json());
+
+    const duplicate = await postProcess(server, "canvas.duplicate", {
+      perspective: "perspective.shared.instances",
+      instance: created.witness.body.instance,
+      x: 48,
+      y: 64
+    }, asCallan);
+    assert.equal(duplicate.status, 202);
+    const duplicateBody = await duplicate.json();
+    assert.equal(duplicateBody.status, "proposed");
+    assert.equal(duplicateBody.proposal.targetProcess, "canvas.duplicate");
+    assert.equal(duplicateBody.proposal.targetKind, "context");
+    assert.equal(duplicateBody.proposal.targetId, "ctx.shared");
+    assert.equal(duplicateBody.statusMessage, "Proposed canvas duplicate for review.");
+
+    let canvas = await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent("perspective.shared.instances")}`, {
+      headers: { cookie: asAaron.cookie }
+    }).then(response => response.json());
+    assert.equal(canvas.canvas.instances.length, 1);
+    assert.equal(world.allWitnesses().some(w => w.process === "canvas.duplicate" && w.actor === "callan"), false);
+
+    const directDuplicate = await postProcess(server, "canvas.duplicate", {
+      perspective: "perspective.shared.instances",
+      instance: created.witness.body.instance,
+      x: 48,
+      y: 64
+    }, asAaron);
+    assert.equal(directDuplicate.status, 200);
+    const directDuplicateBody = await directDuplicate.json();
+
+    const removeMany = await postProcess(server, "canvas.removeMany", {
+      perspective: "perspective.shared.instances",
+      instances: [created.witness.body.instance, directDuplicateBody.witness.body.instance]
+    }, asCallan);
+    assert.equal(removeMany.status, 202);
+    const removeManyBody = await removeMany.json();
+    assert.equal(removeManyBody.status, "proposed");
+    assert.equal(removeManyBody.proposal.targetProcess, "canvas.removeMany");
+    assert.equal(removeManyBody.proposal.targetKind, "context");
+    assert.equal(removeManyBody.proposal.targetId, "ctx.shared");
+    assert.equal(removeManyBody.statusMessage, "Proposed canvas removals for review.");
+
+    canvas = await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent("perspective.shared.instances")}`, {
+      headers: { cookie: asAaron.cookie }
+    }).then(response => response.json());
+    assert.equal(canvas.canvas.instances.length, 2);
+    assert.equal(world.allWitnesses().some(w => w.process === "canvas.removeMany" && w.actor === "callan"), false);
+    assert.equal(world.allWitnesses().filter(w => w.process === "proposal.create" && w.actor === "callan").length >= 2, true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("shared canvas place route returns proposals for signed-in unauthorized actors", async () => {
+  const { world, server } = await startCanvasServer({
+    extra: `
+[[context]]
+actor = "aaron"
+id = "ctx.shared"
+label = "Shared"
+
+[[perspective]]
+actor = "aaron"
+id = "perspective.shared.place"
+title = "Shared Place Perspective"
+context = "ctx.shared"
+`
+  });
+  try {
+    const asAaron = { cookie: (await openSession(server.url, { username: "aaron", password: "aaron" })).cookie, "content-type": "application/json" };
+    const asCallan = { cookie: (await openSession(server.url, { username: "callan", password: "callan" })).cookie, "content-type": "application/json" };
+    const created = await postProcess(server, "canvas.createThing", {
+      perspective: "perspective.shared.place",
+      name: "Shared Place Node",
+      x: 0,
+      y: 0
+    }, asAaron).then(r => r.json());
+
+    const placed = await postProcess(server, "canvas.place", {
+      perspective: "perspective.shared.place",
+      thing: created.witness.body.thing,
+      x: 300,
+      y: 320
+    }, asCallan);
+    assert.equal(placed.status, 202);
+    const placedBody = await placed.json();
+    assert.equal(placedBody.status, "proposed");
+    assert.equal(placedBody.proposal.targetProcess, "canvas.place");
+    assert.equal(placedBody.proposal.targetKind, "context");
+    assert.equal(placedBody.proposal.targetId, "ctx.shared");
+    assert.equal(placedBody.statusMessage, "Proposed canvas placement for review.");
+
+    const canvas = await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent("perspective.shared.place")}`, {
+      headers: { cookie: asAaron.cookie }
+    }).then(response => response.json());
+    assert.equal(canvas.canvas.instances.filter(instance => instance.thing === created.witness.body.thing).length, 1);
+    assert.equal(world.allWitnesses().some(w => w.process === "canvas.place" && w.actor === "callan"), false);
+    assert.equal(world.allWitnesses().some(w => w.process === "proposal.create" && w.actor === "callan"), true);
   } finally {
     await server.close();
   }

@@ -69,6 +69,31 @@ test("placeThing fails for unknown perspective or unknown thing", () => {
   assert.equal(placeThing(world, { actor: "aaron", perspective, thing: "nope" }).process, "canvas.place.failed");
 });
 
+test("placeThing on a scoped perspective requires context authority", () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "aaron" });
+  createThing(world, { actor: "system", id: "ctx.shared" });
+  createThing(world, { actor: "system", id: "customer" });
+  world.emit({
+    process: "seed.shared.context",
+    actor: "system",
+    claims: [
+      relation("ctx.shared", "hasModuleKind", "context"),
+      relation("aaron", "owns", "ctx.shared")
+    ],
+    body: {}
+  });
+  const perspective = createPerspective(world, { actor: "aaron", title: "Shared Place", context: "ctx.shared" }).body.id;
+
+  const denied = placeThing(world, { actor: "callan", perspective, thing: "customer", x: 100, y: 120 });
+  assert.equal(denied.process, "canvas.place.failed");
+  assert.equal(denied.body.context, "ctx.shared");
+  assert.equal(denied.body.status, 403);
+
+  const allowed = placeThing(world, { actor: "aaron", perspective, thing: "customer", x: 100, y: 120 });
+  assert.equal(allowed.process, "canvas.place");
+});
+
 test("two moves: latest geometry wins via currentRelations", () => {
   const { world, perspective } = worldWithPerspective();
   const instance = placeThing(world, { actor: "aaron", perspective, thing: "customer" }).body.instance;
@@ -120,6 +145,55 @@ test("createThingOnCanvas creates a titled reality thing and places it atomicall
   assert(rels.some(r => r.from === w.body.thing && r.rel === "hasTitle" && r.to === "Proposal"));
   assert(rels.some(r => r.from === w.body.instance && r.rel === "proxies" && r.to === w.body.thing));
   assert.equal(world.project(projectors.owners).get(w.body.thing), "aaron");
+});
+
+test("createThingOnCanvas on a scoped perspective requires context authority and stamps created things into that context", () => {
+  const world = createWorld();
+  world.emit({
+    process: "seed.shared.context",
+    actor: "system",
+    claims: [
+      relation("ctx.shared", "hasModuleKind", "context"),
+      relation("aaron", "owns", "ctx.shared")
+    ],
+    body: {}
+  });
+  const perspective = createPerspective(world, { actor: "aaron", title: "Shared View", context: "ctx.shared" }).body.id;
+
+  const allowed = createThingOnCanvas(world, { actor: "aaron", perspective, name: "Shared Proposal", x: 50, y: 60 });
+  assert.equal(allowed.process, "canvas.createThing");
+  assert.equal(allowed.body.context, "ctx.shared");
+  assert.equal(world.project(projectors.currentRelations).some(r => r.from === allowed.body.thing && r.rel === "inContext" && r.to === "ctx.shared"), true);
+
+  const denied = createThingOnCanvas(world, { actor: "callan", perspective, name: "Hijacked", x: 10, y: 20 });
+  assert.equal(denied.process, "canvas.createThing.failed");
+  assert.equal(denied.body.context, "ctx.shared");
+  assert.equal(denied.body.status, 403);
+});
+
+test("duplicateInstance on a scoped perspective requires context authority", () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "aaron" });
+  createThing(world, { actor: "system", id: "ctx.shared" });
+  world.emit({
+    process: "seed.shared.context",
+    actor: "system",
+    claims: [
+      relation("ctx.shared", "hasModuleKind", "context"),
+      relation("aaron", "owns", "ctx.shared")
+    ],
+    body: {}
+  });
+  const perspective = createPerspective(world, { actor: "aaron", title: "Shared Duplicate", context: "ctx.shared" }).body.id;
+  const instance = createThingOnCanvas(world, { actor: "aaron", perspective, name: "Shared Node", x: 0, y: 0 }).body.instance;
+
+  const denied = duplicateInstance(world, { actor: "callan", perspective, instance, x: 40, y: 40 });
+  assert.equal(denied.process, "canvas.duplicate.failed");
+  assert.equal(denied.body.context, "ctx.shared");
+  assert.equal(denied.body.status, 403);
+
+  const allowed = duplicateInstance(world, { actor: "aaron", perspective, instance, x: 40, y: 40 });
+  assert.equal(allowed.process, "canvas.duplicate");
 });
 
 test("relateThings records a reality relation between things; unrelate retracts it", () => {
@@ -281,6 +355,30 @@ test("setGrid witnesses snap state with clamped size; latest wins", () => {
   assert.equal(setGrid(world, { actor: "callan", perspective, snap: true }).process, "canvas.grid.failed");
 });
 
+test("setGrid on a scoped perspective requires context authority", () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "aaron" });
+  createThing(world, { actor: "system", id: "ctx.shared" });
+  world.emit({
+    process: "seed.shared.context",
+    actor: "system",
+    claims: [
+      relation("ctx.shared", "hasModuleKind", "context"),
+      relation("aaron", "owns", "ctx.shared")
+    ],
+    body: {}
+  });
+  const perspective = createPerspective(world, { actor: "aaron", title: "Shared Grid", context: "ctx.shared" }).body.id;
+
+  const denied = setGrid(world, { actor: "callan", perspective, snap: true, size: 24 });
+  assert.equal(denied.process, "canvas.grid.failed");
+  assert.equal(denied.body.context, "ctx.shared");
+  assert.equal(denied.body.status, 403);
+
+  const allowed = setGrid(world, { actor: "aaron", perspective, snap: true, size: 24 });
+  assert.equal(allowed.process, "canvas.grid");
+});
+
 test("batch applies moves, styles, camera, and grid in one witness", () => {
   const { world, perspective } = worldWithPerspective();
   createThing(world, { actor: "aaron", id: "proposal" });
@@ -302,6 +400,40 @@ test("batch applies moves, styles, camera, and grid in one witness", () => {
   assert.deepEqual(rels.find(r => r.from === a && r.rel === "hasStyle").meta, { color: "#ffcc00" });
   assert.deepEqual(rels.find(r => r.from === perspective && r.rel === "hasCamera").meta, { x: 5, y: 6, zoom: 2 });
   assert.deepEqual(rels.find(r => r.from === perspective && r.rel === "hasGrid").meta, { snap: true, size: 20 });
+});
+
+test("batchApply on a scoped perspective requires context authority", () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "aaron" });
+  createThing(world, { actor: "system", id: "ctx.shared" });
+  world.emit({
+    process: "seed.shared.context",
+    actor: "system",
+    claims: [
+      relation("ctx.shared", "hasModuleKind", "context"),
+      relation("aaron", "owns", "ctx.shared")
+    ],
+    body: {}
+  });
+  const perspective = createPerspective(world, { actor: "aaron", title: "Shared Batch", context: "ctx.shared" }).body.id;
+  const instance = createThingOnCanvas(world, { actor: "aaron", perspective, name: "Shared Node", x: 0, y: 0 }).body.instance;
+
+  const denied = batchApply(world, {
+    actor: "callan",
+    perspective,
+    moves: [{ instance, x: 100, y: 100 }]
+  });
+  assert.equal(denied.process, "canvas.batch.failed");
+  assert.equal(denied.body.context, "ctx.shared");
+  assert.equal(denied.body.status, 403);
+
+  const allowed = batchApply(world, {
+    actor: "aaron",
+    perspective,
+    moves: [{ instance, x: 100, y: 100 }]
+  });
+  assert.equal(allowed.process, "canvas.batch");
+  assert.equal(canvasProjection(world.allWitnesses(), perspective).instances.find(i => i.id === instance).x, 100);
 });
 
 test("batch is all-or-nothing: a ghost instance in moves fails everything including camera", () => {

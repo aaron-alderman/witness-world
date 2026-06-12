@@ -9,6 +9,8 @@ import {
   createIdentity,
   defineContext,
   defineRoute,
+  installRuntimePlugin,
+  removeRuntimePlugin,
   serveRoute,
   createFrontendRunner,
   createViewDescription,
@@ -83,6 +85,35 @@ test("server runner serves a route that points at a frontend artifact", () => {
     context: null,
     serverRunner: "server_runner"
   }]);
+});
+
+test("runtime plugin installs project as serverRunner-scoped authored relations", () => {
+  const world = createWorld();
+  createThing(world, { actor: "adam", id: "aaron" });
+  createServerRunner(world, {
+    actor: "aaron",
+    id: "server_runner",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost"
+  });
+
+  installRuntimePlugin(world, {
+    actor: "aaron",
+    serverRunner: "server_runner",
+    plugin: "plugin.inspect"
+  });
+  assert.deepEqual(world.project(moduleProjectors.runtimePluginInstalls), [{
+    serverRunner: "server_runner",
+    plugin: "plugin.inspect",
+    witness: world.project(moduleProjectors.runtimePluginInstalls)[0].witness
+  }]);
+
+  removeRuntimePlugin(world, {
+    actor: "aaron",
+    serverRunner: "server_runner",
+    plugin: "plugin.inspect"
+  });
+  assert.deepEqual(world.project(moduleProjectors.runtimePluginInstalls), []);
 });
 
 test("frontend runner renders a view and emits user action witnesses", () => {

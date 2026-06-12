@@ -25,17 +25,20 @@ Under that stricter bar, the intended UX split is:
 
 Phase 1 adopts an **explicit app/plugin execution boundary**.
 
-- Generic runtime behavior lives in [src/host.js](C:\Users\aaron\Documents\world\src\host.js), [src/widgets.js](C:\Users\aaron\Documents\world\src\widgets.js), [src/type-model.js](C:\Users\aaron\Documents\world\src\type-model.js), [src/widget-define.js](C:\Users\aaron\Documents\world\src\widget-define.js), [src/world-graph.js](C:\Users\aaron\Documents\world\src\world-graph.js), and [src/process-view.js](C:\Users\aaron\Documents\world\src\process-view.js).
-- Blank-world bootstrap and recovery authoring live in [src/bootstrap-shell.js](C:\Users\aaron\Documents\world\src\bootstrap-shell.js), [src/bootstrap-authoring.js](C:\Users\aaron\Documents\world\src\bootstrap-authoring.js), and [src/runtime-builtins.js](C:\Users\aaron\Documents\world\src\runtime-builtins.js).
-- App-specific behavior remains behind explicit handler sets such as [src/demo-handler-set.js](C:\Users\aaron\Documents\world\src\demo-handler-set.js).
+- Generic runtime behavior now resolves through explicit runtime bundles, profile composition, and dedicated runtime modules rather than one implicit central host file.
+- Blank-world bootstrap and recovery authoring live behind the authoring/tutorial runtime bundle path, with the product shell still centered on [src/bootstrap-shell.js](C:\Users\aaron\Documents\world\src\bootstrap-shell.js) and [src/bootstrap-authoring.js](C:\Users\aaron\Documents\world\src\bootstrap-authoring.js).
+- App-specific execution is now split across explicit seams:
+  - many shipped demo/backend routes execute through authored `backendProgram` definitions
+  - the remaining demo compatibility seam lives behind [src/demo-handler-set.js](C:\Users\aaron\Documents\world\src\demo-handler-set.js) plus `serverRunner.handlerSet = "demo"`
 - `serverRunner.handlerSet` is therefore an intentional extension boundary for now, not a hidden claim that backend route behavior is already executable from witnessed definitions.
 
 What this means:
 
 - declarative routes decide mounting, method/path matching, and handler identity
-- the generic host owns request/session/runtime plumbing
-- handler sets own app data mutations and app-specific route behavior
-- future work may move more backend execution into witnessed definitions, but that is not claimed as part of the current baseline
+- runtime bundle/profile composition plus the generic host own request/session/runtime plumbing
+- authored backend programs already own a meaningful slice of shipped app/backend route behavior
+- handler sets remain as an explicit compatibility seam for the remaining demo/runtime-owned behavior, not as the only app execution path
+- future work still needs to reduce that remaining compatibility seam, but the current baseline already includes real authored backend execution
 
 ---
 
@@ -128,9 +131,11 @@ Canonical startup path:
 - `npm run bootstrap` is a convenience wrapper over the dedicated bootstrap command
 - `npm run demo` is a convenience wrapper over that generic CLI
 - `bootstrap` is a separate blank-world authoring path, not just a variant of the demo app
+- the maintained demo now starts on `--runtime-profile minimal` plus authored runtime-plugin installs on `demo_server`
 - the CLI resolves one authored `serverRunner` and then starts the generic host through `startServer(...)`
 - if `--server` is omitted, startup succeeds only when exactly one authored `serverRunner` exists
 - if no authored runner exists, the host can expose the bootstrap fallback directly through the dedicated bootstrap command or when started programmatically
+- the maintained demo still carries one explicit compatibility seam: `handlerSet = "demo"` currently causes startup to add `bundle-demo`
 
 Useful startup environment:
 
@@ -165,16 +170,20 @@ The generic runtime currently owns these categories:
 
 The generic runtime does **not** currently claim to own:
 
-- todo CRUD semantics
-- private note semantics
-- demo-specific network failure routes
-- other app-specific backend mutations hidden behind handler sets
+- all app/backend behavior through one universal authored execution model
+- the remaining demo compatibility behavior behind `serverRunner.handlerSet = "demo"` / `bundle-demo`
+
+The current shipped split is:
+
+- generic runtime/bundle ownership for profile-gated routes, surfaces, diagnostics, session plumbing, bootstrap shell behavior, and transport seams
+- authored backend-program ownership for many shipped demo/backend routes such as Todo CRUD, private notes, widgets create, witnesses, process-view reads, process-run reads, process-event ingest, and world-graph reads
+- explicit compatibility-seam ownership for the remaining demo-specific handler-set behavior
 
 ---
 
 ## Guaranteed Public Demo Surface
 
-The current demo baseline expects these routes/surfaces to remain reachable:
+The current maintained demo baseline expects these routes/surfaces to remain reachable when started on `minimal` with its authored runtime-plugin installs and the explicit `bundle-demo` compatibility seam:
 
 - `/`
 - `/_bootstrap`

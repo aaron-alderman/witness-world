@@ -1,8 +1,9 @@
 import { frontendProgram } from "./widgets.js";
+import { backendProgramVersionDefinition, backendProgramVersionsProjection } from "./backend-programs.js";
 import { pathLabel, pathBreadcrumb } from "./process-graph.js";
 
-const ASYNC_OPS = new Set(["fetchJson", "postJson", "patchJson", "deleteJson", "initSession", "setSession", "logout", "refreshProjection"]);
-const TERMINAL_STEP_PROCESSES = new Set(["frontend.step.done", "frontend.step.skipped", "frontend.step.failed"]);
+const ASYNC_OPS = new Set(["fetchJson", "postJson", "patchJson", "deleteJson", "initSession", "setSession", "logout", "refreshProjection", "request.readJson", "handler.invoke", "run"]);
+const TERMINAL_STEP_PROCESSES = new Set(["frontend.step.done", "frontend.step.skipped", "frontend.step.failed", "backend.step.done", "backend.step.skipped", "backend.step.failed"]);
 const PROCESS_EVENT_PROCESSES = new Set([
   "frontend.process.start",
   "frontend.process.done",
@@ -10,7 +11,14 @@ const PROCESS_EVENT_PROCESSES = new Set([
   "frontend.step.start",
   "frontend.step.done",
   "frontend.step.skipped",
-  "frontend.step.failed"
+  "frontend.step.failed",
+  "backend.process.start",
+  "backend.process.done",
+  "backend.process.failed",
+  "backend.step.start",
+  "backend.step.done",
+  "backend.step.skipped",
+  "backend.step.failed"
 ]);
 
 export function processCatalogProjection(witnesses) {
@@ -38,6 +46,31 @@ export function processCatalogProjection(witnesses) {
       });
     }
   }
+  for (const versionRow of backendProgramVersionsProjection(witnesses)) {
+    const program = backendProgramVersionDefinition(witnesses, versionRow.version);
+    if (!program) continue;
+    const byEvent = new Map();
+    for (const node of program.graph ?? []) {
+      if (!node.event) continue;
+      if (!byEvent.has(node.event)) byEvent.set(node.event, []);
+      byEvent.get(node.event).push(node);
+    }
+    for (const [event, nodes] of byEvent.entries()) {
+      const graph = buildAuthoredGraph(program.id, event, nodes);
+      catalog.push({
+        id: `${program.id}:${event}`,
+        program: program.id,
+        event,
+        label: `${program.soul} · ${event} · ${program.id}`,
+        kind: "backend",
+        nodeCount: graph.nodes.length,
+        branchCount: graph.nodes.filter(node => node.semantics.branch).length,
+        loopCount: graph.nodes.filter(node => node.semantics.loopKind).length,
+        asyncCount: graph.nodes.filter(node => node.semantics.async).length,
+        parallelLayerCount: graph.layers.filter(layer => layer.nodeIds.length > 1).length
+      });
+    }
+  }
   return catalog.sort((a, b) => a.label.localeCompare(b.label));
 }
 
@@ -49,7 +82,7 @@ export function processViewProjection({ witnesses, observations = [] }, {
   replay = null
 } = {}) {
   const catalog = processCatalogProjection(witnesses);
-  const runs = processRunIndex(witnesses);
+  const runs = processRunIndex(witnesses, observations);
   const selectedFromRun = runId && runs.has(runId) ? runs.get(runId) : null;
   const selectedProcess = resolveSelectedProcess(catalog, {
     program: program ?? selectedFromRun?.program ?? null,
@@ -88,7 +121,7 @@ export function processViewProjection({ witnesses, observations = [] }, {
 }
 
 export function processRunProjection({ witnesses, observations = [] }, { runId, replay = null } = {}) {
-  const runs = processRunIndex(witnesses);
+  const runs = processRunIndex(witnesses, observations);
   const run = runId ? runs.get(runId) ?? null : null;
   if (!run) return null;
   const timeline = decorateRunTimeline(run.timeline);
@@ -227,7 +260,7 @@ export function renderProcessPage(model, { currentPath = "/process" } = {}) {
   <div class="process-shell">
     <aside class="process-pane">
       <h2>Processes</h2>
-      <div class="process-list">${processLinks || `<div class="process-empty">No authored frontend processes.</div>`}</div>
+      <div class="process-list">${processLinks || `<div class="process-empty">No authored processes.</div>`}</div>
       <h3>Recent Runs</h3>
       <div class="process-list">${runLinks || `<div class="process-empty">No recorded runs yet.</div>`}</div>
     </aside>
@@ -239,7 +272,7 @@ export function renderProcessPage(model, { currentPath = "/process" } = {}) {
           <span><strong>Nodes:</strong> ${model.graph?.nodes?.length ?? 0}</span>
           <span><strong>Runs:</strong> ${model.runs?.length ?? 0}</span>
         </div>
-        ${layers || `<div class="process-empty">Select an authored frontend process.</div>`}
+        ${layers || `<div class="process-empty">Select an authored process.</div>`}
       </section>
     </main>
     <aside class="process-pane">
@@ -308,8 +341,13 @@ function resolveSelectedProcess(catalog, { program, event }) {
 
 function buildGraphForSelection(witnesses, programId, event) {
   const program = frontendProgram(witnesses, programId);
-  if (!program?.graph) return emptyGraph();
-  const nodes = program.graph.filter(node => node.event === event);
+  if (program?.graph) {
+    const nodes = program.graph.filter(node => node.event === event);
+    return buildAuthoredGraph(programId, event, nodes);
+  }
+  const backendProgram = backendProgramVersionDefinition(witnesses, programId);
+  if (!backendProgram?.graph) return emptyGraph();
+  const nodes = backendProgram.graph.filter(node => node.event === event);
   return buildAuthoredGraph(programId, event, nodes);
 }
 
@@ -390,12 +428,17 @@ function graphWithSelection(graph, nodeId) {
   };
 }
 
-function processRunIndex(witnesses) {
+function processRunIndex(witnesses, observations = []) {
   const runs = new Map();
-  for (let index = 0; index < witnesses.length; index += 1) {
-    const witness = witnesses[index];
+  const traceEntries = [
+    ...witnesses.map((entry, index) => ({ entry, index, source: "witness" })),
+    ...observations.map((entry, index) => ({ entry, index: witnesses.length + index, source: "observation" }))
+  ];
+  for (const trace of traceEntries) {
+    const witness = trace.entry;
+    const index = trace.index;
     const runId = witness.body?.runId;
-    if (!runId || !String(witness.process || "").startsWith("frontend.")) continue;
+    if (!runId || !PROCESS_EVENT_PROCESSES.has(String(witness.process || ""))) continue;
     const entry = runs.get(runId) ?? {
       runId,
       program: witness.body.program ?? null,
@@ -409,7 +452,7 @@ function processRunIndex(witnesses) {
       eventData: {},
       timeline: []
     };
-    if (witness.process === "frontend.process.start") {
+    if (witness.process === "frontend.process.start" || witness.process === "backend.process.start") {
       entry.program = witness.body.program ?? entry.program;
       entry.event = witness.body.event ?? entry.event;
       entry.actor = witness.actor ?? entry.actor;
@@ -417,15 +460,15 @@ function processRunIndex(witnesses) {
       entry.startedAt = witness.body.timestamp ?? index;
       entry.startedSeq = index;
       entry.eventData = witness.body.eventData ?? {};
-    } else if (witness.process === "frontend.process.done") {
+    } else if (witness.process === "frontend.process.done" || witness.process === "backend.process.done") {
       entry.status = "done";
       entry.endedAt = witness.body.timestamp ?? index;
       entry.endedSeq = index;
-    } else if (witness.process === "frontend.process.failed") {
+    } else if (witness.process === "frontend.process.failed" || witness.process === "backend.process.failed") {
       entry.status = "failed";
       entry.endedAt = witness.body.timestamp ?? index;
       entry.endedSeq = index;
-    } else if (witness.process.startsWith("frontend.step.")) {
+    } else if (witness.process.startsWith("frontend.step.") || witness.process.startsWith("backend.step.")) {
       entry.timeline.push({
         witnessId: witness.id,
         process: witness.process,
@@ -567,10 +610,10 @@ function repeatLabel(repeat) {
 }
 
 function stepStatusFromProcess(process) {
-  if (process === "frontend.step.start") return "start";
-  if (process === "frontend.step.done") return "done";
-  if (process === "frontend.step.skipped") return "skipped";
-  if (process === "frontend.step.failed") return "failed";
+  if (process === "frontend.step.start" || process === "backend.step.start") return "start";
+  if (process === "frontend.step.done" || process === "backend.step.done") return "done";
+  if (process === "frontend.step.skipped" || process === "backend.step.skipped") return "skipped";
+  if (process === "frontend.step.failed" || process === "backend.step.failed") return "failed";
   return "done";
 }
 

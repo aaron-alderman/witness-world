@@ -41,7 +41,7 @@ Current honesty snapshot:
 - same-context and unscoped canonical-id authoring still acts as compatibility sugar, but hidden foreign-scoped canonical-id bypasses on covered bootstrap/DSL surfaces are now blocked
 - some live editing and proposal flows are real but narrow, even where ambient refresh now works
 - the next real honesty risks are migration and governance seams, not a fake command product
-- widget-version routes and Eden version routes now do flow through shared authority derivation, the live inspector now has a first `widgetVersion.activate` / `widgetVersion.rollback` proposal fallback, the Eden versions panel now has a first `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish` proposal fallback, and the Eden capability shelf now has a first `capability.install` proposal fallback, but app-specific handler-set mutations still do not all flow through one shared authority/proposal path
+- widget-version routes and Eden version routes now do flow through shared authority derivation, the live inspector now has a first `widgetVersion.activate` / `widgetVersion.rollback` proposal fallback, the Eden versions panel now has a first `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish` proposal fallback, and the Eden capability shelf now has a first `capability.install` proposal fallback, but remaining app-specific and other operating-surface mutation actions still do not all flow through one shared authority/proposal path
 
 Current honesty ledger:
 
@@ -145,7 +145,7 @@ The user should be able to:
 
 Desktop, browser, and hosted/server shells should all sit over the same core model.
 
-The desktop shell proves ownership.
+The first shipped desktop shell now proves the ownership seam in a narrow but real way.
 The web shell proves reachability.
 The shared model proves coherence.
 
@@ -509,7 +509,7 @@ What is still missing is the actual editable-everywhere part:
 
 The same world should be operable through:
 
-- a desktop shell
+- a first desktop ownership shell, with broader native integrations still to come
 - a browser shell
 - a hosted/server shell
 
@@ -522,9 +522,15 @@ Shell-specific capabilities should be visible as shell-specific capabilities, no
 The current baseline/todo/bootstrap work remains valuable because it proves:
 
 - the runtime can be coherent
-- a blank world can recover
+- the maintained demo can now prove authored plugin composition on `minimal` instead of only riding the implicit `full` profile
+- a blank world can recover through a still-separate bootstrap/tutorial runtime path
 - real app assembly can happen inside the product
 - guided learning can use real surfaces instead of fake wizards
+
+What is still not unified yet is the runtime-composition story:
+
+- the maintained demo is pluginized, but it still carries the explicit `bundle-demo` compatibility seam triggered by `handlerSet = "demo"`
+- blank-world bootstrap/tutorial startup still does not use that same narrowed baseline and authored plugin story yet
 
 But that work should now be understood as groundwork for a broader composition environment:
 

@@ -7,6 +7,13 @@ import { createWorld } from "../src/kernel.js";
 import { applyWitnessDocs, applyWitnessToml, loadWitnessTomlFile } from "../src/dsl.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
 import { processRunProjection, processViewProjection } from "../src/process-view.js";
+import {
+  activateBackendProgramVersion,
+  backendProgramVersionDefinition,
+  defineBackendProgram,
+  defineBackendProgramVersion,
+  defineBackendStep
+} from "../src/backend-programs.js";
 import { frontendProgram } from "../src/widgets.js";
 
 async function tempRuntimeRoot() {
@@ -81,8 +88,8 @@ params = { widget = "status", text = "loop" }
 
 test("process view routes expose correlated runs and dedicated process page", async () => {
   const world = createWorld();
-  declareBackendHost(world, { actor: "adam", id: "backendHost" });
-  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
 
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
@@ -91,7 +98,8 @@ test("process view routes expose correlated runs and dedicated process page", as
   const server = await startServer(world, {
     actor: "adam",
     serverRunnerId: "demo_server",
-    runtimeRoot
+    runtimeRoot,
+    runtimeProfile: "minimal"
   });
 
   try {
@@ -119,6 +127,7 @@ test("process view routes expose correlated runs and dedicated process page", as
     };
 
     await trace("frontend.process.start");
+    assert.equal(world.allObservations().filter(observation => observation.process === "backend.process.start").at(-1)?.body?.program, "todo.processEvents.record.v1");
     await trace("frontend.step.start", { nodeId: tracedStep.id, op: tracedStep.op });
     const todos = await fetch(`${server.url}/api/todos`, {
       headers: {
@@ -145,13 +154,145 @@ test("process view routes expose correlated runs and dedicated process page", as
     assert.equal(processRun.run.runId, runId);
     assert.equal(processRun.run.requests[0].route, "todos_list_route");
     assert.equal(processRun.replay.max >= 2, true);
+    assert.equal(world.allObservations().filter(observation => observation.process === "backend.process.start").at(-1)?.body?.program, "todo.processRun.read.v1");
 
     const directRun = processRunProjection({
       witnesses: world.allWitnesses(),
       observations: world.allObservations()
     }, { runId });
-    assert.equal(directRun.run.requests[0].handler, "todos.list");
+    assert.equal(directRun.run.requests[0].handler, "backendProgram.run");
+
+    const backendRunId = world.allObservations()
+      .filter(observation => observation.process === "backend.process.start" && observation.body?.program === "todo.todos.list.v1")
+      .at(-1)?.body?.runId;
+    assert.ok(backendRunId, "expected a backend program run for /api/todos");
+
+    const backendProcessView = await fetch(`${server.url}/api/process-view?program=todo.todos.list.v1&event=request&runId=${backendRunId}`).then(response => response.json());
+    assert.equal(backendProcessView.selection.runId, backendRunId);
+    assert.equal(backendProcessView.run.requests[0].handler, "todos.readModel");
+    assert.equal(backendProcessView.run.requests[0].url, "/api/todos");
   } finally {
     await server.close();
   }
+});
+
+test("process view projection includes backend program catalogs, runs, and correlated handler calls", () => {
+  const world = createWorld();
+  defineBackendProgram(world, { actor: "backendHost", soul: "backend.echo", owner: "backendHost" });
+  defineBackendProgramVersion(world, {
+    actor: "backendHost",
+    soul: "backend.echo",
+    version: "backend.echo.v1",
+    owner: "backendHost"
+  });
+  defineBackendStep(world, {
+    actor: "backendHost",
+    version: "backend.echo.v1",
+    event: "request",
+    op: "handler.invoke",
+    order: 0,
+    params: { handler: "session.read", method: "GET", into: "sessionStatus" }
+  });
+  defineBackendStep(world, {
+    actor: "backendHost",
+    version: "backend.echo.v1",
+    event: "request",
+    op: "response.json",
+    order: 1,
+    params: { body: { ok: true } }
+  });
+  activateBackendProgramVersion(world, {
+    actor: "backendHost",
+    soul: "backend.echo",
+    version: "backend.echo.v1"
+  });
+
+  const program = backendProgramVersionDefinition(world.allWitnesses(), "backend.echo.v1");
+  const invokeStep = program.graph.find(node => node.op === "handler.invoke");
+  const responseStep = program.graph.find(node => node.op === "response.json");
+  assert.ok(invokeStep);
+  assert.ok(responseStep);
+
+  const runId = "backend-process-run";
+  world.emit({
+    process: "backend.process.start",
+    actor: "backendHost",
+    claims: [],
+    body: { runId, program: "backend.echo.v1", event: "request", timestamp: 1 }
+  });
+  world.emit({
+    process: "backend.step.start",
+    actor: "backendHost",
+    claims: [],
+    body: { runId, program: "backend.echo.v1", event: "request", nodeId: invokeStep.id, op: invokeStep.op, timestamp: 2 }
+  });
+  const requestWitness = world.emit({
+    process: "session.read",
+    actor: "backendHost",
+    claims: [],
+    body: { authenticated: false }
+  });
+  world.observe({
+    process: "backend.request.finish",
+    actor: "backendHost",
+    claims: [],
+    body: {
+      requestId: `${runId}:${invokeStep.id}:session.read`,
+      stepId: invokeStep.id,
+      method: "GET",
+      url: "/api/session",
+      statusCode: 200,
+      route: null,
+      handler: "session.read",
+      runId,
+      emittedWitnessIds: [requestWitness.id],
+      failureWitnessIds: []
+    }
+  });
+  world.emit({
+    process: "backend.step.done",
+    actor: "backendHost",
+    claims: [],
+    body: { runId, program: "backend.echo.v1", event: "request", nodeId: invokeStep.id, op: invokeStep.op, timestamp: 3 }
+  });
+  world.emit({
+    process: "backend.step.start",
+    actor: "backendHost",
+    claims: [],
+    body: { runId, program: "backend.echo.v1", event: "request", nodeId: responseStep.id, op: responseStep.op, timestamp: 4 }
+  });
+  world.emit({
+    process: "backend.step.done",
+    actor: "backendHost",
+    claims: [],
+    body: { runId, program: "backend.echo.v1", event: "request", nodeId: responseStep.id, op: responseStep.op, timestamp: 5 }
+  });
+  world.emit({
+    process: "backend.process.done",
+    actor: "backendHost",
+    claims: [],
+    body: { runId, program: "backend.echo.v1", event: "request", timestamp: 6 }
+  });
+
+  const model = processViewProjection({
+    witnesses: world.allWitnesses(),
+    observations: world.allObservations()
+  }, {
+    program: "backend.echo.v1",
+    event: "request",
+    runId
+  });
+  assert.equal(model.catalog.some(item => item.program === "backend.echo.v1" && item.event === "request"), true);
+  assert.equal(model.selection.runId, runId);
+  assert.equal(model.run.requests.length, 1);
+  assert.equal(model.run.requests[0].handler, "session.read");
+  assert.equal(model.run.timeline[0].status, "start");
+  assert.equal(model.run.nodeHistory[invokeStep.id].some(item => item.type === "request" && item.handler === "session.read"), true);
+
+  const run = processRunProjection({
+    witnesses: world.allWitnesses(),
+    observations: world.allObservations()
+  }, { runId });
+  assert.equal(run.run.requests[0].handler, "session.read");
+  assert.equal(run.run.nodeHistory[invokeStep.id][0].status, "start");
 });

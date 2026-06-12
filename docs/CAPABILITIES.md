@@ -52,7 +52,7 @@ Current honesty snapshot:
 - canonical ids still remain as compatibility sugar for same-context targets, unscoped legacy targets, and foreign targets that are already explicitly visible
 - live-page proposal approval is real and now refreshes rendered pages through the witness stream, but the proposal path is still intentionally narrow
 - the main remaining gaps are migration and governance gaps, not a fake capability registry
-- capability installs are first-class now, widget-version routes now use shared authority derivation, the live inspector now has a first `widgetVersion.activate` / `widgetVersion.rollback` proposal fallback, Eden's versions panel now has a first `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish` proposal fallback, and Eden's capability shelf now has a first `capability.install` proposal fallback, but app-specific handler-set mutations still do not all use the same shared authority/proposal machinery
+- capability installs are first-class now, widget-version routes now use shared authority derivation, the live inspector, shared Todo routes, shared widget editor, live canvas mutations, asset attach/detach flows, Eden's versions panel, and Eden's capability shelf all now have first proposal-aware operating-surface slices, but remaining app-specific and other operating-surface mutations still do not all use the same shared authority/proposal machinery
 
 Current honesty ledger:
 
@@ -451,7 +451,7 @@ Missing molecules:
 - broader context composition semantics beyond the covered first-slice surfaces
 - richer package-like behavior: wildcard imports, namespace imports, re-export chains, and transitive import reasoning
 - clearer long-term context-aware capability/store semantics
-- context-aware composition across canvas and app-specific handler-set behaviors
+- context-aware composition across canvas and the remaining app-specific runtime behaviors
 
 Do:
 
@@ -499,7 +499,7 @@ Missing molecules:
 - authority coverage outside the generic bootstrap mutation surface
 - broader principal/role/group semantics
 - richer proposal queue/review/workflow behavior
-- proposal coverage for app-specific handler-set actions
+- broader proposal coverage for the remaining app-specific and other operating-surface mutation actions
 
 Do:
 
@@ -514,7 +514,7 @@ Honest caveats:
 - stewardship is currently actor-string based, not yet a richer principal model
 - proposals execute a fixed supported set of bootstrap target processes, not arbitrary world mutations
 - the first non-bootstrap proposal-authoring path is intentionally narrow
-  Today it exists on the live widget inspector for `widget.update` plus first-slice `widgetVersion.activate` / `widgetVersion.rollback` proposal creation, on the Eden versions panel for `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish`, and on the Eden capability shelf for `capability.install`; approval/rejection still runs through the generic proposal APIs and broader app-specific actions remain outside this slice.
+  Today it exists on the live widget inspector for `widget.update` plus first-slice `widgetVersion.activate` / `widgetVersion.rollback` proposal creation, on the shared Todo CRUD routes for `todo.create` / `todo.update` / `todo.delete`, on the shared widget editor for `widget.define`, on live canvas mutation and shared asset attachment routes for `canvas.perspective.create` / `canvas.createThing` / `canvas.batch` / `canvas.thing.setTitle` / `canvas.relate` / `canvas.unrelate` / `asset.attach` / `asset.detach`, on the Eden versions panel for `widgetVersion.activate` / `widgetVersion.rollback` / `edenVersions.publish`, and on the Eden capability shelf for `capability.install`; approval/rejection still runs through the generic proposal APIs and broader remaining operating-surface actions still sit outside this slice.
 - older worlds remain valid with many unscoped objects, so direct ownership is still a compatibility path alongside context governance
 
 ---
@@ -800,13 +800,24 @@ Current molecules:
 - local catalog projection
 - local install/remove lifecycle
 - provenance surfaced in the bootstrap read models
+- metadata-first local plugin package discovery and validation through `plugins/<plugin-id>/plugin.json`
+- runtime and bootstrap read models that expose package validity, compatibility, installability-in-principle, and declared capability sources
+- startup-local plugin activation through `PluginManifest.activatesBundles`, repeatable CLI `--runtime-plugin <id>`, and `RUNTIME_PLUGINS=plugin.a,plugin.b`
+- authored `serverRunner` plugin installs through witnessed `runtimePlugin.install` / `runtimePlugin.remove`, with proposal parity and additive operator overlay
+- bootstrap runtime-plugin install/remove/proposal forms plus runner-scoped availability rows that show authored installability, missing dependencies, and metadata-only packages without pretending CLI/env overlays are durable world state
+- runtime-owned review reads plus bootstrap plugin detail panels that preview authored runner composition, no-op installs, reverse dependencies, and declared-vs-resolved plugin contributions before mutation
+- runtime composition reads that expose requested, eligible, active, rejected, resolved-bundle, and resolved-runtime-contribution state for local plugin packages
+- the maintained demo example now uses authored runner installs for `plugin.authoring`, `plugin.inspect`, and `plugin.canvas`, and served demo entrypoints run on `minimal` so plugin composition is proven in the actual project path rather than only in abstract runtime tests
 
 Still missing:
 
 - remote catalog/store protocol
 - update lifecycle
-- trust/review/report surfaces
+- broader store-grade trust/review/report surfaces beyond the shipped local runtime-plugin review/detail and composition-preview reads
 - richer version compatibility semantics
+- runner-scoped reconcile and repair flows for broken authored runtime-plugin installs
+- finishing the migration of remaining bootstrap/tutorial and demo compatibility seams onto the same explicit runtime-composition story
+- executable plugin loader boundaries beyond the current bundle-bridge-only activation path
 
 Do:
 
@@ -832,11 +843,12 @@ Current molecules:
 
 - capability authoring DSL/model
 - bootstrap capability authoring form
+- a concrete external `PluginManifest` shape distinct from the internal executable bundle contract
 
 Still missing:
 
 - packaging/bundling semantics
-- installable export format
+- installable export/import flows beyond the local filesystem manifest shape
 - capability testing/preview
 - less JSON-heavy product-grade authoring surfaces
 
@@ -859,9 +871,14 @@ The current capability slice is real, but a few parts are still bridge-quality r
 - The world graph still carries legacy context capability strings as badges on context nodes even though capability nodes and install edges now exist.
 - `routePage` means the served route plus its root `Page` widget only; it is not a general page/entity/subtree placement model.
 - Validation is typed and dependency-aware, but not yet a deep semantic solver for version, authority, or cross-surface conflicts.
-- The local catalog behaves like a projected index, not yet like a full ecosystem/store protocol.
+- Internal bundles are now the executable extension contract, while local plugin packages can only activate those bundles through a manifest-to-bundle bridge.
+- The local catalog behaves like a projected index plus package-discovery and runtime-composition read model, not yet like a full ecosystem/store protocol.
+- Activated plugin packages still do not execute package-local providers, load local JS, register runtime routes directly, or auto-install capabilities into the world model.
+- Authored runtime-plugin installs persist runner intent, but they still resolve only to pre-registered internal bundles; they are not yet a third-party executable loader or a remote store install lifecycle.
+- The maintained demo now proves authored plugin composition on `minimal`, but it still relies on one explicit compatibility seam: `handlerSet = "demo"` currently causes startup to add `bundle-demo`.
+- Blank-world bootstrap/tutorial startup still follows a separate runtime path from the pluginized maintained demo, so the project does not yet have one fully unified runtime-composition story across both entry modes.
 - None of those caveats make the capability slice fake.
-  They mean the current slice still mixes real first-class behavior with compatibility bridges, narrow placement semantics, and projection-backed cataloging.
+  They mean the current slice still mixes real first-class behavior with compatibility bridges, narrow placement semantics, projection-backed cataloging, and an explicit bundle-bridge-only local plugin boundary.
 
 These are acceptable for the first vertical slice, but they should stay visible so later work can tighten or replace them intentionally rather than accrete around them by accident.
 
@@ -1013,7 +1030,7 @@ What it is:
 
 - browser/hosted operation now
 - a first local MCP automation shell over the same world and runtime seams
-- future desktop shell alongside it
+- a first local desktop ownership shell alongside it
 
 Why it accelerates:
 
@@ -1027,12 +1044,15 @@ Current molecules:
 - per-server tool exposure, acting mode, and local scope through authored `mcpToolInstall`
 - stdio and local-first HTTP MCP transports over the real witnessed host/tool surface
 - delegated versus service identity execution instead of one implicit global automation identity
+- a real `desktop` startup mode over the same runtime/profile/operator seams
+- a desktop launcher window that chooses or creates `WORLD_HOME` before the runtime-backed app page loads
+- a single-active-world desktop session manager with recent-world persistence outside world truth
+- explicit desktop shell state and a narrow `window.witnessDesktop` bridge for world-home open/create/reveal flows
 
 Still missing:
 
-- explicit shell contract
-- broader shell-specific capability boundaries beyond the current MCP/browser split
-- desktop integration story
+- broader in-product explanation for shell-specific absence and profile-gated surface differences
+- wider desktop-native breadth beyond local ownership
 - MCP prompts/resources/completions and richer remote auth/discovery semantics
 
 Do:
@@ -1046,31 +1066,42 @@ Do not:
 
 ### 8.2 Desktop shell
 
-Status: `missing`
+Status: `partial`
 
 What it is:
 
-- the "real program" shell
+- the first local ownership shell over the same runtime and world model
 
 Why it accelerates:
 
 - restores local ownership feel
-- enables filesystem/native integrations cleanly
+- makes `WORLD_HOME` ownership explicit through a native launcher and directory selection flow
+- proves that shell-local powers can stay explicit without becoming ambient core/runtime capabilities
 
-Missing molecules:
+Current molecules:
 
-- Electron or equivalent wrapper
-- file/open/save integration model
+- Electron wrapper over the shared runtime startup path
+- launcher window for `Open Existing World` / `Create New World`
+- single-active-world session manager with recent-world persistence
+- explicit `openWorldHome`, `createWorldHome`, `revealWorldHome`, and `getDesktopShellState` bridge methods
+- bootstrap-visible desktop shell status over the running world
+
+Still missing:
+
+- broader file/open/save document semantics beyond world-home ownership
 - desktop notifications/system integrations
 - local packaging/update lifecycle
+- stronger end-to-end non-mock desktop testing and ops breadth
 
 Do:
 
-- model desktop-only powers as explicit capabilities
+- keep desktop-only powers explicit and shell-local
+- keep desktop ownership anchored to `WORLD_HOME`
 
 Do not:
 
 - assume the desktop shell is "just the web app in a box"
+- turn native world-home ownership into an ambient generic filesystem bridge
 
 ### 8.3 Persistence, backup, and operator lifecycle
 
@@ -1117,7 +1148,7 @@ Missing molecules:
 - signed provenance
 - install/update channels
 - compatibility semantics
-- trust/review/report surfaces
+- broader trust/review/report surfaces beyond the shipped local runtime-plugin review/detail and composition-preview layer
 
 Do:
 

@@ -28,7 +28,8 @@ The current backend slice is real but narrow:
 - generic HTTP host startup through `serverRunner`
 - explicit route mounting through `route` + `serve`
 - session read/open/logout on the generic host
-- built-in backend capability envelopes:
+- the maintained demo serve path now runs on `minimal` plus authored runtime-plugin installs rather than only relying on the implicit `full` profile
+- shipped backend capability envelopes currently provided through runtime bundle/profile composition:
   - `runtime.config`
   - `http.serve`
   - `fs.json.read`
@@ -45,7 +46,9 @@ The current backend slice is real but narrow:
   - `notify.email`
   - `notify.sms`
 - authored MCP transport and tool surfaces through `mcpServer` + `mcpToolInstall`
-- app-specific backend behavior still expressed through explicit handler sets
+- many shipped demo/backend routes now execute through authored `backendProgram` definitions instead of raw handler-set glue
+- the remaining demo/runtime compatibility seam is explicit: `serverRunner.handlerSet = "demo"` still causes startup to add `bundle-demo`, and that ownership is now reported honestly in runtime diagnostics
+- several shipped backend-program versions still call demo handler-set model helpers such as `todos.*Model`, `privateNotes.*Model`, `widgets.createModel`, and `network.simulateModel`, so the remaining app-logic compatibility seam is narrower than before but not gone yet
 
 That is an honest baseline.
 
@@ -175,7 +178,7 @@ Shipped runtime status so far:
 - The active starting slice is `Files + Uploads`.
 - The roadmap should show sequence, phases, and completion rules.
 - This document is the detailed operating spec for section 6.
-- Existing capability mechanics in `src/modules.js`, `src/runtime-builtins.js`, and `src/host.js` remain the baseline contract that section 6 extends.
+- Existing capability mechanics in `src/modules.js`, the runtime bundle/profile composition path, and the public host/runtime facade remain the baseline contract that section 6 extends.
 
 ---
 
@@ -1828,7 +1831,7 @@ For the active first slice, completion additionally requires:
 
 Current honest status:
 
-- built-in backend capability definitions now project explicit `dependsOn`, `authority`, `providerAdapters`, and `witnessContract` metadata through the normal capability model
+- shipped backend capability definitions now project explicit `dependsOn`, `authority`, `providerAdapters`, and `witnessContract` metadata through the normal capability model
 - `GET /api/backend-seams` now exposes the installed backend capability contracts for the active host rather than leaving those seam-wide rules only in prose
 - `runtime.config` is shipped runtime behavior with runner-authored config, env-backed secret resolution, safe inspection, and startup failure on unresolved required secrets
 - `jobs.queue` is shipped runtime behavior with a witnessed in-process worker, delayed execution, idempotent enqueue, retry/backoff, dead-letter state, generic host endpoints, and host tests

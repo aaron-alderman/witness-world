@@ -30,8 +30,8 @@ This is the beginning of the academy, not the whole academy.
 
 What the repo already has:
 
-- a working Todo app and demo world
-- bootstrap/tutorial flows
+- a working Todo app and maintained demo world that now runs on `minimal` plus authored runtime-plugin installs
+- bootstrap/tutorial flows that still remain a separate blank-world runtime path from that pluginized maintained demo
 - world, process, and canvas surfaces
 - widget version activation and rollback primitives
 - a strong non-browser test suite around projections, widgets, routes, host behavior, and world inspection

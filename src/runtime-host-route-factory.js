@@ -1,4 +1,5 @@
 import { createRuntimeRouteHandlers } from "./runtime-route-handlers.js";
+import { SUPPORTED_BACKEND_OPS } from "./backend-programs.js";
 import {
   looksJsonContentType,
   responseHeadersToObject,
@@ -11,6 +12,7 @@ import {
   streamReadableToFile
 } from "./runtime-stream-utils.js";
 import { DEFAULT_RUNTIME_PROFILE } from "./runtime-bundles.js";
+import { resolveRuntimePluginRoot } from "./runtime-plugin-utils.js";
 
 const SUPPORTED_FRONTEND_OPS = [
   "initSession",
@@ -51,7 +53,10 @@ export function createGenericRouteHandlers({
   runtimeProfile = DEFAULT_RUNTIME_PROFILE,
   runtimeBundleSummary = null,
   runtimeSurfaceEntries = [],
-  handlerSetDefinitions = {}
+  handlerSetDefinitions = {},
+  runtimePluginRoot = resolveRuntimePluginRoot(),
+  runtimePluginIds = [],
+  authoredRuntimePluginIds = []
 }) {
   return createRuntimeRouteHandlers({
     world,
@@ -72,7 +77,11 @@ export function createGenericRouteHandlers({
     streamReadableToFile,
     streamFileToFile,
     webhookPayloadPathFor,
+    runtimePluginRoot,
+    runtimePluginIds,
+    authoredRuntimePluginIds,
     supportedFrontendOps: SUPPORTED_FRONTEND_OPS,
+    supportedBackendOps: SUPPORTED_BACKEND_OPS,
     frontendTraceProcesses: FRONTEND_TRACE_PROCESSES
   });
 }

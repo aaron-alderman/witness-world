@@ -1,0 +1,11 @@
+{
+  "id": "plugin.authoring",
+  "version": "0.1.0",
+  "displayName": "Authoring Bundle Bridge",
+  "description": "Activates the internal authoring and bootstrap runtime bundle through the local plugin bridge.",
+  "kind": "plugin",
+  "activatesBundles": [
+    "bundle-authoring"
+  ],
+  "contributes": {}
+}

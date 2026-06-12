@@ -4,14 +4,24 @@ import { setTimeout as delay } from "node:timers/promises";
 import { moduleProjectors } from "../src/modules.js";
 import { expectNoRuntimeErrors, launchBrowser, startUiDemoServer } from "./support/harness.js";
 
-async function loginAsAaron(page) {
-  await page.fill("#session-username", "aaron");
-  await page.fill("#session-password", "aaron");
+async function loginAs(page, { username, password = username, label }) {
+  await page.fill("#session-username", username);
+  await page.fill("#session-password", password);
   await page.locator("#session-open-btn").click();
-  await page.waitForFunction(() => {
+  await page.waitForFunction(expectedLabel => {
     const status = document.getElementById("session-status");
-    return Boolean(status && status.textContent && status.textContent.includes("Signed in as Aaron"));
-  });
+    return Boolean(status && status.textContent && status.textContent.includes(`Signed in as ${expectedLabel}`));
+  }, label);
+  const statusText = (await page.locator("#session-status").textContent()) || "";
+  assert.match(statusText, new RegExp(`Signed in as ${label}`));
+}
+
+async function loginAsAaron(page) {
+  await loginAs(page, { username: "aaron", label: "Aaron" });
+}
+
+async function loginAsCallan(page) {
+  await loginAs(page, { username: "callan", label: "Callan" });
 }
 
 async function createFileTransfer(page, files) {
@@ -117,6 +127,592 @@ test("canvas uses session-backed login before perspective creation", async () =>
 
     const sessionValue = (await page.locator("#session-status").textContent()) || "";
     assert.match(sessionValue, /Signed in as Aaron/);
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("canvas live surface proposes shared title edits for signed-in non-stewards", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/canvas`);
+    await page.waitForLoadState("domcontentloaded");
+    await loginAsAaron(page);
+
+    const ids = await page.evaluate(async () => {
+      const contextId = "context:ui-shared";
+      const perspectiveId = "perspective:ui-shared";
+      await fetch("/api/contexts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: contextId, label: "UI Shared" })
+      });
+      await fetch("/api/perspectives", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: perspectiveId, title: "UI Shared Perspective", context: contextId })
+      });
+      return { contextId, perspectiveId };
+    });
+
+    const created = await createCanvasThing(page, {
+      perspectiveId: ids.perspectiveId,
+      name: "Shared Customer",
+      x: 120,
+      y: 120
+    });
+    const sharedThing = created.witness.body.thing;
+
+    await page.locator("#session-logout-btn").click();
+    await page.waitForFunction(() => {
+      const status = document.getElementById("session-status");
+      return Boolean(status && status.textContent?.includes("Not signed in"));
+    });
+    await loginAsCallan(page);
+    await page.selectOption("#perspective-select", ids.perspectiveId);
+    const callanCookie = await page.evaluate(() => document.cookie);
+
+    const canvas = await waitForCanvas(server.url, {
+      perspectiveId: ids.perspectiveId,
+      cookie: callanCookie,
+      until: current => current.instances.some(instance => instance.thing === sharedThing)
+    });
+    const sharedNode = canvas.instances.find(instance => instance.thing === sharedThing);
+    assert(sharedNode);
+
+    await page.locator("#canvas-stage").click({
+      position: {
+        x: Math.max(8, Math.round(sharedNode.x + Math.min(sharedNode.w / 2, 40))),
+        y: Math.max(8, Math.round(sharedNode.y + Math.min(sharedNode.h / 2, 20)))
+      }
+    });
+    const nameInput = page.locator("#thing-props .prop-row input").first();
+    await nameInput.fill("Hijacked Customer");
+    await nameInput.press("Tab");
+    await page.waitForFunction(() => {
+      const status = document.getElementById("status");
+      return Boolean(status?.textContent?.includes("Proposed canvas title update for review."));
+    });
+
+    const after = await readCanvas(server.url, { perspectiveId: ids.perspectiveId, cookie: callanCookie });
+    assert.equal(after.instances.some(instance => instance.label === "Hijacked Customer"), false);
+
+    const witnesses = await fetch(`${server.url}/api/witnesses`, {
+      headers: { cookie: callanCookie }
+    }).then(r => r.json());
+    assert.equal(witnesses.witnesses.some(w => w.process === "proposal.create"), true);
+    assert.equal(witnesses.witnesses.some(w => w.process === "canvas.thing.setTitle" && w.actor === "callan"), false);
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("canvas live surface proposes shared thing creation for signed-in non-stewards", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/canvas`);
+    await page.waitForLoadState("domcontentloaded");
+    await loginAsAaron(page);
+
+    const ids = await page.evaluate(async () => {
+      const contextId = "context:ui-shared-create";
+      const perspectiveId = "perspective:ui-shared-create";
+      await fetch("/api/contexts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: contextId, label: "UI Shared Create" })
+      });
+      await fetch("/api/perspectives", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: perspectiveId, title: "UI Shared Create Perspective", context: contextId })
+      });
+      return { contextId, perspectiveId };
+    });
+
+    await page.locator("#session-logout-btn").click();
+    await page.waitForFunction(() => {
+      const status = document.getElementById("session-status");
+      return Boolean(status && status.textContent?.includes("Not signed in"));
+    });
+    await loginAsCallan(page);
+    await page.selectOption("#perspective-select", ids.perspectiveId);
+    const callanCookie = await page.evaluate(() => document.cookie);
+
+    await page.locator("#canvas-stage").dblclick({ position: { x: 260, y: 180 } });
+    await page.locator("#overlay-input").fill("Hijacked Shared Thing");
+    await page.locator("#overlay-input").press("Enter");
+    await page.waitForFunction(() => {
+      const status = document.getElementById("status");
+      return Boolean(status?.textContent?.includes("Proposed canvas thing for review."));
+    });
+
+    const after = await readCanvas(server.url, { perspectiveId: ids.perspectiveId, cookie: callanCookie });
+    assert.equal(after.instances.some(instance => instance.label === "Hijacked Shared Thing"), false);
+
+    const witnesses = await fetch(`${server.url}/api/witnesses`, {
+      headers: { cookie: callanCookie }
+    }).then(r => r.json());
+    assert.equal(witnesses.witnesses.some(w => w.process === "proposal.create"), true);
+    assert.equal(witnesses.witnesses.some(w => w.process === "canvas.createThing" && w.actor === "callan"), false);
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("canvas live surface proposes shared asset attachments for signed-in non-stewards", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/canvas`);
+    await page.waitForLoadState("domcontentloaded");
+    await loginAsAaron(page);
+
+    const ids = await page.evaluate(async () => {
+      const contextId = "context:ui-shared-attach";
+      const perspectiveId = "perspective:ui-shared-attach";
+      await fetch("/api/contexts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: contextId, label: "UI Shared Attach" })
+      });
+      await fetch("/api/perspectives", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: perspectiveId, title: "UI Shared Attach Perspective", context: contextId })
+      });
+      return { contextId, perspectiveId };
+    });
+
+    const created = await createCanvasThing(page, {
+      perspectiveId: ids.perspectiveId,
+      name: "Shared Attachment Target",
+      x: 120,
+      y: 120
+    });
+    const sharedThing = created.witness.body.thing;
+
+    const uploaded = await page.evaluate(async ({ perspectiveId }) => {
+      const form = new FormData();
+      form.set("file", new File(["proposal attach body"], "shared-attach.txt", { type: "text/plain" }));
+      form.set("perspective", perspectiveId);
+      const response = await fetch(`/api/assets?perspective=${encodeURIComponent(perspectiveId)}`, {
+        method: "POST",
+        body: form
+      });
+      return {
+        status: response.status,
+        body: await response.json().catch(() => ({}))
+      };
+    }, { perspectiveId: ids.perspectiveId });
+    assert.equal(uploaded.status, 201);
+    const uploadedAssetId = uploaded.body.asset.id;
+
+    await page.locator("#session-logout-btn").click();
+    await page.waitForFunction(() => {
+      const status = document.getElementById("session-status");
+      return Boolean(status && status.textContent?.includes("Not signed in"));
+    });
+    await loginAsCallan(page);
+    await page.selectOption("#perspective-select", ids.perspectiveId);
+    const callanCookie = await page.evaluate(() => document.cookie);
+
+    const canvas = await waitForCanvas(server.url, {
+      perspectiveId: ids.perspectiveId,
+      cookie: callanCookie,
+      until: current => current.instances.some(instance => instance.thing === sharedThing)
+    });
+    const targetNode = canvas.instances.find(instance => instance.thing === sharedThing);
+    assert(targetNode);
+
+    await page.locator("#canvas-stage").click({
+      position: {
+        x: Math.max(8, Math.round(targetNode.x + Math.min(targetNode.w / 2, 40))),
+        y: Math.max(8, Math.round(targetNode.y + Math.min(targetNode.h / 2, 20)))
+      }
+    });
+    await page.waitForFunction(expectedAssetId => {
+      const select = document.querySelector('[data-attach-asset-select="true"]');
+      return Boolean(select && [...select.options].some(option => option.value === expectedAssetId));
+    }, uploadedAssetId);
+    await page.selectOption('[data-attach-asset-select="true"]', uploadedAssetId);
+    await page.locator('[data-attach-asset-button]').click();
+    await page.waitForFunction(() => {
+      const status = document.getElementById("status");
+      return Boolean(status?.textContent?.includes("Proposed asset attachment for review."));
+    });
+
+    const after = await readCanvas(server.url, { perspectiveId: ids.perspectiveId, cookie: callanCookie });
+    const afterTargetNode = after.instances.find(instance => instance.thing === sharedThing);
+    assert(afterTargetNode);
+    assert.equal(afterTargetNode.attachedAssets?.length || 0, 0);
+
+    const witnesses = await fetch(`${server.url}/api/witnesses`, {
+      headers: { cookie: callanCookie }
+    }).then(r => r.json());
+    assert.equal(witnesses.witnesses.some(w => w.process === "proposal.create"), true);
+    assert.equal(witnesses.witnesses.some(w => w.process === "asset.attach" && w.actor === "callan"), false);
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("canvas live surface proposes shared layout changes for signed-in non-stewards", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/canvas`);
+    await page.waitForLoadState("domcontentloaded");
+    await loginAsAaron(page);
+
+    const ids = await page.evaluate(async () => {
+      const contextId = "context:ui-shared-batch";
+      const perspectiveId = "perspective:ui-shared-batch";
+      await fetch("/api/contexts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: contextId, label: "UI Shared Batch" })
+      });
+      await fetch("/api/perspectives", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: perspectiveId, title: "UI Shared Batch Perspective", context: contextId })
+      });
+      return { contextId, perspectiveId };
+    });
+
+    const created = await createCanvasThing(page, {
+      perspectiveId: ids.perspectiveId,
+      name: "Shared Batch Customer",
+      x: 120,
+      y: 120
+    });
+    const sharedInstance = created.witness.body.instance;
+    const sharedThing = created.witness.body.thing;
+
+    await page.locator("#session-logout-btn").click();
+    await page.waitForFunction(() => {
+      const status = document.getElementById("session-status");
+      return Boolean(status && status.textContent?.includes("Not signed in"));
+    });
+    await loginAsCallan(page);
+    await page.selectOption("#perspective-select", ids.perspectiveId);
+    const callanCookie = await page.evaluate(() => document.cookie);
+
+    const canvas = await waitForCanvas(server.url, {
+      perspectiveId: ids.perspectiveId,
+      cookie: callanCookie,
+      until: current => current.instances.some(instance => instance.thing === sharedThing)
+    });
+    const sharedNode = canvas.instances.find(instance => instance.thing === sharedThing);
+    assert(sharedNode);
+    const stageBox = await page.locator("#canvas-stage").boundingBox();
+    assert(stageBox);
+
+    await page.mouse.move(
+      stageBox.x + Math.max(8, Math.round(sharedNode.x + Math.min(sharedNode.w / 2, 40))),
+      stageBox.y + Math.max(8, Math.round(sharedNode.y + Math.min(sharedNode.h / 2, 20)))
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      stageBox.x + Math.max(8, Math.round(sharedNode.x + Math.min(sharedNode.w / 2, 40) + 120)),
+      stageBox.y + Math.max(8, Math.round(sharedNode.y + Math.min(sharedNode.h / 2, 20) + 80)),
+      { steps: 10 }
+    );
+    await page.mouse.up();
+
+    await page.waitForFunction(() => {
+      const status = document.getElementById("status");
+      return Boolean(status?.textContent?.includes("Proposed canvas layout change for review."));
+    }, { timeout: 10000 });
+
+    const after = await readCanvas(server.url, { perspectiveId: ids.perspectiveId, cookie: callanCookie });
+    assert.equal(after.instances.find(instance => instance.id === sharedInstance)?.x, sharedNode.x);
+    assert.equal(after.instances.find(instance => instance.id === sharedInstance)?.y, sharedNode.y);
+
+    const witnesses = await fetch(`${server.url}/api/witnesses`, {
+      headers: { cookie: callanCookie }
+    }).then(r => r.json());
+    assert.equal(witnesses.witnesses.some(w => w.process === "proposal.create"), true);
+    assert.equal(witnesses.witnesses.some(w => w.process === "canvas.batch" && w.actor === "callan"), false);
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("canvas live surface proposes shared duplication for signed-in non-stewards", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/canvas`);
+    await page.waitForLoadState("domcontentloaded");
+    await loginAsAaron(page);
+
+    const ids = await page.evaluate(async () => {
+      const contextId = "context:ui-shared-duplicate";
+      const perspectiveId = "perspective:ui-shared-duplicate";
+      await fetch("/api/contexts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: contextId, label: "UI Shared Duplicate" })
+      });
+      await fetch("/api/perspectives", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: perspectiveId, title: "UI Shared Duplicate Perspective", context: contextId })
+      });
+      return { contextId, perspectiveId };
+    });
+
+    const created = await createCanvasThing(page, {
+      perspectiveId: ids.perspectiveId,
+      name: "Shared Duplicate Customer",
+      x: 120,
+      y: 120
+    });
+    const sharedInstance = created.witness.body.instance;
+    const sharedThing = created.witness.body.thing;
+
+    await page.locator("#session-logout-btn").click();
+    await page.waitForFunction(() => {
+      const status = document.getElementById("session-status");
+      return Boolean(status && status.textContent?.includes("Not signed in"));
+    });
+    await loginAsCallan(page);
+    await page.selectOption("#perspective-select", ids.perspectiveId);
+    const callanCookie = await page.evaluate(() => document.cookie);
+
+    const canvas = await waitForCanvas(server.url, {
+      perspectiveId: ids.perspectiveId,
+      cookie: callanCookie,
+      until: current => current.instances.some(instance => instance.thing === sharedThing)
+    });
+    const sharedNode = canvas.instances.find(instance => instance.thing === sharedThing);
+    assert(sharedNode);
+    const stageBox = await page.locator("#canvas-stage").boundingBox();
+    assert(stageBox);
+
+    await page.locator("#canvas-stage").click({
+      position: {
+        x: Math.max(8, Math.round(sharedNode.x + Math.min(sharedNode.w / 2, 40))),
+        y: Math.max(8, Math.round(sharedNode.y + Math.min(sharedNode.h / 2, 20)))
+      }
+    });
+    await page.keyboard.press("Control+d");
+    await page.waitForFunction(() => {
+      const status = document.getElementById("status");
+      return Boolean(status?.textContent?.includes("Proposed canvas duplicate for review."));
+    });
+
+    const after = await readCanvas(server.url, { perspectiveId: ids.perspectiveId, cookie: callanCookie });
+    assert.equal(after.instances.filter(instance => instance.thing === sharedThing).length, 1);
+    assert.equal(after.instances.some(instance => instance.id !== sharedInstance && instance.thing === sharedThing), false);
+
+    const witnesses = await fetch(`${server.url}/api/witnesses`, {
+      headers: { cookie: callanCookie }
+    }).then(r => r.json());
+    assert.equal(witnesses.witnesses.some(w => w.process === "proposal.create"), true);
+    assert.equal(witnesses.witnesses.some(w => w.process === "canvas.duplicate" && w.actor === "callan"), false);
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("canvas live surface proposes shared placement for signed-in non-stewards", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/canvas`);
+    await page.waitForLoadState("domcontentloaded");
+    await loginAsAaron(page);
+
+    const ids = await page.evaluate(async () => {
+      const contextId = "context:ui-shared-place";
+      const perspectiveId = "perspective:ui-shared-place";
+      await fetch("/api/contexts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: contextId, label: "UI Shared Place" })
+      });
+      await fetch("/api/perspectives", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: perspectiveId, title: "UI Shared Place Perspective", context: contextId })
+      });
+      return { contextId, perspectiveId };
+    });
+
+    const created = await createCanvasThing(page, {
+      perspectiveId: ids.perspectiveId,
+      name: "Shared Place Customer",
+      x: 120,
+      y: 120
+    });
+    const sharedThing = created.witness.body.thing;
+
+    await page.locator("#session-logout-btn").click();
+    await page.waitForFunction(() => {
+      const status = document.getElementById("session-status");
+      return Boolean(status && status.textContent?.includes("Not signed in"));
+    });
+    await loginAsCallan(page);
+    await page.selectOption("#perspective-select", ids.perspectiveId);
+    const callanCookie = await page.evaluate(() => document.cookie);
+
+    const canvas = await waitForCanvas(server.url, {
+      perspectiveId: ids.perspectiveId,
+      cookie: callanCookie,
+      until: current => current.instances.some(instance => instance.thing === sharedThing) && current.availableThings.some(thing => thing.id === sharedThing)
+    });
+    assert.equal(canvas.instances.filter(instance => instance.thing === sharedThing).length, 1);
+
+    await page.locator('.palette-item').filter({ hasText: 'Shared Place Customer' }).click();
+    await page.waitForFunction(() => {
+      const status = document.getElementById("status");
+      return Boolean(status?.textContent?.includes("Proposed canvas placement for review."));
+    });
+
+    const after = await readCanvas(server.url, { perspectiveId: ids.perspectiveId, cookie: callanCookie });
+    assert.equal(after.instances.filter(instance => instance.thing === sharedThing).length, 1);
+
+    const witnesses = await fetch(`${server.url}/api/witnesses`, {
+      headers: { cookie: callanCookie }
+    }).then(r => r.json());
+    assert.equal(witnesses.witnesses.some(w => w.process === "proposal.create"), true);
+    assert.equal(witnesses.witnesses.some(w => w.process === "canvas.place" && w.actor === "callan"), false);
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("canvas live surface proposes shared removal for signed-in non-stewards", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/canvas`);
+    await page.waitForLoadState("domcontentloaded");
+    await loginAsAaron(page);
+
+    const ids = await page.evaluate(async () => {
+      const contextId = "context:ui-shared-remove";
+      const perspectiveId = "perspective:ui-shared-remove";
+      await fetch("/api/contexts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: contextId, label: "UI Shared Remove" })
+      });
+      await fetch("/api/perspectives", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: perspectiveId, title: "UI Shared Remove Perspective", context: contextId })
+      });
+      return { contextId, perspectiveId };
+    });
+
+    const created = await createCanvasThing(page, {
+      perspectiveId: ids.perspectiveId,
+      name: "Shared Remove Customer",
+      x: 120,
+      y: 120
+    });
+    const sharedInstance = created.witness.body.instance;
+    const sharedThing = created.witness.body.thing;
+
+    await page.locator("#session-logout-btn").click();
+    await page.waitForFunction(() => {
+      const status = document.getElementById("session-status");
+      return Boolean(status && status.textContent?.includes("Not signed in"));
+    });
+    await loginAsCallan(page);
+    await page.selectOption("#perspective-select", ids.perspectiveId);
+    const callanCookie = await page.evaluate(() => document.cookie);
+
+    const canvas = await waitForCanvas(server.url, {
+      perspectiveId: ids.perspectiveId,
+      cookie: callanCookie,
+      until: current => current.instances.some(instance => instance.thing === sharedThing)
+    });
+    const sharedNode = canvas.instances.find(instance => instance.thing === sharedThing);
+    assert(sharedNode);
+
+    await page.locator("#canvas-stage").click({
+      position: {
+        x: Math.max(8, Math.round(sharedNode.x + Math.min(sharedNode.w / 2, 40))),
+        y: Math.max(8, Math.round(sharedNode.y + Math.min(sharedNode.h / 2, 20)))
+      }
+    });
+    await page.keyboard.press("Delete");
+    await page.waitForFunction(() => {
+      const status = document.getElementById("status");
+      return Boolean(status?.textContent?.includes("Proposed canvas removal for review."));
+    });
+
+    const after = await readCanvas(server.url, { perspectiveId: ids.perspectiveId, cookie: callanCookie });
+    assert.equal(after.instances.some(instance => instance.id === sharedInstance), true);
+
+    const witnesses = await fetch(`${server.url}/api/witnesses`, {
+      headers: { cookie: callanCookie }
+    }).then(r => r.json());
+    assert.equal(witnesses.witnesses.some(w => w.process === "proposal.create"), true);
+    assert.equal(witnesses.witnesses.some(w => w.process === "canvas.remove" && w.actor === "callan"), false);
+
     await expectNoRuntimeErrors(runtime);
   } finally {
     await closeBrowser();
@@ -427,18 +1023,20 @@ test("canvas inspector can attach a dropped asset to another world thing", async
     const assetNode = canvas.instances.find(instance => instance.label === "attachable.txt" && instance.kind === "asset");
     assert(assetNode);
 
+    const proposalNodeBeforeAttach = canvas.instances.find(instance => instance.thing === proposalThing);
+    assert(proposalNodeBeforeAttach);
     await page.locator("#canvas-stage").click({
       position: {
-        x: Math.max(8, Math.round(assetNode.x + Math.min(assetNode.w / 2, 40))),
-        y: Math.max(8, Math.round(assetNode.y + Math.min(assetNode.h / 2, 20)))
+        x: Math.max(8, Math.round(proposalNodeBeforeAttach.x + Math.min(proposalNodeBeforeAttach.w / 2, 40))),
+        y: Math.max(8, Math.round(proposalNodeBeforeAttach.y + Math.min(proposalNodeBeforeAttach.h / 2, 20)))
       }
     });
-    await page.waitForFunction(() => {
-      const select = document.querySelector('[data-asset-attach-target="true"]');
-      return Boolean(select);
-    });
-    await page.selectOption('[data-asset-attach-target="true"]', proposalThing);
-    await page.locator('[data-asset-attach-button]').click();
+    await page.waitForFunction(expectedAssetId => {
+      const select = document.querySelector('[data-attach-asset-select="true"]');
+      return Boolean(select && [...select.options].some(option => option.value === expectedAssetId));
+    }, assetNode.asset.id);
+    await page.selectOption('[data-attach-asset-select="true"]', assetNode.asset.id);
+    await page.locator('[data-attach-asset-button]').click();
 
     const updatedCanvas = await waitForCanvas(server.url, {
       perspectiveId: ids.perspectiveId,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { expectNoRuntimeErrors, launchBrowser, startBlankUiServer, waitForAppReady } from "./support/harness.js";
+import { expectNoRuntimeErrors, launchBrowser, startBlankUiServer, startUiDemoServer, waitForAppReady } from "./support/harness.js";
 
 async function currentTutorialStep(page) {
   return page.evaluate(() => window.__witnessTutorialApp?.currentStepId || window.__witnessTutorial?.currentStepId || null);
@@ -93,6 +93,7 @@ test("guided tutorial persists, resumes, and completes on the live app", async (
   try {
     await page.goto(`${server.url}/`);
     await page.waitForFunction(() => document.body.textContent.includes("Build The Todo App From Scratch"));
+    await page.waitForFunction(() => Boolean(window.__witnessTutorial));
 
     await page.locator("#tutorial-start").click();
     await waitForStep(page, "identity:create");
@@ -216,6 +217,28 @@ test("live app tutorial can restart the current chapter from the first app step"
     await page.waitForURL(`${server.url}/`);
     await waitForAppReady(page);
     await waitForStep(page, "app:intro");
+    assert.deepEqual(
+      await page.evaluate(() => ({
+        bodyContext: document.body.dataset.surfaceContext || null,
+        bodyRoute: document.body.dataset.surfaceRoute || null,
+        bodyRootWidget: document.body.dataset.surfaceRootWidget || null,
+        bodyProgram: document.body.dataset.surfaceProgram || null,
+        tutorialContext: window.__witnessTutorialApp?.surfaceContext || null,
+        tutorialRoute: window.__witnessTutorialApp?.surfaceRouteId || null,
+        tutorialRootWidget: window.__witnessTutorialApp?.surfaceRootWidgetId || null,
+        tutorialProgram: window.__witnessTutorialApp?.surfaceProgramId || null
+      })),
+      {
+        bodyContext: "frontend",
+        bodyRoute: "home_page_route",
+        bodyRootWidget: "todo_app_widget",
+        bodyProgram: "todo_frontend_program",
+        tutorialContext: "frontend",
+        tutorialRoute: "home_page_route",
+        tutorialRootWidget: "todo_app_widget",
+        tutorialProgram: "todo_frontend_program"
+      }
+    );
 
     await completeStep(page, server.url);
     await waitForStep(page, "app:create-todo");
@@ -395,7 +418,7 @@ test("live app tutorial can disable and re-enable guidance on just the app page"
 
     await page.locator("#tutorial-disable-page").click();
     await page.waitForFunction(() => window.__witnessTutorialApp?.surfaceStatus === "disabled");
-    await page.waitForFunction(() => document.getElementById("tutorial-resume-page")?.textContent.includes("Enable On This Page"));
+    await page.waitForFunction(() => document.getElementById("tutorial-resume-page")?.textContent.includes("Enable Sourcery Here"));
 
     await page.reload();
     await waitForAppReady(page);
@@ -409,6 +432,205 @@ test("live app tutorial can disable and re-enable guidance on just the app page"
     await page.waitForFunction(() => window.__witnessTutorialApp?.surfaceStatus === "disabled");
     await page.locator("#tutorial-resume-page").click();
     await page.waitForFunction(() => window.__witnessTutorialApp?.surfaceStatus === "active");
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("live app tutorial shows current and disabled scope controls truthfully", { timeout: 60000 }, async () => {
+  const silentLogger = { info() {}, error() {} };
+  const { server, close: closeServer } = await startBlankUiServer({ logger: silentLogger });
+  const { page, runtime, close: closeBrowser } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await page.waitForFunction(() => document.body.textContent.includes("Build The Todo App From Scratch"));
+
+    await page.locator("#tutorial-start").click();
+    await waitForStep(page, "identity:create");
+    await completeStep(page, server.url);
+    await waitForStep(page, "session:signin");
+    await completeStep(page, server.url);
+    await waitForStep(page, "runner:create");
+
+    await page.locator('details').last().evaluate(node => { node.open = true; });
+    await page.locator("#create-todo-starter").click();
+    await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
+    await waitForStep(page, "open-app");
+
+    await page.locator("#open-app-link").click();
+    await page.waitForURL(`${server.url}/`);
+    await waitForAppReady(page);
+    await waitForStep(page, "app:intro");
+    await page.waitForFunction(() => window.__witnessTutorialApp?.surfaceStatus === "active");
+
+    const seeded = await page.evaluate(async () => {
+      const response = await fetch('/api/tutorial-progress/todo-from-scratch', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          tutorialId: 'todo-from-scratch',
+          chapterId: 'use-app',
+          stepId: 'app:intro',
+          chapterStatus: 'in_progress',
+          draftInputs: {},
+          completedAt: null,
+          hidden: false,
+          disabledScopeKeys: ['section:app:todo_form'],
+          replayScopeKey: null
+        })
+      });
+      return { ok: response.ok, body: await response.json().catch(() => ({})) };
+    });
+    assert.equal(seeded.ok, true, seeded.body?.error || "expected tutorial progress seed to succeed");
+
+    await page.reload();
+    await waitForAppReady(page);
+    await waitForStep(page, "app:intro");
+    await page.waitForFunction(() => window.__witnessTutorialApp?.surfaceStatus === "active");
+    await page.waitForFunction(() => document.getElementById("tutorial-disabled-scopes-toggle")?.hidden === false);
+    await page.evaluate(() => {
+      document.querySelectorAll('[data-tutorial-current],[data-tutorial-focus-scope]').forEach(node => {
+        node.removeAttribute('data-tutorial-current');
+        node.removeAttribute('data-tutorial-focus-scope');
+      });
+    });
+    await page.locator("#tutorial-show-current-control").click();
+    await page.waitForFunction(() => document.querySelector('[data-tutorial-target="app-title"]')?.getAttribute('data-tutorial-current') === 'true');
+
+    await page.locator("#tutorial-disabled-scopes-toggle").click();
+    await page.waitForFunction(() => window.__witnessTutorialApp?.disabledScopesOpen === true);
+    await page.waitForFunction(() => document.getElementById("tutorial-disabled-scopes-panel")?.textContent.includes("Todo form"));
+    await page.evaluate(() => {
+      document.querySelectorAll('[data-tutorial-focus-scope]').forEach(node => node.removeAttribute('data-tutorial-focus-scope'));
+    });
+    await page.locator('button[data-disabled-scope-focus="section:app:todo_form"]').click();
+    await page.waitForFunction(() => document.querySelector('[data-tutorial-target="todo-form"]')?.closest('form,section,main')?.getAttribute('data-tutorial-focus-scope') === 'true');
+    await page.waitForFunction(() => document.querySelector('[data-tutorial-target="todo-form"]')?.getAttribute('data-tutorial-current') !== 'true');
+
+    await page.locator('button[data-disabled-scope-enable="section:app:todo_form"]').click();
+    await page.waitForFunction(() => (window.__witnessTutorialApp?.disabledScopeKeys || []).length === 0);
+    await page.waitForFunction(() => document.getElementById("tutorial-disabled-scopes-toggle")?.hidden === true);
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("bootstrap tutorial shows disabled same-surface controls truthfully", { timeout: 60000 }, async () => {
+  const silentLogger = { info() {}, error() {} };
+  const { server, close: closeServer } = await startBlankUiServer({ logger: silentLogger });
+  const { page, runtime, close: closeBrowser } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await page.waitForFunction(() => document.body.textContent.includes("Build The Todo App From Scratch"));
+
+    await page.locator("#tutorial-start").click();
+    await waitForStep(page, "identity:create");
+    await completeStep(page, server.url);
+    await waitForStep(page, "session:signin");
+    await completeStep(page, server.url);
+    await waitForStep(page, "runner:create");
+
+    const seeded = await page.evaluate(async () => {
+      const response = await fetch('/api/tutorial-progress/todo-from-scratch', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          tutorialId: 'todo-from-scratch',
+          chapterId: 'runtime',
+          stepId: 'runner:create',
+          chapterStatus: 'in_progress',
+          draftInputs: {},
+          completedAt: null,
+          hidden: false,
+          disabledScopeKeys: ['section:bootstrap:identity-form'],
+          replayScopeKey: null
+        })
+      });
+      return { ok: response.ok, body: await response.json().catch(() => ({})) };
+    });
+    assert.equal(seeded.ok, true, seeded.body?.error || "expected tutorial progress seed to succeed");
+
+    await page.reload();
+    await waitForStep(page, "runner:create");
+    await page.waitForFunction(() => document.getElementById("tutorial-suggestions")?.textContent.includes("Show Disabled Sourcery Scopes"));
+    await page.waitForFunction(() => document.querySelector('[data-tutorial-target="runner-form"]')?.getAttribute('data-tutorial-current') === 'true');
+
+    await page.locator('button[data-suggestion-id="show-disabled-scopes"]').click();
+    await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.getAttribute("data-tutorial-focus-scope") === "true");
+    await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.textContent.includes("Identity form"));
+
+    await page.locator('button[data-disabled-focus="identity-form"]').click();
+    await page.waitForFunction(() => document.querySelector('[data-tutorial-target="identity-form"]')?.closest('form,details,.card')?.getAttribute('data-tutorial-focus-scope') === 'true');
+    await page.waitForFunction(() => document.querySelector('[data-tutorial-target="identity-form"]')?.getAttribute('data-tutorial-current') !== 'true');
+    await page.waitForFunction(() => document.querySelector('[data-tutorial-target="runner-form"]')?.getAttribute('data-tutorial-current') === 'true');
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("live app tutorial can recover authored non-step scope anchors on the shipped app surface", { timeout: 60000 }, async () => {
+  const silentLogger = { info() {}, error() {} };
+  const { server, close: closeServer } = await startUiDemoServer({ logger: silentLogger });
+  const { page, runtime, close: closeBrowser } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await page.fill('[data-widget="todo_username_input"]', "aaron");
+    await page.fill('[data-widget="todo_password_input"]', "aaron");
+    await page.locator('[data-widget="todo_open_button"]').click();
+    await page.waitForFunction(() => {
+      const status = document.querySelector('[data-widget="todo_session_status"]');
+      return Boolean(status && status.textContent && status.textContent.includes("Signed in as Aaron"));
+    });
+
+    const seeded = await page.evaluate(async () => {
+      const response = await fetch('/api/tutorial-progress/todo-from-scratch', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          tutorialId: 'todo-from-scratch',
+          chapterId: 'use-app',
+          stepId: 'app:intro',
+          chapterStatus: 'in_progress',
+          draftInputs: {},
+          completedAt: null,
+          hidden: false,
+          disabledScopeKeys: ['widget:todo_widget_editor_button'],
+          replayScopeKey: null
+        })
+      });
+      return { ok: response.ok, body: await response.json().catch(() => ({})) };
+    });
+    assert.equal(seeded.ok, true, seeded.body?.error || "expected tutorial progress seed to succeed");
+
+    await page.reload();
+    await waitForAppReady(page);
+    await waitForStep(page, "app:intro");
+    await page.waitForFunction(() => document.getElementById("tutorial-disabled-scopes-toggle")?.hidden === false);
+    await page.locator("#tutorial-disabled-scopes-toggle").click();
+    await page.waitForFunction(() => document.getElementById("tutorial-disabled-scopes-panel")?.textContent.includes("Add Widget"));
+    await page.locator('button[data-disabled-scope-focus="widget:todo_widget_editor_button"]').click();
+    await page.waitForFunction(() => document.activeElement?.getAttribute('data-tutorial-target') === 'widget-editor-submit');
+    await page.waitForFunction(() => document.querySelector('[data-tutorial-target="widget-editor-submit"]')?.closest('form,section,main')?.getAttribute('data-tutorial-focus-scope') === 'true');
+    await page.waitForFunction(() => document.querySelector('[data-tutorial-target="widget-editor-submit"]')?.getAttribute('data-tutorial-current') !== 'true');
+
+    await page.locator('button[data-disabled-scope-enable="widget:todo_widget_editor_button"]').click();
+    await page.waitForFunction(() => (window.__witnessTutorialApp?.disabledScopeKeys || []).length === 0);
 
     await expectNoRuntimeErrors(runtime);
   } finally {
@@ -448,14 +670,70 @@ test("bootstrap tutorial shows disabled guidance surfaces and can recover them w
     await page.goto(`${server.url}/_bootstrap`);
     await page.waitForFunction(() => window.__witnessTutorial?.surfaceStatus === "offpage");
     await page.waitForFunction(() => document.getElementById("tutorial-summary")?.textContent.includes("guidance is disabled there"));
-    await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.textContent.includes("App"));
+    await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.textContent.includes("App title"));
     await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.textContent.includes("You are now using the real app"));
-    await page.waitForFunction(() => document.getElementById("tutorial-suggestions")?.textContent.includes("Re-Enable Guidance On App"));
+    await page.waitForFunction(() => document.getElementById("tutorial-suggestions")?.textContent.includes("Re-Enable Sourcery On App"));
+    await page.waitForFunction(() => document.getElementById("tutorial-suggestions")?.textContent.includes("Show Disabled Sourcery Scopes"));
+    await page.locator('button[data-suggestion-id="show-disabled-scopes"]').click();
+    await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.getAttribute("data-tutorial-focus-scope") === "true");
 
     await page.locator('button[data-disabled-enable="app"]').click();
     await page.waitForFunction(() => (window.__witnessTutorial?.disabledPages || []).length === 0);
-    await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.textContent.includes("No guidance surfaces are currently disabled."));
+    await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.textContent.includes("No disabled Sourcery scopes right now."));
     await page.waitForFunction(() => document.getElementById("tutorial-summary")?.textContent.includes("Current guidance continues on the App surface"));
+
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await page.waitForFunction(() => window.__witnessTutorialApp?.surfaceStatus === "active");
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("frontend context disable is visible and recoverable across app, bootstrap, and world surfaces", { timeout: 60000 }, async () => {
+  const silentLogger = { info() {}, error() {} };
+  const { server, close: closeServer } = await startBlankUiServer({ logger: silentLogger });
+  const { page, runtime, close: closeBrowser } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await page.waitForFunction(() => document.body.textContent.includes("Build The Todo App From Scratch"));
+
+    await page.locator("#tutorial-start").click();
+    await waitForStep(page, "identity:create");
+    await completeStep(page, server.url);
+    await waitForStep(page, "session:signin");
+    await completeStep(page, server.url);
+    await waitForStep(page, "runner:create");
+
+    await page.locator('details').last().evaluate(node => { node.open = true; });
+    await page.locator("#create-todo-starter").click();
+    await page.waitForFunction(() => document.getElementById("starter-status")?.textContent.includes("Todo starter created."));
+    await waitForStep(page, "open-app");
+
+    await page.locator("#open-app-link").click();
+    await page.waitForURL(`${server.url}/`);
+    await waitForAppReady(page);
+    await waitForStep(page, "app:intro");
+    await page.locator("#tutorial-disable-context").click();
+    await page.waitForFunction(() => window.__witnessTutorialApp?.surfaceStatus === "disabled-context");
+    await page.waitForFunction(() => JSON.stringify(window.__witnessTutorialApp?.disabledContextIds || []) === JSON.stringify(["frontend"]));
+
+    await page.goto(`${server.url}/_bootstrap`);
+    await page.waitForFunction(() => window.__witnessTutorial?.surfaceStatus === "offpage");
+    await page.waitForFunction(() => document.getElementById("tutorial-summary")?.textContent.includes("disabled in that context"));
+    await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.textContent.includes("Frontend context"));
+    await page.locator('button[data-disabled-context="frontend"]').click();
+    await page.waitForFunction(() => (window.__witnessTutorial?.disabledContextIds || []).length === 0);
+
+    await page.goto(`${server.url}/world`);
+    await page.waitForLoadState("domcontentloaded");
+    await page.waitForFunction(() => document.body.dataset.surfaceContext === "frontend");
+    await page.waitForFunction(() => window.__witnessTutorial?.surfaceStatus === "offpage");
+    await page.waitForFunction(() => document.querySelector('[data-world-tutorial-panel]')?.textContent.includes("Current guidance continues on the App surface"));
 
     await page.goto(`${server.url}/`);
     await waitForAppReady(page);

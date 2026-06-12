@@ -62,6 +62,13 @@ username = "callan"
 password = "callan"
 homePerspective = "callan:personal"
 
+[[context]]
+actor = "adam"
+id = "frontend"
+label = "Frontend"
+owner = "frontendHost"
+stewards = ["aaron"]
+
 [[widget]]
 actor = "adam"
 id = "todo_form"
@@ -588,10 +595,11 @@ test("demo app end-to-end: frontend request, backend json store, witnesses", asy
     assert.match(html, /data-widget="todo_app_widget"/);
     assert.match(html, /data-widget="todo_form"/);
     assert.doesNotMatch(html, /data-todo-form/);
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
 
     const created = await fetch(`${server.url}/api/todos`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", cookie: login.cookie },
       body: JSON.stringify({ title: "Ship witness kernel" })
     }).then(r => r.json());
 
@@ -716,16 +724,17 @@ test("demo server supports done/delete actions and witness inspector data", asyn
     assert.match(html, /renderCollection/);
     assert.match(html, /patchJson/);
     assert.match(html, /deleteJson/);
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
 
     const created = await fetch(`${server.url}/api/todos`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", cookie: login.cookie },
       body: JSON.stringify({ title: "Make witnesses visible" })
     }).then(r => r.json());
 
     const updated = await fetch(`${server.url}/api/todos/${created.todo.id}`, {
       method: "PATCH",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", cookie: login.cookie },
       body: JSON.stringify({ done: true })
     }).then(r => r.json());
 
@@ -734,8 +743,9 @@ test("demo server supports done/delete actions and witness inspector data", asyn
     const witnessesBeforeDelete = await fetch(`${server.url}/api/witnesses`).then(r => r.json());
     assert.equal(witnessesBeforeDelete.witnesses.some(w => w.process === "todo.update"), true);
 
-    const deleted = await fetch(`${server.url}/api/todos/${created.todo.id}`, { method: "DELETE" }).then(r => r.json());
-    assert.deepEqual(deleted, { ok: true, id: created.todo.id });
+    const deleted = await fetch(`${server.url}/api/todos/${created.todo.id}`, { method: "DELETE", headers: { cookie: login.cookie } }).then(r => r.json());
+    assert.equal(deleted.ok, true);
+    assert.equal(deleted.id, created.todo.id);
 
     const list = await fetch(`${server.url}/api/todos`).then(r => r.json());
     assert.deepEqual(list.todos, []);
@@ -745,6 +755,925 @@ test("demo server supports done/delete actions and witness inspector data", asyn
     assert.equal(processes.includes("todo.update"), true);
     assert.equal(processes.includes("todo.delete"), true);
     assert.equal(world.allObservations().some(w => w.process === "backend.readWitnesses"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("demo /api/todos list, create, update, and delete routes run through authored backend programs and switch versions live", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const assertTodoShape = body => {
+      assert.deepEqual(Object.keys(body).sort(), ["authority", "todos"]);
+      assert.equal(Array.isArray(body.todos), true);
+      assert.equal(typeof body.authority?.mode, "string");
+    };
+    const assertCreatedShape = body => {
+      assert.deepEqual(Object.keys(body).sort(), ["authority", "todo", "witness"]);
+      assert.equal(typeof body.todo?.title, "string");
+      assert.equal(typeof body.authority?.mode, "string");
+    };
+    const assertUpdatedShape = body => {
+      assert.deepEqual(Object.keys(body).sort(), ["todo", "witness"]);
+      assert.equal(typeof body.todo?.title, "string");
+      assert.equal(typeof body.todo?.done, "boolean");
+    };
+    const assertDeletedShape = body => {
+      assert.deepEqual(Object.keys(body).sort(), ["id", "ok", "witness"]);
+      assert.equal(body.ok, true);
+      assert.equal(typeof body.id, "string");
+    };
+
+    const before = await fetch(`${server.url}/api/todos`).then(r => r.json());
+    assertTodoShape(before);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.todos.list.v1");
+
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const createdBeforeActivate = await fetch(`${server.url}/api/todos`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ title: "Authored create v1" })
+    }).then(r => r.json());
+    assertCreatedShape(createdBeforeActivate);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.todos.create.v1");
+    const updatedBeforeActivate = await fetch(`${server.url}/api/todos/${createdBeforeActivate.todo.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ done: true })
+    }).then(r => r.json());
+    assertUpdatedShape(updatedBeforeActivate);
+    assert.equal(updatedBeforeActivate.todo.done, true);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.todos.update.v1");
+    const deletedBeforeActivate = await fetch(`${server.url}/api/todos/${createdBeforeActivate.todo.id}`, {
+      method: "DELETE",
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertDeletedShape(deletedBeforeActivate);
+    assert.equal(deletedBeforeActivate.id, createdBeforeActivate.todo.id);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.todos.delete.v1");
+
+    const activated = await fetch(`${server.url}/api/backend-program-versions/todo.todos.list/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.todos.list.v2" })
+    });
+    assert.equal(activated.status, 200);
+    const activatedCreate = await fetch(`${server.url}/api/backend-program-versions/todo.todos.create/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.todos.create.v2" })
+    });
+    assert.equal(activatedCreate.status, 200);
+    const activatedUpdate = await fetch(`${server.url}/api/backend-program-versions/todo.todos.update/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.todos.update.v2" })
+    });
+    assert.equal(activatedUpdate.status, 200);
+    const activatedDelete = await fetch(`${server.url}/api/backend-program-versions/todo.todos.delete/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.todos.delete.v2" })
+    });
+    assert.equal(activatedDelete.status, 200);
+
+    const afterActivate = await fetch(`${server.url}/api/todos`).then(r => r.json());
+    assertTodoShape(afterActivate);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.todos.list.v2");
+    const createdAfterActivate = await fetch(`${server.url}/api/todos`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ title: "Authored create v2" })
+    }).then(r => r.json());
+    assertCreatedShape(createdAfterActivate);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.todos.create.v2");
+    const updatedAfterActivate = await fetch(`${server.url}/api/todos/${createdAfterActivate.todo.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ done: true })
+    }).then(r => r.json());
+    assertUpdatedShape(updatedAfterActivate);
+    assert.equal(updatedAfterActivate.todo.done, true);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.todos.update.v2");
+    const deletedAfterActivate = await fetch(`${server.url}/api/todos/${createdAfterActivate.todo.id}`, {
+      method: "DELETE",
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertDeletedShape(deletedAfterActivate);
+    assert.equal(deletedAfterActivate.id, createdAfterActivate.todo.id);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.todos.delete.v2");
+
+    const rolledBack = await fetch(`${server.url}/api/backend-program-versions/todo.todos.list/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBack.status, 200);
+    const rolledBackCreate = await fetch(`${server.url}/api/backend-program-versions/todo.todos.create/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBackCreate.status, 200);
+    const rolledBackUpdate = await fetch(`${server.url}/api/backend-program-versions/todo.todos.update/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBackUpdate.status, 200);
+    const rolledBackDelete = await fetch(`${server.url}/api/backend-program-versions/todo.todos.delete/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBackDelete.status, 200);
+
+    const afterRollback = await fetch(`${server.url}/api/todos`).then(r => r.json());
+    assertTodoShape(afterRollback);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.todos.list.v1");
+    const createdAfterRollback = await fetch(`${server.url}/api/todos`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ title: "Authored create rollback" })
+    }).then(r => r.json());
+    assertCreatedShape(createdAfterRollback);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.todos.create.v1");
+    const updatedAfterRollback = await fetch(`${server.url}/api/todos/${createdAfterRollback.todo.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ done: true })
+    }).then(r => r.json());
+    assertUpdatedShape(updatedAfterRollback);
+    assert.equal(updatedAfterRollback.todo.done, true);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.todos.update.v1");
+    const deletedAfterRollback = await fetch(`${server.url}/api/todos/${createdAfterRollback.todo.id}`, {
+      method: "DELETE",
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertDeletedShape(deletedAfterRollback);
+    assert.equal(deletedAfterRollback.id, createdAfterRollback.todo.id);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.todos.delete.v1");
+  } finally {
+    await server.close();
+  }
+});
+
+test("private notes routes run through authored backend programs and switch versions live", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const assertNotesShape = body => {
+      assert.deepEqual(Object.keys(body).sort(), ["notes", "privacy"]);
+      assert.equal(Array.isArray(body.notes), true);
+      assert.equal(typeof body.privacy?.mode, "string");
+    };
+    const assertCreatedShape = body => {
+      assert.deepEqual(Object.keys(body).sort(), ["note", "privacy"]);
+      assert.equal(typeof body.note?.text, "string");
+      assert.equal(typeof body.privacy?.mode, "string");
+    };
+
+    const before = await fetch(`${server.url}/api/private-notes`).then(r => r.json());
+    assertNotesShape(before);
+    assert.equal(before.privacy.mode, "signin");
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.privateNotes.list.v1");
+
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const createdBeforeActivate = await fetch(`${server.url}/api/private-notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ text: "Authored private note v1" })
+    }).then(r => r.json());
+    assertCreatedShape(createdBeforeActivate);
+    assert.equal(createdBeforeActivate.note.text, "Authored private note v1");
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.privateNotes.create.v1");
+
+    const activatedList = await fetch(`${server.url}/api/backend-program-versions/todo.privateNotes.list/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.privateNotes.list.v2" })
+    });
+    assert.equal(activatedList.status, 200);
+    const activatedCreate = await fetch(`${server.url}/api/backend-program-versions/todo.privateNotes.create/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.privateNotes.create.v2" })
+    });
+    assert.equal(activatedCreate.status, 200);
+
+    const afterActivate = await fetch(`${server.url}/api/private-notes`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertNotesShape(afterActivate);
+    assert.equal(afterActivate.notes.some(note => note.text === "Authored private note v1"), true);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.privateNotes.list.v2");
+
+    const createdAfterActivate = await fetch(`${server.url}/api/private-notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ text: "Authored private note v2" })
+    }).then(r => r.json());
+    assertCreatedShape(createdAfterActivate);
+    assert.equal(createdAfterActivate.note.text, "Authored private note v2");
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.privateNotes.create.v2");
+
+    const rolledBackList = await fetch(`${server.url}/api/backend-program-versions/todo.privateNotes.list/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBackList.status, 200);
+    const rolledBackCreate = await fetch(`${server.url}/api/backend-program-versions/todo.privateNotes.create/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBackCreate.status, 200);
+
+    const afterRollback = await fetch(`${server.url}/api/private-notes`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertNotesShape(afterRollback);
+    assert.equal(afterRollback.notes.some(note => note.text === "Authored private note v2"), true);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.privateNotes.list.v1");
+
+    const createdAfterRollback = await fetch(`${server.url}/api/private-notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ text: "Authored private note rollback" })
+    }).then(r => r.json());
+    assertCreatedShape(createdAfterRollback);
+    assert.equal(createdAfterRollback.note.text, "Authored private note rollback");
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.privateNotes.create.v1");
+  } finally {
+    await server.close();
+  }
+});
+
+test("widgets create route runs through authored backend programs, stamps frontend context, and returns proposals for non-stewards", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const assertWidgetShape = body => {
+      assert.deepEqual(Object.keys(body).sort(), ["widget", "witness"]);
+      assert.equal(typeof body.widget?.id, "string");
+      assert.equal(typeof body.widget?.kind, "string");
+    };
+
+    const denied = await fetch(`${server.url}/api/widgets`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "unsigned_widget", kind: "Text", text: "Unsigned widget" })
+    });
+    assert.equal(denied.status, 401);
+
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+
+    const createdBeforeActivate = await fetch(`${server.url}/api/widgets`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ id: "authored_widget_v1", kind: "Text", text: "Authored widget v1" })
+    }).then(r => r.json());
+    assertWidgetShape(createdBeforeActivate);
+    assert.equal(createdBeforeActivate.widget.parent, "todo_app_widget");
+    assert.equal(createdBeforeActivate.widget.context, "frontend");
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.widgets.create.v1");
+
+    const proposed = await fetch(`${server.url}/api/widgets`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: callan.cookie },
+      body: JSON.stringify({ id: "callan_widget", kind: "Text", text: "Callan widget" })
+    });
+    assert.equal(proposed.status, 202);
+    const proposedBody = await proposed.json();
+    assert.equal(proposedBody.proposal.targetProcess, "widget.define");
+    assert.equal(proposedBody.proposal.targetKind, "context");
+    assert.equal(proposedBody.proposal.targetId, "frontend");
+    assert.equal(proposedBody.statusMessage, "Proposed widget for review.");
+    assert.equal(world.allWitnesses().some(w => w.process === "widget.define" && w.actor === "callan"), false);
+    assert.equal(world.allWitnesses().some(w => w.process === "proposal.create" && w.actor === "callan"), true);
+
+    const activated = await fetch(`${server.url}/api/backend-program-versions/todo.widgets.create/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.widgets.create.v2" })
+    });
+    assert.equal(activated.status, 200);
+
+    const createdAfterActivate = await fetch(`${server.url}/api/widgets`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ id: "authored_widget_v2", kind: "Text", text: "Authored widget v2" })
+    }).then(r => r.json());
+    assertWidgetShape(createdAfterActivate);
+    assert.equal(createdAfterActivate.widget.parent, "todo_app_widget");
+    assert.equal(createdAfterActivate.widget.context, "frontend");
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.widgets.create.v2");
+
+    const rolledBack = await fetch(`${server.url}/api/backend-program-versions/todo.widgets.create/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBack.status, 200);
+
+    const createdAfterRollback = await fetch(`${server.url}/api/widgets`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ id: "authored_widget_rollback", kind: "Text", text: "Authored widget rollback" })
+    }).then(r => r.json());
+    assertWidgetShape(createdAfterRollback);
+    assert.equal(createdAfterRollback.widget.parent, "todo_app_widget");
+    assert.equal(createdAfterRollback.widget.context, "frontend");
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.widgets.create.v1");
+  } finally {
+    await server.close();
+  }
+});
+
+test("witnesses list route runs through authored backend programs and preserves query passthrough live", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const assertWitnessShape = body => {
+      assert.deepEqual(Object.keys(body).sort(), ["offset", "total", "witnesses"]);
+      assert.equal(Array.isArray(body.witnesses), true);
+      assert.equal(typeof body.offset, "number");
+      assert.equal(typeof body.total, "number");
+      assert.equal(body.total >= body.witnesses.length, true);
+    };
+
+    const listedBeforeActivate = await fetch(`${server.url}/api/witnesses`).then(r => r.json());
+    assertWitnessShape(listedBeforeActivate);
+    assert.equal(listedBeforeActivate.offset, 0);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.witnesses.list.v1");
+
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const activated = await fetch(`${server.url}/api/backend-program-versions/todo.witnesses.list/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.witnesses.list.v2" })
+    });
+    assert.equal(activated.status, 200);
+
+    const listedAfterActivate = await fetch(`${server.url}/api/witnesses?offset=1`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertWitnessShape(listedAfterActivate);
+    assert.equal(listedAfterActivate.offset, 1);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.witnesses.list.v2");
+
+    const rolledBack = await fetch(`${server.url}/api/backend-program-versions/todo.witnesses.list/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBack.status, 200);
+
+    const listedAfterRollback = await fetch(`${server.url}/api/witnesses?offset=2`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertWitnessShape(listedAfterRollback);
+    assert.equal(listedAfterRollback.offset, 2);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.witnesses.list.v1");
+  } finally {
+    await server.close();
+  }
+});
+
+test("witnesses list route runs through authored backend programs, preserves actor visibility, and switches versions live", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const assertWitnessShape = body => {
+      assert.deepEqual(Object.keys(body).sort(), ["offset", "total", "witnesses"]);
+      assert.equal(Array.isArray(body.witnesses), true);
+    };
+
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+
+    const note = await fetch(`${server.url}/api/private-notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ text: "Witness visibility note" })
+    }).then(r => r.json());
+    assert.equal(note.note.text, "Witness visibility note");
+
+    const signedOutWitnesses = await fetch(`${server.url}/api/witnesses`).then(r => r.json());
+    assertWitnessShape(signedOutWitnesses);
+    assert.equal(typeof signedOutWitnesses.witnesses.at(0)?.bodyJson, "string");
+    assert.equal(signedOutWitnesses.witnesses.some(w => w.process === "privateNote.create"), false);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.witnesses.list.v1");
+
+    const aaronWitnesses = await fetch(`${server.url}/api/witnesses`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertWitnessShape(aaronWitnesses);
+    assert.equal(aaronWitnesses.witnesses.some(w => w.process === "privateNote.create"), true);
+
+    const callanWitnesses = await fetch(`${server.url}/api/witnesses`, {
+      headers: { cookie: callan.cookie }
+    }).then(r => r.json());
+    assertWitnessShape(callanWitnesses);
+    assert.equal(callanWitnesses.witnesses.some(w => w.process === "privateNote.create"), false);
+
+    const activated = await fetch(`${server.url}/api/backend-program-versions/todo.witnesses.list/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.witnesses.list.v2" })
+    });
+    assert.equal(activated.status, 200);
+
+    const afterActivate = await fetch(`${server.url}/api/witnesses?offset=1`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertWitnessShape(afterActivate);
+    assert.equal(afterActivate.offset, 1);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.witnesses.list.v2");
+
+    const rolledBack = await fetch(`${server.url}/api/backend-program-versions/todo.witnesses.list/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBack.status, 200);
+
+    const afterRollback = await fetch(`${server.url}/api/witnesses`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertWitnessShape(afterRollback);
+    assert.equal(afterRollback.witnesses.some(w => w.process === "privateNote.create"), true);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.witnesses.list.v1");
+  } finally {
+    await server.close();
+  }
+});
+
+test("simulate network error route runs through authored backend programs and preserves the failure contract live", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const assertFailureShape = body => {
+      assert.deepEqual(Object.keys(body).sort(), ["error"]);
+      assert.equal(body.error, "simulated network error");
+    };
+
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+
+    const failedBeforeActivate = await fetch(`${server.url}/api/simulate-network-error`, {
+      headers: { cookie: aaron.cookie }
+    });
+    assert.equal(failedBeforeActivate.status, 503);
+    assertFailureShape(await failedBeforeActivate.json());
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.network.simulateError.v1");
+
+    const activated = await fetch(`${server.url}/api/backend-program-versions/todo.network.simulateError/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.network.simulateError.v2" })
+    });
+    assert.equal(activated.status, 200);
+
+    const failedAfterActivate = await fetch(`${server.url}/api/simulate-network-error`, {
+      headers: { cookie: aaron.cookie }
+    });
+    assert.equal(failedAfterActivate.status, 503);
+    assertFailureShape(await failedAfterActivate.json());
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.network.simulateError.v2");
+
+    const rolledBack = await fetch(`${server.url}/api/backend-program-versions/todo.network.simulateError/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBack.status, 200);
+
+    const failedAfterRollback = await fetch(`${server.url}/api/simulate-network-error`, {
+      headers: { cookie: aaron.cookie }
+    });
+    assert.equal(failedAfterRollback.status, 503);
+    assertFailureShape(await failedAfterRollback.json());
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.network.simulateError.v1");
+    assert.equal(world.allWitnesses().filter(w => w.process === "network.simulated.failed" && w.actor === "aaron").length >= 3, true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("world graph route runs through authored backend programs and preserves the projected graph contract live", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const assertWorldGraphShape = body => {
+      assert.deepEqual(Object.keys(body).sort(), ["astNodes", "graph"]);
+      assert(Array.isArray(body.graph?.nodes));
+      assert(Array.isArray(body.graph?.edges));
+      assert.equal(typeof body.astNodes?.byFile, "object");
+      assert.equal(typeof body.astNodes?.byTarget, "object");
+    };
+
+    const beforeActivate = await fetch(`${server.url}/api/world-graph`).then(r => r.json());
+    assertWorldGraphShape(beforeActivate);
+    assert(beforeActivate.graph.nodes.some(node => node.id === "todo_app_widget"));
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.worldGraph.read.v1");
+
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const activated = await fetch(`${server.url}/api/backend-program-versions/todo.worldGraph.read/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.worldGraph.read.v2" })
+    });
+    assert.equal(activated.status, 200);
+
+    const afterActivate = await fetch(`${server.url}/api/world-graph`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertWorldGraphShape(afterActivate);
+    assert(afterActivate.graph.nodes.some(node => node.id === "todo_app_widget"));
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.worldGraph.read.v2");
+
+    const rolledBack = await fetch(`${server.url}/api/backend-program-versions/todo.worldGraph.read/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBack.status, 200);
+
+    const afterRollback = await fetch(`${server.url}/api/world-graph`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertWorldGraphShape(afterRollback);
+    assert(afterRollback.graph.nodes.some(node => node.id === "todo_app_widget"));
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.worldGraph.read.v1");
+  } finally {
+    await server.close();
+  }
+});
+
+test("process view route runs through authored backend programs and preserves backend run inspection query passthrough live", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const assertProcessViewShape = body => {
+      assert.equal(body.selection.program, "todo.todos.list.v1");
+      assert.equal(body.selection.event, "request");
+      assert.equal(Array.isArray(body.catalog), true);
+      assert.equal(Array.isArray(body.runs), true);
+      assert.equal(body.run.requests.some(request => request.handler === "todos.readModel"), true);
+      assert.equal(body.run.requests.some(request => request.url === "/api/todos"), true);
+    };
+
+    await fetch(`${server.url}/api/todos`).then(r => r.json());
+    const todoRunId = world.allObservations()
+      .filter(w => w.process === "backend.process.start" && w.body?.program === "todo.todos.list.v1")
+      .at(-1)?.body?.runId;
+    assert.ok(todoRunId, "expected /api/todos backend run");
+
+    const beforeActivate = await fetch(`${server.url}/api/process-view?program=todo.todos.list.v1&event=request&runId=${todoRunId}`).then(r => r.json());
+    assertProcessViewShape(beforeActivate);
+    assert.equal(beforeActivate.selection.runId, todoRunId);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.processView.read.v1");
+
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const activated = await fetch(`${server.url}/api/backend-program-versions/todo.processView.read/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.processView.read.v2" })
+    });
+    assert.equal(activated.status, 200);
+
+    const afterActivate = await fetch(`${server.url}/api/process-view?program=todo.todos.list.v1&event=request&runId=${todoRunId}`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertProcessViewShape(afterActivate);
+    assert.equal(afterActivate.selection.runId, todoRunId);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.processView.read.v2");
+
+    const rolledBack = await fetch(`${server.url}/api/backend-program-versions/todo.processView.read/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBack.status, 200);
+
+    const afterRollback = await fetch(`${server.url}/api/process-view?program=todo.todos.list.v1&event=request&runId=${todoRunId}`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertProcessViewShape(afterRollback);
+    assert.equal(afterRollback.selection.runId, todoRunId);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.processView.read.v1");
+  } finally {
+    await server.close();
+  }
+});
+
+test("process run route runs through authored backend programs and preserves replay inspection for backend runs live", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const assertProcessRunShape = body => {
+      assert.equal(body.run.program, "todo.todos.list.v1");
+      assert.equal(body.run.event, "request");
+      assert.equal(body.run.requests.some(request => request.handler === "todos.readModel"), true);
+      assert.equal(body.run.requests.some(request => request.url === "/api/todos"), true);
+      assert.equal(body.replay.cursor, 1);
+      assert.equal(body.replay.max >= 1, true);
+    };
+
+    await fetch(`${server.url}/api/todos`).then(r => r.json());
+    const todoRunId = world.allObservations()
+      .filter(w => w.process === "backend.process.start" && w.body?.program === "todo.todos.list.v1")
+      .at(-1)?.body?.runId;
+    assert.ok(todoRunId, "expected /api/todos backend run");
+
+    const beforeActivate = await fetch(`${server.url}/api/process-runs/${todoRunId}?replay=1`).then(r => r.json());
+    assertProcessRunShape(beforeActivate);
+    assert.equal(beforeActivate.run.runId, todoRunId);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.processRun.read.v1");
+
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const activated = await fetch(`${server.url}/api/backend-program-versions/todo.processRun.read/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.processRun.read.v2" })
+    });
+    assert.equal(activated.status, 200);
+
+    const afterActivate = await fetch(`${server.url}/api/process-runs/${todoRunId}?replay=1`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertProcessRunShape(afterActivate);
+    assert.equal(afterActivate.run.runId, todoRunId);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.processRun.read.v2");
+
+    const rolledBack = await fetch(`${server.url}/api/backend-program-versions/todo.processRun.read/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBack.status, 200);
+
+    const afterRollback = await fetch(`${server.url}/api/process-runs/${todoRunId}?replay=1`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertProcessRunShape(afterRollback);
+    assert.equal(afterRollback.run.runId, todoRunId);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.processRun.read.v1");
+  } finally {
+    await server.close();
+  }
+});
+
+test("process events route runs through authored backend programs and preserves trace ingest success and validation live", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const validTrace = body => fetch(`${server.url}/api/process-events`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        process: "frontend.process.start",
+        runId: "trace-run",
+        program: "todo_frontend_program",
+        event: "load",
+        timestamp: Date.now(),
+        ...body
+      })
+    });
+
+    const invalidTrace = process => fetch(`${server.url}/api/process-events`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ process })
+    });
+
+    const beforeActivate = await validTrace({});
+    assert.equal(beforeActivate.status, 200);
+    const beforeActivateBody = await beforeActivate.json();
+    assert.equal(beforeActivateBody.ok, true);
+    assert.equal(typeof beforeActivateBody.id, "string");
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.processEvents.record.v1");
+
+    const beforeInvalid = await invalidTrace("frontend.process.nope");
+    assert.equal(beforeInvalid.status, 400);
+    assert.deepEqual(await beforeInvalid.json(), { error: "unknown process trace", process: "frontend.process.nope" });
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.processEvents.record.v1");
+
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const activated = await fetch(`${server.url}/api/backend-program-versions/todo.processEvents.record/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.processEvents.record.v2" })
+    });
+    assert.equal(activated.status, 200);
+
+    const afterActivate = await validTrace({ nodeId: "step-1", op: "fetchJson" });
+    assert.equal(afterActivate.status, 200);
+    const afterActivateBody = await afterActivate.json();
+    assert.equal(afterActivateBody.ok, true);
+    assert.equal(typeof afterActivateBody.id, "string");
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.processEvents.record.v2");
+
+    const rolledBack = await fetch(`${server.url}/api/backend-program-versions/todo.processEvents.record/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBack.status, 200);
+
+    const afterRollback = await invalidTrace("frontend.process.invalid");
+    assert.equal(afterRollback.status, 400);
+    assert.deepEqual(await afterRollback.json(), { error: "unknown process trace", process: "frontend.process.invalid" });
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.processEvents.record.v1");
+    assert.equal(world.allWitnesses().some(w => w.process === "frontend.process.start" && w.body?.runId === "trace-run"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("shared todo routes expose authority metadata and return proposals for signed-in non-stewards", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const signedOut = await fetch(`${server.url}/api/todos`).then(r => r.json());
+    assert.equal(signedOut.authority.mode, "signin");
+    const unsignedWrite = await fetch(`${server.url}/api/todos`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title: "Unsigned write" })
+    });
+    assert.equal(unsignedWrite.status, 401);
+
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const callan = await openSession(server.url, { username: "callan", password: "callan" });
+
+    const created = await fetch(`${server.url}/api/todos`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ title: "Governed todo" })
+    });
+    assert.equal(created.status, 201);
+    const createdBody = await created.json();
+
+    const proposeMode = await fetch(`${server.url}/api/todos`, {
+      headers: { cookie: callan.cookie }
+    }).then(r => r.json());
+    assert.equal(proposeMode.authority.mode, "propose");
+
+    const proposedCreate = await fetch(`${server.url}/api/todos`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: callan.cookie },
+      body: JSON.stringify({ title: "Callan proposal" })
+    });
+    assert.equal(proposedCreate.status, 202);
+    const proposedCreateBody = await proposedCreate.json();
+    assert.equal(proposedCreateBody.proposal.targetProcess, "todo.create");
+    assert.equal(world.allWitnesses().some(w => w.process === "todo.create" && w.actor === "callan"), false);
+
+    const proposedUpdate = await fetch(`${server.url}/api/todos/${createdBody.todo.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie: callan.cookie },
+      body: JSON.stringify({ done: true })
+    });
+    assert.equal(proposedUpdate.status, 202);
+    const proposedUpdateBody = await proposedUpdate.json();
+    assert.equal(proposedUpdateBody.proposal.targetProcess, "todo.update");
+
+    const proposedDelete = await fetch(`${server.url}/api/todos/${createdBody.todo.id}`, {
+      method: "DELETE",
+      headers: { cookie: callan.cookie }
+    });
+    assert.equal(proposedDelete.status, 202);
+    const proposedDeleteBody = await proposedDelete.json();
+    assert.equal(proposedDeleteBody.proposal.targetProcess, "todo.delete");
+
+    assert.equal(world.allWitnesses().some(w => w.process === "proposal.create" && w.actor === "callan"), true);
+    assert.equal(world.allWitnesses().some(w => w.process === "todo.update" && w.actor === "callan"), false);
+    assert.equal(world.allWitnesses().some(w => w.process === "todo.delete" && w.actor === "callan"), false);
   } finally {
     await server.close();
   }
@@ -780,12 +1709,21 @@ test("personal projections: identity session, themes, and private notes are sess
     assert.equal(login.body.actor, "aaron");
     assert.ok(login.cookie);
 
+    const signedOutNotes = await fetch(`${server.url}/api/private-notes`).then(r => r.json());
+    assert.deepEqual(signedOutNotes.notes, []);
+    assert.equal(signedOutNotes.privacy.mode, "signin");
+    assert.equal(signedOutNotes.privacy.visibility, "actor-private");
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.privateNotes.list.v1");
+
     const note = await fetch(`${server.url}/api/private-notes`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: login.cookie },
       body: JSON.stringify({ text: "Aaron-only thought" })
     }).then(r => r.json());
     assert.equal(note.note.text, "Aaron-only thought");
+    assert.equal(note.privacy.mode, "private");
+    assert.equal(note.privacy.actor, "aaron");
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.privateNotes.create.v1");
 
     const aaronNotes = await fetch(`${server.url}/api/private-notes`, {
       headers: { cookie: login.cookie }
@@ -796,7 +1734,11 @@ test("personal projections: identity session, themes, and private notes are sess
     }).then(r => r.json());
 
     assert.deepEqual(aaronNotes.notes.map(n => n.text), ["Aaron-only thought"]);
+    assert.equal(aaronNotes.privacy.mode, "private");
+    assert.equal(aaronNotes.privacy.actor, "aaron");
     assert.deepEqual(callanNotes.notes, []);
+    assert.equal(callanNotes.privacy.mode, "private");
+    assert.equal(callanNotes.privacy.actor, "callan");
 
     const aaronWitnesses = await fetch(`${server.url}/api/witnesses`, {
       headers: { cookie: login.cookie }
@@ -808,6 +1750,101 @@ test("personal projections: identity session, themes, and private notes are sess
     assert.equal(aaronWitnesses.witnesses.some(w => w.process === "privateNote.create"), true);
     assert.equal(callanWitnesses.witnesses.some(w => w.process === "privateNote.create"), false);
     assert.equal(world.allWitnesses().some(w => w.process === "session.open" && w.actor === "aaron"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("private notes routes run through authored backend programs and switch versions live", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const assertListShape = body => {
+      assert.deepEqual(Object.keys(body).sort(), ["notes", "privacy"]);
+      assert.equal(Array.isArray(body.notes), true);
+      assert.equal(body.privacy.visibility, "actor-private");
+    };
+    const assertCreatedShape = body => {
+      assert.deepEqual(Object.keys(body).sort(), ["note", "privacy"]);
+      assert.equal(typeof body.note?.text, "string");
+      assert.equal(body.privacy.visibility, "actor-private");
+    };
+
+    const signedOutList = await fetch(`${server.url}/api/private-notes`).then(r => r.json());
+    assertListShape(signedOutList);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.privateNotes.list.v1");
+
+    const aaron = await openSession(server.url, { username: "aaron", password: "aaron" });
+    const createdBeforeActivate = await fetch(`${server.url}/api/private-notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ text: "Authored private note v1" })
+    }).then(r => r.json());
+    assertCreatedShape(createdBeforeActivate);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.privateNotes.create.v1");
+
+    const activatedList = await fetch(`${server.url}/api/backend-program-versions/todo.privateNotes.list/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.privateNotes.list.v2" })
+    });
+    assert.equal(activatedList.status, 200);
+    const activatedCreate = await fetch(`${server.url}/api/backend-program-versions/todo.privateNotes.create/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ version: "todo.privateNotes.create.v2" })
+    });
+    assert.equal(activatedCreate.status, 200);
+
+    const listAfterActivate = await fetch(`${server.url}/api/private-notes`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertListShape(listAfterActivate);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.privateNotes.list.v2");
+    const createdAfterActivate = await fetch(`${server.url}/api/private-notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ text: "Authored private note v2" })
+    }).then(r => r.json());
+    assertCreatedShape(createdAfterActivate);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.privateNotes.create.v2");
+
+    const rolledBackList = await fetch(`${server.url}/api/backend-program-versions/todo.privateNotes.list/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBackList.status, 200);
+    const rolledBackCreate = await fetch(`${server.url}/api/backend-program-versions/todo.privateNotes.create/rollback`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({})
+    });
+    assert.equal(rolledBackCreate.status, 200);
+
+    const listAfterRollback = await fetch(`${server.url}/api/private-notes`, {
+      headers: { cookie: aaron.cookie }
+    }).then(r => r.json());
+    assertListShape(listAfterRollback);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.privateNotes.list.v1");
+    const createdAfterRollback = await fetch(`${server.url}/api/private-notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: aaron.cookie },
+      body: JSON.stringify({ text: "Authored private note rollback" })
+    }).then(r => r.json());
+    assertCreatedShape(createdAfterRollback);
+    assert.equal(world.allObservations().filter(w => w.process === "backend.process.start").at(-1)?.body?.program, "todo.privateNotes.create.v1");
   } finally {
     await server.close();
   }
@@ -1035,7 +2072,7 @@ order = 0
   }
 });
 
-test("shared widget version APIs reject unauthorized actors", async () => {
+test("shared widget version APIs return proposals for signed-in unauthorized actors", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
@@ -1057,16 +2094,27 @@ test("shared widget version APIs reject unauthorized actors", async () => {
       headers: { "content-type": "application/json", cookie: callan.cookie },
       body: JSON.stringify({ version: "todo_versioned_banner_v2" })
     });
-    assert.equal(activate.status, 403);
+    assert.equal(activate.status, 202);
+    const activateBody = await activate.json();
+    assert.equal(activateBody.status, "proposed");
+    assert.equal(activateBody.statusMessage, "Proposed widget version activation for review.");
+    assert.equal(activateBody.proposal?.targetProcess, "widgetVersion.activate");
+    assert.equal(activateBody.proposal?.targetId, "todo_versioned_banner");
 
     const rollback = await fetch(`${server.url}/api/widget-versions/todo_versioned_banner/rollback`, {
       method: "POST",
       headers: { cookie: callan.cookie }
     });
-    assert.equal(rollback.status, 403);
+    assert.equal(rollback.status, 202);
+    const rollbackBody = await rollback.json();
+    assert.equal(rollbackBody.status, "proposed");
+    assert.equal(rollbackBody.statusMessage, "Proposed widget version rollback for review.");
+    assert.equal(rollbackBody.proposal?.targetProcess, "widgetVersion.rollback");
+    assert.equal(rollbackBody.proposal?.targetId, "todo_versioned_banner");
 
     assert.equal(world.allWitnesses().some(w => w.process === "activateWidgetVersion" && w.actor === "callan"), false);
     assert.equal(world.allWitnesses().some(w => w.process === "widgetVersion.rollback" && w.actor === "callan"), false);
+    assert.equal(world.allWitnesses().some(w => w.process === "proposal.create" && w.actor === "callan"), true);
   } finally {
     await server.close();
   }
@@ -1181,6 +2229,8 @@ test("private notes endpoint returns empty list without request actor", async ()
     assert.equal(response.status, 200);
     const body = await response.json();
     assert.deepEqual(body.notes, []);
+    assert.equal(body.privacy.mode, "signin");
+    assert.equal(body.privacy.visibility, "actor-private");
   } finally {
     await server.close();
   }

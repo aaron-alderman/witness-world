@@ -366,8 +366,8 @@ The platform needed one last baseline capability: from a blank world, it had to 
 
 That is now implemented through:
 
-- bootstrap fallback and request handling in [src/host.js](C:\Users\aaron\Documents\world\src\host.js)
-- runtime-owned builtins for typed bootstrap authoring in [src/runtime-builtins.js](C:\Users\aaron\Documents\world\src\runtime-builtins.js)
+- bootstrap fallback and request handling through the runtime host path exposed by [src/host.js](C:\Users\aaron\Documents\world\src\host.js)
+- typed bootstrap authoring through the authoring/runtime bundle path rather than only a monolithic `runtime-builtins.js` boundary
 - typed bootstrap mutation helpers in [src/bootstrap-authoring.js](C:\Users\aaron\Documents\world\src\bootstrap-authoring.js)
 - the semi-internal bootstrap shell in [src/bootstrap-shell.js](C:\Users\aaron\Documents\world\src\bootstrap-shell.js)
 - browser and host coverage in [test/ui.bootstrap.test.js](C:\Users\aaron\Documents\world\test\ui.bootstrap.test.js) and [test/bootstrap-host.test.js](C:\Users\aaron\Documents\world\test\bootstrap-host.test.js)

@@ -1,0 +1,11 @@
+{
+  "id": "plugin.canvas",
+  "version": "0.1.0",
+  "displayName": "Canvas Bundle Bridge",
+  "description": "Activates the internal canvas runtime bundle through the local plugin bridge.",
+  "kind": "plugin",
+  "activatesBundles": [
+    "bundle-canvas"
+  ],
+  "contributes": {}
+}

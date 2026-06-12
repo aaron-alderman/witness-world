@@ -27,11 +27,23 @@ import {
   defineCapability,
   installCapability,
   installMcpTool,
+  installRuntimePlugin,
   removeCapability,
   removeMcpTool,
+  removeRuntimePlugin,
   moduleProjectors
 } from "./modules.js";
 import { defineFrontendProgram, defineFrontendStep, defineWidget, updateWidget, attachWidget, widgetDefinitions, widgetVersions } from "./widgets.js";
+import {
+  defineBackendProgram,
+  defineBackendProgramVersion,
+  defineBackendProgramVersionTransition,
+  defineBackendStep,
+  backendProgramsProjection,
+  backendProgramVersionsProjection,
+  requestBackendProgramVersionActivation,
+  rollbackBackendProgramVersion
+} from "./backend-programs.js";
 import { processSpecFor, typeModelProjection, validateProcessInput, validateProcessOutput } from "./type-model.js";
 
 function fail(world, { process, actor, body }) {
@@ -134,6 +146,11 @@ function isRoutePageTarget(world, routeId) {
 function installExists(world, { capability, target, targetKind }) {
   return world.project(moduleProjectors.capabilityInstalls)
     .some(row => row.capability === capability && row.target === target && row.targetKind === targetKind);
+}
+
+function runtimePluginInstallExists(world, { serverRunner, plugin }) {
+  return world.project(moduleProjectors.runtimePluginInstalls)
+    .some(row => row.serverRunner === serverRunner && row.plugin === plugin);
 }
 
 function exportedTarget(world, { context, name, target }) {
@@ -945,7 +962,8 @@ export function requestBootstrapRouteDefine(world, {
   actor,
   backendHost,
   body,
-  allowedHandlers = []
+  allowedHandlers = [],
+  handlerMetadataById = {}
 }) {
   const validated = validateInput(world, "route.define", body);
   if (!validated.ok) {
@@ -972,6 +990,31 @@ export function requestBootstrapRouteDefine(world, {
       body: { reason: "unknown handler", handler: input.handler }
     });
     return { ok: false, status: 400, error: "unknown handler", witness };
+  }
+  const handlerMetadata = handlerMetadataById?.[input.handler] ?? {};
+  const routeKind = typeof handlerMetadata.routeKind === "string" && handlerMetadata.routeKind.trim()
+    ? handlerMetadata.routeKind.trim()
+    : (input.handler === "backendProgram.run" ? "backendProgram" : (input.handler.startsWith("page.") ? "page" : "json"));
+  const supportedMethods = Array.isArray(handlerMetadata.methods)
+    ? handlerMetadata.methods.map(value => String(value).trim().toUpperCase()).filter(Boolean)
+    : [];
+  if (supportedMethods.length && !supportedMethods.includes(String(input.method || "").toUpperCase())) {
+    const witness = fail(world, {
+      process: "route.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "handler does not support method", handler: input.handler, method: input.method, supportedMethods }
+    });
+    return { ok: false, status: 400, error: "handler does not support method", witness };
+  }
+  const backendProgramResolved = resolveBodyRef(world, body, {
+    contextField: "context",
+    idField: "backendProgramSoul",
+    refField: "backendProgramSoulRef",
+    label: "backend program soul"
+  });
+  if (!backendProgramResolved.ok) {
+    const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: backendProgramResolved.error } });
+    return { ok: false, status: 400, error: backendProgramResolved.error, witness };
   }
   const servesResolved = resolveBodyRef(world, body, {
     contextField: "context",
@@ -1008,6 +1051,51 @@ export function requestBootstrapRouteDefine(world, {
       body: { reason: "route serves target is required" }
     });
     return { ok: false, status: 400, error: "route serves target is required", witness };
+  }
+  const backendProgramSoul = backendProgramResolved.target ?? null;
+  if (backendProgramSoul && routeKind !== "backendProgram") {
+    const witness = fail(world, {
+      process: "route.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "backend program routes must use backendProgram.run", handler: input.handler, backendProgramSoul }
+    });
+    return { ok: false, status: 400, error: "backend program routes must use backendProgram.run", witness };
+  }
+  if (routeKind === "backendProgram" && !backendProgramSoul) {
+    const witness = fail(world, {
+      process: "route.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "backendProgram.run requires backendProgramSoul", handler: input.handler }
+    });
+    return { ok: false, status: 400, error: "backendProgram.run requires backendProgramSoul", witness };
+  }
+  if (routeKind === "backendProgram" && (params.rootWidget || body.frontendProgram || body.page || body.liveProjection === true || Array.isArray(body.excludeWidgetRoles) || (typeof body.defaultRootWidget === "string" && body.defaultRootWidget.trim()))) {
+    const witness = fail(world, {
+      process: "route.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "backend program routes cannot also declare page/frontend params", handler: input.handler }
+    });
+    return { ok: false, status: 400, error: "backend program routes cannot also declare page/frontend params", witness };
+  }
+  if (routeKind === "stream" && (params.rootWidget || body.frontendProgram || body.page || body.liveProjection === true || Array.isArray(body.excludeWidgetRoles) || (typeof body.defaultRootWidget === "string" && body.defaultRootWidget.trim()) || backendProgramSoul)) {
+    const witness = fail(world, {
+      process: "route.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "stream routes cannot declare page or backend-program params", handler: input.handler }
+    });
+    return { ok: false, status: 400, error: "stream routes cannot declare page or backend-program params", witness };
+  }
+  if (backendProgramSoul) {
+    const backendPrograms = new Set(backendProgramsProjection(world.allWitnesses()).map(row => row.soul));
+    if (!backendPrograms.has(backendProgramSoul)) {
+      const witness = fail(world, {
+        process: "route.define.failed",
+        actor: actor || backendHost,
+        body: { reason: "backend program not found", backendProgramSoul }
+      });
+      return { ok: false, status: 400, error: "backend program not found", witness };
+    }
+    params.backendProgramSoul = backendProgramSoul;
   }
   if ((input.handler === "page.home" || input.handler === "page.world") && !params.rootWidget) {
     const witness = fail(world, {
@@ -1376,6 +1464,161 @@ export function requestBootstrapCapabilityRemove(world, {
   return { ok: true, status: 200, capabilityInstall: input, witness };
 }
 
+export function requestBootstrapRuntimePluginInstall(world, {
+  actor,
+  backendHost,
+  body,
+  pluginCatalog = null
+}) {
+  const validated = validateInput(world, "runtimePlugin.install", body);
+  if (!validated.ok) {
+    const witness = fail(world, {
+      process: "runtimePlugin.install.blocked",
+      actor: actor || backendHost,
+      body: { gate: "type.compatibility", failures: validated.failures }
+    });
+    return { ok: false, status: 400, error: "typed validation failed", witness };
+  }
+  const serverRunner = typeof validated.value.serverRunner === "string" ? validated.value.serverRunner.trim() : "";
+  const plugin = typeof validated.value.plugin === "string" ? validated.value.plugin.trim() : "";
+  if (!serverRunner || !plugin) {
+    const witness = fail(world, {
+      process: "runtimePlugin.install.failed",
+      actor: actor || backendHost,
+      body: { reason: "serverRunner and plugin are required", serverRunner, plugin }
+    });
+    return { ok: false, status: 400, error: "serverRunner and plugin are required", witness };
+  }
+  if (!world.project(moduleProjectors.serverRunners).some(row => row.id === serverRunner)) {
+    const witness = fail(world, {
+      process: "runtimePlugin.install.failed",
+      actor: actor || backendHost,
+      body: { reason: "server runner target not found", serverRunner, plugin }
+    });
+    return { ok: false, status: 404, error: "server runner target not found", witness };
+  }
+  if (runtimePluginInstallExists(world, { serverRunner, plugin })) {
+    const witness = fail(world, {
+      process: "runtimePlugin.install.failed",
+      actor: actor || backendHost,
+      body: { reason: "runtime plugin already installed on server runner", serverRunner, plugin }
+    });
+    return { ok: false, status: 409, error: "runtime plugin already installed on server runner", witness };
+  }
+  const pluginPackage = pluginCatalog?.packages?.find(row => row.id === plugin) ?? null;
+  if (!pluginPackage) {
+    const witness = fail(world, {
+      process: "runtimePlugin.install.failed",
+      actor: actor || backendHost,
+      body: { reason: "runtime plugin package not found", serverRunner, plugin }
+    });
+    return { ok: false, status: 404, error: "runtime plugin package not found", witness };
+  }
+  if (!pluginPackage.validation?.ok) {
+    const witness = fail(world, {
+      process: "runtimePlugin.install.failed",
+      actor: actor || backendHost,
+      body: {
+        reason: "runtime plugin manifest invalid",
+        serverRunner,
+        plugin,
+        validationErrors: [...(pluginPackage.validation?.errors ?? [])]
+      }
+    });
+    return { ok: false, status: 400, error: "runtime plugin manifest invalid", witness };
+  }
+  if (!pluginPackage.execution?.executable) {
+    const witness = fail(world, {
+      process: "runtimePlugin.install.failed",
+      actor: actor || backendHost,
+      body: { reason: "runtime plugin package is metadata-only", serverRunner, plugin }
+    });
+    return { ok: false, status: 400, error: "runtime plugin package is metadata-only", witness };
+  }
+  if (!pluginPackage.compatibility?.compatible) {
+    const witness = fail(world, {
+      process: "runtimePlugin.install.failed",
+      actor: actor || backendHost,
+      body: {
+        reason: "runtime plugin package incompatible with active runtime profile",
+        serverRunner,
+        plugin,
+        compatibilityReasons: [...(pluginPackage.compatibility?.reasons ?? [])]
+      }
+    });
+    return { ok: false, status: 400, error: "runtime plugin package incompatible with active runtime profile", witness };
+  }
+
+  const installed = installRuntimePlugin(world, {
+    actor: actor || backendHost,
+    serverRunner,
+    plugin
+  });
+  if (installed.body?.ok === false) {
+    return { ok: false, status: 400, error: installed.body?.reason ?? "runtime plugin install failed", witness: installed };
+  }
+  const row = world.project(moduleProjectors.runtimePluginInstalls)
+    .find(entry => entry.serverRunner === serverRunner && entry.plugin === plugin) ?? { serverRunner, plugin };
+  const witness = world.emit({
+    process: "runtimePlugin.install",
+    actor: actor || backendHost,
+    claims: [relation(actor || backendHost, "editedProjection", serverRunner)],
+    body: { runtimePluginInstall: row }
+  });
+  return { ok: true, status: 201, runtimePluginInstall: row, witness };
+}
+
+export function requestBootstrapRuntimePluginRemove(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  const validated = validateInput(world, "runtimePlugin.remove", body);
+  if (!validated.ok) {
+    const witness = fail(world, {
+      process: "runtimePlugin.remove.blocked",
+      actor: actor || backendHost,
+      body: { gate: "type.compatibility", failures: validated.failures }
+    });
+    return { ok: false, status: 400, error: "typed validation failed", witness };
+  }
+  const serverRunner = typeof validated.value.serverRunner === "string" ? validated.value.serverRunner.trim() : "";
+  const plugin = typeof validated.value.plugin === "string" ? validated.value.plugin.trim() : "";
+  if (!serverRunner || !plugin) {
+    const witness = fail(world, {
+      process: "runtimePlugin.remove.failed",
+      actor: actor || backendHost,
+      body: { reason: "serverRunner and plugin are required", serverRunner, plugin }
+    });
+    return { ok: false, status: 400, error: "serverRunner and plugin are required", witness };
+  }
+  const existing = world.project(moduleProjectors.runtimePluginInstalls)
+    .find(row => row.serverRunner === serverRunner && row.plugin === plugin);
+  if (!existing) {
+    const witness = fail(world, {
+      process: "runtimePlugin.remove.failed",
+      actor: actor || backendHost,
+      body: { reason: "runtime plugin install not found", serverRunner, plugin }
+    });
+    return { ok: false, status: 404, error: "runtime plugin install not found", witness };
+  }
+  const removed = removeRuntimePlugin(world, {
+    actor: actor || backendHost,
+    serverRunner,
+    plugin
+  });
+  if (removed.body?.ok === false) {
+    return { ok: false, status: 400, error: removed.body?.reason ?? "runtime plugin remove failed", witness: removed };
+  }
+  const witness = world.emit({
+    process: "runtimePlugin.remove",
+    actor: actor || backendHost,
+    claims: [relation(actor || backendHost, "editedProjection", serverRunner)],
+    body: { serverRunner, plugin }
+  });
+  return { ok: true, status: 200, runtimePluginInstall: existing, witness };
+}
+
 export function requestBootstrapMcpToolInstall(world, {
   actor,
   backendHost,
@@ -1644,6 +1887,284 @@ export function requestBootstrapFrontendStepDefine(world, {
   return { ok: true, status: 201, step, witness };
 }
 
+export function requestBootstrapBackendProgramDefine(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  const validated = validateInput(world, "backendProgram.define", body);
+  if (!validated.ok) {
+    const witness = fail(world, {
+      process: "backendProgram.define.blocked",
+      actor: actor || backendHost,
+      body: { gate: "type.compatibility", failures: validated.failures }
+    });
+    return { ok: false, status: 400, error: "typed validation failed", witness };
+  }
+  const input = validated.value;
+  if (exists(world, input.soul)) {
+    const witness = fail(world, {
+      process: "backendProgram.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "backend program soul already exists", soul: input.soul }
+    });
+    return { ok: false, status: 409, error: "backend program soul already exists", witness };
+  }
+  defineBackendProgram(world, {
+    actor: actor || backendHost,
+    soul: input.soul,
+    label: input.label ?? input.soul,
+    context: input.context ?? null,
+    owner: actor || backendHost
+  });
+  const backendProgram = {
+    soul: input.soul,
+    label: input.label ?? input.soul,
+    context: input.context ?? null
+  };
+  const witness = world.emit({
+    process: "backendProgram.define",
+    actor: actor || backendHost,
+    claims: [relation(actor || backendHost, "editedProjection", input.soul)],
+    body: { backendProgram }
+  });
+  return { ok: true, status: 201, backendProgram, witness };
+}
+
+export function requestBootstrapBackendProgramVersionDefine(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  const validated = validateInput(world, "backendProgramVersion.define", body);
+  if (!validated.ok) {
+    const witness = fail(world, {
+      process: "backendProgramVersion.define.blocked",
+      actor: actor || backendHost,
+      body: { gate: "type.compatibility", failures: validated.failures }
+    });
+    return { ok: false, status: 400, error: "typed validation failed", witness };
+  }
+  const input = validated.value;
+  const backendPrograms = new Set(backendProgramsProjection(world.allWitnesses()).map(row => row.soul));
+  if (!backendPrograms.has(input.soul)) {
+    const witness = fail(world, {
+      process: "backendProgramVersion.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "backend program not found", soul: input.soul }
+    });
+    return { ok: false, status: 400, error: "backend program not found", witness };
+  }
+  if (exists(world, input.version)) {
+    const witness = fail(world, {
+      process: "backendProgramVersion.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "backend program version already exists", version: input.version }
+    });
+    return { ok: false, status: 409, error: "backend program version already exists", witness };
+  }
+  const versions = backendProgramVersionsProjection(world.allWitnesses()).filter(row => row.soul === input.soul);
+  const index = Number.isFinite(Number(input.index)) ? Number(input.index) : versions.length;
+  defineBackendProgramVersion(world, {
+    actor: actor || backendHost,
+    soul: input.soul,
+    version: input.version,
+    index,
+    context: input.context ?? null,
+    owner: actor || backendHost
+  });
+  if (typeof input.transitionFrom === "string" && input.transitionFrom.trim()) {
+    defineBackendProgramVersionTransition(world, {
+      actor: actor || backendHost,
+      soul: input.soul,
+      from: input.transitionFrom.trim(),
+      to: input.version,
+      strategy: input.transitionStrategy || "block",
+      owner: actor || backendHost
+    });
+  }
+  const backendProgramVersion = {
+    soul: input.soul,
+    version: input.version,
+    index,
+    transitionFrom: input.transitionFrom ?? null,
+    transitionStrategy: input.transitionStrategy ?? null,
+    context: input.context ?? null
+  };
+  const witness = world.emit({
+    process: "backendProgramVersion.define",
+    actor: actor || backendHost,
+    claims: [relation(actor || backendHost, "editedProjection", input.soul)],
+    body: { backendProgramVersion }
+  });
+  return { ok: true, status: 201, backendProgramVersion, witness };
+}
+
+export function requestBootstrapBackendStepDefine(world, {
+  actor,
+  backendHost,
+  body,
+  allowedOps = []
+}) {
+  const validated = validateInput(world, "backendStep.define", body);
+  if (!validated.ok) {
+    const witness = fail(world, {
+      process: "backendStep.define.blocked",
+      actor: actor || backendHost,
+      body: { gate: "type.compatibility", failures: validated.failures }
+    });
+    return { ok: false, status: 400, error: "typed validation failed", witness };
+  }
+  const input = validated.value;
+  if (!exists(world, input.version)) {
+    const witness = fail(world, {
+      process: "backendStep.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "backend program version not found", version: input.version }
+    });
+    return { ok: false, status: 400, error: "backend program version not found", witness };
+  }
+  if (allowedOps.length && !allowedOps.includes(input.op)) {
+    const witness = fail(world, {
+      process: "backendStep.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "unknown backend op", op: input.op }
+    });
+    return { ok: false, status: 400, error: "unknown backend op", witness };
+  }
+  const paramsParsed = parseJsonField(body.paramsJson, "paramsJson");
+  if (paramsParsed && !paramsParsed.ok) {
+    const witness = fail(world, {
+      process: "backendStep.define.failed",
+      actor: actor || backendHost,
+      body: { reason: paramsParsed.error }
+    });
+    return { ok: false, status: 400, error: paramsParsed.error, witness };
+  }
+  const whenParsed = parseJsonField(body.whenJson, "whenJson");
+  if (whenParsed && !whenParsed.ok) {
+    const witness = fail(world, {
+      process: "backendStep.define.failed",
+      actor: actor || backendHost,
+      body: { reason: whenParsed.error }
+    });
+    return { ok: false, status: 400, error: whenParsed.error, witness };
+  }
+  const repeatParsed = parseJsonField(body.repeatJson, "repeatJson");
+  if (repeatParsed && !repeatParsed.ok) {
+    const witness = fail(world, {
+      process: "backendStep.define.failed",
+      actor: actor || backendHost,
+      body: { reason: repeatParsed.error }
+    });
+    return { ok: false, status: 400, error: repeatParsed.error, witness };
+  }
+  const afterParsed = parseJsonField(body.afterJson, "afterJson");
+  if (afterParsed && !afterParsed.ok) {
+    const witness = fail(world, {
+      process: "backendStep.define.failed",
+      actor: actor || backendHost,
+      body: { reason: afterParsed.error }
+    });
+    return { ok: false, status: 400, error: afterParsed.error, witness };
+  }
+  defineBackendStep(world, {
+    actor: actor || backendHost,
+    version: input.version,
+    event: input.event,
+    op: input.op,
+    order: Number.isFinite(Number(input.order)) ? Number(input.order) : 0,
+    params: paramsParsed?.value && typeof paramsParsed.value === "object" ? paramsParsed.value : {},
+    when: whenParsed?.value && typeof whenParsed.value === "object" ? whenParsed.value : null,
+    repeat: repeatParsed?.value && typeof repeatParsed.value === "object" ? repeatParsed.value : null,
+    after: Array.isArray(afterParsed?.value) ? afterParsed.value : []
+  });
+  const step = {
+    version: input.version,
+    event: input.event,
+    op: input.op,
+    order: Number.isFinite(Number(input.order)) ? Number(input.order) : 0
+  };
+  const witness = world.emit({
+    process: "backendStep.define",
+    actor: actor || backendHost,
+    claims: [relation(actor || backendHost, "editedProjection", input.version)],
+    body: { step }
+  });
+  return { ok: true, status: 201, step, witness };
+}
+
+export function requestBootstrapBackendProgramVersionActivate(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  const validated = validateInput(world, "backendProgramVersion.activate", body);
+  if (!validated.ok) {
+    const witness = fail(world, {
+      process: "backendProgramVersion.activate.blocked",
+      actor: actor || backendHost,
+      body: { gate: "type.compatibility", failures: validated.failures }
+    });
+    return { ok: false, status: 400, error: "typed validation failed", witness };
+  }
+  const result = requestBackendProgramVersionActivation(world, {
+    actor: actor || backendHost,
+    soul: validated.value.soul,
+    version: validated.value.version
+  });
+  return result.ok
+    ? {
+        ok: true,
+        status: 200,
+        activationStatus: result.status,
+        witness: result.witness,
+        witnesses: result.witnesses,
+        backendProgramVersion: { soul: validated.value.soul, version: validated.value.version }
+      }
+    : {
+        ok: false,
+        status: result.status === "failed" ? 400 : 409,
+        error: result.witness?.body?.reason || "backend program version activation failed",
+        witness: result.witness
+      };
+}
+
+export function requestBootstrapBackendProgramVersionRollback(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  const validated = validateInput(world, "backendProgramVersion.rollback", body);
+  if (!validated.ok) {
+    const witness = fail(world, {
+      process: "backendProgramVersion.rollback.blocked",
+      actor: actor || backendHost,
+      body: { gate: "type.compatibility", failures: validated.failures }
+    });
+    return { ok: false, status: 400, error: "typed validation failed", witness };
+  }
+  const result = rollbackBackendProgramVersion(world, {
+    actor: actor || backendHost,
+    soul: validated.value.soul
+  });
+  return result.ok
+    ? {
+        ok: true,
+        status: 200,
+        rollbackStatus: result.status,
+        witness: result.witness,
+        witnesses: result.witnesses,
+        backendProgramVersion: { soul: validated.value.soul, version: result.version }
+      }
+    : {
+        ok: false,
+        status: 409,
+        error: result.witness?.body?.reason || "backend program version rollback failed",
+        witness: result.witness
+      };
+}
+
 export function requestWidgetDefine(world, {
   actor,
   backendHost,
@@ -1852,7 +2373,7 @@ export function requestWidgetUpdate(world, {
   return { ok: true, status: 200, widget, witness };
 }
 
-export function requestBootstrapProposalApprove(world, {
+export async function requestBootstrapProposalApprove(world, {
   actor,
   backendHost,
   proposalId,
@@ -1875,7 +2396,7 @@ export function requestBootstrapProposalApprove(world, {
     });
     return { ok: false, status: 409, error: "proposal is not open", witness };
   }
-  const executed = executeTarget(proposal);
+  const executed = await executeTarget(proposal);
   if (!executed.ok) return executed;
   approveProposal(world, {
     actor: actor || backendHost,

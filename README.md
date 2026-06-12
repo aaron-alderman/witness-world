@@ -20,6 +20,7 @@ This repository is not only exploring a Todo demo. The broader direction is a tr
 
 See [docs/EXPERIENCE.md](C:\Users\aaron\Documents\world\docs\EXPERIENCE.md) for the wider product direction.
 See [docs/CAPABILITIES.md](C:\Users\aaron\Documents\world\docs\CAPABILITIES.md) for the detailed capability breakdown and current do/don't rules.
+See [docs/SHELLS-PERSISTENCE-ECOSYSTEM.md](C:\Users\aaron\Documents\world\docs\SHELLS-PERSISTENCE-ECOSYSTEM.md) for the explicit shell, operator-persistence, and ecosystem-trust contract.
 
 The demo is a Todo app that is intentionally more complicated than a normal Todo app because it exercises the architecture:
 
@@ -44,6 +45,7 @@ npm install
 npm test
 npm run bootstrap
 npm run demo
+npm run desktop
 ```
 
 Then open:
@@ -174,6 +176,7 @@ The project deliberately avoids TypeScript for now. Instead it relies on:
 npm test      # run all tests (unit + integration, no browser required)
 npm run bootstrap # start a blank-world bootstrap server
 npm run demo  # start the demo server
+npm run desktop # start the first desktop ownership shell
 ```
 
 ## CLI
@@ -183,34 +186,59 @@ The runtime starts through one generic CLI entrypoint:
 ```bash
 node src/cli.js serve <dslPath> [--server <id>] [--port <n>]
 node src/cli.js bootstrap [--port <n>]
+node src/cli.js desktop [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]
 ```
 
 Examples:
 
 ```bash
 node src/cli.js bootstrap
-node src/cli.js serve examples/demo-todo-server.wtoml --server demo_server
-node src/cli.js serve examples/demo-todo-server.wtoml --port 4000
+node src/cli.js serve examples/demo-todo-server.wtoml --server demo_server --runtime-profile minimal
+node src/cli.js serve examples/demo-todo-server.wtoml --port 4000 --runtime-profile minimal
+node src/cli.js desktop
 ```
 
 Notes:
 
 - `--server` is optional only when the DSL resolves to exactly one `serverRunner`
 - `bootstrap` starts a blank-world authoring server and treats `/_bootstrap` as the primary seam
+- the maintained demo app now runs on `minimal` plus authored runtime-plugin installs on `demo_server`
+- the maintained demo still carries one explicit compatibility seam: `handlerSet = "demo"` currently causes startup to add `bundle-demo`, and runtime diagnostics report that ownership honestly
+- blank-world bootstrap/tutorial startup is still a separate runtime-composition path from the pluginized maintained demo
+- `desktop` starts the first shipped ownership shell: a narrow Electron adapter over the same runtime/profile/world model, with launcher-based `WORLD_HOME` open/create flows and explicit desktop-only powers
 - `bootstrap` now starts from a fresh temp runtime root by default, so prior todo/private-note projection files are not reused across runs
 - `npm run demo` is a convenience wrapper around the generic CLI
 - `npm run bootstrap` is a convenience wrapper around `node src/cli.js bootstrap`
+- `npm run desktop` is a convenience wrapper around `node src/cli.js desktop`
 - if the selected runner exposes a reachable home route, `/` serves the app
 - if no served home route exists yet, `/` falls back to `/_bootstrap`
 - set `RUNTIME_ROOT` explicitly only when you intentionally want a warm/persistent bootstrap restart
 
-Useful environment variables:
+Preferred operator-owned persistence:
+
+```bash
+WORLD_HOME=/tmp/witness-world/demo
+```
+
+This yields the canonical layout:
+
+```text
+$WORLD_HOME/logs/
+$WORLD_HOME/runtime/
+$WORLD_HOME/backups/
+$WORLD_HOME/exports/
+$WORLD_HOME/imports/
+```
+
+Compatibility environment variables still work:
 
 ```bash
 RUNTIME_ROOT=/tmp/witness-runtime
 WITNESS_LOG=/tmp/witness-world.witnesses.jsonl
 OBSERVATION_LOG=/tmp/witness-world.observations.jsonl
 ```
+
+The CLI now prints whether startup is `warm`, `cold`, `warm-compatibility`, or `ephemeral`, and reports the active `WORLD_HOME` when one is in use.
 
 The CLI prints the resolved server URL, definition path, selected runner, and log locations on startup.
 
@@ -233,7 +261,7 @@ npm run test:all  # unit + integration + browser
 
 This is not a production framework. It is a working architecture probe.
 
-The most important current behavior is that the app is increasingly described by witnessed data rather than hand-written special cases, and that a blank world can now recover into a bootstrap seam that teaches and assembles a runnable app through the real product surface.
+The most important current behavior is that the app is increasingly described by witnessed data rather than hand-written special cases, that the maintained demo now runs on `minimal` plus authored runtime-plugin installs, and that a blank world can recover into a still-separate bootstrap seam that teaches and assembles a runnable app through the real product surface.
 
 The current capability slice is real but still intentionally narrow:
 
@@ -248,5 +276,10 @@ The current Todo/bootstrap path should be read as a proving ground, not the fina
 - contextual Sourcery guidance
 - editable-everywhere product surfaces
 - coherent desktop/web/hosted shells over the same world model
+
+Current migration caveat:
+
+- the maintained demo is pluginized, but it still depends on the explicit `bundle-demo` compatibility seam triggered by `handlerSet = "demo"`
+- blank-world bootstrap/tutorial startup still follows a separate runtime-composition path
 
 The detailed capability inventory for that longer arc lives in [docs/CAPABILITIES.md](C:\Users\aaron\Documents\world\docs\CAPABILITIES.md).

@@ -6,7 +6,7 @@ Reduce the default runtime to a narrow executable core, while preserving today's
 
 ## Implementation Status
 
-Updated: `2026-06-12`
+Updated: `2026-06-13`
 
 ### Completed
 
@@ -96,6 +96,159 @@ These suites keep the default `full` profile honest across bundle diagnostics, c
 
 The architecture-first checklist above is complete, the fast compatibility verification sweep passes under the default `full` profile, and runtime composition is now visible through strict CLI profile selection plus `GET /api/runtime/diagnostics`. Any further migration work should change shipped surface area only through explicit profile/bundle decisions rather than leftover host ownership.
 
+### Externalizable Local Plugin Contract
+
+- [x] Added a distinct external `PluginManifest` contract beside the internal executable `BundleManifest` contract.
+- [x] Standardized local plugin discovery on `plugins/<plugin-id>/plugin.json`, with `RUNTIME_PLUGIN_ROOT` as the only root override.
+- [x] Added metadata-first local package discovery and validation with explicit `valid`, `invalid`, and `ignored` package results.
+- [x] Added compatibility and installability read semantics so discovered packages can be `discoverable`, `compatible`, and still explicitly `not executable yet`.
+- [x] Added `GET /api/runtime/plugins` as the core runtime-owned read-only package catalog endpoint.
+- [x] Extended `GET /api/runtime/diagnostics` with plugin root and discovery summary information.
+- [x] Bridged plugin package metadata into bootstrap capability catalog read models as package sources without auto-installing or auto-executing anything.
+- [x] Kept internal bundles as the only executable extension mechanism; local plugin packages remain metadata-only in this tranche.
+
+### Local Executable Plugin Activation Bridge
+
+- [x] Extended `PluginManifest` with optional `activatesBundles` so local plugin packages can request activation of pre-registered internal bundles.
+- [x] Added bundle-bridge validation so executable plugin packages are rejected when they reference unknown internal bundle ids.
+- [x] Added startup-local plugin activation inputs through repeatable CLI `--runtime-plugin <id>` and environment `RUNTIME_PLUGINS=plugin.a,plugin.b`, with CLI ids overriding env selection when present.
+- [x] Added runtime plugin selection and runtime composition resolution so startup, route ownership, surfaces, handler ownership, and capability provisioning now resolve from `profile + activated plugins`, not profile alone.
+- [x] Added explicit requested, eligible, active, rejected, resolved-bundle, and resolved-runtime-contribution reporting to `GET /api/runtime/plugins`.
+- [x] Extended `GET /api/runtime/diagnostics` and CLI startup reporting with configured plugin ids, active plugin ids, rejected plugin ids, and bundle ids added by activated plugins.
+- [x] Added the first executable local plugin package set for `plugin.authoring`, `plugin.inspect`, `plugin.canvas`, `plugin.mcp`, and `plugin.practical-backend`, while keeping `plugin.notes-sidebar` as a valid metadata-only example.
+- [x] Kept the execution boundary strict: plugin packages do not load local JS or register routes/providers/surfaces directly; they only activate existing internal bundles.
+
+### Authored ServerRunner Plugin Enablement
+
+- [x] Added authored `serverRunner -> plugin` runtime-plugin installs as first-class witnessed state through `runtimePlugin.install` and `runtimePlugin.remove`.
+- [x] Added runtime-plugin install projections and bootstrap-state exposure so authored runner intent is queryable without mirroring plugin package objects into the world model.
+- [x] Made runtime composition resolve from `authored runner installs + operator plugin ids`, with explicit source attribution for `authored`, `operator`, and effective requested plugin sets.
+- [x] Added direct authoring endpoints `POST /api/runtime-plugin-installs` and `DELETE /api/runtime-plugin-installs` with runner authority checks and executable-package validation.
+- [x] Extended the generic proposal executor so `runtimePlugin.install` and `runtimePlugin.remove` proposals execute through the same validation and authority path as direct writes.
+- [x] Added DSL parity through `[[runtimePluginInstall]]` and `[[runtimePluginRemove]]`, including source-annotation coverage.
+- [x] Extended runtime diagnostics, plugin catalog reads, bootstrap state, and CLI startup reporting so authored, operator, effective, activated, and rejected runtime plugin state is visible and attributable.
+- [x] Kept the execution boundary unchanged: authored installs still only activate pre-registered internal bundles through the bundle bridge; there is still no plugin-local JS/module loading in this tranche.
+
+### Authored Runtime Plugin Bootstrap UX
+
+- [x] Added runner-scoped `runtimePluginAvailability` bootstrap read rows derived from discovered local packages plus authored installs, without mixing in CLI/env operator overlays.
+- [x] Added bootstrap runtime-plugin direct install/remove forms backed by `POST /api/runtime-plugin-installs` and `DELETE /api/runtime-plugin-installs`.
+- [x] Added bootstrap proposal forms for `runtimePlugin.install` and `runtimePlugin.remove` through the existing generic proposal path instead of a new workflow.
+- [x] Added bootstrap-visible status messaging for installable, installed, metadata-only, incompatible, and dependency-blocked plugin package states.
+- [x] Kept bootstrap runtime-plugin execution honest: the UI only authors runner intent and proposals; executable runtime contributions still come solely from internal bundles resolved through the bundle bridge.
+
+### Runtime Plugin Review And Composition Preview
+
+- [x] Added runner-scoped runtime-plugin review rows that compare authored runner composition before and after install/remove without mixing in CLI/env operator overlays.
+- [x] Added explicit composition previews and deltas for bundle ids, capabilities, routes, and surfaces, including truthful no-op reporting when the effective runtime composition does not change.
+- [x] Added reverse-dependency warnings and executable-boundary explanation so metadata-only, incompatible, missing-dependency, and no-op plugin states are legible before mutation.
+- [x] Added runtime-owned `GET /api/runtime/plugin-reviews` and a bootstrap detail panel that keeps declared manifest contributions separate from resolved executable bundle-bridge contributions.
+
+### Current Project Pluginization
+
+- [x] Added authored `runtimePlugin.install` rows to the maintained demo source of truth so `demo_server` explicitly requests `plugin.authoring`, `plugin.inspect`, and `plugin.canvas`.
+- [x] Moved served demo entrypoints and shared demo test harnesses onto `--runtime-profile minimal`, while keeping the global CLI default profile and blank-world bootstrap behavior unchanged.
+- [x] Added fast verification that the maintained demo now activates those authored plugins under `minimal`, exposes inspect/authoring/canvas routes through bundle composition, and loses those optional surfaces when the authored installs are removed.
+- [x] Kept the remaining demo compatibility seam explicit instead of hiding it: `handlerSet = "demo"` currently causes startup to add `bundle-demo`, and runtime diagnostics now report that bundle ownership honestly.
+
+### Next Migration Cleanup
+
+- [ ] Finish migrating the maintained demo off the remaining runtime-owned `bundle-demo` / `handlerSet = "demo"` compatibility seam so served-example composition is explained entirely by authored installs plus explicit runtime-owned bundle ownership rather than example glue.
+- [ ] Remove the remaining demo handler-set model shims from authored backend programs, starting with `todos.*Model`, `privateNotes.*Model`, `widgets.createModel`, and `network.simulateModel`, so authored demo/backend execution no longer bounces through `src/demo-handler-set.js` for core app logic.
+- [ ] Bring blank-world bootstrap/tutorial startup onto the same explicit runtime-composition story as the maintained demo so bootstrap can eventually run from a narrow baseline instead of a compatibility-heavy runtime path.
+- [ ] Add runner-scoped runtime-plugin reconcile and repair flows so authored installs that point at missing, invalid, incompatible, metadata-only, or dependency-broken local packages become operable cleanup work instead of only startup failures and review warnings.
+- [ ] Decide whether runtime profile choice remains operator-only startup input or becomes authored runtime intent on `serverRunner` / runtime config, and make that decision explicit before the bootstrap/runtime migration converges.
+
+### Local Plugin Example
+
+The current filesystem contract is intentionally narrow and concrete:
+
+```text
+plugins/
+  inspect/
+    plugin.json
+  notes-sidebar/
+    plugin.json
+```
+
+Metadata-only manifest example:
+
+```json
+{
+  "id": "plugin.notes-sidebar",
+  "version": "0.1.0",
+  "displayName": "Notes Sidebar",
+  "description": "Adds a notes sidebar capability package for authoring runtimes.",
+  "kind": "plugin",
+  "permissions": ["context.read", "routePage.install"],
+  "compatibleRuntimeProfiles": ["authoring", "full"],
+  "provenance": { "source": "local-example" },
+  "author": "Witness World",
+  "homepage": "https://example.invalid/plugins/notes-sidebar",
+  "license": "MIT",
+  "contributes": {
+    "capabilities": ["notes.sidebar"],
+    "routes": [
+      { "path": "/notes", "handler": "page.notesSidebar" }
+    ],
+    "surfaces": [
+      { "id": "surface:notes-sidebar", "title": "Open Notes Sidebar" }
+    ],
+    "providers": [
+      { "id": "provider.notes-sidebar", "kind": "widget-runtime" }
+    ]
+  }
+}
+```
+
+Executable bundle-bridge manifest example:
+
+```json
+{
+  "id": "plugin.inspect",
+  "version": "0.1.0",
+  "displayName": "Inspect Runtime Bundle",
+  "description": "Activates inspect routes and operator surfaces for the current runtime.",
+  "kind": "plugin",
+  "compatibleRuntimeProfiles": ["minimal", "authoring", "full"],
+  "activatesBundles": ["bundle-inspect"],
+  "contributes": {
+    "capabilities": ["world.inspect"],
+    "routes": [
+      { "path": "/world", "handler": "page.world" },
+      { "path": "/process", "handler": "page.process" }
+    ],
+    "surfaces": [
+      { "id": "surface:world", "title": "World" },
+      { "id": "surface:process-view", "title": "Process" }
+    ],
+    "providers": []
+  }
+}
+```
+
+Activation remains startup-local in this tranche:
+
+- `node src/cli.js bootstrap --runtime-profile minimal --runtime-plugin plugin.inspect`
+- `RUNTIME_PLUGINS=plugin.inspect node src/cli.js bootstrap --runtime-profile minimal`
+
+Those inputs change runtime composition for the current process only. They do not author install state into the world model and they do not load executable code from plugin directories.
+
+### Local Plugin Contract Verification
+
+Fast verification for the metadata-first plugin-contract tranche is intentionally focused:
+
+- `node --test test/runtime-plugin-utils.test.js`
+- `node --test test/runtime-profile.test.js test/runtime-server.test.js`
+- `node --test test/bootstrap-host.test.js --test-name-pattern "bootstrap capability catalog and install lifecycle are exposed through the generic API|blank world falls back to bootstrap instead of failing hard"`
+
+Fast verification for the executable activation-bridge tranche stays equally focused:
+
+- `node --test test/runtime-plugin-utils.test.js`
+- `node --test test/runtime-profile.test.js`
+- `node --test test/runtime-server.test.js`
+- `node --test test/cli.test.js`
+
 The current codebase already has the right concepts:
 
 - explicit capability objects and installs
@@ -104,7 +257,7 @@ The current codebase already has the right concepts:
 
 The main remaining problem is operational coupling:
 
-- capability definitions are centralized in `src/runtime-builtins.js`
+- some compatibility-era capability and authoring mechanics still point through older runtime-builtins/module seams even though bundle/profile composition is now the executable source of truth
 - `src/host.js` now serves as a deliberate compatibility/public facade over dedicated runtime host-entry and host-utility modules instead of carrying accidental runtime ownership
 - bundle handlers now consume shared runtime authority services and dedicated support-service modules, provider runtime ownership lives in dedicated runtime modules, server orchestration lives in a dedicated runtime server module, generic handler composition lives in a dedicated runtime route-handlers module, shared HTTP/session/request primitives live in a dedicated runtime HTTP utilities module, active-path runtime config/stream/default job-handler seams flow through dedicated runtime modules, and host declaration/runner/storage/route-factory seams now live in dedicated runtime host modules rather than `src/host.js`
 - tutorial API ownership is now bundle-scoped, the live-app tutorial client plus home-page tutorial attachment have moved out of generic runtime flow ownership, and bootstrap tutorial page chrome, page-data assembly, progress/state handling, overlay/automation behavior, and event wiring now flow through dedicated tutorial modules rather than staying embedded inline in `src/bootstrap-shell.js`
@@ -301,7 +454,7 @@ Owns:
 Primary source files today:
 
 - `src/mcp.js`
-- MCP handlers in `src/host.js`
+- runtime bundle handler wiring in `src/runtime-bundle-generic-handlers.js` and `src/runtime-bundle-handlers.js`
 
 ### `bundle-practical-backend`
 
@@ -322,8 +475,8 @@ Owns:
 
 Primary source files today:
 
-- capability definitions in `src/runtime-builtins.js`
-- practical backend handlers in `src/host.js`
+- runtime bundle metadata and diagnostics in `src/runtime-bundles.js`
+- practical-backend handler/service modules such as `src/runtime-practical-backend-glue.js`, `src/runtime-practical-backend-support-services.js`, `src/runtime-practical-backend-db-search-services.js`, `src/runtime-practical-backend-io-services.js`, `src/runtime-practical-backend-asset-services.js`, and `src/runtime-backend-seams-page.js`
 
 ### `bundle-demo`
 
@@ -379,6 +532,13 @@ Produce one agreed classification of the shipped surface before moving code.
 ### Main Risk
 
 If this classification is skipped, the migration will devolve into moving code around without actually reducing authority in core.
+
+## Historical Design Notes
+
+The sections below are retained as historical phase-by-phase design notes from earlier planning.
+
+They are no longer the primary status source of truth.
+For current implementation status, completed slices, and next migration cleanup items, use the sections above.
 
 ## Phase 1: Introduce Bundle Manifests With No Behavior Change
 

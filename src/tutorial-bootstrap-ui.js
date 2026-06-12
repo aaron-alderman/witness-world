@@ -57,17 +57,17 @@ export function renderBootstrapTutorialCard() {
           <div class="tutorial-suggestion-list" id="tutorial-suggestions"></div>
         </div>
         <div>
-          <div class="kicker">Disabled Guidance Surfaces</div>
+          <div class="kicker">Disabled Sourcery Scopes</div>
           <div class="tutorial-disabled-list" id="tutorial-disabled-pages"></div>
         </div>
         <div class="actions">
           <button type="button" id="tutorial-start">Start Tutorial</button>
           <button type="button" id="tutorial-resume" class="secondary">Resume Tutorial</button>
           <button type="button" id="tutorial-restart-chapter" class="secondary">Restart Chapter</button>
-          <button type="button" id="tutorial-restart-from-here" class="secondary">Restart From Here</button>
+          <button type="button" id="tutorial-restart-from-here" class="secondary">Restart From This Scope</button>
           <button type="button" id="tutorial-back" class="secondary">Back</button>
           <button type="button" id="tutorial-skip" class="secondary">Skip Chapter</button>
-          <button type="button" id="tutorial-disable-page" class="secondary">Disable On This Page</button>
+          <button type="button" id="tutorial-disable-page" class="secondary">Disable Sourcery Here</button>
           <button type="button" id="tutorial-exit" class="secondary">Exit</button>
           <button type="button" id="tutorial-reset" class="secondary">Reset Tutorial</button>
         </div>
@@ -93,9 +93,9 @@ export function renderBootstrapTutorialOverlay() {
     <div class="actions">
       <button type="button" id="tutorial-next">Next</button>
       <button type="button" class="secondary" id="tutorial-restart-current">Restart Chapter</button>
-      <button type="button" class="secondary" id="tutorial-replay-current">Restart From Here</button>
+      <button type="button" class="secondary" id="tutorial-replay-current">Restart From This Scope</button>
       <button type="button" class="secondary" id="tutorial-finish-chapter">Finish Chapter For Me</button>
-      <button type="button" class="secondary" id="tutorial-disable-current-page">Disable On This Page</button>
+      <button type="button" class="secondary" id="tutorial-disable-current-page">Disable Sourcery Here</button>
       <button type="button" class="secondary" id="tutorial-overlay-resume">Resume</button>
     </div>
   </aside>

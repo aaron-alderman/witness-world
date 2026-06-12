@@ -1,0 +1,11 @@
+{
+  "id": "plugin.mcp",
+  "version": "0.1.0",
+  "displayName": "MCP Bundle Bridge",
+  "description": "Activates the internal MCP runtime bundle through the local plugin bridge.",
+  "kind": "plugin",
+  "activatesBundles": [
+    "bundle-mcp"
+  ],
+  "contributes": {}
+}

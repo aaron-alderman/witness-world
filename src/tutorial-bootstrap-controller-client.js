@@ -24,12 +24,20 @@ export function renderBootstrapTutorialControllerFactory() {
         tutorialStep,
         previousTutorialStep,
         tutorialDisabledPages,
+        tutorialDisabledScopeKeys,
+        tutorialDisabledContextIds,
         tutorialReplayStepId,
+        tutorialReplayScopeKey,
         tutorialPageLabel,
+        tutorialStepScope,
+        tutorialStepSurfaceContext,
         tutorialStepConcepts,
         tutorialRevealedConcepts,
         tutorialSurfaceState,
+        clearTutorialScopeDisabled,
         clearTutorialPageDisabled,
+        clearTutorialContextDisabled,
+        disableTutorialOnCurrentScope,
         disableTutorialOnCurrentPage,
         persistTutorialProgress,
         defaultProgress,
@@ -158,6 +166,37 @@ export function renderBootstrapTutorialControllerFactory() {
         focusable?.focus?.({ preventScroll: true });
         return true;
       };
+      const focusTutorialScopeTarget = targetName => {
+        const target = byTarget(targetName);
+        if (!target) return false;
+        if (activeFocusScope?.isConnected) activeFocusScope.removeAttribute("data-tutorial-focus-scope");
+        document.querySelectorAll("[data-tutorial-focus-scope]").forEach(node => node.removeAttribute("data-tutorial-focus-scope"));
+        revealTarget(target);
+        const focusScope = focusScopeFor(target);
+        if (focusScope) {
+          focusScope.setAttribute("data-tutorial-focus-scope", "true");
+          activeFocusScope = focusScope;
+        }
+        target.scrollIntoView({ block: "center", behavior: "smooth" });
+        pulseNode(target, 1200);
+        const focusable = target.matches?.("input,select,textarea,button,a,summary")
+          ? target
+          : target.querySelector?.("input,select,textarea,button,a,summary,[tabindex]");
+        focusable?.focus?.({ preventScroll: true });
+        return true;
+      };
+      const focusDisabledGuidance = () => {
+        const target = byId("tutorial-disabled-pages");
+        if (!target) return false;
+        clearTutorialHighlight();
+        revealTarget(target);
+        target.setAttribute("data-tutorial-focus-scope", "true");
+        activeFocusScope = target;
+        target.scrollIntoView({ block: "center", behavior: "smooth" });
+        const focusable = target.querySelector?.("button, [tabindex]");
+        focusable?.focus?.({ preventScroll: true });
+        return true;
+      };
       const runSuggestion = async suggestion => {
         if (!suggestion?.action) return;
         if (suggestion.action.kind === "startTutorial") {
@@ -169,12 +208,17 @@ export function renderBootstrapTutorialControllerFactory() {
           return;
         }
         if (suggestion.action.kind === "enableCurrentPage") {
-          await persistTutorialProgress(clearTutorialPageDisabled(state.tutorialProgress));
+          await persistTutorialProgress(clearTutorialScopeDisabled(state.tutorialProgress, suggestion.action.scopeKey || tutorialSurfaceState().scopeKey || tutorialStepScope(tutorialStep())?.key || null));
+          renderPage();
+          return;
+        }
+        if (suggestion.action.kind === "enableContext") {
+          await persistTutorialProgress(clearTutorialContextDisabled(state.tutorialProgress, suggestion.action.contextId || tutorialStepSurfaceContext(tutorialStep())?.id || null));
           renderPage();
           return;
         }
         if (suggestion.action.kind === "enablePage") {
-          await persistTutorialProgress(clearTutorialPageDisabled(state.tutorialProgress, suggestion.action.page));
+          await persistTutorialProgress(clearTutorialScopeDisabled(state.tutorialProgress, suggestion.action.scopeKey || (suggestion.action.page === "world" ? "world" : null)));
           renderPage();
           return;
         }
@@ -184,6 +228,10 @@ export function renderBootstrapTutorialControllerFactory() {
         }
         if (suggestion.action.kind === "openApp") {
           await openAppHome(byId("open-app-link").href, { advance: false });
+          return;
+        }
+        if (suggestion.action.kind === "focusDisabledScopes") {
+          focusDisabledGuidance();
           return;
         }
         if (suggestion.action.kind === "focusTarget") {
@@ -213,7 +261,7 @@ export function renderBootstrapTutorialControllerFactory() {
         byId("tutorial-resume").disabled = !progress || Boolean(progress.completedAt) || tutorialAutoRunning || surface.kind === "active";
         byId("tutorial-resume").textContent = surface.kind === "offpage"
           ? ("Continue On " + tutorialPageLabel(surface.page))
-          : (surface.kind === "disabled" ? "Enable On This Page" : "Resume Tutorial");
+          : (surface.kind === "disabled-context" ? "Enable Sourcery In This Context" : (surface.kind === "disabled" ? "Enable Sourcery Here" : "Resume Tutorial"));
         byId("tutorial-back").disabled = !previousTutorialStep() || tutorialAutoRunning;
         byId("tutorial-skip").disabled = !progress || Boolean(progress.completedAt) || tutorialAutoRunning;
         byId("tutorial-exit").disabled = !progress || Boolean(progress.hidden) || Boolean(progress.completedAt) || tutorialAutoRunning;
@@ -221,14 +269,22 @@ export function renderBootstrapTutorialControllerFactory() {
         byId("tutorial-restart-from-here").disabled = !progress || !current || Boolean(progress.completedAt) || tutorialAutoRunning;
         byId("tutorial-disable-page").disabled = !progress || !current || Boolean(progress.completedAt) || tutorialAutoRunning || current.page !== currentSurfacePage;
         byId("tutorial-restart-chapter").disabled = !progress || !current || Boolean(progress.completedAt) || tutorialAutoRunning;
+        const currentScopeKey = tutorialStepScope(current)?.key || null;
+        const currentScopeDisabled = Boolean(progress && currentScopeKey && tutorialState.isTutorialScopeDisabled(progress, currentScopeKey));
+        const currentContextId = tutorialStepSurfaceContext(current)?.id || null;
+        const currentContextDisabled = Boolean(progress && currentContextId && tutorialState.isTutorialContextDisabled(progress, currentContextId));
         byId("tutorial-summary").textContent = !progress
           ? "Start the guided build to learn the platform through the real bootstrap seam."
           : progress.completedAt
             ? "Tutorial complete. The app is wired and you have used the real surface."
             : surface.kind === "offpage"
-              ? (surface.page && tutorialDisabledPages(progress).includes(surface.page)
-                  ? ("Current guidance continues on the " + tutorialPageLabel(surface.page) + " surface, but guidance is disabled there until you re-enable it. Current step: " + (current?.title || "Tutorial in progress.") + ".")
-                  : ("Current guidance continues on the " + tutorialPageLabel(surface.page) + " surface: " + (current?.title || "Tutorial in progress.") + "."))
+              ? (surface.page && currentContextDisabled
+                  ? ("Current guidance continues on the " + tutorialPageLabel(surface.page) + " surface, but guidance is disabled in that context until you re-enable it. Current step: " + (current?.title || "Tutorial in progress.") + ".")
+                  : (surface.page && currentScopeDisabled
+                      ? ("Current guidance continues on the " + tutorialPageLabel(surface.page) + " surface, but guidance is disabled there until you re-enable it. Current step: " + (current?.title || "Tutorial in progress.") + ".")
+                      : ("Current guidance continues on the " + tutorialPageLabel(surface.page) + " surface: " + (current?.title || "Tutorial in progress.") + ".")))
+              : surface.kind === "disabled-context"
+                ? ("Guidance is disabled in this context. " + (current ? current.title + " stays recoverable on the " + tutorialPageLabel(current.page) + " surface." : ""))
               : surface.kind === "disabled"
                 ? ("Guidance is disabled on this page. " + (current ? current.title + " stays available on the " + tutorialPageLabel(current.page) + " surface." : ""))
                 : surface.kind === "hidden"
@@ -317,7 +373,7 @@ export function renderBootstrapTutorialControllerFactory() {
         const currentIndex = currentStepIndex(state.tutorialProgress);
         const next = tutorial.steps[currentIndex + 1] || null;
         if (!next) {
-          await persistTutorialProgress({ ...state.tutorialProgress, chapterStatus: "completed", completedAt: new Date().toISOString(), replayStepId: null });
+          await persistTutorialProgress({ ...state.tutorialProgress, chapterStatus: "completed", completedAt: new Date().toISOString(), replayScopeKey: null });
         } else {
           await persistTutorialProgress({
             ...state.tutorialProgress,
@@ -326,7 +382,7 @@ export function renderBootstrapTutorialControllerFactory() {
             chapterStatus: "in_progress",
             completedAt: null,
             hidden: false,
-            replayStepId: null
+            replayScopeKey: null
           });
         }
         refreshTutorialChrome();
@@ -385,7 +441,7 @@ export function renderBootstrapTutorialControllerFactory() {
           const target = byTarget(current.target);
           if (!target) throw new Error("Missing tutorial target for " + current.id + ".");
           fillForm(target, current.payload);
-          await persistTutorialProgress({ ...state.tutorialProgress, draftInputs: current.payload, hidden: false, replayStepId: null });
+          await persistTutorialProgress({ ...state.tutorialProgress, draftInputs: current.payload, hidden: false, replayScopeKey: null });
           renderTutorialOverlay();
           await sleep(180);
           await submitTutorialForm(target);
@@ -402,7 +458,7 @@ export function renderBootstrapTutorialControllerFactory() {
         const element = eventTarget?.nodeType === Node.ELEMENT_NODE ? eventTarget : eventTarget?.parentElement || null;
         if (!target || !element) return;
         if (!(element === target || target.contains(element) || element.closest?.('[data-tutorial-target="' + CSS.escape(current.target) + '"]'))) return;
-        await persistTutorialProgress({ ...state.tutorialProgress, replayStepId: null });
+        await persistTutorialProgress({ ...state.tutorialProgress, replayScopeKey: null });
       };
       const bindTutorialInteractions = () => {
         if (tutorialHandlersBound) return;
@@ -419,13 +475,23 @@ export function renderBootstrapTutorialControllerFactory() {
           }
         });
         byId("tutorial-disabled-pages").addEventListener("click", async event => {
+          const focusButton = event.target.closest("button[data-disabled-focus]");
           const enableButton = event.target.closest("button[data-disabled-enable]");
           const openButton = event.target.closest("button[data-disabled-open]");
           try {
+            if (focusButton) {
+              focusTutorialScopeTarget(focusButton.dataset.disabledFocus);
+              return;
+            }
             if (enableButton) {
               if (!state.tutorialProgress) return;
-              await persistTutorialProgress(clearTutorialPageDisabled(state.tutorialProgress, enableButton.dataset.disabledEnable));
-              setStatus("tutorial-status", "Guidance re-enabled on " + tutorialPageLabel(enableButton.dataset.disabledEnable) + ".");
+              if (enableButton.dataset.disabledContext) {
+                await persistTutorialProgress(clearTutorialContextDisabled(state.tutorialProgress, enableButton.dataset.disabledContext || null));
+                setStatus("tutorial-status", "Guidance re-enabled in " + (enableButton.closest(".tutorial-disabled-item")?.querySelector("strong")?.textContent || "that context") + ".");
+              } else {
+                await persistTutorialProgress(clearTutorialScopeDisabled(state.tutorialProgress, enableButton.dataset.disabledScope || (enableButton.dataset.disabledEnable === "world" ? "world" : null)));
+                setStatus("tutorial-status", "Guidance re-enabled on " + tutorialPageLabel(enableButton.dataset.disabledEnable) + ".");
+              }
               renderPage();
               return;
             }
@@ -476,10 +542,12 @@ export function renderBootstrapTutorialControllerFactory() {
             await continueTutorialOnPage(surface.page);
             return;
           }
-          if (surface.kind === "disabled") {
-            await persistTutorialProgress(clearTutorialPageDisabled(state.tutorialProgress));
+          if (surface.kind === "disabled-context") {
+            await persistTutorialProgress(clearTutorialContextDisabled(state.tutorialProgress, surface.contextId || tutorialStepSurfaceContext(tutorialStep())?.id || null));
+          } else if (surface.kind === "disabled") {
+            await persistTutorialProgress(clearTutorialScopeDisabled(state.tutorialProgress, surface.scopeKey || tutorialStepScope(tutorialStep())?.key || null));
           } else {
-            await persistTutorialProgress({ ...state.tutorialProgress, hidden: false });
+            await persistTutorialProgress({ ...state.tutorialProgress, hidden: false, replayScopeKey: null });
           }
           renderPage();
         });
@@ -492,7 +560,7 @@ export function renderBootstrapTutorialControllerFactory() {
             stepId: previous.id,
             hidden: false,
             completedAt: null,
-            replayStepId: isStepComplete(previous) ? previous.id : null
+            replayScopeKey: isStepComplete(previous) ? (tutorialStepScope(previous)?.key || null) : null
           });
           renderPage();
         });
@@ -501,22 +569,22 @@ export function renderBootstrapTutorialControllerFactory() {
           if (!state.tutorialProgress || !current) return;
           const next = tutorial.steps.find(step => step.chapterId !== current.chapterId && (currentStepIndex({ stepId: step.id }) > currentStepIndex({ stepId: current.id })));
           if (!next) {
-            await persistTutorialProgress({ ...state.tutorialProgress, completedAt: new Date().toISOString(), chapterStatus: "completed", replayStepId: null });
+            await persistTutorialProgress({ ...state.tutorialProgress, completedAt: new Date().toISOString(), chapterStatus: "completed", replayScopeKey: null });
           } else {
-            await persistTutorialProgress({ ...state.tutorialProgress, chapterId: next.chapterId, stepId: next.id, hidden: false, replayStepId: null });
+            await persistTutorialProgress({ ...state.tutorialProgress, chapterId: next.chapterId, stepId: next.id, hidden: false, replayScopeKey: null });
           }
           renderPage();
         });
         byId("tutorial-exit").addEventListener("click", async () => {
           if (!state.tutorialProgress) return;
-          await persistTutorialProgress({ ...state.tutorialProgress, hidden: true, replayStepId: null });
+          await persistTutorialProgress({ ...state.tutorialProgress, hidden: true, replayScopeKey: null });
           renderPage();
         });
         byId("tutorial-disable-page").addEventListener("click", async () => {
           const current = tutorialStep();
           if (!state.tutorialProgress || !current || current.page !== currentSurfacePage) return;
-          await persistTutorialProgress(disableTutorialOnCurrentPage(state.tutorialProgress));
-          setStatus("tutorial-status", "Guidance disabled on the Bootstrap page.");
+          await persistTutorialProgress(disableTutorialOnCurrentScope(state.tutorialProgress));
+          setStatus("tutorial-status", "Guidance disabled for this scope.");
           renderPage();
         });
         byId("tutorial-reset").addEventListener("click", async () => {
@@ -548,8 +616,8 @@ export function renderBootstrapTutorialControllerFactory() {
         byId("tutorial-disable-current-page").addEventListener("click", async () => {
           const current = tutorialStep();
           if (!state.tutorialProgress || !current || current.page !== currentSurfacePage) return;
-          await persistTutorialProgress(disableTutorialOnCurrentPage(state.tutorialProgress));
-          setStatus("tutorial-status", "Guidance disabled on the Bootstrap page.");
+          await persistTutorialProgress(disableTutorialOnCurrentScope(state.tutorialProgress));
+          setStatus("tutorial-status", "Guidance disabled for this scope.");
           refreshTutorialChrome();
         });
         byId("tutorial-finish-chapter").addEventListener("click", async () => {

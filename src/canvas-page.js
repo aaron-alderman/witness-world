@@ -169,7 +169,7 @@ const CANVAS_CLIENT_JS = `(async () => {
       setStatus(process + ' rejected: ' + (body.error || response.status));
       return null;
     }
-    setStatus(process + ' witnessed');
+    setStatus(body.statusMessage || (process + ' witnessed'));
     return body;
   }
 
@@ -1266,7 +1266,7 @@ const CANVAS_CLIENT_JS = `(async () => {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) return { ok: false, error: body.error || ('attach failed (' + response.status + ')') };
-    return { ok: true, witness: body.witness };
+    return { ok: true, witness: body.witness, statusMessage: body.statusMessage || null };
   }
 
   async function detachAsset(assetId, targetId) {
@@ -1275,7 +1275,7 @@ const CANVAS_CLIENT_JS = `(async () => {
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) return { ok: false, error: body.error || ('detach failed (' + response.status + ')') };
-    return { ok: true, witness: body.witness };
+    return { ok: true, witness: body.witness, statusMessage: body.statusMessage || null };
   }
 
   async function retryAssetIngest(assetId) {
@@ -1485,14 +1485,14 @@ const CANVAS_CLIENT_JS = `(async () => {
               removeAttachment.textContent = 'Detach';
               removeAttachment.dataset.assetDetachButton = asset.id;
               removeAttachment.addEventListener('click', async () => {
-                const removed = await detachAsset(asset.id, node.thing);
-                if (!removed.ok) {
-                  setStatus('detach failed: ' + removed.error);
-                  return;
-                }
-                setStatus('detached ' + (asset.title || asset.id));
-                await refresh();
-              });
+                  const removed = await detachAsset(asset.id, node.thing);
+                  if (!removed.ok) {
+                    setStatus('detach failed: ' + removed.error);
+                    return;
+                  }
+                  setStatus(removed.statusMessage || ('detached ' + (asset.title || asset.id)));
+                  await refresh();
+                });
               row.appendChild(document.createTextNode(' '));
               row.appendChild(removeAttachment);
             }
@@ -1546,7 +1546,7 @@ const CANVAS_CLIENT_JS = `(async () => {
                     setStatus('detach failed: ' + removed.error);
                     return;
                   }
-                  setStatus('detached from ' + (target.title || target.id));
+                  setStatus(removed.statusMessage || ('detached from ' + (target.title || target.id)));
                   await refresh();
                 });
                 row.appendChild(document.createTextNode(' '));
@@ -1651,7 +1651,7 @@ const CANVAS_CLIENT_JS = `(async () => {
                   setStatus('attach failed: ' + attached.error);
                   return;
                 }
-                setStatus('attached ' + (node.label || node.asset.id));
+                setStatus(attached.statusMessage || ('attached ' + (node.label || node.asset.id)));
                 await refresh();
               });
               controls.appendChild(picker);
@@ -1687,7 +1687,7 @@ const CANVAS_CLIENT_JS = `(async () => {
                 setStatus('attach failed: ' + attached.error);
                 return;
               }
-              setStatus('attached file to ' + (node.label || node.thing));
+              setStatus(attached.statusMessage || ('attached file to ' + (node.label || node.thing)));
               await refresh();
             });
             controls.appendChild(picker);

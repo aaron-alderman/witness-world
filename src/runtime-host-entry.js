@@ -35,7 +35,10 @@ export async function startServer(world, {
   runtimeRoot = os.tmpdir(),
   logger = createLogger(),
   mcpInternalToken = null,
-  runtimeProfile = DEFAULT_RUNTIME_PROFILE
+  runtimeProfile = DEFAULT_RUNTIME_PROFILE,
+  runtimePluginIds = null,
+  runtimeStartupMode = "serve",
+  runtimeOperatorContract = null
 }) {
   return startRuntimeServer(world, {
     actor,
@@ -44,7 +47,10 @@ export async function startServer(world, {
     runtimeRoot,
     logger,
     mcpInternalToken,
-    runtimeProfile
+    runtimeProfile,
+    runtimePluginIds,
+    runtimeStartupMode,
+    runtimeOperatorContract
   }, {
     createBuiltinAssetJobHandlers: createBuiltinAssetJobHandlersDefault,
     createBuiltinNotificationJobHandlers: createBuiltinNotificationJobHandlersDefault,

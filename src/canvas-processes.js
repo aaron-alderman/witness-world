@@ -58,6 +58,20 @@ function moduleKindOf(world, id) {
     ?.to ?? null;
 }
 
+function perspectiveContextId(world, perspective) {
+  return world
+    .project(projectors.currentRelations)
+    .find(r => r.from === perspective && r.rel === "inContext")
+    ?.to ?? null;
+}
+
+function canMutatePerspectiveSurface(world, actor, perspective) {
+  const context = perspectiveContextId(world, perspective);
+  if (context) return { context, ...canCreateInContext(world, actor, context) };
+  if (canAcceptInto(world, actor, perspective)) return { context: null, ok: true, status: 200, reason: null };
+  return { context: null, ok: false, status: 403, reason: "actor does not own or steward perspective" };
+}
+
 export function createPerspective(world, { actor, title, context = null }) {
   const blocked = blockedWitness(world, { actor, process: "canvas.perspective.create", gates: [actorRequired, textRequired("title")], context: { actor, title, context } });
   if (blocked) return blocked;
@@ -109,8 +123,13 @@ export function placeThing(world, { actor, perspective, thing: target, ...params
   if (!world.project(projectors.things).has(target)) {
     return failed(world, { process, actor, body: { perspective, thing: target, reason: "unknown thing" } });
   }
-  if (!canAcceptInto(world, actor, perspective)) {
-    return failed(world, { process, actor, body: { perspective, thing: target, reason: "actor does not own or steward perspective" } });
+  const gate = canMutatePerspectiveSurface(world, actor, perspective);
+  if (!gate.ok) {
+    return failed(world, {
+      process,
+      actor,
+      body: { perspective, thing: target, context: gate.context, reason: gate.reason, status: gate.status || 403 }
+    });
   }
   const geometry = geometryFrom(params);
   const instance = thingId("projection-instance", { perspective, thing: target, ordinal: world.allWitnesses().length });
@@ -129,8 +148,9 @@ export function moveInstance(world, { actor, perspective, instance, ...params })
   if (!perspectiveContains(world, perspective, instance)) {
     return failed(world, { process, actor, body: { perspective, instance, reason: "instance not in perspective" } });
   }
-  if (!canAcceptInto(world, actor, perspective)) {
-    return failed(world, { process, actor, body: { perspective, instance, reason: "actor does not own or steward perspective" } });
+  const gate = canMutatePerspectiveSurface(world, actor, perspective);
+  if (!gate.ok) {
+    return failed(world, { process, actor, body: { perspective, instance, context: gate.context, reason: gate.reason, status: gate.status || 403 } });
   }
   const current = world
     .project(projectors.currentRelations)
@@ -151,8 +171,9 @@ export function styleInstance(world, { actor, perspective, instance, ...params }
   if (!perspectiveContains(world, perspective, instance)) {
     return failed(world, { process, actor, body: { perspective, instance, reason: "instance not in perspective" } });
   }
-  if (!canAcceptInto(world, actor, perspective)) {
-    return failed(world, { process, actor, body: { perspective, instance, reason: "actor does not own or steward perspective" } });
+  const gate = canMutatePerspectiveSurface(world, actor, perspective);
+  if (!gate.ok) {
+    return failed(world, { process, actor, body: { perspective, instance, context: gate.context, reason: gate.reason, status: gate.status || 403 } });
   }
   const style = styleFrom(params);
   return world.emit({
@@ -170,8 +191,9 @@ export function removeInstance(world, { actor, perspective, instance }) {
   if (!perspectiveContains(world, perspective, instance)) {
     return failed(world, { process, actor, body: { perspective, instance, reason: "instance not in perspective" } });
   }
-  if (!canAcceptInto(world, actor, perspective)) {
-    return failed(world, { process, actor, body: { perspective, instance, reason: "actor does not own or steward perspective" } });
+  const gate = canMutatePerspectiveSurface(world, actor, perspective);
+  if (!gate.ok) {
+    return failed(world, { process, actor, body: { perspective, instance, context: gate.context, reason: gate.reason, status: gate.status || 403 } });
   }
   return world.emit({
     process,
@@ -188,8 +210,9 @@ export function moveManyInstances(world, { actor, perspective, moves }) {
   if (!Array.isArray(moves) || !moves.length || moves.some(m => !m || typeof m.instance !== "string")) {
     return failed(world, { process, actor, body: { perspective, reason: "moves required" } });
   }
-  if (!canAcceptInto(world, actor, perspective)) {
-    return failed(world, { process, actor, body: { perspective, reason: "actor does not own or steward perspective" } });
+  const gate = canMutatePerspectiveSurface(world, actor, perspective);
+  if (!gate.ok) {
+    return failed(world, { process, actor, body: { perspective, context: gate.context, reason: gate.reason, status: gate.status || 403 } });
   }
   const current = world.project(projectors.currentRelations);
   const contained = new Set(current.filter(r => r.from === perspective && r.rel === "contains").map(r => r.to));
@@ -217,8 +240,9 @@ export function removeManyInstances(world, { actor, perspective, instances }) {
   if (!unique.length || unique.some(i => typeof i !== "string")) {
     return failed(world, { process, actor, body: { perspective, reason: "instances required" } });
   }
-  if (!canAcceptInto(world, actor, perspective)) {
-    return failed(world, { process, actor, body: { perspective, reason: "actor does not own or steward perspective" } });
+  const gate = canMutatePerspectiveSurface(world, actor, perspective);
+  if (!gate.ok) {
+    return failed(world, { process, actor, body: { perspective, context: gate.context, reason: gate.reason, status: gate.status || 403 } });
   }
   const invalid = unique.filter(i => !perspectiveContains(world, perspective, i));
   if (invalid.length) {
@@ -239,8 +263,9 @@ export function duplicateInstance(world, { actor, perspective, instance, x, y })
   if (!perspectiveContains(world, perspective, instance)) {
     return failed(world, { process, actor, body: { perspective, instance, reason: "instance not in perspective" } });
   }
-  if (!canAcceptInto(world, actor, perspective)) {
-    return failed(world, { process, actor, body: { perspective, instance, reason: "actor does not own or steward perspective" } });
+  const gate = canMutatePerspectiveSurface(world, actor, perspective);
+  if (!gate.ok) {
+    return failed(world, { process, actor, body: { perspective, instance, context: gate.context, reason: gate.reason, status: gate.status || 403 } });
   }
   const current = world.project(projectors.currentRelations);
   const target = current.find(r => r.from === instance && r.rel === "proxies")?.to;
@@ -269,8 +294,10 @@ export function createThingOnCanvas(world, { actor, perspective, name, ...params
   if (!isPerspective(world, perspective)) {
     return failed(world, { process, actor, body: { perspective, name, reason: "unknown perspective" } });
   }
-  if (!canAcceptInto(world, actor, perspective)) {
-    return failed(world, { process, actor, body: { perspective, name, reason: "actor does not own or steward perspective" } });
+  const gate = canMutatePerspectiveSurface(world, actor, perspective);
+  const context = gate.context;
+  if (!gate.ok) {
+    return failed(world, { process, actor, body: { perspective, context, name, reason: gate.reason, status: gate.status || 403 } });
   }
   const title = name.trim();
   const ordinal = world.allWitnesses().length;
@@ -285,9 +312,10 @@ export function createThingOnCanvas(world, { actor, perspective, name, ...params
       relation(actor, "owns", id),
       relation(actor, "created", id),
       relation(id, "hasTitle", title),
+      ...(context ? [relation(id, "inContext", context)] : []),
       ...placementClaims({ actor, perspective, instance, target: id, geometry })
     ],
-    body: { perspective, thing: id, instance, name: title, ...geometry }
+    body: { perspective, context, thing: id, instance, name: title, ...geometry }
   });
 }
 
@@ -429,8 +457,9 @@ export function setCamera(world, { actor, perspective, x, y, zoom }) {
   if (!isPerspective(world, perspective)) {
     return failed(world, { process, actor, body: { perspective, reason: "unknown perspective" } });
   }
-  if (!canAcceptInto(world, actor, perspective)) {
-    return failed(world, { process, actor, body: { perspective, reason: "actor does not own or steward perspective" } });
+  const gate = canMutatePerspectiveSurface(world, actor, perspective);
+  if (!gate.ok) {
+    return failed(world, { process, actor, body: { perspective, context: gate.context, reason: gate.reason, status: gate.status || 403 } });
   }
   const camera = { x: num(x, 0), y: num(y, 0), zoom: Math.min(4, Math.max(0.2, num(zoom, 1))) };
   return world.emit({
@@ -448,8 +477,9 @@ export function setGrid(world, { actor, perspective, snap, size }) {
   if (!isPerspective(world, perspective)) {
     return failed(world, { process, actor, body: { perspective, reason: "unknown perspective" } });
   }
-  if (!canAcceptInto(world, actor, perspective)) {
-    return failed(world, { process, actor, body: { perspective, reason: "actor does not own or steward perspective" } });
+  const gate = canMutatePerspectiveSurface(world, actor, perspective);
+  if (!gate.ok) {
+    return failed(world, { process, actor, body: { perspective, context: gate.context, reason: gate.reason, status: gate.status || 403 } });
   }
   const grid = { snap: snap === true || snap === "true", size: Math.min(400, Math.max(4, num(size, 20))) };
   return world.emit({
@@ -467,8 +497,13 @@ export function batchApply(world, { actor, perspective, moves, styles, camera, g
   if (!isPerspective(world, perspective)) {
     return failed(world, { process, actor, body: { perspective, reason: "unknown perspective" } });
   }
-  if (!canAcceptInto(world, actor, perspective)) {
-    return failed(world, { process, actor, body: { perspective, reason: "actor does not own or steward perspective" } });
+  const gate = canMutatePerspectiveSurface(world, actor, perspective);
+  if (!gate.ok) {
+    return failed(world, {
+      process,
+      actor,
+      body: { perspective, context: gate.context, reason: gate.reason, status: gate.status || 403 }
+    });
   }
   const malformedList = list => list !== undefined && (!Array.isArray(list) || list.some(entry => !entry || typeof entry.instance !== "string"));
   const malformedObject = value => value !== undefined && (value === null || typeof value !== "object");
@@ -518,8 +553,9 @@ function compensate(world, { actor, perspective, process, target, link }) {
   if (!isPerspective(world, perspective)) {
     return failed(world, { process, actor, body: { perspective, reason: "unknown perspective" } });
   }
-  if (!canAcceptInto(world, actor, perspective)) {
-    return failed(world, { process, actor, body: { perspective, reason: "actor does not own or steward perspective" } });
+  const gate = canMutatePerspectiveSurface(world, actor, perspective);
+  if (!gate.ok) {
+    return failed(world, { process, actor, body: { perspective, context: gate.context, reason: gate.reason, status: gate.status || 403 } });
   }
   if (!target) {
     return failed(world, { process, actor, body: { perspective, reason: link === "undoes" ? "nothing to undo" : "nothing to redo" } });

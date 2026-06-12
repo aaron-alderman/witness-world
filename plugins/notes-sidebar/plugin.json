@@ -1,0 +1,61 @@
+{
+  "id": "plugin.notes-sidebar",
+  "version": "0.1.0",
+  "displayName": "Notes Sidebar",
+  "description": "A local metadata-only plugin package that contributes a notes sidebar capability and related surface metadata.",
+  "kind": "plugin",
+  "dependsOnPlugins": [],
+  "dependsOnCapabilities": [],
+  "permissions": [
+    "context.read",
+    "routePage.install"
+  ],
+  "compatibleRuntimeProfiles": [
+    "authoring",
+    "full"
+  ],
+  "compatibleShells": [
+    "browser"
+  ],
+  "updateChannel": "local",
+  "provenance": {
+    "source": "local-example",
+    "origin": "workspace://plugins/notes-sidebar",
+    "channel": "local",
+    "trust": "local",
+    "signature": {
+      "status": "none"
+    }
+  },
+  "author": "Local Example",
+  "homepage": "https://example.invalid/plugins/notes-sidebar",
+  "license": "MIT",
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "notes.sidebar",
+        "label": "Notes Sidebar"
+      }
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/notes",
+        "handler": "page.notesSidebar"
+      }
+    ],
+    "surfaces": [
+      {
+        "id": "surface:notes-sidebar",
+        "title": "Open Notes Sidebar",
+        "href": "/notes"
+      }
+    ],
+    "providers": [
+      {
+        "id": "provider.notes-sidebar",
+        "kind": "widget-runtime"
+      }
+    ]
+  }
+}

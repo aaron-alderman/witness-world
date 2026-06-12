@@ -5,11 +5,13 @@
   "scripts": {
     "test": "node scripts/run-tests.mjs",
     "bootstrap": "node src/cli.js bootstrap",
-    "demo": "node src/cli.js serve examples/demo-todo-server.wtoml --server demo_server",
+    "desktop": "node src/cli.js desktop",
+    "demo": "node src/cli.js serve examples/demo-todo-server.wtoml --server demo_server --runtime-profile minimal",
     "test:ui": "node scripts/run-tests.mjs ui",
     "test:all": "node scripts/run-tests.mjs all"
   },
   "devDependencies": {
+    "electron": "^33.2.0",
     "playwright": "^1.54.0"
   }
 }

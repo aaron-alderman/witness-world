@@ -1,5 +1,5 @@
 import { composeRuntimeBundleHandlers } from "./runtime-bundle-handlers.js";
-import { genericHandlerFactoriesForProfile } from "./runtime-bundles.js";
+import { genericHandlerFactoriesForBundleIds } from "./runtime-bundles.js";
 
 export function createRuntimeBundleHandlers({
   runtimeProfile,
@@ -7,7 +7,7 @@ export function createRuntimeBundleHandlers({
   sessionStore,
   factoryDeps,
   reservedHandlerIds = ["__sessionStore"],
-  handlerFactories = genericHandlerFactoriesForProfile(runtimeProfile),
+  handlerFactories = genericHandlerFactoriesForBundleIds(activeBundleIds),
   composeHandlers = composeRuntimeBundleHandlers
 }) {
   let diagnostics = null;

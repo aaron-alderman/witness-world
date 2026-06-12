@@ -113,6 +113,28 @@ test("world browser search and command surface can reach capabilities, hidden su
       const status = document.querySelector('[data-widget="world_session_status"]');
       return Boolean(status && status.textContent && status.textContent.includes("Signed in as Aaron"));
     });
+    assert.deepEqual(
+      await page.evaluate(() => ({
+        bodyContext: document.body.dataset.surfaceContext || null,
+        bodyRoute: document.body.dataset.surfaceRoute || null,
+        bodyRootWidget: document.body.dataset.surfaceRootWidget || null,
+        bodyProgram: document.body.dataset.surfaceProgram || null,
+        tutorialContext: window.__witnessTutorial?.surfaceContext || null,
+        tutorialRoute: window.__witnessTutorial?.surfaceRouteId || null,
+        tutorialRootWidget: window.__witnessTutorial?.surfaceRootWidgetId || null,
+        tutorialProgram: window.__witnessTutorial?.surfaceProgramId || null
+      })),
+      {
+        bodyContext: "frontend",
+        bodyRoute: "world_page_route",
+        bodyRootWidget: "world_graph_page",
+        bodyProgram: "world_graph_program",
+        tutorialContext: "frontend",
+        tutorialRoute: "world_page_route",
+        tutorialRootWidget: "world_graph_page",
+        tutorialProgram: "world_graph_program"
+      }
+    );
 
     await page.locator('[data-world-command-toggle]').click();
     await page.locator('[data-world-command-input]').fill("dom.render");
@@ -197,8 +219,8 @@ test("world browser command surface can expose disabled tutorial guidance surfac
           draftInputs: {},
           completedAt: null,
           hidden: false,
-          disabledPages: ['app'],
-          replayStepId: null
+          disabledScopeKeys: ['widget:todo_title'],
+          replayScopeKey: null
         })
       });
       return { ok: response.ok, body: await response.json().catch(() => ({})) };
@@ -212,13 +234,18 @@ test("world browser command surface can expose disabled tutorial guidance surfac
       const status = document.querySelector('[data-widget="world_session_status"]');
       return Boolean(status && status.textContent && status.textContent.includes("Signed in as Aaron"));
     });
+    await page.waitForFunction(() => document.querySelector('[data-world-tutorial-panel]')?.textContent.includes("Sourcery is disabled there until you re-enable that scope"));
+    await page.waitForFunction(() => document.querySelector('[data-world-tutorial-panel]')?.textContent.includes("Show Disabled Sourcery Scopes"));
+    await page.waitForFunction(() => document.querySelector('[data-world-tutorial-disabled-list]')?.textContent.includes("App title"));
+    await page.locator('[data-world-tutorial-show-disabled]').click();
+    await page.waitForFunction(() => document.querySelector('[data-world-tutorial-disabled-list]')?.getAttribute('data-tutorial-focus-scope') === 'true');
 
     await page.locator('[data-world-command-toggle]').click();
     await page.locator('[data-world-command-input]').fill("guidance recovery");
-    await page.locator('.world-command-item', { hasText: "Open App Guidance Recovery" }).waitFor();
+    await page.locator('.world-command-item', { hasText: "Open App Sourcery Recovery" }).waitFor();
 
     await page.locator('[data-world-command-input]').fill("enable tutorial on app");
-    await page.locator('.world-command-item', { hasText: "Enable Tutorial On App" }).click();
+    await page.locator('.world-command-item', { hasText: "Enable Sourcery For App title" }).click();
 
     await page.waitForFunction(async () => {
       const response = await fetch('/api/tutorial-progress/todo-from-scratch', { credentials: 'same-origin' });
@@ -283,13 +310,139 @@ test("world browser surfaces a real tutorial panel for world-scope guidance", as
 
     await page.locator('[data-world-tutorial-disable]').click();
     await page.waitForFunction(() => window.__witnessTutorial?.surfaceStatus === "disabled");
-    await page.waitForFunction(() => document.querySelector('[data-world-tutorial-panel]')?.textContent.includes("Enable On This Page"));
+    await page.waitForFunction(() => document.querySelector('[data-world-tutorial-panel]')?.textContent.includes("Enable Sourcery Here"));
+    await page.locator('[data-world-tutorial-show-disabled]').click();
+    await page.waitForFunction(() => document.querySelector('[data-world-tutorial-disabled-list]')?.textContent.includes("World command entry"));
+    await page.locator('[data-world-tutorial-focus-scope-target="world-command-toggle"]').click();
+    await page.waitForFunction(() => document.querySelector('[data-world-command-toggle]')?.closest('.world-main-pane, .world-graph-inspector, .world-command-palette, nav, form, section')?.getAttribute('data-tutorial-focus-scope') === 'true');
+    await page.waitForFunction(() => document.querySelector('[data-world-command-toggle]')?.getAttribute('data-tutorial-current') !== 'true');
 
     await page.locator('[data-world-tutorial-resume]').click();
     await page.waitForFunction(() => window.__witnessTutorial?.surfaceStatus === "active");
 
     await page.locator('[data-world-tutorial-next]').click();
     await page.waitForFunction(() => Boolean(window.__witnessTutorial?.completedAt));
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("world browser can recover authored non-step scope anchors on the shipped world surface", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/world`);
+    await page.waitForLoadState("domcontentloaded");
+    await page.locator('[data-widget="world_graph_page"]').waitFor();
+
+    await page.fill('[data-widget="world_username_input"]', "aaron");
+    await page.fill('[data-widget="world_password_input"]', "aaron");
+    await page.locator('[data-widget="world_open_button"]').click();
+    await page.waitForFunction(() => {
+      const status = document.querySelector('[data-widget="world_session_status"]');
+      return Boolean(status && status.textContent && status.textContent.includes("Signed in as Aaron"));
+    });
+
+    const seeded = await page.evaluate(async () => {
+      const response = await fetch('/api/tutorial-progress/todo-from-scratch', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          tutorialId: 'todo-from-scratch',
+          chapterId: 'inspect-world',
+          stepId: 'world:inspect',
+          chapterStatus: 'in_progress',
+          draftInputs: {},
+          completedAt: null,
+          hidden: false,
+          disabledScopeKeys: ['widget:world_graph_process_link'],
+          replayScopeKey: null
+        })
+      });
+      return { ok: response.ok, body: await response.json().catch(() => ({})) };
+    });
+    assert.equal(seeded.ok, true, seeded.body?.error || 'expected tutorial progress seed to succeed');
+
+    await page.reload();
+    await page.waitForLoadState("domcontentloaded");
+    await page.locator('[data-widget="world_graph_page"]').waitFor();
+    await page.waitForFunction(() => document.querySelector('[data-world-tutorial-disabled-list]')?.textContent.includes("Open Process View"));
+    await page.locator('[data-world-tutorial-show-disabled]').click();
+    await page.locator('[data-world-tutorial-focus-scope-target="world-process-link"]').click();
+    await page.waitForFunction(() => document.querySelector('[data-tutorial-target="world-process-link"]')?.closest('.world-main-pane, .world-graph-inspector, .world-command-palette, nav, form, section, a')?.getAttribute('data-tutorial-focus-scope') === 'true');
+    await page.waitForFunction(() => document.querySelector('[data-tutorial-target="world-process-link"]')?.getAttribute('data-tutorial-current') !== 'true');
+
+    await page.locator('[data-world-tutorial-enable-scope="widget:world_graph_process_link"]').click();
+    await page.waitForFunction(() => (window.__witnessTutorial?.disabledScopeKeys || []).length === 0);
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("world browser can recover a disabled frontend tutorial context truthfully", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/world`);
+    await page.waitForLoadState("domcontentloaded");
+    await page.locator('[data-widget="world_graph_page"]').waitFor();
+
+    await page.fill('[data-widget="world_username_input"]', "aaron");
+    await page.fill('[data-widget="world_password_input"]', "aaron");
+    await page.locator('[data-widget="world_open_button"]').click();
+    await page.waitForFunction(() => {
+      const status = document.querySelector('[data-widget="world_session_status"]');
+      return Boolean(status && status.textContent && status.textContent.includes("Signed in as Aaron"));
+    });
+
+    const seeded = await page.evaluate(async () => {
+      const response = await fetch('/api/tutorial-progress/todo-from-scratch', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          tutorialId: 'todo-from-scratch',
+          chapterId: 'inspect-world',
+          stepId: 'world:inspect',
+          chapterStatus: 'in_progress',
+          draftInputs: {},
+          completedAt: null,
+          hidden: false,
+          disabledContextIds: ['frontend'],
+          replayScopeKey: null
+        })
+      });
+      return { ok: response.ok, body: await response.json().catch(() => ({})) };
+    });
+    assert.equal(seeded.ok, true, seeded.body?.error || 'expected tutorial progress seed to succeed');
+
+    await page.reload();
+    await page.waitForLoadState("domcontentloaded");
+    await page.locator('[data-widget="world_graph_page"]').waitFor();
+    await page.waitForFunction(() => window.__witnessTutorial?.surfaceStatus === "disabled-context");
+    await page.waitForFunction(() => JSON.stringify(window.__witnessTutorial?.disabledContextIds || []) === JSON.stringify(["frontend"]));
+    await page.waitForFunction(() => document.querySelector('[data-world-tutorial-panel]')?.textContent.includes("Enable Sourcery In This Context"));
+    await page.locator('[data-world-tutorial-show-disabled]').click();
+    await page.waitForFunction(() => document.querySelector('[data-world-tutorial-disabled-list]')?.textContent.includes("Frontend context"));
+    await page.locator('[data-world-tutorial-enable-context="frontend"]').click();
+    await page.waitForFunction(() => window.__witnessTutorial?.surfaceStatus === "active");
 
     await expectNoRuntimeErrors(runtime);
   } finally {

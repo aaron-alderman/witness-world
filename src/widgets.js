@@ -461,6 +461,10 @@ function renderDocument(root, program, appConfig = {}, typeModel = {}, templates
   const pageTheme = resolveEdenPageTheme(appConfig.pageChrome || {});
   const bodyAttrs = [
     appConfig.page ? `data-page="${escapeAttr(appConfig.page)}"` : "",
+    appConfig.surfaceContext ? `data-surface-context="${escapeAttr(appConfig.surfaceContext)}"` : "",
+    appConfig.surfaceRouteId ? `data-surface-route="${escapeAttr(appConfig.surfaceRouteId)}"` : "",
+    appConfig.surfaceRootWidgetId ? `data-surface-root-widget="${escapeAttr(appConfig.surfaceRootWidgetId)}"` : "",
+    appConfig.surfaceProgramId ? `data-surface-program="${escapeAttr(appConfig.surfaceProgramId)}"` : "",
     pageTheme.themeId ? `data-page-theme="${escapeAttr(pageTheme.themeId)}"` : "",
     pageTheme.material ? `data-page-material="${escapeAttr(pageTheme.material)}"` : "",
     pageTheme.typography ? `data-page-typography="${escapeAttr(pageTheme.typography)}"` : ""
@@ -810,6 +814,9 @@ function renderAttrs(widget) {
     parts.push(`data-${escapeAttr(widget.props.role)}`);
   }
   if (widget.props.action) parts.push(`data-action="${escapeAttr(widget.props.action)}"`);
+  if (typeof widget.props.tutorialTarget === "string" && widget.props.tutorialTarget !== "") {
+    parts.push(`data-tutorial-target="${escapeAttr(widget.props.tutorialTarget)}"`);
+  }
   if (widget.props.type && widget.kind !== "Button") parts.push(`type="${escapeAttr(widget.props.type)}"`);
   if (widget.versionIndex != null) parts.push(`style="--version-color: ${escapeAttr(versionColor(widget.versionIndex))}"`);
   for (const [key, value] of Object.entries(widget.props || {})) {
@@ -822,7 +829,7 @@ function renderAttrs(widget) {
 }
 
 function renderExtraAttrs(widget, consumed = []) {
-  const consumedSet = new Set(["class", "role", "action", "hidden", "template", ...consumed]);
+  const consumedSet = new Set(["class", "role", "action", "hidden", "template", "tutorialTarget", ...consumed]);
   const entries = Object.entries(widget.props || {})
     .filter(([key, value]) => !consumedSet.has(key) && !key.startsWith("event") && !key.startsWith("data-") && !key.startsWith("aria-") && value != null && typeof value !== "object");
   if (entries.length === 0) return "";
@@ -852,6 +859,7 @@ function renderClientEngine(program) {
   let program = JSON.parse(document.getElementById('witness-frontend-program').textContent);
   let config = program.config || {};
   let typeModel = config.typeModel || {};
+  const currentSurfaceContext = typeof config.surfaceContext === 'string' && config.surfaceContext.trim() ? config.surfaceContext.trim() : null;
   const runtimeSurfaces = Array.isArray(config.runtimeSurfaces) ? config.runtimeSurfaces : [];
   const runtimeSurfacesFor = context => runtimeSurfaces.filter(surface => {
     if (!Array.isArray(surface?.contexts) || !surface.contexts.length) return true;
@@ -2304,19 +2312,131 @@ function renderClientEngine(program) {
   };
   const commandTutorialStepById = new Map((commandTutorial?.steps || []).map(step => [step.id, step]));
   const commandTutorialConceptMap = new Map((commandTutorial?.concepts || []).map(concept => [concept.id, concept]));
-  const commandTutorialKnownPages = [...new Set((commandTutorial?.steps || []).map(step => typeof step.page === 'string' ? step.page : '').filter(Boolean))];
   const commandTutorialPageLabel = page => page === 'app' ? 'App' : (page === 'bootstrap' ? 'Bootstrap' : (page === 'world' ? 'World' : String(page || '')));
   const commandTutorialPageHref = page => page === 'app' ? '/' : (page === 'bootstrap' ? '/_bootstrap' : (page === 'world' ? '/world' : null));
+  const commandTutorialPageScopeKey = page => typeof page === 'string' && page.trim() ? ('page:' + page.trim()) : null;
+  const commandTutorialChapterScopeKey = chapterId => typeof chapterId === 'string' && chapterId.trim() ? ('chapter:' + chapterId.trim()) : null;
+  const commandTutorialStepScope = step => {
+    if (!step) return null;
+    const key = typeof step.scopeKey === 'string' && step.scopeKey.trim()
+      ? step.scopeKey.trim()
+      : (step.page === 'world' ? 'world' : commandTutorialPageScopeKey(step.page));
+    if (!key) return null;
+    const kind = typeof step.scopeKind === 'string' && step.scopeKind.trim()
+      ? step.scopeKind.trim()
+      : (key === 'world'
+          ? 'world'
+          : (key.startsWith('section:')
+              ? 'section'
+              : (key.startsWith('widget:')
+                  ? 'widget'
+                  : (key.startsWith('chapter:')
+                      ? 'chapter'
+                      : 'page'))));
+    return {
+      key,
+      kind,
+      page: typeof step.scopePage === 'string' && step.scopePage.trim() ? step.scopePage.trim() : (kind === 'world' ? 'world' : (step.page || null)),
+      label: typeof step.scopeLabel === 'string' && step.scopeLabel.trim() ? step.scopeLabel.trim() : (step.title || ''),
+      chapterId: step.chapterId || null,
+      target: typeof step.target === 'string' && step.target.trim() ? step.target.trim() : null
+    };
+  };
+  const commandTutorialScopeCatalog = new Map();
+  const commandTutorialContextCatalog = new Map();
+  const addCommandTutorialScope = info => {
+    if (!info?.key) return;
+    if (!commandTutorialScopeCatalog.has(info.key)) {
+      commandTutorialScopeCatalog.set(info.key, { ...info });
+      return;
+    }
+    commandTutorialScopeCatalog.set(info.key, {
+      ...commandTutorialScopeCatalog.get(info.key),
+      ...Object.fromEntries(Object.entries(info).filter(([, value]) => value != null && value !== ''))
+    });
+  };
+  const addCommandTutorialContext = info => {
+    if (!info?.id || commandTutorialContextCatalog.has(info.id)) return;
+    commandTutorialContextCatalog.set(info.id, { ...info });
+  };
+  const commandTutorialContextLabel = contextId => typeof contextId === 'string' && contextId.trim()
+    ? (contextId.trim().charAt(0).toUpperCase() + contextId.trim().slice(1) + ' context')
+    : null;
+  const commandTutorialStepSurfaceContext = step => {
+    if (!step) return null;
+    const contextId = typeof step.surfaceContextId === 'string' && step.surfaceContextId.trim() ? step.surfaceContextId.trim() : '';
+    if (!contextId) return null;
+    return {
+      id: contextId,
+      label: typeof step.surfaceContextLabel === 'string' && step.surfaceContextLabel.trim() ? step.surfaceContextLabel.trim() : commandTutorialContextLabel(contextId)
+    };
+  };
+  for (const scope of commandTutorial?.scopes || []) addCommandTutorialScope(commandTutorialStepScope(scope));
+  for (const step of commandTutorial?.steps || []) {
+    addCommandTutorialScope(commandTutorialStepScope(step));
+    addCommandTutorialContext(commandTutorialStepSurfaceContext(step));
+    if (step.page) addCommandTutorialScope({ key: commandTutorialPageScopeKey(step.page), kind: 'page', page: step.page, label: commandTutorialPageLabel(step.page) });
+    if (step.page === 'world') addCommandTutorialScope({ key: 'world', kind: 'world', page: 'world', label: 'World surface' });
+    if (step.chapterId) addCommandTutorialScope({ key: commandTutorialChapterScopeKey(step.chapterId), kind: 'chapter', chapterId: step.chapterId, label: step.chapterId });
+  }
+  const commandTutorialScopeInfo = scopeKey => commandTutorialScopeCatalog.get(typeof scopeKey === 'string' ? scopeKey.trim() : '') || null;
+  const commandTutorialContextInfo = contextId => commandTutorialContextCatalog.get(typeof contextId === 'string' ? contextId.trim() : '') || null;
+  const commandTutorialScopeTargetName = scopeKey => {
+    const key = typeof scopeKey === 'string' ? scopeKey.trim() : '';
+    if (!key) return null;
+    const authored = commandTutorialScopeInfo(key);
+    if (authored?.target && (!authored.page || authored.page === 'world')) return authored.target;
+    const preferred = (commandTutorial?.steps || []).find(step => commandTutorialStepScope(step)?.key === key && step.page === 'world' && typeof step.target === 'string' && step.target.trim());
+    if (preferred?.target) return preferred.target.trim();
+    const fallback = (commandTutorial?.steps || []).find(step => commandTutorialStepScope(step)?.key === key && typeof step.target === 'string' && step.target.trim());
+    return fallback?.target?.trim() || null;
+  };
   const normalizeWorldTutorialProgress = progress => {
     if (!progress || typeof progress !== 'object') return null;
-    const stepId = typeof progress.stepId === 'string' && commandTutorialStepById.has(progress.stepId) ? progress.stepId : null;
-    const disabledPages = [...new Set((Array.isArray(progress.disabledPages) ? progress.disabledPages : []).map(String).filter(page => commandTutorialKnownPages.includes(page)))];
-    const replayStepId = typeof progress.replayStepId === 'string' && commandTutorialStepById.has(progress.replayStepId) ? progress.replayStepId : null;
+    const step = commandTutorialStepById.get(progress.stepId || '') || commandTutorial?.steps?.[0] || null;
+    const disabledScopeKeys = [];
+    const disabledContextIds = [];
+    if (Array.isArray(progress.disabledScopeKeys)) {
+      for (const key of progress.disabledScopeKeys.map(String).map(value => value.trim()).filter(Boolean)) {
+        if (commandTutorialScopeInfo(key) && !disabledScopeKeys.includes(key)) disabledScopeKeys.push(key);
+      }
+    }
+    if (Array.isArray(progress.disabledContextIds)) {
+      for (const contextId of progress.disabledContextIds.map(String).map(value => value.trim()).filter(Boolean)) {
+        if (commandTutorialContextInfo(contextId) && !disabledContextIds.includes(contextId)) disabledContextIds.push(contextId);
+      }
+    }
+    for (const page of (Array.isArray(progress.disabledPages) ? progress.disabledPages : []).map(String).map(value => value.trim()).filter(Boolean)) {
+      const pageKey = commandTutorialPageScopeKey(page);
+      if (pageKey && commandTutorialScopeInfo(pageKey) && !disabledScopeKeys.includes(pageKey)) disabledScopeKeys.push(pageKey);
+      if (page === 'world' && commandTutorialScopeInfo('world') && !disabledScopeKeys.includes('world')) disabledScopeKeys.push('world');
+    }
+    const stepScopeKey = commandTutorialStepScope(step)?.key || null;
+    const chapterScopeKey = commandTutorialChapterScopeKey(step?.chapterId);
+    const explicitReplayScopeKey = typeof progress.replayScopeKey === 'string' ? progress.replayScopeKey.trim() : '';
+    const replayScopeKey = explicitReplayScopeKey && commandTutorialScopeInfo(explicitReplayScopeKey) && (explicitReplayScopeKey === stepScopeKey || explicitReplayScopeKey === chapterScopeKey)
+      ? explicitReplayScopeKey
+      : (typeof progress.replayStepId === 'string' && progress.replayStepId === step?.id ? stepScopeKey : null);
+    const disabledPages = [];
+    for (const key of disabledScopeKeys) {
+      const scope = commandTutorialScopeInfo(key);
+      if (!scope) continue;
+      if (scope.kind === 'page' && scope.page && !disabledPages.includes(scope.page)) disabledPages.push(scope.page);
+      if (scope.kind === 'world' && !disabledPages.includes('world')) disabledPages.push('world');
+    }
     return {
-      ...progress,
-      stepId,
+      tutorialId: commandTutorial?.id || '',
+      chapterId: step?.chapterId || null,
+      stepId: step?.id || null,
+      chapterStatus: typeof progress.chapterStatus === 'string' ? progress.chapterStatus : (step ? 'in_progress' : 'idle'),
+      draftInputs: progress.draftInputs && typeof progress.draftInputs === 'object' ? progress.draftInputs : {},
+      completedAt: typeof progress.completedAt === 'string' ? progress.completedAt : null,
+      hidden: progress.hidden === true,
+      disabledScopeKeys,
+      disabledContextIds,
+      replayScopeKey,
       disabledPages,
-      replayStepId
+      replayStepId: replayScopeKey && step?.id ? step.id : null
     };
   };
   const commandTutorialStep = current => commandTutorialStepById.get(current?.stepId || '') || null;
@@ -2324,15 +2444,11 @@ function renderClientEngine(program) {
     const index = (commandTutorial?.steps || []).findIndex(step => step.id === current?.stepId);
     return index > 0 ? commandTutorial.steps[index - 1] : null;
   };
-  const commandTutorialNextStep = current => {
-    const index = (commandTutorial?.steps || []).findIndex(step => step.id === current?.stepId);
-    return index >= 0 ? (commandTutorial.steps[index + 1] || null) : (commandTutorial.steps?.[0] || null);
-  };
-  const commandTutorialDisabledPages = current => [...new Set((Array.isArray(current?.disabledPages) ? current.disabledPages : []).map(String).filter(page => commandTutorialKnownPages.includes(page)))];
-  const commandTutorialReplayStepId = current => {
-    const replayStepId = typeof current?.replayStepId === 'string' && commandTutorialStepById.has(current.replayStepId) ? current.replayStepId : null;
-    return replayStepId;
-  };
+  const commandTutorialDisabledScopeKeysFor = current => normalizeWorldTutorialProgress(current)?.disabledScopeKeys || [];
+  const commandTutorialDisabledContextIdsFor = current => normalizeWorldTutorialProgress(current)?.disabledContextIds || [];
+  const commandTutorialDisabledPages = current => normalizeWorldTutorialProgress(current)?.disabledPages || [];
+  const commandTutorialReplayScopeKeyFor = current => normalizeWorldTutorialProgress(current)?.replayScopeKey || null;
+  const commandTutorialReplayStepId = current => normalizeWorldTutorialProgress(current)?.replayStepId || null;
   const commandTutorialStepConcepts = step => [...new Set((step?.concepts || []).map(String))].map(id => commandTutorialConceptMap.get(id)).filter(Boolean);
   const commandTutorialRevealedConcepts = current => {
     if (!commandTutorial?.steps?.length) return [];
@@ -2348,24 +2464,80 @@ function renderClientEngine(program) {
     }
     return ids.map(id => commandTutorialConceptMap.get(id)).filter(Boolean);
   };
+  const commandTutorialScopeAncestors = scopeKey => {
+    const scope = commandTutorialScopeInfo(scopeKey);
+    if (!scope?.key) return [];
+    const keys = [scope.key];
+    if (scope.kind === 'widget' || scope.kind === 'section') {
+      const pageKey = commandTutorialPageScopeKey(scope.page);
+      if (pageKey) keys.push(pageKey);
+      if (scope.page === 'world') keys.push('world');
+    } else if (scope.kind === 'page' && scope.page === 'world') {
+      keys.push('world');
+    } else if (scope.kind === 'world') {
+      const pageKey = commandTutorialPageScopeKey('world');
+      if (pageKey) keys.push(pageKey);
+    }
+    return [...new Set(keys.filter(Boolean))];
+  };
+  const isCommandTutorialScopeDisabled = (current, scopeKey) => {
+    const disabled = new Set(commandTutorialDisabledScopeKeysFor(current));
+    return commandTutorialScopeAncestors(scopeKey).some(key => disabled.has(key));
+  };
+  const isCommandTutorialContextDisabled = (current, contextId) => {
+    const normalizedContextId = typeof contextId === 'string' ? contextId.trim() : '';
+    return Boolean(normalizedContextId) && commandTutorialDisabledContextIdsFor(current).includes(normalizedContextId);
+  };
   const worldTutorialSurfaceState = current => {
     const step = commandTutorialStep(current);
     if (!current || !step) return { kind: 'idle', page: null };
     if (current.completedAt) return { kind: 'completed', page: step.page || null };
     if (current.hidden) return { kind: 'hidden', page: step.page || null };
     if ((step.page || null) !== 'world') return { kind: 'offpage', page: step.page || null };
-    if (commandTutorialDisabledPages(current).includes('world')) return { kind: 'disabled', page: step.page || null };
-    return { kind: 'active', page: step.page || null };
+    const contextId = commandTutorialStepSurfaceContext(step)?.id || null;
+    if (contextId && isCommandTutorialContextDisabled(current, contextId)) return { kind: 'disabled-context', page: step.page || null, contextId };
+    const scopeKey = commandTutorialStepScope(step)?.key || null;
+    if (scopeKey && isCommandTutorialScopeDisabled(current, scopeKey)) return { kind: 'disabled', page: step.page || null, scopeKey };
+    return { kind: 'active', page: step.page || null, scopeKey };
   };
-  const clearWorldTutorialPageDisabled = (current, page = 'world') => ({
-    ...current,
-    disabledPages: commandTutorialDisabledPages(current).filter(candidate => candidate !== page)
-  });
-  const disableWorldTutorialOnCurrentPage = current => ({
-    ...current,
-    hidden: false,
-    disabledPages: [...new Set([...commandTutorialDisabledPages(current), 'world'])]
-  });
+  const clearWorldTutorialScopeDisabled = (current, scopeKey = 'world') => {
+    if (!current) return null;
+    const keysToRemove = new Set(commandTutorialScopeAncestors(scopeKey));
+    return normalizeWorldTutorialProgress({
+      ...current,
+      disabledScopeKeys: commandTutorialDisabledScopeKeysFor(current).filter(key => !keysToRemove.has(key)),
+      disabledPages: []
+    });
+  };
+  const disableWorldTutorialOnCurrentScope = current => {
+    if (!current) return null;
+    const scopeKey = commandTutorialStepScope(commandTutorialStep(current))?.key || 'world';
+    return normalizeWorldTutorialProgress({
+      ...current,
+      hidden: false,
+      disabledScopeKeys: [...new Set([...commandTutorialDisabledScopeKeysFor(current), scopeKey])],
+      disabledPages: []
+    });
+  };
+  const clearWorldTutorialContextDisabled = (current, contextId = currentSurfaceContext) => {
+    if (!current) return null;
+    const normalizedContextId = typeof contextId === 'string' ? contextId.trim() : '';
+    if (!normalizedContextId) return normalizeWorldTutorialProgress(current);
+    return normalizeWorldTutorialProgress({
+      ...current,
+      disabledContextIds: commandTutorialDisabledContextIdsFor(current).filter(id => id !== normalizedContextId)
+    });
+  };
+  const disableWorldTutorialOnCurrentContext = current => {
+    if (!current) return null;
+    const contextId = typeof currentSurfaceContext === 'string' ? currentSurfaceContext.trim() : '';
+    if (!contextId) return normalizeWorldTutorialProgress(current);
+    return normalizeWorldTutorialProgress({
+      ...current,
+      hidden: false,
+      disabledContextIds: [...new Set([...commandTutorialDisabledContextIdsFor(current), contextId])]
+    });
+  };
   const requestWorldTutorialProgress = async () => {
     if (!commandTutorial?.id || !state.session?.authenticated) {
       state.worldTutorialProgress = null;
@@ -2664,12 +2836,46 @@ function renderClientEngine(program) {
       return url.pathname + url.search;
     };
     const currentWorldTutorialStep = commandTutorialStepById.get(state.worldTutorialProgress?.stepId || '') || null;
-    const commandTutorialDisabledPageRows = () => commandTutorialDisabledPages(state.worldTutorialProgress).map(page => ({
-      page,
-      label: commandTutorialPageLabel(page),
-      currentStepTitle: currentWorldTutorialStep?.page === page ? currentWorldTutorialStep.title : null,
-      href: commandTutorialPageHref(page)
-    }));
+    const commandTutorialDisabledScopeRows = () => {
+      const stepScopeKey = commandTutorialStepScope(currentWorldTutorialStep)?.key || null;
+      const stepScopeAncestors = commandTutorialScopeAncestors(stepScopeKey);
+      const stepContextId = commandTutorialStepSurfaceContext(currentWorldTutorialStep)?.id || null;
+      const rows = commandTutorialDisabledContextIdsFor(state.worldTutorialProgress).map(contextId => {
+        const context = commandTutorialContextInfo(contextId);
+        const matchingStep = (stepContextId && stepContextId === contextId ? currentWorldTutorialStep : null)
+          || (commandTutorial?.steps || []).find(step => commandTutorialStepSurfaceContext(step)?.id === contextId && step.page === 'world')
+          || (commandTutorial?.steps || []).find(step => commandTutorialStepSurfaceContext(step)?.id === contextId)
+          || null;
+        const focusScopeKey = commandTutorialStepScope(matchingStep)?.key || null;
+        return {
+          type: 'context',
+          contextId,
+          scopeKey: focusScopeKey,
+          page: matchingStep?.page || null,
+          label: context?.label || commandTutorialContextLabel(contextId) || contextId,
+          kind: 'context',
+          pageLabel: matchingStep?.page ? commandTutorialPageLabel(matchingStep.page) : '',
+          currentStepTitle: stepContextId === contextId ? currentWorldTutorialStep?.title || null : null,
+          href: matchingStep?.page ? commandTutorialPageHref(matchingStep.page) : null,
+          target: matchingStep?.page === 'world' && focusScopeKey ? commandTutorialScopeTargetName(focusScopeKey) : null
+        };
+      });
+      for (const scopeKey of commandTutorialDisabledScopeKeysFor(state.worldTutorialProgress)) {
+        const scope = commandTutorialScopeInfo(scopeKey);
+        rows.push({
+          type: 'scope',
+          scopeKey,
+          page: scope?.page || null,
+          label: scope?.label || scopeKey,
+          kind: scope?.kind || 'scope',
+          pageLabel: scope?.page ? commandTutorialPageLabel(scope.page) : '',
+          currentStepTitle: stepScopeAncestors.includes(scopeKey) ? currentWorldTutorialStep?.title || null : null,
+          href: scope?.page ? commandTutorialPageHref(scope.page) : null,
+          target: scope?.page === 'world' ? commandTutorialScopeTargetName(scopeKey) : null
+        });
+      }
+      return rows;
+    };
     const continueWorldTutorialOnPage = page => {
       const href = commandTutorialPageHref(page);
       if (!href) return;
@@ -2839,40 +3045,42 @@ function renderClientEngine(program) {
               action: { kind: 'tutorial-resume', href: commandTutorialPageHref(currentWorldTutorialStep.page) || '/world' }
             });
           }
-          for (const row of commandTutorialDisabledPageRows()) {
+          for (const row of commandTutorialDisabledScopeRows()) {
             push({
-              id: 'tutorial:enable:' + row.page,
+              id: 'tutorial:enable:' + (row.type === 'context' ? ('context:' + row.contextId) : row.scopeKey),
               type: 'command',
               tier: 'harness',
-              title: 'Enable Tutorial On ' + row.label,
-              subtitle: row.currentStepTitle || ('Guidance disabled on ' + row.label),
-              search: 'enable tutorial sourcery guidance disabled surface ' + row.page + ' ' + row.label + ' ' + (row.currentStepTitle || ''),
+              title: 'Enable Sourcery For ' + row.label,
+              subtitle: row.currentStepTitle || ('Guidance disabled on ' + row.label + (row.pageLabel ? (' / ' + row.pageLabel) : '')),
+              search: 'enable tutorial on sourcery guidance disabled ' + row.type + ' ' + (row.scopeKey || row.contextId || '') + ' ' + row.label + ' ' + row.kind + ' ' + (row.page || '') + ' ' + (row.currentStepTitle || ''),
               priority: 222,
-              action: { kind: 'tutorial-enable-page', page: row.page }
+              action: row.type === 'context'
+                ? { kind: 'tutorial-enable-context', contextId: row.contextId }
+                : { kind: 'tutorial-enable-scope', scopeKey: row.scopeKey }
             });
             if (row.href) {
               push({
-                id: 'tutorial:open-disabled:' + row.page,
+                id: 'tutorial:open-disabled:' + row.scopeKey,
                 type: 'surface',
                 tier: 'harness',
-                title: 'Open ' + row.label + ' Guidance Recovery',
+                title: 'Open ' + row.pageLabel + ' Sourcery Recovery',
                 subtitle: row.currentStepTitle || ('Guidance disabled on ' + row.label),
-                search: 'open disabled tutorial sourcery guidance recovery ' + row.page + ' ' + row.label + ' ' + (row.currentStepTitle || ''),
+                search: 'open disabled tutorial sourcery guidance recovery ' + row.scopeKey + ' ' + row.pageLabel + ' ' + row.label + ' ' + (row.currentStepTitle || ''),
                 priority: 216,
                 action: { kind: 'navigate', href: row.href }
               });
             }
           }
-          if (commandTutorialStep?.page && commandTutorialStep.page !== 'world') {
-            const targetHref = commandTutorialPageHref(commandTutorialStep.page);
+          if (currentWorldTutorialStep?.page && currentWorldTutorialStep.page !== 'world') {
+            const targetHref = commandTutorialPageHref(currentWorldTutorialStep.page);
             if (targetHref) {
               push({
-                id: 'tutorial:continue:' + commandTutorialStep.page,
+                id: 'tutorial:continue:' + currentWorldTutorialStep.page,
                 type: 'surface',
                 tier: 'harness',
-                title: 'Continue Tutorial On ' + commandTutorialPageLabel(commandTutorialStep.page),
-                subtitle: commandTutorialStep.title || commandTutorialStep.id,
-                search: 'continue tutorial sourcery current step surface ' + commandTutorialStep.page + ' ' + (commandTutorialStep.title || ''),
+                title: 'Continue Tutorial On ' + commandTutorialPageLabel(currentWorldTutorialStep.page),
+                subtitle: currentWorldTutorialStep.title || currentWorldTutorialStep.id,
+                search: 'continue tutorial sourcery current step surface ' + currentWorldTutorialStep.page + ' ' + (currentWorldTutorialStep.title || ''),
                 priority: 218,
                 action: { kind: 'navigate', href: targetHref }
               });
@@ -2987,40 +3195,52 @@ function renderClientEngine(program) {
       if (!progress && !state.worldTutorialError) return '';
       const currentConcepts = step ? commandTutorialStepConcepts(step) : [];
       const revealedConcepts = commandTutorialRevealedConcepts(progress);
-      const disabledRows = commandTutorialDisabledPageRows();
+      const disabledRows = commandTutorialDisabledScopeRows();
       const previous = commandTutorialPreviousStep(progress);
+      const currentScopeKey = commandTutorialStepScope(step)?.key || null;
+      const currentScopeDisabled = Boolean(progress && currentScopeKey && isCommandTutorialScopeDisabled(progress, currentScopeKey));
+      const currentContextId = commandTutorialStepSurfaceContext(step)?.id || null;
+      const currentContextDisabled = Boolean(progress && currentContextId && isCommandTutorialContextDisabled(progress, currentContextId));
       const summary = !progress
         ? 'Tutorial progress is not active on this surface yet.'
         : progress.completedAt
           ? 'Tutorial complete. The world surface remains available for truthful inspection and handoff into real product pages.'
           : surface.kind === 'offpage'
-            ? (surface.page && commandTutorialDisabledPages(progress).includes(surface.page)
-                ? ('Current guidance continues on the ' + commandTutorialPageLabel(surface.page) + ' surface, but guidance is disabled there until you re-enable it.')
-                : ('Current guidance continues on the ' + commandTutorialPageLabel(surface.page) + ' surface.'))
+            ? (() => {
+                return currentContextDisabled
+                  ? ('Current guidance continues on the ' + commandTutorialPageLabel(surface.page) + ' surface, but Sourcery is disabled in that context until you re-enable it.')
+                  : (currentScopeDisabled
+                  ? ('Current guidance continues on the ' + commandTutorialPageLabel(surface.page) + ' surface, but Sourcery is disabled there until you re-enable that scope.')
+                  : ('Current guidance continues on the ' + commandTutorialPageLabel(surface.page) + ' surface.'));
+              })()
+            : surface.kind === 'disabled-context'
+              ? 'Sourcery is disabled for this context, but the current step remains recoverable without losing progress.'
             : surface.kind === 'disabled'
-              ? 'Guidance is disabled on this page, but the current step remains recoverable without losing progress.'
+              ? 'Sourcery is disabled for this scope, but the current step remains recoverable without losing progress.'
               : surface.kind === 'hidden'
                 ? 'Tutorial paused. Resume to continue with the current authored step.'
-                : (commandTutorialReplayStepId(progress) === step?.id
-                    ? ('Replaying this step from here: ' + (step?.title || '') + '. This replays guidance only and does not roll back app state.')
+                : (commandTutorialReplayScopeKeyFor(progress)
+                    ? ('Replaying this scope from here: ' + (step?.title || '') + '. This replays guidance only and does not roll back app state.')
                     : (step ? (step.title + ' (' + step.chapterId + ' / ' + step.page + ')') : 'Tutorial in progress.'));
       const disabledList = disabledRows.length
-        ? '<div class="world-tutorial-list">' + disabledRows.map(row =>
-          '<div class="world-tutorial-item"><strong>' + escapeHtml(row.label) + '</strong><p>' + escapeHtml(row.currentStepTitle ? ('Current step there: ' + row.currentStepTitle + '.') : 'Guidance is disabled on this surface, but you can re-enable it without resetting progress.') + '</p></div>'
+        ? '<div class="world-tutorial-list" data-world-tutorial-disabled-list>' + disabledRows.map(row =>
+          '<div class="world-tutorial-item"><strong>' + escapeHtml(row.label) + '</strong><p>' + escapeHtml((row.pageLabel ? (row.pageLabel + ' / ') : '') + (row.currentStepTitle ? ('Current step there: ' + row.currentStepTitle + '.') : (row.type === 'context' ? 'Sourcery is disabled for this context, but you can re-enable it without resetting progress.' : 'Sourcery is disabled for this scope, but you can re-enable it without resetting progress.'))) + '</p><div class="actions">' + (row.target ? '<button type="button" class="secondary" data-world-tutorial-focus-scope-target="' + escapeHtml(row.target) + '">Show This Control</button>' : '') + (row.type === 'context' ? '<button type="button" class="secondary" data-world-tutorial-enable-context="' + escapeHtml(row.contextId) + '">Enable This Context</button>' : '<button type="button" class="secondary" data-world-tutorial-enable-scope="' + escapeHtml(row.scopeKey) + '">Enable Sourcery Here</button>') + (row.href ? '<button type="button" class="secondary" data-world-tutorial-open-scope="' + escapeHtml(row.href) + '">Open Surface</button>' : '') + '</div></div>'
         ).join('') + '</div>'
-        : '';
+        : '<div class="world-tutorial-list" data-world-tutorial-disabled-list><div class="world-tutorial-item"><p>No disabled Sourcery scopes right now.</p></div></div>';
       return '<section class="world-tutorial-panel" data-world-tutorial-panel>' +
         '<div class="world-tutorial-meta">Sourcery / ' + escapeHtml(surface.kind) + '</div>' +
         '<h2>' + escapeHtml(step?.title || 'Tutorial status') + '</h2>' +
         '<div class="world-tutorial-summary">' + escapeHtml(summary) + '</div>' +
         '<div class="world-tutorial-actions">' +
+          (disabledRows.length ? '<button type="button" class="secondary" data-world-tutorial-show-disabled>Show Disabled Sourcery Scopes</button>' : '') +
           (step?.target && surface.kind === 'active' ? '<button type="button" class="secondary" data-world-tutorial-focus-target="' + escapeHtml(step.target) + '">Show Current Control</button>' : '') +
-          (progress && !progress.completedAt ? '<button type="button" class="secondary" data-world-tutorial-resume>' + escapeHtml(surface.kind === 'offpage' ? ('Continue On ' + commandTutorialPageLabel(surface.page)) : (surface.kind === 'disabled' ? 'Enable On This Page' : 'Resume Tutorial')) + '</button>' : '') +
+          (progress && !progress.completedAt ? '<button type="button" class="secondary" data-world-tutorial-resume>' + escapeHtml(surface.kind === 'offpage' ? ('Continue On ' + commandTutorialPageLabel(surface.page)) : (surface.kind === 'disabled-context' ? 'Enable Sourcery In This Context' : (surface.kind === 'disabled' ? 'Enable Sourcery Here' : 'Resume Tutorial'))) + '</button>' : '') +
           (surface.kind === 'active' && previous ? '<button type="button" class="secondary" data-world-tutorial-back>Back</button>' : '') +
           (surface.kind === 'active' && step ? '<button type="button" data-world-tutorial-next>' + escapeHtml(step.nextLabel || 'Next') + '</button>' : '') +
           (progress && !progress.completedAt ? '<button type="button" class="secondary" data-world-tutorial-restart-chapter>Restart Chapter</button>' : '') +
-          (progress && !progress.completedAt && step ? '<button type="button" class="secondary" data-world-tutorial-restart-step>Restart From Here</button>' : '') +
-          (surface.kind === 'active' && step?.page === 'world' ? '<button type="button" class="secondary" data-world-tutorial-disable>Disable On This Page</button>' : '') +
+          (progress && !progress.completedAt && step ? '<button type="button" class="secondary" data-world-tutorial-restart-step>Restart From This Scope</button>' : '') +
+          (surface.kind === 'active' && step?.page === 'world' ? '<button type="button" class="secondary" data-world-tutorial-disable>Disable Sourcery Here</button>' : '') +
+          (surface.kind === 'active' && currentSurfaceContext ? '<button type="button" class="secondary" data-world-tutorial-disable-context>Disable Sourcery In This Context</button>' : '') +
           (progress && !progress.completedAt && !progress.hidden ? '<button type="button" class="secondary" data-world-tutorial-exit>Exit</button>' : '') +
           (progress ? '<button type="button" class="secondary" data-world-tutorial-reset>Reset</button>' : '') +
         '</div>' +
@@ -3260,13 +3480,15 @@ function renderClientEngine(program) {
       const src = (byId[selectedId]?.sources || []).slice(-1)[0];
       if (src?.file) await openSourceFile(src.file, selectedId);
     };
+    const tutorialDomRoot = () => root.closest('[data-widget="world_graph_page"]') || root;
     const focusWorldTutorialTarget = targetName => {
       if (!targetName) return false;
-      const target = root.querySelector('[data-tutorial-target="' + CSS.escape(targetName) + '"]');
+      const domRoot = tutorialDomRoot();
+      const target = domRoot.querySelector('[data-tutorial-target="' + CSS.escape(targetName) + '"]');
       if (!target) return false;
       const scope = target.closest('.world-main-pane, .world-graph-inspector, .world-command-palette, nav, form, section') || target;
-      root.querySelectorAll('[data-tutorial-current]').forEach(node => node.removeAttribute('data-tutorial-current'));
-      root.querySelectorAll('[data-tutorial-focus-scope]').forEach(node => node.removeAttribute('data-tutorial-focus-scope'));
+      domRoot.querySelectorAll('[data-tutorial-current]').forEach(node => node.removeAttribute('data-tutorial-current'));
+      domRoot.querySelectorAll('[data-tutorial-focus-scope]').forEach(node => node.removeAttribute('data-tutorial-focus-scope'));
       scope.setAttribute('data-tutorial-focus-scope', 'true');
       target.setAttribute('data-tutorial-current', 'true');
       target.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -3276,44 +3498,66 @@ function renderClientEngine(program) {
       focusable?.focus?.({ preventScroll: true });
       return true;
     };
+    const focusWorldTutorialScopeTarget = targetName => {
+      if (!targetName) return false;
+      const domRoot = tutorialDomRoot();
+      const target = domRoot.querySelector('[data-tutorial-target="' + CSS.escape(targetName) + '"]');
+      if (!target) return false;
+      const scope = target.closest('.world-main-pane, .world-graph-inspector, .world-command-palette, nav, form, section') || target;
+      domRoot.querySelectorAll('[data-tutorial-focus-scope]').forEach(node => node.removeAttribute('data-tutorial-focus-scope'));
+      scope.setAttribute('data-tutorial-focus-scope', 'true');
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const focusable = target.matches?.('input, textarea, select, button, a')
+        ? target
+        : target.querySelector?.('input, textarea, select, button, a, [tabindex]');
+      focusable?.focus?.({ preventScroll: true });
+      return true;
+    };
+    const focusWorldTutorialDisabledList = () => {
+      const domRoot = tutorialDomRoot();
+      const target = domRoot.querySelector('[data-world-tutorial-disabled-list]');
+      if (!target) return false;
+      domRoot.querySelectorAll('[data-tutorial-current]').forEach(node => node.removeAttribute('data-tutorial-current'));
+      domRoot.querySelectorAll('[data-tutorial-focus-scope]').forEach(node => node.removeAttribute('data-tutorial-focus-scope'));
+      target.setAttribute('data-tutorial-focus-scope', 'true');
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      target.querySelector('button, [tabindex]')?.focus?.({ preventScroll: true });
+      return true;
+    };
     const updateWorldTutorialApi = () => {
       window.__witnessTutorial = {
         get currentStepId() { return state.worldTutorialProgress?.stepId || null; },
         get currentChapterId() { return state.worldTutorialProgress?.chapterId || null; },
         get currentPage() { return commandTutorialStep(state.worldTutorialProgress)?.page || null; },
+        get currentScopeKey() { return commandTutorialStepScope(commandTutorialStep(state.worldTutorialProgress))?.key || null; },
         get currentConceptIds() { return commandTutorialStepConcepts(commandTutorialStep(state.worldTutorialProgress)).map(concept => concept.id); },
         get revealedConceptIds() { return commandTutorialRevealedConcepts(state.worldTutorialProgress).map(concept => concept.id); },
+        get replayScopeKey() { return commandTutorialReplayScopeKeyFor(state.worldTutorialProgress); },
         get replayStepId() { return commandTutorialReplayStepId(state.worldTutorialProgress); },
         get completedAt() { return state.worldTutorialProgress?.completedAt || null; },
         get hidden() { return state.worldTutorialProgress?.hidden === true; },
+        get disabledScopeKeys() { return commandTutorialDisabledScopeKeysFor(state.worldTutorialProgress); },
+        get disabledContextIds() { return commandTutorialDisabledContextIdsFor(state.worldTutorialProgress); },
         get disabledPages() { return commandTutorialDisabledPages(state.worldTutorialProgress); },
         get surfacePage() { return 'world'; },
+        get surfaceContext() { return typeof config.surfaceContext === 'string' && config.surfaceContext.trim() ? config.surfaceContext.trim() : null; },
+        get surfaceRouteId() { return typeof config.surfaceRouteId === 'string' && config.surfaceRouteId.trim() ? config.surfaceRouteId.trim() : null; },
+        get surfaceRootWidgetId() { return typeof config.surfaceRootWidgetId === 'string' && config.surfaceRootWidgetId.trim() ? config.surfaceRootWidgetId.trim() : null; },
+        get surfaceProgramId() { return typeof config.surfaceProgramId === 'string' && config.surfaceProgramId.trim() ? config.surfaceProgramId.trim() : null; },
         get surfaceStatus() { return worldTutorialSurfaceState(state.worldTutorialProgress).kind; }
       };
     };
     const advanceWorldTutorial = async () => {
       const current = state.worldTutorialProgress;
-      const next = commandTutorialNextStep(current);
       if (!current) return;
+      const step = commandTutorialStep(current);
+      const nextIndex = (commandTutorial?.steps || []).findIndex(candidate => candidate.id === step?.id);
+      const next = nextIndex >= 0 ? (commandTutorial.steps[nextIndex + 1] || null) : null;
       if (!next) {
-        await persistWorldTutorialProgress({
-          ...current,
-          chapterStatus: 'completed',
-          completedAt: new Date().toISOString(),
-          hidden: false,
-          replayStepId: null
-        });
+        await persistWorldTutorialProgress({ ...current, chapterStatus: 'completed', completedAt: new Date().toISOString(), hidden: false, replayScopeKey: null });
         return;
       }
-      await persistWorldTutorialProgress({
-        ...current,
-        chapterId: next.chapterId,
-        stepId: next.id,
-        chapterStatus: 'in_progress',
-        completedAt: null,
-        hidden: false,
-        replayStepId: null
-      });
+      await persistWorldTutorialProgress({ ...current, chapterId: next.chapterId, stepId: next.id, chapterStatus: 'in_progress', completedAt: null, hidden: false, replayScopeKey: null });
     };
     const backWorldTutorial = async () => {
       const current = state.worldTutorialProgress;
@@ -3325,7 +3569,7 @@ function renderClientEngine(program) {
         stepId: previous.id,
         completedAt: null,
         hidden: false,
-        replayStepId: previous.id
+        replayScopeKey: commandTutorialStepScope(previous)?.key || null
       });
     };
     const restartWorldTutorialChapter = async () => {
@@ -3340,7 +3584,7 @@ function renderClientEngine(program) {
         chapterStatus: 'in_progress',
         completedAt: null,
         hidden: false,
-        replayStepId: null
+        replayScopeKey: null
       });
     };
     const restartWorldTutorialFromHere = async () => {
@@ -3354,7 +3598,7 @@ function renderClientEngine(program) {
         chapterStatus: 'in_progress',
         completedAt: null,
         hidden: false,
-        replayStepId: step.id
+        replayScopeKey: commandTutorialStepScope(step)?.key || null
       });
     };
     const resumeWorldTutorial = async () => {
@@ -3365,11 +3609,15 @@ function renderClientEngine(program) {
         continueWorldTutorialOnPage(surface.page);
         return;
       }
-      if (surface.kind === 'disabled') {
-        await persistWorldTutorialProgress(clearWorldTutorialPageDisabled(current));
+      if (surface.kind === 'disabled-context') {
+        await persistWorldTutorialProgress(clearWorldTutorialContextDisabled(current, surface.contextId || commandTutorialStepSurfaceContext(commandTutorialStep(current))?.id || currentSurfaceContext));
         return;
       }
-      await persistWorldTutorialProgress({ ...current, hidden: false, replayStepId: null });
+      if (surface.kind === 'disabled') {
+        await persistWorldTutorialProgress(clearWorldTutorialScopeDisabled(current, surface.scopeKey || commandTutorialStepScope(commandTutorialStep(current))?.key || 'world'));
+        return;
+      }
+      await persistWorldTutorialProgress({ ...current, hidden: false, replayScopeKey: null });
     };
     const executeWorldCommand = async item => {
       if (!item?.action) return;
@@ -3393,12 +3641,28 @@ function renderClientEngine(program) {
         draw();
         return;
       }
-      if (action.kind === 'tutorial-enable-page') {
+      if (action.kind === 'tutorial-enable-scope') {
         if (!state.session?.authenticated || !state.worldTutorialProgress) return;
-        const nextProgress = {
-          ...state.worldTutorialProgress,
-          disabledPages: commandTutorialDisabledPages(state.worldTutorialProgress).filter(page => page !== action.page)
-        };
+        const nextProgress = clearWorldTutorialScopeDisabled(state.worldTutorialProgress, action.scopeKey);
+        const response = await fetch('/api/tutorial-progress/' + encodeURIComponent(commandTutorial.id), requestOptions({
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(nextProgress)
+        }, { url: '/api/tutorial-progress/' + encodeURIComponent(commandTutorial.id) }));
+        const body = await response.json().catch(() => ({}));
+        state.worldTutorialProgress = response.ok
+          ? normalizeWorldTutorialProgress(body.progress || nextProgress)
+          : state.worldTutorialProgress;
+        state.worldTutorialError = response.ok ? null : (body.error || 'tutorial guidance update failed');
+        state.worldTutorialLoaded = true;
+        state.worldCommandOpen = false;
+        state.worldCommandQuery = '';
+        draw();
+        return;
+      }
+      if (action.kind === 'tutorial-enable-context') {
+        if (!state.session?.authenticated || !state.worldTutorialProgress) return;
+        const nextProgress = clearWorldTutorialContextDisabled(state.worldTutorialProgress, action.contextId || currentSurfaceContext);
         const response = await fetch('/api/tutorial-progress/' + encodeURIComponent(commandTutorial.id), requestOptions({
           method: 'PUT',
           headers: { 'content-type': 'application/json' },
@@ -3419,7 +3683,8 @@ function renderClientEngine(program) {
         if (state.session?.authenticated && state.worldTutorialProgress) {
           const nextProgress = {
             ...state.worldTutorialProgress,
-            hidden: false
+            hidden: false,
+            replayScopeKey: null
           };
           await fetch('/api/tutorial-progress/' + encodeURIComponent(commandTutorial.id), requestOptions({
             method: 'PUT',
@@ -3657,6 +3922,18 @@ function renderClientEngine(program) {
           focusWorldTutorialTarget(el.getAttribute('data-world-tutorial-focus-target') || '');
         });
       });
+      root.querySelectorAll('[data-world-tutorial-focus-scope-target]').forEach(el => {
+        el.addEventListener('click', event => {
+          event.preventDefault();
+          focusWorldTutorialScopeTarget(el.getAttribute('data-world-tutorial-focus-scope-target') || '');
+        });
+      });
+      root.querySelectorAll('[data-world-tutorial-show-disabled]').forEach(el => {
+        el.addEventListener('click', event => {
+          event.preventDefault();
+          focusWorldTutorialDisabledList();
+        });
+      });
       root.querySelectorAll('[data-world-tutorial-resume]').forEach(el => {
         el.addEventListener('click', async event => {
           event.preventDefault();
@@ -3692,11 +3969,42 @@ function renderClientEngine(program) {
           draw();
         });
       });
+      root.querySelectorAll('[data-world-tutorial-enable-scope]').forEach(el => {
+        el.addEventListener('click', async event => {
+          event.preventDefault();
+          if (!state.worldTutorialProgress) return;
+          await persistWorldTutorialProgress(clearWorldTutorialScopeDisabled(state.worldTutorialProgress, el.getAttribute('data-world-tutorial-enable-scope') || ''));
+          draw();
+        });
+      });
+      root.querySelectorAll('[data-world-tutorial-enable-context]').forEach(el => {
+        el.addEventListener('click', async event => {
+          event.preventDefault();
+          if (!state.worldTutorialProgress) return;
+          await persistWorldTutorialProgress(clearWorldTutorialContextDisabled(state.worldTutorialProgress, el.getAttribute('data-world-tutorial-enable-context') || currentSurfaceContext));
+          draw();
+        });
+      });
+      root.querySelectorAll('[data-world-tutorial-open-scope]').forEach(el => {
+        el.addEventListener('click', event => {
+          event.preventDefault();
+          const href = el.getAttribute('data-world-tutorial-open-scope') || '';
+          if (href) window.location.assign(href);
+        });
+      });
       root.querySelectorAll('[data-world-tutorial-disable]').forEach(el => {
         el.addEventListener('click', async event => {
           event.preventDefault();
           if (!state.worldTutorialProgress) return;
-          await persistWorldTutorialProgress(disableWorldTutorialOnCurrentPage(state.worldTutorialProgress));
+          await persistWorldTutorialProgress(disableWorldTutorialOnCurrentScope(state.worldTutorialProgress));
+          draw();
+        });
+      });
+      root.querySelectorAll('[data-world-tutorial-disable-context]').forEach(el => {
+        el.addEventListener('click', async event => {
+          event.preventDefault();
+          if (!state.worldTutorialProgress) return;
+          await persistWorldTutorialProgress(disableWorldTutorialOnCurrentContext(state.worldTutorialProgress));
           draw();
         });
       });
@@ -3704,7 +4012,7 @@ function renderClientEngine(program) {
         el.addEventListener('click', async event => {
           event.preventDefault();
           if (!state.worldTutorialProgress) return;
-          await persistWorldTutorialProgress({ ...state.worldTutorialProgress, hidden: true, replayStepId: null });
+          await persistWorldTutorialProgress({ ...state.worldTutorialProgress, hidden: true, replayScopeKey: null });
           draw();
         });
       });
@@ -3725,8 +4033,9 @@ function renderClientEngine(program) {
       if (worldTutorialSurfaceState(state.worldTutorialProgress).kind === 'active') {
         focusWorldTutorialTarget(commandTutorialStep(state.worldTutorialProgress)?.target || '');
       } else {
-        root.querySelectorAll('[data-tutorial-current]').forEach(node => node.removeAttribute('data-tutorial-current'));
-        root.querySelectorAll('[data-tutorial-focus-scope]').forEach(node => node.removeAttribute('data-tutorial-focus-scope'));
+        const domRoot = tutorialDomRoot();
+        domRoot.querySelectorAll('[data-tutorial-current]').forEach(node => node.removeAttribute('data-tutorial-current'));
+        domRoot.querySelectorAll('[data-tutorial-focus-scope]').forEach(node => node.removeAttribute('data-tutorial-focus-scope'));
       }
       if (state.worldCommandOpen && state.worldCommandFocusRequested !== false) {
         const input = root.querySelector('[data-world-command-input]');

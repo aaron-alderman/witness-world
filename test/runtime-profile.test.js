@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createWorld } from "../src/kernel.js";
-import { applyWitnessToml } from "../src/dsl.js";
+import { applyWitnessDocs, applyWitnessToml, loadWitnessTomlFile } from "../src/dsl.js";
 import { declareBackendHost, declareFrontendHost, hostCapabilities, startServer } from "../src/host.js";
 import {
   authorableHandlerIdsForProfile,
@@ -321,6 +321,90 @@ test("runtime surface contributions vary by active runtime profile", async () =>
   }
 });
 
+test("minimal runtime plus plugin.inspect exposes inspect routes and surfaces", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  applyWorldPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.inspect"]
+  });
+
+  assert.equal(server.ok, true);
+
+  try {
+    const response = await fetch(`${server.url}/world`);
+    assert.notEqual(response.status, 404);
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.inspect"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-inspect"]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.practical-backend exposes backend routes and capabilities", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.practical-backend"]
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(hostCapabilities(world, "backendHost").has("db.sql"), true);
+
+  try {
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), true);
+    assert.equal(diagnostics.providedCapabilities.includes("db.sql"), true);
+    assert.equal(diagnostics.routes.some(route => route.matcher === "/backend-seams" && route.handler === "page.backendSeams"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("authoring runtime plus plugin.inspect composes both bundle sets", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  applyWorldPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "authoring" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "authoring" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "authoring",
+    runtimePluginIds: ["plugin.inspect"]
+  });
+
+  assert.equal(server.ok, true);
+
+  try {
+    assert.equal((await fetch(`${server.url}/_bootstrap`)).status, 200);
+    assert.notEqual((await fetch(`${server.url}/world`)).status, 404);
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
+  } finally {
+    await server.close();
+  }
+});
+
 test("runtime diagnostics endpoint exposes truthful minimal composition", async () => {
   const world = createWorld();
   applyMinimalPageDsl(world);
@@ -346,9 +430,18 @@ test("runtime diagnostics endpoint exposes truthful minimal composition", async 
     assert.deepEqual(body.availableProfiles, ["minimal", "authoring", "inspect", "practical-backend", "full"]);
     assert.deepEqual(body.activeBundles.map(bundle => bundle.id), ["bundle-core-runtime"]);
     assert.equal(body.routes.some(route => route.matcher === "/api/runtime/diagnostics" && route.handler === "runtime.diagnostics.read"), true);
+    assert.equal(body.handlerMetadata["backendProgram.run"].routeKind, "backendProgram");
+    assert.deepEqual(body.handlerMetadata["page.home"].methods, ["GET"]);
     assert.deepEqual(body.installedHostCapabilities.backend, ["http.serve", "runtime.config"]);
     assert.deepEqual(body.installedHostCapabilities.frontend, ["dom.render", "http.fetch"]);
     assert.equal(body.surfaces.some(surface => surface.id === "surface:bootstrap"), false);
+    assert.equal(body.shells.shells.some(shell => shell.id === "browser" && shell.active === true), true);
+    assert.equal(body.shells.shells.some(shell => shell.id === "desktop" && shell.status === "present"), true);
+    assert.equal(typeof body.operator.directories.runtimeRoot, "string");
+    assert.equal(body.plugins.validCount >= 5, true);
+    assert.equal(body.plugins.activePluginIds.length, 0);
+    assert.equal(body.plugins.requestedCount, 0);
+    assert.equal(body.plugins.activeCount, 0);
   } finally {
     await server.close();
   }
@@ -379,6 +472,174 @@ test("runtime diagnostics endpoint exposes full-profile bundle and handler-set c
     assert.equal(body.surfaces.some(surface => surface.id === "surface:world"), true);
     assert.equal(body.providedCapabilities.includes("db.sql"), true);
     assert.equal(body.handlerSets.some(entry => entry.id === "demo"), true);
+    assert.equal(body.handlerMetadata["events.stream"].routeKind, "stream");
+    assert.deepEqual(body.handlerMetadata["events.stream"].methods, ["GET"]);
+    assert.equal(body.plugins.validCount >= 5, true);
+    assert.equal(body.plugins.compatibleCount >= 1, true);
+    assert.equal(body.plugins.trustStateCounts.local >= 1 || body.plugins.trustStateCounts.unsigned >= 1, true);
+    assert.deepEqual(body.plugins.activePluginIds, []);
+    assert.deepEqual(body.plugins.addedBundleIds, []);
+  } finally {
+    await server.close();
+  }
+});
+
+test("runtime plugins endpoint exposes local plugin package metadata and activation state", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.inspect"]
+  });
+
+  assert.equal(server.ok, true);
+
+  try {
+    const response = await fetch(`${server.url}/api/runtime/plugins`);
+    assert.equal(response.status, 200);
+    const body = await response.json();
+
+    assert.equal(body.summary.validCount >= 5, true);
+    assert.equal(body.summary.activeCount, 1);
+    assert.deepEqual(body.activePluginIds, ["plugin.inspect"]);
+    assert.deepEqual(body.addedBundleIds, ["bundle-inspect"]);
+    const inspectPlugin = body.packages.find(row => row.id === "plugin.inspect");
+    assert.equal(Boolean(inspectPlugin), true);
+    assert.equal(inspectPlugin.execution.executable, true);
+    assert.equal(inspectPlugin.execution.mode, "bundle-bridge");
+    assert.equal(inspectPlugin.activation.requested, true);
+    assert.equal(inspectPlugin.activation.active, true);
+    assert.equal(inspectPlugin.resolvedBundles.some(row => row.id === "bundle-inspect"), true);
+    assert.equal(inspectPlugin.resolvedRuntimeContributions.surfaces.some(row => row.id === "surface:world"), true);
+    assert.equal(inspectPlugin.resolvedRuntimeContributions.handlerMetadata["events.stream"].routeKind, "stream");
+    assert.deepEqual(inspectPlugin.resolvedRuntimeContributions.routes.find(route => route.handler === "events.stream")?.handlerMetadata?.methods, ["GET"]);
+    const pluginPackage = body.packages.find(row => row.id === "plugin.notes-sidebar");
+    assert.equal(Boolean(pluginPackage), true);
+    assert.equal(pluginPackage.compatibility.compatible, false);
+    assert.equal(pluginPackage.execution.executable, false);
+    assert.equal(pluginPackage.activation.requested, false);
+    assert.equal(pluginPackage.trust.state, "local");
+    assert.equal(pluginPackage.declaredCapabilityIds.includes("notes.sidebar"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("maintained demo runs on minimal plus authored runtime plugins", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+  applyWitnessDocs(world, await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml")));
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal"
+  });
+
+  assert.equal(server.ok, true);
+
+  try {
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+
+    assert.equal(diagnostics.activeProfile, "minimal");
+    assert.deepEqual([...diagnostics.plugins.authoredPluginIds].sort(), ["plugin.authoring", "plugin.canvas", "plugin.inspect"]);
+    assert.deepEqual(diagnostics.plugins.operatorPluginIds, []);
+    assert.deepEqual([...diagnostics.plugins.effectivePluginIds].sort(), ["plugin.authoring", "plugin.canvas", "plugin.inspect"]);
+    assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.canvas", "plugin.inspect"]);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-core-runtime"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-canvas"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-mcp"), false);
+
+    assert.equal((await fetch(`${server.url}/_bootstrap`)).status, 200);
+    assert.equal((await fetch(`${server.url}/world`)).status, 200);
+    assert.equal((await fetch(`${server.url}/process`)).status, 200);
+    assert.equal((await fetch(`${server.url}/canvas`)).status, 200);
+  } finally {
+    await server.close();
+  }
+});
+
+test("maintained demo without authored runtime plugins loses optional inspect, authoring, and canvas surfaces under minimal", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+  applyWitnessDocs(world, await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml")));
+  applyWitnessToml(world, `
+[[runtimePluginRemove]]
+actor = "aaron"
+serverRunner = "demo_server"
+plugin = "plugin.authoring"
+
+[[runtimePluginRemove]]
+actor = "aaron"
+serverRunner = "demo_server"
+plugin = "plugin.inspect"
+
+[[runtimePluginRemove]]
+actor = "aaron"
+serverRunner = "demo_server"
+plugin = "plugin.canvas"
+`);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal"
+  });
+
+  assert.equal(server.ok, true);
+
+  try {
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+
+    assert.deepEqual(diagnostics.plugins.authoredPluginIds, []);
+    assert.deepEqual(diagnostics.plugins.effectivePluginIds, []);
+    assert.deepEqual(diagnostics.activeBundles.map(bundle => bundle.id), ["bundle-core-runtime", "bundle-demo"]);
+
+    assert.equal((await fetch(server.url)).status, 200);
+    assert.equal((await fetch(`${server.url}/_bootstrap`)).status, 404);
+    assert.equal((await fetch(`${server.url}/world`)).status, 404);
+    assert.equal((await fetch(`${server.url}/process`)).status, 404);
+    assert.equal((await fetch(`${server.url}/canvas`)).status, 404);
+  } finally {
+    await server.close();
+  }
+});
+
+test("full runtime plus plugin.inspect is a no-op in bundle composition but still reported honestly", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "full" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "full" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "full",
+    runtimePluginIds: ["plugin.inspect"]
+  });
+
+  assert.equal(server.ok, true);
+
+  try {
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.inspect"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, []);
+    assert.equal(diagnostics.activeBundles.filter(bundle => bundle.id === "bundle-inspect").length, 1);
   } finally {
     await server.close();
   }

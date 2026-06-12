@@ -42,14 +42,23 @@ const VALUE_TYPES = [
   { id: "identity.password", label: "Identity Password", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "identity.context", label: "Identity Home Context", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "identity.perspective", label: "Identity Perspective", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "todo.id", label: "Todo Id", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "todo.title", label: "Todo Title", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "todo.done", label: "Todo Done", compatibleWith: ["boolean"], editor: { control: "checkbox" } },
   { id: "program.id", label: "Program Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "program.event", label: "Program Event", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "program.op", label: "Program Operation", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["initSession", "setSession", "logout", "setText", "setValue", "fetchJson", "renderCollection", "renderWorldGraph", "readForm", "refreshProjection", "reloadPage", "postJson", "patchJson", "deleteJson", "clearForm", "run"] } },
+  { id: "backendProgram.soul", label: "Backend Program Soul", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "backendProgram.version", label: "Backend Program Version", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "backendProgram.label", label: "Backend Program Label", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "backendProgram.transitionStrategy", label: "Backend Program Transition Strategy", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["compatible", "migrate", "block", "fork"] } },
+  { id: "backendProgram.op", label: "Backend Program Operation", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["request.readJson", "state.assign", "handler.invoke", "response.json", "response.error", "run"] } },
   { id: "route.id", label: "Route Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "route.path", label: "Route Path", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "route.serves", label: "Route Serves", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "route.method", label: "Route Method", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["GET", "POST", "PATCH", "DELETE"] } },
   { id: "route.handler", label: "Route Handler", compatibleWith: ["textual"], editor: { control: "text" } },
+  { id: "route.backendProgramSoul", label: "Route Backend Program Soul", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "serverRunner.id", label: "Server Runner Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "serverRunner.handlerSet", label: "Handler Set", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "serverRunner.host", label: "Host Id", compatibleWith: ["textual"], editor: { control: "text" } },
@@ -239,6 +248,44 @@ const PROCESS_SPECS = [
     outputs: [{ name: "id", accepts: "proposal.id", required: true }]
   },
   {
+    id: "todo_create_spec",
+    process: "todo.create",
+    inputs: [
+      { name: "id", accepts: "todo.id", required: false },
+      { name: "title", accepts: "todo.title", required: true },
+      { name: "done", accepts: "todo.done", required: false }
+    ],
+    outputs: [
+      { name: "id", accepts: "todo.id", required: true },
+      { name: "title", accepts: "todo.title", required: true },
+      { name: "done", accepts: "todo.done", required: true }
+    ]
+  },
+  {
+    id: "todo_update_spec",
+    process: "todo.update",
+    inputs: [
+      { name: "id", accepts: "todo.id", required: true },
+      { name: "title", accepts: "todo.title", required: false },
+      { name: "done", accepts: "todo.done", required: false }
+    ],
+    outputs: [
+      { name: "id", accepts: "todo.id", required: true },
+      { name: "title", accepts: "todo.title", required: true },
+      { name: "done", accepts: "todo.done", required: true }
+    ]
+  },
+  {
+    id: "todo_delete_spec",
+    process: "todo.delete",
+    inputs: [
+      { name: "id", accepts: "todo.id", required: true }
+    ],
+    outputs: [
+      { name: "id", accepts: "todo.id", required: true }
+    ]
+  },
+  {
     id: "frontend_program_define_spec",
     process: "frontendProgram.define",
     inputs: [
@@ -265,6 +312,61 @@ const PROCESS_SPECS = [
     outputs: [{ name: "program", accepts: "program.id", required: true }]
   },
   {
+    id: "backend_program_define_spec",
+    process: "backendProgram.define",
+    inputs: [
+      { name: "soul", accepts: "backendProgram.soul", required: true },
+      { name: "label", accepts: "backendProgram.label", required: false },
+      { name: "context", accepts: "context.id", required: false }
+    ],
+    outputs: [{ name: "soul", accepts: "backendProgram.soul", required: true }]
+  },
+  {
+    id: "backend_program_version_define_spec",
+    process: "backendProgramVersion.define",
+    inputs: [
+      { name: "soul", accepts: "backendProgram.soul", required: true },
+      { name: "version", accepts: "backendProgram.version", required: true },
+      { name: "index", accepts: "widget.order", required: false },
+      { name: "transitionFrom", accepts: "backendProgram.version", required: false },
+      { name: "transitionStrategy", accepts: "backendProgram.transitionStrategy", required: false },
+      { name: "context", accepts: "context.id", required: false }
+    ],
+    outputs: [{ name: "version", accepts: "backendProgram.version", required: true }]
+  },
+  {
+    id: "backend_step_define_spec",
+    process: "backendStep.define",
+    inputs: [
+      { name: "version", accepts: "backendProgram.version", required: true },
+      { name: "event", accepts: "program.event", required: true },
+      { name: "op", accepts: "backendProgram.op", required: true },
+      { name: "order", accepts: "widget.order", required: false },
+      { name: "paramsJson", accepts: "json.text", required: false },
+      { name: "whenJson", accepts: "json.text", required: false },
+      { name: "repeatJson", accepts: "json.text", required: false },
+      { name: "afterJson", accepts: "json.text", required: false }
+    ],
+    outputs: [{ name: "version", accepts: "backendProgram.version", required: true }]
+  },
+  {
+    id: "backend_program_version_activate_spec",
+    process: "backendProgramVersion.activate",
+    inputs: [
+      { name: "soul", accepts: "backendProgram.soul", required: true },
+      { name: "version", accepts: "backendProgram.version", required: true }
+    ],
+    outputs: [{ name: "soul", accepts: "backendProgram.soul", required: true }]
+  },
+  {
+    id: "backend_program_version_rollback_spec",
+    process: "backendProgramVersion.rollback",
+    inputs: [
+      { name: "soul", accepts: "backendProgram.soul", required: true }
+    ],
+    outputs: [{ name: "soul", accepts: "backendProgram.soul", required: true }]
+  },
+  {
     id: "route_define_spec",
     process: "route.define",
     inputs: [
@@ -274,6 +376,8 @@ const PROCESS_SPECS = [
       { name: "servesRef", accepts: "context.name", required: false },
       { name: "method", accepts: "route.method", required: true },
       { name: "handler", accepts: "route.handler", required: true },
+      { name: "backendProgramSoul", accepts: "route.backendProgramSoul", required: false },
+      { name: "backendProgramSoulRef", accepts: "context.name", required: false },
       { name: "rootWidgetRef", accepts: "context.name", required: false },
       { name: "context", accepts: "context.id", required: false }
     ],

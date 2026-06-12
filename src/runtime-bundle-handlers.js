@@ -2,11 +2,14 @@ function freezeStrings(values = []) {
   return Object.freeze(values.map(value => String(value)));
 }
 
-function freezeCatalog({ authorableHandlers = [], pageHandlers = [], dispatchHandlers = [] }) {
+function freezeCatalog({ authorableHandlers = [], pageHandlers = [], dispatchHandlers = [], handlerMetadata = {} }) {
   return Object.freeze({
     authorableHandlers: freezeStrings(authorableHandlers),
     pageHandlers: freezeStrings(pageHandlers),
-    dispatchHandlers: freezeStrings(dispatchHandlers)
+    dispatchHandlers: freezeStrings(dispatchHandlers),
+    handlerMetadata: Object.freeze(Object.fromEntries(
+      Object.entries(handlerMetadata || {}).map(([handlerId, metadata]) => [String(handlerId), Object.freeze({ ...(metadata || {}) })])
+    ))
   });
 }
 
@@ -18,16 +21,29 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
       "session.read",
       "session.open",
       "session.logout",
+      "backendProgram.run",
       "page.home",
-      "runtime.diagnostics.read"
+      "runtime.diagnostics.read",
+      "runtime.plugins.read",
+      "runtime.pluginReviews.read"
     ],
+    handlerMetadata: {
+      "backendProgram.run": { routeKind: "backendProgram", responseKind: "json" },
+      "page.home": { routeKind: "page", responseKind: "page", methods: ["GET"] },
+      "session.read": { routeKind: "json", responseKind: "json", methods: ["GET"] },
+      "session.open": { routeKind: "json", responseKind: "json", methods: ["POST"] },
+      "session.logout": { routeKind: "json", responseKind: "json", methods: ["DELETE"] }
+    },
     pageHandlers: ["page.home"],
     dispatchHandlers: [
       "session.read",
       "session.open",
       "session.logout",
+      "backendProgram.run",
       "page.home",
-      "runtime.diagnostics.read"
+      "runtime.diagnostics.read",
+      "runtime.plugins.read",
+      "runtime.pluginReviews.read"
     ]
   }),
   "bundle-tutorial": freezeCatalog({
@@ -41,12 +57,19 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
     authorableHandlers: [
       "mcpServer.create",
       "mcpTool.install",
-      "mcpTool.remove"
+      "mcpTool.remove",
+      "runtimePlugin.install",
+      "runtimePlugin.remove"
     ],
     dispatchHandlers: [
       "bootstrap.model.read",
       "bootstrap.state.read",
       "bootstrap.page",
+      "operator.state.read",
+      "operator.backup",
+      "operator.export",
+      "operator.restore",
+      "operator.import",
       "identity.create",
       "identity.update",
       "context.create",
@@ -67,8 +90,15 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
       "capability.create",
       "capability.install",
       "capability.remove",
+      "runtimePlugin.install",
+      "runtimePlugin.remove",
       "frontendProgram.create",
       "frontendStep.create",
+      "backendProgram.create",
+      "backendProgramVersion.create",
+      "backendStep.create",
+      "backendProgramVersions.activate",
+      "backendProgramVersions.rollback",
       "route.create",
       "serve.create",
       "serverRunner.create",
@@ -79,6 +109,7 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
   }),
   "bundle-inspect": freezeCatalog({
     authorableHandlers: [
+      "events.stream",
       "widgetVersions.activate",
       "widgetVersions.rollback",
       "witnesses.list",
@@ -90,11 +121,23 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
       "page.world",
       "page.process"
     ],
+    handlerMetadata: {
+      "events.stream": { routeKind: "stream", responseKind: "stream", methods: ["GET"] },
+      "witnesses.list": { routeKind: "json", responseKind: "json", methods: ["GET"] },
+      "worldGraph.read": { routeKind: "json", responseKind: "json", methods: ["GET"] },
+      "processView.read": { routeKind: "json", responseKind: "json", methods: ["GET"] },
+      "processRun.read": { routeKind: "json", responseKind: "json", methods: ["GET"] },
+      "processEvents.record": { routeKind: "json", responseKind: "json", methods: ["POST"] },
+      "source.read": { routeKind: "json", responseKind: "json", methods: ["GET"] },
+      "page.world": { routeKind: "page", responseKind: "page", methods: ["GET"] },
+      "page.process": { routeKind: "page", responseKind: "page", methods: ["GET"] }
+    },
     pageHandlers: [
       "page.world",
       "page.process"
     ],
     dispatchHandlers: [
+      "events.stream",
       "widgetVersions.activate",
       "widgetVersions.rollback",
       "witnesses.list",
@@ -114,6 +157,12 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
       "canvas.process",
       "page.canvas"
     ],
+    handlerMetadata: {
+      "canvas.perspectives.list": { routeKind: "json", responseKind: "json", methods: ["GET"] },
+      "canvas.read": { routeKind: "json", responseKind: "json", methods: ["GET"] },
+      "canvas.process": { routeKind: "json", responseKind: "json", methods: ["POST"] },
+      "page.canvas": { routeKind: "page", responseKind: "page", methods: ["GET"] }
+    },
     pageHandlers: ["page.canvas"],
     dispatchHandlers: [
       "canvas.perspectives.list",
@@ -124,6 +173,9 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
   }),
   "bundle-mcp": freezeCatalog({
     authorableHandlers: ["mcp.http"],
+    handlerMetadata: {
+      "mcp.http": { routeKind: "json", responseKind: "json" }
+    },
     dispatchHandlers: ["mcp.http"]
   }),
   "bundle-practical-backend": freezeCatalog({

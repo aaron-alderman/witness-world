@@ -17,9 +17,11 @@ import {
   importContextName,
   installCapability,
   installMcpTool,
+  installRuntimePlugin,
   createMcpServer,
   removeCapability,
   removeMcpTool,
+  removeRuntimePlugin,
   validateContextBinding,
   validateContextExport,
   validateContextImport,
@@ -34,6 +36,13 @@ import {
   emitUserAction
 } from "./modules.js";
 import { defineWidget, defineWidgetVersion, defineWidgetVersionTransition, activateWidgetVersion, attachWidget, defineFrontendProgram, defineFrontendStep } from "./widgets.js";
+import {
+  defineBackendProgram,
+  defineBackendProgramVersion,
+  defineBackendProgramVersionTransition,
+  defineBackendStep,
+  activateBackendProgramVersion
+} from "./backend-programs.js";
 import { defineTrait, defineValueType, defineProcessSpec } from "./type-model.js";
 
 // Tiny TOML-ish DSL parser. Intentional subset:
@@ -176,6 +185,23 @@ function sourceTargets(kind, values) {
     if (values.to) ids.push(values.to);
   }
   if (kind === "activateWidgetVersion" && values.soul) ids.push(values.soul);
+  if (kind === "backendProgram" && values.soul) ids.push(values.soul);
+  if (kind === "backendProgramVersion") {
+    if (values.soul) ids.push(values.soul);
+    if (values.version) ids.push(values.version);
+    if (values.transitionFrom) ids.push(values.transitionFrom);
+  }
+  if (kind === "backendProgramVersionTransition") {
+    if (values.id) ids.push(values.id);
+    if (values.soul) ids.push(values.soul);
+    if (values.from) ids.push(values.from);
+    if (values.to) ids.push(values.to);
+  }
+  if (kind === "activateBackendProgramVersion") {
+    if (values.soul) ids.push(values.soul);
+    if (values.version) ids.push(values.version);
+  }
+  if (kind === "backendStep" && values.version) ids.push(values.version);
   if ((kind === "frontendStep" || kind === "step") && values.program) ids.push(values.program);
   if (kind === "capability" && values.id) ids.push(values.id);
   if (kind === "capabilityInstall") {
@@ -187,6 +213,9 @@ function sourceTargets(kind, values) {
   }
   if (kind === "mcpToolInstall") {
     if (values.server) ids.push(values.server);
+  }
+  if (kind === "runtimePluginInstall" || kind === "runtimePluginRemove") {
+    if (values.serverRunner) ids.push(values.serverRunner);
   }
   if (kind === "contextBinding") {
     if (values.context) ids.push(values.context);
@@ -415,6 +444,20 @@ function applyDoc(world, { kind, values }, context) {
         capability: req(valuesWithDefaults, "capability"),
         target: req(valuesWithDefaults, "target"),
         targetKind: valuesWithDefaults.targetKind ?? null
+      });
+
+    case "runtimePluginInstall":
+      return installRuntimePlugin(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        serverRunner: req(valuesWithDefaults, "serverRunner"),
+        plugin: req(valuesWithDefaults, "plugin")
+      });
+
+    case "runtimePluginRemove":
+      return removeRuntimePlugin(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        serverRunner: req(valuesWithDefaults, "serverRunner"),
+        plugin: req(valuesWithDefaults, "plugin")
       });
 
     case "thing":
@@ -677,6 +720,71 @@ function applyDoc(world, { kind, values }, context) {
         owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
       });
 
+    case "backendProgram":
+      return defineBackendProgram(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        soul: req(valuesWithDefaults, "soul"),
+        label: valuesWithDefaults.label ?? valuesWithDefaults.soul,
+        context: valuesWithDefaults.context ?? null,
+        owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
+      });
+
+    case "backendProgramVersion":
+      {
+        const result = [
+          defineBackendProgramVersion(world, {
+            actor: req(valuesWithDefaults, "actor"),
+            soul: req(valuesWithDefaults, "soul"),
+            version: req(valuesWithDefaults, "version"),
+            index: valuesWithDefaults.index ?? 0,
+            context: valuesWithDefaults.context ?? null,
+            owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
+          })
+        ];
+        if (typeof valuesWithDefaults.transitionFrom === "string" && valuesWithDefaults.transitionFrom.trim()) {
+          result.push(defineBackendProgramVersionTransition(world, {
+            actor: req(valuesWithDefaults, "actor"),
+            soul: req(valuesWithDefaults, "soul"),
+            from: valuesWithDefaults.transitionFrom.trim(),
+            to: req(valuesWithDefaults, "version"),
+            strategy: valuesWithDefaults.transitionStrategy ?? "block",
+            owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
+          }));
+        }
+        return result;
+      }
+
+    case "backendProgramVersionTransition":
+      return defineBackendProgramVersionTransition(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        id: valuesWithDefaults.id ?? `backendProgramVersionTransition:${req(valuesWithDefaults, "soul")}:${req(valuesWithDefaults, "from")}:${req(valuesWithDefaults, "to")}`,
+        soul: req(valuesWithDefaults, "soul"),
+        from: req(valuesWithDefaults, "from"),
+        to: req(valuesWithDefaults, "to"),
+        strategy: req(valuesWithDefaults, "strategy"),
+        owner: valuesWithDefaults.owner ?? valuesWithDefaults.actor
+      });
+
+    case "backendStep":
+      return defineBackendStep(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        version: req(valuesWithDefaults, "version"),
+        event: req(valuesWithDefaults, "event"),
+        op: req(valuesWithDefaults, "op"),
+        order: valuesWithDefaults.order ?? 0,
+        params: valuesWithDefaults.params ?? {},
+        when: valuesWithDefaults.when ?? null,
+        repeat: valuesWithDefaults.repeat ?? null,
+        after: Array.isArray(valuesWithDefaults.after) ? valuesWithDefaults.after : null
+      });
+
+    case "activateBackendProgramVersion":
+      return activateBackendProgramVersion(world, {
+        actor: req(valuesWithDefaults, "actor"),
+        soul: req(valuesWithDefaults, "soul"),
+        version: req(valuesWithDefaults, "version")
+      });
+
     case "frontendStep":
       return applyFrontendStep(world, {
         ...valuesWithDefaults,
@@ -768,6 +876,12 @@ function routeParams(world, values) {
   if (rootWidget) params.rootWidget = rootWidget;
   if (values.page != null) params.page = values.page;
   if (values.frontendProgram != null) params.frontendProgram = values.frontendProgram;
+  const backendProgramSoul = resolveDocRef(world, values, {
+    idField: "backendProgramSoul",
+    refField: "backendProgramSoulRef",
+    label: "backend program soul"
+  });
+  if (backendProgramSoul) params.backendProgramSoul = backendProgramSoul;
   if (values.liveProjection === true) params.liveProjection = true;
   return Object.keys(params).length ? params : null;
 }

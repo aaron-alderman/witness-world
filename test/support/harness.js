@@ -25,13 +25,14 @@ async function tempRuntimeRoot(prefix = "witness-world-ui-") {
 export async function startUiDemoServer({
   dslPath = path.join(process.cwd(), "examples", "demo-todo-server.wtoml"),
   extraWitnessToml = "",
-  logger = silentLogger
+  logger = silentLogger,
+  runtimeProfile = "full"
 } = {}) {
   const world = createWorld();
   const runtimeRoot = await tempRuntimeRoot();
 
-  declareBackendHost(world, { actor: "adam", id: "backendHost" });
-  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile });
 
   const docs = await loadWitnessTomlFile(dslPath);
   applyWitnessDocs(world, docs);
@@ -41,6 +42,7 @@ export async function startUiDemoServer({
     actor: "adam",
     serverRunnerId: "demo_server",
     runtimeRoot,
+    runtimeProfile,
     logger
   });
 

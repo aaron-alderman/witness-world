@@ -42,9 +42,15 @@ import {
   authorableHandlerIdsForProfile,
   DEFAULT_RUNTIME_PROFILE,
   dispatchHandlerIdsForProfile,
+  handlerMetadataForProfile,
   pageHandlerIdsForProfile,
   runtimeBundleSummaryForProfile
 } from "./runtime-bundles.js";
+import {
+  buildPluginCapabilitySourceIndex,
+  readRuntimePluginCatalog,
+  readRuntimePluginReviews
+} from "./runtime-plugin-utils.js";
 
 export function createRuntimeRouteHandlers({
   world,
@@ -65,7 +71,11 @@ export function createRuntimeRouteHandlers({
   streamReadableToFile,
   streamFileToFile,
   webhookPayloadPathFor,
+  runtimePluginRoot = null,
+  runtimePluginIds = [],
+  authoredRuntimePluginIds = [],
   supportedFrontendOps = [],
+  supportedBackendOps = [],
   frontendTraceProcesses = [],
   createRuntimeProjectionServicesImpl = createRuntimeProjectionServices,
   createMcpBundleSupportServicesImpl = createMcpBundleSupportServices,
@@ -114,8 +124,51 @@ export function createRuntimeRouteHandlers({
   const supportedHandlerSets = Object.keys(handlerSetDefinitions);
   const supportedHandlers = runtimeBundleSummary?.authorableHandlers ?? authorableHandlerIdsForProfile(runtimeProfile);
   const supportedPageHandlers = runtimeBundleSummary?.pageHandlers ?? pageHandlerIdsForProfile(runtimeProfile);
+  const supportedHandlerMetadata = runtimeBundleSummary?.handlerMetadata ?? handlerMetadataForProfile(runtimeProfile);
   const activeDispatchHandlers = new Set(runtimeBundleSummary?.dispatchHandlers ?? dispatchHandlerIdsForProfile(runtimeProfile));
-  const activeBundleIds = ((runtimeBundleSummary ?? runtimeBundleSummaryForProfile(runtimeProfile)).bundles ?? []).map(bundle => bundle.id);
+  const activeBundleIds = (runtimeBundleSummary ?? runtimeBundleSummaryForProfile(runtimeProfile)).bundleIds
+    ?? ((runtimeBundleSummary ?? runtimeBundleSummaryForProfile(runtimeProfile)).bundles ?? []).map(bundle => bundle.id);
+  const runtimePluginInstallIdsForRunner = serverRunnerId => {
+    const installIndex = world.project(moduleProjectors.runtimePluginInstallIndex);
+    return (installIndex?.byServerRunner?.[serverRunnerId] ?? []).map(row => row.plugin);
+  };
+  const getRuntimePluginCatalog = async (options = {}) => {
+    const activeProfile = typeof options === "string"
+      ? options
+      : (options?.activeProfile ?? runtimeProfile);
+    const serverRunnerId = typeof options === "object" && options
+      ? (options.serverRunnerId ?? null)
+      : null;
+    const configuredPluginIds = typeof options === "object" && options && Array.isArray(options.configuredPluginIds)
+      ? options.configuredPluginIds
+      : runtimePluginIds;
+    const authoredPluginIds = typeof options === "object" && options && Array.isArray(options.authoredPluginIds)
+      ? options.authoredPluginIds
+      : (serverRunnerId ? runtimePluginInstallIdsForRunner(serverRunnerId) : authoredRuntimePluginIds);
+    return readRuntimePluginCatalog({
+      pluginRoot: runtimePluginRoot,
+      runtimeProfile: activeProfile,
+      configuredPluginIds,
+      authoredPluginIds
+    });
+  };
+  const getRuntimePluginReviews = async (options = {}) => {
+    const activeProfile = options?.activeProfile ?? runtimeProfile;
+    const serverRunnerId = options?.serverRunnerId ?? null;
+    const authoredPluginIds = Array.isArray(options?.authoredPluginIds)
+      ? options.authoredPluginIds
+      : (serverRunnerId ? runtimePluginInstallIdsForRunner(serverRunnerId) : authoredRuntimePluginIds);
+    const pluginId = typeof options?.pluginId === "string" && options.pluginId.trim()
+      ? options.pluginId.trim()
+      : null;
+    return readRuntimePluginReviews({
+      pluginRoot: runtimePluginRoot,
+      runtimeProfile: activeProfile,
+      serverRunnerId,
+      authoredPluginIds,
+      pluginId
+    });
+  };
   const invokeRouteHandler = async ({
     handler,
     method = "GET",
@@ -143,17 +196,21 @@ export function createRuntimeRouteHandlers({
       }).map(([key, value]) => [String(key).toLowerCase(), value])
     );
     const chunks = [];
+    let responseCommitted = false;
     const res = {
       statusCode: 200,
       headers: {},
       writeHead(status, nextHeaders = {}) {
+        responseCommitted = true;
         this.statusCode = status;
         this.headers = { ...this.headers, ...nextHeaders };
       },
       write(chunk) {
+        responseCommitted = true;
         if (chunk != null) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       },
       end(chunk) {
+        responseCommitted = true;
         if (chunk != null) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
       }
     };
@@ -176,7 +233,7 @@ export function createRuntimeRouteHandlers({
         contentType: "application/json"
       };
     }
-    await handlerFn({
+    const returned = await handlerFn({
       req,
       res,
       requestId: `mcp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
@@ -188,6 +245,28 @@ export function createRuntimeRouteHandlers({
       requestSession,
       appContext
     });
+    if (!responseCommitted && chunks.length === 0 && returned !== undefined) {
+      const routeResult = returned
+        && typeof returned === "object"
+        && Number.isFinite(Number(returned.status))
+        && Object.prototype.hasOwnProperty.call(returned, "body")
+        ? {
+            status: Number(returned.status),
+            body: returned.body,
+            headers: returned.headers && typeof returned.headers === "object" ? returned.headers : {}
+          }
+        : null;
+      const syntheticBody = routeResult ? routeResult.body : returned;
+      const syntheticHeaders = routeResult?.headers ?? {};
+      const buffer = Buffer.from(JSON.stringify(syntheticBody));
+      return {
+        status: routeResult?.status ?? res.statusCode,
+        body: syntheticBody,
+        headers: { "content-type": "application/json", ...syntheticHeaders },
+        buffer,
+        contentType: "application/json"
+      };
+    }
     const buffer = Buffer.concat(chunks);
     const responseHeaders = Object.fromEntries(Object.entries(res.headers).map(([key, value]) => [String(key).toLowerCase(), value]));
     const contentType = String(responseHeaders["content-type"] || "");
@@ -210,8 +289,11 @@ export function createRuntimeRouteHandlers({
     currentIdentityIndex,
     supportedHandlerSets,
     supportedHandlers,
+    supportedHandlerMetadata,
     supportedFrontendOps,
-    mcpToolNames
+    supportedBackendOps,
+    mcpToolNames,
+    getRuntimePluginCatalog
   });
   const authorityServices = authoringServices;
   const sendGateFailure = (res, gate) => sendJson(res, gate.status || 403, { error: gate.reason || "forbidden" });
@@ -495,12 +577,18 @@ export function createRuntimeRouteHandlers({
       supportedPageHandlers,
       supportedHandlerSets,
       supportedHandlers,
+      supportedHandlerMetadata,
       supportedFrontendOps,
+      supportedBackendOps,
       requestedRuntimeProfile: runtimeProfile,
       currentBackendCapabilities,
       currentFrontendCapabilities: () => hostCapabilities(world, frontendHost),
       handlerSetDefinitions,
       buildRuntimeDiagnosticsForProfile,
+      getRuntimePluginCatalog,
+      getRuntimePluginReviews,
+      getRuntimeOperatorState: async appContext => appContext?.runtimeOperatorService?.state?.() ?? null,
+      buildPluginCapabilitySourceIndex,
       backendHosts,
       frontendHosts,
       mcpToolNames,

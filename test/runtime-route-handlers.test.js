@@ -58,6 +58,7 @@ test("runtime route handlers compose bundle factory deps and invoke extracted ha
     streamFileToFile: async () => ({ sizeBytes: 0 }),
     webhookPayloadPathFor: () => "/tmp/webhook",
     supportedFrontendOps: ["setText", "fetchJson"],
+    supportedBackendOps: ["handler.invoke", "response.json"],
     frontendTraceProcesses: ["frontend.process.start"],
     createRuntimeProjectionServicesImpl: () => ({
       requestVisibleWitnesses: () => [],
@@ -170,6 +171,7 @@ test("runtime route handlers compose bundle factory deps and invoke extracted ha
   assert.equal(typeof handlers["demo.echo"], "function");
   assert.deepEqual(captured.activeBundleIds, []);
   assert.deepEqual(captured.factoryDeps.supportedFrontendOps, ["setText", "fetchJson"]);
+  assert.deepEqual(captured.factoryDeps.supportedBackendOps, ["handler.invoke", "response.json"]);
   assert.deepEqual(captured.factoryDeps.frontendTraceProcesses, ["frontend.process.start"]);
   assert.deepEqual(captured.factoryDeps.backendHosts, ["backendHost"]);
   assert.deepEqual(captured.factoryDeps.frontendHosts, ["frontendHost"]);

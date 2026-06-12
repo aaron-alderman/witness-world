@@ -1,0 +1,11 @@
+{
+  "id": "plugin.inspect",
+  "version": "0.1.0",
+  "displayName": "Inspect Bundle Bridge",
+  "description": "Activates the internal inspect runtime bundle through the local plugin bridge.",
+  "kind": "plugin",
+  "activatesBundles": [
+    "bundle-inspect"
+  ],
+  "contributes": {}
+}

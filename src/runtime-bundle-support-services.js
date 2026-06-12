@@ -17,7 +17,16 @@ export function createRuntimeProjectionServices({ world }) {
     const witnesses = requestVisibleWitnesses(requestActor, appContext);
     const visibleIds = new Set(witnesses.map(witness => witness.id));
     const observations = world.allObservations()
-      .filter(observation => observation.process === "backend.request.finish")
+      .filter(observation =>
+        observation.process === "backend.request.finish"
+        || observation.process === "backend.process.start"
+        || observation.process === "backend.process.done"
+        || observation.process === "backend.process.failed"
+        || observation.process === "backend.step.start"
+        || observation.process === "backend.step.done"
+        || observation.process === "backend.step.skipped"
+        || observation.process === "backend.step.failed"
+      )
       .map(observation => ({
         ...observation,
         body: {

@@ -40,8 +40,11 @@ export function createAuthoringBundleServices({
   currentIdentityIndex,
   supportedHandlerSets,
   supportedHandlers,
+  supportedHandlerMetadata = {},
   supportedFrontendOps,
-  mcpToolNames
+  supportedBackendOps,
+  mcpToolNames,
+  getRuntimePluginCatalog = async () => ({ packages: [] })
 }) {
   const accessServices = createRuntimeAuthorityServices({
     world,
@@ -55,11 +58,14 @@ export function createAuthoringBundleServices({
       backendHost,
       supportedHandlerSets,
       supportedHandlers,
+      supportedHandlerMetadata,
       supportedFrontendOps,
+      supportedBackendOps,
       ensureIdentityAuthority: accessServices.ensureIdentityAuthority,
       ensureTargetAuthority: accessServices.ensureTargetAuthority,
       ensureContextAuthority: accessServices.ensureContextAuthority,
-      mcpToolNames
+      mcpToolNames,
+      getRuntimePluginCatalog
     })
   };
 }

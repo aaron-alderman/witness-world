@@ -55,7 +55,7 @@ export function shouldServeBootstrapFallback({
   return !hasReachableHomeRoute(world, routeTable);
 }
 
-export function matchGenericEndpoint(method, pathname, runtimeProfile = DEFAULT_RUNTIME_PROFILE) {
+export function matchGenericEndpoint(method, pathname, runtimeProfile = DEFAULT_RUNTIME_PROFILE, options = {}) {
   const targetMethod = String(method || "GET").toUpperCase();
-  return matchRuntimeBundleRoute(runtimeProfile, targetMethod, pathname);
+  return matchRuntimeBundleRoute(runtimeProfile, targetMethod, pathname, options);
 }

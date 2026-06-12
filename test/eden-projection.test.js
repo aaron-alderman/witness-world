@@ -535,7 +535,7 @@ targetKind = "context"
       reason: "Open the guild through witnessed governance"
     }
   });
-  requestBootstrapProposalApprove(world, {
+  await requestBootstrapProposalApprove(world, {
     actor: "aaron",
     backendHost: "backendHost",
     proposalId: "proposal.eden.organization.aaron.1",

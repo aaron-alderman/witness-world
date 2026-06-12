@@ -80,7 +80,11 @@ function makeWorldFromLog({ genesis, log, obsLog }) {
     log.replace(next);
   }
 
-  return { emit, observe, project, allWitnesses, allObservations, fork, _replaceWitnesses };
+  function _replaceObservations(next) {
+    obsLog.replace(next);
+  }
+
+  return { emit, observe, project, allWitnesses, allObservations, fork, _replaceWitnesses, _replaceObservations };
 }
 
 function makeWitness({ cause, process, actor, claims, body }) {

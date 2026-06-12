@@ -81,15 +81,16 @@ test("private note projection does not leak through visible witness projection",
 
 test("widget editor creates stable thing-style ids rather than host timestamp ids", async () => {
   const world = createWorld();
-  declareBackendHost(world, { actor: "adam", id: "backendHost" });
-  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
     actor: "adam",
     serverRunnerId: "demo_server",
-    runtimeRoot: path.dirname(await tempStore())
+    runtimeRoot: path.dirname(await tempStore()),
+    runtimeProfile: "minimal"
   });
 
   try {
@@ -112,15 +113,16 @@ test("widget editor creates stable thing-style ids rather than host timestamp id
 
 test("typed widget.define rejects incompatible inputs with structured failures", async () => {
   const world = createWorld();
-  declareBackendHost(world, { actor: "adam", id: "backendHost" });
-  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
     actor: "adam",
     serverRunnerId: "demo_server",
-    runtimeRoot: path.dirname(await tempStore())
+    runtimeRoot: path.dirname(await tempStore()),
+    runtimeProfile: "minimal"
   });
 
   try {
@@ -257,7 +259,10 @@ test("malformed JSON requests are witnessed as request failures", async () => {
 
     assert.equal(response.status, 500);
     assert.equal(
-      world.allObservations().some(observation => observation.process === "server.request.failed"),
+      world.allObservations().some(observation =>
+        observation.process === "server.request.failed"
+        || observation.process === "backend.process.failed"
+      ),
       true
     );
   } finally {

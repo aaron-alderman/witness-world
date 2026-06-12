@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
 import { createWorld, createThing, projectors } from "../src/kernel.js";
-import { parseWitnessToml, applyWitnessToml, applyWitnessDocs } from "../src/dsl.js";
+import { parseWitnessToml, applyWitnessToml, applyWitnessDocs, loadWitnessTomlFile } from "../src/dsl.js";
 import { moduleProjectors } from "../src/modules.js";
 import { frontendProgramsProjection, widgetTree } from "../src/widgets.js";
 
@@ -303,6 +304,53 @@ scopeTargets = ["page.root"]
     scopeTargets: ["page.root"],
     witness: world.project(moduleProjectors.mcpToolInstalls)[0].witness
   }]);
+});
+
+test("runtime plugin DSL sections emit serverRunner-scoped runtime plugin installs", () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "backendHost" });
+  createThing(world, { actor: "system", id: "frontendHost" });
+  const docs = parseWitnessToml(`
+[[serverRunner]]
+actor = "system"
+id = "app_runner"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[runtimePluginInstall]]
+actor = "system"
+serverRunner = "app_runner"
+plugin = "plugin.inspect"
+
+[[runtimePluginRemove]]
+actor = "system"
+serverRunner = "app_runner"
+plugin = "plugin.inspect"
+`).map(doc => ({ ...doc, file: "C:/demo/runtime-plugins.wtoml" }));
+
+  applyWitnessDocs(world, docs);
+
+  assert.deepEqual(world.project(moduleProjectors.runtimePluginInstalls), []);
+  assert.equal(world.allWitnesses().some(w => w.process === "installRuntimePlugin" && w.body.plugin === "plugin.inspect"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "removeRuntimePlugin" && w.body.plugin === "plugin.inspect"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "dsl.source.annotate" && w.body.section === "runtimePluginInstall" && w.body.target === "app_runner"), true);
+});
+
+test("maintained demo entrypoints inherit authored runtime plugin installs without duplicates", async () => {
+  const expected = ["plugin.authoring", "plugin.canvas", "plugin.inspect"];
+  const loadPlugins = async relativePath => {
+    const world = createWorld();
+    const docs = await loadWitnessTomlFile(path.join(process.cwd(), relativePath));
+    applyWitnessDocs(world, docs);
+    return world.project(moduleProjectors.runtimePluginInstalls)
+      .filter(row => row.serverRunner === "demo_server")
+      .map(row => row.plugin)
+      .sort();
+  };
+
+  assert.deepEqual(await loadPlugins("examples/demo-todo-server.wtoml"), expected);
+  assert.deepEqual(await loadPlugins("examples/demo-todo-server.explicit.wtoml"), expected);
+  assert.deepEqual(await loadPlugins("examples/demo-todo-server.monolith.wtoml"), expected);
 });
 
 test("context composition DSL sections project bindings and lower contextual refs to canonical ids across covered surfaces", () => {

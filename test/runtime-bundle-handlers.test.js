@@ -38,7 +38,15 @@ test("active bundle handler composition filters inactive implementations and rep
   });
 
   assert.deepEqual(Object.keys(minimal.handlers).sort(), ["__sessionStore", "page.home"]);
-  assert.deepEqual(minimal.diagnostics.missingHandlerIds, ["session.read", "session.open", "session.logout", "runtime.diagnostics.read"]);
+  assert.deepEqual(minimal.diagnostics.missingHandlerIds, [
+    "session.read",
+    "session.open",
+    "session.logout",
+    "backendProgram.run",
+    "runtime.diagnostics.read",
+    "runtime.plugins.read",
+    "runtime.pluginReviews.read"
+  ]);
   assert.deepEqual([...minimal.diagnostics.extraHandlerIds].sort(), [
     "bootstrap.page",
     "db.sql.query",
@@ -107,6 +115,7 @@ test("session routes stay core while tutorial routes vary with the tutorial bund
 
   assert.equal(minimalRoutes.some(route => route.method === "GET" && route.path === "/api/session" && route.handler === "session.read"), true);
   assert.equal(minimalRoutes.some(route => route.method === "GET" && route.path === "/api/runtime/diagnostics" && route.handler === "runtime.diagnostics.read"), true);
+  assert.equal(minimalRoutes.some(route => route.method === "GET" && route.path === "/api/runtime/plugins" && route.handler === "runtime.plugins.read"), true);
   assert.equal(minimalRoutes.some(route => route.method === "POST" && route.path === "/api/session" && route.handler === "session.open"), true);
   assert.equal(minimalRoutes.some(route => route.method === "DELETE" && route.path === "/api/session" && route.handler === "session.logout"), true);
   assert.equal(minimalRoutes.some(route => route.handler === "tutorial.progress.read" && route.kind === "pattern"), false);
@@ -136,6 +145,10 @@ test("internal runtime bundle manifests expose bundle contract metadata", () => 
     assert.equal(typeof manifest.description, "string");
     assert.equal(Boolean(manifest.description), true);
   }
+  const inspect = manifests.find(manifest => manifest.id === "bundle-inspect");
+  assert.ok(inspect);
+  assert.equal(inspect.handlerCatalog.handlerMetadata["events.stream"].routeKind, "stream");
+  assert.deepEqual(inspect.contributes.routes.find(route => route.handler === "events.stream")?.handlerMetadata?.methods, ["GET"]);
 });
 
 test("runtime diagnostics read model summarizes bundle composition and live installation state", () => {
@@ -164,4 +177,43 @@ test("runtime diagnostics read model summarizes bundle composition and live inst
   assert.deepEqual(diagnostics.installedHostCapabilities.backend, ["http.serve", "runtime.config"]);
   assert.equal(diagnostics.surfaces.some(surface => surface.id === "surface:process-view"), true);
   assert.equal(diagnostics.handlerSets.some(entry => entry.id === "demo"), true);
+  assert.equal(diagnostics.handlerMetadata["backendProgram.run"].routeKind, "backendProgram");
+  assert.deepEqual(diagnostics.handlerMetadata["events.stream"].methods, ["GET"]);
+  assert.equal(diagnostics.shells.shells.some(shell => shell.id === "browser" && shell.active === true), true);
+  assert.equal(diagnostics.shells.shells.some(shell => shell.id === "desktop" && shell.status === "present"), true);
+});
+
+test("runtime diagnostics include authored, operator, and effective runtime plugin request state", () => {
+  const diagnostics = buildRuntimeDiagnosticsForProfile({
+    requestedProfile: "minimal",
+    profileName: "minimal",
+    pluginCatalogSummary: {
+      pluginRoot: "/plugins",
+      activeProfile: "minimal",
+      discoveredCount: 2,
+      validCount: 2,
+      invalidCount: 0,
+      ignoredCount: 0,
+      compatibleCount: 2,
+      installableCount: 2,
+      executableCount: 2,
+      requestedCount: 2,
+      eligibleCount: 2,
+      activeCount: 2,
+      rejectedCount: 1,
+      trustStateCounts: { unsigned: 2 }
+    },
+    authoredPluginIds: ["plugin.inspect"],
+    operatorPluginIds: ["plugin.canvas"],
+    effectivePluginIds: ["plugin.inspect", "plugin.canvas"],
+    configuredPluginIds: ["plugin.canvas"],
+    activePluginIds: ["plugin.inspect", "plugin.canvas"],
+    rejectedPlugins: [{ id: "plugin.nope", reasons: ["plugin package not found"], requestedSources: ["operator"] }],
+    pluginAddedBundleIds: ["bundle-inspect", "bundle-canvas"]
+  });
+
+  assert.deepEqual(diagnostics.plugins.authoredPluginIds, ["plugin.inspect"]);
+  assert.deepEqual(diagnostics.plugins.operatorPluginIds, ["plugin.canvas"]);
+  assert.deepEqual(diagnostics.plugins.effectivePluginIds, ["plugin.inspect", "plugin.canvas"]);
+  assert.deepEqual(diagnostics.plugins.rejectedPlugins[0].requestedSources, ["operator"]);
 });

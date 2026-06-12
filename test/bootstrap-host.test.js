@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createWorld } from "../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
+import { resolveRuntimeOperatorPaths } from "../src/runtime-operator-contract.js";
 import { defineWidgetVersion, defineWidgetVersionTransition, activateWidgetVersion } from "../src/widgets.js";
 
 async function tempRuntimeRoot() {
@@ -40,6 +41,29 @@ async function startBlankServer() {
   return { world, server };
 }
 
+async function startBlankServerWithWorldHome(worldHome) {
+  const operatorContract = await resolveRuntimeOperatorPaths({
+    startupMode: "bootstrap",
+    cwd: process.cwd(),
+    env: { WORLD_HOME: worldHome }
+  });
+  const world = createWorld({
+    genesis: { system: "witness-world", mode: "bootstrap" },
+    witnessLogPath: operatorContract.canonicalTruth.witnessLogPath,
+    observationLogPath: operatorContract.canonicalTruth.observationLogPath
+  });
+  declareBackendHost(world, { actor: "system", id: "backendHost" });
+  declareFrontendHost(world, { actor: "system", id: "frontendHost" });
+  const server = await startServer(world, {
+    actor: "system",
+    runtimeRoot: operatorContract.directories.runtimeRoot,
+    runtimeStartupMode: "bootstrap",
+    runtimeOperatorContract: operatorContract
+  });
+  assert.equal(server.ok, true);
+  return { world, server, operatorContract };
+}
+
 test("blank world falls back to bootstrap instead of failing hard", async () => {
   const { server } = await startBlankServer();
   try {
@@ -50,10 +74,144 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
     assert.match(rootHtml, /Recover And Author The App Boundary/);
     assert.match(bootstrapHtml, /Semi-Internal Bootstrap Seam/);
     assert.equal(model.appReady, false);
+    assert(model.supportedHandlers.includes("backendProgram.run"));
+    assert(model.supportedHandlers.includes("events.stream"));
     assert(model.supportedHandlers.includes("page.home"));
+    assert.equal(model.supportedHandlerMetadata["backendProgram.run"].routeKind, "backendProgram");
+    assert.equal(model.supportedHandlerMetadata["events.stream"].routeKind, "stream");
+    assert.deepEqual(model.supportedHandlerMetadata["events.stream"].methods, ["GET"]);
+    assert(model.supportedBackendOps.includes("handler.invoke"));
     assert(model.supportedFrontendOps.includes("renderCollection"));
   } finally {
     await server.close();
+  }
+});
+
+test("bootstrap state exposes operator contract and artifact inventory for world-home runtimes", async () => {
+  const worldHome = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-state-"));
+  const { server } = await startBlankServerWithWorldHome(worldHome);
+  try {
+    const state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(state.operator.contract.layout, "world-home-v1");
+    assert.equal(state.operator.contract.worldHome, path.resolve(worldHome));
+    assert.deepEqual(state.operator.inventory.backups, []);
+    assert.deepEqual(state.operator.inventory.exports, []);
+    assert.deepEqual(state.operator.inventory.imports, []);
+    assert.equal(state.operator.mutations.enabled, true);
+    assert.equal(Array.isArray(state.widgetVersions), true);
+    assert.equal(Array.isArray(state.widgetVersionTransitions), true);
+    assert.equal(Array.isArray(state.widgetVersionActivationHistory), true);
+    assert.equal(Array.isArray(state.backendProgramTransitions), true);
+    assert.equal(Array.isArray(state.backendProgramActivationHistory), true);
+  } finally {
+    await server.close();
+    await fs.rm(worldHome, { recursive: true, force: true });
+  }
+});
+
+test("operator routes require auth after first identity and reject non world-home mutation layouts", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const createdIdentity = await fetch(`${server.url}/api/identities`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        id: "identity.aaron",
+        actor: "aaron",
+        label: "Aaron",
+        username: "aaron",
+        password: "aaron",
+        homePerspective: "aaron:personal"
+      })
+    });
+    assert.equal(createdIdentity.status, 201);
+
+    const denied = await fetch(`${server.url}/api/operator/state`);
+    assert.equal(denied.status, 401);
+
+    const login = await openSession(server.url);
+    assert.equal(login.response.status, 200);
+
+    const disabled = await fetch(`${server.url}/api/operator/backups`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: login.cookie },
+      body: JSON.stringify({ label: "not-allowed" })
+    });
+    assert.equal(disabled.status, 409);
+    const body = await disabled.json();
+    assert.match(body.error, /world-home-v1/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("operator restore and import replace live bootstrap truth and create safety backups when requested", async () => {
+  const worldHome = await fs.mkdtemp(path.join(os.tmpdir(), "witness-operator-restore-"));
+  const { world, server, operatorContract } = await startBlankServerWithWorldHome(worldHome);
+  try {
+    const post = (pathname, body) => fetch(`${server.url}${pathname}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    assert.equal((await post("/api/widgets", { id: "alpha_page", kind: "Page", title: "Alpha", attach: false })).status, 201);
+
+    const createdBackup = await post("/api/operator/backups", { label: "alpha" });
+    assert.equal(createdBackup.status, 201);
+    const backupBody = await createdBackup.json();
+    const backupId = backupBody.artifact.id;
+
+    const createdExport = await post("/api/operator/exports", { label: "alpha-export" });
+    assert.equal(createdExport.status, 201);
+    const exportBody = await createdExport.json();
+    const exportedPath = exportBody.artifact.path;
+    const importedArtifactId = `import-${Date.now()}`;
+    await fs.cp(exportedPath, path.join(operatorContract.directories.importsRoot, importedArtifactId), { recursive: true });
+
+    assert.equal((await post("/api/widgets", { id: "beta_page", kind: "Page", title: "Beta", attach: false })).status, 201);
+    let state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(state.widgets.some(row => row.id === "beta_page"), true);
+
+    const unsafeRestore = await post("/api/operator/restores", { artifactId: "../escape" });
+    assert.equal(unsafeRestore.status, 400);
+
+    const restored = await post("/api/operator/restores", {
+      artifactId: backupId,
+      preserveCurrent: true
+    });
+    assert.equal(restored.status, 200);
+    const restoreBody = await restored.json();
+    assert.ok(restoreBody.safetyBackup?.id);
+    state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(state.widgets.some(row => row.id === "alpha_page"), true);
+    assert.equal(state.widgets.some(row => row.id === "beta_page"), false);
+    assert.equal(world.allWitnesses().some(row => row.body?.id === "beta_page"), false);
+
+    assert.equal((await post("/api/widgets", { id: "gamma_page", kind: "Page", title: "Gamma", attach: false })).status, 201);
+    state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(state.widgets.some(row => row.id === "gamma_page"), true);
+
+    const imported = await post("/api/operator/imports", {
+      artifactId: importedArtifactId,
+      preserveCurrent: true
+    });
+    assert.equal(imported.status, 200);
+    const importBody = await imported.json();
+    assert.ok(importBody.safetyBackup?.id);
+    assert.equal(importBody.restartRequired, false);
+
+    state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(state.widgets.some(row => row.id === "alpha_page"), true);
+    assert.equal(state.widgets.some(row => row.id === "gamma_page"), false);
+
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
+    assert.equal(diagnostics.operator.mutations.enabled, true);
+    assert.equal(diagnostics.operator.artifacts.backups >= 2, true);
+    assert.equal(diagnostics.operator.recentActivity.some(entry => entry.process === "operator.import"), true);
+  } finally {
+    await server.close();
+    await fs.rm(worldHome, { recursive: true, force: true });
   }
 });
 
@@ -85,6 +243,87 @@ test("bootstrap server runner authoring accepts runtimeConfigJson and preserves 
     assert.ok(runner);
     assert.equal(runner.runtimeConfig.publicBaseUrl.value, "https://world.test");
     assert.equal(runner.runtimeConfig.serviceToken.secret, "WITNESS_RUNTIME_SECRET");
+  } finally {
+    await server.close();
+  }
+});
+
+test("bootstrap route authoring validates backendProgram.run shape", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const post = (pathname, body) => fetch(`${server.url}${pathname}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    const createdProgram = await post("/api/backend-programs", {
+      soul: "backend.echo",
+      label: "Backend Echo"
+    });
+    assert.equal(createdProgram.status, 201);
+
+    const missingSoul = await post("/api/routes", {
+      id: "missing_backend_program_route",
+      path: "/api/missing-backend-program",
+      serves: "backendProgram",
+      method: "GET",
+      handler: "backendProgram.run"
+    });
+    assert.equal(missingSoul.status, 400);
+
+    const mixedShape = await post("/api/routes", {
+      id: "mixed_backend_program_route",
+      path: "/api/mixed-backend-program",
+      serves: "backendProgram",
+      method: "GET",
+      handler: "page.home",
+      backendProgramSoul: "backend.echo"
+    });
+    assert.equal(mixedShape.status, 400);
+
+    const unknownSoul = await post("/api/routes", {
+      id: "unknown_backend_program_route",
+      path: "/api/unknown-backend-program",
+      serves: "backendProgram",
+      method: "GET",
+      handler: "backendProgram.run",
+      backendProgramSoul: "backend.unknown"
+    });
+    assert.equal(unknownSoul.status, 400);
+  } finally {
+    await server.close();
+  }
+});
+
+test("bootstrap route authoring validates stream handler shape and method contract", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const post = (pathname, body) => fetch(`${server.url}${pathname}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    const wrongMethod = await post("/api/routes", {
+      id: "events_stream_post_route",
+      path: "/api/events-post",
+      serves: "eventsStream",
+      method: "POST",
+      handler: "events.stream"
+    });
+    assert.equal(wrongMethod.status, 400);
+
+    const mixedShape = await post("/api/routes", {
+      id: "events_stream_mixed_route",
+      path: "/api/events-mixed",
+      serves: "eventsStream",
+      method: "GET",
+      handler: "events.stream",
+      page: "home",
+      rootWidget: "some_page"
+    });
+    assert.equal(mixedShape.status, 400);
   } finally {
     await server.close();
   }
@@ -269,6 +508,7 @@ test("tutorial progress syncs into the authenticated session store", async () =>
         draftInputs: { id: "identity.aaron" },
         completedAt: null,
         hidden: false,
+        disabledContextIds: ["frontend", "unknown"],
         disabledPages: ["app", "unknown"],
         replayStepId: "identity:create"
       })
@@ -280,7 +520,10 @@ test("tutorial progress syncs into the authenticated session store", async () =>
     }).then(response => response.json());
     assert.equal(readBack.progress.chapterId, "identity");
     assert.deepEqual(readBack.progress.draftInputs, { id: "identity.aaron" });
+    assert.deepEqual(readBack.progress.disabledScopeKeys, ["page:app"]);
+    assert.deepEqual(readBack.progress.disabledContextIds, ["frontend"]);
     assert.deepEqual(readBack.progress.disabledPages, ["app"]);
+    assert.equal(readBack.progress.replayScopeKey, "section:bootstrap:identity-form");
     assert.equal(readBack.progress.replayStepId, "identity:create");
 
     const cleared = await fetch(`${server.url}/api/tutorial-progress/todo-from-scratch`, {
@@ -303,6 +546,10 @@ test("bootstrap capability catalog and install lifecycle are exposed through the
   try {
     const initialState = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
     assert.equal(initialState.capabilityCatalog.some(row => row.id === "dom.render"), true);
+    assert.equal(initialState.pluginCatalog.summary.validCount >= 1, true);
+    assert.equal(initialState.pluginCatalog.packages.some(row => row.id === "plugin.notes-sidebar" && row.execution.executable === false), true);
+    assert.equal(initialState.capabilityPackageSources.some(row => row.capabilityId === "notes.sidebar" && row.sourceState === "package-only"), true);
+    assert.equal(initialState.capabilityCatalog.find(row => row.id === "dom.render")?.capabilitySourceState, "catalog-only");
 
     const post = (pathname, body, method = "POST") => fetch(`${server.url}${pathname}`, {
       method,
@@ -346,6 +593,9 @@ test("bootstrap capability catalog and install lifecycle are exposed through the
 
     const afterInstall = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
     assert.equal(afterInstall.capabilityInstalls.some(row => row.capability === "notes.sidebar" && row.target === "demo_server" && row.targetKind === "serverRunner"), true);
+    assert.equal(afterInstall.capabilityCatalog.find(row => row.id === "notes.sidebar")?.capabilitySourceState, "both");
+    assert.equal(afterInstall.capabilityCatalog.find(row => row.id === "notes.sidebar")?.packageSources?.some(row => row.pluginId === "plugin.notes-sidebar"), true);
+    assert.equal(afterInstall.capabilityPackageSources.some(row => row.capabilityId === "notes.sidebar" && row.sourceState === "both"), true);
 
     const removed = await post("/api/capability-installs", {
       capability: "notes.sidebar",
@@ -356,6 +606,271 @@ test("bootstrap capability catalog and install lifecycle are exposed through the
 
     const afterRemove = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
     assert.equal(afterRemove.capabilityInstalls.some(row => row.capability === "notes.sidebar" && row.target === "demo_server" && row.targetKind === "serverRunner"), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("bootstrap runtime plugin availability and authoring flows are exposed through the generic API", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const post = (pathname, body, method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    const model = await fetch(`${server.url}/api/bootstrap-model`).then(response => response.json());
+    assert.equal(model.proposalTargetProcesses.includes("runtimePlugin.install"), true);
+    assert.equal(model.proposalTargetProcesses.includes("runtimePlugin.remove"), true);
+
+    assert.equal((await post("/api/server-runners", {
+      id: "demo_server",
+      backendHost: "backendHost",
+      frontendHost: "frontendHost"
+    })).status, 201);
+
+    const initialState = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    const installableInspect = initialState.runtimePluginAvailability.find(row => row.serverRunner === "demo_server" && row.plugin === "plugin.inspect");
+    assert.ok(installableInspect);
+    assert.equal(installableInspect.installed, false);
+    assert.equal(installableInspect.executable, true);
+    assert.equal(installableInspect.installable, true);
+    const metadataOnly = initialState.runtimePluginAvailability.find(row => row.serverRunner === "demo_server" && row.plugin === "plugin.notes-sidebar");
+    assert.ok(metadataOnly);
+    assert.equal(metadataOnly.executable, false);
+    assert.equal(metadataOnly.installable, false);
+
+    const installed = await post("/api/runtime-plugin-installs", {
+      serverRunner: "demo_server",
+      plugin: "plugin.inspect"
+    });
+    assert.equal(installed.status, 201);
+
+    const duplicate = await post("/api/runtime-plugin-installs", {
+      serverRunner: "demo_server",
+      plugin: "plugin.inspect"
+    });
+    assert.equal(duplicate.status, 409);
+
+    const afterInstall = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(afterInstall.runtimePluginInstalls.some(row => row.serverRunner === "demo_server" && row.plugin === "plugin.inspect"), true);
+    assert.equal(
+      afterInstall.runtimePluginAvailability.some(row => row.serverRunner === "demo_server" && row.plugin === "plugin.inspect" && row.installed === true),
+      true
+    );
+
+    const proposedInstall = await post("/api/proposals", {
+      id: "proposal.runtime-plugin.canvas",
+      targetProcess: "runtimePlugin.install",
+      targetKind: "serverRunner",
+      targetId: "demo_server",
+      bodyJson: JSON.stringify({ serverRunner: "demo_server", plugin: "plugin.canvas" }),
+      reason: "Need canvas on this runner"
+    });
+    assert.equal(proposedInstall.status, 201);
+    assert.equal((await post("/api/proposals/proposal.runtime-plugin.canvas/approve", {})).status, 200);
+
+    const proposedRemove = await post("/api/proposals", {
+      id: "proposal.runtime-plugin.inspect.remove",
+      targetProcess: "runtimePlugin.remove",
+      targetKind: "serverRunner",
+      targetId: "demo_server",
+      bodyJson: JSON.stringify({ serverRunner: "demo_server", plugin: "plugin.inspect" }),
+      reason: "Remove inspect from this runner"
+    });
+    assert.equal(proposedRemove.status, 201);
+    assert.equal((await post("/api/proposals/proposal.runtime-plugin.inspect.remove/approve", {})).status, 200);
+
+    const afterProposal = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(afterProposal.runtimePluginInstalls.some(row => row.serverRunner === "demo_server" && row.plugin === "plugin.canvas"), true);
+    assert.equal(afterProposal.runtimePluginInstalls.some(row => row.serverRunner === "demo_server" && row.plugin === "plugin.inspect"), false);
+
+    const removed = await post("/api/runtime-plugin-installs", {
+      serverRunner: "demo_server",
+      plugin: "plugin.canvas"
+    }, "DELETE");
+    assert.equal(removed.status, 200);
+
+    const afterRemove = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(afterRemove.runtimePluginInstalls.some(row => row.serverRunner === "demo_server" && row.plugin === "plugin.canvas"), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("bootstrap MCP authoring and grouped MCP state are exposed through the generic API", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const post = (pathname, body, method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    const model = await fetch(`${server.url}/api/bootstrap-model`).then(response => response.json());
+    assert.equal(model.proposalTargetProcesses.includes("mcpServer.define"), true);
+    assert.equal(model.proposalTargetProcesses.includes("mcpTool.install"), true);
+    assert.equal(model.proposalTargetProcesses.includes("mcpTool.remove"), true);
+    assert.equal(model.supportedMcpActingModes.includes("delegated"), true);
+    assert.equal(model.supportedMcpActingModes.includes("service"), true);
+    assert.equal(model.supportedMcpTools.some(row => row.name === "world.read"), true);
+
+    assert.equal((await post("/api/server-runners", {
+      id: "demo_server",
+      backendHost: "backendHost",
+      frontendHost: "frontendHost"
+    })).status, 201);
+
+    assert.equal((await post("/api/mcp-servers", {
+      id: "personal_mcp",
+      label: "Personal MCP",
+      serverRunner: "demo_server",
+      serviceIdentity: "aaron",
+      transportsJson: JSON.stringify(["http"])
+    })).status, 201);
+
+    const installed = await post("/api/mcp-tool-installs", {
+      server: "personal_mcp",
+      tool: "authoring.write",
+      actingMode: "service",
+      scopeContextsJson: JSON.stringify(["ctx.docs"]),
+      scopeTargetsJson: JSON.stringify(["ctx.docs:home"])
+    });
+    assert.equal(installed.status, 201);
+
+    const duplicate = await post("/api/mcp-tool-installs", {
+      server: "personal_mcp",
+      tool: "authoring.write",
+      actingMode: "service"
+    });
+    assert.equal(duplicate.status, 409);
+
+    const afterInstall = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    const personalServer = afterInstall.mcp.servers.find(row => row.id === "personal_mcp");
+    assert.ok(personalServer);
+    assert.equal(personalServer.httpPath, "/mcp/personal_mcp");
+    assert.equal(personalServer.transportVisibility.http, true);
+    assert.equal(personalServer.transportVisibility.stdio, false);
+    assert.equal(personalServer.tools.some(row => row.tool === "authoring.write" && row.actingMode === "service"), true);
+    assert.equal(personalServer.tools.some(row => row.scopeContexts.includes("ctx.docs")), true);
+    assert.equal(afterInstall.mcpServers.some(row => row.id === "personal_mcp"), true);
+    assert.equal(afterInstall.mcpToolInstalls.some(row => row.server === "personal_mcp" && row.tool === "authoring.write"), true);
+
+    const proposedServer = await post("/api/proposals", {
+      id: "proposal.mcp.server.ops",
+      targetProcess: "mcpServer.define",
+      targetKind: "serverRunner",
+      targetId: "demo_server",
+      bodyJson: JSON.stringify({
+        id: "ops_mcp",
+        label: "Ops MCP",
+        serverRunner: "demo_server",
+        transportsJson: JSON.stringify(["stdio", "http"])
+      }),
+      reason: "Need an ops automation surface"
+    });
+    assert.equal(proposedServer.status, 201);
+    assert.equal((await post("/api/proposals/proposal.mcp.server.ops/approve", {})).status, 200);
+
+    const proposedInstall = await post("/api/proposals", {
+      id: "proposal.mcp.tool.install.ops",
+      targetProcess: "mcpTool.install",
+      targetKind: "serverRunner",
+      targetId: "demo_server",
+      bodyJson: JSON.stringify({
+        server: "ops_mcp",
+        tool: "world.read",
+        actingMode: "delegated",
+        scopeContextsJson: JSON.stringify([]),
+        scopeTargetsJson: JSON.stringify([])
+      }),
+      reason: "Need world inspection"
+    });
+    assert.equal(proposedInstall.status, 201);
+    assert.equal((await post("/api/proposals/proposal.mcp.tool.install.ops/approve", {})).status, 200);
+
+    const proposedRemove = await post("/api/proposals", {
+      id: "proposal.mcp.tool.remove.personal",
+      targetProcess: "mcpTool.remove",
+      targetKind: "serverRunner",
+      targetId: "demo_server",
+      bodyJson: JSON.stringify({
+        server: "personal_mcp",
+        tool: "authoring.write"
+      }),
+      reason: "Remove direct authoring from personal server"
+    });
+    assert.equal(proposedRemove.status, 201);
+    assert.equal((await post("/api/proposals/proposal.mcp.tool.remove.personal/approve", {})).status, 200);
+
+    const afterProposal = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    const opsServer = afterProposal.mcp.servers.find(row => row.id === "ops_mcp");
+    assert.ok(opsServer);
+    assert.equal(opsServer.transportVisibility.http, true);
+    assert.equal(opsServer.transportVisibility.stdio, true);
+    assert.equal(opsServer.tools.some(row => row.tool === "world.read" && row.actingMode === "delegated"), true);
+    assert.equal(afterProposal.mcp.servers.find(row => row.id === "personal_mcp")?.tools.some(row => row.tool === "authoring.write"), false);
+
+    const removed = await post("/api/mcp-tool-installs", {
+      server: "ops_mcp",
+      tool: "world.read"
+    }, "DELETE");
+    assert.equal(removed.status, 200);
+
+    const afterRemove = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
+    assert.equal(afterRemove.mcp.servers.find(row => row.id === "ops_mcp")?.tools.some(row => row.tool === "world.read"), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("runtime plugin review API exposes authored runner composition previews without operator overlays", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const post = (pathname, body, method = "POST") => fetch(`${server.url}${pathname}`, {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+
+    assert.equal((await post("/api/server-runners", {
+      id: "demo_server",
+      backendHost: "backendHost",
+      frontendHost: "frontendHost"
+    })).status, 201);
+
+    const missingRunner = await fetch(`${server.url}/api/runtime/plugin-reviews?serverRunner=missing`);
+    assert.equal(missingRunner.status, 404);
+
+    const initialReview = await fetch(`${server.url}/api/runtime/plugin-reviews?serverRunner=demo_server`).then(response => response.json());
+    assert.equal(initialReview.serverRunner, "demo_server");
+    assert.match(initialReview.note, /authored runner intent only/i);
+    const inspect = initialReview.packages.find(row => row.plugin === "plugin.inspect");
+    const notes = initialReview.packages.find(row => row.plugin === "plugin.notes-sidebar");
+    assert.ok(inspect);
+    assert.ok(notes);
+    assert.equal(Array.isArray(initialReview.authoredPluginIds), true);
+    assert.equal(initialReview.currentComposition.handlerMetadata["backendProgram.run"].routeKind, "backendProgram");
+    assert.equal(inspect.installPreview.available, true);
+    assert.equal(Array.isArray(inspect.installPreview.delta.addedSurfaces), true);
+    assert.equal(inspect.installPreview.nextComposition.routes.some(route =>
+      route.handlerMetadata && typeof route.handlerMetadata.routeKind === "string"
+    ), true);
+    assert.equal(notes.installPreview.available, false);
+    assert.equal(notes.blockingReasons.some(reason => reason.includes("metadata-only")), true);
+
+    assert.equal((await post("/api/runtime-plugin-installs", {
+      serverRunner: "demo_server",
+      plugin: "plugin.inspect"
+    })).status, 201);
+
+    const filteredReview = await fetch(`${server.url}/api/runtime/plugin-reviews?serverRunner=demo_server&plugin=plugin.inspect`).then(response => response.json());
+    assert.deepEqual(filteredReview.authoredPluginIds, ["plugin.inspect"]);
+    assert.equal(filteredReview.packages.length, 1);
+    assert.equal(filteredReview.packages[0].plugin, "plugin.inspect");
+    assert.equal(filteredReview.packages[0].installed, true);
+    assert.equal(filteredReview.packages[0].removePreview.available, true);
   } finally {
     await server.close();
   }

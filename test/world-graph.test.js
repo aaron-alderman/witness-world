@@ -153,8 +153,8 @@ transports = ["http"]
 
 test("demo UI includes world graph widget and frontend render operation", async () => {
   const world = createWorld();
-  declareBackendHost(world, { actor: "adam", id: "backendHost" });
-  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
 
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
@@ -162,7 +162,8 @@ test("demo UI includes world graph widget and frontend render operation", async 
   const server = await startServer(world, {
     actor: "adam",
     serverRunnerId: "demo_server",
-    runtimeRoot: path.dirname(await tempStore())
+    runtimeRoot: path.dirname(await tempStore()),
+    runtimeProfile: "minimal"
   });
 
   try {
@@ -225,8 +226,8 @@ test("server logs request start, projection, and finish for world graph", async 
   };
 
   const world = createWorld();
-  declareBackendHost(world, { actor: "adam", id: "backendHost" });
-  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
 
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
@@ -235,6 +236,7 @@ test("server logs request start, projection, and finish for world graph", async 
     actor: "adam",
     serverRunnerId: "demo_server",
     runtimeRoot: path.dirname(await tempStore()),
+    runtimeProfile: "minimal",
     logger
   });
 
@@ -589,13 +591,14 @@ test("source endpoint returns only witnessed imported DSL files", async () => {
   const world = createWorld();
   const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
   applyWitnessDocs(world, docs);
-  declareBackendHost(world, { actor: "adam", id: "backendHost" });
-  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
   const storePath = await tempStore();
   const server = await startServer(world, {
     actor: "adam",
     serverRunnerId: "demo_server",
-    runtimeRoot: path.dirname(storePath)
+    runtimeRoot: path.dirname(storePath),
+    runtimeProfile: "minimal"
   });
 
   try {
