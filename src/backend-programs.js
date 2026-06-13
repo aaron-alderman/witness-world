@@ -1,6 +1,8 @@
 import { thing, relation } from "./kernel.js";
 import { stepGraphFromLinearSteps } from "./process-graph.js";
 
+// Generic authored backend-program ABI: witnessed definitions, projections, and
+// version-transition primitives that multiple plugins build on.
 export const SUPPORTED_BACKEND_OPS = Object.freeze([
   "request.readJson",
   "state.assign",

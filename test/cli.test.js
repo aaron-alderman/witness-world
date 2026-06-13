@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { createWorld } from "../src/kernel.js";
-import { MCP_PROTOCOL_VERSION } from "../src/mcp.js";
+import { MCP_PROTOCOL_VERSION } from "../plugins/mcp/mcp-tools.js";
 
 test("bootstrap CLI starts a blank-world bootstrap server", async () => {
   const child = spawn(process.execPath, ["src/cli.js", "bootstrap", "--port", "0"], {
@@ -26,13 +26,19 @@ test("bootstrap CLI starts a blank-world bootstrap server", async () => {
     const diagnostics = await fetch(`${url}/api/runtime/diagnostics`).then(response => response.json());
     assert.match(html, /Recover And Author The App Boundary/);
     assert.equal(diagnostics.activeProfile, "authoring");
-    assert.deepEqual(diagnostics.activeBundles.map(bundle => bundle.id), [
+    assert.deepEqual([...diagnostics.activeBundles.map(bundle => bundle.id)].sort(), [
       "bundle-core-runtime",
-      "bundle-tutorial",
-      "bundle-authoring"
-    ]);
+      "bundle-bootstrap",
+      "bundle-authoring-core",
+      "bundle-capability-authoring",
+      "bundle-program-authoring",
+      "bundle-server-runner-authoring",
+      "bundle-mcp-authoring",
+      "bundle-proposals",
+      "bundle-tutorial"
+    ].sort());
     assert.equal(diagnostics.startupRunner?.bootstrapOnly, true);
-    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.authoring"]);
+    assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.capability-authoring", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.tutorial"]);
   } finally {
     if (!child.killed) child.kill("SIGINT");
     await onceExit(child);
@@ -46,9 +52,19 @@ test("bootstrap CLI starts a blank-world bootstrap server", async () => {
   assert.match(stdout, /Persistence:\s+cold/);
   assert.match(stdout, /World home:\s+/);
   assert.match(stdout, /Runtime profile:\s+authoring/);
-  assert.match(stdout, /Active bundles:\s+bundle-core-runtime, bundle-tutorial, bundle-authoring/);
+  assert.deepEqual(cliListLine(stdout, "Active bundles").sort(), [
+    "bundle-core-runtime",
+    "bundle-bootstrap",
+    "bundle-authoring-core",
+    "bundle-capability-authoring",
+    "bundle-program-authoring",
+    "bundle-server-runner-authoring",
+    "bundle-mcp-authoring",
+    "bundle-proposals",
+    "bundle-tutorial"
+  ].sort());
   assert.match(stdout, /Operator runtime plugins:\s+plugin\.authoring/);
-  assert.match(stdout, /Activated runtime plugins:\s+plugin\.authoring/);
+  assert.match(stdout, /Activated runtime plugins:\s+.*plugin\.mcp-authoring/);
   assert.match(stdout, /Bundle counts:\s+capabilities=\d+ routes=\d+ surfaces=\d+/);
   assert.match(stdout, /Runtime diagnostics:\s+http:\/\/[^\s]+\/api\/runtime\/diagnostics/);
 });
@@ -88,6 +104,11 @@ actor = "system"
 id = "demo_server"
 backendHost = "backendHost"
 frontendHost = "frontendHost"
+
+[[runtimePluginInstall]]
+actor = "system"
+serverRunner = "demo_server"
+plugin = "plugin.mcp"
 
 [[mcpServer]]
 actor = "system"
@@ -135,7 +156,7 @@ actingMode = "service"
       method: "tools/call",
       params: {
         name: "world.read",
-        arguments: { view: "bootstrapState" }
+        arguments: { view: "witnesses" }
       }
     })}\n`);
 
@@ -147,8 +168,8 @@ actingMode = "service"
     assert.equal(initialize.result.protocolVersion, MCP_PROTOCOL_VERSION);
     assert.deepEqual(list.result.tools.map(tool => tool.name), ["world.read"]);
     assert.equal(call.result.isError, false);
-    assert.equal(call.result.structuredContent.serverRunners.some(row => row.id === "demo_server"), true);
-    assert.equal(call.result.structuredContent.mcpServers.some(row => row.id === "cli_world"), true);
+    assert.equal(call.result.structuredContent.witnesses.some(row => row.process === "defineServerRunner" && row.body?.id === "demo_server"), true);
+    assert.equal(call.result.structuredContent.witnesses.some(row => row.process === "defineMcpServer" && row.body?.id === "cli_world"), true);
   } finally {
     child.stdin.end();
     if (!child.killed) child.kill("SIGINT");
@@ -196,9 +217,15 @@ test("bootstrap CLI activates local runtime plugins through --runtime-plugin", a
   try {
     const url = await waitForServerUrl(() => stdout);
     const diagnostics = await fetch(`${url}/api/runtime/diagnostics`).then(response => response.json());
-    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.authoring"]);
-    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-authoring", "bundle-tutorial"]);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring"), true);
+    assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.capability-authoring", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.tutorial"]);
+    assert.deepEqual([...diagnostics.plugins.addedBundleIds].sort(), ["bundle-authoring-core", "bundle-bootstrap", "bundle-capability-authoring", "bundle-mcp-authoring", "bundle-program-authoring", "bundle-proposals", "bundle-server-runner-authoring", "bundle-tutorial"]);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring-core"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-bootstrap"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-capability-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-program-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-server-runner-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-mcp-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-proposals"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-tutorial"), true);
     assert.equal((await fetch(`${url}/_bootstrap`)).status, 200);
   } finally {
@@ -208,8 +235,8 @@ test("bootstrap CLI activates local runtime plugins through --runtime-plugin", a
 
   assert.equal(normalizeCliStderr(stderr), "");
   assert.match(stdout, /Configured runtime plugins:\s+plugin\.authoring/);
-  assert.match(stdout, /Activated runtime plugins:\s+plugin\.authoring/);
-  assert.match(stdout, /Plugin-added bundles:\s+bundle-authoring, bundle-tutorial/);
+  assert.match(stdout, /Activated runtime plugins:\s+.*plugin\.mcp-authoring/);
+  assert.match(stdout, /Plugin-added bundles:\s+.*bundle-mcp-authoring/);
   assert.match(stdout, /Handler route kinds:\s+/);
 });
 
@@ -237,17 +264,25 @@ test("serve CLI runs the maintained demo on minimal with authored runtime plugin
   child.stderr.on("data", chunk => { stderr += chunk; });
 
   try {
-    const url = await waitForServerUrl(() => stdout);
+    const url = await waitForServerUrl(() => stdout, { timeoutMs: 60000 });
     const diagnostics = await fetch(`${url}/api/runtime/diagnostics`).then(response => response.json());
 
     assert.equal(diagnostics.activeProfile, "minimal");
-    assert.deepEqual([...diagnostics.plugins.authoredPluginIds].sort(), ["plugin.authoring", "plugin.canvas", "plugin.inspect"]);
+    assert.deepEqual([...diagnostics.plugins.authoredPluginIds].sort(), ["plugin.authoring", "plugin.canvas", "plugin.demo", "plugin.inspect"]);
     assert.deepEqual(diagnostics.plugins.operatorPluginIds, []);
-    assert.deepEqual([...diagnostics.plugins.effectivePluginIds].sort(), ["plugin.authoring", "plugin.canvas", "plugin.inspect"]);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring"), true);
+    assert.deepEqual([...diagnostics.plugins.effectivePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.canvas", "plugin.capability-authoring", "plugin.demo", "plugin.fs-json", "plugin.inspect", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.tutorial"]);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring-core"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-bootstrap"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-capability-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-program-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-server-runner-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-mcp-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-proposals"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-tutorial"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-canvas"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), false);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-fs-json"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
     assert.equal((await fetch(`${url}/world`)).status, 200);
     assert.equal((await fetch(`${url}/canvas`)).status, 200);
@@ -258,8 +293,8 @@ test("serve CLI runs the maintained demo on minimal with authored runtime plugin
 
   assert.equal(normalizeCliStderr(stderr), "");
   assert.match(stdout, /Runtime profile:\s+minimal/);
-  assert.match(stdout, /Authored runtime plugins:\s+plugin\.authoring, plugin\.canvas, plugin\.inspect/);
-  assert.match(stdout, /Activated runtime plugins:\s+plugin\.authoring, plugin\.canvas, plugin\.inspect/);
+  assert.match(stdout, /Authored runtime plugins:\s+plugin\.authoring, plugin\.canvas, plugin\.demo, plugin\.inspect/);
+  assert.match(stdout, /Activated runtime plugins:\s+.*plugin\.mcp-authoring/);
 });
 
 test("bootstrap CLI rejects explicitly unknown runtime plugins with actionable reasons", async () => {
@@ -327,22 +362,22 @@ test("bootstrap CLI rejects plugin-owned runtime plugins when runtime.js is miss
   }
 });
 
-test("bootstrap CLI rejects plugin.practical-backend when runtime.js is missing", async () => {
-  const pluginRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-broken-practical-backend-plugin-root-"));
-  const backendDir = path.join(pluginRoot, "practical-backend");
-  await fs.mkdir(backendDir, { recursive: true });
-  await fs.writeFile(path.join(backendDir, "plugin.json"), JSON.stringify({
-    id: "plugin.practical-backend",
+test("bootstrap CLI rejects plugin.assets when runtime.js is missing", async () => {
+  const pluginRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-broken-assets-plugin-root-"));
+  const assetsDir = path.join(pluginRoot, "assets");
+  await fs.mkdir(assetsDir, { recursive: true });
+  await fs.writeFile(path.join(assetsDir, "plugin.json"), JSON.stringify({
+    id: "plugin.assets",
     version: "0.1.0",
-    displayName: "Practical Backend Plugin",
-    description: "Broken practical backend plugin",
+    displayName: "Assets Plugin",
+    description: "Broken assets plugin",
     kind: "plugin",
     runtime: { entry: "./runtime.js" },
-    activatesBundles: ["bundle-practical-backend"],
+    activatesBundles: ["bundle-assets"],
     contributes: {}
   }, null, 2));
 
-  const child = spawn(process.execPath, ["src/cli.js", "bootstrap", "--runtime-profile", "minimal", "--runtime-plugin", "plugin.practical-backend"], {
+  const child = spawn(process.execPath, ["src/cli.js", "bootstrap", "--runtime-profile", "minimal", "--runtime-plugin", "plugin.assets"], {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe"],
     env: {
@@ -363,7 +398,7 @@ test("bootstrap CLI rejects plugin.practical-backend when runtime.js is missing"
     assert.equal(exitCode, 1);
     assert.equal(stdout.trim(), "");
     assert.match(stderr, /runtime plugins unresolved/);
-    assert.match(stderr, /Runtime plugin rejected:\s+plugin\.practical-backend/);
+    assert.match(stderr, /Runtime plugin rejected:\s+plugin\.assets/);
     assert.match(stderr, /runtime\.entry not found/);
   } finally {
     await fs.rm(pluginRoot, { recursive: true, force: true });
@@ -413,7 +448,7 @@ test("bootstrap CLI rejects plugin.mcp when runtime.js is missing", async () => 
   }
 });
 
-test("bootstrap CLI default activation fails when plugin.authoring runtime.js is missing", async () => {
+test("bootstrap CLI default activation fails when plugin.authoring-core runtime.js is missing", async () => {
   const pluginRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-broken-authoring-plugin-root-"));
   const authoringDir = path.join(pluginRoot, "authoring");
   await fs.mkdir(authoringDir, { recursive: true });
@@ -423,10 +458,112 @@ test("bootstrap CLI default activation fails when plugin.authoring runtime.js is
     displayName: "Authoring Plugin",
     description: "Broken authoring plugin",
     kind: "plugin",
-    runtime: { entry: "./runtime.js" },
-    activatesBundles: ["bundle-authoring", "bundle-tutorial"],
+    dependsOnPlugins: ["plugin.authoring-core", "plugin.bootstrap", "plugin.capability-authoring", "plugin.program-authoring", "plugin.server-runner-authoring", "plugin.mcp-authoring", "plugin.proposals", "plugin.tutorial"],
     contributes: {}
   }, null, 2));
+  const authoringCoreDir = path.join(pluginRoot, "authoring-core");
+  await fs.mkdir(authoringCoreDir, { recursive: true });
+  await fs.writeFile(path.join(authoringCoreDir, "plugin.json"), JSON.stringify({
+    id: "plugin.authoring-core",
+    version: "0.1.0",
+    displayName: "Authoring Core Plugin",
+    description: "Authoring core plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-authoring-core"],
+    contributes: {}
+  }, null, 2));
+  const bootstrapDir = path.join(pluginRoot, "bootstrap");
+  await fs.mkdir(bootstrapDir, { recursive: true });
+  await fs.writeFile(path.join(bootstrapDir, "plugin.json"), JSON.stringify({
+    id: "plugin.bootstrap",
+    version: "0.1.0",
+    displayName: "Bootstrap Plugin",
+    description: "Bootstrap plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-bootstrap"],
+    contributes: {}
+  }, null, 2));
+  await fs.writeFile(path.join(bootstrapDir, "runtime.js"), `export const bundleId = "bundle-bootstrap"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["bootstrap.page"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "GET", path: "/_bootstrap", handler: "bootstrap.page", params: {} }]; export const surfaces = [{ id: "surface:bootstrap", title: "Bootstrap", href: "/_bootstrap", action: null, search: "bootstrap", type: "surface", tier: "harness", contexts: ["app-command"] }]; export function createHandlers() { return { "bootstrap.page": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  const capabilityAuthoringDir = path.join(pluginRoot, "capability-authoring");
+  await fs.mkdir(capabilityAuthoringDir, { recursive: true });
+  await fs.writeFile(path.join(capabilityAuthoringDir, "plugin.json"), JSON.stringify({
+    id: "plugin.capability-authoring",
+    version: "0.1.0",
+    displayName: "Capability Authoring Plugin",
+    description: "Capability authoring plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-capability-authoring"],
+    contributes: {}
+  }, null, 2));
+  await fs.writeFile(path.join(capabilityAuthoringDir, "runtime.js"), `export const bundleId = "bundle-capability-authoring"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["capability.create"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "POST", path: "/api/capabilities", handler: "capability.create", params: {} }]; export const surfaces = []; export function createHandlers() { return { "capability.create": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  const programAuthoringDir = path.join(pluginRoot, "program-authoring");
+  await fs.mkdir(programAuthoringDir, { recursive: true });
+  await fs.writeFile(path.join(programAuthoringDir, "plugin.json"), JSON.stringify({
+    id: "plugin.program-authoring",
+    version: "0.1.0",
+    displayName: "Program Authoring Plugin",
+    description: "Program authoring plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-program-authoring"],
+    contributes: {}
+  }, null, 2));
+  await fs.writeFile(path.join(programAuthoringDir, "runtime.js"), `export const bundleId = "bundle-program-authoring"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["frontendProgram.create"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "POST", path: "/api/frontend-programs", handler: "frontendProgram.create", params: {} }]; export const surfaces = []; export function createHandlers() { return { "frontendProgram.create": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  const serverRunnerAuthoringDir = path.join(pluginRoot, "server-runner-authoring");
+  await fs.mkdir(serverRunnerAuthoringDir, { recursive: true });
+  await fs.writeFile(path.join(serverRunnerAuthoringDir, "plugin.json"), JSON.stringify({
+    id: "plugin.server-runner-authoring",
+    version: "0.1.0",
+    displayName: "Server Runner Authoring Plugin",
+    description: "Server runner authoring plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-server-runner-authoring"],
+    contributes: {}
+  }, null, 2));
+  await fs.writeFile(path.join(serverRunnerAuthoringDir, "runtime.js"), `export const bundleId = "bundle-server-runner-authoring"; export const handlerCatalog = { authorableHandlers: ["runtimePlugin.install", "runtimePlugin.remove"], pageHandlers: [], dispatchHandlers: ["serverRunner.create", "runtimePlugin.install", "runtimePlugin.remove"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "POST", path: "/api/server-runners", handler: "serverRunner.create", params: {} }]; export const surfaces = []; export function createHandlers() { return { "serverRunner.create": async () => {}, "runtimePlugin.install": async () => {}, "runtimePlugin.remove": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  const mcpAuthoringDir = path.join(pluginRoot, "mcp-authoring");
+  await fs.mkdir(mcpAuthoringDir, { recursive: true });
+  await fs.writeFile(path.join(mcpAuthoringDir, "plugin.json"), JSON.stringify({
+    id: "plugin.mcp-authoring",
+    version: "0.1.0",
+    displayName: "MCP Authoring Plugin",
+    description: "MCP authoring plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-mcp-authoring"],
+    contributes: {}
+  }, null, 2));
+  await fs.writeFile(path.join(mcpAuthoringDir, "runtime.js"), `export const bundleId = "bundle-mcp-authoring"; export const handlerCatalog = { authorableHandlers: ["mcpServer.create", "mcpTool.install", "mcpTool.remove"], pageHandlers: [], dispatchHandlers: ["mcpServer.create", "mcpTool.install", "mcpTool.remove"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "POST", path: "/api/mcp-servers", handler: "mcpServer.create", params: {} }]; export const surfaces = []; export function createHandlers() { return { "mcpServer.create": async () => {}, "mcpTool.install": async () => {}, "mcpTool.remove": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  const proposalsDir = path.join(pluginRoot, "proposals");
+  await fs.mkdir(proposalsDir, { recursive: true });
+  await fs.writeFile(path.join(proposalsDir, "plugin.json"), JSON.stringify({
+    id: "plugin.proposals",
+    version: "0.1.0",
+    displayName: "Proposals Plugin",
+    description: "Proposals plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-proposals"],
+    contributes: {}
+  }, null, 2));
+  await fs.writeFile(path.join(proposalsDir, "runtime.js"), `export const bundleId = "bundle-proposals"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["proposal.create"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "POST", path: "/api/proposals", handler: "proposal.create", params: {} }]; export const surfaces = []; export function createHandlers() { return { "proposal.create": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  const tutorialDir = path.join(pluginRoot, "tutorial");
+  await fs.mkdir(tutorialDir, { recursive: true });
+  await fs.writeFile(path.join(tutorialDir, "plugin.json"), JSON.stringify({
+    id: "plugin.tutorial",
+    version: "0.1.0",
+    displayName: "Tutorial Plugin",
+    description: "Tutorial plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-tutorial"],
+    contributes: {}
+  }, null, 2));
+  await fs.writeFile(path.join(tutorialDir, "runtime.js"), `export const bundleId = "bundle-tutorial"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["tutorial.progress.read"], handlerMetadata: {} }; export const routes = [{ kind: "pattern", method: "GET", pattern: /^\\/api\\/tutorial-progress\\/([^/]+)$/, handler: "tutorial.progress.read", paramNames: ["tutorialId"] }]; export const surfaces = []; export function createHandlers() { return { "tutorial.progress.read": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
 
   const child = spawn(process.execPath, ["src/cli.js", "bootstrap"], {
     cwd: process.cwd(),
@@ -472,10 +609,89 @@ test("serve CLI rejects authored plugin.canvas when runtime.js is missing", asyn
     displayName: "Authoring Plugin",
     description: "Authoring plugin",
     kind: "plugin",
-    runtime: { entry: "./runtime.js" },
-    activatesBundles: ["bundle-authoring", "bundle-tutorial"],
+    dependsOnPlugins: ["plugin.authoring-core", "plugin.bootstrap", "plugin.capability-authoring", "plugin.program-authoring", "plugin.server-runner-authoring", "plugin.mcp-authoring", "plugin.proposals", "plugin.tutorial"],
     contributes: {}
-  }, `export default { bundles: { "bundle-authoring": { handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["bootstrap.page"], handlerMetadata: {} }, routes: [{ kind: "exact", method: "GET", path: "/_bootstrap", handler: "bootstrap.page", params: {} }], surfaces: [], createHandlers() { return { "bootstrap.page": async ({ send }) => send }; } }, "bundle-tutorial": { handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["tutorial.progress.read"], handlerMetadata: {} }, routes: [{ kind: "pattern", method: "GET", pattern: /^\\/api\\/tutorial-progress\\/([^/]+)$/, handler: "tutorial.progress.read", paramNames: ["tutorialId"] }], surfaces: [], createHandlers() { return { "tutorial.progress.read": async () => {} }; } } } };`);
+  }, null);
+  await writePlugin("authoring-core", {
+    id: "plugin.authoring-core",
+    version: "0.1.0",
+    displayName: "Authoring Core Plugin",
+    description: "Authoring core plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-authoring-core"],
+    contributes: {}
+  }, `export const bundleId = "bundle-authoring-core"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["context.create"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "POST", path: "/api/contexts", handler: "context.create", params: {} }]; export const surfaces = []; export function createHandlers() { return { "context.create": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  await writePlugin("bootstrap", {
+    id: "plugin.bootstrap",
+    version: "0.1.0",
+    displayName: "Bootstrap Plugin",
+    description: "Bootstrap plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-bootstrap"],
+    contributes: {}
+  }, `export const bundleId = "bundle-bootstrap"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["bootstrap.page"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "GET", path: "/_bootstrap", handler: "bootstrap.page", params: {} }]; export const surfaces = [{ id: "surface:bootstrap", title: "Bootstrap", href: "/_bootstrap", action: null, search: "bootstrap", type: "surface", tier: "harness", contexts: ["app-command"] }]; export function createHandlers() { return { "bootstrap.page": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  await writePlugin("capability-authoring", {
+    id: "plugin.capability-authoring",
+    version: "0.1.0",
+    displayName: "Capability Authoring Plugin",
+    description: "Capability authoring plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-capability-authoring"],
+    contributes: {}
+  }, `export const bundleId = "bundle-capability-authoring"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["capability.create"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "POST", path: "/api/capabilities", handler: "capability.create", params: {} }]; export const surfaces = []; export function createHandlers() { return { "capability.create": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  await writePlugin("program-authoring", {
+    id: "plugin.program-authoring",
+    version: "0.1.0",
+    displayName: "Program Authoring Plugin",
+    description: "Program authoring plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-program-authoring"],
+    contributes: {}
+  }, `export const bundleId = "bundle-program-authoring"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["frontendProgram.create"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "POST", path: "/api/frontend-programs", handler: "frontendProgram.create", params: {} }]; export const surfaces = []; export function createHandlers() { return { "frontendProgram.create": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  await writePlugin("server-runner-authoring", {
+    id: "plugin.server-runner-authoring",
+    version: "0.1.0",
+    displayName: "Server Runner Authoring Plugin",
+    description: "Server runner authoring plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-server-runner-authoring"],
+    contributes: {}
+  }, `export const bundleId = "bundle-server-runner-authoring"; export const handlerCatalog = { authorableHandlers: ["runtimePlugin.install", "runtimePlugin.remove"], pageHandlers: [], dispatchHandlers: ["serverRunner.create", "runtimePlugin.install", "runtimePlugin.remove"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "POST", path: "/api/server-runners", handler: "serverRunner.create", params: {} }]; export const surfaces = []; export function createHandlers() { return { "serverRunner.create": async () => {}, "runtimePlugin.install": async () => {}, "runtimePlugin.remove": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  await writePlugin("mcp-authoring", {
+    id: "plugin.mcp-authoring",
+    version: "0.1.0",
+    displayName: "MCP Authoring Plugin",
+    description: "MCP authoring plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-mcp-authoring"],
+    contributes: {}
+  }, `export const bundleId = "bundle-mcp-authoring"; export const handlerCatalog = { authorableHandlers: ["mcpServer.create", "mcpTool.install", "mcpTool.remove"], pageHandlers: [], dispatchHandlers: ["mcpServer.create", "mcpTool.install", "mcpTool.remove"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "POST", path: "/api/mcp-servers", handler: "mcpServer.create", params: {} }]; export const surfaces = []; export function createHandlers() { return { "mcpServer.create": async () => {}, "mcpTool.install": async () => {}, "mcpTool.remove": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  await writePlugin("proposals", {
+    id: "plugin.proposals",
+    version: "0.1.0",
+    displayName: "Proposals Plugin",
+    description: "Proposals plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-proposals"],
+    contributes: {}
+  }, `export const bundleId = "bundle-proposals"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["proposal.create"], handlerMetadata: {} }; export const routes = [{ kind: "exact", method: "POST", path: "/api/proposals", handler: "proposal.create", params: {} }]; export const surfaces = []; export function createHandlers() { return { "proposal.create": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  await writePlugin("tutorial", {
+    id: "plugin.tutorial",
+    version: "0.1.0",
+    displayName: "Tutorial Plugin",
+    description: "Tutorial plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-tutorial"],
+    contributes: {}
+  }, `export const bundleId = "bundle-tutorial"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["tutorial.progress.read"], handlerMetadata: {} }; export const routes = [{ kind: "pattern", method: "GET", pattern: /^\\/api\\/tutorial-progress\\/([^/]+)$/, handler: "tutorial.progress.read", paramNames: ["tutorialId"] }]; export const surfaces = []; export function createHandlers() { return { "tutorial.progress.read": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
   await writePlugin("inspect", {
     id: "plugin.inspect",
     version: "0.1.0",
@@ -486,6 +702,16 @@ test("serve CLI rejects authored plugin.canvas when runtime.js is missing", asyn
     activatesBundles: ["bundle-inspect"],
     contributes: {}
   }, `export const bundleId = "bundle-inspect"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["page.world"], handlerMetadata: {} }; export const routes = []; export const surfaces = []; export function createHandlers() { return { "page.world": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  await writePlugin("demo", {
+    id: "plugin.demo",
+    version: "0.1.0",
+    displayName: "Demo Plugin",
+    description: "Demo plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-demo"],
+    contributes: {}
+  }, `export const bundleId = "bundle-demo"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [], handlerMetadata: {} }; export const routes = []; export const surfaces = []; export const providers = []; export function createHandlers() { return {}; } export default { bundleId, handlerCatalog, routes, surfaces, providers, createHandlers };`);
   await writePlugin("canvas", {
     id: "plugin.canvas",
     version: "0.1.0",
@@ -585,7 +811,7 @@ async function waitForServerUrl(readStdout, { timeoutMs = 20000 } = {}) {
   throw new Error(`Timed out waiting for bootstrap CLI startup.\nSTDOUT:\n${readStdout()}`);
 }
 
-async function waitForJsonRpcLines(readStdout, count, { timeoutMs = 20000 } = {}) {
+async function waitForJsonRpcLines(readStdout, count, { timeoutMs = 30000 } = {}) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     const lines = readStdout()
@@ -614,6 +840,12 @@ function normalizeCliStderr(stderr) {
 
 function escapeRegex(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function cliListLine(stdout, label) {
+  const match = stdout.match(new RegExp(`^${escapeRegex(label)}:\\s+([^\\r\\n]+)`, "m"));
+  assert.ok(match, `expected ${label} line`);
+  return match[1].split(",").map(value => value.trim()).filter(Boolean);
 }
 
 async function onceExit(child) {

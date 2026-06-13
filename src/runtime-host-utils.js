@@ -5,7 +5,9 @@ import { ensureRuntimeBuiltins } from "./runtime-builtins.js";
 import {
   DEFAULT_RUNTIME_PROFILE,
   defaultHostCapabilitiesForProfile,
-  providedCapabilityIdsForProfile
+  providedCapabilityIdsForProfile,
+  runtimeCapabilityDefinitionsForProfile,
+  runtimeBuiltinSeedContributionsForProfile
 } from "./runtime-bundles.js";
 
 export function declareBackendHost(world, { actor, id, owner = actor, runtimeProfile = DEFAULT_RUNTIME_PROFILE }) {
@@ -39,7 +41,12 @@ function declareHost(world, {
   process
 }) {
   const capabilities = defaultHostCapabilitiesForProfile(runtimeProfile, hostKind);
-  ensureRuntimeBuiltins(world, { actor, capabilityIds: providedCapabilityIdsForProfile(runtimeProfile) });
+  ensureRuntimeBuiltins(world, {
+    actor,
+    capabilityIds: providedCapabilityIdsForProfile(runtimeProfile),
+    capabilityDefinitions: runtimeCapabilityDefinitionsForProfile(runtimeProfile),
+    seedContributions: runtimeBuiltinSeedContributionsForProfile(runtimeProfile)
+  });
   for (const capability of capabilities) {
     ensureCapabilityDefinition(world, {
       actor,

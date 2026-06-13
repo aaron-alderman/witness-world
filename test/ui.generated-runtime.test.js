@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
 import { applyWitnessToml } from "../src/dsl.js";
-import { renderWidgetPage } from "../src/widgets.js";
+import { renderWidgetPage } from "../plugins/inspect/widget-page.js";
 import { expectNoRuntimeErrors, launchBrowser, startUiDemoServer, waitForAppReady } from "./support/harness.js";
 
 test("generated UI boots, renders core widgets, and is executable", async () => {

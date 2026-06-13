@@ -1,0 +1,1832 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>Mill-iQ™ — Engentus</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --dk: #2C3C63;
+      --mid: #344C6C;
+      --brd: #3D5880;
+      --brdl: #e2e8f0;
+      --t1: #f1f5f9;
+      --t2: #94a3b8;
+      --t3: #475569;
+      --tdark: #1e293b;
+      --blue: #8CC4D4;
+      --blu2: #5AAABF;
+      --bluf: #DCF0F5;
+      --red: #dc2626;
+      --grn: #16a34a;
+      --ylw: #EC7424;
+      --pur: #7c3aed;
+      --sw: 284px;
+      --th: 44px;
+      --sch: 50px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--dk);
+      color: var(--t1);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      font-size: 12.5px
+    }
+
+    /* ── TOOLBAR ── */
+    #tb {
+      height: var(--th);
+      background: var(--dk);
+      border-bottom: 1px solid var(--brd);
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      z-index: 50
+    }
+
+    #tb-brand {
+      padding: 0 14px;
+      min-width: var(--sw);
+      border-right: 1px solid var(--brd);
+      height: 100%;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      letter-spacing: -.02em;
+      transition: background .15s;
+      user-select: none;
+    }
+
+    #tb-brand.clickable { cursor: pointer; }
+    #tb-brand.clickable:hover { background: rgba(255,255,255,.05); }
+
+    #tb-divider {
+      width: 1px;
+      height: 24px;
+      background: var(--brd);
+      flex-shrink: 0
+    }
+
+    /* Goodman-specific toolbar items — toggled by router */
+    #tb-goodman-tools {
+      display: none;
+      align-items: center;
+      flex: 1;
+    }
+
+    .mode-pill {
+      display: flex;
+      background: var(--mid);
+      border-radius: 6px;
+      padding: 2px;
+      margin: 0 12px;
+      gap: 2px
+    }
+
+    .mode-btn {
+      background: none;
+      border: none;
+      color: var(--t2);
+      padding: 4px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all .15s
+    }
+
+    .mode-btn.on {
+      background: var(--blue);
+      color: var(--dk)
+    }
+
+    #tb-wins {
+      display: flex;
+      gap: 2px;
+      margin-left: auto;
+      padding-right: 8px;
+      align-items: center
+    }
+
+    /* User profile */
+    #user-prof {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 14px;
+      cursor: pointer;
+      border-left: 1px solid var(--brd);
+      height: 100%;
+      flex-shrink: 0;
+      user-select: none;
+      transition: background .15s;
+      position: relative
+    }
+
+    #user-prof:hover { background: rgba(255,255,255,.04) }
+
+    #up-avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--blue);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--dk);
+      flex-shrink: 0
+    }
+
+    #up-info { display: flex; flex-direction: column; gap: 1px }
+    #up-name { font-size: 11.5px; font-weight: 600; color: var(--t1); line-height: 1.2 }
+    #up-role { font-size: 9.5px; color: var(--t2); line-height: 1.2 }
+    #up-caret { font-size: 9px; color: var(--t2); margin-left: 2px }
+
+    #up-menu {
+      position: absolute;
+      top: calc(100% + 2px);
+      right: 0;
+      background: var(--mid);
+      border: 1px solid var(--brd);
+      border-radius: 8px;
+      min-width: 170px;
+      z-index: 200;
+      box-shadow: 0 8px 24px rgba(0,0,0,.3);
+      padding: 4px;
+      display: none
+    }
+
+    #up-menu.open { display: block }
+
+    .up-mi {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 5px;
+      font-size: 12px;
+      color: var(--t1);
+      cursor: pointer;
+      transition: background .1s
+    }
+
+    .up-mi:hover { background: rgba(255,255,255,.07) }
+    .up-mi-icon { font-size: 13px; width: 16px; text-align: center; flex-shrink: 0; color: var(--t2) }
+    .up-sep { height: 1px; background: var(--brd); margin: 3px 0 }
+
+    .tbw {
+      background: none;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: var(--t2);
+      padding: 5px 10px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all .15s;
+      display: flex;
+      align-items: center;
+      gap: 5px
+    }
+
+    .tbw:hover { border-color: var(--brd); color: var(--t1) }
+    .tbw.on { background: var(--mid); border-color: var(--blue); color: var(--blue) }
+
+    /* ── HOME VIEW ── */
+    #view-home { flex: 1; display: flex; overflow: hidden; }
+
+    #news-panel {
+      width: var(--sw);
+      min-width: var(--sw);
+      background: var(--mid);
+      border-right: 1px solid var(--brd);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .news-hdr {
+      padding: 11px 13px;
+      border-bottom: 1px solid var(--brd);
+      font-size: 9.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--t2);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .news-live {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 9px;
+      color: #4ade80;
+      font-weight: 600;
+    }
+
+    .news-live-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #4ade80;
+      animation: livepulse 2s infinite;
+    }
+
+    @keyframes livepulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .3; }
+    }
+
+    .news-list { flex: 1; overflow-y: auto; padding: 8px; }
+    .news-list::-webkit-scrollbar { width: 4px; }
+    .news-list::-webkit-scrollbar-thumb { background: var(--brd); border-radius: 2px; }
+
+    .news-item {
+      background: rgba(0,0,0,.18);
+      border-radius: 6px;
+      padding: 9px 10px;
+      margin-bottom: 7px;
+      border-left: 3px solid transparent;
+      cursor: pointer;
+      transition: background .12s;
+    }
+
+    .news-item:hover { background: rgba(0,0,0,.3); }
+    .ni-alert    { border-left-color: var(--ylw); }
+    .ni-product  { border-left-color: #4ade80; }
+    .ni-industry { border-left-color: #a78bfa; }
+    .ni-platform { border-left-color: var(--blue); }
+
+    .ni-cat { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 3px; }
+    .ni-alert .ni-cat    { color: var(--ylw); }
+    .ni-product .ni-cat  { color: #4ade80; }
+    .ni-industry .ni-cat { color: #a78bfa; }
+    .ni-platform .ni-cat { color: var(--blue); }
+    .ni-title { font-size: 11.5px; color: var(--t1); line-height: 1.38; margin-bottom: 4px; }
+    .ni-time  { font-size: 9.5px; color: var(--t2); }
+
+    #module-area { flex: 1; overflow-y: auto; padding: 22px 24px; }
+    #module-area::-webkit-scrollbar { width: 5px; }
+    #module-area::-webkit-scrollbar-thumb { background: var(--brd); border-radius: 3px; }
+
+    .mod-area-hdr { margin-bottom: 18px; }
+    .mod-area-hdr h2 { font-size: 15px; font-weight: 700; color: var(--t1); margin-bottom: 5px; }
+    .mod-area-meta { display: flex; align-items: center; gap: 10px; }
+    .mod-area-meta p { font-size: 11px; color: var(--t2); }
+
+    .mill-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(140,196,212,.1);
+      border: 1px solid rgba(140,196,212,.22);
+      border-radius: 4px;
+      padding: 2px 9px;
+      font-size: 10px;
+      color: var(--blue);
+      font-weight: 600;
+    }
+
+    #module-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    .mod-card {
+      background: var(--mid);
+      border: 1px solid var(--brd);
+      border-radius: 10px;
+      padding: 16px 14px 13px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 7px;
+      text-align: center;
+      transition: all .18s;
+      position: relative;
+      min-height: 148px;
+    }
+
+    .mod-card.active {
+      border-color: rgba(140,196,212,.45);
+      cursor: pointer;
+      background: rgba(140,196,212,.06);
+    }
+
+    .mod-card.active:hover {
+      background: rgba(140,196,212,.13);
+      border-color: var(--blue);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0,0,0,.25);
+    }
+
+    .mod-card.locked { opacity: .35; }
+
+    .mod-icon { width: 64px; height: 50px; border-radius: 6px; overflow: hidden; flex-shrink: 0; }
+    .mod-name { font-size: 11.5px; font-weight: 600; color: var(--t1); line-height: 1.3; }
+    .mod-desc { font-size: 9.5px; color: var(--t2); line-height: 1.4; }
+    .mod-lock { position: absolute; top: 9px; right: 9px; font-size: 10px; color: var(--t2); opacity: .55; }
+
+    .mod-status {
+      font-size: 8.5px;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-weight: 600;
+      margin-top: auto;
+    }
+
+    .ms-open { background: rgba(140,196,212,.18); color: var(--blue); }
+    .ms-soon { background: rgba(255,255,255,.05); color: var(--t2); }
+
+    /* ── GOODMAN VIEW ── */
+    #view-goodman { flex: 1; display: none; flex-direction: column; overflow: hidden; }
+
+    /* ── BODY ── */
+    #body { flex: 1; display: flex; overflow: hidden }
+
+    /* ── SIDEBAR ── */
+    #sb {
+      width: var(--sw);
+      min-width: var(--sw);
+      background: var(--mid);
+      border-right: 1px solid var(--brd);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden
+    }
+
+    #sb-scroll { flex: 1; overflow-y: auto; overflow-x: hidden }
+    #sb-scroll::-webkit-scrollbar { width: 4px }
+    #sb-scroll::-webkit-scrollbar-thumb { background: var(--brd); border-radius: 2px }
+
+    .ssec { padding: 10px 12px; border-bottom: 1px solid var(--brd) }
+
+    .ssec-title {
+      font-size: 9.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--t2);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between
+    }
+
+    .ssec-title button { background: none; border: none; color: var(--blue); cursor: pointer; font-size: 11px; font-weight: 600; padding: 0 }
+    .ssec-title button:hover { color: var(--blu2) }
+
+    .sim-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 7px;
+      border-radius: 5px;
+      cursor: pointer;
+      margin-bottom: 2px;
+      transition: background .1s
+    }
+
+    .sim-row:hover { background: rgba(255,255,255,.05) }
+    .sim-row.on { background: rgba(140,196,212,.15) }
+    .sim-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0 }
+    .sim-name { flex: 1; font-size: 12px; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+
+    .sim-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 600; flex-shrink: 0 }
+    .sim-badge.idle    { background: rgba(255,255,255,.1); color: var(--t2) }
+    .sim-badge.running { background: rgba(140,196,212,.3); color: #6CBDCF }
+    .sim-badge.done    { background: rgba(22,163,74,.2); color: #86efac }
+    .sim-badge.stale   { background: rgba(236,116,36,.2); color: #FDBA74 }
+    .sim-badge.stopped { background: rgba(220,38,38,.15); color: #fca5a5 }
+
+    .sim-acts { display: flex; gap: 2px; opacity: 0; transition: opacity .15s }
+    .sim-row:hover .sim-acts { opacity: 1 }
+
+    .sab { background: none; border: none; color: var(--t2); cursor: pointer; padding: 1px 4px; border-radius: 3px; font-size: 10px }
+    .sab:hover { background: rgba(255,255,255,.1); color: var(--t1) }
+
+    .add-sim-btn {
+      width: 100%;
+      padding: 6px;
+      background: rgba(140,196,212,.12);
+      border: 1px dashed rgba(140,196,212,.4);
+      border-radius: 5px;
+      color: var(--blue);
+      font-size: 11.5px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: all .15s;
+      margin-top: 4px
+    }
+
+    .add-sim-btn:hover { background: rgba(140,196,212,.22) }
+
+    .mc-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px }
+    .mc-row label { font-size: 11px; color: var(--t2); flex: 1 }
+
+    .mc-row input[type=number] {
+      width: 72px;
+      background: var(--dk);
+      color: var(--t1);
+      border: 1px solid var(--brd);
+      border-radius: 4px;
+      padding: 3px 6px;
+      font-size: 11px;
+      text-align: right
+    }
+
+    .run-row { display: flex; gap: 5px; margin-top: 8px }
+
+    .rbtn { flex: 1; padding: 7px; border-radius: 5px; border: none; cursor: pointer; font-size: 11.5px; font-weight: 600; transition: all .15s }
+    .rbtn.go { background: var(--grn); color: #fff }
+    .rbtn.go:hover { background: #15803d }
+    .rbtn.go:disabled { opacity: .4; cursor: not-allowed }
+    .rbtn.pause { background: var(--ylw); color: #fff }
+    .rbtn.stop { background: var(--dk); border: 1px solid var(--brd); color: var(--t2) }
+
+    .prog-wrap { height: 4px; background: var(--brd); border-radius: 2px; margin-top: 6px; overflow: hidden }
+    .prog-fill { height: 100%; background: var(--blue); border-radius: 2px; transition: width .3s; width: 0% }
+    .prog-lbl { font-size: 9.5px; color: var(--t2); margin-top: 2px }
+
+    .bs-item { border-radius: 6px; border: 1px solid var(--brd); margin-bottom: 5px; overflow: hidden }
+
+    .bs-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 9px;
+      cursor: pointer;
+      background: rgba(255,255,255,.03);
+      transition: background .1s;
+      user-select: none
+    }
+
+    .bs-head:hover { background: rgba(255,255,255,.07) }
+    .bs-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0 }
+    .bs-name { flex: 1; font-size: 12px; font-weight: 500 }
+    .bs-actions { display: flex; gap: 3px }
+    .bs-act { background: none; border: none; color: var(--t2); cursor: pointer; font-size: 11px; padding: 1px 4px; border-radius: 3px }
+    .bs-act:hover { background: rgba(255,255,255,.1); color: var(--t1) }
+    .bs-chev { color: var(--t2); font-size: 10px; transition: transform .15s; flex-shrink: 0 }
+    .bs-chev.open { transform: rotate(90deg) }
+    .bs-params { display: none; padding: 2px 8px 8px }
+    .bs-params.open { display: block }
+
+    .cat-lbl {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--t2);
+      margin: 8px 0 4px;
+      padding-left: 2px;
+      border-top: 1px solid var(--brd);
+      padding-top: 6px
+    }
+
+    .cat-lbl:first-child { border-top: none; margin-top: 4px }
+
+    .prow { margin-bottom: 6px }
+    .prow-top { display: flex; align-items: center; gap: 5px; margin-bottom: 2px }
+    .plabel { flex: 1; font-size: 10.5px; color: var(--t2); line-height: 1.3 }
+    .pval { font-size: 11px; font-weight: 600; color: var(--blue); min-width: 52px; text-align: right; font-variant-numeric: tabular-nums }
+
+    .free-tog { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; flex-shrink: 0 }
+    .tog-track { width: 24px; height: 13px; background: var(--brd); border-radius: 7px; position: relative; transition: background .15s; flex-shrink: 0 }
+    .tog-track.on { background: var(--blue) }
+    .tog-knob { width: 9px; height: 9px; background: #fff; border-radius: 50%; position: absolute; top: 2px; left: 2px; transition: left .15s }
+    .tog-track.on .tog-knob { left: 13px }
+    .tog-lbl { font-size: 9px; color: var(--t2) }
+
+    .dist-box { background: rgba(0,0,0,.25); border-radius: 4px; padding: 5px 7px; margin-top: 3px; display: none }
+    .dist-box.open { display: block }
+    .dist-sel { width: 100%; background: var(--dk); color: var(--t1); border: 1px solid var(--brd); border-radius: 3px; padding: 3px 5px; font-size: 11px; margin-bottom: 4px }
+    .dist-inputs { display: flex; gap: 5px; flex-wrap: wrap }
+    .dig { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 58px }
+    .dig label { font-size: 9px; color: var(--t2) }
+    .dig input { background: var(--dk); color: var(--t1); border: 1px solid var(--brd); border-radius: 3px; padding: 2px 5px; font-size: 11px; width: 100% }
+
+    input[type=range] { width: 100%; accent-color: var(--blue); height: 3px; cursor: pointer }
+
+    .probe-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px }
+    .probe-row label { font-size: 11px; color: var(--t2); flex: 1 }
+    .probe-val { font-size: 11px; font-weight: 600; color: var(--blue); min-width: 52px; text-align: right; font-variant-numeric: tabular-nums }
+
+    .save-sim-btn { width: 100%; margin-top: 10px; padding: 6px 0; background: var(--blue); color: var(--dk); border: none; border-radius: 6px; font-size: 11.5px; font-weight: 600; cursor: pointer; letter-spacing: .3px; opacity: .9 }
+    .save-sim-btn:hover { opacity: 1 }
+
+    .info-box { background: rgba(0,0,0,.2); border-radius: 5px; padding: 8px 10px; margin-top: 4px }
+    .info-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--t2); margin-bottom: 3px }
+    .info-row:last-child { margin-bottom: 0 }
+    .info-val { font-weight: 600; font-variant-numeric: tabular-nums }
+
+    /* ── CHART AREA ── */
+    #chart-area { flex: 1; display: flex; flex-direction: column; overflow: hidden }
+
+    #scr.hidden+#chart-wrap { margin-top: 8px; border-radius: 8px }
+
+    #chart-wrap {
+      flex: 1;
+      background: #fff;
+      margin: 0 8px 8px;
+      border-radius: 0 0 8px 8px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,.15)
+    }
+
+    #chart-svg, #mc-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block }
+    #mc-canvas { pointer-events: none }
+
+    #chart-tip {
+      position: absolute;
+      pointer-events: none;
+      background: rgba(15,23,42,.9);
+      color: var(--t1);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      opacity: 0;
+      transition: opacity .1s;
+      line-height: 1.7;
+      z-index: 20;
+      white-space: nowrap
+    }
+
+    /* ── SCRUBBER ── */
+    #scr {
+      height: var(--sch);
+      background: var(--mid);
+      border-bottom: 1px solid var(--brd);
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 0 12px;
+      margin: 7px 8px 0;
+      border-radius: 8px 8px 0 0;
+      flex-shrink: 0
+    }
+
+    #scr.hidden { display: none }
+
+    #play-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      border: none;
+      background: var(--blue);
+      color: var(--dk);
+      cursor: pointer;
+      font-size: 11px;
+      flex-shrink: 0;
+      transition: background .15s;
+      display: flex;
+      align-items: center;
+      justify-content: center
+    }
+
+    #play-btn:hover { background: var(--blu2) }
+    #time-sl { flex: 1 }
+
+    #t-lbl { font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 90px; text-align: right; color: var(--t1) }
+    .fail-badge { font-size: 10.5px; min-width: 80px; text-align: right; color: #f87171; font-variant-numeric: tabular-nums }
+
+    /* ── FLOATING WINDOWS ── */
+    #wl { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 200 }
+
+    .fw {
+      position: absolute;
+      pointer-events: all;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.22), 0 0 0 1px rgba(0,0,0,.07);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      min-width: 300px;
+      min-height: 140px
+    }
+
+    .fw-tb { background: var(--dk); padding: 7px 9px; display: flex; align-items: center; gap: 7px; cursor: grab; flex-shrink: 0; border-radius: 10px 10px 0 0; user-select: none }
+    .fw-tb:active { cursor: grabbing }
+    .fw-title { flex: 1; font-size: 12px; font-weight: 600; color: var(--t1) }
+
+    .fw-btn { width: 18px; height: 18px; border-radius: 3px; border: none; background: rgba(255,255,255,.1); color: var(--t2); cursor: pointer; font-size: 10px; display: flex; align-items: center; justify-content: center; transition: background .1s }
+    .fw-btn:hover { background: rgba(255,255,255,.2); color: var(--t1) }
+    .fw-body { flex: 1; overflow: auto; position: relative }
+    .fw-rz { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, #e2e8f0 50%) }
+
+    .stbl { width: 100%; border-collapse: collapse; font-size: 11.5px }
+    .stbl th { background: #f8fafc; color: #475569; font-weight: 600; padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--brdl); font-size: 10px; text-transform: uppercase; letter-spacing: .04em }
+    .stbl td { padding: 5px 8px; border-bottom: 1px solid #f1f5f9; color: #1e293b }
+    .stbl .num { font-variant-numeric: tabular-nums; text-align: right }
+    .stbl tr:last-child td { border-bottom: none }
+
+    .sc-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px }
+
+    .anova-stat { display: flex; gap: 12px; flex-wrap: wrap; padding: 10px 12px; background: #f8fafc; border-bottom: 1px solid var(--brdl) }
+    .anova-kv { display: flex; flex-direction: column; gap: 2px }
+    .anova-k { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; color: #64748b; font-weight: 600 }
+    .anova-v { font-size: 16px; font-weight: 700; color: #0f172a; font-variant-numeric: tabular-nums }
+    .anova-sig { font-size: 10px; padding: 2px 7px; border-radius: 3px; font-weight: 600; align-self: center }
+    .anova-sig.yes { background: #dcfce7; color: #15803d }
+    .anova-sig.no  { background: #f1f5f9; color: #64748b }
+    .anova-note { font-size: 10.5px; color: #64748b; padding: 6px 12px; border-bottom: 1px solid var(--brdl) }
+
+    .leg-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px }
+    .leg-sw { width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; opacity: .85 }
+    .leg-row span { font-size: 10.5px; color: var(--t2) }
+
+    .bs-edit-form { display: none; padding: 6px 8px 8px; background: rgba(0,0,0,.18); border-top: 1px solid var(--brd) }
+    .bs-edit-form.open { display: block }
+
+    .bs-ef-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px }
+    .bs-ef-row label { font-size: 10px; color: var(--t2); width: 40px; flex-shrink: 0 }
+    .bs-ef-row input[type=text] { flex: 1; background: var(--dk); color: var(--t1); border: 1px solid var(--brd); border-radius: 3px; padding: 3px 6px; font-size: 11px }
+    .bs-ef-row input[type=color] { width: 32px; height: 22px; border: none; background: none; cursor: pointer; padding: 0; border-radius: 3px }
+    .bs-ef-save { background: var(--blue); color: var(--dk); border: none; border-radius: 3px; padding: 3px 10px; font-size: 10px; cursor: pointer; font-weight: 600 }
+
+    .edit-group { background: rgba(0,0,0,.2); border-radius: 5px; padding: 8px 9px; margin-bottom: 7px }
+    .edit-group-title { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--t2); margin-bottom: 6px }
+
+    .efield-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px }
+    .efield-row label { font-size: 10px; color: var(--t2); flex: 1 }
+    .efield-row input[type=text] { flex: 2; background: var(--dk); color: var(--t1); border: 1px solid var(--brd); border-radius: 3px; padding: 2px 5px; font-size: 11px }
+    .efield-row input[type=number] { width: 52px; background: var(--dk); color: var(--t1); border: 1px solid var(--brd); border-radius: 3px; padding: 2px 5px; font-size: 11px; text-align: right }
+    .efield-row input[type=color] { width: 30px; height: 20px; border: none; background: none; cursor: pointer; padding: 0 }
+
+    .annot-list { margin-top: 4px }
+    .annot-row { display: flex; align-items: center; gap: 4px; margin-bottom: 3px; background: rgba(255,255,255,.04); border-radius: 3px; padding: 3px 5px }
+    .annot-row input[type=text] { flex: 1; background: var(--dk); color: var(--t1); border: 1px solid var(--brd); border-radius: 3px; padding: 2px 4px; font-size: 10.5px }
+    .annot-row input[type=number] { width: 46px; background: var(--dk); color: var(--t1); border: 1px solid var(--brd); border-radius: 3px; padding: 2px 4px; font-size: 10.5px; text-align: right }
+    .annot-del { background: none; border: none; color: var(--t2); cursor: pointer; padding: 1px 3px; border-radius: 2px; font-size: 10px }
+    .annot-del:hover { background: rgba(220,38,38,.2); color: #f87171 }
+
+    .add-annot-btn { width: 100%; padding: 5px; background: rgba(140,196,212,.1); border: 1px dashed rgba(140,196,212,.35); border-radius: 4px; color: var(--blue); font-size: 11px; cursor: pointer; font-weight: 500; margin-top: 4px; transition: all .15s }
+    .add-annot-btn:hover { background: rgba(140,196,212,.2) }
+
+    body.edit-mode #chart-svg { cursor: crosshair }
+    body.edit-mode #chart-svg [data-editable] { cursor: pointer }
+    body.edit-mode #chart-svg [data-editable]:hover { opacity: .75 }
+    .edit-selected { outline: 2px dashed var(--blue) }
+
+    /* ── MILL CHARGE VIEW ── */
+    #view-mill { flex: 1; display: none; flex-direction: column; overflow: hidden; }
+
+    #mill-body { flex: 1; display: flex; overflow: hidden; }
+
+    #mill-sb {
+      width: var(--sw);
+      min-width: var(--sw);
+      background: var(--mid);
+      border-right: 1px solid var(--brd);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #mill-sb-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; }
+    #mill-sb-scroll::-webkit-scrollbar { width: 4px; }
+    #mill-sb-scroll::-webkit-scrollbar-thumb { background: var(--brd); border-radius: 2px; }
+
+    #mill-main { flex: 1; display: flex; overflow: hidden; background: var(--dk); }
+
+    #mill-canvas-wrap {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      min-width: 0;
+    }
+
+    #mill-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      border-radius: 10px;
+    }
+
+    #mill-metrics {
+      width: 190px;
+      min-width: 190px;
+      background: var(--mid);
+      border-left: 1px solid var(--brd);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #mill-metrics-hdr {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--brd);
+      font-size: 9.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--t2);
+    }
+
+    #mill-metrics-panel { padding: 10px 12px; }
+
+    .mill-metric-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 9px;
+    }
+
+    .mill-metric-lbl { font-size: 11px; color: var(--t2); }
+    .mill-metric-val { font-size: 12px; font-weight: 600; color: var(--blue); font-variant-numeric: tabular-nums; }
+
+    .mill-regime-badge {
+      margin-top: 10px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-align: center;
+    }
+
+    .mill-preset-btn {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 6px 8px;
+      margin-bottom: 4px;
+      background: rgba(0,0,0,.18);
+      border: 1px solid var(--brd);
+      border-radius: 5px;
+      color: var(--t1);
+      font-size: 11.5px;
+      cursor: pointer;
+      transition: background .1s;
+    }
+    .mill-preset-btn:hover { background: rgba(140,196,212,.12); border-color: rgba(140,196,212,.35); }
+
+    #spd-wrap { display: flex; align-items: center; gap: 4px; flex-shrink: 0 }
+    #spd-sl { width: 72px; accent-color: var(--blue); cursor: pointer }
+    #spd-lbl { font-size: 10.5px; min-width: 34px; text-align: right; font-variant-numeric: tabular-nums; color: var(--t1) }
+
+    #trail-wrap { display: flex; align-items: center; gap: 3px; flex-shrink: 0; cursor: pointer }
+    #trail-wrap label { font-size: 10.5px; color: var(--t2); cursor: pointer }
+    #trail-cb { accent-color: var(--blue); cursor: pointer }
+
+    .cloud-note { font-size: 9.5px; color: var(--t2); margin-top: 5px; font-style: italic }
+
+    /* ── AUTH VIEWS (login / signout) — position:fixed, overlay everything ── */
+    /* Logo fix: images in column-flex containers must not stretch on the cross-axis */
+    .auth-hero img { align-self: flex-start; }
+    .auth-form-logo img { align-self: flex-start; }
+    #view-login, #view-signout {
+      position: fixed;
+      inset: 0;
+      display: none;
+      z-index: 1000;
+    }
+
+    .auth-left {
+      flex: 0 0 55%;
+      background:
+        linear-gradient(160deg, rgba(12,20,42,0.91) 0%, rgba(36,54,90,0.86) 55%, rgba(18,28,55,0.93) 100%),
+        url(img/main.png) center / cover no-repeat;
+      display: flex;
+      flex-direction: column;
+      padding: 32px 40px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Subtle grid overlay */
+    .auth-left::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(140,196,212,.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(140,196,212,.035) 1px, transparent 1px);
+      background-size: 44px 44px;
+      pointer-events: none;
+    }
+
+    .auth-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .auth-brand-div {
+      width: 1px;
+      height: 20px;
+      background: rgba(140,196,212,.35);
+    }
+
+    .auth-hero {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      position: relative;
+      z-index: 1;
+      padding: 0 8px;
+    }
+
+    .auth-tagline {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--t1);
+      line-height: 1.22;
+      margin-bottom: 14px;
+      letter-spacing: -.025em;
+    }
+
+    .auth-tagline em {
+      color: var(--blue);
+      font-style: normal;
+    }
+
+    .auth-sub {
+      font-size: 13px;
+      color: rgba(148,163,184,.85);
+      line-height: 1.65;
+      margin-bottom: 34px;
+      max-width: 380px;
+    }
+
+    .auth-bullets {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .auth-bullet {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      font-size: 12.5px;
+      color: rgba(241,245,249,.78);
+    }
+
+    .auth-bullet-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--blue);
+      flex-shrink: 0;
+      box-shadow: 0 0 0 3px rgba(140,196,212,.18);
+    }
+
+    .auth-footer {
+      font-size: 10px;
+      color: rgba(148,163,184,.45);
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Right form panel */
+    .auth-right {
+      flex: 1;
+      background: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 36px;
+    }
+
+    .auth-form-wrap { width: 100%; max-width: 372px; }
+
+    .auth-form-logo { margin-bottom: 26px; }
+
+    .auth-form-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 5px;
+      letter-spacing: -.025em;
+    }
+
+    .auth-form-sub {
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 26px;
+    }
+
+    /* Microsoft SSO button */
+    .ms-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 11px;
+      padding: 12px 18px;
+      background: #2f2f2f;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 13.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .15s;
+      letter-spacing: .01em;
+      margin-bottom: 20px;
+      font-family: inherit;
+    }
+
+    .ms-btn:hover { background: #1a1a1a; }
+
+    /* Divider */
+    .auth-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .auth-divider-line { flex: 1; height: 1px; background: #e2e8f0; }
+
+    .auth-divider-text {
+      font-size: 11px;
+      color: #94a3b8;
+      white-space: nowrap;
+    }
+
+    /* Fields */
+    .auth-field { margin-bottom: 14px; }
+
+    .auth-field label {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 5px;
+    }
+
+    .auth-input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #0f172a;
+      background: #fff;
+      transition: border-color .15s, box-shadow .15s;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .auth-input:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(140,196,212,.2);
+    }
+
+    .auth-pw-wrap { position: relative; }
+
+    .auth-pw-toggle {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #94a3b8;
+      font-size: 14px;
+      padding: 2px;
+      line-height: 1;
+    }
+
+    .auth-pw-toggle:hover { color: #475569; }
+
+    .auth-forgot {
+      text-align: right;
+      margin-top: -8px;
+      margin-bottom: 20px;
+    }
+
+    .auth-forgot a {
+      font-size: 11px;
+      color: var(--blu2);
+      text-decoration: none;
+    }
+
+    .auth-forgot a:hover { text-decoration: underline; }
+
+    .auth-submit {
+      width: 100%;
+      padding: 11.5px;
+      background: var(--dk);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .15s;
+      letter-spacing: .015em;
+      font-family: inherit;
+    }
+
+    .auth-submit:hover { background: #1e2f52; }
+
+    .auth-form-footer {
+      margin-top: 22px;
+      font-size: 10.5px;
+      color: #94a3b8;
+      text-align: center;
+      line-height: 1.65;
+    }
+
+    .auth-form-footer a { color: var(--blu2); text-decoration: none; }
+    .auth-form-footer a:hover { text-decoration: underline; }
+
+    /* ── PAGE-TURN ANIMATION ── */
+    /* Perspective sits on the fixed container; the inner .auth-book is the "page" */
+    #view-login  { perspective: 2200px; perspective-origin: 50% 50%; }
+    #view-signout { perspective: 2200px; perspective-origin: 50% 50%; }
+
+    .auth-book {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-shrink: 0;
+      position: relative;
+      transform-origin: right center;
+      transition: transform 0.9s cubic-bezier(0.77, 0, 0.175, 1);
+      backface-visibility: hidden;
+      will-change: transform;
+    }
+
+    /* Fold shadow — grows on the right edge as the page turns away */
+    .auth-book::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to left,
+        rgba(0,0,0,.6) 0%, rgba(0,0,0,.15) 18%, transparent 45%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.9s cubic-bezier(0.77, 0, 0.175, 1);
+    }
+
+    .auth-book.folding::after { opacity: 1; }
+
+    /* Sign-out incoming flip: shadow is on the left edge instead */
+    #view-signout .auth-book { transform-origin: left center; }
+    #view-signout .auth-book::after {
+      background: linear-gradient(to right,
+        rgba(0,0,0,.6) 0%, rgba(0,0,0,.15) 18%, transparent 45%);
+    }
+
+    /* Loading spinner for the sign-in button */
+    @keyframes authSpin { to { transform: rotate(360deg); } }
+
+    .auth-spinner {
+      display: inline-block;
+      width: 13px;
+      height: 13px;
+      border: 2px solid rgba(255,255,255,.28);
+      border-top-color: rgba(255,255,255,.9);
+      border-radius: 50%;
+      animation: authSpin 0.65s linear infinite;
+      vertical-align: -2px;
+      margin-right: 5px;
+      flex-shrink: 0;
+    }
+
+    .ms-btn .auth-spinner {
+      border-color: rgba(255,255,255,.28);
+      border-top-color: rgba(255,255,255,.9);
+    }
+
+    /* Signout confirmation */
+    .auth-signout-icon {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: var(--grn);
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 24px;
+      color: #fff;
+    }
+
+    .auth-so-title {
+      font-size: 21px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 9px;
+      letter-spacing: -.025em;
+      text-align: center;
+    }
+
+    .auth-so-sub {
+      font-size: 12.5px;
+      color: #64748b;
+      text-align: center;
+      margin-bottom: 28px;
+      line-height: 1.55;
+    }
+
+    /* ── MILL FORCE STYLES (mirrors mill-force-main.js layout) ── */
+    #mill-force-body { flex: 1; display: flex; overflow: hidden; }
+
+    #mill-force-sb {
+      width: var(--sw);
+      background: var(--mid);
+      border-right: 1px solid var(--brd);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    #mill-force-sb-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; }
+    #mill-force-sb-scroll::-webkit-scrollbar { width: 4px; }
+    #mill-force-sb-scroll::-webkit-scrollbar-thumb { background: var(--brd); border-radius: 2px; }
+
+    #mill-force-chart-area { flex: 1; display: flex; flex-direction: column; background: var(--dk); overflow: hidden; }
+    #mill-force-chart-tabs { display: flex; gap: 0; padding: 8px 12px; border-bottom: 1px solid var(--brd); background: var(--mid); flex-shrink: 0; }
+    .mill-force-cht-tab { background: none; border: 1px solid transparent; color: var(--t2); padding: 5px 12px; border-radius: 3px; cursor: pointer; font-size: 11px; transition: all 0.15s; }
+    .mill-force-cht-tab:hover { color: var(--t1); }
+    .mill-force-cht-tab.active { background: rgba(140,196,212,.12); color: var(--blue); border-color: rgba(140,196,212,.35); }
+
+    #mill-force-chart-wrap { flex: 1; overflow: hidden; position: relative; background: var(--dk); }
+    #mill-force-svg-cross, #mill-force-svg-force, #mill-force-svg-rose { width: 100%; height: 100%; }
+    #mill-force-mc-canvas { position: absolute; top: 0; left: 0; }
+    #mill-force-tip { position: absolute; background: rgba(29,39,83,.95); color: #f1f5f9; padding: 8px 12px; border-radius: 5px; font-size: 10.5px; z-index: 100; pointer-events: none; display: none; border: 1px solid var(--brd); box-shadow: 0 4px 12px rgba(0,0,0,.4); }
+
+    .mill-force-mode-pills { display: flex; gap: 6px; padding: 6px 0; }
+    .mill-force-pill { background: var(--dk); border: 1px solid var(--brd); color: var(--t2); padding: 4px 12px; border-radius: 3px; cursor: pointer; font-size: 11px; transition: all 0.15s; }
+    .mill-force-pill:hover { background: rgba(140,196,212,.08); border-color: var(--brd); }
+    .mill-force-pill.active { background: rgba(140,196,212,.12); color: var(--blue); border-color: rgba(140,196,212,.35); }
+
+    .prow { margin: 8px 0; display: flex; flex-direction: column; gap: 4px; }
+    .prow-top { display: flex; justify-content: space-between; align-items: center; }
+    .plabel { font-size: 11px; color: var(--t2); }
+    .pval { font-size: 11px; color: var(--blue); font-weight: 600; }
+    .mill-force-slider { width: 100%; height: 4px; border-radius: 2px; background: var(--brd); cursor: pointer; }
+
+    .mill-force-result-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 11px; }
+    .mill-force-rl { color: var(--t2); }
+    .mill-force-rv { color: var(--t1); font-weight: 600; }
+    .mill-force-rd { color: var(--ylw); font-size: 10px; }
+
+    .mill-force-mc-toggle { cursor: pointer; }
+    .mill-force-mc-toggle:hover { color: var(--blue); }
+    .mc-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 11px; }
+    .rbtn { background: var(--mid); border: 1px solid var(--brd); color: var(--t1); padding: 4px 12px; border-radius: 3px; cursor: pointer; font-size: 10px; transition: all 0.15s; }
+    .rbtn:hover:not(:disabled) { background: rgba(140,196,212,.12); border-color: rgba(140,196,212,.35); color: var(--blue); }
+    .rbtn:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+</head>
+
+<body>
+  <!-- ══ LOGIN VIEW (position:fixed overlay) ══ -->
+  <div id="view-login">
+    <div class="auth-book">
+    <!-- Left: brand panel -->
+    <div class="auth-left">
+      <div class="auth-brand">
+        <img src="img/engentus.png" alt="Engentus" style="height:17px;width:auto;flex-shrink:0">
+        <div class="auth-brand-div"></div>
+        <img src="img/mill-iq.png" alt="Mill-iQ™" style="height:19px;width:auto;flex-shrink:0">
+      </div>
+      <div class="auth-hero">
+        <img src="img/mill-iq.png" alt="Mill-iQ™" style="height:42px;width:auto;margin-bottom:28px">
+        <div class="auth-tagline">Structural Intelligence<br>for <em>SAG Mills</em></div>
+        <p class="auth-sub">Real-time fatigue monitoring and predictive analysis for critical liner fasteners — from bolt load to remaining life.</p>
+        <ul class="auth-bullets">
+          <li class="auth-bullet"><span class="auth-bullet-dot"></span>Real-time bolt load monitoring</li>
+          <li class="auth-bullet"><span class="auth-bullet-dot"></span>Goodman fatigue diagram analysis</li>
+          <li class="auth-bullet"><span class="auth-bullet-dot"></span>Monte Carlo life prediction</li>
+          <li class="auth-bullet"><span class="auth-bullet-dot"></span>Multi-site fleet management</li>
+        </ul>
+      </div>
+      <div class="auth-footer">© 2025 Engentus Pty Ltd. All rights reserved.</div>
+    </div>
+    <!-- Right: login form -->
+    <div class="auth-right">
+      <div class="auth-form-wrap">
+        <div class="auth-form-logo">
+          <img src="img/mill-iq.png" alt="Mill-iQ™" style="height:30px;width:auto">
+        </div>
+        <h2 class="auth-form-title">Welcome back</h2>
+        <p class="auth-form-sub">Sign in to your Engentus account</p>
+        <!-- Microsoft SSO — primary -->
+        <button class="ms-btn" id="ms-btn" onclick="authSignIn(this)">
+          <svg width="18" height="18" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0"  y="0"  width="10" height="10" fill="#f25022"/>
+            <rect x="11" y="0"  width="10" height="10" fill="#7fba00"/>
+            <rect x="0"  y="11" width="10" height="10" fill="#00a4ef"/>
+            <rect x="11" y="11" width="10" height="10" fill="#ffb900"/>
+          </svg>
+          Sign in with Microsoft
+        </button>
+        <div class="auth-divider">
+          <div class="auth-divider-line"></div>
+          <span class="auth-divider-text">or continue with email</span>
+          <div class="auth-divider-line"></div>
+        </div>
+        <div class="auth-field">
+          <label for="login-email">Email address</label>
+          <input type="email" id="login-email" class="auth-input" placeholder="you@company.com" autocomplete="email">
+        </div>
+        <div class="auth-field">
+          <label for="login-pw">Password</label>
+          <div class="auth-pw-wrap">
+            <input type="password" id="login-pw" class="auth-input" placeholder="••••••••" autocomplete="current-password" style="padding-right:36px">
+            <button class="auth-pw-toggle" type="button" onclick="(function(b){var i=document.getElementById('login-pw');i.type=i.type==='password'?'text':'password';b.textContent=i.type==='password'?'◉':'◎'})(this)">◉</button>
+          </div>
+        </div>
+        <div class="auth-forgot"><a href="#">Forgot password?</a></div>
+        <button class="auth-submit" onclick="authSignIn(this)">Sign in</button>
+        <div class="auth-form-footer">
+          By signing in you agree to Engentus's
+          <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>.
+        </div>
+      </div>
+    </div>
+    </div><!-- /.auth-book -->
+  </div>
+
+  <!-- ══ SIGNOUT VIEW (position:fixed overlay) ══ -->
+  <div id="view-signout">
+    <div class="auth-book">
+    <!-- Left: same brand panel -->
+    <div class="auth-left">
+      <div class="auth-brand">
+        <img src="img/engentus.png" alt="Engentus" style="height:17px;width:auto;flex-shrink:0">
+        <div class="auth-brand-div"></div>
+        <img src="img/mill-iq.png" alt="Mill-iQ™" style="height:19px;width:auto;flex-shrink:0">
+      </div>
+      <div class="auth-hero">
+        <img src="img/mill-iq.png" alt="Mill-iQ™" style="height:42px;width:auto;margin-bottom:28px">
+        <div class="auth-tagline">Structural Intelligence<br>for <em>SAG Mills</em></div>
+        <p class="auth-sub">Real-time fatigue monitoring and predictive analysis for critical liner fasteners — from bolt load to remaining life.</p>
+        <ul class="auth-bullets">
+          <li class="auth-bullet"><span class="auth-bullet-dot"></span>Real-time bolt load monitoring</li>
+          <li class="auth-bullet"><span class="auth-bullet-dot"></span>Goodman fatigue diagram analysis</li>
+          <li class="auth-bullet"><span class="auth-bullet-dot"></span>Monte Carlo life prediction</li>
+          <li class="auth-bullet"><span class="auth-bullet-dot"></span>Multi-site fleet management</li>
+        </ul>
+      </div>
+      <div class="auth-footer">© 2025 Engentus Pty Ltd. All rights reserved.</div>
+    </div>
+    <!-- Right: signout confirmation -->
+    <div class="auth-right">
+      <div class="auth-form-wrap" style="text-align:center">
+        <div class="auth-form-logo" style="display:flex;justify-content:center">
+          <img src="img/mill-iq.png" alt="Mill-iQ™" style="height:30px;width:auto">
+        </div>
+        <div class="auth-signout-icon">✓</div>
+        <h2 class="auth-so-title">You've been signed out</h2>
+        <p class="auth-so-sub">Your session has ended securely.<br>Thank you for using Mill-iQ™.</p>
+        <button class="auth-submit" onclick="authGoLogin()">Sign back in</button>
+        <div class="auth-form-footer" style="margin-top:16px">
+          Mill-iQ™ is a product of Engentus Pty Ltd
+        </div>
+      </div>
+    </div>
+    </div><!-- /.auth-book -->
+  </div>
+
+  <!-- SHARED TOOLBAR -->
+  <div id="tb">
+    <div id="tb-brand">
+      <img src="img/engentus.png" alt="Engentus" style="height:20px;width:auto;flex-shrink:0">
+      <div id="tb-divider"></div>
+      <img src="img/mill-iq.png" alt="Mill-iQ™" style="height:22px;width:auto;flex-shrink:0">
+    </div>
+    <!-- Shown only in Goodman view -->
+    <div id="tb-goodman-tools">
+      <div class="mode-pill">
+        <button class="mode-btn on" data-mode="static">Static</button>
+        <button class="mode-btn" data-mode="mc">Monte Carlo</button>
+        <button class="mode-btn" data-mode="edit">✏ Edit</button>
+      </div>
+      <div id="tb-wins">
+        <button class="tbw" data-win="cdf">📈 CDF</button>
+        <button class="tbw" data-win="stats">📊 Stats</button>
+        <button class="tbw" data-win="anova">🔬 ANOVA</button>
+      </div>
+    </div>
+    <!-- Always visible -->
+    <div id="user-prof" onclick="document.getElementById('up-menu').classList.toggle('open')">
+      <div id="up-avatar">AA</div>
+      <div id="up-info">
+        <div id="up-name">Aaron A.</div>
+        <div id="up-role">Lead Engineer</div>
+      </div>
+      <span id="up-caret">▾</span>
+      <div id="up-menu">
+        <div class="up-mi"><span class="up-mi-icon">👤</span>Profile</div>
+        <div class="up-mi"><span class="up-mi-icon">⚙</span>Settings</div>
+        <div class="up-mi"><span class="up-mi-icon">📋</span>Report export</div>
+        <div class="up-sep"></div>
+        <div class="up-mi"><span class="up-mi-icon">🏭</span>Mill: M48 – Goldfields</div>
+        <div class="up-sep"></div>
+        <div class="up-mi" onclick="authSignOut()" style="color:#f87171;cursor:pointer"><span class="up-mi-icon">↩</span>Sign out</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ HOME VIEW ══ -->
+  <div id="view-home">
+    <!-- Left: News / feed panel -->
+    <div id="news-panel">
+      <div class="news-hdr">
+        <span>Feed</span>
+        <div class="news-live"><div class="news-live-dot"></div>Live</div>
+      </div>
+      <div class="news-list">
+        <div class="news-item ni-alert">
+          <div class="ni-cat">Alert</div>
+          <div class="ni-title">Sensor B7 on M48 reporting anomalous load readings — review recommended before next measurement window</div>
+          <div class="ni-time">2h ago</div>
+        </div>
+        <div class="news-item ni-platform">
+          <div class="ni-cat">Platform</div>
+          <div class="ni-title">Scheduled maintenance window: API gateway Sunday 02:00–04:00 AWST</div>
+          <div class="ni-time">6h ago</div>
+        </div>
+        <div class="news-item ni-product">
+          <div class="ni-cat">Product</div>
+          <div class="ni-title">Mill-iQ™ Fatigue Module v2.1.0 — Goodman diagram now supports multi-scenario ANOVA export</div>
+          <div class="ni-time">1d ago</div>
+        </div>
+        <div class="news-item ni-product">
+          <div class="ni-cat">Product</div>
+          <div class="ni-title">M48 maintenance window complete — 3 bolt sets recalibrated and re-zeroed</div>
+          <div class="ni-time">2d ago</div>
+        </div>
+        <div class="news-item ni-industry">
+          <div class="ni-cat">Industry</div>
+          <div class="ni-title">AS 4024 annex revision published — updated fatigue factors for mining fasteners now available</div>
+          <div class="ni-time">3d ago</div>
+        </div>
+        <div class="news-item ni-platform">
+          <div class="ni-cat">Platform</div>
+          <div class="ni-title">New firmware v2.3.1 available for LinerSense o310 sensors</div>
+          <div class="ni-time">4d ago</div>
+        </div>
+        <div class="news-item ni-industry">
+          <div class="ni-cat">Industry</div>
+          <div class="ni-title">MCA publishes updated guidelines on real-time structural monitoring for SAG mills</div>
+          <div class="ni-time">1w ago</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Module grid -->
+    <div id="module-area">
+      <div class="mod-area-hdr">
+        <h2>Analysis Modules</h2>
+        <div class="mod-area-meta">
+          <p>Select a module to begin analysis</p>
+          <div class="mill-pill">⚙ M48 – Goldfields</div>
+        </div>
+      </div>
+      <div id="module-grid">
+        <!-- Active: Mill Charge Motion -->
+        <div class="mod-card active" onclick="location.hash='#mill'">
+          <div class="mod-icon">
+            <svg viewBox="0 0 66 50" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+              <rect width="66" height="50" fill="#0d1a2e" rx="4"/>
+              <circle cx="33" cy="25" r="20" stroke="#475569" stroke-width="1.5" fill="none"/>
+              <!-- Charge region -->
+              <path d="M 33 25 L 53 25 A 20 20 0 1 1 22 9 Z" fill="rgba(124,94,26,0.75)"/>
+              <!-- Free surface -->
+              <line x1="22" y1="9" x2="53" y2="25" stroke="#c9913a" stroke-width="1.5"/>
+              <!-- Shoulder dot -->
+              <circle cx="22" cy="9" r="3" fill="#fbbf24"/>
+              <!-- Toe dot -->
+              <circle cx="53" cy="25" r="3" fill="#f87171"/>
+              <!-- Centre -->
+              <circle cx="33" cy="25" r="2" fill="#475569"/>
+            </svg>
+          </div>
+          <div class="mod-name">Mill Charge Motion</div>
+          <div class="mod-desc">2D charge shape, regime &amp; power proxy</div>
+          <div class="mod-status ms-open">Available</div>
+        </div>
+        <!-- Active: Goodman Fatigue Diagram -->
+        <div class="mod-card active" onclick="location.hash='#goodman'">
+          <div class="mod-icon">
+            <svg viewBox="0 0 66 50" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+              <rect width="66" height="50" fill="#0d1f35" rx="4"/>
+              <!-- Safe zone -->
+              <polygon points="9,42 9,7 57,42" fill="rgba(22,163,74,0.2)"/>
+              <!-- Unsafe zone -->
+              <polygon points="9,7 57,7 57,42" fill="rgba(220,38,38,0.1)"/>
+              <!-- Goodman line -->
+              <line x1="9" y1="7" x2="57" y2="42" stroke="#f87171" stroke-width="1.5" stroke-linecap="round"/>
+              <!-- Y axis -->
+              <line x1="9" y1="46" x2="9" y2="4" stroke="#94a3b8" stroke-width="1"/>
+              <polygon points="9,3 7.2,6.5 10.8,6.5" fill="#94a3b8"/>
+              <!-- X axis -->
+              <line x1="6" y1="42" x2="61" y2="42" stroke="#94a3b8" stroke-width="1"/>
+              <polygon points="62,42 58.5,40.3 58.5,43.7" fill="#94a3b8"/>
+              <!-- Safe data points -->
+              <circle cx="17" cy="33" r="2.1" fill="#5AAABF"/>
+              <circle cx="24" cy="26" r="2.1" fill="#5AAABF"/>
+              <circle cx="13" cy="38" r="2.1" fill="#5AAABF"/>
+              <circle cx="32" cy="19" r="2.1" fill="#5AAABF"/>
+              <!-- Borderline point -->
+              <circle cx="40" cy="34" r="2.1" fill="#f59e0b"/>
+              <!-- Failed point -->
+              <circle cx="36" cy="14" r="2.1" fill="#f87171"/>
+              <!-- Labels -->
+              <text x="58" y="49" font-size="5" fill="#64748b" font-family="sans-serif">σm</text>
+              <text x="1" y="8" font-size="5" fill="#64748b" font-family="sans-serif">σa</text>
+            </svg>
+          </div>
+          <div class="mod-name">Goodman Fatigue Diagram</div>
+          <div class="mod-desc">SN curve analysis with Monte Carlo simulation</div>
+          <div class="mod-status ms-open">Available</div>
+        </div>
+        <!-- Active: Mill Force Analysis -->
+        <div class="mod-card active" onclick="location.hash='#mill-force'">
+          <div class="mod-icon">
+            <svg viewBox="0 0 66 50" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%">
+              <rect width="66" height="50" fill="#0d1f35" rx="4"/>
+              <circle cx="33" cy="25" r="18" fill="none" stroke="#94a3b8" stroke-width="1"/>
+              <circle cx="33" cy="25" r="13" fill="none" stroke="#475569" stroke-width="0.8" stroke-dasharray="2,2"/>
+              <path d="M 26.2 9.5 A 18 18 0 0 1 49.6 33.5 L 44.5 30 A 13 13 0 0 0 30 13 Z" fill="#5AAABF" fill-opacity="0.3" stroke="#5AAABF" stroke-width="0.6"/>
+              <rect x="29" y="7" width="3.5" height="6"   rx="0.5" fill="#5AAABF" fill-opacity="0.85" transform="rotate(-28,33,25)"/>
+              <rect x="29" y="7" width="3.5" height="8.5" rx="0.5" fill="#5AAABF" fill-opacity="0.85" transform="rotate(-10,33,25)"/>
+              <rect x="29" y="7" width="3.5" height="9.5" rx="0.5" fill="#5AAABF" fill-opacity="0.85" transform="rotate( 10,33,25)"/>
+              <rect x="29" y="7" width="3.5" height="7"   rx="0.5" fill="#5AAABF" fill-opacity="0.85" transform="rotate( 30,33,25)"/>
+              <line x1="33" y1="25" x2="20" y2="8"  stroke="#f1f5f9" stroke-width="0.8" stroke-dasharray="2.5,2"/>
+              <line x1="33" y1="25" x2="51" y2="35" stroke="#94a3b8" stroke-width="0.8" stroke-dasharray="2.5,2"/>
+              <text x="16" y="14" font-size="4.5" fill="#94a3b8" font-family="sans-serif">φ</text>
+              <text x="50" y="43" font-size="4.5" fill="#94a3b8" font-family="sans-serif">φ'</text>
+            </svg>
+          </div>
+          <div class="mod-name">Mill Force Analysis</div>
+          <div class="mod-desc">Liner force distribution with dual-model comparison</div>
+          <div class="mod-status ms-open">Available</div>
+        </div>
+        <!-- Locked cards rendered by script below -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ GOODMAN VIEW ══ -->
+  <div id="view-goodman">
+    <div id="body">
+      <!-- SIDEBAR -->
+      <div id="sb">
+        <div id="sb-scroll">
+          <!-- Static view params (mode=static) -->
+          <div class="ssec" id="sec-static">
+            <div class="ssec-title">Scenario View</div>
+            <div id="static-params-html"></div>
+          </div>
+          <!-- MC simulation manager (mode=mc) -->
+          <div class="ssec" id="sec-mc" style="display:none">
+            <div class="ssec-title">Simulations <button id="new-sim-btn">+ New</button></div>
+            <div id="sim-list"></div>
+          </div>
+          <!-- MC run config (mode=mc, sim selected) -->
+          <div class="ssec" id="sec-run" style="display:none">
+            <div class="ssec-title">Run Config</div>
+            <div class="mc-row"><label>Bolts per set</label><input type="number" id="cfg-n" value="500" min="50" max="5000" step="50"></div>
+            <div class="mc-row"><label>Duration (months)</label><input type="number" id="cfg-tmax" value="24" min="3" max="60" step="1"></div>
+            <div class="mc-row"><label>Time step (months)</label><input type="number" id="cfg-dt" value="0.5" min="0.1" max="2" step="0.1"></div>
+            <div class="run-row">
+              <button class="rbtn go" id="btn-run">▶ Run</button>
+              <button class="rbtn pause" id="btn-pause" disabled>⏸</button>
+              <button class="rbtn stop" id="btn-stop" disabled>■</button>
+            </div>
+            <div class="prog-wrap"><div class="prog-fill" id="prog-fill"></div></div>
+            <div class="prog-lbl" id="prog-lbl">Ready</div>
+          </div>
+          <!-- Chart edit mode -->
+          <div class="ssec" id="sec-edit" style="display:none">
+            <div class="ssec-title">Chart Style</div>
+            <div id="edit-panel-html"></div>
+          </div>
+          <!-- Bolt sets -->
+          <div class="ssec">
+            <div class="ssec-title">Bolt Sets <button id="new-bs-btn">+ New</button></div>
+            <div id="bs-list"></div>
+          </div>
+          <!-- Legend -->
+          <div class="ssec">
+            <div class="ssec-title">Fatigue Life Regions</div>
+            <div id="legend-html"></div>
+            <p style="font-size:9.5px;color:var(--t2);margin-top:6px;line-height:1.5">Hannover M48 combined SN, 50% survival, m=4.6. Goodman line: σ<sub>a</sub> = σ<sub>lim</sub>(1−σ<sub>m</sub>/UTS).</p>
+          </div>
+        </div>
+      </div>
+      <!-- CHART AREA -->
+      <div id="chart-area">
+        <div id="scr" class="hidden">
+          <button id="play-btn">▶</button>
+          <input type="range" id="time-sl" min="0" max="24" step="0.05" value="0">
+          <span id="t-lbl">t = 0.0 mo</span>
+          <span class="fail-badge" id="fail-badge"></span>
+          <div id="spd-wrap">
+            <label style="font-size:10px;color:var(--t2);flex-shrink:0">Speed</label>
+            <input type="range" id="spd-sl" min="0.1" max="20" step="0.1" value="1">
+            <span id="spd-lbl">1.0×</span>
+          </div>
+          <div id="trail-wrap">
+            <input type="checkbox" id="trail-cb">
+            <label for="trail-cb">Trail</label>
+          </div>
+        </div>
+        <div id="chart-wrap">
+          <svg id="chart-svg"></svg>
+          <canvas id="mc-canvas"></canvas>
+          <div id="chart-tip"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MILL CHARGE VIEW ══ -->
+  <div id="view-mill">
+    <div id="mill-body">
+      <!-- SIDEBAR -->
+      <div id="mill-sb">
+        <div id="mill-sb-scroll"></div>
+      </div>
+      <!-- MAIN CANVAS AREA -->
+      <div id="mill-main">
+        <div id="mill-canvas-wrap">
+          <canvas id="mill-canvas"></canvas>
+        </div>
+      </div>
+      <!-- METRICS PANEL -->
+      <div id="mill-metrics">
+        <div id="mill-metrics-hdr">Metrics</div>
+        <div id="mill-metrics-panel"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MILL FORCE VIEW ══ -->
+  <div id="view-mill-force">
+    <div id="mill-force-body">
+      <!-- SIDEBAR -->
+      <div id="mill-force-sb">
+        <div id="mill-force-sb-scroll"></div>
+      </div>
+      <!-- CHART AREA -->
+      <div id="mill-force-chart-area">
+        <div id="mill-force-chart-tabs">
+          <button class="mill-force-cht-tab active" data-view="cross">Cross-section</button>
+          <button class="mill-force-cht-tab" data-view="force">Force vs Angle</button>
+          <button class="mill-force-cht-tab" data-view="rose">Force Rose</button>
+        </div>
+        <div id="mill-force-chart-wrap">
+          <svg id="mill-force-svg-cross"></svg>
+          <svg id="mill-force-svg-force" style="display:none"></svg>
+          <svg id="mill-force-svg-rose"  style="display:none"></svg>
+          <canvas id="mill-force-mc-canvas"></canvas>
+          <div id="mill-force-tip"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FLOATING WINDOWS LAYER (position:fixed, view-independent) -->
+  <div id="wl" style="display:none"></div>
+
+  <!-- Populate locked module cards -->
+  <script>
+    (function () {
+      const W = `<svg viewBox="0 0 66 50" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"><rect width="66" height="50" fill="rgba(0,0,0,.25)" rx="4"/><polyline points="4,32 13,19 22,37 32,11 42,35 52,23 62,28" stroke="rgba(255,255,255,.22)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><line x1="4" y1="43" x2="62" y2="43" stroke="rgba(255,255,255,.1)" stroke-width="1"/><line x1="4" y1="43" x2="4" y2="7" stroke="rgba(255,255,255,.1)" stroke-width="1"/></svg>`;
+      const B = `<svg viewBox="0 0 66 50" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"><rect width="66" height="50" fill="rgba(0,0,0,.25)" rx="4"/><rect x="8" y="27" width="9" height="16" fill="rgba(255,255,255,.18)" rx="1"/><rect x="20" y="19" width="9" height="24" fill="rgba(255,255,255,.18)" rx="1"/><rect x="32" y="13" width="9" height="30" fill="rgba(255,255,255,.18)" rx="1"/><rect x="44" y="21" width="9" height="22" fill="rgba(255,255,255,.18)" rx="1"/><line x1="4" y1="43" x2="62" y2="43" stroke="rgba(255,255,255,.1)" stroke-width="1"/><line x1="4" y1="43" x2="4" y2="7" stroke="rgba(255,255,255,.1)" stroke-width="1"/></svg>`;
+      const S = `<svg viewBox="0 0 66 50" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"><rect width="66" height="50" fill="rgba(0,0,0,.25)" rx="4"/><circle cx="14" cy="35" r="2.2" fill="rgba(255,255,255,.22)"/><circle cx="23" cy="27" r="2.2" fill="rgba(255,255,255,.22)"/><circle cx="33" cy="18" r="2.2" fill="rgba(255,255,255,.22)"/><circle cx="19" cy="39" r="2.2" fill="rgba(255,255,255,.22)"/><circle cx="43" cy="30" r="2.2" fill="rgba(255,255,255,.22)"/><circle cx="53" cy="22" r="2.2" fill="rgba(255,255,255,.22)"/><circle cx="47" cy="13" r="2.2" fill="rgba(255,255,255,.22)"/><circle cx="29" cy="38" r="2.2" fill="rgba(255,255,255,.22)"/><line x1="4" y1="43" x2="62" y2="43" stroke="rgba(255,255,255,.1)" stroke-width="1"/><line x1="4" y1="43" x2="4" y2="7" stroke="rgba(255,255,255,.1)" stroke-width="1"/></svg>`;
+      const H = `<svg viewBox="0 0 66 50" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:100%"><rect width="66" height="50" fill="rgba(0,0,0,.25)" rx="4"/><rect x="6" y="6" width="12" height="10" fill="rgba(255,255,255,.25)" rx="1"/><rect x="20" y="6" width="12" height="10" fill="rgba(255,255,255,.1)" rx="1"/><rect x="34" y="6" width="12" height="10" fill="rgba(255,255,255,.2)" rx="1"/><rect x="48" y="6" width="12" height="10" fill="rgba(255,255,255,.08)" rx="1"/><rect x="6" y="19" width="12" height="10" fill="rgba(255,255,255,.08)" rx="1"/><rect x="20" y="19" width="12" height="10" fill="rgba(255,255,255,.28)" rx="1"/><rect x="34" y="19" width="12" height="10" fill="rgba(255,255,255,.12)" rx="1"/><rect x="48" y="19" width="12" height="10" fill="rgba(255,255,255,.22)" rx="1"/><rect x="6" y="32" width="12" height="10" fill="rgba(255,255,255,.15)" rx="1"/><rect x="20" y="32" width="12" height="10" fill="rgba(255,255,255,.06)" rx="1"/><rect x="34" y="32" width="12" height="10" fill="rgba(255,255,255,.3)" rx="1"/><rect x="48" y="32" width="12" height="10" fill="rgba(255,255,255,.14)" rx="1"/></svg>`;
+
+      const mods = [
+        ['Tension Time Series',      'Bolt load over measurement windows',           W],
+        ['Bolt Load Distribution',   'Spatial load mapping across positions',         B],
+        ['Channel Health Monitor',   'Sensor integrity and diagnostic status',        H],
+        ['Calibration Workspace',    'Two-stage bolt calibration tooling',            S],
+        ['Maintenance Forecaster',   'Predictive maintenance scheduling',             B],
+        ['Sensor Fleet Overview',    'Device status and connectivity',                H],
+        ['Report Builder',           'PDF and data export for field reports',         W],
+        ['Alert Timeline',           'Event history and notification log',            S],
+        ['Mill Comparison',          'Cross-site benchmark analysis',                 B],
+        ['Torque Analysis',          'Torque–tension relationship modelling',         W],
+        ['Vibration Spectrum',       'FFT and frequency domain analysis',             W],
+        ['Life Cycle Estimator',     'Remaining useful life projections',             S],
+        ['API Data Explorer',        'Raw data query and inspection',                 H],
+        ['Historical Archive',       'Long-term trend and archive analysis',          B],
+        ['Compliance Dashboard',     'Standards and certification tracking',          H],
+      ];
+
+      const grid = document.getElementById('module-grid');
+      for (const [name, desc, icon] of mods) {
+        const el = document.createElement('div');
+        el.className = 'mod-card locked';
+        el.innerHTML = `<span class="mod-lock">🔒</span><div class="mod-icon">${icon}</div><div class="mod-name">${name}</div><div class="mod-desc">${desc}</div><div class="mod-status ms-soon">Coming Soon</div>`;
+        grid.appendChild(el);
+      }
+    })();
+  </script>
+
+  <!-- Router + page-turn animation controller -->
+  <script>
+    (function () {
+      let goodmanReady = false;
+      let millReady = false;
+      let millForceReady = false;
+      const $ = id => document.getElementById(id);
+
+      /* ── ROUTER ── */
+
+      function route() {
+        const hash      = location.hash || '#login';
+        const isLogin   = hash === '#login';
+        const isSignout = hash === '#signout';
+        const isGoodman = hash === '#goodman';
+        const isMill    = hash === '#mill';
+        const isMillForce = hash === '#mill-force';
+        const isAuth    = isLogin || isSignout;
+        const isApp     = !isAuth;
+        const isHome    = isApp && !isGoodman && !isMill && !isMillForce;
+
+        $('view-login').style.display        = isLogin   ? 'flex'  : 'none';
+        $('view-signout').style.display      = isSignout ? 'flex'  : 'none';
+        $('tb').style.display                = isApp     ? ''      : 'none';
+        $('view-home').style.display         = isHome    ? 'flex'  : 'none';
+        $('view-goodman').style.display      = isGoodman ? 'flex'  : 'none';
+        $('view-mill').style.display         = isMill    ? 'flex'  : 'none';
+        $('view-mill-force').style.display   = isMillForce ? 'flex' : 'none';
+        $('tb-goodman-tools').style.display  = isGoodman ? 'flex'  : 'none';
+        $('wl').style.display                = isGoodman ? 'block' : 'none';
+        $('tb-brand').classList.toggle('clickable', isGoodman || isMill || isMillForce);
+
+        const menu = $('up-menu');
+        if (menu) menu.classList.remove('open');
+
+        if (isGoodman && !goodmanReady) {
+          goodmanReady = true;
+          const s = document.createElement('script');
+          s.type = 'module';
+          s.src  = 'js/main.js';
+          document.head.appendChild(s);
+        }
+
+        if (isMill && !millReady) {
+          millReady = true;
+          const s = document.createElement('script');
+          s.type = 'module';
+          s.src  = 'js/mill_main.js';
+          document.head.appendChild(s);
+        } else if (isMill && millReady) {
+          // Re-entering: notify mill main to re-init view
+          window.dispatchEvent(new CustomEvent('mill:show'));
+        }
+
+        if (isMillForce && !millForceReady) {
+          millForceReady = true;
+          const s = document.createElement('script');
+          s.type = 'module';
+          s.src  = 'js/mill_force_main.js';
+          document.head.appendChild(s);
+        } else if (isMillForce && millForceReady) {
+          // Re-entering: notify mill force main to re-init view
+          window.dispatchEvent(new CustomEvent('mill-force:show'));
+        }
+      }
+
+      $('tb-brand').addEventListener('click', function () {
+        if (location.hash === '#goodman' || location.hash === '#mill' || location.hash === '#mill-force') location.hash = '#home';
+      });
+
+      window.addEventListener('hashchange', route);
+      route();
+
+      /* ── PAGE-TURN HELPERS ── */
+      function bookOf(viewId) {
+        return document.querySelector('#' + viewId + ' .auth-book');
+      }
+
+      function resetBook(book) {
+        book.style.transition = 'none';
+        book.style.transform  = '';
+        book.classList.remove('folding');
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          book.style.transition = '';
+        }));
+      }
+
+      /* ── authSignIn(btn)
+         1. Fake loading state (1.25 s)
+         2. Page flips away to the right (rotateY -90°, origin: right)
+         3. Hash changes → router shows #home               ── */
+      window.authSignIn = function (btn) {
+        if (btn.dataset.busy) return;
+        btn.dataset.busy = '1';
+
+        const origHTML = btn.innerHTML;
+        const origW    = btn.offsetWidth + 'px';
+        btn.style.minWidth = origW;
+        btn.innerHTML = '<span class="auth-spinner"></span>Signing in…';
+        btn.disabled  = true;
+
+        // Disable the other sign-in button too
+        const other = btn.classList.contains('ms-btn')
+          ? document.querySelector('#view-login .auth-submit')
+          : $('ms-btn');
+        if (other) other.disabled = true;
+
+        setTimeout(() => {
+          // Reveal app shell underneath before the flip completes
+          $('tb').style.display           = '';
+          $('view-home').style.display    = 'flex';
+
+          const book = bookOf('view-login');
+          book.classList.add('folding');
+          book.style.transform = 'rotateY(-90deg)';
+
+          setTimeout(() => {
+            location.hash = '#home';
+
+            // Reset login view for next visit (instantly, while hidden)
+            resetBook(book);
+            btn.innerHTML  = origHTML;
+            btn.disabled   = false;
+            btn.style.minWidth = '';
+            delete btn.dataset.busy;
+            if (other) other.disabled = false;
+          }, 920);
+        }, 1250);
+      };
+
+      /* ── authSignOut()
+         1. Signout page flies in from the right (origin: left, starts at +90°)
+         2. Hash changes → router confirms #signout          ── */
+      window.authSignOut = function () {
+        const soView = $('view-signout');
+        const soBook = bookOf('view-signout');
+
+        // Position the signout page off-screen to the right
+        soBook.style.transition = 'none';
+        soBook.style.transform  = 'rotateY(90deg)';
+        soBook.classList.remove('folding');
+        soView.style.display = 'flex';
+
+        // Double-rAF to let the browser paint the initial state
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          soBook.style.transition = '';
+          soBook.style.transform  = '';   // animate to flat
+        }));
+
+        setTimeout(() => {
+          location.hash = '#signout';
+        }, 950);
+      };
+
+      /* ── authGoLogin()
+         Sign-back-in from the signout screen: flip signout away, show login. ── */
+      window.authGoLogin = function () {
+        // Show login underneath
+        $('view-login').style.display = 'flex';
+
+        const soBook = bookOf('view-signout');
+        soBook.classList.add('folding');
+        soBook.style.transform = 'rotateY(-90deg)';
+
+        setTimeout(() => {
+          location.hash = '#login';
+          resetBook(soBook);
+        }, 920);
+      };
+    })();
+  </script>
+</body>
+
+</html>

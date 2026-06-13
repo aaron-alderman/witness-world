@@ -1,5 +1,5 @@
 import { canCreateInContext, canMutateTarget } from "./kernel.js";
-import { createAuthoringProposalExecutor } from "../plugins/authoring/proposal-executor.js";
+import { createAuthoringProposalExecutor } from "../plugins/proposals/proposal-executor.js";
 
 export function createRuntimeAuthorityServices({
   world,

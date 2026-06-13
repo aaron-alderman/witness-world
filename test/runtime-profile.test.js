@@ -94,8 +94,14 @@ test("practical-backend runtime profile installs extracted backend capabilities"
   assert.equal(backend.has("http.serve"), true);
   assert.equal(backend.has("runtime.config"), true);
   assert.equal(backend.has("fs.json.write"), true);
+  assert.equal(backend.has("fs.blob"), true);
+  assert.equal(backend.has("fs.stream"), true);
   assert.equal(backend.has("db.sql"), true);
+  assert.equal(backend.has("jobs.queue"), true);
+  assert.equal(backend.has("search.index"), true);
   assert.equal(backend.has("notify.email"), true);
+  assert.equal(backend.has("http.outbound"), true);
+  assert.equal(backend.has("auth.oauth"), true);
   assert.equal(frontend.has("dom.render"), true);
   assert.equal(frontend.has("http.fetch"), true);
   assert.equal(frontend.has("db.sql"), false);
@@ -375,14 +381,486 @@ test("minimal runtime plus plugin.practical-backend exposes backend routes and c
     const plugins = await fetch(`${server.url}/api/runtime/plugins`).then(result => result.json());
     const backendPlugin = plugins.packages.find(row => row.id === "plugin.practical-backend");
 
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-fs-json"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-assets"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-sqlite"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-jobs"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-search"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-notifications"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-webhooks"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-http-outbound"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-oauth"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-runtime-config"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-backend-seams"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-fs-blob"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-fs-stream"), true);
     assert.equal(diagnostics.providedCapabilities.includes("db.sql"), true);
-    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.practical-backend"]);
-    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-practical-backend"]);
-    assert.equal(diagnostics.plugins.loadedRuntimeCount, 1);
-    assert.equal(backendPlugin.execution.mode, "plugin-owned");
-    assert.equal(backendPlugin.runtimeModule.loadStatus, "loaded");
-    assert.deepEqual(backendPlugin.runtimeModule.bundleIds, ["bundle-practical-backend"]);
+    assert.equal(diagnostics.providedCapabilities.includes("jobs.queue"), true);
+    assert.equal(diagnostics.providedCapabilities.includes("search.index"), true);
+    assert.equal(diagnostics.providedCapabilities.includes("notify.email"), true);
+    assert.equal(diagnostics.providedCapabilities.includes("webhook.inbound"), true);
+    assert.equal(diagnostics.providedCapabilities.includes("http.outbound"), true);
+    assert.equal(diagnostics.providedCapabilities.includes("auth.oauth"), true);
+    assert.equal(diagnostics.providedCapabilities.includes("fs.json.read"), true);
+    assert.equal(diagnostics.providedCapabilities.includes("fs.json.write"), true);
+    assert.equal(diagnostics.providedCapabilities.includes("fs.blob"), true);
+    assert.equal(diagnostics.providedCapabilities.includes("fs.stream"), true);
+    assert.deepEqual(new Set(diagnostics.plugins.activePluginIds), new Set(["plugin.practical-backend", "plugin.assets", "plugin.backend-seams", "plugin.fs-blob", "plugin.fs-json", "plugin.fs-stream", "plugin.http-outbound", "plugin.jobs", "plugin.notifications", "plugin.oauth", "plugin.runtime-config", "plugin.search", "plugin.sqlite", "plugin.webhooks"]));
+    assert.deepEqual(new Set(diagnostics.plugins.addedBundleIds), new Set(["bundle-assets", "bundle-backend-seams", "bundle-fs-blob", "bundle-fs-json", "bundle-fs-stream", "bundle-http-outbound", "bundle-jobs", "bundle-notifications", "bundle-oauth", "bundle-runtime-config", "bundle-search", "bundle-sqlite", "bundle-webhooks"]));
+    assert.equal(diagnostics.plugins.loadedRuntimeCount, 13);
+    assert.equal(backendPlugin.execution.mode, "meta-package");
+    assert.equal(backendPlugin.runtimeModule.loadStatus, "not-applicable");
+    assert.equal(diagnostics.routes.some(route => route.matcher === "/backend-seams" && route.handler === "page.backendSeams"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.fs-blob exposes blob storage without unrelated practical-backend routes", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.fs-blob"]
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(hostCapabilities(world, "backendHost").has("fs.blob"), true);
+  assert.equal(hostCapabilities(world, "backendHost").has("fs.stream"), false);
+  assert.equal(hostCapabilities(world, "backendHost").has("upload.asset"), false);
+  assert.equal(hostCapabilities(world, "backendHost").has("db.sql"), false);
+
+  try {
+    const blobResponse = await fetch(`${server.url}/api/fs/blobs`);
+    const streamResponse = await fetch(`${server.url}/api/fs/streams/content`);
+    const assetResponse = await fetch(`${server.url}/api/assets/some-asset/content`);
+    const backendSeamsResponse = await fetch(`${server.url}/backend-seams`);
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+
+    assert.equal(blobResponse.status, 401);
+    assert.equal(streamResponse.status, 404);
+    assert.equal(assetResponse.status, 404);
+    assert.equal(backendSeamsResponse.status, 404);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.fs-blob"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-fs-blob"]);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-fs-blob"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
+    assert.equal(diagnostics.routes.some(route => route.matcher === "/api/fs/blobs" && route.handler === "fs.blob.list"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.fs-stream exposes stream storage through fs-blob dependency only", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.fs-stream"]
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(hostCapabilities(world, "backendHost").has("fs.blob"), true);
+  assert.equal(hostCapabilities(world, "backendHost").has("fs.stream"), true);
+  assert.equal(hostCapabilities(world, "backendHost").has("upload.asset"), false);
+  assert.equal(hostCapabilities(world, "backendHost").has("db.sql"), false);
+
+  try {
+    const streamResponse = await fetch(`${server.url}/api/fs/streams/content`);
+    const blobResponse = await fetch(`${server.url}/api/fs/blobs`);
+    const assetResponse = await fetch(`${server.url}/api/assets/some-asset/content`);
+    const backendSeamsResponse = await fetch(`${server.url}/backend-seams`);
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+
+    assert.equal(streamResponse.status, 401);
+    assert.equal(blobResponse.status, 401);
+    assert.equal(assetResponse.status, 404);
+    assert.equal(backendSeamsResponse.status, 404);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.fs-blob", "plugin.fs-stream"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-fs-blob", "bundle-fs-stream"]);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-fs-blob"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-fs-stream"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
+    assert.equal(diagnostics.routes.some(route => route.matcher === "/api/fs/streams/content" && route.handler === "fs.stream.read"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.sqlite exposes DB SQL without unrelated practical-backend routes", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.sqlite"]
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(hostCapabilities(world, "backendHost").has("db.sql"), true);
+  assert.equal(hostCapabilities(world, "backendHost").has("jobs.queue"), false);
+  assert.equal(hostCapabilities(world, "backendHost").has("search.index"), false);
+
+  try {
+    const sqlResponse = await fetch(`${server.url}/api/db/sql`);
+    const jobsResponse = await fetch(`${server.url}/api/jobs`);
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+
+    assert.equal(sqlResponse.status, 401);
+    assert.equal(jobsResponse.status, 404);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.sqlite"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-sqlite"]);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-sqlite"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.jobs exposes jobs without unrelated practical-backend routes", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.jobs"]
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(hostCapabilities(world, "backendHost").has("jobs.queue"), true);
+  assert.equal(hostCapabilities(world, "backendHost").has("db.sql"), false);
+
+  try {
+    const jobsResponse = await fetch(`${server.url}/api/jobs`);
+    const sqlResponse = await fetch(`${server.url}/api/db/sql`);
+    const backendSeamsResponse = await fetch(`${server.url}/backend-seams`);
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+
+    assert.equal(jobsResponse.status, 401);
+    assert.equal(sqlResponse.status, 404);
+    assert.equal(backendSeamsResponse.status, 404);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.jobs"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-jobs"]);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-jobs"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.search exposes search without unrelated practical-backend routes", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.search"]
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(hostCapabilities(world, "backendHost").has("search.index"), true);
+  assert.equal(hostCapabilities(world, "backendHost").has("jobs.queue"), false);
+  assert.equal(hostCapabilities(world, "backendHost").has("db.sql"), false);
+
+  try {
+    const searchResponse = await fetch(`${server.url}/api/search/index`);
+    const jobsResponse = await fetch(`${server.url}/api/jobs`);
+    const backendSeamsResponse = await fetch(`${server.url}/backend-seams`);
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+
+    assert.equal(searchResponse.status, 401);
+    assert.equal(jobsResponse.status, 404);
+    assert.equal(backendSeamsResponse.status, 404);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.search"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-search"]);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-search"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.notifications exposes notifications without unrelated practical-backend routes", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.notifications"]
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(hostCapabilities(world, "backendHost").has("notify.email"), true);
+  assert.equal(hostCapabilities(world, "backendHost").has("notify.sms"), true);
+  assert.equal(hostCapabilities(world, "backendHost").has("jobs.queue"), true);
+  assert.equal(hostCapabilities(world, "backendHost").has("db.sql"), false);
+  assert.equal(hostCapabilities(world, "backendHost").has("search.index"), false);
+
+  try {
+    const notifyResponse = await fetch(`${server.url}/api/notify/email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ to: "aaron@example.test", text: "hi" })
+    });
+    const jobsResponse = await fetch(`${server.url}/api/jobs`);
+    const searchResponse = await fetch(`${server.url}/api/search/index`);
+    const backendSeamsResponse = await fetch(`${server.url}/backend-seams`);
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+
+    assert.equal(notifyResponse.status, 401);
+    assert.equal(jobsResponse.status, 401);
+    assert.equal(searchResponse.status, 404);
+    assert.equal(backendSeamsResponse.status, 404);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.jobs", "plugin.notifications"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-jobs", "bundle-notifications"]);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-notifications"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.webhooks exposes webhooks without unrelated practical-backend routes", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.webhooks"]
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(hostCapabilities(world, "backendHost").has("webhook.inbound"), true);
+  assert.equal(hostCapabilities(world, "backendHost").has("jobs.queue"), true);
+  assert.equal(hostCapabilities(world, "backendHost").has("db.sql"), false);
+  assert.equal(hostCapabilities(world, "backendHost").has("search.index"), false);
+
+  try {
+    const receiveResponse = await fetch(`${server.url}/api/webhooks/inbound/stripe`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-witness-webhook-id": "delivery-1",
+        "x-witness-webhook-timestamp": "1718150400",
+        "x-witness-webhook-signature": "sha256=bad"
+      },
+      body: JSON.stringify({ ok: true })
+    });
+    const listResponse = await fetch(`${server.url}/api/webhooks`);
+    const searchResponse = await fetch(`${server.url}/api/search/index`);
+    const backendSeamsResponse = await fetch(`${server.url}/backend-seams`);
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+
+    assert.equal(receiveResponse.status, 503);
+    assert.equal((await receiveResponse.json()).error, "webhook.inbound.secret not configured");
+    assert.equal(listResponse.status, 401);
+    assert.equal(searchResponse.status, 404);
+    assert.equal(backendSeamsResponse.status, 404);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.jobs", "plugin.webhooks"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-jobs", "bundle-webhooks"]);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-webhooks"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.http-outbound exposes outbound HTTP without unrelated practical-backend routes", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.http-outbound"]
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(hostCapabilities(world, "backendHost").has("http.outbound"), true);
+  assert.equal(hostCapabilities(world, "backendHost").has("jobs.queue"), false);
+  assert.equal(hostCapabilities(world, "backendHost").has("webhook.inbound"), false);
+  assert.equal(hostCapabilities(world, "backendHost").has("db.sql"), false);
+
+  try {
+    const sendResponse = await fetch(`${server.url}/api/http/outbound`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ target: "crm.sync", url: "stub://echo" })
+    });
+    const listResponse = await fetch(`${server.url}/api/http/outbound`);
+    const webhooksResponse = await fetch(`${server.url}/api/webhooks`);
+    const backendSeamsResponse = await fetch(`${server.url}/backend-seams`);
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+
+    assert.equal(sendResponse.status, 401);
+    assert.equal(listResponse.status, 401);
+    assert.equal(webhooksResponse.status, 404);
+    assert.equal(backendSeamsResponse.status, 404);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.http-outbound"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-http-outbound"]);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-http-outbound"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.oauth exposes OAuth without unrelated practical-backend routes", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.oauth"]
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(hostCapabilities(world, "backendHost").has("auth.oauth"), true);
+  assert.equal(hostCapabilities(world, "backendHost").has("http.outbound"), false);
+  assert.equal(hostCapabilities(world, "backendHost").has("jobs.queue"), false);
+  assert.equal(hostCapabilities(world, "backendHost").has("db.sql"), false);
+
+  try {
+    const startResponse = await fetch(`${server.url}/api/oauth/start`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: "stub" })
+    });
+    const linksResponse = await fetch(`${server.url}/api/oauth/links`);
+    const outboundResponse = await fetch(`${server.url}/api/http/outbound`);
+    const backendSeamsResponse = await fetch(`${server.url}/backend-seams`);
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+
+    assert.equal(startResponse.status, 200);
+    assert.equal((await startResponse.json()).flow.provider, "stub");
+    assert.equal(linksResponse.status, 401);
+    assert.equal(outboundResponse.status, 404);
+    assert.equal(backendSeamsResponse.status, 404);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.oauth"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-oauth"]);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-oauth"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.runtime-config exposes runtime config without unrelated practical-backend routes", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.runtime-config"]
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(hostCapabilities(world, "backendHost").has("runtime.config"), true);
+  assert.equal(hostCapabilities(world, "backendHost").has("fs.blob"), false);
+  assert.equal(hostCapabilities(world, "backendHost").has("upload.asset"), false);
+
+  try {
+    const runtimeConfigResponse = await fetch(`${server.url}/api/runtime-config`);
+    const backendSeamsResponse = await fetch(`${server.url}/backend-seams`);
+    const blobResponse = await fetch(`${server.url}/api/fs/blobs`);
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+
+    assert.equal(runtimeConfigResponse.status, 401);
+    assert.equal(backendSeamsResponse.status, 404);
+    assert.equal(blobResponse.status, 404);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.runtime-config"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-runtime-config"]);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-runtime-config"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.backend-seams exposes backend seams without unrelated practical-backend routes", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.backend-seams"]
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(hostCapabilities(world, "backendHost").has("fs.blob"), false);
+  assert.equal(hostCapabilities(world, "backendHost").has("upload.asset"), false);
+  assert.equal(hostCapabilities(world, "backendHost").has("db.sql"), false);
+
+  try {
+    const backendSeamsResponse = await fetch(`${server.url}/api/backend-seams`, { headers: { "x-witness-actor": "adam" } });
+    const backendSeamsPageResponse = await fetch(`${server.url}/backend-seams`);
+    const blobResponse = await fetch(`${server.url}/api/fs/blobs`);
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+
+    assert.equal(backendSeamsResponse.status, 401);
+    assert.equal(backendSeamsPageResponse.status, 401);
+    assert.equal(blobResponse.status, 404);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.backend-seams"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-backend-seams"]);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-backend-seams"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
     assert.equal(diagnostics.routes.some(route => route.matcher === "/backend-seams" && route.handler === "page.backendSeams"), true);
   } finally {
     await server.close();
@@ -410,7 +888,7 @@ test("authoring runtime plus plugin.inspect composes both bundle sets", async ()
     assert.equal((await fetch(`${server.url}/_bootstrap`)).status, 200);
     assert.notEqual((await fetch(`${server.url}/world`)).status, 404);
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring-core"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
   } finally {
     await server.close();
@@ -548,7 +1026,7 @@ test("runtime plugins endpoint exposes local plugin package metadata and activat
   }
 });
 
-test("bootstrap default activation loads plugin.authoring as a plugin-owned multi-bundle runtime", async () => {
+test("bootstrap default activation loads authoring plus bootstrap/tutorial dependencies as plugin-owned runtimes", async () => {
   const result = await startBlankRuntime({
     startupMode: "bootstrap",
     port: 0
@@ -560,14 +1038,59 @@ test("bootstrap default activation loads plugin.authoring as a plugin-owned mult
     const diagnostics = await fetch(`${result.server.url}/api/runtime/diagnostics`).then(response => response.json());
     const plugins = await fetch(`${result.server.url}/api/runtime/plugins`).then(response => response.json());
     const authoringPlugin = plugins.packages.find(row => row.id === "plugin.authoring");
+    const authoringCorePlugin = plugins.packages.find(row => row.id === "plugin.authoring-core");
+    const bootstrapPlugin = plugins.packages.find(row => row.id === "plugin.bootstrap");
+    const capabilityAuthoringPlugin = plugins.packages.find(row => row.id === "plugin.capability-authoring");
+    const programAuthoringPlugin = plugins.packages.find(row => row.id === "plugin.program-authoring");
+    const serverRunnerAuthoringPlugin = plugins.packages.find(row => row.id === "plugin.server-runner-authoring");
+    const mcpAuthoringPlugin = plugins.packages.find(row => row.id === "plugin.mcp-authoring");
+    const proposalsPlugin = plugins.packages.find(row => row.id === "plugin.proposals");
+    const tutorialPlugin = plugins.packages.find(row => row.id === "plugin.tutorial");
 
-    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.authoring"]);
-    assert.equal(diagnostics.plugins.loadedRuntimeCount, 1);
-    assert.equal(authoringPlugin.execution.mode, "plugin-owned");
-    assert.equal(authoringPlugin.runtimeModule.loadStatus, "loaded");
-    assert.deepEqual([...authoringPlugin.runtimeModule.bundleIds].sort(), ["bundle-authoring", "bundle-tutorial"]);
-    assert.equal(authoringPlugin.resolvedBundles.some(row => row.id === "bundle-authoring"), true);
-    assert.equal(authoringPlugin.resolvedBundles.some(row => row.id === "bundle-tutorial"), true);
+    assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.capability-authoring", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.tutorial"]);
+    assert.equal(diagnostics.plugins.loadedRuntimeCount, 8);
+    assert.equal(authoringPlugin.execution.mode, "meta-package");
+    assert.equal(authoringPlugin.runtimeModule.loadStatus, "not-applicable");
+    assert.deepEqual(authoringPlugin.runtimeModule.bundleIds, []);
+    assert.equal(authoringCorePlugin.execution.mode, "plugin-owned");
+    assert.equal(authoringCorePlugin.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual(authoringCorePlugin.runtimeModule.bundleIds, ["bundle-authoring-core"]);
+    assert.equal(authoringCorePlugin.resolvedBundles.some(row => row.id === "bundle-authoring-core"), true);
+    assert.equal(authoringPlugin.resolvedBundles.some(row => row.id === "bundle-bootstrap"), false);
+    assert.equal(authoringPlugin.resolvedBundles.some(row => row.id === "bundle-capability-authoring"), false);
+    assert.equal(authoringPlugin.resolvedBundles.some(row => row.id === "bundle-program-authoring"), false);
+    assert.equal(authoringPlugin.resolvedBundles.some(row => row.id === "bundle-server-runner-authoring"), false);
+    assert.equal(authoringPlugin.resolvedBundles.some(row => row.id === "bundle-mcp-authoring"), false);
+    assert.equal(authoringPlugin.resolvedBundles.some(row => row.id === "bundle-proposals"), false);
+    assert.equal(authoringPlugin.resolvedBundles.some(row => row.id === "bundle-tutorial"), false);
+    assert.equal(capabilityAuthoringPlugin.execution.mode, "plugin-owned");
+    assert.equal(capabilityAuthoringPlugin.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual(capabilityAuthoringPlugin.runtimeModule.bundleIds, ["bundle-capability-authoring"]);
+    assert.equal(capabilityAuthoringPlugin.resolvedBundles.some(row => row.id === "bundle-capability-authoring"), true);
+    assert.equal(programAuthoringPlugin.execution.mode, "plugin-owned");
+    assert.equal(programAuthoringPlugin.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual(programAuthoringPlugin.runtimeModule.bundleIds, ["bundle-program-authoring"]);
+    assert.equal(programAuthoringPlugin.resolvedBundles.some(row => row.id === "bundle-program-authoring"), true);
+    assert.equal(serverRunnerAuthoringPlugin.execution.mode, "plugin-owned");
+    assert.equal(serverRunnerAuthoringPlugin.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual(serverRunnerAuthoringPlugin.runtimeModule.bundleIds, ["bundle-server-runner-authoring"]);
+    assert.equal(serverRunnerAuthoringPlugin.resolvedBundles.some(row => row.id === "bundle-server-runner-authoring"), true);
+    assert.equal(mcpAuthoringPlugin.execution.mode, "plugin-owned");
+    assert.equal(mcpAuthoringPlugin.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual(mcpAuthoringPlugin.runtimeModule.bundleIds, ["bundle-mcp-authoring"]);
+    assert.equal(mcpAuthoringPlugin.resolvedBundles.some(row => row.id === "bundle-mcp-authoring"), true);
+    assert.equal(bootstrapPlugin.execution.mode, "plugin-owned");
+    assert.equal(bootstrapPlugin.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual(bootstrapPlugin.runtimeModule.bundleIds, ["bundle-bootstrap"]);
+    assert.equal(bootstrapPlugin.resolvedBundles.some(row => row.id === "bundle-bootstrap"), true);
+    assert.equal(proposalsPlugin.execution.mode, "plugin-owned");
+    assert.equal(proposalsPlugin.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual(proposalsPlugin.runtimeModule.bundleIds, ["bundle-proposals"]);
+    assert.equal(proposalsPlugin.resolvedBundles.some(row => row.id === "bundle-proposals"), true);
+    assert.equal(tutorialPlugin.execution.mode, "plugin-owned");
+    assert.equal(tutorialPlugin.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual(tutorialPlugin.runtimeModule.bundleIds, ["bundle-tutorial"]);
+    assert.equal(tutorialPlugin.resolvedBundles.some(row => row.id === "bundle-tutorial"), true);
   } finally {
     await result.server.close();
   }
@@ -594,18 +1117,24 @@ test("maintained demo runs on minimal plus authored runtime plugins", async () =
     const canvasPlugin = plugins.packages.find(row => row.id === "plugin.canvas");
 
     assert.equal(diagnostics.activeProfile, "minimal");
-    assert.deepEqual([...diagnostics.plugins.authoredPluginIds].sort(), ["plugin.authoring", "plugin.canvas", "plugin.inspect"]);
+    assert.deepEqual([...diagnostics.plugins.authoredPluginIds].sort(), ["plugin.authoring", "plugin.canvas", "plugin.demo", "plugin.inspect"]);
     assert.deepEqual(diagnostics.plugins.operatorPluginIds, []);
-    assert.deepEqual([...diagnostics.plugins.effectivePluginIds].sort(), ["plugin.authoring", "plugin.canvas", "plugin.inspect"]);
-    assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.canvas", "plugin.inspect"]);
+    assert.deepEqual([...diagnostics.plugins.effectivePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.canvas", "plugin.capability-authoring", "plugin.demo", "plugin.fs-json", "plugin.inspect", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.tutorial"].sort());
+    assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.canvas", "plugin.capability-authoring", "plugin.demo", "plugin.fs-json", "plugin.inspect", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.tutorial"].sort());
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-core-runtime"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring-core"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-bootstrap"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-capability-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-program-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-server-runner-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-mcp-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-proposals"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-canvas"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), false);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-mcp"), false);
-    assert.equal(diagnostics.handlerSets.some(entry => entry.id === "demo"), false);
+    assert.equal(diagnostics.handlerSets.some(entry => entry.id === "demo"), true);
     assert.equal(canvasPlugin.execution.mode, "plugin-owned");
     assert.equal(canvasPlugin.runtimeModule.loadStatus, "loaded");
     assert.deepEqual(canvasPlugin.runtimeModule.bundleIds, ["bundle-canvas"]);
@@ -619,7 +1148,7 @@ test("maintained demo runs on minimal plus authored runtime plugins", async () =
   }
 });
 
-test("maintained demo without authored runtime plugins loses optional inspect, authoring, and canvas surfaces under minimal", async () => {
+test("maintained demo without authored runtime plugins loses optional plugin-owned behavior under minimal", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
@@ -639,6 +1168,11 @@ plugin = "plugin.inspect"
 actor = "aaron"
 serverRunner = "demo_server"
 plugin = "plugin.canvas"
+
+[[runtimePluginRemove]]
+actor = "aaron"
+serverRunner = "demo_server"
+plugin = "plugin.demo"
 `);
 
   const server = await startServer(world, {
@@ -653,15 +1187,18 @@ plugin = "plugin.canvas"
   try {
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
 
+    assert.equal(diagnostics.activeProfile, "minimal");
     assert.deepEqual(diagnostics.plugins.authoredPluginIds, []);
-    assert.deepEqual(diagnostics.plugins.effectivePluginIds, []);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, []);
     assert.deepEqual(diagnostics.activeBundles.map(bundle => bundle.id), ["bundle-core-runtime"]);
 
-    assert.equal((await fetch(server.url)).status, 200);
+    assert.equal((await fetch(`${server.url}/`)).status, 200);
     assert.equal((await fetch(`${server.url}/_bootstrap`)).status, 404);
     assert.equal((await fetch(`${server.url}/world`)).status, 404);
     assert.equal((await fetch(`${server.url}/process`)).status, 404);
     assert.equal((await fetch(`${server.url}/canvas`)).status, 404);
+    assert.equal((await fetch(`${server.url}/api/witnesses`)).status, 500);
+    assert.equal((await fetch(`${server.url}/api/world-graph`)).status, 500);
   } finally {
     await server.close();
   }
@@ -1009,8 +1546,8 @@ test("minimal runtime plus plugin.demo exposes the demo handler set from the plu
     const demoPlugin = plugins.packages.find(row => row.id === "plugin.demo");
 
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), true);
-    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.demo"]);
-    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-demo"]);
+    assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.fs-json", "plugin.demo"].sort());
+    assert.deepEqual([...diagnostics.plugins.addedBundleIds].sort(), ["bundle-fs-json", "bundle-demo"].sort());
     assert.equal(diagnostics.handlerSets.some(entry => entry.id === "demo"), true);
     assert.equal(demoPlugin.execution.mode, "plugin-owned");
     assert.equal(demoPlugin.runtimeModule.loadStatus, "loaded");
@@ -1019,6 +1556,30 @@ test("minimal runtime plus plugin.demo exposes the demo handler set from the plu
   } finally {
     await server.close();
   }
+});
+
+test("serverRunner.handlerSet no longer auto-activates the demo bundle under minimal", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[serverRunner]]
+actor = "adam"
+id = "server_runner"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+handlerSet = "demo"
+`);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal"
+  });
+
+  assert.equal(server.ok, false);
+  assert.equal(server.reason, "unknown handler set");
 });
 
 test("mounted routes with handlers from inactive bundles return not found", async () => {

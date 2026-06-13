@@ -2,11 +2,11 @@
 import path from "node:path";
 import { thing, relation } from "../../src/kernel.js";
 import { thingId } from "../../src/ids.js";
-import { todoState, privateNotesFor, publicWitnessesFor } from "../../src/projections.js";
-import { privateNotesPrivacyState } from "../../src/private-notes-runtime.js";
+import { todoState, privateNotesFor, publicWitnessesFor } from "./projections.js";
+import { privateNotesPrivacyState } from "./private-notes-runtime.js";
 import { actorRequired, runGates, textRequired } from "../../src/gates.js";
-import { requestWidgetDefine } from "../../src/widget-define.js";
-import { requestBootstrapProposalCreate } from "../../src/bootstrap-authoring.js";
+import { requestWidgetDefine } from "../authoring-core/authoring-core-processes.js";
+import { requestBootstrapProposalCreate } from "../proposals/proposal-processes.js";
 import {
   ensureTodoTargetAuthority,
   requestTodoCreate,
@@ -14,7 +14,7 @@ import {
   requestTodoUpdate,
   SHARED_TODO_CONTEXT_ID,
   todoAuthorityState
-} from "../../src/todo-runtime.js";
+} from "./todo-runtime.js";
 
 const DEMO_TODO_ROOT_WIDGET_ID = "todo_app_widget";
 

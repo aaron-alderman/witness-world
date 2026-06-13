@@ -1,4 +1,17 @@
 import { moduleProjectors } from "./modules.js";
+import { isoAt, positiveInteger, runtimeConfigLookup } from "./runtime-config-utils.js";
+import {
+  assetDerivedTextPathForAppContext,
+  assetDerivedTextStorageKey,
+  assetDerivedThumbnailPathForAppContext,
+  assetDerivedThumbnailStorageKey,
+  assetThumbnailUrlForId
+} from "../plugins/assets/asset-services.js";
+import {
+  extractAssetSearchText,
+  extractAssetThumbnail,
+  supportsDerivedAssetSearchText
+} from "../plugins/assets/asset-derived-utils.js";
 
 export function actorsFromIdentities(identities) {
   const seen = new Set();
@@ -103,7 +116,18 @@ export async function createRuntimeAppContext({
     ...createBuiltinAssetJobHandlers({
       world,
       backendHost,
-      runtimeConfig: appContext.runtimeConfig
+      runtimeConfig: appContext.runtimeConfig,
+      runtimeConfigLookup,
+      positiveInteger,
+      supportsDerivedAssetSearchText,
+      extractAssetSearchText,
+      extractAssetThumbnail,
+      assetDerivedTextPathForAppContext,
+      assetDerivedTextStorageKey,
+      assetDerivedThumbnailPathForAppContext,
+      assetDerivedThumbnailStorageKey,
+      assetThumbnailUrlForId,
+      isoAt
     }),
     ...createBuiltinNotificationJobHandlers({
       world,

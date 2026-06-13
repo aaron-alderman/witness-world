@@ -1,40 +1,42 @@
 ﻿import { relation } from "../../src/kernel.js";
-import { edenNeighborhoodProjection } from "../../src/canvas-projection.js";
-import { renderEdenPage } from "../../src/eden-page.js";
+import { edenNeighborhoodProjection } from "./eden-projection.js";
+import { renderEdenPage } from "./eden-page.js";
 import {
   requestBootstrapContextDefine,
-  requestBootstrapStewardshipGrant,
+  requestBootstrapStewardshipGrant
+} from "../authoring-core/authoring-core-processes.js";
+import {
   requestBootstrapProposalCreate,
   requestBootstrapProposalApprove
-} from "../../src/bootstrap-authoring.js";
+} from "../proposals/proposal-processes.js";
 import {
   projectEdenPersonalBoxItems,
   requestEdenPersonalBoxItemCreate,
   requestEdenPersonalBoxItemDelete,
   requestEdenPersonalBoxItemUpdate
-} from "../../src/eden-personal-box.js";
-import { projectEdenPageTheme, requestEdenPageThemeSet } from "../../src/eden-page-theme.js";
-import { projectEdenAcademyState } from "../../src/eden-academy.js";
+} from "./eden-personal-box.js";
+import { projectEdenPageTheme, requestEdenPageThemeSet } from "./eden-page-theme.js";
+import { projectEdenAcademyState } from "./eden-academy.js";
 import {
   edenOrganizationContextId,
   edenOrganizationContextLabel,
   edenOrganizationProposalBody,
   nextEdenOrganizationProposalId,
   projectEdenOrganizationState
-} from "../../src/eden-organization.js";
+} from "./eden-organization.js";
 import {
   requestEdenTheoryAssessmentPass,
   requestEdenTheoryLessonStudy,
   requestEdenTheoryTeachBack
-} from "../../src/eden-theory.js";
-import { projectEdenCapabilityInstallState } from "../../src/eden-capability-install.js";
-import { requestEdenCapabilityInstall } from "../../src/eden-capability-install-request.js";
+} from "./eden-theory.js";
+import { projectEdenCapabilityInstallState } from "./eden-capability-install.js";
+import { requestEdenCapabilityInstall } from "./eden-capability-install-request.js";
 import {
   projectEdenVersionState,
   requestEdenVersionActivate,
   requestEdenVersionPublish,
   requestEdenVersionRollback
-} from "../../src/eden-versions.js";
+} from "./eden-versions.js";
 export function createEdenBundleHandlers({
   world,
   backendHost,

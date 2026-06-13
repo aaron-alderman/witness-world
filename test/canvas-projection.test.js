@@ -4,8 +4,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createWorld, createThing, thing, relation } from "../src/kernel.js";
-import { createPerspective, placeThing, moveInstance, moveManyInstances, relateThings, removeInstance, duplicateInstance, setGrid, batchApply, attachAsset } from "../src/canvas-processes.js";
-import { canvasProjection, perspectivesProjection, thingDetails } from "../src/canvas-projection.js";
+import { createPerspective, placeThing, moveInstance, moveManyInstances, relateThings, removeInstance, duplicateInstance, setGrid, batchApply, attachAsset } from "../plugins/canvas/canvas-processes.js";
+import { canvasProjection, perspectivesProjection, thingDetails } from "../plugins/canvas/canvas-projection.js";
 
 function seededWorld({ witnessLogPath = null } = {}) {
   const world = createWorld({ witnessLogPath });

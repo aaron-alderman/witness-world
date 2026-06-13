@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "packageRoot": "plugins",
+  "packages": [
+    { "id": "plugin.authoring", "directory": "authoring", "order": 10 },
+    { "id": "plugin.bootstrap", "directory": "bootstrap", "order": 11 },
+    { "id": "plugin.authoring-core", "directory": "authoring-core", "order": 12 },
+    { "id": "plugin.capability-authoring", "directory": "capability-authoring", "order": 13 },
+    { "id": "plugin.program-authoring", "directory": "program-authoring", "order": 14 },
+    { "id": "plugin.server-runner-authoring", "directory": "server-runner-authoring", "order": 15 },
+    { "id": "plugin.mcp-authoring", "directory": "mcp-authoring", "order": 16 },
+    { "id": "plugin.proposals", "directory": "proposals", "order": 17 },
+    { "id": "plugin.tutorial", "directory": "tutorial", "order": 18 },
+    { "id": "plugin.inspect", "directory": "inspect", "order": 30 },
+    { "id": "plugin.canvas", "directory": "canvas", "order": 40 },
+    { "id": "plugin.mcp", "directory": "mcp", "order": 50 },
+    { "id": "plugin.practical-backend", "directory": "practical-backend", "order": 60 },
+    { "id": "plugin.fs-json", "directory": "fs-json", "order": 61 },
+    { "id": "plugin.sqlite", "directory": "sqlite", "order": 62 },
+    { "id": "plugin.jobs", "directory": "jobs", "order": 63 },
+    { "id": "plugin.search", "directory": "search", "order": 64 },
+    { "id": "plugin.notifications", "directory": "notifications", "order": 65 },
+    { "id": "plugin.webhooks", "directory": "webhooks", "order": 66 },
+    { "id": "plugin.http-outbound", "directory": "http-outbound", "order": 67 },
+    { "id": "plugin.oauth", "directory": "oauth", "order": 68 },
+    { "id": "plugin.runtime-config", "directory": "runtime-config", "order": 69 },
+    { "id": "plugin.backend-seams", "directory": "backend-seams", "order": 70 },
+    { "id": "plugin.fs-blob", "directory": "fs-blob", "order": 71 },
+    { "id": "plugin.fs-stream", "directory": "fs-stream", "order": 72 },
+    { "id": "plugin.assets", "directory": "assets", "order": 73 },
+    { "id": "plugin.demo", "directory": "demo", "order": 90 },
+    { "id": "plugin.eden", "directory": "eden", "order": 91 },
+    { "id": "plugin.notes-sidebar", "directory": "notes-sidebar", "order": 100 }
+  ],
+  "bundles": [
+    {
+      "id": "bundle-bootstrap",
+      "plugin": "plugin.bootstrap",
+      "displayName": "Bootstrap",
+      "description": "Bootstrap shell, bootstrap read APIs, operator recovery APIs, and bootstrap operator surface."
+    },
+    {
+      "id": "bundle-proposals",
+      "plugin": "plugin.proposals",
+      "displayName": "Proposals",
+      "description": "Proposal create/approve/reject routes, handlers, and proposal execution dispatch."
+    },
+    {
+      "id": "bundle-capability-authoring",
+      "plugin": "plugin.capability-authoring",
+      "displayName": "Capability Authoring",
+      "description": "Capability define/install/remove authoring routes, handlers, and proposal target execution."
+    },
+    {
+      "id": "bundle-program-authoring",
+      "plugin": "plugin.program-authoring",
+      "displayName": "Program Authoring",
+      "description": "Frontend and backend program authoring routes, handlers, and proposal target execution."
+    },
+    {
+      "id": "bundle-server-runner-authoring",
+      "plugin": "plugin.server-runner-authoring",
+      "displayName": "Server Runner Authoring",
+      "description": "Server runner authoring and runner-scoped runtime plugin install/remove routes, handlers, and proposal target execution."
+    },
+    {
+      "id": "bundle-mcp-authoring",
+      "plugin": "plugin.mcp-authoring",
+      "displayName": "MCP Authoring",
+      "description": "MCP server and MCP tool authoring routes, handlers, and proposal target execution."
+    },
+    {
+      "id": "bundle-tutorial",
+      "plugin": "plugin.tutorial",
+      "displayName": "Tutorial",
+      "description": "Tutorial progress APIs and runtime-owned tutorial continuity."
+    },
+    {
+      "id": "bundle-authoring-core",
+      "plugin": "plugin.authoring-core",
+      "displayName": "Authoring Core",
+      "description": "Generic authoring CRUD routes and handlers."
+    },
+    {
+      "id": "bundle-inspect",
+      "plugin": "plugin.inspect",
+      "displayName": "Inspect",
+      "description": "World graph, process view, source inspection, and operator-facing inspect surfaces."
+    },
+    {
+      "id": "bundle-canvas",
+      "plugin": "plugin.canvas",
+      "displayName": "Canvas",
+      "description": "Canvas projection, canvas process execution, and canvas page rendering."
+    },
+    {
+      "id": "bundle-mcp",
+      "plugin": "plugin.mcp",
+      "displayName": "MCP",
+      "description": "MCP HTTP transport routes and runtime-owned MCP execution surface."
+    },
+    {
+      "id": "bundle-sqlite",
+      "plugin": "plugin.sqlite",
+      "displayName": "SQLite DB SQL",
+      "description": "SQLite-backed DB SQL capability, handlers, and routes."
+    },
+    {
+      "id": "bundle-jobs",
+      "plugin": "plugin.jobs",
+      "displayName": "Jobs Queue",
+      "description": "Jobs queue capability, handlers, and routes."
+    },
+    {
+      "id": "bundle-search",
+      "plugin": "plugin.search",
+      "displayName": "Search Index",
+      "description": "Search index capability, handlers, and routes."
+    },
+    {
+      "id": "bundle-notifications",
+      "plugin": "plugin.notifications",
+      "displayName": "Notifications",
+      "description": "Email/SMS notification capabilities, handlers, and routes."
+    },
+    {
+      "id": "bundle-webhooks",
+      "plugin": "plugin.webhooks",
+      "displayName": "Webhooks",
+      "description": "Inbound webhook capability, handlers, and routes."
+    },
+    {
+      "id": "bundle-http-outbound",
+      "plugin": "plugin.http-outbound",
+      "displayName": "HTTP Outbound",
+      "description": "Outbound HTTP capability, handlers, transport glue, and routes."
+    },
+    {
+      "id": "bundle-oauth",
+      "plugin": "plugin.oauth",
+      "displayName": "OAuth",
+      "description": "OAuth authentication capability, handlers, support services, and routes."
+    },
+    {
+      "id": "bundle-runtime-config",
+      "plugin": "plugin.runtime-config",
+      "displayName": "Runtime Config",
+      "description": "Backend runtime-config read route and handler."
+    },
+    {
+      "id": "bundle-backend-seams",
+      "plugin": "plugin.backend-seams",
+      "displayName": "Backend Seams",
+      "description": "Backend seam diagnostics page, read model, routes, and operator surface."
+    },
+    {
+      "id": "bundle-fs-json",
+      "plugin": "plugin.fs-json",
+      "displayName": "JSON File Capabilities",
+      "description": "JSON file read/write host capability declarations."
+    },
+    {
+      "id": "bundle-fs-blob",
+      "plugin": "plugin.fs-blob",
+      "displayName": "Blob File Storage",
+      "description": "Blob file storage capability, scoped blob routes, handler catalog, and local storage helpers."
+    },
+    {
+      "id": "bundle-fs-stream",
+      "plugin": "plugin.fs-stream",
+      "displayName": "Stream File Storage",
+      "description": "Streamed file read/write/copy capability, routes, handler catalog, and transfer helpers."
+    },
+    {
+      "id": "bundle-assets",
+      "plugin": "plugin.assets",
+      "displayName": "Assets",
+      "description": "Asset upload, content, derived text, thumbnail, attachment, ingest retry, and asset search reindex behavior."
+    },
+    {
+      "id": "bundle-demo",
+      "plugin": "plugin.demo",
+      "displayName": "Demo",
+      "description": "Demo handler-set registration and demo-specific startup requirements."
+    },
+    {
+      "id": "bundle-eden",
+      "plugin": "plugin.eden",
+      "displayName": "Eden",
+      "description": "Eden neighborhood, academy, versions, capability-install, and commons flows."
+    }
+  ]
+}

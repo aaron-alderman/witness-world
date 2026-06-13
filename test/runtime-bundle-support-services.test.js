@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { moduleProjectors } from "../src/modules.js";
-import { createRuntimeProjectionServices, createMcpBundleSupportServices } from "../src/runtime-bundle-support-services.js";
+import { createRuntimeProjectionServices } from "../src/runtime-bundle-support-services.js";
+import { createMcpBundleSupportServices } from "../plugins/mcp/mcp-support-services.js";
 
 test("runtime projection services derive visible process inputs and process selection", () => {
   const world = {

@@ -1,0 +1,53 @@
+{
+  "id": "plugin.oauth",
+  "version": "0.1.0",
+  "displayName": "OAuth Plugin Runtime",
+  "description": "Owns auth.oauth runtime handlers, routes, support services, and capability metadata.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-oauth"
+  ],
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "auth.oauth"
+      }
+    ],
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/api/oauth/start",
+        "handler": "auth.oauth.start"
+      },
+      {
+        "method": "GET",
+        "path": "/api/oauth/links",
+        "handler": "auth.oauth.links.list"
+      },
+      {
+        "method": "GET",
+        "path": "/api/oauth/links/:id",
+        "handler": "auth.oauth.links.read"
+      },
+      {
+        "method": "GET",
+        "path": "/api/oauth/callback/:provider",
+        "handler": "auth.oauth.callback"
+      }
+    ],
+    "surfaces": [],
+    "providers": [
+      {
+        "id": "oauth.handlers",
+        "kind": "runtime-handler-catalog"
+      },
+      {
+        "id": "oauth.support-services",
+        "kind": "runtime-support-services"
+      }
+    ]
+  }
+}

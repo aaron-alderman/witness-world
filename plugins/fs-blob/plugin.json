@@ -1,0 +1,60 @@
+{
+  "id": "plugin.fs-blob",
+  "version": "0.1.0",
+  "displayName": "Blob File Storage Plugin",
+  "description": "Blob file storage capability, scoped blob routes, handler catalog, handler implementation, and local blob storage helpers.",
+  "kind": "plugin",
+  "activatesBundles": [
+    "bundle-fs-blob"
+  ],
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "fs.blob"
+      }
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/api/fs/blobs",
+        "handler": "fs.blob.list"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/fs/blobs",
+        "handler": "fs.blob.delete"
+      },
+      {
+        "method": "GET",
+        "path": "/api/fs/blobs/meta",
+        "handler": "fs.blob.meta"
+      },
+      {
+        "method": "GET",
+        "path": "/api/fs/blobs/content",
+        "handler": "fs.blob.read"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/fs/blobs/content",
+        "handler": "fs.blob.write"
+      }
+    ],
+    "surfaces": [],
+    "providers": [
+      {
+        "id": "fs-blob.handlers",
+        "kind": "runtime-handler-catalog",
+        "description": "Bundle-owned fs.blob route handlers."
+      },
+      {
+        "id": "fs-blob.local-disk",
+        "kind": "runtime-provider",
+        "description": "Local disk scoped blob storage helpers."
+      }
+    ]
+  }
+}

@@ -37,6 +37,22 @@ test("bootstrap cold starts create a fresh temp world-home contract when no expl
   assert.equal(contract.canonicalTruth.observationLogPath, path.resolve("C:/tmp", "witness-world-bootstrap-abc123", "logs", "bootstrap.observations.jsonl"));
 });
 
+test("serve without explicit persistence uses an isolated ephemeral world-home contract", async () => {
+  const contract = await resolveRuntimeOperatorPaths({
+    startupMode: "serve",
+    cwd: "C:/workspace/world",
+    env: {},
+    mkdtemp: async prefix => `${prefix}run456`,
+    tmpdir: "C:/tmp"
+  });
+
+  assert.equal(contract.layout, "ephemeral-world-home-v1");
+  assert.equal(contract.persistence.mode, "ephemeral");
+  assert.equal(contract.worldHome, path.resolve("C:/tmp", "witness-world-ephemeral-run456"));
+  assert.equal(contract.directories.runtimeRoot, path.resolve("C:/tmp", "witness-world-ephemeral-run456", "runtime"));
+  assert.equal(contract.canonicalTruth.witnessLogPath, path.resolve("C:/tmp", "witness-world-ephemeral-run456", "logs", "witness-world.witnesses.jsonl"));
+});
+
 test("operator contract carries canonical truth and derived storage directories", () => {
   const contract = buildRuntimeOperatorContract({
     startupMode: "mcp",

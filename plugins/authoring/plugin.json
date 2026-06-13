@@ -1,15 +1,18 @@
 {
   "id": "plugin.authoring",
   "version": "0.1.0",
-  "displayName": "Authoring Plugin Runtime",
-  "description": "Owns bootstrap authoring and tutorial runtime behavior through the local plugin runtime module.",
+  "displayName": "Authoring Plugin",
+  "description": "Meta package that installs the first-party authoring plugin set.",
   "kind": "plugin",
-  "runtime": {
-    "entry": "./runtime.js"
-  },
-  "activatesBundles": [
-    "bundle-authoring",
-    "bundle-tutorial"
+  "dependsOnPlugins": [
+    "plugin.bootstrap",
+    "plugin.authoring-core",
+    "plugin.capability-authoring",
+    "plugin.program-authoring",
+    "plugin.server-runner-authoring",
+    "plugin.mcp-authoring",
+    "plugin.proposals",
+    "plugin.tutorial"
   ],
   "contributes": {}
 }

@@ -3,11 +3,9 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import {
-  createBuiltinAssetJobHandlers,
-  createBuiltinNotificationJobHandlers,
-  createBuiltinWebhookJobHandlers
-} from "../src/runtime-builtin-job-handlers.js";
+import { createBuiltinAssetJobHandlers } from "../plugins/assets/job-handlers.js";
+import { createBuiltinNotificationJobHandlers } from "../plugins/notifications/job-handlers.js";
+import { createBuiltinWebhookJobHandlers } from "../plugins/webhooks/job-handlers.js";
 import { moduleProjectors } from "../src/modules.js";
 
 test("builtin notification job handlers render and send stub notifications", async () => {

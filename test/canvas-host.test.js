@@ -2085,8 +2085,8 @@ test("client projection module output matches the server canvas API", async () =
 
     const served = await fetch(`${server.url}/canvas-lib/canvas-projection.js`).then(r => r.text());
     assert(served.length > 0);
-    const { canvasProjection } = await import("../src/canvas-projection.js");
-    const { publicWitnessesFor } = await import("../src/projections.js");
+    const { canvasProjection } = await import("../plugins/canvas/canvas-projection.js");
+    const { publicWitnessesFor } = await import("../plugins/demo/projections.js");
     const local = canvasProjection(publicWitnessesFor(world.allWitnesses(), "aaron"), perspective);
 
     const api = (await fetch(`${server.url}/api/canvas?perspective=${encodeURIComponent(perspective)}`, { headers: asAaron }).then(r => r.json())).canvas;

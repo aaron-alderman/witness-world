@@ -1,10 +1,3 @@
-import { bundles as authoringRuntimeBundles } from "../plugins/authoring/runtime.js";
-import { handlerCatalog as canvasHandlerCatalog } from "../plugins/canvas/runtime.js";
-import { handlerCatalog as edenHandlerCatalog } from "../plugins/eden/runtime.js";
-import { handlerCatalog as inspectHandlerCatalog } from "../plugins/inspect/runtime.js";
-import { handlerCatalog as mcpHandlerCatalog } from "../plugins/mcp/runtime.js";
-import { handlerCatalog as practicalBackendHandlerCatalog } from "../plugins/practical-backend/handler-catalog.js";
-
 function freezeStrings(values = []) {
   return Object.freeze(values.map(value => String(value)));
 }
@@ -52,14 +45,7 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
       "runtime.plugins.read",
       "runtime.pluginReviews.read"
     ]
-  }),
-  "bundle-tutorial": authoringRuntimeBundles["bundle-tutorial"].handlerCatalog,
-  "bundle-authoring": authoringRuntimeBundles["bundle-authoring"].handlerCatalog,
-  "bundle-inspect": inspectHandlerCatalog,
-  "bundle-canvas": canvasHandlerCatalog,
-  "bundle-mcp": mcpHandlerCatalog,
-  "bundle-practical-backend": practicalBackendHandlerCatalog,
-  "bundle-eden": edenHandlerCatalog
+  })
 });
 
 export function runtimeBundleHandlerCatalog(bundleId) {

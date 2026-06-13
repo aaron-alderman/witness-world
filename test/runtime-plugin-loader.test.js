@@ -29,12 +29,12 @@ test("plugin runtime loader supports multi-bundle plugin-owned modules", async (
       description: "Authoring plugin runtime",
       kind: "plugin",
       runtime: { entry: "./runtime.js" },
-      activatesBundles: ["bundle-authoring", "bundle-tutorial"],
+      activatesBundles: ["bundle-authoring-core", "bundle-tutorial"],
       contributes: {}
     }, `
       export default {
         bundles: {
-          "bundle-authoring": {
+          "bundle-authoring-core": {
             handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["bootstrap.page"], handlerMetadata: {} },
             routes: [{ kind: "exact", method: "GET", path: "/_bootstrap", handler: "bootstrap.page", params: {} }],
             surfaces: [{ id: "surface:bootstrap", title: "Bootstrap", href: "/_bootstrap", action: null, search: "bootstrap", type: "surface", tier: "harness", contexts: ["app-command"] }],
@@ -60,9 +60,9 @@ test("plugin runtime loader supports multi-bundle plugin-owned modules", async (
     const authoring = loadedCatalog.packages.find(row => row.id === "plugin.authoring");
 
     assert.equal(loadResult.hasBlockingErrors, false);
-    assert.deepEqual(Object.keys(loadResult.bundleOverrides).sort(), ["bundle-authoring", "bundle-tutorial"]);
+    assert.deepEqual(Object.keys(loadResult.bundleOverrides).sort(), ["bundle-authoring-core", "bundle-tutorial"]);
     assert.equal(authoring.runtimeModule.loadStatus, "loaded");
-    assert.deepEqual([...authoring.runtimeModule.bundleIds].sort(), ["bundle-authoring", "bundle-tutorial"]);
+    assert.deepEqual([...authoring.runtimeModule.bundleIds].sort(), ["bundle-authoring-core", "bundle-tutorial"]);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
@@ -78,12 +78,12 @@ test("plugin runtime loader rejects duplicate active bundle claims across plugin
       description: "Alpha plugin runtime",
       kind: "plugin",
       runtime: { entry: "./runtime.js" },
-      activatesBundles: ["bundle-authoring"],
+      activatesBundles: ["bundle-authoring-core"],
       contributes: {}
     }, `
       export default {
         bundles: {
-          "bundle-authoring": {
+          "bundle-authoring-core": {
             handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [], handlerMetadata: {} },
             routes: [],
             surfaces: [],
@@ -99,12 +99,12 @@ test("plugin runtime loader rejects duplicate active bundle claims across plugin
       description: "Beta plugin runtime",
       kind: "plugin",
       runtime: { entry: "./runtime.js" },
-      activatesBundles: ["bundle-authoring"],
+      activatesBundles: ["bundle-authoring-core"],
       contributes: {}
     }, `
       export default {
         bundles: {
-          "bundle-authoring": {
+          "bundle-authoring-core": {
             handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [], handlerMetadata: {} },
             routes: [],
             surfaces: [],

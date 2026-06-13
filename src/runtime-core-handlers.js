@@ -1,6 +1,5 @@
 import { relation } from "./kernel.js";
 import {
-  renderWidgetPage,
   widgetDefinitions,
   frontendProgramsProjection
 } from "./widgets.js";
@@ -10,8 +9,9 @@ import {
   SUPPORTED_BACKEND_OPS,
   activeBackendProgramDefinition
 } from "./backend-programs.js";
-import { appTutorialConfigForSession } from "./tutorial-runtime-ui.js";
-import { projectEdenPageTheme } from "./eden-page-theme.js";
+import { appTutorialConfigForSession } from "../plugins/tutorial/tutorial-runtime-ui.js";
+import { projectEdenPageTheme } from "../plugins/eden/eden-page-theme.js";
+import { renderWidgetPage } from "../plugins/inspect/widget-page.js";
 
 function widgetPageTutorialSurface(world, {
   route = null,

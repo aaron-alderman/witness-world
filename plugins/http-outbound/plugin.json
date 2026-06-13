@@ -1,0 +1,44 @@
+{
+  "id": "plugin.http-outbound",
+  "version": "0.1.0",
+  "displayName": "HTTP Outbound Plugin Runtime",
+  "description": "Owns http.outbound runtime handlers, routes, transport glue, and capability metadata.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-http-outbound"
+  ],
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "http.outbound"
+      }
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/api/http/outbound",
+        "handler": "http.outbound.list"
+      },
+      {
+        "method": "POST",
+        "path": "/api/http/outbound",
+        "handler": "http.outbound.send"
+      },
+      {
+        "method": "GET",
+        "path": "/api/http/outbound/:id",
+        "handler": "http.outbound.read"
+      }
+    ],
+    "surfaces": [],
+    "providers": [
+      {
+        "id": "http.outbound.handlers",
+        "kind": "runtime-handler-catalog"
+      }
+    ]
+  }
+}

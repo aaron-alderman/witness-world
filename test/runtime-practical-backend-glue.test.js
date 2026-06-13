@@ -4,13 +4,12 @@ import {
   dbSqlDatasourceId,
   dbSqlDatasourceTitle,
   dbSqlOperationId,
-  dbSqlOperationTitle,
-  delayWithSignal,
-  executeHttpOutbound,
-  notificationTitle
-} from "../src/runtime-practical-backend-glue.js";
+  dbSqlOperationTitle
+} from "../plugins/sqlite/glue.js";
+import { notificationTitle } from "../plugins/notifications/glue.js";
+import { delayWithSignal, executeHttpOutbound } from "../plugins/http-outbound/glue.js";
 import { isoAt, nonNegativeInteger, positiveInteger, runtimeConfigLookup, runtimeConfigScalar } from "../src/runtime-config-utils.js";
-import { renderBackendSeamsPage } from "../src/runtime-backend-seams-page.js";
+import { renderBackendSeamsPage } from "../plugins/backend-seams/backend-seams-page.js";
 
 test("runtime config utils resolve nested keys and numeric/time coercions", () => {
   assert.equal(runtimeConfigScalar("x"), true);

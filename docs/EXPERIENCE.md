@@ -529,7 +529,7 @@ The current baseline/todo/bootstrap work remains valuable because it proves:
 
 What is still not unified yet is the runtime-composition story:
 
-- the maintained demo is pluginized, but it still carries the explicit `bundle-demo` compatibility seam triggered by `handlerSet = "demo"`
+- the maintained demo is pluginized through authored runtime-plugin installs, including `plugin.demo`; `handlerSet = "demo"` no longer activates `bundle-demo` by itself
 - blank-world bootstrap/tutorial startup still does not use that same narrowed baseline and authored plugin story yet
 
 But that work should now be understood as groundwork for a broader composition environment:

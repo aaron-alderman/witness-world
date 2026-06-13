@@ -15,6 +15,7 @@ import {
 import { resolveRuntimeOperatorPaths } from "./runtime-operator-contract.js";
 import { createRuntimeOperatorService, runtimeOperatorMutations } from "./runtime-operator-service.js";
 import { startBlankRuntime } from "./runtime-local-launcher.js";
+import { createLogger } from "./logger.js";
 
 const [command, ...rest] = process.argv.slice(2);
 
@@ -264,6 +265,7 @@ async function runMcp(args) {
     serverRunnerId: runner.id,
     port: 0,
     runtimeRoot,
+    logger: createLogger({ level: "silent" }),
     mcpInternalToken: internalToken,
     runtimeProfile,
     runtimePluginIds: parsed.runtimePluginIds.length ? parsed.runtimePluginIds : null,

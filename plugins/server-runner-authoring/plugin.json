@@ -1,0 +1,14 @@
+{
+  "id": "plugin.server-runner-authoring",
+  "version": "0.1.0",
+  "displayName": "Server Runner Authoring Plugin Runtime",
+  "description": "Owns server runner authoring and runner-scoped runtime plugin install/remove routes, handlers, process helpers, and proposal target execution.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-server-runner-authoring"
+  ],
+  "contributes": {}
+}

@@ -1,0 +1,14 @@
+{
+  "id": "plugin.tutorial",
+  "version": "0.1.0",
+  "displayName": "Tutorial Plugin Runtime",
+  "description": "Owns tutorial progress routes, handlers, and default guided-build behavior.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-tutorial"
+  ],
+  "contributes": {}
+}

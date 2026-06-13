@@ -2,15 +2,17 @@ import { createRuntimeRouteHandlers } from "./runtime-route-handlers.js";
 import { SUPPORTED_BACKEND_OPS } from "./backend-programs.js";
 import {
   looksJsonContentType,
-  responseHeadersToObject,
-  webhookPayloadPathFor
-} from "./runtime-practical-backend-io-services.js";
-import { hostCapabilities, hostIdsByCapability } from "./runtime-host-utils.js";
+  responseHeadersToObject
+} from "../plugins/http-outbound/io-services.js";
 import {
   parseStreamFailureLimit,
   streamFileToFile,
   streamReadableToFile
-} from "./runtime-stream-utils.js";
+} from "../plugins/fs-stream/stream-utils.js";
+import {
+  webhookPayloadPathFor
+} from "../plugins/webhooks/io-services.js";
+import { hostCapabilities, hostIdsByCapability } from "./runtime-host-utils.js";
 import { DEFAULT_RUNTIME_PROFILE } from "./runtime-bundles.js";
 import { resolveRuntimePluginRoot } from "./runtime-plugin-utils.js";
 

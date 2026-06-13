@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { renderBootstrapPage } from "../src/bootstrap-shell.js";
+import { renderBootstrapPage } from "../plugins/bootstrap/bootstrap-shell.js";
 
 test("bootstrap shell renders the desktop ownership card and explicit desktop actions", () => {
   const html = renderBootstrapPage();

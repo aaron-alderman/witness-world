@@ -1,0 +1,14 @@
+{
+  "id": "plugin.mcp-authoring",
+  "version": "0.1.0",
+  "displayName": "MCP Authoring Plugin Runtime",
+  "description": "Owns MCP server and MCP tool authoring routes, handlers, process helpers, and proposal target execution.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-mcp-authoring"
+  ],
+  "contributes": {}
+}

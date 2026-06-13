@@ -1,0 +1,42 @@
+{
+  "id": "plugin.backend-seams",
+  "version": "0.1.0",
+  "displayName": "Backend Seams Plugin",
+  "description": "Backend seam diagnostics page, read model, operator surface, and runtime bundle contribution.",
+  "kind": "plugin",
+  "activatesBundles": [
+    "bundle-backend-seams"
+  ],
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "contributes": {
+    "capabilities": [],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/backend-seams",
+        "handler": "page.backendSeams"
+      },
+      {
+        "method": "GET",
+        "path": "/api/backend-seams",
+        "handler": "backendSeams.read"
+      }
+    ],
+    "surfaces": [
+      {
+        "id": "surface:backend-seams",
+        "title": "Open Backend Seams",
+        "href": "/backend-seams"
+      }
+    ],
+    "providers": [
+      {
+        "id": "backend-seams.runtime",
+        "kind": "runtime-handler-catalog",
+        "description": "Bundle-owned backend seam diagnostics handlers."
+      }
+    ]
+  }
+}

@@ -202,8 +202,8 @@ Notes:
 
 - `--server` is optional only when the DSL resolves to exactly one `serverRunner`
 - `bootstrap` starts a blank-world authoring server and treats `/_bootstrap` as the primary seam
-- the maintained demo app now runs on `minimal` plus authored runtime-plugin installs on `demo_server`
-- the maintained demo still carries one explicit compatibility seam: `handlerSet = "demo"` currently causes startup to add `bundle-demo`, and runtime diagnostics report that ownership honestly
+- the maintained demo app now runs on `minimal` plus authored runtime-plugin installs on `demo_server`, including `plugin.demo` for demo handler-set behavior
+- `serverRunner.handlerSet = "demo"` no longer activates `bundle-demo`; the demo bundle must come from `plugin.demo` or a profile that already includes it
 - blank-world bootstrap/tutorial startup is still a separate runtime-composition path from the pluginized maintained demo
 - `desktop` starts the first shipped ownership shell: a narrow Electron adapter over the same runtime/profile/world model, with launcher-based `WORLD_HOME` open/create flows and explicit desktop-only powers
 - `bootstrap` now starts from a fresh temp runtime root by default, so prior todo/private-note projection files are not reused across runs
@@ -279,7 +279,7 @@ The current Todo/bootstrap path should be read as a proving ground, not the fina
 
 Current migration caveat:
 
-- the maintained demo is pluginized, but it still depends on the explicit `bundle-demo` compatibility seam triggered by `handlerSet = "demo"`
+- the maintained demo is pluginized through authored runtime-plugin installs, including `plugin.demo`
 - blank-world bootstrap/tutorial startup still follows a separate runtime-composition path
 
 The detailed capability inventory for that longer arc lives in [docs/CAPABILITIES.md](C:\Users\aaron\Documents\world\docs\CAPABILITIES.md).

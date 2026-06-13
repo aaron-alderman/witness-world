@@ -10,8 +10,8 @@ import {
   batchApply,
   relateThings,
   unrelateThings
-} from "../src/canvas-processes.js";
-import { compensationClaims, undoState } from "../src/canvas-undo.js";
+} from "../plugins/canvas/canvas-processes.js";
+import { compensationClaims, undoState } from "../plugins/canvas/canvas-undo.js";
 
 function worldWithPlacement() {
   const world = createWorld();

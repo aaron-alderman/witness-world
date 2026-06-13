@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "defaultProfile": "full",
+  "profiles": {
+    "minimal": {
+      "coreBundles": ["bundle-core-runtime"],
+      "plugins": []
+    },
+    "authoring": {
+      "coreBundles": ["bundle-core-runtime"],
+      "plugins": ["plugin.authoring"]
+    },
+    "inspect": {
+      "coreBundles": ["bundle-core-runtime"],
+      "plugins": ["plugin.inspect"]
+    },
+    "practical-backend": {
+      "coreBundles": ["bundle-core-runtime"],
+      "plugins": ["plugin.practical-backend"]
+    },
+    "full": {
+      "coreBundles": ["bundle-core-runtime"],
+      "plugins": [
+        "plugin.authoring",
+        "plugin.inspect",
+        "plugin.canvas",
+        "plugin.mcp",
+        "plugin.practical-backend",
+        "plugin.demo",
+        "plugin.eden"
+      ]
+    }
+  }
+}

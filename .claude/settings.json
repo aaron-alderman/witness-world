@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls -la \"C:\\\\Users\\\\aaron\\\\Documents\\\\world\\\\\" | head -40)",
+      "Read(//c/Users/aaron/Documents/**)"
+    ]
+  }
+}

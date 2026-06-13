@@ -19,7 +19,7 @@ import {
   tutorialStepSurfaceContext,
   tutorialStepScope,
   tutorialStepConcepts
-} from "../src/tutorials.js";
+} from "../plugins/tutorial/tutorials.js";
 
 test("tutorial concepts are authored per step and reveal progressively with progress", () => {
   const tutorial = todoTutorialDefinition();

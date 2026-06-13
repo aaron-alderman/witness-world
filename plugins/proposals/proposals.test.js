@@ -1,0 +1,106 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { createWorld } from "../../src/kernel.js";
+import { bundleId, createHandlers, handlerCatalog, routes } from "./runtime.js";
+import { createAuthoringProposalExecutor } from "./proposal-executor.js";
+
+test("proposals plugin owns proposal bundle routes and handlers", async () => {
+  const manifest = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
+
+  assert.equal(manifest.id, "plugin.proposals");
+  assert.deepEqual(manifest.activatesBundles, ["bundle-proposals"]);
+  assert.equal(manifest.runtime.entry, "./runtime.js");
+  assert.equal(bundleId, "bundle-proposals");
+  assert.deepEqual(handlerCatalog.dispatchHandlers, [
+    "proposal.create",
+    "proposal.approve",
+    "proposal.reject"
+  ]);
+  assert.equal(routes.some(route => route.path === "/api/proposals" && route.handler === "proposal.create"), true);
+  assert.equal(routes.some(route => route.handler === "proposal.approve"), true);
+  assert.equal(routes.some(route => route.handler === "proposal.reject"), true);
+
+  const handlers = createHandlers({
+    world: createWorld(),
+    backendHost: "backendHost",
+    readJson: async () => ({}),
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" },
+      executeBootstrapProposal: actor => async () => ({ ok: true, witnessIds: [`executed-by-${actor}`] })
+    },
+    sendGateFailure() {},
+    sendJson() {}
+  });
+  assert.equal(typeof handlers["proposal.create"], "function");
+  assert.equal(typeof handlers["proposal.approve"], "function");
+  assert.equal(typeof handlers["proposal.reject"], "function");
+});
+
+test("proposals plugin owns the proposal executor dispatch", async () => {
+  const executorSource = await readFile(new URL("./proposal-executor.js", import.meta.url), "utf8");
+  assert.equal(executorSource.includes("../authoring-core/authoring-core-proposal-targets.js"), true);
+  assert.equal(executorSource.includes("../capability-authoring/capability-proposal-targets.js"), true);
+  assert.equal(executorSource.includes("../program-authoring/program-proposal-targets.js"), true);
+  assert.equal(executorSource.includes("../server-runner-authoring/server-runner-proposal-targets.js"), true);
+  assert.equal(executorSource.includes("../mcp-authoring/mcp-proposal-targets.js"), true);
+  assert.equal(executorSource.includes("../demo/demo-proposal-targets.js"), true);
+  assert.equal(executorSource.includes("../../src/todo-runtime.js"), false);
+  assert.equal(executorSource.includes("requestTodoCreate"), false);
+  assert.equal(executorSource.includes("requestTodoUpdate"), false);
+  assert.equal(executorSource.includes("requestTodoDelete"), false);
+  assert.equal(executorSource.includes("requestBootstrapCapabilityDefine"), false);
+  assert.equal(executorSource.includes("requestBootstrapCapabilityInstall"), false);
+  assert.equal(executorSource.includes("requestBootstrapCapabilityRemove"), false);
+  assert.equal(executorSource.includes("requestBootstrapFrontendProgramDefine"), false);
+  assert.equal(executorSource.includes("requestBootstrapFrontendStepDefine"), false);
+  assert.equal(executorSource.includes("requestBootstrapBackendProgramDefine"), false);
+  assert.equal(executorSource.includes("requestBootstrapBackendProgramVersionDefine"), false);
+  assert.equal(executorSource.includes("requestBootstrapBackendStepDefine"), false);
+  assert.equal(executorSource.includes("requestBootstrapBackendProgramVersionActivate"), false);
+  assert.equal(executorSource.includes("requestBootstrapBackendProgramVersionRollback"), false);
+  assert.equal(executorSource.includes("requestBootstrapServerRunnerDefine"), false);
+  assert.equal(executorSource.includes("requestBootstrapRuntimePluginInstall"), false);
+  assert.equal(executorSource.includes("requestBootstrapRuntimePluginRemove"), false);
+  assert.equal(executorSource.includes("requestBootstrapMcpServerDefine"), false);
+  assert.equal(executorSource.includes("requestBootstrapMcpToolInstall"), false);
+  assert.equal(executorSource.includes("requestBootstrapMcpToolRemove"), false);
+  assert.equal(executorSource.includes("requestBootstrapIdentityUpdate"), false);
+  assert.equal(executorSource.includes("requestBootstrapContextDefine"), false);
+  assert.equal(executorSource.includes("requestBootstrapRouteDefine"), false);
+  assert.equal(executorSource.includes("requestBootstrapServeDefine"), false);
+  assert.equal(executorSource.includes("requestWidgetDefine"), false);
+
+  const execute = createAuthoringProposalExecutor({
+    world: createWorld(),
+    backendHost: "backendHost",
+    supportedHandlerSets: [],
+    supportedHandlers: [],
+    supportedFrontendOps: [],
+    supportedBackendOps: [],
+    ensureIdentityAuthority: () => ({ ok: true }),
+    ensureTargetAuthority: () => ({ ok: true }),
+    ensureContextAuthority: () => ({ ok: true }),
+    mcpToolNames: () => [],
+    getRuntimePluginCatalog: async () => ({ packages: [] })
+  });
+
+  const result = await execute("aaron")({
+    targetProcess: "proposal.executor.unsupported",
+    body: {}
+  });
+  assert.deepEqual(result, {
+    ok: false,
+    status: 400,
+    error: "proposal target process not supported"
+  });
+});
+
+test("proposals plugin owns proposal process helpers", async () => {
+  const processesSource = await readFile(new URL("./proposal-processes.js", import.meta.url), "utf8");
+
+  assert.equal(processesSource.includes("export function requestBootstrapProposalCreate"), true);
+  assert.equal(processesSource.includes("export async function requestBootstrapProposalApprove"), true);
+  assert.equal(processesSource.includes("export function requestBootstrapProposalReject"), true);
+  await assert.rejects(readFile(new URL("../../src/bootstrap-authoring.js", import.meta.url), "utf8"));
+});

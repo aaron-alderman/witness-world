@@ -1,0 +1,14 @@
+{
+  "id": "plugin.authoring-core",
+  "version": "0.1.0",
+  "displayName": "Authoring Core Plugin Runtime",
+  "description": "Owns the remaining generic authoring CRUD routes and handlers for identities, contexts, perspectives, stewardship, widgets, routes, and serve mounts.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-authoring-core"
+  ],
+  "contributes": {}
+}

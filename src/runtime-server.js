@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { relation } from "./kernel.js";
-import { installCapability, moduleProjectors } from "./modules.js";
+import { ensureCapabilityDefinition, installCapability, moduleProjectors } from "./modules.js";
 import {
   headerValue,
   readJson,
@@ -20,15 +20,17 @@ import {
   createRuntimeResolverForServer
 } from "./runtime-startup-services.js";
 import {
-  createBuiltinAssetJobHandlers,
-  createBuiltinNotificationJobHandlers,
-  createBuiltinWebhookJobHandlers
-} from "./runtime-default-job-handlers.js";
+  createBuiltinAssetJobHandlers
+} from "../plugins/assets/job-handlers.js";
 import {
-  createDbSqlRuntime,
-  createInProcessJobQueue,
-  createSearchIndexRuntime
-} from "./runtime-provider-runtimes.js";
+  createBuiltinNotificationJobHandlers
+} from "../plugins/notifications/job-handlers.js";
+import {
+  createBuiltinWebhookJobHandlers
+} from "../plugins/webhooks/job-handlers.js";
+import { createDbSqlRuntime } from "../plugins/sqlite/provider-runtime.js";
+import { createInProcessJobQueue } from "../plugins/jobs/provider-runtime.js";
+import { createSearchIndexRuntime } from "../plugins/search/provider-runtime.js";
 import { createRuntimeContextResolver } from "./runtime-context-resolver.js";
 import {
   compileRouteMatcher,
@@ -39,12 +41,13 @@ import {
 import { ensureRuntimeBuiltins } from "./runtime-builtins.js";
 import {
   DEFAULT_RUNTIME_PROFILE,
-  bundleIdsForHandlerSet,
   defaultHostCapabilitiesForProfile,
   dispatchHandlerIdsForProfile,
   handlerSetDefinitionsForProfile,
   handlerSetFactoriesForProfile,
   providedCapabilityIdsForProfile,
+  runtimeCapabilityDefinitionsForProfile,
+  runtimeBuiltinSeedContributionsForProfile,
   runtimeBundleSummaryForProfile,
   runtimeSurfaceEntriesForProfile,
   startupRequiredHostCapabilitiesForProfile
@@ -63,15 +66,18 @@ import { createRuntimeOperatorService } from "./runtime-operator-service.js";
 
 function canvasLibFilesForRuntime() {
   const srcDir = path.dirname(fileURLToPath(import.meta.url));
+  const canvasDir = path.join(srcDir, "..", "plugins", "canvas");
+  const edenDir = path.join(srcDir, "..", "plugins", "eden");
   return new Map([
-    ["projectors-core.js", path.join(srcDir, "projectors-core.js")],
-    ["canvas-projection.js", path.join(srcDir, "canvas-projection.js")],
-    ["eden-personal-box.js", path.join(srcDir, "eden-personal-box.js")],
-    ["eden-page-theme.js", path.join(srcDir, "eden-page-theme.js")],
-    ["eden-capability-install.js", path.join(srcDir, "eden-capability-install.js")],
-    ["eden-academy.js", path.join(srcDir, "eden-academy.js")],
-    ["eden-organization.js", path.join(srcDir, "eden-organization.js")],
-    ["eden-theory.js", path.join(srcDir, "eden-theory.js")]
+    ["canvas-core.js", path.join(canvasDir, "canvas-core.js")],
+    ["projectors-core.js", path.join(canvasDir, "projectors-core.js")],
+    ["canvas-projection.js", path.join(canvasDir, "canvas-projection.js")],
+    ["eden-personal-box.js", path.join(edenDir, "eden-personal-box.js")],
+    ["eden-page-theme.js", path.join(edenDir, "eden-page-theme.js")],
+    ["eden-capability-install.js", path.join(edenDir, "eden-capability-install.js")],
+    ["eden-academy.js", path.join(edenDir, "eden-academy.js")],
+    ["eden-organization.js", path.join(edenDir, "eden-organization.js")],
+    ["eden-theory.js", path.join(edenDir, "eden-theory.js")]
   ]);
 }
 
@@ -104,6 +110,8 @@ export async function startRuntimeServer(world, {
     handlerSetFactoriesForProfile: handlerSetFactoriesForProfileImpl = handlerSetFactoriesForProfile,
     handlerSetDefinitionsForProfile: handlerSetDefinitionsForProfileImpl = handlerSetDefinitionsForProfile,
     providedCapabilityIdsForProfile: providedCapabilityIdsForProfileImpl = providedCapabilityIdsForProfile,
+    runtimeCapabilityDefinitionsForProfile: runtimeCapabilityDefinitionsForProfileImpl = runtimeCapabilityDefinitionsForProfile,
+    runtimeBuiltinSeedContributionsForProfile: runtimeBuiltinSeedContributionsForProfileImpl = runtimeBuiltinSeedContributionsForProfile,
     startupRequiredHostCapabilitiesForProfile: startupRequiredHostCapabilitiesForProfileImpl = startupRequiredHostCapabilitiesForProfile,
     createRuntimeAppContextForRunner: createRuntimeAppContextForRunnerImpl = createRuntimeAppContextForRunner,
     createRuntimeResolverForServer: createRuntimeResolverForServerImpl = createRuntimeResolverForServer,
@@ -186,11 +194,11 @@ export async function startRuntimeServer(world, {
     });
     return { ok: false, reason: "runtime plugin modules unresolved", runtimePluginCatalog: effectiveRuntimePluginCatalog };
   }
-  const additionalBundleIds = [...new Set([
-    ...(effectiveRuntimePluginCatalog.addedBundleIds ?? []),
-    ...bundleIdsForHandlerSet(serverRunner.handlerSet)
-  ])];
   const bundleOverrides = runtimePluginLoadResult.bundleOverrides ?? {};
+  const additionalBundleIds = [...new Set([
+    ...(runtimePluginCatalog.addedBundleIds ?? []),
+    ...Object.keys(bundleOverrides)
+  ])];
   const resolvedRuntime = runtimeBundleSummaryForProfileImpl(runtimeProfile, {
     additionalBundleIds,
     bundleOverrides
@@ -201,7 +209,11 @@ export async function startRuntimeServer(world, {
   const activeDispatchHandlers = new Set(resolvedRuntime.dispatchHandlers ?? dispatchHandlerIdsForProfileImpl(activeRuntimeProfile, compositionOptions));
   const handlerSetFactories = handlerSetFactoriesForProfileImpl(activeRuntimeProfile, compositionOptions);
   const handlerSetDefinitions = handlerSetDefinitionsForProfileImpl(activeRuntimeProfile, compositionOptions);
-  ensureRuntimeBuiltinsImpl(world, { capabilityIds: providedCapabilityIdsForProfileImpl(activeRuntimeProfile, compositionOptions) });
+  ensureRuntimeBuiltinsImpl(world, {
+    capabilityIds: providedCapabilityIdsForProfileImpl(activeRuntimeProfile, compositionOptions),
+    capabilityDefinitions: runtimeCapabilityDefinitionsForProfileImpl(activeRuntimeProfile, compositionOptions),
+    seedContributions: runtimeBuiltinSeedContributionsForProfileImpl(activeRuntimeProfile, compositionOptions)
+  });
   const backendHost = serverRunner.backendHost;
   const frontendHost = serverRunner.frontendHost;
   if (!backendHost || !frontendHost) {
@@ -218,10 +230,22 @@ export async function startRuntimeServer(world, {
   const frontendDefaults = defaultHostCapabilitiesForProfileImpl(activeRuntimeProfile, "frontend", compositionOptions);
   for (const capability of backendDefaults) {
     if (hostCapabilities(world, backendHost).has(capability)) continue;
+    ensureCapabilityDefinition(world, {
+      actor,
+      id: capability,
+      label: capability,
+      provenance: { source: "server.start.defaultHostCapabilities" }
+    });
     installCapability(world, { actor, capability, target: backendHost, targetKind: "host" });
   }
   for (const capability of frontendDefaults) {
     if (hostCapabilities(world, frontendHost).has(capability)) continue;
+    ensureCapabilityDefinition(world, {
+      actor,
+      id: capability,
+      label: capability,
+      provenance: { source: "server.start.defaultHostCapabilities" }
+    });
     installCapability(world, { actor, capability, target: frontendHost, targetKind: "host" });
   }
   const backendCaps = hostCapabilities(world, backendHost);

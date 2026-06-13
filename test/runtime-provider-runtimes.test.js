@@ -6,9 +6,9 @@ import test from "node:test";
 import { moduleProjectors } from "../src/modules.js";
 import {
   createDbSqlRuntime,
-  createInProcessJobQueue,
-  createSearchIndexRuntime
-} from "../src/runtime-provider-runtimes.js";
+} from "../plugins/sqlite/provider-runtime.js";
+import { createInProcessJobQueue } from "../plugins/jobs/provider-runtime.js";
+import { createSearchIndexRuntime } from "../plugins/search/provider-runtime.js";
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));

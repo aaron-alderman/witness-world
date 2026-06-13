@@ -2,16 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
 import {
-  createHandlers as createInspectBundleHandlers
-} from "../plugins/inspect/runtime.js";
+  genericHandlerFactoriesForProfile
+} from "../src/runtime-bundles.js";
 import {
-  createPracticalBackendOauthHandlers
-} from "../plugins/practical-backend/handlers.js";
+  createOauthHandlers
+} from "../plugins/oauth/handlers.js";
 
 test("inspect bundle handlers consume shared authority services for widget version gates", async () => {
   const world = createWorld();
   const calls = [];
   let response = null;
+  const createInspectBundleHandlers = genericHandlerFactoriesForProfile("inspect")
+    .find(entry => entry.bundleId === "bundle-inspect")
+    .factory;
   const handlers = createInspectBundleHandlers({
     world,
     backendHost: "backendHost",
@@ -49,11 +52,11 @@ test("inspect bundle handlers consume shared authority services for widget versi
   assert.equal(response?.body?.status, "proposed");
 });
 
-test("practical-backend oauth handlers consume shared authority services for runner-scoped reads", async () => {
+test("oauth plugin handlers consume shared authority services for runner-scoped reads", async () => {
   const world = createWorld();
   const calls = [];
   let gated = null;
-  const handlers = createPracticalBackendOauthHandlers({
+  const handlers = createOauthHandlers({
     world,
     backendHost: "backendHost",
     readJson: async () => ({}),

@@ -84,8 +84,14 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
     assert.equal(diagnostics.activeProfile, "authoring");
     assert.deepEqual(diagnostics.activeBundles.map(bundle => bundle.id), [
       "bundle-core-runtime",
-      "bundle-tutorial",
-      "bundle-authoring"
+      "bundle-bootstrap",
+      "bundle-authoring-core",
+      "bundle-capability-authoring",
+      "bundle-program-authoring",
+      "bundle-server-runner-authoring",
+      "bundle-mcp-authoring",
+      "bundle-proposals",
+      "bundle-tutorial"
     ]);
     assert.equal(diagnostics.startupRunner?.bootstrapOnly, true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), false);

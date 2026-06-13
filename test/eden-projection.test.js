@@ -3,17 +3,20 @@ import test from "node:test";
 import path from "node:path";
 import { createWorld } from "../src/kernel.js";
 import { loadWitnessTomlFile, applyWitnessDocs, applyWitnessToml } from "../src/dsl.js";
-import { canvasProjection, edenNeighborhoodProjection } from "../src/canvas-projection.js";
+import { canvasProjection } from "../plugins/canvas/canvas-projection.js";
+import { edenNeighborhoodProjection } from "../plugins/eden/eden-projection.js";
 import {
   requestBootstrapContextDefine,
-  requestBootstrapProposalApprove,
-  requestBootstrapProposalCreate,
   requestBootstrapStewardshipGrant,
   requestWidgetDefine
-} from "../src/bootstrap-authoring.js";
-import { requestEdenPersonalBoxItemCreate, requestEdenPersonalBoxItemDelete, requestEdenPersonalBoxItemUpdate } from "../src/eden-personal-box.js";
-import { requestEdenPageThemeSet } from "../src/eden-page-theme.js";
-import { requestEdenVersionActivate, requestEdenVersionPublish, requestEdenVersionRollback } from "../src/eden-versions.js";
+} from "../plugins/authoring-core/authoring-core-processes.js";
+import {
+  requestBootstrapProposalApprove,
+  requestBootstrapProposalCreate
+} from "../plugins/proposals/proposal-processes.js";
+import { requestEdenPersonalBoxItemCreate, requestEdenPersonalBoxItemDelete, requestEdenPersonalBoxItemUpdate } from "../plugins/eden/eden-personal-box.js";
+import { requestEdenPageThemeSet } from "../plugins/eden/eden-page-theme.js";
+import { requestEdenVersionActivate, requestEdenVersionPublish, requestEdenVersionRollback } from "../plugins/eden/eden-versions.js";
 
 async function loadDemoWorld() {
   const world = createWorld();

@@ -121,7 +121,7 @@ Current first slice now exists:
 - startup-local runtime plugin activation through repeatable CLI `--runtime-plugin <id>` and `RUNTIME_PLUGINS=plugin.a,plugin.b`, with runtime composition resolved as `profile + activated plugins`
 - runner-authored `runtimePlugin.install` / `runtimePlugin.remove` intent plus bootstrap availability and installed-state reads, so capability assembly can expose executable-vs-metadata-only packages and per-runner installability truth
 - explicit plugin-backed composition attribution through `capabilityPackageSources`, `capabilitySourceState` / `packageSources`, `runtimePluginAvailability`, and authored/operator/effective plugin source reporting rather than treating plugin contributions as ambient runtime behavior
-- the maintained demo example now proves authored plugin composition directly: `demo_server` installs `plugin.authoring`, `plugin.inspect`, and `plugin.canvas`, and served demo entrypoints run on `minimal` rather than relying on implicit `full`
+- the maintained demo example now proves authored plugin composition directly: `demo_server` installs `plugin.authoring`, `plugin.inspect`, `plugin.canvas`, and `plugin.demo`, and served demo entrypoints run on `minimal` rather than relying on implicit `full` or handler-set bundle fallback
 - the core engineering rule is now written down explicitly in the capability docs: app semantics belong either in the world/model, universal runtime/shell infrastructure, or explicit plugin boundaries rather than hidden generic JS glue
 
 Honest caveats / rollback watch:
@@ -638,7 +638,7 @@ Current base now exists:
 - [x] Add a first product-quality MCP server/tool-install authoring and operations surface over the shipped DSL, direct authoring routes, generic proposal support, bootstrap-state read models, and CLI bridge.
 - [x] Add a first bootstrap runtime-plugin install/remove surface with proposal parity, package availability reads, and runner-scoped install visibility.
 - [x] Deepen runtime-plugin review and operations surfaces beyond the first bootstrap forms: richer dependency/source explanation, composition diffs, and clearer package review/detail affordances.
-- [ ] Finish migrating the maintained demo off the remaining runtime-owned `bundle-demo` / `handlerSet = "demo"` compatibility seam so served-example composition is entirely explained by authored installs plus explicit runtime-owned bundle ownership, not hidden example glue.
+- [x] Finish migrating the maintained demo off the remaining runtime-owned `bundle-demo` / `handlerSet = "demo"` compatibility seam so served-example composition is entirely explained by authored installs plus explicit runtime-owned bundle ownership, not hidden example glue.
 - [ ] Remove the remaining demo handler-set model shims from authored backend programs, starting with `todos.*Model`, `privateNotes.*Model`, `widgets.createModel`, and `network.simulateModel`, so the pluginized maintained demo no longer routes core app logic back through `src/demo-handler-set.js`.
 - [ ] Bring blank-world bootstrap/tutorial startup onto the same explicit runtime-composition story as the maintained demo so bootstrap can eventually run from a narrow baseline instead of a compatibility-heavy runtime path.
 - [ ] Add runner-scoped runtime-plugin reconcile and repair flows so authored installs that point at missing, invalid, incompatible, or dependency-broken local packages become operable cleanup work instead of only startup failures and review warnings.
@@ -681,8 +681,8 @@ Honest caveats / rollback watch:
   Bootstrap now exposes install/remove/proposal forms plus runner-scoped availability, installed-state, blocked/installable reason badges, and authored-composition review/detail panels for `runtimePlugin.install` / `runtimePlugin.remove`, yet reconcile/repair flows, store/update lifecycle, and broader trust operations still remain future work.
 - The maintained demo project is now pluginized, but blank-world bootstrap is still a separate runtime path.
   The served example app proves authored plugin composition on `minimal`; bootstrap/tutorial continuity still depends on runtime-owned bundles and remains intentionally outside that migration slice for now.
-- The maintained demo still depends on one explicit compatibility seam: `handlerSet = "demo"` currently causes the runtime to add `bundle-demo` at startup.
-  That bundle ownership is now reported honestly, but the remaining demo behavior is not yet fully pluginized or authored away.
+- The maintained demo no longer depends on the `handlerSet = "demo"` bundle-activation compatibility seam.
+  `plugin.demo` is now authored on `demo_server`; a runner that names `handlerSet = "demo"` without activating `plugin.demo` fails startup instead of silently adding `bundle-demo`.
 - The maintained demo's authored backend programs still rely on a narrower compatibility seam inside that bundle.
   Several shipped backend-program versions still call demo handler-set model helpers such as `todos.*Model`, `privateNotes.*Model`, `widgets.createModel`, and `network.simulateModel` rather than fully bundle-owned or authored executable seams.
 

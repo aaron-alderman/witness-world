@@ -79,9 +79,9 @@ test("plugin discovery finds valid executable local plugin packages through bund
     assert.equal(discovered.packages[0].metadata.runtime.entry, "./runtime.js");
     assert.equal(discovered.packages[0].runtimeModule.loadStatus, "not-loaded");
     assert.equal(discovered.packages[0].resolvedBundles.some(row => row.id === "bundle-inspect"), true);
-    assert.equal(discovered.packages[0].resolvedRuntimeContributions.surfaces.some(row => row.id === "surface:world"), true);
-    assert.equal(discovered.packages[0].resolvedRuntimeContributions.handlerMetadata["events.stream"].routeKind, "stream");
-    assert.deepEqual(discovered.packages[0].resolvedRuntimeContributions.routes.find(route => route.handler === "events.stream")?.handlerMetadata?.methods, ["GET"]);
+    assert.deepEqual(discovered.packages[0].resolvedRuntimeContributions.surfaces, []);
+    assert.deepEqual(discovered.packages[0].resolvedRuntimeContributions.routes, []);
+    assert.deepEqual(Object.keys(discovered.packages[0].resolvedRuntimeContributions.handlerMetadata), []);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
@@ -299,7 +299,7 @@ test("plugin compatibility follows profile metadata and startup activation stays
     assert.equal(full.packages[0].compatibility.compatible, true);
     assert.equal(full.packages[0].activation.active, true);
     assert.deepEqual(full.activePluginIds, ["plugin.inspect"]);
-    assert.deepEqual(full.addedBundleIds, []);
+    assert.deepEqual(full.addedBundleIds, ["bundle-inspect"]);
     assert.deepEqual(full.selection.activeBundleIds, ["bundle-inspect"]);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
@@ -346,7 +346,7 @@ test("plugin catalog reports authored, operator, and effective runtime plugin re
   }
 });
 
-test("plugin activation rejects dependency-incomplete authored installs with source attribution", async () => {
+test("plugin activation expands authored plugin dependencies with source attribution", async () => {
   const root = await tempPluginRoot();
   try {
     await writePlugin(root, "inspect", {
@@ -375,13 +375,11 @@ test("plugin activation rejects dependency-incomplete authored installs with sou
       authoredPluginIds: ["plugin.inspect"]
     });
 
-    assert.deepEqual(discovered.effectivePluginIds, ["plugin.inspect"]);
-    assert.equal(discovered.packages.find(row => row.id === "plugin.inspect")?.activation.active, false);
-    assert.equal(discovered.rejectedPlugins.some(entry =>
-      entry.id === "plugin.inspect"
-      && entry.requestedSources.includes("authored")
-      && entry.reasons.some(reason => reason.includes("missing requested plugin dependencies: plugin.canvas"))
-    ), true);
+    assert.deepEqual(discovered.effectivePluginIds, ["plugin.inspect", "plugin.canvas"]);
+    assert.equal(discovered.packages.find(row => row.id === "plugin.inspect")?.activation.active, true);
+    assert.equal(discovered.packages.find(row => row.id === "plugin.canvas")?.activation.active, true);
+    assert.deepEqual(discovered.packages.find(row => row.id === "plugin.canvas")?.activation.requestedSources, ["authored"]);
+    assert.deepEqual(discovered.rejectedPlugins, []);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
@@ -422,15 +420,166 @@ test("runtime plugin reviews show executable composition deltas and metadata-onl
     await writePlugin(root, "practical-backend", {
       id: "plugin.practical-backend",
       version: "0.2.0",
-      displayName: "Practical Backend Bridge",
-      description: "Backend bridge",
+      displayName: "Practical Backend Meta",
+      description: "Backend meta package",
       kind: "plugin",
-      activatesBundles: ["bundle-practical-backend"],
+      dependsOnPlugins: ["plugin.sqlite", "plugin.jobs", "plugin.search", "plugin.notifications", "plugin.webhooks", "plugin.http-outbound", "plugin.oauth", "plugin.runtime-config", "plugin.backend-seams", "plugin.fs-json", "plugin.fs-blob", "plugin.fs-stream", "plugin.assets"],
       contributes: {
         capabilities: [{ id: "db.sql" }],
         routes: [{ path: "/declared-backend", handler: "backendProgram.run" }],
         surfaces: [{ id: "surface:declared-backend", title: "Declared Backend" }],
-        providers: [{ id: "provider.backend", kind: "bundle-bridge" }]
+        providers: [{ id: "provider.backend", kind: "meta-package" }]
+      }
+    });
+    await writePlugin(root, "sqlite", {
+      id: "plugin.sqlite",
+      version: "0.2.0",
+      displayName: "SQLite",
+      description: "SQLite DB SQL",
+      kind: "plugin",
+      activatesBundles: ["bundle-sqlite"],
+      contributes: {
+        capabilities: [{ id: "db.sql" }]
+      }
+    });
+    await writePlugin(root, "jobs", {
+      id: "plugin.jobs",
+      version: "0.2.0",
+      displayName: "Jobs",
+      description: "Jobs queue",
+      kind: "plugin",
+      activatesBundles: ["bundle-jobs"],
+      contributes: {
+        capabilities: [{ id: "jobs.queue" }]
+      }
+    });
+    await writePlugin(root, "search", {
+      id: "plugin.search",
+      version: "0.2.0",
+      displayName: "Search",
+      description: "Search index",
+      kind: "plugin",
+      activatesBundles: ["bundle-search"],
+      contributes: {
+        capabilities: [{ id: "search.index" }]
+      }
+    });
+    await writePlugin(root, "notifications", {
+      id: "plugin.notifications",
+      version: "0.2.0",
+      displayName: "Notifications",
+      description: "Email/SMS notifications",
+      kind: "plugin",
+      dependsOnPlugins: ["plugin.jobs"],
+      activatesBundles: ["bundle-notifications"],
+      contributes: {
+        capabilities: [{ id: "notify.email" }, { id: "notify.sms" }]
+      }
+    });
+    await writePlugin(root, "webhooks", {
+      id: "plugin.webhooks",
+      version: "0.2.0",
+      displayName: "Webhooks",
+      description: "Inbound webhooks",
+      kind: "plugin",
+      dependsOnPlugins: ["plugin.jobs"],
+      activatesBundles: ["bundle-webhooks"],
+      contributes: {
+        capabilities: [{ id: "webhook.inbound" }]
+      }
+    });
+    await writePlugin(root, "http-outbound", {
+      id: "plugin.http-outbound",
+      version: "0.2.0",
+      displayName: "HTTP Outbound",
+      description: "Outbound HTTP",
+      kind: "plugin",
+      activatesBundles: ["bundle-http-outbound"],
+      contributes: {
+        capabilities: [{ id: "http.outbound" }]
+      }
+    });
+    await writePlugin(root, "oauth", {
+      id: "plugin.oauth",
+      version: "0.2.0",
+      displayName: "OAuth",
+      description: "OAuth authentication",
+      kind: "plugin",
+      activatesBundles: ["bundle-oauth"],
+      contributes: {
+        capabilities: [{ id: "auth.oauth" }]
+      }
+    });
+    await writePlugin(root, "runtime-config", {
+      id: "plugin.runtime-config",
+      version: "0.2.0",
+      displayName: "Runtime Config",
+      description: "Runtime config read route",
+      kind: "plugin",
+      activatesBundles: ["bundle-runtime-config"],
+      contributes: {
+        capabilities: [{ id: "runtime.config" }]
+      }
+    });
+    await writePlugin(root, "backend-seams", {
+      id: "plugin.backend-seams",
+      version: "0.2.0",
+      displayName: "Backend Seams",
+      description: "Backend seam diagnostics",
+      kind: "plugin",
+      activatesBundles: ["bundle-backend-seams"],
+      contributes: {
+        routes: [{ method: "GET", path: "/api/backend-seams", handler: "backendSeams.read" }],
+        surfaces: [{ id: "surface:backend-seams", title: "Open Backend Seams" }]
+      }
+    });
+    await writePlugin(root, "fs-blob", {
+      id: "plugin.fs-blob",
+      version: "0.2.0",
+      displayName: "Blob File Storage",
+      description: "Blob file storage",
+      kind: "plugin",
+      activatesBundles: ["bundle-fs-blob"],
+      contributes: {
+        capabilities: [{ id: "fs.blob" }],
+        routes: [{ method: "GET", path: "/api/fs/blobs", handler: "fs.blob.list" }]
+      }
+    });
+    await writePlugin(root, "fs-json", {
+      id: "plugin.fs-json",
+      version: "0.2.0",
+      displayName: "JSON File Capabilities",
+      description: "JSON file read/write host capabilities",
+      kind: "plugin",
+      activatesBundles: ["bundle-fs-json"],
+      contributes: {
+        capabilities: [{ id: "fs.json.read" }, { id: "fs.json.write" }]
+      }
+    });
+    await writePlugin(root, "fs-stream", {
+      id: "plugin.fs-stream",
+      version: "0.2.0",
+      displayName: "Stream File Storage",
+      description: "Stream file storage",
+      kind: "plugin",
+      dependsOnPlugins: ["plugin.fs-blob"],
+      activatesBundles: ["bundle-fs-stream"],
+      contributes: {
+        capabilities: [{ id: "fs.stream" }],
+        routes: [{ method: "GET", path: "/api/fs/streams/content", handler: "fs.stream.read" }]
+      }
+    });
+    await writePlugin(root, "assets", {
+      id: "plugin.assets",
+      version: "0.2.0",
+      displayName: "Assets",
+      description: "Asset upload and content APIs",
+      kind: "plugin",
+      dependsOnPlugins: ["plugin.fs-blob", "plugin.fs-stream", "plugin.jobs", "plugin.search"],
+      activatesBundles: ["bundle-assets"],
+      contributes: {
+        capabilities: [{ id: "upload.asset" }],
+        routes: [{ method: "POST", path: "/api/assets", handler: "asset.upload" }]
       }
     });
     await writePlugin(root, "notes-sidebar", {
@@ -473,19 +622,30 @@ test("runtime plugin reviews show executable composition deltas and metadata-onl
     assert.ok(inspect);
     assert.ok(notes);
     assert.equal(backend.installPreview?.available, true);
-    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-practical-backend"), true);
-    assert.equal(backend.installPreview?.delta.addedCapabilityIds.includes("db.sql"), true);
-    assert.equal(backend.installPreview?.delta.addedRoutes.length > 0, true);
+    assert.equal(backend.execution.mode, "meta-package");
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-sqlite"), true);
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-jobs"), true);
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-search"), true);
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-notifications"), true);
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-webhooks"), true);
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-http-outbound"), true);
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-oauth"), true);
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-runtime-config"), true);
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-backend-seams"), true);
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-fs-json"), true);
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-fs-blob"), true);
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-fs-stream"), true);
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-assets"), true);
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-practical-backend"), false);
+    assert.equal(backend.declaredManifestContributions.capabilities.some(row => row.id === "db.sql"), true);
+    assert.deepEqual(backend.installPreview?.delta.addedCapabilityIds, []);
+    assert.deepEqual(backend.installPreview?.delta.addedRoutes, []);
     assert.equal(backend.declaredManifestContributions.routes.some(route => route.path === "/declared-backend"), true);
     assert.equal(backend.resolvedRuntimeContributions.routes.some(route => route.matcher === "/declared-backend"), false);
-    assert.equal(inspect.declaredManifestContributions.routes.some(route =>
-      route.path === "/declared-world" && route.handlerMetadata?.routeKind === "page"
-    ), true);
-    assert.equal(inspect.resolvedRuntimeContributions.handlerMetadata["events.stream"].routeKind, "stream");
-    assert.equal(inspect.installPreview?.delta.addedHandlerMetadata.some(row =>
-      row.handler === "events.stream" && row.metadata?.routeKind === "stream"
-    ), true);
-    assert.deepEqual(inspect.installPreview?.delta.addedRoutes.find(route => route.handler === "events.stream")?.handlerMetadata?.methods, ["GET"]);
+    assert.equal(inspect.declaredManifestContributions.routes.some(route => route.path === "/declared-world"), true);
+    assert.deepEqual(Object.keys(inspect.resolvedRuntimeContributions.handlerMetadata), []);
+    assert.deepEqual(inspect.installPreview?.delta.addedHandlerMetadata, []);
+    assert.deepEqual(inspect.installPreview?.delta.addedRoutes, []);
     assert.equal(notes.installPreview?.available, false);
     assert.equal(notes.blockingReasons.some(reason => reason.includes("metadata-only")), true);
   } finally {
@@ -526,8 +686,8 @@ test("runtime plugin reviews report no-op installs, missing dependencies, and re
     });
     const missingInspect = missingDependency.packages.find(row => row.plugin === "plugin.inspect");
     assert.ok(missingInspect);
-    assert.equal(missingInspect.installPreview?.available, false);
-    assert.equal(missingInspect.blockingReasons.some(reason => reason.includes("missing plugin dependencies: plugin.canvas")), true);
+    assert.equal(missingInspect.installPreview?.available, true);
+    assert.equal(missingInspect.installPreview?.delta.addedBundleIds.includes("bundle-canvas"), true);
 
     const installed = await readRuntimePluginReviews({
       pluginRoot: root,
@@ -548,8 +708,8 @@ test("runtime plugin reviews report no-op installs, missing dependencies, and re
     });
     const fullInspect = fullReview.packages.find(row => row.plugin === "plugin.inspect");
     assert.ok(fullInspect);
-    assert.equal(fullInspect.installPreview?.available, false);
-    assert.equal(fullInspect.blockingReasons.some(reason => reason.includes("missing plugin dependencies: plugin.canvas")), true);
+    assert.equal(fullInspect.installPreview?.available, true);
+    assert.equal(fullInspect.installPreview?.delta.effectiveNoOp, true);
 
     const fullNoOp = await readRuntimePluginReviews({
       pluginRoot: root,

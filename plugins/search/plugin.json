@@ -1,0 +1,49 @@
+{
+  "id": "plugin.search",
+  "version": "0.1.0",
+  "displayName": "Search Index Plugin Runtime",
+  "description": "Owns search.index runtime handlers, routes, and capability metadata.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-search"
+  ],
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "search.index"
+      }
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/api/search/index",
+        "handler": "search.index.inspect"
+      },
+      {
+        "method": "POST",
+        "path": "/api/search/index/build",
+        "handler": "search.index.build"
+      },
+      {
+        "method": "POST",
+        "path": "/api/search/index/reindex",
+        "handler": "search.index.reindex"
+      },
+      {
+        "method": "POST",
+        "path": "/api/search/index/query",
+        "handler": "search.index.query"
+      }
+    ],
+    "surfaces": [],
+    "providers": [
+      {
+        "id": "search.index.handlers",
+        "kind": "runtime-handler-catalog"
+      }
+    ]
+  }
+}

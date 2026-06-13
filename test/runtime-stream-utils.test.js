@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { Readable } from "node:stream";
-import { parseStreamFailureLimit, streamFileToFile, streamReadableToFile } from "../src/runtime-stream-utils.js";
+import { parseStreamFailureLimit, streamFileToFile, streamReadableToFile } from "../plugins/fs-stream/stream-utils.js";
 
 test("stream utils parse failure limits and persist readable content", async () => {
   assert.equal(parseStreamFailureLimit("12"), 12);

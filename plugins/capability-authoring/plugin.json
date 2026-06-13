@@ -1,0 +1,14 @@
+{
+  "id": "plugin.capability-authoring",
+  "version": "0.1.0",
+  "displayName": "Capability Authoring Plugin Runtime",
+  "description": "Owns capability define/install/remove authoring routes, handlers, process helpers, and proposal target execution.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-capability-authoring"
+  ],
+  "contributes": {}
+}

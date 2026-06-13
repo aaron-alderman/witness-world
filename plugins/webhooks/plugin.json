@@ -1,0 +1,47 @@
+{
+  "id": "plugin.webhooks",
+  "version": "0.1.0",
+  "displayName": "Webhooks Plugin Runtime",
+  "description": "Owns webhook.inbound runtime handlers, routes, and capability metadata.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-webhooks"
+  ],
+  "dependsOnPlugins": [
+    "plugin.jobs"
+  ],
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "webhook.inbound"
+      }
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/api/webhooks",
+        "handler": "webhook.inbound.list"
+      },
+      {
+        "method": "GET",
+        "path": "/api/webhooks/:id",
+        "handler": "webhook.inbound.read"
+      },
+      {
+        "method": "POST",
+        "path": "/api/webhooks/inbound/:target",
+        "handler": "webhook.inbound.receive"
+      }
+    ],
+    "surfaces": [],
+    "providers": [
+      {
+        "id": "webhooks.handlers",
+        "kind": "runtime-handler-catalog"
+      }
+    ]
+  }
+}

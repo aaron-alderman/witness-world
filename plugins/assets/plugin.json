@@ -1,0 +1,40 @@
+{
+  "id": "plugin.assets",
+  "version": "0.1.0",
+  "displayName": "Asset Upload Plugin Runtime",
+  "description": "Owns asset upload, content, derived text, thumbnails, attachments, ingest retry, and asset search reindex behavior.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-assets"
+  ],
+  "dependsOnPlugins": [
+    "plugin.fs-blob",
+    "plugin.fs-stream",
+    "plugin.jobs",
+    "plugin.search"
+  ],
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "upload.asset"
+      }
+    ],
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/api/assets",
+        "handler": "asset.upload"
+      }
+    ],
+    "surfaces": [],
+    "providers": [
+      {
+        "id": "assets.handlers",
+        "kind": "runtime-handler-catalog"
+      }
+    ]
+  }
+}

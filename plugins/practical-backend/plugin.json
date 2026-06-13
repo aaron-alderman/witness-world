@@ -2,13 +2,67 @@
   "id": "plugin.practical-backend",
   "version": "0.1.0",
   "displayName": "Practical Backend Plugin Runtime",
-  "description": "Owns practical backend runtime composition through the local plugin runtime module.",
+  "description": "Meta package that installs the practical backend child packages required for the full practical backend runtime surface.",
   "kind": "plugin",
-  "runtime": {
-    "entry": "./runtime.js"
-  },
-  "activatesBundles": [
-    "bundle-practical-backend"
+  "dependsOnPlugins": [
+    "plugin.fs-json",
+    "plugin.sqlite",
+    "plugin.jobs",
+    "plugin.search",
+    "plugin.notifications",
+    "plugin.webhooks",
+    "plugin.http-outbound",
+    "plugin.oauth",
+    "plugin.runtime-config",
+    "plugin.backend-seams",
+    "plugin.fs-blob",
+    "plugin.fs-stream",
+    "plugin.assets"
   ],
-  "contributes": {}
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "db.sql"
+      },
+      {
+        "id": "fs.json.read"
+      },
+      {
+        "id": "fs.json.write"
+      },
+      {
+        "id": "fs.blob"
+      },
+      {
+        "id": "fs.stream"
+      },
+      {
+        "id": "upload.asset"
+      },
+      {
+        "id": "jobs.queue"
+      },
+      {
+        "id": "auth.oauth"
+      },
+      {
+        "id": "search.index"
+      },
+      {
+        "id": "http.outbound"
+      },
+      {
+        "id": "webhook.inbound"
+      },
+      {
+        "id": "notify.email"
+      },
+      {
+        "id": "notify.sms"
+      }
+    ],
+    "routes": [],
+    "surfaces": [],
+    "providers": []
+  }
 }

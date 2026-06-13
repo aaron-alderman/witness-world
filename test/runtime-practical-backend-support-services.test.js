@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { moduleProjectors } from "../src/modules.js";
-import { createPracticalBackendSupportServices } from "../src/runtime-practical-backend-support-services.js";
+import { createPracticalBackendSupportServices } from "../plugins/backend-seams/support-services.js";
+
+test("practical backend support services are plugin-owned without a src compatibility facade", async () => {
+  const pluginSource = await readFile(new URL("../plugins/backend-seams/support-services.js", import.meta.url), "utf8");
+
+  assert.equal(pluginSource.includes("export function createPracticalBackendSupportServices"), true);
+  assert.equal(pluginSource.includes("../../src/kernel.js"), true);
+  await assert.rejects(readFile(new URL("../src/runtime-practical-backend-support-services.js", import.meta.url), "utf8"));
+});
 
 test("practical backend support services provide runner-scoped selectors and diagnostics", async () => {
   const world = {

@@ -3,14 +3,13 @@ import path from "node:path";
 import { relation } from "../../src/kernel.js";
 import {
   frontendProgramsProjection,
-  renderWidgetPage,
-  requestWidgetVersionActivation,
-  rollbackWidgetVersion,
   widgetDefinitions
 } from "../../src/widgets.js";
-import { worldGraphProjection, astNodesProjection } from "../../src/world-graph.js";
-import { processRunProjection, processViewProjection, renderProcessPage } from "../../src/process-view.js";
-import { requestBootstrapProposalCreate } from "../../src/bootstrap-authoring.js";
+import { renderWidgetPage } from "./widget-page.js";
+import { requestWidgetVersionActivation, rollbackWidgetVersion } from "./widget-versions.js";
+import { worldGraphProjection, astNodesProjection } from "./world-graph.js";
+import { processRunProjection, processViewProjection, renderProcessPage } from "./process-view.js";
+import { requestBootstrapProposalCreate } from "../proposals/proposal-processes.js";
 
 export const bundleId = "bundle-inspect";
 
@@ -486,7 +485,7 @@ export function createHandlers({
     "source.read": async ({ res, requestUrl }) => {
       const requested = requestUrl.searchParams.get("file") || "";
       const allowed = new Set(world.allWitnesses()
-        .filter(witness => witness.process === "dsl.source.annotate" && typeof witness.body?.file === "string")
+        .filter(witness => isSourceAnnotationWitness(witness) && typeof witness.body?.file === "string")
         .map(witness => path.resolve(witness.body.file)));
       const resolvedFile = path.resolve(requested);
       if (!allowed.has(resolvedFile)) {
@@ -495,8 +494,19 @@ export function createHandlers({
         return;
       }
       const text = await fs.readFile(resolvedFile, "utf8");
+      const ast = astNodesProjection(world.allWitnesses());
+      const annotations = (ast.byFile.get(resolvedFile) ?? []).slice().sort((a, b) =>
+        Number(a.startLine ?? a.line ?? 0) - Number(b.startLine ?? b.line ?? 0)
+        || Number(a.startColumn ?? 1) - Number(b.startColumn ?? 1)
+        || String(a.target ?? "").localeCompare(String(b.target ?? ""))
+      );
       world.observe({ process: "backend.readSource", actor: backendHost, claims: [relation(backendHost, "read", `source:${resolvedFile}`)], body: { file: resolvedFile, bytes: text.length } });
-      sendJson(res, 200, { file: resolvedFile, text });
+      sendJson(res, 200, {
+        file: resolvedFile,
+        text,
+        annotations,
+        targets: [...new Set(annotations.map(node => node.target).filter(Boolean))]
+      });
     }
   };
 }
@@ -508,3 +518,7 @@ export default {
   surfaces,
   createHandlers
 };
+
+function isSourceAnnotationWitness(witness) {
+  return typeof witness?.process === "string" && witness.process.endsWith(".source.annotate");
+}

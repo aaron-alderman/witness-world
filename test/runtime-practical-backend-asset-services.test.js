@@ -10,7 +10,7 @@ import {
   assetTextUrlForId,
   assetThumbnailUrlForId,
   createPracticalBackendAssetServices
-} from "../src/runtime-practical-backend-asset-services.js";
+} from "../plugins/assets/asset-services.js";
 
 test("practical backend asset services expose asset URL/path helpers and read access gates", () => {
   const world = createWorld();

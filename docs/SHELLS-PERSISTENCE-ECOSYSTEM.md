@@ -201,7 +201,7 @@ The executable boundary remains intentionally explicit.
 ### Current operational caveats
 
 - runner-authored runtime-plugin installs, startup-local operator overlays, and bootstrap review/detail reads are now real product seams, but reconcile and repair flows for broken authored installs are still missing
-- the maintained demo now proves authored plugin composition on `minimal`, but it still depends on the explicit `bundle-demo` compatibility seam triggered by `handlerSet = "demo"`
+- the maintained demo now proves authored plugin composition on `minimal`, including `plugin.demo`; `handlerSet = "demo"` no longer activates `bundle-demo` by itself
 - blank-world bootstrap/tutorial startup still remains a separate runtime-composition path rather than using the same narrowed baseline as the maintained demo
 
 ---

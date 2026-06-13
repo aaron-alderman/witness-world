@@ -43,6 +43,13 @@ function cloneSurface(surface = {}) {
   };
 }
 
+function cloneCapability(capability = "") {
+  if (capability && typeof capability === "object" && !Array.isArray(capability)) {
+    return { ...capability, id: String(capability.id || "").trim() };
+  }
+  return String(capability || "").trim();
+}
+
 function cloneAdditionalProvider(provider = {}) {
   return {
     ...(provider || {}),
@@ -72,6 +79,11 @@ function validateRuntimeBundleDefinition(bundleId, definition, errors) {
   if (errors.length) return null;
   return {
     bundleId,
+    capabilities: Array.isArray(definition.capabilities)
+      ? definition.capabilities.map(cloneCapability).filter(capability =>
+          typeof capability === "string" ? capability : capability?.id
+        )
+      : [],
     handlerCatalog: cloneHandlerCatalog(definition.handlerCatalog),
     routes: definition.routes.map(cloneRoute),
     surfaces: definition.surfaces.map(cloneSurface),
@@ -87,10 +99,12 @@ function normalizeLegacyRuntimeModule(loaded) {
   if (!bundleId) return null;
   return {
     [bundleId]: {
+      capabilities: loaded.capabilities,
       handlerCatalog: loaded.handlerCatalog,
       routes: loaded.routes,
       surfaces: loaded.surfaces,
-      createHandlers: loaded.createHandlers
+      createHandlers: loaded.createHandlers,
+      providers: loaded.providers
     }
   };
 }
@@ -201,10 +215,25 @@ export async function loadRuntimePluginModules({
       }
       for (const bundleDefinition of validated.bundleDefinitions) {
         claimedBundles[bundleDefinition.bundleId] = pluginPackage.id;
+        const manifestCapabilities = (pluginPackage.manifest?.contributes?.capabilities ?? [])
+          .map(entry => typeof entry === "string" ? entry : entry?.id)
+          .map(id => String(id || "").trim())
+          .filter(Boolean);
+        const capabilityIds = bundleDefinition.capabilities.length
+          ? bundleDefinition.capabilities
+          : manifestCapabilities;
+        const capabilityProviders = capabilityIds.length
+          ? [{
+              kind: "defaultHostCapabilities",
+              hostKind: "backend",
+              capabilities: capabilityIds
+            }]
+          : [];
         bundleOverrides[bundleDefinition.bundleId] = {
           id: bundleDefinition.bundleId,
           contributes: {
             providers: [
+              ...capabilityProviders,
               {
                 kind: "handlerCatalog",
                 ...bundleDefinition.handlerCatalog
@@ -215,6 +244,7 @@ export async function loadRuntimePluginModules({
             },
             ...bundleDefinition.providers
           ],
+            capabilities: capabilityIds,
             routes: bundleDefinition.routes,
             surfaces: bundleDefinition.surfaces
           }
@@ -273,6 +303,7 @@ export function applyRuntimePluginLoadState(pluginCatalog, loadResult) {
   return {
     ...pluginCatalog,
     packages,
+    addedBundleIds: Object.keys(loadResult?.bundleOverrides ?? {}),
     rejectedPlugins: [
       ...(pluginCatalog?.rejectedPlugins ?? []),
       ...(loadResult?.failures ?? [])

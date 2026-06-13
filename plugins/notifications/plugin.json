@@ -1,0 +1,55 @@
+{
+  "id": "plugin.notifications",
+  "version": "0.1.0",
+  "displayName": "Notifications Plugin Runtime",
+  "description": "Owns notify.email, notify.sms, and notification inspection runtime handlers, routes, and capability metadata.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-notifications"
+  ],
+  "dependsOnPlugins": [
+    "plugin.jobs"
+  ],
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "notify.email"
+      },
+      {
+        "id": "notify.sms"
+      }
+    ],
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/api/notify/email",
+        "handler": "notify.email.enqueue"
+      },
+      {
+        "method": "POST",
+        "path": "/api/notify/sms",
+        "handler": "notify.sms.enqueue"
+      },
+      {
+        "method": "GET",
+        "path": "/api/notifications",
+        "handler": "notifications.list"
+      },
+      {
+        "method": "GET",
+        "path": "/api/notifications/:id",
+        "handler": "notifications.read"
+      }
+    ],
+    "surfaces": [],
+    "providers": [
+      {
+        "id": "notifications.handlers",
+        "kind": "runtime-handler-catalog"
+      }
+    ]
+  }
+}

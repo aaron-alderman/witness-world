@@ -1,0 +1,32 @@
+import { handlerCatalog } from "./handler-catalog.js";
+import { createSqliteDbSqlHandlers } from "./handlers.js";
+
+export const bundleId = "bundle-sqlite";
+
+export { handlerCatalog };
+
+function exactRoute(method, path, handler, params = {}) {
+  return { kind: "exact", method, path, handler, params };
+}
+
+export const routes = Object.freeze([
+  exactRoute("GET", "/api/db/sql", "db.sql.inspect"),
+  exactRoute("POST", "/api/db/sql/migrate", "db.sql.migrate"),
+  exactRoute("POST", "/api/db/sql/query", "db.sql.query"),
+  exactRoute("POST", "/api/db/sql/command", "db.sql.command"),
+  exactRoute("POST", "/api/db/sql/transaction", "db.sql.transaction")
+]);
+
+export const surfaces = Object.freeze([]);
+
+export function createHandlers(deps) {
+  return createSqliteDbSqlHandlers(deps);
+}
+
+export default {
+  bundleId,
+  handlerCatalog,
+  routes,
+  surfaces,
+  createHandlers
+};

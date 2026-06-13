@@ -1,0 +1,34 @@
+{
+  "id": "plugin.runtime-config",
+  "version": "0.1.0",
+  "displayName": "Runtime Config Plugin Runtime",
+  "description": "Owns the backend runtime-config read route and handler while core retains startup config resolution.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-runtime-config"
+  ],
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "runtime.config"
+      }
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/api/runtime-config",
+        "handler": "runtimeConfig.read"
+      }
+    ],
+    "surfaces": [],
+    "providers": [
+      {
+        "id": "runtime-config.handlers",
+        "kind": "runtime-handler-catalog"
+      }
+    ]
+  }
+}

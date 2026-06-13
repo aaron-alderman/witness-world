@@ -1,0 +1,54 @@
+{
+  "id": "plugin.sqlite",
+  "version": "0.1.0",
+  "displayName": "SQLite DB SQL Plugin Runtime",
+  "description": "Owns SQLite-backed DB SQL runtime handlers, routes, and capability metadata.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-sqlite"
+  ],
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "db.sql"
+      }
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/api/db/sql",
+        "handler": "db.sql.inspect"
+      },
+      {
+        "method": "POST",
+        "path": "/api/db/sql/migrate",
+        "handler": "db.sql.migrate"
+      },
+      {
+        "method": "POST",
+        "path": "/api/db/sql/query",
+        "handler": "db.sql.query"
+      },
+      {
+        "method": "POST",
+        "path": "/api/db/sql/command",
+        "handler": "db.sql.command"
+      },
+      {
+        "method": "POST",
+        "path": "/api/db/sql/transaction",
+        "handler": "db.sql.transaction"
+      }
+    ],
+    "surfaces": [],
+    "providers": [
+      {
+        "id": "sqlite.db-sql.handlers",
+        "kind": "runtime-handler-catalog"
+      }
+    ]
+  }
+}

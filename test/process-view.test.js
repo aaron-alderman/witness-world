@@ -6,7 +6,7 @@ import test from "node:test";
 import { createWorld } from "../src/kernel.js";
 import { applyWitnessDocs, applyWitnessToml, loadWitnessTomlFile } from "../src/dsl.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
-import { processRunProjection, processViewProjection } from "../src/process-view.js";
+import { processRunProjection, processViewProjection } from "../plugins/inspect/process-view.js";
 import {
   activateBackendProgramVersion,
   backendProgramVersionDefinition,

@@ -7,6 +7,7 @@ import {
   DEFAULT_RUNTIME_PROFILE,
   runtimeBundleSummaryForProfile,
   resolveRuntimeComposition,
+  runtimeProfilePluginIds,
   runtimeBundleManifest
 } from "./runtime-bundles.js";
 import { availableRuntimeShellIds } from "./runtime-shell-contract.js";
@@ -439,6 +440,100 @@ function uniqueStrings(values) {
   return [...new Set((values ?? []).map(value => String(value || "").trim()).filter(Boolean))];
 }
 
+function addRequestSource(byId, pluginId, source) {
+  const current = byId.get(pluginId) ?? [];
+  if (!current.includes(source)) current.push(source);
+  byId.set(pluginId, current);
+}
+
+function expandPluginRequest({
+  pluginId,
+  source,
+  packageById,
+  requestedSourcesById,
+  errors,
+  stack = []
+}) {
+  if (!pluginId) return;
+  if (stack.includes(pluginId)) {
+    const cycle = [...stack.slice(stack.indexOf(pluginId)), pluginId];
+    errors.push({
+      id: pluginId,
+      reason: `cyclic plugin dependencies: ${cycle.join(" -> ")}`
+    });
+    addRequestSource(requestedSourcesById, pluginId, source);
+    return;
+  }
+  addRequestSource(requestedSourcesById, pluginId, source);
+  const pluginPackage = packageById.get(pluginId);
+  if (!pluginPackage) return;
+  for (const dependencyId of pluginPackage.manifest?.dependsOnPlugins ?? []) {
+    expandPluginRequest({
+      pluginId: dependencyId,
+      source,
+      packageById,
+      requestedSourcesById,
+      errors,
+      stack: [...stack, pluginId]
+    });
+  }
+}
+
+function expandedRequestSourceMap({
+  profilePluginIds = [],
+  authoredPluginIds = [],
+  configuredPluginIds = [],
+  packageById = new Map()
+} = {}) {
+  const byId = new Map();
+  const errors = [];
+  for (const pluginId of uniqueStrings(profilePluginIds)) {
+    expandPluginRequest({ pluginId, source: "profile", packageById, requestedSourcesById: byId, errors });
+  }
+  for (const pluginId of uniqueStrings(authoredPluginIds)) {
+    expandPluginRequest({ pluginId, source: "authored", packageById, requestedSourcesById: byId, errors });
+  }
+  for (const pluginId of uniqueStrings(configuredPluginIds)) {
+    expandPluginRequest({ pluginId, source: "operator", packageById, requestedSourcesById: byId, errors });
+  }
+  return { byId, errors };
+}
+
+export function resolvePluginDependencyClosure({
+  pluginId,
+  packageById,
+  includeRoot = false
+} = {}) {
+  const ordered = [];
+  const errors = [];
+  const visited = new Set();
+  function visit(id, stack = []) {
+    if (!id) return;
+    if (stack.includes(id)) {
+      const cycle = [...stack.slice(stack.indexOf(id)), id];
+      errors.push(`cyclic plugin dependencies: ${cycle.join(" -> ")}`);
+      return;
+    }
+    if (visited.has(id)) return;
+    const pluginPackage = packageById.get(id);
+    if (!pluginPackage) {
+      errors.push(`plugin dependency not found: ${id}`);
+      return;
+    }
+    visited.add(id);
+    for (const dependencyId of pluginPackage.manifest?.dependsOnPlugins ?? []) {
+      visit(dependencyId, [...stack, id]);
+    }
+    if (includeRoot || id !== pluginId) ordered.push(id);
+  }
+  visit(pluginId, []);
+  return {
+    ok: errors.length === 0,
+    pluginIds: ordered,
+    errors
+  };
+}
+
 function summarizeBundle(bundleId) {
   const bundle = runtimeBundleManifest(bundleId);
   if (!bundle) return null;
@@ -732,10 +827,14 @@ function buildPluginPackageRow({
     installabilityReasons.push("runtime-profile-incompatible");
   }
   const installableInPrinciple = installabilityReasons.length === 0;
-  const executable = Boolean(manifest?.activatesBundles.length);
-  const executionMode = executable
+  const activatesBundles = Boolean(manifest?.activatesBundles.length);
+  const metaPackage = Boolean(manifest && !activatesBundles && !manifest.runtime && manifest.dependsOnPlugins.length > 0);
+  const executable = Boolean(activatesBundles || metaPackage);
+  const executionMode = activatesBundles
     ? (runtimeEntry ? "plugin-owned" : "bundle-bridge")
-    : "metadata-only";
+    : metaPackage
+      ? "meta-package"
+      : "metadata-only";
   const resolvedBundleIds = [...(manifest?.activatesBundles ?? [])];
   const resolvedBundles = resolvedBundleIds
     .map(bundleId => summarizeBundle(bundleId))
@@ -785,8 +884,10 @@ function buildPluginPackageRow({
       mode: executionMode,
       reason: executionMode === "plugin-owned"
         ? "plugin package provides a local runtime module through the plugin runtime ABI"
-        : executable
+        : executionMode === "bundle-bridge"
           ? BUNDLE_BRIDGE_PLUGIN_EXECUTION_REASON
+          : executionMode === "meta-package"
+            ? "plugin package installs executable plugin dependencies and contributes no runtime module directly"
           : DEFAULT_PLUGIN_EXECUTION_REASON
     },
     runtimeModule: {
@@ -861,22 +962,6 @@ function activationFailureReasons(pluginPackage, {
   return uniqueStrings(reasons);
 }
 
-function requestSourceMap({
-  authoredPluginIds = [],
-  configuredPluginIds = []
-} = {}) {
-  const byId = new Map();
-  for (const pluginId of uniqueStrings(authoredPluginIds)) {
-    byId.set(pluginId, ["authored"]);
-  }
-  for (const pluginId of uniqueStrings(configuredPluginIds)) {
-    const current = byId.get(pluginId) ?? [];
-    if (!current.includes("operator")) current.push("operator");
-    byId.set(pluginId, current);
-  }
-  return byId;
-}
-
 export function resolveRuntimePluginSelection({
   profileName = DEFAULT_RUNTIME_PROFILE,
   configuredPluginIds = [],
@@ -885,13 +970,23 @@ export function resolveRuntimePluginSelection({
 } = {}) {
   const operatorPluginIds = uniqueStrings(configuredPluginIds);
   const authored = uniqueStrings(authoredPluginIds);
-  const effectivePluginIds = uniqueStrings([...authored, ...operatorPluginIds]);
-  const requestedSourcesById = requestSourceMap({
-    authoredPluginIds: authored,
-    configuredPluginIds: operatorPluginIds
-  });
-  const effectiveSet = new Set(effectivePluginIds);
+  const profilePluginIds = runtimeProfilePluginIds(profileName);
   const packageById = new Map(discoveredPlugins.map(pluginPackage => [pluginPackage.id, pluginPackage]));
+  const expandedRequests = expandedRequestSourceMap({
+    profilePluginIds,
+    authoredPluginIds: authored,
+    configuredPluginIds: operatorPluginIds,
+    packageById
+  });
+  const requestedSourcesById = expandedRequests.byId;
+  const effectivePluginIds = [...requestedSourcesById.keys()];
+  const effectiveSet = new Set(effectivePluginIds);
+  const expansionErrorsById = new Map();
+  for (const error of expandedRequests.errors) {
+    const current = expansionErrorsById.get(error.id) ?? [];
+    current.push(error.reason);
+    expansionErrorsById.set(error.id, current);
+  }
   const baseComposition = resolveRuntimeComposition({ profileName });
   const baseBundleSet = new Set(baseComposition.bundleIds);
   const activePluginIds = [];
@@ -904,10 +999,14 @@ export function resolveRuntimePluginSelection({
     const missingRequestedDependencies = requested
       ? (pluginPackage.manifest?.dependsOnPlugins ?? []).filter(pluginId => !effectiveSet.has(pluginId))
       : [];
-    const eligible = pluginPackage.activation.eligible && missingRequestedDependencies.length === 0;
+    const dependencyExpansionReasons = expansionErrorsById.get(pluginPackage.id) ?? [];
+    const eligible = pluginPackage.activation.eligible && missingRequestedDependencies.length === 0 && dependencyExpansionReasons.length === 0;
     const active = requested && eligible;
     const reasons = requested && !active
-      ? activationFailureReasons(pluginPackage, { missingRequestedDependencies })
+      ? uniqueStrings([
+          ...activationFailureReasons(pluginPackage, { missingRequestedDependencies }),
+          ...dependencyExpansionReasons
+        ])
       : [];
     if (active) {
       activePluginIds.push(pluginPackage.id);
@@ -940,6 +1039,7 @@ export function resolveRuntimePluginSelection({
   }
   return {
     profileName,
+    profilePluginIds,
     configuredPluginIds: operatorPluginIds,
     authoredPluginIds: authored,
     operatorPluginIds,
@@ -1111,6 +1211,7 @@ export async function readRuntimePluginCatalog({
     packages,
     validPackages: packages.filter(row => row.validation.ok),
     invalidPackages: packages.filter(row => !row.validation.ok),
+    profilePluginIds: selection.profilePluginIds,
     configuredPluginIds: selection.configuredPluginIds,
     authoredPluginIds: selection.authoredPluginIds,
     operatorPluginIds: selection.operatorPluginIds,
@@ -1184,7 +1285,7 @@ function reviewStatusBadges(row) {
   if (row.missingPackage) badges.push("missing-package");
   if (!row.executable) badges.push("metadata-only");
   if (!row.compatible) badges.push("incompatible");
-  if (row.missingDependencies.length) badges.push("missing deps");
+  if ((row.dependencyIssues ?? []).length) badges.push("missing deps");
   const preview = row.installed ? row.removePreview : row.installPreview;
   if (preview?.available && preview.delta?.effectiveNoOp) badges.push("no-op");
   return badges;
@@ -1265,6 +1366,15 @@ function buildRuntimePluginReviewRows({
       const installed = requestedAuthoredIds.includes(pluginId);
       const directDependencies = [...(pluginPackage.manifest?.dependsOnPlugins ?? pluginPackage.metadata?.dependsOnPlugins ?? [])];
       const missingDependencies = directDependencies.filter(dependencyId => !requestedAuthoredIds.includes(dependencyId));
+      const dependencyIssues = directDependencies.flatMap(dependencyId => {
+        const dependencyPackage = packageById.get(dependencyId);
+        if (!dependencyPackage) return [`plugin dependency not found: ${dependencyId}`];
+        const issues = [];
+        if (!dependencyPackage.validation?.ok) issues.push(`plugin dependency manifest invalid: ${dependencyId}`);
+        if (!dependencyPackage.execution?.executable) issues.push(`plugin dependency is metadata-only: ${dependencyId}`);
+        if (!dependencyPackage.compatibility?.compatible) issues.push(`plugin dependency incompatible: ${dependencyId}`);
+        return issues;
+      });
       const reverseDependents = reverseDependentsFor(pluginId);
       const blockingReasons = [];
       if (installed) blockingReasons.push("already installed on server runner");
@@ -1278,9 +1388,7 @@ function buildRuntimePluginReviewRows({
             : reason
         )));
       }
-      if (missingDependencies.length) {
-        blockingReasons.push(`missing plugin dependencies: ${missingDependencies.join(", ")}`);
-      }
+      blockingReasons.push(...dependencyIssues);
       const installPreview = installed
         ? null
         : (blockingReasons.length
@@ -1329,6 +1437,7 @@ function buildRuntimePluginReviewRows({
           missing: missingDependencies,
           reverseDependents
         },
+        dependencyIssues,
         validation: {
           ok: pluginPackage.validation?.ok === true,
           errors: [...(pluginPackage.validation?.errors ?? [])]

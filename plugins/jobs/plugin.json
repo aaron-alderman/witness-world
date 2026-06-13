@@ -1,0 +1,44 @@
+{
+  "id": "plugin.jobs",
+  "version": "0.1.0",
+  "displayName": "Jobs Queue Plugin Runtime",
+  "description": "Owns jobs.queue runtime handlers, routes, and capability metadata.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-jobs"
+  ],
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "jobs.queue"
+      }
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/api/jobs",
+        "handler": "jobs.queue.list"
+      },
+      {
+        "method": "POST",
+        "path": "/api/jobs",
+        "handler": "jobs.queue.enqueue"
+      },
+      {
+        "method": "GET",
+        "path": "/api/jobs/:id",
+        "handler": "jobs.queue.read"
+      }
+    ],
+    "surfaces": [],
+    "providers": [
+      {
+        "id": "jobs.queue.handlers",
+        "kind": "runtime-handler-catalog"
+      }
+    ]
+  }
+}

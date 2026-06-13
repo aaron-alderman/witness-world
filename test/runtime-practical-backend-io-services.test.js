@@ -3,12 +3,24 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { createFsBlobIoServices } from "../plugins/fs-blob/io-services.js";
 import {
-  createPracticalBackendIoServices,
+  createHttpOutboundIoServices,
   looksJsonContentType,
-  responseHeadersToObject,
+  responseHeadersToObject
+} from "../plugins/http-outbound/io-services.js";
+import {
+  createWebhookIoServices,
   webhookPayloadPathFor
-} from "../src/runtime-practical-backend-io-services.js";
+} from "../plugins/webhooks/io-services.js";
+
+function createPracticalBackendIoServices(options = {}) {
+  return {
+    ...createFsBlobIoServices(options),
+    ...createHttpOutboundIoServices(options),
+    ...createWebhookIoServices(options)
+  };
+}
 
 function createIoServices({ blobsRoot }) {
   return createPracticalBackendIoServices({

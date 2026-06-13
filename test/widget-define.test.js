@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
 import { applyWitnessToml } from "../src/dsl.js";
-import { requestWidgetDefine } from "../src/widget-define.js";
+import { requestWidgetDefine } from "../plugins/authoring-core/authoring-core-processes.js";
 
 function seededWorld() {
   const world = createWorld();

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import { createWorld, createThing, projectors } from "../src/kernel.js";
-import { parseWitnessToml, applyWitnessToml, applyWitnessDocs, loadWitnessTomlFile } from "../src/dsl.js";
+import { parseWitnessToml, applyWitnessToml, applyWitnessDocs, applyWitnessDocsLegacy, loadWitnessTomlFile } from "../src/dsl.js";
 import { moduleProjectors } from "../src/modules.js";
 import { frontendProgramsProjection, widgetTree } from "../src/widgets.js";
 
@@ -103,6 +103,29 @@ test("applies witness DSL to build compiler and browser runner ladder", () => {
   );
   assert.equal(world.project(moduleProjectors.identityIndex).byUsername.aaron.id, "identity.aaron");
   assert.equal(world.allWitnesses().some(w => w.process === "emitUserAction" && w.body.x === 12), true);
+});
+
+test("legacy WTOML apply export delegates through DESIRE pipeline", () => {
+  const world = createWorld();
+  const docs = parseWitnessToml(`
+[context.frontend]
+actor = "browser"
+
+[[page]]
+actor = "browser"
+id = "home_page"
+`).map(doc => ({ ...doc, file: "C:/demo/legacy-alias.wtoml" }));
+
+  applyWitnessDocsLegacy(world, docs);
+
+  assert.equal(world.allWitnesses().some(w => w.process === "defineContext" && w.body?.id === "frontend"), true);
+  assert.equal(world.allWitnesses().some(w =>
+    w.process === "dsl.source.annotate"
+    && w.body?.target === "home_page"
+    && w.body?.sourceLanguage === "wtoml"
+    && typeof w.body?.desireNodeId === "string"
+    && Array.isArray(w.body?.desireSourceNodeIds)
+  ), true);
 });
 
 test("rejects unsupported DSL value syntax", () => {
@@ -337,7 +360,7 @@ plugin = "plugin.inspect"
 });
 
 test("maintained demo entrypoints inherit authored runtime plugin installs without duplicates", async () => {
-  const expected = ["plugin.authoring", "plugin.canvas", "plugin.inspect"];
+  const expected = ["plugin.authoring", "plugin.canvas", "plugin.demo", "plugin.inspect"];
   const loadRunnerState = async relativePath => {
     const world = createWorld();
     const docs = await loadWitnessTomlFile(path.join(process.cwd(), relativePath));

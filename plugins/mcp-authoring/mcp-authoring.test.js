@@ -1,0 +1,82 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { createWorld } from "../../src/kernel.js";
+import { bundleId, createHandlers, handlerCatalog, routes } from "./runtime.js";
+import { executeMcpAuthoringProposalTarget } from "./mcp-proposal-targets.js";
+
+const MCP_AUTHORING_HANDLER_IDS = [
+  "mcpServer.create",
+  "mcpTool.install",
+  "mcpTool.remove"
+];
+
+const MCP_AUTHORING_PROCESS_EXPORTS = [
+  "requestBootstrapMcpServerDefine",
+  "requestBootstrapMcpToolInstall",
+  "requestBootstrapMcpToolRemove"
+];
+
+test("mcp-authoring plugin owns MCP authoring routes and handlers", async () => {
+  const manifest = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
+
+  assert.equal(manifest.id, "plugin.mcp-authoring");
+  assert.deepEqual(manifest.activatesBundles, ["bundle-mcp-authoring"]);
+  assert.equal(manifest.runtime.entry, "./runtime.js");
+  assert.equal(bundleId, "bundle-mcp-authoring");
+  assert.deepEqual(handlerCatalog.authorableHandlers, MCP_AUTHORING_HANDLER_IDS);
+  assert.deepEqual(handlerCatalog.dispatchHandlers, MCP_AUTHORING_HANDLER_IDS);
+  assert.equal(routes.some(route => route.path === "/api/mcp-servers" && route.handler === "mcpServer.create"), true);
+  assert.equal(routes.some(route => route.path === "/api/mcp-tool-installs" && route.handler === "mcpTool.install"), true);
+  assert.equal(routes.some(route => route.method === "DELETE" && route.path === "/api/mcp-tool-installs" && route.handler === "mcpTool.remove"), true);
+
+  const handlers = createHandlers({
+    world: createWorld(),
+    backendHost: "backendHost",
+    readJson: async () => ({}),
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" },
+      ensureContextAuthority: () => ({ ok: true }),
+      ensureTargetAuthority: () => ({ ok: true })
+    },
+    sendGateFailure() {},
+    sendJson() {},
+    mcpToolNames: () => ["example.tool"]
+  });
+  for (const handlerId of MCP_AUTHORING_HANDLER_IDS) {
+    assert.equal(typeof handlers[handlerId], "function");
+  }
+});
+
+test("mcp-authoring plugin owns process helpers and proposal targets", async () => {
+  const processesSource = await readFile(new URL("./mcp-processes.js", import.meta.url), "utf8");
+  const proposalTargetSource = await readFile(new URL("./mcp-proposal-targets.js", import.meta.url), "utf8");
+  const authoringMeta = JSON.parse(await readFile(new URL("../authoring/plugin.json", import.meta.url), "utf8"));
+
+  for (const exportName of MCP_AUTHORING_PROCESS_EXPORTS) {
+    assert.equal(processesSource.includes(`export function ${exportName}`), true);
+  }
+  await assert.rejects(readFile(new URL("../../src/bootstrap-authoring.js", import.meta.url), "utf8"));
+  for (const targetProcess of [
+    "mcpServer.define",
+    "mcpTool.install",
+    "mcpTool.remove"
+  ]) {
+    assert.equal(proposalTargetSource.includes(`case "${targetProcess}"`), true);
+  }
+  assert.equal(authoringMeta.runtime, undefined);
+  assert.equal(authoringMeta.activatesBundles, undefined);
+  assert.equal(authoringMeta.dependsOnPlugins.includes("plugin.mcp-authoring"), true);
+
+  const unsupported = executeMcpAuthoringProposalTarget({
+    world: createWorld(),
+    actor: "aaron",
+    backendHost: "backendHost",
+    proposal: { targetProcess: "not.mcp" },
+    body: {},
+    mcpToolNames: () => [],
+    ensureContextAuthority: () => ({ ok: true }),
+    ensureTargetAuthority: () => ({ ok: true })
+  });
+  assert.equal(unsupported, null);
+});

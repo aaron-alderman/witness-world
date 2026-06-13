@@ -1,0 +1,31 @@
+{
+  "id": "plugin.fs-json",
+  "version": "0.1.0",
+  "displayName": "JSON File Capability Plugin Runtime",
+  "description": "Owns the JSON file read/write host capability declarations used by practical backend and demo compatibility.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-fs-json"
+  ],
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "fs.json.read"
+      },
+      {
+        "id": "fs.json.write"
+      }
+    ],
+    "routes": [],
+    "surfaces": [],
+    "providers": [
+      {
+        "id": "fs-json.host-capabilities",
+        "kind": "host-capability-provider"
+      }
+    ]
+  }
+}

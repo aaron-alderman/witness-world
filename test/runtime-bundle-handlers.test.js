@@ -5,7 +5,10 @@ import {
   dispatchHandlerIdsForProfile,
   genericHandlerFactoriesForProfile,
   handlerSetDefinitionsForProfile,
+  matchRuntimeBundleRoute,
   runtimeBundleManifests,
+  runtimeBundleSummaryForProfile,
+  runtimeProfilePluginIds,
   runtimeRouteEntriesForProfile,
   runtimeSurfaceEntriesForProfile
 } from "../src/runtime-bundles.js";
@@ -13,21 +16,41 @@ import {
   composeRuntimeBundleHandlers,
   runtimeBundleHandlerCatalog
 } from "../src/runtime-bundle-handlers.js";
+import { readRuntimePluginCatalog } from "../src/runtime-plugin-utils.js";
+import { loadRuntimePluginModules } from "../src/runtime-plugin-loader.js";
 
-test("bundle handler catalogs preserve route-authoring subsets separately from dispatch ownership", () => {
-  const eden = runtimeBundleHandlerCatalog("bundle-eden");
+async function loadedOptions(profileName, configuredPluginIds = []) {
+  const catalog = await readRuntimePluginCatalog({ runtimeProfile: profileName, configuredPluginIds });
+  const loaded = await loadRuntimePluginModules({ pluginCatalog: catalog });
+  assert.deepEqual(loaded.failures, []);
+  return {
+    additionalBundleIds: catalog.addedBundleIds,
+    bundleOverrides: loaded.bundleOverrides
+  };
+}
 
-  assert.equal(eden.authorableHandlers.includes("edenPersonalBox.read"), false);
-  assert.equal(eden.dispatchHandlers.includes("edenPersonalBox.read"), true);
-  assert.equal(eden.pageHandlers.includes("page.edenCanvas"), true);
+test("static bundle catalogs are core-only and optional catalogs arrive through loaded plugin overrides", async () => {
+  const core = runtimeBundleHandlerCatalog("bundle-core-runtime");
+  const inspectStatic = runtimeBundleHandlerCatalog("bundle-inspect");
+
+  assert.equal(core.dispatchHandlers.includes("session.read"), true);
+  assert.deepEqual(inspectStatic.dispatchHandlers, []);
+
+  const options = await loadedOptions("minimal", ["plugin.inspect"]);
+  const summary = runtimeBundleSummaryForProfile("minimal", options);
+  assert.equal(summary.dispatchHandlers.includes("events.stream"), true);
+  assert.equal(summary.pageHandlers.includes("page.world"), true);
+  assert.equal(summary.handlerMetadata["events.stream"].routeKind, "stream");
 });
 
-test("active bundle handler composition filters inactive implementations and reports drift", () => {
+test("active bundle handler composition filters inactive implementations and reports drift", async () => {
+  const options = await loadedOptions("minimal", ["plugin.inspect"]);
+  const summary = runtimeBundleSummaryForProfile("minimal", options);
   const availableHandlers = {
     __sessionStore: new Map(),
     "page.home": () => {},
     "page.world": () => {},
-    "bootstrap.page": () => {},
+    "events.stream": () => {},
     "db.sql.query": () => {}
   };
 
@@ -36,152 +59,111 @@ test("active bundle handler composition filters inactive implementations and rep
     availableHandlers,
     reservedHandlerIds: ["__sessionStore"]
   });
+  assert.equal(Object.prototype.hasOwnProperty.call(minimal.handlers, "page.world"), false);
+  assert.equal(minimal.diagnostics.extraHandlerIds.includes("page.world"), true);
 
-  assert.deepEqual(Object.keys(minimal.handlers).sort(), ["__sessionStore", "page.home"]);
-  assert.deepEqual(minimal.diagnostics.missingHandlerIds, [
-    "session.read",
-    "session.open",
-    "session.logout",
-    "backendProgram.run",
-    "runtime.diagnostics.read",
-    "runtime.plugins.read",
-    "runtime.pluginReviews.read"
-  ]);
-  assert.deepEqual([...minimal.diagnostics.extraHandlerIds].sort(), [
-    "bootstrap.page",
-    "db.sql.query",
-    "page.world"
-  ]);
-
-  const fullSubset = composeRuntimeBundleHandlers({
-    activeBundleIds: ["bundle-core-runtime", "bundle-authoring", "bundle-inspect", "bundle-practical-backend"],
+  const inspect = composeRuntimeBundleHandlers({
+    activeBundleIds: summary.bundleIds,
     availableHandlers,
-    reservedHandlerIds: ["__sessionStore"]
+    reservedHandlerIds: ["__sessionStore"],
+    handlerCatalogsByBundleId: Object.fromEntries(summary.bundles.map(bundle => [bundle.id, bundle.handlerCatalog]))
   });
-
-  assert.equal(Object.prototype.hasOwnProperty.call(fullSubset.handlers, "page.world"), true);
-  assert.equal(Object.prototype.hasOwnProperty.call(fullSubset.handlers, "bootstrap.page"), true);
-  assert.equal(Object.prototype.hasOwnProperty.call(fullSubset.handlers, "db.sql.query"), true);
-  assert.deepEqual(fullSubset.diagnostics.extraHandlerIds, []);
+  assert.equal(Object.prototype.hasOwnProperty.call(inspect.handlers, "page.world"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(inspect.handlers, "events.stream"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(inspect.handlers, "db.sql.query"), false);
 });
 
-test("generic handler factories are resolved from active runtime bundles", () => {
+test("generic handler factories are resolved from materialized active runtime bundles", async () => {
   const minimal = genericHandlerFactoriesForProfile("minimal");
-  const authoring = genericHandlerFactoriesForProfile("authoring");
-  const inspect = genericHandlerFactoriesForProfile("inspect");
-  const practicalBackend = genericHandlerFactoriesForProfile("practical-backend");
-  const full = genericHandlerFactoriesForProfile("full");
+  const options = await loadedOptions("minimal", ["plugin.inspect"]);
+  const inspect = genericHandlerFactoriesForProfile("minimal", options);
 
   assert.deepEqual(minimal.map(entry => entry.bundleId), ["bundle-core-runtime"]);
-  assert.deepEqual(authoring.map(entry => entry.bundleId), ["bundle-core-runtime", "bundle-tutorial", "bundle-authoring"]);
-  assert.deepEqual(inspect.map(entry => entry.bundleId), ["bundle-core-runtime", "bundle-inspect"]);
-  assert.deepEqual(practicalBackend.map(entry => entry.bundleId), ["bundle-core-runtime", "bundle-practical-backend"]);
-  assert.equal(full.some(entry => entry.bundleId === "bundle-core-runtime"), true);
-  assert.equal(full.some(entry => entry.bundleId === "bundle-tutorial"), true);
-  assert.equal(full.some(entry => entry.bundleId === "bundle-authoring"), true);
-  assert.equal(full.some(entry => entry.bundleId === "bundle-inspect"), true);
-  assert.equal(full.some(entry => entry.bundleId === "bundle-canvas"), true);
-  assert.equal(full.some(entry => entry.bundleId === "bundle-mcp"), true);
-  assert.equal(full.some(entry => entry.bundleId === "bundle-practical-backend"), true);
-  assert.equal(full.some(entry => entry.bundleId === "bundle-eden"), true);
+  assert.equal(inspect.some(entry => entry.bundleId === "bundle-core-runtime"), true);
+  assert.equal(inspect.some(entry => entry.bundleId === "bundle-inspect"), true);
 });
 
-test("handler set definitions are resolved from active runtime bundles", () => {
-  const minimal = handlerSetDefinitionsForProfile("minimal");
-  const full = handlerSetDefinitionsForProfile("full");
+test("runtime profiles are seed plugin presets with core-only static composition", () => {
+  assert.deepEqual(runtimeProfilePluginIds("minimal"), []);
+  assert.deepEqual(runtimeProfilePluginIds("authoring"), ["plugin.authoring"]);
+  assert.deepEqual(runtimeProfilePluginIds("inspect"), ["plugin.inspect"]);
+  assert.deepEqual(runtimeProfilePluginIds("practical-backend"), ["plugin.practical-backend"]);
+  assert.deepEqual(runtimeProfilePluginIds("full"), [
+    "plugin.authoring",
+    "plugin.inspect",
+    "plugin.canvas",
+    "plugin.mcp",
+    "plugin.practical-backend",
+    "plugin.demo",
+    "plugin.eden"
+  ]);
 
-  assert.equal(Object.prototype.hasOwnProperty.call(minimal, "demo"), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(full, "demo"), true);
-  assert.equal(full.demo.handlers.includes("todos.list"), true);
-  assert.equal(full.demo.jobHandlers.includes("demo.echo"), true);
+  const full = runtimeBundleSummaryForProfile("full");
+  assert.deepEqual(full.profilePluginIds, runtimeProfilePluginIds("full"));
+  assert.deepEqual(full.profileCoreBundleIds, ["bundle-core-runtime"]);
+  assert.deepEqual(full.bundleIds, ["bundle-core-runtime"]);
 });
 
-test("runtime surfaces are resolved from active runtime bundles, including mode actions", () => {
-  const minimal = runtimeSurfaceEntriesForProfile("minimal", "world-command");
-  const full = runtimeSurfaceEntriesForProfile("full", "world-command");
+test("handler sets, routes, and surfaces are absent until owning plugin runtimes are loaded", async () => {
+  assert.equal(Object.prototype.hasOwnProperty.call(handlerSetDefinitionsForProfile("full"), "demo"), false);
+  assert.equal(runtimeSurfaceEntriesForProfile("full", "world-command").some(surface => surface.id === "surface:world-mode:graph"), false);
+  assert.equal(runtimeRouteEntriesForProfile("authoring").some(route => route.handler === "tutorial.progress.read"), false);
 
-  assert.equal(minimal.some(surface => surface.id === "surface:world-mode:graph"), false);
-  const graphSurface = full.find(surface => surface.id === "surface:world-mode:graph");
-  assert.equal(Boolean(graphSurface), true);
-  assert.deepEqual(graphSurface.action, { kind: "mode", mode: "graph" });
-  assert.equal(full.some(surface => surface.id === "surface:process-view"), true);
+  const fullOptions = await loadedOptions("full");
+  const fullHandlerSets = handlerSetDefinitionsForProfile("full", fullOptions);
+  const fullSurfaces = runtimeSurfaceEntriesForProfile("full", "world-command", fullOptions);
+  const fullRoutes = runtimeRouteEntriesForProfile("full", fullOptions);
+
+  assert.equal(Object.prototype.hasOwnProperty.call(fullHandlerSets, "demo"), true);
+  assert.equal(fullSurfaces.some(surface => surface.id === "surface:world-mode:graph"), true);
+  assert.equal(fullRoutes.some(route => route.handler === "tutorial.progress.read"), true);
 });
 
-test("session routes stay core while tutorial routes vary with the tutorial bundle", () => {
-  const minimalRoutes = runtimeRouteEntriesForProfile("minimal");
-  const authoringRoutes = runtimeRouteEntriesForProfile("authoring");
-  const fullRoutes = runtimeRouteEntriesForProfile("full");
+test("route and dispatch ownership varies by loaded plugin composition", async () => {
+  const minimalHandlers = dispatchHandlerIdsForProfile("minimal");
+  const inspectOptions = await loadedOptions("minimal", ["plugin.inspect"]);
+  const inspectHandlers = dispatchHandlerIdsForProfile("minimal", inspectOptions);
 
-  assert.equal(minimalRoutes.some(route => route.method === "GET" && route.path === "/api/session" && route.handler === "session.read"), true);
-  assert.equal(minimalRoutes.some(route => route.method === "GET" && route.path === "/api/runtime/diagnostics" && route.handler === "runtime.diagnostics.read"), true);
-  assert.equal(minimalRoutes.some(route => route.method === "GET" && route.path === "/api/runtime/plugins" && route.handler === "runtime.plugins.read"), true);
-  assert.equal(minimalRoutes.some(route => route.method === "POST" && route.path === "/api/session" && route.handler === "session.open"), true);
-  assert.equal(minimalRoutes.some(route => route.method === "DELETE" && route.path === "/api/session" && route.handler === "session.logout"), true);
-  assert.equal(minimalRoutes.some(route => route.handler === "tutorial.progress.read" && route.kind === "pattern"), false);
-  assert.equal(authoringRoutes.some(route => route.handler === "tutorial.progress.read" && route.kind === "pattern"), true);
-  assert.equal(fullRoutes.some(route => route.method === "GET" && route.path === "/api/session" && route.handler === "session.read"), true);
-  assert.equal(fullRoutes.some(route => route.handler === "tutorial.progress.read" && route.kind === "pattern"), true);
+  assert.equal(minimalHandlers.includes("events.stream"), false);
+  assert.equal(inspectHandlers.includes("events.stream"), true);
+  assert.equal(matchRuntimeBundleRoute("minimal", "GET", "/api/events"), null);
+  assert.deepEqual(matchRuntimeBundleRoute("minimal", "GET", "/api/events", inspectOptions), {
+    handler: "events.stream",
+    params: {}
+  });
 });
 
-test("dispatch handler ownership varies by active runtime profile", () => {
-  const minimal = dispatchHandlerIdsForProfile("minimal");
-  const full = dispatchHandlerIdsForProfile("full");
-
-  assert.equal(minimal.includes("todos.readModel"), false);
-  assert.equal(minimal.includes("page.edenCanvas"), false);
-  assert.equal(minimal.includes("mcp.http"), false);
-  assert.equal(full.includes("todos.readModel"), true);
-  assert.equal(full.includes("page.edenCanvas"), true);
-  assert.equal(full.includes("mcp.http"), true);
-});
-
-test("internal runtime bundle manifests expose bundle contract metadata", () => {
+test("internal runtime bundle manifests expose seed skeleton contract metadata", () => {
   const manifests = runtimeBundleManifests();
-
-  assert.equal(manifests.length >= 8, true);
-  for (const manifest of manifests) {
-    assert.equal(manifest.kind, "internal");
-    assert.equal(typeof manifest.displayName, "string");
-    assert.equal(Boolean(manifest.displayName), true);
-    assert.equal(typeof manifest.description, "string");
-    assert.equal(Boolean(manifest.description), true);
-  }
   const inspect = manifests.find(manifest => manifest.id === "bundle-inspect");
+
+  assert.equal(manifests.some(manifest => manifest.id === "bundle-core-runtime"), true);
   assert.ok(inspect);
-  assert.equal(inspect.handlerCatalog.handlerMetadata["events.stream"].routeKind, "stream");
-  assert.deepEqual(inspect.contributes.routes.find(route => route.handler === "events.stream")?.handlerMetadata?.methods, ["GET"]);
+  assert.equal(inspect.displayName, "Inspect");
+  assert.deepEqual(inspect.handlerCatalog.dispatchHandlers, []);
+  assert.deepEqual(inspect.contributes.routes, []);
 });
 
-test("runtime diagnostics read model summarizes bundle composition and live installation state", () => {
+test("runtime diagnostics summarize seed profile and loaded composition separately", async () => {
+  const options = await loadedOptions("minimal", ["plugin.inspect"]);
+  const summary = runtimeBundleSummaryForProfile("minimal", options);
   const diagnostics = buildRuntimeDiagnosticsForProfile({
-    requestedProfile: "inspect",
-    profileName: "inspect",
-    startupRunner: {
-      id: "runner-1",
-      backendHost: "backendHost",
-      frontendHost: "frontendHost",
-      handlerSet: "demo"
-    },
+    requestedProfile: "minimal",
+    profileName: "minimal",
+    additionalBundleIds: options.additionalBundleIds,
+    bundleOverrides: options.bundleOverrides,
+    pluginAddedBundleIds: options.additionalBundleIds,
     installedHostCapabilities: {
       backend: ["http.serve", "runtime.config"],
       frontend: ["dom.render", "http.fetch"]
-    },
-    handlerSetDefinitions: {
-      demo: { handlers: ["todos.list", "todos.create"] }
     }
   });
 
-  assert.equal(diagnostics.requestedProfile, "inspect");
-  assert.equal(diagnostics.activeProfile, "inspect");
-  assert.deepEqual(diagnostics.availableProfiles, ["minimal", "authoring", "inspect", "practical-backend", "full"]);
+  assert.equal(diagnostics.activeProfile, "minimal");
+  assert.deepEqual(diagnostics.profilePluginIds, []);
   assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
-  assert.deepEqual(diagnostics.installedHostCapabilities.backend, ["http.serve", "runtime.config"]);
   assert.equal(diagnostics.surfaces.some(surface => surface.id === "surface:process-view"), true);
-  assert.equal(diagnostics.handlerSets.some(entry => entry.id === "demo"), true);
-  assert.equal(diagnostics.handlerMetadata["backendProgram.run"].routeKind, "backendProgram");
-  assert.deepEqual(diagnostics.handlerMetadata["events.stream"].methods, ["GET"]);
-  assert.equal(diagnostics.shells.shells.some(shell => shell.id === "browser" && shell.active === true), true);
-  assert.equal(diagnostics.shells.shells.some(shell => shell.id === "desktop" && shell.status === "present"), true);
+  assert.equal(diagnostics.handlerMetadata["events.stream"].routeKind, "stream");
 });
 
 test("runtime diagnostics include authored, operator, and effective runtime plugin request state", () => {

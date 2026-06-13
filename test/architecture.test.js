@@ -6,7 +6,7 @@ import test from "node:test";
 import { createWorld, createThing } from "../src/kernel.js";
 import { WitnessLog } from "../src/witness-log.js";
 import { thingId, versionId } from "../src/ids.js";
-import { todoState, privateNotesFor, publicWitnessesFor } from "../src/projections.js";
+import { todoState, privateNotesFor, publicWitnessesFor } from "../plugins/demo/projections.js";
 import { runGates, textRequired } from "../src/gates.js";
 
 async function tempFile(name = "witnesses.jsonl") {

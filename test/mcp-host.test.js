@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { createWorld } from "../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
-import { MCP_PROTOCOL_VERSION } from "../src/mcp.js";
+import { MCP_PROTOCOL_VERSION } from "../plugins/mcp/mcp-tools.js";
 
 async function tempRuntimeRoot() {
   return fs.mkdtemp(path.join(os.tmpdir(), "witness-mcp-host-"));

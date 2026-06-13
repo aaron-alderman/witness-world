@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
 import { WitnessLog } from "../src/witness-log.js";
-import { todoState, privateNotesFor, publicWitnessesFor } from "../src/projections.js";
+import { todoState, privateNotesFor, publicWitnessesFor } from "../plugins/demo/projections.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
 import { applyWitnessToml, applyWitnessDocs, loadWitnessTomlFile } from "../src/dsl.js";
 

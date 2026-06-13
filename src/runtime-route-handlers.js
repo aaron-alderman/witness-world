@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { canCreateInContext, canManageContext, canMutateTarget, projectors } from "./kernel.js";
-import { canvasProcessHandlers } from "./canvas-processes.js";
 import {
   clearSessionCookieHeader,
   headerValue,
@@ -12,29 +11,57 @@ import {
   sendJson,
   sessionCookieHeader
 } from "./runtime-http-utils.js";
-import { executeMcpTool, mcpToolDefinition, mcpToolNames, resolveMcpToolScope, MCP_PROTOCOL_VERSION } from "./mcp.js";
 import { isoAt, nonNegativeInteger, positiveInteger, runtimeConfigLookup, runtimeConfigScalar } from "./runtime-config-utils.js";
-import { renderBackendSeamsPage } from "./runtime-backend-seams-page.js";
 import { createAuthoringBundleServices } from "./runtime-authoring-services.js";
 import { createRuntimeBundleHandlers } from "./runtime-bundle-handler-assembly.js";
 import {
-  createMcpBundleSupportServices,
   createRuntimeProjectionServices
 } from "./runtime-bundle-support-services.js";
-import { createPracticalBackendSupportServices } from "./runtime-practical-backend-support-services.js";
-import { createPracticalBackendIoServices } from "./runtime-practical-backend-io-services.js";
-import { createPracticalBackendAssetServices } from "./runtime-practical-backend-asset-services.js";
-import { createRuntimeAuthOAuthSupportServices } from "./runtime-auth-oauth-support-services.js";
-import { createPracticalBackendDbSearchServices } from "./runtime-practical-backend-db-search-services.js";
+import {
+  createHttpOutboundIoServices,
+  looksJsonContentType,
+  responseHeadersToObject
+} from "../plugins/http-outbound/io-services.js";
+import {
+  delayWithSignal,
+  executeHttpOutbound
+} from "../plugins/http-outbound/glue.js";
+import {
+  createFsBlobIoServices
+} from "../plugins/fs-blob/io-services.js";
+import {
+  createWebhookIoServices,
+  webhookPayloadPathFor
+} from "../plugins/webhooks/io-services.js";
+import {
+  createPracticalBackendAssetServices
+} from "../plugins/assets/asset-services.js";
+import {
+  createRuntimeAuthOAuthSupportServices
+} from "../plugins/oauth/support-services.js";
+import {
+  createPracticalBackendDbSearchServices
+} from "../plugins/search/db-search-services.js";
+import {
+  createPracticalBackendSupportServices
+} from "../plugins/backend-seams/support-services.js";
+import { renderBackendSeamsPage } from "../plugins/backend-seams/backend-seams-page.js";
 import {
   dbSqlDatasourceId,
   dbSqlDatasourceTitle,
   dbSqlOperationId,
-  dbSqlOperationTitle,
-  delayWithSignal,
-  executeHttpOutbound,
-  notificationTitle
-} from "./runtime-practical-backend-glue.js";
+  dbSqlOperationTitle
+} from "../plugins/sqlite/glue.js";
+import { notificationTitle } from "../plugins/notifications/glue.js";
+import {
+  executeMcpTool,
+  mcpToolDefinition,
+  mcpToolNames,
+  resolveMcpToolScope,
+  MCP_PROTOCOL_VERSION
+} from "../plugins/mcp/mcp-tools.js";
+import { createMcpBundleSupportServices } from "../plugins/mcp/mcp-support-services.js";
+import { canvasProcessHandlers } from "../plugins/canvas/canvas-processes.js";
 import { createRuntimeSessionServices } from "./runtime-session-services.js";
 import { createIdentity, defineContext, moduleProjectors } from "./modules.js";
 import {
@@ -51,6 +78,14 @@ import {
   readRuntimePluginCatalog,
   readRuntimePluginReviews
 } from "./runtime-plugin-utils.js";
+
+function createPracticalBackendIoServices(options = {}) {
+  return {
+    ...createFsBlobIoServices(options),
+    ...createHttpOutboundIoServices(options),
+    ...createWebhookIoServices(options)
+  };
+}
 
 export function createRuntimeRouteHandlers({
   world,

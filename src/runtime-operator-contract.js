@@ -129,13 +129,19 @@ export async function resolveRuntimeOperatorPaths({
     });
   }
 
+  const tempHome = await mkdtemp(path.join(tmpdir, "witness-world-ephemeral-"));
+  const layout = worldHomeLayout(tempHome);
   return buildRuntimeOperatorContract({
     startupMode,
-    layout: "legacy-ephemeral",
+    layout: "ephemeral-world-home-v1",
     persistenceMode: "ephemeral",
-    runtimeRoot: tmpdir,
-    witnessLogPath: path.join(tmpdir, "witness-world-demo.witnesses.jsonl"),
-    observationLogPath: path.join(tmpdir, "witness-world-demo.observations.jsonl"),
-    notes: ["No WORLD_HOME or explicit paths were provided, so startup uses the legacy ephemeral temp-root contract."]
+    worldHome: tempHome,
+    runtimeRoot: layout.runtimeRoot,
+    witnessLogPath: path.join(layout.logsRoot, `${bootstrapLogPrefix}.witnesses.jsonl`),
+    observationLogPath: path.join(layout.logsRoot, `${bootstrapLogPrefix}.observations.jsonl`),
+    backupsRoot: layout.backupsRoot,
+    exportsRoot: layout.exportsRoot,
+    importsRoot: layout.importsRoot,
+    notes: ["No WORLD_HOME or explicit paths were provided, so startup uses an isolated ephemeral temp world."]
   });
 }

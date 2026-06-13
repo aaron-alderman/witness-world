@@ -9,7 +9,7 @@ import {
   selectionBounds,
   worldToScreen,
   zoomCameraAt
-} from "../src/canvas-core.js";
+} from "../plugins/canvas/canvas-core.js";
 
 test("camera transforms round-trip between world and screen coordinates", () => {
   const camera = { x: 120, y: 80, zoom: 1.5 };

@@ -1,0 +1,14 @@
+{
+  "id": "plugin.proposals",
+  "version": "0.1.0",
+  "displayName": "Proposals Plugin Runtime",
+  "description": "Owns proposal create/approve/reject routes, handlers, and proposal execution dispatch.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-proposals"
+  ],
+  "contributes": {}
+}

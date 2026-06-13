@@ -1,0 +1,53 @@
+{
+  "id": "plugin.fs-stream",
+  "version": "0.1.0",
+  "displayName": "Stream File Storage Plugin",
+  "description": "Streamed file read/write/copy capability, routes, handler catalog, handler implementation, and stream transfer helpers.",
+  "kind": "plugin",
+  "dependsOnPlugins": [
+    "plugin.fs-blob"
+  ],
+  "activatesBundles": [
+    "bundle-fs-stream"
+  ],
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "fs.stream"
+      }
+    ],
+    "routes": [
+      {
+        "method": "POST",
+        "path": "/api/fs/streams/copy",
+        "handler": "fs.stream.copy"
+      },
+      {
+        "method": "GET",
+        "path": "/api/fs/streams/content",
+        "handler": "fs.stream.read"
+      },
+      {
+        "method": "PUT",
+        "path": "/api/fs/streams/content",
+        "handler": "fs.stream.write"
+      }
+    ],
+    "surfaces": [],
+    "providers": [
+      {
+        "id": "fs-stream.handlers",
+        "kind": "runtime-handler-catalog",
+        "description": "Bundle-owned fs.stream route handlers."
+      },
+      {
+        "id": "fs-stream.transfer",
+        "kind": "runtime-provider",
+        "description": "Atomic stream-to-file and file-to-file transfer helpers."
+      }
+    ]
+  }
+}

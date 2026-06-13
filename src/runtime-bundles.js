@@ -2,43 +2,14 @@ import { runtimeBundleHandlerCatalog } from "./runtime-bundle-handlers.js";
 import {
   createCoreRuntimeBundleHandlers,
 } from "./runtime-core-handlers.js";
-import { bundles as authoringRuntimeBundles } from "../plugins/authoring/runtime.js";
 import {
-  createHandlers as createCanvasBundleHandlers,
-  handlerCatalog as canvasHandlerCatalog,
-  routes as canvasRoutes,
-  surfaces as canvasSurfaces
-} from "../plugins/canvas/runtime.js";
-import {
-  createHandlers as createInspectBundleHandlers,
-  handlerCatalog as inspectHandlerCatalog,
-  routes as inspectRoutes,
-  surfaces as inspectSurfaces
-} from "../plugins/inspect/runtime.js";
-import {
-  createHandlers as createEdenBundleHandlers,
-  handlerCatalog as edenHandlerCatalog,
-  routes as edenRoutes,
-  surfaces as edenSurfaces
-} from "../plugins/eden/runtime.js";
-import { handlerSetProvider as demoHandlerSetProvider } from "../plugins/demo/runtime.js";
-import {
-  createHandlers as createMcpBundleHandlers,
-  handlerCatalog as mcpHandlerCatalog,
-  routes as mcpRoutes,
-  surfaces as mcpSurfaces
-} from "../plugins/mcp/runtime.js";
-import {
-  createHandlers as createPracticalBackendHandlers,
-  handlerCatalog as practicalBackendHandlerCatalog,
-  routes as practicalBackendRoutes,
-  surfaces as practicalBackendSurfaces
-} from "../plugins/practical-backend/runtime.js";
-import {
-  CORE_RUNTIME_CAPABILITY_IDS,
-  PRACTICAL_BACKEND_CAPABILITY_IDS
+  CORE_RUNTIME_CAPABILITY_IDS
 } from "./runtime-builtins.js";
 import { buildRuntimeShellDiagnostics } from "./runtime-shell-contract.js";
+import {
+  firstPartyBundleRows,
+  runtimeProfilePresetsFromSeeds
+} from "./runtime-store-seeds.js";
 
 export const DEFAULT_RUNTIME_PROFILE = "full";
 export const DEFAULT_BOOTSTRAP_RUNTIME_PROFILE = "authoring";
@@ -74,10 +45,6 @@ function deepFreezeBundle(bundle) {
 
 function exactRoute(method, path, handler, params = {}) {
   return { kind: "exact", method, path, handler, params };
-}
-
-function patternRoute(method, pattern, handler, paramNames = []) {
-  return { kind: "pattern", method, pattern, handler, paramNames };
 }
 
 function surfaceEntry({
@@ -139,6 +106,22 @@ function internalBundle({
   });
 }
 
+function seedBundle(row) {
+  return internalBundle({
+    id: row.id,
+    displayName: row.displayName,
+    description: row.description,
+    contributes: {
+      capabilities: [],
+      providers: [],
+      routes: [],
+      surfaces: []
+    }
+  });
+}
+
+const RUNTIME_PROFILE_PRESETS = runtimeProfilePresetsFromSeeds();
+
 const INTERNAL_BUNDLE_MANIFESTS = [
   internalBundle({
     id: "bundle-core-runtime",
@@ -175,143 +158,10 @@ const INTERNAL_BUNDLE_MANIFESTS = [
       ]
     }
   }),
-  internalBundle({
-    id: "bundle-tutorial",
-    displayName: "Tutorial",
-    description: "Tutorial progress APIs and runtime-owned tutorial continuity.",
-    contributes: {
-      capabilities: [],
-      providers: [
-        handlerCatalog(authoringRuntimeBundles["bundle-tutorial"].handlerCatalog),
-        genericHandlerFactory(authoringRuntimeBundles["bundle-tutorial"].createHandlers)
-      ],
-      routes: authoringRuntimeBundles["bundle-tutorial"].routes,
-      surfaces: authoringRuntimeBundles["bundle-tutorial"].surfaces
-    }
-  }),
-  internalBundle({
-    id: "bundle-authoring",
-    displayName: "Authoring",
-    description: "Bootstrap recovery, CRUD authoring flows, proposals, and capability/catalog mutation seams.",
-    contributes: {
-      capabilities: [],
-      providers: [
-        handlerCatalog(authoringRuntimeBundles["bundle-authoring"].handlerCatalog),
-        genericHandlerFactory(authoringRuntimeBundles["bundle-authoring"].createHandlers)
-      ],
-      routes: authoringRuntimeBundles["bundle-authoring"].routes,
-      surfaces: authoringRuntimeBundles["bundle-authoring"].surfaces
-    }
-  }),
-  internalBundle({
-    id: "bundle-inspect",
-    displayName: "Inspect",
-    description: "World graph, process view, source inspection, and operator-facing inspect surfaces.",
-    contributes: {
-      capabilities: [],
-      providers: [
-        handlerCatalog(inspectHandlerCatalog),
-        genericHandlerFactory(createInspectBundleHandlers)
-      ],
-      routes: inspectRoutes,
-      surfaces: inspectSurfaces
-    }
-  }),
-  internalBundle({
-    id: "bundle-canvas",
-    displayName: "Canvas",
-    description: "Canvas projection, canvas process execution, and canvas page rendering.",
-    contributes: {
-      capabilities: [],
-      providers: [
-        handlerCatalog(canvasHandlerCatalog),
-        genericHandlerFactory(createCanvasBundleHandlers)
-      ],
-      routes: canvasRoutes,
-      surfaces: canvasSurfaces
-    }
-  }),
-  internalBundle({
-    id: "bundle-mcp",
-    displayName: "MCP",
-    description: "MCP HTTP transport routes and runtime-owned MCP execution surface.",
-    contributes: {
-      capabilities: [],
-      providers: [
-        handlerCatalog(mcpHandlerCatalog),
-        genericHandlerFactory(createMcpBundleHandlers)
-      ],
-      routes: mcpRoutes,
-      surfaces: mcpSurfaces
-    }
-  }),
-  internalBundle({
-    id: "bundle-practical-backend",
-    displayName: "Practical Backend",
-    description: "Opt-in backend capabilities: runtime config, SQL, search, jobs, storage, outbound HTTP, OAuth, webhooks, notifications, and backend diagnostics.",
-    contributes: {
-      capabilities: PRACTICAL_BACKEND_CAPABILITY_IDS,
-      providers: [
-        {
-          kind: "defaultHostCapabilities",
-          hostKind: "backend",
-          capabilities: [...PRACTICAL_BACKEND_CAPABILITY_IDS]
-        },
-        handlerCatalog(practicalBackendHandlerCatalog),
-        genericHandlerFactory(createPracticalBackendHandlers)
-      ],
-      routes: practicalBackendRoutes,
-      surfaces: practicalBackendSurfaces
-    }
-  }),
-  internalBundle({
-    id: "bundle-demo",
-    displayName: "Demo",
-    description: "Demo handler-set registration and demo-specific startup requirements.",
-    contributes: {
-      capabilities: ["fs.json.read", "fs.json.write"],
-      providers: [
-        demoHandlerSetProvider,
-        {
-          kind: "defaultHostCapabilities",
-          hostKind: "backend",
-          capabilities: ["fs.json.read", "fs.json.write"]
-        },
-        {
-          kind: "startupRequiredHostCapabilities",
-          hostKind: "backend",
-          capabilities: ["fs.json.read", "fs.json.write"]
-        }
-      ],
-      routes: [],
-      surfaces: []
-    }
-  }),
-  internalBundle({
-    id: "bundle-eden",
-    displayName: "Eden",
-    description: "Eden neighborhood, academy, versions, capability-install, and commons flows.",
-    contributes: {
-      capabilities: [],
-      providers: [
-        handlerCatalog(edenHandlerCatalog),
-        genericHandlerFactory(createEdenBundleHandlers)
-      ],
-      routes: edenRoutes,
-      surfaces: edenSurfaces
-    }
-  })
+  ...firstPartyBundleRows().map(seedBundle)
 ];
 
 const BUNDLE_BY_ID = new Map(INTERNAL_BUNDLE_MANIFESTS.map(bundle => [bundle.id, bundle]));
-
-const RUNTIME_PROFILES = Object.freeze({
-  minimal: Object.freeze(["bundle-core-runtime"]),
-  authoring: Object.freeze(["bundle-core-runtime", "bundle-tutorial", "bundle-authoring"]),
-  inspect: Object.freeze(["bundle-core-runtime", "bundle-inspect"]),
-  "practical-backend": Object.freeze(["bundle-core-runtime", "bundle-practical-backend"]),
-  full: Object.freeze(INTERNAL_BUNDLE_MANIFESTS.map(bundle => bundle.id))
-});
 
 function cloneSurface(surface) {
   return {
@@ -381,13 +231,30 @@ function materializeBundle(bundleId, bundleOverrides = {}) {
 }
 
 function normalizeProfileName(profileName) {
-  return Object.prototype.hasOwnProperty.call(RUNTIME_PROFILES, profileName)
+  return Object.prototype.hasOwnProperty.call(RUNTIME_PROFILE_PRESETS, profileName)
     ? profileName
     : DEFAULT_RUNTIME_PROFILE;
 }
 
 export function availableRuntimeProfiles() {
-  return Object.keys(RUNTIME_PROFILES);
+  return Object.keys(RUNTIME_PROFILE_PRESETS);
+}
+
+export function runtimeProfilePluginIds(profileName = DEFAULT_RUNTIME_PROFILE) {
+  const id = normalizeProfileName(profileName);
+  return [...(RUNTIME_PROFILE_PRESETS[id]?.plugins ?? [])];
+}
+
+function resolveProfilePreset(profileName = DEFAULT_RUNTIME_PROFILE) {
+  const id = normalizeProfileName(profileName);
+  const preset = RUNTIME_PROFILE_PRESETS[id];
+  return {
+    id,
+    coreBundleIds: [...preset.coreBundles],
+    pluginIds: [...preset.plugins],
+    resolvedPluginIds: [...preset.plugins],
+    bundleIds: [...preset.coreBundles]
+  };
 }
 
 export function availableRuntimeBundleIds() {
@@ -439,16 +306,19 @@ export function resolveRuntimeComposition({
   additionalBundleIds = [],
   bundleOverrides = {}
 } = {}) {
-  const id = normalizeProfileName(profileName);
+  const preset = resolveProfilePreset(profileName);
   const bundleIds = [];
   const seen = new Set();
-  for (const bundleId of [...RUNTIME_PROFILES[id], ...additionalBundleIds.map(String)]) {
+  for (const bundleId of [...preset.bundleIds, ...additionalBundleIds.map(String)]) {
     if (!BUNDLE_BY_ID.has(bundleId) || seen.has(bundleId)) continue;
     seen.add(bundleId);
     bundleIds.push(bundleId);
   }
   return {
-    id,
+    id: preset.id,
+    profilePluginIds: [...preset.pluginIds],
+    resolvedProfilePluginIds: [...preset.resolvedPluginIds],
+    profileCoreBundleIds: [...preset.coreBundleIds],
     bundleIds,
     bundles: bundleIds.map(bundleId => materializeBundle(bundleId, bundleOverrides)).filter(Boolean)
   };
@@ -476,7 +346,7 @@ export function resolveRuntimeProfile(profileName = DEFAULT_RUNTIME_PROFILE) {
 
 export function resolveRuntimeProfileStrict(profileName = DEFAULT_RUNTIME_PROFILE) {
   const normalized = String(profileName || DEFAULT_RUNTIME_PROFILE);
-  if (!Object.prototype.hasOwnProperty.call(RUNTIME_PROFILES, normalized)) {
+  if (!Object.prototype.hasOwnProperty.call(RUNTIME_PROFILE_PRESETS, normalized)) {
     return {
       ok: false,
       requestedProfile: normalized,
@@ -495,6 +365,27 @@ export function providedCapabilityIdsForProfile(profileName = DEFAULT_RUNTIME_PR
     for (const capabilityId of bundle.contributes.capabilities) ids.add(String(capabilityId));
   }
   return [...ids];
+}
+
+export function runtimeBuiltinSeedContributionsForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
+  return selectedComposition(profileName, options).bundles.flatMap(bundle =>
+    bundle.contributes.providers
+      .filter(provider => provider?.kind === "runtimeBuiltinSeeds")
+      .map(provider => ({
+        traits: [...(provider.traits ?? [])],
+        valueTypes: [...(provider.valueTypes ?? [])],
+        processSpecs: [...(provider.processSpecs ?? [])]
+      }))
+  );
+}
+
+export function runtimeCapabilityDefinitionsForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
+  return selectedComposition(profileName, options).bundles.flatMap(bundle =>
+    bundle.contributes.providers
+      .filter(provider => provider?.kind === "capabilityDefinitions")
+      .flatMap(provider => provider.capabilities ?? [])
+      .map(capability => JSON.parse(JSON.stringify(capability)))
+  );
 }
 
 export function defaultHostCapabilitiesForProfile(profileName = DEFAULT_RUNTIME_PROFILE, hostKind = "backend", options = {}) {
@@ -586,20 +477,15 @@ export function bundleHandlerCatalogsForProfile(profileName = DEFAULT_RUNTIME_PR
   return catalogs;
 }
 
-export function bundleIdsForHandlerSet(handlerSetId = "") {
-  const targetId = String(handlerSetId || "").trim();
-  if (!targetId) return [];
-  const bundleIds = [];
-  for (const bundle of INTERNAL_BUNDLE_MANIFESTS) {
-    if (bundle.contributes.providers.some(provider => provider?.kind === "handlerSet" && provider.id === targetId)) {
-      bundleIds.push(bundle.id);
+export function genericHandlerFactoriesForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
+  const factories = [];
+  for (const bundle of selectedComposition(profileName, options).bundles) {
+    for (const provider of bundle.contributes.providers) {
+      if (provider?.kind !== "genericHandlerFactory" || typeof provider.factory !== "function") continue;
+      factories.push({ bundleId: bundle.id, factory: provider.factory });
     }
   }
-  return bundleIds;
-}
-
-export function genericHandlerFactoriesForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
-  return genericHandlerFactoriesForBundleIds(selectedComposition(profileName, options).bundleIds);
+  return factories;
 }
 
 export function genericHandlerFactoriesForBundleIds(bundleIds = []) {
@@ -676,6 +562,9 @@ export function runtimeBundleSummaryForProfile(profileName = DEFAULT_RUNTIME_PRO
   const handlerMetadata = handlerMetadataForProfile(resolved.id, options);
   return {
     profile: resolved.id,
+    profilePluginIds: [...resolved.profilePluginIds],
+    resolvedProfilePluginIds: [...resolved.resolvedProfilePluginIds],
+    profileCoreBundleIds: [...resolved.profileCoreBundleIds],
     bundleIds: [...resolved.bundleIds],
     bundles: resolved.bundles.map(bundle => ({
       id: bundle.id,
@@ -764,6 +653,9 @@ export function buildRuntimeDiagnosticsForProfile({
       routeCount: bundle.routeCount,
       surfaceCount: bundle.surfaceCount
     })),
+    profilePluginIds: [...(summary.profilePluginIds ?? [])],
+    resolvedProfilePluginIds: [...(summary.resolvedProfilePluginIds ?? [])],
+    profileCoreBundleIds: [...(summary.profileCoreBundleIds ?? [])],
     providedCapabilities: [...summary.capabilities],
     defaultHostCapabilities: {
       backend: defaultHostCapabilitiesForProfile(summary.profile, "backend", { additionalBundleIds, bundleOverrides }).sort(),
@@ -844,6 +736,8 @@ export function buildRuntimeDiagnosticsForProfile({
         ? {
           pluginRoot: pluginCatalogSummary.pluginRoot,
           activeProfile: pluginCatalogSummary.activeProfile,
+          profilePluginIds: [...(summary.profilePluginIds ?? [])],
+          resolvedProfilePluginIds: [...(summary.resolvedProfilePluginIds ?? [])],
           authoredPluginIds: [...authoredPluginIds],
           operatorPluginIds: [...operatorPluginIds],
           effectivePluginIds: [...effectivePluginIds],

@@ -1,0 +1,14 @@
+{
+  "id": "plugin.program-authoring",
+  "version": "0.1.0",
+  "displayName": "Program Authoring Plugin Runtime",
+  "description": "Owns frontend and backend program authoring routes, handlers, process helpers, and proposal target execution.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-program-authoring"
+  ],
+  "contributes": {}
+}

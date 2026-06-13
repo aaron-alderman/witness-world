@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createWorld } from "../src/kernel.js";
+import { applyWitnessToml } from "../src/dsl.js";
 import { moduleProjectors } from "../src/modules.js";
+import {
+  declareBackendHost,
+  declareFrontendHost,
+  hostCapabilities,
+  resolveServerRunner,
+  resolveStartupRunner,
+  resolveStorageConfig
+} from "../src/runtime-host-utils.js";
 import { startRuntimeServer } from "../src/runtime-server.js";
 
 function createWitnessWorld({ routes = [], runtimePluginInstalls = [] } = {}) {
@@ -171,6 +181,103 @@ test("runtime server composes authored runtime plugin installs with operator plu
   assert.deepEqual(catalogRequest?.authoredPluginIds, ["plugin.inspect"]);
   assert.deepEqual(catalogRequest?.configuredPluginIds, ["plugin.canvas"]);
   assert.deepEqual(server.runtimePluginCatalog.effectivePluginIds, ["plugin.inspect", "plugin.canvas"]);
+});
+
+test("runtime server defines and installs plugin-selected default host capabilities before startup validation", async () => {
+  const world = createWorld({ genesis: { system: "runtime-server-test" } });
+  applyWitnessToml(world, `
+[[serverRunner]]
+actor = "adam"
+id = "runner-1"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+`);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    logger: { info() {}, error() {} },
+    runtimeProfile: "minimal"
+  }, {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities,
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner,
+    resolveStartupRunner,
+    resolveStorageConfig,
+    sendJson: () => {},
+    readRuntimePluginCatalog: async () => ({
+      pluginRoot: "plugins",
+      activeProfile: "minimal",
+      packages: [],
+      summary: {},
+      authoredPluginIds: [],
+      operatorPluginIds: [],
+      effectivePluginIds: ["plugin.demo"],
+      configuredPluginIds: [],
+      activePluginIds: ["plugin.demo"],
+      rejectedPlugins: [],
+      addedBundleIds: ["bundle-demo"],
+      selection: { hasBlockingErrors: false }
+    }),
+    loadRuntimePluginModules: async () => ({
+      bundleOverrides: {},
+      failures: [],
+      hasBlockingErrors: false
+    }),
+    defaultHostCapabilitiesForProfile: (_profile, hostKind, options) => {
+      assert.equal(options.additionalBundleIds.includes("bundle-demo"), true);
+      return hostKind === "backend" ? ["fs.json.read", "fs.json.write"] : [];
+    },
+    ensureRuntimeBuiltins: () => {},
+    runtimeBundleSummaryForProfile: profile => ({ profile, bundles: [], dispatchHandlers: [] }),
+    runtimeSurfaceEntriesForProfile: () => [],
+    dispatchHandlerIdsForProfile: () => [],
+    handlerSetFactoriesForProfile: () => ({}),
+    handlerSetDefinitionsForProfile: () => ({}),
+    providedCapabilityIdsForProfile: () => [],
+    runtimeCapabilityDefinitionsForProfile: () => [],
+    runtimeBuiltinSeedContributionsForProfile: () => [],
+    startupRequiredHostCapabilitiesForProfile: (_profile, hostKind) => hostKind === "backend" ? ["fs.json.read", "fs.json.write"] : [],
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [],
+      storage: {},
+      visibleWitnesses: () => world.allWitnesses()
+    }),
+    createRuntimeResolverForServer: () => ({
+      runtimeContexts: new Map(),
+      resolveActiveRuntime: async () => ({
+        runner: resolveServerRunner(world, "runner-1").runner,
+        context: { handlers: {}, close() {} }
+      })
+    }),
+    httpModule: {
+      createServer() {
+        return {
+          listen(_port, _host, callback) {
+            callback();
+          },
+          address() {
+            return { port: 4321 };
+          },
+          closeAllConnections() {},
+          close(callback) {
+            callback();
+          }
+        };
+      }
+    }
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(hostCapabilities(world, "backendHost").has("fs.json.read"), true);
+  assert.equal(hostCapabilities(world, "backendHost").has("fs.json.write"), true);
+  assert.equal(world.allWitnesses().some(witness => witness.process === "installCapability.failed"), false);
+  await server.close();
 });
 
 test("runtime server dispatches mounted routes and owns lifecycle outside host.js", async () => {

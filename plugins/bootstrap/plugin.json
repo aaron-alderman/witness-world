@@ -1,0 +1,17 @@
+{
+  "id": "plugin.bootstrap",
+  "version": "0.1.0",
+  "displayName": "Bootstrap Plugin Runtime",
+  "description": "Owns bootstrap shell, bootstrap read APIs, operator recovery APIs, and the bootstrap operator surface.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "dependsOnPlugins": [
+    "plugin.tutorial"
+  ],
+  "activatesBundles": [
+    "bundle-bootstrap"
+  ],
+  "contributes": {}
+}

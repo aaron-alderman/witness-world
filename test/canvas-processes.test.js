@@ -20,8 +20,8 @@ import {
   undoLastAction,
   redoLastUndo,
   canvasProcessHandlers
-} from "../src/canvas-processes.js";
-import { canvasProjection } from "../src/canvas-projection.js";
+} from "../plugins/canvas/canvas-processes.js";
+import { canvasProjection } from "../plugins/canvas/canvas-projection.js";
 
 function worldWithPerspective() {
   const world = createWorld();

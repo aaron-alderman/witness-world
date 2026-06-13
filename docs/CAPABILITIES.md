@@ -807,7 +807,7 @@ Current molecules:
 - bootstrap runtime-plugin install/remove/proposal forms plus runner-scoped availability rows that show authored installability, missing dependencies, and metadata-only packages without pretending CLI/env overlays are durable world state
 - runtime-owned review reads plus bootstrap plugin detail panels that preview authored runner composition, no-op installs, reverse dependencies, and declared-vs-resolved plugin contributions before mutation
 - runtime composition reads that expose requested, eligible, active, rejected, resolved-bundle, and resolved-runtime-contribution state for local plugin packages
-- the maintained demo example now uses authored runner installs for `plugin.authoring`, `plugin.inspect`, and `plugin.canvas`, and served demo entrypoints run on `minimal` so plugin composition is proven in the actual project path rather than only in abstract runtime tests
+- the maintained demo example now uses authored runner installs for `plugin.authoring`, `plugin.inspect`, `plugin.canvas`, and `plugin.demo`, and served demo entrypoints run on `minimal` so plugin composition is proven in the actual project path rather than only in abstract runtime tests
 
 Still missing:
 

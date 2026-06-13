@@ -3,16 +3,16 @@ import test from "node:test";
 import { createThing, createWorld, projectors, relation, thing } from "../src/kernel.js";
 import { canMutateTarget } from "../src/kernel.js";
 import { createServerRunner, moduleProjectors } from "../src/modules.js";
+import { requestBootstrapContextDefine } from "../plugins/authoring-core/authoring-core-processes.js";
 import {
-  requestBootstrapContextDefine,
   requestBootstrapProposalApprove,
   requestBootstrapProposalCreate
-} from "../src/bootstrap-authoring.js";
+} from "../plugins/proposals/proposal-processes.js";
 import {
   createAuthoringBundleServices,
   createRuntimeAuthorityServices
 } from "../src/runtime-authoring-services.js";
-import { todoState } from "../src/projections.js";
+import { todoState } from "../plugins/demo/projections.js";
 
 test("runtime authority services expose bootstrap access and target/context gates independently of bundle proposal execution", () => {
   const world = createWorld();

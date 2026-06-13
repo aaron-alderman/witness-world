@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
-import { createPracticalBackendDbSearchServices } from "../src/runtime-practical-backend-db-search-services.js";
+import { createPracticalBackendDbSearchServices } from "../plugins/search/db-search-services.js";
 
 test("practical backend db/search services shape rows and emit bundle-owned witnesses", () => {
   const world = createWorld();

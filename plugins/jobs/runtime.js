@@ -1,0 +1,34 @@
+import { handlerCatalog } from "./handler-catalog.js";
+import { createJobsQueueHandlers } from "./handlers.js";
+
+export const bundleId = "bundle-jobs";
+
+export { handlerCatalog };
+
+function exactRoute(method, path, handler, params = {}) {
+  return { kind: "exact", method, path, handler, params };
+}
+
+function patternRoute(method, pattern, handler, paramNames = []) {
+  return { kind: "pattern", method, pattern, handler, paramNames };
+}
+
+export const routes = Object.freeze([
+  exactRoute("GET", "/api/jobs", "jobs.queue.list"),
+  exactRoute("POST", "/api/jobs", "jobs.queue.enqueue"),
+  patternRoute("GET", /^\/api\/jobs\/([^/]+)$/, "jobs.queue.read", ["id"])
+]);
+
+export const surfaces = Object.freeze([]);
+
+export function createHandlers(deps) {
+  return createJobsQueueHandlers(deps);
+}
+
+export default {
+  bundleId,
+  handlerCatalog,
+  routes,
+  surfaces,
+  createHandlers
+};

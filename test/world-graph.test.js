@@ -4,10 +4,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createWorld, thing, relation } from "../src/kernel.js";
-import { worldGraphProjection } from "../src/world-graph.js";
+import { worldGraphProjection } from "../plugins/inspect/world-graph.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
 import { applyWitnessDocs, applyWitnessToml, loadWitnessTomlFile } from "../src/dsl.js";
-import { renderWidgetPage } from "../src/widgets.js";
+import { renderWidgetPage } from "../plugins/inspect/widget-page.js";
+import { applyDesire, compileRvmFileToDesirePlus, compileRvmToDesirePlus, normalizeDesirePlusToDesire } from "../src/desire/index.js";
 
 async function tempStore() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "witness-world-graph-"));
@@ -34,7 +35,7 @@ test("world graph projection returns deterministic positioned nodes and relation
 
 test("world graph hides canvas view-state vocabulary nodes and edges", async () => {
   const { createThing } = await import("../src/kernel.js");
-  const { createPerspective, placeThing, styleInstance, setCamera, setGrid } = await import("../src/canvas-processes.js");
+  const { createPerspective, placeThing, styleInstance, setCamera, setGrid } = await import("../plugins/canvas/canvas-processes.js");
   const world = createWorld();
   createThing(world, { actor: "adam", id: "aaron" });
   createThing(world, { actor: "aaron", id: "customer" });
@@ -119,6 +120,204 @@ test("world graph surfaces trait, valueType, and processSpec nodes with compatib
   assert.ok(specNode);
   assert.equal(specNode.values.some(v => v.key === "process" && v.value.type === "string" && v.value.value === "widget.define"), true);
   assert.equal(specNode.values.some(v => v.key === "inputs" && v.value.type === "list"), true);
+});
+
+test("world graph surfaces native RVM semantic message/entity/process/boundary nodes", () => {
+  const world = createWorld();
+  const desire = normalizeDesirePlusToDesire(compileRvmToDesirePlus(`
+context todo_items {
+}
+
+message TodoSelectedPayload {
+  fields {
+    item_id: string
+  }
+}
+
+entity TodoRecord {
+  context todo_items
+  durable_state todo_store
+  id_prop item_id
+}
+
+process TodoFlow {
+  handles TodoSelectedPayload
+  emits TodoSelectedPayload
+}
+
+boundary TodoApi {
+  capability todo.read
+}
+
+actor TodoSession owns TodoRecord {
+  collection_context todo_items
+  entity TodoRecord
+  list_projection todos_list_projection
+  detail_projection todo_detail_projection
+  durable_state todo_store
+}
+`, { file: "C:/demo/todo.rvm" }));
+  applyDesire(world, desire);
+
+  const graph = worldGraphProjection(world.allWitnesses());
+  assert.equal(graph.nodes.some(n => n.kind === "message" && n.id === "TodoSelectedPayload"), true);
+  assert.equal(graph.nodes.some(n => n.kind === "entity" && n.id === "TodoRecord"), true);
+  assert.equal(graph.nodes.some(n => n.kind === "process" && n.id === "TodoFlow"), true);
+  assert.equal(graph.nodes.some(n => n.kind === "boundary" && n.id === "TodoApi"), true);
+  assert.equal(graph.nodes.some(n => n.kind === "store" && n.id === "todo_store"), true);
+  assert.equal(graph.nodes.some(n => n.kind === "projection" && n.id === "todos_list_projection"), true);
+  assert.equal(graph.edges.some(e => e.from === "TodoFlow" && e.rel === "handlesMessage" && e.to === "TodoSelectedPayload"), true);
+  assert.equal(graph.edges.some(e => e.from === "TodoApi" && e.rel === "depends on" && e.to === "todo.read"), true);
+  assert.equal(graph.edges.some(e => e.from === "todo_store" && e.rel === "inContext" && e.to === "todo_items"), true);
+  assert.equal(graph.edges.some(e => e.from === "todo_store" && e.rel === "storesEntity" && e.to === "TodoRecord"), true);
+  assert.equal(graph.edges.some(e => e.from === "TodoSession" && e.rel === "usesStore" && e.to === "todo_store"), true);
+  assert.equal(graph.edges.some(e => e.from === "todos_list_projection" && e.rel === "projectsFrom" && e.to === "todo_store"), true);
+
+  const entityNode = graph.nodes.find(n => n.id === "TodoRecord");
+  assert.ok(entityNode);
+  assert.equal(graph.edges.some(e => e.from === "TodoRecord" && e.rel === "usesStore" && e.to === "todo_store"), true);
+});
+
+test("world graph surfaces native RVM capability and policy nodes", () => {
+  const world = createWorld();
+  const desire = normalizeDesirePlusToDesire(compileRvmToDesirePlus(`
+graph_context scientific_entities {
+}
+
+capability host_source_read {
+  in scientific_entities
+  source builtin
+  state configured
+  provide "capability:read:source_text"
+}
+
+read source_text {
+  capability "capability:read:source_text"
+}
+
+command OpenPromotionReview {
+  fields {
+    gate_id: "promotion_gate"
+  }
+}
+
+event PromotionGateSatisfied {
+  writes {
+    GovernanceLoading: false
+  }
+}
+
+adapter GovernancePromotionReviewSbtp using SBTP {
+  command OpenPromotionReview
+  kind command
+  route /api/runtime/materialized-host-operation
+  success_event PromotionGateSatisfied
+}
+
+process GovernanceWorkflow {
+  handles OpenPromotionReview
+  emits PromotionGateSatisfied
+}
+
+policy GovernanceEvidencePolicy {
+  subject GovernanceWorkflow
+  initial_state monitoring
+  state_field policy_state
+  ready_state aligned_evidence
+}
+`, { file: "C:/demo/governance.rvm" }));
+  applyDesire(world, desire);
+
+  const graph = worldGraphProjection(world.allWitnesses());
+  assert.equal(graph.nodes.some(n => n.kind === "capability" && n.id === "host_source_read"), true);
+  assert.equal(graph.nodes.some(n => n.kind === "policy" && n.id === "GovernanceEvidencePolicy"), true);
+  assert.equal(graph.nodes.some(n => n.kind === "message" && n.id === "OpenPromotionReview"), true);
+  assert.equal(graph.nodes.some(n => n.kind === "message" && n.id === "PromotionGateSatisfied"), true);
+  assert.equal(graph.nodes.some(n => n.kind === "boundary" && n.id === "source_text"), true);
+  assert.equal(graph.nodes.some(n => n.kind === "boundary" && n.id === "GovernancePromotionReviewSbtp"), true);
+  assert.equal(graph.edges.some(e => e.from === "host_source_read" && e.rel === "provides" && e.to === "capability:read:source_text"), true);
+  assert.equal(graph.edges.some(e => e.from === "source_text" && e.rel === "depends on" && e.to === "capability:read:source_text"), true);
+  assert.equal(graph.edges.some(e => e.from === "GovernancePromotionReviewSbtp" && e.rel === "handlesMessage" && e.to === "OpenPromotionReview"), true);
+  assert.equal(graph.edges.some(e => e.from === "GovernancePromotionReviewSbtp" && e.rel === "emitsMessage" && e.to === "PromotionGateSatisfied"), true);
+  assert.equal(graph.edges.some(e => e.from === "GovernanceEvidencePolicy" && e.rel === "governs" && e.to === "GovernanceWorkflow"), true);
+  assert.equal(graph.nodes.find(n => n.id === "host_source_read")?.context, "scientific_entities");
+});
+
+test("world graph surfaces native RVM projection and surface nodes", () => {
+  const world = createWorld();
+  const desire = normalizeDesirePlusToDesire(compileRvmToDesirePlus(`
+derive TodoItemSummary {
+  kind todo_item_summary
+}
+
+derive InspectorClosed {
+  kind bool_not
+  source InspectorOpen
+}
+
+view TodoRuntimePage {
+  kind runtime_root
+  class runtime-shell.runtime-page
+  children {
+    todo_page_shell
+    reflective_hint_root
+  }
+}
+`, { file: "C:/demo/surface.rvm" }));
+  applyDesire(world, desire);
+
+  const graph = worldGraphProjection(world.allWitnesses());
+  assert.equal(graph.nodes.some(n => n.kind === "projection" && n.id === "TodoItemSummary"), true);
+  assert.equal(graph.nodes.some(n => n.kind === "projection" && n.id === "InspectorClosed"), true);
+  assert.equal(graph.nodes.some(n => n.kind === "surface" && n.id === "TodoRuntimePage"), true);
+  assert.equal(graph.edges.some(e => e.from === "InspectorClosed" && e.rel === "projectsFrom" && e.to === "InspectorOpen"), true);
+  assert.equal(graph.edges.some(e => e.from === "TodoRuntimePage" && e.rel === "hasChildSurface" && e.to === "todo_page_shell"), true);
+});
+
+test("world graph surfaces native RVM dataflow and chart nodes with provenance", () => {
+  const world = createWorld();
+  const file = "C:/demo/goodman.rvm";
+  const desire = normalizeDesirePlusToDesire(compileRvmToDesirePlus(`
+model BoltFatigue {
+  axis sm = sweep(0, 650, 1.6)
+  axis lifetime = category(0.5, 2, 6)
+  param rpm = 9
+  derive band = goodman_sa(sm, fat_limit, uts, ys) over sm, lifetime
+}
+
+chart GoodmanDiagram of BoltFatigue {
+  frame cartesian
+  x sm
+  x.domain 0 650
+  x.label Mean stress
+  y sigma_a
+  y.domain 0 auto
+  editable title, band.fills
+  layer bands = area over lifetime | y:band fill:band.fills
+}
+`, { file }));
+  applyDesire(world, desire);
+
+  const graph = worldGraphProjection(world.allWitnesses());
+  assert.equal(graph.nodes.some(node => node.kind === "dataflow" && node.id === "BoltFatigue"), true);
+  assert.equal(graph.nodes.some(node => node.kind === "surface" && node.id === "GoodmanDiagram"), true);
+  assert.equal(graph.nodes.some(node => node.id === "BoltFatigue.axis.sm"), true);
+  assert.equal(graph.nodes.some(node => node.id === "GoodmanDiagram.encoding.x"), true);
+  assert.equal(graph.nodes.some(node => node.id === "GoodmanDiagram.layer.bands"), true);
+  assert.equal(graph.edges.some(edge => edge.from === "BoltFatigue" && edge.rel === "hasAxis" && edge.to === "BoltFatigue.axis.sm"), true);
+  assert.equal(graph.edges.some(edge => edge.from === "BoltFatigue" && edge.rel === "hasParameter" && edge.to === "BoltFatigue.param.rpm"), true);
+  assert.equal(graph.edges.some(edge => edge.from === "BoltFatigue" && edge.rel === "hasDerive" && edge.to === "BoltFatigue.derive.band"), true);
+  assert.equal(graph.edges.some(edge => edge.from === "GoodmanDiagram" && edge.rel === "visualizesDataflow" && edge.to === "BoltFatigue"), true);
+  assert.equal(graph.edges.some(edge => edge.from === "GoodmanDiagram" && edge.rel === "hasEncoding" && edge.to === "GoodmanDiagram.encoding.x"), true);
+  assert.equal(graph.edges.some(edge => edge.from === "GoodmanDiagram" && edge.rel === "hasLayer" && edge.to === "GoodmanDiagram.layer.bands"), true);
+  assert.equal(graph.nodes.some(node =>
+    node.id === "BoltFatigue"
+    && node.sources?.some(source => source.file === file && source.sourceLanguage === "rvm" && source.sourceKind === "model")
+  ), true);
+  assert.equal(graph.nodes.some(node =>
+    node.id === "GoodmanDiagram"
+    && node.sources?.some(source => source.file === file && source.sourceLanguage === "rvm" && source.sourceKind === "chart")
+  ), true);
 });
 
 test("world graph places mcp servers in backend runtime contexts", () => {
@@ -609,9 +808,141 @@ test("source endpoint returns only witnessed imported DSL files", async () => {
     const body = await ok.json();
     assert.equal(body.file.endsWith("frontend.wtoml"), true);
     assert.match(body.text, /world_graph_page/);
+    assert.equal(Array.isArray(body.annotations), true);
+    assert.equal(Array.isArray(body.targets), true);
+    assert.equal(body.annotations.some(node =>
+      node.sourceLanguage === "wtoml"
+      && typeof node.startLine === "number"
+      && node.sourceKind === node.section
+      && Array.isArray(node.desireSourceNodeIds)
+    ), true);
+    assert.equal(body.targets.includes("world_graph_page"), true);
 
     const denied = await fetch(`${server.url}/api/source?file=${encodeURIComponent(path.join(process.cwd(), "package.json"))}`);
     assert.equal(denied.status, 404);
+  } finally {
+    await server.close();
+  }
+});
+
+test("source and world-graph endpoints expose unified WTOML and RVM DESIRE provenance", async () => {
+  const world = createWorld();
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  applyWitnessDocs(world, docs);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const rvmDir = await fs.mkdtemp(path.join(os.tmpdir(), "witness-rvm-source-"));
+  const rvmFile = path.join(rvmDir, "todo.rvm");
+  await fs.writeFile(rvmFile, `
+context todo_items {
+}
+
+message TodoSelectedPayload {
+  fields {
+    item_id: string
+  }
+}
+
+entity TodoRecord {
+  context todo_items
+  durable_state todo_store
+  id_prop item_id
+}
+
+process TodoFlow {
+  handles TodoSelectedPayload
+  emits TodoSelectedPayload
+}
+
+boundary TodoApi {
+  capability todo.read
+}
+`.trimStart(), "utf8");
+
+  const desire = normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(rvmFile));
+  applyDesire(world, desire);
+
+  const storePath = await tempStore();
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(storePath),
+    runtimeProfile: "minimal"
+  });
+
+  try {
+    const graphRes = await fetch(`${server.url}/api/world-graph`);
+    assert.equal(graphRes.status, 200);
+    const graphBody = await graphRes.json();
+    const graph = graphBody.graph;
+    const wtomlSource = docs.find(doc => doc.file?.endsWith("frontend.wtoml"))?.file;
+    assert.ok(wtomlSource);
+    assert.equal(graph.nodes.some(node =>
+      node.id === "world_graph_page"
+      && node.sources?.some(source =>
+        source.file === wtomlSource
+        && source.sourceLanguage === "wtoml"
+        && source.sourceKind === "page"
+        && typeof source.startLine === "number"
+        && typeof source.desireNodeId === "string"
+        && Array.isArray(source.desireSourceNodeIds)
+      )
+    ), true);
+    assert.equal(graph.nodes.some(node => node.id === "TodoRecord" && node.kind === "entity"), true);
+    assert.equal(graph.nodes.some(node =>
+      node.id === "TodoRecord"
+      && node.sources?.some(source =>
+        source.file === rvmFile
+        && source.sourceLanguage === "rvm"
+        && source.sourceKind === "entity"
+        && typeof source.startLine === "number"
+        && typeof source.desireNodeId === "string"
+        && Array.isArray(source.desireSourceNodeIds)
+      )
+    ), true);
+    assert.equal(graph.nodes.some(node =>
+      node.id === "TodoFlow"
+      && node.sources?.some(source => source.sourceLanguage === "rvm" && source.sourceKind === "process")
+    ), true);
+
+    const wtomlSourceRes = await fetch(`${server.url}/api/source?file=${encodeURIComponent(wtomlSource)}`);
+    assert.equal(wtomlSourceRes.status, 200);
+    const wtomlSourceBody = await wtomlSourceRes.json();
+    assert.equal(wtomlSourceBody.file, wtomlSource);
+    assert.equal(wtomlSourceBody.targets.includes("world_graph_page"), true);
+    assert.equal(wtomlSourceBody.annotations.some(node =>
+      node.sourceLanguage === "wtoml"
+      && node.file === wtomlSource
+      && node.sourceKind === "page"
+      && node.target === "world_graph_page"
+      && typeof node.startLine === "number"
+      && typeof node.desireNodeId === "string"
+      && Array.isArray(node.desireSourceNodeIds)
+    ), true);
+
+    const sourceRes = await fetch(`${server.url}/api/source?file=${encodeURIComponent(rvmFile)}`);
+    assert.equal(sourceRes.status, 200);
+    const sourceBody = await sourceRes.json();
+    assert.equal(sourceBody.file, rvmFile);
+    assert.match(sourceBody.text, /TodoRecord/);
+    assert.equal(sourceBody.targets.includes("TodoRecord"), true);
+    assert.equal(sourceBody.targets.includes("TodoFlow"), true);
+    assert.equal(sourceBody.annotations.some(node =>
+      node.sourceLanguage === "rvm"
+      && node.file === rvmFile
+      && node.sourceKind === "entity"
+      && node.target === "TodoRecord"
+      && typeof node.startLine === "number"
+      && typeof node.desireNodeId === "string"
+      && Array.isArray(node.desireSourceNodeIds)
+    ), true);
+    assert.equal(sourceBody.annotations.some(node =>
+      node.sourceLanguage === "rvm"
+      && node.file === rvmFile
+      && node.sourceKind === "process"
+      && node.target === "TodoFlow"
+    ), true);
   } finally {
     await server.close();
   }

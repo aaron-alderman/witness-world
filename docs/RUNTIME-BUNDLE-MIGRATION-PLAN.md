@@ -146,14 +146,14 @@ The architecture-first checklist above is complete, the fast compatibility verif
 
 ### Current Project Pluginization
 
-- [x] Added authored `runtimePlugin.install` rows to the maintained demo source of truth so `demo_server` explicitly requests `plugin.authoring`, `plugin.inspect`, and `plugin.canvas`.
+- [x] Added authored `runtimePlugin.install` rows to the maintained demo source of truth so `demo_server` explicitly requests `plugin.authoring`, `plugin.inspect`, `plugin.canvas`, and `plugin.demo`.
 - [x] Moved served demo entrypoints and shared demo test harnesses onto `--runtime-profile minimal`, while keeping the global CLI default profile and blank-world bootstrap behavior unchanged.
-- [x] Added fast verification that the maintained demo now activates those authored plugins under `minimal`, exposes inspect/authoring/canvas routes through bundle composition, and loses those optional surfaces when the authored installs are removed.
-- [x] Kept the remaining demo compatibility seam explicit instead of hiding it: `handlerSet = "demo"` currently causes startup to add `bundle-demo`, and runtime diagnostics now report that bundle ownership honestly.
+- [x] Added fast verification that the maintained demo now activates those authored plugins under `minimal`, exposes inspect/authoring/canvas/demo contributions through plugin composition, and loses those optional surfaces/handler sets when the authored installs are removed.
+- [x] Removed the remaining demo bundle-activation compatibility seam: `handlerSet = "demo"` no longer causes startup to add `bundle-demo`; `plugin.demo` or an explicit profile must provide the demo handler-set provider.
 
 ### Next Migration Cleanup
 
-- [ ] Finish migrating the maintained demo off the remaining runtime-owned `bundle-demo` / `handlerSet = "demo"` compatibility seam so served-example composition is explained entirely by authored installs plus explicit runtime-owned bundle ownership rather than example glue.
+- [x] Finish migrating the maintained demo off the remaining runtime-owned `bundle-demo` / `handlerSet = "demo"` compatibility seam so served-example composition is explained entirely by authored installs plus explicit runtime-owned bundle ownership rather than example glue.
 - [ ] Remove the remaining demo handler-set model shims from authored backend programs, starting with `todos.*Model`, `privateNotes.*Model`, `widgets.createModel`, and `network.simulateModel`, so authored demo/backend execution no longer bounces through `src/demo-handler-set.js` for core app logic.
 - [ ] Bring blank-world bootstrap/tutorial startup onto the same explicit runtime-composition story as the maintained demo so bootstrap can eventually run from a narrow baseline instead of a compatibility-heavy runtime path.
 - [ ] Add runner-scoped runtime-plugin reconcile and repair flows so authored installs that point at missing, invalid, incompatible, metadata-only, or dependency-broken local packages become operable cleanup work instead of only startup failures and review warnings.
@@ -402,8 +402,11 @@ Owns:
 
 Primary source files today:
 
-- `src/bootstrap-shell.js`
-- `src/bootstrap-authoring.js`
+- `plugins/bootstrap/bootstrap-shell.js`
+- authoring process helpers in `plugins/authoring-core`,
+  `plugins/proposals`, `plugins/capability-authoring`,
+  `plugins/program-authoring`, `plugins/server-runner-authoring`, and
+  `plugins/mcp-authoring`
 - authoring endpoints currently in `src/host.js`
 
 ### `bundle-inspect`
@@ -500,8 +503,8 @@ Owns:
 
 Primary source files today:
 
-- `src/eden-page.js`
-- `src/eden-*.js`
+- `plugins/eden/eden-page.js`
+- `plugins/eden/eden-*.js`
 - Eden handlers in `src/host.js`
 
 ## Phase 0: Inventory And Boundary Freeze

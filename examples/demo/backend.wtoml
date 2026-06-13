@@ -7,6 +7,7 @@ context = "backend"
 id = "demo_server"
 backendHost = "backendHost"
 frontendHost = "frontendHost"
+handlerSet = "demo"
 storage = { todoProjection = "witness-world-demo-todos.json", privateNotesProjection = "witness-world-demo-todos.private-notes.json" }
 
 [[runtimePluginInstall]]
@@ -23,6 +24,11 @@ plugin = "plugin.inspect"
 actor = "aaron"
 serverRunner = "demo_server"
 plugin = "plugin.canvas"
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "demo_server"
+plugin = "plugin.demo"
 
 [[backendProgram]]
 actor = "aaron"

@@ -1,8 +1,8 @@
 import { relation, projectors } from "../../src/kernel.js";
-import { canvasProcessHandlers } from "../../src/canvas-processes.js";
-import { canvasProjection, perspectivesProjection } from "../../src/canvas-projection.js";
-import { renderCanvasPage } from "../../src/canvas-page.js";
-import { requestBootstrapProposalCreate } from "../../src/bootstrap-authoring.js";
+import { canvasProcessHandlers } from "./canvas-processes.js";
+import { canvasProjection, perspectivesProjection } from "./canvas-projection.js";
+import { renderCanvasPage } from "./canvas-page.js";
+import { requestBootstrapProposalCreate } from "../proposals/proposal-processes.js";
 
 export const bundleId = "bundle-canvas";
 

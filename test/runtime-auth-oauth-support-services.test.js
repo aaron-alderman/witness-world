@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
-import { createRuntimeAuthOAuthSupportServices } from "../src/runtime-auth-oauth-support-services.js";
+import { createRuntimeAuthOAuthSupportServices } from "../plugins/oauth/support-services.js";
 
 test("runtime auth oauth support services normalize config, callback base URL, and profile defaults", () => {
   const services = createRuntimeAuthOAuthSupportServices({

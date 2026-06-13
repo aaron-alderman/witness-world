@@ -5,13 +5,12 @@ import { createWorld, canMutateTarget } from "../src/kernel.js";
 import { applyWitnessToml, applyWitnessDocs, loadWitnessTomlFile } from "../src/dsl.js";
 import {
   widgetTree,
-  renderWidgetPage,
   frontendProgram,
   templateWidgetTrees,
-  widgetVersionTransitions,
-  requestWidgetVersionActivation,
-  rollbackWidgetVersion
+  widgetVersionTransitions
 } from "../src/widgets.js";
+import { renderWidgetPage } from "../plugins/inspect/widget-page.js";
+import { requestWidgetVersionActivation, rollbackWidgetVersion } from "../plugins/inspect/widget-versions.js";
 
 test("todo UI is generated from primitive widgets, template widgets, and credential-backed session steps", async () => {
   const world = createWorld();

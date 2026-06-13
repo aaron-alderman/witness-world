@@ -4,7 +4,7 @@ import {
   extractAssetSearchText,
   extractAssetThumbnail,
   supportsDerivedAssetSearchText
-} from "../src/runtime-asset-derived-utils.js";
+} from "../plugins/assets/asset-derived-utils.js";
 
 test("asset derivation extracts structured search text and metadata", () => {
   assert.equal(supportsDerivedAssetSearchText("application/json", "example.json"), true);
