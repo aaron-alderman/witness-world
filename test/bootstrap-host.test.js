@@ -31,11 +31,12 @@ async function openSession(serverUrl, { username = "aaron", password = username 
 
 async function startBlankServer() {
   const world = createWorld();
-  declareBackendHost(world, { actor: "system", id: "backendHost" });
-  declareFrontendHost(world, { actor: "system", id: "frontendHost" });
+  declareBackendHost(world, { actor: "system", id: "backendHost", runtimeProfile: "authoring" });
+  declareFrontendHost(world, { actor: "system", id: "frontendHost", runtimeProfile: "authoring" });
   const server = await startServer(world, {
     actor: "system",
-    runtimeRoot: await tempRuntimeRoot()
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeStartupMode: "bootstrap"
   });
   assert.equal(server.ok, true);
   return { world, server };
@@ -52,8 +53,8 @@ async function startBlankServerWithWorldHome(worldHome) {
     witnessLogPath: operatorContract.canonicalTruth.witnessLogPath,
     observationLogPath: operatorContract.canonicalTruth.observationLogPath
   });
-  declareBackendHost(world, { actor: "system", id: "backendHost" });
-  declareFrontendHost(world, { actor: "system", id: "frontendHost" });
+  declareBackendHost(world, { actor: "system", id: "backendHost", runtimeProfile: "authoring" });
+  declareFrontendHost(world, { actor: "system", id: "frontendHost", runtimeProfile: "authoring" });
   const server = await startServer(world, {
     actor: "system",
     runtimeRoot: operatorContract.directories.runtimeRoot,
@@ -70,18 +71,24 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
     const rootHtml = await fetch(`${server.url}/`).then(response => response.text());
     const bootstrapHtml = await fetch(`${server.url}/_bootstrap`).then(response => response.text());
     const model = await fetch(`${server.url}/api/bootstrap-model`).then(response => response.json());
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
 
     assert.match(rootHtml, /Recover And Author The App Boundary/);
     assert.match(bootstrapHtml, /Semi-Internal Bootstrap Seam/);
     assert.equal(model.appReady, false);
     assert(model.supportedHandlers.includes("backendProgram.run"));
-    assert(model.supportedHandlers.includes("events.stream"));
     assert(model.supportedHandlers.includes("page.home"));
     assert.equal(model.supportedHandlerMetadata["backendProgram.run"].routeKind, "backendProgram");
-    assert.equal(model.supportedHandlerMetadata["events.stream"].routeKind, "stream");
-    assert.deepEqual(model.supportedHandlerMetadata["events.stream"].methods, ["GET"]);
     assert(model.supportedBackendOps.includes("handler.invoke"));
     assert(model.supportedFrontendOps.includes("renderCollection"));
+    assert.equal(diagnostics.activeProfile, "authoring");
+    assert.deepEqual(diagnostics.activeBundles.map(bundle => bundle.id), [
+      "bundle-core-runtime",
+      "bundle-tutorial",
+      "bundle-authoring"
+    ]);
+    assert.equal(diagnostics.startupRunner?.bootstrapOnly, true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), false);
   } finally {
     await server.close();
   }
@@ -447,8 +454,7 @@ test("a bootstrap-authored runner and home route take over without restarting th
     assert.equal((await post("/api/server-runners", {
       id: "demo_server",
       backendHost: "backendHost",
-      frontendHost: "frontendHost",
-      handlerSet: "demo"
+      frontendHost: "frontendHost"
     })).status, 201);
     assert.equal((await post("/api/routes", {
       id: "home_route",

@@ -6,11 +6,13 @@ import path from "node:path";
 import { createWorld } from "../src/kernel.js";
 import { applyWitnessDocs, applyWitnessToml, loadWitnessTomlFile } from "../src/dsl.js";
 import { declareBackendHost, declareFrontendHost, hostCapabilities, startServer } from "../src/host.js";
+import { startBlankRuntime } from "../src/runtime-local-launcher.js";
 import {
   authorableHandlerIdsForProfile,
   pageHandlerIdsForProfile,
   resolveRuntimeProfileStrict
 } from "../src/runtime-bundles.js";
+import { runtimeBundleHandlerCatalog } from "../src/runtime-bundle-handlers.js";
 
 function applyMinimalPageDsl(world) {
   applyWitnessToml(world, `
@@ -345,6 +347,7 @@ test("minimal runtime plus plugin.inspect exposes inspect routes and surfaces", 
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
     assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.inspect"]);
     assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-inspect"]);
+    assert.equal(diagnostics.plugins.loadedRuntimeCount, 1);
   } finally {
     await server.close();
   }
@@ -369,8 +372,17 @@ test("minimal runtime plus plugin.practical-backend exposes backend routes and c
 
   try {
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+    const plugins = await fetch(`${server.url}/api/runtime/plugins`).then(result => result.json());
+    const backendPlugin = plugins.packages.find(row => row.id === "plugin.practical-backend");
+
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), true);
     assert.equal(diagnostics.providedCapabilities.includes("db.sql"), true);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.practical-backend"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-practical-backend"]);
+    assert.equal(diagnostics.plugins.loadedRuntimeCount, 1);
+    assert.equal(backendPlugin.execution.mode, "plugin-owned");
+    assert.equal(backendPlugin.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual(backendPlugin.runtimeModule.bundleIds, ["bundle-practical-backend"]);
     assert.equal(diagnostics.routes.some(route => route.matcher === "/backend-seams" && route.handler === "page.backendSeams"), true);
   } finally {
     await server.close();
@@ -507,12 +519,17 @@ test("runtime plugins endpoint exposes local plugin package metadata and activat
 
     assert.equal(body.summary.validCount >= 5, true);
     assert.equal(body.summary.activeCount, 1);
+    assert.equal(body.summary.loadedRuntimeCount, 1);
     assert.deepEqual(body.activePluginIds, ["plugin.inspect"]);
     assert.deepEqual(body.addedBundleIds, ["bundle-inspect"]);
     const inspectPlugin = body.packages.find(row => row.id === "plugin.inspect");
     assert.equal(Boolean(inspectPlugin), true);
     assert.equal(inspectPlugin.execution.executable, true);
-    assert.equal(inspectPlugin.execution.mode, "bundle-bridge");
+    assert.equal(inspectPlugin.execution.mode, "plugin-owned");
+    assert.equal(inspectPlugin.metadata.runtime.entry, "./runtime.js");
+    assert.equal(inspectPlugin.runtimeModule.loadStatus, "loaded");
+    assert.equal(inspectPlugin.runtimeModule.bundleId, "bundle-inspect");
+    assert.deepEqual(inspectPlugin.runtimeModule.bundleIds, ["bundle-inspect"]);
     assert.equal(inspectPlugin.activation.requested, true);
     assert.equal(inspectPlugin.activation.active, true);
     assert.equal(inspectPlugin.resolvedBundles.some(row => row.id === "bundle-inspect"), true);
@@ -528,6 +545,31 @@ test("runtime plugins endpoint exposes local plugin package metadata and activat
     assert.equal(pluginPackage.declaredCapabilityIds.includes("notes.sidebar"), true);
   } finally {
     await server.close();
+  }
+});
+
+test("bootstrap default activation loads plugin.authoring as a plugin-owned multi-bundle runtime", async () => {
+  const result = await startBlankRuntime({
+    startupMode: "bootstrap",
+    port: 0
+  });
+
+  assert.equal(result.server.ok, true);
+
+  try {
+    const diagnostics = await fetch(`${result.server.url}/api/runtime/diagnostics`).then(response => response.json());
+    const plugins = await fetch(`${result.server.url}/api/runtime/plugins`).then(response => response.json());
+    const authoringPlugin = plugins.packages.find(row => row.id === "plugin.authoring");
+
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.authoring"]);
+    assert.equal(diagnostics.plugins.loadedRuntimeCount, 1);
+    assert.equal(authoringPlugin.execution.mode, "plugin-owned");
+    assert.equal(authoringPlugin.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual([...authoringPlugin.runtimeModule.bundleIds].sort(), ["bundle-authoring", "bundle-tutorial"]);
+    assert.equal(authoringPlugin.resolvedBundles.some(row => row.id === "bundle-authoring"), true);
+    assert.equal(authoringPlugin.resolvedBundles.some(row => row.id === "bundle-tutorial"), true);
+  } finally {
+    await result.server.close();
   }
 });
 
@@ -548,6 +590,8 @@ test("maintained demo runs on minimal plus authored runtime plugins", async () =
 
   try {
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+    const plugins = await fetch(`${server.url}/api/runtime/plugins`).then(result => result.json());
+    const canvasPlugin = plugins.packages.find(row => row.id === "plugin.canvas");
 
     assert.equal(diagnostics.activeProfile, "minimal");
     assert.deepEqual([...diagnostics.plugins.authoredPluginIds].sort(), ["plugin.authoring", "plugin.canvas", "plugin.inspect"]);
@@ -558,9 +602,13 @@ test("maintained demo runs on minimal plus authored runtime plugins", async () =
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-canvas"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), false);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-mcp"), false);
+    assert.equal(diagnostics.handlerSets.some(entry => entry.id === "demo"), false);
+    assert.equal(canvasPlugin.execution.mode, "plugin-owned");
+    assert.equal(canvasPlugin.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual(canvasPlugin.runtimeModule.bundleIds, ["bundle-canvas"]);
 
     assert.equal((await fetch(`${server.url}/_bootstrap`)).status, 200);
     assert.equal((await fetch(`${server.url}/world`)).status, 200);
@@ -607,7 +655,7 @@ plugin = "plugin.canvas"
 
     assert.deepEqual(diagnostics.plugins.authoredPluginIds, []);
     assert.deepEqual(diagnostics.plugins.effectivePluginIds, []);
-    assert.deepEqual(diagnostics.activeBundles.map(bundle => bundle.id), ["bundle-core-runtime", "bundle-demo"]);
+    assert.deepEqual(diagnostics.activeBundles.map(bundle => bundle.id), ["bundle-core-runtime"]);
 
     assert.equal((await fetch(server.url)).status, 200);
     assert.equal((await fetch(`${server.url}/_bootstrap`)).status, 404);
@@ -870,6 +918,104 @@ test("blank minimal runtime does not expose MCP routes", async () => {
       body: JSON.stringify({ jsonrpc: "2.0", id: "1", method: "ping" })
     });
     assert.equal(postResponse.status, 404);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.mcp loads MCP routes from the plugin runtime", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.mcp"]
+  });
+
+  assert.equal(server.ok, true);
+
+  try {
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+    const plugins = await fetch(`${server.url}/api/runtime/plugins`).then(result => result.json());
+    const mcpPlugin = plugins.packages.find(row => row.id === "plugin.mcp");
+
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-mcp"), true);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.mcp"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-mcp"]);
+    assert.equal(diagnostics.plugins.loadedRuntimeCount, 1);
+    assert.equal(diagnostics.routes.some(route => route.matcher === "/^\\/mcp\\/([^/]+)$/" && route.handler === "mcp.http"), true);
+    assert.equal(mcpPlugin.execution.mode, "plugin-owned");
+    assert.equal(mcpPlugin.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual(mcpPlugin.runtimeModule.bundleIds, ["bundle-mcp"]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.eden loads Eden handlers from the plugin runtime", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.eden"]
+  });
+
+  assert.equal(server.ok, true);
+
+  try {
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+    const plugins = await fetch(`${server.url}/api/runtime/plugins`).then(result => result.json());
+    const edenPlugin = plugins.packages.find(row => row.id === "plugin.eden");
+
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-eden"), true);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.eden"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-eden"]);
+    assert.equal(diagnostics.plugins.loadedRuntimeCount, 1);
+    assert.equal(runtimeBundleHandlerCatalog("bundle-eden").dispatchHandlers.includes("edenAcademy.read"), true);
+    assert.equal(runtimeBundleHandlerCatalog("bundle-eden").pageHandlers.includes("page.edenCanvas"), true);
+    assert.equal(edenPlugin.resolvedBundles.some(row => row.id === "bundle-eden"), true);
+    assert.equal(edenPlugin.execution.mode, "plugin-owned");
+    assert.equal(edenPlugin.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual(edenPlugin.runtimeModule.bundleIds, ["bundle-eden"]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("minimal runtime plus plugin.demo exposes the demo handler set from the plugin runtime", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.demo"]
+  });
+
+  assert.equal(server.ok, true);
+
+  try {
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+    const plugins = await fetch(`${server.url}/api/runtime/plugins`).then(result => result.json());
+    const demoPlugin = plugins.packages.find(row => row.id === "plugin.demo");
+
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), true);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.demo"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-demo"]);
+    assert.equal(diagnostics.handlerSets.some(entry => entry.id === "demo"), true);
+    assert.equal(demoPlugin.execution.mode, "plugin-owned");
+    assert.equal(demoPlugin.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual(demoPlugin.runtimeModule.bundleIds, ["bundle-demo"]);
+    assert.deepEqual(demoPlugin.resolvedRuntimeContributions.handlerSets, ["demo"]);
   } finally {
     await server.close();
   }

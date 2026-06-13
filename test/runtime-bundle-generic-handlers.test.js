@@ -2,26 +2,28 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
 import {
-  createInspectBundleHandlers,
+  createHandlers as createInspectBundleHandlers
+} from "../plugins/inspect/runtime.js";
+import {
   createPracticalBackendOauthHandlers
-} from "../src/runtime-bundle-generic-handlers.js";
+} from "../plugins/practical-backend/handlers.js";
 
 test("inspect bundle handlers consume shared authority services for widget version gates", async () => {
   const world = createWorld();
   const calls = [];
-  let gated = null;
+  let response = null;
   const handlers = createInspectBundleHandlers({
     world,
     backendHost: "backendHost",
     frontendHost: "frontendHost",
     logger: { info() {}, error() {} },
     send: () => {},
-    sendJson: () => {
-      throw new Error("sendJson should not be called when gate fails");
+    sendJson: (_res, status, body) => {
+      response = { status, body };
     },
     readJson: async () => ({}),
     sendGateFailure: (_res, gate) => {
-      gated = gate;
+      throw new Error(`sendGateFailure should not be called when proposal fallback is available: ${JSON.stringify(gate)}`);
     },
     authorityServices: {
       ensureTargetAuthority(actor, target) {
@@ -43,7 +45,8 @@ test("inspect bundle handlers consume shared authority services for widget versi
   });
 
   assert.deepEqual(calls, [{ actor: "aaron", target: "banner" }]);
-  assert.deepEqual(gated, { ok: false, status: 403, reason: "forbidden" });
+  assert.equal(response?.status, 202);
+  assert.equal(response?.body?.status, "proposed");
 });
 
 test("practical-backend oauth handlers consume shared authority services for runner-scoped reads", async () => {

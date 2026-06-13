@@ -1,11 +1,15 @@
 {
   "id": "plugin.authoring",
   "version": "0.1.0",
-  "displayName": "Authoring Bundle Bridge",
-  "description": "Activates the internal authoring and bootstrap runtime bundle through the local plugin bridge.",
+  "displayName": "Authoring Plugin Runtime",
+  "description": "Owns bootstrap authoring and tutorial runtime behavior through the local plugin runtime module.",
   "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
   "activatesBundles": [
-    "bundle-authoring"
+    "bundle-authoring",
+    "bundle-tutorial"
   ],
   "contributes": {}
 }

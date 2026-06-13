@@ -4,6 +4,9 @@
   "displayName": "Inspect Bundle Bridge",
   "description": "Activates the internal inspect runtime bundle through the local plugin bridge.",
   "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
   "activatesBundles": [
     "bundle-inspect"
   ],

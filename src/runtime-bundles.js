@@ -1,27 +1,39 @@
-import { DEMO_HANDLER_SET_PROVIDER } from "./demo-handler-set.js";
 import { runtimeBundleHandlerCatalog } from "./runtime-bundle-handlers.js";
 import {
-  createAuthoringBundleHandlers,
   createCoreRuntimeBundleHandlers,
-  createTutorialBundleHandlers,
-  createEdenBundleHandlers,
-  createPracticalBackendBackendSeamsHandlers,
-  createPracticalBackendAssetSurfaceHandlers,
-  createPracticalBackendAssetWorkflowHandlers,
-  createCanvasBundleHandlers,
-  createPracticalBackendDbSqlHandlers,
-  createPracticalBackendFsBlobHandlers,
-  createPracticalBackendFsStreamHandlers,
-  createInspectBundleHandlers,
-  createMcpBundleHandlers,
-  createPracticalBackendHttpOutboundHandlers,
-  createPracticalBackendJobsHandlers,
-  createPracticalBackendNotificationsHandlers,
-  createPracticalBackendOauthHandlers,
-  createPracticalBackendRuntimeConfigHandlers,
-  createPracticalBackendSearchIndexHandlers,
-  createPracticalBackendWebhookHandlers
-} from "./runtime-bundle-generic-handlers.js";
+} from "./runtime-core-handlers.js";
+import { bundles as authoringRuntimeBundles } from "../plugins/authoring/runtime.js";
+import {
+  createHandlers as createCanvasBundleHandlers,
+  handlerCatalog as canvasHandlerCatalog,
+  routes as canvasRoutes,
+  surfaces as canvasSurfaces
+} from "../plugins/canvas/runtime.js";
+import {
+  createHandlers as createInspectBundleHandlers,
+  handlerCatalog as inspectHandlerCatalog,
+  routes as inspectRoutes,
+  surfaces as inspectSurfaces
+} from "../plugins/inspect/runtime.js";
+import {
+  createHandlers as createEdenBundleHandlers,
+  handlerCatalog as edenHandlerCatalog,
+  routes as edenRoutes,
+  surfaces as edenSurfaces
+} from "../plugins/eden/runtime.js";
+import { handlerSetProvider as demoHandlerSetProvider } from "../plugins/demo/runtime.js";
+import {
+  createHandlers as createMcpBundleHandlers,
+  handlerCatalog as mcpHandlerCatalog,
+  routes as mcpRoutes,
+  surfaces as mcpSurfaces
+} from "../plugins/mcp/runtime.js";
+import {
+  createHandlers as createPracticalBackendHandlers,
+  handlerCatalog as practicalBackendHandlerCatalog,
+  routes as practicalBackendRoutes,
+  surfaces as practicalBackendSurfaces
+} from "../plugins/practical-backend/runtime.js";
 import {
   CORE_RUNTIME_CAPABILITY_IDS,
   PRACTICAL_BACKEND_CAPABILITY_IDS
@@ -29,6 +41,7 @@ import {
 import { buildRuntimeShellDiagnostics } from "./runtime-shell-contract.js";
 
 export const DEFAULT_RUNTIME_PROFILE = "full";
+export const DEFAULT_BOOTSTRAP_RUNTIME_PROFILE = "authoring";
 
 /**
  * @typedef {Object} BundleManifest
@@ -169,15 +182,11 @@ const INTERNAL_BUNDLE_MANIFESTS = [
     contributes: {
       capabilities: [],
       providers: [
-        bundleHandlerCatalog("bundle-tutorial"),
-        genericHandlerFactory(createTutorialBundleHandlers)
+        handlerCatalog(authoringRuntimeBundles["bundle-tutorial"].handlerCatalog),
+        genericHandlerFactory(authoringRuntimeBundles["bundle-tutorial"].createHandlers)
       ],
-      routes: [
-        patternRoute("GET", /^\/api\/tutorial-progress\/([^/]+)$/, "tutorial.progress.read", ["tutorialId"]),
-        patternRoute("PUT", /^\/api\/tutorial-progress\/([^/]+)$/, "tutorial.progress.write", ["tutorialId"]),
-        patternRoute("DELETE", /^\/api\/tutorial-progress\/([^/]+)$/, "tutorial.progress.delete", ["tutorialId"])
-      ],
-      surfaces: []
+      routes: authoringRuntimeBundles["bundle-tutorial"].routes,
+      surfaces: authoringRuntimeBundles["bundle-tutorial"].surfaces
     }
   }),
   internalBundle({
@@ -187,64 +196,11 @@ const INTERNAL_BUNDLE_MANIFESTS = [
     contributes: {
       capabilities: [],
       providers: [
-        bundleHandlerCatalog("bundle-authoring"),
-        genericHandlerFactory(createAuthoringBundleHandlers)
+        handlerCatalog(authoringRuntimeBundles["bundle-authoring"].handlerCatalog),
+        genericHandlerFactory(authoringRuntimeBundles["bundle-authoring"].createHandlers)
       ],
-      routes: [
-        exactRoute("GET", "/_bootstrap", "bootstrap.page"),
-        exactRoute("GET", "/api/bootstrap-model", "bootstrap.model.read"),
-        exactRoute("GET", "/api/bootstrap-state", "bootstrap.state.read"),
-        exactRoute("GET", "/api/operator/state", "operator.state.read"),
-        exactRoute("POST", "/api/operator/backups", "operator.backup"),
-        exactRoute("POST", "/api/operator/exports", "operator.export"),
-        exactRoute("POST", "/api/operator/restores", "operator.restore"),
-        exactRoute("POST", "/api/operator/imports", "operator.import"),
-        exactRoute("POST", "/api/contexts", "context.create"),
-        exactRoute("POST", "/api/context-bindings", "contextBinding.create"),
-        exactRoute("DELETE", "/api/context-bindings", "contextBinding.remove"),
-        exactRoute("POST", "/api/context-exports", "contextExport.create"),
-        exactRoute("DELETE", "/api/context-exports", "contextExport.remove"),
-        exactRoute("POST", "/api/context-imports", "contextImport.create"),
-        exactRoute("DELETE", "/api/context-imports", "contextImport.remove"),
-        exactRoute("POST", "/api/perspectives", "perspective.create"),
-        exactRoute("POST", "/api/stewardships", "stewardship.create"),
-        exactRoute("DELETE", "/api/stewardships", "stewardship.remove"),
-        exactRoute("POST", "/api/proposals", "proposal.create"),
-        patternRoute("POST", /^\/api\/proposals\/([^/]+)\/approve$/, "proposal.approve", ["id"]),
-        patternRoute("POST", /^\/api\/proposals\/([^/]+)\/reject$/, "proposal.reject", ["id"]),
-        exactRoute("POST", "/api/widgets", "widgets.create"),
-        patternRoute("PATCH", /^\/api\/widgets\/([^/]+)$/, "widgets.update", ["id"]),
-        exactRoute("POST", "/api/identities", "identity.create"),
-        patternRoute("PATCH", /^\/api\/identities\/([^/]+)$/, "identity.update", ["id"]),
-        exactRoute("POST", "/api/mcp-servers", "mcpServer.create"),
-        exactRoute("POST", "/api/mcp-tool-installs", "mcpTool.install"),
-        exactRoute("DELETE", "/api/mcp-tool-installs", "mcpTool.remove"),
-        exactRoute("POST", "/api/capabilities", "capability.create"),
-        exactRoute("POST", "/api/capability-installs", "capability.install"),
-        exactRoute("DELETE", "/api/capability-installs", "capability.remove"),
-        exactRoute("POST", "/api/runtime-plugin-installs", "runtimePlugin.install"),
-        exactRoute("DELETE", "/api/runtime-plugin-installs", "runtimePlugin.remove"),
-        exactRoute("POST", "/api/frontend-programs", "frontendProgram.create"),
-        exactRoute("POST", "/api/frontend-steps", "frontendStep.create"),
-        exactRoute("POST", "/api/backend-programs", "backendProgram.create"),
-        exactRoute("POST", "/api/backend-program-versions", "backendProgramVersion.create"),
-        exactRoute("POST", "/api/backend-steps", "backendStep.create"),
-        patternRoute("POST", /^\/api\/backend-program-versions\/([^/]+)\/activate$/, "backendProgramVersions.activate", ["soul"]),
-        patternRoute("POST", /^\/api\/backend-program-versions\/([^/]+)\/rollback$/, "backendProgramVersions.rollback", ["soul"]),
-        exactRoute("POST", "/api/routes", "route.create"),
-        exactRoute("POST", "/api/serve-mounts", "serve.create"),
-        exactRoute("POST", "/api/server-runners", "serverRunner.create")
-      ],
-      surfaces: [
-        surfaceEntry({
-          id: "surface:bootstrap",
-          title: "Open Bootstrap",
-          subtitle: "Recovery and authoring seam",
-          href: "/_bootstrap",
-          tier: "harness",
-          search: "bootstrap hidden recovery authoring harness /_bootstrap"
-        })
-      ]
+      routes: authoringRuntimeBundles["bundle-authoring"].routes,
+      surfaces: authoringRuntimeBundles["bundle-authoring"].surfaces
     }
   }),
   internalBundle({
@@ -254,81 +210,11 @@ const INTERNAL_BUNDLE_MANIFESTS = [
     contributes: {
       capabilities: [],
       providers: [
-        bundleHandlerCatalog("bundle-inspect"),
+        handlerCatalog(inspectHandlerCatalog),
         genericHandlerFactory(createInspectBundleHandlers)
       ],
-      routes: [
-        exactRoute("GET", "/api/events", "events.stream")
-      ],
-      surfaces: [
-        surfaceEntry({
-          id: "surface:world",
-          title: "Open World",
-          subtitle: "Operating surface / graph and inspectors",
-          href: "/world",
-          type: "surface",
-          tier: "internal",
-          contexts: ["app-command"],
-          search: "world graph operating surface witnesses source process internal operator /world"
-        }),
-        surfaceEntry({
-          id: "surface:world-mode:graph",
-          title: "Show Graph",
-          action: { kind: "mode", mode: "graph" },
-          subtitle: "Operating surface / graph mode",
-          contexts: ["world-command"],
-          search: "graph surface world map objects internal operator"
-        }),
-        surfaceEntry({
-          id: "surface:world-mode:things",
-          title: "Show Thing List",
-          action: { kind: "mode", mode: "things" },
-          subtitle: "Operating surface / thing list",
-          contexts: ["world-command"],
-          search: "things list widgets routes capabilities internal operator"
-        }),
-        surfaceEntry({
-          id: "surface:world-mode:primitive",
-          title: "Show Primitive Browser",
-          action: { kind: "mode", mode: "primitive" },
-          subtitle: "Hidden surface / literals and unresolved refs",
-          contexts: ["world-command"],
-          search: "primitive browser hidden literals refs values internal operator"
-        }),
-        surfaceEntry({
-          id: "surface:world-mode:witness",
-          title: "Show Witness Browser",
-          action: { kind: "mode", mode: "witness" },
-          subtitle: "Witnessed history for the selected object",
-          contexts: ["world-command"],
-          search: "witness browser show witnesses selected object history internal operator"
-        }),
-        surfaceEntry({
-          id: "surface:world-mode:source",
-          title: "Show Source Browser",
-          action: { kind: "mode", mode: "source" },
-          subtitle: "Hidden surface / witnessed source definitions",
-          contexts: ["world-command"],
-          search: "source browser hidden dsl file witnessed source internal operator"
-        }),
-        surfaceEntry({
-          id: "surface:world-mode:process",
-          title: "Show Process Explorer",
-          action: { kind: "mode", mode: "process" },
-          subtitle: "Witnessed execution handoff surface",
-          contexts: ["world-command"],
-          search: "process explorer witnessed execution runs replay internal operator"
-        }),
-        surfaceEntry({
-          id: "surface:process-view",
-          title: "Open Process View",
-          subtitle: "Witnessed execution page",
-          href: "/process",
-          type: "surface",
-          tier: "internal",
-          search: "process view witnessed execution runs replay internal operator /process"
-        })
-      ]
+      routes: inspectRoutes,
+      surfaces: inspectSurfaces
     }
   }),
   internalBundle({
@@ -338,11 +224,11 @@ const INTERNAL_BUNDLE_MANIFESTS = [
     contributes: {
       capabilities: [],
       providers: [
-        bundleHandlerCatalog("bundle-canvas"),
+        handlerCatalog(canvasHandlerCatalog),
         genericHandlerFactory(createCanvasBundleHandlers)
       ],
-      routes: [],
-      surfaces: []
+      routes: canvasRoutes,
+      surfaces: canvasSurfaces
     }
   }),
   internalBundle({
@@ -352,14 +238,11 @@ const INTERNAL_BUNDLE_MANIFESTS = [
     contributes: {
       capabilities: [],
       providers: [
-        bundleHandlerCatalog("bundle-mcp"),
+        handlerCatalog(mcpHandlerCatalog),
         genericHandlerFactory(createMcpBundleHandlers)
       ],
-      routes: [
-        patternRoute("POST", /^\/mcp\/([^/]+)$/, "mcp.http", ["id"]),
-        patternRoute("GET", /^\/mcp\/([^/]+)$/, "mcp.http", ["id"])
-      ],
-      surfaces: []
+      routes: mcpRoutes,
+      surfaces: mcpSurfaces
     }
   }),
   internalBundle({
@@ -374,81 +257,11 @@ const INTERNAL_BUNDLE_MANIFESTS = [
           hostKind: "backend",
           capabilities: [...PRACTICAL_BACKEND_CAPABILITY_IDS]
         },
-        bundleHandlerCatalog("bundle-practical-backend"),
-        genericHandlerFactory(createPracticalBackendAssetSurfaceHandlers),
-        genericHandlerFactory(createPracticalBackendAssetWorkflowHandlers),
-        genericHandlerFactory(createPracticalBackendBackendSeamsHandlers),
-        genericHandlerFactory(createPracticalBackendOauthHandlers),
-        genericHandlerFactory(createPracticalBackendRuntimeConfigHandlers),
-        genericHandlerFactory(createPracticalBackendJobsHandlers),
-        genericHandlerFactory(createPracticalBackendHttpOutboundHandlers),
-        genericHandlerFactory(createPracticalBackendNotificationsHandlers),
-        genericHandlerFactory(createPracticalBackendWebhookHandlers),
-        genericHandlerFactory(createPracticalBackendDbSqlHandlers),
-        genericHandlerFactory(createPracticalBackendFsBlobHandlers),
-        genericHandlerFactory(createPracticalBackendFsStreamHandlers),
-        genericHandlerFactory(createPracticalBackendSearchIndexHandlers)
+        handlerCatalog(practicalBackendHandlerCatalog),
+        genericHandlerFactory(createPracticalBackendHandlers)
       ],
-      routes: [
-        exactRoute("GET", "/backend-seams", "page.backendSeams"),
-        exactRoute("GET", "/api/backend-seams", "backendSeams.read"),
-        exactRoute("GET", "/api/runtime-config", "runtimeConfig.read"),
-        exactRoute("GET", "/api/db/sql", "db.sql.inspect"),
-        exactRoute("POST", "/api/db/sql/migrate", "db.sql.migrate"),
-        exactRoute("POST", "/api/db/sql/query", "db.sql.query"),
-        exactRoute("POST", "/api/db/sql/command", "db.sql.command"),
-        exactRoute("POST", "/api/db/sql/transaction", "db.sql.transaction"),
-        exactRoute("GET", "/api/search/index", "search.index.inspect"),
-        exactRoute("POST", "/api/search/index/build", "search.index.build"),
-        exactRoute("POST", "/api/search/index/reindex", "search.index.reindex"),
-        exactRoute("POST", "/api/search/index/query", "search.index.query"),
-        exactRoute("POST", "/api/oauth/start", "auth.oauth.start"),
-        exactRoute("GET", "/api/oauth/links", "auth.oauth.links.list"),
-        patternRoute("GET", /^\/api\/oauth\/links\/([^/]+)$/, "auth.oauth.links.read", ["id"]),
-        patternRoute("GET", /^\/api\/oauth\/callback\/([^/]+)$/, "auth.oauth.callback", ["provider"]),
-        exactRoute("GET", "/api/http/outbound", "http.outbound.list"),
-        exactRoute("POST", "/api/http/outbound", "http.outbound.send"),
-        patternRoute("GET", /^\/api\/http\/outbound\/([^/]+)$/, "http.outbound.read", ["id"]),
-        exactRoute("GET", "/api/webhooks", "webhook.inbound.list"),
-        patternRoute("GET", /^\/api\/webhooks\/([^/]+)$/, "webhook.inbound.read", ["id"]),
-        patternRoute("POST", /^\/api\/webhooks\/inbound\/([^/]+)$/, "webhook.inbound.receive", ["target"]),
-        exactRoute("GET", "/api/jobs", "jobs.queue.list"),
-        exactRoute("POST", "/api/jobs", "jobs.queue.enqueue"),
-        patternRoute("GET", /^\/api\/jobs\/([^/]+)$/, "jobs.queue.read", ["id"]),
-        exactRoute("POST", "/api/notify/email", "notify.email.enqueue"),
-        exactRoute("POST", "/api/notify/sms", "notify.sms.enqueue"),
-        exactRoute("GET", "/api/notifications", "notifications.list"),
-        patternRoute("GET", /^\/api\/notifications\/([^/]+)$/, "notifications.read", ["id"]),
-        exactRoute("GET", "/api/fs/blobs", "fs.blob.list"),
-        exactRoute("DELETE", "/api/fs/blobs", "fs.blob.delete"),
-        exactRoute("GET", "/api/fs/blobs/meta", "fs.blob.meta"),
-        exactRoute("GET", "/api/fs/blobs/content", "fs.blob.read"),
-        exactRoute("PUT", "/api/fs/blobs/content", "fs.blob.write"),
-        exactRoute("POST", "/api/fs/streams/copy", "fs.stream.copy"),
-        exactRoute("GET", "/api/fs/streams/content", "fs.stream.read"),
-        exactRoute("PUT", "/api/fs/streams/content", "fs.stream.write"),
-        exactRoute("POST", "/api/assets", "asset.upload"),
-        patternRoute("GET", /^\/api\/assets\/([^/]+)\/attachments$/, "asset.attachments.list", ["id"]),
-        patternRoute("POST", /^\/api\/assets\/([^/]+)\/attachments$/, "asset.attach", ["id"]),
-        patternRoute("DELETE", /^\/api\/assets\/([^/]+)\/attachments$/, "asset.detach", ["id"]),
-        patternRoute("POST", /^\/api\/assets\/([^/]+)\/ingest\/retry$/, "asset.ingest.retry", ["id"]),
-        patternRoute("POST", /^\/api\/assets\/([^/]+)\/search\/reindex$/, "asset.search.reindex", ["id"]),
-        patternRoute("GET", /^\/api\/assets\/([^/]+)\/content$/, "asset.content.read", ["id"]),
-        patternRoute("GET", /^\/api\/assets\/([^/]+)\/text$/, "asset.text.read", ["id"]),
-        patternRoute("GET", /^\/api\/assets\/([^/]+)\/thumbnail$/, "asset.thumbnail.read", ["id"])
-      ],
-      surfaces: [
-        surfaceEntry({
-          id: "surface:backend-seams",
-          title: "Open Backend Seams",
-          subtitle: "Diagnostics surface",
-          href: "/backend-seams",
-          type: "surface",
-          tier: "internal",
-          contexts: ["world-command"],
-          search: "backend seams diagnostics hidden internal operator /backend-seams"
-        })
-      ]
+      routes: practicalBackendRoutes,
+      surfaces: practicalBackendSurfaces
     }
   }),
   internalBundle({
@@ -456,9 +269,9 @@ const INTERNAL_BUNDLE_MANIFESTS = [
     displayName: "Demo",
     description: "Demo handler-set registration and demo-specific startup requirements.",
     contributes: {
-      capabilities: [],
+      capabilities: ["fs.json.read", "fs.json.write"],
       providers: [
-        DEMO_HANDLER_SET_PROVIDER,
+        demoHandlerSetProvider,
         {
           kind: "defaultHostCapabilities",
           hostKind: "backend",
@@ -481,11 +294,11 @@ const INTERNAL_BUNDLE_MANIFESTS = [
     contributes: {
       capabilities: [],
       providers: [
-        bundleHandlerCatalog("bundle-eden"),
+        handlerCatalog(edenHandlerCatalog),
         genericHandlerFactory(createEdenBundleHandlers)
       ],
-      routes: [],
-      surfaces: []
+      routes: edenRoutes,
+      surfaces: edenSurfaces
     }
   })
 ];
@@ -508,6 +321,65 @@ function cloneSurface(surface) {
   };
 }
 
+function cloneHandlerMetadataEntry(entry = {}) {
+  return {
+    ...(entry || {}),
+    methods: Array.isArray(entry?.methods) ? [...entry.methods] : undefined
+  };
+}
+
+function cloneHandlerCatalogProvider(provider = null) {
+  if (!provider || provider.kind !== "handlerCatalog") {
+    return {
+      authorableHandlers: [],
+      pageHandlers: [],
+      dispatchHandlers: [],
+      handlerMetadata: {}
+    };
+  }
+  return {
+    authorableHandlers: [...(provider.authorableHandlers ?? [])].map(String),
+    pageHandlers: [...(provider.pageHandlers ?? [])].map(String),
+    dispatchHandlers: [...(provider.dispatchHandlers ?? [])].map(String),
+    handlerMetadata: Object.fromEntries(
+      Object.entries(provider.handlerMetadata ?? {}).map(([handlerId, entry]) => [
+        String(handlerId),
+        cloneHandlerMetadataEntry(entry)
+      ])
+    )
+  };
+}
+
+function handlerCatalogProviderForBundle(bundle) {
+  return (bundle?.contributes?.providers ?? []).find(provider => provider?.kind === "handlerCatalog") ?? null;
+}
+
+function materializeBundle(bundleId, bundleOverrides = {}) {
+  const base = BUNDLE_BY_ID.get(String(bundleId || ""));
+  if (!base) return null;
+  const override = bundleOverrides?.[base.id] ?? null;
+  if (!override) return base;
+  const baseProvidersToPreserve = base.contributes.providers.filter(provider =>
+    provider?.kind !== "handlerCatalog"
+    && provider?.kind !== "genericHandlerFactory"
+  );
+  const overrideProviders = override.contributes?.providers ?? base.contributes.providers;
+  return deepFreezeBundle({
+    ...base,
+    displayName: override.displayName ?? base.displayName,
+    description: override.description ?? base.description,
+    dependsOn: override.dependsOn ?? base.dependsOn,
+    contributes: {
+      capabilities: override.contributes?.capabilities ?? base.contributes.capabilities,
+      providers: override.contributes?.providers
+        ? [...baseProvidersToPreserve, ...overrideProviders]
+        : overrideProviders,
+      routes: override.contributes?.routes ?? base.contributes.routes,
+      surfaces: override.contributes?.surfaces ?? base.contributes.surfaces
+    }
+  });
+}
+
 function normalizeProfileName(profileName) {
   return Object.prototype.hasOwnProperty.call(RUNTIME_PROFILES, profileName)
     ? profileName
@@ -525,7 +397,7 @@ export function availableRuntimeBundleIds() {
 export function runtimeBundleManifest(bundleId) {
   const bundle = BUNDLE_BY_ID.get(String(bundleId || ""));
   if (!bundle) return null;
-  const handlerCatalog = runtimeBundleHandlerCatalog(bundle.id);
+  const handlerCatalog = cloneHandlerCatalogProvider(handlerCatalogProviderForBundle(bundle));
   return {
     ...bundle,
     handlerCatalog: {
@@ -538,8 +410,7 @@ export function runtimeBundleManifest(bundleId) {
           .map(([handlerId, entry]) => [
             handlerId,
             {
-              ...(entry || {}),
-              methods: Array.isArray(entry?.methods) ? [...entry.methods] : undefined
+              ...cloneHandlerMetadataEntry(entry)
             }
           ])
       )
@@ -550,10 +421,7 @@ export function runtimeBundleManifest(bundleId) {
       routes: bundle.contributes.routes.map(route => ({
         ...route,
         handlerMetadata: handlerCatalog.handlerMetadata?.[String(route.handler)] ? {
-          ...(handlerCatalog.handlerMetadata[String(route.handler)] || {}),
-          methods: Array.isArray(handlerCatalog.handlerMetadata[String(route.handler)]?.methods)
-            ? [...handlerCatalog.handlerMetadata[String(route.handler)].methods]
-            : undefined
+          ...cloneHandlerMetadataEntry(handlerCatalog.handlerMetadata[String(route.handler)])
         } : undefined
       })),
       surfaces: bundle.contributes.surfaces.map(cloneSurface)
@@ -568,7 +436,8 @@ export function runtimeBundleManifests() {
 
 export function resolveRuntimeComposition({
   profileName = DEFAULT_RUNTIME_PROFILE,
-  additionalBundleIds = []
+  additionalBundleIds = [],
+  bundleOverrides = {}
 } = {}) {
   const id = normalizeProfileName(profileName);
   const bundleIds = [];
@@ -581,20 +450,22 @@ export function resolveRuntimeComposition({
   return {
     id,
     bundleIds,
-    bundles: bundleIds.map(bundleId => BUNDLE_BY_ID.get(bundleId)).filter(Boolean)
+    bundles: bundleIds.map(bundleId => materializeBundle(bundleId, bundleOverrides)).filter(Boolean)
   };
 }
 
 function compositionOptions(options = {}) {
   return {
-    additionalBundleIds: [...(options.additionalBundleIds ?? [])].map(String)
+    additionalBundleIds: [...(options.additionalBundleIds ?? [])].map(String),
+    bundleOverrides: options.bundleOverrides ?? {}
   };
 }
 
 function selectedComposition(profileName, options = {}) {
   const resolved = resolveRuntimeComposition({
     profileName,
-    additionalBundleIds: compositionOptions(options).additionalBundleIds
+    additionalBundleIds: compositionOptions(options).additionalBundleIds,
+    bundleOverrides: compositionOptions(options).bundleOverrides
   });
   return resolved;
 }
@@ -707,6 +578,14 @@ export function handlerSetDefinitionsForProfile(profileName = DEFAULT_RUNTIME_PR
   return definitions;
 }
 
+export function bundleHandlerCatalogsForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
+  const catalogs = Object.create(null);
+  for (const bundle of selectedComposition(profileName, options).bundles) {
+    catalogs[bundle.id] = cloneHandlerCatalogProvider(handlerCatalogProviderForBundle(bundle));
+  }
+  return catalogs;
+}
+
 export function bundleIdsForHandlerSet(handlerSetId = "") {
   const targetId = String(handlerSetId || "").trim();
   if (!targetId) return [];
@@ -807,7 +686,14 @@ export function runtimeBundleSummaryForProfile(profileName = DEFAULT_RUNTIME_PRO
       capabilityCount: bundle.contributes.capabilities.length,
       providerCount: bundle.contributes.providers.length,
       routeCount: bundle.contributes.routes.length,
-      surfaceCount: bundle.contributes.surfaces.length
+      surfaceCount: bundle.contributes.surfaces.length,
+      contributes: {
+        capabilities: [...bundle.contributes.capabilities],
+        providers: [...bundle.contributes.providers],
+        routes: bundle.contributes.routes.map(route => ({ ...route })),
+        surfaces: bundle.contributes.surfaces.map(cloneSurface)
+      },
+      handlerCatalog: cloneHandlerCatalogProvider(handlerCatalogProviderForBundle(bundle))
     })),
     capabilities: providedCapabilityIdsForProfile(resolved.id, options).sort(),
     authorableHandlers: authorableHandlerIdsForProfile(resolved.id, options),
@@ -839,6 +725,7 @@ export function buildRuntimeDiagnosticsForProfile({
   requestedProfile = null,
   profileName = DEFAULT_RUNTIME_PROFILE,
   additionalBundleIds = [],
+  bundleOverrides = {},
   startupRunner = null,
   startupMode = "serve",
   installedHostCapabilities = {},
@@ -854,7 +741,7 @@ export function buildRuntimeDiagnosticsForProfile({
   rejectedPlugins = [],
   pluginAddedBundleIds = []
 } = {}) {
-  const summary = runtimeBundleSummaryForProfile(profileName, { additionalBundleIds });
+  const summary = runtimeBundleSummaryForProfile(profileName, { additionalBundleIds, bundleOverrides });
   return {
     requestedProfile: requestedProfile ?? profileName,
     activeProfile: summary.profile,
@@ -879,12 +766,12 @@ export function buildRuntimeDiagnosticsForProfile({
     })),
     providedCapabilities: [...summary.capabilities],
     defaultHostCapabilities: {
-      backend: defaultHostCapabilitiesForProfile(summary.profile, "backend", { additionalBundleIds }).sort(),
-      frontend: defaultHostCapabilitiesForProfile(summary.profile, "frontend", { additionalBundleIds }).sort()
+      backend: defaultHostCapabilitiesForProfile(summary.profile, "backend", { additionalBundleIds, bundleOverrides }).sort(),
+      frontend: defaultHostCapabilitiesForProfile(summary.profile, "frontend", { additionalBundleIds, bundleOverrides }).sort()
     },
     startupRequiredHostCapabilities: {
-      backend: startupRequiredHostCapabilitiesForProfile(summary.profile, "backend", { additionalBundleIds }).sort(),
-      frontend: startupRequiredHostCapabilitiesForProfile(summary.profile, "frontend", { additionalBundleIds }).sort()
+      backend: startupRequiredHostCapabilitiesForProfile(summary.profile, "backend", { additionalBundleIds, bundleOverrides }).sort(),
+      frontend: startupRequiredHostCapabilitiesForProfile(summary.profile, "frontend", { additionalBundleIds, bundleOverrides }).sort()
     },
     installedHostCapabilities: {
       backend: [...(installedHostCapabilities.backend ?? [])].map(String).sort(),
@@ -979,6 +866,8 @@ export function buildRuntimeDiagnosticsForProfile({
           eligibleCount: pluginCatalogSummary.eligibleCount ?? 0,
           activeCount: pluginCatalogSummary.activeCount ?? 0,
           rejectedCount: pluginCatalogSummary.rejectedCount ?? 0,
+          loadedRuntimeCount: pluginCatalogSummary.loadedRuntimeCount ?? 0,
+          failedRuntimeCount: pluginCatalogSummary.failedRuntimeCount ?? 0,
           trustStateCounts: { ...(pluginCatalogSummary.trustStateCounts ?? {}) }
         }
       : null

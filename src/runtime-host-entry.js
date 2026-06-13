@@ -16,7 +16,7 @@ import {
 } from "./runtime-host-utils.js";
 import { createGenericRouteHandlers } from "./runtime-host-route-factory.js";
 import { startRuntimeServer } from "./runtime-server.js";
-import { DEFAULT_RUNTIME_PROFILE } from "./runtime-bundles.js";
+import { DEFAULT_BOOTSTRAP_RUNTIME_PROFILE, DEFAULT_RUNTIME_PROFILE } from "./runtime-bundles.js";
 
 export { hostCapabilities, resolveServerRunner } from "./runtime-host-utils.js";
 
@@ -35,11 +35,16 @@ export async function startServer(world, {
   runtimeRoot = os.tmpdir(),
   logger = createLogger(),
   mcpInternalToken = null,
-  runtimeProfile = DEFAULT_RUNTIME_PROFILE,
+  runtimeProfile = null,
   runtimePluginIds = null,
   runtimeStartupMode = "serve",
   runtimeOperatorContract = null
 }) {
+  const selectedRuntimeProfile = runtimeProfile ?? (
+    runtimeStartupMode === "bootstrap"
+      ? DEFAULT_BOOTSTRAP_RUNTIME_PROFILE
+      : DEFAULT_RUNTIME_PROFILE
+  );
   return startRuntimeServer(world, {
     actor,
     serverRunnerId,
@@ -47,7 +52,7 @@ export async function startServer(world, {
     runtimeRoot,
     logger,
     mcpInternalToken,
-    runtimeProfile,
+    runtimeProfile: selectedRuntimeProfile,
     runtimePluginIds,
     runtimeStartupMode,
     runtimeOperatorContract

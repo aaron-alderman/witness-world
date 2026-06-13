@@ -7,6 +7,7 @@ import { loadWitnessTomlFile, applyWitnessDocs } from "./dsl.js";
 import { moduleProjectors } from "./modules.js";
 import { declareBackendHost, declareFrontendHost, resolveServerRunner, startServer } from "./host.js";
 import {
+  DEFAULT_BOOTSTRAP_RUNTIME_PROFILE,
   DEFAULT_RUNTIME_PROFILE,
   resolveRuntimeProfile,
   resolveRuntimeProfileStrict
@@ -463,7 +464,7 @@ function parseServeArgs(args) {
 }
 
 function parseBootstrapArgs(args) {
-  const result = { port: 3000, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [] };
+  const result = { port: 3000, worldHome: null, runtimeProfile: DEFAULT_BOOTSTRAP_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [] };
   const queue = [...args];
   while (queue.length) {
     const token = queue.shift();

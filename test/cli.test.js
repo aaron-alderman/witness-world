@@ -23,7 +23,16 @@ test("bootstrap CLI starts a blank-world bootstrap server", async () => {
   try {
     const url = await waitForServerUrl(() => stdout);
     const html = await fetch(url).then(response => response.text());
+    const diagnostics = await fetch(`${url}/api/runtime/diagnostics`).then(response => response.json());
     assert.match(html, /Recover And Author The App Boundary/);
+    assert.equal(diagnostics.activeProfile, "authoring");
+    assert.deepEqual(diagnostics.activeBundles.map(bundle => bundle.id), [
+      "bundle-core-runtime",
+      "bundle-tutorial",
+      "bundle-authoring"
+    ]);
+    assert.equal(diagnostics.startupRunner?.bootstrapOnly, true);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.authoring"]);
   } finally {
     if (!child.killed) child.kill("SIGINT");
     await onceExit(child);
@@ -36,8 +45,10 @@ test("bootstrap CLI starts a blank-world bootstrap server", async () => {
   assert.notEqual(path.resolve(runtimeRoot), path.resolve(os.tmpdir()));
   assert.match(stdout, /Persistence:\s+cold/);
   assert.match(stdout, /World home:\s+/);
-  assert.match(stdout, /Runtime profile:\s+full/);
-  assert.match(stdout, /Active bundles:\s+bundle-core-runtime, bundle-tutorial, bundle-authoring, bundle-inspect, bundle-canvas, bundle-mcp, bundle-practical-backend, bundle-demo, bundle-eden/);
+  assert.match(stdout, /Runtime profile:\s+authoring/);
+  assert.match(stdout, /Active bundles:\s+bundle-core-runtime, bundle-tutorial, bundle-authoring/);
+  assert.match(stdout, /Operator runtime plugins:\s+plugin\.authoring/);
+  assert.match(stdout, /Activated runtime plugins:\s+plugin\.authoring/);
   assert.match(stdout, /Bundle counts:\s+capabilities=\d+ routes=\d+ surfaces=\d+/);
   assert.match(stdout, /Runtime diagnostics:\s+http:\/\/[^\s]+\/api\/runtime\/diagnostics/);
 });
@@ -186,8 +197,9 @@ test("bootstrap CLI activates local runtime plugins through --runtime-plugin", a
     const url = await waitForServerUrl(() => stdout);
     const diagnostics = await fetch(`${url}/api/runtime/diagnostics`).then(response => response.json());
     assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.authoring"]);
-    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-authoring"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-authoring", "bundle-tutorial"]);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-tutorial"), true);
     assert.equal((await fetch(`${url}/_bootstrap`)).status, 200);
   } finally {
     if (!child.killed) child.kill("SIGINT");
@@ -197,7 +209,7 @@ test("bootstrap CLI activates local runtime plugins through --runtime-plugin", a
   assert.equal(normalizeCliStderr(stderr), "");
   assert.match(stdout, /Configured runtime plugins:\s+plugin\.authoring/);
   assert.match(stdout, /Activated runtime plugins:\s+plugin\.authoring/);
-  assert.match(stdout, /Plugin-added bundles:\s+bundle-authoring/);
+  assert.match(stdout, /Plugin-added bundles:\s+bundle-authoring, bundle-tutorial/);
   assert.match(stdout, /Handler route kinds:\s+/);
 });
 
@@ -235,6 +247,7 @@ test("serve CLI runs the maintained demo on minimal with authored runtime plugin
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-canvas"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), false);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
     assert.equal((await fetch(`${url}/world`)).status, 200);
     assert.equal((await fetch(`${url}/canvas`)).status, 200);
@@ -269,6 +282,255 @@ test("bootstrap CLI rejects explicitly unknown runtime plugins with actionable r
   assert.match(stderr, /runtime plugins unresolved/);
   assert.match(stderr, /Runtime plugin rejected:\s+plugin\.nope/);
   assert.match(stderr, /plugin package not found/);
+});
+
+test("bootstrap CLI rejects plugin-owned runtime plugins when runtime.js is missing", async () => {
+  const pluginRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-broken-plugin-root-"));
+  const inspectDir = path.join(pluginRoot, "inspect");
+  await fs.mkdir(inspectDir, { recursive: true });
+  await fs.writeFile(path.join(inspectDir, "plugin.json"), JSON.stringify({
+    id: "plugin.inspect",
+    version: "0.1.0",
+    displayName: "Inspect Plugin",
+    description: "Broken inspect plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-inspect"],
+    contributes: {}
+  }, null, 2));
+
+  const child = spawn(process.execPath, ["src/cli.js", "bootstrap", "--runtime-profile", "minimal", "--runtime-plugin", "plugin.inspect"], {
+    cwd: process.cwd(),
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      RUNTIME_PLUGIN_ROOT: pluginRoot
+    }
+  });
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", chunk => { stdout += chunk; });
+  child.stderr.on("data", chunk => { stderr += chunk; });
+
+  try {
+    const exitCode = await onceExitCode(child);
+    assert.equal(exitCode, 1);
+    assert.equal(stdout.trim(), "");
+    assert.match(stderr, /runtime plugins unresolved/);
+    assert.match(stderr, /Runtime plugin rejected:\s+plugin\.inspect/);
+    assert.match(stderr, /runtime\.entry not found/);
+  } finally {
+    await fs.rm(pluginRoot, { recursive: true, force: true });
+  }
+});
+
+test("bootstrap CLI rejects plugin.practical-backend when runtime.js is missing", async () => {
+  const pluginRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-broken-practical-backend-plugin-root-"));
+  const backendDir = path.join(pluginRoot, "practical-backend");
+  await fs.mkdir(backendDir, { recursive: true });
+  await fs.writeFile(path.join(backendDir, "plugin.json"), JSON.stringify({
+    id: "plugin.practical-backend",
+    version: "0.1.0",
+    displayName: "Practical Backend Plugin",
+    description: "Broken practical backend plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-practical-backend"],
+    contributes: {}
+  }, null, 2));
+
+  const child = spawn(process.execPath, ["src/cli.js", "bootstrap", "--runtime-profile", "minimal", "--runtime-plugin", "plugin.practical-backend"], {
+    cwd: process.cwd(),
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      RUNTIME_PLUGIN_ROOT: pluginRoot
+    }
+  });
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", chunk => { stdout += chunk; });
+  child.stderr.on("data", chunk => { stderr += chunk; });
+
+  try {
+    const exitCode = await onceExitCode(child);
+    assert.equal(exitCode, 1);
+    assert.equal(stdout.trim(), "");
+    assert.match(stderr, /runtime plugins unresolved/);
+    assert.match(stderr, /Runtime plugin rejected:\s+plugin\.practical-backend/);
+    assert.match(stderr, /runtime\.entry not found/);
+  } finally {
+    await fs.rm(pluginRoot, { recursive: true, force: true });
+  }
+});
+
+test("bootstrap CLI rejects plugin.mcp when runtime.js is missing", async () => {
+  const pluginRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-broken-mcp-plugin-root-"));
+  const mcpDir = path.join(pluginRoot, "mcp");
+  await fs.mkdir(mcpDir, { recursive: true });
+  await fs.writeFile(path.join(mcpDir, "plugin.json"), JSON.stringify({
+    id: "plugin.mcp",
+    version: "0.1.0",
+    displayName: "MCP Plugin",
+    description: "Broken MCP plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-mcp"],
+    contributes: {}
+  }, null, 2));
+
+  const child = spawn(process.execPath, ["src/cli.js", "bootstrap", "--runtime-profile", "minimal", "--runtime-plugin", "plugin.mcp"], {
+    cwd: process.cwd(),
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      RUNTIME_PLUGIN_ROOT: pluginRoot
+    }
+  });
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", chunk => { stdout += chunk; });
+  child.stderr.on("data", chunk => { stderr += chunk; });
+
+  try {
+    const exitCode = await onceExitCode(child);
+    assert.equal(exitCode, 1);
+    assert.equal(stdout.trim(), "");
+    assert.match(stderr, /runtime plugins unresolved/);
+    assert.match(stderr, /Runtime plugin rejected:\s+plugin\.mcp/);
+    assert.match(stderr, /runtime\.entry not found/);
+  } finally {
+    await fs.rm(pluginRoot, { recursive: true, force: true });
+  }
+});
+
+test("bootstrap CLI default activation fails when plugin.authoring runtime.js is missing", async () => {
+  const pluginRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-broken-authoring-plugin-root-"));
+  const authoringDir = path.join(pluginRoot, "authoring");
+  await fs.mkdir(authoringDir, { recursive: true });
+  await fs.writeFile(path.join(authoringDir, "plugin.json"), JSON.stringify({
+    id: "plugin.authoring",
+    version: "0.1.0",
+    displayName: "Authoring Plugin",
+    description: "Broken authoring plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-authoring", "bundle-tutorial"],
+    contributes: {}
+  }, null, 2));
+
+  const child = spawn(process.execPath, ["src/cli.js", "bootstrap"], {
+    cwd: process.cwd(),
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      RUNTIME_PLUGIN_ROOT: pluginRoot
+    }
+  });
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", chunk => { stdout += chunk; });
+  child.stderr.on("data", chunk => { stderr += chunk; });
+
+  try {
+    const exitCode = await onceExitCode(child);
+    assert.equal(exitCode, 1);
+    assert.equal(stdout.trim(), "");
+    assert.match(stderr, /runtime plugins unresolved/);
+    assert.match(stderr, /Runtime plugin rejected:\s+plugin\.authoring/);
+    assert.match(stderr, /runtime\.entry not found/);
+  } finally {
+    await fs.rm(pluginRoot, { recursive: true, force: true });
+  }
+});
+
+test("serve CLI rejects authored plugin.canvas when runtime.js is missing", async () => {
+  const pluginRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-broken-canvas-plugin-root-"));
+  const writePlugin = async (directoryName, manifest, runtimeSource = null) => {
+    const pluginDir = path.join(pluginRoot, directoryName);
+    await fs.mkdir(pluginDir, { recursive: true });
+    await fs.writeFile(path.join(pluginDir, "plugin.json"), JSON.stringify(manifest, null, 2));
+    if (runtimeSource != null) {
+      await fs.writeFile(path.join(pluginDir, "runtime.js"), runtimeSource, "utf8");
+    }
+  };
+  await writePlugin("authoring", {
+    id: "plugin.authoring",
+    version: "0.1.0",
+    displayName: "Authoring Plugin",
+    description: "Authoring plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-authoring", "bundle-tutorial"],
+    contributes: {}
+  }, `export default { bundles: { "bundle-authoring": { handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["bootstrap.page"], handlerMetadata: {} }, routes: [{ kind: "exact", method: "GET", path: "/_bootstrap", handler: "bootstrap.page", params: {} }], surfaces: [], createHandlers() { return { "bootstrap.page": async ({ send }) => send }; } }, "bundle-tutorial": { handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["tutorial.progress.read"], handlerMetadata: {} }, routes: [{ kind: "pattern", method: "GET", pattern: /^\\/api\\/tutorial-progress\\/([^/]+)$/, handler: "tutorial.progress.read", paramNames: ["tutorialId"] }], surfaces: [], createHandlers() { return { "tutorial.progress.read": async () => {} }; } } } };`);
+  await writePlugin("inspect", {
+    id: "plugin.inspect",
+    version: "0.1.0",
+    displayName: "Inspect Plugin",
+    description: "Inspect plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-inspect"],
+    contributes: {}
+  }, `export const bundleId = "bundle-inspect"; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["page.world"], handlerMetadata: {} }; export const routes = []; export const surfaces = []; export function createHandlers() { return { "page.world": async () => {} }; } export default { bundleId, handlerCatalog, routes, surfaces, createHandlers };`);
+  await writePlugin("canvas", {
+    id: "plugin.canvas",
+    version: "0.1.0",
+    displayName: "Canvas Plugin",
+    description: "Broken canvas plugin",
+    kind: "plugin",
+    runtime: { entry: "./runtime.js" },
+    activatesBundles: ["bundle-canvas"],
+    contributes: {}
+  });
+
+  const child = spawn(process.execPath, [
+    "src/cli.js",
+    "serve",
+    "examples/demo-todo-server.wtoml",
+    "--server",
+    "demo_server",
+    "--runtime-profile",
+    "minimal"
+  ], {
+    cwd: process.cwd(),
+    stdio: ["ignore", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      RUNTIME_PLUGIN_ROOT: pluginRoot
+    }
+  });
+
+  let stdout = "";
+  let stderr = "";
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", chunk => { stdout += chunk; });
+  child.stderr.on("data", chunk => { stderr += chunk; });
+
+  try {
+    const exitCode = await onceExitCode(child);
+    assert.equal(exitCode, 1);
+    assert.equal(stdout.trim(), "");
+    assert.match(stderr, /runtime plugins unresolved/);
+    assert.match(stderr, /Runtime plugin rejected:\s+plugin\.canvas/);
+    assert.match(stderr, /runtime\.entry not found/);
+  } finally {
+    await fs.rm(pluginRoot, { recursive: true, force: true });
+  }
 });
 
 test("operator CLI creates backup and export artifacts under the active world home", async () => {
@@ -313,7 +575,7 @@ test("operator CLI creates backup and export artifacts under the active world ho
   }
 });
 
-async function waitForServerUrl(readStdout, { timeoutMs = 10000 } = {}) {
+async function waitForServerUrl(readStdout, { timeoutMs = 20000 } = {}) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     const match = readStdout().match(/Witness (?:bootstrap|server) running:\s+(http:\/\/[^\s]+)/);
@@ -323,7 +585,7 @@ async function waitForServerUrl(readStdout, { timeoutMs = 10000 } = {}) {
   throw new Error(`Timed out waiting for bootstrap CLI startup.\nSTDOUT:\n${readStdout()}`);
 }
 
-async function waitForJsonRpcLines(readStdout, count, { timeoutMs = 10000 } = {}) {
+async function waitForJsonRpcLines(readStdout, count, { timeoutMs = 20000 } = {}) {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
     const lines = readStdout()

@@ -3,6 +3,7 @@ import path from "node:path";
 import { createWorld } from "./kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "./host.js";
 import {
+  DEFAULT_BOOTSTRAP_RUNTIME_PROFILE,
   DEFAULT_RUNTIME_PROFILE,
   resolveRuntimeProfile,
   resolveRuntimeProfileStrict
@@ -48,7 +49,7 @@ export async function startBlankRuntime({
   port = 0,
   startupMode = "bootstrap",
   worldHome = null,
-  runtimeProfile = DEFAULT_RUNTIME_PROFILE,
+  runtimeProfile = DEFAULT_BOOTSTRAP_RUNTIME_PROFILE,
   runtimeProfileExplicit = false,
   runtimePluginIds = [],
   cwd = process.cwd(),
@@ -60,8 +61,13 @@ export async function startBlankRuntime({
   declareFrontendHostImpl = declareFrontendHost,
   startServerImpl = startServer
 } = {}) {
+  const requestedRuntimeProfile = runtimeProfile ?? (
+    startupMode === "bootstrap"
+      ? DEFAULT_BOOTSTRAP_RUNTIME_PROFILE
+      : DEFAULT_RUNTIME_PROFILE
+  );
   const runtimeProfileInfo = resolveCliRuntimeProfile({
-    runtimeProfile,
+    runtimeProfile: requestedRuntimeProfile,
     explicit: runtimeProfileExplicit
   });
   const operatorContract = await resolveRuntimeOperatorPathsImpl({
@@ -92,12 +98,24 @@ export async function startBlankRuntime({
     runtimeProfile: runtimeProfileInfo.id
   });
 
+  const explicitRuntimePlugins = Array.isArray(runtimePluginIds) ? runtimePluginIds.filter(Boolean) : [];
+  const envRuntimePlugins = typeof env?.RUNTIME_PLUGINS === "string" ? env.RUNTIME_PLUGINS.trim() : "";
+  const defaultBootstrapRuntimePluginIds = (
+    startupMode === "bootstrap"
+    && explicitRuntimePlugins.length === 0
+    && !envRuntimePlugins
+  )
+    ? ["plugin.authoring"]
+    : [];
+
   const server = await startServerImpl(world, {
     actor,
     port,
     runtimeRoot: operatorContract.directories.runtimeRoot,
     runtimeProfile: runtimeProfileInfo.id,
-    runtimePluginIds: runtimePluginIds.length ? runtimePluginIds : null,
+    runtimePluginIds: explicitRuntimePlugins.length
+      ? explicitRuntimePlugins
+      : (defaultBootstrapRuntimePluginIds.length ? defaultBootstrapRuntimePluginIds : null),
     runtimeStartupMode: startupMode,
     runtimeOperatorContract: operatorContract
   });

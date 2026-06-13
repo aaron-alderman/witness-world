@@ -1,9 +1,12 @@
 {
   "id": "plugin.practical-backend",
   "version": "0.1.0",
-  "displayName": "Practical Backend Bundle Bridge",
-  "description": "Activates the internal practical-backend runtime bundle through the local plugin bridge.",
+  "displayName": "Practical Backend Plugin Runtime",
+  "description": "Owns practical backend runtime composition through the local plugin runtime module.",
   "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
   "activatesBundles": [
     "bundle-practical-backend"
   ],

@@ -1,0 +1,14 @@
+{
+  "id": "plugin.eden",
+  "version": "0.1.0",
+  "displayName": "Eden Plugin Runtime",
+  "description": "Owns Eden neighborhood, academy, versions, capability-install, and commons runtime behavior.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-eden"
+  ],
+  "contributes": {}
+}

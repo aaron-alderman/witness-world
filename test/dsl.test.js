@@ -338,19 +338,27 @@ plugin = "plugin.inspect"
 
 test("maintained demo entrypoints inherit authored runtime plugin installs without duplicates", async () => {
   const expected = ["plugin.authoring", "plugin.canvas", "plugin.inspect"];
-  const loadPlugins = async relativePath => {
+  const loadRunnerState = async relativePath => {
     const world = createWorld();
     const docs = await loadWitnessTomlFile(path.join(process.cwd(), relativePath));
     applyWitnessDocs(world, docs);
-    return world.project(moduleProjectors.runtimePluginInstalls)
+    const plugins = world.project(moduleProjectors.runtimePluginInstalls)
       .filter(row => row.serverRunner === "demo_server")
       .map(row => row.plugin)
       .sort();
+    const runner = world.project(moduleProjectors.serverRunners).find(row => row.id === "demo_server");
+    return { plugins, runner };
   };
 
-  assert.deepEqual(await loadPlugins("examples/demo-todo-server.wtoml"), expected);
-  assert.deepEqual(await loadPlugins("examples/demo-todo-server.explicit.wtoml"), expected);
-  assert.deepEqual(await loadPlugins("examples/demo-todo-server.monolith.wtoml"), expected);
+  for (const relativePath of [
+    "examples/demo-todo-server.wtoml",
+    "examples/demo-todo-server.explicit.wtoml",
+    "examples/demo-todo-server.monolith.wtoml"
+  ]) {
+    const { plugins, runner } = await loadRunnerState(relativePath);
+    assert.deepEqual(plugins, expected);
+    assert.equal(runner?.handlerSet ?? null, null);
+  }
 });
 
 test("context composition DSL sections project bindings and lower contextual refs to canonical ids across covered surfaces", () => {

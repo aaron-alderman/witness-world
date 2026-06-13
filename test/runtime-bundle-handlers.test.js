@@ -75,8 +75,7 @@ test("generic handler factories are resolved from active runtime bundles", () =>
   assert.deepEqual(minimal.map(entry => entry.bundleId), ["bundle-core-runtime"]);
   assert.deepEqual(authoring.map(entry => entry.bundleId), ["bundle-core-runtime", "bundle-tutorial", "bundle-authoring"]);
   assert.deepEqual(inspect.map(entry => entry.bundleId), ["bundle-core-runtime", "bundle-inspect"]);
-  assert.equal(practicalBackend.length >= 14, true);
-  assert.deepEqual([...new Set(practicalBackend.map(entry => entry.bundleId))], ["bundle-core-runtime", "bundle-practical-backend"]);
+  assert.deepEqual(practicalBackend.map(entry => entry.bundleId), ["bundle-core-runtime", "bundle-practical-backend"]);
   assert.equal(full.some(entry => entry.bundleId === "bundle-core-runtime"), true);
   assert.equal(full.some(entry => entry.bundleId === "bundle-tutorial"), true);
   assert.equal(full.some(entry => entry.bundleId === "bundle-authoring"), true);
@@ -128,8 +127,10 @@ test("dispatch handler ownership varies by active runtime profile", () => {
   const minimal = dispatchHandlerIdsForProfile("minimal");
   const full = dispatchHandlerIdsForProfile("full");
 
+  assert.equal(minimal.includes("todos.readModel"), false);
   assert.equal(minimal.includes("page.edenCanvas"), false);
   assert.equal(minimal.includes("mcp.http"), false);
+  assert.equal(full.includes("todos.readModel"), true);
   assert.equal(full.includes("page.edenCanvas"), true);
   assert.equal(full.includes("mcp.http"), true);
 });

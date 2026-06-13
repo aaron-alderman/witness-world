@@ -554,6 +554,7 @@ export function createRuntimeRouteHandlers({
     runtimeProfile,
     activeBundleIds,
     sessionStore,
+    bundleManifests: runtimeBundleSummary?.bundles ?? [],
     factoryDeps: {
       world,
       backendHost,

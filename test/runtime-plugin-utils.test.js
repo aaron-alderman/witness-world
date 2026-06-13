@@ -23,6 +23,10 @@ async function writePlugin(root, directoryName, manifest) {
   return pluginDir;
 }
 
+async function writePluginRuntime(pluginDir, source = "export default {};\n") {
+  await fs.writeFile(path.join(pluginDir, "runtime.js"), source);
+}
+
 test("runtime plugin root resolves from cwd by default and honors env override", () => {
   const defaultRoot = resolveRuntimePluginRoot({ env: {}, cwd: "C:/workspace/world" });
   const overridden = resolveRuntimePluginRoot({ env: { RUNTIME_PLUGIN_ROOT: "D:/plugins" }, cwd: "C:/workspace/world" });
@@ -48,15 +52,17 @@ test("configured runtime plugin ids come from env by default and CLI when provid
 test("plugin discovery finds valid executable local plugin packages through bundle bindings", async () => {
   const root = await tempPluginRoot();
   try {
-    await writePlugin(root, "notes-sidebar", {
+    const pluginDir = await writePlugin(root, "notes-sidebar", {
       id: "plugin.inspect",
       version: "0.1.0",
       displayName: "Inspect Bridge",
       description: "Inspect bundle bridge",
       kind: "plugin",
+      runtime: { entry: "./runtime.js" },
       activatesBundles: ["bundle-inspect"],
       contributes: {}
     });
+    await writePluginRuntime(pluginDir, "export const bundleId = 'bundle-inspect'; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [], handlerMetadata: {} }; export const routes = []; export const surfaces = []; export function createHandlers() { return {}; }\n");
 
     const discovered = await discoverRuntimePluginPackages({
       pluginRoot: root,
@@ -69,11 +75,61 @@ test("plugin discovery finds valid executable local plugin packages through bund
     assert.equal(discovered.packages[0].compatibility.compatible, true);
     assert.equal(discovered.packages[0].installability.installableInPrinciple, true);
     assert.equal(discovered.packages[0].execution.executable, true);
-    assert.equal(discovered.packages[0].execution.mode, "bundle-bridge");
+    assert.equal(discovered.packages[0].execution.mode, "plugin-owned");
+    assert.equal(discovered.packages[0].metadata.runtime.entry, "./runtime.js");
+    assert.equal(discovered.packages[0].runtimeModule.loadStatus, "not-loaded");
     assert.equal(discovered.packages[0].resolvedBundles.some(row => row.id === "bundle-inspect"), true);
     assert.equal(discovered.packages[0].resolvedRuntimeContributions.surfaces.some(row => row.id === "surface:world"), true);
     assert.equal(discovered.packages[0].resolvedRuntimeContributions.handlerMetadata["events.stream"].routeKind, "stream");
     assert.deepEqual(discovered.packages[0].resolvedRuntimeContributions.routes.find(route => route.handler === "events.stream")?.handlerMetadata?.methods, ["GET"]);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin discovery rejects invalid runtime entry paths and missing runtime modules", async () => {
+  const root = await tempPluginRoot();
+  try {
+    await writePlugin(root, "absolute", {
+      id: "plugin.absolute",
+      version: "0.1.0",
+      displayName: "Absolute",
+      description: "Absolute path plugin",
+      kind: "plugin",
+      runtime: { entry: "C:/bad/runtime.js" },
+      activatesBundles: ["bundle-inspect"],
+      contributes: {}
+    });
+    await writePlugin(root, "escape", {
+      id: "plugin.escape",
+      version: "0.1.0",
+      displayName: "Escape",
+      description: "Escaping plugin",
+      kind: "plugin",
+      runtime: { entry: "../runtime.js" },
+      activatesBundles: ["bundle-inspect"],
+      contributes: {}
+    });
+    await writePlugin(root, "missing", {
+      id: "plugin.missing-runtime",
+      version: "0.1.0",
+      displayName: "Missing Runtime",
+      description: "Missing runtime file plugin",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      activatesBundles: ["bundle-inspect"],
+      contributes: {}
+    });
+
+    const discovered = await discoverRuntimePluginPackages({
+      pluginRoot: root,
+      runtimeProfile: "minimal"
+    });
+
+    assert.equal(discovered.summary.validCount, 0);
+    assert.equal(discovered.invalidPackages.some(row => row.validation.errors.some(error => error.includes("must not be absolute"))), true);
+    assert.equal(discovered.invalidPackages.some(row => row.validation.errors.some(error => error.includes("must stay inside the plugin directory"))), true);
+    assert.equal(discovered.invalidPackages.some(row => row.validation.errors.some(error => error.includes("runtime.entry not found"))), true);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

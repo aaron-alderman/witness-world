@@ -1,9 +1,12 @@
 {
   "id": "plugin.mcp",
   "version": "0.1.0",
-  "displayName": "MCP Bundle Bridge",
-  "description": "Activates the internal MCP runtime bundle through the local plugin bridge.",
+  "displayName": "MCP Plugin Runtime",
+  "description": "Owns MCP HTTP transport runtime behavior through the local plugin runtime module.",
   "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
   "activatesBundles": [
     "bundle-mcp"
   ],

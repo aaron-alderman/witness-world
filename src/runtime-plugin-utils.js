@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
@@ -28,6 +29,7 @@ const TOP_LEVEL_FIELDS = new Set([
   "compatibleShells",
   "requiresRuntimeVersion",
   "updateChannel",
+  "runtime",
   "activatesBundles",
   "provenance",
   "author",
@@ -57,6 +59,10 @@ const SIGNATURE_FIELDS = new Set([
   "keyId"
 ]);
 
+const RUNTIME_FIELDS = new Set([
+  "entry"
+]);
+
 const KNOWN_TRUST_STATES = new Set(["local", "authored-here", "imported", "unsigned", "reviewed"]);
 const KNOWN_SIGNATURE_STATUSES = new Set(["none", "unsigned", "signed", "verified"]);
 
@@ -82,6 +88,7 @@ const SEMVER_RE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
  * @property {string[]=} compatibleShells
  * @property {string|null=} requiresRuntimeVersion
  * @property {string|null=} updateChannel
+ * @property {{entry:string}|null=} runtime
  * @property {string[]=} activatesBundles
  * @property {Record<string, any>|null=} provenance
  * @property {string|null=} author
@@ -273,6 +280,20 @@ function normalizeProvenance(value, errors) {
   };
 }
 
+function normalizeRuntime(value, errors) {
+  if (value == null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    errors.push("runtime must be an object when provided");
+    return null;
+  }
+  for (const key of Object.keys(value)) {
+    if (!RUNTIME_FIELDS.has(key)) errors.push(`unknown runtime field: ${key}`);
+  }
+  const entry = nullableString(value.entry, "runtime.entry", errors);
+  if (!entry) return null;
+  return { entry };
+}
+
 function summarizePluginTrust(manifest, validation) {
   const provenance = manifest?.provenance ?? null;
   const signatureStatus = provenance?.signature?.status ?? "none";
@@ -297,6 +318,35 @@ function summarizePluginTrust(manifest, validation) {
     reviewedAt: provenance?.reviewedAt ?? null,
     signatureStatus,
     warnings
+  };
+}
+
+function resolvePluginRuntimeEntry(discoveryPath, runtime, errors) {
+  if (!runtime?.entry) return null;
+  const manifestDir = path.dirname(discoveryPath);
+  const entry = String(runtime.entry || "").trim();
+  if (path.isAbsolute(entry)) {
+    errors.push("runtime.entry must not be absolute");
+    return null;
+  }
+  if (!entry.startsWith("./") && !entry.startsWith("../")) {
+    errors.push("runtime.entry must be a relative path");
+    return null;
+  }
+  const ext = path.extname(entry).toLowerCase();
+  if (ext !== ".js" && ext !== ".mjs") {
+    errors.push("runtime.entry must reference a .js or .mjs file");
+    return null;
+  }
+  const resolvedPath = path.resolve(manifestDir, entry);
+  const relative = path.relative(manifestDir, resolvedPath);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+    errors.push("runtime.entry must stay inside the plugin directory");
+    return null;
+  }
+  return {
+    entry,
+    resolvedPath
   };
 }
 
@@ -335,6 +385,7 @@ function normalizeManifestObject(raw, discoveryPath) {
   if (unknownShells.length) errors.push(`unknown runtime shells: ${unknownShells.join(", ")}`);
   const requiresRuntimeVersion = nullableString(raw.requiresRuntimeVersion, "requiresRuntimeVersion", errors);
   const updateChannel = nullableString(raw.updateChannel, "updateChannel", errors);
+  const runtime = normalizeRuntime(raw.runtime, errors);
   const activatesBundles = stringList(raw.activatesBundles, "activatesBundles", errors);
   const author = nullableString(raw.author, "author", errors);
   const homepage = nullableString(raw.homepage, "homepage", errors);
@@ -362,6 +413,7 @@ function normalizeManifestObject(raw, discoveryPath) {
           compatibleShells,
           requiresRuntimeVersion,
           updateChannel,
+          runtime,
           activatesBundles,
           provenance,
           author,
@@ -656,6 +708,13 @@ function buildPluginPackageRow({
       errors.push(`unknown runtime bundles: ${unknownBundles.join(", ")}`);
     }
   }
+  const runtimeEntry = resolvePluginRuntimeEntry(discoveryPath, manifest?.runtime ?? null, errors);
+  if (manifest?.runtime && !manifest.activatesBundles.length) {
+    errors.push("runtime.entry requires activatesBundles");
+  }
+  if (runtimeEntry && !existsSync(runtimeEntry.resolvedPath)) {
+    errors.push(`runtime.entry not found: ${manifest?.runtime?.entry ?? runtimeEntry.entry}`);
+  }
   const validation = { ok: errors.length === 0, errors };
   const compatible = Boolean(
     validation.ok
@@ -674,6 +733,9 @@ function buildPluginPackageRow({
   }
   const installableInPrinciple = installabilityReasons.length === 0;
   const executable = Boolean(manifest?.activatesBundles.length);
+  const executionMode = executable
+    ? (runtimeEntry ? "plugin-owned" : "bundle-bridge")
+    : "metadata-only";
   const resolvedBundleIds = [...(manifest?.activatesBundles ?? [])];
   const resolvedBundles = resolvedBundleIds
     .map(bundleId => summarizeBundle(bundleId))
@@ -690,6 +752,10 @@ function buildPluginPackageRow({
         compatibleShells: [...manifest.compatibleShells],
         requiresRuntimeVersion: manifest.requiresRuntimeVersion,
         updateChannel: manifest.updateChannel,
+        runtime: manifest.runtime ? {
+          ...manifest.runtime,
+          resolvedEntryPath: runtimeEntry?.resolvedPath ?? null
+        } : null,
         activatesBundles: [...manifest.activatesBundles],
         contributes: {
           capabilities: manifest.contributes.capabilities.map(entry => ({ ...entry })),
@@ -716,8 +782,19 @@ function buildPluginPackageRow({
     },
     execution: {
       executable,
-      mode: executable ? "bundle-bridge" : "metadata-only",
-      reason: executable ? BUNDLE_BRIDGE_PLUGIN_EXECUTION_REASON : DEFAULT_PLUGIN_EXECUTION_REASON
+      mode: executionMode,
+      reason: executionMode === "plugin-owned"
+        ? "plugin package provides a local runtime module through the plugin runtime ABI"
+        : executable
+          ? BUNDLE_BRIDGE_PLUGIN_EXECUTION_REASON
+          : DEFAULT_PLUGIN_EXECUTION_REASON
+    },
+    runtimeModule: {
+      entry: manifest?.runtime?.entry ?? null,
+      resolvedPath: runtimeEntry?.resolvedPath ?? null,
+      loadStatus: executionMode === "plugin-owned" ? "not-loaded" : "not-applicable",
+      bundleId: null,
+      errors: []
     },
     trust,
     activation: {
@@ -741,6 +818,10 @@ function buildPluginPackageRow({
       compatibleShells: [...manifest.compatibleShells],
       requiresRuntimeVersion: manifest.requiresRuntimeVersion,
       updateChannel: manifest.updateChannel,
+      runtime: manifest.runtime ? {
+        ...manifest.runtime,
+        resolvedEntryPath: runtimeEntry?.resolvedPath ?? null
+      } : null,
       activatesBundles: [...manifest.activatesBundles],
       provenance: manifest.provenance ? { ...manifest.provenance } : null,
       author: manifest.author,

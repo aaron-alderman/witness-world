@@ -1,9 +1,12 @@
 {
   "id": "plugin.canvas",
   "version": "0.1.0",
-  "displayName": "Canvas Bundle Bridge",
-  "description": "Activates the internal canvas runtime bundle through the local plugin bridge.",
+  "displayName": "Canvas Plugin Runtime",
+  "description": "Owns canvas runtime behavior through the local plugin runtime module.",
   "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
   "activatesBundles": [
     "bundle-canvas"
   ],

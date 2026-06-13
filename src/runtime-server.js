@@ -54,6 +54,10 @@ import {
   resolveConfiguredRuntimePluginIds,
   resolveRuntimePluginRoot
 } from "./runtime-plugin-utils.js";
+import {
+  applyRuntimePluginLoadState,
+  loadRuntimePluginModules
+} from "./runtime-plugin-loader.js";
 import { buildRuntimeOperatorContract } from "./runtime-operator-contract.js";
 import { createRuntimeOperatorService } from "./runtime-operator-service.js";
 
@@ -115,7 +119,9 @@ export async function startRuntimeServer(world, {
     resolveRuntimePluginRoot: resolveRuntimePluginRootImpl = resolveRuntimePluginRoot,
     resolveConfiguredRuntimePluginIds: resolveConfiguredRuntimePluginIdsImpl = resolveConfiguredRuntimePluginIds,
     readRuntimePluginCatalog: readRuntimePluginCatalogImpl = readRuntimePluginCatalog,
-    defaultHostCapabilitiesForProfile: defaultHostCapabilitiesForProfileImpl = defaultHostCapabilitiesForProfile
+    defaultHostCapabilitiesForProfile: defaultHostCapabilitiesForProfileImpl = defaultHostCapabilitiesForProfile,
+    loadRuntimePluginModules: loadRuntimePluginModulesImpl = loadRuntimePluginModules,
+    applyRuntimePluginLoadState: applyRuntimePluginLoadStateImpl = applyRuntimePluginLoadState
   } = deps;
 
   const runtimePluginRoot = resolveRuntimePluginRootImpl({ env });
@@ -159,15 +165,38 @@ export async function startRuntimeServer(world, {
     });
     return { ok: false, reason: "runtime plugins unresolved", runtimePluginCatalog };
   }
+  const runtimePluginLoadResult = await loadRuntimePluginModulesImpl({
+    pluginCatalog: runtimePluginCatalog
+  });
+  const effectiveRuntimePluginCatalog = applyRuntimePluginLoadStateImpl(runtimePluginCatalog, runtimePluginLoadResult);
+  if (runtimePluginLoadResult.hasBlockingErrors) {
+    world.emit({
+      process: "server.start.failed",
+      actor,
+      claims: [],
+      body: {
+        reason: "runtime plugin modules unresolved",
+        serverRunner: serverRunner.id,
+        pluginRoot: runtimePluginRoot,
+        authoredRuntimePlugins: effectiveRuntimePluginCatalog.authoredPluginIds,
+        operatorRuntimePlugins: effectiveRuntimePluginCatalog.operatorPluginIds,
+        effectiveRuntimePlugins: effectiveRuntimePluginCatalog.effectivePluginIds,
+        rejectedRuntimePlugins: effectiveRuntimePluginCatalog.rejectedPlugins
+      }
+    });
+    return { ok: false, reason: "runtime plugin modules unresolved", runtimePluginCatalog: effectiveRuntimePluginCatalog };
+  }
   const additionalBundleIds = [...new Set([
-    ...(runtimePluginCatalog.addedBundleIds ?? []),
+    ...(effectiveRuntimePluginCatalog.addedBundleIds ?? []),
     ...bundleIdsForHandlerSet(serverRunner.handlerSet)
   ])];
+  const bundleOverrides = runtimePluginLoadResult.bundleOverrides ?? {};
   const resolvedRuntime = runtimeBundleSummaryForProfileImpl(runtimeProfile, {
-    additionalBundleIds
+    additionalBundleIds,
+    bundleOverrides
   });
   const activeRuntimeProfile = resolvedRuntime.profile;
-  const compositionOptions = { additionalBundleIds };
+  const compositionOptions = { additionalBundleIds, bundleOverrides };
   const runtimeSurfaceEntries = runtimeSurfaceEntriesForProfileImpl(activeRuntimeProfile, null, compositionOptions);
   const activeDispatchHandlers = new Set(resolvedRuntime.dispatchHandlers ?? dispatchHandlerIdsForProfileImpl(activeRuntimeProfile, compositionOptions));
   const handlerSetFactories = handlerSetFactoriesForProfileImpl(activeRuntimeProfile, compositionOptions);
@@ -260,13 +289,14 @@ export async function startRuntimeServer(world, {
   appContext.runtimeStartupMode = runtimeStartupMode;
   appContext.runtimeBundleSummary = resolvedRuntime;
   appContext.runtimeAdditionalBundleIds = additionalBundleIds;
+  appContext.runtimeBundleOverrides = bundleOverrides;
   appContext.runtimeSurfaceEntries = runtimeSurfaceEntries;
-  appContext.runtimePluginCatalog = runtimePluginCatalog;
-  appContext.authoredRuntimePluginIds = runtimePluginCatalog.authoredPluginIds;
-  appContext.runtimePluginIds = runtimePluginCatalog.operatorPluginIds;
-  appContext.operatorRuntimePluginIds = runtimePluginCatalog.operatorPluginIds;
-  appContext.effectiveRuntimePluginIds = runtimePluginCatalog.effectivePluginIds;
-  appContext.activeRuntimePluginIds = runtimePluginCatalog.activePluginIds;
+  appContext.runtimePluginCatalog = effectiveRuntimePluginCatalog;
+  appContext.authoredRuntimePluginIds = effectiveRuntimePluginCatalog.authoredPluginIds;
+  appContext.runtimePluginIds = effectiveRuntimePluginCatalog.operatorPluginIds;
+  appContext.operatorRuntimePluginIds = effectiveRuntimePluginCatalog.operatorPluginIds;
+  appContext.effectiveRuntimePluginIds = effectiveRuntimePluginCatalog.effectivePluginIds;
+  appContext.activeRuntimePluginIds = effectiveRuntimePluginCatalog.activePluginIds;
   const attachEventsStream = context => {
     if (!context) return context;
     context.eventsStream = {
@@ -311,8 +341,8 @@ export async function startRuntimeServer(world, {
     runtimeSurfaceEntries,
     handlerSetDefinitions,
     runtimePluginRoot,
-    runtimePluginIds: runtimePluginCatalog.operatorPluginIds,
-    authoredRuntimePluginIds: runtimePluginCatalog.authoredPluginIds
+    runtimePluginIds: effectiveRuntimePluginCatalog.operatorPluginIds,
+    authoredRuntimePluginIds: effectiveRuntimePluginCatalog.authoredPluginIds
   });
   const mountedRoutesFor = runnerId => world.project(moduleProjectors.servedRoutes)
     .filter(route => route.serverRunner === runnerId)
@@ -533,7 +563,7 @@ export async function startRuntimeServer(world, {
         actors: appContext.actors,
         storage,
         routeCount: mountedRoutesFor(serverRunner.id).length,
-        runtimePlugins: runtimePluginCatalog.activePluginIds
+        runtimePlugins: effectiveRuntimePluginCatalog.activePluginIds
       }
     });
 
@@ -541,7 +571,7 @@ export async function startRuntimeServer(world, {
     ok: true,
     url,
     runtimeBundleSummary: resolvedRuntime,
-    runtimePluginCatalog,
+    runtimePluginCatalog: effectiveRuntimePluginCatalog,
     close: () => {
       clearInterval(sseWatcher);
       for (const client of sseClients) client.end();
