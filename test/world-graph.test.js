@@ -6,7 +6,7 @@ import path from "node:path";
 import { createWorld, thing, relation } from "../src/kernel.js";
 import { worldGraphProjection } from "../plugins/inspect/world-graph.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
-import { applyWitnessDocs, applyWitnessToml, loadWitnessTomlFile } from "../src/dsl.js";
+import { applyWitnessDocs, applyWitnessDocsWithRuntimePlugins, applyWitnessToml, loadWitnessTomlFile, parseWitnessToml } from "../src/dsl.js";
 import { renderWidgetPage } from "../plugins/inspect/widget-page.js";
 import { applyDesire, compileRvmFileToDesirePlus, compileRvmToDesirePlus, normalizeDesirePlusToDesire } from "../src/desire/index.js";
 
@@ -138,6 +138,17 @@ entity TodoRecord {
   context todo_items
   durable_state todo_store
   id_prop item_id
+}
+
+graph_node TodoRecordGraph {
+  kind entity
+  entity_type TodoRecord
+}
+
+graph_edge TodoFlowReadsTodoRecord {
+  from TodoFlow
+  to TodoRecordGraph
+  edge_type reads
 }
 
 process TodoFlow {
@@ -320,9 +331,41 @@ chart GoodmanDiagram of BoltFatigue {
   ), true);
 });
 
-test("world graph places mcp servers in backend runtime contexts", () => {
+test("world graph surfaces native RVM graph nodes and edges with provenance", () => {
+  const file = "C:/demo/graph.rvm";
+  const desire = normalizeDesirePlusToDesire(compileRvmToDesirePlus(`
+graph_node TodoRecordGraph {
+  kind entity
+  entity_type TodoRecord
+}
+
+graph_edge TodoFlowReadsTodoRecord {
+  from TodoFlow
+  to TodoRecordGraph
+  edge_type reads
+}
+`, { file }));
   const world = createWorld();
-  applyWitnessToml(world, `
+  applyDesire(world, desire);
+  const graph = worldGraphProjection(world.allWitnesses());
+
+  assert.equal(graph.nodes.some(node =>
+    node.id === "TodoRecordGraph"
+    && node.kind === "graphNode"
+    && node.sources?.some(source => source.file === file && source.sourceLanguage === "rvm" && source.sourceKind === "graph_node")
+  ), true);
+  assert.equal(graph.nodes.some(node =>
+    node.id === "TodoFlowReadsTodoRecord"
+    && node.kind === "graphEdge"
+    && node.sources?.some(source => source.file === file && source.sourceLanguage === "rvm" && source.sourceKind === "graph_edge")
+  ), true);
+  assert.equal(graph.edges.some(edge => edge.from === "TodoFlowReadsTodoRecord" && edge.rel === "graphFrom" && edge.to === "TodoFlow"), true);
+  assert.equal(graph.edges.some(edge => edge.from === "TodoFlowReadsTodoRecord" && edge.rel === "graphTo" && edge.to === "TodoRecordGraph"), true);
+});
+
+test("world graph places mcp servers in backend runtime contexts", async () => {
+  const world = createWorld();
+  await applyWitnessDocsWithRuntimePlugins(world, parseWitnessToml(`
 [[thing]]
 actor = "system"
 id = "backendHost"
@@ -337,13 +380,18 @@ id = "app_runner"
 backendHost = "backendHost"
 frontendHost = "frontendHost"
 
+[[runtimePluginInstall]]
+actor = "system"
+serverRunner = "app_runner"
+plugin = "plugin.mcp-authoring"
+
 [[mcpServer]]
 actor = "system"
 id = "project_mcp"
 label = "Project MCP"
 serverRunner = "app_runner"
 transports = ["http"]
-`);
+`));
 
   const graph = worldGraphProjection(world.allWitnesses());
   assert.equal(graph.nodes.some(node => node.id === "project_mcp" && node.badges.some(badge => badge.label === "kind:mcpServer")), true);
@@ -858,6 +906,17 @@ process TodoFlow {
 boundary TodoApi {
   capability todo.read
 }
+
+graph_node TodoRecordGraph {
+  kind entity
+  entity_type TodoRecord
+}
+
+graph_edge TodoFlowReadsTodoRecord {
+  from TodoFlow
+  to TodoRecordGraph
+  edge_type reads
+}
 `.trimStart(), "utf8");
 
   const desire = normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(rvmFile));
@@ -905,7 +964,6 @@ boundary TodoApi {
       node.id === "TodoFlow"
       && node.sources?.some(source => source.sourceLanguage === "rvm" && source.sourceKind === "process")
     ), true);
-
     const wtomlSourceRes = await fetch(`${server.url}/api/source?file=${encodeURIComponent(wtomlSource)}`);
     assert.equal(wtomlSourceRes.status, 200);
     const wtomlSourceBody = await wtomlSourceRes.json();
@@ -928,6 +986,8 @@ boundary TodoApi {
     assert.match(sourceBody.text, /TodoRecord/);
     assert.equal(sourceBody.targets.includes("TodoRecord"), true);
     assert.equal(sourceBody.targets.includes("TodoFlow"), true);
+    assert.equal(sourceBody.targets.includes("TodoRecordGraph"), true);
+    assert.equal(sourceBody.targets.includes("TodoFlowReadsTodoRecord"), true);
     assert.equal(sourceBody.annotations.some(node =>
       node.sourceLanguage === "rvm"
       && node.file === rvmFile
@@ -936,6 +996,16 @@ boundary TodoApi {
       && typeof node.startLine === "number"
       && typeof node.desireNodeId === "string"
       && Array.isArray(node.desireSourceNodeIds)
+    ), true);
+    assert.equal(sourceBody.annotations.some(node =>
+      node.sourceLanguage === "rvm"
+      && node.file === rvmFile
+      && node.sourceKind === "graph_edge"
+      && node.target === "TodoFlowReadsTodoRecord"
+      && typeof node.desireNodeId === "string"
+      && Array.isArray(node.desireSourceNodeIds)
+      && Object.prototype.hasOwnProperty.call(node, "originNodeId")
+      && Array.isArray(node.via)
     ), true);
     assert.equal(sourceBody.annotations.some(node =>
       node.sourceLanguage === "rvm"

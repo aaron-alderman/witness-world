@@ -46,12 +46,16 @@ function multipartFileFromFormData(formData) {
   return null;
 }
 
+function defaultAssetsRootFor(appContext) {
+  return appContext?.storage?.assetsRoot || path.resolve(appContext?.runtimeRoot || process.cwd(), "assets");
+}
+
 export function createPracticalBackendAssetServices({
   world,
   backendHost,
   runtimeConfigLookup,
   headerValue,
-  assetsRootFor,
+  assetsRootFor = defaultAssetsRootFor,
   canCreateInContext,
   canMutateTarget,
   currentPerspectiveById,

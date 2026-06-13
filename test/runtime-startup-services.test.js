@@ -21,12 +21,7 @@ test("runtime startup services build app context inputs from runner storage and 
     sendJson: () => {},
     readJson: () => {},
     handlerSetFactories: {},
-    createBuiltinAssetJobHandlers: () => ({}),
-    createBuiltinNotificationJobHandlers: () => ({}),
-    createBuiltinWebhookJobHandlers: () => ({}),
-    createInProcessJobQueue: () => ({}),
-    createDbSqlRuntime: () => ({}),
-    createSearchIndexRuntime: () => ({}),
+    runtimeContributions: { providerRuntimeFactories: {}, jobHandlerFactories: {} },
     resolveStorageConfig: (storage, root) => ({ storage, root, resolved: true }),
     resolveRuntimeConfig: (runtimeConfig, env) => ({ ok: true, values: { runtimeConfig, env }, fields: [] }),
     env: { DEMO: "1" },
@@ -39,6 +34,7 @@ test("runtime startup services build app context inputs from runner storage and 
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0].storage, { storage: { assetsRoot: "assets" }, root: "/runtime", resolved: true });
   assert.deepEqual(calls[0].runtimeConfig, { ok: true, values: { runtimeConfig: { demo: true }, env: { DEMO: "1" } }, fields: [] });
+  assert.deepEqual(calls[0].runtimeContributions, { providerRuntimeFactories: {}, jobHandlerFactories: {} });
   assert.equal(appContext.ok, true);
 });
 
@@ -60,12 +56,7 @@ test("runtime startup services create resolver bindings for live and unavailable
     sendJson: () => {},
     readJson: () => {},
     handlerSetFactories: {},
-    createBuiltinAssetJobHandlers: () => ({}),
-    createBuiltinNotificationJobHandlers: () => ({}),
-    createBuiltinWebhookJobHandlers: () => ({}),
-    createInProcessJobQueue: () => ({}),
-    createDbSqlRuntime: () => ({}),
-    createSearchIndexRuntime: () => ({}),
+    runtimeContributions: { providerRuntimeFactories: {}, jobHandlerFactories: {} },
     resolveStorageConfig: storage => ({ storage }),
     resolveRuntimeConfig: runtimeConfig => ({ ok: true, values: runtimeConfig ?? {}, fields: [] }),
     env: {},

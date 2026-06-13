@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createWorld, projectors } from "../src/kernel.js";
@@ -12,6 +14,11 @@ import {
   applyDesireNativeOnly,
   assertNoLegacyRuntimeDeclarationFallbackRequired,
   auditRuntimeDeclarationBridge,
+  createCoreRuntimeDeclarationRegistry,
+  createDesirePlusElaboratorRegistry,
+  createDesireRegistriesFromPluginExtensions,
+  createRuntimeDeclarationRegistry,
+  elaborateDesirePlus,
   auditRvmDesirePlus,
   compileWtomlDocsToDesirePlus,
   compileRvmToDesirePlus,
@@ -30,6 +37,8 @@ import {
   validateDesirePlusDocument,
   validateDesireDocument
 } from "../src/desire/index.js";
+import { readRuntimePluginCatalog } from "../src/runtime-plugin-utils.js";
+import { loadRuntimePluginModules } from "../src/runtime-plugin-loader.js";
 
 test("WTOML docs compile to DESIRE+ with trace metadata", () => {
   const docs = parseWitnessToml(`
@@ -81,7 +90,7 @@ test("DESIRE kernel kind set excludes bridge-only runtime residuals", () => {
   assert.equal(DESIRE_BRIDGE_KINDS.has("runtime.declaration"), true);
   assert.equal(DESIRE_NODE_KINDS.has("runtime.doc"), false);
   assert.equal(DESIRE_NODE_KINDS.has("runtime.declaration"), false);
-  for (const kind of ["context", "type", "message", "store", "entity", "projection", "capability", "boundary", "policy", "process", "surface", "dataflow"]) {
+  for (const kind of ["context", "type", "message", "store", "entity", "graph", "projection", "capability", "boundary", "policy", "process", "surface", "dataflow"]) {
     assert.equal(DESIRE_KERNEL_KINDS.has(kind), true, kind);
     assert.equal(DESIRE_NODE_KINDS.has(kind), true, kind);
   }
@@ -94,6 +103,7 @@ test("DESIRE kernel validators cover every node kind", () => {
     { kind: "message", valid: { fields: [] }, invalid: { fields: {} }, error: /fields/ },
     { kind: "store", valid: { storeKind: "durable", props: {} }, invalid: { props: [] }, error: /props/ },
     { kind: "entity", valid: { context: "ctx", fields: [] }, invalid: { fields: {} }, error: /fields/ },
+    { kind: "graph", valid: { graphKind: "edge", from: "a", to: "b", fields: [], props: {} }, invalid: { props: [] }, error: /props/ },
     { kind: "projection", valid: { projectionKind: "list", source: "Todo", props: {} }, invalid: { props: [] }, error: /props/ },
     { kind: "capability", valid: { verbs: ["read"], scope: [] }, invalid: { verbs: {} }, error: /verbs/ },
     { kind: "boundary", valid: { capabilities: [], operations: [] }, invalid: { operations: {} }, error: /operations/ },
@@ -116,6 +126,7 @@ test("DESIRE native application covers every kernel node kind", () => {
     createDesireNode({ kind: "message", name: "TodoCreated", body: { fields: [{ name: "id", type: "string" }] } }),
     createDesireNode({ kind: "store", name: "todo_store", body: { storeKind: "durable", context: "ctx", owner: "TodoFlow", entity: "TodoItem", props: {} } }),
     createDesireNode({ kind: "entity", name: "TodoItem", body: { context: "ctx", store: "todo_store", identity: "id", version: "version", fields: [{ name: "id", type: "string" }] } }),
+    createDesireNode({ kind: "graph", name: "TodoEdge", body: { graphKind: "edge", from: "TodoFlow", to: "TodoItem", edgeType: "reads", fields: [], props: {} } }),
     createDesireNode({ kind: "projection", name: "TodoList", body: { projectionKind: "list", source: "todo_store", props: {} } }),
     createDesireNode({ kind: "dataflow", name: "TodoMetrics", body: { axes: [{ name: "done", kind: "category", from: "done" }], params: [{ name: "window", default: 7 }], derives: [{ name: "count", expr: "count(done)", over: [] }], reduces: [] } }),
     createDesireNode({ kind: "capability", name: "todo_backend", body: { verbs: ["read"], scope: ["ctx"], provides: ["capability:read:todo"], dependsOn: [], publicApi: [], providerAdapters: [], placement: [] } }),
@@ -136,6 +147,7 @@ test("DESIRE native application covers every kernel node kind", () => {
     message: "desire.defineMessage",
     store: "desire.defineStore",
     entity: "desire.defineEntity",
+    graph: "desire.defineGraph",
     projection: "desire.defineProjection",
     dataflow: "desire.define.dataflow",
     capability: "desire.defineCapability",
@@ -154,6 +166,8 @@ test("DESIRE native application covers every kernel node kind", () => {
 
   const relations = world.project(projectors.currentRelations);
   assert.equal(relations.some(row => row.from === "TodoMetrics" && row.rel === "hasAxis" && row.to === "TodoMetrics.axis.done"), true);
+  assert.equal(relations.some(row => row.from === "TodoEdge" && row.rel === "hasModuleKind" && row.to === "graphEdge"), true);
+  assert.equal(relations.some(row => row.from === "TodoEdge" && row.rel === "graphFrom" && row.to === "TodoFlow"), true);
   assert.equal(relations.some(row => row.from === "TodoApi" && row.rel === "hasOperation" && row.to === "TodoApi.operation.list"), true);
   assert.equal(relations.some(row => row.from === "TodoPage" && row.rel === "visualizesDataflow" && row.to === "TodoMetrics"), true);
 });
@@ -335,6 +349,227 @@ test("DESIRE+ validators enforce built-in source categories and semantic kinds",
   }), /semantic\.kind/);
 });
 
+test("DESIRE+ elaboration is a no-op without a registry", () => {
+  const desirePlus = compileRvmToDesirePlus(conciseDashboardRvm(), { file: "C:/demo/dashboard.rvm" });
+  const elaborated = elaborateDesirePlus(desirePlus);
+
+  assert.deepEqual(elaborated, validateDesirePlusDocument(desirePlus));
+});
+
+test("DESIRE+ elaborator expands registered source forms with provenance ancestry", () => {
+  const desirePlus = compileRvmToDesirePlus(conciseDashboardRvm(), { file: "C:/demo/dashboard.rvm" });
+  const dashboard = desirePlus.nodes.find(node => node.trace.sourceKind === "dashboard");
+  assert.ok(dashboard);
+  assert.equal(dashboard.semantic, null);
+  assert.equal(dashboard.meta.sourceCategory, "runtime");
+  assert.equal(dashboard.meta.desireBoundary, "desire-plus-only");
+
+  const elaborated = elaborateDesirePlus(desirePlus, { elaboratorRegistry: createDashboardElaboratorRegistry() });
+  assert.equal(elaborated.nodes.some(node => node.id === dashboard.id), false);
+
+  const generated = elaborated.nodes.filter(node => node.trace.originNodeId === dashboard.id);
+  assert.deepEqual(generated.map(node => node.semantic?.kind).sort(), ["dataflow", "projection", "surface"]);
+  for (const node of generated) {
+    assert.equal(node.trace.sourceLanguage, "rvm");
+    assert.equal(node.trace.file, "C:/demo/dashboard.rvm");
+    assert.equal(node.trace.via.includes("elaborate:plugin.dashboard"), true);
+    assert.equal(node.meta.sourceCategory, "semantic");
+    assert.equal(node.meta.desireBoundary, "desire-kernel");
+  }
+});
+
+test("DESIRE+ elaborator rejects malformed and duplicate output", () => {
+  const desirePlus = compileRvmToDesirePlus(conciseDashboardRvm(), { file: "C:/demo/dashboard.rvm" });
+
+  const malformed = createDesirePlusElaboratorRegistry().register({
+    id: "bad.dashboard",
+    sourceLanguage: "rvm",
+    sourceKind: "dashboard",
+    elaborate() {
+      return [{ kind: "rvm.form" }];
+    }
+  });
+  assert.throws(
+    () => elaborateDesirePlus(desirePlus, { elaboratorRegistry: malformed }),
+    /elaborator\(bad\.dashboard\)\.node\.id/
+  );
+
+  const duplicate = createDesirePlusElaboratorRegistry().register({
+    id: "duplicate.dashboard",
+    sourceLanguage: "rvm",
+    sourceKind: "dashboard",
+    elaborate(_node, { createNode }) {
+      const meta = { sourceCategory: "semantic", desireBoundary: "desire-kernel" };
+      return [
+        createNode({ name: "TodoMetrics", sourceKind: "dashboard.dataflow", semantic: dashboardDataflowSemantic("TodoMetrics"), meta }),
+        createNode({ name: "TodoMetrics", sourceKind: "dashboard.dataflow", semantic: dashboardDataflowSemantic("TodoMetrics"), meta })
+      ];
+    }
+  });
+  assert.throws(
+    () => elaborateDesirePlus(desirePlus, { elaboratorRegistry: duplicate }),
+    /duplicate DESIRE\+ node id/
+  );
+});
+
+test("concise RVM extension form stays above DESIRE unless elaborated", () => {
+  const desirePlus = compileRvmToDesirePlus(conciseDashboardRvm(), { file: "C:/demo/dashboard.rvm" });
+  const audit = auditRvmDesirePlus(desirePlus);
+
+  assert.equal(audit.total, 1);
+  assert.equal(audit.authoredRuntime, 1);
+  assert.equal(audit.semantic, 0);
+  assert.equal(audit.unknown, 0);
+  assert.deepEqual(normalizeDesirePlusToDesire(desirePlus).nodes.map(signature), []);
+});
+
+test("concise RVM extension elaborates into native DESIRE semantics and applies", () => {
+  const desirePlus = compileRvmToDesirePlus(conciseDashboardRvm(), { file: "C:/demo/dashboard.rvm" });
+  const elaborated = elaborateDesirePlus(desirePlus, { elaboratorRegistry: createDashboardElaboratorRegistry() });
+  const desire = normalizeDesirePlusToDesire(elaborated);
+  const signatures = desire.nodes.map(signature).sort(compareSignatures);
+
+  assert.deepEqual(signatures, [
+    {
+      kind: "dataflow",
+      name: "TodoMetrics",
+      body: dashboardDataflowBody()
+    },
+    {
+      kind: "projection",
+      name: "TodoList",
+      body: {
+        projectionKind: "list",
+        source: "todo_store",
+        props: {}
+      }
+    },
+    {
+      kind: "surface",
+      name: "TodoPage",
+      body: {
+        surfaceKind: "chart",
+        className: "todo-dashboard",
+        children: ["TodoList"],
+        props: {},
+        modelRef: "TodoMetrics",
+        frame: "cartesian",
+        encoding: {},
+        editable: [],
+        layers: []
+      }
+    }
+  ].sort(compareSignatures));
+
+  const world = createWorld();
+  applyDesire(world, desire);
+  const witnesses = world.allWitnesses();
+  const relations = world.project(projectors.currentRelations);
+
+  assert.equal(witnesses.some(w => w.process === "desire.define.dataflow" && w.body?.id === "TodoMetrics"), true);
+  assert.equal(witnesses.some(w => w.process === "desire.defineProjection" && w.body?.id === "TodoList"), true);
+  assert.equal(witnesses.some(w => w.process === "desire.defineSurface" && w.body?.id === "TodoPage"), true);
+  assert.equal(relations.some(row => row.from === "TodoPage" && row.rel === "hasChildSurface" && row.to === "TodoList"), true);
+  assert.equal(relations.some(row => row.from === "TodoPage" && row.rel === "visualizesDataflow" && row.to === "TodoMetrics"), true);
+  assert.equal(relations.some(row => row.from === "TodoMetrics" && row.rel === "hasAxis" && row.to === "TodoMetrics.axis.status"), true);
+});
+
+test("loaded plugin DESIRE+ elaborator expands concise RVM source into native semantics", async () => {
+  const pluginRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-desire-elaborator-plugin-"));
+  try {
+    const pluginDir = path.join(pluginRoot, "dashboard");
+    await fs.mkdir(pluginDir, { recursive: true });
+    await fs.writeFile(path.join(pluginDir, "plugin.json"), JSON.stringify({
+      id: "plugin.dashboard",
+      version: "0.1.0",
+      displayName: "Dashboard",
+      description: "Dashboard DESIRE elaborator",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      contributes: {}
+    }, null, 2));
+    await fs.writeFile(path.join(pluginDir, "runtime.js"), `
+      function fieldsOf(node) {
+        return Object.fromEntries((node.payload.fields ?? []).map(({ key, value }) => [key, value]));
+      }
+      export function elaborateDashboard(node, { createNode }) {
+        const fields = fieldsOf(node);
+        const model = fields.model ?? "DashboardMetrics";
+        const projection = fields.projection ?? "DashboardProjection";
+        const page = fields.page ?? node.name;
+        const source = fields.source ?? null;
+        const meta = { sourceCategory: "semantic", desireBoundary: "desire-kernel" };
+        return {
+          replace: true,
+          nodes: [
+            createNode({
+              name: model,
+              sourceKind: "dashboard.dataflow",
+              semantic: {
+                kind: "dataflow",
+                name: model,
+                axes: [{ name: "status", kind: "category", from: "done" }],
+                params: [],
+                derives: [{ name: "count", expr: "count(status)", over: ["status"] }],
+                reduces: []
+              },
+              meta
+            }),
+            createNode({
+              name: projection,
+              sourceKind: "dashboard.projection",
+              semantic: { kind: "projection", name: projection, projectionKind: "list", source, props: {} },
+              meta
+            }),
+            createNode({
+              name: page,
+              sourceKind: "dashboard.surface",
+              semantic: {
+                kind: "surface",
+                name: page,
+                surfaceKind: "chart",
+                className: "todo-dashboard",
+                children: [projection],
+                props: {},
+                modelRef: model,
+                frame: "cartesian",
+                encoding: {},
+                editable: [],
+                layers: []
+              },
+              meta
+            })
+          ]
+        };
+      }
+      export default {
+        desireExtensions: {
+          elaborators: [{ id: "plugin.dashboard.elaborator", sourceLanguage: "rvm", sourceKind: "dashboard", elaborate: elaborateDashboard }]
+        }
+      };
+    `);
+
+    const pluginCatalog = await readRuntimePluginCatalog({
+      pluginRoot,
+      runtimeProfile: "minimal",
+      configuredPluginIds: ["plugin.dashboard"]
+    });
+    const loadResult = await loadRuntimePluginModules({ pluginCatalog });
+    const { elaboratorRegistry } = createDesireRegistriesFromPluginExtensions(loadResult);
+    const desirePlus = compileRvmToDesirePlus(conciseDashboardRvm(), { file: "C:/demo/dashboard.rvm" });
+    const desire = normalizeDesirePlusToDesire(elaborateDesirePlus(desirePlus, { elaboratorRegistry }));
+    const world = createWorld();
+
+    assert.equal(loadResult.hasBlockingErrors, false);
+    assert.deepEqual(loadResult.desireExtensions.elaborators.map(row => row.id), ["plugin.dashboard.elaborator"]);
+    applyDesire(world, desire);
+    assert.equal(world.allWitnesses().some(w => w.process === "desire.define.dataflow" && w.body?.id === "TodoMetrics"), true);
+    assert.equal(world.project(projectors.currentRelations).some(row => row.from === "TodoPage" && row.rel === "visualizesDataflow" && row.to === "TodoMetrics"), true);
+  } finally {
+    await fs.rm(pluginRoot, { recursive: true, force: true });
+  }
+});
+
 test("DESIRE normalization separates runtime residuals from semantic nodes", () => {
   const docs = parseWitnessToml(`
 [context.frontend]
@@ -422,14 +657,14 @@ test("DESIRE application does not perform runtime default merging", () => {
       kind: "runtime.doc",
       body: {
         sourceLanguage: "wtoml",
-        sourceKind: "unsupportedBridge",
-        docKind: "unsupportedBridge",
-        values: { id: "manual_unknown" },
+        sourceKind: "app",
+        docKind: "app",
+        values: { id: "manual_app" },
         file: null,
         line: null,
         order: 1,
         sectionStyle: "array",
-        trace: trace("unsupportedBridge")
+        trace: trace("app")
       },
       meta: { compatibilityBridge: true, kernelResident: false, residualHome: "desire+" }
     })
@@ -443,16 +678,17 @@ test("DESIRE application does not perform runtime default merging", () => {
   assert.equal(audit.legacyResiduals, 1);
   assert.equal(audit.byResidualKind["runtime.declaration"], 1);
   assert.equal(audit.byResidualKind["runtime.doc"], 1);
+  assert.equal(audit.nativeCovered, 2);
+  assert.equal(audit.unsupported, 0);
 
   assert.equal(world.allWitnesses().some(w =>
-    w.process === "dsl.unknownSection"
-    && w.actor === "unknown"
-    && w.body?.kind === "unsupportedBridge"
-    && w.body?.values?.actor === undefined
+    w.process === "dsl.app.define"
+    && w.actor === "system"
+    && w.body?.id === "manual_app"
   ), true);
 });
 
-test("runtime declaration bridge audit separates native-covered and legacy-required declaration kinds", () => {
+test("runtime declaration bridge audit reports unregistered declaration kinds as unsupported", () => {
   const docs = parseWitnessToml(`
 [[app]]
 id = "demo_app"
@@ -468,8 +704,10 @@ id = "legacy_only"
   assert.equal(audit.canonicalResiduals, 2);
   assert.equal(audit.legacyResiduals, 0);
   assert.deepEqual(audit.byResidualKind, { "runtime.declaration": 2 });
-  assert.equal(audit.nativeCovered, 2);
-  assert.equal(audit.legacyRequired, 0);
+  assert.equal(audit.registered, 1);
+  assert.equal(audit.unsupported, 1);
+  assert.equal(audit.nativeCovered, 1);
+  assert.equal(audit.legacyRequired, 1);
   assert.equal(audit.policy.kernelResident, false);
   assert.equal(audit.policy.residualHome, "desire+");
   assert.equal(audit.byKind.app.nativeCovered, true);
@@ -478,29 +716,32 @@ id = "legacy_only"
   assert.equal(audit.byKind.app.legacyResiduals, 0);
   assert.equal(audit.byKind.app.kernelResident, false);
   assert.equal(audit.byKind.app.residualHome, "desire+");
-  assert.equal(audit.byKind.unsupportedBridge.nativeCovered, true);
-  assert.equal(audit.byKind.unsupportedBridge.nativeCoverage, "unknown-section");
+  assert.equal(audit.byKind.unsupportedBridge.registered, false);
+  assert.equal(audit.byKind.unsupportedBridge.unsupported, true);
+  assert.equal(audit.byKind.unsupportedBridge.nativeCovered, false);
+  assert.equal(audit.byKind.unsupportedBridge.nativeCoverage, "unregistered");
   assert.equal(audit.byKind.unsupportedBridge.canonicalResiduals, 1);
   assert.equal(audit.byKind.unsupportedBridge.legacyResiduals, 0);
-  assert.equal(audit.byKind.unsupportedBridge.legacyRequired, false);
+  assert.equal(audit.byKind.unsupportedBridge.legacyRequired, true);
   assert.equal(audit.byKind.unsupportedBridge.residualHome, "desire+");
 });
 
-test("native-only DESIRE application handles unknown runtime declarations without legacy fallback", () => {
-  const desire = normalizeDesirePlusToDesire(compileWtomlDocsToDesirePlus(parseWitnessToml(`
+test("native-only DESIRE application rejects unregistered runtime declarations", () => {
+  const docs = parseWitnessToml(`
 [[unsupportedBridge]]
 id = "legacy_only"
-`)));
+`).map(doc => ({ ...doc, file: "C:/demo/unknown.wtoml" }));
+  const desire = normalizeDesirePlusToDesire(compileWtomlDocsToDesirePlus(docs));
   const world = createWorld();
-  const audit = assertNoLegacyRuntimeDeclarationFallbackRequired(desire);
+  const audit = auditRuntimeDeclarationBridge(desire);
 
-  assert.equal(audit.legacyRequired, 0);
-  assert.doesNotThrow(() => applyDesireNativeOnly(world, desire));
-  assert.equal(world.allWitnesses().some(w =>
-    w.process === "dsl.unknownSection"
-    && w.body?.kind === "unsupportedBridge"
-    && w.body?.values?.id === "legacy_only"
-  ), true);
+  assert.equal(audit.legacyRequired, 1);
+  assert.equal(audit.unsupported, 1);
+  assert.throws(() => assertNoLegacyRuntimeDeclarationFallbackRequired(desire), /unsupportedBridge/);
+  assert.throws(
+    () => applyDesireNativeOnly(world, desire),
+    /unsupported runtime declaration: kind=unsupportedBridge file=C:\/demo\/unknown\.wtoml line=2 sourceLanguage=wtoml sourceKind=unsupportedBridge/
+  );
 });
 
 test("native-only DESIRE application accepts native-covered runtime declarations", () => {
@@ -513,6 +754,57 @@ label = "Demo"
 
   assert.equal(audit.legacyRequired, 0);
   assert.doesNotThrow(() => applyDesireNativeOnly(createWorld(), desire));
+});
+
+test("runtime declaration registry applies plugin-registered declaration handlers", () => {
+  const desire = normalizeDesirePlusToDesire(compileWtomlDocsToDesirePlus(parseWitnessToml(`
+[[pluginFeature]]
+id = "feature_one"
+`)));
+  const registry = createCoreRuntimeDeclarationRegistry()
+    .register("pluginFeature", {
+      nativeCoverage: "plugin",
+      extension: "plugin.demo",
+      apply(world, doc) {
+        return world.emit({
+          process: "plugin.runtimeDeclaration.apply",
+          actor: "plugin.demo",
+          claims: [],
+          body: {
+            kind: doc.kind,
+            values: structuredClone(doc.values)
+          }
+        });
+      }
+    });
+  const audit = auditRuntimeDeclarationBridge(desire, { runtimeDeclarationRegistry: registry });
+  const world = createWorld();
+
+  assert.equal(audit.unsupported, 0);
+  assert.equal(audit.nativeCovered, 1);
+  assert.equal(audit.byKind.pluginFeature.nativeCoverage, "plugin");
+  applyDesireNativeOnly(world, desire, { runtimeDeclarationRegistry: registry });
+  assert.equal(world.allWitnesses().some(w =>
+    w.process === "plugin.runtimeDeclaration.apply"
+    && w.body?.values?.id === "feature_one"
+  ), true);
+});
+
+test("runtime declaration registry rejects registered declarations without handlers", () => {
+  const desire = normalizeDesirePlusToDesire(compileWtomlDocsToDesirePlus(parseWitnessToml(`
+[[pluginFeature]]
+id = "feature_one"
+`)));
+  const registry = createRuntimeDeclarationRegistry([{ kind: "pluginFeature", nativeCoverage: "plugin" }]);
+  const audit = auditRuntimeDeclarationBridge(desire, { runtimeDeclarationRegistry: registry });
+
+  assert.equal(audit.registered, 1);
+  assert.equal(audit.registeredWithoutHandler, 1);
+  assert.equal(audit.byKind.pluginFeature.nativeCoverage, "registered-without-handler");
+  assert.throws(
+    () => applyDesireNativeOnly(createWorld(), desire, { runtimeDeclarationRegistry: registry }),
+    /registered runtime declaration has no apply handler: kind=pluginFeature/
+  );
 });
 
 test("WTOML apply path still runs through compatibility wrapper", async () => {
@@ -872,10 +1164,6 @@ actor = "context_actor"
 id = "ctx_page"
 context = "ctx_target"
 title = "Context page"
-
-[[unsupportedBridge]]
-id = "ctx_unknown"
-context = "ctx_target"
 `).map(doc => ({ ...doc, file: "C:/demo/native-context-actor.wtoml" }));
   const desire = normalizeDesirePlusToDesire(compileWtomlDocsToDesirePlus(docs));
 
@@ -885,12 +1173,6 @@ context = "ctx_target"
     w.process === "defineWidget"
     && w.actor === "context_actor"
     && w.body?.id === "ctx_page"
-  ), true);
-  assert.equal(world.allWitnesses().some(w =>
-    w.process === "dsl.unknownSection"
-    && w.actor === "context_actor"
-    && w.body?.kind === "unsupportedBridge"
-    && w.body?.values?.actor === "context_actor"
   ), true);
 });
 
@@ -1317,7 +1599,7 @@ children = ["todo_list"]
 
 [[dataflow]]
 id = "TodoMetrics"
-axes = [{ name = "completed", kind = "category", from = "done" }]
+axes = [{ name = "completed", kind = "category", values = ["done"] }]
 params = [{ name = "window", default = 7 }]
 derives = [{ name = "count", expr = "completed_total + window", over = [] }]
 `));
@@ -1678,7 +1960,7 @@ view TodoRuntimePage kind=runtime_root class=runtime-shell.runtime-page children
   assert.equal(world.project(projectors.currentRelations).some(row => row.from === "TodoRuntimePage" && row.rel === "surfaceKind" && row.to === "runtime_root"), true);
 });
 
-test("RVM lowered runtime and graph-data forms are classified as DESIRE+-only residuals", () => {
+test("RVM lowered runtime remains residual while graph-data normalizes into DESIRE graph nodes", () => {
   const desirePlus = compileRvmToDesirePlus(`
 atom draft_title_state {
   kind state_cell
@@ -1698,17 +1980,24 @@ machine todo_app {
 
 graph_node TodoRecord {
   kind entity
+  entity_type TodoRecord
 }
 
 graph_edge TodoSessionOwnsTodoRecord {
   from TodoSession
   to TodoRecord
+  edge_type owns
 }
 
 entity_type TodoRecord {
+  fields {
+    id: string
+  }
 }
 
 edge_type owns {
+  from TodoSession
+  to TodoRecord
 }
 
 unparsed residual line
@@ -1719,20 +2008,40 @@ unparsed residual line
   assert.equal(byKind.get("atom")?.meta.residualCategory, "lowered-runtime");
   assert.equal(byKind.get("atom")?.meta.desireBoundary, "desire-plus-only");
   assert.equal(byKind.get("machine")?.meta.residualCategory, "lowered-runtime");
-  assert.equal(byKind.get("graph_node")?.meta.sourceCategory, "graph-data");
-  assert.equal(byKind.get("entity_type")?.meta.boundaryReason, "graph data needs a separate semantic graph model decision");
+  assert.equal(byKind.get("graph_node")?.meta.sourceCategory, "semantic");
+  assert.equal(byKind.get("graph_node")?.meta.desireBoundary, "desire-kernel");
+  assert.equal(byKind.get("entity_type")?.semantic?.kind, "graph");
   assert.equal(byKind.get("unknown")?.meta.desireBoundary, "needs-classification");
 
   const audit = auditRvmDesirePlus(desirePlus);
   assert.equal(audit.total, 9);
   assert.equal(audit.loweredRuntime, 4);
-  assert.equal(audit.graphData, 4);
+  assert.equal(audit.graphData, 0);
   assert.equal(audit.unknown, 1);
-  assert.equal(audit.semantic, 0);
+  assert.equal(audit.semantic, 4);
   assert.equal(audit.bySourceKind.atom, 1);
 
   const desire = normalizeDesirePlusToDesire(desirePlus);
-  assert.equal(desire.nodes.length, 0);
+  assert.equal(desire.nodes.length, 4);
+  assert.equal(desire.nodes.every(node => node.kind === "graph"), true);
+  assert.equal(desire.nodes.find(node => node.name === "TodoSessionOwnsTodoRecord")?.body.from, "TodoSession");
+  assert.equal(desire.nodes.find(node => node.name === "TodoSessionOwnsTodoRecord")?.body.to, "TodoRecord");
+
+  const world = createWorld();
+  applyDesire(world, desire);
+  const relations = world.project(projectors.currentRelations);
+  assert.equal(relations.some(row => row.from === "TodoRecord" && row.rel === "hasModuleKind" && row.to === "graphNode"), true);
+  assert.equal(relations.some(row => row.from === "TodoSessionOwnsTodoRecord" && row.rel === "hasModuleKind" && row.to === "graphEdge"), true);
+  assert.equal(relations.some(row => row.from === "TodoSessionOwnsTodoRecord" && row.rel === "graphFrom" && row.to === "TodoSession"), true);
+  assert.equal(relations.some(row => row.from === "TodoSessionOwnsTodoRecord" && row.rel === "graphTo" && row.to === "TodoRecord"), true);
+  assert.equal(world.allWitnesses().some(w =>
+    w.process === "dsl.source.annotate"
+    && w.body?.target === "TodoSessionOwnsTodoRecord"
+    && w.body?.sourceLanguage === "rvm"
+    && w.body?.sourceKind === "graph_edge"
+    && typeof w.body?.desireNodeId === "string"
+    && Array.isArray(w.body?.desireSourceNodeIds)
+  ), true);
 });
 
 test("RVM module blocks, stdlib directives, comments, and enums classify without residual unknowns", () => {
@@ -2033,7 +2342,7 @@ test("broad RVM specimen set compiles into DESIRE+ with classified residuals", a
   assert.ok(totals.semantic > 0);
   assert.ok(totals.sourceOnly > 0);
   assert.ok(totals.loweredRuntime > 0);
-  assert.ok(totals.graphData > 0);
+  assert.equal(totals.graphData, 0);
   assert.ok(totals.fixtureCorruption > 0);
   assert.equal(
     totals.total,
@@ -2046,6 +2355,88 @@ test("broad RVM specimen set compiles into DESIRE+ with classified residuals", a
       + totals.unknown
   );
 });
+
+function conciseDashboardRvm() {
+  return readFileSync(path.join(process.cwd(), "test", "fixtures", "desire", "concise-dashboard.rvm"), "utf8");
+}
+
+function createDashboardElaboratorRegistry() {
+  return createDesirePlusElaboratorRegistry().register({
+    id: "plugin.dashboard",
+    sourceLanguage: "rvm",
+    sourceKind: "dashboard",
+    elaborate(node, { createNode }) {
+      const fields = Object.fromEntries((node.payload.fields ?? []).map(({ key, value }) => [key, value]));
+      const model = fields.model ?? `${node.name}Metrics`;
+      const projection = fields.projection ?? `${node.name}Projection`;
+      const source = fields.source ?? null;
+      const page = fields.page ?? node.name;
+      const meta = {
+        sourceCategory: "semantic",
+        desireBoundary: "desire-kernel",
+        boundaryReason: "dashboard elaborator generated kernel semantic nodes"
+      };
+      return {
+        replace: true,
+        nodes: [
+          createNode({
+            name: model,
+            sourceKind: "dashboard.dataflow",
+            semantic: dashboardDataflowSemantic(model),
+            meta
+          }),
+          createNode({
+            name: projection,
+            sourceKind: "dashboard.projection",
+            semantic: {
+              kind: "projection",
+              name: projection,
+              projectionKind: "list",
+              source,
+              props: {}
+            },
+            meta
+          }),
+          createNode({
+            name: page,
+            sourceKind: "dashboard.surface",
+            semantic: {
+              kind: "surface",
+              name: page,
+              surfaceKind: "chart",
+              className: "todo-dashboard",
+              children: [projection],
+              props: {},
+              modelRef: model,
+              frame: "cartesian",
+              encoding: {},
+              editable: [],
+              layers: []
+            },
+            meta
+          })
+        ]
+      };
+    }
+  });
+}
+
+function dashboardDataflowSemantic(name) {
+  return {
+    kind: "dataflow",
+    name,
+    ...dashboardDataflowBody()
+  };
+}
+
+function dashboardDataflowBody() {
+  return {
+    axes: [{ name: "status", kind: "category", from: "done" }],
+    params: [],
+    derives: [{ name: "count", expr: "count(status)", over: ["status"] }],
+    reduces: []
+  };
+}
 
 async function collectFilesByExtension(dir, extension) {
   const entries = await fs.readdir(dir, { withFileTypes: true });

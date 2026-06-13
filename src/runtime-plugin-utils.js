@@ -804,9 +804,6 @@ function buildPluginPackageRow({
     }
   }
   const runtimeEntry = resolvePluginRuntimeEntry(discoveryPath, manifest?.runtime ?? null, errors);
-  if (manifest?.runtime && !manifest.activatesBundles.length) {
-    errors.push("runtime.entry requires activatesBundles");
-  }
   if (runtimeEntry && !existsSync(runtimeEntry.resolvedPath)) {
     errors.push(`runtime.entry not found: ${manifest?.runtime?.entry ?? runtimeEntry.entry}`);
   }
@@ -828,10 +825,13 @@ function buildPluginPackageRow({
   }
   const installableInPrinciple = installabilityReasons.length === 0;
   const activatesBundles = Boolean(manifest?.activatesBundles.length);
+  const pluginOwnedRuntime = Boolean(runtimeEntry);
   const metaPackage = Boolean(manifest && !activatesBundles && !manifest.runtime && manifest.dependsOnPlugins.length > 0);
-  const executable = Boolean(activatesBundles || metaPackage);
-  const executionMode = activatesBundles
-    ? (runtimeEntry ? "plugin-owned" : "bundle-bridge")
+  const executable = Boolean(pluginOwnedRuntime || activatesBundles || metaPackage);
+  const executionMode = pluginOwnedRuntime
+    ? "plugin-owned"
+    : activatesBundles
+      ? "bundle-bridge"
     : metaPackage
       ? "meta-package"
       : "metadata-only";

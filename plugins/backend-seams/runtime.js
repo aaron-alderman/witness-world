@@ -1,5 +1,7 @@
 import { handlerCatalog } from "./handler-catalog.js";
 import { createBackendSeamsHandlers } from "./handlers.js";
+import { renderBackendSeamsPage } from "./backend-seams-page.js";
+import { createPracticalBackendSupportServices } from "./support-services.js";
 
 export const bundleId = "bundle-backend-seams";
 
@@ -51,6 +53,17 @@ export const surfaces = Object.freeze([
   })
 ]);
 
+export const providers = Object.freeze([
+  {
+    kind: "supportServiceFactory",
+    id: "backend-seams.support",
+    factory: () => ({
+      createPracticalBackendSupportServices,
+      renderBackendSeamsPage
+    })
+  }
+]);
+
 export function createHandlers(deps) {
   return createBackendSeamsHandlers(deps);
 }
@@ -60,5 +73,6 @@ export default {
   handlerCatalog,
   routes,
   surfaces,
+  providers,
   createHandlers
 };

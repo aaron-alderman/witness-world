@@ -12,7 +12,6 @@ import {
   pageHandlerIdsForProfile,
   resolveRuntimeProfileStrict
 } from "../src/runtime-bundles.js";
-import { runtimeBundleHandlerCatalog } from "../src/runtime-bundle-handlers.js";
 
 function applyMinimalPageDsl(world) {
   applyWitnessToml(world, `
@@ -83,7 +82,7 @@ test("minimal runtime profile only installs core host capabilities", () => {
   assert.deepEqual(frontend, ["dom.render", "http.fetch"]);
 });
 
-test("practical-backend runtime profile installs extracted backend capabilities", () => {
+test("profile-time host declaration stays core-only before active plugin loading", () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "practical-backend" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "practical-backend" });
@@ -93,15 +92,15 @@ test("practical-backend runtime profile installs extracted backend capabilities"
 
   assert.equal(backend.has("http.serve"), true);
   assert.equal(backend.has("runtime.config"), true);
-  assert.equal(backend.has("fs.json.write"), true);
-  assert.equal(backend.has("fs.blob"), true);
-  assert.equal(backend.has("fs.stream"), true);
-  assert.equal(backend.has("db.sql"), true);
-  assert.equal(backend.has("jobs.queue"), true);
-  assert.equal(backend.has("search.index"), true);
-  assert.equal(backend.has("notify.email"), true);
-  assert.equal(backend.has("http.outbound"), true);
-  assert.equal(backend.has("auth.oauth"), true);
+  assert.equal(backend.has("fs.json.write"), false);
+  assert.equal(backend.has("fs.blob"), false);
+  assert.equal(backend.has("fs.stream"), false);
+  assert.equal(backend.has("db.sql"), false);
+  assert.equal(backend.has("jobs.queue"), false);
+  assert.equal(backend.has("search.index"), false);
+  assert.equal(backend.has("notify.email"), false);
+  assert.equal(backend.has("http.outbound"), false);
+  assert.equal(backend.has("auth.oauth"), false);
   assert.equal(frontend.has("dom.render"), true);
   assert.equal(frontend.has("http.fetch"), true);
   assert.equal(frontend.has("db.sql"), false);
@@ -967,8 +966,11 @@ test("runtime diagnostics endpoint exposes full-profile bundle and handler-set c
     assert.equal(body.plugins.validCount >= 5, true);
     assert.equal(body.plugins.compatibleCount >= 1, true);
     assert.equal(body.plugins.trustStateCounts.local >= 1 || body.plugins.trustStateCounts.unsigned >= 1, true);
-    assert.deepEqual(body.plugins.activePluginIds, []);
-    assert.deepEqual(body.plugins.addedBundleIds, []);
+    assert.equal(body.plugins.activePluginIds.includes("plugin.inspect"), true);
+    assert.equal(body.plugins.activePluginIds.includes("plugin.practical-backend"), true);
+    assert.equal(body.plugins.activePluginIds.includes("plugin.demo"), true);
+    assert.equal(body.plugins.addedBundleIds.includes("bundle-inspect"), true);
+    assert.equal(body.plugins.addedBundleIds.includes("bundle-demo"), true);
   } finally {
     await server.close();
   }
@@ -1222,15 +1224,16 @@ test("full runtime plus plugin.inspect is a no-op in bundle composition but stil
 
   try {
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
-    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.inspect"]);
-    assert.deepEqual(diagnostics.plugins.addedBundleIds, []);
+    assert.equal(diagnostics.plugins.activePluginIds.includes("plugin.inspect"), true);
+    assert.deepEqual(diagnostics.plugins.operatorPluginIds, ["plugin.inspect"]);
+    assert.equal(diagnostics.plugins.addedBundleIds.includes("bundle-inspect"), true);
     assert.equal(diagnostics.activeBundles.filter(bundle => bundle.id === "bundle-inspect").length, 1);
   } finally {
     await server.close();
   }
 });
 
-test("authorable handler catalogs vary by active runtime profile", () => {
+test("static handler catalog helpers stay core-only before plugin runtime loading", () => {
   const minimalHandlers = authorableHandlerIdsForProfile("minimal");
   const minimalPageHandlers = pageHandlerIdsForProfile("minimal");
   const fullHandlers = authorableHandlerIdsForProfile("full");
@@ -1241,13 +1244,12 @@ test("authorable handler catalogs vary by active runtime profile", () => {
   assert.equal(minimalHandlers.includes("db.sql.query"), false);
   assert.deepEqual(minimalPageHandlers, ["page.home"]);
 
-  assert.equal(fullHandlers.includes("page.world"), true);
-  assert.equal(fullHandlers.includes("db.sql.query"), true);
-  assert.equal(fullHandlers.includes("canvas.process"), true);
-  assert.equal(fullHandlers.includes("mcp.http"), true);
-  assert.equal(fullPageHandlers.includes("page.process"), true);
-  assert.equal(fullPageHandlers.includes("page.canvas"), true);
-  assert.equal(fullPageHandlers.includes("page.backendSeams"), true);
+  assert.equal(fullHandlers.includes("page.home"), true);
+  assert.equal(fullHandlers.includes("page.world"), false);
+  assert.equal(fullHandlers.includes("db.sql.query"), false);
+  assert.equal(fullHandlers.includes("canvas.process"), false);
+  assert.equal(fullHandlers.includes("mcp.http"), false);
+  assert.deepEqual(fullPageHandlers, ["page.home"]);
 });
 
 test("blank minimal runtime does not expose authoring bootstrap routes or fallback", async () => {
@@ -1515,8 +1517,6 @@ test("minimal runtime plus plugin.eden loads Eden handlers from the plugin runti
     assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.eden"]);
     assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-eden"]);
     assert.equal(diagnostics.plugins.loadedRuntimeCount, 1);
-    assert.equal(runtimeBundleHandlerCatalog("bundle-eden").dispatchHandlers.includes("edenAcademy.read"), true);
-    assert.equal(runtimeBundleHandlerCatalog("bundle-eden").pageHandlers.includes("page.edenCanvas"), true);
     assert.equal(edenPlugin.resolvedBundles.some(row => row.id === "bundle-eden"), true);
     assert.equal(edenPlugin.execution.mode, "plugin-owned");
     assert.equal(edenPlugin.runtimeModule.loadStatus, "loaded");

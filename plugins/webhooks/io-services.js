@@ -9,6 +9,31 @@ export function webhookPayloadPathFor(appContext, webhookIdValue) {
   return path.join(webhooksRootFor(appContext), encodeURIComponent(webhookIdValue), "payload");
 }
 
+export function webhookReadShape(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    target: row.target,
+    deliveryId: row.deliveryId,
+    contentType: row.contentType,
+    sizeBytes: row.sizeBytes,
+    storageKey: row.storageKey,
+    status: row.status,
+    signatureStatus: row.signatureStatus,
+    replayStatus: row.replayStatus,
+    receivedAt: row.receivedAt,
+    timestamp: row.timestamp,
+    correlationId: row.correlationId,
+    context: row.context,
+    serverRunner: row.serverRunner,
+    jobId: row.jobId,
+    attempt: row.attempt,
+    maxAttempts: row.maxAttempts,
+    retryDelayMs: row.retryDelayMs,
+    lastError: row.lastError
+  };
+}
+
 export function createWebhookIoServices({
   runtimeConfigLookup,
   runtimeConfigScalar,

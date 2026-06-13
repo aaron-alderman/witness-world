@@ -1,9 +1,8 @@
 import http from "node:http";
 import fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { relation } from "./kernel.js";
-import { ensureCapabilityDefinition, installCapability, moduleProjectors } from "./modules.js";
+import { ensureCapabilityDefinition, installCapability, moduleProjectors, registerModuleProjectors } from "./modules.js";
 import {
   headerValue,
   readJson,
@@ -19,18 +18,6 @@ import {
   createRuntimeAppContextForRunner,
   createRuntimeResolverForServer
 } from "./runtime-startup-services.js";
-import {
-  createBuiltinAssetJobHandlers
-} from "../plugins/assets/job-handlers.js";
-import {
-  createBuiltinNotificationJobHandlers
-} from "../plugins/notifications/job-handlers.js";
-import {
-  createBuiltinWebhookJobHandlers
-} from "../plugins/webhooks/job-handlers.js";
-import { createDbSqlRuntime } from "../plugins/sqlite/provider-runtime.js";
-import { createInProcessJobQueue } from "../plugins/jobs/provider-runtime.js";
-import { createSearchIndexRuntime } from "../plugins/search/provider-runtime.js";
 import { createRuntimeContextResolver } from "./runtime-context-resolver.js";
 import {
   compileRouteMatcher,
@@ -61,25 +48,9 @@ import {
   applyRuntimePluginLoadState,
   loadRuntimePluginModules
 } from "./runtime-plugin-loader.js";
+import { collectActiveRuntimeContributions } from "./runtime-active-contributions.js";
 import { buildRuntimeOperatorContract } from "./runtime-operator-contract.js";
 import { createRuntimeOperatorService } from "./runtime-operator-service.js";
-
-function canvasLibFilesForRuntime() {
-  const srcDir = path.dirname(fileURLToPath(import.meta.url));
-  const canvasDir = path.join(srcDir, "..", "plugins", "canvas");
-  const edenDir = path.join(srcDir, "..", "plugins", "eden");
-  return new Map([
-    ["canvas-core.js", path.join(canvasDir, "canvas-core.js")],
-    ["projectors-core.js", path.join(canvasDir, "projectors-core.js")],
-    ["canvas-projection.js", path.join(canvasDir, "canvas-projection.js")],
-    ["eden-personal-box.js", path.join(edenDir, "eden-personal-box.js")],
-    ["eden-page-theme.js", path.join(edenDir, "eden-page-theme.js")],
-    ["eden-capability-install.js", path.join(edenDir, "eden-capability-install.js")],
-    ["eden-academy.js", path.join(edenDir, "eden-academy.js")],
-    ["eden-organization.js", path.join(edenDir, "eden-organization.js")],
-    ["eden-theory.js", path.join(edenDir, "eden-theory.js")]
-  ]);
-}
 
 export async function startRuntimeServer(world, {
   actor,
@@ -118,18 +89,13 @@ export async function startRuntimeServer(world, {
     createRuntimeAppContext: createRuntimeAppContextImpl = createRuntimeAppContext,
     createUnavailableRuntimeAppContext: createUnavailableRuntimeAppContextImpl = createUnavailableRuntimeAppContext,
     createRuntimeContextResolver: createRuntimeContextResolverImpl = createRuntimeContextResolver,
-    createBuiltinAssetJobHandlers: createBuiltinAssetJobHandlersImpl = createBuiltinAssetJobHandlers,
-    createBuiltinNotificationJobHandlers: createBuiltinNotificationJobHandlersImpl = createBuiltinNotificationJobHandlers,
-    createBuiltinWebhookJobHandlers: createBuiltinWebhookJobHandlersImpl = createBuiltinWebhookJobHandlers,
-    createInProcessJobQueue: createInProcessJobQueueImpl = createInProcessJobQueue,
-    createDbSqlRuntime: createDbSqlRuntimeImpl = createDbSqlRuntime,
-    createSearchIndexRuntime: createSearchIndexRuntimeImpl = createSearchIndexRuntime,
     resolveRuntimePluginRoot: resolveRuntimePluginRootImpl = resolveRuntimePluginRoot,
     resolveConfiguredRuntimePluginIds: resolveConfiguredRuntimePluginIdsImpl = resolveConfiguredRuntimePluginIds,
     readRuntimePluginCatalog: readRuntimePluginCatalogImpl = readRuntimePluginCatalog,
     defaultHostCapabilitiesForProfile: defaultHostCapabilitiesForProfileImpl = defaultHostCapabilitiesForProfile,
     loadRuntimePluginModules: loadRuntimePluginModulesImpl = loadRuntimePluginModules,
-    applyRuntimePluginLoadState: applyRuntimePluginLoadStateImpl = applyRuntimePluginLoadState
+    applyRuntimePluginLoadState: applyRuntimePluginLoadStateImpl = applyRuntimePluginLoadState,
+    collectActiveRuntimeContributions: collectActiveRuntimeContributionsImpl = collectActiveRuntimeContributions
   } = deps;
 
   const runtimePluginRoot = resolveRuntimePluginRootImpl({ env });
@@ -203,6 +169,28 @@ export async function startRuntimeServer(world, {
     additionalBundleIds,
     bundleOverrides
   });
+  let runtimeContributions;
+  let unregisterRuntimeModuleProjectors = () => {};
+  try {
+    runtimeContributions = collectActiveRuntimeContributionsImpl({
+      bundles: resolvedRuntime.bundles ?? []
+    });
+    unregisterRuntimeModuleProjectors = registerModuleProjectors(
+      `runtime.activePlugins:${serverRunner.id}:${randomUUID()}`,
+      runtimeContributions.moduleProjectors ?? {}
+    );
+  } catch (error) {
+    world.emit({
+      process: "server.start.failed",
+      actor,
+      claims: [],
+      body: {
+        reason: "runtime plugin contributions unresolved",
+        message: error instanceof Error ? error.message : String(error)
+      }
+    });
+    return { ok: false, reason: "runtime plugin contributions unresolved", error };
+  }
   const activeRuntimeProfile = resolvedRuntime.profile;
   const compositionOptions = { additionalBundleIds, bundleOverrides };
   const runtimeSurfaceEntries = runtimeSurfaceEntriesForProfileImpl(activeRuntimeProfile, null, compositionOptions);
@@ -217,6 +205,7 @@ export async function startRuntimeServer(world, {
   const backendHost = serverRunner.backendHost;
   const frontendHost = serverRunner.frontendHost;
   if (!backendHost || !frontendHost) {
+    unregisterRuntimeModuleProjectors();
     world.emit({
       process: "server.start.failed",
       actor,
@@ -255,6 +244,7 @@ export async function startRuntimeServer(world, {
   const missingBackend = requiredBackend.filter(capability => !backendCaps.has(capability));
   const missingFrontend = requiredFrontend.filter(capability => !frontendCaps.has(capability));
   if (missingBackend.length || missingFrontend.length) {
+    unregisterRuntimeModuleProjectors();
     world.emit({
       process: "server.start.failed",
       actor,
@@ -266,6 +256,7 @@ export async function startRuntimeServer(world, {
 
   const runtimeConfig = resolveRuntimeConfig(serverRunner.runtimeConfig, env);
   if (!runtimeConfig.ok) {
+    unregisterRuntimeModuleProjectors();
     world.emit({
       process: "server.start.failed",
       actor,
@@ -287,18 +278,14 @@ export async function startRuntimeServer(world, {
     sendJson,
     readJson,
     handlerSetFactories,
-    createBuiltinAssetJobHandlers: createBuiltinAssetJobHandlersImpl,
-    createBuiltinNotificationJobHandlers: createBuiltinNotificationJobHandlersImpl,
-    createBuiltinWebhookJobHandlers: createBuiltinWebhookJobHandlersImpl,
-    createInProcessJobQueue: createInProcessJobQueueImpl,
-    createDbSqlRuntime: createDbSqlRuntimeImpl,
-    createSearchIndexRuntime: createSearchIndexRuntimeImpl,
+    runtimeContributions,
     resolveStorageConfig,
     resolveRuntimeConfig,
     env,
     createRuntimeAppContext: createRuntimeAppContextImpl
   });
   if (!appContext.ok) {
+    unregisterRuntimeModuleProjectors();
     world.emit({
       process: "server.start.failed",
       actor,
@@ -364,6 +351,7 @@ export async function startRuntimeServer(world, {
     runtimeBundleSummary: resolvedRuntime,
     runtimeSurfaceEntries,
     handlerSetDefinitions,
+    runtimeContributions,
     runtimePluginRoot,
     runtimePluginIds: effectiveRuntimePluginCatalog.operatorPluginIds,
     authoredRuntimePluginIds: effectiveRuntimePluginCatalog.authoredPluginIds
@@ -379,12 +367,7 @@ export async function startRuntimeServer(world, {
     sendJson,
     readJson,
     handlerSetFactories,
-    createBuiltinAssetJobHandlers: createBuiltinAssetJobHandlersImpl,
-    createBuiltinNotificationJobHandlers: createBuiltinNotificationJobHandlersImpl,
-    createBuiltinWebhookJobHandlers: createBuiltinWebhookJobHandlersImpl,
-    createInProcessJobQueue: createInProcessJobQueueImpl,
-    createDbSqlRuntime: createDbSqlRuntimeImpl,
-    createSearchIndexRuntime: createSearchIndexRuntimeImpl,
+    runtimeContributions,
     resolveStorageConfig,
     resolveRuntimeConfig,
     env,
@@ -394,7 +377,7 @@ export async function startRuntimeServer(world, {
     resolveLiveRunner: () => resolveServerRunner(world, null)
   });
   const { runtimeContexts, resolveActiveRuntime } = runtimeResolver;
-  const canvasLibFiles = canvasLibFilesForRuntime();
+  const staticPluginFiles = runtimeContributions.staticAssetFiles ?? new Map();
   const sseClients = new Set();
   let sseLastCount = world.allWitnesses().length;
   const sseWatcher = setInterval(() => {
@@ -427,7 +410,7 @@ export async function startRuntimeServer(world, {
     try {
       if (req.method === "GET" && req.url?.startsWith("/canvas-lib/")) {
         const name = decodeURIComponent(req.url.slice("/canvas-lib/".length));
-        const resolvedFile = canvasLibFiles.get(name);
+        const resolvedFile = staticPluginFiles.get(name);
         if (!resolvedFile) {
           world.observe({ process: "backend.readCanvasLib.failed", actor: backendHost, claims: [], body: { name, reason: "not in canvas-lib whitelist" } });
           sendJson(res, 404, { error: "unknown canvas-lib module", name });
@@ -601,6 +584,7 @@ export async function startRuntimeServer(world, {
       for (const client of sseClients) client.end();
       sseClients.clear();
       for (const context of new Set(runtimeContexts.values())) context?.close?.();
+      unregisterRuntimeModuleProjectors();
       server.closeAllConnections?.();
       return new Promise(resolve => server.close(resolve));
     }

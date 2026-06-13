@@ -6,6 +6,7 @@ import { projectEdenPageTheme } from "./eden-page-theme.js";
 import { projectEdenAcademyState } from "./eden-academy.js";
 import { edenNeighborhoodProjection } from "./eden-projection.js";
 import { renderEdenPage } from "./eden-page.js";
+import { providers } from "./runtime.js";
 
 test("eden plugin exposes eden bundle handlers", async () => {
   const source = await readFile(new URL("./runtime.js", import.meta.url), "utf8");
@@ -56,7 +57,11 @@ test("canvas no longer owns Eden projection helpers", async () => {
 
 test("canvas-lib serves Eden compatibility modules from plugin.eden", async () => {
   const source = await readFile(new URL("../../src/runtime-server.js", import.meta.url), "utf8");
-  assert.equal(source.includes('const edenDir = path.join(srcDir, "..", "plugins", "eden")'), true);
-  assert.equal(source.includes('["eden-personal-box.js", path.join(edenDir, "eden-personal-box.js")]'), true);
-  assert.equal(source.includes('["eden-page-theme.js", path.join(edenDir, "eden-page-theme.js")]'), true);
+  const staticProvider = providers.find(provider => provider.kind === "staticAssetProvider" && provider.id === "eden.static");
+  assert.equal(source.includes("edenDir"), false);
+  assert.equal(staticProvider.mount, "/canvas-lib/");
+  assert.equal(Object.keys(staticProvider.files).includes("eden-personal-box.js"), true);
+  assert.equal(Object.keys(staticProvider.files).includes("eden-page-theme.js"), true);
+  assert.equal(String(staticProvider.files["eden-personal-box.js"]).replaceAll("\\", "/").includes("/plugins/eden/eden-personal-box.js"), true);
+  assert.equal(String(staticProvider.files["eden-page-theme.js"]).replaceAll("\\", "/").includes("/plugins/eden/eden-page-theme.js"), true);
 });

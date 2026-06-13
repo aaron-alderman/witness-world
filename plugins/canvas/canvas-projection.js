@@ -78,6 +78,24 @@ function assetAttachmentMaps(current, assetRows, { titles, kinds, contexts }) {
   return { byTarget, byAsset, byAssetRows };
 }
 
+function assetIngestRetryUrl(assetId) {
+  return `/api/assets/${encodeURIComponent(assetId)}/ingest/retry`;
+}
+
+function assetSearchReindexUrl(assetId) {
+  return `/api/assets/${encodeURIComponent(assetId)}/search/reindex`;
+}
+
+function assetCanRetryIngest(row) {
+  const status = String(row?.processingStatus || "");
+  return status === "dead-letter" || status === "enqueue-failed";
+}
+
+function assetCanRefreshSearch(row) {
+  if (String(row?.searchStatus || "") === "manual") return true;
+  return typeof row?.searchError === "string" && row.searchError.trim().length > 0;
+}
+
 function assetIndex(witnesses, current, kinds, titles) {
   const assetDownloadUrl = contentUrl => {
     if (typeof contentUrl !== "string" || !contentUrl) return null;

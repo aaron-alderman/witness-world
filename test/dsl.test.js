@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { createWorld, createThing, projectors } from "../src/kernel.js";
-import { parseWitnessToml, applyWitnessToml, applyWitnessDocs, applyWitnessDocsLegacy, loadWitnessTomlFile } from "../src/dsl.js";
+import { parseWitnessToml, applyWitnessToml, applyWitnessDocs, applyWitnessDocsLegacy, applyWitnessDocsWithRuntimePlugins, loadWitnessTomlFile } from "../src/dsl.js";
 import { moduleProjectors } from "../src/modules.js";
 import { frontendProgramsProjection, widgetTree } from "../src/widgets.js";
+import { mcpServers, mcpToolInstalls } from "../plugins/mcp/projections.js";
 
 const script = `
 # Compiler ladder
@@ -139,15 +142,72 @@ note = null
   }, /unsupported value/);
 });
 
-test("records unknown DSL sections as dsl.unknownSection witnesses", () => {
-  const world = createWorld();
-  const witnesses = applyWitnessToml(world, `
+test("parses unknown DSL sections but rejects unregistered runtime declarations", () => {
+  const source = `
 [[mystery]]
 actor = "adam"
 id = "mystery_object"
+`;
+  const docs = parseWitnessToml(source);
+  assert.equal(docs[0].kind, "mystery");
+  assert.equal(docs[0].values.id, "mystery_object");
+  assert.throws(() => applyWitnessToml(createWorld(), source), /unsupported runtime declaration: kind=mystery/);
+});
+
+test("authored runtime plugin installs activate plugin DESIRE runtime declaration handlers during WTOML loading", async () => {
+  const pluginRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-desire-plugin-"));
+  try {
+    const pluginDir = path.join(pluginRoot, "dashboard");
+    await fs.mkdir(pluginDir, { recursive: true });
+    await fs.writeFile(path.join(pluginDir, "plugin.json"), JSON.stringify({
+      id: "plugin.dashboard",
+      version: "0.1.0",
+      displayName: "Dashboard",
+      description: "Dashboard DESIRE runtime declaration extension",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      contributes: {}
+    }, null, 2));
+    await fs.writeFile(path.join(pluginDir, "runtime.js"), `
+      export function applyDashboardRuntime(world, doc) {
+        return world.emit({
+          process: "plugin.dashboard.runtime",
+          actor: "plugin.dashboard",
+          claims: [],
+          body: { id: doc.values.id, label: doc.values.label ?? null }
+        });
+      }
+      export default {
+        desireExtensions: {
+          runtimeDeclarations: [{ kind: "dashboardRuntime", apply: applyDashboardRuntime }]
+        }
+      };
+    `);
+    const docs = parseWitnessToml(`
+[[runtimePluginInstall]]
+actor = "system"
+serverRunner = "app_runner"
+plugin = "plugin.dashboard"
+
+[[dashboardRuntime]]
+id = "main_dashboard"
+label = "Main Dashboard"
 `);
-  assert.equal(witnesses.at(-1).process, "dsl.unknownSection");
-  assert.equal(world.allWitnesses().some(w => w.process === "dsl.unknownSection"), true);
+
+    assert.throws(() => applyWitnessDocs(createWorld(), docs), /unsupported runtime declaration: kind=dashboardRuntime/);
+
+    const world = createWorld();
+    await applyWitnessDocsWithRuntimePlugins(world, docs, { pluginRoot, runtimeProfile: "minimal" });
+
+    assert.equal(world.allWitnesses().some(w =>
+      w.process === "plugin.dashboard.runtime"
+      && w.actor === "plugin.dashboard"
+      && w.body?.id === "main_dashboard"
+      && w.body?.label === "Main Dashboard"
+    ), true);
+  } finally {
+    await fs.rm(pluginRoot, { recursive: true, force: true });
+  }
 });
 
 test("missing required fields in DSL relation section fail fast", () => {
@@ -283,11 +343,8 @@ targetKind = "context"
   assert.equal(installs.some(row => row.capability === "notes.sidebar" && row.target === "frontend" && row.targetKind === "context"), true);
 });
 
-test("mcp server DSL sections emit first-class server and tool installs", () => {
-  const world = createWorld();
-  createThing(world, { actor: "system", id: "backendHost" });
-  createThing(world, { actor: "system", id: "frontendHost" });
-  applyWitnessToml(world, `
+test("mcp server DSL sections are applied by the active mcp-authoring plugin", async () => {
+  const docs = parseWitnessToml(`
 [[serverRunner]]
 actor = "system"
 id = "app_runner"
@@ -311,7 +368,20 @@ scopeContexts = ["ctx.docs"]
 scopeTargets = ["page.root"]
 `);
 
-  assert.deepEqual(world.project(moduleProjectors.mcpServers), [{
+  const coreOnlyWorld = createWorld();
+  createThing(coreOnlyWorld, { actor: "system", id: "backendHost" });
+  createThing(coreOnlyWorld, { actor: "system", id: "frontendHost" });
+  assert.throws(() => applyWitnessDocs(coreOnlyWorld, docs), /unsupported runtime declaration/);
+
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "backendHost" });
+  createThing(world, { actor: "system", id: "frontendHost" });
+  await applyWitnessDocsWithRuntimePlugins(world, docs, {
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.mcp-authoring"]
+  });
+
+  assert.deepEqual(mcpServers(world.allWitnesses()), [{
     id: "project_mcp",
     label: "Project MCP",
     serverRunner: "app_runner",
@@ -319,13 +389,14 @@ scopeTargets = ["page.root"]
     transports: ["http", "stdio"],
     context: null
   }]);
-  assert.deepEqual(world.project(moduleProjectors.mcpToolInstalls), [{
+  const projectedToolInstalls = mcpToolInstalls(world.allWitnesses());
+  assert.deepEqual(projectedToolInstalls, [{
     server: "project_mcp",
     tool: "world.read",
     actingMode: "service",
     scopeContexts: ["ctx.docs"],
     scopeTargets: ["page.root"],
-    witness: world.project(moduleProjectors.mcpToolInstalls)[0].witness
+    witness: projectedToolInstalls[0].witness
   }]);
 });
 

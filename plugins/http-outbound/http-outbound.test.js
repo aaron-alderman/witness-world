@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bundleId, handlerCatalog, routes, createHandlers } from "./runtime.js";
+import { createWorld, createThing, relation } from "../../src/kernel.js";
+import { moduleProjectors } from "../../src/modules.js";
+import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
+import { bundleId, handlerCatalog, providers, routes, createHandlers } from "./runtime.js";
 import { createHttpOutboundIoServices, responseHeadersToObject } from "./io-services.js";
 import { delayWithSignal, executeHttpOutbound } from "./glue.js";
 
@@ -70,3 +73,69 @@ test("http-outbound plugin owns stub outbound transport glue", async () => {
   assert.equal(response.status, 200);
   assert.equal(JSON.parse(response.bodyText).target, "Example");
 });
+
+test("http-outbound plugin registers outbound request read-model projectors", () => withRegisteredPluginProjectors(providers, () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "system" });
+  createThing(world, { actor: "system", id: "outbound.demo" });
+  world.emit({
+    process: "defineOutboundRequest",
+    actor: "system",
+    claims: [
+      relation("outbound.demo", "hasModuleKind", "outboundRequest"),
+      relation("outbound.demo", "hasTitle", "Demo Outbound")
+    ],
+    body: { id: "outbound.demo" }
+  });
+  world.emit({
+    process: "http.outbound.succeeded",
+    actor: "system",
+    body: {
+      id: "outbound.demo",
+      context: "ctx.demo",
+      serverRunner: "runner.demo",
+      target: "Example",
+      url: "stub://echo",
+      method: "POST",
+      transport: "stub",
+      authKind: "none",
+      requestHeaderNames: ["content-type"],
+      requestBodyKind: "json",
+      timeoutMs: 1200,
+      maxAttempts: 4,
+      retryDelayMs: 75,
+      attempt: 2,
+      correlationId: "corr-1",
+      externalRefId: "req-1",
+      responseStatus: 200,
+      responseContentType: "application/json"
+    }
+  });
+
+  assert.deepEqual(world.project(moduleProjectors.outboundRequests), [{
+    id: "outbound.demo",
+    title: "Demo Outbound",
+    owner: "system",
+    context: "ctx.demo",
+    serverRunner: "runner.demo",
+    target: "Example",
+    url: "stub://echo",
+    method: "POST",
+    transport: "stub",
+    status: "succeeded",
+    authKind: "none",
+    authConfigKey: null,
+    requestHeaderNames: ["content-type"],
+    requestBodyKind: "json",
+    timeoutMs: 1200,
+    maxAttempts: 4,
+    retryDelayMs: 75,
+    attempt: 2,
+    correlationId: "corr-1",
+    externalRefId: "req-1",
+    responseStatus: 200,
+    responseContentType: "application/json",
+    lastError: null
+  }]);
+  assert.equal(world.project(moduleProjectors.outboundRequestIndex).byId["outbound.demo"].status, "succeeded");
+}));

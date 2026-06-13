@@ -1,4 +1,5 @@
 import { createProposalBundleHandlers } from "./proposal-handlers.js";
+import { createAuthoringProposalExecutor } from "./proposal-executor.js";
 
 function exactRoute(method, path, handler, params = {}) {
   return Object.freeze({ kind: "exact", method, path, handler, params });
@@ -29,6 +30,16 @@ export const routes = Object.freeze([
 
 export const surfaces = Object.freeze([]);
 
+export const providers = Object.freeze([
+  {
+    kind: "supportServiceFactory",
+    id: "proposals.support",
+    factory: () => ({
+      createAuthoringProposalExecutor
+    })
+  }
+]);
+
 export function createHandlers(deps) {
   return createProposalBundleHandlers(deps);
 }
@@ -38,5 +49,6 @@ export default {
   handlerCatalog,
   routes,
   surfaces,
+  providers,
   createHandlers
 };

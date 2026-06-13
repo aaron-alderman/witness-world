@@ -1,0 +1,6 @@
+dashboard TodoDashboard {
+  model TodoMetrics
+  projection TodoList
+  source todo_store
+  page TodoPage
+}

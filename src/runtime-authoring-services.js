@@ -1,5 +1,4 @@
 import { canCreateInContext, canMutateTarget } from "./kernel.js";
-import { createAuthoringProposalExecutor } from "../plugins/proposals/proposal-executor.js";
 
 export function createRuntimeAuthorityServices({
   world,
@@ -44,6 +43,7 @@ export function createAuthoringBundleServices({
   supportedFrontendOps,
   supportedBackendOps,
   mcpToolNames,
+  createAuthoringProposalExecutor: createAuthoringProposalExecutorImpl = null,
   getRuntimePluginCatalog = async () => ({ packages: [] })
 }) {
   const accessServices = createRuntimeAuthorityServices({
@@ -53,7 +53,11 @@ export function createAuthoringBundleServices({
   });
   return {
     ...accessServices,
-    executeBootstrapProposal: createAuthoringProposalExecutor({
+    executeBootstrapProposal: (createAuthoringProposalExecutorImpl ?? (() => async () => ({
+      ok: false,
+      status: 503,
+      reason: "proposal executor unavailable in active runtime composition"
+    })))({
       world,
       backendHost,
       supportedHandlerSets,

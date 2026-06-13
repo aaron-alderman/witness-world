@@ -1,5 +1,6 @@
 import { handlerCatalog } from "./handler-catalog.js";
 import { createFsBlobHandlers } from "./handlers.js";
+import { createFsBlobIoServices } from "./io-services.js";
 
 export const bundleId = "bundle-fs-blob";
 
@@ -19,6 +20,16 @@ export const routes = Object.freeze([
 
 export const surfaces = Object.freeze([]);
 
+export const providers = Object.freeze([
+  {
+    kind: "supportServiceFactory",
+    id: "fs-blob.support",
+    factory: () => ({
+      createFsBlobIoServices
+    })
+  }
+]);
+
 export function createHandlers(deps) {
   return createFsBlobHandlers(deps);
 }
@@ -28,5 +39,6 @@ export default {
   handlerCatalog,
   routes,
   surfaces,
+  providers,
   createHandlers
 };

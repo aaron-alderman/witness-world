@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { bundleId, handlerCatalog, routes } from "./runtime.js";
+import { createWorld, createThing, relation } from "../../src/kernel.js";
+import { moduleProjectors } from "../../src/modules.js";
+import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
+import { bundleId, handlerCatalog, providers, routes } from "./runtime.js";
 import { createMcpBundleSupportServices } from "./mcp-support-services.js";
 import { MCP_PROTOCOL_VERSION, listSupportedMcpTools, mcpToolNames, resolveMcpToolScope } from "./mcp-tools.js";
 
@@ -34,7 +37,11 @@ test("mcp plugin owns origin, principal, and scope support services", () => {
   };
   const world = {
     project(projector) {
-      return projected[projector.name];
+      if (projector === moduleProjectors.mcpServerIndex) return projected.mcpServerIndex;
+      if (projector === moduleProjectors.mcpToolInstalls) return projected.mcpToolInstalls;
+      if (projector === moduleProjectors.modules) return projected.modules;
+      if (projector === moduleProjectors.objectContexts) return projected.objectContexts;
+      return null;
     }
   };
   const services = createMcpBundleSupportServices({
@@ -62,7 +69,56 @@ test("mcp runtime ownership is not implemented in core compatibility files", asy
   const routeHandlersSource = await readFile(new URL("../../src/runtime-route-handlers.js", import.meta.url), "utf8");
 
   await assert.rejects(readFile(new URL("../../src/mcp.js", import.meta.url), "utf8"));
-  assert.equal(routeHandlersSource.includes("../plugins/mcp/mcp-tools.js"), true);
-  assert.equal(routeHandlersSource.includes("../plugins/mcp/mcp-support-services.js"), true);
+  assert.equal(routeHandlersSource.includes("../plugins/mcp/mcp-tools.js"), false);
+  assert.equal(routeHandlersSource.includes("../plugins/mcp/mcp-support-services.js"), false);
   assert.equal(routeHandlersSource.includes("from \"./mcp.js\""), false);
 });
+
+test("mcp plugin registers MCP server and tool install read-model projectors", () => withRegisteredPluginProjectors(providers, () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "system" });
+  createThing(world, { actor: "system", id: "mcp.demo" });
+  world.emit({
+    process: "defineMcpServer",
+    actor: "system",
+    claims: [
+      relation("mcp.demo", "hasModuleKind", "mcpServer"),
+      relation("mcp.demo", "usesServerRunner", "runner.demo"),
+      relation("mcp.demo", "serviceIdentity", "identity.mcp"),
+      relation("mcp.demo", "supportsTransport", "stdio"),
+      relation("mcp.demo", "supportsTransport", "http"),
+      relation("mcp.demo", "supportsTransport", "invalid"),
+      relation("mcp.demo", "exposesMcpTool", "world.read", {
+        actingMode: "service",
+        scopeContexts: ["ctx.demo", "ctx.demo"],
+        scopeTargets: ["page.demo"]
+      })
+    ],
+    body: {
+      id: "mcp.demo",
+      label: "Demo MCP",
+      serverRunner: "runner.initial",
+      serviceIdentity: "identity.initial",
+      transports: ["stdio"]
+    }
+  });
+
+  assert.deepEqual(world.project(moduleProjectors.mcpServers), [{
+    id: "mcp.demo",
+    label: "Demo MCP",
+    serverRunner: "runner.demo",
+    serviceIdentity: "identity.mcp",
+    transports: ["http", "stdio"],
+    context: null
+  }]);
+  assert.equal(world.project(moduleProjectors.mcpServerIndex).byId["mcp.demo"].serverRunner, "runner.demo");
+  assert.deepEqual(world.project(moduleProjectors.mcpToolInstalls), [{
+    server: "mcp.demo",
+    tool: "world.read",
+    actingMode: "service",
+    scopeContexts: ["ctx.demo"],
+    scopeTargets: ["page.demo"],
+    witness: world.project(moduleProjectors.mcpToolInstalls)[0].witness
+  }]);
+  assert.equal(world.project(moduleProjectors.mcpToolInstallIndex).byServer["mcp.demo"][0].tool, "world.read");
+}));

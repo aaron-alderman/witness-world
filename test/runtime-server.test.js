@@ -69,6 +69,88 @@ function createResponse() {
   };
 }
 
+function createModuleProjectorRuntimeDeps({ runner, projectors, port = 4322 }) {
+  return {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities: (_world, hostId) => hostId === runner.backendHost
+      ? new Set(["http.serve", "runtime.config"])
+      : new Set(["dom.render", "http.fetch"]),
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    sendJson: () => {},
+    defaultHostCapabilitiesForProfile: () => [],
+    ensureRuntimeBuiltins: () => {},
+    readRuntimePluginCatalog: async input => ({
+      pluginRoot: input.pluginRoot,
+      activeProfile: input.runtimeProfile,
+      packages: [],
+      summary: {},
+      authoredPluginIds: [],
+      operatorPluginIds: [],
+      effectivePluginIds: ["plugin.assets"],
+      configuredPluginIds: [],
+      activePluginIds: ["plugin.assets"],
+      rejectedPlugins: [],
+      addedBundleIds: ["bundle-assets"],
+      selection: { hasBlockingErrors: false }
+    }),
+    loadRuntimePluginModules: async () => ({
+      bundleOverrides: {},
+      failures: [],
+      hasBlockingErrors: false
+    }),
+    applyRuntimePluginLoadState: catalog => catalog,
+    runtimeBundleSummaryForProfile: profile => ({
+      profile,
+      dispatchHandlers: [],
+      bundles: [{
+        id: "bundle-assets",
+        contributes: {
+          providers: [{
+            kind: "moduleProjectors",
+            id: "assets.projections",
+            projectors
+          }]
+        }
+      }]
+    }),
+    runtimeSurfaceEntriesForProfile: () => [],
+    dispatchHandlerIdsForProfile: () => [],
+    handlerSetFactoriesForProfile: () => ({}),
+    handlerSetDefinitionsForProfile: () => ({}),
+    providedCapabilityIdsForProfile: () => [],
+    startupRequiredHostCapabilitiesForProfile: (_profile, hostKind) => hostKind === "backend" ? ["http.serve"] : ["dom.render", "http.fetch"],
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [],
+      storage: {},
+      visibleWitnesses: () => []
+    }),
+    createRuntimeResolverForServer: () => ({
+      runtimeContexts: new Map(),
+      resolveActiveRuntime: async () => ({ runner, context: { handlers: {}, close() {} } })
+    }),
+    httpModule: {
+      createServer() {
+        return {
+          listen(_port, _host, callback) {
+            callback();
+          },
+          address() {
+            return { port };
+          },
+          closeAllConnections() {},
+          close(callback) {
+            callback();
+          }
+        };
+      }
+    }
+  };
+}
+
 test("runtime server emits a startup failure when runner resolution fails", async () => {
   const world = createWitnessWorld();
   const result = await startRuntimeServer(world, {
@@ -181,6 +263,287 @@ test("runtime server composes authored runtime plugin installs with operator plu
   assert.deepEqual(catalogRequest?.authoredPluginIds, ["plugin.inspect"]);
   assert.deepEqual(catalogRequest?.configuredPluginIds, ["plugin.canvas"]);
   assert.deepEqual(server.runtimePluginCatalog.effectivePluginIds, ["plugin.inspect", "plugin.canvas"]);
+  await server.close();
+});
+
+test("runtime server registers active plugin module projectors with scoped cleanup", async () => {
+  const world = createWitnessWorld();
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    logger: { info() {}, error() {} },
+    runtimeProfile: "minimal"
+  }, {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities: (_world, hostId) => hostId === "backendHost"
+      ? new Set(["http.serve", "runtime.config"])
+      : new Set(["dom.render", "http.fetch"]),
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    sendJson: () => {},
+    defaultHostCapabilitiesForProfile: () => [],
+    ensureRuntimeBuiltins: () => {},
+    readRuntimePluginCatalog: async input => ({
+      pluginRoot: input.pluginRoot,
+      activeProfile: input.runtimeProfile,
+      packages: [],
+      summary: {},
+      authoredPluginIds: [],
+      operatorPluginIds: [],
+      effectivePluginIds: ["plugin.assets"],
+      configuredPluginIds: [],
+      activePluginIds: ["plugin.assets"],
+      rejectedPlugins: [],
+      addedBundleIds: ["bundle-assets"],
+      selection: { hasBlockingErrors: false }
+    }),
+    loadRuntimePluginModules: async () => ({
+      bundleOverrides: {},
+      failures: [],
+      hasBlockingErrors: false
+    }),
+    applyRuntimePluginLoadState: catalog => catalog,
+    runtimeBundleSummaryForProfile: profile => ({
+      profile,
+      dispatchHandlers: [],
+      bundles: [{
+        id: "bundle-assets",
+        contributes: {
+          providers: [{
+            kind: "moduleProjectors",
+            id: "assets.projections",
+            projectors: {
+              assets: () => [{ id: "asset.plugin", title: "Plugin Asset" }],
+              assetIndex: () => ({ rows: [{ id: "asset.plugin" }], byId: { "asset.plugin": { id: "asset.plugin" } } })
+            }
+          }]
+        }
+      }]
+    }),
+    runtimeSurfaceEntriesForProfile: () => [],
+    dispatchHandlerIdsForProfile: () => [],
+    handlerSetFactoriesForProfile: () => ({}),
+    handlerSetDefinitionsForProfile: () => ({}),
+    providedCapabilityIdsForProfile: () => [],
+    startupRequiredHostCapabilitiesForProfile: (_profile, hostKind) => hostKind === "backend" ? ["http.serve"] : ["dom.render", "http.fetch"],
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [],
+      storage: {},
+      visibleWitnesses: () => world.allWitnesses()
+    }),
+    createRuntimeResolverForServer: () => ({
+      runtimeContexts: new Map(),
+      resolveActiveRuntime: async () => ({ runner, context: { handlers: {}, close() {} } })
+    }),
+    httpModule: {
+      createServer() {
+        return {
+          listen(_port, _host, callback) {
+            callback();
+          },
+          address() {
+            return { port: 4322 };
+          },
+          closeAllConnections() {},
+          close(callback) {
+            callback();
+          }
+        };
+      }
+    }
+  });
+
+  assert.equal(server.ok, true);
+  assert.deepEqual(moduleProjectors.assets([]), [{ id: "asset.plugin", title: "Plugin Asset" }]);
+  await server.close();
+  assert.deepEqual(moduleProjectors.assets([]), []);
+});
+
+test("runtime server keeps identical active module projectors alive until all servers close", async () => {
+  const projectors = {
+    assets: () => [{ id: "asset.plugin", title: "Plugin Asset" }],
+    assetIndex: () => ({ rows: [{ id: "asset.plugin" }], byId: { "asset.plugin": { id: "asset.plugin" } } })
+  };
+  const runnerOne = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  const runnerTwo = {
+    id: "runner-2",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  let first = null;
+  let second = null;
+  try {
+    first = await startRuntimeServer(createWitnessWorld(), {
+      actor: "adam",
+      serverRunnerId: "runner-1",
+      runtimeRoot: "C:/runtime",
+      logger: { info() {}, error() {} },
+      runtimeProfile: "minimal"
+    }, createModuleProjectorRuntimeDeps({ runner: runnerOne, projectors, port: 4323 }));
+    second = await startRuntimeServer(createWitnessWorld(), {
+      actor: "adam",
+      serverRunnerId: "runner-2",
+      runtimeRoot: "C:/runtime",
+      logger: { info() {}, error() {} },
+      runtimeProfile: "minimal"
+    }, createModuleProjectorRuntimeDeps({ runner: runnerTwo, projectors, port: 4324 }));
+
+    assert.equal(first.ok, true);
+    assert.equal(second.ok, true);
+    assert.deepEqual(moduleProjectors.assets([]), [{ id: "asset.plugin", title: "Plugin Asset" }]);
+    await first.close();
+    first = null;
+    assert.deepEqual(moduleProjectors.assets([]), [{ id: "asset.plugin", title: "Plugin Asset" }]);
+    await second.close();
+    second = null;
+    assert.deepEqual(moduleProjectors.assets([]), []);
+  } finally {
+    if (first?.ok) await first.close();
+    if (second?.ok) await second.close();
+  }
+});
+
+test("runtime server rejects conflicting active module projector implementations without clearing existing servers", async () => {
+  const runnerOne = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  const runnerTwo = {
+    id: "runner-2",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  const firstProjectors = {
+    assets: () => [{ id: "asset.first" }]
+  };
+  const secondProjectors = {
+    assets: () => [{ id: "asset.second" }]
+  };
+  let first = null;
+  try {
+    first = await startRuntimeServer(createWitnessWorld(), {
+      actor: "adam",
+      serverRunnerId: "runner-1",
+      runtimeRoot: "C:/runtime",
+      logger: { info() {}, error() {} },
+      runtimeProfile: "minimal"
+    }, createModuleProjectorRuntimeDeps({ runner: runnerOne, projectors: firstProjectors, port: 4325 }));
+    assert.equal(first.ok, true);
+
+    const conflict = await startRuntimeServer(createWitnessWorld(), {
+      actor: "adam",
+      serverRunnerId: "runner-2",
+      runtimeRoot: "C:/runtime",
+      logger: { info() {}, error() {} },
+      runtimeProfile: "minimal"
+    }, createModuleProjectorRuntimeDeps({ runner: runnerTwo, projectors: secondProjectors, port: 4326 }));
+
+    assert.equal(conflict.ok, false);
+    assert.equal(conflict.reason, "runtime plugin contributions unresolved");
+    assert.match(String(conflict.error?.message ?? ""), /module projector assets is already registered by runtime\.activePlugins:runner-1:.*different implementation/);
+    assert.deepEqual(moduleProjectors.assets([]), [{ id: "asset.first" }]);
+  } finally {
+    if (first?.ok) await first.close();
+  }
+  assert.deepEqual(moduleProjectors.assets([]), []);
+});
+
+test("runtime server rejects duplicate active module projector providers before registration", async () => {
+  const world = createWitnessWorld();
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: null
+  };
+  const result = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    logger: { info() {}, error() {} },
+    runtimeProfile: "minimal"
+  }, {
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    readRuntimePluginCatalog: async input => ({
+      pluginRoot: input.pluginRoot,
+      activeProfile: input.runtimeProfile,
+      packages: [],
+      summary: {},
+      authoredPluginIds: [],
+      operatorPluginIds: [],
+      effectivePluginIds: ["plugin.alpha", "plugin.beta"],
+      configuredPluginIds: [],
+      activePluginIds: ["plugin.alpha", "plugin.beta"],
+      rejectedPlugins: [],
+      addedBundleIds: ["bundle-alpha", "bundle-beta"],
+      selection: { hasBlockingErrors: false }
+    }),
+    loadRuntimePluginModules: async () => ({
+      bundleOverrides: {},
+      failures: [],
+      hasBlockingErrors: false
+    }),
+    applyRuntimePluginLoadState: catalog => catalog,
+    runtimeBundleSummaryForProfile: profile => ({
+      profile,
+      dispatchHandlers: [],
+      bundles: [
+        {
+          id: "bundle-alpha",
+          contributes: {
+            providers: [{
+              kind: "moduleProjectors",
+              id: "alpha.projections",
+              projectors: { assets: () => [{ id: "alpha" }] }
+            }]
+          }
+        },
+        {
+          id: "bundle-beta",
+          contributes: {
+            providers: [{
+              kind: "moduleProjectors",
+              id: "beta.projections",
+              projectors: { assets: () => [{ id: "beta" }] }
+            }]
+          }
+        }
+      ]
+    })
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.reason, "runtime plugin contributions unresolved");
+  assert.match(String(result.error?.message ?? ""), /duplicate runtime contribution assets/);
+  assert.deepEqual(moduleProjectors.assets([]), []);
 });
 
 test("runtime server defines and installs plugin-selected default host capabilities before startup validation", async () => {

@@ -1,6 +1,21 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { compileWtomlDocsToDesirePlus, normalizeDesirePlusToDesire, applyDesire } from "./desire/index.js";
+import {
+  compileWtomlDocsToDesirePlus,
+  createDesireRegistriesFromPluginExtensions,
+  elaborateDesirePlus,
+  normalizeDesirePlusToDesire,
+  applyDesire
+} from "./desire/index.js";
+import { registerModuleProjectors } from "./modules.js";
+import { DEFAULT_RUNTIME_PROFILE, runtimeBundleSummaryForProfile } from "./runtime-bundles.js";
+import { collectActiveRuntimeContributions } from "./runtime-active-contributions.js";
+import {
+  readRuntimePluginCatalog,
+  resolveConfiguredRuntimePluginIds,
+  resolveRuntimePluginRoot
+} from "./runtime-plugin-utils.js";
+import { loadRuntimePluginModules } from "./runtime-plugin-loader.js";
 
 // Tiny TOML-ish DSL parser. Intentional subset:
 //   [[section]]
@@ -73,18 +88,88 @@ export async function loadWitnessTomlFile(file, { seen = new Set() } = {}) {
   return [...docs, ...imported];
 }
 
-export function applyWitnessToml(world, source) {
-  return applyWitnessDocs(world, parseWitnessToml(source));
+export function applyWitnessToml(world, source, options = {}) {
+  return applyWitnessDocs(world, parseWitnessToml(source), options);
 }
 
-export function applyWitnessDocs(world, docs) {
+export function applyWitnessDocs(world, docs, options = {}) {
   const desirePlus = compileWtomlDocsToDesirePlus(docs);
-  const desire = normalizeDesirePlusToDesire(desirePlus);
-  return applyDesire(world, desire);
+  const elaboratedDesirePlus = elaborateDesirePlus(desirePlus, { elaboratorRegistry: options.elaboratorRegistry });
+  const desire = normalizeDesirePlusToDesire(elaboratedDesirePlus);
+  return applyDesire(world, desire, { runtimeDeclarationRegistry: options.runtimeDeclarationRegistry });
 }
 
-export function applyWitnessDocsLegacy(world, docs) {
-  return applyWitnessDocs(world, docs);
+export async function applyWitnessDocsWithRuntimePlugins(world, docs, options = {}) {
+  const authoredPluginIds = runtimePluginInstallIdsFromDocs(docs);
+  const configuredPluginIds = resolveConfiguredRuntimePluginIds({
+    env: options.env ?? process.env,
+    runtimePluginIds: options.runtimePluginIds ?? null
+  });
+  if (!authoredPluginIds.length && !configuredPluginIds.length) {
+    return applyWitnessDocs(world, docs, options);
+  }
+
+  const pluginRoot = options.pluginRoot ?? resolveRuntimePluginRoot({ env: options.env ?? process.env });
+  const pluginCatalog = await (options.readRuntimePluginCatalog ?? readRuntimePluginCatalog)({
+    pluginRoot,
+    runtimeProfile: options.runtimeProfile ?? DEFAULT_RUNTIME_PROFILE,
+    configuredPluginIds,
+    authoredPluginIds
+  });
+  if (pluginCatalog.selection?.hasBlockingErrors) {
+    throw createRuntimePluginLoadError("runtime plugins unresolved", pluginCatalog);
+  }
+
+  const loadResult = await (options.loadRuntimePluginModules ?? loadRuntimePluginModules)({ pluginCatalog });
+  if (loadResult.hasBlockingErrors) {
+    throw createRuntimePluginLoadError("runtime plugin modules unresolved", {
+      ...pluginCatalog,
+      rejectedPlugins: [
+        ...(pluginCatalog.rejectedPlugins ?? []),
+        ...(loadResult.failures ?? [])
+      ]
+    });
+  }
+
+  const registries = createDesireRegistriesFromPluginExtensions(loadResult);
+  const summary = runtimeBundleSummaryForProfile(options.runtimeProfile ?? DEFAULT_RUNTIME_PROFILE, {
+    additionalBundleIds: [
+      ...(pluginCatalog.addedBundleIds ?? []),
+      ...Object.keys(loadResult.bundleOverrides ?? {})
+    ],
+    bundleOverrides: loadResult.bundleOverrides
+  });
+  const contributions = collectActiveRuntimeContributions({ bundles: summary.bundles });
+  const unregisterModuleProjectors = registerModuleProjectors("dsl.activePlugins", contributions.moduleProjectors ?? {});
+  try {
+    return applyWitnessDocs(world, docs, {
+      ...options,
+      elaboratorRegistry: options.elaboratorRegistry ?? registries.elaboratorRegistry,
+      runtimeDeclarationRegistry: options.runtimeDeclarationRegistry ?? registries.runtimeDeclarationRegistry
+    });
+  } finally {
+    unregisterModuleProjectors();
+  }
+}
+
+export function applyWitnessDocsLegacy(world, docs, options = {}) {
+  return applyWitnessDocs(world, docs, options);
+}
+
+function runtimePluginInstallIdsFromDocs(docs) {
+  return [...new Set(
+    docs
+      .filter(doc => doc?.kind === "runtimePluginInstall")
+      .map(doc => typeof doc.values?.plugin === "string" ? doc.values.plugin.trim() : "")
+      .filter(Boolean)
+  )];
+}
+
+function createRuntimePluginLoadError(reason, runtimePluginCatalog) {
+  const error = new Error(reason);
+  error.reason = reason;
+  error.runtimePluginCatalog = runtimePluginCatalog;
+  return error;
 }
 
 function stripComment(line) {

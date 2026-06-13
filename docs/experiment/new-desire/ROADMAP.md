@@ -50,7 +50,7 @@ Verified in the current tree:
 - `[X]` RVM ingestion exists and compiles the checked-in specimen set into `DESIRE+`.
 - `[X]` best-effort `DESIRE+ -> WTOML` and `DESIRE+ -> RVM` serializers exist with focused round-trip tests.
 - `[X]` DESIRE-backed provenance reaches the inspect graph and `/api/source` annotations.
-- `[X]` `applyDesire` now executes every DESIRE kernel kind natively, including source-less canonical DESIRE documents, plus a verified native WTOML semantic subset, a direct runtime declaration subset, and native unknown-section compatibility witnesses without calling the legacy doc applicator.
+- `[X]` `applyDesire` now executes every DESIRE kernel kind natively, including source-less canonical DESIRE documents, plus a verified native WTOML semantic subset and registered runtime declaration handlers without calling the legacy doc applicator.
 - `[X]` the checked-in runnable WTOML entry examples now apply through DESIRE without any legacy `runtime.doc` fallback.
 - `[X]` RVM `graph_context`, `capability`, `event`, `command`/`query`, and `policy` block forms now survive into normalized DESIRE and native execution instead of being dropped after parsing.
 - `[X]` native semantic execution for RVM-backed `capability` and `policy` forms now emits meaningful semantic relations (`inContext`, `providesCapability`, `governs`) rather than only bare definition witnesses.
@@ -65,7 +65,7 @@ Verified in the current tree:
 - `[X]` WTOML also has generic semantic kernel sections for `type`, `message`, `entity`, `store`, `process`, `boundary`, `policy`, `projection`, and `surface`, with structural WTOML/RVM normalization equivalence coverage over the common kernel subset.
 - `[X]` `/api/world-graph` object details and `/api/source` now have a mixed WTOML+RVM provenance proof covering source language, source kind, spans, DESIRE node ids, DESIRE+ source node ids, and target resolution through the same response shape.
 - `[X]` the RVM serializer now emits RVM-like semantic fallback source for supported DESIRE+ nodes when exact raw source text is unavailable, with normalized round-trip coverage across context, capability, message/event/command/query, entity/version, process/state, boundary/adapter, policy, projection/view, actor/store, and import/module families.
-- `[X]` lowered Tiny/RVM implementation forms are now explicitly classified in DESIRE+ metadata as `lowered-runtime` and kept above the DESIRE boundary; graph data forms are separately classified as `graph-data`.
+- `[X]` lowered Tiny/RVM implementation forms are now explicitly classified in DESIRE+ metadata as `lowered-runtime` and kept above the DESIRE boundary; supported RVM graph forms now normalize into first-class DESIRE `graph` kernel semantics.
 - `[X]` RVM `enum` forms now normalize into DESIRE `type` nodes with `role = "enum"` and preserved cases.
 - `[X]` RVM `model` and `chart` authored forms now have tracked DESIRE coverage: `model` normalizes to `dataflow`, chart-specific surface fields are preserved, native application emits dataflow/surface witnesses plus structural graph relations for axes, parameters, derived flows, chart model refs, encodings, and layers, and both WTOML-like and RVM-like serializers round-trip by normalized structure.
 - `[X]` the inspect world graph now recognizes `dataflow` as a first-class node kind and exposes RVM `model`/`chart` provenance plus structural dataflow/chart edges.
@@ -75,19 +75,28 @@ Verified in the current tree:
 - `[X]` `runtime.doc` has been removed from the declared DESIRE kernel kind set and from `DESIRE_NODE_KINDS`; normalized WTOML runtime material now uses the explicit `runtime.declaration` residual API, with legacy `runtime.doc` accepted only for compatibility.
 - `[X]` runtime declaration bridge coverage is now auditable through the canonical `auditRuntimeDeclarationBridge` API; every discovered `examples/**/*.wtoml` file is covered by a static audit that requires 0 legacy-required declaration kinds.
 - `[X]` runtime boundary helper APIs now use declaration-first names (`auditRuntimeDeclarationBridge`, `assertNoLegacyRuntimeDeclarationFallbackRequired`, `NATIVE_RUNTIME_DECLARATION_KINDS`, `RUNTIME_DECLARATION_BRIDGE_POLICY`); old `RuntimeDoc` names remain compatibility aliases only.
-- `[X]` `applyDesire` no longer calls `applyWitnessDocsLegacy`; unsupported runtime declarations are handled inside DESIRE as native `dsl.unknownSection` witnesses.
+- `[X]` `applyDesire` no longer calls `applyWitnessDocsLegacy`; unsupported runtime declarations now fail with strict diagnostics unless a core or plugin runtime declaration registry provides an apply handler.
 - `[X]` `applyWitnessDocsLegacy` has been demoted to a compatibility alias that delegates through `WTOML -> DESIRE+ -> DESIRE -> applyDesire`; the old direct-doc applicator implementation has been removed from `src/dsl.js`.
-- `[X]` `applyDesireNativeOnly` now provides an explicit DESIRE-only execution path over first-class runtime declarations plus native unknown-section residual handling.
+- `[X]` `applyDesireNativeOnly` now provides an explicit DESIRE-only execution path over first-class registered runtime declarations and rejects unregistered runtime residuals before mutation.
 - `[X]` WTOML source-local `defaults` propagation now happens during `DESIRE+ -> DESIRE` normalization; `applyDesire` no longer performs runtime default merging, and live-world context actor lookup happens inside native runtime declaration application.
 - `[X]` the runtime-only residual boundary is now explicit in IR metadata and audits: WTOML runtime declarations compile as `desire-plus-only` authored-runtime material, normalized `runtime.declaration` residuals are marked `compatibilityBridge`, `kernelResident = false`, and `residualHome = "desire+"`.
 - `[X]` normalized `runtime.declaration` residuals now require a first-class `body.declaration` envelope (`kind`, normalized `values`, source/default metadata, trace); source-shaped `body.values`/`declarationKind` aliases remain compatibility output only.
+- `[X]` runtime declaration application now goes through an explicit registry: core declaration kinds are registered by default, plugin declaration kinds must register handlers, unregistered kinds are reported as unsupported, and registered entries without handlers fail explicitly.
+- `[X]` registered DESIRE+ elaborators are now available through `createDesirePlusElaboratorRegistry` and `elaborateDesirePlus`; plugin-style source extension happens as explicit DESIRE+ tree-to-tree rewrites with provenance ancestry, not implicit unknown acceptance.
+- `[X]` WTOML compatibility application now routes through `WTOML -> DESIRE+ -> elaborate DESIRE+ -> DESIRE -> applyDesire` while keeping the public CLI/source shape unchanged.
+- `[X]` a focused concise RVM `dashboard` proof shows unregistered source sugar stays above the DESIRE boundary, while a registered elaborator expands it into ordinary `dataflow`, `projection`, and `surface` kernel semantics that apply natively.
+- `[X]` active trusted plugin `runtime.js` modules can now export `desireExtensions` for DESIRE+ elaborators and runtime declaration handlers; the runtime plugin loader validates those exports and the DESIRE adapter converts them into explicit registries.
+- `[X]` CLI WTOML entrypoints now use plugin-aware loading for `serve` and `mcp`, deriving compile-active plugins from authored `runtimePluginInstall` declarations plus operator CLI/env plugin selection before DESIRE+ elaboration and DESIRE application.
+- `[X]` DESIRE now has a native `graph` kernel kind; RVM `graph_node`, `graph_edge`, `entity_type`, and `edge_type` forms compile to semantic graph nodes, apply natively, and expose provenance through `/api/world-graph` and `/api/source`.
+- `[X]` optional module/read-model projectors are now active plugin contributions: `plugin.assets` owns the real `assets` and `assetIndex` projections, while core keeps only delegated empty fallbacks.
+- `[X]` active plugin module/read-model projector registrations are now token-scoped: concurrent identical implementations share safely, scoped cleanup is idempotent, and conflicting same-name implementations fail clearly.
 - `[X]` latest RVM ingestion audit over `examples_rvm/` is enforced in `test/desire.test.js`: all checked-in `.rvm` files compile to `DESIRE+`, intentional residual categories are counted, and both authored-runtime residuals and unknown language forms must remain at 0.
 
 Verified test coverage:
 
+- `[X]` `node --test test\\desire.test.js`
 - `[X]` `node --test test\\desire.test.js test\\world-graph.test.js test\\dsl.test.js`
 - `[X]` `node --test test\\world-graph.test.js test\\desire.test.js`
-- `[X]` `node --test test\\desire.test.js`
 - `[X]` `node --test test\\desire.test.js test\\world-graph.test.js`
 - `[X]` `node --test test\\dsl.test.js`
 - `[X]` `node --test test\\cli.test.js`
@@ -115,6 +124,7 @@ Define the minimal semantic kernel as a JSON-serializable IR with normalized nod
 - `process`
 - `surface`
 - `dataflow`
+- `graph`
 
 Exit criteria:
 
@@ -128,7 +138,7 @@ Current state:
 - `[X]` stable ids exist in `src/desire/ids.js`.
 - `[X]` DESIRE nodes retain `sourceNodeIds`.
 - `[X]` explicit validators now exist for `trace`, `DESIRE+` nodes/documents, and `DESIRE` nodes/documents in `src/desire/ir.js`.
-- `[X]` `DESIRE_KERNEL_KINDS` and `DESIRE_NODE_KINDS` now contain only semantic kernel kinds, including the added `dataflow` kernel form for model-like computations; `runtime.declaration` and legacy `runtime.doc` are separated into `DESIRE_BRIDGE_KINDS` and validated through `DESIRE.runtimeResiduals`.
+- `[X]` `DESIRE_KERNEL_KINDS` and `DESIRE_NODE_KINDS` now contain only semantic kernel kinds, including `dataflow` for model-like computations and `graph` for graph declarations/schema edges; `runtime.declaration` and legacy `runtime.doc` are separated into `DESIRE_BRIDGE_KINDS` and validated through `DESIRE.runtimeResiduals`.
 - `[X]` every DESIRE kernel kind has a validated body contract and table-driven test coverage for accepted and rejected bodies.
 - `[X]` the remaining runtime bridge is explicitly non-kernel and tracked under bridge debt rather than the DESIRE kernel milestone.
 
@@ -172,10 +182,12 @@ Current state:
 - `[X]` WTOML and RVM compilation both attach stable ids and trace payloads.
 - `[X]` provenance carries source language, file, spans/source line, source kind, and ancestry slots.
 - `[X]` trace and document validators now enforce the current first-class IR contract at constructor and pipeline boundaries.
-- `[X]` RVM DESIRE+ nodes now carry explicit boundary metadata for semantic, source-only, lowered-runtime, graph-data, authored-runtime, fixture-corruption, and unknown residual categories.
+- `[X]` RVM DESIRE+ nodes now carry explicit boundary metadata for semantic, source-only, lowered-runtime, authored-runtime, fixture-corruption, and unknown residual categories. `graph-data` remains a historical/reserved residual category, but supported RVM graph forms now enter the semantic graph path.
 - `[X]` RVM conflict markers are preserved as DESIRE+ fixture-corruption nodes for trace/debug without polluting language-support unknown counts.
 - `[X]` built-in DESIRE+ schema validation now enforces known `sourceCategory`, `residualCategory`, `desireBoundary`, and semantic-kind vocabularies for `wtoml.doc` and `rvm.form`.
 - `[X]` the global DESIRE+ schema remains intentionally extensible for plugin-provided node kinds; this is an explicit design property, not remaining schema debt.
+- `[X]` explicit DESIRE+ elaboration is implemented as a registry of tree-to-tree handlers whose outputs must validate as DESIRE+ and preserve `originNodeId` plus `trace.via` ancestry.
+- `[X]` plugin-loaded DESIRE extension exports now bridge the existing runtime plugin package system into DESIRE registries without allowing implicit unknown fallback.
 
 ### 3. DESIRE+ To DESIRE Normalization
 
@@ -296,7 +308,7 @@ Current state:
   - `mcpServer.serverRunnerRef`
   - `route.servesRef`
   - `serve.serverRunnerRef` / `serve.routeRef`
-- `[X]` `applyDesire` applies all residual runtime declarations without calling `applyWitnessDocsLegacy`; known WTOML runtime declarations use first-class native handlers and unknown declarations emit native `dsl.unknownSection` compatibility witnesses.
+- `[X]` `applyDesire` applies residual runtime declarations through the runtime declaration registry without calling `applyWitnessDocsLegacy`; known WTOML runtime declarations use first-class native handlers and unknown declarations fail unless registered by core or plugin code.
 - `[X]` the checked-in WTOML entry examples (`demo-todo-server.wtoml`, `demo-todo-server.explicit.wtoml`, `demo-todo-server.monolith.wtoml`) now run through `applyDesireNativeOnly`, proving that the in-repo runnable WTOML surface no longer requires the legacy bridge.
 - `[X]` native semantic execution remains intentionally generic for some kernel shapes, but every kernel kind is now covered by native application tests and emits structural graph relations beyond a bare definition witness where the body carries stable semantic fields, including dataflow axes/parameters/operations and chart surface encodings/layers.
 - `[X]` RVM `model`/`chart` authored forms are covered by the current DESIRE kernel surface: `model` normalizes to `dataflow`, `chart` normalizes to chart-specific `surface` nodes, both apply natively, and rawless serializers preserve normalized meaning.
@@ -395,10 +407,10 @@ Current state:
 - `[X]` RVM enum declarations now map to DESIRE `type` nodes with enum cases.
 - `[X]` module blocks, `stdlib` directives, and comments are source/debug material in DESIRE+ instead of residual unknowns.
 - `[X]` lowered Tiny/RVM implementation forms (`atom`, `map`, `witness`, `machine`) are classified as DESIRE+-only runtime residuals rather than candidates for the DESIRE kernel.
-- `[X]` graph data forms (`graph_node`, `graph_edge`, `entity_type`, `edge_type`) are classified separately from runtime lowering so they can be handled by a future semantic graph-data decision.
+- `[X]` graph data forms (`graph_node`, `graph_edge`, `entity_type`, `edge_type`) now map to DESIRE+ semantic `graph` nodes and normalize into the DESIRE `graph` kernel.
 - `[X]` conflict markers in historical backup specimens are classified as fixture corruption, reducing broad-audit unknown language forms to zero.
 - `[X]` the covered RVM semantic core now runs through `DESIRE -> world` natively for contexts, capabilities, messages/events/commands/queries, entities, processes, actor-backed durable stores, boundaries, read/write bindings, adapter boundaries, policies, projections, surfaces, and the compact one-line semantic family.
-- `[X]` checked-in authored/runtime/surface specimen coverage is now classified rather than approximate: supported semantic surfaces normalize to DESIRE, source organization stays DESIRE+-only, lowered runtime forms stay DESIRE+-only, graph data is isolated as graph-data, fixture corruption is explicit, and the broad audit enforces 0 unknown and 0 authored-runtime residuals.
+- `[X]` checked-in authored/runtime/surface specimen coverage is now classified rather than approximate: supported semantic surfaces and graph forms normalize to DESIRE, source organization stays DESIRE+-only, lowered runtime forms stay DESIRE+-only, fixture corruption is explicit, and the broad audit enforces 0 unknown and 0 authored-runtime residuals.
 
 ### 8. DESIRE+ Serializers
 
@@ -431,8 +443,9 @@ Current state:
 - `[X]` WTOML serialization now emits WTOML-like semantic fallback sections for RVM-backed DESIRE+ nodes across the common kernel subset, with normalized round-trip coverage.
 - `[X]` WTOML semantic fallback serialization now expands RVM actor-derived store/projection semantics into first-class `[[store]]` and `[[projection]]` sections, preserving normalized equivalence.
 - `[X]` WTOML semantic fallback serialization now emits `[[dataflow]]` sections and chart-specific `[[surface]]` payloads for RVM `model`/`chart` forms.
+- `[X]` WTOML semantic fallback serialization now emits neutral `[[graph]]` sections for DESIRE+ graph semantics.
 - `[X]` RVM serialization preserves raw authored source when available and reconstructs supported semantic forms when raw text is absent.
-- `[X]` rawless RVM semantic fallback coverage now spans imports/modules, context/capability, messages/events/commands/queries, entity/version, process/state, boundary/read/write/adapter, policy, projection/view, surface/chart, dataflow/model, and actor-backed store forms.
+- `[X]` rawless RVM semantic fallback coverage now spans imports/modules, context/capability, messages/events/commands/queries, entity/version, process/state, boundary/read/write/adapter, policy, projection/view, surface/chart, dataflow/model, graph node/edge/schema forms, and actor-backed store forms.
 - `[X]` serializers meet the milestone contract as best-effort debug/trace surfaces with normalized structural round-trip coverage; exact authored reconstruction remains intentionally out of scope, and unsupported runtime/lowered forms depend on retained raw source or a future runtime-boundary decision.
 
 ### 9. Legacy Path Demotion
@@ -461,7 +474,7 @@ Current state:
 New item raised by the current execution shape:
 
 - `[X]` replace remaining WTOML-shaped runtime residual handling with richer first-class semantic/runtime boundary APIs: normalized `runtime.declaration` residuals now require `body.declaration`, and `applyDesire` consumes `declaration.kind` / `declaration.values` before compatibility aliases.
-- `[X]` remove the `applyWitnessDocsLegacy` fallback from `applyDesire`; unknown runtime declarations are now native DESIRE compatibility witnesses.
+- `[X]` remove the `applyWitnessDocsLegacy` fallback from `applyDesire`; unknown runtime declarations now fail unless they are registered by core or plugin runtime declaration handlers.
 - `[X]` demote `applyWitnessDocsLegacy` itself to the DESIRE-backed path so internal or external compatibility callers cannot bypass DESIRE through the old direct-doc implementation.
 - `[X]` the residual runtime bridge is no longer mixed into `DESIRE.nodes` and normalized WTOML now uses `runtime.declaration`; runtime implementation material intentionally lives above the DESIRE kernel boundary.
 - `[X]` remove `runtime.doc` emission for semantic WTOML doc kinds; native WTOML handlers now execute directly from DESIRE node bodies and preserve source annotations through generic DESIRE provenance.
@@ -477,8 +490,8 @@ New item raised by the current execution shape:
   - `[X]` widget version and backend program/version authored flows now apply natively through DESIRE
 - `[X]` remaining mainstream WTOML section kinds in `src/dsl.js` now have native DESIRE execution paths
 - `[X]` remaining legacy-shaped behavior is concentrated in the residual runtime declaration bridge architecture itself, rather than in `applyWitnessDocsLegacy` fallback execution or the core authored WTOML surface.
-- `[X]` static runtime declaration bridge audit now distinguishes first-class native declaration kinds from native unknown-section residual handling.
-- `[X]` native-only DESIRE application now combines the static bridge audit with DESIRE-local unknown-section handling, giving parity tests a direct API for proving they do not depend on `applyWitnessDocsLegacy`.
+- `[X]` static runtime declaration bridge audit now distinguishes first-class registered declaration kinds from unregistered or registered-without-handler declarations.
+- `[X]` native-only DESIRE application now combines the static bridge audit with registry preflight, giving parity tests a direct API for proving they do not depend on unregistered runtime declarations.
 - `[X]` checked-in WTOML example files are discovered recursively in tests and audit to 0 statically legacy-required runtime declaration kinds and 0 legacy `runtime.doc` residuals.
 - `[X]` decide whether any runtime-only residual layer belongs below DESIRE or whether it should remain explicitly in DESIRE+ only.
 - `[X]` remove `runtime.doc` from the effective kernel kind set and semantic node stream; normalized runtime material now uses `runtime.declaration` while legacy `runtime.doc` remains compatibility-only.
@@ -503,7 +516,7 @@ Use these as the near-term epic slices. Each slice should leave the tree runnabl
    - Exit when `runtime.doc` is no longer part of the effective DESIRE kernel.
    - Completed semantic WTOML cleanup: semantic WTOML doc kinds now lower directly to DESIRE and no longer produce bridge nodes.
    - Bridge metadata now records `compatibilityBridge`, `kernelResident = false`, `residualHome = "desire+"`, and source boundary categories for normalized runtime declarations.
-   - Native-only application now handles unsupported bridge residuals as native `dsl.unknownSection` witnesses and runs supported bridge material without any legacy fallback.
+  - Native-only application now rejects unsupported bridge residuals unless a core or plugin runtime declaration registry provides an apply handler, and supported bridge material runs without any legacy fallback.
    - Normalized WTOML runtime material now lives under `DESIRE.runtimeResiduals` as `runtime.declaration` instead of `DESIRE.nodes`; `DESIRE_NODE_KINDS` is kernel-only and legacy `runtime.doc` is compatibility-only.
    - Exit criteria met: `runtime.doc` is no longer part of the effective DESIRE kernel.
 
@@ -524,8 +537,8 @@ Use these as the near-term epic slices. Each slice should leave the tree runnabl
    - Decide whether high-volume lowered forms such as `atom`, `map`, `witness`, and `machine` should remain runtime/provenance-only DESIRE+ nodes or receive explicit semantic DESIRE mappings.
    - Treat `graph_node`, `graph_edge`, `entity_type`, and `edge_type` as a separate semantic graph-data question rather than mixing them into runtime implementation lowering.
    - Exit when the residual RVM unknown audit is split into intentional DESIRE+ runtime forms versus forms that still need semantic kernel coverage.
-   - Decision landed: `atom`, `map`, `witness`, and `machine` remain DESIRE+-only lowered-runtime forms; graph-data forms are classified separately and do not normalize into DESIRE.
-   - Verified by `auditRvmDesirePlus` and tests proving classified lowered/runtime graph forms preserve traceability while producing no DESIRE kernel nodes.
+   - Initial decision landed: `atom`, `map`, `witness`, and `machine` remain DESIRE+-only lowered-runtime forms; graph-data forms were first isolated from runtime lowering rather than implicitly accepted.
+   - Superseded by slice 9 for supported graph forms: `graph_node`, `graph_edge`, `entity_type`, and `edge_type` now normalize into DESIRE `graph` kernel nodes instead of remaining graph-data residuals.
 
 7. `[X]` RVM fixture hygiene for conflict-marker residuals
    - The remaining generic unknown RVM audit rows are conflict markers inside history-backup specimen files.
@@ -533,6 +546,30 @@ Use these as the near-term epic slices. Each slice should leave the tree runnabl
    - Exit when the generic unknown count reflects real unsupported language forms rather than fixture corruption.
    - Decision landed: retain the corrupted backup specimens as parser resilience fixtures, but classify conflict-marker rows as DESIRE+ `fixture-corruption` outside the DESIRE boundary.
    - Verified broad audit now reports `0` unknown RVM language forms and `285` fixture-corruption rows.
+
+8. `[X]` Strict runtime declaration registry
+   - Removed DESIRE application fallback to `dsl.unknownSection` for unregistered runtime declarations.
+   - Added an explicit runtime declaration registry API; core declarations are registered by default and plugins can register declaration handlers before application.
+   - Audit now reports unsupported and registered-without-handler declaration counts instead of treating unknown kinds as native-covered.
+   - Verified unregistered declarations fail with file/line/source diagnostics, registered plugin handlers apply, and registered declarations without handlers fail explicitly.
+
+9. `[X]` DESIRE graph kernel and plugin-owned read models
+   - Added `graph` as a DESIRE kernel and DESIRE+ semantic kind.
+   - RVM graph forms now compile to semantic graph nodes, normalize into DESIRE, apply natively as graph witnesses/relations, and expose source provenance through inspect APIs.
+   - DESIRE+ serializers round-trip graph semantics through RVM-like graph forms and WTOML-like neutral `[[graph]]` sections.
+   - Active plugin providers now own optional module/read-model projectors; `plugin.assets` provides the real `assets` and `assetIndex` projections, while core keeps only empty delegated fallbacks.
+   - Duplicate active projector providers fail before startup mutation, and runtime server startup cleans active projector registrations on close/failure.
+
+10. `[X]` Scoped plugin read-model registrations
+   - `registerModuleProjectors` now returns token-scoped, idempotent cleanup handles.
+   - Concurrent servers/tests may register the same projector name when they provide the same implementation function; cleanup from one registration no longer removes another active registration.
+   - Different active implementations for the same projector name still fail clearly because the current `moduleProjectors.*(witnesses)` API has no world/server-local projector context.
+
+11. `[X]` Active plugin-loaded DESIRE extensions
+   - Active plugin-owned `runtime.js` modules can export `desireExtensions.elaborators` and `desireExtensions.runtimeDeclarations`.
+   - Extension-only plugin runtimes are valid even when they do not activate runtime bundles.
+   - Duplicate active elaborator ids or runtime declaration kinds fail during plugin loading before world mutation.
+   - Verified authored WTOML `runtimePluginInstall` can activate a plugin runtime declaration handler during plugin-aware DESIRE loading.
 
 ## Delivery Order
 

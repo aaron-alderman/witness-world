@@ -1,24 +1,81 @@
 import fs from "node:fs/promises";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { relation, thing } from "../../src/kernel.js";
 import { moduleProjectors } from "../../src/modules.js";
+import { nonNegativeInteger, positiveInteger } from "../../src/runtime-config-utils.js";
+
+function defaultAssetsRootFor(appContext) {
+  return appContext?.storage?.assetsRoot || path.resolve(appContext?.runtimeRoot || process.cwd(), "assets");
+}
+
+function defaultBlobsRootFor(appContext) {
+  return appContext?.storage?.blobsRoot || path.resolve(appContext?.runtimeRoot || process.cwd(), "blobs");
+}
+
+function assetIngestRetryUrl(assetId) {
+  return `/api/assets/${encodeURIComponent(assetId)}/ingest/retry`;
+}
+
+function assetSearchReindexUrl(assetId) {
+  return `/api/assets/${encodeURIComponent(assetId)}/search/reindex`;
+}
 
 export function createPracticalBackendSupportServices({
   world,
   backendHost,
   currentBackendCapabilities,
-  assetsRootFor,
-  blobsRootFor,
-  assetIngestRetryUrl,
-  assetSearchReindexUrl,
+  assetsRootFor = defaultAssetsRootFor,
+  blobsRootFor = defaultBlobsRootFor,
+  assetIngestRetryUrl: assetIngestRetryUrlImpl = assetIngestRetryUrl,
+  assetSearchReindexUrl: assetSearchReindexUrlImpl = assetSearchReindexUrl,
   requireBackendCapabilities,
+  canCreateInContext,
   canMutateTarget,
   sendGateFailure,
   sendJson,
   readJson,
-  normalizeNotificationRequest,
   notificationTitle,
   notificationReadShape
 }) {
+  const normalizeNotificationRequest = ({ channel, body, actor, serverRunnerId }) => {
+    const recipient = typeof body?.to === "string" ? body.to.trim() : "";
+    if (!recipient) return { ok: false, status: 400, reason: "recipient required" };
+    const subject = channel === "email"
+      ? (typeof body?.subject === "string" ? body.subject.trim() : "")
+      : null;
+    if (channel === "email" && !subject) return { ok: false, status: 400, reason: "subject required" };
+    const hasText = typeof body?.text === "string";
+    const hasTemplate = typeof body?.template === "string" && body.template.trim();
+    if (!hasText && !hasTemplate) return { ok: false, status: 400, reason: "text or template required" };
+    if (hasText && hasTemplate) return { ok: false, status: 400, reason: "choose text or template" };
+    const vars = body?.vars && typeof body.vars === "object" && !Array.isArray(body.vars) ? { ...body.vars } : {};
+    const contextId = typeof body?.context === "string" && body.context.trim() ? body.context.trim() : null;
+    if (contextId) {
+      const gate = canCreateInContext(actor, contextId);
+      if (!gate.ok) return gate;
+    }
+    return {
+      ok: true,
+      notification: {
+        id: `notification_${randomUUID()}`,
+        channel,
+        actor,
+        serverRunner: serverRunnerId,
+        context: contextId,
+        to: recipient,
+        subject,
+        text: hasText ? String(body.text) : null,
+        template: hasTemplate ? String(body.template) : null,
+        vars,
+        delayMs: nonNegativeInteger(body?.delayMs, 0),
+        maxAttempts: positiveInteger(body?.maxAttempts, 3),
+        retryDelayMs: positiveInteger(body?.retryDelayMs, 50),
+        idempotencyKey: typeof body?.idempotencyKey === "string" && body.idempotencyKey.trim() ? body.idempotencyKey.trim() : null
+      }
+    };
+  };
+
   const recentWitnessBodies = process => world.allWitnesses()
     .filter(witness => witness.process === process)
     .slice(-20)
@@ -117,7 +174,7 @@ export function createPracticalBackendSupportServices({
         processingStatus: asset.processingStatus ?? null,
         processingError: asset.processingError ?? null,
         processingJobId: asset.processingJobId ?? null,
-        retryUrl: assetIngestRetryUrl(asset.id)
+        retryUrl: assetIngestRetryUrlImpl(asset.id)
       }));
     const searchRefreshable = searchRepairStates
       .filter(row => row.repair?.ok && row.repair.indexed && row.repair.stale)
@@ -129,7 +186,7 @@ export function createPracticalBackendSupportServices({
         searchPolicy: repair.policy ?? asset.searchPolicy ?? null,
         lastBuiltAt: repair.lastBuiltAt ?? null,
         assetUpdatedAt: repair.assetUpdatedAt ?? null,
-        reindexUrl: assetSearchReindexUrl(asset.id)
+        reindexUrl: assetSearchReindexUrlImpl(asset.id)
       }));
     return {
       backendHost,

@@ -1,4 +1,5 @@
 import { relation, projectors } from "../../src/kernel.js";
+import { fileURLToPath } from "node:url";
 import { canvasProcessHandlers } from "./canvas-processes.js";
 import { canvasProjection, perspectivesProjection } from "./canvas-projection.js";
 import { renderCanvasPage } from "./canvas-page.js";
@@ -30,6 +31,34 @@ export const handlerCatalog = Object.freeze({
 
 export const routes = Object.freeze([]);
 export const surfaces = Object.freeze([]);
+
+function runtimeFile(name) {
+  return fileURLToPath(new URL(`./${name}`, import.meta.url));
+}
+
+function sourceFile(name) {
+  return fileURLToPath(new URL(`../../src/${name}`, import.meta.url));
+}
+
+export const providers = Object.freeze([
+  {
+    kind: "supportServiceFactory",
+    id: "canvas.support",
+    factory: () => ({
+      canvasProcessHandlers
+    })
+  },
+  {
+    kind: "staticAssetProvider",
+    id: "canvas.static",
+    mount: "/canvas-lib/",
+    files: Object.freeze({
+      "canvas-core.js": runtimeFile("canvas-core.js"),
+      "projectors-core.js": sourceFile("projectors-core.js"),
+      "canvas-projection.js": runtimeFile("canvas-projection.js")
+    })
+  }
+]);
 
 function perspectiveContextId(world, perspectiveId) {
   return world
@@ -360,5 +389,6 @@ export default {
   handlerCatalog,
   routes,
   surfaces,
+  providers,
   createHandlers
 };

@@ -9,9 +9,6 @@ import {
   SUPPORTED_BACKEND_OPS,
   activeBackendProgramDefinition
 } from "./backend-programs.js";
-import { appTutorialConfigForSession } from "../plugins/tutorial/tutorial-runtime-ui.js";
-import { projectEdenPageTheme } from "../plugins/eden/eden-page-theme.js";
-import { renderWidgetPage } from "../plugins/inspect/widget-page.js";
 
 function widgetPageTutorialSurface(world, {
   route = null,
@@ -60,8 +57,14 @@ export function createCoreRuntimeBundleHandlers({
   getRuntimePluginCatalog,
   getRuntimePluginReviews,
   invokeRouteHandler,
-  supportedBackendOps = SUPPORTED_BACKEND_OPS
+  supportedBackendOps = SUPPORTED_BACKEND_OPS,
+  coreHooks = {}
 }) {
+  const renderWidgetPageHook = coreHooks.renderWidgetPage ?? ((_world, { rootWidget }) => `<!doctype html>
+<html><head><meta charset="utf-8"><title>${rootWidget || "Runtime"}</title></head>
+<body><main><h1>${rootWidget || "Runtime"}</h1><p>Widget rendering is not active in this runtime composition.</p></main></body></html>`);
+  const projectEdenPageThemeHook = coreHooks.projectEdenPageTheme ?? (() => null);
+  const appTutorialConfigForSessionHook = coreHooks.appTutorialConfigForSession ?? (() => null);
   const lowerCaseHeaders = headers => Object.fromEntries(
     Object.entries(headers ?? {}).map(([key, value]) => [String(key).toLowerCase(), Array.isArray(value) ? value.map(String) : String(value ?? "")])
   );
@@ -390,7 +393,7 @@ export function createCoreRuntimeBundleHandlers({
         claims: [relation(frontendHost, "rendered", route.serves || rootWidget)],
         body: { route: route.path }
       });
-      const pageTheme = projectEdenPageTheme(requestVisibleWitnesses(requestSession?.actor || null, appContext), {
+      const pageTheme = projectEdenPageThemeHook(requestVisibleWitnesses(requestSession?.actor || null, appContext), {
         actor: requestSession?.actor || null,
         pageId: rootWidget
       });
@@ -400,7 +403,7 @@ export function createCoreRuntimeBundleHandlers({
         frontendProgramId: params.frontendProgram ?? null,
         tutorialPage: "app"
       });
-      send(res, 200, "text/html", renderWidgetPage(world, {
+      send(res, 200, "text/html", renderWidgetPageHook(world, {
         actor: frontendHost,
         rootWidget,
         frontendProgram: params.frontendProgram ?? null,
@@ -415,7 +418,7 @@ export function createCoreRuntimeBundleHandlers({
           surfaceRouteId: tutorialSurface.routeId,
           surfaceRootWidgetId: tutorialSurface.rootWidgetId,
           surfaceProgramId: tutorialSurface.frontendProgramId,
-          tutorial: appTutorialConfigForSession({ requestSession, tutorialProgressFor, surface: tutorialSurface })
+          tutorial: appTutorialConfigForSessionHook({ requestSession, tutorialProgressFor, surface: tutorialSurface })
         }
       }));
     },

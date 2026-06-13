@@ -115,6 +115,21 @@ function semanticWtomlDoc(semantic) {
           role: semantic.role
         }
       };
+    case "graph":
+      return {
+        docKind: "graph",
+        values: {
+          id: semantic.name,
+          graphKind: semantic.graphKind,
+          from: semantic.from,
+          to: semantic.to,
+          nodeType: semantic.nodeType,
+          edgeType: semantic.edgeType,
+          schemaType: semantic.schemaType,
+          fields: semantic.fields,
+          props: semantic.props
+        }
+      };
     case "store":
       return {
         docKind: "store",
@@ -329,6 +344,7 @@ function serializeSemanticRvmNode(node) {
       nestedFieldBlock("fields", semantic.fields ?? [])
     ]);
   }
+  if (semantic.kind === "graph") return serializeRvmGraph(semantic);
   if (semantic.kind === "process") {
     return block("process", semantic.name, [
       repeatedBlock("states", semantic.state ?? []),
@@ -416,6 +432,47 @@ function serializeRvmMessage(semantic) {
   }
   return block("message", semantic.name, [
     nestedFieldBlock("fields", semantic.fields ?? [])
+  ]);
+}
+
+function serializeRvmGraph(semantic) {
+  const graphKind = semantic.graphKind ?? "node";
+  if (graphKind === "node") {
+    return block("graph_node", semantic.name, [
+      simpleLine("kind", semantic.nodeType),
+      simpleLine("entity_type", semantic.schemaType),
+      nestedFieldBlock("fields", semantic.fields ?? []),
+      ...propLines(semantic.props)
+    ]);
+  }
+  if (graphKind === "edge") {
+    return block("graph_edge", semantic.name, [
+      simpleLine("from", semantic.from),
+      simpleLine("to", semantic.to),
+      simpleLine("kind", semantic.edgeType),
+      simpleLine("edge_type", semantic.schemaType),
+      nestedFieldBlock("fields", semantic.fields ?? []),
+      ...propLines(semantic.props)
+    ]);
+  }
+  if (graphKind === "entityType") {
+    return block("entity_type", semantic.name, [
+      nestedFieldBlock("fields", semantic.fields ?? []),
+      ...propLines(semantic.props)
+    ]);
+  }
+  if (graphKind === "edgeType") {
+    return block("edge_type", semantic.name, [
+      simpleLine("from", semantic.from),
+      simpleLine("to", semantic.to),
+      nestedFieldBlock("fields", semantic.fields ?? []),
+      ...propLines(semantic.props)
+    ]);
+  }
+  return block("graph", semantic.name, [
+    simpleLine("kind", graphKind),
+    nestedFieldBlock("fields", semantic.fields ?? []),
+    ...propLines(semantic.props)
   ]);
 }
 

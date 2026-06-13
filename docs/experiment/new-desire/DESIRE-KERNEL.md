@@ -382,6 +382,13 @@ Compatibility aliases such as `body.values`, `body.declarationKind`, and `body.s
 
 Runtime residuals are not canonical kernel semantics. They are a bridge for implementation-facing declarations that still need traceability while WTOML remains the runnable authored surface.
 
+Runtime declaration application is registry-based:
+
+- core runtime declarations are registered by default
+- plugin/extension declarations must be registered before application
+- registered declarations must provide an apply handler
+- unregistered declarations fail with source diagnostics instead of becoming unknown-section witnesses
+
 ## Minimal example
 
 ```lisp

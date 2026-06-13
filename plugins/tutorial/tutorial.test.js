@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { bundleId, createHandlers, handlerCatalog, routes } from "./runtime.js";
+import { bundleId, createHandlers, handlerCatalog, providers, routes } from "./runtime.js";
 import { TODO_TUTORIAL_ID, normalizeTutorialProgress, tutorialDefinition } from "./tutorials.js";
 
 test("tutorial plugin owns tutorial bundle routes and handlers", async () => {
@@ -17,6 +17,7 @@ test("tutorial plugin owns tutorial bundle routes and handlers", async () => {
     "tutorial.progress.delete"
   ]);
   assert.equal(routes.some(route => route.handler === "tutorial.progress.read"), true);
+  assert.equal(providers.some(provider => provider.kind === "runtimeBuiltinSeeds" && provider.valueTypes?.some(valueType => valueType.id === "widget.tutorialTarget")), true);
   assert.equal(typeof createHandlers({
     sendJson() {},
     readJson: async () => ({}),

@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import path from "node:path";
 import { Readable } from "node:stream";
 import { canCreateInContext, canManageContext, canMutateTarget, projectors } from "./kernel.js";
 import {
@@ -11,57 +10,12 @@ import {
   sendJson,
   sessionCookieHeader
 } from "./runtime-http-utils.js";
-import { isoAt, nonNegativeInteger, positiveInteger, runtimeConfigLookup, runtimeConfigScalar } from "./runtime-config-utils.js";
+import { isoAt, positiveInteger, runtimeConfigLookup, runtimeConfigScalar } from "./runtime-config-utils.js";
 import { createAuthoringBundleServices } from "./runtime-authoring-services.js";
 import { createRuntimeBundleHandlers } from "./runtime-bundle-handler-assembly.js";
 import {
   createRuntimeProjectionServices
 } from "./runtime-bundle-support-services.js";
-import {
-  createHttpOutboundIoServices,
-  looksJsonContentType,
-  responseHeadersToObject
-} from "../plugins/http-outbound/io-services.js";
-import {
-  delayWithSignal,
-  executeHttpOutbound
-} from "../plugins/http-outbound/glue.js";
-import {
-  createFsBlobIoServices
-} from "../plugins/fs-blob/io-services.js";
-import {
-  createWebhookIoServices,
-  webhookPayloadPathFor
-} from "../plugins/webhooks/io-services.js";
-import {
-  createPracticalBackendAssetServices
-} from "../plugins/assets/asset-services.js";
-import {
-  createRuntimeAuthOAuthSupportServices
-} from "../plugins/oauth/support-services.js";
-import {
-  createPracticalBackendDbSearchServices
-} from "../plugins/search/db-search-services.js";
-import {
-  createPracticalBackendSupportServices
-} from "../plugins/backend-seams/support-services.js";
-import { renderBackendSeamsPage } from "../plugins/backend-seams/backend-seams-page.js";
-import {
-  dbSqlDatasourceId,
-  dbSqlDatasourceTitle,
-  dbSqlOperationId,
-  dbSqlOperationTitle
-} from "../plugins/sqlite/glue.js";
-import { notificationTitle } from "../plugins/notifications/glue.js";
-import {
-  executeMcpTool,
-  mcpToolDefinition,
-  mcpToolNames,
-  resolveMcpToolScope,
-  MCP_PROTOCOL_VERSION
-} from "../plugins/mcp/mcp-tools.js";
-import { createMcpBundleSupportServices } from "../plugins/mcp/mcp-support-services.js";
-import { canvasProcessHandlers } from "../plugins/canvas/canvas-processes.js";
 import { createRuntimeSessionServices } from "./runtime-session-services.js";
 import { createIdentity, defineContext, moduleProjectors } from "./modules.js";
 import {
@@ -79,12 +33,27 @@ import {
   readRuntimePluginReviews
 } from "./runtime-plugin-utils.js";
 
-function createPracticalBackendIoServices(options = {}) {
+const unavailable = name => () => {
+  throw new Error(`${name} is unavailable in the active runtime composition`);
+};
+
+const unavailableAsync = name => async () => {
+  throw new Error(`${name} is unavailable in the active runtime composition`);
+};
+
+function emptyMcpBundleSupportServices() {
   return {
-    ...createFsBlobIoServices(options),
-    ...createHttpOutboundIoServices(options),
-    ...createWebhookIoServices(options)
+    currentMcpServerIndex: () => ({ rows: [], byId: {} }),
+    currentMcpToolInstalls: () => [],
+    mcpToolAvailable: () => false,
+    validateMcpOrigin: () => ({ ok: false, status: 404, reason: "MCP plugin is inactive" }),
+    resolveMcpPrincipal: () => ({ ok: false, status: 404, reason: "MCP plugin is inactive" }),
+    mcpScopeAllows: () => false
   };
+}
+
+function emptyObjectFactory() {
+  return {};
 }
 
 export function createRuntimeRouteHandlers({
@@ -106,6 +75,7 @@ export function createRuntimeRouteHandlers({
   streamReadableToFile,
   streamFileToFile,
   webhookPayloadPathFor,
+  runtimeContributions = null,
   runtimePluginRoot = null,
   runtimePluginIds = [],
   authoredRuntimePluginIds = [],
@@ -113,16 +83,65 @@ export function createRuntimeRouteHandlers({
   supportedBackendOps = [],
   frontendTraceProcesses = [],
   createRuntimeProjectionServicesImpl = createRuntimeProjectionServices,
-  createMcpBundleSupportServicesImpl = createMcpBundleSupportServices,
+  createMcpBundleSupportServicesImpl = null,
   createAuthoringBundleServicesImpl = createAuthoringBundleServices,
-  createPracticalBackendAssetServicesImpl = createPracticalBackendAssetServices,
+  createPracticalBackendAssetServicesImpl = null,
   createRuntimeSessionServicesImpl = createRuntimeSessionServices,
-  createRuntimeAuthOAuthSupportServicesImpl = createRuntimeAuthOAuthSupportServices,
-  createPracticalBackendDbSearchServicesImpl = createPracticalBackendDbSearchServices,
-  createPracticalBackendSupportServicesImpl = createPracticalBackendSupportServices,
-  createPracticalBackendIoServicesImpl = createPracticalBackendIoServices,
+  createRuntimeAuthOAuthSupportServicesImpl = null,
+  createPracticalBackendDbSearchServicesImpl = null,
+  createPracticalBackendSupportServicesImpl = null,
+  createPracticalBackendIoServicesImpl = null,
   createRuntimeBundleHandlersImpl = createRuntimeBundleHandlers
 }) {
+  const supportServices = runtimeContributions?.supportServices ?? {};
+  const coreHooks = runtimeContributions?.coreHooks ?? {};
+  // Optional-domain defaults below are inactive composition guards and test seams.
+  // Executable feature behavior must arrive through active plugin supportServices,
+  // coreHooks, provider factories, job handler factories, or loaded bundle handlers.
+  const mcpToolNamesImpl = supportServices.mcpToolNames ?? (() => []);
+  const resolveMcpToolScopeImpl = supportServices.resolveMcpToolScope ?? (() => null);
+  const mcpToolDefinitionImpl = supportServices.mcpToolDefinition ?? (() => null);
+  const executeMcpToolImpl = supportServices.executeMcpTool ?? unavailableAsync("executeMcpTool");
+  const mcpProtocolVersion = supportServices.MCP_PROTOCOL_VERSION ?? "inactive";
+  const responseHeadersToObjectImpl = responseHeadersToObject ?? supportServices.responseHeadersToObject ?? (headers => Object.fromEntries(Object.entries(headers ?? {})));
+  const looksJsonContentTypeImpl = looksJsonContentType ?? supportServices.looksJsonContentType ?? (value => String(value || "").toLowerCase().includes("json"));
+  const executeHttpOutboundImpl = supportServices.executeHttpOutbound ?? unavailableAsync("executeHttpOutbound");
+  const delayWithSignalImpl = supportServices.delayWithSignal ?? unavailableAsync("delayWithSignal");
+  const webhookPayloadPathForImpl = webhookPayloadPathFor ?? supportServices.webhookPayloadPathFor ?? unavailable("webhookPayloadPathFor");
+  const streamReadableToFileImpl = streamReadableToFile ?? supportServices.streamReadableToFile ?? unavailableAsync("streamReadableToFile");
+  const streamFileToFileImpl = streamFileToFile ?? supportServices.streamFileToFile ?? unavailableAsync("streamFileToFile");
+  const parseStreamFailureLimitImpl = parseStreamFailureLimit ?? supportServices.parseStreamFailureLimit ?? (() => 0);
+  const renderBackendSeamsPageImpl = supportServices.renderBackendSeamsPage ?? (() => "<!doctype html><html><body>Backend seams plugin is inactive.</body></html>");
+  const notificationTitleImpl = supportServices.notificationTitle ?? (row => row?.title ?? row?.id ?? "Notification");
+  const notificationReadShapeImpl = supportServices.notificationReadShape ?? unavailable("notificationReadShape");
+  const outboundReadShapeImpl = supportServices.outboundReadShape ?? unavailable("outboundReadShape");
+  const webhookReadShapeImpl = supportServices.webhookReadShape ?? unavailable("webhookReadShape");
+  const dbSqlDatasourceIdImpl = supportServices.dbSqlDatasourceId ?? (row => row?.id ?? null);
+  const dbSqlDatasourceTitleImpl = supportServices.dbSqlDatasourceTitle ?? (row => row?.title ?? row?.id ?? "SQL datasource");
+  const dbSqlOperationIdImpl = supportServices.dbSqlOperationId ?? (row => row?.id ?? null);
+  const dbSqlOperationTitleImpl = supportServices.dbSqlOperationTitle ?? (row => row?.title ?? row?.id ?? "SQL operation");
+  const canvasProcessHandlersImpl = supportServices.canvasProcessHandlers ?? {};
+  const createMcpBundleSupportServicesResolved = createMcpBundleSupportServicesImpl
+    ?? supportServices.createMcpBundleSupportServices
+    ?? emptyMcpBundleSupportServices;
+  const createPracticalBackendAssetServicesResolved = createPracticalBackendAssetServicesImpl
+    ?? supportServices.createPracticalBackendAssetServices
+    ?? emptyObjectFactory;
+  const createRuntimeAuthOAuthSupportServicesResolved = createRuntimeAuthOAuthSupportServicesImpl
+    ?? supportServices.createRuntimeAuthOAuthSupportServices
+    ?? emptyObjectFactory;
+  const createPracticalBackendDbSearchServicesResolved = createPracticalBackendDbSearchServicesImpl
+    ?? supportServices.createPracticalBackendDbSearchServices
+    ?? emptyObjectFactory;
+  const createPracticalBackendSupportServicesResolved = createPracticalBackendSupportServicesImpl
+    ?? supportServices.createPracticalBackendSupportServices
+    ?? emptyObjectFactory;
+  const createPracticalBackendIoServicesResolved = createPracticalBackendIoServicesImpl
+    ?? (options => ({
+      ...(supportServices.createFsBlobIoServices?.(options) ?? {}),
+      ...(supportServices.createHttpOutboundIoServices?.(options) ?? {}),
+      ...(supportServices.createWebhookIoServices?.(options) ?? {})
+    }));
   const currentIdentityIndex = () => world.project(moduleProjectors.identityIndex);
   const {
     requestVisibleWitnesses,
@@ -137,12 +156,12 @@ export function createRuntimeRouteHandlers({
     validateMcpOrigin,
     resolveMcpPrincipal,
     mcpScopeAllows
-  } = createMcpBundleSupportServicesImpl({
+  } = createMcpBundleSupportServicesResolved({
     world,
     backendHost,
     mcpInternalToken,
     runtimeConfigLookup,
-    resolveMcpToolScope,
+    resolveMcpToolScope: resolveMcpToolScopeImpl,
     hostCapabilities,
     headerValue
   });
@@ -327,7 +346,8 @@ export function createRuntimeRouteHandlers({
     supportedHandlerMetadata,
     supportedFrontendOps,
     supportedBackendOps,
-    mcpToolNames,
+    mcpToolNames: mcpToolNamesImpl,
+    createAuthoringProposalExecutor: supportServices.createAuthoringProposalExecutor,
     getRuntimePluginCatalog
   });
   const authorityServices = authoringServices;
@@ -339,10 +359,6 @@ export function createRuntimeRouteHandlers({
     return { ok: false, status: 503, reason: "missing backend capabilities", missing };
   };
   const currentBackendCapabilities = () => hostCapabilities(world, backendHost);
-  const assetIngestRetryUrl = assetId => `/api/assets/${encodeURIComponent(assetId)}/ingest/retry`;
-  const assetSearchReindexUrl = assetId => `/api/assets/${encodeURIComponent(assetId)}/search/reindex`;
-  const assetsRootFor = appContext => appContext?.storage?.assetsRoot || path.resolve(appContext?.runtimeRoot || process.cwd(), "assets");
-  const blobsRootFor = appContext => appContext?.storage?.blobsRoot || path.resolve(appContext?.runtimeRoot || process.cwd(), "blobs");
   const currentThingIds = () => world.project(projectors.things);
   const currentThingExists = thingId => currentThingIds().has(thingId);
   const currentThingKind = thingId => world.project(moduleProjectors.modules).get(thingId) ?? null;
@@ -377,12 +393,11 @@ export function createRuntimeRouteHandlers({
     ensureReadableAssetAccess,
     normalizeAssetVisibility,
     resolveAssetDropContext
-  } = createPracticalBackendAssetServicesImpl({
+  } = createPracticalBackendAssetServicesResolved({
     world,
     backendHost,
     runtimeConfigLookup,
     headerValue,
-    assetsRootFor,
     canCreateInContext: (actor, contextId) => canCreateInContext(world, actor, contextId),
     canMutateTarget: (actor, target) => canMutateTarget(world, actor, target),
     currentPerspectiveById,
@@ -406,76 +421,12 @@ export function createRuntimeRouteHandlers({
     emitAuthOauthFlow,
     emitAuthOauthLink,
     emitAuthOauthSession
-  } = createRuntimeAuthOAuthSupportServicesImpl({
+  } = createRuntimeAuthOAuthSupportServicesResolved({
     world,
     backendHost,
     randomUUID,
     runtimeConfigLookup,
     headerValue
-  });
-  const notificationReadShape = row => ({
-    id: row.id,
-    title: row.title,
-    channel: row.channel,
-    recipient: row.recipient,
-    subject: row.subject,
-    sender: row.sender,
-    preview: row.preview,
-    transport: row.transport,
-    status: row.status,
-    context: row.context,
-    jobId: row.jobId,
-    providerMessageId: row.providerMessageId,
-    attempt: row.attempt,
-    maxAttempts: row.maxAttempts,
-    retryDelayMs: row.retryDelayMs,
-    lastError: row.lastError
-  });
-  const outboundReadShape = row => ({
-    id: row.id,
-    title: row.title,
-    target: row.target,
-    url: row.url,
-    method: row.method,
-    transport: row.transport,
-    status: row.status,
-    context: row.context,
-    serverRunner: row.serverRunner,
-    authKind: row.authKind,
-    authConfigKey: row.authConfigKey,
-    requestHeaderNames: row.requestHeaderNames,
-    requestBodyKind: row.requestBodyKind,
-    timeoutMs: row.timeoutMs,
-    maxAttempts: row.maxAttempts,
-    retryDelayMs: row.retryDelayMs,
-    attempt: row.attempt,
-    correlationId: row.correlationId,
-    externalRefId: row.externalRefId,
-    responseStatus: row.responseStatus,
-    responseContentType: row.responseContentType,
-    lastError: row.lastError
-  });
-  const webhookReadShape = row => ({
-    id: row.id,
-    title: row.title,
-    target: row.target,
-    deliveryId: row.deliveryId,
-    contentType: row.contentType,
-    sizeBytes: row.sizeBytes,
-    storageKey: row.storageKey,
-    status: row.status,
-    signatureStatus: row.signatureStatus,
-    replayStatus: row.replayStatus,
-    receivedAt: row.receivedAt,
-    timestamp: row.timestamp,
-    correlationId: row.correlationId,
-    context: row.context,
-    serverRunner: row.serverRunner,
-    jobId: row.jobId,
-    attempt: row.attempt,
-    maxAttempts: row.maxAttempts,
-    retryDelayMs: row.retryDelayMs,
-    lastError: row.lastError
   });
   const {
     dbSqlDatasourceReadShape,
@@ -484,79 +435,51 @@ export function createRuntimeRouteHandlers({
     emitDbSqlDatasourceResolve,
     emitDbSqlOperation,
     emitSearchIndexEvent
-  } = createPracticalBackendDbSearchServicesImpl({
+  } = createPracticalBackendDbSearchServicesResolved({
     world,
     backendHost
   });
-  const normalizeNotificationRequest = ({ channel, body, actor, serverRunnerId }) => {
-    const recipient = typeof body?.to === "string" ? body.to.trim() : "";
-    if (!recipient) return { ok: false, status: 400, reason: "recipient required" };
-    const subject = channel === "email"
-      ? (typeof body?.subject === "string" ? body.subject.trim() : "")
-      : null;
-    if (channel === "email" && !subject) return { ok: false, status: 400, reason: "subject required" };
-    const hasText = typeof body?.text === "string";
-    const hasTemplate = typeof body?.template === "string" && body.template.trim();
-    if (!hasText && !hasTemplate) return { ok: false, status: 400, reason: "text or template required" };
-    if (hasText && hasTemplate) return { ok: false, status: 400, reason: "choose text or template" };
-    const vars = body?.vars && typeof body.vars === "object" && !Array.isArray(body.vars) ? { ...body.vars } : {};
-    const contextId = typeof body?.context === "string" && body.context.trim() ? body.context.trim() : null;
-    if (contextId) {
-      const gate = canCreateInContext(world, actor, contextId);
-      if (!gate.ok) return gate;
+  const unavailableNotificationEnqueue = async ({ channel, res, requestActor }) => {
+    const required = channel === "sms" ? ["notify.sms"] : ["notify.email"];
+    const capabilityGate = requireBackendCapabilities(required);
+    if (!capabilityGate.ok) {
+      sendJson(res, capabilityGate.status || 503, { error: capabilityGate.reason, missing: capabilityGate.missing });
+      return;
     }
-    return {
-      ok: true,
-      notification: {
-        id: `notification_${randomUUID()}`,
-        channel,
-        actor,
-        serverRunner: serverRunnerId,
-        context: contextId,
-        to: recipient,
-        subject,
-        text: hasText ? String(body.text) : null,
-        template: hasTemplate ? String(body.template) : null,
-        vars,
-        delayMs: nonNegativeInteger(body?.delayMs, 0),
-        maxAttempts: positiveInteger(body?.maxAttempts, 3),
-        retryDelayMs: positiveInteger(body?.retryDelayMs, 50),
-        idempotencyKey: typeof body?.idempotencyKey === "string" && body.idempotencyKey.trim() ? body.idempotencyKey.trim() : null
-      }
-    };
+    if (!requestActor) {
+      sendJson(res, 401, { error: "sign in first" });
+      return;
+    }
+    sendJson(res, 503, { error: "notification queue support is unavailable in active runtime composition" });
   };
   const {
-    notificationsForRunner,
-    currentNotificationForRunner,
-    outboundRequestsForRunner,
-    currentOutboundForRunner,
-    webhookDeliveriesForRunner,
-    currentWebhookForRunner,
-    currentSqlDatasourceForRunner,
-    sqlOperationsForRunner,
-    currentSqlOperationForRunner,
-    currentSearchIndexForRunner,
-    oauthLinksForRunner,
-    currentOauthLinkForRunner,
-    currentOauthLinkByProviderAccount,
-    assetDiagnostics,
-    enqueueNotification
-  } = createPracticalBackendSupportServicesImpl({
+    notificationsForRunner = () => [],
+    currentNotificationForRunner = () => null,
+    outboundRequestsForRunner = () => [],
+    currentOutboundForRunner = () => null,
+    webhookDeliveriesForRunner = () => [],
+    currentWebhookForRunner = () => null,
+    currentSqlDatasourceForRunner = () => null,
+    sqlOperationsForRunner = () => [],
+    currentSqlOperationForRunner = () => null,
+    currentSearchIndexForRunner = () => null,
+    oauthLinksForRunner = () => [],
+    currentOauthLinkForRunner = () => null,
+    currentOauthLinkByProviderAccount = () => null,
+    assetDiagnostics = () => ({}),
+    enqueueNotification = unavailableNotificationEnqueue
+  } = createPracticalBackendSupportServicesResolved({
     world,
     backendHost,
     currentBackendCapabilities,
-    assetsRootFor,
-    blobsRootFor,
-    assetIngestRetryUrl,
-    assetSearchReindexUrl,
     requireBackendCapabilities,
+    canCreateInContext: (actor, contextId) => canCreateInContext(world, actor, contextId),
     canMutateTarget,
     sendGateFailure,
     sendJson,
     readJson,
-    normalizeNotificationRequest,
-    notificationTitle,
-    notificationReadShape
+    notificationTitle: notificationTitleImpl,
+    notificationReadShape: notificationReadShapeImpl
   });
   const {
     normalizeOutboundRequest,
@@ -573,8 +496,7 @@ export function createRuntimeRouteHandlers({
     pickExternalRefId,
     isRetryableOutboundStatus,
     outboundFailureResponseStatus
-  } = createPracticalBackendIoServicesImpl({
-    blobsRootFor,
+  } = createPracticalBackendIoServicesResolved({
     runtimeConfigLookup,
     runtimeConfigScalar,
     positiveInteger,
@@ -627,9 +549,9 @@ export function createRuntimeRouteHandlers({
       buildPluginCapabilitySourceIndex,
       backendHosts,
       frontendHosts,
-      mcpToolNames,
+      mcpToolNames: mcpToolNamesImpl,
       assetDiagnostics,
-      renderBackendSeamsPage,
+      renderBackendSeamsPage: renderBackendSeamsPageImpl,
       runtimeBundleSummaryForProfile,
       defaultRuntimeProfile: DEFAULT_RUNTIME_PROFILE,
       currentAssetById,
@@ -642,8 +564,8 @@ export function createRuntimeRouteHandlers({
       currentThingExists,
       currentThingKind,
       assetAttachedToTarget,
-      runAssetAttach: ({ actor, asset, target, perspective }) => canvasProcessHandlers["asset.attach"](world, { actor, asset, target, perspective }),
-      runAssetDetach: ({ actor, asset, target, perspective }) => canvasProcessHandlers["asset.detach"](world, { actor, asset, target, perspective }),
+      runAssetAttach: ({ actor, asset, target, perspective }) => canvasProcessHandlersImpl["asset.attach"]?.(world, { actor, asset, target, perspective }),
+      runAssetDetach: ({ actor, asset, target, perspective }) => canvasProcessHandlersImpl["asset.detach"]?.(world, { actor, asset, target, perspective }),
       requireBackendCapabilities,
       headerValue,
       parseMultipartAssetUpload,
@@ -659,41 +581,41 @@ export function createRuntimeRouteHandlers({
       blobStorageDirectoryFor,
       composeBlobFileRecord,
       normalizeBlobPath,
-      streamReadableToFile,
+      streamReadableToFile: streamReadableToFileImpl,
       canMutateTarget,
       normalizeOutboundRequest,
       outboundTitle,
-      executeHttpOutbound,
-      responseHeadersToObject,
-      looksJsonContentType,
+      executeHttpOutbound: executeHttpOutboundImpl,
+      responseHeadersToObject: responseHeadersToObjectImpl,
+      looksJsonContentType: looksJsonContentTypeImpl,
       pickExternalRefId,
       currentOutboundForRunner,
-      outboundReadShape,
+      outboundReadShape: outboundReadShapeImpl,
       isRetryableOutboundStatus,
-      delayWithSignal,
+      delayWithSignal: delayWithSignalImpl,
       outboundFailureResponseStatus,
       outboundRequestsForRunner,
       enqueueNotification,
       notificationsForRunner,
-      notificationReadShape,
+      notificationReadShape: notificationReadShapeImpl,
       currentNotificationForRunner,
       readBody,
       normalizeWebhookDelivery,
       webhookTitle,
       verifyWebhookSignature,
-      webhookReadShape,
+      webhookReadShape: webhookReadShapeImpl,
       currentWebhookForRunner,
       webhookDeliveriesForRunner,
-      webhookPayloadPathFor,
+      webhookPayloadPathFor: webhookPayloadPathForImpl,
       emitDbSqlDatasourceResolve,
       currentSqlDatasourceForRunner,
       sqlOperationsForRunner,
       dbSqlDatasourceReadShape,
       dbSqlOperationReadShape,
-      dbSqlDatasourceId,
-      dbSqlDatasourceTitle,
-      dbSqlOperationId,
-      dbSqlOperationTitle,
+      dbSqlDatasourceId: dbSqlDatasourceIdImpl,
+      dbSqlDatasourceTitle: dbSqlDatasourceTitleImpl,
+      dbSqlOperationId: dbSqlOperationIdImpl,
+      dbSqlOperationTitle: dbSqlOperationTitleImpl,
       emitDbSqlOperation,
       currentSqlOperationForRunner,
       emitSearchIndexEvent,
@@ -726,13 +648,14 @@ export function createRuntimeRouteHandlers({
       mcpToolAvailable,
       validateMcpOrigin,
       resolveMcpPrincipal,
-      MCP_PROTOCOL_VERSION,
-      mcpToolDefinition,
+      MCP_PROTOCOL_VERSION: mcpProtocolVersion,
+      mcpToolDefinition: mcpToolDefinitionImpl,
       mcpScopeAllows,
-      executeMcpTool,
+      executeMcpTool: executeMcpToolImpl,
       invokeRouteHandler,
-      parseStreamFailureLimit,
-      streamFileToFile
+      parseStreamFailureLimit: parseStreamFailureLimitImpl,
+      streamFileToFile: streamFileToFileImpl,
+      coreHooks
     }
   });
   return handlers;

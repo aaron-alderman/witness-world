@@ -190,6 +190,23 @@ function normalizeSemanticNode(node, versionFieldsByName) {
         sourceNodeIds: [node.id],
         meta: semanticMeta(node)
       })];
+    case "graph":
+      return [createDesireNode({
+        kind: "graph",
+        name: semantic.name,
+        body: {
+          graphKind: semantic.graphKind ?? null,
+          from: semantic.from ?? null,
+          to: semantic.to ?? null,
+          nodeType: semantic.nodeType ?? null,
+          edgeType: semantic.edgeType ?? null,
+          schemaType: semantic.schemaType ?? null,
+          fields: semantic.fields ?? [],
+          props: semantic.props ?? {}
+        },
+        sourceNodeIds: [node.id],
+        meta: semanticMeta(node)
+      })];
     case "process":
       return [createDesireNode({
         kind: "process",

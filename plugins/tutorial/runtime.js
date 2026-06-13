@@ -1,4 +1,6 @@
 import { createTutorialBundleHandlers } from "./tutorial-handlers.js";
+import { appTutorialConfigForSession } from "./tutorial-runtime-ui.js";
+import { TUTORIAL_RUNTIME_BUILTIN_SEEDS } from "./runtime-builtins.js";
 
 function patternRoute(method, pattern, handler, paramNames = []) {
   return Object.freeze({ kind: "pattern", method, pattern, handler, paramNames });
@@ -25,6 +27,18 @@ export const routes = Object.freeze([
 
 export const surfaces = Object.freeze([]);
 
+export const providers = Object.freeze([
+  {
+    kind: "coreHook",
+    id: "appTutorialConfigForSession",
+    hook: appTutorialConfigForSession
+  },
+  {
+    kind: "runtimeBuiltinSeeds",
+    ...TUTORIAL_RUNTIME_BUILTIN_SEEDS
+  }
+]);
+
 export function createHandlers(deps) {
   return createTutorialBundleHandlers(deps);
 }
@@ -34,5 +48,6 @@ export default {
   handlerCatalog,
   routes,
   surfaces,
+  providers,
   createHandlers
 };

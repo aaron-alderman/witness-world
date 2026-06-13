@@ -2,15 +2,6 @@ import os from "node:os";
 import { createLogger } from "./logger.js";
 import { resolveRuntimeConfig as resolveRuntimeConfigUtil } from "./runtime-config-utils.js";
 import {
-  createBuiltinAssetJobHandlers as createBuiltinAssetJobHandlersDefault
-} from "../plugins/assets/job-handlers.js";
-import {
-  createBuiltinNotificationJobHandlers as createBuiltinNotificationJobHandlersDefault
-} from "../plugins/notifications/job-handlers.js";
-import {
-  createBuiltinWebhookJobHandlers as createBuiltinWebhookJobHandlersDefault
-} from "../plugins/webhooks/job-handlers.js";
-import {
   declareBackendHost as declareBackendHostUtil,
   declareFrontendHost as declareFrontendHostUtil,
   hostCapabilities,
@@ -61,9 +52,6 @@ export async function startServer(world, {
     runtimeStartupMode,
     runtimeOperatorContract
   }, {
-    createBuiltinAssetJobHandlers: createBuiltinAssetJobHandlersDefault,
-    createBuiltinNotificationJobHandlers: createBuiltinNotificationJobHandlersDefault,
-    createBuiltinWebhookJobHandlers: createBuiltinWebhookJobHandlersDefault,
     createGenericRouteHandlers,
     hostCapabilities,
     resolveRuntimeConfig: resolveRuntimeConfigUtil,

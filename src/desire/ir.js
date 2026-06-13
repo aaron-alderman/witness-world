@@ -6,6 +6,7 @@ export const DESIRE_KERNEL_KINDS = new Set([
   "message",
   "store",
   "entity",
+  "graph",
   "projection",
   "capability",
   "boundary",
@@ -36,6 +37,7 @@ export const DESIRE_PLUS_SEMANTIC_KINDS = new Set([
   "context",
   "dataflow",
   "entity",
+  "graph",
   "import",
   "message",
   "module",
@@ -282,6 +284,16 @@ function validateDesireNodeBody(kind, body, path) {
       assertNullableString(body.identity, `${path}.identity`);
       assertNullableString(body.version, `${path}.version`);
       assertArray(body.fields ?? [], `${path}.fields`);
+      return;
+    case "graph":
+      assertNullableString(body.graphKind, `${path}.graphKind`);
+      assertNullableString(body.from, `${path}.from`);
+      assertNullableString(body.to, `${path}.to`);
+      assertNullableString(body.nodeType, `${path}.nodeType`);
+      assertNullableString(body.edgeType, `${path}.edgeType`);
+      assertNullableString(body.schemaType, `${path}.schemaType`);
+      assertArray(body.fields ?? [], `${path}.fields`);
+      assertPlainObject(body.props ?? {}, `${path}.props`);
       return;
     case "capability":
       assertArray(body.verbs ?? [], `${path}.verbs`);

@@ -1,4 +1,5 @@
 import { DEMO_HANDLER_SET_PROVIDER } from "./handler-set.js";
+import { DEMO_RUNTIME_BUILTIN_SEEDS } from "./runtime-builtins.js";
 
 export const bundleId = "bundle-demo";
 
@@ -23,6 +24,10 @@ export const providers = Object.freeze([
     kind: "startupRequiredHostCapabilities",
     hostKind: "backend",
     capabilities
+  },
+  {
+    kind: "runtimeBuiltinSeeds",
+    ...DEMO_RUNTIME_BUILTIN_SEEDS
   }
 ]);
 export const handlerSetProvider = DEMO_HANDLER_SET_PROVIDER;

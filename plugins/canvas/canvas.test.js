@@ -6,6 +6,7 @@ import { canvasProjection, perspectivesProjection } from "./canvas-projection.js
 import { renderCanvasPage } from "./canvas-page.js";
 import { compensationClaims, undoState } from "./canvas-undo.js";
 import { renderCanvasCorePrelude } from "./canvas-core.js";
+import { providers } from "./runtime.js";
 
 test("canvas plugin exposes canvas bundle handlers", async () => {
   const source = await readFile(new URL("./runtime.js", import.meta.url), "utf8");
@@ -36,13 +37,16 @@ test("canvas runtime ownership is not implemented in core compatibility files", 
     await assert.rejects(readFile(new URL(file, import.meta.url), "utf8"));
   }
 
-  const runtimeServerSource = await readFile(new URL("../../src/runtime-server.js", import.meta.url), "utf8");
   const routeHandlersSource = await readFile(new URL("../../src/runtime-route-handlers.js", import.meta.url), "utf8");
   const proposalExecutorSource = await readFile(new URL("../proposals/proposal-executor.js", import.meta.url), "utf8");
+  const staticProvider = providers.find(provider => provider.kind === "staticAssetProvider" && provider.id === "canvas.static");
 
-  assert.equal(runtimeServerSource.includes('["canvas-core.js", path.join(canvasDir, "canvas-core.js")]'), true);
-  assert.equal(runtimeServerSource.includes('["canvas-projection.js", path.join(canvasDir, "canvas-projection.js")]'), true);
-  assert.equal(routeHandlersSource.includes("../plugins/canvas/canvas-processes.js"), true);
+  assert.equal(staticProvider.mount, "/canvas-lib/");
+  assert.equal(Object.keys(staticProvider.files).includes("canvas-core.js"), true);
+  assert.equal(Object.keys(staticProvider.files).includes("canvas-projection.js"), true);
+  assert.equal(String(staticProvider.files["canvas-core.js"]).replaceAll("\\", "/").includes("/plugins/canvas/canvas-core.js"), true);
+  assert.equal(String(staticProvider.files["canvas-projection.js"]).replaceAll("\\", "/").includes("/plugins/canvas/canvas-projection.js"), true);
+  assert.equal(routeHandlersSource.includes("../plugins/canvas/canvas-processes.js"), false);
   assert.equal(routeHandlersSource.includes("./canvas-processes.js"), false);
   assert.equal(proposalExecutorSource.includes("../canvas/canvas-processes.js"), true);
   assert.equal(proposalExecutorSource.includes("../../src/canvas-processes.js"), false);

@@ -135,14 +135,6 @@ function classifyRvmForm(form) {
       boundaryReason: "lowered Tiny/RVM implementation detail, not kernel semantics"
     };
   }
-  if (RVM_GRAPH_DATA_KINDS.has(form.kind)) {
-    return {
-      sourceCategory: "graph-data",
-      residualCategory: "graph-data",
-      desireBoundary: "desire-plus-only",
-      boundaryReason: "graph data needs a separate semantic graph model decision"
-    };
-  }
   if (form.kind === "source") {
     return {
       sourceCategory: "source",
@@ -508,6 +500,46 @@ function semanticRvmShape(kind, name, type, bodyLines, header = {}) {
         versionRef: readSimpleValue(bodyLines, "version_prop"),
         fields: inferEntityFields(bodyLines)
       };
+    case "graph_node":
+      return {
+        kind: "graph",
+        name,
+        graphKind: "node",
+        nodeType: readSimpleValue(bodyLines, "kind") ?? readSimpleValue(bodyLines, "type"),
+        schemaType: readSimpleValue(bodyLines, "entity_type") ?? readSimpleValue(bodyLines, "schema"),
+        fields: parseTypedFieldBlock(bodyLines, "fields"),
+        props: parseGraphProps(bodyLines, new Set(["kind", "type", "entity_type", "schema"]))
+      };
+    case "graph_edge":
+      return {
+        kind: "graph",
+        name,
+        graphKind: "edge",
+        from: readSimpleValue(bodyLines, "from"),
+        to: readSimpleValue(bodyLines, "to"),
+        edgeType: readSimpleValue(bodyLines, "kind") ?? readSimpleValue(bodyLines, "type"),
+        schemaType: readSimpleValue(bodyLines, "edge_type") ?? readSimpleValue(bodyLines, "schema"),
+        fields: parseTypedFieldBlock(bodyLines, "fields"),
+        props: parseGraphProps(bodyLines, new Set(["from", "to", "kind", "type", "edge_type", "schema"]))
+      };
+    case "entity_type":
+      return {
+        kind: "graph",
+        name,
+        graphKind: "entityType",
+        fields: parseTypedFieldBlock(bodyLines, "fields"),
+        props: parseGraphProps(bodyLines, new Set(["fields"]))
+      };
+    case "edge_type":
+      return {
+        kind: "graph",
+        name,
+        graphKind: "edgeType",
+        from: readSimpleValue(bodyLines, "from"),
+        to: readSimpleValue(bodyLines, "to"),
+        fields: parseTypedFieldBlock(bodyLines, "fields"),
+        props: parseGraphProps(bodyLines, new Set(["from", "to", "fields"]))
+      };
     case "version":
       return {
         kind: "type",
@@ -656,8 +688,12 @@ function parseAxisLine(tail) {
   const kind = rhsMatch[1];
   const args = splitCommaList(rhsMatch[2]).map(parseScalarValue);
   if (kind === "category") {
-    const numeric = args.every(value => typeof value === "number");
-    return numeric ? { name, kind, values: args } : { name, kind, from: args[0] ?? null };
+    // literal value list — string or numeric (e.g. category(faithful, grounded))
+    return { name, kind: "category", values: args };
+  }
+  if (kind === "from" || kind === "external") {
+    // axis values come from an external source (e.g. from(boltSets))
+    return { name, kind: "from", from: args[0] ?? null };
   }
   return { name, kind, args };
 }
@@ -1030,6 +1066,14 @@ function parsePropAssignments(bodyLines) {
         return [match[1], parseScalarValue(match[2])];
       })
       .filter(Boolean)
+  );
+}
+
+function parseGraphProps(bodyLines, ignored = new Set()) {
+  return Object.fromEntries(
+    parseRvmFieldMap(bodyLines)
+      .filter(({ key }) => key && !ignored.has(key))
+      .map(({ key, value }) => [key, parseScalarValue(value)])
   );
 }
 

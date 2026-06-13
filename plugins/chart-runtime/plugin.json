@@ -1,0 +1,60 @@
+{
+  "id": "plugin.chart-runtime",
+  "version": "0.1.0",
+  "displayName": "Chart Runtime",
+  "description": "Generic product-type dataflow evaluator + grammar-of-graphics (D3) renderer. Resolves a witnessed `chart` view over its `model` and paints it. Reusable by any scientific module; carries no domain logic.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-chart-runtime"
+  ],
+  "dependsOnPlugins": [],
+  "dependsOnCapabilities": [],
+  "permissions": [
+    "context.read",
+    "routePage.install"
+  ],
+  "compatibleRuntimeProfiles": [
+    "authoring",
+    "full"
+  ],
+  "compatibleShells": [
+    "browser"
+  ],
+  "updateChannel": "local",
+  "provenance": {
+    "source": "local-example",
+    "origin": "workspace://plugins/chart-runtime",
+    "channel": "local",
+    "trust": "local",
+    "signature": {
+      "status": "none"
+    }
+  },
+  "author": "Engentus port",
+  "license": "MIT",
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "chart.render",
+        "label": "Grammar-of-graphics chart rendering"
+      }
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/chart",
+        "handler": "page.chart"
+      }
+    ],
+    "surfaces": [],
+    "providers": [
+      {
+        "id": "provider.chart-runtime",
+        "kind": "widget-runtime"
+      }
+    ]
+  }
+}

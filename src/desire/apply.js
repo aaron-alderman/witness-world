@@ -24,9 +24,6 @@ import {
   installRuntimePlugin,
   removeRuntimePlugin,
   createServerRunner,
-  createMcpServer,
-  installMcpTool,
-  removeMcpTool,
   defineRoute,
   serveRoute,
   createFrontendRunner,
@@ -85,9 +82,6 @@ export const NATIVE_RUNTIME_DECLARATION_KINDS = new Set([
   "runtimePluginInstall",
   "runtimePluginRemove",
   "serverRunner",
-  "mcpServer",
-  "mcpToolInstall",
-  "mcpToolRemove",
   "route",
   "serve",
   "widget",
@@ -134,13 +128,67 @@ export const RUNTIME_DECLARATION_BRIDGE_POLICY = Object.freeze({
 export const NATIVE_RUNTIME_DOC_KINDS = NATIVE_RUNTIME_DECLARATION_KINDS;
 export const RUNTIME_DOC_BRIDGE_POLICY = RUNTIME_DECLARATION_BRIDGE_POLICY;
 
-export function auditRuntimeDeclarationBridge(desire) {
+export function createRuntimeDeclarationRegistry(entries = []) {
+  const declarations = new Map();
+  const registry = {
+    register(kind, entry = {}) {
+      if (typeof kind !== "string" || !kind.trim()) throw new Error("runtime declaration kind must be a non-empty string");
+      declarations.set(kind, {
+        kind,
+        apply: typeof entry.apply === "function" ? entry.apply : null,
+        nativeCoverage: entry.nativeCoverage ?? "registered",
+        extension: entry.extension ?? null
+      });
+      return registry;
+    },
+    has(kind) {
+      return declarations.has(kind);
+    },
+    get(kind) {
+      return declarations.get(kind) ?? null;
+    },
+    entries() {
+      return [...declarations.values()];
+    },
+    kinds() {
+      return [...declarations.keys()];
+    }
+  };
+  for (const entry of entries) {
+    if (typeof entry === "string") registry.register(entry);
+    else registry.register(entry.kind, entry);
+  }
+  return registry;
+}
+
+export function createCoreRuntimeDeclarationRegistry() {
+  const registry = createRuntimeDeclarationRegistry();
+  for (const kind of NATIVE_RUNTIME_DECLARATION_KINDS) {
+    registry.register(kind, {
+      apply: applyCoreRuntimeDeclaration,
+      nativeCoverage: "first-class"
+    });
+  }
+  return registry;
+}
+
+function resolveRuntimeDeclarationRegistry(registry) {
+  if (!registry) return createCoreRuntimeDeclarationRegistry();
+  if (typeof registry.get === "function" && typeof registry.has === "function") return registry;
+  throw new Error("runtimeDeclarationRegistry must provide get(kind) and has(kind)");
+}
+
+export function auditRuntimeDeclarationBridge(desire, options = {}) {
   const validatedDesire = validateDesireDocument(desire);
+  const runtimeDeclarationRegistry = resolveRuntimeDeclarationRegistry(options.runtimeDeclarationRegistry);
   const audit = {
     policy: RUNTIME_DECLARATION_BRIDGE_POLICY,
     total: 0,
     canonicalResiduals: 0,
     legacyResiduals: 0,
+    registered: 0,
+    unsupported: 0,
+    registeredWithoutHandler: 0,
     nativeCovered: 0,
     legacyRequired: 0,
     byKind: {},
@@ -148,23 +196,32 @@ export function auditRuntimeDeclarationBridge(desire) {
   };
   for (const node of validatedDesire.runtimeResiduals.filter(isRuntimeDeclarationResidual)) {
     const kind = runtimeDeclarationKind(node);
-    const knownNativeKind = NATIVE_RUNTIME_DECLARATION_KINDS.has(kind);
-    const covered = true;
+    const registration = runtimeDeclarationRegistry.get(kind);
+    const registered = Boolean(registration);
+    const hasHandler = typeof registration?.apply === "function";
+    const covered = registered && hasHandler;
     const residualKind = node.kind;
     const residualHome = node.meta?.residualHome ?? RUNTIME_DECLARATION_BRIDGE_POLICY.residualHome;
     audit.total += 1;
     audit.byResidualKind[residualKind] = (audit.byResidualKind[residualKind] ?? 0) + 1;
     if (residualKind === RUNTIME_DECLARATION_BRIDGE_POLICY.nodeKind) audit.canonicalResiduals += 1;
     if (residualKind === RUNTIME_DECLARATION_BRIDGE_POLICY.legacyNodeKind) audit.legacyResiduals += 1;
-    audit.nativeCovered += 1;
+    if (registered) audit.registered += 1;
+    else audit.unsupported += 1;
+    if (registered && !hasHandler) audit.registeredWithoutHandler += 1;
+    if (covered) audit.nativeCovered += 1;
+    if (!covered) audit.legacyRequired += 1;
     if (!audit.byKind[kind]) {
       audit.byKind[kind] = {
         total: 0,
         canonicalResiduals: 0,
         legacyResiduals: 0,
-        nativeCovered: true,
-        nativeCoverage: knownNativeKind ? "first-class" : "unknown-section",
-        legacyRequired: false,
+        registered,
+        unsupported: !registered,
+        registeredWithoutHandler: registered && !hasHandler,
+        nativeCovered: covered,
+        nativeCoverage: covered ? registration.nativeCoverage : (registered ? "registered-without-handler" : "unregistered"),
+        legacyRequired: !covered,
         kernelResident: false,
         residualHome
       };
@@ -176,22 +233,26 @@ export function auditRuntimeDeclarationBridge(desire) {
   return audit;
 }
 
-export function auditRuntimeDocBridge(desire) {
-  return auditRuntimeDeclarationBridge(desire);
+export function auditRuntimeDocBridge(desire, options = {}) {
+  return auditRuntimeDeclarationBridge(desire, options);
 }
 
-export function assertNoLegacyRuntimeDeclarationFallbackRequired(desire) {
-  const audit = auditRuntimeDeclarationBridge(desire);
-  if (audit.legacyRequired === 0) return audit;
-  const requiredKinds = Object.entries(audit.byKind)
-    .filter(([, row]) => row.legacyRequired)
-    .map(([kind, row]) => `${kind} (${row.total})`)
-    .join(", ");
-  throw new Error(`legacy runtime declaration fallback required for ${requiredKinds}`);
+export function assertNoLegacyRuntimeDeclarationFallbackRequired(desire, options = {}) {
+  const validatedDesire = validateDesireDocument(desire);
+  const runtimeDeclarationRegistry = resolveRuntimeDeclarationRegistry(options.runtimeDeclarationRegistry);
+  const runtimeNodes = validatedDesire.runtimeResiduals
+    .filter(isRuntimeDeclarationResidual)
+    .sort(compareRuntimeResidualOrder);
+  for (const doc of prepareRuntimeDeclarations(runtimeNodes)) {
+    const registration = runtimeDeclarationRegistry.get(doc.kind);
+    if (!registration) throw createUnsupportedRuntimeDeclarationError(doc);
+    if (typeof registration.apply !== "function") throw createRegisteredRuntimeDeclarationMissingHandlerError(doc);
+  }
+  return auditRuntimeDeclarationBridge(validatedDesire, options);
 }
 
-export function assertNoLegacyRuntimeDocFallbackRequired(desire) {
-  return assertNoLegacyRuntimeDeclarationFallbackRequired(desire);
+export function assertNoLegacyRuntimeDocFallbackRequired(desire, options = {}) {
+  return assertNoLegacyRuntimeDeclarationFallbackRequired(desire, options);
 }
 
 const WIDGET_KIND_BY_SECTION = new Map([
@@ -211,13 +272,10 @@ const WIDGET_KIND_BY_SECTION = new Map([
 
 export function applyDesire(world, desire, options = {}) {
   const validatedDesire = validateDesireDocument(desire);
+  const runtimeDeclarationRegistry = resolveRuntimeDeclarationRegistry(options.runtimeDeclarationRegistry);
   const runtimeNodes = validatedDesire.runtimeResiduals
     .filter(isRuntimeDeclarationResidual)
-    .sort((a, b) => {
-      const orderA = Number(a.body.order ?? 0);
-      const orderB = Number(b.body.order ?? 0);
-      return orderA - orderB || String(a.id).localeCompare(String(b.id));
-    });
+    .sort(compareRuntimeResidualOrder);
   const runtimeNodesBySourceNodeId = indexRuntimeNodesBySourceNodeId(runtimeNodes);
   const handledRuntimeNodeIds = new Set();
   const witnesses = [];
@@ -231,25 +289,34 @@ export function applyDesire(world, desire, options = {}) {
   const preparedRuntimeDeclarations = prepareRuntimeDeclarations(runtimeNodes);
   for (const doc of preparedRuntimeDeclarations) {
     if (handledRuntimeNodeIds.has(doc.nodeId)) continue;
-    const applied = applyNativeRuntimeDeclaration(world, doc);
+    const registration = runtimeDeclarationRegistry.get(doc.kind);
+    if (!registration) {
+      throw createUnsupportedRuntimeDeclarationError(doc);
+    }
+    if (typeof registration.apply !== "function") {
+      throw createRegisteredRuntimeDeclarationMissingHandlerError(doc);
+    }
+    const applied = registration.apply(world, doc, { runtimeDeclarationRegistry });
     if (applied) {
       handledRuntimeNodeIds.add(doc.nodeId);
       if (Array.isArray(applied)) witnesses.push(...applied.filter(Boolean));
       else witnesses.push(applied);
       continue;
     }
-    if (NATIVE_RUNTIME_DECLARATION_KINDS.has(doc.kind)) {
-      throw new Error(`native runtime declaration application failed for ${doc.kind}${doc.file ? ` at ${doc.file}${doc.line ? `:${doc.line}` : ""}` : ""}`);
-    }
-    handledRuntimeNodeIds.add(doc.nodeId);
-    witnesses.push(applyNativeUnknownRuntimeDeclaration(world, doc));
+    throw new Error(`runtime declaration application failed for ${describeRuntimeDeclaration(doc)}`);
   }
 
   return witnesses;
 }
 
+function compareRuntimeResidualOrder(a, b) {
+  const orderA = Number(a.body.order ?? 0);
+  const orderB = Number(b.body.order ?? 0);
+  return orderA - orderB || String(a.id).localeCompare(String(b.id));
+}
+
 export function applyDesireNativeOnly(world, desire, options = {}) {
-  assertNoLegacyRuntimeDeclarationFallbackRequired(desire);
+  assertNoLegacyRuntimeDeclarationFallbackRequired(desire, options);
   return applyDesire(world, desire, options);
 }
 
@@ -292,6 +359,7 @@ function applyNativeSemanticNode(world, node, runtimeNodesBySourceNodeId, handle
     case "process":
     case "boundary":
     case "store":
+    case "graph":
     case "projection":
     case "policy":
     case "surface":
@@ -491,6 +559,25 @@ function applyGenericSemanticDefinition(world, node) {
   }
   if (node.kind === "entity" && node.body?.version) {
     claims.push(relation(name, "versionField", node.body.version));
+  }
+  if (node.kind === "graph") {
+    const graphKind = node.body?.graphKind ?? null;
+    if (graphKind) claims.push(relation(name, "graphKind", graphKind));
+    if (node.body?.from) claims.push(relation(name, "graphFrom", node.body.from));
+    if (node.body?.to) claims.push(relation(name, "graphTo", node.body.to));
+    if (node.body?.nodeType) claims.push(relation(name, "graphNodeType", node.body.nodeType));
+    if (node.body?.edgeType) claims.push(relation(name, "graphEdgeType", node.body.edgeType));
+    if (node.body?.schemaType) claims.push(relation(name, "graphSchemaType", node.body.schemaType));
+    for (const field of node.body?.fields ?? []) {
+      if (!field?.name) continue;
+      const fieldId = `${name}.${field.name}`;
+      claims.push(
+        thing(fieldId),
+        relation(name, "hasField", fieldId),
+        relation(fieldId, "fieldOf", name)
+      );
+      if (field.type) claims.push(relation(fieldId, "fieldType", field.type));
+    }
   }
   if (node.kind === "type") {
     if (node.body?.role) claims.push(relation(name, "typeRole", node.body.role));
@@ -739,6 +826,15 @@ function semanticChildId(parent, kind, child) {
 }
 
 function genericModuleKindForNode(node) {
+  if (node.kind === "graph") {
+    switch (node.body?.graphKind) {
+      case "node": return "graphNode";
+      case "edge": return "graphEdge";
+      case "entityType": return "graphEntityType";
+      case "edgeType": return "graphEdgeType";
+      default: return "graph";
+    }
+  }
   if (node.kind === "type") return "type";
   return node.kind;
 }
@@ -750,6 +846,7 @@ function genericSemanticProcessForNode(node) {
     case "type": return "desire.defineType";
     case "message": return "desire.defineMessage";
     case "entity": return "desire.defineEntity";
+    case "graph": return "desire.defineGraph";
     case "process": return "desire.defineProcess";
     case "boundary": return "desire.defineBoundary";
     case "store": return "desire.defineStore";
@@ -816,6 +913,7 @@ function emitSourceAnnotation(world, runtimeNode, target, actor) {
       sourceKind: trace.sourceKind ?? section,
       desireNodeId: runtimeNode.id,
       desireSourceNodeIds: runtimeNode.sourceNodeIds ?? [],
+      originNodeId: trace.originNodeId ?? null,
       via: Array.isArray(trace.via) ? trace.via : [],
       values: structuredClone(runtimeNode.body.values ?? {})
     }
@@ -840,6 +938,8 @@ function toRuntimeDeclaration(node) {
     file: declaration.source?.file ?? node.body.file ?? null,
     line: declaration.source?.line ?? node.body.line ?? null,
     sectionStyle: declaration.source?.sectionStyle ?? node.body.sectionStyle ?? "array",
+    sourceLanguage: declaration.source?.language ?? declaration.source?.trace?.sourceLanguage ?? node.body.sourceLanguage ?? node.body.trace?.sourceLanguage ?? null,
+    sourceKind: declaration.source?.kind ?? declaration.source?.trace?.sourceKind ?? node.body.sourceKind ?? node.body.trace?.sourceKind ?? null,
     trace: { ...(declaration.source?.trace ?? node.body.trace ?? {}), desireNodeId: node.id, desireSourceNodeIds: node.sourceNodeIds ?? [] }
   };
 }
@@ -870,8 +970,7 @@ function withContextActor(world, values) {
   return { ...values, actor: context.actor };
 }
 
-function applyNativeRuntimeDeclaration(world, doc) {
-  if (!NATIVE_RUNTIME_DECLARATION_KINDS.has(doc.kind)) return null;
+function applyCoreRuntimeDeclaration(world, doc) {
   const values = withContextActor(world, doc.values ?? {});
 
   switch (doc.kind) {
@@ -1080,47 +1179,6 @@ function applyNativeRuntimeDeclaration(world, doc) {
           })
         ]);
       }
-    case "mcpServer":
-      {
-        const serverRunner = resolvePreparedDocRef(world, values, {
-          idField: "serverRunner",
-          refField: "serverRunnerRef",
-          label: "server runner"
-        });
-        if (!serverRunner.ok) throw new Error(serverRunner.error);
-        if (!serverRunner.target) return null;
-        return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
-          createMcpServer(world, {
-            actor: req(values, "actor"),
-            id: req(values, "id"),
-            label: values.label ?? values.id,
-            serverRunner: serverRunner.target,
-            serviceIdentity: values.serviceIdentity ?? null,
-            transports: values.transports ?? ["stdio", "http"],
-            context: values.context ?? null,
-            owner: values.owner ?? values.actor
-          })
-        ]);
-      }
-    case "mcpToolInstall":
-      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
-        installMcpTool(world, {
-          actor: req(values, "actor"),
-          server: req(values, "server"),
-          tool: req(values, "tool"),
-          actingMode: values.actingMode ?? "delegated",
-          scopeContexts: values.scopeContexts ?? [],
-          scopeTargets: values.scopeTargets ?? []
-        })
-      ]);
-    case "mcpToolRemove":
-      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
-        removeMcpTool(world, {
-          actor: req(values, "actor"),
-          server: req(values, "server"),
-          tool: req(values, "tool")
-        })
-      ]);
     case "route":
       {
         const serves = resolvePreparedDocRef(world, values, {
@@ -1369,17 +1427,21 @@ function applyNativeRuntimeDeclaration(world, doc) {
   }
 }
 
-function applyNativeUnknownRuntimeDeclaration(world, doc) {
-  const values = withContextActor(world, doc.values ?? {});
-  return world.emit({
-    process: "dsl.unknownSection",
-    actor: values.actor ?? "unknown",
-    claims: [],
-    body: {
-      kind: doc.kind,
-      values: structuredClone(values)
-    }
-  });
+function createUnsupportedRuntimeDeclarationError(doc) {
+  return new Error(`unsupported runtime declaration: ${describeRuntimeDeclaration(doc)}. Install or register a DESIRE runtime declaration extension before applying this document.`);
+}
+
+function createRegisteredRuntimeDeclarationMissingHandlerError(doc) {
+  return new Error(`registered runtime declaration has no apply handler: ${describeRuntimeDeclaration(doc)}`);
+}
+
+function describeRuntimeDeclaration(doc) {
+  const parts = [`kind=${doc.kind}`];
+  if (doc.file) parts.push(`file=${doc.file}`);
+  if (doc.line !== null && doc.line !== undefined) parts.push(`line=${doc.line}`);
+  if (doc.sourceLanguage) parts.push(`sourceLanguage=${doc.sourceLanguage}`);
+  if (doc.sourceKind) parts.push(`sourceKind=${doc.sourceKind}`);
+  return parts.join(" ");
 }
 
 function withSourceAnnotations(world, doc, targets, actor, witnesses) {
@@ -1426,6 +1488,7 @@ function emitSourceAnnotationFromDoc(world, doc, target, actor) {
       sourceKind: trace.sourceKind ?? doc.kind,
       desireNodeId: doc.nodeId ?? null,
       desireSourceNodeIds: trace.desireSourceNodeIds ?? [],
+      originNodeId: trace.originNodeId ?? null,
       via: Array.isArray(trace.via) ? trace.via : [],
       values: structuredClone(doc.values ?? {})
     }
@@ -1458,6 +1521,7 @@ function emitSourceAnnotationFromSemanticNode(world, node, target, actor) {
       sourceKind: provenance?.sourceKind ?? node.kind,
       desireNodeId: node.id,
       desireSourceNodeIds: node.sourceNodeIds ?? [],
+      originNodeId: provenance?.originNodeId ?? null,
       via: Array.isArray(provenance?.via) ? provenance.via : [],
       values: structuredClone(node.body ?? {})
     }
@@ -1488,10 +1552,6 @@ function sourceTargetsForDoc(doc) {
   if (doc.kind === "capabilityInstall") {
     if (values.capability) ids.push(values.capability);
     if (values.target) ids.push(values.target);
-  }
-  if (doc.kind === "mcpServer" && values.serverRunner) ids.push(values.serverRunner);
-  if (doc.kind === "mcpToolInstall" || doc.kind === "mcpToolRemove") {
-    if (values.server) ids.push(values.server);
   }
   if (doc.kind === "runtimePluginInstall" || doc.kind === "runtimePluginRemove") {
     if (values.serverRunner) ids.push(values.serverRunner);

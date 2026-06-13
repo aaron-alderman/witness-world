@@ -101,6 +101,11 @@ Built-in `meta.sourceCategory` is explicit and currently one of:
 - `fixture-corruption`
 - `unknown`
 
+`graph-data` is retained as a historical/reserved classification slot for
+unsupported graph-shaped residuals. Supported RVM graph forms now use
+`semantic` with `desire-kernel` boundary metadata and lower to DESIRE `graph`
+nodes.
+
 Built-in `meta.desireBoundary`, when present, is one of:
 
 - `desire-kernel`
@@ -115,6 +120,9 @@ Built-in residual categories currently used by RVM ingestion are:
 - `lowered-runtime`
 - `unknown`
 
+Supported RVM `graph_node`, `graph_edge`, `entity_type`, and `edge_type` forms
+no longer use the residual path; they are semantic graph nodes.
+
 The current built-in semantic kind vocabulary is:
 
 - `actor`
@@ -123,6 +131,7 @@ The current built-in semantic kind vocabulary is:
 - `context`
 - `dataflow`
 - `entity`
+- `graph`
 - `import`
 - `message`
 - `module`
@@ -153,6 +162,35 @@ plugin form -> DESIRE+ normalized form -> DESIRE
 ```
 
 This keeps plugin extension first-class without allowing arbitrary hidden semantics.
+
+Current implementation exposes this as an explicit in-process elaborator registry:
+
+- `createDesirePlusElaboratorRegistry()`
+- `elaborateDesirePlus(desirePlus, { elaboratorRegistry })`
+
+Registry entries match `sourceLanguage`/`sourceKind`, semantic kind, node kind, or name.
+Handlers receive a DESIRE+ node and return replacement or additional DESIRE+ nodes.
+
+Active trusted plugin runtime modules may provide these entries through:
+
+```js
+export const desireExtensions = {
+  elaborators: [],
+  runtimeDeclarations: []
+};
+```
+
+The runtime plugin loader validates these exports and the DESIRE adapter converts them into elaborator and runtime declaration registries.
+
+Elaborator output must be DESIRE+ again, not DESIRE directly.
+Every produced node must retain provenance through:
+
+- `trace.originNodeId`
+- `trace.via[]`
+- the original source language, file, and span
+
+If no elaborator is registered, source forms remain classified according to the base compiler and do not silently become kernel meaning.
+This is separate from runtime declaration handling: unregistered runtime declarations still fail during DESIRE application unless a runtime declaration registry provides an apply handler.
 
 ## Boundary with DESIRE
 
@@ -247,6 +285,8 @@ Initial rewrite split:
   - source contract sugar into messages, boundaries, projections, and process rules
 
 Rewrites may be provided by plugins, but their outputs should still be inspectable in `DESIRE+`.
+
+The first proof fixture is intentionally small: an RVM `dashboard` source form is classified above the DESIRE boundary without a registered elaborator, then expands through a registered elaborator into ordinary `dataflow`, `projection`, and `surface` semantic DESIRE+ nodes.
 
 ## Approximate round-tripping
 

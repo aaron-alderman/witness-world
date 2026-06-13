@@ -1,5 +1,13 @@
 import { handlerCatalog } from "./handler-catalog.js";
 import { createSqliteDbSqlHandlers } from "./handlers.js";
+import { createDbSqlRuntime } from "./provider-runtime.js";
+import {
+  dbSqlDatasourceId,
+  dbSqlDatasourceTitle,
+  dbSqlOperationId,
+  dbSqlOperationTitle
+} from "./glue.js";
+import { sqliteModuleProjectors } from "./projections.js";
 
 export const bundleId = "bundle-sqlite";
 
@@ -19,6 +27,29 @@ export const routes = Object.freeze([
 
 export const surfaces = Object.freeze([]);
 
+export const providers = Object.freeze([
+  {
+    kind: "moduleProjectors",
+    id: "sqlite.projections",
+    projectors: sqliteModuleProjectors
+  },
+  {
+    kind: "providerRuntimeFactory",
+    id: "db.sql",
+    factory: createDbSqlRuntime
+  },
+  {
+    kind: "supportServiceFactory",
+    id: "sqlite.support",
+    factory: () => ({
+      dbSqlDatasourceId,
+      dbSqlDatasourceTitle,
+      dbSqlOperationId,
+      dbSqlOperationTitle
+    })
+  }
+]);
+
 export function createHandlers(deps) {
   return createSqliteDbSqlHandlers(deps);
 }
@@ -28,5 +59,6 @@ export default {
   handlerCatalog,
   routes,
   surfaces,
+  providers,
   createHandlers
 };

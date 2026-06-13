@@ -3,6 +3,21 @@ import {
   createAssetSurfaceHandlers,
   createAssetWorkflowHandlers
 } from "./handlers.js";
+import {
+  assetDerivedTextPathForAppContext,
+  assetDerivedTextStorageKey,
+  assetDerivedThumbnailPathForAppContext,
+  assetDerivedThumbnailStorageKey,
+  assetThumbnailUrlForId,
+  createPracticalBackendAssetServices
+} from "./asset-services.js";
+import {
+  extractAssetSearchText,
+  extractAssetThumbnail,
+  supportsDerivedAssetSearchText
+} from "./asset-derived-utils.js";
+import { createBuiltinAssetJobHandlers } from "./job-handlers.js";
+import { assetModuleProjectors } from "./projections.js";
 
 export const bundleId = "bundle-assets";
 
@@ -35,6 +50,53 @@ const handlerFactories = Object.freeze([
   createAssetWorkflowHandlers
 ]);
 
+export const providers = Object.freeze([
+  {
+    kind: "capabilityDefinitions",
+    id: "assets.capabilities",
+    capabilities: Object.freeze([
+      Object.freeze({
+        id: "upload.asset",
+        label: "Upload Asset",
+        dependsOn: Object.freeze(["fs.blob", "fs.stream"]),
+        providerAdapters: Object.freeze([
+          Object.freeze({ id: "local-disk", label: "Local disk", status: "shipped", default: true })
+        ]),
+        witnessContract: Object.freeze({
+          externalRefs: Object.freeze(["storageKey", "contentUrl", "textRef", "thumbnailRef", "thumbnailUrl"])
+        })
+      })
+    ])
+  },
+  {
+    kind: "moduleProjectors",
+    id: "assets.projections",
+    projectors: assetModuleProjectors
+  },
+  {
+    kind: "supportServiceFactory",
+    id: "assets.support",
+    factory: () => ({
+      createPracticalBackendAssetServices
+    })
+  },
+  {
+    kind: "jobHandlerFactory",
+    id: "assets",
+    factory: deps => createBuiltinAssetJobHandlers({
+      ...deps,
+      supportsDerivedAssetSearchText,
+      extractAssetSearchText,
+      extractAssetThumbnail,
+      assetDerivedTextPathForAppContext,
+      assetDerivedTextStorageKey,
+      assetDerivedThumbnailPathForAppContext,
+      assetDerivedThumbnailStorageKey,
+      assetThumbnailUrlForId
+    })
+  }
+]);
+
 export function createHandlers(deps) {
   return Object.assign(
     {},
@@ -47,5 +109,6 @@ export default {
   handlerCatalog,
   routes,
   surfaces,
+  providers,
   createHandlers
 };

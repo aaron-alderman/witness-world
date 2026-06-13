@@ -14,6 +14,33 @@ export function looksJsonContentType(value) {
   return contentType.startsWith("application/json") || contentType.includes("+json");
 }
 
+export function outboundReadShape(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    target: row.target,
+    url: row.url,
+    method: row.method,
+    transport: row.transport,
+    status: row.status,
+    context: row.context,
+    serverRunner: row.serverRunner,
+    authKind: row.authKind,
+    authConfigKey: row.authConfigKey,
+    requestHeaderNames: row.requestHeaderNames,
+    requestBodyKind: row.requestBodyKind,
+    timeoutMs: row.timeoutMs,
+    maxAttempts: row.maxAttempts,
+    retryDelayMs: row.retryDelayMs,
+    attempt: row.attempt,
+    correlationId: row.correlationId,
+    externalRefId: row.externalRefId,
+    responseStatus: row.responseStatus,
+    responseContentType: row.responseContentType,
+    lastError: row.lastError
+  };
+}
+
 export function createHttpOutboundIoServices({
   runtimeConfigLookup,
   runtimeConfigScalar,

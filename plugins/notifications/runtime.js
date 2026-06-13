@@ -1,5 +1,8 @@
 import { handlerCatalog } from "./handler-catalog.js";
 import { createNotificationHandlers } from "./handlers.js";
+import { notificationReadShape, notificationTitle } from "./glue.js";
+import { createBuiltinNotificationJobHandlers } from "./job-handlers.js";
+import { notificationModuleProjectors } from "./projections.js";
 
 export const bundleId = "bundle-notifications";
 
@@ -22,6 +25,27 @@ export const routes = Object.freeze([
 
 export const surfaces = Object.freeze([]);
 
+export const providers = Object.freeze([
+  {
+    kind: "moduleProjectors",
+    id: "notifications.projections",
+    projectors: notificationModuleProjectors
+  },
+  {
+    kind: "supportServiceFactory",
+    id: "notifications.support",
+    factory: () => ({
+      notificationTitle,
+      notificationReadShape
+    })
+  },
+  {
+    kind: "jobHandlerFactory",
+    id: "notifications",
+    factory: createBuiltinNotificationJobHandlers
+  }
+]);
+
 export function createHandlers(deps) {
   return createNotificationHandlers(deps);
 }
@@ -31,5 +55,6 @@ export default {
   handlerCatalog,
   routes,
   surfaces,
+  providers,
   createHandlers
 };

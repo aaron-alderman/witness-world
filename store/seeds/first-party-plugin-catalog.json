@@ -30,6 +30,7 @@
     { "id": "plugin.assets", "directory": "assets", "order": 73 },
     { "id": "plugin.demo", "directory": "demo", "order": 90 },
     { "id": "plugin.eden", "directory": "eden", "order": 91 },
+    { "id": "plugin.chart-runtime", "directory": "chart-runtime", "order": 92 },
     { "id": "plugin.notes-sidebar", "directory": "notes-sidebar", "order": 100 }
   ],
   "bundles": [
@@ -188,6 +189,12 @@
       "plugin": "plugin.eden",
       "displayName": "Eden",
       "description": "Eden neighborhood, academy, versions, capability-install, and commons flows."
+    },
+    {
+      "id": "bundle-chart-runtime",
+      "plugin": "plugin.chart-runtime",
+      "displayName": "Chart Runtime",
+      "description": "Generic chart rendering capability, chart page handler, and grammar-of-graphics runtime."
     }
   ]
 }

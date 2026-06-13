@@ -1,8 +1,12 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
+function defaultBlobsRootFor(appContext) {
+  return appContext?.storage?.blobsRoot || path.resolve(appContext?.runtimeRoot || process.cwd(), "blobs");
+}
+
 export function createFsBlobIoServices({
-  blobsRootFor,
+  blobsRootFor = defaultBlobsRootFor,
   canManageContext,
   canMutateTarget
 }) {

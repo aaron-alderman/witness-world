@@ -23,6 +23,7 @@
     "test:plugin:canvas": "node scripts/run-plugin-tests.mjs canvas",
     "test:plugin:mcp": "node scripts/run-plugin-tests.mjs mcp",
     "test:plugin:eden": "node scripts/run-plugin-tests.mjs eden",
+    "test:plugin:chart-runtime": "node scripts/run-plugin-tests.mjs chart-runtime",
     "test:plugin:demo": "node scripts/run-plugin-tests.mjs demo",
     "test:plugin:practical-backend": "node scripts/run-plugin-tests.mjs practical-backend",
     "test:plugin:assets": "node scripts/run-plugin-tests.mjs assets",

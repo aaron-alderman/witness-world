@@ -2,7 +2,31 @@
   "permissions": {
     "allow": [
       "Bash(ls -la \"C:\\\\Users\\\\aaron\\\\Documents\\\\world\\\\\" | head -40)",
-      "Read(//c/Users/aaron/Documents/**)"
+      "Read(//c/Users/aaron/Documents/**)",
+      "Bash(WITNESS_LOG_LEVEL=silent node --test test/desire.test.js test/desire-engentus-forms.test.js)",
+      "Bash(echo \"exit=$?\")",
+      "Read(//tmp/**)",
+      "Bash(cd 'c:\\\\Users\\\\aaron\\\\Documents\\\\world' && grep -n \"not ok\" /tmp/m1test.out)",
+      "Bash(cd 'c:\\\\Users\\\\aaron\\\\Documents\\\\world' && sed -n '53,120p' /tmp/m1test.out)",
+      "Bash(WITNESS_LOG_LEVEL=silent node --test test/desire-engentus-eval.test.js)",
+      "Bash(WITNESS_LOG_LEVEL=silent node --test test/desire-engentus-chart.test.js)",
+      "Bash(WITNESS_LOG_LEVEL=silent node --test test/desire-engentus-plugin.test.js)",
+      "Bash(git mv *)",
+      "Bash(mv test/desire-engentus-plugin.test.js plugins/chart-runtime/chart-runtime.test.js)",
+      "Bash(WITNESS_LOG_LEVEL=silent node --test plugins/chart-runtime/chart-runtime.test.js)",
+      "Bash(WITNESS_LOG_LEVEL=silent node --test test/plugin-boundaries.test.js)",
+      "Bash(WITNESS_LOG_LEVEL=silent node --test test/desire-engentus-forms.test.js test/desire-engentus-eval.test.js test/desire-engentus-chart.test.js test/desire-engentus-shell.test.js plugins/chart-runtime/chart-runtime.test.js test/plugin-boundaries.test.js)",
+      "Bash(WITNESS_LOG_LEVEL=silent node --test test/desire.test.js)",
+      "Bash(node scripts/run-tests.mjs)",
+      "Bash(wc -l)",
+      "Bash(tail -12 /tmp/fullsuite.out)",
+      "Bash(ps -W)",
+      "Bash(tasklist)",
+      "Bash(WITNESS_LOG_LEVEL=silent node --test test/desire-engentus-forms.test.js test/desire-engentus-eval.test.js test/desire-engentus-chart.test.js plugins/chart-runtime/chart-runtime.test.js)",
+      "Bash(WITNESS_LOG_LEVEL=silent node --test test/desire-engentus-millforce-eval.test.js)",
+      "Bash(WITNESS_LOG_LEVEL=silent node --test test/desire-engentus-millforce-chart.test.js)",
+      "Bash(WITNESS_LOG_LEVEL=silent node --test test/desire-engentus-forms.test.js test/desire-engentus-eval.test.js test/desire-engentus-chart.test.js test/desire-engentus-shell.test.js test/desire-engentus-millforce-eval.test.js test/desire-engentus-millforce-chart.test.js plugins/chart-runtime/chart-runtime.test.js test/plugin-boundaries.test.js)",
+      "Bash(grep -viE \"^\\\\S+:[0-9]+: *\\(//|\\\\*\\)\")"
     ]
   }
 }

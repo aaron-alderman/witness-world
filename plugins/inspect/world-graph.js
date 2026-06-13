@@ -183,6 +183,7 @@ function nodeDetails(witnesses, relations, knownIds = new Set()) {
         endColumn: w.body.endColumn ?? null,
         sourceLanguage: w.body.sourceLanguage ?? "wtoml",
         sourceKind: w.body.sourceKind ?? w.body.section,
+        originNodeId: w.body.originNodeId ?? null,
         via: Array.isArray(w.body.via) ? w.body.via : [],
         desireNodeId: w.body.desireNodeId ?? null,
         desireSourceNodeIds: Array.isArray(w.body.desireSourceNodeIds) ? w.body.desireSourceNodeIds : [],
@@ -860,6 +861,7 @@ function inferKind(id, relations) {
   if (moduleKind === "surface") return "surface";
   if (moduleKind === "dataflow") return "dataflow";
   if (moduleKind === "process") return "process";
+  if (["graphNode", "graphEdge", "graphEntityType", "graphEdgeType"].includes(moduleKind)) return moduleKind;
   if (moduleKind === "trait" || moduleKind === "valueType" || moduleKind === "processSpec") return moduleKind;
   if (moduleKind?.includes("widget")) return "widget";
   if (moduleKind) return "module";
@@ -1061,6 +1063,7 @@ export function astNodesProjection(witnesses) {
       target,
       values,
       via,
+      originNodeId,
       desireNodeId,
       desireSourceNodeIds
     } = w.body;
@@ -1077,6 +1080,7 @@ export function astNodesProjection(witnesses) {
       sourceKind: sourceKind ?? section,
       target,
       values,
+      originNodeId: originNodeId ?? null,
       via: Array.isArray(via) ? via : [],
       desireNodeId: desireNodeId ?? null,
       desireSourceNodeIds: Array.isArray(desireSourceNodeIds) ? desireSourceNodeIds : [],

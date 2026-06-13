@@ -1,17 +1,5 @@
 import { createRuntimeRouteHandlers } from "./runtime-route-handlers.js";
 import { SUPPORTED_BACKEND_OPS } from "./backend-programs.js";
-import {
-  looksJsonContentType,
-  responseHeadersToObject
-} from "../plugins/http-outbound/io-services.js";
-import {
-  parseStreamFailureLimit,
-  streamFileToFile,
-  streamReadableToFile
-} from "../plugins/fs-stream/stream-utils.js";
-import {
-  webhookPayloadPathFor
-} from "../plugins/webhooks/io-services.js";
 import { hostCapabilities, hostIdsByCapability } from "./runtime-host-utils.js";
 import { DEFAULT_RUNTIME_PROFILE } from "./runtime-bundles.js";
 import { resolveRuntimePluginRoot } from "./runtime-plugin-utils.js";
@@ -56,6 +44,7 @@ export function createGenericRouteHandlers({
   runtimeBundleSummary = null,
   runtimeSurfaceEntries = [],
   handlerSetDefinitions = {},
+  runtimeContributions = null,
   runtimePluginRoot = resolveRuntimePluginRoot(),
   runtimePluginIds = [],
   authoredRuntimePluginIds = []
@@ -73,12 +62,7 @@ export function createGenericRouteHandlers({
     handlerSetDefinitions,
     hostCapabilities,
     hostIdsByCapability,
-    parseStreamFailureLimit,
-    responseHeadersToObject,
-    looksJsonContentType,
-    streamReadableToFile,
-    streamFileToFile,
-    webhookPayloadPathFor,
+    runtimeContributions,
     runtimePluginRoot,
     runtimePluginIds,
     authoredRuntimePluginIds,

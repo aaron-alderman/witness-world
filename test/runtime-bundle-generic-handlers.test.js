@@ -4,15 +4,28 @@ import { createWorld } from "../src/kernel.js";
 import {
   genericHandlerFactoriesForProfile
 } from "../src/runtime-bundles.js";
+import { loadRuntimePluginModules } from "../src/runtime-plugin-loader.js";
+import { readRuntimePluginCatalog } from "../src/runtime-plugin-utils.js";
 import {
   createOauthHandlers
 } from "../plugins/oauth/handlers.js";
+
+async function loadedOptions(profileName, configuredPluginIds = []) {
+  const catalog = await readRuntimePluginCatalog({ runtimeProfile: profileName, configuredPluginIds });
+  const loaded = await loadRuntimePluginModules({ pluginCatalog: catalog });
+  assert.deepEqual(loaded.failures, []);
+  return {
+    additionalBundleIds: catalog.addedBundleIds,
+    bundleOverrides: loaded.bundleOverrides
+  };
+}
 
 test("inspect bundle handlers consume shared authority services for widget version gates", async () => {
   const world = createWorld();
   const calls = [];
   let response = null;
-  const createInspectBundleHandlers = genericHandlerFactoriesForProfile("inspect")
+  const inspectOptions = await loadedOptions("minimal", ["plugin.inspect"]);
+  const createInspectBundleHandlers = genericHandlerFactoriesForProfile("minimal", inspectOptions)
     .find(entry => entry.bundleId === "bundle-inspect")
     .factory;
   const handlers = createInspectBundleHandlers({

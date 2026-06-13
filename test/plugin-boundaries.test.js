@@ -67,6 +67,22 @@ async function pluginSrcImports() {
   return imports;
 }
 
+async function srcPluginImports() {
+  const srcRoot = path.join(repoRoot, "src");
+  const files = await findFiles(srcRoot, file => file.endsWith(".js"));
+  const imports = [];
+  for (const file of files) {
+    const source = await fs.readFile(file, "utf8");
+    for (const match of source.matchAll(/from\s+["'](\.\.\/plugins\/[^"']+)["']/g)) {
+      imports.push({
+        file: path.relative(repoRoot, file).replace(/\\/g, "/"),
+        specifier: match[1]
+      });
+    }
+  }
+  return imports;
+}
+
 function bundleIds() {
   return runtimeBundleManifests().map(bundle => bundle.id);
 }
@@ -165,6 +181,25 @@ const REMOVED_PLUGIN_SRC_STUBS = Object.freeze([
   "src/widget-define.js",
   "src/world-graph.js"
 ]);
+
+const LARGE_SRC_CEREMONY_ALLOWLIST = Object.freeze({
+  "src/backend-programs.js": "stable authored backend-program ABI",
+  "src/cli.js": "CLI transport and startup orchestration",
+  "src/desktop-session-manager.js": "desktop runtime lifecycle ceremony",
+  "src/dsl.js": "generic DSL apply/load orchestration",
+  "src/kernel.js": "generic world/kernel mechanics",
+  "src/modules.js": "generic witnessed-state projection host and stable ABI",
+  "src/runtime-builtins.js": "core builtin traits, universal capabilities, and generic process specs",
+  "src/runtime-bundles.js": "seed-backed profile and bundle composition mechanics",
+  "src/runtime-core-handlers.js": "core session, diagnostics, runtime catalog, home page hook invocation, and backend-program ABI dispatch",
+  "src/runtime-operator-service.js": "operator filesystem/import/export service ceremony",
+  "src/runtime-plugin-loader.js": "plugin runtime ABI validation and active module loading",
+  "src/runtime-plugin-utils.js": "plugin discovery, validation, dependency expansion, catalog, review, and composition read models",
+  "src/runtime-route-handlers.js": "generic route assembly and dependency shaping; remaining optional-domain shaping is tracked migration debt",
+  "src/runtime-server.js": "server startup, lifecycle, transport, and active static asset dispatch",
+  "src/type-model.js": "generic type model",
+  "src/widgets.js": "generic authored-widget ABI"
+});
 
 test("every executable plugin has co-located tests", async () => {
   const executableWithoutTests = (await pluginPackages())
@@ -324,6 +359,33 @@ test("global first-party service barrels stay absent", async () => {
   assert.equal(pluginSupportSource.includes("enqueueNotification"), true);
 });
 
+test("src does not statically import optional plugin implementation modules", async () => {
+  assert.deepEqual(await srcPluginImports(), []);
+});
+
+test("core app context has no optional provider fallback factory seam", async () => {
+  const appContextSource = await fs.readFile(path.join(repoRoot, "src", "runtime-app-context.js"), "utf8");
+  const startupServicesSource = await fs.readFile(path.join(repoRoot, "src", "runtime-startup-services.js"), "utf8");
+  const forbiddenFallbackNames = [
+    "createBuiltinAssetJobHandlers",
+    "createBuiltinNotificationJobHandlers",
+    "createBuiltinWebhookJobHandlers",
+    "createInProcessJobQueue",
+    "createDbSqlRuntime",
+    "createSearchIndexRuntime"
+  ];
+
+  for (const name of forbiddenFallbackNames) {
+    assert.equal(appContextSource.includes(name), false, `${name} must not be a core app-context fallback`);
+    assert.equal(startupServicesSource.includes(name), false, `${name} must not be passed through startup services`);
+  }
+  assert.equal(appContextSource.includes('providerRuntimeFactories["jobs.queue"] ??'), false);
+  assert.equal(appContextSource.includes('providerRuntimeFactories["db.sql"] ??'), false);
+  assert.equal(appContextSource.includes('providerRuntimeFactories["search.index"] ??'), false);
+  assert.equal(appContextSource.includes("runtimeContributions?.providerRuntimeFactories"), true);
+  assert.equal(appContextSource.includes("runtimeContributions?.jobHandlerFactories"), true);
+});
+
 test("plugin-to-src import audit stays explicitly classified", async () => {
   const imports = await pluginSrcImports();
   const discoveredTargets = [...imports.keys()].sort();
@@ -332,8 +394,11 @@ test("plugin-to-src import audit stays explicitly classified", async () => {
   assert.deepEqual(discoveredTargets, classifiedTargets);
   const backendProgramsSource = await fs.readFile(path.join(repoRoot, "src", "backend-programs.js"), "utf8");
   const runtimeBuiltinsSource = await fs.readFile(path.join(repoRoot, "src", "runtime-builtins.js"), "utf8");
+  const desireApplySource = await fs.readFile(path.join(repoRoot, "src", "desire", "apply.js"), "utf8");
   const demoRuntimeBuiltinsSource = await fs.readFile(path.join(pluginsRoot, "demo", "runtime-builtins.js"), "utf8");
   const mcpAuthoringRuntimeBuiltinsSource = await fs.readFile(path.join(pluginsRoot, "mcp-authoring", "runtime-builtins.js"), "utf8");
+  const mcpAuthoringRuntimeSource = await fs.readFile(path.join(pluginsRoot, "mcp-authoring", "runtime.js"), "utf8");
+  const tutorialRuntimeBuiltinsSource = await fs.readFile(path.join(pluginsRoot, "tutorial", "runtime-builtins.js"), "utf8");
   const manifests = await Promise.all((await pluginPackages()).map(pkg => fs.readFile(path.join(pkg.pluginDir, "plugin.json"), "utf8").then(JSON.parse)));
   const manifestCapabilityIds = new Set(manifests.flatMap(manifest =>
     (manifest.contributes?.capabilities ?? []).map(entry => String(entry?.id ?? entry)).filter(Boolean)
@@ -346,9 +411,16 @@ test("plugin-to-src import audit stays explicitly classified", async () => {
   assert.equal(runtimeBuiltinsSource.includes("todo_create_spec"), false);
   assert.equal(runtimeBuiltinsSource.includes("todo_update_spec"), false);
   assert.equal(runtimeBuiltinsSource.includes("todo_delete_spec"), false);
+  assert.equal(runtimeBuiltinsSource.includes("todoProjection"), false);
+  assert.equal(runtimeBuiltinsSource.includes("privateNotesProjection"), false);
+  assert.equal(runtimeBuiltinsSource.includes("widget.tutorialTarget"), false);
+  assert.equal(runtimeBuiltinsSource.includes("tutorialTarget"), false);
   assert.equal(runtimeBuiltinsSource.includes("mcp_server_define_spec"), false);
   assert.equal(runtimeBuiltinsSource.includes("mcp_tool_install_spec"), false);
   assert.equal(runtimeBuiltinsSource.includes("mcp_tool_remove_spec"), false);
+  assert.equal(desireApplySource.includes('"mcpServer"'), false);
+  assert.equal(desireApplySource.includes('"mcpToolInstall"'), false);
+  assert.equal(desireApplySource.includes('"mcpToolRemove"'), false);
   assert.equal(runtimeBuiltinsSource.includes("fs.json.read"), false);
   assert.equal(runtimeBuiltinsSource.includes("upload.asset"), false);
   assert.equal(runtimeBuiltinsSource.includes("db.sql"), false);
@@ -369,13 +441,81 @@ test("plugin-to-src import audit stays explicitly classified", async () => {
   assert.equal(demoRuntimeBuiltinsSource.includes("todo_create_spec"), true);
   assert.equal(demoRuntimeBuiltinsSource.includes("todo_update_spec"), true);
   assert.equal(demoRuntimeBuiltinsSource.includes("todo_delete_spec"), true);
+  assert.equal(demoRuntimeBuiltinsSource.includes("todoProjection"), true);
+  assert.equal(demoRuntimeBuiltinsSource.includes("privateNotesProjection"), true);
   assert.equal(mcpAuthoringRuntimeBuiltinsSource.includes("mcp_server_define_spec"), true);
   assert.equal(mcpAuthoringRuntimeBuiltinsSource.includes("mcp_tool_install_spec"), true);
   assert.equal(mcpAuthoringRuntimeBuiltinsSource.includes("mcp_tool_remove_spec"), true);
+  assert.equal(mcpAuthoringRuntimeSource.includes("mcpAuthoringRuntimeDeclarations"), true);
+  assert.equal(tutorialRuntimeBuiltinsSource.includes("widget.tutorialTarget"), true);
+  assert.equal(tutorialRuntimeBuiltinsSource.includes("tutorial_widget_target_spec"), true);
+});
+
+test("DSL ownership keeps plugin activation core but feature declarations plugin-owned or generic", async () => {
+  const desireApplySource = await fs.readFile(path.join(repoRoot, "src", "desire", "apply.js"), "utf8");
+  const desireRvmSource = await fs.readFile(path.join(repoRoot, "src", "desire", "rvm.js"), "utf8");
+  const chartRuntimeSource = await fs.readFile(path.join(pluginsRoot, "chart-runtime", "runtime.js"), "utf8");
+  const mcpAuthoringRuntimeSource = await fs.readFile(path.join(pluginsRoot, "mcp-authoring", "runtime.js"), "utf8");
+
+  assert.equal(desireApplySource.includes('"runtimePluginInstall"'), true);
+  assert.equal(desireApplySource.includes('"runtimePluginRemove"'), true);
+  assert.equal(desireApplySource.includes('"mcpServer"'), false);
+  assert.equal(desireApplySource.includes('"mcpToolInstall"'), false);
+  assert.equal(desireApplySource.includes('"mcpToolRemove"'), false);
+  assert.equal(mcpAuthoringRuntimeSource.includes("mcpAuthoringRuntimeDeclarations"), true);
+
+  assert.equal(desireRvmSource.includes('case "chart"'), true);
+  assert.equal(desireRvmSource.includes("planChart"), false);
+  assert.equal(desireRvmSource.includes("renderChartHtml"), false);
+  assert.equal(chartRuntimeSource.includes('bundleId = "bundle-chart-runtime"'), true);
+  assert.equal(chartRuntimeSource.includes('"page.chart"'), true);
 });
 
 test("deleted src plugin stubs stay absent", async () => {
   for (const relativePath of REMOVED_PLUGIN_SRC_STUBS) {
     assert.equal(await pathExists(path.join(repoRoot, relativePath)), false, `${relativePath} should stay deleted`);
   }
+});
+
+test("large top-level src files stay explicitly classified as ceremony or ABI", async () => {
+  const srcRoot = path.join(repoRoot, "src");
+  const entries = await fs.readdir(srcRoot, { withFileTypes: true });
+  const largeFiles = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".js")) continue;
+    const relativePath = `src/${entry.name}`;
+    const stat = await fs.stat(path.join(srcRoot, entry.name));
+    if (stat.size > 8000) largeFiles.push(relativePath);
+  }
+
+  assert.deepEqual(
+    largeFiles.sort(),
+    Object.keys(LARGE_SRC_CEREMONY_ALLOWLIST).sort()
+  );
+  for (const [relativePath, classification] of Object.entries(LARGE_SRC_CEREMONY_ALLOWLIST)) {
+    assert.equal(typeof classification === "string" && classification.trim().length > 0, true, `${relativePath} must have a classification`);
+  }
+});
+
+test("process-view support services stay generic process ABI", async () => {
+  const source = await fs.readFile(path.join(repoRoot, "src", "runtime-bundle-support-services.js"), "utf8");
+
+  assert.equal(source.includes("../plugins/"), false);
+  assert.equal(source.includes("plugin.inspect"), false);
+  assert.equal(source.includes("worldGraph"), false);
+  assert.equal(source.includes("renderProcess"), false);
+  assert.equal(source.includes("backend.process.start"), true);
+  assert.equal(source.includes("backend.step.done"), true);
+});
+
+test("backend-program execution stays classified as stable core ABI", async () => {
+  const coreHandlersSource = await fs.readFile(path.join(repoRoot, "src", "runtime-core-handlers.js"), "utf8");
+  const backendProgramsSource = await fs.readFile(path.join(repoRoot, "src", "backend-programs.js"), "utf8");
+
+  assert.equal(backendProgramsSource.includes("Generic authored backend-program ABI"), true);
+  assert.equal(coreHandlersSource.includes('"backendProgram.run"'), true);
+  assert.equal(coreHandlersSource.includes("activeBackendProgramDefinition"), true);
+  assert.equal(coreHandlersSource.includes("../plugins/"), false);
+  assert.equal(coreHandlersSource.includes("todo_create_spec"), false);
+  assert.equal(coreHandlersSource.includes("privateNotesProjection"), false);
 });

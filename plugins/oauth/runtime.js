@@ -1,5 +1,7 @@
 import { handlerCatalog } from "./handler-catalog.js";
 import { createOauthHandlers } from "./handlers.js";
+import { createRuntimeAuthOAuthSupportServices } from "./support-services.js";
+import { oauthModuleProjectors } from "./projections.js";
 
 export const bundleId = "bundle-oauth";
 
@@ -22,6 +24,21 @@ export const routes = Object.freeze([
 
 export const surfaces = Object.freeze([]);
 
+export const providers = Object.freeze([
+  {
+    kind: "moduleProjectors",
+    id: "oauth.projections",
+    projectors: oauthModuleProjectors
+  },
+  {
+    kind: "supportServiceFactory",
+    id: "oauth.support",
+    factory: () => ({
+      createRuntimeAuthOAuthSupportServices
+    })
+  }
+]);
+
 export function createHandlers(deps) {
   return createOauthHandlers(deps);
 }
@@ -31,5 +48,6 @@ export default {
   handlerCatalog,
   routes,
   surfaces,
+  providers,
   createHandlers
 };

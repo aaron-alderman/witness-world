@@ -5,6 +5,7 @@ import { createWorld } from "../../src/kernel.js";
 import { executeDemoProposalTarget } from "./demo-proposal-targets.js";
 import { privateNotesPrivacyState } from "./private-notes-runtime.js";
 import { todoState, privateNotesFor, publicWitnessesFor } from "./projections.js";
+import { providers } from "./runtime.js";
 import { requestTodoCreate, requestTodoUpdate, requestTodoDelete } from "./todo-runtime.js";
 
 test("demo plugin owns demo handler-set provider", async () => {
@@ -16,7 +17,8 @@ test("demo plugin owns demo handler-set provider", async () => {
   assert.deepEqual(manifest.activatesBundles, ["bundle-demo"]);
   assert.equal(manifest.runtime.entry, "./runtime.js");
   assert.equal(runtimeSource.includes('bundleId = "bundle-demo"'), true);
-  assert.equal(runtimeSource.includes("providers = Object.freeze([DEMO_HANDLER_SET_PROVIDER])"), true);
+  assert.equal(providers.some(provider => provider.kind === "handlerSet" && provider.id === "demo"), true);
+  assert.equal(providers.some(provider => provider.kind === "runtimeBuiltinSeeds" && provider.processSpecs?.some(spec => spec.id === "demo_server_runner_storage_spec")), true);
   assert.equal(runtimeSource.includes("handlerSetProvider = DEMO_HANDLER_SET_PROVIDER"), true);
   assert.equal(handlerSetSource.includes('kind: "handlerSet"'), true);
   assert.equal(handlerSetSource.includes('id: "demo"'), true);

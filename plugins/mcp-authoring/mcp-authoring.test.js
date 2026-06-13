@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createWorld } from "../../src/kernel.js";
-import { bundleId, createHandlers, handlerCatalog, routes } from "./runtime.js";
+import { bundleId, createHandlers, desireExtensions, handlerCatalog, providers, routes } from "./runtime.js";
 import { executeMcpAuthoringProposalTarget } from "./mcp-proposal-targets.js";
 
 const MCP_AUTHORING_HANDLER_IDS = [
@@ -29,6 +29,12 @@ test("mcp-authoring plugin owns MCP authoring routes and handlers", async () => 
   assert.equal(routes.some(route => route.path === "/api/mcp-servers" && route.handler === "mcpServer.create"), true);
   assert.equal(routes.some(route => route.path === "/api/mcp-tool-installs" && route.handler === "mcpTool.install"), true);
   assert.equal(routes.some(route => route.method === "DELETE" && route.path === "/api/mcp-tool-installs" && route.handler === "mcpTool.remove"), true);
+  assert.equal(providers.some(provider => provider.kind === "runtimeBuiltinSeeds" && provider.processSpecs?.some(spec => spec.id === "mcp_server_define_spec")), true);
+  assert.deepEqual(desireExtensions.runtimeDeclarations.map(entry => entry.kind), [
+    "mcpServer",
+    "mcpToolInstall",
+    "mcpToolRemove"
+  ]);
 
   const handlers = createHandlers({
     world: createWorld(),

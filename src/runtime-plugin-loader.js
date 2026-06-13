@@ -92,6 +92,97 @@ function validateRuntimeBundleDefinition(bundleId, definition, errors) {
   };
 }
 
+function normalizeMatcherValue(value, label, errors) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === "string" && value.trim()) return value.trim();
+  if (Array.isArray(value)) {
+    const rows = value
+      .map(entry => typeof entry === "string" ? entry.trim() : "")
+      .filter(Boolean);
+    if (rows.length !== value.length) {
+      errors.push(`${label} entries must be non-empty strings`);
+      return null;
+    }
+    return [...new Set(rows)];
+  }
+  errors.push(`${label} must be a string or array of strings`);
+  return null;
+}
+
+function validateDesireExtensions(pluginPackage, loaded, errors) {
+  const raw = loaded?.desireExtensions ?? null;
+  if (raw === null || raw === undefined) {
+    return {
+      elaborators: [],
+      runtimeDeclarations: []
+    };
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    errors.push("desireExtensions must be an object");
+    return {
+      elaborators: [],
+      runtimeDeclarations: []
+    };
+  }
+  const pluginId = pluginPackage.id;
+  const elaborators = [];
+  const runtimeDeclarations = [];
+  if (raw.elaborators !== undefined && !Array.isArray(raw.elaborators)) {
+    errors.push("desireExtensions.elaborators must be an array");
+  }
+  if (raw.runtimeDeclarations !== undefined && !Array.isArray(raw.runtimeDeclarations)) {
+    errors.push("desireExtensions.runtimeDeclarations must be an array");
+  }
+  for (const [index, entry] of (Array.isArray(raw.elaborators) ? raw.elaborators : []).entries()) {
+    const path = `desireExtensions.elaborators[${index}]`;
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      errors.push(`${path} must be an object`);
+      continue;
+    }
+    const id = typeof entry.id === "string" && entry.id.trim() ? entry.id.trim() : null;
+    if (!id) errors.push(`${path}.id must be a non-empty string`);
+    if (typeof entry.elaborate !== "function") errors.push(`${path}.elaborate must be a function`);
+    const normalized = {
+      pluginId,
+      id,
+      sourceLanguage: normalizeMatcherValue(entry.sourceLanguage, `${path}.sourceLanguage`, errors),
+      sourceKind: normalizeMatcherValue(entry.sourceKind, `${path}.sourceKind`, errors),
+      semanticKind: normalizeMatcherValue(entry.semanticKind, `${path}.semanticKind`, errors),
+      nodeKind: normalizeMatcherValue(entry.nodeKind, `${path}.nodeKind`, errors),
+      name: normalizeMatcherValue(entry.name, `${path}.name`, errors),
+      elaborate: entry.elaborate
+    };
+    if (id && typeof entry.elaborate === "function") elaborators.push(normalized);
+  }
+  for (const [index, entry] of (Array.isArray(raw.runtimeDeclarations) ? raw.runtimeDeclarations : []).entries()) {
+    const path = `desireExtensions.runtimeDeclarations[${index}]`;
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      errors.push(`${path} must be an object`);
+      continue;
+    }
+    const kind = typeof entry.kind === "string" && entry.kind.trim() ? entry.kind.trim() : null;
+    if (!kind) errors.push(`${path}.kind must be a non-empty string`);
+    if (typeof entry.apply !== "function") errors.push(`${path}.apply must be a function`);
+    if (entry.metadata !== undefined && (!entry.metadata || typeof entry.metadata !== "object" || Array.isArray(entry.metadata))) {
+      errors.push(`${path}.metadata must be an object when provided`);
+    }
+    if (kind && typeof entry.apply === "function") {
+      runtimeDeclarations.push({
+        pluginId,
+        kind,
+        apply: entry.apply,
+        metadata: entry.metadata && typeof entry.metadata === "object" && !Array.isArray(entry.metadata)
+          ? { ...entry.metadata }
+          : {}
+      });
+    }
+  }
+  return {
+    elaborators,
+    runtimeDeclarations
+  };
+}
+
 function normalizeLegacyRuntimeModule(loaded) {
   const bundleId = typeof loaded?.bundleId === "string" && loaded.bundleId.trim()
     ? loaded.bundleId.trim()
@@ -115,14 +206,9 @@ function validatePluginRuntimeModule(pluginPackage, loaded) {
   const rawBundles = loaded?.bundles && typeof loaded.bundles === "object" && !Array.isArray(loaded.bundles)
     ? loaded.bundles
     : normalizeLegacyRuntimeModule(loaded);
-  if (!rawBundles || !Object.keys(rawBundles).length) {
-    return {
-      ok: false,
-      errors: ["runtime module must export bundles or legacy bundleId/handlerCatalog/routes/surfaces/createHandlers"]
-    };
-  }
   const bundleDefinitions = [];
-  for (const [rawBundleId, definition] of Object.entries(rawBundles)) {
+  const desireExtensions = validateDesireExtensions(pluginPackage, loaded, errors);
+  for (const [rawBundleId, definition] of Object.entries(rawBundles ?? {})) {
     const bundleId = String(rawBundleId || "").trim();
     if (!bundleId) {
       errors.push("runtime module bundle ids must be non-empty strings");
@@ -140,13 +226,14 @@ function validatePluginRuntimeModule(pluginPackage, loaded) {
     }
     bundleDefinitions.push(normalized);
   }
-  if (errors.length) return { ok: false, errors };
-  if (!bundleDefinitions.length) {
-    return { ok: false, errors: ["runtime module did not provide any valid bundles"] };
+  if (!bundleDefinitions.length && !desireExtensions.elaborators.length && !desireExtensions.runtimeDeclarations.length && !errors.length) {
+    errors.push("runtime module must export bundles, legacy bundleId/handlerCatalog/routes/surfaces/createHandlers, or desireExtensions");
   }
+  if (errors.length) return { ok: false, errors };
   return {
     ok: true,
-    bundleDefinitions
+    bundleDefinitions,
+    desireExtensions
   };
 }
 
@@ -158,6 +245,12 @@ export async function loadRuntimePluginModules({
   const pluginStates = Object.create(null);
   const failures = [];
   const claimedBundles = Object.create(null);
+  const claimedElaborators = Object.create(null);
+  const claimedRuntimeDeclarations = Object.create(null);
+  const desireExtensions = {
+    elaborators: [],
+    runtimeDeclarations: []
+  };
 
   for (const pluginPackage of pluginCatalog?.packages ?? []) {
     const baseState = {
@@ -200,15 +293,41 @@ export async function loadRuntimePluginModules({
           duplicateBundleClaims.push(`runtime bundle already claimed by ${claimedBy}: ${bundleDefinition.bundleId}`);
         }
       }
-      if (duplicateBundleClaims.length) {
+      const duplicateExtensionClaims = [];
+      const localElaborators = new Set();
+      for (const elaborator of validated.desireExtensions.elaborators) {
+        if (localElaborators.has(elaborator.id)) {
+          duplicateExtensionClaims.push(`duplicate DESIRE+ elaborator in plugin ${pluginPackage.id}: ${elaborator.id}`);
+          continue;
+        }
+        localElaborators.add(elaborator.id);
+        const claimedBy = claimedElaborators[elaborator.id];
+        if (claimedBy && claimedBy !== pluginPackage.id) {
+          duplicateExtensionClaims.push(`DESIRE+ elaborator already claimed by ${claimedBy}: ${elaborator.id}`);
+        }
+      }
+      const localRuntimeDeclarations = new Set();
+      for (const declaration of validated.desireExtensions.runtimeDeclarations) {
+        if (localRuntimeDeclarations.has(declaration.kind)) {
+          duplicateExtensionClaims.push(`duplicate DESIRE runtime declaration in plugin ${pluginPackage.id}: ${declaration.kind}`);
+          continue;
+        }
+        localRuntimeDeclarations.add(declaration.kind);
+        const claimedBy = claimedRuntimeDeclarations[declaration.kind];
+        if (claimedBy && claimedBy !== pluginPackage.id) {
+          duplicateExtensionClaims.push(`DESIRE runtime declaration already claimed by ${claimedBy}: ${declaration.kind}`);
+        }
+      }
+      if (duplicateBundleClaims.length || duplicateExtensionClaims.length) {
+        const errors = [...duplicateBundleClaims, ...duplicateExtensionClaims];
         pluginStates[pluginPackage.id] = {
           ...baseState,
           loadStatus: "failed",
-          errors: [...duplicateBundleClaims]
+          errors
         };
         failures.push({
           id: pluginPackage.id,
-          reasons: duplicateBundleClaims.map(error => `runtime module invalid: ${error}`),
+          reasons: errors.map(error => `runtime module invalid: ${error}`),
           requestedSources: [...(pluginPackage.activation?.requestedSources ?? [])]
         });
         continue;
@@ -251,11 +370,23 @@ export async function loadRuntimePluginModules({
         };
       }
       const bundleIds = validated.bundleDefinitions.map(definition => definition.bundleId);
+      for (const elaborator of validated.desireExtensions.elaborators) {
+        claimedElaborators[elaborator.id] = pluginPackage.id;
+        desireExtensions.elaborators.push(elaborator);
+      }
+      for (const declaration of validated.desireExtensions.runtimeDeclarations) {
+        claimedRuntimeDeclarations[declaration.kind] = pluginPackage.id;
+        desireExtensions.runtimeDeclarations.push(declaration);
+      }
       pluginStates[pluginPackage.id] = {
         ...baseState,
         loadStatus: "loaded",
         bundleIds,
         bundleId: bundleIds.length === 1 ? bundleIds[0] : null,
+        desireExtensions: {
+          elaborators: validated.desireExtensions.elaborators.map(entry => entry.id),
+          runtimeDeclarations: validated.desireExtensions.runtimeDeclarations.map(entry => entry.kind)
+        },
         errors: []
       };
     } catch (error) {
@@ -275,9 +406,71 @@ export async function loadRuntimePluginModules({
 
   return {
     bundleOverrides,
+    desireExtensions,
     pluginStates,
     failures,
     hasBlockingErrors: failures.length > 0
+  };
+}
+
+function handlerCatalogProvider(bundle = null) {
+  return (bundle?.contributes?.providers ?? []).find(provider => provider?.kind === "handlerCatalog") ?? null;
+}
+
+function summarizeLoadedRoute(route = {}, handlerMetadata = {}) {
+  const method = String(route.method || "GET").toUpperCase();
+  const matcher = route.kind === "exact" ? route.path : String(route.pattern);
+  const metadata = handlerMetadata[String(route.handler || "")] ?? undefined;
+  return {
+    method,
+    matcher,
+    handler: String(route.handler || ""),
+    handlerMetadata: metadata ? {
+      ...metadata,
+      methods: Array.isArray(metadata.methods) ? [...metadata.methods] : undefined
+    } : undefined
+  };
+}
+
+function summarizeLoadedBundleContributions(bundleIds = [], bundleOverrides = {}) {
+  const capabilities = new Set();
+  const routes = [];
+  const surfaces = [];
+  const handlerSets = new Set();
+  const handlerMetadata = {};
+  for (const bundleId of bundleIds) {
+    const bundle = bundleOverrides?.[bundleId] ?? null;
+    if (!bundle) continue;
+    const catalog = handlerCatalogProvider(bundle);
+    for (const [handlerId, entry] of Object.entries(catalog?.handlerMetadata ?? {})) {
+      handlerMetadata[handlerId] = {
+        ...(entry || {}),
+        methods: Array.isArray(entry?.methods) ? [...entry.methods] : undefined
+      };
+    }
+    for (const capability of bundle.contributes?.capabilities ?? []) {
+      capabilities.add(typeof capability === "string" ? capability : capability?.id);
+    }
+    for (const route of bundle.contributes?.routes ?? []) routes.push(summarizeLoadedRoute(route, handlerMetadata));
+    for (const surface of bundle.contributes?.surfaces ?? []) {
+      surfaces.push({
+        id: surface.id,
+        href: surface.href ?? null,
+        action: surface.action ? { ...surface.action } : null,
+        tier: surface.tier ?? "internal",
+        contexts: [...(surface.contexts ?? [])]
+      });
+    }
+    for (const provider of bundle.contributes?.providers ?? []) {
+      if (provider?.kind === "handlerSet" && provider.id) handlerSets.add(String(provider.id));
+    }
+  }
+  return {
+    capabilities: [...capabilities].filter(Boolean).map(String).sort(),
+    routes,
+    surfaces,
+    handlerSets: [...handlerSets].sort(),
+    handlerMetadata
   };
 }
 
@@ -290,10 +483,16 @@ export function applyRuntimePluginLoadState(pluginCatalog, loadResult) {
       bundleId: null,
       errors: []
     };
+    const loadedBundleIds = [...(runtimeModule.bundleIds ?? [])];
+    const loadedContributions = runtimeModule.loadStatus === "loaded"
+      ? summarizeLoadedBundleContributions(loadedBundleIds, loadResult?.bundleOverrides ?? {})
+      : null;
     return {
       ...pluginPackage,
+      resolvedRuntimeContributions: loadedContributions ?? pluginPackage.resolvedRuntimeContributions,
       runtimeModule: {
         ...runtimeModule,
+        bundleIds: loadedBundleIds,
         errors: [...(runtimeModule.errors ?? [])]
       }
     };

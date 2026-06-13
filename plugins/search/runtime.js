@@ -1,5 +1,8 @@
 import { handlerCatalog } from "./handler-catalog.js";
 import { createSearchIndexHandlers } from "./handlers.js";
+import { createSearchIndexRuntime } from "./provider-runtime.js";
+import { createPracticalBackendDbSearchServices } from "./db-search-services.js";
+import { searchModuleProjectors } from "./projections.js";
 
 export const bundleId = "bundle-search";
 
@@ -18,6 +21,26 @@ export const routes = Object.freeze([
 
 export const surfaces = Object.freeze([]);
 
+export const providers = Object.freeze([
+  {
+    kind: "moduleProjectors",
+    id: "search.projections",
+    projectors: searchModuleProjectors
+  },
+  {
+    kind: "providerRuntimeFactory",
+    id: "search.index",
+    factory: createSearchIndexRuntime
+  },
+  {
+    kind: "supportServiceFactory",
+    id: "search.support",
+    factory: () => ({
+      createPracticalBackendDbSearchServices
+    })
+  }
+]);
+
 export function createHandlers(deps) {
   return createSearchIndexHandlers(deps);
 }
@@ -27,5 +50,6 @@ export default {
   handlerCatalog,
   routes,
   surfaces,
+  providers,
   createHandlers
 };

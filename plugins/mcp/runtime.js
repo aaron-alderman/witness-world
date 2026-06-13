@@ -1,3 +1,13 @@
+import {
+  executeMcpTool,
+  mcpToolDefinition,
+  mcpToolNames,
+  resolveMcpToolScope,
+  MCP_PROTOCOL_VERSION
+} from "./mcp-tools.js";
+import { createMcpBundleSupportServices } from "./mcp-support-services.js";
+import { mcpModuleProjectors } from "./projections.js";
+
 export const bundleId = "bundle-mcp";
 
 export const handlerCatalog = Object.freeze({
@@ -19,6 +29,26 @@ export const routes = Object.freeze([
 ]);
 
 export const surfaces = Object.freeze([]);
+
+export const providers = Object.freeze([
+  {
+    kind: "moduleProjectors",
+    id: "mcp.projections",
+    projectors: mcpModuleProjectors
+  },
+  {
+    kind: "supportServiceFactory",
+    id: "mcp.support",
+    factory: () => ({
+      executeMcpTool,
+      mcpToolDefinition,
+      mcpToolNames,
+      resolveMcpToolScope,
+      MCP_PROTOCOL_VERSION,
+      createMcpBundleSupportServices
+    })
+  }
+]);
 
 export function createHandlers({
   currentMcpServerIndex,
@@ -226,5 +256,6 @@ export default {
   handlerCatalog,
   routes,
   surfaces,
+  providers,
   createHandlers
 };

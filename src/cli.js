@@ -3,7 +3,7 @@ import readline from "node:readline";
 import { randomUUID } from "node:crypto";
 import { launchDesktopProcess } from "./desktop-cli.js";
 import { createWorld } from "./kernel.js";
-import { loadWitnessTomlFile, applyWitnessDocs } from "./dsl.js";
+import { loadWitnessTomlFile, applyWitnessDocsWithRuntimePlugins } from "./dsl.js";
 import { moduleProjectors } from "./modules.js";
 import { declareBackendHost, declareFrontendHost, resolveServerRunner, startServer } from "./host.js";
 import {
@@ -60,7 +60,19 @@ async function runServe(args) {
   const runtimeRoot = operatorContract.directories.runtimeRoot;
   const world = createWorld({ genesis: { system: "witness-world", definitionPath }, witnessLogPath, observationLogPath });
   const docs = await loadWitnessTomlFile(definitionPath);
-  applyWitnessDocs(world, docs);
+  try {
+    await applyWitnessDocsWithRuntimePlugins(world, docs, {
+      runtimeProfile,
+      runtimePluginIds: parsed.runtimePluginIds.length ? parsed.runtimePluginIds : null,
+      env: process.env
+    });
+  } catch (error) {
+    if (error?.runtimePluginCatalog) {
+      reportStartupFailure(error);
+      process.exit(1);
+    }
+    throw error;
+  }
 
   const resolved = resolveServerRunner(world, parsed.serverRunnerId ?? null);
   if (!resolved.ok) {
@@ -192,9 +204,21 @@ async function runMcp(args) {
   const runtimeRoot = operatorContract.directories.runtimeRoot;
   const world = createWorld({ genesis: { system: "witness-world", definitionPath }, witnessLogPath, observationLogPath });
   const docs = await loadWitnessTomlFile(definitionPath);
-  applyWitnessDocs(world, docs);
+  try {
+    await applyWitnessDocsWithRuntimePlugins(world, docs, {
+      runtimeProfile,
+      runtimePluginIds: parsed.runtimePluginIds.length ? parsed.runtimePluginIds : null,
+      env: process.env
+    });
+  } catch (error) {
+    if (error?.runtimePluginCatalog) {
+      reportStartupFailure(error);
+      process.exit(1);
+    }
+    throw error;
+  }
 
-  const mcpServer = world.project(moduleProjectors.mcpServerIndex).byId[parsed.mcpServerId] ?? null;
+  const mcpServer = resolveMcpServerForCliStartup(world, parsed.mcpServerId);
   if (!mcpServer) {
     console.error(`MCP server not found: ${parsed.mcpServerId}`);
     process.exit(1);
@@ -313,6 +337,31 @@ async function runMcp(args) {
   } finally {
     await server.close();
   }
+}
+
+function resolveMcpServerForCliStartup(world, id) {
+  const projected = world.project(moduleProjectors.mcpServerIndex).byId[id] ?? null;
+  if (projected) return projected;
+
+  // The stdio bridge must choose a server runner before runtime startup has
+  // registered plugin-owned MCP read-model projectors.
+  let found = null;
+  for (const witness of world.allWitnesses()) {
+    if (witness.process === "defineMcpServer" && witness.body?.id === id) {
+      found = witness.body;
+    } else if (witness.process === "mcpServer.define" && witness.body?.mcpServer?.id === id) {
+      found = witness.body.mcpServer;
+    }
+  }
+  if (!found) return null;
+  return {
+    id: String(found.id),
+    label: typeof found.label === "string" && found.label.trim() ? found.label.trim() : String(found.id),
+    serverRunner: found.serverRunner ? String(found.serverRunner) : null,
+    serviceIdentity: found.serviceIdentity ? String(found.serviceIdentity) : null,
+    transports: Array.isArray(found.transports) ? [...new Set(found.transports.map(String).filter(Boolean))] : [],
+    context: found.context ? String(found.context) : null
+  };
 }
 
 async function runDesktop(args) {

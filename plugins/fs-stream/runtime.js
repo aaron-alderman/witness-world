@@ -1,5 +1,10 @@
 import { handlerCatalog } from "./handler-catalog.js";
 import { createFsStreamHandlers } from "./handlers.js";
+import {
+  parseStreamFailureLimit,
+  streamFileToFile,
+  streamReadableToFile
+} from "./stream-utils.js";
 
 export const bundleId = "bundle-fs-stream";
 
@@ -17,6 +22,18 @@ export const routes = Object.freeze([
 
 export const surfaces = Object.freeze([]);
 
+export const providers = Object.freeze([
+  {
+    kind: "supportServiceFactory",
+    id: "fs-stream.support",
+    factory: () => ({
+      parseStreamFailureLimit,
+      streamFileToFile,
+      streamReadableToFile
+    })
+  }
+]);
+
 export function createHandlers(deps) {
   return createFsStreamHandlers(deps);
 }
@@ -26,5 +43,6 @@ export default {
   handlerCatalog,
   routes,
   surfaces,
+  providers,
   createHandlers
 };

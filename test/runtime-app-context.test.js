@@ -40,7 +40,7 @@ test("createUnavailableRuntimeAppContext exposes witness visibility and derived 
   assert.equal(unavailable.visibleWitnesses(), witnesses);
 });
 
-test("createRuntimeAppContext composes the baseline runtime services outside host.js", async () => {
+test("createRuntimeAppContext composes provider services from active runtime contributions", async () => {
   const witnesses = [{ id: "w1" }];
   const identityIndex = {
     rows: [{ actor: "aaron", label: "Aaron" }],
@@ -68,15 +68,21 @@ test("createRuntimeAppContext composes the baseline runtime services outside hos
     sendJson: () => {},
     readJson: () => {},
     handlerSetFactories: {},
-    createBuiltinAssetJobHandlers: () => ({ "asset.job": () => {} }),
-    createBuiltinNotificationJobHandlers: () => ({ "notify.job": () => {} }),
-    createBuiltinWebhookJobHandlers: () => ({ "webhook.job": () => {} }),
-    createInProcessJobQueue: config => {
-      queuedConfig = config;
-      return { close: () => closed.push("jobs") };
+    runtimeContributions: {
+      jobHandlerFactories: {
+        assets: () => ({ "asset.job": () => {} }),
+        notifications: () => ({ "notify.job": () => {} }),
+        webhooks: () => ({ "webhook.job": () => {} })
+      },
+      providerRuntimeFactories: {
+        "jobs.queue": config => {
+          queuedConfig = config;
+          return { close: () => closed.push("jobs") };
+        },
+        "db.sql": () => ({ close: () => closed.push("db") }),
+        "search.index": () => ({ close: () => closed.push("search") })
+      }
     },
-    createDbSqlRuntime: () => ({ close: () => closed.push("db") }),
-    createSearchIndexRuntime: () => ({ close: () => closed.push("search") }),
     identityIndex
   });
 
@@ -96,6 +102,32 @@ test("createRuntimeAppContext composes the baseline runtime services outside hos
 
   appContext.close();
   assert.deepEqual(closed, ["jobs", "db", "search"]);
+});
+
+test("createRuntimeAppContext does not create optional provider runtimes without active contributions", async () => {
+  const appContext = await createRuntimeAppContext({
+    world: { allWitnesses: () => [] },
+    serverRunner: { id: "runner-minimal", handlerSet: null, actors: [] },
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    runtimeRoot: "/runtime",
+    storage: {},
+    runtimeConfig: { ok: true, values: {}, fields: [] },
+    sendJson: () => {},
+    readJson: () => {},
+    handlerSetFactories: {},
+    runtimeContributions: {
+      jobHandlerFactories: {},
+      providerRuntimeFactories: {}
+    },
+    identityIndex: { rows: [], byId: {}, byUsername: {} }
+  });
+
+  assert.equal(appContext.ok, true);
+  assert.deepEqual(appContext.jobs.jobHandlers, {});
+  assert.equal(appContext.jobs.enqueue, undefined);
+  assert.equal(appContext.dbSql, null);
+  assert.equal(appContext.searchIndex, null);
 });
 
 test("createRuntimeAppContext preserves handler-set produced services and job handlers", async () => {
@@ -121,12 +153,10 @@ test("createRuntimeAppContext preserves handler-set produced services and job ha
         visibleWitnesses: () => [{ id: "demo-witness" }]
       })
     },
-    createBuiltinAssetJobHandlers: () => ({}),
-    createBuiltinNotificationJobHandlers: () => ({}),
-    createBuiltinWebhookJobHandlers: () => ({}),
-    createInProcessJobQueue: ({ jobHandlers }) => ({ jobHandlers, close: () => {} }),
-    createDbSqlRuntime: () => ({ close: () => {} }),
-    createSearchIndexRuntime: () => ({ close: () => {} }),
+    runtimeContributions: {
+      jobHandlerFactories: {},
+      providerRuntimeFactories: {}
+    },
     identityIndex: { rows: [], byId: {}, byUsername: {} }
   });
 

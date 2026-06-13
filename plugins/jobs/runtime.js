@@ -1,5 +1,7 @@
 import { handlerCatalog } from "./handler-catalog.js";
 import { createJobsQueueHandlers } from "./handlers.js";
+import { createInProcessJobQueue } from "./provider-runtime.js";
+import { jobsModuleProjectors } from "./projections.js";
 
 export const bundleId = "bundle-jobs";
 
@@ -21,6 +23,19 @@ export const routes = Object.freeze([
 
 export const surfaces = Object.freeze([]);
 
+export const providers = Object.freeze([
+  {
+    kind: "moduleProjectors",
+    id: "jobs.projections",
+    projectors: jobsModuleProjectors
+  },
+  {
+    kind: "providerRuntimeFactory",
+    id: "jobs.queue",
+    factory: createInProcessJobQueue
+  }
+]);
+
 export function createHandlers(deps) {
   return createJobsQueueHandlers(deps);
 }
@@ -30,5 +45,6 @@ export default {
   handlerCatalog,
   routes,
   surfaces,
+  providers,
   createHandlers
 };

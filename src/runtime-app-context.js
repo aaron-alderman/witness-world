@@ -1,17 +1,5 @@
 import { moduleProjectors } from "./modules.js";
 import { isoAt, positiveInteger, runtimeConfigLookup } from "./runtime-config-utils.js";
-import {
-  assetDerivedTextPathForAppContext,
-  assetDerivedTextStorageKey,
-  assetDerivedThumbnailPathForAppContext,
-  assetDerivedThumbnailStorageKey,
-  assetThumbnailUrlForId
-} from "../plugins/assets/asset-services.js";
-import {
-  extractAssetSearchText,
-  extractAssetThumbnail,
-  supportsDerivedAssetSearchText
-} from "../plugins/assets/asset-derived-utils.js";
 
 export function actorsFromIdentities(identities) {
   const seen = new Set();
@@ -50,12 +38,7 @@ export async function createRuntimeAppContext({
   sendJson,
   readJson,
   handlerSetFactories,
-  createBuiltinAssetJobHandlers,
-  createBuiltinNotificationJobHandlers,
-  createBuiltinWebhookJobHandlers,
-  createInProcessJobQueue,
-  createDbSqlRuntime,
-  createSearchIndexRuntime,
+  runtimeContributions = null,
   identityIndex
 }) {
   if (runtimeConfig && runtimeConfig.ok === false) {
@@ -112,52 +95,51 @@ export async function createRuntimeAppContext({
   }
 
   let contextRef = appContext;
-  const builtinJobHandlers = {
-    ...createBuiltinAssetJobHandlers({
-      world,
-      backendHost,
-      runtimeConfig: appContext.runtimeConfig,
-      runtimeConfigLookup,
-      positiveInteger,
-      supportsDerivedAssetSearchText,
-      extractAssetSearchText,
-      extractAssetThumbnail,
-      assetDerivedTextPathForAppContext,
-      assetDerivedTextStorageKey,
-      assetDerivedThumbnailPathForAppContext,
-      assetDerivedThumbnailStorageKey,
-      assetThumbnailUrlForId,
-      isoAt
-    }),
-    ...createBuiltinNotificationJobHandlers({
-      world,
-      backendHost,
-      runtimeConfig: appContext.runtimeConfig
-    }),
-    ...createBuiltinWebhookJobHandlers({
-      world,
-      backendHost
-    })
+  const jobHandlerDeps = {
+    world,
+    backendHost,
+    runtimeConfig: appContext.runtimeConfig,
+    runtimeConfigLookup,
+    positiveInteger,
+    isoAt
   };
-  appContext.jobs = createInProcessJobQueue({
-    world,
-    serverRunnerId: serverRunner.id,
-    runtimeConfig: appContext.runtimeConfig,
-    jobHandlers: { ...builtinJobHandlers, ...(appContext.jobHandlers ?? {}) },
-    getAppContext: () => contextRef
-  });
-  appContext.dbSql = createDbSqlRuntime({
-    runtimeConfig: appContext.runtimeConfig,
-    runtimeRoot,
-    serverRunnerId: serverRunner.id
-  });
-  appContext.searchIndex = createSearchIndexRuntime({
-    world,
-    runtimeConfig: appContext.runtimeConfig,
-    runtimeRoot,
-    serverRunnerId: serverRunner.id,
-    storage
-  });
+  const pluginJobHandlers = Object.assign(
+    {},
+    ...Object.values(runtimeContributions?.jobHandlerFactories ?? {}).map(factory => factory(jobHandlerDeps) ?? {})
+  );
+  const providerRuntimeFactories = runtimeContributions?.providerRuntimeFactories ?? {};
+  const jobsFactory = providerRuntimeFactories["jobs.queue"];
+  const dbSqlFactory = providerRuntimeFactories["db.sql"];
+  const searchIndexFactory = providerRuntimeFactories["search.index"];
+  const jobHandlers = { ...pluginJobHandlers, ...(appContext.jobHandlers ?? {}) };
+  appContext.jobs = typeof jobsFactory === "function"
+    ? jobsFactory({
+        world,
+        serverRunnerId: serverRunner.id,
+        runtimeConfig: appContext.runtimeConfig,
+        jobHandlers,
+        getAppContext: () => contextRef
+      })
+    : {
+        jobHandlers,
+        close() {}
+      };
+  appContext.dbSql = typeof dbSqlFactory === "function"
+    ? dbSqlFactory({
+        runtimeConfig: appContext.runtimeConfig,
+        runtimeRoot,
+        serverRunnerId: serverRunner.id
+      })
+    : null;
+  appContext.searchIndex = typeof searchIndexFactory === "function"
+    ? searchIndexFactory({
+        world,
+        runtimeConfig: appContext.runtimeConfig,
+        runtimeRoot,
+        serverRunnerId: serverRunner.id,
+        storage
+      })
+    : null;
   appContext.authOAuth = {
     pendingFlows: new Map()
   };

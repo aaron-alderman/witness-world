@@ -42,6 +42,16 @@ export const DEMO_RUNTIME_BUILTIN_SEEDS = Object.freeze({
       outputs: [
         { name: "id", accepts: "todo.id", required: true }
       ]
+    },
+    {
+      id: "demo_server_runner_storage_spec",
+      process: "serverRunner.define",
+      inputs: [
+        { name: "id", accepts: "serverRunner.id", required: true },
+        { name: "todoProjection", accepts: "serverRunner.storage", required: false },
+        { name: "privateNotesProjection", accepts: "serverRunner.storage", required: false }
+      ],
+      outputs: [{ name: "id", accepts: "serverRunner.id", required: true }]
     }
   ])
 });

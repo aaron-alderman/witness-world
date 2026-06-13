@@ -152,6 +152,14 @@ export const surfaces = Object.freeze([
   })
 ]);
 
+export const providers = Object.freeze([
+  {
+    kind: "coreHook",
+    id: "renderWidgetPage",
+    hook: renderWidgetPage
+  }
+]);
+
 function widgetPageTutorialSurface(world, {
   route = null,
   rootWidget = null,
@@ -516,6 +524,7 @@ export default {
   handlerCatalog,
   routes,
   surfaces,
+  providers,
   createHandlers
 };
 

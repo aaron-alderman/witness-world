@@ -6,8 +6,6 @@ const NAME_REL_PREFIX = "bindsName:";
 const EXPORT_REL_PREFIX = "exportsName:";
 const IMPORT_REL_PREFIX = "importsName:";
 const CONTEXT_REF_SEP = "\u0000";
-const MCP_TOOL_ACTING_MODES = new Set(["delegated", "service"]);
-const MCP_SERVER_TRANSPORTS = new Set(["stdio", "http"]);
 
 function latestBodiesByProcess(witnesses, process) {
   const rows = new Map();
@@ -107,57 +105,6 @@ function currentRelations(witnesses) {
   return projectors.currentRelations(witnesses);
 }
 
-function thingReferenceRow(id, { titles, kinds, contexts }) {
-  const contextId = contexts.get(id) ?? null;
-  return {
-    id,
-    title: titles.get(id) ?? id,
-    kind: kinds.get(id) ?? null,
-    context: contextId,
-    contextTitle: contextId ? (titles.get(contextId) ?? contextId) : null
-  };
-}
-
-function assetAttachmentMaps(current, assetRows, { titles, kinds, contexts }) {
-  const assetById = new Map(assetRows.map(row => [row.id, row]));
-  const byTarget = new Map();
-  const byAsset = new Map();
-  const byAssetRows = new Map();
-  for (const row of current) {
-    if (row.rel !== "attachedAsset") continue;
-    const asset = assetById.get(row.to);
-    if (!asset) continue;
-    if (!byTarget.has(row.from)) byTarget.set(row.from, []);
-    byTarget.get(row.from).push(asset);
-    if (!byAsset.has(row.to)) byAsset.set(row.to, []);
-    byAsset.get(row.to).push(row.from);
-    if (!byAssetRows.has(row.to)) byAssetRows.set(row.to, []);
-    byAssetRows.get(row.to).push(thingReferenceRow(row.from, { titles, kinds, contexts }));
-  }
-  for (const rows of byTarget.values()) rows.sort((a, b) => String(a.title || a.id).localeCompare(String(b.title || b.id)));
-  for (const rows of byAsset.values()) rows.sort((a, b) => String(a).localeCompare(String(b)));
-  for (const rows of byAssetRows.values()) rows.sort((a, b) => String(a.title || a.id).localeCompare(String(b.title || b.id)));
-  return { byTarget, byAsset, byAssetRows };
-}
-
-function assetIngestRetryUrl(assetId) {
-  return `/api/assets/${encodeURIComponent(assetId)}/ingest/retry`;
-}
-
-function assetSearchReindexUrl(assetId) {
-  return `/api/assets/${encodeURIComponent(assetId)}/search/reindex`;
-}
-
-function assetCanRetryIngest(row) {
-  const status = String(row?.processingStatus || "");
-  return status === "dead-letter" || status === "enqueue-failed";
-}
-
-function assetCanRefreshSearch(row) {
-  if (String(row?.searchStatus || "") === "manual") return true;
-  return typeof row?.searchError === "string" && row.searchError.trim().length > 0;
-}
-
 function localNameRel(name) {
   return `${NAME_REL_PREFIX}${String(name)}`;
 }
@@ -197,6 +144,61 @@ function capabilityDefinitionsById(witnesses) {
     rows.set(w.body.id, normalizeCapabilityDefinition(w.body));
   }
   return rows;
+}
+
+const registeredModuleProjectors = new Map();
+
+export function registerModuleProjectors(owner, projectorEntries = {}) {
+  const provider = typeof owner === "string" && owner.trim() ? owner.trim() : "unknown";
+  const token = Symbol(provider);
+  const entries = Object.entries(projectorEntries ?? {});
+  const registered = [];
+  for (const [name, projector] of entries) {
+    if (typeof projector !== "function") {
+      throw new Error(`module projector ${name} from ${provider} must be a function`);
+    }
+    const existing = registeredModuleProjectors.get(name);
+    if (existing && existing.projector !== projector) {
+      const owners = [...existing.registrations.values()]
+        .map(registration => registration.owner)
+        .filter(Boolean)
+        .join(", ");
+      throw new Error(`module projector ${name} is already registered by ${owners || "unknown"} with a different implementation`);
+    }
+  }
+  for (const [name, projector] of entries) {
+    const existing = registeredModuleProjectors.get(name);
+    const next = existing ?? { projector, registrations: new Map() };
+    next.registrations.set(token, { owner: provider });
+    if (!existing) registeredModuleProjectors.set(name, next);
+    registered.push(name);
+  }
+  let closed = false;
+  return () => {
+    if (closed) return;
+    closed = true;
+    for (const name of registered) {
+      const existing = registeredModuleProjectors.get(name);
+      if (!existing) continue;
+      existing.registrations.delete(token);
+      if (!existing.registrations.size) registeredModuleProjectors.delete(name);
+    }
+  };
+}
+
+function delegatedModuleProjector(name, fallback) {
+  return witnesses => {
+    const registered = registeredModuleProjectors.get(name);
+    return (registered?.projector ?? fallback)(witnesses);
+  };
+}
+
+function emptyRows() {
+  return [];
+}
+
+function emptyIndex() {
+  return { rows: [], byId: Object.create(null) };
 }
 
 export function ensureCapabilityDefinition(world, {
@@ -1530,969 +1532,45 @@ export const moduleProjectors = {
     return { rows, byServerRunner, byServerRunnerPlugin };
   },
 
-  mcpServers(witnesses) {
-    const contexts = moduleProjectors.objectContexts(witnesses);
-    const rows = new Map();
-    const rels = currentRelations(witnesses);
-    for (const witness of witnesses) {
-      if (witness.process !== "defineMcpServer" || !witness.body?.id) continue;
-      rows.set(witness.body.id, {
-        id: witness.body.id,
-        label: typeof witness.body.label === "string" && witness.body.label.trim() ? witness.body.label.trim() : witness.body.id,
-        serverRunner: witness.body.serverRunner ? String(witness.body.serverRunner) : null,
-        serviceIdentity: witness.body.serviceIdentity ? String(witness.body.serviceIdentity) : null,
-        transports: Array.isArray(witness.body.transports) ? [...new Set(witness.body.transports.map(String).filter(Boolean))] : [],
-        context: contexts.get(witness.body.id) ?? (witness.body.context ? String(witness.body.context) : null)
-      });
-    }
-    for (const row of rels) {
-      if (!rows.has(row.from)) continue;
-      const current = rows.get(row.from);
-      if (row.rel === "usesServerRunner") current.serverRunner = row.to;
-      if (row.rel === "serviceIdentity") current.serviceIdentity = row.to;
-      if (row.rel === "supportsTransport" && !current.transports.includes(String(row.to))) current.transports.push(String(row.to));
-    }
-    return [...rows.values()]
-      .map(row => ({
-        ...row,
-        transports: row.transports.filter(transport => MCP_SERVER_TRANSPORTS.has(transport)).sort()
-      }))
-      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  },
+  mcpServers: delegatedModuleProjector("mcpServers", emptyRows),
 
-  mcpServerIndex(witnesses) {
-    const rows = moduleProjectors.mcpServers(witnesses);
-    const byId = Object.create(null);
-    for (const row of rows) byId[row.id] = row;
-    return { rows, byId };
-  },
+  mcpServerIndex: delegatedModuleProjector("mcpServerIndex", emptyIndex),
 
-  mcpToolInstalls(witnesses) {
-    const rows = [];
-    const seen = new Set();
-    for (const row of currentRelations(witnesses)) {
-      if (row.rel !== "exposesMcpTool") continue;
-      const key = `${row.from}\u0000${row.to}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      rows.push({
-        server: row.from,
-        tool: String(row.to),
-        actingMode: MCP_TOOL_ACTING_MODES.has(String(row.meta?.actingMode || ""))
-          ? String(row.meta.actingMode)
-          : "delegated",
-        scopeContexts: Array.isArray(row.meta?.scopeContexts)
-          ? [...new Set(row.meta.scopeContexts.map(String).filter(Boolean))].sort()
-          : [],
-        scopeTargets: Array.isArray(row.meta?.scopeTargets)
-          ? [...new Set(row.meta.scopeTargets.map(String).filter(Boolean))].sort()
-          : [],
-        witness: row.witness
-      });
-    }
-    return rows.sort((a, b) =>
-      String(a.server).localeCompare(String(b.server))
-      || String(a.tool).localeCompare(String(b.tool))
-    );
-  },
+  mcpToolInstalls: delegatedModuleProjector("mcpToolInstalls", emptyRows),
 
-  mcpToolInstallIndex(witnesses) {
-    const rows = moduleProjectors.mcpToolInstalls(witnesses);
-    const byServer = Object.create(null);
-    for (const row of rows) {
-      if (!byServer[row.server]) byServer[row.server] = [];
-      byServer[row.server].push(row);
-    }
-    return { rows, byServer };
-  },
+  mcpToolInstallIndex: delegatedModuleProjector("mcpToolInstallIndex", () => ({ rows: [], byServer: Object.create(null) })),
 
-    assets(witnesses) {
-      const assetDownloadUrl = contentUrl => {
-        if (typeof contentUrl !== "string" || !contentUrl) return null;
-        return contentUrl.includes("?") ? `${contentUrl}&download=1` : `${contentUrl}?download=1`;
-      };
-      const assetTextUrl = assetId => `/api/assets/${encodeURIComponent(assetId)}/text`;
-      const rows = new Map();
-    const owners = projectors.owners(witnesses);
-    const contexts = moduleProjectors.objectContexts(witnesses);
-    const modules = moduleProjectors.modules(witnesses);
-    const titles = new Map(
-      currentRelations(witnesses)
-        .filter(row => row.rel === "hasTitle")
-        .map(row => [row.from, row.to])
-    );
-    const defaultRow = id => ({
-      id,
-      title: titles.get(id) ?? id,
-      owner: owners.get(id) ?? null,
-      mimeType: null,
-      sizeBytes: null,
-      storageKey: null,
-      visibility: "private",
-      context: contexts.get(id) ?? null,
-      contextTitle: null,
-      contentUrl: null,
-      downloadUrl: null,
-      textUrl: null,
-      originalName: null,
-      processingStatus: null,
-      processingJobId: null,
-      processingAttempt: 0,
-      processingUpdatedAt: null,
-      processingError: null,
-      derivedMetadata: null,
-      textStatus: null,
-      textBytes: null,
-      textRef: null,
-      textExtractor: null,
-      thumbnailStatus: null,
-      thumbnailRef: null,
-      thumbnailUrl: null,
-      imageWidth: null,
-      imageHeight: null,
-      searchStatus: null,
-      searchError: null,
-      searchPolicy: null,
-      reindexedIndexId: null,
-      canRetryIngest: false,
-      ingestRetryUrl: null,
-      canRefreshSearch: false,
-      searchReindexUrl: null,
-      attachedTo: [],
-      attachedToRows: [],
-      attachmentCount: 0
-    });
+  assets: delegatedModuleProjector("assets", emptyRows),
 
-    for (const [id, kind] of modules) {
-      if (kind !== "asset") continue;
-      rows.set(id, defaultRow(id));
-    }
+  assetIndex: delegatedModuleProjector("assetIndex", emptyIndex),
 
-    for (const witness of witnesses) {
-      if (witness.process !== "asset.upload" || !witness.body?.id) continue;
-      const id = String(witness.body.id);
-      const row = rows.get(id) ?? defaultRow(id);
-      row.originalName = typeof witness.body.originalName === "string" ? witness.body.originalName : row.originalName;
-      row.title = titles.get(id) ?? row.originalName ?? row.title;
-      row.mimeType = typeof witness.body.mimeType === "string" ? witness.body.mimeType : row.mimeType;
-      row.sizeBytes = Number.isFinite(witness.body.sizeBytes) ? witness.body.sizeBytes : row.sizeBytes;
-      row.storageKey = typeof witness.body.storageKey === "string" ? witness.body.storageKey : row.storageKey;
-      row.visibility = witness.body.visibility === "public" || witness.body.visibility === "private"
-        ? witness.body.visibility
-        : row.visibility;
-      row.context = contexts.get(id) ?? (typeof witness.body.context === "string" ? witness.body.context : row.context);
-      row.contentUrl = typeof witness.body.contentUrl === "string" ? witness.body.contentUrl : row.contentUrl;
-      row.downloadUrl = assetDownloadUrl(row.contentUrl);
-      rows.set(id, row);
-    }
+  jobs: delegatedModuleProjector("jobs", emptyRows),
 
-    const jobsByAsset = new Map();
-    const assetIdByJobId = new Map();
-    for (const witness of witnesses) {
-      if (!witness.process.startsWith("jobs.queue.") || !witness.body?.id) continue;
-      if (witness.body.handler !== "asset.ingest.process") continue;
-      const jobId = String(witness.body.id);
-      const assetId = typeof witness.body.payload?.assetId === "string"
-        ? witness.body.payload.assetId
-        : assetIdByJobId.get(jobId) || "";
-      if (!assetId) continue;
-      assetIdByJobId.set(jobId, assetId);
-      const row = jobsByAsset.get(assetId) ?? {
-        assetId,
-        id: jobId,
-        status: "queued",
-        attempt: 0,
-        createdAt: null,
-        availableAt: null,
-        completedAt: null,
-        lastError: null
-      };
-      row.id = jobId;
-      if (Number.isFinite(witness.body.attempt)) row.attempt = witness.body.attempt;
-      if (typeof witness.body.createdAt === "string") row.createdAt = witness.body.createdAt;
-      if (typeof witness.body.availableAt === "string") row.availableAt = witness.body.availableAt;
-      if (typeof witness.body.nextAvailableAt === "string") row.availableAt = witness.body.nextAvailableAt;
-      if (typeof witness.body.completedAt === "string") row.completedAt = witness.body.completedAt;
-      if (typeof witness.body.reason === "string") row.lastError = witness.body.reason;
-      if (witness.process === "jobs.queue.enqueue") row.status = "queued";
-      if (witness.process === "jobs.queue.start") row.status = "running";
-      if (witness.process === "jobs.queue.retry") row.status = "queued";
-      if (witness.process === "jobs.queue.succeeded") row.status = "succeeded";
-      if (witness.process === "jobs.queue.deadLetter") row.status = "dead-letter";
-      jobsByAsset.set(assetId, row);
-    }
+  jobIndex: delegatedModuleProjector("jobIndex", emptyIndex),
 
-    for (const witness of witnesses) {
-      if (!witness.body?.id) continue;
-      if (![
-        "asset.ingest.enqueue",
-        "asset.ingest.enqueue.failed",
-        "asset.ingest.start",
-        "asset.ingest.succeeded",
-        "asset.ingest.failed",
-        "asset.search.reindex",
-        "asset.search.reindex.failed"
-      ].includes(witness.process)) continue;
-      const id = String(witness.body.id);
-      const row = rows.get(id) ?? defaultRow(id);
-      if (witness.process === "asset.ingest.enqueue") {
-        row.processingStatus = "queued";
-        row.processingJobId = typeof witness.body.jobId === "string" ? witness.body.jobId : row.processingJobId;
-      }
-      if (witness.process === "asset.ingest.enqueue.failed") {
-        row.processingStatus = "enqueue-failed";
-        row.processingError = typeof witness.body.reason === "string" ? witness.body.reason : row.processingError;
-      }
-      if (witness.process === "asset.ingest.start") {
-        row.processingStatus = "running";
-        row.processingJobId = typeof witness.body.jobId === "string" ? witness.body.jobId : row.processingJobId;
-        row.processingAttempt = Number.isFinite(witness.body.attempt) ? witness.body.attempt : row.processingAttempt;
-      }
-        if (witness.process === "asset.ingest.succeeded") {
-        row.processingStatus = "succeeded";
-        row.processingJobId = typeof witness.body.jobId === "string" ? witness.body.jobId : row.processingJobId;
-        row.processingAttempt = Number.isFinite(witness.body.attempt) ? witness.body.attempt : row.processingAttempt;
-        row.processingUpdatedAt = typeof witness.body.completedAt === "string" ? witness.body.completedAt : row.processingUpdatedAt;
-        row.processingError = null;
-          row.derivedMetadata = witness.body.derivedMetadata && typeof witness.body.derivedMetadata === "object" && !Array.isArray(witness.body.derivedMetadata)
-            ? witness.body.derivedMetadata
-            : row.derivedMetadata;
-          row.textStatus = typeof witness.body.textStatus === "string" ? witness.body.textStatus : row.textStatus;
-          row.textBytes = Number.isFinite(witness.body.textBytes) ? witness.body.textBytes : row.textBytes;
-          row.textRef = typeof witness.body.textRef === "string" ? witness.body.textRef : row.textRef;
-          row.textUrl = row.textRef ? assetTextUrl(id) : row.textUrl;
-          row.textExtractor = typeof witness.body.textExtractor === "string" ? witness.body.textExtractor : row.textExtractor;
-        row.thumbnailStatus = typeof witness.body.thumbnailStatus === "string" ? witness.body.thumbnailStatus : row.thumbnailStatus;
-        row.thumbnailRef = typeof witness.body.thumbnailRef === "string" ? witness.body.thumbnailRef : row.thumbnailRef;
-        row.thumbnailUrl = typeof witness.body.thumbnailUrl === "string" ? witness.body.thumbnailUrl : row.thumbnailUrl;
-        row.imageWidth = Number.isFinite(witness.body.imageWidth) ? witness.body.imageWidth : row.imageWidth;
-        row.imageHeight = Number.isFinite(witness.body.imageHeight) ? witness.body.imageHeight : row.imageHeight;
-        row.searchStatus = typeof witness.body.searchStatus === "string" ? witness.body.searchStatus : row.searchStatus;
-        row.searchPolicy = typeof witness.body.searchPolicy === "string" ? witness.body.searchPolicy : row.searchPolicy;
-        row.reindexedIndexId = typeof witness.body.reindexedIndexId === "string" ? witness.body.reindexedIndexId : row.reindexedIndexId;
-        row.searchError = null;
-      }
-      if (witness.process === "asset.ingest.failed") {
-        row.processingJobId = typeof witness.body.jobId === "string" ? witness.body.jobId : row.processingJobId;
-        row.processingAttempt = Number.isFinite(witness.body.attempt) ? witness.body.attempt : row.processingAttempt;
-        row.processingError = typeof witness.body.reason === "string" ? witness.body.reason : row.processingError;
-      }
-      if (witness.process === "asset.search.reindex") {
-        row.searchStatus = typeof witness.body.searchStatus === "string" ? witness.body.searchStatus : "reindexed";
-        row.searchPolicy = typeof witness.body.searchPolicy === "string" ? witness.body.searchPolicy : row.searchPolicy;
-        row.reindexedIndexId = typeof witness.body.reindexedIndexId === "string" ? witness.body.reindexedIndexId : row.reindexedIndexId;
-        row.searchError = null;
-      }
-      if (witness.process === "asset.search.reindex.failed") {
-        row.searchError = typeof witness.body.reason === "string" ? witness.body.reason : row.searchError;
-      }
-      rows.set(id, row);
-    }
+  notifications: delegatedModuleProjector("notifications", emptyRows),
 
-    for (const [assetId, job] of jobsByAsset) {
-      const row = rows.get(assetId) ?? defaultRow(assetId);
-      row.processingJobId = job.id;
-      row.processingStatus = job.status;
-      row.processingAttempt = Number.isFinite(job.attempt) ? job.attempt : row.processingAttempt;
-      row.processingUpdatedAt = job.completedAt ?? job.availableAt ?? job.createdAt ?? row.processingUpdatedAt;
-      if (job.status === "succeeded") row.processingError = null;
-      else if (typeof job.lastError === "string") row.processingError = job.lastError;
-      rows.set(assetId, row);
-    }
+  notificationIndex: delegatedModuleProjector("notificationIndex", emptyIndex),
 
-      for (const row of rows.values()) {
-        if (!row.downloadUrl) row.downloadUrl = assetDownloadUrl(row.contentUrl);
-        if (!row.textUrl && row.textRef) row.textUrl = assetTextUrl(row.id);
-        row.canRetryIngest = assetCanRetryIngest(row);
-        row.ingestRetryUrl = row.canRetryIngest ? assetIngestRetryUrl(row.id) : null;
-        row.canRefreshSearch = assetCanRefreshSearch(row);
-        row.searchReindexUrl = row.canRefreshSearch ? assetSearchReindexUrl(row.id) : null;
-        row.contextTitle = row.context ? (titles.get(row.context) ?? row.context) : null;
-      }
+  outboundRequests: delegatedModuleProjector("outboundRequests", emptyRows),
 
-    const assetRows = [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
-    const attachments = assetAttachmentMaps(currentRelations(witnesses), assetRows, { titles, kinds: modules, contexts });
-    for (const row of assetRows) {
-      row.attachedTo = attachments.byAsset.get(row.id) ?? [];
-      row.attachedToRows = attachments.byAssetRows.get(row.id) ?? [];
-      row.attachmentCount = row.attachedTo.length;
-    }
-    return assetRows;
-  },
+  outboundRequestIndex: delegatedModuleProjector("outboundRequestIndex", emptyIndex),
 
-  assetIndex(witnesses) {
-    const rows = moduleProjectors.assets(witnesses);
-    const byId = Object.create(null);
-    for (const row of rows) byId[row.id] = row;
-    return { rows, byId };
-  },
+  webhookDeliveries: delegatedModuleProjector("webhookDeliveries", emptyRows),
 
-  jobs(witnesses) {
-    const rows = new Map();
-    const owners = projectors.owners(witnesses);
-    const modules = moduleProjectors.modules(witnesses);
-    const titles = new Map(
-      currentRelations(witnesses)
-        .filter(row => row.rel === "hasTitle")
-        .map(row => [row.from, row.to])
-    );
+  webhookDeliveryIndex: delegatedModuleProjector("webhookDeliveryIndex", emptyIndex),
 
-    for (const [id, kind] of modules) {
-      if (kind !== "job") continue;
-      rows.set(id, {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        serverRunner: null,
-        handler: null,
-        actor: null,
-        payload: null,
-        status: "queued",
-        availableAt: null,
-        createdAt: null,
-        completedAt: null,
-        idempotencyKey: null,
-        maxAttempts: null,
-        retryDelayMs: null,
-        attempt: 0,
-        lastError: null
-      });
-    }
+  sqlDatasources: delegatedModuleProjector("sqlDatasources", emptyRows),
 
-    for (const witness of witnesses) {
-      if (!witness.process.startsWith("jobs.queue.") || !witness.body?.id) continue;
-      const id = String(witness.body.id);
-      const row = rows.get(id) ?? {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        serverRunner: null,
-        handler: null,
-        actor: null,
-        payload: null,
-        status: "queued",
-        availableAt: null,
-        createdAt: null,
-        completedAt: null,
-        idempotencyKey: null,
-        maxAttempts: null,
-        retryDelayMs: null,
-        attempt: 0,
-        lastError: null
-      };
-      row.serverRunner = typeof witness.body.serverRunner === "string" ? witness.body.serverRunner : row.serverRunner;
-      row.handler = typeof witness.body.handler === "string" ? witness.body.handler : row.handler;
-      row.actor = typeof witness.body.actor === "string" ? witness.body.actor : row.actor;
-      row.title = titles.get(id) ?? row.handler ?? row.title;
-      if (Object.prototype.hasOwnProperty.call(witness.body, "payload")) row.payload = witness.body.payload;
-      row.idempotencyKey = typeof witness.body.idempotencyKey === "string" ? witness.body.idempotencyKey : row.idempotencyKey;
-      row.maxAttempts = Number.isFinite(witness.body.maxAttempts) ? witness.body.maxAttempts : row.maxAttempts;
-      row.retryDelayMs = Number.isFinite(witness.body.retryDelayMs) ? witness.body.retryDelayMs : row.retryDelayMs;
-      if (Number.isFinite(witness.body.attempt)) row.attempt = witness.body.attempt;
-      if (typeof witness.body.availableAt === "string") row.availableAt = witness.body.availableAt;
-      if (typeof witness.body.nextAvailableAt === "string") row.availableAt = witness.body.nextAvailableAt;
-      if (typeof witness.body.createdAt === "string") row.createdAt = witness.body.createdAt;
-      if (typeof witness.body.completedAt === "string") row.completedAt = witness.body.completedAt;
-      if (typeof witness.body.reason === "string") row.lastError = witness.body.reason;
+  sqlDatasourceIndex: delegatedModuleProjector("sqlDatasourceIndex", emptyIndex),
 
-      if (witness.process === "jobs.queue.enqueue") row.status = "queued";
-      if (witness.process === "jobs.queue.start") row.status = "running";
-      if (witness.process === "jobs.queue.retry") row.status = "queued";
-      if (witness.process === "jobs.queue.succeeded") row.status = "succeeded";
-      if (witness.process === "jobs.queue.deadLetter") row.status = "dead-letter";
-      rows.set(id, row);
-    }
+  sqlOperations: delegatedModuleProjector("sqlOperations", emptyRows),
 
-    return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  },
+  sqlOperationIndex: delegatedModuleProjector("sqlOperationIndex", emptyIndex),
 
-  jobIndex(witnesses) {
-    const rows = moduleProjectors.jobs(witnesses);
-    const byId = Object.create(null);
-    for (const row of rows) byId[row.id] = row;
-    return { rows, byId };
-  },
+  searchIndexes: delegatedModuleProjector("searchIndexes", emptyRows),
 
-  notifications(witnesses) {
-    const rows = new Map();
-    const owners = projectors.owners(witnesses);
-    const contexts = moduleProjectors.objectContexts(witnesses);
-    const modules = moduleProjectors.modules(witnesses);
-    const jobIndex = moduleProjectors.jobIndex(witnesses).byId;
-    const titles = new Map(
-      currentRelations(witnesses)
-        .filter(row => row.rel === "hasTitle")
-        .map(row => [row.from, row.to])
-    );
-
-    for (const [id, kind] of modules) {
-      if (kind !== "notification") continue;
-      rows.set(id, {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        channel: null,
-        recipient: null,
-        subject: null,
-        sender: null,
-        template: null,
-        vars: null,
-        text: null,
-        preview: null,
-        transport: "stub",
-        jobId: null,
-        status: "queued",
-        providerMessageId: null,
-        lastError: null
-      });
-    }
-
-    for (const witness of witnesses) {
-      if (!/^notify\.(email|sms)\./.test(witness.process) || !witness.body?.id) continue;
-      const id = String(witness.body.id);
-      const row = rows.get(id) ?? {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        channel: null,
-        recipient: null,
-        subject: null,
-        sender: null,
-        template: null,
-        vars: null,
-        text: null,
-        preview: null,
-        transport: "stub",
-        jobId: null,
-        status: "queued",
-        providerMessageId: null,
-        lastError: null
-      };
-      row.context = contexts.get(id) ?? (typeof witness.body.context === "string" ? witness.body.context : row.context);
-      row.channel = witness.process.startsWith("notify.email.") ? "email" : "sms";
-      row.recipient = typeof witness.body.to === "string" ? witness.body.to : row.recipient;
-      row.subject = typeof witness.body.subject === "string" ? witness.body.subject : row.subject;
-      row.sender = typeof witness.body.sender === "string" ? witness.body.sender : row.sender;
-      row.template = typeof witness.body.template === "string" ? witness.body.template : row.template;
-      if (Object.prototype.hasOwnProperty.call(witness.body, "vars")) row.vars = witness.body.vars;
-      row.text = typeof witness.body.text === "string" ? witness.body.text : row.text;
-      row.preview = typeof witness.body.preview === "string" ? witness.body.preview : row.preview;
-      row.transport = typeof witness.body.transport === "string" ? witness.body.transport : row.transport;
-      row.jobId = typeof witness.body.jobId === "string" ? witness.body.jobId : row.jobId;
-      row.providerMessageId = typeof witness.body.providerMessageId === "string" ? witness.body.providerMessageId : row.providerMessageId;
-      row.lastError = typeof witness.body.reason === "string" ? witness.body.reason : row.lastError;
-      row.title = titles.get(id) ?? row.subject ?? row.recipient ?? row.title;
-      rows.set(id, row);
-    }
-
-    return [...rows.values()]
-      .map(row => {
-        const job = row.jobId ? jobIndex[row.jobId] ?? null : null;
-        let status = row.status;
-        if (job?.status === "running") status = "running";
-        else if (job?.status === "queued") status = "queued";
-        else if (job?.status === "dead-letter") status = "failed";
-        else if (row.providerMessageId) status = "sent";
-        else if (job?.status === "succeeded") status = "sent";
-        return {
-          ...row,
-          status,
-          attempt: job?.attempt ?? 0,
-          maxAttempts: job?.maxAttempts ?? null,
-          retryDelayMs: job?.retryDelayMs ?? null,
-          lastError: row.lastError ?? job?.lastError ?? null
-        };
-      })
-      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  },
-
-  notificationIndex(witnesses) {
-    const rows = moduleProjectors.notifications(witnesses);
-    const byId = Object.create(null);
-    for (const row of rows) byId[row.id] = row;
-    return { rows, byId };
-  },
-
-  outboundRequests(witnesses) {
-    const rows = new Map();
-    const owners = projectors.owners(witnesses);
-    const contexts = moduleProjectors.objectContexts(witnesses);
-    const modules = moduleProjectors.modules(witnesses);
-    const titles = new Map(
-      currentRelations(witnesses)
-        .filter(row => row.rel === "hasTitle")
-        .map(row => [row.from, row.to])
-    );
-
-    for (const [id, kind] of modules) {
-      if (kind !== "outboundRequest") continue;
-      rows.set(id, {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        serverRunner: null,
-        target: null,
-        url: null,
-        method: "GET",
-        transport: null,
-        status: "pending",
-        authKind: null,
-        authConfigKey: null,
-        requestHeaderNames: [],
-        requestBodyKind: "none",
-        timeoutMs: null,
-        maxAttempts: null,
-        retryDelayMs: null,
-        attempt: 0,
-        correlationId: null,
-        externalRefId: null,
-        responseStatus: null,
-        responseContentType: null,
-        lastError: null
-      });
-    }
-
-    for (const witness of witnesses) {
-      if (!witness.process.startsWith("http.outbound.") || !witness.body?.id) continue;
-      const id = String(witness.body.id);
-      const row = rows.get(id) ?? {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        serverRunner: null,
-        target: null,
-        url: null,
-        method: "GET",
-        transport: null,
-        status: "pending",
-        authKind: null,
-        authConfigKey: null,
-        requestHeaderNames: [],
-        requestBodyKind: "none",
-        timeoutMs: null,
-        maxAttempts: null,
-        retryDelayMs: null,
-        attempt: 0,
-        correlationId: null,
-        externalRefId: null,
-        responseStatus: null,
-        responseContentType: null,
-        lastError: null
-      };
-      row.context = contexts.get(id) ?? (typeof witness.body.context === "string" ? witness.body.context : row.context);
-      row.serverRunner = typeof witness.body.serverRunner === "string" ? witness.body.serverRunner : row.serverRunner;
-      row.target = typeof witness.body.target === "string" ? witness.body.target : row.target;
-      row.url = typeof witness.body.url === "string" ? witness.body.url : row.url;
-      row.method = typeof witness.body.method === "string" ? witness.body.method : row.method;
-      row.transport = typeof witness.body.transport === "string" ? witness.body.transport : row.transport;
-      row.authKind = typeof witness.body.authKind === "string" ? witness.body.authKind : row.authKind;
-      row.authConfigKey = typeof witness.body.authConfigKey === "string" ? witness.body.authConfigKey : row.authConfigKey;
-      row.requestHeaderNames = Array.isArray(witness.body.requestHeaderNames)
-        ? witness.body.requestHeaderNames.map(value => String(value))
-        : row.requestHeaderNames;
-      row.requestBodyKind = typeof witness.body.requestBodyKind === "string" ? witness.body.requestBodyKind : row.requestBodyKind;
-      row.timeoutMs = Number.isFinite(witness.body.timeoutMs) ? witness.body.timeoutMs : row.timeoutMs;
-      row.maxAttempts = Number.isFinite(witness.body.maxAttempts) ? witness.body.maxAttempts : row.maxAttempts;
-      row.retryDelayMs = Number.isFinite(witness.body.retryDelayMs) ? witness.body.retryDelayMs : row.retryDelayMs;
-      row.attempt = Number.isFinite(witness.body.attempt) ? witness.body.attempt : row.attempt;
-      row.correlationId = typeof witness.body.correlationId === "string" ? witness.body.correlationId : row.correlationId;
-      row.externalRefId = typeof witness.body.externalRefId === "string" ? witness.body.externalRefId : row.externalRefId;
-      row.responseStatus = Number.isFinite(witness.body.responseStatus) ? witness.body.responseStatus : row.responseStatus;
-      row.responseContentType = typeof witness.body.responseContentType === "string" ? witness.body.responseContentType : row.responseContentType;
-      row.lastError = typeof witness.body.reason === "string" ? witness.body.reason : row.lastError;
-      if (witness.process === "http.outbound.request") row.status = "pending";
-      if (witness.process === "http.outbound.attempt") row.status = "running";
-      if (witness.process === "http.outbound.retry") row.status = "retrying";
-      if (witness.process === "http.outbound.succeeded") row.status = "succeeded";
-      if (witness.process === "http.outbound.failed") row.status = "failed";
-      row.title = titles.get(id) ?? row.target ?? row.title;
-      rows.set(id, row);
-    }
-
-    return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  },
-
-  outboundRequestIndex(witnesses) {
-    const rows = moduleProjectors.outboundRequests(witnesses);
-    const byId = Object.create(null);
-    for (const row of rows) byId[row.id] = row;
-    return { rows, byId };
-  },
-
-  webhookDeliveries(witnesses) {
-    const rows = new Map();
-    const owners = projectors.owners(witnesses);
-    const contexts = moduleProjectors.objectContexts(witnesses);
-    const modules = moduleProjectors.modules(witnesses);
-    const jobIndex = moduleProjectors.jobIndex(witnesses).byId;
-    const titles = new Map(
-      currentRelations(witnesses)
-        .filter(row => row.rel === "hasTitle")
-        .map(row => [row.from, row.to])
-    );
-
-    for (const [id, kind] of modules) {
-      if (kind !== "webhookDelivery") continue;
-      rows.set(id, {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        serverRunner: null,
-        target: null,
-        deliveryId: null,
-        contentType: null,
-        sizeBytes: null,
-        storageKey: null,
-        signatureStatus: null,
-        replayStatus: null,
-        status: "received",
-        receivedAt: null,
-        timestamp: null,
-        correlationId: null,
-        jobId: null,
-        lastError: null
-      });
-    }
-
-    for (const witness of witnesses) {
-      if (!witness.process.startsWith("webhook.inbound.") || !witness.body?.id) continue;
-      const id = String(witness.body.id);
-      const row = rows.get(id) ?? {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        serverRunner: null,
-        target: null,
-        deliveryId: null,
-        contentType: null,
-        sizeBytes: null,
-        storageKey: null,
-        signatureStatus: null,
-        replayStatus: null,
-        status: "received",
-        receivedAt: null,
-        timestamp: null,
-        correlationId: null,
-        jobId: null,
-        lastError: null
-      };
-      row.context = contexts.get(id) ?? (typeof witness.body.context === "string" ? witness.body.context : row.context);
-      row.serverRunner = typeof witness.body.serverRunner === "string" ? witness.body.serverRunner : row.serverRunner;
-      row.target = typeof witness.body.target === "string" ? witness.body.target : row.target;
-      row.deliveryId = typeof witness.body.deliveryId === "string" ? witness.body.deliveryId : row.deliveryId;
-      row.contentType = typeof witness.body.contentType === "string" ? witness.body.contentType : row.contentType;
-      row.sizeBytes = Number.isFinite(witness.body.sizeBytes) ? witness.body.sizeBytes : row.sizeBytes;
-      row.storageKey = typeof witness.body.storageKey === "string" ? witness.body.storageKey : row.storageKey;
-      row.receivedAt = typeof witness.body.receivedAt === "string" ? witness.body.receivedAt : row.receivedAt;
-      row.timestamp = typeof witness.body.timestamp === "string" ? witness.body.timestamp : row.timestamp;
-      row.correlationId = typeof witness.body.correlationId === "string" ? witness.body.correlationId : row.correlationId;
-      row.jobId = typeof witness.body.jobId === "string" ? witness.body.jobId : row.jobId;
-      row.lastError = typeof witness.body.reason === "string" ? witness.body.reason : row.lastError;
-      if (witness.process === "webhook.inbound.receive") row.status = "received";
-      if (witness.process === "webhook.inbound.verify.failed") {
-        row.signatureStatus = "invalid";
-        row.status = "rejected";
-      }
-      if (witness.process === "webhook.inbound.replay.failed") {
-        row.signatureStatus = row.signatureStatus ?? "verified";
-        row.replayStatus = "duplicate";
-        row.status = "rejected";
-      }
-      if (witness.process === "webhook.inbound.accepted") {
-        row.signatureStatus = "verified";
-        row.replayStatus = "accepted";
-        row.status = "accepted";
-      }
-      if (witness.process === "webhook.inbound.processed") {
-        row.signatureStatus = "verified";
-        row.replayStatus = row.replayStatus ?? "accepted";
-        row.status = "processed";
-      }
-      if (witness.process === "webhook.inbound.process.failed") {
-        row.signatureStatus = "verified";
-        row.replayStatus = row.replayStatus ?? "accepted";
-      }
-      row.title = titles.get(id) ?? row.target ?? row.deliveryId ?? row.title;
-      rows.set(id, row);
-    }
-
-    return [...rows.values()]
-      .map(row => {
-        const job = row.jobId ? jobIndex[row.jobId] ?? null : null;
-        let status = row.status;
-        if (job?.status === "running") status = "running";
-        else if (job?.status === "queued") status = "queued";
-        else if (job?.status === "dead-letter") status = "failed";
-        else if (job?.status === "succeeded" && row.status !== "processed") status = "processed";
-        return {
-          ...row,
-          status,
-          attempt: job?.attempt ?? 0,
-          maxAttempts: job?.maxAttempts ?? null,
-          retryDelayMs: job?.retryDelayMs ?? null,
-          lastError: row.lastError ?? job?.lastError ?? null
-        };
-      })
-      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  },
-
-  webhookDeliveryIndex(witnesses) {
-    const rows = moduleProjectors.webhookDeliveries(witnesses);
-    const byId = Object.create(null);
-    for (const row of rows) byId[row.id] = row;
-    return { rows, byId };
-  },
-
-  sqlDatasources(witnesses) {
-    const rows = new Map();
-    const owners = projectors.owners(witnesses);
-    const contexts = moduleProjectors.objectContexts(witnesses);
-    const modules = moduleProjectors.modules(witnesses);
-    const titles = new Map(
-      currentRelations(witnesses)
-        .filter(row => row.rel === "hasTitle")
-        .map(row => [row.from, row.to])
-    );
-    const operationRows = moduleProjectors.sqlOperations(witnesses);
-
-    for (const [id, kind] of modules) {
-      if (kind !== "sqlDatasource") continue;
-      rows.set(id, {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        serverRunner: null,
-        provider: null,
-        datasourceName: null,
-        migrationTable: null,
-        status: "configured",
-        path: null,
-        adapterStatus: null,
-        lastError: null,
-        operationCount: 0
-      });
-    }
-
-    for (const witness of witnesses) {
-      if (!witness.process.startsWith("db.sql.datasource.") || !witness.body?.id) continue;
-      const id = String(witness.body.id);
-      const row = rows.get(id) ?? {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        serverRunner: null,
-        provider: null,
-        datasourceName: null,
-        migrationTable: null,
-        status: "configured",
-        path: null,
-        adapterStatus: null,
-        lastError: null,
-        operationCount: 0
-      };
-      row.serverRunner = typeof witness.body.serverRunner === "string" ? witness.body.serverRunner : row.serverRunner;
-      row.provider = typeof witness.body.provider === "string" ? witness.body.provider : row.provider;
-      row.datasourceName = typeof witness.body.datasourceName === "string" ? witness.body.datasourceName : row.datasourceName;
-      row.migrationTable = typeof witness.body.migrationTable === "string" ? witness.body.migrationTable : row.migrationTable;
-      row.path = typeof witness.body.path === "string" ? witness.body.path : row.path;
-      row.adapterStatus = typeof witness.body.adapterStatus === "string" ? witness.body.adapterStatus : row.adapterStatus;
-      row.status = typeof witness.body.status === "string" ? witness.body.status : row.status;
-      row.lastError = typeof witness.body.reason === "string"
-        ? witness.body.reason
-        : (typeof witness.body.lastError === "string" ? witness.body.lastError : row.lastError);
-      row.title = titles.get(id) ?? row.datasourceName ?? row.title;
-      rows.set(id, row);
-    }
-
-    const operationCounts = new Map();
-    for (const operation of operationRows) {
-      if (!operation.datasourceId) continue;
-      operationCounts.set(operation.datasourceId, (operationCounts.get(operation.datasourceId) ?? 0) + 1);
-    }
-
-    return [...rows.values()]
-      .map(row => ({ ...row, operationCount: operationCounts.get(row.id) ?? 0 }))
-      .sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  },
-
-  sqlDatasourceIndex(witnesses) {
-    const rows = moduleProjectors.sqlDatasources(witnesses);
-    const byId = Object.create(null);
-    for (const row of rows) byId[row.id] = row;
-    return { rows, byId };
-  },
-
-  sqlOperations(witnesses) {
-    const rows = new Map();
-    const owners = projectors.owners(witnesses);
-    const contexts = moduleProjectors.objectContexts(witnesses);
-    const modules = moduleProjectors.modules(witnesses);
-    const titles = new Map(
-      currentRelations(witnesses)
-        .filter(row => row.rel === "hasTitle")
-        .map(row => [row.from, row.to])
-    );
-
-    for (const [id, kind] of modules) {
-      if (kind !== "sqlOperation") continue;
-      rows.set(id, {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        serverRunner: null,
-        datasourceId: null,
-        datasourceName: null,
-        provider: null,
-        kind: null,
-        status: "pending",
-        rowCount: 0,
-        changes: 0,
-        lastInsertRowid: 0,
-        migrationCount: 0,
-        skippedCount: 0,
-        stepCount: 0,
-        lastError: null
-      });
-    }
-
-    for (const witness of witnesses) {
-      if (!witness.process.startsWith("db.sql.") || !witness.body?.id || witness.process.startsWith("db.sql.datasource.")) continue;
-      const id = String(witness.body.id);
-      const row = rows.get(id) ?? {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        serverRunner: null,
-        datasourceId: null,
-        datasourceName: null,
-        provider: null,
-        kind: null,
-        status: "pending",
-        rowCount: 0,
-        changes: 0,
-        lastInsertRowid: 0,
-        migrationCount: 0,
-        skippedCount: 0,
-        stepCount: 0,
-        lastError: null
-      };
-      row.serverRunner = typeof witness.body.serverRunner === "string" ? witness.body.serverRunner : row.serverRunner;
-      row.datasourceId = typeof witness.body.datasourceId === "string" ? witness.body.datasourceId : row.datasourceId;
-      row.datasourceName = typeof witness.body.datasourceName === "string" ? witness.body.datasourceName : row.datasourceName;
-      row.provider = typeof witness.body.provider === "string" ? witness.body.provider : row.provider;
-      row.kind = typeof witness.body.kind === "string" ? witness.body.kind : row.kind;
-      row.rowCount = Number.isFinite(witness.body.rowCount) ? witness.body.rowCount : row.rowCount;
-      row.changes = Number.isFinite(witness.body.changes) ? witness.body.changes : row.changes;
-      row.lastInsertRowid = Number.isFinite(witness.body.lastInsertRowid) ? witness.body.lastInsertRowid : row.lastInsertRowid;
-      row.migrationCount = Number.isFinite(witness.body.migrationCount) ? witness.body.migrationCount : row.migrationCount;
-      row.skippedCount = Number.isFinite(witness.body.skippedCount) ? witness.body.skippedCount : row.skippedCount;
-      row.stepCount = Number.isFinite(witness.body.stepCount) ? witness.body.stepCount : row.stepCount;
-      row.lastError = typeof witness.body.reason === "string" ? witness.body.reason : row.lastError;
-      row.status = witness.process.endsWith(".failed") ? "failed" : "succeeded";
-      row.title = titles.get(id) ?? row.title;
-      rows.set(id, row);
-    }
-
-    return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  },
-
-  sqlOperationIndex(witnesses) {
-    const rows = moduleProjectors.sqlOperations(witnesses);
-    const byId = Object.create(null);
-    for (const row of rows) byId[row.id] = row;
-    return { rows, byId };
-  },
-
-  searchIndexes(witnesses) {
-    const rows = new Map();
-    const owners = projectors.owners(witnesses);
-    const contexts = moduleProjectors.objectContexts(witnesses);
-    const modules = moduleProjectors.modules(witnesses);
-    const titles = new Map(
-      currentRelations(witnesses)
-        .filter(row => row.rel === "hasTitle")
-        .map(row => [row.from, row.to])
-    );
-
-    for (const [id, kind] of modules) {
-      if (kind !== "searchIndex") continue;
-      rows.set(id, {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        serverRunner: null,
-        provider: null,
-        name: "main",
-        status: "pending",
-        sourceCount: 0,
-        documentCount: 0,
-        assetCount: 0,
-        queryCount: 0,
-        lastBuiltAt: null,
-        lastQueryAt: null,
-        path: null,
-        lastError: null
-      });
-    }
-
-    for (const witness of witnesses) {
-      if (!witness.process.startsWith("search.index.") || !witness.body?.id) continue;
-      const id = String(witness.body.id);
-      const row = rows.get(id) ?? {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        serverRunner: null,
-        provider: null,
-        name: "main",
-        status: "pending",
-        sourceCount: 0,
-        documentCount: 0,
-        assetCount: 0,
-        queryCount: 0,
-        lastBuiltAt: null,
-        lastQueryAt: null,
-        path: null,
-        lastError: null
-      };
-      row.serverRunner = typeof witness.body.serverRunner === "string" ? witness.body.serverRunner : row.serverRunner;
-      row.provider = typeof witness.body.provider === "string" ? witness.body.provider : row.provider;
-      row.name = typeof witness.body.name === "string" ? witness.body.name : row.name;
-      row.sourceCount = Number.isFinite(witness.body.sourceCount) ? witness.body.sourceCount : row.sourceCount;
-      row.documentCount = Number.isFinite(witness.body.documentCount) ? witness.body.documentCount : row.documentCount;
-      row.assetCount = Number.isFinite(witness.body.assetCount) ? witness.body.assetCount : row.assetCount;
-      row.queryCount = Number.isFinite(witness.body.queryCount) ? witness.body.queryCount : row.queryCount;
-      row.lastBuiltAt = typeof witness.body.lastBuiltAt === "string" ? witness.body.lastBuiltAt : row.lastBuiltAt;
-      row.lastQueryAt = typeof witness.body.lastQueryAt === "string" ? witness.body.lastQueryAt : row.lastQueryAt;
-      row.path = typeof witness.body.path === "string" ? witness.body.path : row.path;
-      row.lastError = typeof witness.body.reason === "string" ? witness.body.reason : row.lastError;
-      if (witness.process === "search.index.build" || witness.process === "search.index.reindex" || witness.process === "search.index.query") row.status = "ready";
-      if (witness.process.endsWith(".failed")) row.status = "failed";
-      row.title = titles.get(id) ?? row.title;
-      rows.set(id, row);
-    }
-
-    return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  },
-
-  searchIndexIndex(witnesses) {
-    const rows = moduleProjectors.searchIndexes(witnesses);
-    const byId = Object.create(null);
-    for (const row of rows) byId[row.id] = row;
-    return { rows, byId };
-  },
+  searchIndexIndex: delegatedModuleProjector("searchIndexIndex", emptyIndex),
 
   compiledArtifacts(witnesses) {
     const rows = [];
@@ -2612,173 +1690,13 @@ export const moduleProjectors = {
     return { rows: identities, byId, byUsername, byActor };
   },
 
-  oauthFlows(witnesses) {
-    const rows = new Map();
-    const owners = projectors.owners(witnesses);
-    const contexts = moduleProjectors.objectContexts(witnesses);
-    const modules = moduleProjectors.modules(witnesses);
-    const titles = new Map(
-      currentRelations(witnesses)
-        .filter(row => row.rel === "hasTitle")
-        .map(row => [row.from, row.to])
-    );
+  oauthFlows: delegatedModuleProjector("oauthFlows", emptyRows),
 
-    for (const [id, kind] of modules) {
-      if (kind !== "oauthFlow") continue;
-      rows.set(id, {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        serverRunner: null,
-        provider: null,
-        state: null,
-        action: null,
-        requestedIdentity: null,
-        linkedIdentity: null,
-        createdIdentity: null,
-        providerAccountId: null,
-        status: "started",
-        callbackUrl: null,
-        authorizeUrl: null,
-        lastError: null
-      });
-    }
+  oauthFlowIndex: delegatedModuleProjector("oauthFlowIndex", () => ({ rows: [], byId: Object.create(null), byState: Object.create(null) })),
 
-    for (const witness of witnesses) {
-      if (!witness.process.startsWith("auth.oauth.") || !witness.body?.id) continue;
-      const id = String(witness.body.id);
-      const row = rows.get(id) ?? {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        serverRunner: null,
-        provider: null,
-        state: null,
-        action: null,
-        requestedIdentity: null,
-        linkedIdentity: null,
-        createdIdentity: null,
-        providerAccountId: null,
-        status: "started",
-        callbackUrl: null,
-        authorizeUrl: null,
-        lastError: null
-      };
-      row.serverRunner = typeof witness.body.serverRunner === "string" ? witness.body.serverRunner : row.serverRunner;
-      row.provider = typeof witness.body.provider === "string" ? witness.body.provider : row.provider;
-      row.state = typeof witness.body.state === "string" ? witness.body.state : row.state;
-      row.action = typeof witness.body.action === "string" ? witness.body.action : row.action;
-      row.requestedIdentity = typeof witness.body.requestedIdentity === "string" ? witness.body.requestedIdentity : row.requestedIdentity;
-      row.linkedIdentity = typeof witness.body.identity === "string" ? witness.body.identity : row.linkedIdentity;
-      row.createdIdentity = witness.body.createdIdentity === true ? row.linkedIdentity : row.createdIdentity;
-      row.providerAccountId = typeof witness.body.providerAccountId === "string" ? witness.body.providerAccountId : row.providerAccountId;
-      row.callbackUrl = typeof witness.body.callbackUrl === "string" ? witness.body.callbackUrl : row.callbackUrl;
-      row.authorizeUrl = typeof witness.body.authorizeUrl === "string" ? witness.body.authorizeUrl : row.authorizeUrl;
-      row.lastError = typeof witness.body.reason === "string" ? witness.body.reason : row.lastError;
-      if (witness.process === "auth.oauth.start") row.status = "started";
-      if (witness.process === "auth.oauth.callback") row.status = "callback";
-      if (witness.process === "auth.oauth.link") row.status = witness.body.createdIdentity === true ? "created" : "linked";
-      if (witness.process === "auth.oauth.session") row.status = "authenticated";
-      if (witness.process.endsWith(".failed")) row.status = "failed";
-      row.title = titles.get(id) ?? row.title;
-      rows.set(id, row);
-    }
+  oauthLinks: delegatedModuleProjector("oauthLinks", emptyRows),
 
-    return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  },
-
-  oauthFlowIndex(witnesses) {
-    const rows = moduleProjectors.oauthFlows(witnesses);
-    const byId = Object.create(null);
-    const byState = Object.create(null);
-    for (const row of rows) {
-      byId[row.id] = row;
-      if (row.state) byState[row.state] = row;
-    }
-    return { rows, byId, byState };
-  },
-
-  oauthLinks(witnesses) {
-    const rows = new Map();
-    const owners = projectors.owners(witnesses);
-    const contexts = moduleProjectors.objectContexts(witnesses);
-    const modules = moduleProjectors.modules(witnesses);
-    const identities = moduleProjectors.identityIndex(witnesses).byId;
-    const titles = new Map(
-      currentRelations(witnesses)
-        .filter(row => row.rel === "hasTitle")
-        .map(row => [row.from, row.to])
-    );
-
-    for (const [id, kind] of modules) {
-      if (kind !== "oauthLink") continue;
-      rows.set(id, {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        serverRunner: null,
-        provider: null,
-        providerAccountId: null,
-        identity: null,
-        actor: null,
-        label: null,
-        flowId: null,
-        status: "linked",
-        createdIdentity: false,
-        lastError: null
-      });
-    }
-
-    for (const witness of witnesses) {
-      if (!["auth.oauth.link", "auth.oauth.link.failed"].includes(witness.process) || !witness.body?.linkId) continue;
-      const id = String(witness.body.linkId);
-      const row = rows.get(id) ?? {
-        id,
-        title: titles.get(id) ?? id,
-        owner: owners.get(id) ?? null,
-        context: contexts.get(id) ?? null,
-        serverRunner: null,
-        provider: null,
-        providerAccountId: null,
-        identity: null,
-        actor: null,
-        label: null,
-        flowId: null,
-        status: "linked",
-        createdIdentity: false,
-        lastError: null
-      };
-      row.serverRunner = typeof witness.body.serverRunner === "string" ? witness.body.serverRunner : row.serverRunner;
-      row.provider = typeof witness.body.provider === "string" ? witness.body.provider : row.provider;
-      row.providerAccountId = typeof witness.body.providerAccountId === "string" ? witness.body.providerAccountId : row.providerAccountId;
-      row.identity = typeof witness.body.identity === "string" ? witness.body.identity : row.identity;
-      const identity = row.identity ? identities[row.identity] ?? null : null;
-      row.actor = typeof witness.body.actor === "string" ? witness.body.actor : (identity?.actor ?? row.actor);
-      row.label = typeof witness.body.label === "string" ? witness.body.label : (identity?.label ?? row.label);
-      row.flowId = typeof witness.body.id === "string" ? witness.body.id : row.flowId;
-      row.createdIdentity = witness.body.createdIdentity === true || row.createdIdentity === true;
-      row.lastError = typeof witness.body.reason === "string" ? witness.body.reason : row.lastError;
-      row.status = witness.process.endsWith(".failed") ? "failed" : "linked";
-      row.title = titles.get(id) ?? row.title;
-      rows.set(id, row);
-    }
-
-    return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  },
-
-  oauthLinkIndex(witnesses) {
-    const rows = moduleProjectors.oauthLinks(witnesses);
-    const byId = Object.create(null);
-    const byProviderAccount = Object.create(null);
-    for (const row of rows) {
-      byId[row.id] = row;
-      if (row.provider && row.providerAccountId) byProviderAccount[`${row.provider}:${row.providerAccountId}`] = row;
-    }
-    return { rows, byId, byProviderAccount };
-  },
+  oauthLinkIndex: delegatedModuleProjector("oauthLinkIndex", () => ({ rows: [], byId: Object.create(null), byProviderAccount: Object.create(null) })),
 
   servedRoutes(witnesses) {
     const routes = new Map(moduleProjectors.routes(witnesses).map(route => [route.id, route]));

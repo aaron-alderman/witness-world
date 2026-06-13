@@ -1,5 +1,16 @@
 import { handlerCatalog } from "./handler-catalog.js";
 import { createHttpOutboundHandlers } from "./handlers.js";
+import {
+  createHttpOutboundIoServices,
+  looksJsonContentType,
+  outboundReadShape,
+  responseHeadersToObject
+} from "./io-services.js";
+import {
+  delayWithSignal,
+  executeHttpOutbound
+} from "./glue.js";
+import { httpOutboundModuleProjectors } from "./projections.js";
 
 export const bundleId = "bundle-http-outbound";
 
@@ -21,6 +32,39 @@ export const routes = Object.freeze([
 
 export const surfaces = Object.freeze([]);
 
+export const providers = Object.freeze([
+  {
+    kind: "capabilityDefinitions",
+    id: "http-outbound.capabilities",
+    capabilities: Object.freeze([
+      Object.freeze({
+        id: "http.outbound",
+        label: "HTTP Outbound",
+        witnessContract: Object.freeze({
+          externalRefs: Object.freeze(["externalRefId", "correlationId"])
+        })
+      })
+    ])
+  },
+  {
+    kind: "moduleProjectors",
+    id: "http-outbound.projections",
+    projectors: httpOutboundModuleProjectors
+  },
+  {
+    kind: "supportServiceFactory",
+    id: "http-outbound.support",
+    factory: () => ({
+      createHttpOutboundIoServices,
+      looksJsonContentType,
+      responseHeadersToObject,
+      outboundReadShape,
+      delayWithSignal,
+      executeHttpOutbound
+    })
+  }
+]);
+
 export function createHandlers(deps) {
   return createHttpOutboundHandlers(deps);
 }
@@ -30,5 +74,6 @@ export default {
   handlerCatalog,
   routes,
   surfaces,
+  providers,
   createHandlers
 };
