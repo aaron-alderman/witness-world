@@ -1,0 +1,2443 @@
+{
+  "runner": {
+    "id": "demo_server",
+    "handlerSet": "demo",
+    "backendHost": "backendHost",
+    "frontendHost": "frontendHost",
+    "todoProjection": "witness-world-bootstrap-todos.json",
+    "privateNotesProjection": "witness-world-bootstrap-private-notes.json"
+  },
+  "contexts": [
+    {
+      "id": "backend",
+      "label": "Backend",
+      "owner": "backendHost",
+      "stewardsJson": "[\"aaron\"]"
+    },
+    {
+      "id": "frontend",
+      "label": "Frontend",
+      "owner": "frontendHost",
+      "stewardsJson": "[\"aaron\"]"
+    }
+  ],
+  "requestPlan": [
+    {
+      "from": "contexts",
+      "url": "/api/contexts",
+      "skipIfPresentIn": "contexts",
+      "matchField": "id"
+    },
+    {
+      "from": "runner",
+      "url": "/api/server-runners",
+      "skipIfPresentIn": "serverRunners",
+      "matchField": "id"
+    },
+    {
+      "from": "runtimePluginInstalls",
+      "url": "/api/runtime-plugin-installs"
+    },
+    {
+      "from": "widgets",
+      "url": "/api/widgets"
+    },
+    {
+      "from": "operatingWidgets",
+      "url": "/api/widgets"
+    },
+    {
+      "from": "program",
+      "url": "/api/frontend-programs"
+    },
+    {
+      "from": "operatingPrograms",
+      "url": "/api/frontend-programs"
+    },
+    {
+      "from": "backendPrograms",
+      "url": "/api/backend-programs"
+    },
+    {
+      "from": "backendProgramVersions",
+      "url": "/api/backend-program-versions"
+    },
+    {
+      "from": "backendSteps",
+      "url": "/api/backend-steps"
+    },
+    {
+      "from": "backendActivations",
+      "urlTemplate": "/api/backend-program-versions/${soul}/activate",
+      "pickFields": [
+        "version"
+      ]
+    },
+    {
+      "from": "steps",
+      "url": "/api/frontend-steps"
+    },
+    {
+      "from": "operatingSteps",
+      "url": "/api/frontend-steps"
+    },
+    {
+      "from": "routes",
+      "url": "/api/routes"
+    },
+    {
+      "from": "operatingRoutes",
+      "url": "/api/routes"
+    },
+    {
+      "from": "serves",
+      "url": "/api/serve-mounts"
+    }
+  ],
+  "runtimePluginInstalls": [
+    {
+      "serverRunner": "demo_server",
+      "plugin": "plugin.authoring"
+    },
+    {
+      "serverRunner": "demo_server",
+      "plugin": "plugin.inspect"
+    },
+    {
+      "serverRunner": "demo_server",
+      "plugin": "plugin.canvas"
+    },
+    {
+      "serverRunner": "demo_server",
+      "plugin": "plugin.demo"
+    }
+  ],
+  "widgets": [
+    {
+      "id": "todo_app_widget",
+      "kind": "Page",
+      "title": "Witness Todo",
+      "attach": false,
+      "tutorialTarget": "app-root",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_session",
+      "kind": "Box",
+      "parent": "todo_app_widget",
+      "order": 0,
+      "class": "session-panel",
+      "role": "session-panel",
+      "tutorialTarget": "app-session-panel",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_session_title",
+      "kind": "Text",
+      "parent": "todo_session",
+      "order": 0,
+      "text": "Personal Projection",
+      "tutorialTarget": "app-session-title",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_session_form",
+      "kind": "Form",
+      "parent": "todo_session",
+      "order": 1,
+      "role": "login-form",
+      "tutorialTarget": "app-session-form",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_username_input",
+      "kind": "Input",
+      "parent": "todo_session_form",
+      "order": 0,
+      "name": "username",
+      "placeholder": "Username",
+      "autocomplete": "username",
+      "tutorialTarget": "app-session-username",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_password_input",
+      "kind": "Input",
+      "parent": "todo_session_form",
+      "order": 1,
+      "name": "password",
+      "placeholder": "Password",
+      "type": "password",
+      "autocomplete": "current-password",
+      "tutorialTarget": "app-session-password",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_open_button",
+      "kind": "Button",
+      "parent": "todo_session_form",
+      "order": 2,
+      "text": "Sign in",
+      "type": "submit",
+      "tutorialTarget": "app-session-submit",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_logout_button",
+      "kind": "Button",
+      "parent": "todo_session_form",
+      "order": 3,
+      "text": "Logout",
+      "type": "button",
+      "action": "logout",
+      "tutorialTarget": "app-session-logout",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_session_status",
+      "kind": "Text",
+      "parent": "todo_session",
+      "order": 2,
+      "text": "Not signed in",
+      "role": "session-status",
+      "tutorialTarget": "app-session-status",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_title",
+      "kind": "Heading",
+      "parent": "todo_app_widget",
+      "order": 1,
+      "text": "Witness Todo",
+      "level": 1,
+      "tutorialTarget": "app-title",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_form",
+      "kind": "Form",
+      "parent": "todo_app_widget",
+      "order": 2,
+      "role": "todo-form",
+      "tutorialTarget": "todo-form",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_input",
+      "kind": "Input",
+      "parent": "todo_form",
+      "order": 0,
+      "name": "title",
+      "placeholder": "New todo",
+      "tutorialTarget": "todo-input",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_add_button",
+      "kind": "Button",
+      "parent": "todo_form",
+      "order": 1,
+      "text": "Add",
+      "type": "submit",
+      "tutorialTarget": "todo-submit",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_status",
+      "kind": "Text",
+      "parent": "todo_app_widget",
+      "order": 3,
+      "text": "",
+      "class": "status",
+      "role": "app-status",
+      "tutorialTarget": "todo-status",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_list",
+      "kind": "Box",
+      "parent": "todo_app_widget",
+      "order": 4,
+      "role": "todo-list",
+      "tutorialTarget": "todo-list",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_private_notes",
+      "kind": "Box",
+      "parent": "todo_app_widget",
+      "order": 5,
+      "class": "private-notes",
+      "role": "private-notes",
+      "tutorialTarget": "private-notes-section",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_private_notes_title",
+      "kind": "Heading",
+      "parent": "todo_private_notes",
+      "order": 0,
+      "text": "Private Notes",
+      "level": 2,
+      "tutorialTarget": "note-title",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_private_notes_status",
+      "kind": "Text",
+      "parent": "todo_private_notes",
+      "order": 1,
+      "text": "Sign in to see and save notes that belong only to you.",
+      "class": "status",
+      "role": "private-notes-status",
+      "tutorialTarget": "note-status",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_private_notes_form",
+      "kind": "Form",
+      "parent": "todo_private_notes",
+      "order": 2,
+      "role": "private-note-form",
+      "tutorialTarget": "note-form",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_private_note_input",
+      "kind": "Input",
+      "parent": "todo_private_notes_form",
+      "order": 0,
+      "name": "text",
+      "placeholder": "Only your perspective can see this",
+      "tutorialTarget": "note-input",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_private_note_button",
+      "kind": "Button",
+      "parent": "todo_private_notes_form",
+      "order": 1,
+      "text": "Save note",
+      "type": "submit",
+      "tutorialTarget": "note-submit",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_private_note_list",
+      "kind": "Box",
+      "parent": "todo_private_notes",
+      "order": 3,
+      "class": "private-note-list",
+      "role": "private-note-list",
+      "tutorialTarget": "note-list",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_widget_editor",
+      "kind": "Box",
+      "parent": "todo_app_widget",
+      "order": 6,
+      "class": "widget-editor",
+      "role": "widget-editor",
+      "tutorialTarget": "widget-editor",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_widget_editor_title",
+      "kind": "Heading",
+      "parent": "todo_widget_editor",
+      "order": 0,
+      "text": "Widget Editor",
+      "level": 2,
+      "tutorialTarget": "widget-editor-title",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_widget_editor_form",
+      "kind": "Form",
+      "parent": "todo_widget_editor",
+      "order": 1,
+      "role": "widget-editor-form",
+      "tutorialTarget": "widget-editor-form",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_widget_kind",
+      "kind": "ValueEditor",
+      "parent": "todo_widget_editor_form",
+      "order": 0,
+      "name": "kind",
+      "valueType": "widget.kind",
+      "label": "Kind",
+      "placeholder": "Choose a widget kind",
+      "tutorialTarget": "widget-editor-kind",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_widget_text",
+      "kind": "ValueEditor",
+      "parent": "todo_widget_editor_form",
+      "order": 1,
+      "name": "text",
+      "valueType": "widget.text",
+      "label": "Text",
+      "placeholder": "Widget text",
+      "tutorialTarget": "widget-editor-text",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_widget_parent",
+      "kind": "ValueEditor",
+      "parent": "todo_widget_editor_form",
+      "order": 2,
+      "name": "parent",
+      "valueType": "widget.parent",
+      "label": "Parent",
+      "placeholder": "Parent widget id, blank = root",
+      "tutorialTarget": "widget-editor-parent",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_widget_order",
+      "kind": "ValueEditor",
+      "parent": "todo_widget_editor_form",
+      "order": 3,
+      "name": "order",
+      "valueType": "widget.order",
+      "label": "Order",
+      "placeholder": "Optional order",
+      "tutorialTarget": "widget-editor-order",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_widget_editor_button",
+      "kind": "Button",
+      "parent": "todo_widget_editor_form",
+      "order": 4,
+      "text": "Add Widget",
+      "type": "submit",
+      "tutorialTarget": "widget-editor-submit",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_item_template",
+      "kind": "Box",
+      "attach": false,
+      "template": true,
+      "class": "${item.done ? 'todo-row done' : 'todo-row'}",
+      "tutorialTarget": "todo-item-row",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_item_title_template",
+      "kind": "Text",
+      "parent": "todo_item_template",
+      "order": 0,
+      "template": true,
+      "text": "${item.title}",
+      "class": "todo-title",
+      "tutorialTarget": "todo-item-title",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_item_actions_template",
+      "kind": "Box",
+      "parent": "todo_item_template",
+      "order": 1,
+      "template": true,
+      "class": "todo-actions",
+      "tutorialTarget": "todo-item-actions",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_item_toggle_template",
+      "kind": "Button",
+      "parent": "todo_item_actions_template",
+      "order": 0,
+      "template": true,
+      "text": "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? (item.done ? 'Propose Undo' : 'Propose Done') : (item.done ? 'Undo' : 'Done')}",
+      "type": "button",
+      "action": "toggleTodo",
+      "dataId": "${item.id}",
+      "dataDone": "${!item.done}",
+      "tutorialTarget": "todo-toggle",
+      "context": "frontend"
+    },
+    {
+      "id": "todo_item_delete_template",
+      "kind": "Button",
+      "parent": "todo_item_actions_template",
+      "order": 1,
+      "template": true,
+      "text": "${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Propose Delete' : 'Delete'}",
+      "type": "button",
+      "action": "deleteTodo",
+      "dataId": "${item.id}",
+      "tutorialTarget": "todo-delete",
+      "context": "frontend"
+    },
+    {
+      "id": "private_note_template",
+      "kind": "Text",
+      "attach": false,
+      "template": true,
+      "class": "private-note",
+      "text": "${item.text}",
+      "tutorialTarget": "note-item",
+      "context": "frontend"
+    },
+    {
+      "id": "private_note_empty_template",
+      "kind": "Text",
+      "attach": false,
+      "template": true,
+      "class": "private-note",
+      "text": "Sign in to see private notes.",
+      "tutorialTarget": "note-empty",
+      "context": "frontend"
+    }
+  ],
+  "operatingWidgets": [
+    {
+      "id": "world_graph_page",
+      "kind": "Page",
+      "title": "Witness World Graph",
+      "attach": false,
+      "tutorialTarget": "world-root",
+      "context": "frontend"
+    },
+    {
+      "id": "world_graph_back_link",
+      "kind": "Link",
+      "parent": "world_graph_page",
+      "order": 0,
+      "href": "/",
+      "text": "< Back to Todo",
+      "class": "world-graph-link",
+      "tutorialTarget": "world-back-link",
+      "context": "frontend"
+    },
+    {
+      "id": "world_graph_process_link",
+      "kind": "Link",
+      "parent": "world_graph_page",
+      "order": 1,
+      "href": "/process",
+      "text": "Open Process View",
+      "class": "world-graph-link",
+      "tutorialTarget": "world-process-link",
+      "context": "frontend"
+    },
+    {
+      "id": "world_session",
+      "kind": "Box",
+      "parent": "world_graph_page",
+      "order": 2,
+      "class": "session-panel",
+      "role": "session-panel",
+      "tutorialTarget": "world-session-panel",
+      "context": "frontend"
+    },
+    {
+      "id": "world_session_title",
+      "kind": "Text",
+      "parent": "world_session",
+      "order": 0,
+      "text": "Personal Projection",
+      "tutorialTarget": "world-session-title",
+      "context": "frontend"
+    },
+    {
+      "id": "world_session_form",
+      "kind": "Form",
+      "parent": "world_session",
+      "order": 1,
+      "role": "login-form",
+      "tutorialTarget": "world-session-form",
+      "context": "frontend"
+    },
+    {
+      "id": "world_username_input",
+      "kind": "Input",
+      "parent": "world_session_form",
+      "order": 0,
+      "name": "username",
+      "placeholder": "Username",
+      "autocomplete": "username",
+      "tutorialTarget": "world-session-username",
+      "context": "frontend"
+    },
+    {
+      "id": "world_password_input",
+      "kind": "Input",
+      "parent": "world_session_form",
+      "order": 1,
+      "name": "password",
+      "placeholder": "Password",
+      "type": "password",
+      "autocomplete": "current-password",
+      "tutorialTarget": "world-session-password",
+      "context": "frontend"
+    },
+    {
+      "id": "world_open_button",
+      "kind": "Button",
+      "parent": "world_session_form",
+      "order": 2,
+      "text": "Sign in",
+      "type": "submit",
+      "tutorialTarget": "world-session-submit",
+      "context": "frontend"
+    },
+    {
+      "id": "world_logout_button",
+      "kind": "Button",
+      "parent": "world_session_form",
+      "order": 3,
+      "text": "Logout",
+      "type": "button",
+      "action": "logout",
+      "tutorialTarget": "world-session-logout",
+      "context": "frontend"
+    },
+    {
+      "id": "world_session_status",
+      "kind": "Text",
+      "parent": "world_session",
+      "order": 2,
+      "text": "Not signed in",
+      "role": "session-status",
+      "tutorialTarget": "world-session-status",
+      "context": "frontend"
+    },
+    {
+      "id": "world_graph_title",
+      "kind": "Heading",
+      "parent": "world_graph_page",
+      "order": 3,
+      "text": "World Graph",
+      "level": 1,
+      "tutorialTarget": "world-title",
+      "context": "frontend"
+    },
+    {
+      "id": "world_graph_canvas",
+      "kind": "Box",
+      "parent": "world_graph_page",
+      "order": 4,
+      "class": "world-graph-body",
+      "role": "world-graph-body",
+      "tutorialTarget": "world-canvas",
+      "context": "frontend"
+    }
+  ],
+  "program": {
+    "id": "todo_frontend_program",
+    "rootWidget": "todo_app_widget",
+    "context": "frontend"
+  },
+  "operatingPrograms": [
+    {
+      "id": "world_graph_program",
+      "rootWidget": "world_graph_page",
+      "context": "frontend"
+    }
+  ],
+  "backendPrograms": [
+    {
+      "soul": "todo.todos.list",
+      "label": "Todo Todos List",
+      "context": "backend"
+    },
+    {
+      "soul": "todo.todos.create",
+      "label": "Todo Todos Create",
+      "context": "backend"
+    },
+    {
+      "soul": "todo.todos.update",
+      "label": "Todo Todos Update",
+      "context": "backend"
+    },
+    {
+      "soul": "todo.todos.delete",
+      "label": "Todo Todos Delete",
+      "context": "backend"
+    },
+    {
+      "soul": "todo.privateNotes.list",
+      "label": "Todo Private Notes List",
+      "context": "backend"
+    },
+    {
+      "soul": "todo.privateNotes.create",
+      "label": "Todo Private Notes Create",
+      "context": "backend"
+    },
+    {
+      "soul": "todo.widgets.create",
+      "label": "Todo Widgets Create",
+      "context": "backend"
+    },
+    {
+      "soul": "todo.witnesses.list",
+      "label": "Todo Witnesses List",
+      "context": "backend"
+    },
+    {
+      "soul": "todo.network.simulateError",
+      "label": "Todo Network Simulate Error",
+      "context": "backend"
+    },
+    {
+      "soul": "todo.worldGraph.read",
+      "label": "Todo World Graph Read",
+      "context": "backend"
+    },
+    {
+      "soul": "todo.processView.read",
+      "label": "Todo Process View Read",
+      "context": "backend"
+    },
+    {
+      "soul": "todo.processRun.read",
+      "label": "Todo Process Run Read",
+      "context": "backend"
+    },
+    {
+      "soul": "todo.processEvents.record",
+      "label": "Todo Process Events Record",
+      "context": "backend"
+    }
+  ],
+  "backendProgramVersions": [
+    {
+      "soul": "todo.todos.list",
+      "version": "todo.todos.list.v1",
+      "index": 0,
+      "context": "backend"
+    },
+    {
+      "soul": "todo.todos.create",
+      "version": "todo.todos.create.v1",
+      "index": 0,
+      "context": "backend"
+    },
+    {
+      "soul": "todo.todos.update",
+      "version": "todo.todos.update.v1",
+      "index": 0,
+      "context": "backend"
+    },
+    {
+      "soul": "todo.todos.delete",
+      "version": "todo.todos.delete.v1",
+      "index": 0,
+      "context": "backend"
+    },
+    {
+      "soul": "todo.privateNotes.list",
+      "version": "todo.privateNotes.list.v1",
+      "index": 0,
+      "context": "backend"
+    },
+    {
+      "soul": "todo.privateNotes.create",
+      "version": "todo.privateNotes.create.v1",
+      "index": 0,
+      "context": "backend"
+    },
+    {
+      "soul": "todo.widgets.create",
+      "version": "todo.widgets.create.v1",
+      "index": 0,
+      "context": "backend"
+    },
+    {
+      "soul": "todo.witnesses.list",
+      "version": "todo.witnesses.list.v1",
+      "index": 0,
+      "context": "backend"
+    },
+    {
+      "soul": "todo.network.simulateError",
+      "version": "todo.network.simulateError.v1",
+      "index": 0,
+      "context": "backend"
+    },
+    {
+      "soul": "todo.worldGraph.read",
+      "version": "todo.worldGraph.read.v1",
+      "index": 0,
+      "context": "backend"
+    },
+    {
+      "soul": "todo.processView.read",
+      "version": "todo.processView.read.v1",
+      "index": 0,
+      "context": "backend"
+    },
+    {
+      "soul": "todo.processRun.read",
+      "version": "todo.processRun.read.v1",
+      "index": 0,
+      "context": "backend"
+    },
+    {
+      "soul": "todo.processEvents.record",
+      "version": "todo.processEvents.record.v1",
+      "index": 0,
+      "context": "backend"
+    },
+    {
+      "soul": "todo.todos.list",
+      "version": "todo.todos.list.v2",
+      "index": 1,
+      "context": "backend",
+      "transitionFrom": "todo.todos.list.v1",
+      "transitionStrategy": "compatible"
+    },
+    {
+      "soul": "todo.todos.create",
+      "version": "todo.todos.create.v2",
+      "index": 1,
+      "context": "backend",
+      "transitionFrom": "todo.todos.create.v1",
+      "transitionStrategy": "compatible"
+    },
+    {
+      "soul": "todo.todos.update",
+      "version": "todo.todos.update.v2",
+      "index": 1,
+      "context": "backend",
+      "transitionFrom": "todo.todos.update.v1",
+      "transitionStrategy": "compatible"
+    },
+    {
+      "soul": "todo.todos.delete",
+      "version": "todo.todos.delete.v2",
+      "index": 1,
+      "context": "backend",
+      "transitionFrom": "todo.todos.delete.v1",
+      "transitionStrategy": "compatible"
+    },
+    {
+      "soul": "todo.privateNotes.list",
+      "version": "todo.privateNotes.list.v2",
+      "index": 1,
+      "context": "backend",
+      "transitionFrom": "todo.privateNotes.list.v1",
+      "transitionStrategy": "compatible"
+    },
+    {
+      "soul": "todo.privateNotes.create",
+      "version": "todo.privateNotes.create.v2",
+      "index": 1,
+      "context": "backend",
+      "transitionFrom": "todo.privateNotes.create.v1",
+      "transitionStrategy": "compatible"
+    },
+    {
+      "soul": "todo.widgets.create",
+      "version": "todo.widgets.create.v2",
+      "index": 1,
+      "context": "backend",
+      "transitionFrom": "todo.widgets.create.v1",
+      "transitionStrategy": "compatible"
+    },
+    {
+      "soul": "todo.witnesses.list",
+      "version": "todo.witnesses.list.v2",
+      "index": 1,
+      "context": "backend",
+      "transitionFrom": "todo.witnesses.list.v1",
+      "transitionStrategy": "compatible"
+    },
+    {
+      "soul": "todo.network.simulateError",
+      "version": "todo.network.simulateError.v2",
+      "index": 1,
+      "context": "backend",
+      "transitionFrom": "todo.network.simulateError.v1",
+      "transitionStrategy": "compatible"
+    },
+    {
+      "soul": "todo.worldGraph.read",
+      "version": "todo.worldGraph.read.v2",
+      "index": 1,
+      "context": "backend",
+      "transitionFrom": "todo.worldGraph.read.v1",
+      "transitionStrategy": "compatible"
+    },
+    {
+      "soul": "todo.processView.read",
+      "version": "todo.processView.read.v2",
+      "index": 1,
+      "context": "backend",
+      "transitionFrom": "todo.processView.read.v1",
+      "transitionStrategy": "compatible"
+    },
+    {
+      "soul": "todo.processRun.read",
+      "version": "todo.processRun.read.v2",
+      "index": 1,
+      "context": "backend",
+      "transitionFrom": "todo.processRun.read.v1",
+      "transitionStrategy": "compatible"
+    },
+    {
+      "soul": "todo.processEvents.record",
+      "version": "todo.processEvents.record.v2",
+      "index": 1,
+      "context": "backend",
+      "transitionFrom": "todo.processEvents.record.v1",
+      "transitionStrategy": "compatible"
+    }
+  ],
+  "backendProgramVersionTransitions": [
+    {
+      "soul": "todo.todos.list",
+      "from": "todo.todos.list.v2",
+      "to": "todo.todos.list.v1",
+      "strategy": "compatible"
+    },
+    {
+      "soul": "todo.todos.create",
+      "from": "todo.todos.create.v2",
+      "to": "todo.todos.create.v1",
+      "strategy": "compatible"
+    },
+    {
+      "soul": "todo.todos.update",
+      "from": "todo.todos.update.v2",
+      "to": "todo.todos.update.v1",
+      "strategy": "compatible"
+    },
+    {
+      "soul": "todo.todos.delete",
+      "from": "todo.todos.delete.v2",
+      "to": "todo.todos.delete.v1",
+      "strategy": "compatible"
+    },
+    {
+      "soul": "todo.privateNotes.list",
+      "from": "todo.privateNotes.list.v2",
+      "to": "todo.privateNotes.list.v1",
+      "strategy": "compatible"
+    },
+    {
+      "soul": "todo.privateNotes.create",
+      "from": "todo.privateNotes.create.v2",
+      "to": "todo.privateNotes.create.v1",
+      "strategy": "compatible"
+    },
+    {
+      "soul": "todo.widgets.create",
+      "from": "todo.widgets.create.v2",
+      "to": "todo.widgets.create.v1",
+      "strategy": "compatible"
+    },
+    {
+      "soul": "todo.witnesses.list",
+      "from": "todo.witnesses.list.v2",
+      "to": "todo.witnesses.list.v1",
+      "strategy": "compatible"
+    },
+    {
+      "soul": "todo.network.simulateError",
+      "from": "todo.network.simulateError.v2",
+      "to": "todo.network.simulateError.v1",
+      "strategy": "compatible"
+    },
+    {
+      "soul": "todo.worldGraph.read",
+      "from": "todo.worldGraph.read.v2",
+      "to": "todo.worldGraph.read.v1",
+      "strategy": "compatible"
+    },
+    {
+      "soul": "todo.processView.read",
+      "from": "todo.processView.read.v2",
+      "to": "todo.processView.read.v1",
+      "strategy": "compatible"
+    },
+    {
+      "soul": "todo.processRun.read",
+      "from": "todo.processRun.read.v2",
+      "to": "todo.processRun.read.v1",
+      "strategy": "compatible"
+    },
+    {
+      "soul": "todo.processEvents.record",
+      "from": "todo.processEvents.record.v2",
+      "to": "todo.processEvents.record.v1",
+      "strategy": "compatible"
+    }
+  ],
+  "backendSteps": [
+    {
+      "version": "todo.todos.list.v1",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"todos.readModel\",\"method\":\"GET\",\"path\":\"/api/todos\",\"into\":\"todoResponse\"}"
+    },
+    {
+      "version": "todo.todos.list.v1",
+      "event": "request",
+      "op": "response.json",
+      "order": 1,
+      "paramsJson": "{\"from\":\"todoResponse\"}"
+    },
+    {
+      "version": "todo.todos.list.v2",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"todos.readModel\",\"method\":\"GET\",\"path\":\"/api/todos\",\"into\":\"todoResponse\"}"
+    },
+    {
+      "version": "todo.todos.list.v2",
+      "event": "request",
+      "op": "state.assign",
+      "order": 1,
+      "paramsJson": "{\"into\":\"meta.version\",\"value\":\"v2\"}"
+    },
+    {
+      "version": "todo.todos.list.v2",
+      "event": "request",
+      "op": "run",
+      "order": 2,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.todos.list.v2",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "paramsJson": "{\"from\":\"todoResponse\"}"
+    },
+    {
+      "version": "todo.todos.create.v1",
+      "event": "request",
+      "op": "request.readJson",
+      "order": 0,
+      "paramsJson": "{\"into\":\"draftTodo\"}"
+    },
+    {
+      "version": "todo.todos.create.v1",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 1,
+      "paramsJson": "{\"handler\":\"todos.createModel\",\"method\":\"POST\",\"path\":\"/api/todos\",\"from\":\"draftTodo\",\"into\":\"createResult\",\"allowFailure\":true}"
+    },
+    {
+      "version": "todo.todos.create.v1",
+      "event": "request",
+      "op": "run",
+      "order": 2,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.todos.create.v1",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "whenJson": "{\"path\":\"createResult.ok\",\"truthy\":true}",
+      "paramsJson": "{\"from\":\"createResult.payload\",\"statusFrom\":\"createResult.status\"}"
+    },
+    {
+      "version": "todo.todos.create.v1",
+      "event": "respond",
+      "op": "response.error",
+      "order": 1,
+      "whenJson": "{\"path\":\"createResult.ok\",\"falsy\":true}",
+      "paramsJson": "{\"statusFrom\":\"createResult.status\",\"messageFrom\":\"createResult.error\",\"bodyFrom\":\"createResult.payload\"}"
+    },
+    {
+      "version": "todo.todos.create.v2",
+      "event": "request",
+      "op": "request.readJson",
+      "order": 0,
+      "paramsJson": "{\"into\":\"draftTodo\"}"
+    },
+    {
+      "version": "todo.todos.create.v2",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 1,
+      "paramsJson": "{\"handler\":\"todos.createModel\",\"method\":\"POST\",\"path\":\"/api/todos\",\"from\":\"draftTodo\",\"into\":\"createResult\",\"allowFailure\":true}"
+    },
+    {
+      "version": "todo.todos.create.v2",
+      "event": "request",
+      "op": "state.assign",
+      "order": 2,
+      "paramsJson": "{\"into\":\"meta.version\",\"value\":\"v2\"}"
+    },
+    {
+      "version": "todo.todos.create.v2",
+      "event": "request",
+      "op": "run",
+      "order": 3,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.todos.create.v2",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "whenJson": "{\"path\":\"createResult.ok\",\"truthy\":true}",
+      "paramsJson": "{\"from\":\"createResult.payload\",\"statusFrom\":\"createResult.status\"}"
+    },
+    {
+      "version": "todo.todos.create.v2",
+      "event": "respond",
+      "op": "response.error",
+      "order": 1,
+      "whenJson": "{\"path\":\"createResult.ok\",\"falsy\":true}",
+      "paramsJson": "{\"statusFrom\":\"createResult.status\",\"messageFrom\":\"createResult.error\",\"bodyFrom\":\"createResult.payload\"}"
+    },
+    {
+      "version": "todo.todos.update.v1",
+      "event": "request",
+      "op": "request.readJson",
+      "order": 0,
+      "paramsJson": "{\"into\":\"todoPatch\"}"
+    },
+    {
+      "version": "todo.todos.update.v1",
+      "event": "request",
+      "op": "state.assign",
+      "order": 1,
+      "paramsJson": "{\"into\":\"todoPatch.id\",\"from\":\"request.params.id\"}"
+    },
+    {
+      "version": "todo.todos.update.v1",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 2,
+      "paramsJson": "{\"handler\":\"todos.updateModel\",\"method\":\"PATCH\",\"path\":\"/api/todos/${state.request.params.id}\",\"from\":\"todoPatch\",\"into\":\"updateResult\",\"allowFailure\":true,\"params\":{\"id\":\"${state.request.params.id}\"}}"
+    },
+    {
+      "version": "todo.todos.update.v1",
+      "event": "request",
+      "op": "run",
+      "order": 3,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.todos.update.v1",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "whenJson": "{\"path\":\"updateResult.ok\",\"truthy\":true}",
+      "paramsJson": "{\"from\":\"updateResult.payload\",\"statusFrom\":\"updateResult.status\"}"
+    },
+    {
+      "version": "todo.todos.update.v1",
+      "event": "respond",
+      "op": "response.error",
+      "order": 1,
+      "whenJson": "{\"path\":\"updateResult.ok\",\"falsy\":true}",
+      "paramsJson": "{\"statusFrom\":\"updateResult.status\",\"messageFrom\":\"updateResult.error\",\"bodyFrom\":\"updateResult.payload\"}"
+    },
+    {
+      "version": "todo.todos.update.v2",
+      "event": "request",
+      "op": "request.readJson",
+      "order": 0,
+      "paramsJson": "{\"into\":\"todoPatch\"}"
+    },
+    {
+      "version": "todo.todos.update.v2",
+      "event": "request",
+      "op": "state.assign",
+      "order": 1,
+      "paramsJson": "{\"into\":\"todoPatch.id\",\"from\":\"request.params.id\"}"
+    },
+    {
+      "version": "todo.todos.update.v2",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 2,
+      "paramsJson": "{\"handler\":\"todos.updateModel\",\"method\":\"PATCH\",\"path\":\"/api/todos/${state.request.params.id}\",\"from\":\"todoPatch\",\"into\":\"updateResult\",\"allowFailure\":true,\"params\":{\"id\":\"${state.request.params.id}\"}}"
+    },
+    {
+      "version": "todo.todos.update.v2",
+      "event": "request",
+      "op": "state.assign",
+      "order": 3,
+      "paramsJson": "{\"into\":\"meta.version\",\"value\":\"v2\"}"
+    },
+    {
+      "version": "todo.todos.update.v2",
+      "event": "request",
+      "op": "run",
+      "order": 4,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.todos.update.v2",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "whenJson": "{\"path\":\"updateResult.ok\",\"truthy\":true}",
+      "paramsJson": "{\"from\":\"updateResult.payload\",\"statusFrom\":\"updateResult.status\"}"
+    },
+    {
+      "version": "todo.todos.update.v2",
+      "event": "respond",
+      "op": "response.error",
+      "order": 1,
+      "whenJson": "{\"path\":\"updateResult.ok\",\"falsy\":true}",
+      "paramsJson": "{\"statusFrom\":\"updateResult.status\",\"messageFrom\":\"updateResult.error\",\"bodyFrom\":\"updateResult.payload\"}"
+    },
+    {
+      "version": "todo.todos.delete.v1",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"todos.deleteModel\",\"method\":\"DELETE\",\"path\":\"/api/todos/${state.request.params.id}\",\"into\":\"deleteResult\",\"allowFailure\":true,\"params\":{\"id\":\"${state.request.params.id}\"}}"
+    },
+    {
+      "version": "todo.todos.delete.v1",
+      "event": "request",
+      "op": "run",
+      "order": 1,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.todos.delete.v1",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "whenJson": "{\"path\":\"deleteResult.ok\",\"truthy\":true}",
+      "paramsJson": "{\"from\":\"deleteResult.payload\",\"statusFrom\":\"deleteResult.status\"}"
+    },
+    {
+      "version": "todo.todos.delete.v1",
+      "event": "respond",
+      "op": "response.error",
+      "order": 1,
+      "whenJson": "{\"path\":\"deleteResult.ok\",\"falsy\":true}",
+      "paramsJson": "{\"statusFrom\":\"deleteResult.status\",\"messageFrom\":\"deleteResult.error\",\"bodyFrom\":\"deleteResult.payload\"}"
+    },
+    {
+      "version": "todo.todos.delete.v2",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"todos.deleteModel\",\"method\":\"DELETE\",\"path\":\"/api/todos/${state.request.params.id}\",\"into\":\"deleteResult\",\"allowFailure\":true,\"params\":{\"id\":\"${state.request.params.id}\"}}"
+    },
+    {
+      "version": "todo.todos.delete.v2",
+      "event": "request",
+      "op": "state.assign",
+      "order": 1,
+      "paramsJson": "{\"into\":\"meta.version\",\"value\":\"v2\"}"
+    },
+    {
+      "version": "todo.todos.delete.v2",
+      "event": "request",
+      "op": "run",
+      "order": 2,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.todos.delete.v2",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "whenJson": "{\"path\":\"deleteResult.ok\",\"truthy\":true}",
+      "paramsJson": "{\"from\":\"deleteResult.payload\",\"statusFrom\":\"deleteResult.status\"}"
+    },
+    {
+      "version": "todo.todos.delete.v2",
+      "event": "respond",
+      "op": "response.error",
+      "order": 1,
+      "whenJson": "{\"path\":\"deleteResult.ok\",\"falsy\":true}",
+      "paramsJson": "{\"statusFrom\":\"deleteResult.status\",\"messageFrom\":\"deleteResult.error\",\"bodyFrom\":\"deleteResult.payload\"}"
+    },
+    {
+      "version": "todo.privateNotes.list.v1",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"privateNotes.readModel\",\"method\":\"GET\",\"path\":\"/api/private-notes\",\"into\":\"privateNotesResponse\"}"
+    },
+    {
+      "version": "todo.privateNotes.list.v1",
+      "event": "request",
+      "op": "response.json",
+      "order": 1,
+      "paramsJson": "{\"from\":\"privateNotesResponse\"}"
+    },
+    {
+      "version": "todo.privateNotes.list.v2",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"privateNotes.readModel\",\"method\":\"GET\",\"path\":\"/api/private-notes\",\"into\":\"privateNotesResponse\"}"
+    },
+    {
+      "version": "todo.privateNotes.list.v2",
+      "event": "request",
+      "op": "state.assign",
+      "order": 1,
+      "paramsJson": "{\"into\":\"meta.version\",\"value\":\"v2\"}"
+    },
+    {
+      "version": "todo.privateNotes.list.v2",
+      "event": "request",
+      "op": "run",
+      "order": 2,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.privateNotes.list.v2",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "paramsJson": "{\"from\":\"privateNotesResponse\"}"
+    },
+    {
+      "version": "todo.privateNotes.create.v1",
+      "event": "request",
+      "op": "request.readJson",
+      "order": 0,
+      "paramsJson": "{\"into\":\"privateNoteDraft\"}"
+    },
+    {
+      "version": "todo.privateNotes.create.v1",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 1,
+      "paramsJson": "{\"handler\":\"privateNotes.createModel\",\"method\":\"POST\",\"path\":\"/api/private-notes\",\"from\":\"privateNoteDraft\",\"into\":\"privateNoteResult\",\"allowFailure\":true}"
+    },
+    {
+      "version": "todo.privateNotes.create.v1",
+      "event": "request",
+      "op": "run",
+      "order": 2,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.privateNotes.create.v1",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "whenJson": "{\"path\":\"privateNoteResult.ok\",\"truthy\":true}",
+      "paramsJson": "{\"from\":\"privateNoteResult.payload\",\"statusFrom\":\"privateNoteResult.status\"}"
+    },
+    {
+      "version": "todo.privateNotes.create.v1",
+      "event": "respond",
+      "op": "response.error",
+      "order": 1,
+      "whenJson": "{\"path\":\"privateNoteResult.ok\",\"falsy\":true}",
+      "paramsJson": "{\"statusFrom\":\"privateNoteResult.status\",\"messageFrom\":\"privateNoteResult.error\",\"bodyFrom\":\"privateNoteResult.payload\"}"
+    },
+    {
+      "version": "todo.privateNotes.create.v2",
+      "event": "request",
+      "op": "request.readJson",
+      "order": 0,
+      "paramsJson": "{\"into\":\"privateNoteDraft\"}"
+    },
+    {
+      "version": "todo.privateNotes.create.v2",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 1,
+      "paramsJson": "{\"handler\":\"privateNotes.createModel\",\"method\":\"POST\",\"path\":\"/api/private-notes\",\"from\":\"privateNoteDraft\",\"into\":\"privateNoteResult\",\"allowFailure\":true}"
+    },
+    {
+      "version": "todo.privateNotes.create.v2",
+      "event": "request",
+      "op": "state.assign",
+      "order": 2,
+      "paramsJson": "{\"into\":\"meta.version\",\"value\":\"v2\"}"
+    },
+    {
+      "version": "todo.privateNotes.create.v2",
+      "event": "request",
+      "op": "run",
+      "order": 3,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.privateNotes.create.v2",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "whenJson": "{\"path\":\"privateNoteResult.ok\",\"truthy\":true}",
+      "paramsJson": "{\"from\":\"privateNoteResult.payload\",\"statusFrom\":\"privateNoteResult.status\"}"
+    },
+    {
+      "version": "todo.privateNotes.create.v2",
+      "event": "respond",
+      "op": "response.error",
+      "order": 1,
+      "whenJson": "{\"path\":\"privateNoteResult.ok\",\"falsy\":true}",
+      "paramsJson": "{\"statusFrom\":\"privateNoteResult.status\",\"messageFrom\":\"privateNoteResult.error\",\"bodyFrom\":\"privateNoteResult.payload\"}"
+    },
+    {
+      "version": "todo.widgets.create.v1",
+      "event": "request",
+      "op": "request.readJson",
+      "order": 0,
+      "paramsJson": "{\"into\":\"widgetDraft\"}"
+    },
+    {
+      "version": "todo.widgets.create.v1",
+      "event": "request",
+      "op": "state.assign",
+      "order": 1,
+      "paramsJson": "{\"into\":\"widgetDraft.parent\",\"value\":\"todo_app_widget\"}"
+    },
+    {
+      "version": "todo.widgets.create.v1",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 2,
+      "paramsJson": "{\"handler\":\"widgets.createModel\",\"method\":\"POST\",\"path\":\"/api/widgets\",\"from\":\"widgetDraft\",\"into\":\"widgetCreateResult\",\"allowFailure\":true,\"params\":{\"rootWidget\":\"todo_app_widget\",\"context\":\"frontend\"}}"
+    },
+    {
+      "version": "todo.widgets.create.v1",
+      "event": "request",
+      "op": "run",
+      "order": 3,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.widgets.create.v1",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "whenJson": "{\"path\":\"widgetCreateResult.ok\",\"truthy\":true}",
+      "paramsJson": "{\"from\":\"widgetCreateResult.payload\",\"statusFrom\":\"widgetCreateResult.status\"}"
+    },
+    {
+      "version": "todo.widgets.create.v1",
+      "event": "respond",
+      "op": "response.error",
+      "order": 1,
+      "whenJson": "{\"path\":\"widgetCreateResult.ok\",\"falsy\":true}",
+      "paramsJson": "{\"statusFrom\":\"widgetCreateResult.status\",\"messageFrom\":\"widgetCreateResult.error\",\"bodyFrom\":\"widgetCreateResult.payload\"}"
+    },
+    {
+      "version": "todo.widgets.create.v2",
+      "event": "request",
+      "op": "request.readJson",
+      "order": 0,
+      "paramsJson": "{\"into\":\"widgetDraft\"}"
+    },
+    {
+      "version": "todo.widgets.create.v2",
+      "event": "request",
+      "op": "state.assign",
+      "order": 1,
+      "paramsJson": "{\"into\":\"widgetDraft.parent\",\"value\":\"todo_app_widget\"}"
+    },
+    {
+      "version": "todo.widgets.create.v2",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 2,
+      "paramsJson": "{\"handler\":\"widgets.createModel\",\"method\":\"POST\",\"path\":\"/api/widgets\",\"from\":\"widgetDraft\",\"into\":\"widgetCreateResult\",\"allowFailure\":true,\"params\":{\"rootWidget\":\"todo_app_widget\",\"context\":\"frontend\"}}"
+    },
+    {
+      "version": "todo.widgets.create.v2",
+      "event": "request",
+      "op": "state.assign",
+      "order": 3,
+      "paramsJson": "{\"into\":\"meta.version\",\"value\":\"v2\"}"
+    },
+    {
+      "version": "todo.widgets.create.v2",
+      "event": "request",
+      "op": "run",
+      "order": 4,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.widgets.create.v2",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "whenJson": "{\"path\":\"widgetCreateResult.ok\",\"truthy\":true}",
+      "paramsJson": "{\"from\":\"widgetCreateResult.payload\",\"statusFrom\":\"widgetCreateResult.status\"}"
+    },
+    {
+      "version": "todo.widgets.create.v2",
+      "event": "respond",
+      "op": "response.error",
+      "order": 1,
+      "whenJson": "{\"path\":\"widgetCreateResult.ok\",\"falsy\":true}",
+      "paramsJson": "{\"statusFrom\":\"widgetCreateResult.status\",\"messageFrom\":\"widgetCreateResult.error\",\"bodyFrom\":\"widgetCreateResult.payload\"}"
+    },
+    {
+      "version": "todo.witnesses.list.v1",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"witnesses.list\",\"method\":\"GET\",\"path\":\"/api/witnesses\",\"query\":\"${state.request.query}\",\"into\":\"witnessResponse\"}"
+    },
+    {
+      "version": "todo.witnesses.list.v1",
+      "event": "request",
+      "op": "response.json",
+      "order": 1,
+      "paramsJson": "{\"from\":\"witnessResponse\"}"
+    },
+    {
+      "version": "todo.witnesses.list.v2",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"witnesses.list\",\"method\":\"GET\",\"path\":\"/api/witnesses\",\"query\":\"${state.request.query}\",\"into\":\"witnessResponse\"}"
+    },
+    {
+      "version": "todo.witnesses.list.v2",
+      "event": "request",
+      "op": "state.assign",
+      "order": 1,
+      "paramsJson": "{\"into\":\"meta.version\",\"value\":\"v2\"}"
+    },
+    {
+      "version": "todo.witnesses.list.v2",
+      "event": "request",
+      "op": "run",
+      "order": 2,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.witnesses.list.v2",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "paramsJson": "{\"from\":\"witnessResponse\"}"
+    },
+    {
+      "version": "todo.network.simulateError.v1",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"network.simulateModel\",\"method\":\"GET\",\"path\":\"/api/simulate-network-error\",\"into\":\"networkFailure\",\"allowFailure\":true}"
+    },
+    {
+      "version": "todo.network.simulateError.v1",
+      "event": "request",
+      "op": "response.error",
+      "order": 1,
+      "paramsJson": "{\"statusFrom\":\"networkFailure.status\",\"messageFrom\":\"networkFailure.error\",\"bodyFrom\":\"networkFailure.payload\"}"
+    },
+    {
+      "version": "todo.network.simulateError.v2",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"network.simulateModel\",\"method\":\"GET\",\"path\":\"/api/simulate-network-error\",\"into\":\"networkFailure\",\"allowFailure\":true}"
+    },
+    {
+      "version": "todo.network.simulateError.v2",
+      "event": "request",
+      "op": "state.assign",
+      "order": 1,
+      "paramsJson": "{\"into\":\"meta.version\",\"value\":\"v2\"}"
+    },
+    {
+      "version": "todo.network.simulateError.v2",
+      "event": "request",
+      "op": "run",
+      "order": 2,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.network.simulateError.v2",
+      "event": "respond",
+      "op": "response.error",
+      "order": 0,
+      "paramsJson": "{\"statusFrom\":\"networkFailure.status\",\"messageFrom\":\"networkFailure.error\",\"bodyFrom\":\"networkFailure.payload\"}"
+    },
+    {
+      "version": "todo.worldGraph.read.v1",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"worldGraph.read\",\"method\":\"GET\",\"path\":\"/api/world-graph\",\"into\":\"worldGraphResponse\"}"
+    },
+    {
+      "version": "todo.worldGraph.read.v1",
+      "event": "request",
+      "op": "response.json",
+      "order": 1,
+      "paramsJson": "{\"from\":\"worldGraphResponse\"}"
+    },
+    {
+      "version": "todo.worldGraph.read.v2",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"worldGraph.read\",\"method\":\"GET\",\"path\":\"/api/world-graph\",\"into\":\"worldGraphResponse\"}"
+    },
+    {
+      "version": "todo.worldGraph.read.v2",
+      "event": "request",
+      "op": "state.assign",
+      "order": 1,
+      "paramsJson": "{\"into\":\"meta.version\",\"value\":\"v2\"}"
+    },
+    {
+      "version": "todo.worldGraph.read.v2",
+      "event": "request",
+      "op": "run",
+      "order": 2,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.worldGraph.read.v2",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "paramsJson": "{\"from\":\"worldGraphResponse\"}"
+    },
+    {
+      "version": "todo.processView.read.v1",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"processView.read\",\"method\":\"GET\",\"path\":\"/api/process-view\",\"query\":\"${state.request.query}\",\"into\":\"processViewResponse\"}"
+    },
+    {
+      "version": "todo.processView.read.v1",
+      "event": "request",
+      "op": "response.json",
+      "order": 1,
+      "paramsJson": "{\"from\":\"processViewResponse\"}"
+    },
+    {
+      "version": "todo.processView.read.v2",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"processView.read\",\"method\":\"GET\",\"path\":\"/api/process-view\",\"query\":\"${state.request.query}\",\"into\":\"processViewResponse\"}"
+    },
+    {
+      "version": "todo.processView.read.v2",
+      "event": "request",
+      "op": "state.assign",
+      "order": 1,
+      "paramsJson": "{\"into\":\"meta.version\",\"value\":\"v2\"}"
+    },
+    {
+      "version": "todo.processView.read.v2",
+      "event": "request",
+      "op": "run",
+      "order": 2,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.processView.read.v2",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "paramsJson": "{\"from\":\"processViewResponse\"}"
+    },
+    {
+      "version": "todo.processRun.read.v1",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"processRun.read\",\"method\":\"GET\",\"path\":\"/api/process-runs/${state.request.params.runId}\",\"query\":\"${state.request.query}\",\"into\":\"processRunResponse\",\"params\":{\"runId\":\"${state.request.params.runId}\"}}"
+    },
+    {
+      "version": "todo.processRun.read.v1",
+      "event": "request",
+      "op": "response.json",
+      "order": 1,
+      "paramsJson": "{\"from\":\"processRunResponse\"}"
+    },
+    {
+      "version": "todo.processRun.read.v2",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 0,
+      "paramsJson": "{\"handler\":\"processRun.read\",\"method\":\"GET\",\"path\":\"/api/process-runs/${state.request.params.runId}\",\"query\":\"${state.request.query}\",\"into\":\"processRunResponse\",\"params\":{\"runId\":\"${state.request.params.runId}\"}}"
+    },
+    {
+      "version": "todo.processRun.read.v2",
+      "event": "request",
+      "op": "state.assign",
+      "order": 1,
+      "paramsJson": "{\"into\":\"meta.version\",\"value\":\"v2\"}"
+    },
+    {
+      "version": "todo.processRun.read.v2",
+      "event": "request",
+      "op": "run",
+      "order": 2,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.processRun.read.v2",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "paramsJson": "{\"from\":\"processRunResponse\"}"
+    },
+    {
+      "version": "todo.processEvents.record.v1",
+      "event": "request",
+      "op": "request.readJson",
+      "order": 0,
+      "paramsJson": "{\"into\":\"traceEvent\"}"
+    },
+    {
+      "version": "todo.processEvents.record.v1",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 1,
+      "paramsJson": "{\"handler\":\"processEvents.record\",\"method\":\"POST\",\"path\":\"/api/process-events\",\"from\":\"traceEvent\",\"into\":\"processEventResult\",\"allowFailure\":true}"
+    },
+    {
+      "version": "todo.processEvents.record.v1",
+      "event": "request",
+      "op": "run",
+      "order": 2,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.processEvents.record.v1",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "whenJson": "{\"path\":\"processEventResult.ok\",\"truthy\":true}",
+      "paramsJson": "{\"from\":\"processEventResult\"}"
+    },
+    {
+      "version": "todo.processEvents.record.v1",
+      "event": "respond",
+      "op": "response.error",
+      "order": 1,
+      "whenJson": "{\"path\":\"processEventResult.ok\",\"falsy\":true}",
+      "paramsJson": "{\"messageFrom\":\"processEventResult.error\",\"bodyFrom\":\"processEventResult\"}"
+    },
+    {
+      "version": "todo.processEvents.record.v2",
+      "event": "request",
+      "op": "request.readJson",
+      "order": 0,
+      "paramsJson": "{\"into\":\"traceEvent\"}"
+    },
+    {
+      "version": "todo.processEvents.record.v2",
+      "event": "request",
+      "op": "handler.invoke",
+      "order": 1,
+      "paramsJson": "{\"handler\":\"processEvents.record\",\"method\":\"POST\",\"path\":\"/api/process-events\",\"from\":\"traceEvent\",\"into\":\"processEventResult\",\"allowFailure\":true}"
+    },
+    {
+      "version": "todo.processEvents.record.v2",
+      "event": "request",
+      "op": "state.assign",
+      "order": 2,
+      "paramsJson": "{\"into\":\"meta.version\",\"value\":\"v2\"}"
+    },
+    {
+      "version": "todo.processEvents.record.v2",
+      "event": "request",
+      "op": "run",
+      "order": 3,
+      "paramsJson": "{\"event\":\"respond\"}"
+    },
+    {
+      "version": "todo.processEvents.record.v2",
+      "event": "respond",
+      "op": "response.json",
+      "order": 0,
+      "whenJson": "{\"path\":\"processEventResult.ok\",\"truthy\":true}",
+      "paramsJson": "{\"from\":\"processEventResult\"}"
+    },
+    {
+      "version": "todo.processEvents.record.v2",
+      "event": "respond",
+      "op": "response.error",
+      "order": 1,
+      "whenJson": "{\"path\":\"processEventResult.ok\",\"falsy\":true}",
+      "paramsJson": "{\"messageFrom\":\"processEventResult.error\",\"bodyFrom\":\"processEventResult\"}"
+    }
+  ],
+  "backendActivations": [
+    {
+      "soul": "todo.todos.list",
+      "version": "todo.todos.list.v1"
+    },
+    {
+      "soul": "todo.todos.create",
+      "version": "todo.todos.create.v1"
+    },
+    {
+      "soul": "todo.todos.update",
+      "version": "todo.todos.update.v1"
+    },
+    {
+      "soul": "todo.todos.delete",
+      "version": "todo.todos.delete.v1"
+    },
+    {
+      "soul": "todo.privateNotes.list",
+      "version": "todo.privateNotes.list.v1"
+    },
+    {
+      "soul": "todo.privateNotes.create",
+      "version": "todo.privateNotes.create.v1"
+    },
+    {
+      "soul": "todo.widgets.create",
+      "version": "todo.widgets.create.v1"
+    },
+    {
+      "soul": "todo.witnesses.list",
+      "version": "todo.witnesses.list.v1"
+    },
+    {
+      "soul": "todo.network.simulateError",
+      "version": "todo.network.simulateError.v1"
+    },
+    {
+      "soul": "todo.worldGraph.read",
+      "version": "todo.worldGraph.read.v1"
+    },
+    {
+      "soul": "todo.processView.read",
+      "version": "todo.processView.read.v1"
+    },
+    {
+      "soul": "todo.processRun.read",
+      "version": "todo.processRun.read.v1"
+    },
+    {
+      "soul": "todo.processEvents.record",
+      "version": "todo.processEvents.record.v1"
+    }
+  ],
+  "steps": [
+    {
+      "program": "todo_frontend_program",
+      "event": "load",
+      "op": "initSession",
+      "order": 0,
+      "paramsJson": "{}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "load",
+      "op": "setText",
+      "order": 1,
+      "paramsJson": "{\"widget\":\"todo_session_status\",\"text\":\"${state.session && state.session.authenticated ? 'Signed in as ' + state.session.label + ' (' + state.session.actor + ')' + (state.session.perspective ? ' in ' + state.session.perspective : '') : 'Not signed in'}\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "load",
+      "op": "setText",
+      "order": 2,
+      "paramsJson": "{\"widget\":\"todo_status\",\"text\":\"Loading...\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "load",
+      "op": "fetchJson",
+      "order": 3,
+      "paramsJson": "{\"url\":\"/api/todos\",\"into\":\"todoResponse\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "load",
+      "op": "setText",
+      "order": 4,
+      "paramsJson": "{\"widget\":\"todo_add_button\",\"text\":\"${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Propose Add' : 'Add'}\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "load",
+      "op": "renderCollection",
+      "order": 5,
+      "paramsJson": "{\"widget\":\"todo_list\",\"from\":\"todoResponse.todos\",\"template\":\"todo_item_template\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "load",
+      "op": "fetchJson",
+      "order": 6,
+      "paramsJson": "{\"url\":\"/api/private-notes\",\"into\":\"privateNotesResponse\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "load",
+      "op": "setText",
+      "order": 7,
+      "paramsJson": "{\"widget\":\"todo_private_notes_status\",\"text\":\"${state.privateNotesResponse && state.privateNotesResponse.privacy && state.privateNotesResponse.privacy.mode === 'private' ? 'Only you can see these notes in your current perspective.' : 'Sign in to see and save notes that belong only to you.'}\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "load",
+      "op": "renderCollection",
+      "order": 8,
+      "paramsJson": "{\"widget\":\"todo_private_note_list\",\"from\":\"privateNotesResponse.notes\",\"template\":\"private_note_template\",\"emptyWidget\":\"private_note_empty_template\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "load",
+      "op": "setText",
+      "order": 9,
+      "paramsJson": "{\"widget\":\"todo_status\",\"text\":\"${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Ready. Shared app changes are read-only here. Todo, widget, and version changes will be proposed for review.' : (state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'signin' ? 'Ready. Sign in to change shared app state.' : 'Ready')}\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "load",
+      "op": "setText",
+      "order": 10,
+      "paramsJson": "{\"widget\":\"todo_widget_editor_button\",\"text\":\"${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Propose Add Widget' : 'Add Widget'}\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_form",
+      "op": "readForm",
+      "order": 0,
+      "paramsJson": "{\"widget\":\"todo_form\",\"into\":\"draftTodo\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_form",
+      "op": "setText",
+      "order": 1,
+      "paramsJson": "{\"widget\":\"todo_status\",\"text\":\"${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Proposing add...' : 'Saving...'}\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_form",
+      "op": "postJson",
+      "order": 2,
+      "paramsJson": "{\"url\":\"/api/todos\",\"method\":\"POST\",\"from\":\"draftTodo\",\"pick\":[\"title\"],\"into\":\"createdTodo\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_form",
+      "op": "clearForm",
+      "order": 3,
+      "paramsJson": "{\"widget\":\"todo_form\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_form",
+      "op": "run",
+      "order": 4,
+      "paramsJson": "{\"event\":\"load\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_form",
+      "op": "setText",
+      "order": 5,
+      "paramsJson": "{\"widget\":\"todo_status\",\"text\":\"${state.createdTodo && state.createdTodo.statusMessage ? state.createdTodo.statusMessage : 'Saved.'}\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "click:toggleTodo",
+      "op": "setText",
+      "order": 0,
+      "paramsJson": "{\"widget\":\"todo_status\",\"text\":\"${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Proposing update...' : 'Updating...'}\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "click:toggleTodo",
+      "op": "patchJson",
+      "order": 1,
+      "paramsJson": "{\"url\":\"/api/todos/${event.id}\",\"body\":{\"done\":\"${event.done}\"},\"into\":\"updatedTodo\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "click:toggleTodo",
+      "op": "run",
+      "order": 2,
+      "paramsJson": "{\"event\":\"load\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "click:toggleTodo",
+      "op": "setText",
+      "order": 3,
+      "paramsJson": "{\"widget\":\"todo_status\",\"text\":\"${state.updatedTodo && state.updatedTodo.statusMessage ? state.updatedTodo.statusMessage : 'Saved.'}\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "click:deleteTodo",
+      "op": "setText",
+      "order": 0,
+      "paramsJson": "{\"widget\":\"todo_status\",\"text\":\"${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Proposing delete...' : 'Deleting...'}\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "click:deleteTodo",
+      "op": "deleteJson",
+      "order": 1,
+      "paramsJson": "{\"url\":\"/api/todos/${event.id}\",\"into\":\"deletedTodo\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "click:deleteTodo",
+      "op": "run",
+      "order": 2,
+      "paramsJson": "{\"event\":\"load\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "click:deleteTodo",
+      "op": "setText",
+      "order": 3,
+      "paramsJson": "{\"widget\":\"todo_status\",\"text\":\"${state.deletedTodo && state.deletedTodo.statusMessage ? state.deletedTodo.statusMessage : 'Deleted.'}\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_session_form",
+      "op": "readForm",
+      "order": 0,
+      "paramsJson": "{\"widget\":\"todo_session_form\",\"into\":\"sessionDraft\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_session_form",
+      "op": "setSession",
+      "order": 1,
+      "paramsJson": "{\"from\":\"sessionDraft\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_session_form",
+      "op": "run",
+      "order": 2,
+      "paramsJson": "{\"event\":\"load\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "click:logout",
+      "op": "logout",
+      "order": 0,
+      "paramsJson": "{}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "click:logout",
+      "op": "run",
+      "order": 1,
+      "paramsJson": "{\"event\":\"load\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_private_notes_form",
+      "op": "readForm",
+      "order": 0,
+      "paramsJson": "{\"widget\":\"todo_private_notes_form\",\"into\":\"privateNoteDraft\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_private_notes_form",
+      "op": "postJson",
+      "order": 1,
+      "paramsJson": "{\"url\":\"/api/private-notes\",\"from\":\"privateNoteDraft\",\"pick\":[\"text\"],\"into\":\"privateNoteCreated\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_private_notes_form",
+      "op": "clearForm",
+      "order": 2,
+      "paramsJson": "{\"widget\":\"todo_private_notes_form\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_private_notes_form",
+      "op": "run",
+      "order": 3,
+      "paramsJson": "{\"event\":\"load\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_widget_editor_form",
+      "op": "readForm",
+      "order": 0,
+      "paramsJson": "{\"widget\":\"todo_widget_editor_form\",\"into\":\"widgetDraft\",\"schema\":\"widget.define\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_widget_editor_form",
+      "op": "setText",
+      "order": 1,
+      "paramsJson": "{\"widget\":\"todo_status\",\"text\":\"${state.todoResponse && state.todoResponse.authority && state.todoResponse.authority.mode === 'propose' ? 'Proposing widget...' : 'Saving widget...'}\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_widget_editor_form",
+      "op": "postJson",
+      "order": 2,
+      "paramsJson": "{\"url\":\"/api/widgets\",\"method\":\"POST\",\"from\":\"widgetDraft\",\"into\":\"widgetCreated\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_widget_editor_form",
+      "op": "clearForm",
+      "order": 3,
+      "paramsJson": "{\"widget\":\"todo_widget_editor_form\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_widget_editor_form",
+      "op": "run",
+      "order": 4,
+      "paramsJson": "{\"event\":\"load\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "submit:todo_widget_editor_form",
+      "op": "setText",
+      "order": 5,
+      "paramsJson": "{\"widget\":\"todo_status\",\"text\":\"${state.widgetCreated && state.widgetCreated.statusMessage ? state.widgetCreated.statusMessage : 'Saved widget.'}\"}"
+    },
+    {
+      "program": "todo_frontend_program",
+      "event": "error",
+      "op": "setText",
+      "order": 0,
+      "paramsJson": "{\"widget\":\"todo_status\",\"text\":\"Failed: ${event.message}\"}"
+    }
+  ],
+  "operatingSteps": [
+    {
+      "program": "world_graph_program",
+      "event": "load",
+      "op": "initSession",
+      "order": 0,
+      "paramsJson": "{}"
+    },
+    {
+      "program": "world_graph_program",
+      "event": "load",
+      "op": "setText",
+      "order": 1,
+      "paramsJson": "{\"widget\":\"world_session_status\",\"text\":\"${state.session && state.session.authenticated ? 'Signed in as ' + state.session.label + ' (' + state.session.actor + ')' + (state.session.perspective ? ' in ' + state.session.perspective : '') : 'Not signed in'}\"}"
+    },
+    {
+      "program": "world_graph_program",
+      "event": "load",
+      "op": "fetchJson",
+      "order": 2,
+      "paramsJson": "{\"url\":\"/api/world-graph\",\"into\":\"worldGraphResponse\"}"
+    },
+    {
+      "program": "world_graph_program",
+      "event": "load",
+      "op": "renderWorldGraph",
+      "order": 3,
+      "paramsJson": "{\"widget\":\"world_graph_canvas\",\"from\":\"worldGraphResponse.graph\"}"
+    },
+    {
+      "program": "world_graph_program",
+      "event": "submit:world_session_form",
+      "op": "readForm",
+      "order": 0,
+      "paramsJson": "{\"widget\":\"world_session_form\",\"into\":\"worldSessionDraft\"}"
+    },
+    {
+      "program": "world_graph_program",
+      "event": "submit:world_session_form",
+      "op": "setSession",
+      "order": 1,
+      "paramsJson": "{\"from\":\"worldSessionDraft\"}"
+    },
+    {
+      "program": "world_graph_program",
+      "event": "submit:world_session_form",
+      "op": "run",
+      "order": 2,
+      "paramsJson": "{\"event\":\"load\"}"
+    },
+    {
+      "program": "world_graph_program",
+      "event": "click:logout",
+      "op": "logout",
+      "order": 0,
+      "paramsJson": "{}"
+    },
+    {
+      "program": "world_graph_program",
+      "event": "click:logout",
+      "op": "run",
+      "order": 1,
+      "paramsJson": "{\"event\":\"load\"}"
+    }
+  ],
+  "routes": [
+    {
+      "id": "home_page_route",
+      "path": "/",
+      "serves": "todoAppView",
+      "method": "GET",
+      "handler": "page.home",
+      "rootWidget": "todo_app_widget",
+      "frontendProgram": "todo_frontend_program",
+      "page": "home",
+      "liveProjection": true,
+      "context": "frontend"
+    },
+    {
+      "id": "session_read_route",
+      "path": "/api/session",
+      "serves": "session",
+      "method": "GET",
+      "handler": "session.read"
+    },
+    {
+      "id": "session_open_route",
+      "path": "/api/session",
+      "serves": "session",
+      "method": "POST",
+      "handler": "session.open"
+    },
+    {
+      "id": "session_logout_route",
+      "path": "/api/session",
+      "serves": "session",
+      "method": "DELETE",
+      "handler": "session.logout"
+    },
+    {
+      "id": "todos_list_route",
+      "path": "/api/todos",
+      "serves": "todoStore",
+      "method": "GET",
+      "handler": "backendProgram.run",
+      "backendProgramSoul": "todo.todos.list",
+      "context": "backend"
+    },
+    {
+      "id": "todos_create_route",
+      "path": "/api/todos",
+      "serves": "todoStore",
+      "method": "POST",
+      "handler": "backendProgram.run",
+      "backendProgramSoul": "todo.todos.create",
+      "context": "backend"
+    },
+    {
+      "id": "todos_update_route",
+      "path": "/api/todos/:id",
+      "serves": "todoStore",
+      "method": "PATCH",
+      "handler": "backendProgram.run",
+      "backendProgramSoul": "todo.todos.update",
+      "context": "backend"
+    },
+    {
+      "id": "todos_delete_route",
+      "path": "/api/todos/:id",
+      "serves": "todoStore",
+      "method": "DELETE",
+      "handler": "backendProgram.run",
+      "backendProgramSoul": "todo.todos.delete",
+      "context": "backend"
+    },
+    {
+      "id": "private_notes_list_route",
+      "path": "/api/private-notes",
+      "serves": "privateNotes",
+      "method": "GET",
+      "handler": "backendProgram.run",
+      "backendProgramSoul": "todo.privateNotes.list",
+      "context": "backend"
+    },
+    {
+      "id": "private_notes_create_route",
+      "path": "/api/private-notes",
+      "serves": "privateNotes",
+      "method": "POST",
+      "handler": "backendProgram.run",
+      "backendProgramSoul": "todo.privateNotes.create",
+      "context": "backend"
+    },
+    {
+      "id": "widgets_create_route",
+      "path": "/api/widgets",
+      "serves": "widgetEditor",
+      "method": "POST",
+      "handler": "backendProgram.run",
+      "backendProgramSoul": "todo.widgets.create",
+      "context": "backend"
+    },
+    {
+      "id": "witnesses_list_route",
+      "path": "/api/witnesses",
+      "serves": "witnessLog",
+      "method": "GET",
+      "handler": "backendProgram.run",
+      "backendProgramSoul": "todo.witnesses.list",
+      "context": "backend"
+    },
+    {
+      "id": "network_simulate_route",
+      "path": "/api/simulate-network-error",
+      "serves": "networkFailure",
+      "method": "GET",
+      "handler": "backendProgram.run",
+      "backendProgramSoul": "todo.network.simulateError",
+      "context": "backend"
+    },
+    {
+      "id": "events_stream_route",
+      "path": "/api/events",
+      "serves": "eventsStream",
+      "method": "GET",
+      "handler": "events.stream",
+      "context": "backend"
+    },
+    {
+      "id": "process_events_route",
+      "path": "/api/process-events",
+      "serves": "processEvents",
+      "method": "POST",
+      "handler": "backendProgram.run",
+      "backendProgramSoul": "todo.processEvents.record",
+      "context": "backend"
+    }
+  ],
+  "operatingRoutes": [
+    {
+      "id": "world_page_route",
+      "path": "/world",
+      "serves": "worldGraphView",
+      "method": "GET",
+      "handler": "page.world",
+      "rootWidget": "world_graph_page",
+      "frontendProgram": "world_graph_program",
+      "page": "world",
+      "context": "frontend"
+    },
+    {
+      "id": "world_graph_read_route",
+      "path": "/api/world-graph",
+      "serves": "worldGraph",
+      "method": "GET",
+      "handler": "backendProgram.run",
+      "backendProgramSoul": "todo.worldGraph.read",
+      "context": "backend"
+    },
+    {
+      "id": "process_view_read_route",
+      "path": "/api/process-view",
+      "serves": "processView",
+      "method": "GET",
+      "handler": "backendProgram.run",
+      "backendProgramSoul": "todo.processView.read",
+      "context": "backend"
+    },
+    {
+      "id": "process_run_read_route",
+      "path": "/api/process-runs/:runId",
+      "serves": "processRun",
+      "method": "GET",
+      "handler": "backendProgram.run",
+      "backendProgramSoul": "todo.processRun.read",
+      "context": "backend"
+    },
+    {
+      "id": "process_page_route",
+      "path": "/process",
+      "serves": "processView",
+      "method": "GET",
+      "handler": "page.process"
+    }
+  ],
+  "serves": [
+    {
+      "serverRunner": "demo_server",
+      "route": "home_page_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "session_read_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "session_open_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "session_logout_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "todos_list_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "todos_create_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "todos_update_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "todos_delete_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "private_notes_list_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "private_notes_create_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "widgets_create_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "witnesses_list_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "network_simulate_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "events_stream_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "process_events_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "world_page_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "world_graph_read_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "process_view_read_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "process_run_read_route"
+    },
+    {
+      "serverRunner": "demo_server",
+      "route": "process_page_route"
+    }
+  ]
+}

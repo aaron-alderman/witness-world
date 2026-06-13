@@ -1,0 +1,627 @@
+[[defaults]]
+actor = "frontendHost"
+context = "frontend"
+program = "process_page_program"
+
+[[page]]
+id = "process_page_root"
+title = "Process View"
+class = "surface-page"
+children = ["process_page_header", "process_page_status", "process_page_shell"]
+
+[[box]]
+id = "process_page_header"
+class = "surface-header-bar"
+children = ["process_page_title", "process_page_back_link", "process_page_world_link"]
+
+[[heading]]
+id = "process_page_title"
+text = "Process View"
+level = 1
+
+[[link]]
+id = "process_page_back_link"
+href = "/"
+text = "Back to Todo"
+class = "surface-link-chip"
+
+[[link]]
+id = "process_page_world_link"
+href = "/world"
+text = "World Graph"
+class = "surface-link-chip"
+
+[[text]]
+id = "process_page_status"
+text = "Loading process view..."
+class = "status"
+
+[[box]]
+id = "process_page_shell"
+class = "surface-shell-3"
+children = ["process_page_catalog_pane", "process_page_main_pane", "process_page_inspector_pane"]
+
+[[box]]
+id = "process_page_catalog_pane"
+class = "surface-pane surface-stack"
+children = ["process_page_catalog_title", "process_page_catalog_list", "process_page_runs_title", "process_page_runs_list"]
+
+[[heading]]
+id = "process_page_catalog_title"
+text = "Processes"
+level = 2
+
+[[box]]
+id = "process_page_catalog_list"
+class = "surface-list"
+
+[[heading]]
+id = "process_page_runs_title"
+text = "Recent Runs"
+level = 3
+
+[[box]]
+id = "process_page_runs_list"
+class = "surface-list"
+
+[[box]]
+id = "process_page_main_pane"
+class = "surface-pane surface-pane-main surface-stack"
+children = ["process_page_summary", "process_page_graph_section"]
+
+[[box]]
+id = "process_page_summary"
+class = "surface-card-grid"
+
+[[box]]
+id = "process_page_graph_section"
+class = "surface-stack"
+data-process-view = "true"
+children = ["process_page_layers"]
+
+[[box]]
+id = "process_page_layers"
+class = "surface-stack"
+
+[[box]]
+id = "process_page_inspector_pane"
+class = "surface-pane surface-stack"
+children = ["process_page_run_card_host", "process_page_replay_card_host", "process_page_selected_node_card_host", "process_page_timeline_title", "process_page_timeline_list", "process_page_requests_title", "process_page_requests_list"]
+
+[[box]]
+id = "process_page_run_card_host"
+class = "surface-stack"
+
+[[box]]
+id = "process_page_replay_card_host"
+class = "surface-stack"
+
+[[box]]
+id = "process_page_selected_node_card_host"
+class = "surface-stack"
+
+[[heading]]
+id = "process_page_timeline_title"
+text = "Timeline"
+level = 2
+
+[[box]]
+id = "process_page_timeline_list"
+class = "surface-stack"
+
+[[heading]]
+id = "process_page_requests_title"
+text = "Correlated Requests"
+level = 2
+
+[[box]]
+id = "process_page_requests_list"
+class = "surface-stack"
+
+[[box]]
+id = "process_summary_item_template"
+template = true
+widgetId = "${item.widgetId}"
+class = "surface-card surface-stack"
+children = ["process_summary_item_label_template", "process_summary_item_value_template"]
+
+[[text]]
+id = "process_summary_item_label_template"
+template = true
+widgetId = "${item.labelWidgetId}"
+text = "${item.label}"
+class = "surface-card-label"
+
+[[text]]
+id = "process_summary_item_value_template"
+template = true
+widgetId = "${item.valueWidgetId}"
+text = "${item.value}"
+class = "surface-card-value"
+
+[[box]]
+id = "process_catalog_item_template"
+template = true
+widgetId = "${item.widgetId}"
+class = "${item.selected ? 'surface-link-item selected surface-stack' : 'surface-link-item surface-stack'}"
+data-process-catalog-item = "true"
+children = ["process_catalog_item_link_template", "process_catalog_item_meta_template"]
+
+[[link]]
+id = "process_catalog_item_link_template"
+template = true
+widgetId = "${item.linkWidgetId}"
+href = "${item.href}"
+text = "${item.label}"
+class = "surface-title-link"
+
+[[text]]
+id = "process_catalog_item_meta_template"
+template = true
+widgetId = "${item.metaWidgetId}"
+text = "${item.meta}"
+class = "surface-note surface-mono"
+
+[[text]]
+id = "process_catalog_empty_template"
+template = true
+text = "No authored processes."
+class = "surface-empty"
+
+[[box]]
+id = "process_run_item_template"
+template = true
+widgetId = "${item.widgetId}"
+class = "${item.selected ? 'surface-link-item selected surface-stack' : 'surface-link-item surface-stack'}"
+data-process-run-item = "true"
+children = ["process_run_item_link_template", "process_run_item_meta_template"]
+
+[[link]]
+id = "process_run_item_link_template"
+template = true
+widgetId = "${item.linkWidgetId}"
+href = "${item.href}"
+text = "${item.label}"
+class = "surface-title-link"
+
+[[text]]
+id = "process_run_item_meta_template"
+template = true
+widgetId = "${item.metaWidgetId}"
+text = "${item.meta}"
+class = "surface-note surface-mono"
+
+[[text]]
+id = "process_run_empty_template"
+template = true
+text = "No recorded runs yet."
+class = "surface-empty"
+
+[[box]]
+id = "process_layer_template"
+template = true
+widgetId = "${item.widgetId}"
+class = "surface-section surface-stack"
+children = ["process_layer_title_template", "process_layer_nodes_template"]
+
+[[heading]]
+id = "process_layer_title_template"
+template = true
+widgetId = "${item.titleWidgetId}"
+text = "${item.title}"
+level = 3
+
+[[box]]
+id = "process_layer_nodes_template"
+template = true
+widgetId = "${item.nodeContainerWidgetId}"
+class = "surface-grid-auto"
+
+[[text]]
+id = "process_layer_empty_template"
+template = true
+text = "Select an authored process."
+class = "surface-empty"
+
+[[box]]
+id = "process_node_template"
+template = true
+widgetId = "${item.widgetId}"
+class = "${item.selected ? 'surface-card surface-stack surface-state-' + item.status + ' selected' : 'surface-card surface-stack surface-state-' + item.status}"
+data-process-node = "true"
+data-process-status = "${item.status}"
+data-process-branch = "${item.branch}"
+data-process-loop = "${item.loopKind || ''}"
+data-process-parallel = "${item.parallel}"
+data-process-async = "${item.async}"
+children = ["process_node_link_template", "process_node_op_template", "process_node_meta_template", "process_node_badges_template", "process_node_when_template", "process_node_repeat_template", "process_node_after_template"]
+
+[[link]]
+id = "process_node_link_template"
+template = true
+widgetId = "${item.linkWidgetId}"
+href = "${item.href}"
+text = "${item.label}"
+class = "surface-title-link"
+
+[[text]]
+id = "process_node_op_template"
+template = true
+widgetId = "${item.opWidgetId}"
+text = "${item.op}"
+class = "surface-mono surface-accent"
+
+[[text]]
+id = "process_node_meta_template"
+template = true
+widgetId = "${item.metaWidgetId}"
+text = "${item.meta}"
+class = "surface-note surface-mono"
+
+[[text]]
+id = "process_node_badges_template"
+template = true
+widgetId = "${item.badgesWidgetId}"
+text = "${item.badgesText}"
+class = "${item.badgesText ? 'surface-note surface-mono' : 'surface-note surface-mono surface-hidden'}"
+
+[[text]]
+id = "process_node_when_template"
+template = true
+widgetId = "${item.whenWidgetId}"
+text = "${item.whenText}"
+class = "${item.whenText ? 'surface-note surface-mono' : 'surface-note surface-mono surface-hidden'}"
+
+[[text]]
+id = "process_node_repeat_template"
+template = true
+widgetId = "${item.repeatWidgetId}"
+text = "${item.repeatText}"
+class = "${item.repeatText ? 'surface-note surface-mono' : 'surface-note surface-mono surface-hidden'}"
+
+[[text]]
+id = "process_node_after_template"
+template = true
+widgetId = "${item.afterWidgetId}"
+text = "${item.afterText}"
+class = "${item.afterText ? 'surface-note surface-mono' : 'surface-note surface-mono surface-hidden'}"
+
+[[box]]
+id = "process_run_card_template"
+template = true
+widgetId = "${item.widgetId}"
+class = "surface-card surface-stack"
+children = ["process_run_card_title_template", "process_run_card_id_template", "process_run_card_status_template", "process_run_card_actor_template"]
+
+[[text]]
+id = "process_run_card_title_template"
+template = true
+widgetId = "${item.titleWidgetId}"
+text = "Run"
+class = "surface-card-label"
+
+[[text]]
+id = "process_run_card_id_template"
+template = true
+widgetId = "${item.runIdWidgetId}"
+text = "${item.runId}"
+class = "surface-mono"
+
+[[text]]
+id = "process_run_card_status_template"
+template = true
+widgetId = "${item.statusWidgetId}"
+text = "${item.status}"
+class = "surface-note"
+
+[[text]]
+id = "process_run_card_actor_template"
+template = true
+widgetId = "${item.actorWidgetId}"
+text = "${item.actor}"
+class = "surface-note"
+
+[[text]]
+id = "process_run_card_empty_template"
+template = true
+text = "No run selected."
+class = "surface-card surface-empty"
+
+[[box]]
+id = "process_replay_card_template"
+template = true
+widgetId = "${item.widgetId}"
+class = "surface-card surface-stack"
+data-process-replay = "true"
+children = ["process_replay_card_title_template", "process_replay_card_cursor_template", "process_replay_card_controls_template", "process_replay_range_template"]
+
+[[text]]
+id = "process_replay_card_title_template"
+template = true
+widgetId = "${item.titleWidgetId}"
+text = "Replay"
+class = "surface-card-label"
+
+[[text]]
+id = "process_replay_card_cursor_template"
+template = true
+widgetId = "${item.cursorWidgetId}"
+text = "${item.cursorLabel}"
+class = "surface-note surface-mono"
+
+[[box]]
+id = "process_replay_card_controls_template"
+template = true
+widgetId = "${item.controlsWidgetId}"
+class = "surface-actions"
+children = ["process_replay_prev_template", "process_replay_next_template", "process_replay_failure_template"]
+
+[[link]]
+id = "process_replay_prev_template"
+template = true
+widgetId = "${item.prevWidgetId}"
+href = "${item.prevHref}"
+text = "Step back"
+class = "surface-link-chip"
+
+[[link]]
+id = "process_replay_next_template"
+template = true
+widgetId = "${item.nextWidgetId}"
+href = "${item.nextHref}"
+text = "Step forward"
+class = "surface-link-chip"
+
+[[link]]
+id = "process_replay_failure_template"
+template = true
+widgetId = "${item.failureWidgetId}"
+href = "${item.failureHref || '#'}"
+text = "Jump to failure"
+class = "${item.failureHref ? 'surface-link-chip' : 'surface-link-chip surface-hidden'}"
+
+[[input]]
+id = "process_replay_range_template"
+template = true
+widgetId = "process_replay_range"
+name = "replay"
+type = "range"
+min = "0"
+max = "${item.max}"
+value = "${item.cursor}"
+data-process-replay-range = "true"
+data-url-prefix = "${item.rangeUrlPrefix}"
+
+[[text]]
+id = "process_replay_card_empty_template"
+template = true
+text = "No run selected."
+class = "surface-card surface-empty"
+
+[[box]]
+id = "process_selected_node_card_template"
+template = true
+widgetId = "${item.widgetId}"
+class = "surface-card surface-stack"
+children = ["process_selected_node_title_template", "process_selected_node_label_template", "process_selected_node_op_template", "process_selected_node_meta_template", "process_selected_node_status_template"]
+
+[[text]]
+id = "process_selected_node_title_template"
+template = true
+widgetId = "${item.titleWidgetId}"
+text = "Selected Node"
+class = "surface-card-label"
+
+[[text]]
+id = "process_selected_node_label_template"
+template = true
+widgetId = "${item.labelWidgetId}"
+text = "${item.label}"
+
+[[text]]
+id = "process_selected_node_op_template"
+template = true
+widgetId = "${item.opWidgetId}"
+text = "${item.op}"
+class = "surface-mono"
+
+[[text]]
+id = "process_selected_node_meta_template"
+template = true
+widgetId = "${item.metaWidgetId}"
+text = "${item.meta}"
+class = "surface-note surface-mono"
+
+[[text]]
+id = "process_selected_node_status_template"
+template = true
+widgetId = "${item.statusWidgetId}"
+text = "${item.status}"
+class = "${item.status ? 'surface-note' : 'surface-note surface-hidden'}"
+
+[[text]]
+id = "process_selected_node_card_empty_template"
+template = true
+text = "Select a node."
+class = "surface-card surface-empty"
+
+[[box]]
+id = "process_timeline_item_template"
+template = true
+widgetId = "${item.widgetId}"
+class = "${item.failed ? 'surface-card surface-stack surface-state-failed' : 'surface-card surface-stack'}"
+children = ["process_timeline_item_label_template", "process_timeline_item_status_template", "process_timeline_item_message_template"]
+
+[[text]]
+id = "process_timeline_item_label_template"
+template = true
+widgetId = "${item.labelWidgetId}"
+text = "${item.label}"
+class = "surface-mono"
+
+[[text]]
+id = "process_timeline_item_status_template"
+template = true
+widgetId = "${item.statusWidgetId}"
+text = "${item.status}"
+class = "surface-note surface-mono"
+
+[[text]]
+id = "process_timeline_item_message_template"
+template = true
+widgetId = "${item.messageWidgetId}"
+text = "${item.message}"
+class = "${item.message ? 'surface-note' : 'surface-note surface-hidden'}"
+
+[[text]]
+id = "process_timeline_empty_template"
+template = true
+text = "No node events yet."
+class = "surface-empty"
+
+[[box]]
+id = "process_request_item_template"
+template = true
+widgetId = "${item.widgetId}"
+class = "${item.failed ? 'surface-card surface-stack surface-state-failed' : 'surface-card surface-stack'}"
+children = ["process_request_item_label_template", "process_request_item_status_template", "process_request_item_message_template"]
+
+[[text]]
+id = "process_request_item_label_template"
+template = true
+widgetId = "${item.labelWidgetId}"
+text = "${item.label}"
+class = "surface-mono"
+
+[[text]]
+id = "process_request_item_status_template"
+template = true
+widgetId = "${item.statusWidgetId}"
+text = "${item.status}"
+class = "surface-note surface-mono"
+
+[[text]]
+id = "process_request_item_message_template"
+template = true
+widgetId = "${item.messageWidgetId}"
+text = "${item.message}"
+class = "${item.message ? 'surface-note' : 'surface-note surface-hidden'}"
+
+[[text]]
+id = "process_request_empty_template"
+template = true
+text = "No correlated requests for this node."
+class = "surface-empty"
+
+[[frontendProgram]]
+id = "process_page_program"
+rootWidget = "process_page_root"
+
+[[step]]
+order = 0
+op = "renderCollection"
+on = "load"
+widget = "process_page_catalog_list"
+from = "processPage.catalogItems"
+template = "process_catalog_item_template"
+emptyWidget = "process_catalog_empty_template"
+
+[[step]]
+order = 1
+op = "renderCollection"
+on = "load"
+widget = "process_page_runs_list"
+from = "processPage.runItems"
+template = "process_run_item_template"
+emptyWidget = "process_run_empty_template"
+
+[[step]]
+order = 2
+op = "renderCollection"
+on = "load"
+widget = "process_page_summary"
+from = "processPage.summaryItems"
+template = "process_summary_item_template"
+
+[[step]]
+order = 3
+op = "renderCollection"
+on = "load"
+widget = "process_page_layers"
+from = "processPage.graphLayers"
+template = "process_layer_template"
+emptyWidget = "process_layer_empty_template"
+
+[[step]]
+order = 4
+op = "renderCollection"
+on = "load"
+repeat = { forEach = { from = "processPage.graphLayers" } }
+widget = "${item.nodeContainerWidgetId}"
+from = "${item.nodes}"
+template = "process_node_template"
+
+[[step]]
+order = 5
+op = "renderCollection"
+on = "load"
+widget = "process_page_run_card_host"
+from = "processPage.runCards"
+template = "process_run_card_template"
+emptyWidget = "process_run_card_empty_template"
+
+[[step]]
+order = 6
+op = "renderCollection"
+on = "load"
+widget = "process_page_replay_card_host"
+from = "processPage.replayCards"
+template = "process_replay_card_template"
+emptyWidget = "process_replay_card_empty_template"
+
+[[step]]
+order = 7
+op = "renderCollection"
+on = "load"
+widget = "process_page_selected_node_card_host"
+from = "processPage.selectedNodeCards"
+template = "process_selected_node_card_template"
+emptyWidget = "process_selected_node_card_empty_template"
+
+[[step]]
+order = 8
+op = "renderCollection"
+on = "load"
+widget = "process_page_timeline_list"
+from = "processPage.selectedNodeTimeline"
+template = "process_timeline_item_template"
+emptyWidget = "process_timeline_empty_template"
+
+[[step]]
+order = 9
+op = "renderCollection"
+on = "load"
+widget = "process_page_requests_list"
+from = "processPage.selectedNodeRequests"
+template = "process_request_item_template"
+emptyWidget = "process_request_empty_template"
+
+[[step]]
+order = 10
+op = "setText"
+on = "load"
+widget = "process_page_status"
+text = "Ready."
+
+[[step]]
+order = 0
+op = "navigate"
+on = "change:process_replay_range"
+url = "${event.urlPrefix}${event.value}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+widget = "process_page_status"
+text = "Failed: ${event.message}"

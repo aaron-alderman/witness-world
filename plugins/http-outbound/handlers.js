@@ -157,7 +157,7 @@ export function createHttpOutboundHandlers({
               }
             });
             sendJson(res, 200, {
-              outbound: outboundReadShape(currentOutboundForRunner(serverRunnerId, requestRow.id) ?? {
+              outbound: outboundReadShape(currentOutboundForRunner(serverRunnerId, requestRow.id, appContext) ?? {
                 id: requestRow.id,
                 title: outboundTitle(requestRow),
                 target: requestRow.target,
@@ -233,7 +233,7 @@ export function createHttpOutboundHandlers({
           });
           sendJson(res, outboundFailureResponseStatus(reason, result.status), {
             error: reason,
-            outbound: outboundReadShape(currentOutboundForRunner(serverRunnerId, requestRow.id)),
+            outbound: outboundReadShape(currentOutboundForRunner(serverRunnerId, requestRow.id, appContext)),
             response: responsePayload,
             witness: requestWitness.id
           });
@@ -281,7 +281,7 @@ export function createHttpOutboundHandlers({
         });
         sendJson(res, outboundFailureResponseStatus(reason), {
           error: reason,
-          outbound: outboundReadShape(currentOutboundForRunner(serverRunnerId, requestRow.id)),
+          outbound: outboundReadShape(currentOutboundForRunner(serverRunnerId, requestRow.id, appContext)),
           witness: requestWitness.id
         });
         return;
@@ -307,7 +307,7 @@ export function createHttpOutboundHandlers({
         sendGateFailure(res, gate);
         return;
       }
-      const outbound = outboundRequestsForRunner(serverRunnerId).map(outboundReadShape);
+      const outbound = outboundRequestsForRunner(serverRunnerId, appContext).map(outboundReadShape);
       world.observe({
         process: "http.outbound.list",
         actor: requestActor,
@@ -336,7 +336,7 @@ export function createHttpOutboundHandlers({
         sendGateFailure(res, gate);
         return;
       }
-      const row = currentOutboundForRunner(serverRunnerId, params.id || "");
+      const row = currentOutboundForRunner(serverRunnerId, params.id || "", appContext);
       if (!row) {
         world.observe({ process: "http.outbound.read.failed", actor: requestActor, claims: [], body: { reason: "outbound request not found", serverRunner: serverRunnerId, id: params.id || "" } });
         sendJson(res, 404, { error: "outbound request not found", id: params.id || "" });

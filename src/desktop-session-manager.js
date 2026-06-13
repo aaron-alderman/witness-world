@@ -2,6 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createDesktopShellState, DESKTOP_ONLY_POWERS } from "./desktop-bridge.js";
 import { renderDesktopLauncherPage } from "./desktop-launcher-page.js";
+import { loadAppProject, resolveDesktopTarget } from "./app-project.js";
+import { startAppRuntime } from "./app-runtime.js";
 
 const DESKTOP_STATE_FILE = "desktop-shell-state.json";
 const RECENT_WORLD_LIMIT = 8;
@@ -58,7 +60,9 @@ export function createDesktopSessionManager({
   runtimePluginIds = [],
   cwd = process.cwd(),
   env = process.env,
-  fsModule = fs
+  fsModule = fs,
+  loadAppProjectImpl = loadAppProject,
+  startAppRuntimeImpl = startAppRuntime
 } = {}) {
   const userDataRoot = typeof app?.getPath === "function"
     ? app.getPath("userData")
@@ -71,12 +75,18 @@ export function createDesktopSessionManager({
   let activeRuntimeServer = null;
   let currentWorldHome = null;
   let currentRuntimeProfile = requestedRuntimeProfile;
+  let currentAppRoot = null;
+  let currentManifestPath = null;
+  let currentSelectedTarget = null;
   let launcherRequired = true;
   let runtimeStatus = "idle";
 
   const desktopShellState = () => createDesktopShellState({
     worldHome: currentWorldHome,
     runtimeProfile: currentRuntimeProfile,
+    appRoot: currentAppRoot,
+    manifestPath: currentManifestPath,
+    selectedTarget: currentSelectedTarget,
     availablePowers: DESKTOP_ONLY_POWERS,
     recentWorldHomes,
     launcherRequired,
@@ -160,6 +170,9 @@ export function createDesktopSessionManager({
     const previousServer = activeRuntimeServer;
     const previousWorldHome = currentWorldHome;
     const previousRuntimeProfile = currentRuntimeProfile;
+    const previousAppRoot = currentAppRoot;
+    const previousManifestPath = currentManifestPath;
+    const previousSelectedTarget = currentSelectedTarget;
     const previousLauncherRequired = launcherRequired;
 
     runtimeStatus = "launching";
@@ -195,6 +208,9 @@ export function createDesktopSessionManager({
       activeRuntimeServer = nextRuntime.server;
       currentWorldHome = nextRuntime.operatorContract.worldHome;
       currentRuntimeProfile = nextRuntime.runtimeProfile;
+      currentAppRoot = null;
+      currentManifestPath = null;
+      currentSelectedTarget = null;
       launcherRequired = false;
       runtimeStatus = "ready";
       recentWorldHomes = updateRecentWorldHomes(recentWorldHomes, currentWorldHome);
@@ -212,6 +228,81 @@ export function createDesktopSessionManager({
       }
       currentWorldHome = previousWorldHome;
       currentRuntimeProfile = previousRuntimeProfile;
+      currentAppRoot = previousAppRoot;
+      currentManifestPath = previousManifestPath;
+      currentSelectedTarget = previousSelectedTarget;
+      launcherRequired = hadActiveRuntime ? previousLauncherRequired : true;
+      runtimeStatus = hadActiveRuntime ? "ready" : "error";
+      if (!hadActiveRuntime) await showLauncherWindow(error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+  };
+
+  const launchAppProject = async ({
+    appPath,
+    desktopTargetId = null,
+    worldHome = null
+  }) => {
+    const hadActiveRuntime = Boolean(activeRuntimeServer);
+    const previousServer = activeRuntimeServer;
+    const previousWorldHome = currentWorldHome;
+    const previousRuntimeProfile = currentRuntimeProfile;
+    const previousAppRoot = currentAppRoot;
+    const previousManifestPath = currentManifestPath;
+    const previousSelectedTarget = currentSelectedTarget;
+    const previousLauncherRequired = launcherRequired;
+
+    runtimeStatus = "launching";
+    launcherRequired = false;
+
+    let nextRuntime = null;
+    try {
+      const appProject = await loadAppProjectImpl(appPath, { cwd });
+      const selection = resolveDesktopTarget(appProject, { desktopTargetId });
+      nextRuntime = await startAppRuntimeImpl({
+        appProject,
+        startupMode: "desktop",
+        port: 0,
+        serverRunnerId: selection.serverRunner.id,
+        runtimeProfile: requestedRuntimeProfile,
+        runtimeProfileExplicit,
+        runtimePluginIds,
+        worldHome,
+        cwd,
+        env
+      });
+      if (!nextRuntime?.server?.ok) {
+        const error = new Error(nextRuntime?.server?.reason || nextRuntime?.reason || "desktop runtime failed to start");
+        error.code = "DESKTOP_RUNTIME_FAILED";
+        throw error;
+      }
+      const window = ensureMainWindow();
+      await window.loadURL(nextRuntime.server.url);
+
+      activeRuntimeServer = nextRuntime.server;
+      currentWorldHome = nextRuntime.operatorContract.worldHome ?? null;
+      currentRuntimeProfile = nextRuntime.runtimeProfile;
+      currentAppRoot = appProject.appRoot;
+      currentManifestPath = appProject.manifestPath;
+      currentSelectedTarget = selection.desktopTarget.id;
+      launcherRequired = false;
+      runtimeStatus = "ready";
+      hideLauncherWindow();
+
+      if (previousServer?.close && previousServer !== activeRuntimeServer) {
+        await previousServer.close();
+      }
+
+      return desktopShellState();
+    } catch (error) {
+      if (nextRuntime?.server?.close && nextRuntime.server !== activeRuntimeServer) {
+        await nextRuntime.server.close();
+      }
+      currentWorldHome = previousWorldHome;
+      currentRuntimeProfile = previousRuntimeProfile;
+      currentAppRoot = previousAppRoot;
+      currentManifestPath = previousManifestPath;
+      currentSelectedTarget = previousSelectedTarget;
       launcherRequired = hadActiveRuntime ? previousLauncherRequired : true;
       runtimeStatus = hadActiveRuntime ? "ready" : "error";
       if (!hadActiveRuntime) await showLauncherWindow(error instanceof Error ? error.message : String(error));
@@ -275,10 +366,20 @@ export function createDesktopSessionManager({
   };
 
   const initialize = async ({
+    appPath = null,
+    desktopTargetId = null,
     worldHome = null,
     createIfMissing = false
   } = {}) => {
     await loadPersistedState();
+    if (appPath) {
+      try {
+        await launchAppProject({ appPath, desktopTargetId, worldHome });
+        return desktopShellState();
+      } catch {
+        return desktopShellState();
+      }
+    }
     if (worldHome) {
       try {
         await launchWorld({ worldHome, createIfMissing });

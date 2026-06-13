@@ -60,10 +60,12 @@ it before starting another migration slice.
 - Optional read-model implementations are plugin-owned active providers. Core may
   keep delegated empty fallbacks for absent optional plugins, but not real
   feature projectors such as `assets` or `assetIndex`.
-- Active module/read-model projector registration is token-scoped: concurrent
-  identical implementations can share a projector name safely, scoped cleanup is
-  idempotent, and conflicting same-name implementations fail until a future
-  per-runtime projector context exists.
+- Active module/read-model projectors are runtime/world-local projection
+  contexts. Different runtimes may use different implementations for the same
+  projector name without process-global conflict.
+- `registerModuleProjectors(...)` is transitional compatibility for direct tests
+  and legacy callers only. Runtime startup must use projection contexts instead
+  of process-global projector registration.
 - `src/runtime-route-handlers.js` delegates optional read shapes, storage root
   defaults, notification normalization, and backend diagnostic path/url helpers
   to active plugin support services.

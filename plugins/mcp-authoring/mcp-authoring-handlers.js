@@ -19,7 +19,7 @@ export function createMcpAuthoringBundleHandlers({
     ensureContextAuthority
   } = authoringServices;
   return {
-    "mcpServer.create": async ({ req, res, requestActor }) => {
+    "mcpServer.create": async ({ req, res, requestActor, appContext }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
         sendGateFailure(res, gate);
@@ -33,7 +33,7 @@ export function createMcpAuthoringBundleHandlers({
         sendGateFailure(res, auth);
         return;
       }
-      const result = requestBootstrapMcpServerDefine(world, { actor: gate.actor, backendHost, body });
+      const result = requestBootstrapMcpServerDefine(world, { actor: gate.actor, backendHost, body, appContext });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;
@@ -41,7 +41,7 @@ export function createMcpAuthoringBundleHandlers({
       sendJson(res, result.status, { mcpServer: result.mcpServer, witness: result.witness });
     },
 
-    "mcpTool.install": async ({ req, res, requestActor }) => {
+    "mcpTool.install": async ({ req, res, requestActor, appContext }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
         sendGateFailure(res, gate);
@@ -57,7 +57,8 @@ export function createMcpAuthoringBundleHandlers({
         actor: gate.actor,
         backendHost,
         body,
-        allowedTools: mcpToolNames()
+        allowedTools: mcpToolNames(),
+        appContext
       });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
@@ -66,7 +67,7 @@ export function createMcpAuthoringBundleHandlers({
       sendJson(res, result.status, { mcpToolInstall: result.mcpToolInstall, witness: result.witness });
     },
 
-    "mcpTool.remove": async ({ req, res, requestActor }) => {
+    "mcpTool.remove": async ({ req, res, requestActor, appContext }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
         sendGateFailure(res, gate);
@@ -78,7 +79,7 @@ export function createMcpAuthoringBundleHandlers({
         sendGateFailure(res, auth);
         return;
       }
-      const result = requestBootstrapMcpToolRemove(world, { actor: gate.actor, backendHost, body });
+      const result = requestBootstrapMcpToolRemove(world, { actor: gate.actor, backendHost, body, appContext });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;

@@ -123,7 +123,13 @@ export async function runNode(node, execute, state) {
   if (repeat?.forEach) {
     const items = readPath(state, repeat.forEach.from);
     const list = Array.isArray(items) ? items : [];
-    await Promise.all(list.map((item, index) => execute(node, state, { item, index, as: repeat.forEach.as ?? "item" })));
+    if (repeat.forEach.serial === true) {
+      for (const [index, item] of list.entries()) {
+        await execute(node, state, { item, index, as: repeat.forEach.as ?? "item" });
+      }
+    } else {
+      await Promise.all(list.map((item, index) => execute(node, state, { item, index, as: repeat.forEach.as ?? "item" })));
+    }
     return { mode: "forEach", count: list.length };
   }
 

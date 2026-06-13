@@ -430,11 +430,12 @@ export function matchRuntimeBundleRoute(profileName = DEFAULT_RUNTIME_PROFILE, m
   const targetPath = String(pathname || "");
   for (const route of runtimeRouteEntriesForProfile(profileName, options)) {
     if (String(route.method || "GET").toUpperCase() !== targetMethod) continue;
-    if (route.kind === "exact") {
+    const routeKind = route.kind ?? (typeof route.path === "string" ? "exact" : (route.pattern ? "pattern" : null));
+    if (routeKind === "exact") {
       if (route.path !== targetPath) continue;
       return { handler: route.handler, params: { ...(route.params ?? {}) } };
     }
-    if (route.kind === "pattern") {
+    if (routeKind === "pattern") {
       const match = targetPath.match(route.pattern);
       if (!match) continue;
       const params = {};

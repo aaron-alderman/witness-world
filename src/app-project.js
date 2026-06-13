@@ -1,0 +1,313 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { loadWitnessAppFile } from "./dsl.js";
+
+export const APP_MANIFEST_BASENAME = "app.wtoml";
+
+function createAppProjectError(code, message, details = {}) {
+  const error = new Error(message);
+  error.code = code;
+  Object.assign(error, details);
+  return error;
+}
+
+function uniqueByFile(rows = []) {
+  const seen = new Set();
+  const result = [];
+  for (const row of rows) {
+    const file = typeof row?.file === "string" ? path.resolve(row.file) : "";
+    if (!file || seen.has(file)) continue;
+    seen.add(file);
+    result.push({ ...row, file });
+  }
+  return result;
+}
+
+function normalizeId(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function isWithinRoot(filePath, rootPath) {
+  const relative = path.relative(rootPath, filePath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+async function statOrNull(targetPath, fsModule) {
+  try {
+    return await fsModule.stat(targetPath);
+  } catch {
+    return null;
+  }
+}
+
+function sharedLibRootFor(appRoot) {
+  return path.join(path.dirname(appRoot), "_lib");
+}
+
+function classifySource(filePath, { appRoot, sharedLibRoot }) {
+  if (isWithinRoot(filePath, appRoot)) return "app-owned";
+  if (isWithinRoot(filePath, sharedLibRoot)) return "shared-lib";
+  return "invalid";
+}
+
+function buildTargetRows(kind, docs = []) {
+  return docs.map(doc => {
+    const id = normalizeId(doc.values?.id);
+    if (!id) {
+      throw createAppProjectError(
+        "APP_TARGET_ID_REQUIRED",
+        `${kind} target is missing id at ${doc.file}:${doc.line ?? 0}`,
+        { kind, file: doc.file, line: doc.line ?? null }
+      );
+    }
+    return {
+      id,
+      label: normalizeId(doc.values?.label) ?? id,
+      default: doc.values?.default === true,
+      file: doc.file ?? null,
+      line: doc.line ?? null,
+      values: structuredClone(doc.values ?? {})
+    };
+  });
+}
+
+function assertUniqueTargetIds(kind, rows) {
+  const seen = new Map();
+  for (const row of rows) {
+    if (!seen.has(row.id)) {
+      seen.set(row.id, row);
+      continue;
+    }
+    throw createAppProjectError(
+      "APP_TARGET_DUPLICATE_ID",
+      `duplicate ${kind} target id: ${row.id}`,
+      { kind, targetId: row.id, first: seen.get(row.id), second: row }
+    );
+  }
+}
+
+function selectTarget(kind, rows, overrideId = null) {
+  const label = kind === "server" ? "server runner" : (kind === "mcp" ? "MCP server" : "desktop target");
+  if (overrideId) {
+    const selected = rows.find(row => row.id === overrideId) ?? null;
+    if (!selected) {
+      throw createAppProjectError(
+        "APP_TARGET_NOT_FOUND",
+        `${label} not found: ${overrideId}`,
+        { kind, targetId: overrideId, available: rows.map(row => row.id) }
+      );
+    }
+    return selected;
+  }
+  if (rows.length === 0) {
+    throw createAppProjectError(
+      "APP_TARGET_MISSING",
+      `no ${rows.length === 1 ? label : `${label}s`} defined`,
+      { kind, available: [] }
+    );
+  }
+  if (rows.length === 1) return rows[0];
+  const defaults = rows.filter(row => row.default === true);
+  if (defaults.length === 1) return defaults[0];
+  if (defaults.length === 0) {
+    throw createAppProjectError(
+      "APP_TARGET_DEFAULT_REQUIRED",
+      `multiple ${label}s defined but none marked default`,
+      { kind, available: rows.map(row => row.id) }
+    );
+  }
+  throw createAppProjectError(
+    "APP_TARGET_MULTIPLE_DEFAULTS",
+    `multiple ${label}s marked default`,
+    { kind, available: defaults.map(row => row.id) }
+  );
+}
+
+export async function resolveAppProjectEntry(entryPath, {
+  cwd = process.cwd(),
+  fsModule = fs
+} = {}) {
+  const raw = typeof entryPath === "string" ? entryPath.trim() : "";
+  if (!raw) {
+    throw createAppProjectError("APP_ENTRY_REQUIRED", "app startup path is required");
+  }
+  const resolved = path.resolve(cwd, raw);
+  const stat = await statOrNull(resolved, fsModule);
+  if (!stat) {
+    throw createAppProjectError("APP_ENTRY_MISSING", `app startup path not found: ${resolved}`, { entryPath: resolved });
+  }
+  if (stat.isDirectory()) {
+    const manifestPath = path.join(resolved, APP_MANIFEST_BASENAME);
+    const manifestStat = await statOrNull(manifestPath, fsModule);
+    if (!manifestStat?.isFile()) {
+      throw createAppProjectError("APP_MANIFEST_MISSING", `app manifest not found: ${manifestPath}`, {
+        appRoot: resolved,
+        manifestPath
+      });
+    }
+    return {
+      appRoot: resolved,
+      manifestPath
+    };
+  }
+  if (!stat.isFile()) {
+    throw createAppProjectError("APP_ENTRY_INVALID", `app startup path must be a directory or file: ${resolved}`, {
+      entryPath: resolved
+    });
+  }
+  if (path.basename(resolved) !== APP_MANIFEST_BASENAME) {
+    throw createAppProjectError(
+      "APP_ENTRY_NOT_CANONICAL",
+      `direct app startup file must be ${APP_MANIFEST_BASENAME}: ${resolved}`,
+      { entryPath: resolved }
+    );
+  }
+  return {
+    appRoot: path.dirname(resolved),
+    manifestPath: resolved
+  };
+}
+
+export async function loadAppProject(entryPath, options = {}) {
+  const { appRoot, manifestPath } = await resolveAppProjectEntry(entryPath, options);
+  const sharedLibRoot = sharedLibRootFor(appRoot);
+  const ensureSourceWithinBoundary = async sourcePath => {
+    const classification = classifySource(sourcePath, { appRoot, sharedLibRoot });
+    if (classification !== "invalid") return;
+    throw createAppProjectError(
+      "APP_IMPORT_OUT_OF_BOUNDS",
+      `app import outside allowed roots: ${sourcePath}`,
+      {
+        appRoot,
+        manifestPath,
+        file: sourcePath,
+        allowedRoots: [appRoot, sharedLibRoot]
+      }
+    );
+  };
+  const loaded = await loadWitnessAppFile(manifestPath, { beforeLoad: ensureSourceWithinBoundary });
+  const sourceFiles = uniqueByFile(loaded.sourceFiles);
+  const groupedImports = {
+    "app-owned": [],
+    "shared-lib": [],
+    "plugin/runtime": []
+  };
+
+  for (const source of sourceFiles) {
+    const classification = classifySource(source.file, { appRoot, sharedLibRoot });
+    if (classification === "invalid") continue;
+    groupedImports[classification].push(source.file);
+  }
+
+  const appDocs = loaded.allDocs.filter(doc => doc.kind === "app");
+  const serverTargets = buildTargetRows("server", loaded.allDocs.filter(doc => doc.kind === "serverRunner"));
+  const mcpTargets = buildTargetRows("mcp", loaded.allDocs.filter(doc => doc.kind === "mcpServer")).map(row => ({
+    ...row,
+    serverRunner: normalizeId(row.values.serverRunner),
+    transports: Array.isArray(row.values.transports)
+      ? [...new Set(row.values.transports.map(value => String(value).trim()).filter(Boolean))]
+      : ["stdio", "http"]
+  }));
+  const desktopTargets = buildTargetRows("desktop", loaded.allDocs.filter(doc => doc.kind === "desktopTarget")).map(row => ({
+    ...row,
+    serverRunner: normalizeId(row.values.serverRunner)
+  }));
+
+  assertUniqueTargetIds("server", serverTargets);
+  assertUniqueTargetIds("mcp", mcpTargets);
+  assertUniqueTargetIds("desktop", desktopTargets);
+
+  const serverIds = new Set(serverTargets.map(row => row.id));
+  for (const row of mcpTargets) {
+    if (!row.serverRunner) {
+      throw createAppProjectError("APP_MCP_SERVER_RUNNER_REQUIRED", `mcp target ${row.id} is missing serverRunner`, { target: row });
+    }
+    if (!serverIds.has(row.serverRunner)) {
+      throw createAppProjectError(
+        "APP_MCP_SERVER_RUNNER_UNKNOWN",
+        `mcp target ${row.id} references unknown server runner ${row.serverRunner}`,
+        { target: row, availableServerRunners: [...serverIds] }
+      );
+    }
+  }
+  for (const row of desktopTargets) {
+    if (!row.serverRunner) {
+      throw createAppProjectError("APP_DESKTOP_SERVER_RUNNER_REQUIRED", `desktop target ${row.id} is missing serverRunner`, { target: row });
+    }
+    if (!serverIds.has(row.serverRunner)) {
+      throw createAppProjectError(
+        "APP_DESKTOP_SERVER_RUNNER_UNKNOWN",
+        `desktop target ${row.id} references unknown server runner ${row.serverRunner}`,
+        { target: row, availableServerRunners: [...serverIds] }
+      );
+    }
+  }
+
+  return {
+    appRoot,
+    manifestPath,
+    appId: normalizeId(appDocs[0]?.values?.id),
+    witnessDocs: loaded.witnessDocs,
+    authoredDesireDocs: loaded.authoredDesireDocs,
+    allDocs: loaded.allDocs,
+    sourceFiles,
+    importEntries: loaded.importEntries,
+    targets: {
+      server: serverTargets,
+      mcp: mcpTargets,
+      desktop: desktopTargets
+    },
+    diagnostics: {
+      appRoot,
+      manifestPath,
+      shellTargets: {
+        server: serverTargets.map(row => ({ id: row.id, default: row.default, file: row.file, line: row.line })),
+        mcp: mcpTargets.map(row => ({ id: row.id, default: row.default, serverRunner: row.serverRunner, file: row.file, line: row.line })),
+        desktop: desktopTargets.map(row => ({ id: row.id, default: row.default, serverRunner: row.serverRunner, file: row.file, line: row.line }))
+      },
+      imports: groupedImports
+    }
+  };
+}
+
+export function resolveServeTarget(appProject, { serverRunnerId = null } = {}) {
+  const serverRunner = selectTarget("server", appProject.targets.server, serverRunnerId);
+  return {
+    kind: "server",
+    serverRunner
+  };
+}
+
+export function resolveMcpTarget(appProject, { mcpServerId = null } = {}) {
+  const mcpServer = selectTarget("mcp", appProject.targets.mcp, mcpServerId);
+  const serverRunner = appProject.targets.server.find(row => row.id === mcpServer.serverRunner) ?? null;
+  if (!serverRunner) {
+    throw createAppProjectError(
+      "APP_MCP_SERVER_RUNNER_UNKNOWN",
+      `mcp target ${mcpServer.id} references unknown server runner ${mcpServer.serverRunner}`,
+      { target: mcpServer }
+    );
+  }
+  return {
+    kind: "mcp",
+    mcpServer,
+    serverRunner
+  };
+}
+
+export function resolveDesktopTarget(appProject, { desktopTargetId = null } = {}) {
+  const desktopTarget = selectTarget("desktop", appProject.targets.desktop, desktopTargetId);
+  const serverRunner = appProject.targets.server.find(row => row.id === desktopTarget.serverRunner) ?? null;
+  if (!serverRunner) {
+    throw createAppProjectError(
+      "APP_DESKTOP_SERVER_RUNNER_UNKNOWN",
+      `desktop target ${desktopTarget.id} references unknown server runner ${desktopTarget.serverRunner}`,
+      { target: desktopTarget }
+    );
+  }
+  return {
+    kind: "desktop",
+    desktopTarget,
+    serverRunner
+  };
+}

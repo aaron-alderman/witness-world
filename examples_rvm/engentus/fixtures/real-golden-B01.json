@@ -1,0 +1,42 @@
+{
+  "_note": "REAL captured golden host-op I/O for mill B01 — values taken verbatim from example-ports/engentus-pipeline/analysis/output/B01/outputs/*.csv (the actual Python pipeline outputs), projected onto each stage's declared Rung-C result schema. This replaces the synthetic host-op-golden.json for fidelity verification: the stub returned made-up constants (rpm 12.5); these are the real algorithm outputs (rpm 11.45). The full per-row frames validate against the *Frame schemas in test/desire-engentus-frames.test.js; test/desire-engentus-real-golden.test.js asserts these fixtures match the source CSVs and replay through the engine.",
+  "mill": "B01",
+  "operations": {
+    "engentus.pipeline.fit.burst": {
+      "source": "burst_rotation.csv row 1 (projected onto BurstFitResultPayload)",
+      "request": {
+        "source_name": "engentus.mill.pipeline",
+        "mill_id": "B01",
+        "burst_start": "2026-04-02 16:23:44+00:00",
+        "burst_end": "2026-04-02 16:23:54+00:00"
+      },
+      "response": {
+        "status": "success",
+        "payload": {
+          "burst_start": "2026-04-02 16:23:44+00:00",
+          "rpm": 11.45000000000002,
+          "n_valid_pkgs": 6
+        }
+      }
+    },
+    "engentus.pipeline.kalman": {
+      "source": "burst_kalman.csv first kalman_ok=True row, bolt 5 (projected onto KalmanResultPayload)",
+      "request": {
+        "source_name": "engentus.mill.pipeline",
+        "mill_id": "B01",
+        "burst_start": "2026-04-02 16:23:44+00:00",
+        "burst_end": "2026-04-02 16:23:54+00:00"
+      },
+      "response": {
+        "status": "success",
+        "payload": {
+          "burst_start": "2026-04-02 16:23:44+00:00",
+          "omega_burst_rpm": 11.34044012376737,
+          "delta_bt_deg": 1035012.5141895331,
+          "bias_combined_dps": 64663.32639157116,
+          "omega_disagree_flag": false
+        }
+      }
+    }
+  }
+}

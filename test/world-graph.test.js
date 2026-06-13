@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -60,7 +60,7 @@ test("world graph groups nodes into context boxes and hides witness nodes by def
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const graph = worldGraphProjection(world.allWitnesses());
@@ -78,7 +78,7 @@ test("world graph renders frontend process actions as semantic nested path conte
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const graph = worldGraphProjection(world.allWitnesses());
@@ -107,7 +107,7 @@ test("world graph can include witness nodes when explicitly requested", () => {
 
 test("world graph surfaces trait, valueType, and processSpec nodes with compatibility edges", async () => {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const graph = worldGraphProjection(world.allWitnesses());
@@ -403,7 +403,7 @@ test("demo UI includes world graph widget and frontend render operation", async 
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -476,7 +476,7 @@ test("server logs request start, projection, and finish for world graph", async 
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -502,7 +502,7 @@ test("server logs request start, projection, and finish for world graph", async 
 
 test("world graph keeps frontend program actions in frontend context and hides process steps", async () => {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const graph = worldGraphProjection(world.allWitnesses());
@@ -522,7 +522,7 @@ test("world graph keeps frontend program actions in frontend context and hides p
 
 test("world graph groups widgets, layout, execution, routes, and API as semantic areas", async () => {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const graph = worldGraphProjection(world.allWitnesses());
@@ -548,7 +548,7 @@ test("world graph groups widgets, layout, execution, routes, and API as semantic
 
 test("world graph renders explicit API boundary for frontend to backend communication", async () => {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const graph = worldGraphProjection(world.allWitnesses());
@@ -567,7 +567,7 @@ test("world graph renders explicit API boundary for frontend to backend communic
 
 test("world graph stops at action nodes and leaves process step detail to process views", async () => {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const graph = worldGraphProjection(world.allWitnesses());
@@ -584,7 +584,7 @@ test("world graph stops at action nodes and leaves process step detail to proces
 
 test("world graph exposes process handoff metadata for frontend program and action nodes", async () => {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const graph = worldGraphProjection(world.allWitnesses());
@@ -606,7 +606,7 @@ test("world graph scopes runtime hosts, capabilities, and vocabulary", async () 
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const graph = worldGraphProjection(world.allWitnesses());
@@ -624,7 +624,7 @@ test("world graph classifies app routes versus harness and internal operating su
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const graph = worldGraphProjection(world.allWitnesses());
@@ -678,7 +678,7 @@ targetKind = "routePage"
 
 test("world graph exposes object properties, association metadata, and DSL source provenance", async () => {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const graph = worldGraphProjection(world.allWitnesses());
@@ -693,7 +693,7 @@ test("world graph exposes object properties, association metadata, and DSL sourc
 
 test("world graph exposes recent witness history for objects and process nodes", async () => {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const graph = worldGraphProjection(world.allWitnesses());
@@ -767,7 +767,7 @@ version = "banner_v2"
 
 test("world page selected object inspector includes properties, associations, association properties, and source definition sections", async () => {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
   const html = renderWidgetPage(world, { rootWidget: "world_graph_page", frontendProgram: "world_graph_program", appConfig: { page: "world" } });
 
@@ -789,7 +789,7 @@ test("world page selected object inspector includes properties, associations, as
 
 test("world graph typed values preserve arrays and refs for inspector rendering", async () => {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const graph = worldGraphProjection(world.allWitnesses());
@@ -809,7 +809,7 @@ test("world graph typed values preserve arrays and refs for inspector rendering"
 
 test("world page CSS gives inspector and canvas independent scroll containers", async () => {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
   const html = renderWidgetPage(world, { rootWidget: "world_graph_page", frontendProgram: "world_graph_program", appConfig: { page: "world" } });
 
@@ -820,7 +820,7 @@ test("world page CSS gives inspector and canvas independent scroll containers", 
 
 test("world page supports source document and primitive browser UI modes", async () => {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
   const html = renderWidgetPage(world, { rootWidget: "world_graph_page", frontendProgram: "world_graph_program", appConfig: { page: "world" } });
 
@@ -836,7 +836,7 @@ test("world page supports source document and primitive browser UI modes", async
 
 test("source endpoint returns only witnessed imported DSL files", async () => {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
@@ -875,7 +875,7 @@ test("source endpoint returns only witnessed imported DSL files", async () => {
 
 test("source and world-graph endpoints expose unified WTOML and RVM DESIRE provenance", async () => {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
@@ -1022,7 +1022,7 @@ test("world browser exposes first-class graph primitive and source modes", async
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
   const html = renderWidgetPage(world, { actor: "frontendHost", rootWidget: "world_graph_page", frontendProgram: "world_graph_program", appConfig: { page: "world" } });
   assert.match(html, /modeButton\('graph', 'Graph'\)/);
@@ -1032,3 +1032,4 @@ test("world browser exposes first-class graph primitive and source modes", async
   assert.match(html, /world-source-workbench/);
   assert.match(html, /world-source-highlight/);
 });
+

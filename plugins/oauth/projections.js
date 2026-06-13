@@ -30,11 +30,11 @@ function defaultOauthFlowRow(id, { titles, owners, contexts }) {
   };
 }
 
-export function oauthFlows(witnesses) {
+export function oauthFlows(witnesses, options = {}) {
   const rows = new Map();
   const owners = projectors.owners(witnesses);
-  const contexts = moduleProjectors.objectContexts(witnesses);
-  const modules = moduleProjectors.modules(witnesses);
+  const contexts = moduleProjectors.objectContexts(witnesses, options);
+  const modules = moduleProjectors.modules(witnesses, options);
   const titles = titleMap(witnesses);
 
   for (const [id, kind] of modules) {
@@ -69,8 +69,8 @@ export function oauthFlows(witnesses) {
   return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
 
-export function oauthFlowIndex(witnesses) {
-  const rows = oauthFlows(witnesses);
+export function oauthFlowIndex(witnesses, options = {}) {
+  const rows = oauthFlows(witnesses, options);
   const byId = Object.create(null);
   const byState = Object.create(null);
   for (const row of rows) {
@@ -99,12 +99,12 @@ function defaultOauthLinkRow(id, { titles, owners, contexts }) {
   };
 }
 
-export function oauthLinks(witnesses) {
+export function oauthLinks(witnesses, options = {}) {
   const rows = new Map();
   const owners = projectors.owners(witnesses);
-  const contexts = moduleProjectors.objectContexts(witnesses);
-  const modules = moduleProjectors.modules(witnesses);
-  const identities = moduleProjectors.identityIndex(witnesses).byId;
+  const contexts = moduleProjectors.objectContexts(witnesses, options);
+  const modules = moduleProjectors.modules(witnesses, options);
+  const identities = moduleProjectors.identityIndex(witnesses, options).byId;
   const titles = titleMap(witnesses);
 
   for (const [id, kind] of modules) {
@@ -134,8 +134,8 @@ export function oauthLinks(witnesses) {
   return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
 
-export function oauthLinkIndex(witnesses) {
-  const rows = oauthLinks(witnesses);
+export function oauthLinkIndex(witnesses, options = {}) {
+  const rows = oauthLinks(witnesses, options);
   const byId = Object.create(null);
   const byProviderAccount = Object.create(null);
   for (const row of rows) {

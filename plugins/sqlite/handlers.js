@@ -53,9 +53,9 @@ export function createSqliteDbSqlHandlers({
         return;
       }
       const projectedDatasource = inspection.datasource
-        ? (currentSqlDatasourceForRunner(serverRunnerId, inspection.datasource.id) ?? inspection.datasource)
+        ? (currentSqlDatasourceForRunner(serverRunnerId, inspection.datasource.id, appContext) ?? inspection.datasource)
         : null;
-      const operations = sqlOperationsForRunner(serverRunnerId).map(dbSqlOperationReadShape);
+      const operations = sqlOperationsForRunner(serverRunnerId, appContext).map(dbSqlOperationReadShape);
       world.observe({
         process: "db.sql.inspect",
         actor: requestActor,
@@ -145,7 +145,7 @@ export function createSqliteDbSqlHandlers({
         }
       });
       sendJson(res, 200, {
-        operation: dbSqlOperationReadShape(currentSqlOperationForRunner(serverRunnerId, operationId) ?? {
+        operation: dbSqlOperationReadShape(currentSqlOperationForRunner(serverRunnerId, operationId, appContext) ?? {
           id: operationId,
           title,
           serverRunner: serverRunnerId,
@@ -219,7 +219,7 @@ export function createSqliteDbSqlHandlers({
         body: { rowCount: result.rowCount }
       });
       sendJson(res, 200, {
-        operation: dbSqlOperationReadShape(currentSqlOperationForRunner(serverRunnerId, operationId) ?? {
+        operation: dbSqlOperationReadShape(currentSqlOperationForRunner(serverRunnerId, operationId, appContext) ?? {
           id: operationId,
           title,
           serverRunner: serverRunnerId,
@@ -295,7 +295,7 @@ export function createSqliteDbSqlHandlers({
         }
       });
       sendJson(res, 200, {
-        operation: dbSqlOperationReadShape(currentSqlOperationForRunner(serverRunnerId, operationId) ?? {
+        operation: dbSqlOperationReadShape(currentSqlOperationForRunner(serverRunnerId, operationId, appContext) ?? {
           id: operationId,
           title,
           serverRunner: serverRunnerId,
@@ -369,7 +369,7 @@ export function createSqliteDbSqlHandlers({
         body: { stepCount: result.results.length }
       });
       sendJson(res, 200, {
-        operation: dbSqlOperationReadShape(currentSqlOperationForRunner(serverRunnerId, operationId) ?? {
+        operation: dbSqlOperationReadShape(currentSqlOperationForRunner(serverRunnerId, operationId, appContext) ?? {
           id: operationId,
           title,
           serverRunner: serverRunnerId,

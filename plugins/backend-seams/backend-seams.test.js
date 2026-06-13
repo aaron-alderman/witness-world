@@ -66,6 +66,20 @@ test("backend-seams plugin owns practical backend support service registry", asy
   await assert.rejects(readFile(new URL("../../src/runtime-practical-backend-support-services.js", import.meta.url), "utf8"));
 });
 
+test("backend-seams declares repair actions through authored semantic click handlers", async () => {
+  const pageSource = await readFile(new URL("./backend-seams-page.wtoml", import.meta.url), "utf8");
+  const html = renderBackendSeamsPage(diagnosticsFixture());
+
+  assert.equal(pageSource.includes('action = "retryAssetIngest"'), true);
+  assert.equal(pageSource.includes('on = "click:retryAssetIngest"'), true);
+  assert.equal(pageSource.includes('action = "refreshAssetSearch"'), true);
+  assert.equal(pageSource.includes('on = "click:refreshAssetSearch"'), true);
+  assert.match(html, /data-action="retryAssetIngest"/);
+  assert.match(html, /data-action="refreshAssetSearch"/);
+  assert.match(html, /click:retryAssetIngest/);
+  assert.match(html, /click:refreshAssetSearch/);
+});
+
 test("backend-seams handlers render page and expose diagnostics read model", async () => {
   const observations = [];
   const responses = [];
@@ -98,9 +112,9 @@ test("backend-seams handlers render page and expose diagnostics read model", asy
   });
   assert.equal(responses[0].status, 200);
   assert.equal(responses[0].contentType, "text/html; charset=utf-8");
-  assert.match(responses[0].body, /<h1>Backend Seams<\/h1>/);
+  assert.match(responses[0].body, /<h1[^>]*>Backend Seams<\/h1>/);
   assert.match(responses[0].body, /\/api\/backend-seams/);
-  assert.match(responses[0].body, /backend-seams-json/);
+  assert.match(responses[0].body, /backend_seams_json|backend-seams-initial-state/);
 
   await handlers["backendSeams.read"]({
     res: {},

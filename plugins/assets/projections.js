@@ -56,7 +56,7 @@ function assetCanRefreshSearch(row) {
   return typeof row?.searchError === "string" && row.searchError.trim().length > 0;
 }
 
-export function assets(witnesses) {
+export function assets(witnesses, options = {}) {
   const assetDownloadUrl = contentUrl => {
     if (typeof contentUrl !== "string" || !contentUrl) return null;
     return contentUrl.includes("?") ? `${contentUrl}&download=1` : `${contentUrl}?download=1`;
@@ -64,8 +64,8 @@ export function assets(witnesses) {
   const assetTextUrl = assetId => `/api/assets/${encodeURIComponent(assetId)}/text`;
   const rows = new Map();
   const owners = projectors.owners(witnesses);
-  const contexts = moduleProjectors.objectContexts(witnesses);
-  const modules = moduleProjectors.modules(witnesses);
+  const contexts = moduleProjectors.objectContexts(witnesses, options);
+  const modules = moduleProjectors.modules(witnesses, options);
   const titles = new Map(
     currentRelations(witnesses)
       .filter(row => row.rel === "hasTitle")
@@ -270,8 +270,8 @@ export function assets(witnesses) {
   return assetRows;
 }
 
-export function assetIndex(witnesses) {
-  const rows = assets(witnesses);
+export function assetIndex(witnesses, options = {}) {
+  const rows = assets(witnesses, options);
   const byId = Object.create(null);
   for (const row of rows) byId[row.id] = row;
   return { rows, byId };

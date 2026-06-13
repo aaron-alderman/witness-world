@@ -21,9 +21,17 @@ test("the engentus shell normalizes into surface nodes for every screen", async 
   for (const screen of ["EngentusRoot", "EngentusLogin", "EngentusHome", "EngentusApp", "ModuleGrid", "GoodmanSidebar"]) {
     assert.ok(surfaces.has(screen), `missing surface ${screen}`);
   }
-  // the router composes the screens (Goodman + mill-force apps now both present)
+  // the router composes the screens (Goodman + mill-force + mill-charge apps present)
   assert.deepEqual(surfaces.get("EngentusRoot").body.children,
-    ["EngentusLogin", "EngentusHome", "EngentusApp", "EngentusMillForceApp", "EngentusSignout"]);
+    ["EngentusLogin", "EngentusHome", "EngentusApp", "EngentusMillForceApp", "EngentusMillChargeApp", "EngentusSignout"]);
+});
+
+test("the mill-charge app screen composes the cross-section chart", async () => {
+  const desire = await shellDesire();
+  const app = desire.nodes.find(n => n.kind === "surface" && n.name === "EngentusMillChargeApp");
+  assert.ok(app, "EngentusMillChargeApp surface should exist");
+  assert.ok(app.body.children.includes("MillChargeCrossSection"),
+    "mill-charge app should reference the MillChargeCrossSection chart by id");
 });
 
 test("the mill-force app screen composes the three mill-force charts", async () => {
@@ -35,21 +43,24 @@ test("the mill-force app screen composes the three mill-force charts", async () 
   }
 });
 
-test("the app screen composes down to the GoodmanDiagram chart", async () => {
+test("the app screen composes down to the Goodman charts (deterministic + MC bands)", async () => {
   const desire = await shellDesire();
   const app = desire.nodes.find(n => n.kind === "surface" && n.name === "EngentusApp");
   assert.ok(app.body.children.includes("GoodmanDiagram"),
     "EngentusApp should reference the GoodmanDiagram chart by id");
+  assert.ok(app.body.children.includes("GoodmanMCBands"),
+    "EngentusApp should reference the GoodmanMCBands Monte-Carlo chart by id");
 });
 
-test("the module grid lists the three sciences (Goodman active, others locked)", async () => {
+test("the module grid lists the three sciences (all three now active)", async () => {
   const desire = await shellDesire();
   const grid = desire.nodes.find(n => n.kind === "surface" && n.name === "ModuleGrid");
   assert.deepEqual(grid.body.children, ["card_goodman", "card_mill_charge", "card_mill_force"]);
   const goodmanCard = desire.nodes.find(n => n.kind === "surface" && n.name === "ModuleCardGoodman");
   assert.equal(goodmanCard.body.className, "active");
   assert.equal(desire.nodes.find(n => n.name === "ModuleCardMillForce").body.className, "active");
-  assert.equal(desire.nodes.find(n => n.name === "ModuleCardMillCharge").body.className, "locked");
+  // mill-charge unlocked now that the 3rd science exists
+  assert.equal(desire.nodes.find(n => n.name === "ModuleCardMillCharge").body.className, "active");
 });
 
 test("the shell applies into witnessed surfaces (hasChildSurface relations)", async () => {

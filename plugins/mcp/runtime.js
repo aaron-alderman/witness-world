@@ -67,7 +67,7 @@ export function createHandlers({
 }) {
   return {
     "mcp.http": async ({ req, res, params, requestActor, requestIdentity, requestSession, appContext }) => {
-      const mcpServer = currentMcpServerIndex().byId[params.id || ""] ?? null;
+      const mcpServer = currentMcpServerIndex(appContext).byId[params.id || ""] ?? null;
       if (!mcpServer) {
         sendJson(res, 404, { error: "mcp server not found", id: params.id || "" });
         return;
@@ -169,7 +169,7 @@ export function createHandlers({
         sendJson(res, 200, { jsonrpc: "2.0", id: message.id, result: {} });
         return;
       }
-      const installs = currentMcpToolInstalls()
+      const installs = currentMcpToolInstalls(appContext)
         .filter(row => row.server === mcpServer.id)
         .filter(row => row.actingMode === principal.actingMode)
         .filter(row => mcpToolAvailable(row.tool));

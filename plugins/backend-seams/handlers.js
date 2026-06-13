@@ -1,4 +1,5 @@
 import { relation } from "../../src/kernel.js";
+import { buildBackendSeamsViewModel } from "./backend-seams-page.js";
 
 export function createBackendSeamsHandlers({
   world,
@@ -20,13 +21,19 @@ export function createBackendSeamsHandlers({
         return;
       }
       const diagnostics = await assetDiagnostics(appContext);
+      const runtime = {
+        profile: appContext.runtimeProfile || defaultRuntimeProfile,
+        ...(appContext.runtimeBundleSummary ?? runtimeBundleSummaryForProfile(appContext.runtimeProfile || defaultRuntimeProfile)),
+        handlerImplementations: getRuntimeBundleHandlerDiagnostics()
+      };
+      const body = buildBackendSeamsViewModel(diagnostics, runtime);
       world.observe({
         process: "frontend.renderBackendSeamsPage",
         actor: frontendHost,
         claims: [relation(frontendHost, "rendered", "backendSeams")],
         body: { assets: diagnostics.assets.total, assetsRoot: diagnostics.storage.assetsRoot }
       });
-      send(res, 200, "text/html; charset=utf-8", renderBackendSeamsPage(diagnostics));
+      send(res, 200, "text/html; charset=utf-8", renderBackendSeamsPage(body));
     },
 
     "backendSeams.read": async ({ res, requestActor, appContext }) => {
@@ -64,14 +71,11 @@ export function createBackendSeamsHandlers({
           fsStreamFailures: diagnostics.failures.fsStreamFailed.length
         }
       });
-      sendJson(res, 200, {
-        ...diagnostics,
-        runtime: {
-          profile: appContext.runtimeProfile || defaultRuntimeProfile,
-          ...(appContext.runtimeBundleSummary ?? runtimeBundleSummaryForProfile(appContext.runtimeProfile || defaultRuntimeProfile)),
-          handlerImplementations: getRuntimeBundleHandlerDiagnostics()
-        }
-      });
+      sendJson(res, 200, buildBackendSeamsViewModel(diagnostics, {
+        profile: appContext.runtimeProfile || defaultRuntimeProfile,
+        ...(appContext.runtimeBundleSummary ?? runtimeBundleSummaryForProfile(appContext.runtimeProfile || defaultRuntimeProfile)),
+        handlerImplementations: getRuntimeBundleHandlerDiagnostics()
+      }));
     }
   };
 }

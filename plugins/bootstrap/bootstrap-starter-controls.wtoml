@@ -1,0 +1,92 @@
+[[defaults]]
+actor = "frontendHost"
+context = "frontend"
+program = "bootstrap_starter_controls_program"
+
+[[box]]
+id = "bootstrap_starter_controls_root"
+class = "card surface-card surface-stack"
+children = ["bootstrap_starter_badge", "bootstrap_starter_details"]
+
+[[text]]
+id = "bootstrap_starter_badge"
+class = "badge"
+text = "Fast Path"
+
+[[details]]
+id = "bootstrap_starter_details"
+children = ["bootstrap_starter_summary", "bootstrap_starter_note", "bootstrap_starter_actions", "bootstrap_starter_status"]
+
+[[summary]]
+id = "bootstrap_starter_summary"
+text = "Advanced Shortcut"
+
+[[text]]
+id = "bootstrap_starter_note"
+class = "surface-note muted note"
+text = "This remains available as a quick seam for experienced users. It is not used by the tutorial."
+
+[[box]]
+id = "bootstrap_starter_actions"
+class = "surface-actions"
+children = ["bootstrap_starter_button"]
+
+[[button]]
+id = "bootstrap_starter_button"
+domId = "create-todo-starter"
+text = "Create Todo Starter"
+type = "button"
+action = "createBootstrapTodoStarter"
+tutorialTarget = "create-todo-starter"
+
+[[text]]
+id = "bootstrap_starter_status"
+domId = "starter-status"
+class = "status"
+text = ""
+
+[[frontendProgram]]
+id = "bootstrap_starter_controls_program"
+rootWidget = "bootstrap_starter_controls_root"
+
+[[step]]
+id = "bootstrap_starter_begin"
+order = 0
+op = "setText"
+on = "click:createBootstrapTodoStarter"
+widget = "bootstrap_starter_status"
+text = "Creating minimal todo app..."
+
+[[step]]
+id = "bootstrap_starter_requests"
+order = 1
+op = "postJson"
+on = "click:createBootstrapTodoStarter"
+repeat = { forEach = { from = "bootstrapStarterPlan.requests", as = "item", serial = true } }
+url = "${item.url}"
+from = "item.body"
+into = "bootstrapStarterLastResponse"
+
+[[step]]
+id = "bootstrap_starter_complete"
+order = 2
+op = "setText"
+on = "click:createBootstrapTodoStarter"
+widget = "bootstrap_starter_status"
+text = "Todo starter created. Open the app at / and inspect it at /world."
+
+[[step]]
+id = "bootstrap_starter_refresh"
+order = 3
+op = "dispatchDomEvent"
+on = "click:createBootstrapTodoStarter"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-starter-controls", reason = "create-todo-starter" }
+
+[[step]]
+id = "bootstrap_starter_error"
+order = 0
+op = "setText"
+on = "error"
+widget = "bootstrap_starter_status"
+text = "${event.message}"

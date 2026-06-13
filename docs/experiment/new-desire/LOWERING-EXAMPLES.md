@@ -1,4 +1,4 @@
-# Lowering Examples
+﻿# Lowering Examples
 
 This document works one small `wtoml` slice and one small `RVM` slice through the proposed stack:
 
@@ -11,7 +11,7 @@ The goal is to make the kernel boundary concrete.
 
 ## Example A: WTOML
 
-Source fragment from [examples/demo/frontend.wtoml](/C:/Users/aaron/Documents/world/examples/demo/frontend.wtoml:361):
+Source fragment from [examples/_lib/demo-todo/frontend.wtoml](/C:/Users/aaron/Documents/world/examples/_lib/demo-todo/frontend.wtoml:361):
 
 ```toml
 [[step]]
@@ -320,3 +320,4 @@ A form probably belongs in `DESIRE+` if it mainly answers:
 - how should this pretty-print back to source?
 
 That is the current draft boundary.
+

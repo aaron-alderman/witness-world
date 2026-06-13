@@ -72,7 +72,7 @@ export function createAssetSurfaceHandlers({
   };
   return {
     "asset.content.read": async ({ res, params, requestActor, requestUrl, appContext }) => {
-      const asset = currentAssetById(params.id || "");
+      const asset = currentAssetById(params.id || "", appContext);
       if (!asset) {
         world.observe({ process: "asset.content.read.failed", actor: requestActor || backendHost, claims: [], body: { id: params.id || "", reason: "unknown asset" } });
         sendJson(res, 404, { error: "unknown asset", id: params.id || "" });
@@ -125,7 +125,7 @@ export function createAssetSurfaceHandlers({
     },
 
     "asset.text.read": async ({ res, params, requestActor, appContext }) => {
-      const asset = currentAssetById(params.id || "");
+      const asset = currentAssetById(params.id || "", appContext);
       if (!asset) {
         world.observe({ process: "asset.text.read.failed", actor: requestActor || backendHost, claims: [], body: { id: params.id || "", reason: "unknown asset" } });
         sendJson(res, 404, { error: "unknown asset", id: params.id || "" });
@@ -180,7 +180,7 @@ export function createAssetSurfaceHandlers({
     },
 
     "asset.thumbnail.read": async ({ res, params, requestActor, appContext }) => {
-      const asset = currentAssetById(params.id || "");
+      const asset = currentAssetById(params.id || "", appContext);
       if (!asset) {
         world.observe({ process: "asset.thumbnail.read.failed", actor: requestActor || backendHost, claims: [], body: { id: params.id || "", reason: "unknown asset" } });
         sendJson(res, 404, { error: "unknown asset", id: params.id || "" });
@@ -234,14 +234,14 @@ export function createAssetSurfaceHandlers({
       stream.pipe(res);
     },
 
-    "asset.attachments.list": async ({ res, params, requestActor }) => {
+    "asset.attachments.list": async ({ res, params, requestActor, appContext }) => {
       const capabilityGate = requireBackendCapabilities(["upload.asset"]);
       if (!capabilityGate.ok) {
         world.observe({ process: "asset.attachments.read.failed", actor: requestActor || backendHost, claims: [], body: { id: params.id || "", reason: capabilityGate.reason, missing: capabilityGate.missing } });
         sendJson(res, capabilityGate.status || 503, { error: capabilityGate.reason, missing: capabilityGate.missing });
         return;
       }
-      const asset = currentAssetById(params.id || "");
+      const asset = currentAssetById(params.id || "", appContext);
       if (!asset) {
         world.observe({ process: "asset.attachments.read.failed", actor: requestActor || backendHost, claims: [], body: { id: params.id || "", reason: "unknown asset" } });
         sendJson(res, 404, { error: "unknown asset", id: params.id || "" });
@@ -268,7 +268,7 @@ export function createAssetSurfaceHandlers({
       sendJson(res, 200, { asset, attachments });
     },
 
-    "asset.attach": async ({ req, res, params, requestActor }) => {
+    "asset.attach": async ({ req, res, params, requestActor, appContext }) => {
       const capabilityGate = requireBackendCapabilities(["upload.asset"]);
       if (!capabilityGate.ok) {
         world.emit({ process: "asset.attach.failed", actor: requestActor || backendHost, claims: [], body: { asset: params.id || "", reason: capabilityGate.reason, missing: capabilityGate.missing } });
@@ -280,7 +280,7 @@ export function createAssetSurfaceHandlers({
         sendJson(res, 401, { error: "sign in first" });
         return;
       }
-      const asset = currentAssetById(params.id || "");
+      const asset = currentAssetById(params.id || "", appContext);
       if (!asset) {
         world.emit({ process: "asset.attach.failed", actor: requestActor, claims: [], body: { asset: params.id || "", reason: "unknown asset" } });
         sendJson(res, 404, { error: "unknown asset", id: params.id || "" });
@@ -374,7 +374,7 @@ export function createAssetSurfaceHandlers({
       sendJson(res, 201, { ok: true, witness, attachment: { asset: asset.id, target, perspective } });
     },
 
-    "asset.detach": async ({ req, res, params, requestActor, requestUrl }) => {
+    "asset.detach": async ({ req, res, params, requestActor, requestUrl, appContext }) => {
       const capabilityGate = requireBackendCapabilities(["upload.asset"]);
       if (!capabilityGate.ok) {
         world.emit({ process: "asset.detach.failed", actor: requestActor || backendHost, claims: [], body: { asset: params.id || "", reason: capabilityGate.reason, missing: capabilityGate.missing } });
@@ -386,7 +386,7 @@ export function createAssetSurfaceHandlers({
         sendJson(res, 401, { error: "sign in first" });
         return;
       }
-      const asset = currentAssetById(params.id || "");
+      const asset = currentAssetById(params.id || "", appContext);
       if (!asset) {
         world.emit({ process: "asset.detach.failed", actor: requestActor, claims: [], body: { asset: params.id || "", reason: "unknown asset" } });
         sendJson(res, 404, { error: "unknown asset", id: params.id || "" });
@@ -709,7 +709,7 @@ export function createAssetWorkflowHandlers({
         sendJson(res, 401, { error: "sign in first" });
         return;
       }
-      const asset = currentAssetById(params.id || "");
+      const asset = currentAssetById(params.id || "", appContext);
       if (!asset) {
         world.emit({ process: "asset.ingest.retry.failed", actor: requestActor, claims: [], body: { id: params.id || "", reason: "asset not found" } });
         sendJson(res, 404, { error: "asset not found", id: params.id || "" });
@@ -753,7 +753,7 @@ export function createAssetWorkflowHandlers({
         }
       });
       sendJson(res, queued.created === false ? 200 : 201, {
-        asset: currentAssetById(asset.id) ?? asset,
+        asset: currentAssetById(asset.id, appContext) ?? asset,
         job: queued.job,
         witness: witness.id
       });
@@ -771,7 +771,7 @@ export function createAssetWorkflowHandlers({
         sendJson(res, 401, { error: "sign in first" });
         return;
       }
-      const asset = currentAssetById(params.id || "");
+      const asset = currentAssetById(params.id || "", appContext);
       if (!asset) {
         world.emit({ process: "asset.search.reindex.failed", actor: requestActor, claims: [], body: { id: params.id || "", reason: "asset not found" } });
         sendJson(res, 404, { error: "asset not found", id: params.id || "" });
@@ -831,13 +831,13 @@ export function createAssetWorkflowHandlers({
       });
       sendJson(res, 200, {
         asset: {
-          ...(currentAssetById(asset.id) ?? asset),
+          ...(currentAssetById(asset.id, appContext) ?? asset),
           searchStatus: "reindexed",
           searchPolicy: rebuilt.repair?.policy || asset.searchPolicy || null,
           reindexedIndexId: rebuilt.index.id,
           searchError: null
         },
-        index: searchIndexReadShape(currentSearchIndexForRunner(serverRunnerId, rebuilt.index.id) ?? rebuilt.index),
+        index: searchIndexReadShape(currentSearchIndexForRunner(serverRunnerId, rebuilt.index.id, appContext) ?? rebuilt.index),
         repair: rebuilt.repair ?? null,
         witness: witness.id
       });

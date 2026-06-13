@@ -1,0 +1,10 @@
+[app]
+id = "demo_todo_app"
+imports = ["../_lib/common.wtoml", "../_lib/demo-todo/backend.wtoml", "../_lib/demo-todo/frontend.wtoml"]
+spawn = ["backend", "frontend"]
+
+[[desktopTarget]]
+id = "demo_todo_desktop"
+label = "Demo Todo Desktop"
+serverRunner = "demo_server"
+default = true

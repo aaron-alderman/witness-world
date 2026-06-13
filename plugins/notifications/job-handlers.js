@@ -3,6 +3,7 @@ import { moduleProjectors } from "../../src/modules.js";
 
 export function createBuiltinNotificationJobHandlers({
   world,
+  project = projector => world.project(projector),
   backendHost,
   runtimeConfig,
   renderTemplatedText
@@ -16,7 +17,7 @@ export function createBuiltinNotificationJobHandlers({
 
   const deliver = channel => async ({ actor, job, payload, attempt }) => {
     const notificationId = typeof payload?.notificationId === "string" ? payload.notificationId : "";
-    const notification = world.project(moduleProjectors.notificationIndex).byId[notificationId] ?? null;
+    const notification = project(moduleProjectors.notificationIndex).byId[notificationId] ?? null;
     if (!notification) {
       throw new Error("notification not found");
     }

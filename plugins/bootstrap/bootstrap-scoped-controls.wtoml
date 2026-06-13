@@ -1,0 +1,621 @@
+[[defaults]]
+actor = "frontendHost"
+context = "frontend"
+
+[[box]]
+id = "bootstrap_context_binding_create_controls_root"
+class = "stack"
+children = ["bootstrap_context_binding_create_form", "bootstrap_context_binding_create_status"]
+
+[[form]]
+id = "bootstrap_context_binding_create_form"
+domId = "context-binding-form"
+class = "stack"
+children = ["bootstrap_context_binding_create_grid_one", "bootstrap_context_binding_create_grid_two", "bootstrap_context_binding_create_actions"]
+
+[[box]]
+id = "bootstrap_context_binding_create_grid_one"
+class = "grid two"
+children = ["bootstrap_context_binding_create_context_field", "bootstrap_context_binding_create_name_field"]
+
+[[box]]
+id = "bootstrap_context_binding_create_context_field"
+class = "stack"
+children = ["bootstrap_context_binding_create_context_text", "bootstrap_context_binding_create_context_select"]
+
+[[text]]
+id = "bootstrap_context_binding_create_context_text"
+text = "Context"
+
+[[select]]
+id = "bootstrap_context_binding_create_context_select"
+domId = "context-binding-context"
+name = "context"
+
+[[box]]
+id = "bootstrap_context_binding_create_name_field"
+class = "stack"
+children = ["bootstrap_context_binding_create_name_text", "bootstrap_context_binding_create_name_input"]
+
+[[text]]
+id = "bootstrap_context_binding_create_name_text"
+text = "Name"
+
+[[input]]
+id = "bootstrap_context_binding_create_name_input"
+name = "name"
+placeholder = "homePage"
+
+[[box]]
+id = "bootstrap_context_binding_create_grid_two"
+class = "grid two"
+children = ["bootstrap_context_binding_create_target_field", "bootstrap_context_binding_create_spacer"]
+
+[[box]]
+id = "bootstrap_context_binding_create_target_field"
+class = "stack"
+children = ["bootstrap_context_binding_create_target_text", "bootstrap_context_binding_create_target_select"]
+
+[[text]]
+id = "bootstrap_context_binding_create_target_text"
+text = "Target"
+
+[[select]]
+id = "bootstrap_context_binding_create_target_select"
+domId = "context-binding-target"
+name = "target"
+
+[[box]]
+id = "bootstrap_context_binding_create_spacer"
+class = "stack"
+
+[[box]]
+id = "bootstrap_context_binding_create_actions"
+class = "actions"
+children = ["bootstrap_context_binding_create_submit"]
+
+[[button]]
+id = "bootstrap_context_binding_create_submit"
+text = "Bind Name"
+type = "submit"
+
+[[text]]
+id = "bootstrap_context_binding_create_status"
+domId = "context-binding-status"
+class = "status"
+text = ""
+
+[[frontendProgram]]
+id = "bootstrap_context_binding_create_controls_program"
+rootWidget = "bootstrap_context_binding_create_controls_root"
+
+[[step]]
+program = "bootstrap_context_binding_create_controls_program"
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_context_binding_create_context_select"
+eventName = "witness:bootstrap-dependent-select-sync"
+detail = { source = "bootstrap-scoped-controls", family = "context-binding-target", contextSelectId = "context-binding-context", targetSelectId = "context-binding-target" }
+
+[[step]]
+program = "bootstrap_context_binding_create_controls_program"
+order = 0
+op = "setText"
+on = "submit:bootstrap_context_binding_create_form"
+widget = "bootstrap_context_binding_create_status"
+text = "Saving..."
+
+[[step]]
+program = "bootstrap_context_binding_create_controls_program"
+order = 1
+op = "readForm"
+on = "submit:bootstrap_context_binding_create_form"
+widget = "bootstrap_context_binding_create_form"
+into = "bootstrapContextBindingCreateDraft"
+
+[[step]]
+program = "bootstrap_context_binding_create_controls_program"
+order = 2
+op = "postJson"
+on = "submit:bootstrap_context_binding_create_form"
+url = "/api/context-bindings"
+from = "bootstrapContextBindingCreateDraft"
+into = "bootstrapContextBindingCreateResult"
+
+[[step]]
+program = "bootstrap_context_binding_create_controls_program"
+order = 3
+op = "setText"
+on = "submit:bootstrap_context_binding_create_form"
+widget = "bootstrap_context_binding_create_status"
+text = "Saved."
+
+[[step]]
+program = "bootstrap_context_binding_create_controls_program"
+order = 4
+op = "clearForm"
+on = "submit:bootstrap_context_binding_create_form"
+widget = "bootstrap_context_binding_create_form"
+
+[[step]]
+program = "bootstrap_context_binding_create_controls_program"
+order = 5
+op = "dispatchDomEvent"
+on = "submit:bootstrap_context_binding_create_form"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-scoped-controls", reason = "context-binding-create" }
+
+[[step]]
+program = "bootstrap_context_binding_create_controls_program"
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_context_binding_create_form" }
+widget = "bootstrap_context_binding_create_status"
+text = "${event.message}"
+
+[[box]]
+id = "bootstrap_context_export_create_controls_root"
+class = "stack"
+children = ["bootstrap_context_export_create_form", "bootstrap_context_export_create_status"]
+
+[[form]]
+id = "bootstrap_context_export_create_form"
+domId = "context-export-form"
+class = "stack"
+children = ["bootstrap_context_export_create_grid_one", "bootstrap_context_export_create_grid_two", "bootstrap_context_export_create_actions"]
+
+[[box]]
+id = "bootstrap_context_export_create_grid_one"
+class = "grid two"
+children = ["bootstrap_context_export_create_context_field", "bootstrap_context_export_create_name_field"]
+
+[[box]]
+id = "bootstrap_context_export_create_context_field"
+class = "stack"
+children = ["bootstrap_context_export_create_context_text", "bootstrap_context_export_create_context_select"]
+
+[[text]]
+id = "bootstrap_context_export_create_context_text"
+text = "Context"
+
+[[select]]
+id = "bootstrap_context_export_create_context_select"
+domId = "context-export-context"
+name = "context"
+
+[[box]]
+id = "bootstrap_context_export_create_name_field"
+class = "stack"
+children = ["bootstrap_context_export_create_name_text", "bootstrap_context_export_create_name_input"]
+
+[[text]]
+id = "bootstrap_context_export_create_name_text"
+text = "Export Name"
+
+[[input]]
+id = "bootstrap_context_export_create_name_input"
+name = "name"
+placeholder = "homePage"
+
+[[box]]
+id = "bootstrap_context_export_create_grid_two"
+class = "grid two"
+children = ["bootstrap_context_export_create_target_field", "bootstrap_context_export_create_spacer"]
+
+[[box]]
+id = "bootstrap_context_export_create_target_field"
+class = "stack"
+children = ["bootstrap_context_export_create_target_text", "bootstrap_context_export_create_target_select"]
+
+[[text]]
+id = "bootstrap_context_export_create_target_text"
+text = "Target"
+
+[[select]]
+id = "bootstrap_context_export_create_target_select"
+domId = "context-export-target"
+name = "target"
+
+[[box]]
+id = "bootstrap_context_export_create_spacer"
+class = "stack"
+
+[[box]]
+id = "bootstrap_context_export_create_actions"
+class = "actions"
+children = ["bootstrap_context_export_create_submit"]
+
+[[button]]
+id = "bootstrap_context_export_create_submit"
+text = "Export Name"
+type = "submit"
+
+[[text]]
+id = "bootstrap_context_export_create_status"
+domId = "context-export-status"
+class = "status"
+text = ""
+
+[[frontendProgram]]
+id = "bootstrap_context_export_create_controls_program"
+rootWidget = "bootstrap_context_export_create_controls_root"
+
+[[step]]
+program = "bootstrap_context_export_create_controls_program"
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_context_export_create_context_select"
+eventName = "witness:bootstrap-dependent-select-sync"
+detail = { source = "bootstrap-scoped-controls", family = "context-export-target", contextSelectId = "context-export-context", targetSelectId = "context-export-target" }
+
+[[step]]
+program = "bootstrap_context_export_create_controls_program"
+order = 0
+op = "setText"
+on = "submit:bootstrap_context_export_create_form"
+widget = "bootstrap_context_export_create_status"
+text = "Saving..."
+
+[[step]]
+program = "bootstrap_context_export_create_controls_program"
+order = 1
+op = "readForm"
+on = "submit:bootstrap_context_export_create_form"
+widget = "bootstrap_context_export_create_form"
+into = "bootstrapContextExportCreateDraft"
+
+[[step]]
+program = "bootstrap_context_export_create_controls_program"
+order = 2
+op = "postJson"
+on = "submit:bootstrap_context_export_create_form"
+url = "/api/context-exports"
+from = "bootstrapContextExportCreateDraft"
+into = "bootstrapContextExportCreateResult"
+
+[[step]]
+program = "bootstrap_context_export_create_controls_program"
+order = 3
+op = "setText"
+on = "submit:bootstrap_context_export_create_form"
+widget = "bootstrap_context_export_create_status"
+text = "Saved."
+
+[[step]]
+program = "bootstrap_context_export_create_controls_program"
+order = 4
+op = "clearForm"
+on = "submit:bootstrap_context_export_create_form"
+widget = "bootstrap_context_export_create_form"
+
+[[step]]
+program = "bootstrap_context_export_create_controls_program"
+order = 5
+op = "dispatchDomEvent"
+on = "submit:bootstrap_context_export_create_form"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-scoped-controls", reason = "context-export-create" }
+
+[[step]]
+program = "bootstrap_context_export_create_controls_program"
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_context_export_create_form" }
+widget = "bootstrap_context_export_create_status"
+text = "${event.message}"
+
+[[box]]
+id = "bootstrap_context_import_create_controls_root"
+class = "stack"
+children = ["bootstrap_context_import_create_form", "bootstrap_context_import_create_status"]
+
+[[form]]
+id = "bootstrap_context_import_create_form"
+domId = "context-import-form"
+class = "stack"
+children = ["bootstrap_context_import_create_grid_one", "bootstrap_context_import_create_grid_two", "bootstrap_context_import_create_actions"]
+
+[[box]]
+id = "bootstrap_context_import_create_grid_one"
+class = "grid two"
+children = ["bootstrap_context_import_create_context_field", "bootstrap_context_import_create_source_context_field"]
+
+[[box]]
+id = "bootstrap_context_import_create_context_field"
+class = "stack"
+children = ["bootstrap_context_import_create_context_text", "bootstrap_context_import_create_context_select"]
+
+[[text]]
+id = "bootstrap_context_import_create_context_text"
+text = "Target Context"
+
+[[select]]
+id = "bootstrap_context_import_create_context_select"
+domId = "context-import-context"
+name = "context"
+
+[[box]]
+id = "bootstrap_context_import_create_source_context_field"
+class = "stack"
+children = ["bootstrap_context_import_create_source_context_text", "bootstrap_context_import_create_source_context_select"]
+
+[[text]]
+id = "bootstrap_context_import_create_source_context_text"
+text = "Source Context"
+
+[[select]]
+id = "bootstrap_context_import_create_source_context_select"
+domId = "context-import-source-context"
+name = "sourceContext"
+
+[[box]]
+id = "bootstrap_context_import_create_grid_two"
+class = "grid two"
+children = ["bootstrap_context_import_create_export_name_field", "bootstrap_context_import_create_name_field"]
+
+[[box]]
+id = "bootstrap_context_import_create_export_name_field"
+class = "stack"
+children = ["bootstrap_context_import_create_export_name_text", "bootstrap_context_import_create_export_name_select"]
+
+[[text]]
+id = "bootstrap_context_import_create_export_name_text"
+text = "Export Name"
+
+[[select]]
+id = "bootstrap_context_import_create_export_name_select"
+domId = "context-import-export-name"
+name = "exportName"
+
+[[box]]
+id = "bootstrap_context_import_create_name_field"
+class = "stack"
+children = ["bootstrap_context_import_create_name_text", "bootstrap_context_import_create_name_input"]
+
+[[text]]
+id = "bootstrap_context_import_create_name_text"
+text = "Local Alias"
+
+[[input]]
+id = "bootstrap_context_import_create_name_input"
+name = "name"
+placeholder = "optional alias"
+
+[[box]]
+id = "bootstrap_context_import_create_actions"
+class = "actions"
+children = ["bootstrap_context_import_create_submit"]
+
+[[button]]
+id = "bootstrap_context_import_create_submit"
+text = "Import Name"
+type = "submit"
+
+[[text]]
+id = "bootstrap_context_import_create_status"
+domId = "context-import-status"
+class = "status"
+text = ""
+
+[[frontendProgram]]
+id = "bootstrap_context_import_create_controls_program"
+rootWidget = "bootstrap_context_import_create_controls_root"
+
+[[step]]
+program = "bootstrap_context_import_create_controls_program"
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_context_import_create_source_context_select"
+eventName = "witness:bootstrap-dependent-select-sync"
+detail = { source = "bootstrap-scoped-controls", family = "context-import-export", sourceContextSelectId = "context-import-source-context", exportNameSelectId = "context-import-export-name" }
+
+[[step]]
+program = "bootstrap_context_import_create_controls_program"
+order = 0
+op = "setText"
+on = "submit:bootstrap_context_import_create_form"
+widget = "bootstrap_context_import_create_status"
+text = "Saving..."
+
+[[step]]
+program = "bootstrap_context_import_create_controls_program"
+order = 1
+op = "readForm"
+on = "submit:bootstrap_context_import_create_form"
+widget = "bootstrap_context_import_create_form"
+into = "bootstrapContextImportCreateDraft"
+
+[[step]]
+program = "bootstrap_context_import_create_controls_program"
+order = 2
+op = "postJson"
+on = "submit:bootstrap_context_import_create_form"
+url = "/api/context-imports"
+from = "bootstrapContextImportCreateDraft"
+into = "bootstrapContextImportCreateResult"
+
+[[step]]
+program = "bootstrap_context_import_create_controls_program"
+order = 3
+op = "setText"
+on = "submit:bootstrap_context_import_create_form"
+widget = "bootstrap_context_import_create_status"
+text = "Saved."
+
+[[step]]
+program = "bootstrap_context_import_create_controls_program"
+order = 4
+op = "clearForm"
+on = "submit:bootstrap_context_import_create_form"
+widget = "bootstrap_context_import_create_form"
+
+[[step]]
+program = "bootstrap_context_import_create_controls_program"
+order = 5
+op = "dispatchDomEvent"
+on = "submit:bootstrap_context_import_create_form"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-scoped-controls", reason = "context-import-create" }
+
+[[step]]
+program = "bootstrap_context_import_create_controls_program"
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_context_import_create_form" }
+widget = "bootstrap_context_import_create_status"
+text = "${event.message}"
+
+[[box]]
+id = "bootstrap_stewardship_create_controls_root"
+class = "stack"
+children = ["bootstrap_stewardship_create_form", "bootstrap_stewardship_create_status"]
+
+[[form]]
+id = "bootstrap_stewardship_create_form"
+domId = "stewardship-form"
+class = "stack"
+children = ["bootstrap_stewardship_create_grid_one", "bootstrap_stewardship_create_grid_two", "bootstrap_stewardship_create_actions"]
+
+[[box]]
+id = "bootstrap_stewardship_create_grid_one"
+class = "grid two"
+children = ["bootstrap_stewardship_create_steward_field", "bootstrap_stewardship_create_target_field"]
+
+[[box]]
+id = "bootstrap_stewardship_create_steward_field"
+class = "stack"
+children = ["bootstrap_stewardship_create_steward_text", "bootstrap_stewardship_create_steward_input"]
+
+[[text]]
+id = "bootstrap_stewardship_create_steward_text"
+text = "Steward Actor"
+
+[[input]]
+id = "bootstrap_stewardship_create_steward_input"
+name = "steward"
+placeholder = "callan"
+
+[[box]]
+id = "bootstrap_stewardship_create_target_field"
+class = "stack"
+children = ["bootstrap_stewardship_create_target_text", "bootstrap_stewardship_create_target_select"]
+
+[[text]]
+id = "bootstrap_stewardship_create_target_text"
+text = "Target"
+
+[[select]]
+id = "bootstrap_stewardship_create_target_select"
+domId = "stewardship-target"
+name = "target"
+
+[[box]]
+id = "bootstrap_stewardship_create_grid_two"
+class = "grid two"
+children = ["bootstrap_stewardship_create_kind_field", "bootstrap_stewardship_create_spacer"]
+
+[[box]]
+id = "bootstrap_stewardship_create_kind_field"
+class = "stack"
+children = ["bootstrap_stewardship_create_kind_text", "bootstrap_stewardship_create_kind_select"]
+
+[[text]]
+id = "bootstrap_stewardship_create_kind_text"
+text = "Target Kind"
+
+[[select]]
+id = "bootstrap_stewardship_create_kind_select"
+domId = "stewardship-target-kind"
+name = "targetKind"
+
+[[box]]
+id = "bootstrap_stewardship_create_spacer"
+class = "stack"
+
+[[box]]
+id = "bootstrap_stewardship_create_actions"
+class = "actions"
+children = ["bootstrap_stewardship_create_submit"]
+
+[[button]]
+id = "bootstrap_stewardship_create_submit"
+text = "Grant Stewardship"
+type = "submit"
+
+[[text]]
+id = "bootstrap_stewardship_create_status"
+domId = "stewardship-status"
+class = "status"
+text = ""
+
+[[frontendProgram]]
+id = "bootstrap_stewardship_create_controls_program"
+rootWidget = "bootstrap_stewardship_create_controls_root"
+
+[[step]]
+program = "bootstrap_stewardship_create_controls_program"
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_stewardship_create_kind_select"
+eventName = "witness:bootstrap-dependent-select-sync"
+detail = { source = "bootstrap-scoped-controls", family = "stewardship-target", targetKindSelectId = "stewardship-target-kind", targetSelectId = "stewardship-target" }
+
+[[step]]
+program = "bootstrap_stewardship_create_controls_program"
+order = 0
+op = "setText"
+on = "submit:bootstrap_stewardship_create_form"
+widget = "bootstrap_stewardship_create_status"
+text = "Saving..."
+
+[[step]]
+program = "bootstrap_stewardship_create_controls_program"
+order = 1
+op = "readForm"
+on = "submit:bootstrap_stewardship_create_form"
+widget = "bootstrap_stewardship_create_form"
+into = "bootstrapStewardshipCreateDraft"
+
+[[step]]
+program = "bootstrap_stewardship_create_controls_program"
+order = 2
+op = "postJson"
+on = "submit:bootstrap_stewardship_create_form"
+url = "/api/stewardships"
+from = "bootstrapStewardshipCreateDraft"
+into = "bootstrapStewardshipCreateResult"
+
+[[step]]
+program = "bootstrap_stewardship_create_controls_program"
+order = 3
+op = "setText"
+on = "submit:bootstrap_stewardship_create_form"
+widget = "bootstrap_stewardship_create_status"
+text = "Saved."
+
+[[step]]
+program = "bootstrap_stewardship_create_controls_program"
+order = 4
+op = "clearForm"
+on = "submit:bootstrap_stewardship_create_form"
+widget = "bootstrap_stewardship_create_form"
+
+[[step]]
+program = "bootstrap_stewardship_create_controls_program"
+order = 5
+op = "dispatchDomEvent"
+on = "submit:bootstrap_stewardship_create_form"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-scoped-controls", reason = "stewardship-create" }
+
+[[step]]
+program = "bootstrap_stewardship_create_controls_program"
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_stewardship_create_form" }
+widget = "bootstrap_stewardship_create_status"
+text = "${event.message}"

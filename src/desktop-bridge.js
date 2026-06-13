@@ -18,12 +18,18 @@ export function createDesktopShellState({
   availablePowers = DESKTOP_ONLY_POWERS,
   recentWorldHomes = [],
   launcherRequired = false,
-  runtimeStatus = "idle"
+  runtimeStatus = "idle",
+  appRoot = null,
+  manifestPath = null,
+  selectedTarget = null
 } = {}) {
   return {
     shellId,
     worldHome,
     runtimeProfile,
+    appRoot,
+    manifestPath,
+    selectedTarget,
     availablePowers: [...availablePowers],
     recentWorldHomes: [...recentWorldHomes],
     launcherRequired,

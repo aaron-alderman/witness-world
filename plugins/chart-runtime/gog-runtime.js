@@ -108,6 +108,39 @@ function planLayer(layer, evaluated, fills) {
     return { ...base, stroke: colorToken(enc.stroke), width: Number(enc.width) || 2, dash: enc.dash === true, primitives: [{ points }] };
   }
 
+  if (layer.mark === "band") {
+    // a filled region between two y-fields (e.g. p10..p90) over the x axis
+    const y0Field = fields[enc.y0];
+    const y1Field = fields[enc.y1];
+    if (!y0Field || !y1Field) return { ...base, primitives: [] };
+    const iterAxis = iterationAxis(layer, y1Field, axes);
+    const xField = enc.x && fields[enc.x] ? fields[enc.x] : null;
+    const points = (axes[iterAxis]?.values ?? []).map((axVal, i) => {
+      const coord = { [iterAxis]: i };
+      return { x: xField ? valueAt(xField, coord) : axVal, y0: valueAt(y0Field, coord), y1: valueAt(y1Field, coord) };
+    });
+    return { ...base, fill: enc.fill ? colorToken(enc.fill) : "#5AAABF", opacity: Number(enc.opacity) || 0.25, primitives: [{ points }] };
+  }
+
+  if (layer.mark === "cloud") {
+    // faint per-sample spaghetti: one polyline per ensemble sample over the x axis
+    const yField = fields[enc.y];
+    if (!yField) return { ...base, primitives: [] };
+    const sampleAxis = (layer.over || []).find(a => axes[a]?.kind === "ensemble")
+      ?? (yField.axes || []).find(a => axes[a]?.kind === "ensemble");
+    const xAxis = (yField.axes || []).find(a => a !== sampleAxis);
+    const xField = enc.x && fields[enc.x] ? fields[enc.x] : null;
+    const xVals = axes[xAxis]?.values ?? [];
+    const primitives = (axes[sampleAxis]?.values ?? []).map((_, s) => ({
+      sample: s,
+      points: xVals.map((xv, i) => {
+        const coord = { [xAxis]: i, [sampleAxis]: s };
+        return { x: xField ? valueAt(xField, coord) : xv, y: valueAt(yField, coord) };
+      })
+    }));
+    return { ...base, stroke: colorToken(enc.stroke), opacity: Number(enc.opacity) || 0.12, primitives };
+  }
+
   if (layer.mark === "rule") {
     // vertical rule at x = <scalar field or param>
     const xVal = scalarRef(enc.x, evaluated);
@@ -201,7 +234,7 @@ function autoPolarRMax(layers) {
   return max > 0 ? max * 1.08 : 1;
 }
 
-// ── disc frame (mill cross-section: equal-aspect, centred xy) ─────────────────────
+// ── disc frame (equal-aspect, centred xy in a bounding disc) ──────────────────────
 
 function planDiscChart(viewBody, evaluated, opts = {}) {
   const width = opts.width ?? 600;
@@ -217,8 +250,16 @@ function planDiscChart(viewBody, evaluated, opts = {}) {
   const discRadius = scalarRef(enc.r?.field, evaluated) ?? autoDiscRadius(layers) ?? 1;
   const scale = maxRadius / (discRadius || 1);
 
+  // wall-collision clip: flag particle points that have passed beyond the disc wall.
+  // wallClip is a fraction of discRadius (1 = clip at the wall; lower → "landed near wall").
+  const wallClip = opts.wallClip ?? 1;
+  clipParticlesToDisc(layers, discRadius, wallClip);
+
+  // playback: full time span (loops over its physical duration × `speed`)
+  const playback = { speed: opts.speed ?? 1, loop: opts.loop ?? true, wallClip };
+
   return {
-    frame: "disc", width, height, margin, maxRadius, discRadius, scale,
+    frame: "disc", width, height, margin, maxRadius, discRadius, scale, playback,
     center: { x: margin.left + innerW / 2, y: margin.top + innerH / 2 },
     scales: {
       x: { field: enc.x?.field ?? "x", label: enc.x?.label ?? "" },
@@ -227,6 +268,40 @@ function planDiscChart(viewBody, evaluated, opts = {}) {
     layers,
     editable: viewBody.editable ?? []
   };
+}
+
+// annotate each particle point with inDisc (false once it has flown past the wall)
+function clipParticlesToDisc(layers, discRadius, wallClip) {
+  const limit = discRadius * wallClip + 1e-9;
+  for (const layer of layers) {
+    if (layer.mark !== "particles" || !layer.frames) continue;
+    for (const frame of layer.frames) {
+      for (const p of frame.points ?? []) {
+        p.inDisc = Number.isFinite(p.x) && Number.isFinite(p.y) && Math.hypot(p.x, p.y) <= limit;
+      }
+    }
+  }
+}
+
+// map elapsed wall-clock seconds → a frame index along an evenly-or-unevenly-spaced
+// time axis. Loops over the axis's physical span × speed; pure, so it is node-testable
+// (the rAF loop in drawChart is a thin shell over this).
+export function frameIndexForElapsed(tValues, elapsedSec, opts = {}) {
+  if (!Array.isArray(tValues) || tValues.length <= 1) return 0;
+  const speed = opts.speed ?? 1;
+  const loop = opts.loop ?? true;
+  const t0 = tValues[0];
+  const span = tValues[tValues.length - 1] - t0;
+  if (!(span > 0)) return 0;
+  let phase = elapsedSec * speed;
+  if (loop) { phase %= span; if (phase < 0) phase += span; }
+  else phase = Math.max(0, Math.min(span, phase));
+  const target = t0 + phase;
+  let idx = 0;
+  for (let i = 0; i < tValues.length; i += 1) {
+    if (tValues[i] <= target + 1e-12) idx = i; else break;
+  }
+  return idx;
 }
 
 function planDiscLayer(layer, evaluated) {
@@ -381,6 +456,61 @@ function autoXExtent(layers) {
   return [Math.min(0, min), max > min ? max : min + 1];
 }
 
+// ── interactivity: probe (read values at an x) + scrubber (axis value → frame) ────
+
+// linear-interpolate a points array's `key` (y / y0 / y1) at an arbitrary x; clamps at ends
+function interpAtX(points, x, key) {
+  if (!points || points.length === 0) return null;
+  if (x <= points[0].x) return points[0][key];
+  const last = points[points.length - 1];
+  if (x >= last.x) return last[key];
+  for (let i = 1; i < points.length; i += 1) {
+    if (points[i].x >= x) {
+      const a = points[i - 1], b = points[i];
+      const t = (x - a.x) / ((b.x - a.x) || 1);
+      return a[key] + (b[key] - a[key]) * t;
+    }
+  }
+  return last[key];
+}
+
+// Probe: read each cartesian layer's value(s) at a given x along the x-axis. Pure — the
+// host (a drag handler in drawChart) calls this on pointer-move to rebind the probe overlay
+// locally, without re-evaluating the model. Returns { x, readings:[{layer,mark,…}] }.
+export function probeReadout(plan, x) {
+  const readings = [];
+  for (const layer of plan.layers ?? []) {
+    if (layer.mark === "line" || layer.mark === "cloud") {
+      for (const prim of layer.primitives ?? []) {
+        const y = interpAtX(prim.points, x, "y");
+        if (y != null) readings.push({ layer: layer.name, mark: layer.mark, y, sample: prim.sample });
+      }
+    } else if (layer.mark === "band") {
+      const pts = layer.primitives?.[0]?.points;
+      const y0 = interpAtX(pts, x, "y0"), y1 = interpAtX(pts, x, "y1");
+      if (y0 != null) readings.push({ layer: layer.name, mark: "band", y0, y1 });
+    } else if (layer.mark === "area") {
+      for (const prim of layer.primitives ?? []) {
+        const y = interpAtX(prim.points, x, "y1");
+        if (y != null) readings.push({ layer: layer.name, mark: "area", category: prim.category, y });
+      }
+    }
+  }
+  return { x, readings };
+}
+
+// Scrubber: map an axis VALUE to the nearest frame index (value-driven companion to
+// frameIndexForElapsed's time-driven playback). Used to bind a slider/drag to a time axis.
+export function frameIndexForValue(tValues, tValue) {
+  if (!Array.isArray(tValues) || tValues.length === 0) return 0;
+  let best = 0, bestD = Infinity;
+  for (let i = 0; i < tValues.length; i += 1) {
+    const d = Math.abs(tValues[i] - tValue);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
 function numericDomain(domain, fallback) {
   if (!Array.isArray(domain) || domain.length < 2) return fallback;
   return [Number(domain[0]), Number(domain[1])];
@@ -407,6 +537,7 @@ function linearScale(domain, range) {
 export function drawChart(container, plan, d3) {
   if (!d3) throw new Error("drawChart requires d3");
   if (plan.frame === "polar") return drawPolarChart(container, plan, d3);
+  if (plan.frame === "disc") return drawDiscChart(container, plan, d3);
   const { width, height, margin, scales } = plan;
   d3.select(container).selectAll("svg.gog").remove();
   const svg = d3.select(container).append("svg")
@@ -433,6 +564,19 @@ export function drawChart(container, plan, d3) {
           .attr("fill", "none").attr("stroke", layer.stroke).attr("stroke-width", layer.width)
           .attr("stroke-dasharray", layer.dash ? "5,4" : null);
       }
+    } else if (layer.mark === "band") {
+      for (const prim of layer.primitives) {
+        const top = prim.points.filter(p => Number.isFinite(p.y1)).map(p => `${x(p.x)},${y(p.y1)}`);
+        const bottom = prim.points.filter(p => Number.isFinite(p.y0)).slice().reverse().map(p => `${x(p.x)},${y(p.y0)}`);
+        g.append("polygon").attr("points", [...top, ...bottom].join(" "))
+          .attr("fill", layer.fill).attr("opacity", layer.opacity);
+      }
+    } else if (layer.mark === "cloud") {
+      for (const prim of layer.primitives) {
+        g.append("polyline")
+          .attr("points", prim.points.filter(p => Number.isFinite(p.y)).map(p => `${x(p.x)},${y(p.y)}`).join(" "))
+          .attr("fill", "none").attr("stroke", layer.stroke).attr("stroke-width", 0.6).attr("opacity", layer.opacity);
+      }
     } else if (layer.mark === "rule") {
       for (const prim of layer.primitives) {
         g.append("line")
@@ -450,7 +594,36 @@ export function drawChart(container, plan, d3) {
   // axes
   g.append("line").attr("x1", 0).attr("y1", plan.innerH).attr("x2", plan.innerW).attr("y2", plan.innerH).attr("stroke", "#94a3b8");
   g.append("line").attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", plan.innerH).attr("stroke", "#94a3b8");
-  return svg.node();
+
+  // probe: a readout bound to the x-axis. Hover/drag re-renders ONLY this overlay via
+  // probeReadout(plan, x) — a local rebind, no model re-evaluation.
+  const probeG = g.append("g").attr("class", "gog-probe").style("pointer-events", "none");
+  const renderProbe = xVal => {
+    probeG.selectAll("*").remove();
+    if (!Number.isFinite(xVal)) return null;
+    const readout = probeReadout(plan, xVal);
+    const px = x(xVal);
+    probeG.append("line").attr("x1", px).attr("x2", px).attr("y1", 0).attr("y2", plan.innerH)
+      .attr("stroke", "#EC7424").attr("stroke-width", 1);
+    for (const reading of readout.readings) {
+      const ys = reading.mark === "band" ? [reading.y0, reading.y1] : [reading.y];
+      for (const yv of ys) {
+        if (Number.isFinite(yv)) probeG.append("circle").attr("cx", px).attr("cy", y(yv)).attr("r", 3).attr("fill", "#EC7424");
+      }
+    }
+    return readout;
+  };
+  const invertX = px => scales.x.domain[0] + (px / (plan.innerW || 1)) * (scales.x.domain[1] - scales.x.domain[0]);
+  const onMove = event => renderProbe(invertX(d3.pointer ? d3.pointer(event)[0] : 0));
+  g.append("rect").attr("width", plan.innerW).attr("height", plan.innerH)
+    .attr("fill", "transparent").style("cursor", "ew-resize")
+    .on("mousemove", onMove).on("touchmove", onMove);
+  const probeLayer = plan.layers.find(l => l.mark === "rule" && l.name === "probe");
+  if (probeLayer && Number.isFinite(probeLayer.primitives?.[0]?.x)) renderProbe(probeLayer.primitives[0].x);
+
+  const node = svg.node();
+  node.probeAt = renderProbe; // host hook: programmatic local rebind → returns the readout
+  return node;
 }
 
 function drawPolarChart(container, plan, d3) {
@@ -486,6 +659,78 @@ function drawPolarChart(container, plan, d3) {
     }
   }
   return svg.node();
+}
+
+function drawDiscChart(container, plan, d3) {
+  const { width, height, center, scale, discRadius } = plan;
+  const toPx = (x, y) => [center.x + x * scale, center.y - y * scale]; // data y-up → screen y-down
+  d3.select(container).selectAll("svg.gog").remove();
+  const svg = d3.select(container).append("svg")
+    .attr("class", "gog").attr("width", "100%").attr("height", "100%")
+    .attr("viewBox", `0 0 ${width} ${height}`);
+
+  // bounding disc
+  svg.append("circle").attr("cx", center.x).attr("cy", center.y).attr("r", discRadius * scale)
+    .attr("fill", "#0d1a2e").attr("stroke", "#475569").attr("stroke-width", 2);
+
+  let particleLayer = null;
+  for (const layer of plan.layers) {
+    if (layer.mark === "polygon" || layer.mark === "line") {
+      for (const prim of layer.primitives) {
+        const pts = prim.points.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y)).map(p => toPx(p.x, p.y).join(","));
+        const el = layer.closed ? svg.append("polygon") : svg.append("polyline");
+        el.attr("points", pts.join(" ")).attr("fill", layer.fill ?? "none")
+          .attr("fill-opacity", layer.fill ? 0.35 : 0).attr("stroke", layer.stroke).attr("stroke-width", 2);
+      }
+    } else if (layer.mark === "point") {
+      for (const prim of layer.primitives) {
+        if (!Number.isFinite(prim.x) || !Number.isFinite(prim.y)) continue;
+        const [cx, cy] = toPx(prim.x, prim.y);
+        const c = layer.stroke ?? "#dc2626";
+        svg.append("circle").attr("cx", cx).attr("cy", cy).attr("r", 5).attr("fill", "none").attr("stroke", c).attr("stroke-width", 2);
+        svg.append("line").attr("x1", cx - 8).attr("y1", cy).attr("x2", cx + 8).attr("y2", cy).attr("stroke", c);
+        svg.append("line").attr("x1", cx).attr("y1", cy - 8).attr("x2", cx).attr("y2", cy + 8).attr("stroke", c);
+      }
+    } else if (layer.mark === "particles") {
+      particleLayer = layer;
+    }
+  }
+
+  // animate the particle stream over its time frames. Cadence tracks wall-clock
+  // (frameIndexForElapsed) so playback speed follows the axis's physical duration,
+  // not the display refresh rate; only in-disc points (pre-clip) are painted.
+  const node = svg.node();
+  if (particleLayer && particleLayer.frames?.length) {
+    const dots = svg.append("g");
+    const colour = particleLayer.stroke ?? "#EC7424";
+    const playback = plan.playback ?? {};
+    const frames = particleLayer.frames;
+    const tValues = frames.map(f => f.t);
+    const draw = frame => {
+      const sel = dots.selectAll("circle").data(frame.points.filter(p => p.inDisc !== false && Number.isFinite(p.x) && Number.isFinite(p.y)));
+      sel.enter().append("circle").attr("r", 3).attr("fill", colour)
+        .merge(sel).attr("cx", p => toPx(p.x, p.y)[0]).attr("cy", p => toPx(p.x, p.y)[1]);
+      sel.exit().remove();
+    };
+    let playing = true;
+    // scrubber hooks: bind a slider/drag to the time axis. Scrubbing pauses playback and
+    // re-renders ONLY the dots for that frame (local rebind), by index or by axis value.
+    node.scrubTo = i => { playing = false; draw(frames[Math.max(0, Math.min(frames.length - 1, i | 0))]); };
+    node.scrubToValue = v => { playing = false; draw(frames[frameIndexForValue(tValues, v)]); };
+    node.play = () => { playing = true; };
+    if (frames.length === 1 || tValues[0] == null || typeof requestAnimationFrame !== "function") {
+      draw(frames[0]);
+    } else {
+      let startTs = null;
+      const step = ts => {
+        if (startTs == null) startTs = ts;
+        if (playing) draw(frames[frameIndexForElapsed(tValues, (ts - startTs) / 1000, playback)]);
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }
+  }
+  return node;
 }
 
 // cool→warm ramp for force magnitude wedges

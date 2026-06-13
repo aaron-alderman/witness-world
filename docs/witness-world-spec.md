@@ -116,8 +116,8 @@ The adjacent risk is "one more special route" gradually avoiding the shared gove
 - Runtime startup still bridges host capability resolution through the new capability model so older behavior continues to work.
 - Canonical startup path is the generic CLI:
   - `node src/cli.js bootstrap [--port <n>]`
-  - `node src/cli.js serve <dslPath> [--server <id>] [--port <n>]`
-  - `node src/cli.js mcp <dslPath> --mcp <id> [--server <id>] [--transport <stdio|http>] [--port <n>] [--actor <id>]`
+  - `node src/cli.js serve <app-dir|app.wtoml> [--server <id>] [--port <n>]`
+  - `node src/cli.js mcp <app-dir|app.wtoml> [--mcp <id>] [--server <id>] [--transport <stdio|http>] [--port <n>] [--actor <id>]`
   - `npm run bootstrap` is a convenience wrapper around the dedicated blank-world bootstrap command
   - `npm run demo` is a convenience wrapper around that CLI for the demo DSL
 - Runtime selection is driven by authored `serverRunner` + `serve` definitions.

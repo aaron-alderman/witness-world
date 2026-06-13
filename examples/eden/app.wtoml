@@ -1,0 +1,10 @@
+[app]
+id = "eden_app"
+imports = ["../_lib/common.wtoml", "../_lib/demo-todo/backend.wtoml", "../_lib/demo-todo/frontend.wtoml", "./eden.wtoml"]
+spawn = ["backend", "frontend"]
+
+[[desktopTarget]]
+id = "eden_desktop"
+label = "Eden Desktop"
+serverRunner = "demo_server"
+default = true

@@ -1,0 +1,36 @@
+{
+  "_note": "Golden host-operation I/O for the engentus pipeline. Captured from the deterministic CI stub (examples_rvm/engentus/host-ops-stub.mjs), which stands in for the external Python black box. When the real Python lands, these become the reference outputs it must reproduce; when an algorithm is internalised in DESIRE (Rung D), the in-IR handler must reproduce them too.",
+  "operations": {
+    "engentus.pipeline.fit.burst": {
+      "request": {
+        "source_name": "engentus.mill.pipeline",
+        "mill_id": "MILL-7",
+        "burst_start": "2026-01-01T00:00:00Z",
+        "burst_end": "2026-01-01T00:00:01Z"
+      },
+      "response": {
+        "status": "success",
+        "payload": {
+          "burst_start": "2026-01-01T00:00:00Z",
+          "rpm": 12.5,
+          "n_valid_pkgs": 42
+        }
+      }
+    },
+    "engentus.pipeline.health.classify": {
+      "request": {
+        "source_name": "engentus.mill.pipeline",
+        "mill_id": "MILL-7",
+        "hour_start": "2026-01-01T00:00:00Z"
+      },
+      "response": {
+        "status": "success",
+        "payload": {
+          "hour_start": "2026-01-01T00:00:00Z",
+          "n_valid_channels": 5,
+          "n_bolts_evaluated": 3
+        }
+      }
+    }
+  }
+}

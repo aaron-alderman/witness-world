@@ -91,7 +91,7 @@ export function createProgramAuthoringBundleHandlers({
         return;
       }
       const body = await readJson(req);
-      const auth = ensureTargetAuthority(gate.actor, body.program ?? "");
+      const auth = ensureTargetAuthority(gate.actor, body.soul ?? "");
       if (!auth.ok) {
         sendGateFailure(res, auth);
         return;

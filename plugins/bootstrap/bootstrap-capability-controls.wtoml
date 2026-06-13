@@ -1,0 +1,430 @@
+[[defaults]]
+actor = "frontendHost"
+context = "frontend"
+
+[[box]]
+id = "bootstrap_capability_create_controls_root"
+class = "stack"
+children = ["bootstrap_capability_create_form", "bootstrap_capability_create_status"]
+
+[[form]]
+id = "bootstrap_capability_create_form"
+domId = "capability-form"
+class = "stack"
+children = ["bootstrap_capability_create_grid_primary", "bootstrap_capability_create_grid_secondary", "bootstrap_capability_create_context_grid", "bootstrap_capability_create_depends_field", "bootstrap_capability_create_provenance_field", "bootstrap_capability_create_public_api_field", "bootstrap_capability_create_config_field", "bootstrap_capability_create_internals_field", "bootstrap_capability_create_authority_field", "bootstrap_capability_create_actions"]
+
+[[box]]
+id = "bootstrap_capability_create_grid_primary"
+class = "grid two"
+children = ["bootstrap_capability_create_id_field", "bootstrap_capability_create_label_field"]
+
+[[box]]
+id = "bootstrap_capability_create_id_field"
+class = "stack"
+children = ["bootstrap_capability_create_id_text", "bootstrap_capability_create_id_input"]
+
+[[text]]
+id = "bootstrap_capability_create_id_text"
+text = "Capability Id"
+
+[[input]]
+id = "bootstrap_capability_create_id_input"
+name = "id"
+placeholder = "notes.sidebar"
+
+[[box]]
+id = "bootstrap_capability_create_label_field"
+class = "stack"
+children = ["bootstrap_capability_create_label_text", "bootstrap_capability_create_label_input"]
+
+[[text]]
+id = "bootstrap_capability_create_label_text"
+text = "Label"
+
+[[input]]
+id = "bootstrap_capability_create_label_input"
+name = "label"
+placeholder = "Notes Sidebar"
+
+[[box]]
+id = "bootstrap_capability_create_grid_secondary"
+class = "grid two"
+children = ["bootstrap_capability_create_version_field", "bootstrap_capability_create_placement_field"]
+
+[[box]]
+id = "bootstrap_capability_create_version_field"
+class = "stack"
+children = ["bootstrap_capability_create_version_text", "bootstrap_capability_create_version_input"]
+
+[[text]]
+id = "bootstrap_capability_create_version_text"
+text = "Version"
+
+[[input]]
+id = "bootstrap_capability_create_version_input"
+name = "version"
+placeholder = "0.1.0"
+
+[[box]]
+id = "bootstrap_capability_create_placement_field"
+class = "stack"
+children = ["bootstrap_capability_create_placement_text", "bootstrap_capability_create_placement_input"]
+
+[[text]]
+id = "bootstrap_capability_create_placement_text"
+text = "Placement JSON"
+
+[[textarea]]
+id = "bootstrap_capability_create_placement_input"
+name = "placementJson"
+value = "[\"context\"]"
+
+[[box]]
+id = "bootstrap_capability_create_context_grid"
+class = "grid two"
+children = ["bootstrap_capability_create_context_field", "bootstrap_capability_create_context_spacer"]
+
+[[box]]
+id = "bootstrap_capability_create_context_field"
+class = "stack"
+children = ["bootstrap_capability_create_context_text", "bootstrap_capability_create_context_select"]
+
+[[text]]
+id = "bootstrap_capability_create_context_text"
+text = "Context"
+
+[[select]]
+id = "bootstrap_capability_create_context_select"
+domId = "capability-context"
+name = "context"
+
+[[box]]
+id = "bootstrap_capability_create_context_spacer"
+
+[[box]]
+id = "bootstrap_capability_create_depends_field"
+class = "stack"
+children = ["bootstrap_capability_create_depends_text", "bootstrap_capability_create_depends_input"]
+
+[[text]]
+id = "bootstrap_capability_create_depends_text"
+text = "Depends On JSON"
+
+[[textarea]]
+id = "bootstrap_capability_create_depends_input"
+name = "dependsOnJson"
+value = "[]"
+
+[[box]]
+id = "bootstrap_capability_create_provenance_field"
+class = "stack"
+children = ["bootstrap_capability_create_provenance_text", "bootstrap_capability_create_provenance_input"]
+
+[[text]]
+id = "bootstrap_capability_create_provenance_text"
+text = "Provenance JSON"
+
+[[textarea]]
+id = "bootstrap_capability_create_provenance_input"
+name = "provenanceJson"
+value = "{\"source\":\"local\"}"
+
+[[box]]
+id = "bootstrap_capability_create_public_api_field"
+class = "stack"
+children = ["bootstrap_capability_create_public_api_text", "bootstrap_capability_create_public_api_input"]
+
+[[text]]
+id = "bootstrap_capability_create_public_api_text"
+text = "Public API JSON"
+
+[[textarea]]
+id = "bootstrap_capability_create_public_api_input"
+name = "publicApiJson"
+value = "[]"
+
+[[box]]
+id = "bootstrap_capability_create_config_field"
+class = "stack"
+children = ["bootstrap_capability_create_config_text", "bootstrap_capability_create_config_input"]
+
+[[text]]
+id = "bootstrap_capability_create_config_text"
+text = "Config JSON"
+
+[[textarea]]
+id = "bootstrap_capability_create_config_input"
+name = "configJson"
+value = "[]"
+
+[[box]]
+id = "bootstrap_capability_create_internals_field"
+class = "stack"
+children = ["bootstrap_capability_create_internals_text", "bootstrap_capability_create_internals_input"]
+
+[[text]]
+id = "bootstrap_capability_create_internals_text"
+text = "Internals JSON"
+
+[[textarea]]
+id = "bootstrap_capability_create_internals_input"
+name = "internalsJson"
+value = "[]"
+
+[[box]]
+id = "bootstrap_capability_create_authority_field"
+class = "stack"
+children = ["bootstrap_capability_create_authority_text", "bootstrap_capability_create_authority_input"]
+
+[[text]]
+id = "bootstrap_capability_create_authority_text"
+text = "Authority JSON"
+
+[[textarea]]
+id = "bootstrap_capability_create_authority_input"
+name = "authorityJson"
+value = "[]"
+
+[[box]]
+id = "bootstrap_capability_create_actions"
+class = "actions"
+children = ["bootstrap_capability_create_submit"]
+
+[[button]]
+id = "bootstrap_capability_create_submit"
+text = "Define Capability"
+type = "submit"
+
+[[text]]
+id = "bootstrap_capability_create_status"
+domId = "capability-status"
+class = "status"
+text = ""
+
+[[frontendProgram]]
+id = "bootstrap_capability_create_controls_program"
+rootWidget = "bootstrap_capability_create_controls_root"
+
+[[step]]
+program = "bootstrap_capability_create_controls_program"
+order = 0
+op = "setText"
+on = "submit:bootstrap_capability_create_form"
+widget = "bootstrap_capability_create_status"
+text = "Saving..."
+
+[[step]]
+program = "bootstrap_capability_create_controls_program"
+order = 1
+op = "readForm"
+on = "submit:bootstrap_capability_create_form"
+widget = "bootstrap_capability_create_form"
+into = "bootstrapCapabilityCreateDraft"
+schema = "capability.define"
+
+[[step]]
+program = "bootstrap_capability_create_controls_program"
+order = 2
+op = "postJson"
+on = "submit:bootstrap_capability_create_form"
+url = "/api/capabilities"
+from = "bootstrapCapabilityCreateDraft"
+into = "bootstrapCapabilityCreateResult"
+
+[[step]]
+program = "bootstrap_capability_create_controls_program"
+order = 3
+op = "setText"
+on = "submit:bootstrap_capability_create_form"
+widget = "bootstrap_capability_create_status"
+text = "Saved."
+
+[[step]]
+program = "bootstrap_capability_create_controls_program"
+order = 4
+op = "clearForm"
+on = "submit:bootstrap_capability_create_form"
+widget = "bootstrap_capability_create_form"
+
+[[step]]
+program = "bootstrap_capability_create_controls_program"
+order = 5
+op = "dispatchDomEvent"
+on = "submit:bootstrap_capability_create_form"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-capability-controls", reason = "capability-create" }
+
+[[step]]
+program = "bootstrap_capability_create_controls_program"
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_capability_create_form" }
+widget = "bootstrap_capability_create_status"
+text = "${event.message}"
+
+[[box]]
+id = "bootstrap_capability_install_controls_root"
+class = "stack"
+children = ["bootstrap_capability_install_form", "bootstrap_capability_install_help", "bootstrap_capability_install_status"]
+
+[[form]]
+id = "bootstrap_capability_install_form"
+domId = "capability-install-form"
+class = "stack"
+children = ["bootstrap_capability_install_grid", "bootstrap_capability_install_target_field", "bootstrap_capability_install_actions"]
+
+[[box]]
+id = "bootstrap_capability_install_grid"
+class = "grid two"
+children = ["bootstrap_capability_install_capability_field", "bootstrap_capability_install_kind_field"]
+
+[[box]]
+id = "bootstrap_capability_install_capability_field"
+class = "stack"
+children = ["bootstrap_capability_install_capability_text", "bootstrap_capability_install_capability_select"]
+
+[[text]]
+id = "bootstrap_capability_install_capability_text"
+text = "Capability"
+
+[[select]]
+id = "bootstrap_capability_install_capability_select"
+domId = "capability-install-capability"
+name = "capability"
+
+[[box]]
+id = "bootstrap_capability_install_kind_field"
+class = "stack"
+children = ["bootstrap_capability_install_kind_text", "bootstrap_capability_install_kind_select"]
+
+[[text]]
+id = "bootstrap_capability_install_kind_text"
+text = "Target Kind"
+
+[[select]]
+id = "bootstrap_capability_install_kind_select"
+domId = "capability-install-kind"
+name = "targetKind"
+
+[[box]]
+id = "bootstrap_capability_install_target_field"
+class = "stack"
+children = ["bootstrap_capability_install_target_text", "bootstrap_capability_install_target_select"]
+
+[[text]]
+id = "bootstrap_capability_install_target_text"
+text = "Target"
+
+[[select]]
+id = "bootstrap_capability_install_target_select"
+domId = "capability-install-target"
+name = "target"
+
+[[box]]
+id = "bootstrap_capability_install_actions"
+class = "actions"
+children = ["bootstrap_capability_install_submit"]
+
+[[button]]
+id = "bootstrap_capability_install_submit"
+text = "Install Capability"
+type = "submit"
+
+[[text]]
+id = "bootstrap_capability_install_help"
+domId = "capability-install-help"
+class = "note muted"
+text = ""
+
+[[text]]
+id = "bootstrap_capability_install_status"
+domId = "capability-install-status"
+class = "status"
+text = ""
+
+[[frontendProgram]]
+id = "bootstrap_capability_install_controls_program"
+rootWidget = "bootstrap_capability_install_controls_root"
+
+[[step]]
+program = "bootstrap_capability_install_controls_program"
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_capability_install_capability_select"
+eventName = "witness:bootstrap-capability-controls-sync"
+detail = { source = "bootstrap-capability-controls", family = "capability-install", trigger = "capability" }
+
+[[step]]
+program = "bootstrap_capability_install_controls_program"
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_capability_install_kind_select"
+eventName = "witness:bootstrap-capability-controls-sync"
+detail = { source = "bootstrap-capability-controls", family = "capability-install", trigger = "target-kind" }
+
+[[step]]
+program = "bootstrap_capability_install_controls_program"
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_capability_install_target_select"
+eventName = "witness:bootstrap-capability-controls-sync"
+detail = { source = "bootstrap-capability-controls", family = "capability-install", trigger = "target" }
+
+[[step]]
+program = "bootstrap_capability_install_controls_program"
+order = 0
+op = "setText"
+on = "submit:bootstrap_capability_install_form"
+widget = "bootstrap_capability_install_status"
+text = "Saving..."
+
+[[step]]
+program = "bootstrap_capability_install_controls_program"
+order = 1
+op = "readForm"
+on = "submit:bootstrap_capability_install_form"
+widget = "bootstrap_capability_install_form"
+into = "bootstrapCapabilityInstallDraft"
+schema = "capability.install"
+
+[[step]]
+program = "bootstrap_capability_install_controls_program"
+order = 2
+op = "postJson"
+on = "submit:bootstrap_capability_install_form"
+url = "/api/capability-installs"
+from = "bootstrapCapabilityInstallDraft"
+into = "bootstrapCapabilityInstallResult"
+
+[[step]]
+program = "bootstrap_capability_install_controls_program"
+order = 3
+op = "setText"
+on = "submit:bootstrap_capability_install_form"
+widget = "bootstrap_capability_install_status"
+text = "Saved."
+
+[[step]]
+program = "bootstrap_capability_install_controls_program"
+order = 4
+op = "clearForm"
+on = "submit:bootstrap_capability_install_form"
+widget = "bootstrap_capability_install_form"
+
+[[step]]
+program = "bootstrap_capability_install_controls_program"
+order = 5
+op = "dispatchDomEvent"
+on = "submit:bootstrap_capability_install_form"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-capability-controls", reason = "capability-install" }
+
+[[step]]
+program = "bootstrap_capability_install_controls_program"
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_capability_install_form" }
+widget = "bootstrap_capability_install_status"
+text = "${event.message}"

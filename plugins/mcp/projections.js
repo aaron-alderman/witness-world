@@ -4,8 +4,8 @@ import { moduleProjectors } from "../../src/modules.js";
 const MCP_TOOL_ACTING_MODES = new Set(["delegated", "service"]);
 const MCP_SERVER_TRANSPORTS = new Set(["stdio", "http"]);
 
-export function mcpServers(witnesses) {
-  const contexts = moduleProjectors.objectContexts(witnesses);
+export function mcpServers(witnesses, options = {}) {
+  const contexts = moduleProjectors.objectContexts(witnesses, options);
   const rows = new Map();
   const rels = projectors.currentRelations(witnesses);
   for (const witness of witnesses) {
@@ -34,14 +34,14 @@ export function mcpServers(witnesses) {
     .sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
 
-export function mcpServerIndex(witnesses) {
-  const rows = mcpServers(witnesses);
+export function mcpServerIndex(witnesses, options = {}) {
+  const rows = mcpServers(witnesses, options);
   const byId = Object.create(null);
   for (const row of rows) byId[row.id] = row;
   return { rows, byId };
 }
 
-export function mcpToolInstalls(witnesses) {
+export function mcpToolInstalls(witnesses, _options = {}) {
   const rows = [];
   const seen = new Set();
   for (const row of projectors.currentRelations(witnesses)) {
@@ -70,8 +70,8 @@ export function mcpToolInstalls(witnesses) {
   );
 }
 
-export function mcpToolInstallIndex(witnesses) {
-  const rows = mcpToolInstalls(witnesses);
+export function mcpToolInstallIndex(witnesses, options = {}) {
+  const rows = mcpToolInstalls(witnesses, options);
   const byServer = Object.create(null);
   for (const row of rows) {
     if (!byServer[row.server]) byServer[row.server] = [];

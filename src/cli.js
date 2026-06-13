@@ -3,9 +3,6 @@ import readline from "node:readline";
 import { randomUUID } from "node:crypto";
 import { launchDesktopProcess } from "./desktop-cli.js";
 import { createWorld } from "./kernel.js";
-import { loadWitnessTomlFile, applyWitnessDocsWithRuntimePlugins } from "./dsl.js";
-import { moduleProjectors } from "./modules.js";
-import { declareBackendHost, declareFrontendHost, resolveServerRunner, startServer } from "./host.js";
 import {
   DEFAULT_BOOTSTRAP_RUNTIME_PROFILE,
   DEFAULT_RUNTIME_PROFILE,
@@ -16,6 +13,8 @@ import { resolveRuntimeOperatorPaths } from "./runtime-operator-contract.js";
 import { createRuntimeOperatorService, runtimeOperatorMutations } from "./runtime-operator-service.js";
 import { startBlankRuntime } from "./runtime-local-launcher.js";
 import { createLogger } from "./logger.js";
+import { loadAppProject, resolveMcpTarget, resolveServeTarget } from "./app-project.js";
+import { startAppRuntime } from "./app-runtime.js";
 
 const [command, ...rest] = process.argv.slice(2);
 
@@ -36,69 +35,39 @@ if (command === "serve") {
 
 async function runServe(args) {
   const parsed = parseServeArgs(args);
-  const runtimeProfileInfo = resolveCliRuntimeProfile({
-    runtimeProfile: parsed.runtimeProfile,
-    explicit: parsed.runtimeProfileExplicit
-  });
-  const runtimeProfile = runtimeProfileInfo.id;
-  if (!parsed.dslPath) {
-    console.error(`Missing DSL path.\n${usageText()}`);
+  if (!parsed.appPath) {
+    console.error(`Missing app path.\n${usageText()}`);
+    process.exit(1);
+  }
+  let appProject = null;
+  let selection = null;
+  try {
+    appProject = await loadAppProject(parsed.appPath);
+    selection = resolveServeTarget(appProject, { serverRunnerId: parsed.serverRunnerId });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 
-  const definitionPath = path.resolve(parsed.dslPath);
-  const operatorContract = await resolveRuntimeOperatorPaths({
-    startupMode: "serve",
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      ...(parsed.worldHome ? { WORLD_HOME: parsed.worldHome } : {})
-    }
-  });
-  const witnessLogPath = operatorContract.canonicalTruth.witnessLogPath;
-  const observationLogPath = operatorContract.canonicalTruth.observationLogPath;
-  const runtimeRoot = operatorContract.directories.runtimeRoot;
-  const world = createWorld({ genesis: { system: "witness-world", definitionPath }, witnessLogPath, observationLogPath });
-  const docs = await loadWitnessTomlFile(definitionPath);
+  let launched = null;
   try {
-    await applyWitnessDocsWithRuntimePlugins(world, docs, {
-      runtimeProfile,
-      runtimePluginIds: parsed.runtimePluginIds.length ? parsed.runtimePluginIds : null,
+    launched = await startAppRuntime({
+      appProject,
+      startupMode: "serve",
+      port: parsed.port,
+      serverRunnerId: selection.serverRunner.id,
+      runtimeProfile: parsed.runtimeProfile,
+      runtimeProfileExplicit: parsed.runtimeProfileExplicit,
+      runtimePluginIds: parsed.runtimePluginIds,
+      worldHome: parsed.worldHome,
+      cwd: process.cwd(),
       env: process.env
     });
   } catch (error) {
-    if (error?.runtimePluginCatalog) {
-      reportStartupFailure(error);
-      process.exit(1);
-    }
-    throw error;
-  }
-
-  const resolved = resolveServerRunner(world, parsed.serverRunnerId ?? null);
-  if (!resolved.ok) {
-    console.error(resolved.reason);
+    reportStartupFailure(error);
     process.exit(1);
   }
-
-  const runner = resolved.runner;
-  if (!runner.backendHost || !runner.frontendHost) {
-    console.error(`Server runner ${runner.id} is missing backendHost/frontendHost`);
-    process.exit(1);
-  }
-
-  declareBackendHost(world, { actor: "system", id: runner.backendHost, runtimeProfile });
-  declareFrontendHost(world, { actor: "system", id: runner.frontendHost, runtimeProfile });
-
-  const server = await startServer(world, {
-    actor: "system",
-    serverRunnerId: runner.id,
-    port: parsed.port,
-    runtimeRoot,
-    runtimeProfile,
-    runtimePluginIds: parsed.runtimePluginIds.length ? parsed.runtimePluginIds : null,
-    runtimeStartupMode: "serve",
-    runtimeOperatorContract: operatorContract
-  });
+  const { server, runner, witnessLogPath, observationLogPath, operatorContract, runtimeProfile, runtimeProfileInfo } = launched;
 
   if (!server.ok) {
     reportStartupFailure(server);
@@ -111,8 +80,10 @@ async function runServe(args) {
     witnessLogPath,
     observationLogPath,
     extras: [
-      `Definition: ${definitionPath}`,
+      `App root: ${appProject.appRoot}`,
+      `Manifest: ${appProject.manifestPath}`,
       `Server runner: ${runner.id}`,
+      `Selected target: ${selection.serverRunner.id}`,
       `Runtime profile: ${runtimeProfile}`,
       `Persistence: ${operatorContract.persistence.mode}`,
       ...(operatorContract.worldHome ? [`World home: ${operatorContract.worldHome}`] : [])
@@ -180,84 +151,45 @@ async function runBootstrap(args) {
 
 async function runMcp(args) {
   const parsed = parseMcpArgs(args);
-  const runtimeProfileInfo = resolveCliRuntimeProfile({
-    runtimeProfile: parsed.runtimeProfile,
-    explicit: parsed.runtimeProfileExplicit
-  });
-  const runtimeProfile = runtimeProfileInfo.id;
-  if (!parsed.dslPath || !parsed.mcpServerId) {
-    console.error(`Missing DSL path or MCP server id.\n${usageText()}`);
+  if (!parsed.appPath) {
+    console.error(`Missing app path.\n${usageText()}`);
+    process.exit(1);
+  }
+  let appProject = null;
+  let selection = null;
+  try {
+    appProject = await loadAppProject(parsed.appPath);
+    selection = resolveMcpTarget(appProject, { mcpServerId: parsed.mcpServerId });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+  const mcpServer = selection.mcpServer;
+  if (!mcpServer.transports.includes(parsed.transport)) {
+    console.error(`MCP server ${mcpServer.id} does not support transport ${parsed.transport}`);
     process.exit(1);
   }
 
-  const definitionPath = path.resolve(parsed.dslPath);
-  const operatorContract = await resolveRuntimeOperatorPaths({
-    startupMode: "mcp",
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      ...(parsed.worldHome ? { WORLD_HOME: parsed.worldHome } : {})
-    }
-  });
-  const witnessLogPath = operatorContract.canonicalTruth.witnessLogPath;
-  const observationLogPath = operatorContract.canonicalTruth.observationLogPath;
-  const runtimeRoot = operatorContract.directories.runtimeRoot;
-  const world = createWorld({ genesis: { system: "witness-world", definitionPath }, witnessLogPath, observationLogPath });
-  const docs = await loadWitnessTomlFile(definitionPath);
-  try {
-    await applyWitnessDocsWithRuntimePlugins(world, docs, {
-      runtimeProfile,
-      runtimePluginIds: parsed.runtimePluginIds.length ? parsed.runtimePluginIds : null,
-      env: process.env
-    });
-  } catch (error) {
-    if (error?.runtimePluginCatalog) {
+  if (parsed.transport === "http") {
+    let launched = null;
+    try {
+      launched = await startAppRuntime({
+        appProject,
+        startupMode: "mcp",
+        port: parsed.port,
+        serverRunnerId: selection.serverRunner.id,
+        runtimeProfile: parsed.runtimeProfile,
+        runtimeProfileExplicit: parsed.runtimeProfileExplicit,
+        runtimePluginIds: parsed.runtimePluginIds,
+        worldHome: parsed.worldHome,
+        cwd: process.cwd(),
+        env: process.env
+      });
+    } catch (error) {
       reportStartupFailure(error);
       process.exit(1);
     }
-    throw error;
-  }
-
-  const mcpServer = resolveMcpServerForCliStartup(world, parsed.mcpServerId);
-  if (!mcpServer) {
-    console.error(`MCP server not found: ${parsed.mcpServerId}`);
-    process.exit(1);
-  }
-  if (!mcpServer.transports.includes(parsed.transport)) {
-    console.error(`MCP server ${parsed.mcpServerId} does not support transport ${parsed.transport}`);
-    process.exit(1);
-  }
-
-  const resolved = resolveServerRunner(world, mcpServer.serverRunner || parsed.serverRunnerId || null);
-  if (!resolved.ok) {
-    console.error(resolved.reason);
-    process.exit(1);
-  }
-
-  const runner = resolved.runner;
-  if (runner.id !== mcpServer.serverRunner) {
-    console.error(`MCP server ${parsed.mcpServerId} is bound to server runner ${mcpServer.serverRunner}, not ${runner.id}`);
-    process.exit(1);
-  }
-  if (!runner.backendHost || !runner.frontendHost) {
-    console.error(`Server runner ${runner.id} is missing backendHost/frontendHost`);
-    process.exit(1);
-  }
-
-  declareBackendHost(world, { actor: "system", id: runner.backendHost, runtimeProfile });
-  declareFrontendHost(world, { actor: "system", id: runner.frontendHost, runtimeProfile });
-
-  if (parsed.transport === "http") {
-    const server = await startServer(world, {
-      actor: "system",
-      serverRunnerId: runner.id,
-      port: parsed.port,
-      runtimeRoot,
-      runtimeProfile,
-      runtimePluginIds: parsed.runtimePluginIds.length ? parsed.runtimePluginIds : null,
-      runtimeStartupMode: "mcp",
-      runtimeOperatorContract: operatorContract
-    });
+    const { server, runner, witnessLogPath, observationLogPath, operatorContract, runtimeProfile, runtimeProfileInfo } = launched;
     if (!server.ok) {
       reportStartupFailure(server);
       process.exit(1);
@@ -268,7 +200,8 @@ async function runMcp(args) {
       witnessLogPath,
       observationLogPath,
       extras: [
-        `Definition: ${definitionPath}`,
+        `App root: ${appProject.appRoot}`,
+        `Manifest: ${appProject.manifestPath}`,
         `Server runner: ${runner.id}`,
         `MCP server: ${mcpServer.id}`,
         `Runtime profile: ${runtimeProfile}`,
@@ -284,18 +217,27 @@ async function runMcp(args) {
   }
 
   const internalToken = randomUUID();
-  const server = await startServer(world, {
-    actor: "system",
-    serverRunnerId: runner.id,
-    port: 0,
-    runtimeRoot,
-    logger: createLogger({ level: "silent" }),
-    mcpInternalToken: internalToken,
-    runtimeProfile,
-    runtimePluginIds: parsed.runtimePluginIds.length ? parsed.runtimePluginIds : null,
-    runtimeStartupMode: "mcp",
-    runtimeOperatorContract: operatorContract
-  });
+  let launched = null;
+  try {
+    launched = await startAppRuntime({
+      appProject,
+      startupMode: "mcp",
+      port: 0,
+      serverRunnerId: selection.serverRunner.id,
+      runtimeProfile: parsed.runtimeProfile,
+      runtimeProfileExplicit: parsed.runtimeProfileExplicit,
+      runtimePluginIds: parsed.runtimePluginIds,
+      worldHome: parsed.worldHome,
+      cwd: process.cwd(),
+      env: process.env,
+      logger: createLogger({ level: "silent" }),
+      mcpInternalToken: internalToken
+    });
+  } catch (error) {
+    reportStartupFailure(error);
+    process.exit(1);
+  }
+  const { server } = launched;
   if (!server.ok) {
     reportStartupFailure(server);
     process.exit(1);
@@ -337,31 +279,6 @@ async function runMcp(args) {
   } finally {
     await server.close();
   }
-}
-
-function resolveMcpServerForCliStartup(world, id) {
-  const projected = world.project(moduleProjectors.mcpServerIndex).byId[id] ?? null;
-  if (projected) return projected;
-
-  // The stdio bridge must choose a server runner before runtime startup has
-  // registered plugin-owned MCP read-model projectors.
-  let found = null;
-  for (const witness of world.allWitnesses()) {
-    if (witness.process === "defineMcpServer" && witness.body?.id === id) {
-      found = witness.body;
-    } else if (witness.process === "mcpServer.define" && witness.body?.mcpServer?.id === id) {
-      found = witness.body.mcpServer;
-    }
-  }
-  if (!found) return null;
-  return {
-    id: String(found.id),
-    label: typeof found.label === "string" && found.label.trim() ? found.label.trim() : String(found.id),
-    serverRunner: found.serverRunner ? String(found.serverRunner) : null,
-    serviceIdentity: found.serviceIdentity ? String(found.serviceIdentity) : null,
-    transports: Array.isArray(found.transports) ? [...new Set(found.transports.map(String).filter(Boolean))] : [],
-    context: found.context ? String(found.context) : null
-  };
 }
 
 async function runDesktop(args) {
@@ -483,9 +400,9 @@ async function runOperator(args) {
 }
 
 function parseServeArgs(args) {
-  const result = { dslPath: null, serverRunnerId: null, port: 3000, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [] };
+  const result = { appPath: null, serverRunnerId: null, port: 3000, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [] };
   const queue = [...args];
-  if (queue.length && !queue[0].startsWith("--")) result.dslPath = queue.shift();
+  if (queue.length && !queue[0].startsWith("--")) result.appPath = queue.shift();
   while (queue.length) {
     const token = queue.shift();
     if (token === "--server") {
@@ -541,9 +458,9 @@ function parseBootstrapArgs(args) {
 }
 
 function parseMcpArgs(args) {
-  const result = { dslPath: null, serverRunnerId: null, mcpServerId: null, port: 3000, transport: "stdio", actor: null, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [] };
+  const result = { appPath: null, serverRunnerId: null, mcpServerId: null, port: 3000, transport: "stdio", actor: null, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [] };
   const queue = [...args];
-  if (queue.length && !queue[0].startsWith("--")) result.dslPath = queue.shift();
+  if (queue.length && !queue[0].startsWith("--")) result.appPath = queue.shift();
   while (queue.length) {
     const token = queue.shift();
     if (token === "--server") {
@@ -742,10 +659,10 @@ function reportOperatorReplace({
 function usageText() {
   return [
     "Usage:",
-    "  node src/cli.js serve <dslPath> [--server <id>] [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
+    "  node src/cli.js serve <app-dir|app.wtoml> [--server <id>] [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
     "  node src/cli.js bootstrap [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
-    "  node src/cli.js desktop [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
-    "  node src/cli.js mcp <dslPath> --mcp <id> [--server <id>] [--transport <stdio|http>] [--port <n>] [--actor <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
+    "  node src/cli.js desktop [<app-dir|app.wtoml>] [--desktop-target <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
+    "  node src/cli.js mcp <app-dir|app.wtoml> [--mcp <id>] [--server <id>] [--transport <stdio|http>] [--port <n>] [--actor <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
     "  node src/cli.js operator backup --world-home <path> [--label <text>] [--include-derived]",
     "  node src/cli.js operator export --world-home <path> [--label <text>]",
     "  node src/cli.js operator restore --world-home <path> --artifact <artifact-dir> [--preserve-current]",

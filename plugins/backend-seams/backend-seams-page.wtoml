@@ -1,0 +1,371 @@
+[[defaults]]
+actor = "frontendHost"
+context = "frontend"
+program = "backend_seams_program"
+
+[[page]]
+id = "backend_seams_page"
+title = "Backend Seams"
+class = "surface-page"
+children = ["backend_seams_title", "backend_seams_lede", "backend_seams_status", "backend_seams_summary_section", "backend_seams_ingest_section", "backend_seams_search_section", "backend_seams_links_section", "backend_seams_json_section"]
+
+[[heading]]
+id = "backend_seams_title"
+text = "Backend Seams"
+level = 1
+
+[[text]]
+id = "backend_seams_lede"
+text = "Operator-visible inspection for the current practical backend slice. This page reports shipped files, jobs, SQL, search, OAuth, outbound HTTP, inbound webhook, notification seams, local runtime status, and current repair queues."
+class = "surface-lede"
+
+[[text]]
+id = "backend_seams_status"
+text = "Loading diagnostics..."
+class = "status"
+
+[[box]]
+id = "backend_seams_summary_section"
+class = "surface-section surface-stack"
+children = ["backend_seams_summary_title", "backend_seams_summary_cards"]
+
+[[heading]]
+id = "backend_seams_summary_title"
+text = "Summary"
+level = 2
+
+[[box]]
+id = "backend_seams_summary_cards"
+class = "surface-card-grid"
+
+[[box]]
+id = "backend_seams_ingest_section"
+class = "surface-section surface-stack"
+children = ["backend_seams_ingest_title", "backend_seams_ingest_list"]
+
+[[heading]]
+id = "backend_seams_ingest_title"
+text = "Asset Repair Queue"
+level = 2
+
+[[box]]
+id = "backend_seams_ingest_list"
+class = "surface-list"
+
+[[box]]
+id = "backend_seams_search_section"
+class = "surface-section surface-stack"
+children = ["backend_seams_search_title", "backend_seams_search_list"]
+
+[[heading]]
+id = "backend_seams_search_title"
+text = "Asset Search Refresh"
+level = 2
+
+[[box]]
+id = "backend_seams_search_list"
+class = "surface-list"
+
+[[box]]
+id = "backend_seams_links_section"
+class = "surface-section surface-stack"
+children = ["backend_seams_links_title", "backend_seams_links_list"]
+
+[[heading]]
+id = "backend_seams_links_title"
+text = "Related Endpoints"
+level = 2
+
+[[box]]
+id = "backend_seams_links_list"
+class = "surface-actions"
+
+[[box]]
+id = "backend_seams_json_section"
+class = "surface-section surface-stack"
+children = ["backend_seams_json_title", "backend_seams_json"]
+
+[[heading]]
+id = "backend_seams_json_title"
+text = "Diagnostics"
+level = 2
+
+[[text]]
+id = "backend_seams_json"
+text = "{}"
+class = "surface-code"
+
+[[box]]
+id = "backend_seams_summary_card_template"
+template = true
+class = "surface-card surface-stack"
+children = ["backend_seams_summary_card_label_template", "backend_seams_summary_card_value_template"]
+
+[[text]]
+id = "backend_seams_summary_card_label_template"
+template = true
+text = "${item.label}"
+class = "surface-card-label"
+
+[[text]]
+id = "backend_seams_summary_card_value_template"
+template = true
+text = "${item.value}"
+class = "surface-card-value"
+
+[[box]]
+id = "backend_seams_ingest_item_template"
+template = true
+class = "surface-card surface-stack"
+children = ["backend_seams_ingest_item_title_template", "backend_seams_ingest_item_meta_template", "backend_seams_ingest_item_action_template"]
+
+[[heading]]
+id = "backend_seams_ingest_item_title_template"
+template = true
+text = "${item.title || item.id}"
+level = 3
+class = "surface-card-title"
+
+[[text]]
+id = "backend_seams_ingest_item_meta_template"
+template = true
+text = "${'Ingest status: ' + (item.processingStatus || 'unknown') + (item.processingError ? '\\nReason: ' + item.processingError : '')}"
+class = "surface-note"
+
+[[button]]
+id = "backend_seams_ingest_item_action_template"
+template = true
+text = "Retry ingest"
+type = "button"
+action = "retryAssetIngest"
+data-url = "${item.retryUrl}"
+data-asset-id = "${item.id}"
+
+[[text]]
+id = "backend_seams_ingest_empty_template"
+template = true
+text = "No asset ingestion repairs are currently queued for operator action."
+class = "surface-note"
+
+[[box]]
+id = "backend_seams_search_item_template"
+template = true
+class = "surface-card surface-stack"
+children = ["backend_seams_search_item_title_template", "backend_seams_search_item_meta_template", "backend_seams_search_item_action_template"]
+
+[[heading]]
+id = "backend_seams_search_item_title_template"
+template = true
+text = "${item.title || item.id}"
+level = 3
+class = "surface-card-title"
+
+[[text]]
+id = "backend_seams_search_item_meta_template"
+template = true
+text = "${'Search policy: ' + (item.searchPolicy || 'unknown') + (item.lastBuiltAt ? '\\nLast built: ' + item.lastBuiltAt : '') + (item.assetUpdatedAt ? '\\nAsset updated: ' + item.assetUpdatedAt : '')}"
+class = "surface-note"
+
+[[button]]
+id = "backend_seams_search_item_action_template"
+template = true
+text = "Refresh asset search"
+type = "button"
+action = "refreshAssetSearch"
+data-url = "${item.reindexUrl}"
+data-asset-id = "${item.id}"
+
+[[text]]
+id = "backend_seams_search_empty_template"
+template = true
+text = "No stale asset-backed search entries are waiting for repair."
+class = "surface-note"
+
+[[link]]
+id = "backend_seams_link_template"
+template = true
+href = "${item.href}"
+text = "${item.label}"
+class = "surface-link-chip"
+
+[[frontendProgram]]
+id = "backend_seams_program"
+rootWidget = "backend_seams_page"
+
+[[step]]
+order = 0
+op = "setText"
+on = "load"
+widget = "backend_seams_status"
+text = "Loading diagnostics..."
+
+[[step]]
+order = 1
+op = "renderCollection"
+on = "load"
+widget = "backend_seams_summary_cards"
+from = "diagnosticsResponse.summaryCards"
+template = "backend_seams_summary_card_template"
+
+[[step]]
+order = 2
+op = "renderCollection"
+on = "load"
+widget = "backend_seams_ingest_list"
+from = "diagnosticsResponse.repairs.ingestRetryable"
+template = "backend_seams_ingest_item_template"
+emptyWidget = "backend_seams_ingest_empty_template"
+
+[[step]]
+order = 3
+op = "renderCollection"
+on = "load"
+widget = "backend_seams_search_list"
+from = "diagnosticsResponse.repairs.searchRefreshable"
+template = "backend_seams_search_item_template"
+emptyWidget = "backend_seams_search_empty_template"
+
+[[step]]
+order = 4
+op = "renderCollection"
+on = "load"
+widget = "backend_seams_links_list"
+from = "diagnosticsResponse.resourceLinks"
+template = "backend_seams_link_template"
+
+[[step]]
+order = 5
+op = "setText"
+on = "load"
+widget = "backend_seams_json"
+text = "${JSON.stringify(state.diagnosticsResponse || {}, null, 2)}"
+
+[[step]]
+order = 6
+op = "setText"
+on = "load"
+widget = "backend_seams_status"
+text = "Ready."
+
+[[step]]
+order = 0
+op = "setText"
+on = "refreshBackendSeams"
+widget = "backend_seams_status"
+text = "Refreshing diagnostics..."
+
+[[step]]
+order = 1
+op = "fetchJson"
+on = "refreshBackendSeams"
+url = "/api/backend-seams"
+into = "diagnosticsResponse"
+
+[[step]]
+order = 2
+op = "renderCollection"
+on = "refreshBackendSeams"
+widget = "backend_seams_summary_cards"
+from = "diagnosticsResponse.summaryCards"
+template = "backend_seams_summary_card_template"
+
+[[step]]
+order = 3
+op = "renderCollection"
+on = "refreshBackendSeams"
+widget = "backend_seams_ingest_list"
+from = "diagnosticsResponse.repairs.ingestRetryable"
+template = "backend_seams_ingest_item_template"
+emptyWidget = "backend_seams_ingest_empty_template"
+
+[[step]]
+order = 4
+op = "renderCollection"
+on = "refreshBackendSeams"
+widget = "backend_seams_search_list"
+from = "diagnosticsResponse.repairs.searchRefreshable"
+template = "backend_seams_search_item_template"
+emptyWidget = "backend_seams_search_empty_template"
+
+[[step]]
+order = 5
+op = "renderCollection"
+on = "refreshBackendSeams"
+widget = "backend_seams_links_list"
+from = "diagnosticsResponse.resourceLinks"
+template = "backend_seams_link_template"
+
+[[step]]
+order = 6
+op = "setText"
+on = "refreshBackendSeams"
+widget = "backend_seams_json"
+text = "${JSON.stringify(state.diagnosticsResponse || {}, null, 2)}"
+
+[[step]]
+order = 7
+op = "setText"
+on = "refreshBackendSeams"
+widget = "backend_seams_status"
+text = "Ready."
+
+[[step]]
+order = 0
+op = "setText"
+on = "click:retryAssetIngest"
+widget = "backend_seams_status"
+text = "Queueing ingest retry..."
+
+[[step]]
+order = 1
+op = "postJson"
+on = "click:retryAssetIngest"
+url = "${event.url}"
+into = "lastRepairAction"
+
+[[step]]
+order = 2
+op = "run"
+on = "click:retryAssetIngest"
+event = "refreshBackendSeams"
+
+[[step]]
+order = 3
+op = "setText"
+on = "click:retryAssetIngest"
+widget = "backend_seams_status"
+text = "${state.lastRepairAction && state.lastRepairAction.job ? 'Queued ingest retry.' : 'Ingest retry requested.'}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "click:refreshAssetSearch"
+widget = "backend_seams_status"
+text = "Refreshing asset search..."
+
+[[step]]
+order = 1
+op = "postJson"
+on = "click:refreshAssetSearch"
+url = "${event.url}"
+into = "lastRepairAction"
+
+[[step]]
+order = 2
+op = "run"
+on = "click:refreshAssetSearch"
+event = "refreshBackendSeams"
+
+[[step]]
+order = 3
+op = "setText"
+on = "click:refreshAssetSearch"
+widget = "backend_seams_status"
+text = "${state.lastRepairAction && state.lastRepairAction.asset && state.lastRepairAction.asset.searchStatus ? 'Asset search status: ' + state.lastRepairAction.asset.searchStatus + '.' : 'Asset search refresh requested.'}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+widget = "backend_seams_status"
+text = "Failed: ${event.message}"

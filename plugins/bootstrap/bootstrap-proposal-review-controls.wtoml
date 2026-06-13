@@ -1,0 +1,213 @@
+[[defaults]]
+actor = "frontendHost"
+context = "frontend"
+program = "bootstrap_proposal_review_controls_program"
+
+[[box]]
+id = "bootstrap_proposal_review_controls_root"
+class = "stack"
+children = ["bootstrap_proposal_approve_form", "bootstrap_proposal_approve_status", "bootstrap_proposal_reject_form", "bootstrap_proposal_reject_status"]
+
+[[form]]
+id = "bootstrap_proposal_approve_form"
+domId = "proposal-approve-form"
+class = "stack"
+children = ["bootstrap_proposal_approve_grid", "bootstrap_proposal_approve_help", "bootstrap_proposal_approve_actions"]
+
+[[box]]
+id = "bootstrap_proposal_approve_grid"
+class = "grid two"
+children = ["bootstrap_proposal_approve_id_field", "bootstrap_proposal_approve_spacer"]
+
+[[box]]
+id = "bootstrap_proposal_approve_id_field"
+class = "stack"
+children = ["bootstrap_proposal_approve_id_text", "bootstrap_proposal_approve_id_select"]
+
+[[text]]
+id = "bootstrap_proposal_approve_id_text"
+text = "Open Proposal"
+
+[[select]]
+id = "bootstrap_proposal_approve_id_select"
+domId = "proposal-approve-id"
+name = "id"
+
+[[box]]
+id = "bootstrap_proposal_approve_spacer"
+
+[[text]]
+id = "bootstrap_proposal_approve_help"
+domId = "proposal-approve-help"
+class = "note muted"
+text = ""
+
+[[box]]
+id = "bootstrap_proposal_approve_actions"
+class = "actions"
+children = ["bootstrap_proposal_approve_submit"]
+
+[[button]]
+id = "bootstrap_proposal_approve_submit"
+text = "Approve Proposal"
+type = "submit"
+
+[[text]]
+id = "bootstrap_proposal_approve_status"
+domId = "proposal-approve-status"
+class = "status"
+text = ""
+
+[[form]]
+id = "bootstrap_proposal_reject_form"
+domId = "proposal-reject-form"
+class = "stack"
+children = ["bootstrap_proposal_reject_grid", "bootstrap_proposal_reject_actions"]
+
+[[box]]
+id = "bootstrap_proposal_reject_grid"
+class = "grid two"
+children = ["bootstrap_proposal_reject_id_field", "bootstrap_proposal_reject_reason_field"]
+
+[[box]]
+id = "bootstrap_proposal_reject_id_field"
+class = "stack"
+children = ["bootstrap_proposal_reject_id_text", "bootstrap_proposal_reject_id_select"]
+
+[[text]]
+id = "bootstrap_proposal_reject_id_text"
+text = "Open Proposal"
+
+[[select]]
+id = "bootstrap_proposal_reject_id_select"
+domId = "proposal-reject-id"
+name = "id"
+
+[[box]]
+id = "bootstrap_proposal_reject_reason_field"
+class = "stack"
+children = ["bootstrap_proposal_reject_reason_text", "bootstrap_proposal_reject_reason_input"]
+
+[[text]]
+id = "bootstrap_proposal_reject_reason_text"
+text = "Reason"
+
+[[input]]
+id = "bootstrap_proposal_reject_reason_input"
+name = "reason"
+placeholder = "optional rejection reason"
+
+[[box]]
+id = "bootstrap_proposal_reject_actions"
+class = "actions"
+children = ["bootstrap_proposal_reject_submit"]
+
+[[button]]
+id = "bootstrap_proposal_reject_submit"
+text = "Reject Proposal"
+type = "submit"
+
+[[text]]
+id = "bootstrap_proposal_reject_status"
+domId = "proposal-reject-status"
+class = "status"
+text = ""
+
+[[frontendProgram]]
+id = "bootstrap_proposal_review_controls_program"
+rootWidget = "bootstrap_proposal_review_controls_root"
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_proposal_approve_id_select"
+eventName = "witness:bootstrap-proposal-approve-help-sync"
+detail = { source = "bootstrap-proposal-review-controls", trigger = "approve-id" }
+
+[[step]]
+order = 0
+op = "setText"
+on = "submit:bootstrap_proposal_approve_form"
+widget = "bootstrap_proposal_approve_status"
+text = "Approving..."
+
+[[step]]
+order = 1
+op = "readForm"
+on = "submit:bootstrap_proposal_approve_form"
+widget = "bootstrap_proposal_approve_form"
+into = "bootstrapProposalApproveDraft"
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:bootstrap_proposal_approve_form"
+url = "/api/proposals/${state.bootstrapProposalApproveDraft.id}/approve"
+body = {}
+into = "bootstrapProposalApproveResult"
+
+[[step]]
+order = 3
+op = "setText"
+on = "submit:bootstrap_proposal_approve_form"
+widget = "bootstrap_proposal_approve_status"
+text = "Approved."
+
+[[step]]
+order = 4
+op = "dispatchDomEvent"
+on = "submit:bootstrap_proposal_approve_form"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-proposal-review-controls", reason = "proposal-approve" }
+
+[[step]]
+order = 0
+op = "setText"
+on = "submit:bootstrap_proposal_reject_form"
+widget = "bootstrap_proposal_reject_status"
+text = "Rejecting..."
+
+[[step]]
+order = 1
+op = "readForm"
+on = "submit:bootstrap_proposal_reject_form"
+widget = "bootstrap_proposal_reject_form"
+into = "bootstrapProposalRejectDraft"
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:bootstrap_proposal_reject_form"
+url = "/api/proposals/${state.bootstrapProposalRejectDraft.id}/reject"
+body = { reason = "${state.bootstrapProposalRejectDraft.reason || ''}" }
+into = "bootstrapProposalRejectResult"
+
+[[step]]
+order = 3
+op = "setText"
+on = "submit:bootstrap_proposal_reject_form"
+widget = "bootstrap_proposal_reject_status"
+text = "Rejected."
+
+[[step]]
+order = 4
+op = "dispatchDomEvent"
+on = "submit:bootstrap_proposal_reject_form"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-proposal-review-controls", reason = "proposal-reject" }
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_proposal_approve_form" }
+widget = "bootstrap_proposal_approve_status"
+text = "${event.message}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_proposal_reject_form" }
+widget = "bootstrap_proposal_reject_status"
+text = "${event.message}"

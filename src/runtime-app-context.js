@@ -39,6 +39,7 @@ export async function createRuntimeAppContext({
   readJson,
   handlerSetFactories,
   runtimeContributions = null,
+  projectionContext = null,
   identityIndex
 }) {
   if (runtimeConfig && runtimeConfig.ok === false) {
@@ -46,6 +47,7 @@ export async function createRuntimeAppContext({
   }
 
   const resolvedIdentityIndex = identityIndex ?? world.project(moduleProjectors.identityIndex);
+  const project = projector => world.project(projector, { projectionContext });
   const actors = Array.isArray(serverRunner.actors) && serverRunner.actors.length
     ? [...serverRunner.actors]
     : actorsFromIdentities(resolvedIdentityIndex.rows);
@@ -61,6 +63,8 @@ export async function createRuntimeAppContext({
       storage,
       runtimeConfig: runtimeConfig?.values ?? {},
       runtimeConfigFields: runtimeConfig?.fields ?? [],
+      projectionContext,
+      project,
       handlers: {},
       jobHandlers: {},
       visibleWitnesses: () => world.allWitnesses()
@@ -70,6 +74,7 @@ export async function createRuntimeAppContext({
     if (!factory) return { ok: false, reason: "unknown handler set" };
     const produced = await factory({
       world,
+      project,
       backendHost,
       frontendHost,
       runtimeRoot,
@@ -88,6 +93,8 @@ export async function createRuntimeAppContext({
       storage,
       runtimeConfig: runtimeConfig?.values ?? {},
       runtimeConfigFields: runtimeConfig?.fields ?? [],
+      projectionContext,
+      project,
       handlers: produced.handlers ?? {},
       jobHandlers: produced.jobHandlers ?? {},
       visibleWitnesses: produced.visibleWitnesses ?? (() => world.allWitnesses())
@@ -97,6 +104,7 @@ export async function createRuntimeAppContext({
   let contextRef = appContext;
   const jobHandlerDeps = {
     world,
+    project,
     backendHost,
     runtimeConfig: appContext.runtimeConfig,
     runtimeConfigLookup,
@@ -115,6 +123,7 @@ export async function createRuntimeAppContext({
   appContext.jobs = typeof jobsFactory === "function"
     ? jobsFactory({
         world,
+        project,
         serverRunnerId: serverRunner.id,
         runtimeConfig: appContext.runtimeConfig,
         jobHandlers,
@@ -134,6 +143,7 @@ export async function createRuntimeAppContext({
   appContext.searchIndex = typeof searchIndexFactory === "function"
     ? searchIndexFactory({
         world,
+        project,
         runtimeConfig: appContext.runtimeConfig,
         runtimeRoot,
         serverRunnerId: serverRunner.id,

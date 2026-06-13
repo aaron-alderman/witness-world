@@ -52,7 +52,7 @@ export function createSearchIndexHandlers({
         return;
       }
       const index = inspection.index
-        ? searchIndexReadShape(currentSearchIndexForRunner(serverRunnerId, inspection.index.id) ?? inspection.index)
+        ? searchIndexReadShape(currentSearchIndexForRunner(serverRunnerId, inspection.index.id, appContext) ?? inspection.index)
         : null;
       world.observe({
         process: "search.index.inspect",
@@ -103,7 +103,7 @@ export function createSearchIndexHandlers({
           path: built.index.path
         }
       });
-      sendJson(res, 200, { index: searchIndexReadShape(currentSearchIndexForRunner(serverRunnerId, built.index.id) ?? built.index) });
+      sendJson(res, 200, { index: searchIndexReadShape(currentSearchIndexForRunner(serverRunnerId, built.index.id, appContext) ?? built.index) });
     },
 
     "search.index.reindex": async ({ res, requestActor, appContext }) => {
@@ -145,7 +145,7 @@ export function createSearchIndexHandlers({
           path: rebuilt.index.path
         }
       });
-      sendJson(res, 200, { index: searchIndexReadShape(currentSearchIndexForRunner(serverRunnerId, rebuilt.index.id) ?? rebuilt.index) });
+      sendJson(res, 200, { index: searchIndexReadShape(currentSearchIndexForRunner(serverRunnerId, rebuilt.index.id, appContext) ?? rebuilt.index) });
     },
 
     "search.index.query": async ({ req, res, requestActor, appContext }) => {
@@ -195,7 +195,7 @@ export function createSearchIndexHandlers({
         }
       });
       sendJson(res, 200, {
-        index: searchIndexReadShape(currentSearchIndexForRunner(serverRunnerId, result.index.id) ?? result.index),
+        index: searchIndexReadShape(currentSearchIndexForRunner(serverRunnerId, result.index.id, appContext) ?? result.index),
         hits
       });
     }

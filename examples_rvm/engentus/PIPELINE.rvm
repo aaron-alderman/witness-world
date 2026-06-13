@@ -1,0 +1,1697 @@
+import desire/v3-alpha
+
+// ── Module ────────────────────────────────────────────────────────────────────
+
+module EngentusMillPipeline {
+  in mill_monitoring_workspace
+}
+
+// ── Data-source topology (corrected per fidelity audit) ───────────────────────
+// Sensors → MQTT broker → { Vendor MySQL (no direct access), Our MySQL }.
+// The Python pipeline ingests from Our MySQL; the original R pipeline reads the
+// Vendor REST API (Perth-local DD/MM/YYYY HH:MM, ≤1h windows, per-device
+// watermarks). Both ingest fronts feed the same logical `ingest` stage below.
+// (The canonical PIPELINE.dsl §1 "MySQL on client hardware" was inaccurate.)
+
+// ── Enums ────────────────────────────────────────────────────────────────────
+
+enum SensorType {
+  cases {
+    imu
+    strain
+    strain_calibrated
+  }
+}
+
+enum MountType {
+  cases {
+    bolt
+    shell
+  }
+}
+
+enum ChannelImu {
+  cases {
+    b_accel_x
+    b_accel_y
+    b_accel_z
+    i_accel_x
+    i_accel_y
+    i_accel_z
+    b_gyro_x
+    b_gyro_y
+    b_gyro_z
+    i_gyro_x
+    i_gyro_y
+    i_gyro_z
+  }
+}
+
+enum ChannelStrain {
+  cases {
+    ST1
+    ST2
+    ST3
+    ST4
+    ST5
+  }
+}
+
+enum ChannelCal {
+  cases {
+    x1
+    y1
+    x3
+    y3
+    z2
+  }
+}
+
+enum SignalState {
+  // severity order (worst → best): no_data, stuck_or_saturated, indeterminate, unexpected, valid
+  cases {
+    no_data
+    stuck_or_saturated
+    indeterminate
+    unexpected
+    valid
+  }
+}
+
+enum HealthDiag {
+  // priority 0 = most severe within stuck_or_saturated
+  cases {
+    stuck_at_rail_low
+    stuck_at_rail_high
+    near_adc_rail_low
+    near_adc_rail_high
+    collapsed_near_context_low
+    collapsed_near_context_high
+    mostly_zero
+    no_variation
+    stale_signal
+    dominant_repeated_value
+    no_evaluable_bursts
+    low_usable_burst_fraction
+    low_median_good_fraction
+    valid
+    no_data
+  }
+}
+
+enum PipelineRunState {
+  cases {
+    idle
+    running
+    complete
+    failed
+  }
+}
+
+enum ClipArtifact {
+  // worst clip/artifact on a channel within a burst (R stage 03 burst_channel_stats)
+  cases {
+    none
+    hard_clip
+    soft_clip
+    spike_contaminated
+  }
+}
+
+// ── Output-frame schema mirrors ───────────────────────────────────────────────
+// Faithful, per-row mirrors of the real persisted output frames (column names +
+// types match the captured goldens under
+// example-ports/engentus-pipeline/analysis/output/<mill>/outputs/ exactly). These
+// are the data model the host operations produce; test/desire-engentus-frames
+// validates real golden rows against them, including through the Rung-C runtime.
+
+message BurstWindow {
+  // bolt_bursts view — burst definition
+  fields {
+    bolt_number: int
+    burst_id: timestamptz
+    start_at: timestamptz
+    end_at: timestamptz
+    sample_count: int
+    duration_seconds: float64
+  }
+}
+
+message BurstRotationFrame {
+  // burst_rotation.csv — one row per burst (mills/bolts are comma-joined id lists)
+  fields {
+    burst_start: timestamptz
+    burst_end: timestamptz
+    rpm: float64
+    omega: float64
+    sse: float64
+    valid_package_count: int
+    bolt_count: int
+    mills: string
+    bolts: string
+    sample_count: int
+  }
+}
+
+message PackageFitFrame {
+  // package_phase.csv — one row per package (bolt × mount × burst)
+  fields {
+    burst_start: timestamptz
+    burst_end: timestamptz
+    bolt_number: int
+    mill_id: string
+    row_label: int
+    mount: string
+    sample_count: int
+    raw_sample_count: int
+    good_sample_count: int
+    good_fraction: float64
+    magnitude_span_g: float64
+    fit_start_seconds: float64
+    fit_end_seconds: float64
+    rpm: float64
+    omega: float64
+    offset: float64
+    cos_coeff: float64
+    sin_coeff: float64
+    amplitude: float64
+    phase: float64
+    magnitude_phase: float64
+    sse: float64
+    r_squared: float64
+    harmonic2_cos_coeff: float64
+    harmonic2_sin_coeff: float64
+    harmonic2_amplitude: float64
+    harmonic2_phase: float64
+    harmonic2_sse: float64
+    harmonic2_r_squared: float64
+    harmonic2_r_squared_gain: float64
+    phase_drift_cos_coeff: float64
+    phase_drift_sin_coeff: float64
+    phase_drift_strength: float64
+    phase_drift_sse: float64
+    phase_drift_r_squared: float64
+    phase_drift_r_squared_gain: float64
+    approx_freq_error_rad_s: float64
+    approx_freq_error_rpm: float64
+  }
+}
+
+message LatentRowFit {
+  // latent_row_fit.json — single object (x0 is a vestigial null placeholder, omitted)
+  fields {
+    gamma_bolt: float64
+    gamma_shell: float64
+    kappa: float64
+    sse: float64
+    rmse: float64
+    observation_count: int
+    burst_count: int
+    enabled: bool
+    analysis_mode: string
+  }
+}
+
+message ChannelHealthFrame {
+  // channel_health_hourly.csv — one row per bolt × channel × hour
+  fields {
+    bolt_number: int
+    hour_start: timestamptz
+    channel: string
+    mill_id: string
+    row_label: int
+    sample_count: int
+    finite_sample_count: int
+    robust_span: float64
+    hour_median: float64
+    channel_value_p01: float64
+    channel_value_p50: float64
+    channel_value_p99: float64
+    channel_context_span: float64
+    channel_span_ratio: float64
+    channel_edge_proximity: float64
+    zero_fraction: float64
+    stale_fraction: float64
+    adc_rail_low_fraction: float64
+    adc_rail_high_fraction: float64
+    rail_low_fraction: float64
+    rail_high_fraction: float64
+    dominant_value_fraction: float64
+    burst_count_with_data: int
+    evaluable_burst_count: int
+    usable_burst_count: int
+    usable_burst_fraction: float64
+    median_good_fraction: float64
+    state: string
+    primary_diagnostic: string
+    diagnostic_flags: string
+    state_rank: int
+    is_valid: int
+  }
+}
+
+message BoltHealthFrame {
+  // bolt_health_hourly.csv — one row per bolt × hour (per-state channel counts)
+  fields {
+    mill_id: string
+    bolt_number: int
+    row_label: int
+    hour_start: timestamptz
+    no_data_channel_count: int
+    stuck_or_saturated_channel_count: int
+    indeterminate_channel_count: int
+    unexpected_channel_count: int
+    valid_channel_count: int
+    expected_channel_count: int
+    health_score: int
+  }
+}
+
+message BurstKalmanFrame {
+  // burst_kalman.csv — one row per burst (float columns are null on a skipped burst)
+  fields {
+    bolt_number: int
+    burst_start_utc: timestamptz
+    kalman_ok: bool
+    omega_bolt_dps: float64
+    omega_tx_dps: float64
+    omega_burst_rpm: float64
+    r_bolt_m: float64
+    r_tx_m: float64
+    delta_BT_deg: float64
+    bias_combined_dps: float64
+    residual_bolt_sd_deg: float64
+    residual_tx_sd_deg: float64
+    total_rotation_deg: float64
+    sigma_theta_b_used: float64
+    sigma_theta_t_used: float64
+    skip_reason: string
+  }
+}
+
+// ── Stage request / payload messages ─────────────────────────────────────────
+
+message IngestBatchRequest {
+  schema_name engentus.pipeline.ingest.request
+  fields {
+    source_name: string
+    mill_id: string
+    sensor_type: string
+    batch_start: timestamptz
+    batch_end: timestamptz
+  }
+}
+
+message IngestFailedPayload {
+  fields {
+    message: string
+    stage: string
+  }
+}
+
+message StrainCalibrationRequest {
+  schema_name engentus.pipeline.calibrate.strain.request
+  fields {
+    source_name: string
+    mill_id: string
+    burst_start: timestamptz
+    burst_end: timestamptz
+  }
+}
+
+message StrainCalibrationFailedPayload {
+  fields {
+    message: string
+  }
+}
+
+message BurstFitRequest {
+  schema_name engentus.pipeline.burst.fit.request
+  fields {
+    source_name: string
+    mill_id: string
+    burst_start: timestamptz
+    burst_end: timestamptz
+  }
+}
+
+message BurstFitResultPayload {
+  fields {
+    burst_start: timestamptz
+    rpm: float64
+    n_valid_pkgs: int
+  }
+}
+
+message BurstFitFailedPayload {
+  fields {
+    message: string
+  }
+}
+
+message OverviewRequest {
+  schema_name engentus.pipeline.overview.request
+  fields {
+    source_name: string
+    mill_id: string
+    output_dir: string
+  }
+}
+
+message BoltAnalysisRequest {
+  schema_name engentus.pipeline.bolt.request
+  fields {
+    source_name: string
+    mill_id: string
+    bolt_number: int
+    output_dir: string
+  }
+}
+
+message HealthAnalysisRequest {
+  schema_name engentus.pipeline.health.request
+  fields {
+    source_name: string
+    mill_id: string
+    hour_start: timestamptz
+  }
+}
+
+message HealthResultPayload {
+  fields {
+    hour_start: timestamptz
+    n_valid_channels: int
+    n_bolts_evaluated: int
+  }
+}
+
+message HealthFailedPayload {
+  fields {
+    message: string
+  }
+}
+
+message AlignmentRequest {
+  schema_name engentus.pipeline.alignment.request
+  fields {
+    source_name: string
+    mill_id: string
+    output_dir: string
+  }
+}
+
+message AnalysisFailedPayload {
+  fields {
+    message: string
+    stage: string
+  }
+}
+
+// ── Hardware / algorithm configuration ───────────────────────────────────────
+
+value AdcBitDepth: number {
+  initial 24
+}
+
+value AdcGain: number {
+  initial 128
+}
+
+value AccelScale: number {
+  // 1 / 2048.0 ADC counts → g
+  initial 0.000488281
+}
+
+value GyroScaleDps: number {
+  // raw gyro ADC ÷ 16.4 → deg/s (R-ONLY in the canonical DSL; recorded per audit)
+  initial 16.4
+}
+
+value Bolt7Z2FallbackOffset: number {
+  // [AUDIT] Bolt-7 z2 has no fitted calibration. The R pipeline applies this
+  // zero-load baseline offset (raw ADC counts) together with the mean gain across
+  // the other bolts; the Python pipeline omits this workaround entirely. Recorded
+  // here so the calibration contract carries the fix the Python should adopt.
+  initial 8556291.81094527
+}
+
+value LpCutoffHz: number {
+  initial 2.0
+}
+
+value LpOrder: number {
+  initial 4
+}
+
+value RpmRangeMin: number {
+  initial 6.0
+}
+
+value RpmRangeMax: number {
+  initial 18.0
+}
+
+value CoarseStepRpm: number {
+  initial 0.05
+}
+
+value RefineWindowRpm: number {
+  // ± half-width around coarse winner
+  initial 0.25
+}
+
+value RefineStepRpm: number {
+  initial 0.005
+}
+
+value UnwrapMaxIters: number {
+  initial 12
+}
+
+value MinSpanG: number {
+  initial 0.1
+}
+
+value MinGoodFrac: number {
+  initial 0.8
+}
+
+value MinSamples: number {
+  initial 20
+}
+
+value StaleEpsG: number {
+  initial 0.002
+}
+
+value MinStaleRunS: number {
+  initial 0.5
+}
+
+value GoodWindowS: number {
+  initial 1.0
+}
+
+value LocalSpanG: number {
+  initial 0.03
+}
+
+// Health thresholds
+value HealthZeroEps: number {
+  initial 0.000001
+}
+
+value HealthZeroFrac: number {
+  initial 0.95
+}
+
+value HealthStaleFrac: number {
+  initial 0.80
+}
+
+value HealthDomValFrac: number {
+  initial 0.50
+}
+
+value HealthAdcRailRatio: number {
+  initial 0.01
+}
+
+value HealthRailFrac: number {
+  initial 0.80
+}
+
+value HealthSpanRailRatio: number {
+  initial 0.02
+}
+
+value HealthChanSpanRatio: number {
+  initial 0.02
+}
+
+value HealthEdgeProx: number {
+  initial 0.05
+}
+
+value HealthMinEvalSamp: number {
+  initial 3
+}
+
+value HealthUsableFrac: number {
+  initial 0.50
+}
+
+value HealthGoodFrac: number {
+  initial 0.50
+}
+
+// ── Stage 2: Ingest (MySQL → PG) ─────────────────────────────────────────────
+
+process IngestProcess {
+  values {
+    IngestRunState
+    IngestMillId
+    IngestBatchStart
+    IngestBatchEnd
+    IngestLoading
+    IngestErrorMessage
+  }
+  handles {
+    ImuIngestCompleted
+    StrainIngestCompleted
+    IngestFailed
+  }
+  emits {
+    IngestImuBatch
+    IngestStrainBatch
+  }
+}
+
+value IngestRunState: PipelineRunState {
+  initial idle
+}
+
+value IngestMillId: string {
+  initial ""
+}
+
+value IngestBatchStart: string {
+  initial ""
+}
+
+value IngestBatchEnd: string {
+  initial ""
+}
+
+value IngestLoading: bool {
+  initial false
+}
+
+value IngestErrorMessage: string {
+  initial ""
+}
+
+event ImuIngestCompleted {
+  writes {
+    IngestRunState: complete
+    IngestLoading: false
+    IngestErrorMessage: ""
+  }
+}
+
+event StrainIngestCompleted {
+  writes {
+    IngestRunState: complete
+    IngestLoading: false
+    IngestErrorMessage: ""
+  }
+}
+
+event IngestFailed {
+  payload_schema IngestFailedPayload
+  payload {
+    message: IngestErrorMessage
+    stage: "ingest"
+  }
+  writes {
+    IngestRunState: failed
+    IngestLoading: false
+  }
+}
+
+command IngestImuBatch {
+  request_schema IngestBatchRequest
+  fields {
+    source_name: "engentus.mill.pipeline"
+    mill_id: IngestMillId
+    sensor_type: "imu"
+    batch_start: IngestBatchStart
+    batch_end: IngestBatchEnd
+  }
+}
+
+command IngestStrainBatch {
+  request_schema IngestBatchRequest
+  fields {
+    source_name: "engentus.mill.pipeline"
+    mill_id: IngestMillId
+    sensor_type: "strain"
+    batch_start: IngestBatchStart
+    batch_end: IngestBatchEnd
+  }
+}
+
+adapter IngestImuSbtp using SBTP {
+  command IngestImuBatch
+  kind command
+  route "/api/runtime/materialized-host-operation"
+  host_operation engentus.pipeline.ingest.imu
+  request_schema IngestBatchRequest
+  request_state IngestRequestState
+  loading_state IngestLoading
+  success_event ImuIngestCompleted
+  failure_event IngestFailed
+  refresh_runtime true
+}
+
+adapter IngestStrainSbtp using SBTP {
+  command IngestStrainBatch
+  kind command
+  route "/api/runtime/materialized-host-operation"
+  host_operation engentus.pipeline.ingest.strain
+  request_schema IngestBatchRequest
+  request_state IngestRequestState
+  loading_state IngestLoading
+  success_event StrainIngestCompleted
+  failure_event IngestFailed
+  refresh_runtime true
+}
+
+// ── Stage 3: Calibrate Strain ─────────────────────────────────────────────────
+
+process StrainCalibrationProcess {
+  values {
+    CalibrationRunState
+    CalibrationMillId
+    CalibrationBurstStart
+    CalibrationBurstEnd
+    CalibrationLoading
+    CalibrationErrorMessage
+  }
+  handles {
+    StrainCalibrationCompleted
+    StrainCalibrationFailed
+  }
+  emits {
+    RunStrainCalibration
+  }
+}
+
+value CalibrationRunState: PipelineRunState {
+  initial idle
+}
+
+value CalibrationMillId: string {
+  initial ""
+}
+
+value CalibrationBurstStart: string {
+  initial ""
+}
+
+value CalibrationBurstEnd: string {
+  initial ""
+}
+
+value CalibrationLoading: bool {
+  initial false
+}
+
+value CalibrationErrorMessage: string {
+  initial ""
+}
+
+event StrainCalibrationCompleted {
+  writes {
+    CalibrationRunState: complete
+    CalibrationLoading: false
+    CalibrationErrorMessage: ""
+  }
+}
+
+event StrainCalibrationFailed {
+  payload_schema StrainCalibrationFailedPayload
+  payload {
+    message: CalibrationErrorMessage
+  }
+  writes {
+    CalibrationRunState: failed
+    CalibrationLoading: false
+  }
+}
+
+command RunStrainCalibration {
+  request_schema StrainCalibrationRequest
+  fields {
+    source_name: "engentus.mill.pipeline"
+    mill_id: CalibrationMillId
+    burst_start: CalibrationBurstStart
+    burst_end: CalibrationBurstEnd
+  }
+}
+
+adapter CalibrateStrainSbtp using SBTP {
+  command RunStrainCalibration
+  kind command
+  route "/api/runtime/materialized-host-operation"
+  host_operation engentus.pipeline.calibrate.strain
+  request_schema StrainCalibrationRequest
+  request_state CalibrationRequestState
+  loading_state CalibrationLoading
+  success_event StrainCalibrationCompleted
+  failure_event StrainCalibrationFailed
+  refresh_runtime true
+}
+
+// ── Stage 4: Burst Fit ────────────────────────────────────────────────────────
+
+process BurstFitProcess {
+  values {
+    BurstFitRunState
+    BurstFitMillId
+    BurstFitBurstStart
+    BurstFitBurstEnd
+    BurstFitResultRpm
+    BurstFitNValidPkgs
+    BurstFitLoading
+    BurstFitErrorMessage
+  }
+  handles {
+    BurstFitCompleted
+    BurstFitFailed
+  }
+  emits {
+    RunBurstFit
+  }
+}
+
+value BurstFitRunState: PipelineRunState {
+  initial idle
+}
+
+value BurstFitMillId: string {
+  initial ""
+}
+
+value BurstFitBurstStart: string {
+  initial ""
+}
+
+value BurstFitBurstEnd: string {
+  initial ""
+}
+
+value BurstFitResultRpm: number {
+  initial 0
+}
+
+value BurstFitNValidPkgs: number {
+  initial 0
+}
+
+value BurstFitLoading: bool {
+  initial false
+}
+
+value BurstFitErrorMessage: string {
+  initial ""
+}
+
+event BurstFitCompleted {
+  payload_schema BurstFitResultPayload
+  payload {
+    burst_start: BurstFitBurstStart
+    rpm: BurstFitResultRpm
+    n_valid_pkgs: BurstFitNValidPkgs
+  }
+  writes {
+    BurstFitRunState: complete
+    BurstFitLoading: false
+    BurstFitErrorMessage: ""
+  }
+}
+
+event BurstFitFailed {
+  payload_schema BurstFitFailedPayload
+  payload {
+    message: BurstFitErrorMessage
+  }
+  writes {
+    BurstFitRunState: failed
+    BurstFitLoading: false
+  }
+}
+
+command RunBurstFit {
+  request_schema BurstFitRequest
+  fields {
+    source_name: "engentus.mill.pipeline"
+    mill_id: BurstFitMillId
+    burst_start: BurstFitBurstStart
+    burst_end: BurstFitBurstEnd
+  }
+}
+
+adapter BurstFitSbtp using SBTP {
+  command RunBurstFit
+  kind command
+  route "/api/runtime/materialized-host-operation"
+  host_operation engentus.pipeline.fit.burst
+  request_schema BurstFitRequest
+  request_state BurstFitRequestState
+  loading_state BurstFitLoading
+  success_event BurstFitCompleted
+  failure_event BurstFitFailed
+  refresh_runtime true
+}
+
+// ── Stage 5a: Overview ────────────────────────────────────────────────────────
+
+process OverviewProcess {
+  values {
+    OverviewRunState
+    OverviewMillId
+    OverviewOutputDir
+    OverviewLoading
+    OverviewErrorMessage
+  }
+  handles {
+    OverviewCompleted
+    OverviewFailed
+  }
+  emits {
+    RunOverviewAnalysis
+  }
+}
+
+value OverviewRunState: PipelineRunState {
+  initial idle
+}
+
+value OverviewMillId: string {
+  initial ""
+}
+
+value OverviewOutputDir: string {
+  initial "output/"
+}
+
+value OverviewLoading: bool {
+  initial false
+}
+
+value OverviewErrorMessage: string {
+  initial ""
+}
+
+event OverviewCompleted {
+  writes {
+    OverviewRunState: complete
+    OverviewLoading: false
+    OverviewErrorMessage: ""
+  }
+}
+
+event OverviewFailed {
+  payload_schema AnalysisFailedPayload
+  payload {
+    message: OverviewErrorMessage
+    stage: "overview"
+  }
+  writes {
+    OverviewRunState: failed
+    OverviewLoading: false
+  }
+}
+
+command RunOverviewAnalysis {
+  request_schema OverviewRequest
+  fields {
+    source_name: "engentus.mill.pipeline"
+    mill_id: OverviewMillId
+    output_dir: OverviewOutputDir
+  }
+}
+
+adapter OverviewSbtp using SBTP {
+  command RunOverviewAnalysis
+  kind command
+  route "/api/runtime/materialized-host-operation"
+  host_operation engentus.pipeline.overview
+  request_schema OverviewRequest
+  request_state OverviewRequestState
+  loading_state OverviewLoading
+  success_event OverviewCompleted
+  failure_event OverviewFailed
+  refresh_runtime true
+}
+
+// ── Stage 5b: Bolt Analysis ───────────────────────────────────────────────────
+
+process BoltAnalysisProcess {
+  values {
+    BoltAnalysisRunState
+    BoltAnalysisMillId
+    BoltAnalysisBoltNumber
+    BoltAnalysisOutputDir
+    BoltAnalysisLoading
+    BoltAnalysisErrorMessage
+  }
+  handles {
+    BoltAnalysisCompleted
+    BoltAnalysisFailed
+  }
+  emits {
+    RunBoltAnalysis
+  }
+}
+
+value BoltAnalysisRunState: PipelineRunState {
+  initial idle
+}
+
+value BoltAnalysisMillId: string {
+  initial ""
+}
+
+value BoltAnalysisBoltNumber: number {
+  initial 0
+}
+
+value BoltAnalysisOutputDir: string {
+  initial "output/"
+}
+
+value BoltAnalysisLoading: bool {
+  initial false
+}
+
+value BoltAnalysisErrorMessage: string {
+  initial ""
+}
+
+event BoltAnalysisCompleted {
+  writes {
+    BoltAnalysisRunState: complete
+    BoltAnalysisLoading: false
+    BoltAnalysisErrorMessage: ""
+  }
+}
+
+event BoltAnalysisFailed {
+  payload_schema AnalysisFailedPayload
+  payload {
+    message: BoltAnalysisErrorMessage
+    stage: "bolt"
+  }
+  writes {
+    BoltAnalysisRunState: failed
+    BoltAnalysisLoading: false
+  }
+}
+
+command RunBoltAnalysis {
+  request_schema BoltAnalysisRequest
+  fields {
+    source_name: "engentus.mill.pipeline"
+    mill_id: BoltAnalysisMillId
+    bolt_number: BoltAnalysisBoltNumber
+    output_dir: BoltAnalysisOutputDir
+  }
+}
+
+adapter BoltAnalysisSbtp using SBTP {
+  command RunBoltAnalysis
+  kind command
+  route "/api/runtime/materialized-host-operation"
+  host_operation engentus.pipeline.bolt
+  request_schema BoltAnalysisRequest
+  request_state BoltAnalysisRequestState
+  loading_state BoltAnalysisLoading
+  success_event BoltAnalysisCompleted
+  failure_event BoltAnalysisFailed
+  refresh_runtime true
+}
+
+// ── Stage 5c: Health Classification ──────────────────────────────────────────
+
+process HealthProcess {
+  values {
+    HealthRunState
+    HealthMillId
+    HealthHourStart
+    HealthNValidChannels
+    HealthNBoltsEvaluated
+    HealthLoading
+    HealthErrorMessage
+  }
+  handles {
+    HealthAnalysisCompleted
+    HealthAnalysisFailed
+  }
+  emits {
+    RunHealthAnalysis
+  }
+}
+
+value HealthRunState: PipelineRunState {
+  initial idle
+}
+
+value HealthMillId: string {
+  initial ""
+}
+
+value HealthHourStart: string {
+  initial ""
+}
+
+value HealthNValidChannels: number {
+  initial 0
+}
+
+value HealthNBoltsEvaluated: number {
+  initial 0
+}
+
+value HealthLoading: bool {
+  initial false
+}
+
+value HealthErrorMessage: string {
+  initial ""
+}
+
+event HealthAnalysisCompleted {
+  payload_schema HealthResultPayload
+  payload {
+    hour_start: HealthHourStart
+    n_valid_channels: HealthNValidChannels
+    n_bolts_evaluated: HealthNBoltsEvaluated
+  }
+  writes {
+    HealthRunState: complete
+    HealthLoading: false
+    HealthErrorMessage: ""
+  }
+}
+
+event HealthAnalysisFailed {
+  payload_schema HealthFailedPayload
+  payload {
+    message: HealthErrorMessage
+  }
+  writes {
+    HealthRunState: failed
+    HealthLoading: false
+  }
+}
+
+command RunHealthAnalysis {
+  request_schema HealthAnalysisRequest
+  fields {
+    source_name: "engentus.mill.pipeline"
+    mill_id: HealthMillId
+    hour_start: HealthHourStart
+  }
+}
+
+adapter HealthSbtp using SBTP {
+  command RunHealthAnalysis
+  kind command
+  route "/api/runtime/materialized-host-operation"
+  host_operation engentus.pipeline.health.classify
+  request_schema HealthAnalysisRequest
+  request_state HealthRequestState
+  loading_state HealthLoading
+  success_event HealthAnalysisCompleted
+  failure_event HealthAnalysisFailed
+  refresh_runtime true
+}
+
+// ── Stage 5d: Alignment ───────────────────────────────────────────────────────
+
+process AlignmentProcess {
+  values {
+    AlignmentRunState
+    AlignmentMillId
+    AlignmentOutputDir
+    AlignmentLoading
+    AlignmentErrorMessage
+  }
+  handles {
+    AlignmentCompleted
+    AlignmentFailed
+  }
+  emits {
+    RunAlignmentAnalysis
+  }
+}
+
+value AlignmentRunState: PipelineRunState {
+  initial idle
+}
+
+value AlignmentMillId: string {
+  initial ""
+}
+
+value AlignmentOutputDir: string {
+  initial "investigations/alignment/"
+}
+
+value AlignmentLoading: bool {
+  initial false
+}
+
+value AlignmentErrorMessage: string {
+  initial ""
+}
+
+event AlignmentCompleted {
+  writes {
+    AlignmentRunState: complete
+    AlignmentLoading: false
+    AlignmentErrorMessage: ""
+  }
+}
+
+event AlignmentFailed {
+  payload_schema AnalysisFailedPayload
+  payload {
+    message: AlignmentErrorMessage
+    stage: "alignment"
+  }
+  writes {
+    AlignmentRunState: failed
+    AlignmentLoading: false
+  }
+}
+
+command RunAlignmentAnalysis {
+  request_schema AlignmentRequest
+  fields {
+    source_name: "engentus.mill.pipeline"
+    mill_id: AlignmentMillId
+    output_dir: AlignmentOutputDir
+  }
+}
+
+adapter AlignmentSbtp using SBTP {
+  command RunAlignmentAnalysis
+  kind command
+  route "/api/runtime/materialized-host-operation"
+  host_operation engentus.pipeline.alignment
+  request_schema AlignmentRequest
+  request_state AlignmentRequestState
+  loading_state AlignmentLoading
+  success_event AlignmentCompleted
+  failure_event AlignmentFailed
+  refresh_runtime true
+}
+
+// ── Stage 3b: Clip / Artifact Detection ──────────────────────────────────────
+// Per burst×channel hard/soft/spike clip flags (R stage 03 → burst_channel_stats);
+// feeds calibration (clipped samples → NULL) and health. Integer-ADC thresholds.
+
+message ClipDetectionRequest {
+  schema_name engentus.pipeline.clip.request
+  fields {
+    source_name: string
+    mill_id: string
+    burst_start: timestamptz
+    burst_end: timestamptz
+  }
+}
+
+message ClipDetectionResultPayload {
+  fields {
+    burst_start: timestamptz
+    n_channels_evaluated: int
+    n_clipped_channels: int
+  }
+}
+
+message ClipDetectionFailedPayload {
+  fields {
+    message: string
+  }
+}
+
+process ClipDetectionProcess {
+  values {
+    ClipDetectionRunState
+    ClipDetectionMillId
+    ClipDetectionBurstStart
+    ClipDetectionBurstEnd
+    ClipDetectionChannelsEvaluated
+    ClipDetectionClippedChannels
+    ClipDetectionLoading
+    ClipDetectionErrorMessage
+  }
+  handles {
+    ClipDetectionCompleted
+    ClipDetectionFailed
+  }
+  emits {
+    RunClipDetection
+  }
+}
+
+value ClipDetectionRunState: PipelineRunState {
+  initial idle
+}
+
+value ClipDetectionMillId: string {
+  initial ""
+}
+
+value ClipDetectionBurstStart: string {
+  initial ""
+}
+
+value ClipDetectionBurstEnd: string {
+  initial ""
+}
+
+value ClipDetectionChannelsEvaluated: number {
+  initial 0
+}
+
+value ClipDetectionClippedChannels: number {
+  initial 0
+}
+
+value ClipDetectionLoading: bool {
+  initial false
+}
+
+value ClipDetectionErrorMessage: string {
+  initial ""
+}
+
+event ClipDetectionCompleted {
+  payload_schema ClipDetectionResultPayload
+  payload {
+    burst_start: ClipDetectionBurstStart
+    n_channels_evaluated: ClipDetectionChannelsEvaluated
+    n_clipped_channels: ClipDetectionClippedChannels
+  }
+  writes {
+    ClipDetectionRunState: complete
+    ClipDetectionLoading: false
+    ClipDetectionErrorMessage: ""
+  }
+}
+
+event ClipDetectionFailed {
+  payload_schema ClipDetectionFailedPayload
+  payload {
+    message: ClipDetectionErrorMessage
+  }
+  writes {
+    ClipDetectionRunState: failed
+    ClipDetectionLoading: false
+  }
+}
+
+command RunClipDetection {
+  request_schema ClipDetectionRequest
+  fields {
+    source_name: "engentus.mill.pipeline"
+    mill_id: ClipDetectionMillId
+    burst_start: ClipDetectionBurstStart
+    burst_end: ClipDetectionBurstEnd
+  }
+}
+
+adapter ClipDetectionSbtp using SBTP {
+  command RunClipDetection
+  kind command
+  route "/api/runtime/materialized-host-operation"
+  host_operation engentus.pipeline.clip.detect
+  request_schema ClipDetectionRequest
+  request_state ClipDetectionRequestState
+  loading_state ClipDetectionLoading
+  success_event ClipDetectionCompleted
+  failure_event ClipDetectionFailed
+  refresh_runtime true
+}
+
+// ── Stage 6: Kalman Rotation-Angle Fusion ─────────────────────────────────────
+// Dual-sensor (bolt + tx) joint Kalman filter: the PRIMARY rotation-angle estimate
+// plus δ_BT loosening diagnostic. Confirmed in BOTH the Python (kalman.py, 4-state
+// θ/ω/bias/δ_BT) and R (mill_bolt_angle.R, 3-state) implementations. → burst_kalman.
+
+message KalmanRequest {
+  schema_name engentus.pipeline.kalman.request
+  fields {
+    source_name: string
+    mill_id: string
+    burst_start: timestamptz
+    burst_end: timestamptz
+  }
+}
+
+message KalmanResultPayload {
+  fields {
+    burst_start: timestamptz
+    omega_burst_rpm: float64
+    delta_bt_deg: float64
+    bias_combined_dps: float64
+    omega_disagree_flag: bool
+  }
+}
+
+message KalmanFailedPayload {
+  fields {
+    message: string
+  }
+}
+
+process KalmanProcess {
+  values {
+    KalmanRunState
+    KalmanMillId
+    KalmanBurstStart
+    KalmanBurstEnd
+    KalmanResultRpm
+    KalmanDeltaBtDeg
+    KalmanBiasDps
+    KalmanDisagreeFlag
+    KalmanLoading
+    KalmanErrorMessage
+  }
+  handles {
+    KalmanCompleted
+    KalmanFailed
+  }
+  emits {
+    RunKalmanAngle
+  }
+}
+
+value KalmanRunState: PipelineRunState {
+  initial idle
+}
+
+value KalmanMillId: string {
+  initial ""
+}
+
+value KalmanBurstStart: string {
+  initial ""
+}
+
+value KalmanBurstEnd: string {
+  initial ""
+}
+
+value KalmanResultRpm: number {
+  initial 0
+}
+
+value KalmanDeltaBtDeg: number {
+  initial 0
+}
+
+value KalmanBiasDps: number {
+  initial 0
+}
+
+value KalmanDisagreeFlag: bool {
+  initial false
+}
+
+value KalmanLoading: bool {
+  initial false
+}
+
+value KalmanErrorMessage: string {
+  initial ""
+}
+
+event KalmanCompleted {
+  payload_schema KalmanResultPayload
+  payload {
+    burst_start: KalmanBurstStart
+    omega_burst_rpm: KalmanResultRpm
+    delta_bt_deg: KalmanDeltaBtDeg
+    bias_combined_dps: KalmanBiasDps
+    omega_disagree_flag: KalmanDisagreeFlag
+  }
+  writes {
+    KalmanRunState: complete
+    KalmanLoading: false
+    KalmanErrorMessage: ""
+  }
+}
+
+event KalmanFailed {
+  payload_schema KalmanFailedPayload
+  payload {
+    message: KalmanErrorMessage
+  }
+  writes {
+    KalmanRunState: failed
+    KalmanLoading: false
+  }
+}
+
+command RunKalmanAngle {
+  request_schema KalmanRequest
+  fields {
+    source_name: "engentus.mill.pipeline"
+    mill_id: KalmanMillId
+    burst_start: KalmanBurstStart
+    burst_end: KalmanBurstEnd
+  }
+}
+
+adapter KalmanSbtp using SBTP {
+  command RunKalmanAngle
+  kind command
+  route "/api/runtime/materialized-host-operation"
+  host_operation engentus.pipeline.kalman
+  request_schema KalmanRequest
+  request_state KalmanRequestState
+  loading_state KalmanLoading
+  success_event KalmanCompleted
+  failure_event KalmanFailed
+  refresh_runtime true
+}
+
+// ── Stage 7: Uncertainty ──────────────────────────────────────────────────────
+// Parameter covariance / confidence intervals over the burst-fit (mill uncertainty).
+// Reads fit artifacts; produces per-burst / per-package uncertainty frames.
+
+message UncertaintyRequest {
+  schema_name engentus.pipeline.uncertainty.request
+  fields {
+    source_name: string
+    mill_id: string
+    burst_start: timestamptz
+    burst_end: timestamptz
+  }
+}
+
+message UncertaintyResultPayload {
+  fields {
+    burst_start: timestamptz
+    rpm_std: float64
+    phase_std: float64
+    n_packages: int
+  }
+}
+
+message UncertaintyFailedPayload {
+  fields {
+    message: string
+  }
+}
+
+process UncertaintyProcess {
+  values {
+    UncertaintyRunState
+    UncertaintyMillId
+    UncertaintyBurstStart
+    UncertaintyBurstEnd
+    UncertaintyRpmStd
+    UncertaintyPhaseStd
+    UncertaintyNPackages
+    UncertaintyLoading
+    UncertaintyErrorMessage
+  }
+  handles {
+    UncertaintyCompleted
+    UncertaintyFailed
+  }
+  emits {
+    RunUncertainty
+  }
+}
+
+value UncertaintyRunState: PipelineRunState {
+  initial idle
+}
+
+value UncertaintyMillId: string {
+  initial ""
+}
+
+value UncertaintyBurstStart: string {
+  initial ""
+}
+
+value UncertaintyBurstEnd: string {
+  initial ""
+}
+
+value UncertaintyRpmStd: number {
+  initial 0
+}
+
+value UncertaintyPhaseStd: number {
+  initial 0
+}
+
+value UncertaintyNPackages: number {
+  initial 0
+}
+
+value UncertaintyLoading: bool {
+  initial false
+}
+
+value UncertaintyErrorMessage: string {
+  initial ""
+}
+
+event UncertaintyCompleted {
+  payload_schema UncertaintyResultPayload
+  payload {
+    burst_start: UncertaintyBurstStart
+    rpm_std: UncertaintyRpmStd
+    phase_std: UncertaintyPhaseStd
+    n_packages: UncertaintyNPackages
+  }
+  writes {
+    UncertaintyRunState: complete
+    UncertaintyLoading: false
+    UncertaintyErrorMessage: ""
+  }
+}
+
+event UncertaintyFailed {
+  payload_schema UncertaintyFailedPayload
+  payload {
+    message: UncertaintyErrorMessage
+  }
+  writes {
+    UncertaintyRunState: failed
+    UncertaintyLoading: false
+  }
+}
+
+command RunUncertainty {
+  request_schema UncertaintyRequest
+  fields {
+    source_name: "engentus.mill.pipeline"
+    mill_id: UncertaintyMillId
+    burst_start: UncertaintyBurstStart
+    burst_end: UncertaintyBurstEnd
+  }
+}
+
+adapter UncertaintySbtp using SBTP {
+  command RunUncertainty
+  kind command
+  route "/api/runtime/materialized-host-operation"
+  host_operation engentus.pipeline.uncertainty
+  request_schema UncertaintyRequest
+  request_state UncertaintyRequestState
+  loading_state UncertaintyLoading
+  success_event UncertaintyCompleted
+  failure_event UncertaintyFailed
+  refresh_runtime true
+}
+
+// ── Derived values ────────────────────────────────────────────────────────────
+
+derive IngestIdle {
+  kind bool_not
+  source IngestLoading
+}
+
+derive CalibrationIdle {
+  kind bool_not
+  source CalibrationLoading
+}
+
+derive BurstFitIdle {
+  kind bool_not
+  source BurstFitLoading
+}
+
+derive OverviewIdle {
+  kind bool_not
+  source OverviewLoading
+}
+
+derive BoltAnalysisIdle {
+  kind bool_not
+  source BoltAnalysisLoading
+}
+
+derive HealthIdle {
+  kind bool_not
+  source HealthLoading
+}
+
+derive AlignmentIdle {
+  kind bool_not
+  source AlignmentLoading
+}
+
+derive ClipDetectionIdle {
+  kind bool_not
+  source ClipDetectionLoading
+}
+
+derive KalmanIdle {
+  kind bool_not
+  source KalmanLoading
+}
+
+derive UncertaintyIdle {
+  kind bool_not
+  source UncertaintyLoading
+}
+
+// ── Policies ──────────────────────────────────────────────────────────────────
+
+policy BurstQualityPolicy {
+  subject BurstFitProcess
+  initial_state idle
+  state_field BurstFitRunState
+  ready_state complete
+  disagreement_state failed
+  policy_outcomes {
+    complete: ready
+    failed: repair_required
+  }
+}
+
+policy ChannelHealthPolicy {
+  subject HealthProcess
+  initial_state idle
+  state_field HealthRunState
+  ready_state complete
+  disagreement_state failed
+  policy_outcomes {
+    complete: ready
+    failed: repair_required
+  }
+}
+
+policy KalmanQualityPolicy {
+  subject KalmanProcess
+  initial_state idle
+  state_field KalmanRunState
+  ready_state complete
+  disagreement_state failed
+  policy_outcomes {
+    complete: ready
+    failed: repair_required
+  }
+}

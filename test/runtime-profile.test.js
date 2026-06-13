@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -1102,7 +1102,7 @@ test("maintained demo runs on minimal plus authored runtime plugins", async () =
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
-  applyWitnessDocs(world, await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml")));
+  applyWitnessDocs(world, await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml")));
 
   const server = await startServer(world, {
     actor: "adam",
@@ -1154,7 +1154,7 @@ test("maintained demo without authored runtime plugins loses optional plugin-own
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
-  applyWitnessDocs(world, await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml")));
+  applyWitnessDocs(world, await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml")));
   applyWitnessToml(world, `
 [[runtimePluginRemove]]
 actor = "aaron"
@@ -1605,3 +1605,4 @@ test("mounted routes with handlers from inactive bundles return not found", asyn
     await server.close();
   }
 });
+

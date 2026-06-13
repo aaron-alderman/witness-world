@@ -17,6 +17,7 @@ function normalizeJobQueueConfig(runtimeConfig) {
 
 export function createInProcessJobQueue({
   world,
+  project = projector => world.project(projector),
   serverRunnerId,
   runtimeConfig = {},
   jobHandlers = {},
@@ -26,7 +27,7 @@ export function createInProcessJobQueue({
   const activeJobs = new Set();
   let closed = false;
 
-  const list = () => moduleProjectors.jobs(world.allWitnesses())
+  const list = () => project(moduleProjectors.jobs)
     .filter(row => row.serverRunner === serverRunnerId)
     .sort((a, b) => {
       const left = parseIsoAt(a.availableAt) ?? 0;

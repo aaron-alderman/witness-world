@@ -8,14 +8,21 @@ import { createDesktopSessionManager } from "./desktop-session-manager.js";
 
 function parseDesktopArgs(args) {
   const result = {
+    appPath: null,
+    desktopTargetId: null,
     worldHome: null,
     runtimeProfile: "full",
     runtimeProfileExplicit: false,
     runtimePluginIds: []
   };
   const queue = [...args];
+  if (queue.length && !queue[0].startsWith("--")) result.appPath = queue.shift();
   while (queue.length) {
     const token = queue.shift();
+    if (token === "--desktop-target") {
+      result.desktopTargetId = queue.shift() ?? null;
+      continue;
+    }
     if (token === "--world-home") {
       result.worldHome = queue.shift() ?? null;
       continue;
@@ -118,7 +125,9 @@ export async function createDesktopShell({
   env = process.env,
   launcher = startBlankRuntime,
   prepareWorldHome = prepareDesktopWorldHome,
-  preloadPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "desktop-preload.js")
+  preloadPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "desktop-preload.cjs"),
+  loadAppProjectImpl,
+  startAppRuntimeImpl
 } = {}) {
   const parsed = parseDesktopArgs(args);
   const {
@@ -140,7 +149,9 @@ export async function createDesktopShell({
     runtimeProfileExplicit: parsed.runtimeProfileExplicit,
     runtimePluginIds: parsed.runtimePluginIds,
     cwd,
-    env
+    env,
+    loadAppProjectImpl,
+    startAppRuntimeImpl
   });
 
   const handle = (channel, fn) => {
@@ -162,12 +173,18 @@ export async function createDesktopShell({
   const initialWorldSelection = parsed.worldHome
     ? { worldHome: parsed.worldHome, createNew: false }
     : null;
-  const state = initialWorldSelection
+  const state = parsed.appPath
     ? await desktopSession.initialize({
-        worldHome: initialWorldSelection.worldHome,
-        createIfMissing: initialWorldSelection.createNew
+        appPath: parsed.appPath,
+        desktopTargetId: parsed.desktopTargetId,
+        worldHome: parsed.worldHome
       })
-    : await desktopSession.initialize();
+    : initialWorldSelection
+      ? await desktopSession.initialize({
+          worldHome: initialWorldSelection.worldHome,
+          createIfMissing: initialWorldSelection.createNew
+        })
+      : await desktopSession.initialize();
 
   return {
     state,

@@ -9,10 +9,10 @@ function titleMap(witnesses) {
   );
 }
 
-export function jobs(witnesses) {
+export function jobs(witnesses, options = {}) {
   const rows = new Map();
   const owners = projectors.owners(witnesses);
-  const modules = moduleProjectors.modules(witnesses);
+  const modules = moduleProjectors.modules(witnesses, options);
   const titles = titleMap(witnesses);
 
   for (const [id, kind] of modules) {
@@ -84,8 +84,8 @@ export function jobs(witnesses) {
   return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
 
-export function jobIndex(witnesses) {
-  const rows = jobs(witnesses);
+export function jobIndex(witnesses, options = {}) {
+  const rows = jobs(witnesses, options);
   const byId = Object.create(null);
   for (const row of rows) byId[row.id] = row;
   return { rows, byId };

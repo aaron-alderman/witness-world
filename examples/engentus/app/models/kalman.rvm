@@ -1,0 +1,25 @@
+import desire/v3-alpha
+
+// ── Kalman rotation-angle stage as a DESIRE model ──────────────────────────────
+//
+// The joint 3-state Kalman (R mill_bolt_angle.R) is an iterative EKF — an
+// irreducible numerical leaf, like mill-force's grid-search / quadrature. So the
+// model is a thin composition over the lowered `kalmanFunctions`
+// (plugins/pipeline-runtime/kalman-kernels.js): each output column is a scalar
+// derive calling a lowered leaf on the aligned per-sample IMU streams (passed in
+// as params by the host-op). Run by the generic `evaluateModel`.
+
+model Kalman {
+  // aligned per-sample IMU streams (overridden per request by the host-op)
+  param tS          = 0
+  param boltAccelG  = 0
+  param txAccelG    = 0
+  param boltGyroDps = 0
+  param txGyroDps   = 0
+
+  // the burst_kalman.csv result columns (each a lowered-kernel leaf)
+  derive omega_burst_rpm     = kalman_rpm(tS, boltAccelG, txAccelG, boltGyroDps, txGyroDps)
+  derive delta_bt_deg        = kalman_delta_bt(tS, boltAccelG, txAccelG, boltGyroDps, txGyroDps)
+  derive bias_combined_dps   = kalman_bias(tS, boltAccelG, txAccelG, boltGyroDps, txGyroDps)
+  derive omega_disagree_flag = kalman_disagree(tS, boltAccelG, txAccelG, boltGyroDps, txGyroDps)
+}

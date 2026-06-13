@@ -40,7 +40,7 @@ export function createNotificationHandlers({
         sendGateFailure(res, gate);
         return;
       }
-      const notifications = notificationsForRunner(serverRunnerId).map(notificationReadShape);
+      const notifications = notificationsForRunner(serverRunnerId, appContext).map(notificationReadShape);
       world.observe({
         process: "notifications.list",
         actor: requestActor,
@@ -69,7 +69,7 @@ export function createNotificationHandlers({
         sendGateFailure(res, gate);
         return;
       }
-      const notification = currentNotificationForRunner(serverRunnerId, params.id || "");
+      const notification = currentNotificationForRunner(serverRunnerId, params.id || "", appContext);
       if (!notification) {
         world.observe({ process: "notifications.read.failed", actor: requestActor, claims: [], body: { reason: "notification not found", serverRunner: serverRunnerId, id: params.id || "" } });
         sendJson(res, 404, { error: "notification not found", id: params.id || "" });

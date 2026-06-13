@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -707,7 +707,7 @@ test("demo server supports done/delete actions and witness inspector data", asyn
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -765,7 +765,7 @@ test("demo /api/todos list, create, update, and delete routes run through author
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -935,7 +935,7 @@ test("private notes routes run through authored backend programs and switch vers
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -1038,7 +1038,7 @@ test("widgets create route runs through authored backend programs, stamps fronte
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -1131,7 +1131,7 @@ test("witnesses list route runs through authored backend programs and preserves 
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -1192,7 +1192,7 @@ test("witnesses list route runs through authored backend programs, preserves act
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -1272,7 +1272,7 @@ test("simulate network error route runs through authored backend programs and pr
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -1334,7 +1334,7 @@ test("world graph route runs through authored backend programs and preserves the
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -1395,7 +1395,7 @@ test("process view route runs through authored backend programs and preserves ba
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -1463,7 +1463,7 @@ test("process run route runs through authored backend programs and preserves rep
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -1531,7 +1531,7 @@ test("process events route runs through authored backend programs and preserves 
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -1609,7 +1609,7 @@ test("shared todo routes expose authority metadata and return proposals for sign
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -1684,7 +1684,7 @@ test("personal projections: identity session, themes, and private notes are sess
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -1760,7 +1760,7 @@ test("private notes routes run through authored backend programs and switch vers
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -2077,7 +2077,7 @@ test("shared widget version APIs return proposals for signed-in unauthorized act
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -2125,7 +2125,7 @@ test("process graph lab exposes simulated network failure as a witnessed UI scen
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -2164,7 +2164,7 @@ test("generated frontend engine is syntactically valid browser JavaScript", asyn
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -2192,7 +2192,7 @@ test("world graph endpoint is reachable and includes projected nodes", async () 
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
 
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -2260,3 +2260,4 @@ test("logout emits session.logout witness", async () => {
     await server.close();
   }
 });
+

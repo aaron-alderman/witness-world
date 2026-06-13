@@ -1,8 +1,7 @@
 import http from "node:http";
 import fs from "node:fs/promises";
-import { randomUUID } from "node:crypto";
 import { relation } from "./kernel.js";
-import { ensureCapabilityDefinition, installCapability, moduleProjectors, registerModuleProjectors } from "./modules.js";
+import { createModuleProjectorContext, ensureCapabilityDefinition, installCapability, moduleProjectors } from "./modules.js";
 import {
   headerValue,
   readJson,
@@ -170,15 +169,16 @@ export async function startRuntimeServer(world, {
     bundleOverrides
   });
   let runtimeContributions;
-  let unregisterRuntimeModuleProjectors = () => {};
+  let projectionContext;
+  let removeWorldProjectionContext = () => {};
   try {
     runtimeContributions = collectActiveRuntimeContributionsImpl({
       bundles: resolvedRuntime.bundles ?? []
     });
-    unregisterRuntimeModuleProjectors = registerModuleProjectors(
-      `runtime.activePlugins:${serverRunner.id}:${randomUUID()}`,
-      runtimeContributions.moduleProjectors ?? {}
-    );
+    projectionContext = createModuleProjectorContext(runtimeContributions.moduleProjectors ?? {}, {
+      owner: `runtime.activePlugins:${serverRunner.id}`
+    });
+    removeWorldProjectionContext = world._pushProjectionContext?.(projectionContext) ?? (() => {});
   } catch (error) {
     world.emit({
       process: "server.start.failed",
@@ -205,7 +205,7 @@ export async function startRuntimeServer(world, {
   const backendHost = serverRunner.backendHost;
   const frontendHost = serverRunner.frontendHost;
   if (!backendHost || !frontendHost) {
-    unregisterRuntimeModuleProjectors();
+    removeWorldProjectionContext();
     world.emit({
       process: "server.start.failed",
       actor,
@@ -244,7 +244,7 @@ export async function startRuntimeServer(world, {
   const missingBackend = requiredBackend.filter(capability => !backendCaps.has(capability));
   const missingFrontend = requiredFrontend.filter(capability => !frontendCaps.has(capability));
   if (missingBackend.length || missingFrontend.length) {
-    unregisterRuntimeModuleProjectors();
+    removeWorldProjectionContext();
     world.emit({
       process: "server.start.failed",
       actor,
@@ -256,7 +256,7 @@ export async function startRuntimeServer(world, {
 
   const runtimeConfig = resolveRuntimeConfig(serverRunner.runtimeConfig, env);
   if (!runtimeConfig.ok) {
-    unregisterRuntimeModuleProjectors();
+    removeWorldProjectionContext();
     world.emit({
       process: "server.start.failed",
       actor,
@@ -279,13 +279,14 @@ export async function startRuntimeServer(world, {
     readJson,
     handlerSetFactories,
     runtimeContributions,
+    projectionContext,
     resolveStorageConfig,
     resolveRuntimeConfig,
     env,
     createRuntimeAppContext: createRuntimeAppContextImpl
   });
   if (!appContext.ok) {
-    unregisterRuntimeModuleProjectors();
+    removeWorldProjectionContext();
     world.emit({
       process: "server.start.failed",
       actor,
@@ -368,6 +369,7 @@ export async function startRuntimeServer(world, {
     readJson,
     handlerSetFactories,
     runtimeContributions,
+    projectionContext,
     resolveStorageConfig,
     resolveRuntimeConfig,
     env,
@@ -451,7 +453,11 @@ export async function startRuntimeServer(world, {
       if (!matched) {
         const genericEndpoint = matchGenericEndpoint(req.method || "GET", requestUrl.pathname, activeRuntimeProfile, compositionOptions);
         if (genericEndpoint) {
-          const handler = genericHandlers[genericEndpoint.handler];
+          const routeHandlers = {
+            ...genericHandlers,
+            ...(runtime.context.handlers ?? {})
+          };
+          const handler = routeHandlers[genericEndpoint.handler];
           if (!activeDispatchHandlers.has(genericEndpoint.handler) || typeof handler !== "function") {
             sendJson(res, 404, { error: "not found" });
             return;
@@ -584,7 +590,7 @@ export async function startRuntimeServer(world, {
       for (const client of sseClients) client.end();
       sseClients.clear();
       for (const context of new Set(runtimeContexts.values())) context?.close?.();
-      unregisterRuntimeModuleProjectors();
+      removeWorldProjectionContext();
       server.closeAllConnections?.();
       return new Promise(resolve => server.close(resolve));
     }

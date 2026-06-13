@@ -37,11 +37,11 @@ function defaultOutboundRequestRow(id, { titles, owners, contexts }) {
   };
 }
 
-export function outboundRequests(witnesses) {
+export function outboundRequests(witnesses, options = {}) {
   const rows = new Map();
   const owners = projectors.owners(witnesses);
-  const contexts = moduleProjectors.objectContexts(witnesses);
-  const modules = moduleProjectors.modules(witnesses);
+  const contexts = moduleProjectors.objectContexts(witnesses, options);
+  const modules = moduleProjectors.modules(witnesses, options);
   const titles = titleMap(witnesses);
 
   for (const [id, kind] of modules) {
@@ -86,8 +86,8 @@ export function outboundRequests(witnesses) {
   return [...rows.values()].sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
 
-export function outboundRequestIndex(witnesses) {
-  const rows = outboundRequests(witnesses);
+export function outboundRequestIndex(witnesses, options = {}) {
+  const rows = outboundRequests(witnesses, options);
   const byId = Object.create(null);
   for (const row of rows) byId[row.id] = row;
   return { rows, byId };

@@ -31,6 +31,62 @@ const BUILTINS = {
   clamp: (x, lo, hi) => Math.min(Math.max(x, lo), hi)
 };
 
+// q-th quantile (q ∈ [0,1]) of a sorted array, type-7 (linear interpolation between
+// order statistics — the numpy/Excel default). Generic stats, no domain logic.
+function quantileSorted(sorted, q) {
+  const n = sorted.length;
+  if (n === 0) return NaN;
+  if (n === 1) return sorted[0];
+  const idx = (n - 1) * Math.max(0, Math.min(1, q));
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+}
+
+// Array-aware reductions, available only inside a `reduce` (where a field reference
+// carrying the reduced axis resolves to the vector along it). Generic — no domain terms.
+const REDUCERS = {
+  percentile: (arr, p) => quantileSorted([...arr].sort((a, b) => a - b), p / 100),
+  quantile: (arr, q) => quantileSorted([...arr].sort((a, b) => a - b), q),
+  median: arr => quantileSorted([...arr].sort((a, b) => a - b), 0.5),
+  mean: arr => arr.reduce((a, b) => a + b, 0) / arr.length,
+  sum: arr => arr.reduce((a, b) => a + b, 0),
+  count: arr => arr.length,
+  variance: arr => {
+    const m = arr.reduce((a, b) => a + b, 0) / arr.length;
+    return arr.reduce((a, b) => a + (b - m) * (b - m), 0) / arr.length;
+  },
+  std: arr => {
+    const m = arr.reduce((a, b) => a + b, 0) / arr.length;
+    return Math.sqrt(arr.reduce((a, b) => a + (b - m) * (b - m), 0) / arr.length);
+  },
+  pmin: arr => Math.min(...arr),
+  pmax: arr => Math.max(...arr)
+};
+
+// collect the field/var identifiers referenced by an expression AST
+function collectVarRefs(node, acc = new Set()) {
+  if (!node || typeof node !== "object") return acc;
+  if (node.t === "var") acc.add(node.name);
+  else if (node.t === "neg") collectVarRefs(node.x, acc);
+  else if (node.t === "bin") { collectVarRefs(node.l, acc); collectVarRefs(node.r, acc); }
+  else if (node.t === "call") for (const a of node.args) collectVarRefs(a, acc);
+  return acc;
+}
+
+// gather a field's values into a flat vector: reduced axes are iterated, the rest fixed
+// by the output coord (aligned to outputAxes order).
+function gatherVector(field, outputAxes, coord, reducedSet) {
+  const out = [];
+  const walk = (axesLeft, node) => {
+    if (axesLeft.length === 0) { out.push(node); return; }
+    const [ax, ...rest] = axesLeft;
+    if (reducedSet.has(ax)) for (const child of node) walk(rest, child);
+    else walk(rest, node[coord[outputAxes.indexOf(ax)]]);
+  };
+  walk(field.axes, field.data);
+  return out;
+}
+
 export function evaluateModel(body, options = {}) {
   const functions = { ...BUILTINS, ...(options.functions ?? {}) };
   const paramOverrides = options.params ?? {};
@@ -100,11 +156,40 @@ export function evaluateModel(body, options = {}) {
     return { axes: [...flow.over], data: build(0, []) };
   }
 
-  // a reduce collapses ONE axis: expr is f(field, ...) where the referenced field
-  // carries the axis being reduced. For Goodman we don't yet use reduces; supported
-  // minimally so the form is complete (reduce over [axis] → drop that axis).
+  // a reduce COLLAPSES its `over` axes: the referenced field(s) carry those axes, and
+  // an array-aware reducer (percentile/mean/…) aggregates the vector along them. The
+  // output ranges over the remaining axes (referenced-field axes minus the reduced set).
+  const reduceFns = { ...functions, ...REDUCERS };
   function evalReduce(flow) {
-    return evalDerive(flow); // same machinery; reduction fns operate on arrays in-expr
+    const reducedSet = new Set(flow.over);
+    const refFields = [...collectVarRefs(flow.ast)].filter(n => flows.has(n)).map(resolveField);
+    const outputAxes = [];
+    for (const f of refFields) for (const a of f.axes) {
+      if (!reducedSet.has(a) && !outputAxes.includes(a)) outputAxes.push(a);
+    }
+
+    const reduceLookup = coord => ident => {
+      const oi = outputAxes.indexOf(ident);
+      if (oi >= 0) return axes[ident].values[coord[oi]];
+      if (ident in params) return params[ident];
+      if (ident in CONSTANTS) return CONSTANTS[ident];
+      if (flows.has(ident)) {
+        const f = resolveField(ident);
+        return f.axes.some(a => reducedSet.has(a))
+          ? gatherVector(f, outputAxes, coord, reducedSet)
+          : indexField(f, outputAxes, coord, ident);
+      }
+      throw new Error(`dataflow: unresolved identifier "${ident}"`);
+    };
+
+    const dims = outputAxes.map(a => axes[a].values.length);
+    const build = (depth, coord) => {
+      if (depth === outputAxes.length) return evalAst(flow.ast, reduceLookup(coord), reduceFns);
+      const out = [];
+      for (let i = 0; i < dims[depth]; i += 1) out.push(build(depth + 1, [...coord, i]));
+      return out;
+    };
+    return { axes: outputAxes, data: build(0, []) };
   }
 
   for (const name of flows.keys()) resolveField(name);
@@ -136,6 +221,12 @@ function axisValues(axis, externalAxisValues, params = {}) {
     const n = Math.floor((end - start) / step + 1e-9);
     for (let i = 0; i <= n; i += 1) out.push(start + i * step);
     return out;
+  }
+  if (axis.kind === "ensemble") {
+    // a stochastic sample dimension: N sample indices [0 … N-1]. Behaves as an
+    // iteration axis; the model varies inputs per index via an injected seeded sampler.
+    const n = Math.max(0, Math.floor(num(axis.args?.[0])));
+    return Array.from({ length: n }, (_, i) => i);
   }
   if (axis.kind === "category") {
     return Array.isArray(axis.values) ? axis.values : [];

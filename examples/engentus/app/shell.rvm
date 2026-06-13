@@ -1,0 +1,149 @@
+import desire/v3-alpha
+
+// ── Engentus SPA shell, as DESIRE surfaces ─────────────────────────────────────
+//
+// The whole app from front screen → app screen → science → chart, expressed as a
+// tree of `view` (surface) nodes — faithful DESIRE, no direct route wiring. The
+// app screen composes down to the GoodmanDiagram chart (views/goodman.rvm), which
+// is rendered by the chart.render capability that plugin.chart-runtime contributes.
+// Module → plugin dependency; the platform installs the plugin.
+
+// ── Auth: login / sign-out ──
+view EngentusLogin {
+  kind auth-screen
+  class engentus-login
+  children {
+    engentus_brand
+    login_hero
+    login_form
+  }
+}
+
+view EngentusSignout {
+  kind auth-screen
+  class engentus-signout
+  children {
+    engentus_brand
+    signout_confirm
+  }
+}
+
+// ── Home: news rail + module grid of "apps" ──
+view EngentusHome {
+  kind app-shell
+  class engentus-home
+  children {
+    engentus_toolbar
+    news_panel
+    module_grid
+  }
+}
+
+view NewsPanel {
+  kind sidebar
+  class news-rail
+  children {
+    news_live_indicator
+    news_list
+  }
+}
+
+view ModuleGrid {
+  kind grid
+  class module-grid
+  children {
+    card_goodman
+    card_mill_charge
+    card_mill_force
+  }
+}
+
+// the three sciences as cards; Goodman is active, the others locked (matches SPA)
+view ModuleCardGoodman {
+  kind module-card
+  class active
+  children {
+    card_goodman_icon
+    card_goodman_title
+  }
+}
+
+view ModuleCardMillCharge {
+  kind module-card
+  class active
+  children {
+    card_mill_charge_icon
+    card_mill_charge_title
+  }
+}
+
+view ModuleCardMillForce {
+  kind module-card
+  class active
+  children {
+    card_mill_force_icon
+    card_mill_force_title
+  }
+}
+
+// ── App screen: LHS controls + the chart canvas ──
+view EngentusApp {
+  kind app-shell
+  class engentus-app
+  children {
+    engentus_toolbar
+    goodman_scrubber
+    goodman_sidebar
+    GoodmanDiagram
+    GoodmanMCBands
+  }
+}
+
+// sidebar that drives the model params (bolt sets, MC config, probe)
+view GoodmanSidebar {
+  kind sidebar
+  class goodman-controls
+  children {
+    bolt_set_list
+    mc_config
+    probe_controls
+  }
+}
+
+// ── Mill-force app screen: cross-section + force-vs-angle + rose ──
+view EngentusMillForceApp {
+  kind app-shell
+  class engentus-mill-force
+  children {
+    engentus_toolbar
+    mill_force_sidebar
+    MillForceCross
+    MillForceAngle
+    MillForceRose
+  }
+}
+
+// ── Mill-charge app screen: the rotating-charge cross-section ──
+view EngentusMillChargeApp {
+  kind app-shell
+  class engentus-mill-charge
+  children {
+    engentus_toolbar
+    mill_charge_sidebar
+    MillChargeCrossSection
+  }
+}
+
+// ── App root: the router over the screens ──
+view EngentusRoot {
+  kind app-root
+  class engentus-spa
+  children {
+    EngentusLogin
+    EngentusHome
+    EngentusApp
+    EngentusMillForceApp
+    EngentusMillChargeApp
+    EngentusSignout
+  }
+}

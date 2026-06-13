@@ -79,7 +79,7 @@ export function createWebhookHandlers({
         });
         sendJson(res, 401, {
           error: "invalid webhook signature",
-          delivery: webhookReadShape(currentWebhookForRunner(delivery.serverRunner, delivery.id) ?? {
+          delivery: webhookReadShape(currentWebhookForRunner(delivery.serverRunner, delivery.id, appContext) ?? {
             id: delivery.id,
             title: webhookTitle(delivery),
             target: delivery.target,
@@ -124,7 +124,7 @@ export function createWebhookHandlers({
         });
         sendJson(res, 409, {
           error: "delivery timestamp outside replay window",
-          delivery: webhookReadShape(currentWebhookForRunner(delivery.serverRunner, delivery.id) ?? {
+          delivery: webhookReadShape(currentWebhookForRunner(delivery.serverRunner, delivery.id, appContext) ?? {
             id: delivery.id,
             title: webhookTitle(delivery),
             target: delivery.target,
@@ -150,7 +150,7 @@ export function createWebhookHandlers({
         return;
       }
 
-      const duplicate = webhookDeliveriesForRunner(delivery.serverRunner).find(row =>
+      const duplicate = webhookDeliveriesForRunner(delivery.serverRunner, appContext).find(row =>
         row.id !== delivery.id
         && row.target === delivery.target
         && row.deliveryId === delivery.deliveryId
@@ -174,7 +174,7 @@ export function createWebhookHandlers({
         });
         sendJson(res, 409, {
           error: "duplicate delivery",
-          delivery: webhookReadShape(currentWebhookForRunner(delivery.serverRunner, delivery.id) ?? {
+          delivery: webhookReadShape(currentWebhookForRunner(delivery.serverRunner, delivery.id, appContext) ?? {
             id: delivery.id,
             title: webhookTitle(delivery),
             target: delivery.target,
@@ -270,7 +270,7 @@ export function createWebhookHandlers({
         }
       });
       sendJson(res, 202, {
-        delivery: webhookReadShape(currentWebhookForRunner(delivery.serverRunner, delivery.id) ?? {
+        delivery: webhookReadShape(currentWebhookForRunner(delivery.serverRunner, delivery.id, appContext) ?? {
           id: delivery.id,
           title: webhookTitle(delivery),
           target: delivery.target,
@@ -315,7 +315,7 @@ export function createWebhookHandlers({
         sendGateFailure(res, gate);
         return;
       }
-      const deliveries = webhookDeliveriesForRunner(serverRunnerId).map(webhookReadShape);
+      const deliveries = webhookDeliveriesForRunner(serverRunnerId, appContext).map(webhookReadShape);
       world.observe({
         process: "webhook.inbound.list",
         actor: requestActor,
@@ -344,7 +344,7 @@ export function createWebhookHandlers({
         sendGateFailure(res, gate);
         return;
       }
-      const delivery = currentWebhookForRunner(serverRunnerId, params.id || "");
+      const delivery = currentWebhookForRunner(serverRunnerId, params.id || "", appContext);
       if (!delivery) {
         world.observe({ process: "webhook.inbound.read.failed", actor: requestActor, claims: [], body: { reason: "webhook delivery not found", serverRunner: serverRunnerId, id: params.id || "" } });
         sendJson(res, 404, { error: "webhook delivery not found", id: params.id || "" });

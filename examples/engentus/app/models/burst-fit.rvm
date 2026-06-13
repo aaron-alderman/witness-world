@@ -1,0 +1,20 @@
+import desire/v3-alpha
+
+// ── Burst-fit RPM-recovery stage as a DESIRE model ─────────────────────────────
+//
+// Burst-fit recovers the drum rpm by a two-stage harmonic least-squares grid
+// search (PIPELINE.dsl §4.6) — an irreducible numerical optimisation, lowered to
+// the `burst_rpm` leaf (plugins/pipeline-runtime/burst-fit-kernels.js), exactly as
+// mill-force lowers its grid-search / quadrature leaves. The model is the thin
+// composition the host-op evaluates; the burst's magnitude samples + grid range
+// arrive as params. Run by the generic `evaluateModel`.
+
+model BurstFit {
+  param g      = 0   // magnitude samples (host-op param)
+  param dt     = 0   // uniform sample step (or 0 if `times` given)
+  param times  = 0   // explicit sample times (or 0 for uniform dt)
+  param rpm_lo = 6.0
+  param rpm_hi = 18.0
+
+  derive rpm = burst_rpm(g, dt, times, rpm_lo, rpm_hi)
+}

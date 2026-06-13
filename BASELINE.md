@@ -1,4 +1,4 @@
-# Stable Baseline Contract
+﻿# Stable Baseline Contract
 
 This document records the current supported baseline for the platform.
 
@@ -81,8 +81,8 @@ Public surfaces expected to use this model in normal browser behavior:
 Authoritative implementation:
 
 - [src/host.js](C:\Users\aaron\Documents\world\src\host.js)
-- [examples/demo/common.wtoml](C:\Users\aaron\Documents\world\examples\demo\common.wtoml)
-- [examples/demo/frontend.wtoml](C:\Users\aaron\Documents\world\examples\demo\frontend.wtoml)
+- [examples/_lib/common.wtoml](C:\Users\aaron\Documents\world\examples\_lib\common.wtoml)
+- [examples/_lib/demo-todo/frontend.wtoml](C:\Users\aaron\Documents\world\examples\_lib\demo-todo\frontend.wtoml)
 - [src/canvas-page.js](C:\Users\aaron\Documents\world\src\canvas-page.js)
 
 ### Type Execution
@@ -263,3 +263,4 @@ These are intentionally not claimed as part of the stable baseline:
 - theming separation across shell/product boundaries
 - broader live migration/rollback semantics beyond current widget-version behavior
 - distributed or multi-machine witness exchange
+

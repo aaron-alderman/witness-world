@@ -5,6 +5,7 @@ import { moduleProjectors } from "../../src/modules.js";
 
 export function createBuiltinAssetJobHandlers({
   world,
+  project = projector => world.project(projector),
   backendHost,
   runtimeConfig,
   runtimeConfigLookup,
@@ -49,7 +50,7 @@ export function createBuiltinAssetJobHandlers({
       const assetId = typeof payload?.assetId === "string" ? payload.assetId.trim() : "";
       if (!assetId) throw new Error("assetId required");
       const currentActor = actor || backendHost;
-      const asset = world.project(moduleProjectors.assetIndex).byId[assetId] ?? null;
+      const asset = project(moduleProjectors.assetIndex).byId[assetId] ?? null;
       if (!asset) {
         world.emit({
           process: "asset.ingest.failed",

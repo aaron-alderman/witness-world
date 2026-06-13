@@ -1,0 +1,122 @@
+import desire/v3-alpha
+
+// ── Goodman bolt-fatigue model ─────────────────────────────────────────────────
+//
+// A product-type dataflow graph (DESIRE `model` form). Output is a product over
+// named axes: `sm` (mean-stress sweep) and `lifetime` (the band boundaries).
+// Goodman has NO symmetry break — every leaf below is an honest composition of
+// std-lib functions (sn_hannover, goodman_sa, …), so this model lowers to ZERO
+// numeric kernels. It stays fully in the IR. (Mirrors example-ports/engentus
+// js/physics.js: bolt_static_point / goodman_sa / sn_hannover.)
+
+model BoltFatigue {
+  // ── axes: the named dimensions of the output tensor ──
+  axis sm       = sweep(0, 650, 1.6)
+  axis lifetime = category(0.5, 2, 6)
+
+  // ── params (scalars; the `sample` ensemble axis attaches a dist later) ──
+  param rpm                 = 9.0
+  param sigma_lim           = 60
+  param m_slope             = 5
+  param uts                 = 1000
+  param ys                  = 600
+  param F_alt_applied_N     = 30000
+  param n_bolts             = 4
+  param n_interfaces        = 2
+  param mu_joint            = 0.4
+  param angular_span_factor = 1.0
+  param A_s_nom             = 0.001473
+  param preload_utilisation = 0.75
+  param L_grip              = 0.18
+  param D_Shank             = 0.044
+  param D_minor             = 0.041
+  param E_bolt_GPa          = 200
+  param head_direction      = 0
+  param length_factor       = 1.0
+  param rubber_shoreA       = 60
+  param rubber_nu           = 0.49
+  param rubber_area_m2      = 0.045
+  param rubber_thickness_m  = 0.05
+  param probe_sm            = 300
+
+  // ── Goodman background bands (pure composition over sm × lifetime) ──
+  derive cycles    = months_to_cycles(lifetime, rpm) over lifetime
+  derive fat_limit = sn_hannover(cycles, sigma_lim, m_slope) over lifetime
+  derive band      = goodman_sa(sm, fat_limit, uts, ys) over sm, lifetime
+
+  // ── yield line (chart.js: y = 600 - x) ──
+  derive yield_line = ys - sm over sm
+
+  // ── bolt mechanical response: stiffness-share γ → F_shear → σa(sm) ──
+  derive E_r0     = shore_a_to_E_pa(rubber_shoreA)
+  derive G_r      = E_r0 / (2 * (1 + rubber_nu))
+  derive k_rub    = G_r * rubber_area_m2 / rubber_thickness_m
+  derive I_shank  = pi * D_Shank^4 / 64
+  derive k_blt    = bolt_bending_stiffness(E_bolt_GPa * 1e9, I_shank, L_grip, head_direction) * n_bolts
+  derive gamma    = k_blt / (k_blt + k_rub)
+  derive F_per_bolt = F_alt_applied_N / n_bolts * angular_span_factor
+  derive F_friction = mu_joint * (sm * 1e6 * A_s_nom) * n_interfaces over sm
+  derive F_shear    = max(gamma * F_per_bolt, F_per_bolt - F_friction) over sm
+  derive curve      = bolt_bending_sigma_a(F_shear, L_grip, D_Shank, D_minor, head_direction, length_factor) over sm
+
+  // ── slip threshold: friction yields to bending (vertical rule, scalar) ──
+  derive slip = F_per_bolt / (mu_joint * A_s_nom * n_interfaces)
+}
+
+// ── Goodman bolt-fatigue, Monte-Carlo sibling ──────────────────────────────────
+//
+// The SAME honest bolt-response composition as BoltFatigue (zero kernels), now over an
+// added `sample = ensemble(N)` axis: the applied alternating force is drawn per sample
+// from a lognormal (the injected seeded `lognormal` sampler), propagated through the
+// model, and collapsed back to p10/p50/p90 σa bands with `reduce … over sample`. This is
+// the Monte-Carlo proof: stochasticity is "just another axis" + an injected sampler, and
+// the percentile reductions are generic stats in the evaluator. BoltFatigue itself is
+// untouched (its deterministic 1e-6 proof + page stay pristine).
+
+model BoltFatigueMC {
+  // ── axes: the mean-stress sweep × the ensemble of samples ──
+  axis sm     = sweep(0, 650, 1.6)
+  axis sample = ensemble(n_samples)
+
+  // ── ensemble config ──
+  param n_samples   = 96
+  param F_alt_sigma = 0.12
+
+  // ── mechanical params (same as BoltFatigue) ──
+  param F_alt_applied_N     = 30000
+  param n_bolts             = 4
+  param n_interfaces        = 2
+  param mu_joint            = 0.4
+  param angular_span_factor = 1.0
+  param A_s_nom             = 0.001473
+  param L_grip              = 0.18
+  param D_Shank             = 0.044
+  param D_minor             = 0.041
+  param E_bolt_GPa          = 200
+  param head_direction      = 0
+  param length_factor       = 1.0
+  param rubber_shoreA       = 60
+  param rubber_nu           = 0.49
+  param rubber_area_m2      = 0.045
+  param rubber_thickness_m  = 0.05
+
+  // ── stiffness-share γ + friction (honest composition; same chain as BoltFatigue) ──
+  derive E_r0       = shore_a_to_E_pa(rubber_shoreA)
+  derive G_r        = E_r0 / (2 * (1 + rubber_nu))
+  derive k_rub      = G_r * rubber_area_m2 / rubber_thickness_m
+  derive I_shank    = pi * D_Shank^4 / 64
+  derive k_blt      = bolt_bending_stiffness(E_bolt_GPa * 1e9, I_shank, L_grip, head_direction) * n_bolts
+  derive gamma      = k_blt / (k_blt + k_rub)
+  derive F_friction = mu_joint * (sm * 1e6 * A_s_nom) * n_interfaces over sm
+
+  // ── sampled input → per-sample bolt response (the ensemble propagation) ──
+  derive F_alt_s      = lognormal(sample, F_alt_applied_N, F_alt_sigma) over sample
+  derive F_per_bolt_s = F_alt_s / n_bolts * angular_span_factor over sample
+  derive F_shear_s    = max(gamma * F_per_bolt_s, F_per_bolt_s - F_friction) over sm, sample
+  derive curve_s      = bolt_bending_sigma_a(F_shear_s, L_grip, D_Shank, D_minor, head_direction, length_factor) over sm, sample
+
+  // ── reductions: collapse the sample axis into percentile bands over sm ──
+  reduce sa_p10 = percentile(curve_s, 10) over sample
+  reduce sa_p50 = percentile(curve_s, 50) over sample
+  reduce sa_p90 = percentile(curve_s, 90) over sample
+}

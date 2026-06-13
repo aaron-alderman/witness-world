@@ -1,0 +1,16 @@
+import desire/v3-alpha
+
+// ── Clip / artifact-detection stage as a DESIRE model ──────────────────────────
+//
+// detect_clips (R stage 03) reduces a burst's per-(channel) raw samples to
+// quantile stats + hard/soft/spike flags — a reduction with channel-dependent
+// branching, lowered to `clipFunctions` (plugins/pipeline-runtime/clip-kernels.js).
+// The host-op needs only the two count columns, each a scalar derive over the
+// lowered leaf. Run by the generic `evaluateModel`.
+
+model ClipDetect {
+  param samples = 0   // long sample list [{burst_id, channel, sample_idx, raw}] (host-op param)
+
+  derive n_channels_evaluated = clip_n_evaluated(samples)
+  derive n_clipped_channels   = clip_n_clipped(samples)
+}

@@ -1,0 +1,50 @@
+import desire/v3-alpha
+
+// ── Goodman fatigue diagram (DESIRE `chart` form) ──────────────────────────────
+//
+// Grammar-of-graphics over BoltFatigue's axes. Each layer is a mark bound to a
+// model channel; the layer stack maps 1:1 onto the SPA's <g id="g-*"> groups in
+// example-ports/engentus js/chart.js (bands → curves → slip → yield → probe).
+// dtypes drive the 80% defaults; explicit encodings reach the 20%. The renderer
+// (D3) is the only thing lowered — the spec itself is honest IR.
+
+chart GoodmanDiagram of BoltFatigue {
+  frame cartesian
+
+  x sm
+  x.domain 0 650
+  x.label "Mean stress σm (MPa)"
+
+  y sigma_a
+  y.domain 0 auto
+  y.label "Alternating bending stress σa (MPa)"
+
+  // first-class, witnessed representation choices (edit mode in the SPA)
+  editable title, x.label, y.label, band.fills, annotations
+
+  // layer stack (drawn bottom→top), each bound to a BoltFatigue channel
+  layer bands  = area over lifetime | y:band fill:band.fills opacity:0.9
+  layer curves = line over sm | y:curve stroke:blue width:2.2
+  layer slip   = rule | x:slip dash:true stroke:slate
+  layer yield  = line over sm | y:yield_line stroke:red dash:true
+  layer probe  = rule | x:probe_sm stroke:ylw
+}
+
+// ── Goodman Monte-Carlo bands (over BoltFatigueMC) ─────────────────────────────
+//
+// The same σa-vs-σm frame, now showing the ensemble: a faint per-sample `cloud`, the
+// p10..p90 `band`, and the p50 median line. Exercises the generic GoG runtime's new
+// band/cloud marks over the reduced fields produced by `reduce … over sample`.
+chart GoodmanMCBands of BoltFatigueMC {
+  frame cartesian
+  x sm
+  x.domain 0 650
+  x.label "Mean stress σm (MPa)"
+  y sigma_a
+  y.domain 0 auto
+  y.label "Alternating bending stress σa (MPa)"
+
+  layer cloud = cloud over sample | x:sm y:curve_s stroke:slate
+  layer band  = band over sm | x:sm y0:sa_p10 y1:sa_p90 fill:blue opacity:0.25
+  layer med   = line over sm | y:sa_p50 stroke:blue width:2.2
+}

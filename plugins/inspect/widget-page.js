@@ -20,7 +20,19 @@ import {
 import { widgetTree, frontendProgram, templateWidgetTrees, stableJson } from "../../src/widgets.js";
 import { TODO_TUTORIAL_ID, tutorialDefinition } from "../tutorial/tutorials.js";
 import { renderTutorialClient } from "../tutorial/tutorial-app-client.js";
-import { resolveEdenPageTheme } from "../eden/eden-page-theme.js";
+import { renderEdenPageThemeCssVars, resolveEdenPageTheme } from "../eden/eden-page-theme.js";
+import { SHARED_SURFACE_KIT_CSS } from "./surface-kit-styles.js";
+import { renderSurfaceCommandActionsFactory } from "./surface-command-actions.js";
+import { renderSurfaceCommandIdentityActionsFactory } from "./surface-command-identity-actions.js";
+import { renderSurfaceInspectorActionsFactory } from "./surface-inspector-actions.js";
+import { renderSurfaceInspectorFormActionsFactory } from "./surface-inspector-form-actions.js";
+import { renderSurfaceInspectorOverlayViewFactory } from "./surface-inspector-overlay-view.js";
+import { renderSurfaceInspectorVersionActionsFactory } from "./surface-inspector-version-actions.js";
+import { renderWorldCommandActionsFactory } from "./world-command-actions.js";
+import { renderWorldGraphActionsFactory } from "./world-graph-actions.js";
+import { renderWorldPostRenderFactory } from "./world-post-render.js";
+import { renderWorldShellViewFactory } from "./world-shell-view.js";
+import { renderWorldTutorialActionsFactory } from "./world-tutorial-actions.js";
 export function renderWidgetPage(world, { actor, rootWidget, frontendProgram: programId = null, appConfig = {} }) {
   const tree = world.project(w => widgetTree(w, rootWidget));
   const program = world.project(w => frontendProgram(w, programId));
@@ -56,59 +68,13 @@ function renderDocument(root, program, appConfig = {}, typeModel = {}, templates
 }
 
 function renderHead(title, pageTheme = resolveEdenPageTheme()) {
-  const tokens = pageTheme.tokens || resolveEdenPageTheme().tokens;
   return `<head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)}</title>
   <style>
-    :root {
-      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-      --page-bg: ${tokens.pageBackground};
-      --surface-bg: ${tokens.surface};
-      --surface-strong: ${tokens.surfaceStrong};
-      --surface-border: ${tokens.border};
-      --surface-shadow: ${tokens.panelShadow};
-      --accent: ${tokens.accent};
-      --ink: ${tokens.ink};
-      --muted: ${tokens.muted};
-      --input-bg: ${tokens.input};
-      --button-bg: ${tokens.button};
-      --panel-radius: ${tokens.panelRadius};
-      --texture-opacity: ${tokens.textureOpacity};
-      --body-font: ${tokens.bodyFont};
-      --heading-font: ${tokens.headingFont};
-    }
-    body {
-      font-family: var(--body-font);
-      max-width: 920px;
-      margin: 40px auto;
-      padding: 0 24px;
-      color: var(--ink);
-      background:
-        radial-gradient(circle at top, rgba(255,255,255,0.38), transparent 34%),
-        linear-gradient(180deg, rgba(255,255,255,var(--texture-opacity)) 0%, rgba(255,255,255,0) 22%),
-        var(--page-bg);
-    }
-    body[data-page="world"] { max-width: none; margin: 0; padding: 0; overflow: hidden; }
-    body[data-page="world"] main { height: 100vh; display: grid; grid-template-rows: auto 1fr; gap: 0; overflow: hidden; }
-    body[data-page="world"] h1 { font-size: 1.05rem; margin: 4px 14px 6px; line-height: 1.2; }
-    body[data-page="world"] .world-graph-link { padding: 6px 14px; display: inline-block; font-size: 13px; }
-    body[data-actor="aaron"] { --accent: #375a7f; }
-    body[data-actor="callan"] { --accent: #6b4f8a; }
-    body[data-actor="adam"] { --accent: #667a3a; }
-    h1, h2 { font-family: var(--heading-font); }
-    h1 { color: var(--accent, #333); }
-    main { display: grid; gap: 18px; }
-    form { display: flex; gap: 8px; margin: 8px 0; }
-    select { padding: 10px; border: 1px solid var(--surface-border); border-radius: 8px; background: var(--input-bg); color: var(--ink); }
-    input { flex: 1; padding: 10px; border: 1px solid var(--surface-border); border-radius: 8px; background: var(--input-bg); color: var(--ink); }
-    button { padding: 8px 12px; cursor: pointer; border: 1px solid var(--surface-border); border-radius: 999px; background: var(--button-bg); color: var(--ink); }
-    button:hover { background: var(--surface-strong); }
-    ul { list-style: none; padding: 0; margin: 0; }
-    li, .todo-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(0,0,0,0.08); }
-    li.done .todo-title, .todo-row.done .todo-title { text-decoration: line-through; color: var(--muted); }
-    .status { min-height: 1.5em; color: var(--muted); }
+    ${renderEdenPageThemeCssVars(pageTheme)}
+    ${SHARED_SURFACE_KIT_CSS}
     .todo-actions { margin-left: auto; display: flex; gap: 6px; }
     .session-panel, .private-notes, .witness-inspector, .widget-editor, .version-playground {
       border: 1px solid var(--surface-border);
@@ -342,14 +308,22 @@ function renderWidget(widget, options = {}) {
     }
     case "Text":
       return `<div${attrs}>${escapeHtml(widget.props.text ?? "")}</div>`;
+    case "Label":
+      return `<label${attrs}>${children || escapeHtml(widget.props.text ?? "")}</label>`;
     case "Form":
       return `<form${attrs}>\n${children}\n</form>`;
     case "Input":
       return `<input${attrs}${renderExtraAttrs(widget, ["name", "placeholder", "type", "valueType", "label", "template"])} name="${escapeAttr(widget.props.name ?? "value")}" placeholder="${escapeAttr(widget.props.placeholder ?? "")}" autocomplete="off" />`;
+    case "Textarea":
+      return `<textarea${attrs}${renderExtraAttrs(widget, ["name", "placeholder", "label", "template"])} name="${escapeAttr(widget.props.name ?? "value")}" placeholder="${escapeAttr(widget.props.placeholder ?? "")}">${escapeHtml(widget.props.text ?? "")}</textarea>`;
     case "Select":
       return `<select${attrs}${renderExtraAttrs(widget, ["name", "template"])} name="${escapeAttr(widget.props.name ?? "value")}">${children}</select>`;
     case "Option":
       return `<option${attrs}${renderExtraAttrs(widget, ["text", "value", "template"])} value="${escapeAttr(widget.props.value ?? "")}">${escapeHtml(widget.props.text ?? "")}</option>`;
+    case "Details":
+      return `<details${attrs}${renderExtraAttrs(widget, ["open", "template"])}${widget.props.open ? " open" : ""}>${children}</details>`;
+    case "Summary":
+      return `<summary${attrs}>${escapeHtml(widget.props.text ?? "")}</summary>`;
     case "ValueEditor":
       return renderValueEditor(widget, options.typeModel ?? {}, attrs);
     case "Button": {
@@ -387,8 +361,10 @@ function renderValueEditor(widget, typeModel, attrs) {
 }
 
 function renderAttrs(widget) {
-  const parts = [`data-widget="${escapeAttr(widget.id)}"`];
+  const widgetId = widget.props.widgetId ?? widget.id;
+  const parts = [`data-widget="${escapeAttr(widgetId)}"`];
   if (widget.version) parts.push(`data-widget-version="${escapeAttr(widget.version)}"`);
+  if (widget.props.domId) parts.push(`id="${escapeAttr(widget.props.domId)}"`);
   if (widget.props.class) parts.push(`class="${escapeAttr(widget.props.class)}"`);
   if (widget.props.hidden === true) parts.push("hidden");
   if (widget.props.role) {
@@ -411,7 +387,7 @@ function renderAttrs(widget) {
 }
 
 function renderExtraAttrs(widget, consumed = []) {
-  const consumedSet = new Set(["class", "role", "action", "hidden", "template", "tutorialTarget", ...consumed]);
+  const consumedSet = new Set(["class", "role", "action", "hidden", "template", "tutorialTarget", "widgetId", "domId", "open", ...consumed]);
   const entries = Object.entries(widget.props || {})
     .filter(([key, value]) => !consumedSet.has(key) && !key.startsWith("event") && !key.startsWith("data-") && !key.startsWith("aria-") && value != null && typeof value !== "object");
   if (entries.length === 0) return "";
@@ -437,10 +413,26 @@ function renderClientEngine(program) {
   const json = JSON.stringify(program).replace(/</g, "\\u003c");
   const commandTutorial = program.config?.tutorial ? tutorialDefinition(TODO_TUTORIAL_ID) : null;
   const commandTutorialJson = JSON.stringify(commandTutorial).replace(/</g, "\\u003c");
+  const frontendProgramScriptId = typeof program.config?.frontendProgramScriptId === "string" && program.config.frontendProgramScriptId.trim()
+    ? program.config.frontendProgramScriptId.trim()
+    : "witness-frontend-program";
   const engine = String.raw`(async () => {
-  let program = JSON.parse(document.getElementById('witness-frontend-program').textContent);
+  ${renderSurfaceCommandActionsFactory()}
+  ${renderSurfaceCommandIdentityActionsFactory()}
+  ${renderSurfaceInspectorActionsFactory()}
+  ${renderSurfaceInspectorFormActionsFactory()}
+  ${renderSurfaceInspectorOverlayViewFactory()}
+  ${renderSurfaceInspectorVersionActionsFactory()}
+  ${renderWorldCommandActionsFactory()}
+  ${renderWorldGraphActionsFactory()}
+  ${renderWorldPostRenderFactory()}
+  ${renderWorldShellViewFactory()}
+  ${renderWorldTutorialActionsFactory()}
+  const frontendProgramScriptId = ${JSON.stringify(frontendProgramScriptId)};
+  let program = JSON.parse(document.getElementById(frontendProgramScriptId).textContent);
   let config = program.config || {};
   let typeModel = config.typeModel || {};
+  const processTraceEnabled = config.traceProcessEvents !== false;
   const currentSurfaceContext = typeof config.surfaceContext === 'string' && config.surfaceContext.trim() ? config.surfaceContext.trim() : null;
   const runtimeSurfaces = Array.isArray(config.runtimeSurfaces) ? config.runtimeSurfaces : [];
   const runtimeSurfacesFor = context => runtimeSurfaces.filter(surface => {
@@ -449,6 +441,19 @@ function renderClientEngine(program) {
   });
   const commandTutorial = ${commandTutorialJson};
   const state = Object.create(null);
+  const currentInitialStateScriptId = () => typeof config.initialStateScriptId === 'string' && config.initialStateScriptId.trim() ? config.initialStateScriptId.trim() : '';
+  const currentInitialStateInto = () => typeof config.initialStateInto === 'string' && config.initialStateInto.trim() ? config.initialStateInto.trim() : '';
+  const syncInitialState = (sourceDocument = document) => {
+    const initialStateScriptId = currentInitialStateScriptId();
+    const initialStateInto = currentInitialStateInto();
+    if (!initialStateScriptId || !initialStateInto) return;
+    const initialStateEl = sourceDocument.getElementById(initialStateScriptId);
+    if (!initialStateEl?.textContent) return;
+    try {
+      state[initialStateInto] = JSON.parse(initialStateEl.textContent);
+    } catch {}
+  };
+  syncInitialState(document);
   const liveProjectionProcesses = new Set(['defineWidget', 'updateWidget', 'widget.update', 'attachWidget', 'defineWidgetVersion', 'activateWidgetVersion', 'widgetVersion.migrate', 'widgetVersion.rollback']);
   let refreshInFlight = null;
   let liveProjectionStarted = false;
@@ -479,6 +484,20 @@ function renderClientEngine(program) {
     if (!el) return;
     if ('value' in el) el.value = value ?? '';
     else el.textContent = value ?? '';
+  };
+  const coerceBooleanFlag = value => value === true || value === 1 || value === '1' || String(value || '').trim().toLowerCase() === 'true';
+  const setHidden = (id, hidden) => {
+    const el = byWidget(id);
+    if (!el) return;
+    el.hidden = coerceBooleanFlag(hidden);
+  };
+  const setDisabled = (id, disabled) => {
+    const el = byWidget(id);
+    if (!el) return;
+    const next = coerceBooleanFlag(disabled);
+    if ('disabled' in el) el.disabled = next;
+    else if (next) el.setAttribute('disabled', '');
+    else el.removeAttribute('disabled');
   };
   const currentActor = () => state.session?.actor || state.actor || '';
   const applyTheme = () => { document.body.dataset.actor = currentActor() || ''; };
@@ -1383,430 +1402,75 @@ function renderClientEngine(program) {
   };
   const updateSurfaceInspectorUi = () => {
     if (!liveSurfaceInspectable) return;
-    let overlay = document.getElementById('surface-inspector-root');
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.id = 'surface-inspector-root';
-      document.body.appendChild(overlay);
-    }
-    overlay.innerHTML =
-      '<button type="button" class="surface-command-toggle world-command-toggle" data-surface-command-toggle>'
-        + (state.surfaceCommandOpen ? 'Close Search' : 'Search / Command')
-      + '</button>'
-      + renderSurfaceCommandPalette()
-      +
-      '<button type="button" class="surface-inspector-toggle" data-surface-inspector-toggle>'
-        + (state.surfaceInspectorOpen ? 'Close Inspector' : 'Inspect Page')
-      + '</button>'
-      + renderSurfaceInspectorPanel()
-      + renderSurfaceInspectorMenu();
-    overlay.querySelectorAll('[data-surface-command-toggle]').forEach(node => {
-      node.addEventListener('click', event => {
-        event.preventDefault();
-        state.surfaceCommandOpen = !state.surfaceCommandOpen;
-        if (state.surfaceCommandOpen) {
-          state.surfaceCommandFocusRequested = true;
-          void ensureSurfaceInspectorGraph().then(() => updateSurfaceInspectorUi()).catch(() => {});
-        } else {
-          state.surfaceCommandQuery = '';
-          state.surfaceCommandResult = null;
-        }
-        updateSurfaceInspectorUi();
-      });
+    const overlay = ensureSurfaceInspectorOverlayRoot({ documentTarget: document });
+    if (!overlay) return;
+    overlay.innerHTML = renderSurfaceInspectorOverlayView({
+      surfaceCommandOpen: state.surfaceCommandOpen,
+      surfaceInspectorOpen: state.surfaceInspectorOpen,
+      commandPalette: renderSurfaceCommandPalette(),
+      inspectorPanel: renderSurfaceInspectorPanel(),
+      inspectorMenu: renderSurfaceInspectorMenu()
     });
-    overlay.querySelectorAll('[data-surface-command-close]').forEach(node => {
-      node.addEventListener('click', event => {
-        event.preventDefault();
-        state.surfaceCommandOpen = false;
-        state.surfaceCommandQuery = '';
-        state.surfaceCommandResult = null;
-        updateSurfaceInspectorUi();
-      });
+    bindSurfaceCommandActions({
+      overlay,
+      state,
+      ensureSurfaceInspectorGraph,
+      updateSurfaceInspectorUi,
+      visibleSurfaceCommands,
+      executeSurfaceCommand,
+      worldSurfaceHref,
+      windowTarget: window
     });
-    overlay.querySelectorAll('[data-surface-command-input]').forEach(node => {
-      node.addEventListener('input', () => {
-        state.surfaceCommandQuery = node.value || '';
-        if (String(node.value || '').trim().toLowerCase() !== 'whoami') state.surfaceCommandResult = null;
-        state.surfaceCommandFocusRequested = true;
-        updateSurfaceInspectorUi();
-      });
-      node.addEventListener('keydown', async event => {
-        if (event.key !== 'Enter') return;
-        event.preventDefault();
-        const items = visibleSurfaceCommands();
-        if (items[0]) await executeSurfaceCommand(items[0]);
-      });
+    bindSurfaceCommandIdentityActions({
+      overlay,
+      state,
+      buildSurfaceWhoamiResult,
+      currentSurfaceIdentityRecord,
+      patchSurfaceIdentity,
+      applyTheme,
+      updateSurfaceInspectorUi
     });
-    overlay.querySelectorAll('[data-surface-command-run]').forEach(node => {
-      node.addEventListener('click', async event => {
-        event.preventDefault();
-        const index = Number(node.getAttribute('data-surface-command-run'));
-        const items = visibleSurfaceCommands();
-        if (Number.isFinite(index) && items[index]) await executeSurfaceCommand(items[index]);
-      });
+    bindSurfaceInspectorActions({
+      overlay,
+      state,
+      clearSurfaceInspectorHighlight,
+      setSurfaceInspectorStatus,
+      selectedSurfaceWidgetId,
+      applySurfaceInspectorHighlight,
+      updateSurfaceInspectorUi,
+      invalidateSurfaceInspectorGraph,
+      invalidateSurfaceInspectorWidgets,
+      selectSurfaceInspectorWidget,
+      worldSurfaceHref,
+      selectedSurfaceInspectorProcessSelection,
+      processViewHref,
+      windowTarget: window
     });
-    overlay.querySelectorAll('[data-surface-command-result-world]').forEach(node => {
-      node.addEventListener('click', event => {
-        event.preventDefault();
-        const identity = state.surfaceCommandResult?.identity || '';
-        if (!identity) return;
-        window.location.assign(worldSurfaceHref({ select: identity }));
-      });
+    bindSurfaceInspectorVersionActions({
+      overlay,
+      setSurfaceInspectorStatus,
+      updateSurfaceInspectorUi,
+      activateSurfaceWidgetVersion,
+      rollbackSurfaceWidgetVersion,
+      invalidateSurfaceInspectorGraph,
+      refreshProjection,
+      selectSurfaceInspectorWidget
     });
-    overlay.querySelectorAll('[data-surface-command-result-source]').forEach(node => {
-      node.addEventListener('click', event => {
-        event.preventDefault();
-        const identity = state.surfaceCommandResult?.identity || '';
-        if (!identity) return;
-        window.location.assign(worldSurfaceHref({ select: identity, mode: 'source' }));
-      });
-    });
-    overlay.querySelectorAll('[data-surface-command-result-bootstrap]').forEach(node => {
-      node.addEventListener('click', event => {
-        event.preventDefault();
-        const href = state.surfaceCommandResult?.bootstrapHref || '';
-        if (!href) return;
-        window.location.assign(href);
-      });
-    });
-    overlay.querySelectorAll('[data-surface-command-identity-form]').forEach(node => {
-      node.addEventListener('submit', async event => {
-        event.preventDefault();
-        const whoami = state.surfaceCommandResult?.kind === 'whoami' ? state.surfaceCommandResult : null;
-        const identityId = node.getAttribute('data-identity-id') || whoami?.identity || '';
-        const currentIdentity = currentSurfaceIdentityRecord();
-        if (!whoami?.authenticated || !identityId || !currentIdentity) {
-          state.surfaceCommandResult = {
-            ...buildSurfaceWhoamiResult(),
-            statusMessage: 'Inline identity editor is not ready yet.',
-            statusLevel: 'error'
-          };
-          updateSurfaceInspectorUi();
-          return;
-        }
-        const formData = new FormData(node);
-        const label = String(formData.get('label') ?? '').trim();
-        const username = String(formData.get('username') ?? '').trim();
-        const password = String(formData.get('password') ?? '');
-        const homeContext = String(formData.get('homeContext') ?? '').trim();
-        const homePerspective = String(formData.get('homePerspective') ?? '').trim();
-        const patch = {};
-        if (label !== String(currentIdentity.label ?? '')) patch.label = label;
-        if (username !== String(currentIdentity.username ?? '')) patch.username = username;
-        if (homeContext !== String(currentIdentity.homeContext ?? '')) patch.homeContext = homeContext;
-        if (homePerspective !== String(currentIdentity.homePerspective ?? '')) patch.homePerspective = homePerspective;
-        if (password) patch.password = password;
-        if (!Object.keys(patch).length) {
-          state.surfaceCommandResult = {
-            ...buildSurfaceWhoamiResult(),
-            statusMessage: 'No identity changes to save.',
-            statusLevel: 'ok'
-          };
-          updateSurfaceInspectorUi();
-          return;
-        }
-        state.surfaceCommandResult = {
-          ...buildSurfaceWhoamiResult(),
-          statusMessage: 'Saving ' + identityId + '...',
-          statusLevel: 'ok'
-        };
-        updateSurfaceInspectorUi();
-        const result = await patchSurfaceIdentity({ id: identityId, patch });
-        if (!result.ok) {
-          state.surfaceCommandResult = {
-            ...buildSurfaceWhoamiResult(),
-            statusMessage: result.body?.error || 'Identity save failed.',
-            statusLevel: 'error'
-          };
-          updateSurfaceInspectorUi();
-          return;
-        }
-        if (result.body?.session && typeof result.body.session === 'object') {
-          state.session = result.body.session;
-          applyTheme();
-        }
-        if (result.body?.identity && typeof result.body.identity === 'object') {
-          const identity = result.body.identity;
-          const identities = Array.isArray(state.surfaceBootstrapIdentities) ? state.surfaceBootstrapIdentities.slice() : [];
-          const index = identities.findIndex(row => row?.id === identity.id);
-          if (index >= 0) identities[index] = identity;
-          else identities.push(identity);
-          state.surfaceBootstrapIdentities = identities;
-          state.surfaceBootstrapIdentitiesById = Object.fromEntries(identities.map(row => [row.id, row]));
-        }
-        state.surfaceCommandResult = {
-          ...buildSurfaceWhoamiResult(),
-          statusMessage: 'Saved ' + identityId + '.',
-          statusLevel: 'ok'
-        };
-        updateSurfaceInspectorUi();
-      });
-    });
-    overlay.querySelectorAll('[data-surface-inspector-toggle]').forEach(node => {
-      node.addEventListener('click', async event => {
-        event.preventDefault();
-        state.surfaceInspectorOpen = !state.surfaceInspectorOpen;
-        if (!state.surfaceInspectorOpen) {
-          state.surfaceInspectorMenu = null;
-          clearSurfaceInspectorHighlight();
-        } else {
-          setSurfaceInspectorStatus('Inspector enabled. Right-click any widget on the live page.', 'ok');
-          if (selectedSurfaceWidgetId()) applySurfaceInspectorHighlight(selectedSurfaceWidgetId());
-        }
-        updateSurfaceInspectorUi();
-      });
-    });
-    overlay.querySelectorAll('[data-surface-inspector-close]').forEach(node => {
-      node.addEventListener('click', event => {
-        event.preventDefault();
-        state.surfaceInspectorOpen = false;
-        state.surfaceInspectorMenu = null;
-        clearSurfaceInspectorHighlight();
-        updateSurfaceInspectorUi();
-      });
-    });
-    overlay.querySelectorAll('[data-surface-inspector-clear]').forEach(node => {
-      node.addEventListener('click', event => {
-        event.preventDefault();
-        state.surfaceInspectorSelectedId = '';
-        state.surfaceInspectorMenu = null;
-        clearSurfaceInspectorHighlight();
-        setSurfaceInspectorStatus('Selection cleared. Right-click another widget to inspect it.', 'ok');
-        updateSurfaceInspectorUi();
-      });
-    });
-    overlay.querySelectorAll('[data-surface-inspector-refresh]').forEach(node => {
-      node.addEventListener('click', async event => {
-        event.preventDefault();
-        if (!selectedSurfaceWidgetId()) {
-          invalidateSurfaceInspectorGraph();
-          invalidateSurfaceInspectorWidgets();
-          setSurfaceInspectorStatus('Inspector metadata refreshed.', 'ok');
-          updateSurfaceInspectorUi();
-          return;
-        }
-        await selectSurfaceInspectorWidget(selectedSurfaceWidgetId(), {
-          refreshGraph: true,
-          statusMessage: 'Inspector metadata refreshed for ' + selectedSurfaceWidgetId() + '.'
-        });
-      });
-    });
-    overlay.querySelectorAll('[data-surface-inspector-select]').forEach(node => {
-      node.addEventListener('click', event => {
-        event.preventDefault();
-        state.surfaceInspectorMenu = null;
-        updateSurfaceInspectorUi();
-      });
-    });
-    overlay.querySelectorAll('[data-surface-inspector-world]').forEach(node => {
-      node.addEventListener('click', event => {
-        event.preventDefault();
-        const widgetId = selectedSurfaceWidgetId();
-        if (!widgetId) return;
-        window.location.assign(worldSurfaceHref({ select: widgetId }));
-      });
-    });
-    overlay.querySelectorAll('[data-surface-inspector-world-mode]').forEach(node => {
-      node.addEventListener('click', event => {
-        event.preventDefault();
-        const widgetId = selectedSurfaceWidgetId();
-        if (!widgetId) return;
-        const mode = node.getAttribute('data-surface-inspector-world-mode') || '';
-        window.location.assign(worldSurfaceHref({ select: widgetId, mode }));
-      });
-    });
-    overlay.querySelectorAll('[data-surface-inspector-open-process]').forEach(node => {
-      node.addEventListener('click', event => {
-        event.preventDefault();
-        const selection = selectedSurfaceInspectorProcessSelection();
-        if (!selection?.program || !selection?.event) return;
-        window.location.assign(processViewHref(selection));
-      });
-    });
-    overlay.querySelectorAll('[data-surface-inspector-activate]').forEach(node => {
-      node.addEventListener('click', async event => {
-        event.preventDefault();
-        const soul = node.getAttribute('data-surface-inspector-activate') || '';
-        const version = node.getAttribute('data-surface-inspector-version') || '';
-        if (!soul || !version) return;
-        setSurfaceInspectorStatus('Activating ' + version + '...', 'ok');
-        updateSurfaceInspectorUi();
-        const result = await activateSurfaceWidgetVersion({ soul, version });
-        if (!result.ok) {
-          setSurfaceInspectorStatus(result.body?.error || 'Widget version activation failed.', 'error');
-          updateSurfaceInspectorUi();
-          return;
-        }
-        invalidateSurfaceInspectorGraph();
-        await refreshProjection();
-        await selectSurfaceInspectorWidget(soul, {
-          refreshGraph: true,
-          statusMessage: 'Activated ' + version + (result.body?.status ? ' (' + result.body.status + ')' : '.')
-        });
-      });
-    });
-    overlay.querySelectorAll('[data-surface-inspector-rollback]').forEach(node => {
-      node.addEventListener('click', async event => {
-        event.preventDefault();
-        const soul = node.getAttribute('data-surface-inspector-rollback') || '';
-        if (!soul) return;
-        setSurfaceInspectorStatus('Rolling back ' + soul + '...', 'ok');
-        updateSurfaceInspectorUi();
-        const result = await rollbackSurfaceWidgetVersion({ soul });
-        if (!result.ok) {
-          setSurfaceInspectorStatus(result.body?.error || 'Widget version rollback failed.', 'error');
-          updateSurfaceInspectorUi();
-          return;
-        }
-        invalidateSurfaceInspectorGraph();
-        await refreshProjection();
-        await selectSurfaceInspectorWidget(soul, {
-          refreshGraph: true,
-          statusMessage: 'Rolled back to ' + (result.body?.version || 'the previous version') + '.'
-        });
-      });
-    });
-    overlay.querySelectorAll('[data-surface-inspector-edit-form]').forEach(node => {
-      node.addEventListener('submit', async event => {
-        event.preventDefault();
-        const widgetId = node.getAttribute('data-widget-id') || selectedSurfaceWidgetId();
-        if (!widgetId) return;
-        const current = selectedSurfaceWidgetAuthored();
-        if (!current) {
-          setSurfaceInspectorStatus('Authored widget state is not available for editing.', 'error');
-          updateSurfaceInspectorUi();
-          return;
-        }
-        const authority = selectedSurfaceWidgetEditAuthority();
-        if (!authority.ok) {
-          setSurfaceInspectorStatus(authority.reason || 'This widget is read-only right now.', 'error');
-          updateSurfaceInspectorUi();
-          return;
-        }
-        const formData = new FormData(node);
-        const hiddenField = node.querySelector('[name="hidden"]');
-        const patch = {
-          text: String(formData.get('text') ?? ''),
-          title: String(formData.get('title') ?? ''),
-          class: String(formData.get('class') ?? ''),
-          hidden: hiddenField instanceof HTMLInputElement ? hiddenField.checked : false
-        };
-        const currentProps = current.props || {};
-        if (
-          (currentProps.text ?? '') === patch.text
-          && (currentProps.title ?? '') === patch.title
-          && (currentProps.class ?? '') === patch.class
-          && Boolean(currentProps.hidden === true) === patch.hidden
-        ) {
-          setSurfaceInspectorStatus('No widget changes to save.', 'ok');
-          updateSurfaceInspectorUi();
-          return;
-        }
-        setSurfaceInspectorStatus('Saving ' + widgetId + '...', 'ok');
-        updateSurfaceInspectorUi();
-        const result = await patchSurfaceWidget({ id: widgetId, patch });
-        if (!result.ok) {
-          setSurfaceInspectorStatus(result.body?.error || 'Widget save failed.', 'error');
-          updateSurfaceInspectorUi();
-          return;
-        }
-        invalidateSurfaceInspectorGraph();
-        invalidateSurfaceInspectorWidgets();
-        await refreshProjection();
-        await selectSurfaceInspectorWidget(widgetId, {
-          refreshGraph: true,
-          statusMessage: 'Saved ' + widgetId + '.'
-        });
-      });
-    });
-    overlay.querySelectorAll('[data-surface-inspector-proposal-form]').forEach(node => {
-      node.addEventListener('submit', async event => {
-        event.preventDefault();
-        const widgetId = node.getAttribute('data-widget-id') || selectedSurfaceWidgetId();
-        if (!widgetId) return;
-        const current = selectedSurfaceWidgetAuthored();
-        if (!current) {
-          setSurfaceInspectorStatus('Authored widget state is not available for proposal.', 'error');
-          updateSurfaceInspectorUi();
-          return;
-        }
-        const authority = selectedSurfaceWidgetEditAuthority();
-        if (authority.ok) {
-          setSurfaceInspectorStatus('You already have direct authority here. Save the widget instead of proposing it.', 'ok');
-          updateSurfaceInspectorUi();
-          return;
-        }
-        if (!currentActor()) {
-          setSurfaceInspectorStatus(authority.reason || 'Sign in to propose changes.', 'error');
-          updateSurfaceInspectorUi();
-          return;
-        }
-        const formData = new FormData(node);
-        const hiddenField = node.querySelector('[name="hidden"]');
-        const patch = {
-          text: String(formData.get('text') ?? ''),
-          title: String(formData.get('title') ?? ''),
-          class: String(formData.get('class') ?? ''),
-          hidden: hiddenField instanceof HTMLInputElement ? hiddenField.checked : false
-        };
-        const currentProps = current.props || {};
-        if (
-          (currentProps.text ?? '') === patch.text
-          && (currentProps.title ?? '') === patch.title
-          && (currentProps.class ?? '') === patch.class
-          && Boolean(currentProps.hidden === true) === patch.hidden
-        ) {
-          setSurfaceInspectorStatus('No widget changes to propose.', 'ok');
-          updateSurfaceInspectorUi();
-          return;
-        }
-        const reason = String(formData.get('reason') ?? '');
-        setSurfaceInspectorStatus('Creating proposal for ' + widgetId + '...', 'ok');
-        updateSurfaceInspectorUi();
-        const result = await proposeSurfaceWidgetPatch({ id: widgetId, patch, reason });
-        if (!result.ok) {
-          setSurfaceInspectorStatus(result.body?.error || 'Proposal creation failed.', 'error');
-          updateSurfaceInspectorUi();
-          return;
-        }
-        setSurfaceInspectorStatus('Proposed ' + widgetId + ' as ' + (result.body?.proposal?.id || result.proposalId) + '.', 'ok');
-        updateSurfaceInspectorUi();
-      });
-    });
-    overlay.querySelectorAll('[data-surface-inspector-version-proposal-form]').forEach(node => {
-      node.addEventListener('submit', async event => {
-        event.preventDefault();
-        const processName = node.getAttribute('data-surface-inspector-proposal-process') || '';
-        const soul = node.getAttribute('data-surface-inspector-proposal-soul') || '';
-        const version = node.getAttribute('data-surface-inspector-proposal-version') || '';
-        if (!processName || !soul) return;
-        const authority = selectedSurfaceWidgetEditAuthority();
-        if (authority.ok) {
-          setSurfaceInspectorStatus('You already have direct authority here. Apply the version change directly instead of proposing it.', 'ok');
-          updateSurfaceInspectorUi();
-          return;
-        }
-        if (!currentActor()) {
-          setSurfaceInspectorStatus(authority.reason || 'Sign in to propose version changes.', 'error');
-          updateSurfaceInspectorUi();
-          return;
-        }
-        const formData = new FormData(node);
-        const reason = String(formData.get('reason') ?? '');
-        const actionLabel = processName === 'widgetVersion.rollback'
-          ? ('rollback ' + soul)
-          : ('activate ' + version);
-        setSurfaceInspectorStatus('Creating proposal to ' + actionLabel + '...', 'ok');
-        updateSurfaceInspectorUi();
-        const result = await proposeSurfaceWidgetVersionAction({ targetProcess: processName, soul, version, reason });
-        if (!result.ok) {
-          setSurfaceInspectorStatus(result.body?.error || 'Version proposal creation failed.', 'error');
-          updateSurfaceInspectorUi();
-          return;
-        }
-        setSurfaceInspectorStatus('Proposed ' + actionLabel + ' as ' + (result.body?.proposal?.id || result.proposalId) + '.', 'ok');
-        updateSurfaceInspectorUi();
-      });
+    bindSurfaceInspectorFormActions({
+      overlay,
+      selectedSurfaceWidgetId,
+      selectedSurfaceWidgetAuthored,
+      selectedSurfaceWidgetEditAuthority,
+      currentActor,
+      setSurfaceInspectorStatus,
+      updateSurfaceInspectorUi,
+      patchSurfaceWidget,
+      invalidateSurfaceInspectorGraph,
+      invalidateSurfaceInspectorWidgets,
+      refreshProjection,
+      selectSurfaceInspectorWidget,
+      proposeSurfaceWidgetPatch,
+      proposeSurfaceWidgetVersionAction
     });
     if (state.surfaceCommandOpen && state.surfaceCommandFocusRequested !== false) {
       const input = overlay.querySelector('[data-surface-command-input]');
@@ -2213,19 +1877,30 @@ function renderClientEngine(program) {
     }
     return next;
   };
+  const resolveRuntimeUrl = url => {
+    const text = String(url || '').trim();
+    if (!text) return window.location.href;
+    try {
+      return new URL(text, window.location.href).toString();
+    } catch {
+      return new URL(text, 'http://127.0.0.1').toString();
+    }
+  };
   const activateSurfaceWidgetVersion = async ({ soul, version }) => {
-    const response = await fetch('/api/widget-versions/' + encodeURIComponent(soul) + '/activate', requestOptions({
+    const url = '/api/widget-versions/' + encodeURIComponent(soul) + '/activate';
+    const response = await fetch(resolveRuntimeUrl(url), requestOptions({
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ version })
-    }, { url: '/api/widget-versions/' + encodeURIComponent(soul) + '/activate' }));
+    }, { url }));
     const body = await response.json().catch(() => ({}));
     return { ok: response.ok, status: response.status, body };
   };
   const rollbackSurfaceWidgetVersion = async ({ soul }) => {
-    const response = await fetch('/api/widget-versions/' + encodeURIComponent(soul) + '/rollback', requestOptions({
+    const url = '/api/widget-versions/' + encodeURIComponent(soul) + '/rollback';
+    const response = await fetch(resolveRuntimeUrl(url), requestOptions({
       method: 'POST'
-    }, { url: '/api/widget-versions/' + encodeURIComponent(soul) + '/rollback' }));
+    }, { url }));
     const body = await response.json().catch(() => ({}));
     return { ok: response.ok, status: response.status, body };
   };
@@ -2247,6 +1922,7 @@ function renderClientEngine(program) {
     timestamp: Date.now()
   });
   const recordProcessEvent = async (process, body = {}) => {
+    if (!processTraceEnabled) return;
     try {
       await fetch(traceEndpoint, requestOptions({
         method: 'POST',
@@ -2334,7 +2010,7 @@ function renderClientEngine(program) {
   const renderCollection = ({ widget, from, template, itemAs = 'item', indexAs = 'index', emptyWidget = null, limit = null, reverse = false }) => {
     const el = byWidget(widget);
     if (!el) return;
-    const value = readPath(state, from);
+    const value = Array.isArray(from) ? from : readPath(state, from);
     let items = Array.isArray(value) ? [...value] : [];
     if (reverse) items.reverse();
     if (limit != null && Number.isFinite(Number(limit))) items = items.slice(0, Number(limit));
@@ -3350,317 +3026,93 @@ function renderClientEngine(program) {
     };
     const draw = () => {
       queueWorldTutorialStateLoad();
-      root.innerHTML = '<div class="world-graph-shell"><aside class="world-graph-inspector" data-world-inspector>' + renderWorldTutorialPanel() + renderInspector() + '</aside><section class="world-main-pane">' + renderModeMenu() + renderWorldCommandPalette() + renderCanvas() + '</section></div>';
-      if (state.worldGraphInitialSourcePending && currentMode() === 'source' && !state.worldGraphSource && !state.worldGraphSourceLoading) {
-        state.worldGraphInitialSourcePending = false;
-        state.worldGraphSourceLoading = true;
-        void openSourceForSelected()
-          .catch(() => {})
-          .finally(() => {
-            state.worldGraphSourceLoading = false;
-            if (byWidget(widget)) draw();
-          });
-      }
-      root.querySelectorAll('[data-world-mode]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          state.worldGraphMode = el.getAttribute('data-world-mode') || 'graph';
-          if (state.worldGraphMode !== 'source') state.worldGraphSource = null;
-          if (state.worldGraphMode === 'source' && !state.worldGraphSource) await openSourceForSelected();
-          draw();
-        });
+      root.innerHTML = renderWorldGraphShell({
+        tutorialPanel: renderWorldTutorialPanel(),
+        inspector: renderInspector(),
+        modeMenu: renderModeMenu(),
+        commandPalette: renderWorldCommandPalette(),
+        canvas: renderCanvas()
       });
-      root.querySelectorAll('[data-world-node-id], [data-world-select]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          selectedId = el.getAttribute('data-world-node-id') || el.getAttribute('data-world-select');
-          if (!selectedId) return;
-          state.worldGraphSelectedId = selectedId;
-          state.worldGraphSelectedKind = '';
-          state.worldGraphPrimitiveMode = false;
-          if (currentMode() === 'source') await openSourceForSelected();
-          else state.worldGraphSource = null;
-          draw();
-        });
+      queuePendingWorldSourceLoad({
+        state,
+        currentMode,
+        openSourceForSelected,
+        byWidget,
+        widget,
+        redraw: draw
       });
-      root.querySelectorAll('[data-world-kind]').forEach(el => {
-        el.addEventListener('click', event => {
-          event.preventDefault();
-          state.worldGraphSelectedKind = el.getAttribute('data-world-kind') || '';
-          draw();
-        });
-      });
-      root.querySelectorAll('[data-world-clear-kind]').forEach(el => {
-        el.addEventListener('click', event => {
-          event.preventDefault();
-          state.worldGraphSelectedKind = '';
-          draw();
-        });
-      });
-      root.querySelectorAll('[data-world-source-file]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          const file = el.getAttribute('data-world-source-file') || '';
-          await openSourceFile(file, el.getAttribute('data-world-source-focus') || state.worldGraphSourceFocus || selectedId);
-          draw();
-        });
-      });
-      root.querySelectorAll('[data-world-widget-activate]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          await requestWidgetVersionChange({
-            soul: el.getAttribute('data-world-widget-activate') || '',
-            version: el.getAttribute('data-world-widget-version') || ''
-          });
-        });
-      });
-      root.querySelectorAll('[data-world-widget-rollback]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          await requestWidgetVersionRollback({
-            soul: el.getAttribute('data-world-widget-rollback') || ''
-          });
-        });
-      });
-      root.querySelectorAll('[data-world-open-process-program]').forEach(el => {
-        el.addEventListener('click', event => {
-          event.preventDefault();
-          const program = el.getAttribute('data-world-open-process-program') || '';
-          const processEvent = el.getAttribute('data-world-open-process-event') || '';
-          if (!program || !processEvent) return;
-          window.location.assign(processViewHref({ program, event: processEvent }));
-        });
-      });
-      root.querySelectorAll('[data-world-jump-to-graph]').forEach(el => {
-        el.addEventListener('click', event => {
-          event.preventDefault();
-          const id = el.getAttribute('data-world-jump-to-graph');
-          if (!id) return;
+      bindWorldGraphActions({
+        root,
+        state,
+        draw,
+        currentMode,
+        openSourceForSelected,
+        openSourceFile,
+        requestWidgetVersionChange,
+        requestWidgetVersionRollback,
+        processViewHref,
+        getSelectedId: () => selectedId,
+        setSelectedId: id => {
           selectedId = id;
-          state.worldGraphSelectedId = id;
-          state.worldGraphSelectedKind = '';
-          state.worldGraphSource = null;
-          state.worldGraphMode = 'graph';
-          draw();
-        });
+        },
+        windowTarget: window
       });
-      root.querySelectorAll('[data-world-close-source]').forEach(el => {
-        el.addEventListener('click', event => { event.preventDefault(); state.worldGraphSource = null; state.worldGraphMode = 'graph'; draw(); });
+      bindWorldCommandActions({
+        root,
+        state,
+        draw,
+        visibleWorldCommands,
+        executeWorldCommand
       });
-      root.querySelectorAll('[data-world-primitive], [data-world-primitive-kind-only]').forEach(el => {
-        el.addEventListener('click', event => {
-          event.preventDefault();
-          state.worldGraphMode = 'primitive';
-          state.worldGraphPrimitiveMode = true;
-          state.worldGraphSource = null;
-          state.worldGraphSelectedPrimitiveKind = el.getAttribute('data-world-primitive-kind') || el.getAttribute('data-world-primitive-kind-only') || state.worldGraphSelectedPrimitiveKind || '';
-          state.worldGraphSelectedPrimitiveValue = el.getAttribute('data-world-primitive') || '';
-          draw();
-        });
+      bindWorldTutorialActions({
+        root,
+        state,
+        draw,
+        focusWorldTutorialTarget,
+        focusWorldTutorialScopeTarget,
+        focusWorldTutorialDisabledList,
+        resumeWorldTutorial,
+        advanceWorldTutorial,
+        backWorldTutorial,
+        restartWorldTutorialChapter,
+        restartWorldTutorialFromHere,
+        persistWorldTutorialProgress,
+        clearWorldTutorialScopeDisabled,
+        clearWorldTutorialContextDisabled,
+        disableWorldTutorialOnCurrentScope,
+        disableWorldTutorialOnCurrentContext,
+        clearWorldTutorialProgress,
+        currentSurfaceContext,
+        windowTarget: window
       });
-      root.querySelectorAll('[data-world-close-primitive]').forEach(el => {
-        el.addEventListener('click', event => { event.preventDefault(); state.worldGraphPrimitiveMode = false; state.worldGraphMode = 'graph'; draw(); });
+      runWorldPostRender({
+        root,
+        state,
+        byId,
+        getSelectedId: () => selectedId,
+        currentMode,
+        updateWorldTutorialApi,
+        worldTutorialSurfaceState,
+        commandTutorialStep,
+        focusWorldTutorialTarget,
+        tutorialDomRoot,
+        syncWorldCommandFocus
       });
-      root.querySelectorAll('[data-world-command-toggle]').forEach(el => {
-        el.addEventListener('click', event => {
-          event.preventDefault();
-          state.worldCommandOpen = true;
-          state.worldCommandFocusRequested = true;
-          draw();
-        });
-      });
-      root.querySelectorAll('[data-world-command-close]').forEach(el => {
-        el.addEventListener('click', event => {
-          event.preventDefault();
-          state.worldCommandOpen = false;
-          state.worldCommandQuery = '';
-          draw();
-        });
-      });
-      root.querySelectorAll('[data-world-command-input]').forEach(el => {
-        el.addEventListener('input', () => {
-          state.worldCommandQuery = el.value || '';
-          state.worldCommandFocusRequested = true;
-          draw();
-        });
-        el.addEventListener('keydown', async event => {
-          if (event.key !== 'Enter') return;
-          event.preventDefault();
-          const items = visibleWorldCommands();
-          if (items[0]) await executeWorldCommand(items[0]);
-        });
-      });
-      root.querySelectorAll('[data-world-command-run]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          const index = Number(el.getAttribute('data-world-command-run'));
-          const items = visibleWorldCommands();
-          if (Number.isFinite(index) && items[index]) await executeWorldCommand(items[index]);
-        });
-      });
-      root.querySelectorAll('[data-world-tutorial-focus-target]').forEach(el => {
-        el.addEventListener('click', event => {
-          event.preventDefault();
-          focusWorldTutorialTarget(el.getAttribute('data-world-tutorial-focus-target') || '');
-        });
-      });
-      root.querySelectorAll('[data-world-tutorial-focus-scope-target]').forEach(el => {
-        el.addEventListener('click', event => {
-          event.preventDefault();
-          focusWorldTutorialScopeTarget(el.getAttribute('data-world-tutorial-focus-scope-target') || '');
-        });
-      });
-      root.querySelectorAll('[data-world-tutorial-show-disabled]').forEach(el => {
-        el.addEventListener('click', event => {
-          event.preventDefault();
-          focusWorldTutorialDisabledList();
-        });
-      });
-      root.querySelectorAll('[data-world-tutorial-resume]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          await resumeWorldTutorial();
-          draw();
-        });
-      });
-      root.querySelectorAll('[data-world-tutorial-next]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          await advanceWorldTutorial();
-          draw();
-        });
-      });
-      root.querySelectorAll('[data-world-tutorial-back]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          await backWorldTutorial();
-          draw();
-        });
-      });
-      root.querySelectorAll('[data-world-tutorial-restart-chapter]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          await restartWorldTutorialChapter();
-          draw();
-        });
-      });
-      root.querySelectorAll('[data-world-tutorial-restart-step]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          await restartWorldTutorialFromHere();
-          draw();
-        });
-      });
-      root.querySelectorAll('[data-world-tutorial-enable-scope]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          if (!state.worldTutorialProgress) return;
-          await persistWorldTutorialProgress(clearWorldTutorialScopeDisabled(state.worldTutorialProgress, el.getAttribute('data-world-tutorial-enable-scope') || ''));
-          draw();
-        });
-      });
-      root.querySelectorAll('[data-world-tutorial-enable-context]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          if (!state.worldTutorialProgress) return;
-          await persistWorldTutorialProgress(clearWorldTutorialContextDisabled(state.worldTutorialProgress, el.getAttribute('data-world-tutorial-enable-context') || currentSurfaceContext));
-          draw();
-        });
-      });
-      root.querySelectorAll('[data-world-tutorial-open-scope]').forEach(el => {
-        el.addEventListener('click', event => {
-          event.preventDefault();
-          const href = el.getAttribute('data-world-tutorial-open-scope') || '';
-          if (href) window.location.assign(href);
-        });
-      });
-      root.querySelectorAll('[data-world-tutorial-disable]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          if (!state.worldTutorialProgress) return;
-          await persistWorldTutorialProgress(disableWorldTutorialOnCurrentScope(state.worldTutorialProgress));
-          draw();
-        });
-      });
-      root.querySelectorAll('[data-world-tutorial-disable-context]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          if (!state.worldTutorialProgress) return;
-          await persistWorldTutorialProgress(disableWorldTutorialOnCurrentContext(state.worldTutorialProgress));
-          draw();
-        });
-      });
-      root.querySelectorAll('[data-world-tutorial-exit]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          if (!state.worldTutorialProgress) return;
-          await persistWorldTutorialProgress({ ...state.worldTutorialProgress, hidden: true, replayScopeKey: null });
-          draw();
-        });
-      });
-      root.querySelectorAll('[data-world-tutorial-reset]').forEach(el => {
-        el.addEventListener('click', async event => {
-          event.preventDefault();
-          await clearWorldTutorialProgress();
-          draw();
-        });
-      });
-      const selected = byId[selectedId];
-      const canvas = root.querySelector('.world-graph-canvas');
-      if (selected && canvas && currentMode() === 'graph') {
-        canvas.scrollLeft = Math.max(0, (selected.x || 0) - canvas.clientWidth / 2 + 95);
-        canvas.scrollTop = Math.max(0, (selected.y || 0) - canvas.clientHeight / 2 + 28);
-      }
-      updateWorldTutorialApi();
-      if (worldTutorialSurfaceState(state.worldTutorialProgress).kind === 'active') {
-        focusWorldTutorialTarget(commandTutorialStep(state.worldTutorialProgress)?.target || '');
-      } else {
-        const domRoot = tutorialDomRoot();
-        domRoot.querySelectorAll('[data-tutorial-current]').forEach(node => node.removeAttribute('data-tutorial-current'));
-        domRoot.querySelectorAll('[data-tutorial-focus-scope]').forEach(node => node.removeAttribute('data-tutorial-focus-scope'));
-      }
-      if (state.worldCommandOpen && state.worldCommandFocusRequested !== false) {
-        const input = root.querySelector('[data-world-command-input]');
-        if (input) {
-          input.focus();
-          const length = input.value.length;
-          input.setSelectionRange(length, length);
-        }
-        state.worldCommandFocusRequested = false;
-      }
     };
     if (!state.worldCommandShortcutBound) {
       state.worldCommandShortcutBound = true;
-      window.addEventListener('keydown', event => {
-        const active = document.activeElement;
-        const typing = active?.matches?.('input, textarea, select') || active?.isContentEditable;
-        const key = String(event.key || '').toLowerCase();
-        if ((event.ctrlKey || event.metaKey) && key === 'k') {
-          event.preventDefault();
-          state.worldCommandOpen = true;
-          state.worldCommandFocusRequested = true;
-          draw();
-          return;
-        }
-        if (event.key === 'Escape' && state.worldCommandOpen) {
-          event.preventDefault();
-          state.worldCommandOpen = false;
-          state.worldCommandQuery = '';
-          draw();
-          return;
-        }
-        if (event.key === '/' && !typing && !state.worldCommandOpen) {
-          event.preventDefault();
-          state.worldCommandOpen = true;
-          state.worldCommandFocusRequested = true;
-          draw();
-        }
+      bindWorldCommandShortcuts({
+        state,
+        draw,
+        windowTarget: window,
+        documentTarget: document
       });
     }
     draw();
   };
   const initSession = async () => {
-    const res = await fetch('/api/session', requestOptions({}, { url: '/api/session' }));
+    const url = '/api/session';
+    const res = await fetch(resolveRuntimeUrl(url), requestOptions({}, { url }));
     const body = await res.json().catch(() => ({ authenticated: false }));
     if (!res.ok) throw new Error(body?.error || 'session request failed');
     syncSession(body);
@@ -3668,21 +3120,23 @@ function renderClientEngine(program) {
   };
   const setSession = async ({ from }) => {
     const credentials = state[from] || {};
-    const res = await fetch('/api/session', requestOptions({
+    const url = '/api/session';
+    const res = await fetch(resolveRuntimeUrl(url), requestOptions({
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         username: credentials.username || '',
         password: credentials.password || ''
       })
-    }, { url: '/api/session' }));
+    }, { url }));
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body?.error || 'session request failed');
     syncSession(body);
     await requestWorldTutorialProgress().catch(() => {});
   };
   const logout = async () => {
-    const res = await fetch('/api/session', requestOptions({ method: 'DELETE' }, { url: '/api/session' }));
+    const url = '/api/session';
+    const res = await fetch(resolveRuntimeUrl(url), requestOptions({ method: 'DELETE' }, { url }));
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body?.error || 'logout failed');
@@ -3701,13 +3155,70 @@ function renderClientEngine(program) {
     const first = result.failures?.[0];
     throw new Error(first?.reason || ('typed validation failed for ' + schema));
   };
-  const readForm = ({ widget, into, schema }) => {
+  const readFormData = (form, { checkboxes } = {}) => {
+    const data = Object.fromEntries(new FormData(form).entries());
+    if (checkboxes === 'boolean') {
+      for (const field of Array.from(form.elements || [])) {
+        if (!(field instanceof HTMLInputElement)) continue;
+        if (field.type !== 'checkbox' || !field.name) continue;
+        data[field.name] = Boolean(field.checked);
+      }
+    }
+    return data;
+  };
+  const readForm = ({ widget, into, schema, checkboxes }) => {
     const form = formForWidget(widget);
     if (!form) throw new Error('widget ' + widget + ' does not contain a form');
-    const data = Object.fromEntries(new FormData(form).entries());
+    const data = readFormData(form, { checkboxes });
     state[into] = schema ? readTypedForm(data, schema) : data;
   };
   const clearForm = ({ widget }) => { formForWidget(widget)?.reset?.(); };
+  const setQueryParam = ({ name, param, value = '', href = '', replace = true, reload = false }) => {
+    const key = String(name || param || '').trim();
+    if (!key) throw new Error('setQueryParam requires a parameter name');
+    const url = new URL(href || window.location.href, window.location.origin);
+    if (value == null || value === '') url.searchParams.delete(key);
+    else url.searchParams.set(key, String(value));
+    if (reload) {
+      window.location.assign(url.toString());
+      return;
+    }
+    if (replace === false) window.history.pushState({}, '', url.toString());
+    else window.history.replaceState({}, '', url.toString());
+  };
+  const dispatchDomEvent = ({ event, eventName, detail = null, target = 'window', bubbles = false, cancelable = false, composed = false }) => {
+    const name = String(eventName || event || '').trim();
+    if (!name) throw new Error('dispatchDomEvent requires an event name');
+    const resolvedTarget = target === 'document'
+      ? document
+      : target === 'body'
+        ? document.body
+        : window;
+    resolvedTarget?.dispatchEvent?.(new CustomEvent(name, {
+      detail,
+      bubbles: Boolean(bubbles),
+      cancelable: Boolean(cancelable),
+      composed: Boolean(composed)
+    }));
+  };
+  const domEventPayload = target => {
+    const data = { ...(target?.dataset || {}) };
+    if (target && 'name' in target && target.name) data.name = target.name;
+    if (target && 'value' in target) data.value = target.value;
+    if (target && 'checked' in target) data.checked = Boolean(target.checked);
+    if (target && 'selectedIndex' in target) data.selectedIndex = Number(target.selectedIndex);
+    return data;
+  };
+  const domKeyboardPayload = (event, target = null) => ({
+    ...domEventPayload(target),
+    key: event?.key || '',
+    code: event?.code || '',
+    altKey: Boolean(event?.altKey),
+    ctrlKey: Boolean(event?.ctrlKey),
+    metaKey: Boolean(event?.metaKey),
+    shiftKey: Boolean(event?.shiftKey),
+    repeat: Boolean(event?.repeat)
+  });
   const bindSubmitHandlers = () => {
     for (const step of program.steps.filter(s => s.event && s.event.startsWith('submit:'))) {
       const widget = step.event.slice('submit:'.length);
@@ -3725,7 +3236,7 @@ function renderClientEngine(program) {
       if (!res.ok) throw new Error('projection refresh failed');
       const html = await res.text();
       const nextDocument = new DOMParser().parseFromString(html, 'text/html');
-      const nextProgramEl = nextDocument.getElementById('witness-frontend-program');
+      const nextProgramEl = nextDocument.getElementById(frontendProgramScriptId);
       if (nextProgramEl?.textContent) {
         program = JSON.parse(nextProgramEl.textContent);
         config = program.config || {};
@@ -3736,7 +3247,7 @@ function renderClientEngine(program) {
       if (!nextRoot || !currentRoot) throw new Error('projection root not found');
       currentRoot.replaceWith(nextRoot);
       document.querySelectorAll('[data-widget-template]').forEach(node => node.remove());
-      const currentProgramEl = document.getElementById('witness-frontend-program');
+      const currentProgramEl = document.getElementById(frontendProgramScriptId);
       const templateAnchor = currentProgramEl || document.body.lastChild;
       nextDocument.querySelectorAll('[data-widget-template]').forEach(template => {
         const clone = template.cloneNode(true);
@@ -3744,6 +3255,18 @@ function renderClientEngine(program) {
         else document.body.appendChild(clone);
       });
       if (currentProgramEl && nextProgramEl?.textContent) currentProgramEl.textContent = nextProgramEl.textContent;
+      const initialStateScriptId = currentInitialStateScriptId();
+      const initialStateInto = currentInitialStateInto();
+      if (initialStateScriptId && initialStateInto) {
+        const nextInitialStateEl = nextDocument.getElementById(initialStateScriptId);
+        if (nextInitialStateEl?.textContent) {
+          const currentInitialStateEl = document.getElementById(initialStateScriptId);
+          if (currentInitialStateEl) currentInitialStateEl.textContent = nextInitialStateEl.textContent;
+          else if (templateAnchor?.parentNode) templateAnchor.parentNode.insertBefore(nextInitialStateEl.cloneNode(true), templateAnchor);
+          else document.body.appendChild(nextInitialStateEl.cloneNode(true));
+        }
+        syncInitialState(nextDocument);
+      }
       bindSubmitHandlers();
       await safeRun('load');
       invalidateSurfaceInspectorGraph();
@@ -3769,9 +3292,11 @@ function renderClientEngine(program) {
       } catch {}
     };
   };
-  const resolveBody = ({ from, pick, body }) => {
+  const resolveBody = ({ from, pick, body }, executionScope = {}) => {
     if (body) return interpolateValue(body, scopeFor({}));
-    const source = state[from] || {};
+    const source = from
+      ? (readPath(state, from) ?? readPath(scopeFor(executionScope), from) ?? {})
+      : {};
     if (!pick) return source;
     const out = {};
     for (const key of pick) out[key] = source[key];
@@ -3870,8 +3395,10 @@ function renderClientEngine(program) {
         if (step.op === 'logout') await logout(p);
         if (step.op === 'setText') setText(p.widget, p.text || '');
         if (step.op === 'setValue') setValue(p.widget, p.value ?? '');
+        if (step.op === 'setHidden') setHidden(p.widget, p.hidden);
+        if (step.op === 'setDisabled') setDisabled(p.widget, p.disabled);
         if (step.op === 'fetchJson') {
-          const res = await fetch(p.url, requestOptions({}, { url: p.url }));
+          const res = await fetch(resolveRuntimeUrl(p.url), requestOptions({}, { url: p.url }));
           stateRef[p.into] = await res.json().catch(() => ({}));
           if (!res.ok && !p.allowFailure) throw new Error(stateRef[p.into]?.error || 'request failed');
         }
@@ -3879,12 +3406,15 @@ function renderClientEngine(program) {
         if (step.op === 'renderWorldGraph') renderWorldGraph(p);
         if (step.op === 'readForm') readForm(p);
         if (step.op === 'refreshProjection') await refreshProjection();
+        if (step.op === 'navigate') window.location.assign(p.url || p.href || window.location.href);
+        if (step.op === 'setQueryParam') setQueryParam(p);
+        if (step.op === 'dispatchDomEvent') dispatchDomEvent(p);
         if (step.op === 'reloadPage') window.location.reload();
         if (step.op === 'postJson' || step.op === 'patchJson' || step.op === 'deleteJson') {
           const method = step.op === 'postJson' ? (p.method || 'POST') : step.op === 'patchJson' ? (p.method || 'PATCH') : (p.method || 'DELETE');
           const options = requestOptions({ method, headers: { 'content-type': 'application/json' } }, { url: p.url });
-          if (step.op !== 'deleteJson') options.body = JSON.stringify(resolveBody(p));
-          const res = await fetch(p.url, options);
+          if (step.op !== 'deleteJson') options.body = JSON.stringify(resolveBody(p, executionScope));
+          const res = await fetch(resolveRuntimeUrl(p.url), options);
           stateRef[p.into || 'lastResponse'] = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(stateRef[p.into || 'lastResponse'].error || 'request failed');
         }
@@ -3903,12 +3433,30 @@ function renderClientEngine(program) {
     event.preventDefault();
     safeRun('click:' + button.dataset.action, { ...button.dataset, done: button.dataset.done === 'true' });
   });
+  document.addEventListener('change', event => {
+    const field = event.target.closest('input[data-widget], select[data-widget], textarea[data-widget]');
+    if (!field) return;
+    safeRun('change:' + field.getAttribute('data-widget'), domEventPayload(field));
+  });
+  document.addEventListener('input', event => {
+    const field = event.target.closest('input[data-widget], select[data-widget], textarea[data-widget]');
+    if (!field) return;
+    safeRun('input:' + field.getAttribute('data-widget'), domEventPayload(field));
+  });
+  document.addEventListener('keydown', event => {
+    const field = event.target?.closest?.('[data-widget]');
+    const widget = field?.getAttribute('data-widget') || program.rootWidget || '';
+    if (!widget) return;
+    const semanticEvent = 'keydown:' + widget;
+    if (!hasEventHandlers(semanticEvent)) return;
+    safeRun(semanticEvent, domKeyboardPayload(event, field));
+  });
   bootLiveProjection();
   updateSurfaceInspectorUi();
   safeRun('load');
   function escapeHtml(value) { return String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 })();`;
-  return `<script type="application/json" id="witness-frontend-program">${json}</script>\n<script>\n${engine}\n</script>`;
+  return `<script type="application/json" id="${escapeAttr(frontendProgramScriptId)}">${json}</script>\n<script>\n${engine}\n</script>`;
 }
 
 function escapeHtml(value) {

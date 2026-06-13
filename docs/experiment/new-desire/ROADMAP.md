@@ -1,4 +1,4 @@
-# DESIRE Roadmap
+﻿# DESIRE Roadmap
 
 This roadmap tracks the migration from the current WTOML-first execution path to a DESIRE-first internal architecture, while keeping WTOML as the authored and runnable surface for this milestone.
 
@@ -69,7 +69,7 @@ Verified in the current tree:
 - `[X]` RVM `enum` forms now normalize into DESIRE `type` nodes with `role = "enum"` and preserved cases.
 - `[X]` RVM `model` and `chart` authored forms now have tracked DESIRE coverage: `model` normalizes to `dataflow`, chart-specific surface fields are preserved, native application emits dataflow/surface witnesses plus structural graph relations for axes, parameters, derived flows, chart model refs, encodings, and layers, and both WTOML-like and RVM-like serializers round-trip by normalized structure.
 - `[X]` the inspect world graph now recognizes `dataflow` as a first-class node kind and exposes RVM `model`/`chart` provenance plus structural dataflow/chart edges.
-- `[X]` checked-in WTOML entry runtime declaration audit after semantic cleanup: `demo-todo-server.wtoml` has 609 canonical `runtime.declaration` residuals / 18 semantic nodes / 0 legacy `runtime.doc` residuals; explicit and monolith variants each have 386 canonical residuals / 16 semantic nodes / 0 legacy residuals.
+- `[X]` checked-in WTOML entry runtime declaration audit after semantic cleanup: `demo-todo-app/app.wtoml` is the canonical maintained demo entrypoint without legacy `runtime.doc` residuals.
 - `[X]` RVM conflict markers in history-backup specimens are now classified as fixture corruption in DESIRE+ instead of unsupported language forms.
 - `[X]` built-in DESIRE+ validation now enforces source categories, residual categories, DESIRE boundary labels, and known semantic-kind names for `wtoml.doc` and `rvm.form` nodes.
 - `[X]` `runtime.doc` has been removed from the declared DESIRE kernel kind set and from `DESIRE_NODE_KINDS`; normalized WTOML runtime material now uses the explicit `runtime.declaration` residual API, with legacy `runtime.doc` accepted only for compatibility.
@@ -90,6 +90,7 @@ Verified in the current tree:
 - `[X]` DESIRE now has a native `graph` kernel kind; RVM `graph_node`, `graph_edge`, `entity_type`, and `edge_type` forms compile to semantic graph nodes, apply natively, and expose provenance through `/api/world-graph` and `/api/source`.
 - `[X]` optional module/read-model projectors are now active plugin contributions: `plugin.assets` owns the real `assets` and `assetIndex` projections, while core keeps only delegated empty fallbacks.
 - `[X]` active plugin module/read-model projector registrations are now token-scoped: concurrent identical implementations share safely, scoped cleanup is idempotent, and conflicting same-name implementations fail clearly.
+- `[X]` active runtime module/read-model projectors are now projection-context local: `createWorld({ projectionContext })`, `world.project(projector, { projectionContext })`, and runtime `appContext.project(projector)` allow different runtimes to use different same-name optional projector implementations without global conflict.
 - `[X]` latest RVM ingestion audit over `examples_rvm/` is enforced in `test/desire.test.js`: all checked-in `.rvm` files compile to `DESIRE+`, intentional residual categories are counted, and both authored-runtime residuals and unknown language forms must remain at 0.
 
 Verified test coverage:
@@ -309,7 +310,7 @@ Current state:
   - `route.servesRef`
   - `serve.serverRunnerRef` / `serve.routeRef`
 - `[X]` `applyDesire` applies residual runtime declarations through the runtime declaration registry without calling `applyWitnessDocsLegacy`; known WTOML runtime declarations use first-class native handlers and unknown declarations fail unless registered by core or plugin code.
-- `[X]` the checked-in WTOML entry examples (`demo-todo-server.wtoml`, `demo-todo-server.explicit.wtoml`, `demo-todo-server.monolith.wtoml`) now run through `applyDesireNativeOnly`, proving that the in-repo runnable WTOML surface no longer requires the legacy bridge.
+- `[X]` the checked-in WTOML entry examples (`demo-todo-app/app.wtoml`, `eden/app.wtoml`, `engentus/app.wtoml`) now represent the canonical app-entrypoint surface instead of legacy aliases.
 - `[X]` native semantic execution remains intentionally generic for some kernel shapes, but every kernel kind is now covered by native application tests and emits structural graph relations beyond a bare definition witness where the body carries stable semantic fields, including dataflow axes/parameters/operations and chart surface encodings/layers.
 - `[X]` RVM `model`/`chart` authored forms are covered by the current DESIRE kernel surface: `model` normalizes to `dataflow`, `chart` normalizes to chart-specific `surface` nodes, both apply natively, and rawless serializers preserve normalized meaning.
 - `[X]` RVM-backed semantic nodes are executable natively for the supported semantic core, including `graph_context`, `capability`, `event`, `command`/`query`, `policy`, `read`/`write`, and `adapter ... using ...` block forms; authored/runtime RVM forms that stop above the DESIRE boundary are intentionally DESIRE+-only boundary material, not native application debt.
@@ -563,13 +564,20 @@ Use these as the near-term epic slices. Each slice should leave the tree runnabl
 10. `[X]` Scoped plugin read-model registrations
    - `registerModuleProjectors` now returns token-scoped, idempotent cleanup handles.
    - Concurrent servers/tests may register the same projector name when they provide the same implementation function; cleanup from one registration no longer removes another active registration.
-   - Different active implementations for the same projector name still fail clearly because the current `moduleProjectors.*(witnesses)` API has no world/server-local projector context.
+   - Superseded as active-runtime behavior by slice 12: process-global registration remains only as transitional/direct-test compatibility.
 
 11. `[X]` Active plugin-loaded DESIRE extensions
    - Active plugin-owned `runtime.js` modules can export `desireExtensions.elaborators` and `desireExtensions.runtimeDeclarations`.
    - Extension-only plugin runtimes are valid even when they do not activate runtime bundles.
    - Duplicate active elaborator ids or runtime declaration kinds fail during plugin loading before world mutation.
    - Verified authored WTOML `runtimePluginInstall` can activate a plugin runtime declaration handler during plugin-aware DESIRE loading.
+
+12. `[X]` Context-aware module projectors
+   - `createModuleProjectorContext(...)` creates runtime/world-local optional projector contexts.
+   - `createWorld({ projectionContext })`, `world.project(projector, options?)`, and `fork()` preserve projection context.
+   - Runtime startup builds a projection context from active plugin `moduleProjectors` providers and no longer globally registers active projector contributions.
+   - Runtime app contexts expose `appContext.project(projector)` and optional read-model handlers/providers use it when available.
+   - Legacy global `registerModuleProjectors(...)` remains for direct tests and transitional callers only.
 
 ## Delivery Order
 
@@ -598,3 +606,4 @@ Use these as the near-term epic slices. Each slice should leave the tree runnabl
 
 - [Overview](C:\Users\aaron\Documents\world\docs\experiment\new-desire\README.md)
 - [DESIRE Kernel](C:\Users\aaron\Documents\world\docs\experiment\new-desire\DESIRE-KERNEL.md)
+

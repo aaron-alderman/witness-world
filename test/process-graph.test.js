@@ -67,6 +67,19 @@ test("process graph supports parallel foreach coordination", async () => {
   assert.deepEqual(new Set(seen), new Set(["a", "b", "c"]));
 });
 
+test("process graph supports serial foreach coordination", async () => {
+  const graph = [
+    { id: "each", event: "render", op: "each", params: {}, after: [], repeat: { forEach: { from: "items", as: "item", serial: true } } }
+  ];
+
+  const seen = [];
+  await runProcessGraph(graph, "render", async (_node, _state, scope) => {
+    seen.push(scope.item);
+  }, { items: ["a", "b", "c"] });
+
+  assert.deepEqual(seen, ["a", "b", "c"]);
+});
+
 test("process graph stalls when unresolved dependencies remain", async () => {
   const graph = [
     { id: "a", event: "click", op: "a", after: ["b"] },

@@ -131,7 +131,7 @@ export function createOauthHandlers({
         providerAccountId: profile.externalId
       });
 
-      const existingLink = currentOauthLinkByProviderAccount(flow.serverRunner, flow.provider, profile.externalId);
+      const existingLink = currentOauthLinkByProviderAccount(flow.serverRunner, flow.provider, profile.externalId, appContext);
       if (flow.action === "link") {
         if (!requestSession) {
           emitAuthOauthFlow({ actor: backendHost, flow, process: "auth.oauth.link.failed", reason: "sign in first to link an oauth account", providerAccountId: profile.externalId });
@@ -168,7 +168,7 @@ export function createOauthHandlers({
         sendJson(res, 200, {
           linked: true,
           createdIdentity: false,
-          link: authOAuthReadShape(currentOauthLinkForRunner(flow.serverRunner, linkId) ?? {
+          link: authOAuthReadShape(currentOauthLinkForRunner(flow.serverRunner, linkId, appContext) ?? {
             id: linkId,
             title: authOAuthLinkTitle({ provider: flow.provider, providerAccountId: profile.externalId, label: identity.label }),
             serverRunner: flow.serverRunner,
@@ -245,7 +245,7 @@ export function createOauthHandlers({
           homeContext: identity.homeContext ?? null,
           homePerspective: identity.homePerspective ?? null
         },
-        link: authOAuthReadShape(currentOauthLinkForRunner(flow.serverRunner, linkId) ?? {
+        link: authOAuthReadShape(currentOauthLinkForRunner(flow.serverRunner, linkId, appContext) ?? {
           id: linkId,
           title: authOAuthLinkTitle({ provider: flow.provider, providerAccountId: profile.externalId, label: identity.label }),
           serverRunner: flow.serverRunner,
@@ -281,7 +281,7 @@ export function createOauthHandlers({
         sendGateFailure(res, gate);
         return;
       }
-      const links = oauthLinksForRunner(serverRunnerId).map(authOAuthReadShape);
+      const links = oauthLinksForRunner(serverRunnerId, appContext).map(authOAuthReadShape);
       world.observe({ process: "auth.oauth.links.list", actor: requestActor, claims: [relation(requestActor, "read", "auth.oauth.links")], body: { serverRunner: serverRunnerId, count: links.length } });
       sendJson(res, 200, { links });
     },
@@ -305,7 +305,7 @@ export function createOauthHandlers({
         sendGateFailure(res, gate);
         return;
       }
-      const link = currentOauthLinkForRunner(serverRunnerId, params.id || "");
+      const link = currentOauthLinkForRunner(serverRunnerId, params.id || "", appContext);
       if (!link) {
         world.observe({ process: "auth.oauth.links.read.failed", actor: requestActor, claims: [], body: { reason: "oauth link not found", serverRunner: serverRunnerId, id: params.id || "" } });
         sendJson(res, 404, { error: "oauth link not found" });

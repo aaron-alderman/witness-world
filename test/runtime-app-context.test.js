@@ -5,6 +5,8 @@ import {
   createRuntimeAppContext,
   createUnavailableRuntimeAppContext
 } from "../src/runtime-app-context.js";
+import { createWorld } from "../src/kernel.js";
+import { createModuleProjectorContext, moduleProjectors } from "../src/modules.js";
 
 test("actorsFromIdentities deduplicates actor ids and preserves labels", () => {
   assert.deepEqual(
@@ -128,6 +130,36 @@ test("createRuntimeAppContext does not create optional provider runtimes without
   assert.equal(appContext.jobs.enqueue, undefined);
   assert.equal(appContext.dbSql, null);
   assert.equal(appContext.searchIndex, null);
+});
+
+test("createRuntimeAppContext exposes context-aware projection helper", async () => {
+  const projectionContext = createModuleProjectorContext({
+    assets: () => [{ id: "asset.runtime" }]
+  }, { owner: "runtime.test" });
+  const world = createWorld();
+  const appContext = await createRuntimeAppContext({
+    world,
+    serverRunner: { id: "runner-context", handlerSet: null, actors: [] },
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    runtimeRoot: "/runtime",
+    storage: {},
+    runtimeConfig: { ok: true, values: {}, fields: [] },
+    sendJson: () => {},
+    readJson: () => {},
+    handlerSetFactories: {},
+    runtimeContributions: {
+      jobHandlerFactories: {},
+      providerRuntimeFactories: {}
+    },
+    projectionContext,
+    identityIndex: { rows: [], byId: {}, byUsername: {} }
+  });
+
+  assert.equal(appContext.ok, true);
+  assert.equal(appContext.projectionContext, projectionContext);
+  assert.deepEqual(appContext.project(moduleProjectors.assets), [{ id: "asset.runtime" }]);
+  assert.deepEqual(world.project(moduleProjectors.assets), []);
 });
 
 test("createRuntimeAppContext preserves handler-set produced services and job handlers", async () => {

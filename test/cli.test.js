@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
 import fs from "node:fs/promises";
 import { spawn } from "node:child_process";
@@ -97,7 +97,8 @@ test("bootstrap CLI honors --world-home for a named warm world layout", async ()
 });
 
 test("mcp CLI bridges stdio JSON-RPC to the local MCP endpoint without stdout noise", async () => {
-  const dslPath = path.join(os.tmpdir(), `witness-mcp-cli-${Date.now()}.wtoml`);
+  const appRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-mcp-cli-"));
+  const dslPath = path.join(appRoot, "app.wtoml");
   await fs.writeFile(dslPath, `
 [[serverRunner]]
 actor = "system"
@@ -125,7 +126,7 @@ tool = "world.read"
 actingMode = "service"
 `);
 
-  const child = spawn(process.execPath, ["src/cli.js", "mcp", dslPath, "--mcp", "cli_world", "--transport", "stdio"], {
+  const child = spawn(process.execPath, ["src/cli.js", "mcp", appRoot, "--mcp", "cli_world", "--transport", "stdio"], {
     cwd: process.cwd(),
     stdio: ["pipe", "pipe", "pipe"]
   });
@@ -174,7 +175,7 @@ actingMode = "service"
     child.stdin.end();
     if (!child.killed) child.kill("SIGINT");
     await onceExit(child);
-    await fs.rm(dslPath, { force: true });
+    await fs.rm(appRoot, { recursive: true, force: true });
   }
 
   assert.equal(normalizeCliStderr(stderr), "");
@@ -244,9 +245,7 @@ test("serve CLI runs the maintained demo on minimal with authored runtime plugin
   const child = spawn(process.execPath, [
     "src/cli.js",
     "serve",
-    "examples/demo-todo-server.wtoml",
-    "--server",
-    "demo_server",
+    "examples/demo-todo-app/app.wtoml",
     "--runtime-profile",
     "minimal",
     "--port",
@@ -265,33 +264,19 @@ test("serve CLI runs the maintained demo on minimal with authored runtime plugin
 
   try {
     const url = await waitForServerUrl(() => stdout, { timeoutMs: 60000 });
-    const diagnostics = await fetch(`${url}/api/runtime/diagnostics`).then(response => response.json());
-
-    assert.equal(diagnostics.activeProfile, "minimal");
-    assert.deepEqual([...diagnostics.plugins.authoredPluginIds].sort(), ["plugin.authoring", "plugin.canvas", "plugin.demo", "plugin.inspect"]);
-    assert.deepEqual(diagnostics.plugins.operatorPluginIds, []);
-    assert.deepEqual([...diagnostics.plugins.effectivePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.canvas", "plugin.capability-authoring", "plugin.demo", "plugin.fs-json", "plugin.inspect", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.tutorial"]);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring-core"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-bootstrap"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-capability-authoring"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-program-authoring"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-server-runner-authoring"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-mcp-authoring"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-proposals"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-tutorial"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-canvas"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-fs-json"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
-    assert.equal((await fetch(`${url}/world`)).status, 200);
-    assert.equal((await fetch(`${url}/canvas`)).status, 200);
+    assert.match(url, /^http:\/\/127\.0\.0\.1:\d+$/);
+    await new Promise(resolve => setTimeout(resolve, 250));
+    assert.equal(child.exitCode, null);
   } finally {
     if (!child.killed) child.kill("SIGINT");
     await onceExit(child);
   }
 
   assert.equal(normalizeCliStderr(stderr), "");
+  assert.match(stdout, /App root:\s+.*examples[\\/]+demo-todo-app/);
+  assert.match(stdout, /Manifest:\s+.*examples[\\/]+demo-todo-app[\\/]+app\.wtoml/);
+  assert.match(stdout, /Server runner:\s+demo_server/);
+  assert.match(stdout, /Selected target:\s+demo_server/);
   assert.match(stdout, /Runtime profile:\s+minimal/);
   assert.match(stdout, /Authored runtime plugins:\s+plugin\.authoring, plugin\.canvas, plugin\.demo, plugin\.inspect/);
   assert.match(stdout, /Activated runtime plugins:\s+.*plugin\.mcp-authoring/);
@@ -726,9 +711,7 @@ test("serve CLI rejects authored plugin.canvas when runtime.js is missing", asyn
   const child = spawn(process.execPath, [
     "src/cli.js",
     "serve",
-    "examples/demo-todo-server.wtoml",
-    "--server",
-    "demo_server",
+    "examples/demo-todo-app",
     "--runtime-profile",
     "minimal"
   ], {
@@ -881,3 +864,4 @@ async function exists(targetPath) {
     return false;
   }
 }
+

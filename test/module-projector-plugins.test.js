@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createWorld, createThing, relation } from "../src/kernel.js";
-import { moduleProjectors, registerModuleProjectors } from "../src/modules.js";
+import { createModuleProjectorContext, moduleProjectors, registerModuleProjectors } from "../src/modules.js";
 
 test("module projector registrations are scoped and idempotent", () => {
   const assets = () => [{ id: "asset.shared" }];
@@ -37,6 +37,60 @@ test("module projector registrations reject conflicting active implementations",
   }
 
   assert.deepEqual(moduleProjectors.assets([]), []);
+});
+
+test("world projection context isolates optional module projectors per world", () => {
+  const alphaContext = createModuleProjectorContext({
+    assets: () => [{ id: "asset.alpha" }]
+  }, { owner: "alpha" });
+  const betaContext = createModuleProjectorContext({
+    assets: () => [{ id: "asset.beta" }]
+  }, { owner: "beta" });
+  const alphaWorld = createWorld({ projectionContext: alphaContext });
+  const betaWorld = createWorld({ projectionContext: betaContext });
+
+  assert.deepEqual(alphaWorld.project(moduleProjectors.assets), [{ id: "asset.alpha" }]);
+  assert.deepEqual(betaWorld.project(moduleProjectors.assets), [{ id: "asset.beta" }]);
+  assert.deepEqual(alphaWorld.project(moduleProjectors.assets, { projectionContext: betaContext }), [{ id: "asset.beta" }]);
+});
+
+test("projection context wins over legacy global projector registration", () => {
+  const unregister = registerModuleProjectors("test.global", {
+    assets: () => [{ id: "asset.global" }]
+  });
+  const context = createModuleProjectorContext({
+    assets: () => [{ id: "asset.context" }]
+  }, { owner: "context" });
+  const world = createWorld({ projectionContext: context });
+
+  try {
+    assert.deepEqual(createWorld().project(moduleProjectors.assets), [{ id: "asset.global" }]);
+    assert.deepEqual(world.project(moduleProjectors.assets), [{ id: "asset.context" }]);
+  } finally {
+    unregister();
+  }
+
+  assert.deepEqual(createWorld().project(moduleProjectors.assets), []);
+});
+
+test("nested delegated module projectors forward projection context", () => {
+  const notifications = (witnesses, options) => [{
+    id: "notification.demo",
+    jobRunner: moduleProjectors.jobIndex(witnesses, options).byId["job.demo"]?.serverRunner ?? null
+  }];
+  const context = createModuleProjectorContext({
+    jobIndex: () => ({
+      rows: [{ id: "job.demo", serverRunner: "runner.context" }],
+      byId: { "job.demo": { id: "job.demo", serverRunner: "runner.context" } }
+    }),
+    notifications
+  }, { owner: "nested" });
+  const world = createWorld({ projectionContext: context });
+
+  assert.deepEqual(world.project(moduleProjectors.notifications), [{
+    id: "notification.demo",
+    jobRunner: "runner.context"
+  }]);
 });
 
 test("optional backend module projectors are inactive until owning plugins register them", () => {

@@ -12,6 +12,7 @@ import {
   createDesktopShell,
   prepareDesktopWorldHome
 } from "../src/desktop-main.js";
+import { renderDesktopLauncherPage } from "../src/desktop-launcher-page.js";
 
 test("desktop preload bridge exposes only explicit ownership methods", async () => {
   const calls = [];
@@ -53,6 +54,16 @@ test("desktop preload bridge exposes only explicit ownership methods", async () 
       payload: undefined
     }
   ]);
+});
+
+test("desktop launcher page reports a clear status when the desktop bridge is unavailable", () => {
+  const html = renderDesktopLauncherPage();
+
+  assert.equal(html.includes("Desktop bridge unavailable. Restart the desktop shell."), true);
+  assert.equal(html.includes("window.witnessDesktop"), true);
+  assert.equal(html.includes("renderDesktopRecentWorlds"), true);
+  assert.equal(html.includes("bindDesktopRecentWorlds"), true);
+  assert.equal(html.includes("root.innerHTML = rows.map"), false);
 });
 
 test("desktop world-home preparation validates open-vs-create semantics and creates world-home-v1 layouts", async () => {
@@ -237,6 +248,114 @@ test("desktop shell starts on a launcher window, persists recent worlds, and ret
     await desktop.close();
     assert.equal(closeCalls, 2);
   } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("desktop shell can launch an authored app target directly without the launcher flow", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-desktop-app-shell-"));
+  const userDataRoot = path.join(tempRoot, "desktop-user-data");
+  const handled = new Map();
+  const loadedUrls = [];
+  const windows = [];
+  let closeCalls = 0;
+
+  class MockWindow {
+    constructor(options) {
+      this.options = options;
+      windows.push(this);
+    }
+
+    once() {}
+
+    on() {}
+
+    show() {}
+
+    hide() {}
+
+    isDestroyed() {
+      return false;
+    }
+
+    async loadURL(url) {
+      loadedUrls.push(url);
+    }
+  }
+
+  const electron = {
+    app: {
+      async whenReady() {},
+      on() {},
+      getPath(kind) {
+        return kind === "userData" ? userDataRoot : tempRoot;
+      },
+      quit() {}
+    },
+    BrowserWindow: MockWindow,
+    dialog: {
+      async showOpenDialog() {
+        return { canceled: true, filePaths: [] };
+      }
+    },
+    ipcMain: {
+      handle(channel, fn) {
+        handled.set(channel, fn);
+      }
+    },
+    shell: {
+      async openPath() {
+        return "";
+      }
+    }
+  };
+
+  try {
+    await createDesktopShell({
+      electron,
+      args: ["examples/demo-todo-app", "--desktop-target", "demo_todo_desktop"],
+      loadAppProjectImpl: async appPath => ({
+        appRoot: path.join(process.cwd(), "examples", "demo-todo-app"),
+        manifestPath: path.join(process.cwd(), "examples", "demo-todo-app", "app.wtoml"),
+        witnessDocs: [],
+        authoredDesireDocs: [],
+        targets: {
+          server: [{ id: "demo_server", default: true }],
+          mcp: [],
+          desktop: [{ id: "demo_todo_desktop", serverRunner: "demo_server", default: true }]
+        }
+      }),
+      startAppRuntimeImpl: async ({ appProject }) => ({
+        server: {
+          ok: true,
+          url: "http://127.0.0.1/demo-app",
+          async close() {
+            closeCalls += 1;
+          }
+        },
+        operatorContract: { worldHome: null },
+        runtimeProfile: "full",
+        appProject
+      })
+    });
+
+    assert.deepEqual(loadedUrls, ["http://127.0.0.1/demo-app"]);
+    assert.equal(windows.length, 1);
+    assert.equal(windows[0].options.width, 1320);
+
+    const state = await handled.get(DESKTOP_IPC_CHANNELS.getDesktopShellState)();
+    assert.deepEqual(state, createDesktopShellState({
+      worldHome: null,
+      runtimeProfile: "full",
+      appRoot: path.join(process.cwd(), "examples", "demo-todo-app"),
+      manifestPath: path.join(process.cwd(), "examples", "demo-todo-app", "app.wtoml"),
+      selectedTarget: "demo_todo_desktop",
+      recentWorldHomes: [],
+      launcherRequired: false,
+      runtimeStatus: "ready"
+    }));
+  } finally {
+    assert.equal(closeCalls, 0);
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });

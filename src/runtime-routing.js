@@ -31,11 +31,15 @@ export function matchDeclaredRoute(routeTable, method, pathname) {
 }
 
 export function hasReachableHomeRoute(world, routeTable) {
-  const home = routeTable.find(route => route.method === "GET" && route.path === "/" && route.handler === "page.home");
-  if (!home) return false;
-  const rootWidget = home.params?.rootWidget;
-  if (!rootWidget) return false;
-  return world.project(projectors.things).has(rootWidget);
+  const rootRoutes = routeTable.filter(route => route.method === "GET" && route.path === "/");
+  if (!rootRoutes.length) return false;
+  for (const route of rootRoutes) {
+    if (route.handler !== "page.home") return true;
+    const rootWidget = route.params?.rootWidget;
+    if (!rootWidget) return true;
+    if (world.project(projectors.things).has(rootWidget)) return true;
+  }
+  return false;
 }
 
 export function runtimeAllowsBootstrapFallback(runtimeBundleSummary) {

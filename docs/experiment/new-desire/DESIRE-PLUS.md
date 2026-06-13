@@ -1,4 +1,4 @@
-# DESIRE+
+﻿# DESIRE+
 
 ## Purpose
 
@@ -253,9 +253,9 @@ But `RVM` still has support/source forms that should remain in `DESIRE+`, especi
 
 Examples from:
 
-- [common.wtoml](/C:/Users/aaron/Documents/world/examples/demo/common.wtoml)
-- [backend.wtoml](/C:/Users/aaron/Documents/world/examples/demo/backend.wtoml)
-- [frontend.wtoml](/C:/Users/aaron/Documents/world/examples/demo/frontend.wtoml)
+- [common.wtoml](/C:/Users/aaron/Documents/world/examples/_lib/common.wtoml)
+- [backend.wtoml](/C:/Users/aaron/Documents/world/examples/_lib/demo-todo/backend.wtoml)
+- [frontend.wtoml](/C:/Users/aaron/Documents/world/examples/_lib/demo-todo/frontend.wtoml)
 
 Some `wtoml` forms lower cleanly into `DESIRE`:
 
@@ -301,3 +301,4 @@ The target is not:
 - `DESIRE -> WTOML`
 
 Once a source has crossed into `DESIRE`, many tree choices may legitimately be gone.
+

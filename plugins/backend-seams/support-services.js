@@ -82,35 +82,40 @@ export function createPracticalBackendSupportServices({
     .reverse()
     .map(witness => ({ id: witness.id, actor: witness.actor, body: witness.body ?? {} }));
 
-  const notificationsForRunner = serverRunnerId => world.project(moduleProjectors.notifications)
-    .filter(row => row.jobId == null || ((world.project(moduleProjectors.jobIndex).byId[row.jobId] ?? null)?.serverRunner === serverRunnerId));
-  const currentNotificationForRunner = (serverRunnerId, notificationId) => notificationsForRunner(serverRunnerId)
+  const projectFor = appContext => appContext?.project ?? (projector => world.project(projector));
+  const notificationsForRunner = (serverRunnerId, appContext = null) => {
+    const project = projectFor(appContext);
+    const jobIndex = project(moduleProjectors.jobIndex).byId;
+    return project(moduleProjectors.notifications)
+      .filter(row => row.jobId == null || ((jobIndex[row.jobId] ?? null)?.serverRunner === serverRunnerId));
+  };
+  const currentNotificationForRunner = (serverRunnerId, notificationId, appContext = null) => notificationsForRunner(serverRunnerId, appContext)
     .find(row => row.id === notificationId) ?? null;
-  const outboundRequestsForRunner = serverRunnerId => world.project(moduleProjectors.outboundRequests)
+  const outboundRequestsForRunner = (serverRunnerId, appContext = null) => projectFor(appContext)(moduleProjectors.outboundRequests)
     .filter(row => row.serverRunner === serverRunnerId);
-  const currentOutboundForRunner = (serverRunnerId, outboundId) => outboundRequestsForRunner(serverRunnerId)
+  const currentOutboundForRunner = (serverRunnerId, outboundId, appContext = null) => outboundRequestsForRunner(serverRunnerId, appContext)
     .find(row => row.id === outboundId) ?? null;
-  const webhookDeliveriesForRunner = serverRunnerId => world.project(moduleProjectors.webhookDeliveries)
+  const webhookDeliveriesForRunner = (serverRunnerId, appContext = null) => projectFor(appContext)(moduleProjectors.webhookDeliveries)
     .filter(row => row.serverRunner === serverRunnerId);
-  const currentWebhookForRunner = (serverRunnerId, webhookIdValue) => webhookDeliveriesForRunner(serverRunnerId)
+  const currentWebhookForRunner = (serverRunnerId, webhookIdValue, appContext = null) => webhookDeliveriesForRunner(serverRunnerId, appContext)
     .find(row => row.id === webhookIdValue) ?? null;
-  const sqlDatasourcesForRunner = serverRunnerId => world.project(moduleProjectors.sqlDatasources)
+  const sqlDatasourcesForRunner = (serverRunnerId, appContext = null) => projectFor(appContext)(moduleProjectors.sqlDatasources)
     .filter(row => row.serverRunner === serverRunnerId);
-  const currentSqlDatasourceForRunner = (serverRunnerId, datasourceId) => sqlDatasourcesForRunner(serverRunnerId)
+  const currentSqlDatasourceForRunner = (serverRunnerId, datasourceId, appContext = null) => sqlDatasourcesForRunner(serverRunnerId, appContext)
     .find(row => row.id === datasourceId) ?? null;
-  const sqlOperationsForRunner = serverRunnerId => world.project(moduleProjectors.sqlOperations)
+  const sqlOperationsForRunner = (serverRunnerId, appContext = null) => projectFor(appContext)(moduleProjectors.sqlOperations)
     .filter(row => row.serverRunner === serverRunnerId);
-  const currentSqlOperationForRunner = (serverRunnerId, operationId) => sqlOperationsForRunner(serverRunnerId)
+  const currentSqlOperationForRunner = (serverRunnerId, operationId, appContext = null) => sqlOperationsForRunner(serverRunnerId, appContext)
     .find(row => row.id === operationId) ?? null;
-  const searchIndexesForRunner = serverRunnerId => world.project(moduleProjectors.searchIndexes)
+  const searchIndexesForRunner = (serverRunnerId, appContext = null) => projectFor(appContext)(moduleProjectors.searchIndexes)
     .filter(row => row.serverRunner === serverRunnerId);
-  const currentSearchIndexForRunner = (serverRunnerId, indexId) => searchIndexesForRunner(serverRunnerId)
+  const currentSearchIndexForRunner = (serverRunnerId, indexId, appContext = null) => searchIndexesForRunner(serverRunnerId, appContext)
     .find(row => row.id === indexId) ?? null;
-  const oauthLinksForRunner = serverRunnerId => world.project(moduleProjectors.oauthLinks)
+  const oauthLinksForRunner = (serverRunnerId, appContext = null) => projectFor(appContext)(moduleProjectors.oauthLinks)
     .filter(row => row.serverRunner === serverRunnerId);
-  const currentOauthLinkForRunner = (serverRunnerId, linkId) => oauthLinksForRunner(serverRunnerId)
+  const currentOauthLinkForRunner = (serverRunnerId, linkId, appContext = null) => oauthLinksForRunner(serverRunnerId, appContext)
     .find(row => row.id === linkId) ?? null;
-  const currentOauthLinkByProviderAccount = (serverRunnerId, provider, providerAccountId) => oauthLinksForRunner(serverRunnerId)
+  const currentOauthLinkByProviderAccount = (serverRunnerId, provider, providerAccountId, appContext = null) => oauthLinksForRunner(serverRunnerId, appContext)
     .find(row => row.provider === provider && row.providerAccountId === providerAccountId) ?? null;
 
   const retryableAssetIngest = asset => {
@@ -119,32 +124,33 @@ export function createPracticalBackendSupportServices({
   };
 
   const assetDiagnostics = async appContext => {
-    const assets = world.project(moduleProjectors.assets);
-    const capabilityIndex = world.project(moduleProjectors.capabilityIndex).byId;
+    const project = projectFor(appContext);
+    const assets = project(moduleProjectors.assets);
+    const capabilityIndex = project(moduleProjectors.capabilityIndex).byId;
     const streamWrites = world.allWitnesses().filter(row => row.process === "fs.stream.write");
     const streamCopies = world.allWitnesses().filter(row => row.process === "fs.stream.copy");
     const assetUploads = world.allWitnesses().filter(row => row.process === "asset.upload");
-    const jobs = world.project(moduleProjectors.jobs)
+    const jobs = project(moduleProjectors.jobs)
       .filter(row => row.serverRunner === (appContext?.serverRunnerId || ""));
-    const notifications = world.project(moduleProjectors.notifications);
-    const outboundRequests = world.project(moduleProjectors.outboundRequests)
+    const notifications = project(moduleProjectors.notifications);
+    const outboundRequests = project(moduleProjectors.outboundRequests)
       .filter(row => row.serverRunner === (appContext?.serverRunnerId || ""));
-    const webhookDeliveries = world.project(moduleProjectors.webhookDeliveries)
+    const webhookDeliveries = project(moduleProjectors.webhookDeliveries)
       .filter(row => row.serverRunner === (appContext?.serverRunnerId || ""));
-    const sqlDatasources = world.project(moduleProjectors.sqlDatasources)
+    const sqlDatasources = project(moduleProjectors.sqlDatasources)
       .filter(row => row.serverRunner === (appContext?.serverRunnerId || ""));
-    const sqlOperations = world.project(moduleProjectors.sqlOperations)
+    const sqlOperations = project(moduleProjectors.sqlOperations)
       .filter(row => row.serverRunner === (appContext?.serverRunnerId || ""));
-    const searchIndexes = world.project(moduleProjectors.searchIndexes)
+    const searchIndexes = project(moduleProjectors.searchIndexes)
       .filter(row => row.serverRunner === (appContext?.serverRunnerId || ""));
-    const oauthFlows = world.project(moduleProjectors.oauthFlows)
+    const oauthFlows = project(moduleProjectors.oauthFlows)
       .filter(row => row.serverRunner === (appContext?.serverRunnerId || ""));
-    const oauthLinks = world.project(moduleProjectors.oauthLinks)
+    const oauthLinks = project(moduleProjectors.oauthLinks)
       .filter(row => row.serverRunner === (appContext?.serverRunnerId || ""));
     const backendCapabilities = [...currentBackendCapabilities()]
       .sort()
       .map(id => capabilityIndex[id] ? { ...capabilityIndex[id] } : { id, label: id });
-    const filesContexts = world.project(moduleProjectors.contexts)
+    const filesContexts = project(moduleProjectors.contexts)
       .filter(row => String(row.id || "").endsWith(":files"));
     const assetsRoot = assetsRootFor(appContext);
     const blobsRoot = blobsRootFor(appContext);
@@ -416,7 +422,7 @@ export function createPracticalBackendSupportServices({
       }
     });
     sendJson(res, 201, {
-      notification: notificationReadShape(currentNotificationForRunner(serverRunnerId, row.id) ?? {
+      notification: notificationReadShape(currentNotificationForRunner(serverRunnerId, row.id, appContext) ?? {
         id: row.id,
         title,
         channel,

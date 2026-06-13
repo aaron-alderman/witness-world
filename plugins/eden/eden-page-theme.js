@@ -107,6 +107,27 @@ export function resolveEdenPageTheme(input = {}) {
   };
 }
 
+export function renderEdenPageThemeCssVars(pageTheme = resolveEdenPageTheme()) {
+  const tokens = pageTheme?.tokens || resolveEdenPageTheme().tokens;
+  return `:root {
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --page-bg: ${tokens.pageBackground};
+  --surface-bg: ${tokens.surface};
+  --surface-strong: ${tokens.surfaceStrong};
+  --surface-border: ${tokens.border};
+  --surface-shadow: ${tokens.panelShadow};
+  --accent: ${tokens.accent};
+  --ink: ${tokens.ink};
+  --muted: ${tokens.muted};
+  --input-bg: ${tokens.input};
+  --button-bg: ${tokens.button};
+  --panel-radius: ${tokens.panelRadius};
+  --texture-opacity: ${tokens.textureOpacity};
+  --body-font: ${tokens.bodyFont};
+  --heading-font: ${tokens.headingFont};
+}`;
+}
+
 export function projectEdenPageTheme(witnesses, {
   actor = null,
   pageId = DEFAULT_PAGE_ID

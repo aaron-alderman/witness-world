@@ -91,6 +91,6 @@ test("backend seams page renderer escapes diagnostic content", () => {
     }
   });
   assert.match(html, /Backend Seams/);
-  assert.match(html, /&lt;script&gt;/);
-  assert.match(html, /\/retry\?x=&lt;y&gt;/);
+  assert.match(html, /\\u003cscript\\u003e/);
+  assert.match(html, /\/retry\?x=\\u003cy\\u003e/);
 });

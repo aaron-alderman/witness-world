@@ -94,10 +94,15 @@ export const NATIVE_RUNTIME_DECLARATION_KINDS = new Set([
   "section",
   "heading",
   "text",
+  "label",
   "form",
   "input",
+  "textarea",
   "select",
   "option",
+  "details",
+  "summary",
+  "valueEditor",
   "button",
   "link",
   "list",
@@ -261,10 +266,15 @@ const WIDGET_KIND_BY_SECTION = new Map([
   ["section", "Section"],
   ["heading", "Heading"],
   ["text", "Text"],
+  ["label", "Label"],
   ["form", "Form"],
   ["input", "Input"],
+  ["textarea", "Textarea"],
   ["select", "Select"],
   ["option", "Option"],
+  ["details", "Details"],
+  ["summary", "Summary"],
+  ["valueEditor", "ValueEditor"],
   ["button", "Button"],
   ["link", "Link"],
   ["list", "List"]
@@ -667,6 +677,7 @@ function applyGenericSemanticDefinition(world, node) {
       if (operation?.successEvent) claims.push(relation(name, "emitsMessage", operation.successEvent));
       if (operation?.failureEvent) claims.push(relation(name, "emitsMessage", operation.failureEvent));
       if (operation?.route) claims.push(relation(name, "routesTo", operation.route));
+      if (operation?.hostOperation) claims.push(relation(name, "invokesHostOperation", operation.hostOperation));
       if (operationId) {
         if (operation?.capability) claims.push(relation(operationId, "dependsOnCapability", operation.capability));
         if (operation?.command) claims.push(relation(operationId, "handlesMessage", operation.command));
@@ -678,6 +689,7 @@ function applyGenericSemanticDefinition(world, node) {
         if (operation?.kind) claims.push(relation(operationId, "operationKind", operation.kind));
         if (operation?.requestSchema) claims.push(relation(operationId, "requestSchema", operation.requestSchema));
         if (operation?.responseSchema) claims.push(relation(operationId, "responseSchema", operation.responseSchema));
+        if (operation?.hostOperation) claims.push(relation(operationId, "invokesHostOperation", operation.hostOperation));
       }
     }
   }
@@ -1276,10 +1288,15 @@ function applyCoreRuntimeDeclaration(world, doc) {
     case "section":
     case "heading":
     case "text":
+    case "label":
     case "form":
     case "input":
+    case "textarea":
     case "select":
     case "option":
+    case "details":
+    case "summary":
+    case "valueEditor":
     case "button":
     case "link":
     case "list":

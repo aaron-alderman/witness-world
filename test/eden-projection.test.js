@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
 import path from "node:path";
 import { createWorld } from "../src/kernel.js";
@@ -20,7 +20,7 @@ import { requestEdenVersionActivate, requestEdenVersionPublish, requestEdenVersi
 
 async function loadDemoWorld() {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "eden/app.wtoml"));
   applyWitnessDocs(world, docs);
   return world;
 }
@@ -746,3 +746,4 @@ targetKind = "context"
   assert.equal(model.academy.tracks.some(track => track.id === "teaching" && track.count === 1 && track.statusLabel === "first teach-back witnessed"), true);
   assert.equal(model.academy.signals.includes("practice.teaching.first"), true);
 });
+

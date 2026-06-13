@@ -1,0 +1,84 @@
+import desire/v3-alpha
+
+// ── Mill charge-motion model ───────────────────────────────────────────────────
+//
+// The 3rd science: the rotating grinding charge + cataracting media. It stresses
+// the previously-unproven part of the grammar — a TIME/PHASE axis and a
+// PARTICLE/FIELD representation — and it needed ZERO evaluator change: time is just
+// a sweep, the particle fan is just a sweep, and the ballistic trajectory is an
+// ordinary multi-axis `derive over particle, t`.
+//
+// Almost all of it is honest dataflow (shoulder/toe geometry, the charge boundary,
+// and the WHOLE cataracting trajectory field). The symmetry break is just TWO
+// lowered leaves — segment_half_angle (the fill solver, θ−sinθ=2πJ) and the
+// charge-polygon centroid charge_com_x/charge_com_y — in
+// plugins/chart-runtime/mill-charge-kernels.js. The "stochastic" launch jitter
+// enters as the injected seeded sampler spread/vjit/tphase (reproducible; the
+// particle axis is the future Monte-Carlo ensemble axis). Faithful to
+// example-ports/engentus/js/mill_physics.js + mill_canvas.js (_advanceCataracting).
+
+model MillCharge {
+  // ── axes ──
+  // particle = the cataracting fan; t = the TIME/PHASE axis (the unproven grammar);
+  // arc = charge-boundary samples (the region polygon).
+  axis particle = sweep(1, N_particles, 1)
+  axis t        = sweep(0, t_max, dt)
+  axis arc      = sweep(0, N_arc, 1)
+
+  // ── params (mill_view defaults) ──
+  param speedFrac        = 0.75
+  param fillFrac         = 0.30
+  param slurryContent    = 0.20
+  param wallFriction     = 0.50
+  param internalFriction = 35
+  param bulkDensity      = 1800
+  param millRadius       = 1.0
+  param g                = 9.81
+  param N_particles      = 18
+  param N_arc            = 80
+  // t_max ~ 2.5 * sqrt(2R/g) flight envelope
+  param t_max            = 1.1
+  param dt               = 0.05
+
+  // ── honest geometry: slurry modifiers → shoulder/toe (port of mill_physics) ──
+  derive Fr          = speedFrac^2
+  derive muWall_eff  = wallFriction * (1 - 0.4 * slurryContent)
+  derive phi_eff     = internalFriction * (1 - 0.3 * slurryContent)
+  derive rho_eff     = bulkDensity * (1 - slurryContent) + 1450 * slurryContent
+  derive omega       = speedFrac * sqrt(g / millRadius)
+  derive base        = asin(min(Fr, 1))
+  derive wallCorr    = atan(muWall_eff * (1 - Fr) * 0.5)
+  derive internalCorr = atan(tan(phi_eff * pi / 180) * Fr * 0.3)
+  derive phiS        = min(base + wallCorr + internalCorr, pi / 2)
+
+  // ── fill solver: the FIRST kernel (θ−sinθ=2πJ root-find) ──
+  // arcSpan = 2*alpha = phiS - phiT, always > 0 (no +2π guard needed)
+  derive alpha   = segment_half_angle(fillFrac)
+  derive phiT    = phiS - 2 * alpha
+  derive arcSpan = 2 * alpha
+
+  // ── charge centre-of-mass: the SECOND kernel (polygon centroid) ──
+  derive comX       = charge_com_x(phiT, phiS, millRadius)
+  derive comY       = charge_com_y(phiT, phiS, millRadius)
+  derive comOffsetR = sqrt(comX^2 + comY^2) / millRadius
+  derive catIdx     = max(0, min(1, (Fr - 0.4) / 0.5))
+
+  // ── charge boundary (honest, over arc): arc toe→shoulder, closed by the chord ──
+  derive phi_b = phiT + arcSpan * (arc / N_arc) over arc
+  derive bx    = millRadius * cos(phi_b) over arc
+  derive by    = millRadius * sin(phi_b) over arc
+
+  // ── cataracting launch (honest + seeded jitter), per particle ──
+  derive phi0   = phiS + spread(particle, 0.1) over particle
+  derive vscale = vjit(particle) over particle
+  derive x0     = millRadius * cos(phi0) over particle
+  derive y0     = millRadius * sin(phi0) over particle
+  derive vx0    = 0 - omega * millRadius * sin(phi0) * vscale over particle
+  derive vy0    = omega * millRadius * cos(phi0) * vscale over particle
+  derive t0     = tphase(particle, t_max) over particle
+
+  // ── the trajectory FIELD over (particle, t): the proof — pure honest dataflow ──
+  derive tau = max(0, t - t0) over particle, t
+  derive px  = x0 + vx0 * tau over particle, t
+  derive py  = y0 + vy0 * tau - 0.5 * g * tau^2 over particle, t
+}

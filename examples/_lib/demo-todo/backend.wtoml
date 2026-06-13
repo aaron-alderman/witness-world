@@ -1,0 +1,1704 @@
+# Backend server/runtime definition.
+
+[[defaults]]
+context = "backend"
+
+[[serverRunner]]
+id = "demo_server"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+handlerSet = "demo"
+storage = { todoProjection = "witness-world-demo-todos.json", privateNotesProjection = "witness-world-demo-todos.private-notes.json" }
+default = true
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "demo_server"
+plugin = "plugin.authoring"
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "demo_server"
+plugin = "plugin.inspect"
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "demo_server"
+plugin = "plugin.canvas"
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "demo_server"
+plugin = "plugin.demo"
+
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "todo.todos.list"
+label = "Todo Todos List"
+
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "todo.todos.create"
+label = "Todo Todos Create"
+
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "todo.todos.update"
+label = "Todo Todos Update"
+
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "todo.todos.delete"
+label = "Todo Todos Delete"
+
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "todo.privateNotes.list"
+label = "Todo Private Notes List"
+
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "todo.privateNotes.create"
+label = "Todo Private Notes Create"
+
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "todo.widgets.create"
+label = "Todo Widgets Create"
+
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "todo.witnesses.list"
+label = "Todo Witnesses List"
+
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "todo.network.simulateError"
+label = "Todo Network Simulate Error"
+
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "todo.worldGraph.read"
+label = "Todo World Graph Read"
+
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "todo.processView.read"
+label = "Todo Process View Read"
+
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "todo.processRun.read"
+label = "Todo Process Run Read"
+
+[[backendProgram]]
+actor = "aaron"
+context = "backend"
+soul = "todo.processEvents.record"
+label = "Todo Process Events Record"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.todos.list"
+version = "todo.todos.list.v1"
+index = 0
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.todos.create"
+version = "todo.todos.create.v1"
+index = 0
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.todos.update"
+version = "todo.todos.update.v1"
+index = 0
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.todos.delete"
+version = "todo.todos.delete.v1"
+index = 0
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.privateNotes.list"
+version = "todo.privateNotes.list.v1"
+index = 0
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.privateNotes.create"
+version = "todo.privateNotes.create.v1"
+index = 0
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.widgets.create"
+version = "todo.widgets.create.v1"
+index = 0
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.witnesses.list"
+version = "todo.witnesses.list.v1"
+index = 0
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.network.simulateError"
+version = "todo.network.simulateError.v1"
+index = 0
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.worldGraph.read"
+version = "todo.worldGraph.read.v1"
+index = 0
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.processView.read"
+version = "todo.processView.read.v1"
+index = 0
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.processRun.read"
+version = "todo.processRun.read.v1"
+index = 0
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.processEvents.record"
+version = "todo.processEvents.record.v1"
+index = 0
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.todos.list"
+version = "todo.todos.list.v2"
+index = 1
+transitionFrom = "todo.todos.list.v1"
+transitionStrategy = "compatible"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.todos.create"
+version = "todo.todos.create.v2"
+index = 1
+transitionFrom = "todo.todos.create.v1"
+transitionStrategy = "compatible"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.todos.update"
+version = "todo.todos.update.v2"
+index = 1
+transitionFrom = "todo.todos.update.v1"
+transitionStrategy = "compatible"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.todos.delete"
+version = "todo.todos.delete.v2"
+index = 1
+transitionFrom = "todo.todos.delete.v1"
+transitionStrategy = "compatible"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.privateNotes.list"
+version = "todo.privateNotes.list.v2"
+index = 1
+transitionFrom = "todo.privateNotes.list.v1"
+transitionStrategy = "compatible"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.privateNotes.create"
+version = "todo.privateNotes.create.v2"
+index = 1
+transitionFrom = "todo.privateNotes.create.v1"
+transitionStrategy = "compatible"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.widgets.create"
+version = "todo.widgets.create.v2"
+index = 1
+transitionFrom = "todo.widgets.create.v1"
+transitionStrategy = "compatible"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.witnesses.list"
+version = "todo.witnesses.list.v2"
+index = 1
+transitionFrom = "todo.witnesses.list.v1"
+transitionStrategy = "compatible"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.network.simulateError"
+version = "todo.network.simulateError.v2"
+index = 1
+transitionFrom = "todo.network.simulateError.v1"
+transitionStrategy = "compatible"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.worldGraph.read"
+version = "todo.worldGraph.read.v2"
+index = 1
+transitionFrom = "todo.worldGraph.read.v1"
+transitionStrategy = "compatible"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.processView.read"
+version = "todo.processView.read.v2"
+index = 1
+transitionFrom = "todo.processView.read.v1"
+transitionStrategy = "compatible"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.processRun.read"
+version = "todo.processRun.read.v2"
+index = 1
+transitionFrom = "todo.processRun.read.v1"
+transitionStrategy = "compatible"
+
+[[backendProgramVersion]]
+actor = "aaron"
+context = "backend"
+soul = "todo.processEvents.record"
+version = "todo.processEvents.record.v2"
+index = 1
+transitionFrom = "todo.processEvents.record.v1"
+transitionStrategy = "compatible"
+
+[[backendProgramVersionTransition]]
+actor = "aaron"
+soul = "todo.todos.list"
+from = "todo.todos.list.v2"
+to = "todo.todos.list.v1"
+strategy = "compatible"
+
+[[backendProgramVersionTransition]]
+actor = "aaron"
+soul = "todo.todos.create"
+from = "todo.todos.create.v2"
+to = "todo.todos.create.v1"
+strategy = "compatible"
+
+[[backendProgramVersionTransition]]
+actor = "aaron"
+soul = "todo.todos.update"
+from = "todo.todos.update.v2"
+to = "todo.todos.update.v1"
+strategy = "compatible"
+
+[[backendProgramVersionTransition]]
+actor = "aaron"
+soul = "todo.todos.delete"
+from = "todo.todos.delete.v2"
+to = "todo.todos.delete.v1"
+strategy = "compatible"
+
+[[backendProgramVersionTransition]]
+actor = "aaron"
+soul = "todo.privateNotes.list"
+from = "todo.privateNotes.list.v2"
+to = "todo.privateNotes.list.v1"
+strategy = "compatible"
+
+[[backendProgramVersionTransition]]
+actor = "aaron"
+soul = "todo.privateNotes.create"
+from = "todo.privateNotes.create.v2"
+to = "todo.privateNotes.create.v1"
+strategy = "compatible"
+
+[[backendProgramVersionTransition]]
+actor = "aaron"
+soul = "todo.widgets.create"
+from = "todo.widgets.create.v2"
+to = "todo.widgets.create.v1"
+strategy = "compatible"
+
+[[backendProgramVersionTransition]]
+actor = "aaron"
+soul = "todo.witnesses.list"
+from = "todo.witnesses.list.v2"
+to = "todo.witnesses.list.v1"
+strategy = "compatible"
+
+[[backendProgramVersionTransition]]
+actor = "aaron"
+soul = "todo.network.simulateError"
+from = "todo.network.simulateError.v2"
+to = "todo.network.simulateError.v1"
+strategy = "compatible"
+
+[[backendProgramVersionTransition]]
+actor = "aaron"
+soul = "todo.worldGraph.read"
+from = "todo.worldGraph.read.v2"
+to = "todo.worldGraph.read.v1"
+strategy = "compatible"
+
+[[backendProgramVersionTransition]]
+actor = "aaron"
+soul = "todo.processView.read"
+from = "todo.processView.read.v2"
+to = "todo.processView.read.v1"
+strategy = "compatible"
+
+[[backendProgramVersionTransition]]
+actor = "aaron"
+soul = "todo.processRun.read"
+from = "todo.processRun.read.v2"
+to = "todo.processRun.read.v1"
+strategy = "compatible"
+
+[[backendProgramVersionTransition]]
+actor = "aaron"
+soul = "todo.processEvents.record"
+from = "todo.processEvents.record.v2"
+to = "todo.processEvents.record.v1"
+strategy = "compatible"
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.list.v1"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "todos.readModel", method = "GET", path = "/api/todos", into = "todoResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.list.v1"
+event = "request"
+op = "response.json"
+order = 1
+params = { from = "todoResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.list.v2"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "todos.readModel", method = "GET", path = "/api/todos", into = "todoResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.list.v2"
+event = "request"
+op = "state.assign"
+order = 1
+params = { into = "meta.version", value = "v2" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.list.v2"
+event = "request"
+op = "run"
+order = 2
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.list.v2"
+event = "respond"
+op = "response.json"
+order = 0
+params = { from = "todoResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.create.v1"
+event = "request"
+op = "request.readJson"
+order = 0
+params = { into = "draftTodo" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.create.v1"
+event = "request"
+op = "handler.invoke"
+order = 1
+params = { handler = "todos.createModel", method = "POST", path = "/api/todos", from = "draftTodo", into = "createResult", allowFailure = true }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.create.v1"
+event = "request"
+op = "run"
+order = 2
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.create.v1"
+event = "respond"
+op = "response.json"
+order = 0
+when = { path = "createResult.ok", truthy = true }
+params = { from = "createResult.payload", statusFrom = "createResult.status" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.create.v1"
+event = "respond"
+op = "response.error"
+order = 1
+when = { path = "createResult.ok", falsy = true }
+params = { statusFrom = "createResult.status", messageFrom = "createResult.error", bodyFrom = "createResult.payload" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.create.v2"
+event = "request"
+op = "request.readJson"
+order = 0
+params = { into = "draftTodo" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.create.v2"
+event = "request"
+op = "handler.invoke"
+order = 1
+params = { handler = "todos.createModel", method = "POST", path = "/api/todos", from = "draftTodo", into = "createResult", allowFailure = true }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.create.v2"
+event = "request"
+op = "state.assign"
+order = 2
+params = { into = "meta.version", value = "v2" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.create.v2"
+event = "request"
+op = "run"
+order = 3
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.create.v2"
+event = "respond"
+op = "response.json"
+order = 0
+when = { path = "createResult.ok", truthy = true }
+params = { from = "createResult.payload", statusFrom = "createResult.status" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.create.v2"
+event = "respond"
+op = "response.error"
+order = 1
+when = { path = "createResult.ok", falsy = true }
+params = { statusFrom = "createResult.status", messageFrom = "createResult.error", bodyFrom = "createResult.payload" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.update.v1"
+event = "request"
+op = "request.readJson"
+order = 0
+params = { into = "todoPatch" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.update.v1"
+event = "request"
+op = "state.assign"
+order = 1
+params = { into = "todoPatch.id", from = "request.params.id" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.update.v1"
+event = "request"
+op = "handler.invoke"
+order = 2
+params = { handler = "todos.updateModel", method = "PATCH", path = "/api/todos/${state.request.params.id}", from = "todoPatch", into = "updateResult", allowFailure = true, params = { id = "${state.request.params.id}" } }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.update.v1"
+event = "request"
+op = "run"
+order = 3
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.update.v1"
+event = "respond"
+op = "response.json"
+order = 0
+when = { path = "updateResult.ok", truthy = true }
+params = { from = "updateResult.payload", statusFrom = "updateResult.status" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.update.v1"
+event = "respond"
+op = "response.error"
+order = 1
+when = { path = "updateResult.ok", falsy = true }
+params = { statusFrom = "updateResult.status", messageFrom = "updateResult.error", bodyFrom = "updateResult.payload" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.update.v2"
+event = "request"
+op = "request.readJson"
+order = 0
+params = { into = "todoPatch" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.update.v2"
+event = "request"
+op = "state.assign"
+order = 1
+params = { into = "todoPatch.id", from = "request.params.id" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.update.v2"
+event = "request"
+op = "handler.invoke"
+order = 2
+params = { handler = "todos.updateModel", method = "PATCH", path = "/api/todos/${state.request.params.id}", from = "todoPatch", into = "updateResult", allowFailure = true, params = { id = "${state.request.params.id}" } }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.update.v2"
+event = "request"
+op = "state.assign"
+order = 3
+params = { into = "meta.version", value = "v2" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.update.v2"
+event = "request"
+op = "run"
+order = 4
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.update.v2"
+event = "respond"
+op = "response.json"
+order = 0
+when = { path = "updateResult.ok", truthy = true }
+params = { from = "updateResult.payload", statusFrom = "updateResult.status" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.update.v2"
+event = "respond"
+op = "response.error"
+order = 1
+when = { path = "updateResult.ok", falsy = true }
+params = { statusFrom = "updateResult.status", messageFrom = "updateResult.error", bodyFrom = "updateResult.payload" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.delete.v1"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "todos.deleteModel", method = "DELETE", path = "/api/todos/${state.request.params.id}", into = "deleteResult", allowFailure = true, params = { id = "${state.request.params.id}" } }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.delete.v1"
+event = "request"
+op = "run"
+order = 1
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.delete.v1"
+event = "respond"
+op = "response.json"
+order = 0
+when = { path = "deleteResult.ok", truthy = true }
+params = { from = "deleteResult.payload", statusFrom = "deleteResult.status" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.delete.v1"
+event = "respond"
+op = "response.error"
+order = 1
+when = { path = "deleteResult.ok", falsy = true }
+params = { statusFrom = "deleteResult.status", messageFrom = "deleteResult.error", bodyFrom = "deleteResult.payload" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.delete.v2"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "todos.deleteModel", method = "DELETE", path = "/api/todos/${state.request.params.id}", into = "deleteResult", allowFailure = true, params = { id = "${state.request.params.id}" } }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.delete.v2"
+event = "request"
+op = "state.assign"
+order = 1
+params = { into = "meta.version", value = "v2" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.delete.v2"
+event = "request"
+op = "run"
+order = 2
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.delete.v2"
+event = "respond"
+op = "response.json"
+order = 0
+when = { path = "deleteResult.ok", truthy = true }
+params = { from = "deleteResult.payload", statusFrom = "deleteResult.status" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.todos.delete.v2"
+event = "respond"
+op = "response.error"
+order = 1
+when = { path = "deleteResult.ok", falsy = true }
+params = { statusFrom = "deleteResult.status", messageFrom = "deleteResult.error", bodyFrom = "deleteResult.payload" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.list.v1"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "privateNotes.readModel", method = "GET", path = "/api/private-notes", into = "privateNotesResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.list.v1"
+event = "request"
+op = "response.json"
+order = 1
+params = { from = "privateNotesResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.list.v2"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "privateNotes.readModel", method = "GET", path = "/api/private-notes", into = "privateNotesResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.list.v2"
+event = "request"
+op = "state.assign"
+order = 1
+params = { into = "meta.version", value = "v2" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.list.v2"
+event = "request"
+op = "run"
+order = 2
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.list.v2"
+event = "respond"
+op = "response.json"
+order = 0
+params = { from = "privateNotesResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.create.v1"
+event = "request"
+op = "request.readJson"
+order = 0
+params = { into = "privateNoteDraft" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.create.v1"
+event = "request"
+op = "handler.invoke"
+order = 1
+params = { handler = "privateNotes.createModel", method = "POST", path = "/api/private-notes", from = "privateNoteDraft", into = "privateNoteResult", allowFailure = true }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.create.v1"
+event = "request"
+op = "run"
+order = 2
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.create.v1"
+event = "respond"
+op = "response.json"
+order = 0
+when = { path = "privateNoteResult.ok", truthy = true }
+params = { from = "privateNoteResult.payload", statusFrom = "privateNoteResult.status" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.create.v1"
+event = "respond"
+op = "response.error"
+order = 1
+when = { path = "privateNoteResult.ok", falsy = true }
+params = { statusFrom = "privateNoteResult.status", messageFrom = "privateNoteResult.error", bodyFrom = "privateNoteResult.payload" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.create.v2"
+event = "request"
+op = "request.readJson"
+order = 0
+params = { into = "privateNoteDraft" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.create.v2"
+event = "request"
+op = "handler.invoke"
+order = 1
+params = { handler = "privateNotes.createModel", method = "POST", path = "/api/private-notes", from = "privateNoteDraft", into = "privateNoteResult", allowFailure = true }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.create.v2"
+event = "request"
+op = "state.assign"
+order = 2
+params = { into = "meta.version", value = "v2" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.create.v2"
+event = "request"
+op = "run"
+order = 3
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.create.v2"
+event = "respond"
+op = "response.json"
+order = 0
+when = { path = "privateNoteResult.ok", truthy = true }
+params = { from = "privateNoteResult.payload", statusFrom = "privateNoteResult.status" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.privateNotes.create.v2"
+event = "respond"
+op = "response.error"
+order = 1
+when = { path = "privateNoteResult.ok", falsy = true }
+params = { statusFrom = "privateNoteResult.status", messageFrom = "privateNoteResult.error", bodyFrom = "privateNoteResult.payload" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.widgets.create.v1"
+event = "request"
+op = "request.readJson"
+order = 0
+params = { into = "widgetDraft" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.widgets.create.v1"
+event = "request"
+op = "state.assign"
+order = 1
+params = { into = "widgetDraft.parent", value = "todo_app_widget" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.widgets.create.v1"
+event = "request"
+op = "handler.invoke"
+order = 2
+params = { handler = "widgets.createModel", method = "POST", path = "/api/widgets", from = "widgetDraft", into = "widgetCreateResult", allowFailure = true, params = { rootWidget = "todo_app_widget", context = "frontend" } }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.widgets.create.v1"
+event = "request"
+op = "run"
+order = 3
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.widgets.create.v1"
+event = "respond"
+op = "response.json"
+order = 0
+when = { path = "widgetCreateResult.ok", truthy = true }
+params = { from = "widgetCreateResult.payload", statusFrom = "widgetCreateResult.status" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.widgets.create.v1"
+event = "respond"
+op = "response.error"
+order = 1
+when = { path = "widgetCreateResult.ok", falsy = true }
+params = { statusFrom = "widgetCreateResult.status", messageFrom = "widgetCreateResult.error", bodyFrom = "widgetCreateResult.payload" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.widgets.create.v2"
+event = "request"
+op = "request.readJson"
+order = 0
+params = { into = "widgetDraft" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.widgets.create.v2"
+event = "request"
+op = "state.assign"
+order = 1
+params = { into = "widgetDraft.parent", value = "todo_app_widget" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.widgets.create.v2"
+event = "request"
+op = "handler.invoke"
+order = 2
+params = { handler = "widgets.createModel", method = "POST", path = "/api/widgets", from = "widgetDraft", into = "widgetCreateResult", allowFailure = true, params = { rootWidget = "todo_app_widget", context = "frontend" } }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.widgets.create.v2"
+event = "request"
+op = "state.assign"
+order = 3
+params = { into = "meta.version", value = "v2" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.widgets.create.v2"
+event = "request"
+op = "run"
+order = 4
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.widgets.create.v2"
+event = "respond"
+op = "response.json"
+order = 0
+when = { path = "widgetCreateResult.ok", truthy = true }
+params = { from = "widgetCreateResult.payload", statusFrom = "widgetCreateResult.status" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.widgets.create.v2"
+event = "respond"
+op = "response.error"
+order = 1
+when = { path = "widgetCreateResult.ok", falsy = true }
+params = { statusFrom = "widgetCreateResult.status", messageFrom = "widgetCreateResult.error", bodyFrom = "widgetCreateResult.payload" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.witnesses.list.v1"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "witnesses.list", method = "GET", path = "/api/witnesses", query = "${state.request.query}", into = "witnessResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.witnesses.list.v1"
+event = "request"
+op = "response.json"
+order = 1
+params = { from = "witnessResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.witnesses.list.v2"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "witnesses.list", method = "GET", path = "/api/witnesses", query = "${state.request.query}", into = "witnessResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.witnesses.list.v2"
+event = "request"
+op = "state.assign"
+order = 1
+params = { into = "meta.version", value = "v2" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.witnesses.list.v2"
+event = "request"
+op = "run"
+order = 2
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.witnesses.list.v2"
+event = "respond"
+op = "response.json"
+order = 0
+params = { from = "witnessResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.network.simulateError.v1"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "network.simulateModel", method = "GET", path = "/api/simulate-network-error", into = "networkFailure", allowFailure = true }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.network.simulateError.v1"
+event = "request"
+op = "response.error"
+order = 1
+params = { statusFrom = "networkFailure.status", messageFrom = "networkFailure.error", bodyFrom = "networkFailure.payload" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.network.simulateError.v2"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "network.simulateModel", method = "GET", path = "/api/simulate-network-error", into = "networkFailure", allowFailure = true }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.network.simulateError.v2"
+event = "request"
+op = "state.assign"
+order = 1
+params = { into = "meta.version", value = "v2" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.network.simulateError.v2"
+event = "request"
+op = "run"
+order = 2
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.network.simulateError.v2"
+event = "respond"
+op = "response.error"
+order = 0
+params = { statusFrom = "networkFailure.status", messageFrom = "networkFailure.error", bodyFrom = "networkFailure.payload" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.worldGraph.read.v1"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "worldGraph.read", method = "GET", path = "/api/world-graph", into = "worldGraphResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.worldGraph.read.v1"
+event = "request"
+op = "response.json"
+order = 1
+params = { from = "worldGraphResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.worldGraph.read.v2"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "worldGraph.read", method = "GET", path = "/api/world-graph", into = "worldGraphResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.worldGraph.read.v2"
+event = "request"
+op = "state.assign"
+order = 1
+params = { into = "meta.version", value = "v2" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.worldGraph.read.v2"
+event = "request"
+op = "run"
+order = 2
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.worldGraph.read.v2"
+event = "respond"
+op = "response.json"
+order = 0
+params = { from = "worldGraphResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processView.read.v1"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "processView.read", method = "GET", path = "/api/process-view", query = "${state.request.query}", into = "processViewResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processView.read.v1"
+event = "request"
+op = "response.json"
+order = 1
+params = { from = "processViewResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processView.read.v2"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "processView.read", method = "GET", path = "/api/process-view", query = "${state.request.query}", into = "processViewResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processView.read.v2"
+event = "request"
+op = "state.assign"
+order = 1
+params = { into = "meta.version", value = "v2" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processView.read.v2"
+event = "request"
+op = "run"
+order = 2
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processView.read.v2"
+event = "respond"
+op = "response.json"
+order = 0
+params = { from = "processViewResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processRun.read.v1"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "processRun.read", method = "GET", path = "/api/process-runs/${state.request.params.runId}", query = "${state.request.query}", into = "processRunResponse", params = { runId = "${state.request.params.runId}" } }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processRun.read.v1"
+event = "request"
+op = "response.json"
+order = 1
+params = { from = "processRunResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processRun.read.v2"
+event = "request"
+op = "handler.invoke"
+order = 0
+params = { handler = "processRun.read", method = "GET", path = "/api/process-runs/${state.request.params.runId}", query = "${state.request.query}", into = "processRunResponse", params = { runId = "${state.request.params.runId}" } }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processRun.read.v2"
+event = "request"
+op = "state.assign"
+order = 1
+params = { into = "meta.version", value = "v2" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processRun.read.v2"
+event = "request"
+op = "run"
+order = 2
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processRun.read.v2"
+event = "respond"
+op = "response.json"
+order = 0
+params = { from = "processRunResponse" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processEvents.record.v1"
+event = "request"
+op = "request.readJson"
+order = 0
+params = { into = "traceEvent" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processEvents.record.v1"
+event = "request"
+op = "handler.invoke"
+order = 1
+params = { handler = "processEvents.record", method = "POST", path = "/api/process-events", from = "traceEvent", into = "processEventResult", allowFailure = true }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processEvents.record.v1"
+event = "request"
+op = "run"
+order = 2
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processEvents.record.v1"
+event = "respond"
+op = "response.json"
+order = 0
+when = { path = "processEventResult.ok", truthy = true }
+params = { from = "processEventResult" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processEvents.record.v1"
+event = "respond"
+op = "response.error"
+order = 1
+when = { path = "processEventResult.ok", falsy = true }
+params = { messageFrom = "processEventResult.error", bodyFrom = "processEventResult" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processEvents.record.v2"
+event = "request"
+op = "request.readJson"
+order = 0
+params = { into = "traceEvent" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processEvents.record.v2"
+event = "request"
+op = "handler.invoke"
+order = 1
+params = { handler = "processEvents.record", method = "POST", path = "/api/process-events", from = "traceEvent", into = "processEventResult", allowFailure = true }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processEvents.record.v2"
+event = "request"
+op = "state.assign"
+order = 2
+params = { into = "meta.version", value = "v2" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processEvents.record.v2"
+event = "request"
+op = "run"
+order = 3
+params = { event = "respond" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processEvents.record.v2"
+event = "respond"
+op = "response.json"
+order = 0
+when = { path = "processEventResult.ok", truthy = true }
+params = { from = "processEventResult" }
+
+[[backendStep]]
+actor = "aaron"
+version = "todo.processEvents.record.v2"
+event = "respond"
+op = "response.error"
+order = 1
+when = { path = "processEventResult.ok", falsy = true }
+params = { messageFrom = "processEventResult.error", bodyFrom = "processEventResult" }
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "todo.todos.list"
+version = "todo.todos.list.v1"
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "todo.todos.create"
+version = "todo.todos.create.v1"
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "todo.todos.update"
+version = "todo.todos.update.v1"
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "todo.todos.delete"
+version = "todo.todos.delete.v1"
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "todo.privateNotes.list"
+version = "todo.privateNotes.list.v1"
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "todo.privateNotes.create"
+version = "todo.privateNotes.create.v1"
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "todo.widgets.create"
+version = "todo.widgets.create.v1"
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "todo.witnesses.list"
+version = "todo.witnesses.list.v1"
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "todo.network.simulateError"
+version = "todo.network.simulateError.v1"
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "todo.worldGraph.read"
+version = "todo.worldGraph.read.v1"
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "todo.processView.read"
+version = "todo.processView.read.v1"
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "todo.processRun.read"
+version = "todo.processRun.read.v1"
+
+[[activateBackendProgramVersion]]
+actor = "aaron"
+soul = "todo.processEvents.record"
+version = "todo.processEvents.record.v1"
+
+[[route]]
+id = "home_page_route"
+method = "GET"
+path = "/"
+serves = "todoAppView"
+handler = "page.home"
+params = { rootWidget = "todo_app_widget", frontendProgram = "todo_frontend_program", page = "home", excludeWidgetRoles = ["world-graph-body"] }
+
+[[serve]]
+serverRunner = "demo_server"
+route = "home_page_route"
+
+[[route]]
+id = "world_page_route"
+method = "GET"
+path = "/world"
+serves = "worldGraphView"
+handler = "page.world"
+params = { rootWidget = "world_graph_page", frontendProgram = "world_graph_program", page = "world" }
+
+[[serve]]
+serverRunner = "demo_server"
+route = "world_page_route"
+
+[[route]]
+id = "process_page_route"
+method = "GET"
+path = "/process"
+serves = "processView"
+handler = "page.process"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "process_page_route"
+
+[[route]]
+id = "canvas_page_route"
+method = "GET"
+path = "/canvas"
+serves = "canvasView"
+handler = "page.canvas"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "canvas_page_route"
+
+[[route]]
+id = "session_read_route"
+method = "GET"
+path = "/api/session"
+serves = "session"
+handler = "session.read"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "session_read_route"
+
+[[route]]
+id = "session_open_route"
+method = "POST"
+path = "/api/session"
+serves = "session"
+handler = "session.open"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "session_open_route"
+
+[[route]]
+id = "session_logout_route"
+method = "DELETE"
+path = "/api/session"
+serves = "session"
+handler = "session.logout"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "session_logout_route"
+
+[[route]]
+id = "todos_list_route"
+context = "backend"
+method = "GET"
+path = "/api/todos"
+serves = "todoStore"
+handler = "backendProgram.run"
+backendProgramSoul = "todo.todos.list"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "todos_list_route"
+
+[[route]]
+id = "todos_create_route"
+context = "backend"
+method = "POST"
+path = "/api/todos"
+serves = "todoStore"
+handler = "backendProgram.run"
+backendProgramSoul = "todo.todos.create"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "todos_create_route"
+
+[[route]]
+id = "todos_update_route"
+context = "backend"
+method = "PATCH"
+path = "/api/todos/:id"
+serves = "todoStore"
+handler = "backendProgram.run"
+backendProgramSoul = "todo.todos.update"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "todos_update_route"
+
+[[route]]
+id = "todos_delete_route"
+context = "backend"
+method = "DELETE"
+path = "/api/todos/:id"
+serves = "todoStore"
+handler = "backendProgram.run"
+backendProgramSoul = "todo.todos.delete"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "todos_delete_route"
+
+[[route]]
+id = "private_notes_list_route"
+context = "backend"
+method = "GET"
+path = "/api/private-notes"
+serves = "privateNotes"
+handler = "backendProgram.run"
+backendProgramSoul = "todo.privateNotes.list"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "private_notes_list_route"
+
+[[route]]
+id = "private_notes_create_route"
+context = "backend"
+method = "POST"
+path = "/api/private-notes"
+serves = "privateNotes"
+handler = "backendProgram.run"
+backendProgramSoul = "todo.privateNotes.create"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "private_notes_create_route"
+
+[[route]]
+id = "widgets_create_route"
+context = "backend"
+method = "POST"
+path = "/api/widgets"
+serves = "widgetEditor"
+handler = "backendProgram.run"
+backendProgramSoul = "todo.widgets.create"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "widgets_create_route"
+
+[[route]]
+id = "widget_versions_activate_route"
+method = "POST"
+path = "/api/widget-versions/:soul/activate"
+serves = "widgetVersion"
+handler = "widgetVersions.activate"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "widget_versions_activate_route"
+
+[[route]]
+id = "widget_versions_rollback_route"
+method = "POST"
+path = "/api/widget-versions/:soul/rollback"
+serves = "widgetVersion"
+handler = "widgetVersions.rollback"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "widget_versions_rollback_route"
+
+[[route]]
+id = "network_simulate_route"
+method = "GET"
+path = "/api/simulate-network-error"
+serves = "networkFailure"
+context = "backend"
+handler = "backendProgram.run"
+backendProgramSoul = "todo.network.simulateError"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "network_simulate_route"
+
+[[route]]
+id = "witnesses_list_route"
+method = "GET"
+path = "/api/witnesses"
+serves = "witnessLog"
+context = "backend"
+handler = "backendProgram.run"
+backendProgramSoul = "todo.witnesses.list"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "witnesses_list_route"
+
+[[route]]
+id = "world_graph_read_route"
+method = "GET"
+path = "/api/world-graph"
+serves = "worldGraph"
+context = "backend"
+handler = "backendProgram.run"
+backendProgramSoul = "todo.worldGraph.read"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "world_graph_read_route"
+
+[[route]]
+id = "process_view_read_route"
+method = "GET"
+path = "/api/process-view"
+serves = "processView"
+context = "backend"
+handler = "backendProgram.run"
+backendProgramSoul = "todo.processView.read"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "process_view_read_route"
+
+[[route]]
+id = "process_run_read_route"
+method = "GET"
+path = "/api/process-runs/:runId"
+serves = "processRun"
+context = "backend"
+handler = "backendProgram.run"
+backendProgramSoul = "todo.processRun.read"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "process_run_read_route"
+
+[[route]]
+id = "process_events_record_route"
+method = "POST"
+path = "/api/process-events"
+serves = "processTrace"
+context = "backend"
+handler = "backendProgram.run"
+backendProgramSoul = "todo.processEvents.record"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "process_events_record_route"
+
+[[route]]
+id = "events_stream_route"
+method = "GET"
+path = "/api/events"
+serves = "eventsStream"
+context = "backend"
+handler = "events.stream"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "events_stream_route"
+
+[[route]]
+id = "source_read_route"
+method = "GET"
+path = "/api/source"
+serves = "sourceFile"
+handler = "source.read"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "source_read_route"
+
+[[route]]
+id = "canvas_read_route"
+method = "GET"
+path = "/api/canvas"
+serves = "canvasView"
+handler = "canvas.read"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "canvas_read_route"
+
+[[route]]
+id = "canvas_perspectives_route"
+method = "GET"
+path = "/api/canvas/perspectives"
+serves = "canvasView"
+handler = "canvas.perspectives.list"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "canvas_perspectives_route"
+
+[[route]]
+id = "canvas_process_route"
+method = "POST"
+path = "/api/canvas/process"
+serves = "canvasView"
+handler = "canvas.process"
+
+[[serve]]
+serverRunner = "demo_server"
+route = "canvas_process_route"

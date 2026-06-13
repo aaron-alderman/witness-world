@@ -8,6 +8,7 @@ export async function createRuntimeAppContextForRunner({
   readJson,
   handlerSetFactories,
   runtimeContributions,
+  projectionContext,
   resolveStorageConfig,
   resolveRuntimeConfig,
   env,
@@ -25,7 +26,8 @@ export async function createRuntimeAppContextForRunner({
     sendJson,
     readJson,
     handlerSetFactories,
-    runtimeContributions
+    runtimeContributions,
+    projectionContext
   });
 }
 
@@ -38,6 +40,7 @@ export function createRuntimeResolverForServer({
   readJson,
   handlerSetFactories,
   runtimeContributions,
+  projectionContext,
   resolveStorageConfig,
   resolveRuntimeConfig,
   env,
@@ -58,6 +61,7 @@ export function createRuntimeResolverForServer({
       readJson,
       handlerSetFactories,
       runtimeContributions,
+      projectionContext,
       resolveStorageConfig,
       resolveRuntimeConfig,
       env,

@@ -85,8 +85,10 @@ function resolveBodyRef(world, body, {
 export function requestBootstrapMcpServerDefine(world, {
   actor,
   backendHost,
-  body
+  body,
+  appContext = null
 }) {
+  const project = appContext?.project ?? (projector => world.project(projector));
   const validated = validateInput(world, "mcpServer.define", body);
   if (!validated.ok) {
     const witness = fail(world, {
@@ -120,7 +122,7 @@ export function requestBootstrapMcpServerDefine(world, {
     const witness = fail(world, { process: "mcpServer.define.failed", actor: actor || backendHost, body: { reason: "serverRunner is required" } });
     return { ok: false, status: 400, error: "serverRunner is required", witness };
   }
-  if (!world.project(moduleProjectors.serverRunners).some(row => row.id === resolvedServerRunner)) {
+  if (!project(moduleProjectors.serverRunners).some(row => row.id === resolvedServerRunner)) {
     const witness = fail(world, { process: "mcpServer.define.failed", actor: actor || backendHost, body: { reason: "server runner not found", serverRunner: resolvedServerRunner } });
     return { ok: false, status: 404, error: "server runner not found", witness };
   }
@@ -148,7 +150,7 @@ export function requestBootstrapMcpServerDefine(world, {
     context: input.context ?? null,
     owner: actor || backendHost
   });
-  const mcpServer = world.project(moduleProjectors.mcpServerIndex).byId[input.id] ?? {
+  const mcpServer = project(moduleProjectors.mcpServerIndex).byId[input.id] ?? {
     id: input.id,
     label: input.label ?? input.id,
     serverRunner: resolvedServerRunner,
@@ -169,8 +171,10 @@ export function requestBootstrapMcpToolInstall(world, {
   actor,
   backendHost,
   body,
-  allowedTools = []
+  allowedTools = [],
+  appContext = null
 }) {
+  const project = appContext?.project ?? (projector => world.project(projector));
   const validated = validateInput(world, "mcpTool.install", body);
   if (!validated.ok) {
     const witness = fail(world, {
@@ -181,7 +185,7 @@ export function requestBootstrapMcpToolInstall(world, {
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
   const input = validated.value;
-  const server = world.project(moduleProjectors.mcpServerIndex).byId[input.server] ?? null;
+  const server = project(moduleProjectors.mcpServerIndex).byId[input.server] ?? null;
   if (!server) {
     const witness = fail(world, { process: "mcpTool.install.failed", actor: actor || backendHost, body: { reason: "mcp server not found", server: input.server } });
     return { ok: false, status: 404, error: "mcp server not found", witness };
@@ -190,7 +194,7 @@ export function requestBootstrapMcpToolInstall(world, {
     const witness = fail(world, { process: "mcpTool.install.failed", actor: actor || backendHost, body: { reason: "unknown mcp tool", tool: input.tool } });
     return { ok: false, status: 400, error: "unknown mcp tool", witness };
   }
-  const existing = world.project(moduleProjectors.mcpToolInstalls)
+  const existing = project(moduleProjectors.mcpToolInstalls)
     .find(row => row.server === input.server && row.tool === input.tool);
   if (existing) {
     const witness = fail(world, { process: "mcpTool.install.failed", actor: actor || backendHost, body: { reason: "mcp tool already installed on server", server: input.server, tool: input.tool } });
@@ -223,7 +227,7 @@ export function requestBootstrapMcpToolInstall(world, {
     scopeContexts: scopeContexts.value,
     scopeTargets: scopeTargets.value
   });
-  const install = world.project(moduleProjectors.mcpToolInstalls)
+  const install = project(moduleProjectors.mcpToolInstalls)
     .find(row => row.server === input.server && row.tool === input.tool) ?? {
       server: input.server,
       tool: input.tool,
@@ -243,8 +247,10 @@ export function requestBootstrapMcpToolInstall(world, {
 export function requestBootstrapMcpToolRemove(world, {
   actor,
   backendHost,
-  body
+  body,
+  appContext = null
 }) {
+  const project = appContext?.project ?? (projector => world.project(projector));
   const validated = validateInput(world, "mcpTool.remove", body);
   if (!validated.ok) {
     const witness = fail(world, {
@@ -255,7 +261,7 @@ export function requestBootstrapMcpToolRemove(world, {
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
   const input = validated.value;
-  const existing = world.project(moduleProjectors.mcpToolInstalls)
+  const existing = project(moduleProjectors.mcpToolInstalls)
     .find(row => row.server === input.server && row.tool === input.tool);
   if (!existing) {
     const witness = fail(world, { process: "mcpTool.remove.failed", actor: actor || backendHost, body: { reason: "mcp tool install not found", server: input.server, tool: input.tool } });

@@ -9,14 +9,16 @@ export function createMcpBundleSupportServices({
   hostCapabilities,
   headerValue
 }) {
-  const currentMcpServerIndex = () => world.project(moduleProjectors.mcpServerIndex);
-  const currentMcpToolInstalls = () => world.project(moduleProjectors.mcpToolInstalls);
+  const projectFor = appContext => appContext?.project ?? (projector => world.project(projector));
+  const currentMcpServerIndex = (appContext = null) => projectFor(appContext)(moduleProjectors.mcpServerIndex);
+  const currentMcpToolInstalls = (appContext = null) => projectFor(appContext)(moduleProjectors.mcpToolInstalls);
   const currentBackendCapabilities = () => hostCapabilities(world, backendHost);
-  const scopeContextForTarget = targetId => {
+  const scopeContextForTarget = (targetId, appContext = null) => {
     if (!targetId) return null;
-    const moduleKind = world.project(moduleProjectors.modules).get(targetId) ?? null;
+    const project = projectFor(appContext);
+    const moduleKind = project(moduleProjectors.modules).get(targetId) ?? null;
     if (moduleKind === "context") return targetId;
-    return world.project(moduleProjectors.objectContexts).get(targetId) ?? null;
+    return project(moduleProjectors.objectContexts).get(targetId) ?? null;
   };
   const isLoopbackOriginHost = host => {
     const normalized = String(host || "").trim().toLowerCase().replace(/^\[|\]$/g, "");
@@ -90,7 +92,7 @@ export function createMcpBundleSupportServices({
     const contextIds = new Set(scope.contextIds ?? []);
     const targetIds = new Set(scope.targetIds ?? []);
     for (const targetId of targetIds) {
-      const contextId = scopeContextForTarget(targetId);
+      const contextId = scopeContextForTarget(targetId, appContext);
       if (contextId) contextIds.add(contextId);
     }
     if (install.scopeTargets.length && !install.scopeTargets.some(targetId => targetIds.has(targetId))) {

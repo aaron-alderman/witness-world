@@ -1,0 +1,53 @@
+[app]
+id = "engentus_frontend_app"
+imports = ["../_lib/common.wtoml", "./app/models/burst-fit.rvm", "./app/models/clip.rvm", "./app/models/goodman.rvm", "./app/models/health.rvm", "./app/models/kalman.rvm", "./app/models/mill-charge.rvm", "./app/models/mill-force.rvm", "./app/views/goodman.rvm", "./app/views/mill-charge.rvm", "./app/views/mill-force.rvm", "./app/shell.rvm"]
+spawn = ["backend", "frontend"]
+
+[[serverRunner]]
+actor = "aaron"
+id = "engentus_server"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+default = true
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "engentus_server"
+plugin = "plugin.chart-runtime"
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "engentus_server"
+plugin = "plugin.engentus-example"
+
+[[route]]
+actor = "aaron"
+id = "engentus_home_route"
+method = "GET"
+path = "/"
+serves = "engentusView"
+handler = "page.engentus"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_home_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_alias_route"
+method = "GET"
+path = "/engentus"
+serves = "engentusView"
+handler = "page.engentus"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_alias_route"
+
+[[desktopTarget]]
+id = "engentus_desktop"
+label = "Engentus Desktop"
+serverRunner = "engentus_server"
+default = true

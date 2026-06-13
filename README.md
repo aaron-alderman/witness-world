@@ -1,4 +1,4 @@
-# Witness World
+﻿# Witness World
 
 Witness World is a small JavaScript prototype for a witness-oriented application runtime.
 
@@ -147,18 +147,18 @@ It uses the same session model as the main app in normal browser use, while stil
 The main demo DSL is split into files:
 
 ```text
-examples/demo-todo-server.wtoml
-examples/demo/common.wtoml
-examples/demo/backend.wtoml
-examples/demo/frontend.wtoml
+examples/demo-todo-app/
+examples/_lib/common.wtoml
+examples/_lib/demo-todo/backend.wtoml
+examples/_lib/demo-todo/frontend.wtoml
 ```
 
 The main file imports the split files and spawns frontend/backend contexts.
 
 The type / trait model also lives in the demo DSL:
 
-- `examples/demo/common.wtoml` defines `trait`, `valueType`, and `processSpec` witnesses
-- `examples/demo/frontend.wtoml` uses `ValueEditor` widgets and schema-aware `readForm` for the widget editor
+- `examples/_lib/common.wtoml` defines `trait`, `valueType`, and `processSpec` witnesses
+- `examples/_lib/demo-todo/frontend.wtoml` uses `ValueEditor` widgets and schema-aware `readForm` for the widget editor
 
 ## Design notes
 
@@ -184,23 +184,24 @@ npm run desktop # start the first desktop ownership shell
 The runtime starts through one generic CLI entrypoint:
 
 ```bash
-node src/cli.js serve <dslPath> [--server <id>] [--port <n>]
+node src/cli.js serve <app-dir|app.wtoml> [--server <id>] [--port <n>]
 node src/cli.js bootstrap [--port <n>]
-node src/cli.js desktop [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]
+node src/cli.js desktop [<app-dir|app.wtoml>] [--desktop-target <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]
 ```
 
 Examples:
 
 ```bash
 node src/cli.js bootstrap
-node src/cli.js serve examples/demo-todo-server.wtoml --server demo_server --runtime-profile minimal
-node src/cli.js serve examples/demo-todo-server.wtoml --port 4000 --runtime-profile minimal
+node src/cli.js serve examples/demo-todo-app --runtime-profile minimal
+node src/cli.js serve examples/demo-todo-app --port 4000 --runtime-profile minimal
 node src/cli.js desktop
 ```
 
 Notes:
 
-- `--server` is optional only when the DSL resolves to exactly one `serverRunner`
+- directory startup is the preferred public interface; direct file startup is only for canonical `app.wtoml`
+- `--server` is optional only when the app resolves to exactly one `serverRunner`
 - `bootstrap` starts a blank-world authoring server and treats `/_bootstrap` as the primary seam
 - the maintained demo app now runs on `minimal` plus authored runtime-plugin installs on `demo_server`, including `plugin.demo` for demo handler-set behavior
 - `serverRunner.handlerSet = "demo"` no longer activates `bundle-demo`; the demo bundle must come from `plugin.demo` or a profile that already includes it
@@ -283,3 +284,4 @@ Current migration caveat:
 - blank-world bootstrap/tutorial startup still follows a separate runtime-composition path
 
 The detailed capability inventory for that longer arc lives in [docs/CAPABILITIES.md](C:\Users\aaron\Documents\world\docs\CAPABILITIES.md).
+

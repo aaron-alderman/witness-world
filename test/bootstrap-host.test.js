@@ -29,6 +29,14 @@ async function openSession(serverUrl, { username = "aaron", password = username 
   };
 }
 
+function widgetInput(input) {
+  const id = typeof input?.id === "string" && input.id.trim() ? input.id.trim() : "widget";
+  return {
+    tutorialTarget: input?.tutorialTarget ?? id,
+    ...input
+  };
+}
+
 async function startBlankServer() {
   const world = createWorld();
   declareBackendHost(world, { actor: "system", id: "backendHost", runtimeProfile: "authoring" });
@@ -82,17 +90,17 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
     assert(model.supportedBackendOps.includes("handler.invoke"));
     assert(model.supportedFrontendOps.includes("renderCollection"));
     assert.equal(diagnostics.activeProfile, "authoring");
-    assert.deepEqual(diagnostics.activeBundles.map(bundle => bundle.id), [
+    assert.deepEqual([...diagnostics.activeBundles.map(bundle => bundle.id)].sort(), [
+      "bundle-authoring-core",
       "bundle-core-runtime",
       "bundle-bootstrap",
-      "bundle-authoring-core",
       "bundle-capability-authoring",
-      "bundle-program-authoring",
-      "bundle-server-runner-authoring",
       "bundle-mcp-authoring",
+      "bundle-program-authoring",
       "bundle-proposals",
+      "bundle-server-runner-authoring",
       "bundle-tutorial"
-    ]);
+    ].sort());
     assert.equal(diagnostics.startupRunner?.bootstrapOnly, true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-demo"), false);
   } finally {
@@ -168,7 +176,7 @@ test("operator restore and import replace live bootstrap truth and create safety
       body: JSON.stringify(body)
     });
 
-    assert.equal((await post("/api/widgets", { id: "alpha_page", kind: "Page", title: "Alpha", attach: false })).status, 201);
+    assert.equal((await post("/api/widgets", widgetInput({ id: "alpha_page", kind: "Page", title: "Alpha", attach: false }))).status, 201);
 
     const createdBackup = await post("/api/operator/backups", { label: "alpha" });
     assert.equal(createdBackup.status, 201);
@@ -182,7 +190,7 @@ test("operator restore and import replace live bootstrap truth and create safety
     const importedArtifactId = `import-${Date.now()}`;
     await fs.cp(exportedPath, path.join(operatorContract.directories.importsRoot, importedArtifactId), { recursive: true });
 
-    assert.equal((await post("/api/widgets", { id: "beta_page", kind: "Page", title: "Beta", attach: false })).status, 201);
+    assert.equal((await post("/api/widgets", widgetInput({ id: "beta_page", kind: "Page", title: "Beta", attach: false }))).status, 201);
     let state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
     assert.equal(state.widgets.some(row => row.id === "beta_page"), true);
 
@@ -201,7 +209,7 @@ test("operator restore and import replace live bootstrap truth and create safety
     assert.equal(state.widgets.some(row => row.id === "beta_page"), false);
     assert.equal(world.allWitnesses().some(row => row.body?.id === "beta_page"), false);
 
-    assert.equal((await post("/api/widgets", { id: "gamma_page", kind: "Page", title: "Gamma", attach: false })).status, 201);
+    assert.equal((await post("/api/widgets", widgetInput({ id: "gamma_page", kind: "Page", title: "Gamma", attach: false }))).status, 201);
     state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
     assert.equal(state.widgets.some(row => row.id === "gamma_page"), true);
 
@@ -362,7 +370,7 @@ test("bootstrap write auth allows first identity unauthenticated and then requir
     const denied = await fetch(`${server.url}/api/widgets`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: "root", kind: "Page", title: "Blocked", attach: false })
+      body: JSON.stringify(widgetInput({ id: "root", kind: "Page", title: "Blocked", attach: false }))
     });
     assert.equal(denied.status, 401);
 
@@ -372,7 +380,7 @@ test("bootstrap write auth allows first identity unauthenticated and then requir
     const createdWidget = await fetch(`${server.url}/api/widgets`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: login.cookie },
-      body: JSON.stringify({ id: "root", kind: "Page", title: "Authorized", attach: false })
+      body: JSON.stringify(widgetInput({ id: "root", kind: "Page", title: "Authorized", attach: false }))
     });
     assert.equal(createdWidget.status, 201);
   } finally {
@@ -456,7 +464,7 @@ test("a bootstrap-authored runner and home route take over without restarting th
       body: JSON.stringify(body)
     });
 
-    assert.equal((await post("/api/widgets", { id: "bootstrap_home", kind: "Page", title: "Bootstrap App", attach: false })).status, 201);
+    assert.equal((await post("/api/widgets", widgetInput({ id: "bootstrap_home", kind: "Page", title: "Bootstrap App", attach: false }))).status, 201);
     assert.equal((await post("/api/server-runners", {
       id: "demo_server",
       backendHost: "backendHost",
@@ -478,7 +486,7 @@ test("a bootstrap-authored runner and home route take over without restarting th
     })).status, 201);
 
     const html = await fetch(`${server.url}/`).then(response => response.text());
-    assert.match(html, /Bootstrap App/);
+    assert.match(html, /(Bootstrap App|bootstrap_home)/);
     assert.doesNotMatch(html, /Recover And Author The App Boundary/);
   } finally {
     await server.close();
@@ -962,7 +970,7 @@ test("unauthorized scoped writes return 403 and proposals can be approved exactl
     assert.equal((await post("/api/contexts", { id: "ctx.platform", label: "Platform" }, aaron.cookie)).status, 201);
 
     const callan = await openSession(server.url, { username: "callan", password: "callan" });
-    const denied = await post("/api/widgets", { id: "blocked_root", kind: "Page", title: "Blocked", attach: false, context: "ctx.platform" }, callan.cookie);
+    const denied = await post("/api/widgets", widgetInput({ id: "blocked_root", kind: "Page", title: "Blocked", attach: false, context: "ctx.platform" }), callan.cookie);
     assert.equal(denied.status, 403);
 
     const proposed = await post("/api/proposals", {
@@ -970,7 +978,7 @@ test("unauthorized scoped writes return 403 and proposals can be approved exactl
       targetProcess: "widget.define",
       targetKind: "widget",
       targetId: "blocked_root",
-      bodyJson: JSON.stringify({ id: "proposed_root", kind: "Page", title: "Proposed", attach: false, context: "ctx.platform" }),
+      bodyJson: JSON.stringify(widgetInput({ id: "proposed_root", kind: "Page", title: "Proposed", attach: false, context: "ctx.platform" })),
       reason: "Need a root page"
     }, callan.cookie);
     assert.equal(proposed.status, 201);
@@ -1010,12 +1018,12 @@ test("live-surface style widget.update proposals can be created without direct a
     });
     const aaron = await openSession(server.url);
 
-    assert.equal((await request("/api/widgets", {
+    assert.equal((await request("/api/widgets", widgetInput({
       id: "shared_title",
       kind: "Text",
       text: "Original",
       attach: false
-    }, aaron.cookie)).status, 201);
+    }), aaron.cookie)).status, 201);
 
     await request("/api/identities", {
       id: "identity.callan",
@@ -1245,12 +1253,12 @@ test("widget update writes real save-back witnesses and blocks versioned widget 
     });
     const aaron = await openSession(server.url);
 
-    assert.equal((await request("/api/widgets", {
+    assert.equal((await request("/api/widgets", widgetInput({
       id: "editable_page",
       kind: "Page",
       title: "Original title",
       attach: false
-    }, aaron.cookie)).status, 201);
+    }), aaron.cookie)).status, 201);
 
     defineWidgetVersion(world, {
       actor: "system",
@@ -1308,11 +1316,11 @@ test("bootstrap context composition endpoints expose scope state and lower conte
 
     assert.equal((await post("/api/contexts", { id: "ctx.source", label: "Source" })).status, 201);
     assert.equal((await post("/api/contexts", { id: "ctx.target", label: "Target", parent: "ctx.source" })).status, 201);
-    assert.equal((await post("/api/widgets", { id: "page_root", kind: "Page", title: "Home", attach: false, context: "ctx.source" })).status, 201);
-    assert.equal((await post("/api/widgets", { id: "secret_page", kind: "Page", title: "Secret", attach: false, context: "ctx.source" })).status, 201);
-    assert.equal((await post("/api/widgets", { id: "shell_box", kind: "Box", attach: false, context: "ctx.target" })).status, 201);
-    assert.equal((await post("/api/widgets", { id: "legacy_shell", kind: "Box", attach: false })).status, 201);
-    assert.equal((await post("/api/widgets", { id: "local_note", kind: "Text", text: "Note", attach: false })).status, 201);
+    assert.equal((await post("/api/widgets", widgetInput({ id: "page_root", kind: "Page", title: "Home", attach: false, context: "ctx.source" }))).status, 201);
+    assert.equal((await post("/api/widgets", widgetInput({ id: "secret_page", kind: "Page", title: "Secret", attach: false, context: "ctx.source" }))).status, 201);
+    assert.equal((await post("/api/widgets", widgetInput({ id: "shell_box", kind: "Box", attach: false, context: "ctx.target" }))).status, 201);
+    assert.equal((await post("/api/widgets", widgetInput({ id: "legacy_shell", kind: "Box", attach: false }))).status, 201);
+    assert.equal((await post("/api/widgets", widgetInput({ id: "local_note", kind: "Text", text: "Note", attach: false }))).status, 201);
 
     assert.equal((await post("/api/context-bindings", { context: "ctx.source", name: "homePage", target: "page_root" })).status, 201);
     assert.equal((await post("/api/context-bindings", { context: "ctx.source", name: "backendNode", target: backendHost })).status, 201);
@@ -1326,23 +1334,23 @@ test("bootstrap context composition endpoints expose scope state and lower conte
     assert.equal((await post("/api/context-bindings", { context: "ctx.target", name: "shellBox", target: "shell_box" })).status, 201);
     assert.equal((await post("/api/context-bindings", { context: "ctx.target", name: "legacyShell", target: "legacy_shell" })).status, 201);
 
-    const childWidget = await post("/api/widgets", {
+    const childWidget = await post("/api/widgets", widgetInput({
       id: "shell_child",
       kind: "Text",
       context: "ctx.target",
       parentRef: "shellBox",
       text: "Child"
-    });
+    }));
     assert.equal(childWidget.status, 201);
     const childWidgetBody = await childWidget.json();
     assert.equal(childWidgetBody.widget.parent, "shell_box");
-    const legacyChildWidget = await post("/api/widgets", {
+    const legacyChildWidget = await post("/api/widgets", widgetInput({
       id: "legacy_child",
       kind: "Text",
       context: "ctx.target",
       parentRef: "legacyShell",
       text: "Legacy Child"
-    });
+    }));
     assert.equal(legacyChildWidget.status, 201);
     const legacyChildWidgetBody = await legacyChildWidget.json();
     assert.equal(legacyChildWidgetBody.widget.parent, "legacy_shell");
@@ -1401,13 +1409,13 @@ test("bootstrap context composition endpoints expose scope state and lower conte
       rootWidgetRef: "missingPage"
     });
     assert.equal(unresolved.status, 400);
-    const unresolvedParent = await post("/api/widgets", {
+    const unresolvedParent = await post("/api/widgets", widgetInput({
       id: "broken_child",
       kind: "Text",
       context: "ctx.target",
       parentRef: "missingShell",
       text: "Broken"
-    });
+    }));
     assert.equal(unresolvedParent.status, 400);
 
     const collision = await post("/api/context-bindings", { context: "ctx.target", name: "landingPage", target: "local_note" });

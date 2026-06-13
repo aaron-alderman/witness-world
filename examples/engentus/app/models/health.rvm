@@ -1,0 +1,16 @@
+import desire/v3-alpha
+
+// ── Channel-health classification stage as a DESIRE model ──────────────────────
+//
+// The 5-state / 15-flag per-channel-hour classifier (health.py) is branching
+// logic — a lowered leaf in `healthFunctions`
+// (plugins/pipeline-runtime/health-kernels.js). The host-op needs the per-hour
+// valid-channel and distinct-bolt counts; each is a scalar derive over a lowered
+// leaf applied to the hour's feature rows (a host-op param). Run by `evaluateModel`.
+
+model HealthClassify {
+  param rows = 0   // per-(bolt × channel) feature rows for the hour (host-op param)
+
+  derive n_valid_channels = health_n_valid(rows)
+  derive n_bolts_evaluated = health_n_bolts(rows)
+}

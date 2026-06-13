@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -129,6 +129,80 @@ id = "home_page"
     && typeof w.body?.desireNodeId === "string"
     && Array.isArray(w.body?.desireSourceNodeIds)
   ), true);
+});
+
+test("WTOML widget sections supported by the renderer are also first-class in the DESIRE apply path", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[page]]
+actor = "browser"
+id = "root"
+
+[[label]]
+actor = "browser"
+id = "proposal_label"
+text = "Proposal Body"
+
+[[textarea]]
+actor = "browser"
+id = "proposal_body"
+name = "bodyJson"
+text = "{}"
+
+[[details]]
+actor = "browser"
+id = "proposal_details"
+
+[[summary]]
+actor = "browser"
+id = "proposal_summary"
+text = "More"
+
+[[valueEditor]]
+actor = "browser"
+id = "proposal_kind_editor"
+name = "targetKind"
+valueType = "proposal.kind"
+
+[[attachWidget]]
+actor = "browser"
+parent = "root"
+child = "proposal_label"
+order = 0
+
+[[attachWidget]]
+actor = "browser"
+parent = "root"
+child = "proposal_body"
+order = 1
+
+[[attachWidget]]
+actor = "browser"
+parent = "root"
+child = "proposal_details"
+order = 2
+
+[[attachWidget]]
+actor = "browser"
+parent = "proposal_details"
+child = "proposal_summary"
+order = 0
+
+[[attachWidget]]
+actor = "browser"
+parent = "root"
+child = "proposal_kind_editor"
+order = 3
+`);
+
+  const tree = world.project(w => widgetTree(w, "root"));
+  assert.equal(tree.kind, "Page");
+  assert.equal(tree.children.some(child => child.id === "proposal_label" && child.kind === "Label"), true);
+  assert.equal(tree.children.some(child => child.id === "proposal_body" && child.kind === "Textarea"), true);
+  assert.equal(tree.children.some(child => child.id === "proposal_details" && child.kind === "Details"), true);
+  assert.equal(tree.children.some(child => child.id === "proposal_kind_editor" && child.kind === "ValueEditor"), true);
+  const details = tree.children.find(child => child.id === "proposal_details");
+  assert.equal(details.children.some(child => child.id === "proposal_summary" && child.kind === "Summary"), true);
 });
 
 test("rejects unsupported DSL value syntax", () => {
@@ -445,13 +519,12 @@ test("maintained demo entrypoints inherit authored runtime plugin installs witho
   };
 
   for (const relativePath of [
-    "examples/demo-todo-server.wtoml",
-    "examples/demo-todo-server.explicit.wtoml",
-    "examples/demo-todo-server.monolith.wtoml"
+    "examples/demo-todo-app/app.wtoml",
+    "examples/eden/app.wtoml"
   ]) {
     const { plugins, runner } = await loadRunnerState(relativePath);
     assert.deepEqual(plugins, expected);
-    assert.equal(runner?.handlerSet ?? null, null);
+    assert.equal(runner?.handlerSet ?? null, "demo");
   }
 });
 
@@ -865,3 +938,4 @@ rootWidget = "local_page"
   assert.equal(program.rootWidget, "local_page");
   assert.equal(world.project(moduleProjectors.contextScopes).some(row => row.context === "ctx.target" && row.name === "legacyShell" && row.target === "legacy_shell" && row.sourceKind === "local"), true);
 });
+

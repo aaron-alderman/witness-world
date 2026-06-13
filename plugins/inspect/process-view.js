@@ -1,6 +1,12 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { frontendProgram } from "../../src/widgets.js";
 import { backendProgramVersionDefinition, backendProgramVersionsProjection } from "../../src/backend-programs.js";
 import { pathLabel, pathBreadcrumb } from "../../src/process-graph.js";
+import { createWorld } from "../../src/kernel.js";
+import { applyWitnessToml } from "../../src/dsl.js";
+import { renderWidgetPage } from "./widget-page.js";
 
 const ASYNC_OPS = new Set(["fetchJson", "postJson", "patchJson", "deleteJson", "initSession", "setSession", "logout", "refreshProjection", "request.readJson", "handler.invoke", "run"]);
 const TERMINAL_STEP_PROCESSES = new Set(["frontend.step.done", "frontend.step.skipped", "frontend.step.failed", "backend.step.done", "backend.step.skipped", "backend.step.failed"]);
@@ -21,6 +27,9 @@ const PROCESS_EVENT_PROCESSES = new Set([
   "backend.step.failed"
 ]);
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const processViewWtoml = fs.readFileSync(path.join(__dirname, "process-view-page.wtoml"), "utf8");
+
 export function processCatalogProjection(witnesses) {
   const catalog = [];
   const programs = frontendPrograms(witnesses);
@@ -37,7 +46,7 @@ export function processCatalogProjection(witnesses) {
         id: `${program.id}:${event}`,
         program: program.id,
         event,
-        label: `${program.id} · ${event}`,
+        label: `${program.id} - ${event}`,
         nodeCount: graph.nodes.length,
         branchCount: graph.nodes.filter(node => node.semantics.branch).length,
         loopCount: graph.nodes.filter(node => node.semantics.loopKind).length,
@@ -61,7 +70,7 @@ export function processCatalogProjection(witnesses) {
         id: `${program.id}:${event}`,
         program: program.id,
         event,
-        label: `${program.soul} · ${event} · ${program.id}`,
+        label: `${program.soul} - ${event} - ${program.id}`,
         kind: "backend",
         nodeCount: graph.nodes.length,
         branchCount: graph.nodes.filter(node => node.semantics.branch).length,
@@ -152,169 +161,230 @@ export function processRunProjection({ witnesses, observations = [] }, { runId, 
 }
 
 export function renderProcessPage(model, { currentPath = "/process" } = {}) {
+  const world = createWorld();
+  applyWitnessToml(world, processViewWtoml);
+  const html = renderWidgetPage(world, {
+    actor: "frontendHost",
+    rootWidget: "process_page_root",
+    frontendProgram: "process_page_program",
+    appConfig: {
+      initialStateScriptId: "process-page-initial-state",
+      initialStateInto: "processPage"
+    }
+  });
+  const initialState = `<script type="application/json" id="process-page-initial-state">${serializeJsonScript(buildProcessPageState(model, currentPath))}</script>`;
+  return injectBeforeFrontendProgram(html, initialState);
+}
+
+function buildProcessPageState(model, currentPath) {
   const selection = model.selection ?? {};
   const replay = model.replay ?? null;
-  const selectedNode = model.graph?.nodes?.find(node => node.id === selection.nodeId) ?? null;
+  const graphNodes = model.graph?.nodes ?? [];
+  const graphNodeById = new Map(graphNodes.map(node => [node.id, node]));
+  const selectedNode = selection.nodeId ? graphNodeById.get(selection.nodeId) ?? null : null;
   const selectedNodeHistory = selectedNode ? (model.run?.nodeHistory?.[selectedNode.id] ?? []) : [];
+  const selectedNodeTimeline = selectedNodeHistory.filter(item => item.type === "timeline");
+  const selectedNodeRequests = selectedNodeHistory.filter(item => item.type === "request");
   const selectedNodeState = selectedNode ? (replay?.nodeStates?.[selectedNode.id] ?? null) : null;
-  const processLinks = model.catalog.map(item => {
-    const href = processHref(currentPath, { program: item.program, event: item.event });
-    const selected = item.program === selection.program && item.event === selection.event;
-    return `<a class="process-list-item${selected ? " selected" : ""}" data-process-catalog-item href="${escapeAttr(href)}"><strong>${escapeHtml(item.label)}</strong><span>${item.nodeCount} nodes · ${item.asyncCount} async</span></a>`;
-  }).join("");
-  const runLinks = model.runs.map(item => {
-    const href = processHref(currentPath, { program: selection.program, event: selection.event, runId: item.runId });
-    const selected = item.runId === selection.runId;
-    return `<a class="process-list-item${selected ? " selected" : ""}" data-process-run-item href="${escapeAttr(href)}"><strong>${escapeHtml(item.status)}</strong><span>${escapeHtml(item.runId)} · ${escapeHtml(item.actor || "frontendHost")}</span></a>`;
-  }).join("");
-  const layers = (model.graph?.layers ?? []).map(layer => {
-    const nodes = layer.nodeIds.map(nodeId => {
-      const node = model.graph.nodes.find(candidate => candidate.id === nodeId);
-      if (!node) return "";
-      const href = processHref(currentPath, {
-        program: selection.program,
-        event: selection.event,
-        runId: selection.runId,
-        nodeId: node.id,
-        replay: replay?.cursor ?? null
-      });
-      const status = replay?.nodeStates?.[node.id]?.status ?? "pending";
-      const badges = [
-        node.semantics.branch ? `<span class="process-badge">branch</span>` : "",
-        node.semantics.loopKind ? `<span class="process-badge">${escapeHtml(node.semantics.loopKind)}</span>` : "",
-        node.semantics.parallel ? `<span class="process-badge">parallel</span>` : "",
-        node.semantics.async ? `<span class="process-badge">async</span>` : "",
-        node.semantics.fanIn ? `<span class="process-badge">fan-in</span>` : ""
-      ].join("");
-      return `<a class="process-node status-${escapeAttr(status)}${node.id === selection.nodeId ? " selected" : ""}" data-process-node data-process-status="${escapeAttr(status)}" data-process-branch="${node.semantics.branch}" data-process-loop="${escapeAttr(node.semantics.loopKind || "")}" data-process-parallel="${node.semantics.parallel}" data-process-async="${node.semantics.async}" href="${escapeAttr(href)}"><div class="process-node-title">${escapeHtml(node.label)}</div><div class="process-node-op">${escapeHtml(node.op)}</div><div class="process-node-meta">${escapeHtml(node.breadcrumb || "")}</div><div class="process-badges">${badges}</div>${node.whenLabel ? `<div class="process-node-rule">when ${escapeHtml(node.whenLabel)}</div>` : ""}${node.repeatLabel ? `<div class="process-node-rule">${escapeHtml(node.repeatLabel)}</div>` : ""}${node.after.length ? `<div class="process-node-rule">after ${escapeHtml(node.after.join(", "))}</div>` : ""}</a>`;
-    }).join("");
-    return `<section class="process-layer${layer.nodeIds.length > 1 ? " parallel" : ""}" data-process-layer data-process-layer-size="${layer.nodeIds.length}"><header>Layer ${layer.index}</header><div class="process-layer-nodes">${nodes}</div></section>`;
-  }).join("");
-
   const replayCursor = replay?.cursor ?? 0;
   const replayMax = replay?.max ?? 0;
-  const replayPrev = processHref(currentPath, { program: selection.program, event: selection.event, runId: selection.runId, nodeId: selection.nodeId, replay: Math.max(0, replayCursor - 1) });
-  const replayNext = processHref(currentPath, { program: selection.program, event: selection.event, runId: selection.runId, nodeId: selection.nodeId, replay: Math.min(replayMax, replayCursor + 1) });
-  const replayFailure = replay?.firstFailureCursor != null
-    ? processHref(currentPath, { program: selection.program, event: selection.event, runId: selection.runId, nodeId: selection.nodeId, replay: replay.firstFailureCursor })
-    : null;
+  return {
+    summaryItems: [
+      summaryItem("program", "Program", selection.program || "none"),
+      summaryItem("event", "Event", selection.event || "none"),
+      summaryItem("nodes", "Nodes", graphNodes.length),
+      summaryItem("runs", "Runs", model.runs?.length ?? 0)
+    ],
+    catalogItems: (model.catalog ?? []).map((item, index) => {
+      const base = processWidgetId("catalog", index, item.program, item.event);
+      return {
+        widgetId: base,
+        linkWidgetId: `${base}.link`,
+        metaWidgetId: `${base}.meta`,
+        label: item.label,
+        meta: `${item.nodeCount} nodes - ${item.asyncCount} async`,
+        href: processHref(currentPath, { program: item.program, event: item.event }),
+        selected: item.program === selection.program && item.event === selection.event
+      };
+    }),
+    runItems: (model.runs ?? []).map((item, index) => {
+      const base = processWidgetId("run", index, item.runId);
+      return {
+        widgetId: base,
+        linkWidgetId: `${base}.link`,
+        metaWidgetId: `${base}.meta`,
+        label: item.status,
+        meta: `${item.runId} - ${item.actor || "frontendHost"}`,
+        href: processHref(currentPath, { program: selection.program, event: selection.event, runId: item.runId }),
+        selected: item.runId === selection.runId
+      };
+    }),
+    graphLayers: (model.graph?.layers ?? []).map(layer => {
+      const base = processWidgetId("layer", layer.index);
+      return {
+        widgetId: base,
+        titleWidgetId: `${base}.title`,
+        nodeContainerWidgetId: `${base}.nodes`,
+        title: `Layer ${layer.index}`,
+        nodes: layer.nodeIds.map((nodeId, index) => {
+          const node = graphNodeById.get(nodeId);
+          if (!node) return null;
+          const itemBase = processWidgetId("node", layer.index, index, node.id);
+          const status = replay?.nodeStates?.[node.id]?.status ?? "pending";
+          const badges = [];
+          if (node.semantics.branch) badges.push("branch");
+          if (node.semantics.loopKind) badges.push(node.semantics.loopKind);
+          if (node.semantics.parallel) badges.push("parallel");
+          if (node.semantics.async) badges.push("async");
+          if (node.semantics.fanIn) badges.push("fan-in");
+          return {
+            widgetId: itemBase,
+            linkWidgetId: `${itemBase}.link`,
+            opWidgetId: `${itemBase}.op`,
+            metaWidgetId: `${itemBase}.meta`,
+            badgesWidgetId: `${itemBase}.badges`,
+            whenWidgetId: `${itemBase}.when`,
+            repeatWidgetId: `${itemBase}.repeat`,
+            afterWidgetId: `${itemBase}.after`,
+            label: node.label,
+            op: node.op,
+            meta: node.breadcrumb || "",
+            badgesText: badges.join(" | "),
+            whenText: node.whenLabel ? `when ${node.whenLabel}` : "",
+            repeatText: node.repeatLabel || "",
+            afterText: node.after?.length ? `after ${node.after.join(", ")}` : "",
+            href: processHref(currentPath, {
+              program: selection.program,
+              event: selection.event,
+              runId: selection.runId,
+              nodeId: node.id,
+              replay: replay?.cursor ?? null
+            }),
+            selected: node.id === selection.nodeId,
+            status,
+            branch: node.semantics.branch,
+            loopKind: node.semantics.loopKind || "",
+            parallel: node.semantics.parallel,
+            async: node.semantics.async
+          };
+        }).filter(Boolean)
+      };
+    }),
+    runCards: model.run ? [{
+      widgetId: processWidgetId("run-card"),
+      titleWidgetId: processWidgetId("run-card", "title"),
+      runIdWidgetId: processWidgetId("run-card", "id"),
+      statusWidgetId: processWidgetId("run-card", "status"),
+      actorWidgetId: processWidgetId("run-card", "actor"),
+      runId: model.run.runId,
+      status: model.run.status,
+      actor: model.run.actor || "frontendHost"
+    }] : [],
+    replayCards: model.run ? [{
+      widgetId: processWidgetId("replay-card"),
+      titleWidgetId: processWidgetId("replay-card", "title"),
+      cursorWidgetId: processWidgetId("replay-card", "cursor"),
+      controlsWidgetId: processWidgetId("replay-card", "controls"),
+      prevWidgetId: processWidgetId("replay-card", "prev"),
+      nextWidgetId: processWidgetId("replay-card", "next"),
+      failureWidgetId: processWidgetId("replay-card", "failure"),
+      cursorLabel: `Cursor ${replayCursor} / ${replayMax}`,
+      prevHref: processHref(currentPath, { program: selection.program, event: selection.event, runId: selection.runId, nodeId: selection.nodeId, replay: Math.max(0, replayCursor - 1) }),
+      nextHref: processHref(currentPath, { program: selection.program, event: selection.event, runId: selection.runId, nodeId: selection.nodeId, replay: Math.min(replayMax, replayCursor + 1) }),
+      failureHref: replay?.firstFailureCursor != null
+        ? processHref(currentPath, { program: selection.program, event: selection.event, runId: selection.runId, nodeId: selection.nodeId, replay: replay.firstFailureCursor })
+        : "",
+      cursor: replayCursor,
+      max: replayMax,
+      rangeUrlPrefix: replayRangeUrlPrefix(currentPath, selection)
+    }] : [],
+    selectedNodeCards: selectedNode ? [{
+      widgetId: processWidgetId("selected-node-card"),
+      titleWidgetId: processWidgetId("selected-node-card", "title"),
+      labelWidgetId: processWidgetId("selected-node-card", "label"),
+      opWidgetId: processWidgetId("selected-node-card", "op"),
+      metaWidgetId: processWidgetId("selected-node-card", "meta"),
+      statusWidgetId: processWidgetId("selected-node-card", "status"),
+      label: selectedNode.label,
+      op: selectedNode.op,
+      meta: selectedNode.breadcrumb || "",
+      status: selectedNodeState ? `Status: ${selectedNodeState.status}` : ""
+    }] : [],
+    selectedNodeTimeline: selectedNodeTimeline.map((item, index) => {
+      const base = processWidgetId("timeline", index, item.nodeId, item.cursor);
+      return {
+        widgetId: base,
+        labelWidgetId: `${base}.label`,
+        statusWidgetId: `${base}.status`,
+        messageWidgetId: `${base}.message`,
+        label: item.process || item.nodeId || "timeline",
+        status: item.status || "",
+        message: item.message || "",
+        failed: item.status === "failed"
+      };
+    }),
+    selectedNodeRequests: selectedNodeRequests.map((item, index) => {
+      const base = processWidgetId("request", index, item.requestId, item.stepId);
+      return {
+        widgetId: base,
+        labelWidgetId: `${base}.label`,
+        statusWidgetId: `${base}.status`,
+        messageWidgetId: `${base}.message`,
+        label: `${item.method} ${item.url}`,
+        status: `Status ${item.statusCode}`,
+        message: (item.failureWitnesses || [])
+          .map(failure => `${failure.process} ${failure.body?.reason || failure.body?.message || ""}`.trim())
+          .filter(Boolean)
+          .join("\n"),
+        failed: Number(item.statusCode) >= 400
+      };
+    })
+  };
+}
 
-  return `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Process View</title>
-  <style>
-    :root { --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
-    body { margin: 0; font-family: system-ui, sans-serif; color: #1f2937; background: #f7f7f5; }
-    a { color: inherit; text-decoration: none; }
-    .process-header { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid #ddd; background: #fff; }
-    .process-header a { color: #375a7f; text-decoration: underline; }
-    .process-shell { display: grid; grid-template-columns: 280px minmax(0, 1fr) 340px; min-height: calc(100vh - 58px); }
-    .process-pane { border-right: 1px solid #ddd; background: #fff; overflow: auto; }
-    .process-pane:last-child { border-right: 0; border-left: 1px solid #ddd; }
-    .process-pane h2 { margin: 0; padding: 12px 14px 8px; font-size: 1rem; }
-    .process-pane h3 { margin: 0; padding: 8px 14px; font-size: .95rem; color: #555; }
-    .process-list { display: grid; gap: 6px; padding: 0 12px 12px; }
-    .process-list-item { display: grid; gap: 3px; padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fafafa; font-size: 13px; }
-    .process-list-item.selected { border-color: #375a7f; box-shadow: 0 0 0 2px rgba(55,90,127,.12); background: #f4f8fc; }
-    .process-list-item strong, .process-list-item span { color: #666; font-size: 12px; font-family: var(--mono); }
-    .process-list-item strong { color: inherit; font-size: 13px; }
-    .process-main { overflow: auto; padding: 16px; }
-    .process-graph { display: grid; gap: 12px; }
-    .process-graph-summary { display: flex; gap: 10px; flex-wrap: wrap; color: #555; font-size: 13px; }
-    .process-layer { border: 1px solid #ddd; border-radius: 10px; background: #fff; padding: 10px; }
-    .process-layer.parallel { border-color: #8aa3bf; background: #f7fbff; }
-    .process-layer header { font-size: 12px; font-weight: 700; color: #555; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .04em; }
-    .process-layer-nodes { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
-    .process-node { display: grid; gap: 6px; border: 1px solid #ddd; border-radius: 10px; padding: 10px; background: #fff; }
-    .process-node.selected { border-color: #375a7f; box-shadow: 0 0 0 2px rgba(55,90,127,.12); }
-    .process-node.status-done { border-left: 6px solid #3f7d3a; }
-    .process-node.status-running { border-left: 6px solid #9a7c22; }
-    .process-node.status-skipped { border-left: 6px solid #7b7b7b; }
-    .process-node.status-failed { border-left: 6px solid #b53a30; background: #fff5f5; }
-    .process-node.status-pending { border-left: 6px solid #d2d2d2; }
-    .process-node-title { font-weight: 700; }
-    .process-node-op { color: #375a7f; font-family: var(--mono); font-size: 12px; }
-    .process-node-meta, .process-node-rule { color: #666; font-size: 12px; font-family: var(--mono); }
-    .process-badges { display: flex; gap: 6px; flex-wrap: wrap; }
-    .process-badge { padding: 2px 6px; border-radius: 999px; background: #eef2f7; font-size: 11px; font-family: var(--mono); }
-    .process-inspector { padding: 12px 14px 20px; display: grid; gap: 12px; }
-    .process-card { border: 1px solid #ddd; border-radius: 10px; background: #fafafa; padding: 10px; display: grid; gap: 8px; }
-    .process-card pre { margin: 0; white-space: pre-wrap; overflow: auto; font-size: 12px; font-family: var(--mono); }
-    .process-card code { font-family: var(--mono); font-size: 12px; }
-    .process-replay-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .process-replay-controls a { color: #375a7f; text-decoration: underline; font-size: 13px; font-family: var(--mono); }
-    .process-request, .process-timeline-item { border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; padding: 8px; display: grid; gap: 4px; font-size: 12px; font-family: var(--mono); }
-    .process-request.failed, .process-timeline-item.failed { border-color: #e3b0ac; background: #fff5f5; }
-    .process-empty { color: #666; font-size: 13px; padding: 0 14px 14px; }
-  </style>
-</head>
-<body>
-  <header class="process-header">
-    <strong>Process View</strong>
-    <a href="/">Back to Todo</a>
-    <a href="/world">World Graph</a>
-  </header>
-  <div class="process-shell">
-    <aside class="process-pane">
-      <h2>Processes</h2>
-      <div class="process-list">${processLinks || `<div class="process-empty">No authored processes.</div>`}</div>
-      <h3>Recent Runs</h3>
-      <div class="process-list">${runLinks || `<div class="process-empty">No recorded runs yet.</div>`}</div>
-    </aside>
-    <main class="process-main">
-      <section class="process-graph" data-process-view>
-        <div class="process-graph-summary">
-          <span><strong>Program:</strong> ${escapeHtml(selection.program || "none")}</span>
-          <span><strong>Event:</strong> ${escapeHtml(selection.event || "none")}</span>
-          <span><strong>Nodes:</strong> ${model.graph?.nodes?.length ?? 0}</span>
-          <span><strong>Runs:</strong> ${model.runs?.length ?? 0}</span>
-        </div>
-        ${layers || `<div class="process-empty">Select an authored process.</div>`}
-      </section>
-    </main>
-    <aside class="process-pane">
-      <div class="process-inspector">
-        <section class="process-card">
-          <strong>Run</strong>
-          ${model.run ? `<div><code>${escapeHtml(model.run.runId)}</code></div><div>${escapeHtml(model.run.status)}</div><div>${escapeHtml(model.run.actor || "frontendHost")}</div>` : `<div class="process-empty">No run selected.</div>`}
-        </section>
-        ${model.run ? `<section class="process-card" data-process-replay>
-          <strong>Replay</strong>
-          <div>Cursor ${replayCursor} / ${replayMax}</div>
-          <div class="process-replay-controls">
-            <a data-process-replay-prev href="${escapeAttr(replayPrev)}">Step back</a>
-            <a data-process-replay-next href="${escapeAttr(replayNext)}">Step forward</a>
-            ${replayFailure ? `<a data-process-replay-failure href="${escapeAttr(replayFailure)}">Jump to failure</a>` : ""}
-          </div>
-          <input data-process-replay-range type="range" min="0" max="${escapeAttr(replayMax)}" value="${escapeAttr(replayCursor)}" />
-        </section>` : ""}
-        <section class="process-card">
-          <strong>Selected Node</strong>
-          ${selectedNode ? `<div>${escapeHtml(selectedNode.label)}</div><div><code>${escapeHtml(selectedNode.op)}</code></div><div>${escapeHtml(selectedNode.breadcrumb || "")}</div>${selectedNodeState ? `<div>Status: ${escapeHtml(selectedNodeState.status)}</div>` : ""}` : `<div class="process-empty">Select a node.</div>`}
-        </section>
-        <section class="process-card">
-          <strong>Timeline</strong>
-          ${selectedNodeHistory.length ? selectedNodeHistory.map(item => `<div class="process-timeline-item${item.status === "failed" ? " failed" : ""}"><div>${escapeHtml(item.process)}</div><div>${escapeHtml(item.status)}</div>${item.message ? `<div>${escapeHtml(item.message)}</div>` : ""}</div>`).join("") : `<div class="process-empty">No node events yet.</div>`}
-        </section>
-        <section class="process-card">
-          <strong>Correlated Requests</strong>
-          ${selectedNodeHistory.filter(item => item.type === "request").length ? selectedNodeHistory.filter(item => item.type === "request").map(item => `<div class="process-request${item.statusCode >= 400 ? " failed" : ""}"><div>${escapeHtml(item.method)} ${escapeHtml(item.url)}</div><div>Status ${item.statusCode}</div>${(item.failureWitnesses || []).map(failure => `<div><code>${escapeHtml(failure.process)}</code> ${escapeHtml(failure.body?.reason || failure.body?.message || "")}</div>`).join("")}</div>`).join("") : `<div class="process-empty">No correlated requests for this node.</div>`}
-        </section>
-      </div>
-    </aside>
-  </div>
-  <script>
-    document.querySelector('[data-process-replay-range]')?.addEventListener('change', event => {
-      const url = new URL(window.location.href);
-      url.searchParams.set('replay', event.target.value);
-      window.location.assign(url.toString());
-    });
-  </script>
-</body>
-</html>`;
+function summaryItem(id, label, value) {
+  const base = processWidgetId("summary", id);
+  return {
+    widgetId: base,
+    labelWidgetId: `${base}.label`,
+    valueWidgetId: `${base}.value`,
+    label,
+    value: String(value)
+  };
+}
+
+function processWidgetId(...parts) {
+  return parts
+    .map(part => String(part ?? "").trim())
+    .filter(Boolean)
+    .map(part => part.replace(/[^A-Za-z0-9_.:-]+/g, "-"))
+    .join(".");
+}
+
+function replayRangeUrlPrefix(basePath, selection) {
+  return processHref(basePath, {
+    program: selection.program,
+    event: selection.event,
+    runId: selection.runId,
+    nodeId: selection.nodeId,
+    replay: ""
+  });
+}
+
+function serializeJsonScript(value) {
+  return JSON.stringify(value).replace(/[<>&]/g, char => {
+    if (char === "<") return "\\u003c";
+    if (char === ">") return "\\u003e";
+    return "\\u0026";
+  });
+}
+
+function injectBeforeFrontendProgram(html, addition) {
+  const anchor = '<script type="application/json" id="witness-frontend-program">';
+  if (html.includes(anchor)) return html.replace(anchor, `${addition}\n${anchor}`);
+  return html.includes("</body>")
+    ? html.replace("</body>", `${addition}\n</body>`)
+    : `${html}\n${addition}`;
 }
 
 export function isFrontendProcessEventProcess(value) {

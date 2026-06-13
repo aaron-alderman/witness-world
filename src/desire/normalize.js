@@ -5,18 +5,10 @@ export function normalizeDesirePlusToDesire(desirePlus) {
   const nodes = [];
   const runtimeResiduals = [];
   const versionFieldsByName = new Map();
-  const installedPluginsByRunner = new Map();
 
   for (const node of validatedDesirePlus.nodes) {
     if (node.semantic?.kind === "type" && node.semantic?.role === "version") {
       versionFieldsByName.set(node.name, node.semantic.field ?? "version");
-    }
-    if (node.kind === "wtoml.doc" && node.payload.docKind === "runtimePluginInstall") {
-      const runner = node.payload.values?.serverRunner;
-      const plugin = node.payload.values?.plugin;
-      if (!runner || !plugin) continue;
-      if (!installedPluginsByRunner.has(runner)) installedPluginsByRunner.set(runner, new Set());
-      installedPluginsByRunner.get(runner).add(plugin);
     }
   }
 
@@ -28,11 +20,6 @@ export function normalizeDesirePlusToDesire(desirePlus) {
         Object.assign(wtomlDefaults, values);
       } else {
         values = { ...wtomlDefaults, ...values };
-      }
-      if (node.payload.docKind === "serverRunner") {
-        const handlerSet = typeof values.handlerSet === "string" ? values.handlerSet : null;
-        const plugins = installedPluginsByRunner.get(values.id) ?? new Set();
-        if (handlerSet && plugins.has(`plugin.${handlerSet}`)) values.handlerSet = null;
       }
       runtimeResiduals.push(createRuntimeResidual({
         kind: "runtime.declaration",

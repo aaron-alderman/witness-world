@@ -1,11 +1,13 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { chromium } from "playwright";
 import { createWorld } from "../../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../../src/host.js";
-import { applyWitnessDocs, applyWitnessToml, loadWitnessTomlFile } from "../../src/dsl.js";
+import { applyWitnessDocs, applyWitnessToml, loadWitnessAppFile } from "../../src/dsl.js";
+import { applyDesire } from "../../src/desire/index.js";
+import { resolveRuntimeOperatorPaths } from "../../src/runtime-operator-contract.js";
 
 const silentLogger = {
   error() {},
@@ -22,8 +24,9 @@ async function tempRuntimeRoot(prefix = "witness-world-ui-") {
   return fs.mkdtemp(path.join(os.tmpdir(), prefix));
 }
 
-export async function startUiDemoServer({
-  dslPath = path.join(process.cwd(), "examples", "demo-todo-server.wtoml"),
+export async function startUiServer({
+  dslPath,
+  serverRunnerId = "demo_server",
   extraWitnessToml = "",
   logger = silentLogger,
   runtimeProfile = "full"
@@ -34,20 +37,21 @@ export async function startUiDemoServer({
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile });
 
-  const docs = await loadWitnessTomlFile(dslPath);
-  applyWitnessDocs(world, docs);
+  const loaded = await loadWitnessAppFile(dslPath);
+  applyWitnessDocs(world, loaded.witnessDocs);
+  for (const desire of loaded.authoredDesireDocs) applyDesire(world, desire);
   if (extraWitnessToml.trim()) applyWitnessToml(world, extraWitnessToml);
 
   const server = await startServer(world, {
     actor: "adam",
-    serverRunnerId: "demo_server",
+    serverRunnerId,
     runtimeRoot,
     runtimeProfile,
     logger
   });
 
   if (!server.ok) {
-    throw new Error(`failed to start demo server for UI tests: ${server.reason}`);
+    throw new Error(`failed to start UI server for ${serverRunnerId}: ${server.reason}`);
   }
 
   return {
@@ -58,6 +62,21 @@ export async function startUiDemoServer({
       await server.close();
     }
   };
+}
+
+export async function startUiDemoServer({
+  dslPath = path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"),
+  extraWitnessToml = "",
+  logger = silentLogger,
+  runtimeProfile = "full"
+} = {}) {
+  return startUiServer({
+    dslPath,
+    serverRunnerId: "demo_server",
+    extraWitnessToml,
+    logger,
+    runtimeProfile
+  });
 }
 
 export async function startBlankUiServer({ logger = silentLogger } = {}) {
@@ -83,6 +102,47 @@ export async function startBlankUiServer({ logger = silentLogger } = {}) {
     url: server.url,
     close: async () => {
       await server.close();
+    }
+  };
+}
+
+export async function startBlankUiServerWithWorldHome({ worldHome, logger = silentLogger } = {}) {
+  const resolvedWorldHome = worldHome || await fs.mkdtemp(path.join(os.tmpdir(), "witness-world-bootstrap-home-"));
+  const operatorContract = await resolveRuntimeOperatorPaths({
+    startupMode: "bootstrap",
+    cwd: process.cwd(),
+    env: { WORLD_HOME: resolvedWorldHome }
+  });
+  const world = createWorld({
+    genesis: { system: "witness-world", mode: "bootstrap" },
+    witnessLogPath: operatorContract.canonicalTruth.witnessLogPath,
+    observationLogPath: operatorContract.canonicalTruth.observationLogPath
+  });
+
+  declareBackendHost(world, { actor: "system", id: "backendHost", runtimeProfile: "authoring" });
+  declareFrontendHost(world, { actor: "system", id: "frontendHost", runtimeProfile: "authoring" });
+
+  const server = await startServer(world, {
+    actor: "system",
+    runtimeRoot: operatorContract.directories.runtimeRoot,
+    runtimeStartupMode: "bootstrap",
+    runtimeOperatorContract: operatorContract,
+    logger
+  });
+
+  if (!server.ok) {
+    throw new Error(`failed to start world-home bootstrap server for UI tests: ${server.reason}`);
+  }
+
+  return {
+    world,
+    server,
+    url: server.url,
+    worldHome: resolvedWorldHome,
+    operatorContract,
+    close: async () => {
+      await server.close();
+      await fs.rm(resolvedWorldHome, { recursive: true, force: true });
     }
   };
 }
@@ -209,3 +269,4 @@ export function createApiCapture(page) {
     }
   };
 }
+

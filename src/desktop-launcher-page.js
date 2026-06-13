@@ -1,3 +1,5 @@
+import { renderDesktopRecentWorldsFactory } from "./desktop-launcher-recent-worlds.js";
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
@@ -158,6 +160,7 @@ export function renderDesktopLauncherPage({
     </section>
   </main>
   <script>
+    ${renderDesktopRecentWorldsFactory()}
     (() => {
       const initialMessage = ${jsonForScript(safeMessage)};
       const byId = id => document.getElementById(id);
@@ -168,29 +171,12 @@ export function renderDesktopLauncherPage({
         byId("launcher-status").textContent = text || "";
       };
 
-      const renderRecentWorlds = rows => {
-        const root = byId("recent-worlds");
-        if (!rows.length) {
-          root.innerHTML = '<p>No recent worlds yet.</p>';
-          return;
-        }
-        root.innerHTML = rows.map(worldHome => (
-          '<button type="button" class="recent-row" data-world-home="' + worldHome.replace(/"/g, '&quot;') + '">' +
-            '<strong>' + worldHome.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])) + '</strong>' +
-            '<span>Open this world directly</span>' +
-          '</button>'
-        )).join("");
-        root.querySelectorAll("[data-world-home]").forEach(button => {
-          button.addEventListener("click", async () => {
-            setStatus("Opening selected world...");
-            const result = await desktop.openWorldHome({ worldHome: button.dataset.worldHome || "" });
-            if (result?.ok === false) {
-              setStatus(result.reason || "Unable to open world.");
-              await refresh();
-            }
-          });
-        });
-      };
+      bindDesktopRecentWorlds({
+        root: byId("recent-worlds"),
+        desktop,
+        setStatus,
+        refresh
+      });
 
       const render = () => {
         byId("launcher-profile").textContent = state?.runtimeProfile || "full";
@@ -199,10 +185,17 @@ export function renderDesktopLauncherPage({
           ? "Desktop runtime is already active."
           : "Open or create a named WORLD_HOME before entering the app.";
         if (!byId("launcher-status").textContent && initialMessage) setStatus(initialMessage);
-        renderRecentWorlds(state?.recentWorldHomes || []);
+        renderDesktopRecentWorlds({
+          root: byId("recent-worlds"),
+          rows: state?.recentWorldHomes || [],
+          document
+        });
       };
 
       const refresh = async () => {
+        if (!desktop || typeof desktop.getDesktopShellState !== "function") {
+          throw new Error("Desktop bridge unavailable. Restart the desktop shell.");
+        }
         state = await desktop.getDesktopShellState();
         render();
       };

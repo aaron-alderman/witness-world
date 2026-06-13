@@ -1,0 +1,40 @@
+import desire/v3-alpha
+
+// ── Mill-force charts ──────────────────────────────────────────────────────────
+//
+// Three grammar-of-graphics views over the MillForce model. They exercise the
+// generic GoG runtime's new reach: a `where` slice (pick the `method` axis),
+// x-from-a-field (the segment angle tBar), and the polar frame with polygon /
+// wedge marks. Mirrors example-ports/engentus js/mill_force_charts.js.
+
+// Force vs angle (cartesian): radial / tangential / resultant for the grounded model
+chart MillForceAngle of MillForce {
+  frame cartesian
+  x tBar
+  x.domain 0 auto
+  x.label "Segment angle θ (rad)"
+  y force
+  y.domain 0 auto
+  y.label "Force (N)"
+  layer fr   = line over segment | x:tBar y:F_r where:method=grounded stroke:blue
+  layer ft   = line over segment | x:tBar y:F_t where:method=grounded stroke:red
+  layer fres = line over segment | x:tBar y:F_resultant where:method=grounded stroke:ylw width:2.4
+}
+
+// Force rose (polar): resultant magnitude per segment, traced as a closed polygon
+chart MillForceRose of MillForce {
+  frame polar
+  theta tBar
+  r F_resultant
+  r.domain 0 auto
+  layer rose = polygon over segment | theta:tBar r:F_resultant where:method=grounded stroke:blue fill:blue
+}
+
+// Cross-section (polar): per-segment wedge coloured by resultant force
+chart MillForceCross of MillForce {
+  frame polar
+  theta tBar
+  r F_resultant
+  r.domain 0 auto
+  layer liners = wedge over segment | theta0:t1 theta1:t2 value:F_resultant where:method=grounded
+}

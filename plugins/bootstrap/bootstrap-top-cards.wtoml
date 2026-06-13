@@ -1,0 +1,1163 @@
+[[defaults]]
+actor = "frontendHost"
+context = "frontend"
+program = "bootstrap_top_cards_program"
+
+[[box]]
+id = "bootstrap_top_cards_root"
+class = "surface-page"
+children = ["bootstrap_tutorial_card_slot", "bootstrap_status_card", "bootstrap_desktop_card", "bootstrap_operator_card", "bootstrap_identity_card", "bootstrap_session_card"]
+
+[[box]]
+id = "bootstrap_tutorial_card_slot"
+domId = "bootstrap-tutorial-card-slot"
+
+[[box]]
+id = "bootstrap_status_card"
+class = "surface-card surface-stack"
+children = ["bootstrap_status_badge", "bootstrap_status_heading", "bootstrap_summary_text", "bootstrap_status_actions", "bootstrap_status_message"]
+
+[[text]]
+id = "bootstrap_status_badge"
+class = "badge"
+text = "Platform Harness"
+
+[[heading]]
+id = "bootstrap_status_heading"
+level = 2
+text = "Bootstrap Status"
+
+[[text]]
+id = "bootstrap_summary_text"
+domId = "bootstrap-summary"
+text = "Loading bootstrap state..."
+
+[[box]]
+id = "bootstrap_status_actions"
+class = "surface-actions"
+children = ["bootstrap_open_app_link", "bootstrap_refresh_button"]
+
+[[link]]
+id = "bootstrap_open_app_link"
+domId = "open-app-link"
+href = "/"
+tutorialTarget = "open-app-link"
+action = "openBootstrapAppHome"
+children = ["bootstrap_open_app_button"]
+
+[[button]]
+id = "bootstrap_open_app_button"
+text = "Open App"
+type = "button"
+class = "secondary"
+
+[[button]]
+id = "bootstrap_refresh_button"
+domId = "refresh-bootstrap"
+text = "Refresh"
+type = "button"
+class = "secondary"
+action = "refreshBootstrapHost"
+
+[[text]]
+id = "bootstrap_status_message"
+domId = "bootstrap-status"
+class = "status"
+text = ""
+
+[[box]]
+id = "bootstrap_desktop_card"
+class = "surface-card surface-stack"
+children = ["bootstrap_desktop_badge", "bootstrap_desktop_heading", "bootstrap_desktop_summary", "bootstrap_desktop_actions", "bootstrap_desktop_status"]
+
+[[text]]
+id = "bootstrap_desktop_badge"
+class = "badge"
+text = "Desktop"
+
+[[heading]]
+id = "bootstrap_desktop_heading"
+level = 2
+text = "Local World Ownership"
+
+[[text]]
+id = "bootstrap_desktop_summary"
+domId = "desktop-summary"
+class = "muted"
+text = "Desktop shell unavailable in this session."
+
+[[box]]
+id = "bootstrap_desktop_actions"
+class = "surface-actions"
+children = ["bootstrap_desktop_open_button", "bootstrap_desktop_create_button", "bootstrap_desktop_reveal_button"]
+
+[[button]]
+id = "bootstrap_desktop_open_button"
+domId = "desktop-open-world"
+text = "Open Existing World"
+type = "button"
+class = "secondary"
+action = "openBootstrapDesktopWorld"
+
+[[button]]
+id = "bootstrap_desktop_create_button"
+domId = "desktop-create-world"
+text = "Create New World"
+type = "button"
+class = "secondary"
+action = "createBootstrapDesktopWorld"
+
+[[button]]
+id = "bootstrap_desktop_reveal_button"
+domId = "desktop-reveal-world"
+text = "Reveal World Home"
+type = "button"
+class = "secondary"
+action = "revealBootstrapDesktopWorld"
+
+[[text]]
+id = "bootstrap_desktop_status"
+domId = "desktop-status"
+class = "status"
+text = ""
+
+[[box]]
+id = "bootstrap_operator_card"
+class = "surface-card surface-stack"
+children = ["bootstrap_operator_badge", "bootstrap_operator_heading", "bootstrap_operator_summary", "bootstrap_operator_warning", "bootstrap_operator_backup_heading", "bootstrap_operator_backup_form", "bootstrap_operator_backup_status", "bootstrap_operator_export_form", "bootstrap_operator_export_status", "bootstrap_operator_restore_heading", "bootstrap_operator_restore_form", "bootstrap_operator_restore_status", "bootstrap_operator_import_form", "bootstrap_operator_import_status", "bootstrap_operator_state_grid"]
+
+[[text]]
+id = "bootstrap_operator_badge"
+class = "badge"
+text = "Operator"
+
+[[heading]]
+id = "bootstrap_operator_heading"
+level = 2
+text = "Persistence Flows"
+
+[[text]]
+id = "bootstrap_operator_summary"
+domId = "operator-summary"
+text = "Loading operator state..."
+
+[[text]]
+id = "bootstrap_operator_warning"
+domId = "operator-warning"
+class = "surface-note muted note"
+text = "Restore and import replace current world truth. Use preserve-current when you need a safety backup first."
+
+[[heading]]
+id = "bootstrap_operator_backup_heading"
+level = 3
+text = "Backup And Export"
+
+[[form]]
+id = "bootstrap_operator_backup_form"
+domId = "operator-backup-form"
+class = "surface-stack"
+children = ["bootstrap_operator_backup_grid", "bootstrap_operator_backup_actions"]
+
+[[box]]
+id = "bootstrap_operator_backup_grid"
+class = "grid two"
+children = ["bootstrap_operator_backup_label_field", "bootstrap_operator_backup_include_field"]
+
+[[box]]
+id = "bootstrap_operator_backup_label_field"
+class = "surface-stack"
+children = ["bootstrap_operator_backup_label_text", "bootstrap_operator_backup_label_input"]
+
+[[text]]
+id = "bootstrap_operator_backup_label_text"
+text = "Backup Label"
+
+[[input]]
+id = "bootstrap_operator_backup_label_input"
+name = "label"
+placeholder = "before-major-change"
+
+[[box]]
+id = "bootstrap_operator_backup_include_field"
+class = "surface-stack"
+children = ["bootstrap_operator_backup_include_text", "bootstrap_operator_backup_include_input"]
+
+[[text]]
+id = "bootstrap_operator_backup_include_text"
+text = "Include Derived Runtime"
+
+[[input]]
+id = "bootstrap_operator_backup_include_input"
+name = "includeDerived"
+type = "checkbox"
+
+[[box]]
+id = "bootstrap_operator_backup_actions"
+class = "surface-actions"
+children = ["bootstrap_operator_backup_submit"]
+
+[[button]]
+id = "bootstrap_operator_backup_submit"
+text = "Create Backup"
+type = "submit"
+
+[[text]]
+id = "bootstrap_operator_backup_status"
+domId = "operator-backup-status"
+class = "status"
+text = ""
+
+[[form]]
+id = "bootstrap_operator_export_form"
+domId = "operator-export-form"
+class = "surface-stack"
+children = ["bootstrap_operator_export_grid", "bootstrap_operator_export_actions"]
+
+[[box]]
+id = "bootstrap_operator_export_grid"
+class = "grid two"
+children = ["bootstrap_operator_export_label_field", "bootstrap_operator_export_spacer"]
+
+[[box]]
+id = "bootstrap_operator_export_label_field"
+class = "surface-stack"
+children = ["bootstrap_operator_export_label_text", "bootstrap_operator_export_label_input"]
+
+[[text]]
+id = "bootstrap_operator_export_label_text"
+text = "Export Label"
+
+[[input]]
+id = "bootstrap_operator_export_label_input"
+name = "label"
+placeholder = "portable-world"
+
+[[box]]
+id = "bootstrap_operator_export_spacer"
+
+[[box]]
+id = "bootstrap_operator_export_actions"
+class = "surface-actions"
+children = ["bootstrap_operator_export_submit"]
+
+[[button]]
+id = "bootstrap_operator_export_submit"
+text = "Create Export"
+type = "submit"
+
+[[text]]
+id = "bootstrap_operator_export_status"
+domId = "operator-export-status"
+class = "status"
+text = ""
+
+[[heading]]
+id = "bootstrap_operator_restore_heading"
+level = 3
+text = "Restore And Import"
+
+[[form]]
+id = "bootstrap_operator_restore_form"
+domId = "operator-restore-form"
+class = "surface-stack"
+children = ["bootstrap_operator_restore_grid", "bootstrap_operator_restore_actions"]
+
+[[box]]
+id = "bootstrap_operator_restore_grid"
+class = "grid two"
+children = ["bootstrap_operator_restore_artifact_field", "bootstrap_operator_restore_preserve_field"]
+
+[[box]]
+id = "bootstrap_operator_restore_artifact_field"
+class = "surface-stack"
+children = ["bootstrap_operator_restore_artifact_text", "bootstrap_operator_restore_artifact_select"]
+
+[[text]]
+id = "bootstrap_operator_restore_artifact_text"
+text = "Backup Artifact"
+
+[[select]]
+id = "bootstrap_operator_restore_artifact_select"
+domId = "operator-restore-artifact"
+name = "artifactId"
+
+[[box]]
+id = "bootstrap_operator_restore_preserve_field"
+class = "surface-stack"
+children = ["bootstrap_operator_restore_preserve_text", "bootstrap_operator_restore_preserve_input"]
+
+[[text]]
+id = "bootstrap_operator_restore_preserve_text"
+text = "Preserve Current"
+
+[[input]]
+id = "bootstrap_operator_restore_preserve_input"
+name = "preserveCurrent"
+type = "checkbox"
+
+[[box]]
+id = "bootstrap_operator_restore_actions"
+class = "surface-actions"
+children = ["bootstrap_operator_restore_submit"]
+
+[[button]]
+id = "bootstrap_operator_restore_submit"
+text = "Restore Backup"
+type = "submit"
+
+[[text]]
+id = "bootstrap_operator_restore_status"
+domId = "operator-restore-status"
+class = "status"
+text = ""
+
+[[form]]
+id = "bootstrap_operator_import_form"
+domId = "operator-import-form"
+class = "surface-stack"
+children = ["bootstrap_operator_import_grid", "bootstrap_operator_import_actions"]
+
+[[box]]
+id = "bootstrap_operator_import_grid"
+class = "grid two"
+children = ["bootstrap_operator_import_artifact_field", "bootstrap_operator_import_preserve_field"]
+
+[[box]]
+id = "bootstrap_operator_import_artifact_field"
+class = "surface-stack"
+children = ["bootstrap_operator_import_artifact_text", "bootstrap_operator_import_artifact_select"]
+
+[[text]]
+id = "bootstrap_operator_import_artifact_text"
+text = "Import Candidate"
+
+[[select]]
+id = "bootstrap_operator_import_artifact_select"
+domId = "operator-import-artifact"
+name = "artifactId"
+
+[[box]]
+id = "bootstrap_operator_import_preserve_field"
+class = "surface-stack"
+children = ["bootstrap_operator_import_preserve_text", "bootstrap_operator_import_preserve_input"]
+
+[[text]]
+id = "bootstrap_operator_import_preserve_text"
+text = "Preserve Current"
+
+[[input]]
+id = "bootstrap_operator_import_preserve_input"
+name = "preserveCurrent"
+type = "checkbox"
+
+[[box]]
+id = "bootstrap_operator_import_actions"
+class = "surface-actions"
+children = ["bootstrap_operator_import_submit"]
+
+[[button]]
+id = "bootstrap_operator_import_submit"
+text = "Import Artifact"
+type = "submit"
+
+[[text]]
+id = "bootstrap_operator_import_status"
+domId = "operator-import-status"
+class = "status"
+text = ""
+
+[[box]]
+id = "bootstrap_operator_state_grid"
+class = "surface-list"
+children = ["bootstrap_operator_backups_section", "bootstrap_operator_exports_section", "bootstrap_operator_imports_section", "bootstrap_operator_activity_section"]
+
+[[box]]
+id = "bootstrap_operator_backups_section"
+children = ["bootstrap_operator_backups_kicker", "bootstrap_operator_backups_list"]
+
+[[text]]
+id = "bootstrap_operator_backups_kicker"
+class = "kicker"
+text = "Backups"
+
+[[box]]
+id = "bootstrap_operator_backups_list"
+domId = "state-operator-backups"
+class = "surface-list state-list"
+
+[[box]]
+id = "bootstrap_operator_exports_section"
+children = ["bootstrap_operator_exports_kicker", "bootstrap_operator_exports_list"]
+
+[[text]]
+id = "bootstrap_operator_exports_kicker"
+class = "kicker"
+text = "Exports"
+
+[[box]]
+id = "bootstrap_operator_exports_list"
+domId = "state-operator-exports"
+class = "surface-list state-list"
+
+[[box]]
+id = "bootstrap_operator_imports_section"
+children = ["bootstrap_operator_imports_kicker", "bootstrap_operator_imports_list"]
+
+[[text]]
+id = "bootstrap_operator_imports_kicker"
+class = "kicker"
+text = "Imports"
+
+[[box]]
+id = "bootstrap_operator_imports_list"
+domId = "state-operator-imports"
+class = "surface-list state-list"
+
+[[box]]
+id = "bootstrap_operator_activity_section"
+children = ["bootstrap_operator_activity_kicker", "bootstrap_operator_activity_list"]
+
+[[text]]
+id = "bootstrap_operator_activity_kicker"
+class = "kicker"
+text = "Recent Activity"
+
+[[box]]
+id = "bootstrap_operator_activity_list"
+domId = "state-operator-activity"
+class = "surface-list state-list"
+
+[[box]]
+id = "bootstrap_identity_card"
+class = "surface-card surface-stack"
+children = ["bootstrap_identity_badge", "bootstrap_identity_heading", "bootstrap_identity_copy", "bootstrap_identity_form", "bootstrap_identity_status"]
+
+[[text]]
+id = "bootstrap_identity_badge"
+class = "badge"
+text = "Identity"
+
+[[heading]]
+id = "bootstrap_identity_heading"
+domId = "identity-heading"
+level = 2
+text = "Create First Identity"
+
+[[text]]
+id = "bootstrap_identity_copy"
+domId = "identity-copy"
+text = "Create the first user when the world is blank. After identities exist, normal session auth is required for bootstrap edits."
+
+[[form]]
+id = "bootstrap_identity_form"
+domId = "identity-form"
+class = "surface-stack"
+tutorialTarget = "identity-form"
+children = ["bootstrap_identity_edit_id_input", "bootstrap_identity_row_one", "bootstrap_identity_row_two", "bootstrap_identity_row_three", "bootstrap_identity_row_four", "bootstrap_identity_actions"]
+
+[[input]]
+id = "bootstrap_identity_edit_id_input"
+name = "editId"
+type = "hidden"
+
+[[box]]
+id = "bootstrap_identity_row_one"
+class = "grid two"
+children = ["bootstrap_identity_id_field", "bootstrap_identity_actor_field"]
+
+[[box]]
+id = "bootstrap_identity_id_field"
+class = "surface-stack"
+children = ["bootstrap_identity_id_text", "bootstrap_identity_id_input"]
+
+[[text]]
+id = "bootstrap_identity_id_text"
+text = "Identity Id"
+
+[[input]]
+id = "bootstrap_identity_id_input"
+name = "id"
+placeholder = "identity.aaron"
+tutorialTarget = "identity-id"
+
+[[box]]
+id = "bootstrap_identity_actor_field"
+class = "surface-stack"
+children = ["bootstrap_identity_actor_text", "bootstrap_identity_actor_input"]
+
+[[text]]
+id = "bootstrap_identity_actor_text"
+text = "Actor"
+
+[[input]]
+id = "bootstrap_identity_actor_input"
+name = "actor"
+placeholder = "aaron"
+tutorialTarget = "identity-actor"
+
+[[box]]
+id = "bootstrap_identity_row_two"
+class = "grid two"
+children = ["bootstrap_identity_label_field", "bootstrap_identity_username_field"]
+
+[[box]]
+id = "bootstrap_identity_label_field"
+class = "surface-stack"
+children = ["bootstrap_identity_label_text", "bootstrap_identity_label_input"]
+
+[[text]]
+id = "bootstrap_identity_label_text"
+text = "Label"
+
+[[input]]
+id = "bootstrap_identity_label_input"
+name = "label"
+placeholder = "Aaron"
+tutorialTarget = "identity-label"
+
+[[box]]
+id = "bootstrap_identity_username_field"
+class = "surface-stack"
+children = ["bootstrap_identity_username_text", "bootstrap_identity_username_input"]
+
+[[text]]
+id = "bootstrap_identity_username_text"
+text = "Username"
+
+[[input]]
+id = "bootstrap_identity_username_input"
+name = "username"
+placeholder = "aaron"
+tutorialTarget = "identity-username"
+
+[[box]]
+id = "bootstrap_identity_row_three"
+class = "grid two"
+children = ["bootstrap_identity_password_field", "bootstrap_identity_perspective_field"]
+
+[[box]]
+id = "bootstrap_identity_password_field"
+class = "surface-stack"
+children = ["bootstrap_identity_password_text", "bootstrap_identity_password_input"]
+
+[[text]]
+id = "bootstrap_identity_password_text"
+text = "Password"
+
+[[input]]
+id = "bootstrap_identity_password_input"
+name = "password"
+placeholder = "aaron"
+tutorialTarget = "identity-password"
+
+[[box]]
+id = "bootstrap_identity_perspective_field"
+class = "surface-stack"
+children = ["bootstrap_identity_perspective_text", "bootstrap_identity_perspective_input"]
+
+[[text]]
+id = "bootstrap_identity_perspective_text"
+text = "Home Perspective"
+
+[[input]]
+id = "bootstrap_identity_perspective_input"
+name = "homePerspective"
+placeholder = "aaron:personal"
+tutorialTarget = "identity-perspective"
+
+[[box]]
+id = "bootstrap_identity_row_four"
+class = "grid two"
+children = ["bootstrap_identity_home_context_field", "bootstrap_identity_home_context_spacer"]
+
+[[box]]
+id = "bootstrap_identity_home_context_field"
+class = "surface-stack"
+children = ["bootstrap_identity_home_context_text", "bootstrap_identity_home_context_select"]
+
+[[text]]
+id = "bootstrap_identity_home_context_text"
+text = "Home Context"
+
+[[select]]
+id = "bootstrap_identity_home_context_select"
+domId = "identity-home-context"
+name = "homeContext"
+
+[[box]]
+id = "bootstrap_identity_home_context_spacer"
+
+[[box]]
+id = "bootstrap_identity_actions"
+class = "surface-actions"
+children = ["bootstrap_identity_submit_button", "bootstrap_identity_new_button"]
+
+[[button]]
+id = "bootstrap_identity_submit_button"
+domId = "identity-submit-button"
+text = "Create Identity"
+type = "submit"
+tutorialTarget = "identity-submit"
+
+[[button]]
+id = "bootstrap_identity_new_button"
+domId = "identity-create-new"
+text = "New Identity"
+type = "button"
+class = "secondary"
+hidden = true
+action = "clearBootstrapIdentityEdit"
+
+[[text]]
+id = "bootstrap_identity_status"
+domId = "identity-status"
+class = "status"
+text = ""
+
+[[box]]
+id = "bootstrap_session_card"
+class = "surface-card surface-stack"
+children = ["bootstrap_session_badge", "bootstrap_session_heading", "bootstrap_session_form", "bootstrap_session_summary"]
+
+[[text]]
+id = "bootstrap_session_badge"
+class = "badge"
+text = "Session"
+
+[[heading]]
+id = "bootstrap_session_heading"
+level = 2
+text = "Sign In To Keep Editing"
+
+[[form]]
+id = "bootstrap_session_form"
+domId = "session-form"
+class = "surface-stack"
+tutorialTarget = "session-form"
+children = ["bootstrap_session_grid", "bootstrap_session_actions"]
+
+[[box]]
+id = "bootstrap_session_grid"
+class = "grid two"
+children = ["bootstrap_session_username_field", "bootstrap_session_password_field"]
+
+[[box]]
+id = "bootstrap_session_username_field"
+class = "surface-stack"
+children = ["bootstrap_session_username_text", "bootstrap_session_username_input"]
+
+[[text]]
+id = "bootstrap_session_username_text"
+text = "Username"
+
+[[input]]
+id = "bootstrap_session_username_input"
+name = "username"
+autocomplete = "username"
+tutorialTarget = "session-username"
+
+[[box]]
+id = "bootstrap_session_password_field"
+class = "surface-stack"
+children = ["bootstrap_session_password_text", "bootstrap_session_password_input"]
+
+[[text]]
+id = "bootstrap_session_password_text"
+text = "Password"
+
+[[input]]
+id = "bootstrap_session_password_input"
+name = "password"
+type = "password"
+autocomplete = "current-password"
+tutorialTarget = "session-password"
+
+[[box]]
+id = "bootstrap_session_actions"
+class = "surface-actions"
+children = ["bootstrap_session_submit_button", "bootstrap_session_logout_button"]
+
+[[button]]
+id = "bootstrap_session_submit_button"
+text = "Sign In"
+type = "submit"
+tutorialTarget = "session-submit"
+
+[[button]]
+id = "bootstrap_session_logout_button"
+domId = "logout-session"
+text = "Logout"
+type = "button"
+class = "secondary"
+action = "logoutBootstrapSession"
+tutorialTarget = "session-logout"
+
+[[text]]
+id = "bootstrap_session_summary"
+domId = "session-summary"
+class = "muted"
+text = "Loading session..."
+
+[[frontendProgram]]
+id = "bootstrap_top_cards_program"
+rootWidget = "bootstrap_top_cards_root"
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "click:refreshBootstrapHost"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-top-cards", reason = "refresh-bootstrap-button" }
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "click:openBootstrapAppHome"
+eventName = "witness:bootstrap-host-action"
+detail = { source = "bootstrap-top-cards", action = "open-app" }
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "click:openBootstrapDesktopWorld"
+eventName = "witness:bootstrap-host-action"
+detail = { source = "bootstrap-top-cards", action = "desktop-open-world" }
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "click:createBootstrapDesktopWorld"
+eventName = "witness:bootstrap-host-action"
+detail = { source = "bootstrap-top-cards", action = "desktop-create-world" }
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "click:revealBootstrapDesktopWorld"
+eventName = "witness:bootstrap-host-action"
+detail = { source = "bootstrap-top-cards", action = "desktop-reveal-world" }
+
+[[step]]
+id = "bootstrap_identity_load_heading"
+order = 0
+op = "setText"
+on = "load"
+widget = "bootstrap_identity_heading"
+text = "${state.bootstrapIdentityView.heading || 'Create First Identity'}"
+
+[[step]]
+id = "bootstrap_identity_load_copy"
+order = 1
+op = "setText"
+on = "load"
+widget = "bootstrap_identity_copy"
+text = "${state.bootstrapIdentityView.copy || 'Create the first user when the world is blank. After identities exist, normal session auth is required for bootstrap edits.'}"
+
+[[step]]
+id = "bootstrap_identity_load_submit_text"
+order = 2
+op = "setText"
+on = "load"
+widget = "bootstrap_identity_submit_button"
+text = "${state.bootstrapIdentityView.submitText || 'Create Identity'}"
+
+[[step]]
+id = "bootstrap_identity_load_edit_id"
+order = 3
+op = "setValue"
+on = "load"
+widget = "bootstrap_identity_edit_id_input"
+value = "${state.bootstrapIdentityView.fields.editId || ''}"
+
+[[step]]
+id = "bootstrap_identity_load_id"
+order = 4
+op = "setValue"
+on = "load"
+widget = "bootstrap_identity_id_input"
+value = "${state.bootstrapIdentityView.fields.id || ''}"
+
+[[step]]
+id = "bootstrap_identity_load_actor"
+order = 5
+op = "setValue"
+on = "load"
+widget = "bootstrap_identity_actor_input"
+value = "${state.bootstrapIdentityView.fields.actor || ''}"
+
+[[step]]
+id = "bootstrap_identity_load_label"
+order = 6
+op = "setValue"
+on = "load"
+widget = "bootstrap_identity_label_input"
+value = "${state.bootstrapIdentityView.fields.label || ''}"
+
+[[step]]
+id = "bootstrap_identity_load_username"
+order = 7
+op = "setValue"
+on = "load"
+widget = "bootstrap_identity_username_input"
+value = "${state.bootstrapIdentityView.fields.username || ''}"
+
+[[step]]
+id = "bootstrap_identity_load_password"
+order = 8
+op = "setValue"
+on = "load"
+widget = "bootstrap_identity_password_input"
+value = "${state.bootstrapIdentityView.fields.password || ''}"
+
+[[step]]
+id = "bootstrap_identity_load_perspective"
+order = 9
+op = "setValue"
+on = "load"
+widget = "bootstrap_identity_perspective_input"
+value = "${state.bootstrapIdentityView.fields.homePerspective || ''}"
+
+[[step]]
+id = "bootstrap_identity_load_context"
+order = 10
+op = "setValue"
+on = "load"
+widget = "bootstrap_identity_home_context_select"
+value = "${state.bootstrapIdentityView.fields.homeContext || ''}"
+
+[[step]]
+id = "bootstrap_identity_load_new_button_visibility"
+order = 11
+op = "setHidden"
+on = "load"
+widget = "bootstrap_identity_new_button"
+hidden = "${state.bootstrapIdentityView.createNewHidden === true}"
+
+[[step]]
+id = "bootstrap_identity_load_id_disabled"
+order = 12
+op = "setDisabled"
+on = "load"
+widget = "bootstrap_identity_id_input"
+disabled = "${state.bootstrapIdentityView.idDisabled === true}"
+
+[[step]]
+id = "bootstrap_identity_load_actor_disabled"
+order = 13
+op = "setDisabled"
+on = "load"
+widget = "bootstrap_identity_actor_input"
+disabled = "${state.bootstrapIdentityView.actorDisabled === true}"
+
+[[step]]
+order = 0
+op = "readForm"
+on = "submit:bootstrap_identity_form"
+widget = "bootstrap_identity_form"
+into = "bootstrapIdentityDraft"
+
+[[step]]
+order = 1
+op = "setText"
+on = "submit:bootstrap_identity_form"
+when = { path = "bootstrapIdentityDraft.editId", truthy = true }
+widget = "bootstrap_identity_status"
+text = "Saving identity..."
+
+[[step]]
+order = 1
+op = "setText"
+on = "submit:bootstrap_identity_form"
+when = { path = "bootstrapIdentityDraft.editId", falsy = true }
+widget = "bootstrap_identity_status"
+text = "Creating identity..."
+
+[[step]]
+order = 2
+op = "patchJson"
+on = "submit:bootstrap_identity_form"
+when = { path = "bootstrapIdentityDraft.editId", truthy = true }
+url = "/api/identities/${state.bootstrapIdentityDraft.editId}"
+body = { label = "${state.bootstrapIdentityDraft.label}", username = "${state.bootstrapIdentityDraft.username}", password = "${state.bootstrapIdentityDraft.password}", homeContext = "${state.bootstrapIdentityDraft.homeContext}", homePerspective = "${state.bootstrapIdentityDraft.homePerspective}" }
+into = "bootstrapIdentityResult"
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:bootstrap_identity_form"
+when = { path = "bootstrapIdentityDraft.editId", falsy = true }
+url = "/api/identities"
+body = { id = "${state.bootstrapIdentityDraft.id || ('identity.' + String(state.bootstrapIdentityDraft.username || '').trim())}", actor = "${state.bootstrapIdentityDraft.actor}", label = "${state.bootstrapIdentityDraft.label}", username = "${state.bootstrapIdentityDraft.username}", password = "${state.bootstrapIdentityDraft.password}", homeContext = "${state.bootstrapIdentityDraft.homeContext}", homePerspective = "${state.bootstrapIdentityDraft.homePerspective}" }
+into = "bootstrapIdentityResult"
+
+[[step]]
+order = 3
+op = "setText"
+on = "submit:bootstrap_identity_form"
+when = { path = "bootstrapIdentityDraft.editId", truthy = true }
+widget = "bootstrap_identity_status"
+text = "Identity updated."
+
+[[step]]
+order = 3
+op = "setText"
+on = "submit:bootstrap_identity_form"
+when = { path = "bootstrapIdentityDraft.editId", falsy = true }
+widget = "bootstrap_identity_status"
+text = "Identity created."
+
+[[step]]
+order = 4
+op = "clearForm"
+on = "submit:bootstrap_identity_form"
+when = { path = "bootstrapIdentityDraft.editId", falsy = true }
+widget = "bootstrap_identity_form"
+
+[[step]]
+order = 5
+op = "refreshProjection"
+on = "submit:bootstrap_identity_form"
+when = { path = "bootstrapIdentityDraft.editId", truthy = true }
+
+[[step]]
+order = 6
+op = "dispatchDomEvent"
+on = "submit:bootstrap_identity_form"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-top-cards", reason = "identity-form-submit" }
+
+[[step]]
+order = 0
+op = "setText"
+on = "click:clearBootstrapIdentityEdit"
+widget = "bootstrap_identity_status"
+text = ""
+
+[[step]]
+order = 1
+op = "clearForm"
+on = "click:clearBootstrapIdentityEdit"
+widget = "bootstrap_identity_form"
+
+[[step]]
+order = 2
+op = "setQueryParam"
+on = "click:clearBootstrapIdentityEdit"
+name = "identity"
+value = ""
+
+[[step]]
+order = 3
+op = "refreshProjection"
+on = "click:clearBootstrapIdentityEdit"
+
+[[step]]
+order = 4
+op = "dispatchDomEvent"
+on = "click:clearBootstrapIdentityEdit"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-top-cards", reason = "identity-edit-clear" }
+
+[[step]]
+order = 0
+op = "setText"
+on = "submit:bootstrap_session_form"
+widget = "bootstrap_status_message"
+text = "Signing in..."
+
+[[step]]
+order = 1
+op = "readForm"
+on = "submit:bootstrap_session_form"
+widget = "bootstrap_session_form"
+into = "bootstrapSessionDraft"
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:bootstrap_session_form"
+url = "/api/session"
+from = "bootstrapSessionDraft"
+into = "bootstrapSessionResult"
+
+[[step]]
+order = 3
+op = "reloadPage"
+on = "submit:bootstrap_session_form"
+
+[[step]]
+order = 0
+op = "setText"
+on = "click:logoutBootstrapSession"
+widget = "bootstrap_status_message"
+text = "Signing out..."
+
+[[step]]
+order = 1
+op = "deleteJson"
+on = "click:logoutBootstrapSession"
+url = "/api/session"
+into = "bootstrapSessionResult"
+
+[[step]]
+order = 2
+op = "reloadPage"
+on = "click:logoutBootstrapSession"
+
+[[step]]
+order = 0
+op = "setText"
+on = "submit:bootstrap_operator_export_form"
+widget = "bootstrap_operator_export_status"
+text = "Creating export..."
+
+[[step]]
+order = 0
+op = "setText"
+on = "submit:bootstrap_operator_backup_form"
+widget = "bootstrap_operator_backup_status"
+text = "Creating backup..."
+
+[[step]]
+order = 1
+op = "readForm"
+on = "submit:bootstrap_operator_backup_form"
+widget = "bootstrap_operator_backup_form"
+checkboxes = "boolean"
+into = "bootstrapOperatorBackupDraft"
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:bootstrap_operator_backup_form"
+url = "/api/operator/backups"
+from = "bootstrapOperatorBackupDraft"
+into = "bootstrapOperatorBackupResult"
+
+[[step]]
+order = 3
+op = "reloadPage"
+on = "submit:bootstrap_operator_backup_form"
+
+[[step]]
+order = 1
+op = "readForm"
+on = "submit:bootstrap_operator_export_form"
+widget = "bootstrap_operator_export_form"
+into = "bootstrapOperatorExportDraft"
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:bootstrap_operator_export_form"
+url = "/api/operator/exports"
+from = "bootstrapOperatorExportDraft"
+into = "bootstrapOperatorExportResult"
+
+[[step]]
+order = 3
+op = "reloadPage"
+on = "submit:bootstrap_operator_export_form"
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_operator_export_form" }
+widget = "bootstrap_operator_export_status"
+text = "${event.message}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "submit:bootstrap_operator_restore_form"
+widget = "bootstrap_operator_restore_status"
+text = "Restoring backup..."
+
+[[step]]
+order = 1
+op = "readForm"
+on = "submit:bootstrap_operator_restore_form"
+widget = "bootstrap_operator_restore_form"
+checkboxes = "boolean"
+into = "bootstrapOperatorRestoreDraft"
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:bootstrap_operator_restore_form"
+url = "/api/operator/restores"
+from = "bootstrapOperatorRestoreDraft"
+into = "bootstrapOperatorRestoreResult"
+
+[[step]]
+order = 3
+op = "reloadPage"
+on = "submit:bootstrap_operator_restore_form"
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_operator_restore_form" }
+widget = "bootstrap_operator_restore_status"
+text = "${event.message}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "submit:bootstrap_operator_import_form"
+widget = "bootstrap_operator_import_status"
+text = "Importing artifact..."
+
+[[step]]
+order = 1
+op = "readForm"
+on = "submit:bootstrap_operator_import_form"
+widget = "bootstrap_operator_import_form"
+checkboxes = "boolean"
+into = "bootstrapOperatorImportDraft"
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:bootstrap_operator_import_form"
+url = "/api/operator/imports"
+from = "bootstrapOperatorImportDraft"
+into = "bootstrapOperatorImportResult"
+
+[[step]]
+order = 3
+op = "reloadPage"
+on = "submit:bootstrap_operator_import_form"
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_operator_import_form" }
+widget = "bootstrap_operator_import_status"
+text = "${event.message}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_operator_backup_form" }
+widget = "bootstrap_operator_backup_status"
+text = "${event.message}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_identity_form" }
+widget = "bootstrap_identity_status"
+text = "${event.message}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+widget = "bootstrap_status_message"
+text = "${event.message}"

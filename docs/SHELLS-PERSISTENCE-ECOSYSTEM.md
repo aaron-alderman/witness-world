@@ -43,7 +43,7 @@ The first desktop shell is now shipped as a narrow Electron adapter over the sha
 
 Current desktop contract:
 
-- `node src/cli.js desktop [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]` starts the runtime in `desktop` startup mode
+- `node src/cli.js desktop [<app-dir|app.wtoml>] [--desktop-target <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]` starts the runtime in `desktop` startup mode
 - when no `WORLD_HOME` is chosen up front, Electron opens a tiny launcher window before any runtime-backed app page loads
 - the launcher allows `Open Existing World`, `Create New World`, shows recent world homes, and exposes the active runtime profile
 - a desktop session manager owns one active world at a time: current `WORLD_HOME`, active runtime handle, recent worlds, launcher visibility, and current desktop shell state

@@ -120,7 +120,10 @@ export function createPracticalBackendAssetServices({
   const assetTextPathFor = (appContext, assetId) => assetDerivedTextPathForAppContext(appContext, assetId);
   const assetThumbnailPathFor = (appContext, assetId) => assetDerivedThumbnailPathForAppContext(appContext, assetId);
   const filesContextIdFor = homeContext => `context:${homeContext}:files`;
-  const currentAssetById = assetId => world.project(moduleProjectors.assetIndex).byId[assetId] ?? null;
+  const currentAssetById = (assetId, appContext = null) => {
+    const project = appContext?.project ?? (projector => world.project(projector));
+    return project(moduleProjectors.assetIndex).byId[assetId] ?? null;
+  };
   const ensureReadableAssetAccess = (asset, requestActor) => {
     const isPublic = asset?.visibility === "public";
     if (isPublic) return { ok: true, status: 200, isPublic: true };

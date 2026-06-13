@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { expectNoRuntimeErrors, launchBrowser, startUiDemoServer, waitForAppReady } from "./support/harness.js";
+import { expectNoRuntimeErrors, launchBrowser, startUiDemoServer } from "./support/harness.js";
 
 test("process view is a dedicated page with recorded runs, graph nodes, and replay controls", async () => {
   const { server, close: closeServer } = await startUiDemoServer({});
@@ -11,11 +11,35 @@ test("process view is a dedicated page with recorded runs, graph nodes, and repl
   } = await launchBrowser();
 
   try {
-    await page.goto(`${server.url}/`);
-    await waitForAppReady(page);
-    const processHref = await page.locator('[data-widget="todo_process_link"]').getAttribute("href");
-    assert.equal(processHref, "/process");
-    await page.goto(`${server.url}/process?program=todo_frontend_program&event=load`);
+    const program = "todo_frontend_program";
+    const event = "load";
+    const initialView = await fetch(`${server.url}/api/process-view?program=${program}&event=${event}`).then(response => response.json());
+    const tracedNode = initialView.graph?.nodes?.[0];
+    assert.ok(tracedNode?.id, "expected a process-view graph node to seed a run");
+
+    const runId = "ui-process-view-run";
+    const trace = async (process, body = {}) => {
+      const response = await fetch(`${server.url}/api/process-events`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          process,
+          runId,
+          program,
+          event,
+          timestamp: Date.now(),
+          ...body
+        })
+      });
+      assert.equal(response.status, 200);
+    };
+
+    await trace("frontend.process.start");
+    await trace("frontend.step.start", { nodeId: tracedNode.id, op: tracedNode.op });
+    await trace("frontend.step.done", { nodeId: tracedNode.id, op: tracedNode.op });
+    await trace("frontend.process.done");
+
+    await page.goto(`${server.url}/process?program=${program}&event=${event}&runId=${runId}`);
     await page.waitForURL(url => url.pathname === "/process");
 
     assert.equal(await page.locator('[data-widget="world_graph_page"]').count(), 0);
@@ -33,6 +57,12 @@ test("process view is a dedicated page with recorded runs, graph nodes, and repl
     const replayRange = page.locator('[data-process-replay-range]');
     await replayRange.waitFor();
     assert.equal(await replayRange.getAttribute("type"), "range");
+    const replayTarget = "1";
+    await replayRange.evaluate((element, value) => {
+      element.value = value;
+      element.dispatchEvent(new Event("change", { bubbles: true }));
+    }, replayTarget);
+    await page.waitForURL(url => url.pathname === "/process" && url.searchParams.get("replay") === replayTarget);
 
     await expectNoRuntimeErrors(runtime);
   } finally {

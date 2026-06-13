@@ -1,0 +1,20 @@
+import desire/v3-alpha
+
+// ── Mill-charge chart ──────────────────────────────────────────────────────────
+//
+// One grammar-of-graphics view over the MillCharge model in the new `disc` frame
+// (equal-aspect, centred xy — the mill cross-section). It exercises the generic
+// GoG runtime's new reach: the `disc` frame, a `polygon` over a boundary axis in
+// raw (x,y), a scalar `point` mark, and the `particles` mark animated over the
+// time axis. Mirrors example-ports/engentus js/mill_canvas.js (renderMillFrame).
+
+// Cross-section: charge region + centre-of-mass + the cataracting particle stream
+chart MillChargeCrossSection of MillCharge {
+  frame disc
+  x bx
+  y by
+  r millRadius
+  layer charge = polygon over arc | x:bx y:by fill:blue stroke:blue
+  layer com    = point | x:comX y:comY
+  layer fall   = particles over particle | x:px y:py stroke:ylw
+}

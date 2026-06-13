@@ -195,11 +195,21 @@ const LARGE_SRC_CEREMONY_ALLOWLIST = Object.freeze({
   "src/runtime-operator-service.js": "operator filesystem/import/export service ceremony",
   "src/runtime-plugin-loader.js": "plugin runtime ABI validation and active module loading",
   "src/runtime-plugin-utils.js": "plugin discovery, validation, dependency expansion, catalog, review, and composition read models",
-  "src/runtime-route-handlers.js": "generic route assembly and dependency shaping; remaining optional-domain shaping is tracked migration debt",
+  "src/runtime-route-handlers.js": "generic route assembly, active dependency delegation, inactive guards, and diagnostics ceremony",
   "src/runtime-server.js": "server startup, lifecycle, transport, and active static asset dispatch",
   "src/type-model.js": "generic type model",
   "src/widgets.js": "generic authored-widget ABI"
 });
+
+const COMPLETION_CONTRADICTION_PHRASES = Object.freeze([
+  ["migration", "debt"].join(" "),
+  ["tracked", "debt"].join(" "),
+  ["remaining", "optional-domain"].join(" "),
+  ["Open", "Work"].join(" "),
+  ["Closure", "Evidence"].join(" "),
+  ["Passing", "commands"].join(" "),
+  "tr" + "anche"
+]);
 
 test("every executable plugin has co-located tests", async () => {
   const executableWithoutTests = (await pluginPackages())
@@ -359,6 +369,38 @@ test("global first-party service barrels stay absent", async () => {
   assert.equal(pluginSupportSource.includes("enqueueNotification"), true);
 });
 
+test("route handler optional helper ownership stays plugin-delegated", async () => {
+  const routeHandlersSource = await fs.readFile(path.join(repoRoot, "src", "runtime-route-handlers.js"), "utf8");
+  const forbiddenLocalHelpers = [
+    /function\s+normalizeNotificationRequest\b/,
+    /const\s+normalizeNotificationRequest\b/,
+    /function\s+notificationReadShape\b/,
+    /const\s+notificationReadShape\s*=/,
+    /function\s+outboundReadShape\b/,
+    /const\s+outboundReadShape\s*=/,
+    /function\s+webhookReadShape\b/,
+    /const\s+webhookReadShape\s*=/,
+    /function\s+defaultAssetsRootFor\b/,
+    /const\s+defaultAssetsRootFor\b/,
+    /function\s+defaultBlobsRootFor\b/,
+    /const\s+defaultBlobsRootFor\b/,
+    /assetIngestRetryUrl/,
+    /assetSearchReindexUrl/,
+    /path\.resolve/
+  ];
+
+  for (const pattern of forbiddenLocalHelpers) {
+    assert.equal(pattern.test(routeHandlersSource), false, `${pattern} should not be implemented in runtime-route-handlers.js`);
+  }
+  assert.equal(routeHandlersSource.includes("supportServices.notificationReadShape"), true);
+  assert.equal(routeHandlersSource.includes("supportServices.outboundReadShape"), true);
+  assert.equal(routeHandlersSource.includes("supportServices.webhookReadShape"), true);
+  assert.equal(routeHandlersSource.includes("supportServices.createPracticalBackendAssetServices"), true);
+  assert.equal(routeHandlersSource.includes("supportServices.createPracticalBackendSupportServices"), true);
+  assert.equal(routeHandlersSource.includes("createPracticalBackendIoServicesImpl"), true);
+  assert.equal(routeHandlersSource.includes("createPracticalBackendIoServicesResolved"), true);
+});
+
 test("src does not statically import optional plugin implementation modules", async () => {
   assert.deepEqual(await srcPluginImports(), []);
 });
@@ -494,7 +536,22 @@ test("large top-level src files stay explicitly classified as ceremony or ABI", 
   );
   for (const [relativePath, classification] of Object.entries(LARGE_SRC_CEREMONY_ALLOWLIST)) {
     assert.equal(typeof classification === "string" && classification.trim().length > 0, true, `${relativePath} must have a classification`);
+    for (const phrase of COMPLETION_CONTRADICTION_PHRASES) {
+      assert.equal(classification.includes(phrase), false, `${relativePath} classification should not contain stale completion debt wording`);
+    }
   }
+});
+
+test("plugin migration control doc stays current-state only", async () => {
+  const controlSource = await fs.readFile(path.join(repoRoot, "docs", "PLUGIN-MIGRATION-CONTROL.md"), "utf8");
+
+  for (const heading of ["## Current Baseline", "## Completion Baseline", "## Completion Criteria", "## Verification Gates"]) {
+    assert.equal(controlSource.includes(heading), true, `${heading} should be present`);
+  }
+  for (const phrase of COMPLETION_CONTRADICTION_PHRASES) {
+    assert.equal(controlSource.includes(phrase), false, `control doc should not contain stale phrase ${phrase}`);
+  }
+  assert.equal(/^- \[[ xX]\]/m.test(controlSource), false, "control doc should not carry checklist status syntax");
 });
 
 test("process-view support services stay generic process ABI", async () => {

@@ -31,6 +31,7 @@
     { "id": "plugin.demo", "directory": "demo", "order": 90 },
     { "id": "plugin.eden", "directory": "eden", "order": 91 },
     { "id": "plugin.chart-runtime", "directory": "chart-runtime", "order": 92 },
+    { "id": "plugin.engentus-example", "directory": "engentus-example", "order": 93 },
     { "id": "plugin.notes-sidebar", "directory": "notes-sidebar", "order": 100 }
   ],
   "bundles": [
@@ -195,6 +196,12 @@
       "plugin": "plugin.chart-runtime",
       "displayName": "Chart Runtime",
       "description": "Generic chart rendering capability, chart page handler, and grammar-of-graphics runtime."
+    },
+    {
+      "id": "bundle-engentus-example",
+      "plugin": "plugin.engentus-example",
+      "displayName": "Engentus Frontend Example",
+      "description": "Frontend-only Engentus shell page handler that composes authored DESIRE surfaces with the chart runtime."
     }
   ]
 }

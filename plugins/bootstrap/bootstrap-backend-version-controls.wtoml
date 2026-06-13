@@ -1,0 +1,241 @@
+[[defaults]]
+actor = "frontendHost"
+context = "frontend"
+program = "bootstrap_backend_version_controls_program"
+
+[[box]]
+id = "bootstrap_backend_version_controls_root"
+class = "stack"
+children = ["bootstrap_backend_activate_form", "bootstrap_backend_activate_status", "bootstrap_backend_rollback_form", "bootstrap_backend_rollback_status"]
+
+[[form]]
+id = "bootstrap_backend_activate_form"
+domId = "backend-program-activate-form"
+class = "stack"
+children = ["bootstrap_backend_activate_grid", "bootstrap_backend_activate_help", "bootstrap_backend_activate_actions"]
+
+[[box]]
+id = "bootstrap_backend_activate_grid"
+class = "grid two"
+children = ["bootstrap_backend_activate_soul_field", "bootstrap_backend_activate_version_field"]
+
+[[box]]
+id = "bootstrap_backend_activate_soul_field"
+class = "stack"
+children = ["bootstrap_backend_activate_soul_text", "bootstrap_backend_activate_soul_select"]
+
+[[text]]
+id = "bootstrap_backend_activate_soul_text"
+text = "Program Soul"
+
+[[select]]
+id = "bootstrap_backend_activate_soul_select"
+domId = "backend-program-activate-soul"
+name = "soul"
+
+[[box]]
+id = "bootstrap_backend_activate_version_field"
+class = "stack"
+children = ["bootstrap_backend_activate_version_text", "bootstrap_backend_activate_version_select"]
+
+[[text]]
+id = "bootstrap_backend_activate_version_text"
+text = "Version"
+
+[[select]]
+id = "bootstrap_backend_activate_version_select"
+domId = "backend-program-activate-version"
+name = "version"
+
+[[text]]
+id = "bootstrap_backend_activate_help"
+domId = "backend-program-activate-help"
+class = "note muted"
+text = ""
+
+[[box]]
+id = "bootstrap_backend_activate_actions"
+class = "actions"
+children = ["bootstrap_backend_activate_submit"]
+
+[[button]]
+id = "bootstrap_backend_activate_submit"
+text = "Activate Version"
+type = "submit"
+
+[[text]]
+id = "bootstrap_backend_activate_status"
+domId = "backend-program-activate-status"
+class = "status"
+text = ""
+
+[[form]]
+id = "bootstrap_backend_rollback_form"
+domId = "backend-program-rollback-form"
+class = "stack"
+children = ["bootstrap_backend_rollback_grid", "bootstrap_backend_rollback_help", "bootstrap_backend_rollback_actions"]
+
+[[box]]
+id = "bootstrap_backend_rollback_grid"
+class = "grid two"
+children = ["bootstrap_backend_rollback_soul_field", "bootstrap_backend_rollback_spacer"]
+
+[[box]]
+id = "bootstrap_backend_rollback_soul_field"
+class = "stack"
+children = ["bootstrap_backend_rollback_soul_text", "bootstrap_backend_rollback_soul_select"]
+
+[[text]]
+id = "bootstrap_backend_rollback_soul_text"
+text = "Program Soul"
+
+[[select]]
+id = "bootstrap_backend_rollback_soul_select"
+domId = "backend-program-rollback-soul"
+name = "soul"
+
+[[box]]
+id = "bootstrap_backend_rollback_spacer"
+
+[[text]]
+id = "bootstrap_backend_rollback_help"
+domId = "backend-program-rollback-help"
+class = "note muted"
+text = ""
+
+[[box]]
+id = "bootstrap_backend_rollback_actions"
+class = "actions"
+children = ["bootstrap_backend_rollback_submit"]
+
+[[button]]
+id = "bootstrap_backend_rollback_submit"
+text = "Rollback Version"
+type = "submit"
+class = "secondary"
+
+[[text]]
+id = "bootstrap_backend_rollback_status"
+domId = "backend-program-rollback-status"
+class = "status"
+text = ""
+
+[[frontendProgram]]
+id = "bootstrap_backend_version_controls_program"
+rootWidget = "bootstrap_backend_version_controls_root"
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "load"
+eventName = "witness:bootstrap-backend-help-sync"
+detail = { source = "bootstrap-backend-version-controls", family = "load" }
+
+[[step]]
+order = 0
+op = "setText"
+on = "submit:bootstrap_backend_activate_form"
+widget = "bootstrap_backend_activate_status"
+text = "Activating version..."
+
+[[step]]
+order = 1
+op = "readForm"
+on = "submit:bootstrap_backend_activate_form"
+widget = "bootstrap_backend_activate_form"
+into = "bootstrapBackendActivateDraft"
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:bootstrap_backend_activate_form"
+url = "/api/backend-program-versions/${state.bootstrapBackendActivateDraft.soul}/activate"
+body = { version = "${state.bootstrapBackendActivateDraft.version}" }
+into = "bootstrapBackendActivateResult"
+
+[[step]]
+order = 3
+op = "setText"
+on = "submit:bootstrap_backend_activate_form"
+widget = "bootstrap_backend_activate_status"
+text = "Activated."
+
+[[step]]
+order = 4
+op = "dispatchDomEvent"
+on = "submit:bootstrap_backend_activate_form"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-backend-version-controls", reason = "backend-program-activate" }
+
+[[step]]
+order = 0
+op = "setText"
+on = "submit:bootstrap_backend_rollback_form"
+widget = "bootstrap_backend_rollback_status"
+text = "Rolling back version..."
+
+[[step]]
+order = 1
+op = "readForm"
+on = "submit:bootstrap_backend_rollback_form"
+widget = "bootstrap_backend_rollback_form"
+into = "bootstrapBackendRollbackDraft"
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:bootstrap_backend_rollback_form"
+url = "/api/backend-program-versions/${state.bootstrapBackendRollbackDraft.soul}/rollback"
+body = {}
+into = "bootstrapBackendRollbackResult"
+
+[[step]]
+order = 3
+op = "setText"
+on = "submit:bootstrap_backend_rollback_form"
+widget = "bootstrap_backend_rollback_status"
+text = "Rolled back."
+
+[[step]]
+order = 4
+op = "dispatchDomEvent"
+on = "submit:bootstrap_backend_rollback_form"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-backend-version-controls", reason = "backend-program-rollback" }
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_backend_activate_soul_select"
+eventName = "witness:bootstrap-backend-help-sync"
+detail = { source = "bootstrap-backend-version-controls", family = "activate-soul" }
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_backend_activate_version_select"
+eventName = "witness:bootstrap-backend-help-sync"
+detail = { source = "bootstrap-backend-version-controls", family = "activate-version" }
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_backend_rollback_soul_select"
+eventName = "witness:bootstrap-backend-help-sync"
+detail = { source = "bootstrap-backend-version-controls", family = "rollback-soul" }
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_backend_activate_form" }
+widget = "bootstrap_backend_activate_status"
+text = "${event.message}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_backend_rollback_form" }
+widget = "bootstrap_backend_rollback_status"
+text = "${event.message}"

@@ -1,8 +1,0 @@
-# Legacy monolith cheats retired. This compatibility entrypoint now loads the
-# maintained split demo so examples no longer depend on hard-coded runtime
-# behavior.
-
-[app]
-id = "demo_todo_app_monolith_compat"
-imports = ["./demo/common.wtoml", "./demo/backend.wtoml", "./demo/frontend.wtoml"]
-spawn = ["backend", "frontend"]

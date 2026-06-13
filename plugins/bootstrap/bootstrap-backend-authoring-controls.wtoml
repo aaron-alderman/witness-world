@@ -1,0 +1,524 @@
+[[defaults]]
+actor = "frontendHost"
+context = "frontend"
+program = "bootstrap_backend_authoring_controls_program"
+
+[[box]]
+id = "bootstrap_backend_authoring_controls_root"
+class = "stack"
+children = ["bootstrap_backend_program_form", "bootstrap_backend_program_status", "bootstrap_backend_program_version_form", "bootstrap_backend_program_version_status", "bootstrap_backend_step_form", "bootstrap_backend_step_status"]
+
+[[form]]
+id = "bootstrap_backend_program_form"
+domId = "backend-program-form"
+class = "stack"
+children = ["bootstrap_backend_program_grid_primary", "bootstrap_backend_program_grid_secondary", "bootstrap_backend_program_actions"]
+
+[[box]]
+id = "bootstrap_backend_program_grid_primary"
+class = "grid two"
+children = ["bootstrap_backend_program_soul_field", "bootstrap_backend_program_label_field"]
+
+[[box]]
+id = "bootstrap_backend_program_soul_field"
+class = "stack"
+children = ["bootstrap_backend_program_soul_text", "bootstrap_backend_program_soul_input"]
+
+[[text]]
+id = "bootstrap_backend_program_soul_text"
+text = "Program Soul"
+
+[[input]]
+id = "bootstrap_backend_program_soul_input"
+name = "soul"
+placeholder = "todo.todos.list"
+
+[[box]]
+id = "bootstrap_backend_program_label_field"
+class = "stack"
+children = ["bootstrap_backend_program_label_text", "bootstrap_backend_program_label_input"]
+
+[[text]]
+id = "bootstrap_backend_program_label_text"
+text = "Label"
+
+[[input]]
+id = "bootstrap_backend_program_label_input"
+name = "label"
+placeholder = "Todo Todos List"
+
+[[box]]
+id = "bootstrap_backend_program_grid_secondary"
+class = "grid two"
+children = ["bootstrap_backend_program_context_field", "bootstrap_backend_program_spacer"]
+
+[[box]]
+id = "bootstrap_backend_program_context_field"
+class = "stack"
+children = ["bootstrap_backend_program_context_text", "bootstrap_backend_program_context_select"]
+
+[[text]]
+id = "bootstrap_backend_program_context_text"
+text = "Context"
+
+[[select]]
+id = "bootstrap_backend_program_context_select"
+domId = "backend-program-context"
+name = "context"
+
+[[box]]
+id = "bootstrap_backend_program_spacer"
+
+[[box]]
+id = "bootstrap_backend_program_actions"
+class = "actions"
+children = ["bootstrap_backend_program_submit"]
+
+[[button]]
+id = "bootstrap_backend_program_submit"
+text = "Create Backend Program"
+type = "submit"
+
+[[text]]
+id = "bootstrap_backend_program_status"
+domId = "backend-program-status"
+class = "status"
+text = ""
+
+[[form]]
+id = "bootstrap_backend_program_version_form"
+domId = "backend-program-version-form"
+class = "stack"
+children = ["bootstrap_backend_program_version_grid_primary", "bootstrap_backend_program_version_grid_secondary", "bootstrap_backend_program_version_grid_transition", "bootstrap_backend_program_version_actions"]
+
+[[box]]
+id = "bootstrap_backend_program_version_grid_primary"
+class = "grid two"
+children = ["bootstrap_backend_program_version_soul_field", "bootstrap_backend_program_version_value_field"]
+
+[[box]]
+id = "bootstrap_backend_program_version_soul_field"
+class = "stack"
+children = ["bootstrap_backend_program_version_soul_text", "bootstrap_backend_program_version_soul_select"]
+
+[[text]]
+id = "bootstrap_backend_program_version_soul_text"
+text = "Program Soul"
+
+[[select]]
+id = "bootstrap_backend_program_version_soul_select"
+domId = "backend-program-version-soul"
+name = "soul"
+
+[[box]]
+id = "bootstrap_backend_program_version_value_field"
+class = "stack"
+children = ["bootstrap_backend_program_version_value_text", "bootstrap_backend_program_version_value_input"]
+
+[[text]]
+id = "bootstrap_backend_program_version_value_text"
+text = "Version"
+
+[[input]]
+id = "bootstrap_backend_program_version_value_input"
+name = "version"
+placeholder = "todo.todos.list.v1"
+
+[[box]]
+id = "bootstrap_backend_program_version_grid_secondary"
+class = "grid two"
+children = ["bootstrap_backend_program_version_index_field", "bootstrap_backend_program_version_context_field"]
+
+[[box]]
+id = "bootstrap_backend_program_version_index_field"
+class = "stack"
+children = ["bootstrap_backend_program_version_index_text", "bootstrap_backend_program_version_index_input"]
+
+[[text]]
+id = "bootstrap_backend_program_version_index_text"
+text = "Index"
+
+[[input]]
+id = "bootstrap_backend_program_version_index_input"
+name = "index"
+type = "number"
+value = "0"
+
+[[box]]
+id = "bootstrap_backend_program_version_context_field"
+class = "stack"
+children = ["bootstrap_backend_program_version_context_text", "bootstrap_backend_program_version_context_select"]
+
+[[text]]
+id = "bootstrap_backend_program_version_context_text"
+text = "Context"
+
+[[select]]
+id = "bootstrap_backend_program_version_context_select"
+domId = "backend-program-version-context"
+name = "context"
+
+[[box]]
+id = "bootstrap_backend_program_version_grid_transition"
+class = "grid two"
+children = ["bootstrap_backend_program_version_transition_from_field", "bootstrap_backend_program_version_transition_strategy_field"]
+
+[[box]]
+id = "bootstrap_backend_program_version_transition_from_field"
+class = "stack"
+children = ["bootstrap_backend_program_version_transition_from_text", "bootstrap_backend_program_version_transition_from_select"]
+
+[[text]]
+id = "bootstrap_backend_program_version_transition_from_text"
+text = "Transition From"
+
+[[select]]
+id = "bootstrap_backend_program_version_transition_from_select"
+domId = "backend-program-version-transition-from"
+name = "transitionFrom"
+
+[[box]]
+id = "bootstrap_backend_program_version_transition_strategy_field"
+class = "stack"
+children = ["bootstrap_backend_program_version_transition_strategy_text", "bootstrap_backend_program_version_transition_strategy_select"]
+
+[[text]]
+id = "bootstrap_backend_program_version_transition_strategy_text"
+text = "Transition Strategy"
+
+[[select]]
+id = "bootstrap_backend_program_version_transition_strategy_select"
+domId = "backend-program-version-transition-strategy"
+name = "transitionStrategy"
+
+[[box]]
+id = "bootstrap_backend_program_version_actions"
+class = "actions"
+children = ["bootstrap_backend_program_version_submit"]
+
+[[button]]
+id = "bootstrap_backend_program_version_submit"
+text = "Create Backend Version"
+type = "submit"
+
+[[text]]
+id = "bootstrap_backend_program_version_status"
+domId = "backend-program-version-status"
+class = "status"
+text = ""
+
+[[form]]
+id = "bootstrap_backend_step_form"
+domId = "backend-step-form"
+class = "stack"
+children = ["bootstrap_backend_step_grid_primary", "bootstrap_backend_step_grid_secondary", "bootstrap_backend_step_params_field", "bootstrap_backend_step_when_field", "bootstrap_backend_step_repeat_field", "bootstrap_backend_step_after_field", "bootstrap_backend_step_actions"]
+
+[[box]]
+id = "bootstrap_backend_step_grid_primary"
+class = "grid two"
+children = ["bootstrap_backend_step_version_field", "bootstrap_backend_step_event_field"]
+
+[[box]]
+id = "bootstrap_backend_step_version_field"
+class = "stack"
+children = ["bootstrap_backend_step_version_text", "bootstrap_backend_step_version_select"]
+
+[[text]]
+id = "bootstrap_backend_step_version_text"
+text = "Version"
+
+[[select]]
+id = "bootstrap_backend_step_version_select"
+domId = "backend-step-version"
+name = "version"
+
+[[box]]
+id = "bootstrap_backend_step_event_field"
+class = "stack"
+children = ["bootstrap_backend_step_event_text", "bootstrap_backend_step_event_input"]
+
+[[text]]
+id = "bootstrap_backend_step_event_text"
+text = "Event"
+
+[[input]]
+id = "bootstrap_backend_step_event_input"
+name = "event"
+placeholder = "request"
+
+[[box]]
+id = "bootstrap_backend_step_grid_secondary"
+class = "grid two"
+children = ["bootstrap_backend_step_op_field", "bootstrap_backend_step_order_field"]
+
+[[box]]
+id = "bootstrap_backend_step_op_field"
+class = "stack"
+children = ["bootstrap_backend_step_op_text", "bootstrap_backend_step_op_select"]
+
+[[text]]
+id = "bootstrap_backend_step_op_text"
+text = "Operation"
+
+[[select]]
+id = "bootstrap_backend_step_op_select"
+domId = "backend-step-op"
+name = "op"
+
+[[box]]
+id = "bootstrap_backend_step_order_field"
+class = "stack"
+children = ["bootstrap_backend_step_order_text", "bootstrap_backend_step_order_input"]
+
+[[text]]
+id = "bootstrap_backend_step_order_text"
+text = "Order"
+
+[[input]]
+id = "bootstrap_backend_step_order_input"
+name = "order"
+type = "number"
+value = "0"
+
+[[box]]
+id = "bootstrap_backend_step_params_field"
+class = "stack"
+children = ["bootstrap_backend_step_params_text", "bootstrap_backend_step_params_input"]
+
+[[text]]
+id = "bootstrap_backend_step_params_text"
+text = "Params JSON"
+
+[[textarea]]
+id = "bootstrap_backend_step_params_input"
+name = "paramsJson"
+placeholder = "{\"handler\":\"todos.readModel\",\"method\":\"GET\",\"into\":\"todoResponse\"}"
+
+[[box]]
+id = "bootstrap_backend_step_when_field"
+class = "stack"
+children = ["bootstrap_backend_step_when_text", "bootstrap_backend_step_when_input"]
+
+[[text]]
+id = "bootstrap_backend_step_when_text"
+text = "When JSON"
+
+[[textarea]]
+id = "bootstrap_backend_step_when_input"
+name = "whenJson"
+placeholder = "{\"path\":\"session.authenticated\",\"truthy\":true}"
+
+[[box]]
+id = "bootstrap_backend_step_repeat_field"
+class = "stack"
+children = ["bootstrap_backend_step_repeat_text", "bootstrap_backend_step_repeat_input"]
+
+[[text]]
+id = "bootstrap_backend_step_repeat_text"
+text = "Repeat JSON"
+
+[[textarea]]
+id = "bootstrap_backend_step_repeat_input"
+name = "repeatJson"
+placeholder = "{\"forEach\":{\"from\":\"items\",\"as\":\"item\"}}"
+
+[[box]]
+id = "bootstrap_backend_step_after_field"
+class = "stack"
+children = ["bootstrap_backend_step_after_text", "bootstrap_backend_step_after_input"]
+
+[[text]]
+id = "bootstrap_backend_step_after_text"
+text = "After JSON"
+
+[[textarea]]
+id = "bootstrap_backend_step_after_input"
+name = "afterJson"
+placeholder = "[\"version=request/step[0]\"]"
+
+[[box]]
+id = "bootstrap_backend_step_actions"
+class = "actions"
+children = ["bootstrap_backend_step_submit"]
+
+[[button]]
+id = "bootstrap_backend_step_submit"
+text = "Add Backend Step"
+type = "submit"
+
+[[text]]
+id = "bootstrap_backend_step_status"
+domId = "backend-step-status"
+class = "status"
+text = ""
+
+[[frontendProgram]]
+id = "bootstrap_backend_authoring_controls_program"
+rootWidget = "bootstrap_backend_authoring_controls_root"
+
+[[step]]
+order = 0
+op = "setText"
+on = "submit:bootstrap_backend_program_form"
+widget = "bootstrap_backend_program_status"
+text = "Saving backend program..."
+
+[[step]]
+order = 1
+op = "readForm"
+on = "submit:bootstrap_backend_program_form"
+widget = "bootstrap_backend_program_form"
+into = "bootstrapBackendProgramDraft"
+schema = "backendProgram.define"
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:bootstrap_backend_program_form"
+url = "/api/backend-programs"
+from = "bootstrapBackendProgramDraft"
+into = "bootstrapBackendProgramResult"
+
+[[step]]
+order = 3
+op = "setText"
+on = "submit:bootstrap_backend_program_form"
+widget = "bootstrap_backend_program_status"
+text = "Saved."
+
+[[step]]
+order = 4
+op = "clearForm"
+on = "submit:bootstrap_backend_program_form"
+widget = "bootstrap_backend_program_form"
+
+[[step]]
+order = 5
+op = "dispatchDomEvent"
+on = "submit:bootstrap_backend_program_form"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-backend-authoring-controls", reason = "backend-program-create" }
+
+[[step]]
+order = 0
+op = "setText"
+on = "submit:bootstrap_backend_program_version_form"
+widget = "bootstrap_backend_program_version_status"
+text = "Saving backend version..."
+
+[[step]]
+order = 1
+op = "readForm"
+on = "submit:bootstrap_backend_program_version_form"
+widget = "bootstrap_backend_program_version_form"
+into = "bootstrapBackendProgramVersionDraft"
+schema = "backendProgramVersion.define"
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:bootstrap_backend_program_version_form"
+url = "/api/backend-program-versions"
+from = "bootstrapBackendProgramVersionDraft"
+into = "bootstrapBackendProgramVersionResult"
+
+[[step]]
+order = 3
+op = "setText"
+on = "submit:bootstrap_backend_program_version_form"
+widget = "bootstrap_backend_program_version_status"
+text = "Saved."
+
+[[step]]
+order = 4
+op = "clearForm"
+on = "submit:bootstrap_backend_program_version_form"
+widget = "bootstrap_backend_program_version_form"
+
+[[step]]
+order = 5
+op = "dispatchDomEvent"
+on = "submit:bootstrap_backend_program_version_form"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-backend-authoring-controls", reason = "backend-program-version-create" }
+
+[[step]]
+order = 0
+op = "setText"
+on = "submit:bootstrap_backend_step_form"
+widget = "bootstrap_backend_step_status"
+text = "Saving backend step..."
+
+[[step]]
+order = 1
+op = "readForm"
+on = "submit:bootstrap_backend_step_form"
+widget = "bootstrap_backend_step_form"
+into = "bootstrapBackendStepDraft"
+schema = "backendStep.define"
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:bootstrap_backend_step_form"
+url = "/api/backend-steps"
+from = "bootstrapBackendStepDraft"
+into = "bootstrapBackendStepResult"
+
+[[step]]
+order = 3
+op = "setText"
+on = "submit:bootstrap_backend_step_form"
+widget = "bootstrap_backend_step_status"
+text = "Saved."
+
+[[step]]
+order = 4
+op = "clearForm"
+on = "submit:bootstrap_backend_step_form"
+widget = "bootstrap_backend_step_form"
+
+[[step]]
+order = 5
+op = "dispatchDomEvent"
+on = "submit:bootstrap_backend_step_form"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-backend-authoring-controls", reason = "backend-step-create" }
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_backend_program_version_soul_select"
+eventName = "witness:bootstrap-backend-authoring-sync"
+detail = { source = "bootstrap-backend-authoring-controls", family = "version-soul" }
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_backend_program_version_transition_from_select"
+eventName = "witness:bootstrap-backend-authoring-sync"
+detail = { source = "bootstrap-backend-authoring-controls", family = "transition-from" }
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_backend_program_form" }
+widget = "bootstrap_backend_program_status"
+text = "${event.message}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_backend_program_version_form" }
+widget = "bootstrap_backend_program_version_status"
+text = "${event.message}"
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_backend_step_form" }
+widget = "bootstrap_backend_step_status"
+text = "${event.message}"

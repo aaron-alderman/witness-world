@@ -97,3 +97,43 @@ test("program-authoring plugin owns process helpers and proposal targets", async
   });
   assert.equal(unsupported, null);
 });
+
+test("backend program version create checks target authority against soul", async () => {
+  const world = createWorld();
+  const seenTargets = [];
+  const seenJson = [];
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    readJson: async () => {
+      const body = { soul: "todo.todos.list", version: "todo.todos.list.v1", index: 0, context: "backend" };
+      seenJson.push(body);
+      return body;
+    },
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" },
+      ensureContextAuthority: () => ({ ok: true }),
+      ensureTargetAuthority: (actor, target) => {
+        seenTargets.push({ actor, target });
+        return { ok: false, status: 403, reason: "forbidden" };
+      }
+    },
+    sendGateFailure(_res, gate) {
+      sent.push({ kind: "gate", gate });
+    },
+    sendJson(_res, status, body) {
+      sent.push({ kind: "json", status, body });
+    },
+    supportedFrontendOps: [],
+    supportedBackendOps: []
+  });
+
+  await handlers["backendProgramVersion.create"]({ req: {}, res: {}, requestActor: "aaron" });
+
+  assert.deepEqual(seenJson, [{ soul: "todo.todos.list", version: "todo.todos.list.v1", index: 0, context: "backend" }]);
+  assert.deepEqual(seenTargets, [{ actor: "aaron", target: "todo.todos.list" }]);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].kind, "gate");
+  assert.equal(sent[0].gate.reason, "forbidden");
+});

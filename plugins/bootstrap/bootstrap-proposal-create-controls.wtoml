@@ -1,0 +1,213 @@
+[[defaults]]
+actor = "frontendHost"
+context = "frontend"
+program = "bootstrap_proposal_create_controls_program"
+
+[[box]]
+id = "bootstrap_proposal_create_controls_root"
+class = "stack"
+children = ["bootstrap_proposal_create_form", "bootstrap_proposal_create_status"]
+
+[[form]]
+id = "bootstrap_proposal_create_form"
+domId = "proposal-form"
+class = "stack"
+children = ["bootstrap_proposal_create_row_one", "bootstrap_proposal_create_row_two", "bootstrap_proposal_body_field", "bootstrap_proposal_reason_field", "bootstrap_proposal_help", "bootstrap_proposal_create_actions"]
+
+[[box]]
+id = "bootstrap_proposal_create_row_one"
+class = "grid two"
+children = ["bootstrap_proposal_id_field", "bootstrap_proposal_process_field"]
+
+[[box]]
+id = "bootstrap_proposal_id_field"
+class = "stack"
+children = ["bootstrap_proposal_id_text", "bootstrap_proposal_id_input"]
+
+[[text]]
+id = "bootstrap_proposal_id_text"
+text = "Proposal Id"
+
+[[input]]
+id = "bootstrap_proposal_id_input"
+name = "id"
+placeholder = "proposal.route.home"
+
+[[box]]
+id = "bootstrap_proposal_process_field"
+class = "stack"
+children = ["bootstrap_proposal_process_text", "bootstrap_proposal_process_select"]
+
+[[text]]
+id = "bootstrap_proposal_process_text"
+text = "Target Process"
+
+[[select]]
+id = "bootstrap_proposal_process_select"
+domId = "proposal-target-process"
+name = "targetProcess"
+
+[[box]]
+id = "bootstrap_proposal_create_row_two"
+class = "grid two"
+children = ["bootstrap_proposal_kind_field", "bootstrap_proposal_target_field"]
+
+[[box]]
+id = "bootstrap_proposal_kind_field"
+class = "stack"
+children = ["bootstrap_proposal_kind_text", "bootstrap_proposal_kind_input"]
+
+[[text]]
+id = "bootstrap_proposal_kind_text"
+text = "Target Kind"
+
+[[input]]
+id = "bootstrap_proposal_kind_input"
+name = "targetKind"
+placeholder = "route"
+
+[[box]]
+id = "bootstrap_proposal_target_field"
+class = "stack"
+children = ["bootstrap_proposal_target_text", "bootstrap_proposal_target_input"]
+
+[[text]]
+id = "bootstrap_proposal_target_text"
+text = "Target Id"
+
+[[input]]
+id = "bootstrap_proposal_target_input"
+name = "targetId"
+placeholder = "home_route"
+
+[[box]]
+id = "bootstrap_proposal_body_field"
+class = "stack"
+children = ["bootstrap_proposal_body_text", "bootstrap_proposal_body_input"]
+
+[[text]]
+id = "bootstrap_proposal_body_text"
+text = "Body JSON"
+
+[[textarea]]
+id = "bootstrap_proposal_body_input"
+name = "bodyJson"
+text = "{}"
+
+[[box]]
+id = "bootstrap_proposal_reason_field"
+class = "stack"
+children = ["bootstrap_proposal_reason_text", "bootstrap_proposal_reason_input"]
+
+[[text]]
+id = "bootstrap_proposal_reason_text"
+text = "Reason"
+
+[[input]]
+id = "bootstrap_proposal_reason_input"
+name = "reason"
+placeholder = "why this should be approved"
+
+[[text]]
+id = "bootstrap_proposal_help"
+domId = "proposal-help"
+class = "note muted"
+text = ""
+
+[[box]]
+id = "bootstrap_proposal_create_actions"
+class = "actions"
+children = ["bootstrap_proposal_create_submit"]
+
+[[button]]
+id = "bootstrap_proposal_create_submit"
+text = "Create Proposal"
+type = "submit"
+
+[[text]]
+id = "bootstrap_proposal_create_status"
+domId = "proposal-status"
+class = "status"
+text = ""
+
+[[frontendProgram]]
+id = "bootstrap_proposal_create_controls_program"
+rootWidget = "bootstrap_proposal_create_controls_root"
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_proposal_process_select"
+eventName = "witness:bootstrap-proposal-create-help-sync"
+detail = { source = "bootstrap-proposal-create-controls", trigger = "target-process" }
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_proposal_kind_input"
+eventName = "witness:bootstrap-proposal-create-help-sync"
+detail = { source = "bootstrap-proposal-create-controls", trigger = "target-kind" }
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_proposal_target_input"
+eventName = "witness:bootstrap-proposal-create-help-sync"
+detail = { source = "bootstrap-proposal-create-controls", trigger = "target-id" }
+
+[[step]]
+order = 0
+op = "dispatchDomEvent"
+on = "input:bootstrap_proposal_body_input"
+eventName = "witness:bootstrap-proposal-create-help-sync"
+detail = { source = "bootstrap-proposal-create-controls", trigger = "body-json" }
+
+[[step]]
+order = 0
+op = "setText"
+on = "submit:bootstrap_proposal_create_form"
+widget = "bootstrap_proposal_create_status"
+text = "Saving proposal..."
+
+[[step]]
+order = 1
+op = "readForm"
+on = "submit:bootstrap_proposal_create_form"
+widget = "bootstrap_proposal_create_form"
+into = "bootstrapProposalCreateDraft"
+
+[[step]]
+order = 2
+op = "postJson"
+on = "submit:bootstrap_proposal_create_form"
+url = "/api/proposals"
+from = "bootstrapProposalCreateDraft"
+into = "bootstrapProposalCreateResult"
+
+[[step]]
+order = 3
+op = "setText"
+on = "submit:bootstrap_proposal_create_form"
+widget = "bootstrap_proposal_create_status"
+text = "Saved."
+
+[[step]]
+order = 4
+op = "clearForm"
+on = "submit:bootstrap_proposal_create_form"
+widget = "bootstrap_proposal_create_form"
+
+[[step]]
+order = 5
+op = "dispatchDomEvent"
+on = "submit:bootstrap_proposal_create_form"
+eventName = "witness:host-refresh"
+detail = { source = "bootstrap-proposal-create-controls", reason = "proposal-create" }
+
+[[step]]
+order = 0
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_proposal_create_form" }
+widget = "bootstrap_proposal_create_status"
+text = "${event.message}"

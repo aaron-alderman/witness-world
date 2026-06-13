@@ -185,3 +185,13 @@ test("todo starter blueprint authors live app and world frontend surfaces into t
   assert.equal(homeRoute?.context, "frontend");
   assert.equal(worldRoute?.context, "frontend");
 });
+
+test("todo starter blueprint reloads from the authored document as a fresh clone per call", () => {
+  const first = todoStarterBlueprint();
+  first.runner.id = "mutated_runner";
+  first.widgets[0].id = "mutated_widget";
+
+  const second = todoStarterBlueprint();
+  assert.equal(second.runner.id, "demo_server");
+  assert.equal(second.widgets[0].id, "todo_app_widget");
+});

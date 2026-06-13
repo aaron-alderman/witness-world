@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   compileWtomlDocsToDesirePlus,
+  compileRvmFileToDesirePlus,
   createDesireRegistriesFromPluginExtensions,
   elaborateDesirePlus,
   normalizeDesirePlusToDesire,
@@ -16,6 +17,8 @@ import {
   resolveRuntimePluginRoot
 } from "./runtime-plugin-utils.js";
 import { loadRuntimePluginModules } from "./runtime-plugin-loader.js";
+
+const MANIFEST_ONLY_DOC_KINDS = new Set(["desktopTarget"]);
 
 // Tiny TOML-ish DSL parser. Intentional subset:
 //   [[section]]
@@ -69,23 +72,67 @@ export function parseWitnessToml(source) {
   return docs;
 }
 
-export async function loadWitnessTomlFile(file, { seen = new Set() } = {}) {
+export async function loadWitnessTomlFile(file, { seen = new Set(), beforeLoad = null } = {}) {
+  const loaded = await loadWitnessAppFile(file, { seen, beforeLoad });
+  return loaded.witnessDocs;
+}
+
+export async function loadWitnessAppFile(file, { seen = new Set(), beforeLoad = null } = {}) {
   const resolved = path.resolve(file);
-  if (seen.has(resolved)) return [];
+  if (typeof beforeLoad === "function") {
+    await beforeLoad(resolved);
+  }
+  if (seen.has(resolved)) {
+    return {
+      witnessDocs: [],
+      authoredDesireDocs: [],
+      allDocs: [],
+      sourceFiles: [],
+      importEntries: []
+    };
+  }
   seen.add(resolved);
 
+  if (path.extname(resolved).toLowerCase() === ".rvm") {
+    return {
+      witnessDocs: [],
+      authoredDesireDocs: [
+        normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(resolved))
+      ],
+      allDocs: [],
+      sourceFiles: [{ file: resolved, sourceLanguage: "rvm" }],
+      importEntries: []
+    };
+  }
+
   const source = await fs.readFile(resolved, "utf8");
-  const docs = parseWitnessToml(source).map(doc => ({ ...doc, file: resolved }));
-  const imports = docs
+  const parsedDocs = parseWitnessToml(source).map(doc => ({ ...doc, file: resolved }));
+  const docs = parsedDocs.filter(doc => !MANIFEST_ONLY_DOC_KINDS.has(doc.kind));
+  const imports = parsedDocs
     .filter(doc => doc.kind === "app" && Array.isArray(doc.values.imports))
     .flatMap(doc => doc.values.imports);
 
-  const imported = [];
+  const witnessDocs = [...docs];
+  const allDocs = [...parsedDocs];
+  const authoredDesireDocs = [];
+  const sourceFiles = [{ file: resolved, sourceLanguage: "wtoml" }];
+  const importEntries = [];
   for (const spec of imports) {
-    imported.push(...await loadWitnessTomlFile(path.resolve(path.dirname(resolved), spec), { seen }));
+    const importedPath = path.resolve(path.dirname(resolved), spec);
+    importEntries.push({
+      from: resolved,
+      spec,
+      file: importedPath
+    });
+    const loaded = await loadWitnessAppFile(importedPath, { seen, beforeLoad });
+    witnessDocs.push(...loaded.witnessDocs);
+    allDocs.push(...loaded.allDocs);
+    authoredDesireDocs.push(...loaded.authoredDesireDocs);
+    sourceFiles.push(...loaded.sourceFiles);
+    importEntries.push(...loaded.importEntries);
   }
 
-  return [...docs, ...imported];
+  return { witnessDocs, authoredDesireDocs, allDocs, sourceFiles, importEntries };
 }
 
 export function applyWitnessToml(world, source, options = {}) {

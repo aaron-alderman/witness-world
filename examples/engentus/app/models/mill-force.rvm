@@ -1,0 +1,79 @@
+import desire/v3-alpha
+
+// ── Mill liner force model ─────────────────────────────────────────────────────
+//
+// ONE model over a `method` axis (faithful | grounded). Most of it is honest
+// dataflow that stays in the IR; the faithful/grounded duality reduces to a
+// method-keyed sign (tangential_sign) plus THREE irreducible numerical kernels
+// at the symmetry break — fill_angle, gravity_area, cf_mass_moment — lowered to
+// plugins/chart-runtime/mill-force-kernels.js. Faithful to
+// example-ports/engentus/js/mill_force_model.js (DEFAULT_INPUTS).
+
+model MillForce {
+  // ── axes ──
+  axis segment = sweep(1, N_segments, 1)
+  axis method  = category(faithful, grounded)
+
+  // ── params (DEFAULT_INPUTS) ──
+  param percent_crit   = 0.9
+  param mu             = 0.3
+  param radius         = 6.0
+  param beta_prime_deg = 50.0
+  param N_segments     = 39
+  param J_total        = 0.3
+  param J_balls        = 0.1
+  param J_voids        = 0.4
+  param percent_solids = 0.75
+  param rho_ball       = 7.8
+  param rho_ore        = 3.1
+  param g              = 9.81
+  param depth          = 1.5
+  param m_liner        = 0.0
+  param height         = 0.5
+
+  // ── honest geometry (stays in IR) ──
+  derive omega   = sqrt(g / radius) * percent_crit
+  derive rInner  = radius - height
+  derive dTheta  = 2 * pi / N_segments
+  derive J_ore   = J_total - J_balls
+  derive rho_pulp  = rho_ore / ((1 - percent_solids) * rho_ore + percent_solids)
+  derive rhoCharge = (J_balls / J_total * rho_ball + J_ore / J_total * rho_ore) * (1 - J_voids) + J_voids * rho_pulp
+  derive beta  = (90 - beta_prime_deg) * pi / 180
+  derive alpha = atan(mu)
+  derive phi   = asin(sin(beta + alpha) * omega^2 * radius / g) + alpha + beta
+
+  // ── fill angle: the FIRST kernel (grid vs root-find) ──
+  derive gamma    = fill_angle(J_total, radius, height, method) over method
+  derive phiPrime = phi - gamma over method
+
+  // ── fill chord (honest: polar→cartesian slope/intercept) ──
+  derive x1 = rInner * sin(phi)
+  derive y1 = 0 - rInner * cos(phi)
+  derive x2 = rInner * sin(phiPrime) over method
+  derive y2 = 0 - rInner * cos(phiPrime) over method
+  derive mFill = (y2 - y1) / (x2 - x1) over method
+  derive cFill = y1 - mFill * x1 over method
+
+  // ── per-segment angles (honest) ──
+  derive t1   = phi - dTheta * (segment - 1) over segment
+  derive t2   = max(phiPrime, t1 - dTheta) over segment, method
+  derive tBar = (t1 + t2) / 2 over segment, method
+
+  // ── per-segment charge mass: gravity_area is the SECOND kernel ──
+  derive A_gravity = gravity_area(t1, t2, rInner, radius, mFill, cFill, dTheta, phi, phiPrime, method) over segment, method
+  derive m_charge  = A_gravity * depth * rhoCharge * 1000 over segment, method
+  derive m_total   = m_charge + m_liner over segment, method
+
+  // ── gravity force (honest; tangential sign is the parameterised half) ──
+  derive Fw_r = cos(tBar) * m_total * g over segment, method
+  derive Fw_t = tangential_sign(method) * sin(tBar) * m_total * g over segment, method
+
+  // ── centrifugal force: cf_mass_moment is the THIRD kernel ──
+  derive M_cf = cf_mass_moment(t1, t2, rInner, radius, mFill, cFill, dTheta, phi, phiPrime, depth, rhoCharge, method) over segment, method
+  derive Fc_r = omega^2 * (M_cf + radius * m_liner) over segment, method
+
+  // ── resultant (honest) ──
+  derive F_r = Fw_r + Fc_r over segment, method
+  derive F_t = Fw_t over segment, method
+  derive F_resultant = sqrt(F_r^2 + F_t^2) over segment, method
+}

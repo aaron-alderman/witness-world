@@ -483,6 +483,7 @@ function serializeRvmBoundary(node, semantic) {
       simpleLine("command", operation.command),
       simpleLine("kind", operation.operationKind),
       simpleLine("route", operation.route),
+      simpleLine("host_operation", operation.hostOperation),
       simpleLine("request_schema", operation.requestSchema),
       simpleLine("response_schema", operation.responseSchema),
       simpleLine("request_state", operation.requestState),

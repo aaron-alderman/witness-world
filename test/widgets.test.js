@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import { createWorld, canMutateTarget } from "../src/kernel.js";
@@ -14,7 +14,7 @@ import { requestWidgetVersionActivation, rollbackWidgetVersion } from "../plugin
 
 test("todo UI is generated from primitive widgets, template widgets, and credential-backed session steps", async () => {
   const world = createWorld();
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const tree = world.project(w => widgetTree(w, "todo_app_widget"));
@@ -123,6 +123,39 @@ params = { widget = "root", text = "\${event.message}" }
   assert.match(html, /dispatchError/);
   assert.match(html, /safeRun/);
   assert.doesNotMatch(html, /todo_status/);
+});
+
+test("widget pages compose canonical theme tokens and shared surface-kit primitives", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[widget]]
+actor = "adam"
+id = "root"
+kind = "Page"
+props = { title = "Themed" }
+`);
+
+  const html = renderWidgetPage(world, {
+    actor: "frontendHost",
+    rootWidget: "root",
+    appConfig: {
+      pageChrome: {
+        themeId: "moss",
+        material: "stone",
+        typography: "serif"
+      }
+    }
+  });
+
+  assert.match(html, /data-page-theme="moss"/);
+  assert.match(html, /data-page-material="stone"/);
+  assert.match(html, /data-page-typography="serif"/);
+  assert.match(html, /--page-bg: linear-gradient\(180deg, #edf2e6 0%, #dde7d4 100%\);/);
+  assert.match(html, /--surface-shadow: 0 16px 34px rgba\(45, 45, 45, 0.12\);/);
+  assert.match(html, /--body-font: Georgia, "Times New Roman", serif;/);
+  assert.match(html, /\.surface-card-grid \{/);
+  assert.match(html, /\.surface-link-chip \{/);
+  assert.match(html, /\.surface-shell-3 \{/);
 });
 
 test("value editor renders controls chosen by value type metadata", () => {
@@ -416,3 +449,4 @@ text = "Ready"
   const program = world.project(w => frontendProgram(w, "program"));
   assert.equal(program.steps.length, 1);
 });
+

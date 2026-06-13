@@ -266,8 +266,8 @@ test("runtime server composes authored runtime plugin installs with operator plu
   await server.close();
 });
 
-test("runtime server registers active plugin module projectors with scoped cleanup", async () => {
-  const world = createWitnessWorld();
+test("runtime server attaches active plugin module projectors to the runtime world", async () => {
+  const world = createWorld();
   const runner = {
     id: "runner-1",
     backendHost: "backendHost",
@@ -365,12 +365,12 @@ test("runtime server registers active plugin module projectors with scoped clean
   });
 
   assert.equal(server.ok, true);
-  assert.deepEqual(moduleProjectors.assets([]), [{ id: "asset.plugin", title: "Plugin Asset" }]);
+  assert.deepEqual(world.project(moduleProjectors.assets), [{ id: "asset.plugin", title: "Plugin Asset" }]);
   await server.close();
-  assert.deepEqual(moduleProjectors.assets([]), []);
+  assert.deepEqual(world.project(moduleProjectors.assets), []);
 });
 
-test("runtime server keeps identical active module projectors alive until all servers close", async () => {
+test("runtime server keeps identical active module projectors isolated until each server closes", async () => {
   const projectors = {
     assets: () => [{ id: "asset.plugin", title: "Plugin Asset" }],
     assetIndex: () => ({ rows: [{ id: "asset.plugin" }], byId: { "asset.plugin": { id: "asset.plugin" } } })
@@ -391,15 +391,17 @@ test("runtime server keeps identical active module projectors alive until all se
   };
   let first = null;
   let second = null;
+  const worldOne = createWorld();
+  const worldTwo = createWorld();
   try {
-    first = await startRuntimeServer(createWitnessWorld(), {
+    first = await startRuntimeServer(worldOne, {
       actor: "adam",
       serverRunnerId: "runner-1",
       runtimeRoot: "C:/runtime",
       logger: { info() {}, error() {} },
       runtimeProfile: "minimal"
     }, createModuleProjectorRuntimeDeps({ runner: runnerOne, projectors, port: 4323 }));
-    second = await startRuntimeServer(createWitnessWorld(), {
+    second = await startRuntimeServer(worldTwo, {
       actor: "adam",
       serverRunnerId: "runner-2",
       runtimeRoot: "C:/runtime",
@@ -409,20 +411,22 @@ test("runtime server keeps identical active module projectors alive until all se
 
     assert.equal(first.ok, true);
     assert.equal(second.ok, true);
-    assert.deepEqual(moduleProjectors.assets([]), [{ id: "asset.plugin", title: "Plugin Asset" }]);
+    assert.deepEqual(worldOne.project(moduleProjectors.assets), [{ id: "asset.plugin", title: "Plugin Asset" }]);
+    assert.deepEqual(worldTwo.project(moduleProjectors.assets), [{ id: "asset.plugin", title: "Plugin Asset" }]);
     await first.close();
     first = null;
-    assert.deepEqual(moduleProjectors.assets([]), [{ id: "asset.plugin", title: "Plugin Asset" }]);
+    assert.deepEqual(worldOne.project(moduleProjectors.assets), []);
+    assert.deepEqual(worldTwo.project(moduleProjectors.assets), [{ id: "asset.plugin", title: "Plugin Asset" }]);
     await second.close();
     second = null;
-    assert.deepEqual(moduleProjectors.assets([]), []);
+    assert.deepEqual(worldTwo.project(moduleProjectors.assets), []);
   } finally {
     if (first?.ok) await first.close();
     if (second?.ok) await second.close();
   }
 });
 
-test("runtime server rejects conflicting active module projector implementations without clearing existing servers", async () => {
+test("runtime servers can use different active module projector implementations concurrently", async () => {
   const runnerOne = {
     id: "runner-1",
     backendHost: "backendHost",
@@ -444,8 +448,11 @@ test("runtime server rejects conflicting active module projector implementations
     assets: () => [{ id: "asset.second" }]
   };
   let first = null;
+  let second = null;
+  const worldOne = createWorld();
+  const worldTwo = createWorld();
   try {
-    first = await startRuntimeServer(createWitnessWorld(), {
+    first = await startRuntimeServer(worldOne, {
       actor: "adam",
       serverRunnerId: "runner-1",
       runtimeRoot: "C:/runtime",
@@ -454,7 +461,7 @@ test("runtime server rejects conflicting active module projector implementations
     }, createModuleProjectorRuntimeDeps({ runner: runnerOne, projectors: firstProjectors, port: 4325 }));
     assert.equal(first.ok, true);
 
-    const conflict = await startRuntimeServer(createWitnessWorld(), {
+    second = await startRuntimeServer(worldTwo, {
       actor: "adam",
       serverRunnerId: "runner-2",
       runtimeRoot: "C:/runtime",
@@ -462,14 +469,19 @@ test("runtime server rejects conflicting active module projector implementations
       runtimeProfile: "minimal"
     }, createModuleProjectorRuntimeDeps({ runner: runnerTwo, projectors: secondProjectors, port: 4326 }));
 
-    assert.equal(conflict.ok, false);
-    assert.equal(conflict.reason, "runtime plugin contributions unresolved");
-    assert.match(String(conflict.error?.message ?? ""), /module projector assets is already registered by runtime\.activePlugins:runner-1:.*different implementation/);
-    assert.deepEqual(moduleProjectors.assets([]), [{ id: "asset.first" }]);
+    assert.equal(second.ok, true);
+    assert.deepEqual(worldOne.project(moduleProjectors.assets), [{ id: "asset.first" }]);
+    assert.deepEqual(worldTwo.project(moduleProjectors.assets), [{ id: "asset.second" }]);
+    await first.close();
+    first = null;
+    assert.deepEqual(worldOne.project(moduleProjectors.assets), []);
+    assert.deepEqual(worldTwo.project(moduleProjectors.assets), [{ id: "asset.second" }]);
   } finally {
     if (first?.ok) await first.close();
+    if (second?.ok) await second.close();
   }
-  assert.deepEqual(moduleProjectors.assets([]), []);
+  assert.deepEqual(worldOne.project(moduleProjectors.assets), []);
+  assert.deepEqual(worldTwo.project(moduleProjectors.assets), []);
 });
 
 test("runtime server rejects duplicate active module projector providers before registration", async () => {

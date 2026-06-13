@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -83,7 +83,7 @@ test("widget editor creates stable thing-style ids rather than host timestamp id
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -115,7 +115,7 @@ test("typed widget.define rejects incompatible inputs with structured failures",
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -241,7 +241,7 @@ test("malformed JSON requests are witnessed as request failures", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
-  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-server.wtoml"));
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
   applyWitnessDocs(world, docs);
 
   const server = await startServer(world, {
@@ -269,3 +269,4 @@ test("malformed JSON requests are witnessed as request failures", async () => {
     await server.close();
   }
 });
+

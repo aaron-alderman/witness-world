@@ -148,6 +148,22 @@ function capabilityDefinitionsById(witnesses) {
 
 const registeredModuleProjectors = new Map();
 
+export function createModuleProjectorContext(projectorEntries = {}, { owner = "moduleProjectorContext" } = {}) {
+  const provider = typeof owner === "string" && owner.trim() ? owner.trim() : "moduleProjectorContext";
+  const projectors = new Map();
+  for (const [name, projector] of Object.entries(projectorEntries ?? {})) {
+    if (typeof projector !== "function") {
+      throw new Error(`module projector ${name} from ${provider} must be a function`);
+    }
+    projectors.set(name, projector);
+  }
+  return Object.freeze({
+    kind: "moduleProjectorContext",
+    owner: provider,
+    projectors
+  });
+}
+
 export function registerModuleProjectors(owner, projectorEntries = {}) {
   const provider = typeof owner === "string" && owner.trim() ? owner.trim() : "unknown";
   const token = Symbol(provider);
@@ -187,9 +203,11 @@ export function registerModuleProjectors(owner, projectorEntries = {}) {
 }
 
 function delegatedModuleProjector(name, fallback) {
-  return witnesses => {
+  return (witnesses, options = {}) => {
+    const contextProjector = options?.projectionContext?.projectors?.get?.(name) ?? null;
+    if (typeof contextProjector === "function") return contextProjector(witnesses, options);
     const registered = registeredModuleProjectors.get(name);
-    return (registered?.projector ?? fallback)(witnesses);
+    return (registered?.projector ?? fallback)(witnesses, options);
   };
 }
 

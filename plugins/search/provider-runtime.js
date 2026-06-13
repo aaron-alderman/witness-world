@@ -112,7 +112,7 @@ function searchSnippet(text, terms) {
 }
 
 
-export function createSearchIndexRuntime({ world, runtimeConfig, runtimeRoot, serverRunnerId, storage }) {
+export function createSearchIndexRuntime({ world, project = projector => world.project(projector), runtimeConfig, runtimeRoot, serverRunnerId, storage }) {
   let stateLoaded = false;
   let stateCache = null;
   let buildSequence = 0;
@@ -176,7 +176,7 @@ export function createSearchIndexRuntime({ world, runtimeConfig, runtimeRoot, se
   });
 
   const resolveAssetSource = async (descriptor, config) => {
-    const asset = world.project(moduleProjectors.assetIndex).byId[descriptor.assetId] ?? null;
+    const asset = project(moduleProjectors.assetIndex).byId[descriptor.assetId] ?? null;
     if (!asset) return { ok: false, status: 404, reason: `asset ${descriptor.assetId} not found` };
     const metadataText = [asset.title, asset.mimeType, asset.context].filter(Boolean).join(" ");
     let text = metadataText;
@@ -366,7 +366,7 @@ export function createSearchIndexRuntime({ world, runtimeConfig, runtimeRoot, se
       };
     }
     const includesAsset = (state.sourceDescriptors ?? []).some(descriptor => descriptor?.type === "asset" && descriptor.assetId === assetId);
-    const asset = world.project(moduleProjectors.assetIndex).byId[assetId] ?? null;
+    const asset = project(moduleProjectors.assetIndex).byId[assetId] ?? null;
     const lastBuiltAt = typeof state.lastBuiltAt === "string" ? state.lastBuiltAt : null;
     const assetUpdatedAt = typeof asset?.processingUpdatedAt === "string" ? asset.processingUpdatedAt : null;
     const lastBuiltAtMs = parseIsoAt(lastBuiltAt);

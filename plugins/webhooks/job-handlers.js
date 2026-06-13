@@ -4,6 +4,7 @@ import { moduleProjectors } from "../../src/modules.js";
 
 export function createBuiltinWebhookJobHandlers({
   world,
+  project = projector => world.project(projector),
   backendHost,
   webhookPayloadPathFor,
   looksJsonContentType
@@ -11,7 +12,7 @@ export function createBuiltinWebhookJobHandlers({
   return {
     "webhook.inbound.process": async ({ actor, job, payload, attempt, appContext }) => {
       const webhookIdValue = typeof payload?.webhookId === "string" ? payload.webhookId : "";
-      const delivery = world.project(moduleProjectors.webhookDeliveryIndex).byId[webhookIdValue] ?? null;
+      const delivery = project(moduleProjectors.webhookDeliveryIndex).byId[webhookIdValue] ?? null;
       if (!delivery) {
         throw new Error("webhook delivery not found");
       }

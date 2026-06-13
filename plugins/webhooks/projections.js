@@ -32,12 +32,12 @@ function defaultWebhookDeliveryRow(id, { titles, owners, contexts }) {
   };
 }
 
-export function webhookDeliveries(witnesses) {
+export function webhookDeliveries(witnesses, options = {}) {
   const rows = new Map();
   const owners = projectors.owners(witnesses);
-  const contexts = moduleProjectors.objectContexts(witnesses);
-  const modules = moduleProjectors.modules(witnesses);
-  const jobIndex = moduleProjectors.jobIndex(witnesses).byId;
+  const contexts = moduleProjectors.objectContexts(witnesses, options);
+  const modules = moduleProjectors.modules(witnesses, options);
+  const jobIndex = moduleProjectors.jobIndex(witnesses, options).byId;
   const titles = titleMap(witnesses);
 
   for (const [id, kind] of modules) {
@@ -109,8 +109,8 @@ export function webhookDeliveries(witnesses) {
     .sort((a, b) => String(a.id).localeCompare(String(b.id)));
 }
 
-export function webhookDeliveryIndex(witnesses) {
-  const rows = webhookDeliveries(witnesses);
+export function webhookDeliveryIndex(witnesses, options = {}) {
+  const rows = webhookDeliveries(witnesses, options);
   const byId = Object.create(null);
   for (const row of rows) byId[row.id] = row;
   return { rows, byId };

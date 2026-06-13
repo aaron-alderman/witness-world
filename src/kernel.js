@@ -14,12 +14,12 @@ const deepFreeze = value => {
 
 const hash = value => crypto.createHash("sha256").update(stableStringify(value)).digest("hex");
 
-export function createWorld({ genesis = { system: "witness-world", version: "0.1.0" }, witnessLog = null, witnessLogPath = null, observationLog = null, observationLogPath = null } = {}) {
+export function createWorld({ genesis = { system: "witness-world", version: "0.1.0" }, witnessLog = null, witnessLogPath = null, observationLog = null, observationLogPath = null, projectionContext = null } = {}) {
   const log = witnessLog ?? new WitnessLog({ file: witnessLogPath });
   const obsLog = observationLog ?? new WitnessLog({ file: observationLogPath });
   const existing = log.all();
   if (existing.length > 0) {
-    return makeWorldFromLog({ genesis, log, obsLog });
+    return makeWorldFromLog({ genesis, log, obsLog, projectionContext });
   }
   const genesisWitness = makeWitness({
     cause: null,
@@ -36,10 +36,14 @@ export function createWorld({ genesis = { system: "witness-world", version: "0.1
   });
   log.append(genesisWitness);
 
-  return makeWorldFromLog({ genesis, log, obsLog });
+  return makeWorldFromLog({ genesis, log, obsLog, projectionContext });
 }
 
-function makeWorldFromLog({ genesis, log, obsLog }) {
+function makeWorldFromLog({ genesis, log, obsLog, projectionContext = null }) {
+  const projectionContextStack = [];
+  if (projectionContext) projectionContextStack.push({ token: Symbol("initialProjectionContext"), projectionContext });
+  const currentProjectionContext = () => projectionContextStack.at(-1)?.projectionContext ?? null;
+
   function emit({ process, actor, claims = [], body = {}, cause = undefined }) {
     const prior = log.all().at(-1)?.id ?? null;
     const actualCause = cause === undefined ? prior : cause;
@@ -59,13 +63,18 @@ function makeWorldFromLog({ genesis, log, obsLog }) {
   function fork() {
     const childObsLog = new WitnessLog();
     childObsLog.replace(obsLog.all());
-    const child = createWorld({ genesis, observationLog: childObsLog });
+    const child = createWorld({ genesis, observationLog: childObsLog, projectionContext: currentProjectionContext() });
     child._replaceWitnesses(log.all());
     return child;
   }
 
-  function project(projector) {
-    return projector(log.all());
+  function project(projector, options = {}) {
+    const projectionOptions = options && typeof options === "object" ? options : {};
+    const activeProjectionContext = projectionOptions.projectionContext ?? currentProjectionContext();
+    return projector(log.all(), {
+      ...projectionOptions,
+      projectionContext: activeProjectionContext
+    });
   }
 
   function allWitnesses() {
@@ -84,7 +93,20 @@ function makeWorldFromLog({ genesis, log, obsLog }) {
     obsLog.replace(next);
   }
 
-  return { emit, observe, project, allWitnesses, allObservations, fork, _replaceWitnesses, _replaceObservations };
+  function _pushProjectionContext(nextProjectionContext) {
+    if (!nextProjectionContext) return () => {};
+    const token = Symbol("projectionContext");
+    projectionContextStack.push({ token, projectionContext: nextProjectionContext });
+    let closed = false;
+    return () => {
+      if (closed) return;
+      closed = true;
+      const index = projectionContextStack.findIndex(entry => entry.token === token);
+      if (index >= 0) projectionContextStack.splice(index, 1);
+    };
+  }
+
+  return { emit, observe, project, allWitnesses, allObservations, fork, _replaceWitnesses, _replaceObservations, _pushProjectionContext };
 }
 
 function makeWitness({ cause, process, actor, claims, body }) {
