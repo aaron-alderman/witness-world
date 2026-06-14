@@ -30,6 +30,7 @@ export function createUnavailableRuntimeAppContext({
 export async function createRuntimeAppContext({
   world,
   serverRunner,
+  appProject = null,
   backendHost,
   frontendHost,
   runtimeRoot,
@@ -59,6 +60,9 @@ export async function createRuntimeAppContext({
       actors,
       identityIndex: resolvedIdentityIndex,
       serverRunnerId: serverRunner.id,
+      appProject,
+      appRoot: appProject?.appRoot ?? null,
+      manifestPath: appProject?.manifestPath ?? null,
       runtimeRoot,
       storage,
       runtimeConfig: runtimeConfig?.values ?? {},
@@ -89,6 +93,9 @@ export async function createRuntimeAppContext({
       actors: produced.actors ?? actors,
       identityIndex: resolvedIdentityIndex,
       serverRunnerId: serverRunner.id,
+      appProject,
+      appRoot: appProject?.appRoot ?? null,
+      manifestPath: appProject?.manifestPath ?? null,
       runtimeRoot,
       storage,
       runtimeConfig: runtimeConfig?.values ?? {},
@@ -153,6 +160,7 @@ export async function createRuntimeAppContext({
   appContext.authOAuth = {
     pendingFlows: new Map()
   };
+  appContext.runtimeContributions = runtimeContributions;
   appContext.httpOutboundStubState = new Map();
   appContext.close = () => {
     appContext.jobs?.close?.();

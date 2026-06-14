@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createRuntimeSessionServices } from "../src/runtime-session-services.js";
 
-test("runtime session services create, shape, sync, and clear tutorial session state", () => {
+test("runtime session services create, shape, sync, and clear guidance session state with tutorial aliases", () => {
   const sessionStore = new Map();
   const services = createRuntimeSessionServices({ sessionStore });
   const identity = {
@@ -15,6 +15,8 @@ test("runtime session services create, shape, sync, and clear tutorial session s
 
   const session = services.createSessionForIdentity(identity);
   assert.equal(sessionStore.has(session.id), true);
+  assert.equal(Object.keys(session).includes("tutorialProgress"), false);
+  assert.equal(session.tutorialProgress, session.guidanceProgress);
   assert.deepEqual(services.sessionResponseShape(session), {
     authenticated: true,
     identity: "identity.aaron",
@@ -24,10 +26,13 @@ test("runtime session services create, shape, sync, and clear tutorial session s
     perspective: "aaron:workspace"
   });
 
+  assert.equal(services.guidanceProgressFor(session, "todo-from-scratch"), null);
   assert.equal(services.tutorialProgressFor(session, "todo-from-scratch"), null);
-  services.setTutorialProgress(session, "todo-from-scratch", { stepId: "identity:create" });
+  services.setGuidanceProgress(session, "todo-from-scratch", { stepId: "identity:create" });
+  assert.deepEqual(services.guidanceProgressFor(session, "todo-from-scratch"), { stepId: "identity:create" });
   assert.deepEqual(services.tutorialProgressFor(session, "todo-from-scratch"), { stepId: "identity:create" });
   services.setTutorialProgress(session, "todo-from-scratch", null);
+  assert.equal(services.guidanceProgressFor(session, "todo-from-scratch"), null);
   assert.equal(services.tutorialProgressFor(session, "todo-from-scratch"), null);
 
   const synced = services.syncSessionIdentity(session, {
@@ -39,4 +44,5 @@ test("runtime session services create, shape, sync, and clear tutorial session s
   });
   assert.equal(synced.actor, "aaron.updated");
   assert.equal(sessionStore.get(session.id).label, "Aaron Updated");
+  assert.equal(sessionStore.get(session.id).tutorialProgress, sessionStore.get(session.id).guidanceProgress);
 });

@@ -89,10 +89,14 @@ export const NATIVE_RUNTIME_DECLARATION_KINDS = new Set([
   "widgetVersionTransition",
   "activateWidgetVersion",
   "attachWidget",
+  "fragment",
   "page",
   "box",
   "section",
+  "header",
   "heading",
+  "paragraph",
+  "small",
   "text",
   "label",
   "form",
@@ -261,10 +265,14 @@ export function assertNoLegacyRuntimeDocFallbackRequired(desire, options = {}) {
 }
 
 const WIDGET_KIND_BY_SECTION = new Map([
+  ["fragment", "Fragment"],
   ["page", "Page"],
   ["box", "Box"],
   ["section", "Section"],
+  ["header", "Header"],
   ["heading", "Heading"],
+  ["paragraph", "Paragraph"],
+  ["small", "Small"],
   ["text", "Text"],
   ["label", "Label"],
   ["form", "Form"],
@@ -1283,10 +1291,14 @@ function applyCoreRuntimeDeclaration(world, doc) {
           version: req(values, "version")
         })
       ]);
+    case "fragment":
     case "page":
     case "box":
     case "section":
+    case "header":
     case "heading":
+    case "paragraph":
+    case "small":
     case "text":
     case "label":
     case "form":

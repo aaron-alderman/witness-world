@@ -6,7 +6,7 @@ import {
   normalizeDesirePlusToDesire
 } from "../src/desire/index.js";
 import { evaluateModel } from "../plugins/chart-runtime/dataflow-eval.js";
-import { goodmanFunctions } from "../plugins/chart-runtime/goodman-stdlib.js";
+import { goodmanFunctions } from "../examples/engentus/app/chart-functions/goodman-stdlib.js";
 import {
   bolt_static_point,
   goodman_sa,

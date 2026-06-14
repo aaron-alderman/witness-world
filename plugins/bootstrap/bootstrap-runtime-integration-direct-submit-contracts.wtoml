@@ -1,0 +1,52 @@
+[[bootstrapRuntimeIntegrationDirectSubmit]]
+family = "runtime-plugin-install"
+url = "/api/runtime-plugin-installs"
+successText = "Saved."
+resetOnSuccess = true
+bodyFields = ["serverRunner", "plugin"]
+
+[[bootstrapRuntimeIntegrationDirectSubmit]]
+family = "runtime-plugin-remove"
+url = "/api/runtime-plugin-installs"
+method = "DELETE"
+successText = "Removed."
+resetOnSuccess = false
+bodyFields = ["serverRunner", "plugin"]
+
+[[bootstrapRuntimeIntegrationDirectSubmit]]
+family = "mcp-server"
+url = "/api/mcp-servers"
+successText = "Saved."
+resetOnSuccess = true
+omitBlankStrings = true
+bodyFields = ["id", "label", "serverRunner", "context", "serviceIdentity", "transportsJson"]
+
+[[bootstrapRuntimeIntegrationDirectSubmit]]
+family = "mcp-tool-install"
+url = "/api/mcp-tool-installs"
+successText = "Saved."
+resetOnSuccess = true
+bodyFields = ["server", "tool", "actingMode", "scopeContextsJson", "scopeTargetsJson"]
+
+[[bootstrapRuntimeIntegrationDirectSubmitField]]
+family = "mcp-tool-install"
+name = "actingMode"
+defaultValue = "delegated"
+
+[[bootstrapRuntimeIntegrationDirectSubmitField]]
+family = "mcp-tool-install"
+name = "scopeContextsJson"
+defaultValue = "[]"
+
+[[bootstrapRuntimeIntegrationDirectSubmitField]]
+family = "mcp-tool-install"
+name = "scopeTargetsJson"
+defaultValue = "[]"
+
+[[bootstrapRuntimeIntegrationDirectSubmit]]
+family = "mcp-tool-remove"
+url = "/api/mcp-tool-installs"
+method = "DELETE"
+successText = "Removed."
+resetOnSuccess = false
+bodyFields = ["server", "tool"]

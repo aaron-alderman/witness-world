@@ -17,22 +17,26 @@ import {
   jsTypeOf,
   previewValue
 } from "../../src/type-model.js";
+import { resolvePagePresentationTheme } from "../../src/runtime-presentation.js";
 import { widgetTree, frontendProgram, templateWidgetTrees, stableJson } from "../../src/widgets.js";
-import { TODO_TUTORIAL_ID, tutorialDefinition } from "../tutorial/tutorials.js";
-import { renderTutorialClient } from "../tutorial/tutorial-app-client.js";
-import { renderEdenPageThemeCssVars, resolveEdenPageTheme } from "../eden/eden-page-theme.js";
-import { SHARED_SURFACE_KIT_CSS } from "./surface-kit-styles.js";
+import { renderGuidanceClient } from "../../src/runtime-guidance-client.js";
 import { renderSurfaceCommandActionsFactory } from "./surface-command-actions.js";
 import { renderSurfaceCommandIdentityActionsFactory } from "./surface-command-identity-actions.js";
+import { renderSurfaceCommandViewFactory } from "./surface-command-view.js";
 import { renderSurfaceInspectorActionsFactory } from "./surface-inspector-actions.js";
 import { renderSurfaceInspectorFormActionsFactory } from "./surface-inspector-form-actions.js";
 import { renderSurfaceInspectorOverlayViewFactory } from "./surface-inspector-overlay-view.js";
+import { renderSurfaceInspectorPanelViewFactory } from "./surface-inspector-panel-view.js";
 import { renderSurfaceInspectorVersionActionsFactory } from "./surface-inspector-version-actions.js";
 import { renderWorldCommandActionsFactory } from "./world-command-actions.js";
+import { renderWorldBrowserViewFactory } from "./world-browser-view.js";
 import { renderWorldGraphActionsFactory } from "./world-graph-actions.js";
+import { renderWorldGraphViewFactory } from "./world-graph-view.js";
 import { renderWorldPostRenderFactory } from "./world-post-render.js";
 import { renderWorldShellViewFactory } from "./world-shell-view.js";
+import { renderWorldSurfaceViewFactory } from "./world-surface-view.js";
 import { renderWorldTutorialActionsFactory } from "./world-tutorial-actions.js";
+import { renderWidgetPageHead } from "./widget-page-head.js";
 export function renderWidgetPage(world, { actor, rootWidget, frontendProgram: programId = null, appConfig = {} }) {
   const tree = world.project(w => widgetTree(w, rootWidget));
   const program = world.project(w => frontendProgram(w, programId));
@@ -52,7 +56,7 @@ export function renderWidgetPage(world, { actor, rootWidget, frontendProgram: pr
 
 function renderDocument(root, program, appConfig = {}, typeModel = {}, templates = []) {
   const title = root.props?.title ?? "Witness App";
-  const pageTheme = resolveEdenPageTheme(appConfig.pageChrome || {});
+  const pageTheme = resolvePagePresentationTheme(appConfig.pageChrome || {});
   const bodyAttrs = [
     appConfig.page ? `data-page="${escapeAttr(appConfig.page)}"` : "",
     appConfig.surfaceContext ? `data-surface-context="${escapeAttr(appConfig.surfaceContext)}"` : "",
@@ -64,218 +68,8 @@ function renderDocument(root, program, appConfig = {}, typeModel = {}, templates
     pageTheme.typography ? `data-page-typography="${escapeAttr(pageTheme.typography)}"` : ""
   ].filter(Boolean).join(" ");
   const options = { excludeRoles: new Set(appConfig.excludeWidgetRoles ?? []), typeModel };
-  return `<!doctype html>\n<html>\n${renderHead(title, pageTheme)}\n<body${bodyAttrs ? " " + bodyAttrs : ""}>\n${renderWidget(root, options)}\n${templates.map(template => renderWidgetTemplate(template, options)).join("\n")}\n${program ? renderClientEngine({ ...program, config: { ...appConfig, typeModel, pageChrome: pageTheme } }) : ""}\n${appConfig.tutorial ? renderTutorialClient(appConfig.tutorial) : ""}\n</body>\n</html>`;
-}
-
-function renderHead(title, pageTheme = resolveEdenPageTheme()) {
-  return `<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${escapeHtml(title)}</title>
-  <style>
-    ${renderEdenPageThemeCssVars(pageTheme)}
-    ${SHARED_SURFACE_KIT_CSS}
-    .todo-actions { margin-left: auto; display: flex; gap: 6px; }
-    .session-panel, .private-notes, .witness-inspector, .widget-editor, .version-playground {
-      border: 1px solid var(--surface-border);
-      border-radius: var(--panel-radius);
-      padding: 12px;
-      background: var(--surface-bg);
-      box-shadow: var(--surface-shadow);
-    }
-    .session-panel { border-left: 6px solid var(--accent, #ddd); }
-    .value-editor-field { display: grid; gap: 4px; min-width: 0; flex: 1; }
-    .private-note-list { display: grid; gap: 6px; margin-top: 8px; }
-    .private-note { padding: 8px; border-radius: 8px; background: var(--input-bg); border: 1px solid rgba(0,0,0,0.08); }
-    .witness-inspector { }
-    .witness-inspector h2 { font-size: 1rem; margin: 0 0 8px; }
-    code, pre, textarea { font-family: var(--mono); }
-    textarea { font-size: 12px; line-height: 1.45; }
-    .witness-list { max-height: 260px; overflow: auto; font-family: var(--mono); font-size: 12px; }
-    .witness { display: grid; grid-template-columns: 150px 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px solid #eee; }
-    .witness-process { font-weight: 700; }
-    .witness-body { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .widget-editor, .version-playground { border-left: 6px solid var(--surface-border); }
-    .widget-editor input, .widget-editor select, .widget-editor textarea, [data-role="widget-editor-form"] input, [data-role="widget-editor-form"] select, [data-role="widget-editor-form"] textarea { font-family: var(--mono); }
-    .world-graph { border: 0; border-radius: 0; padding: 0; background: #fafafa; height: 100%; min-height: 0; overflow: hidden; }
-    .world-graph h2 { font-size: 1rem; margin: 0 0 8px; }
-    .world-graph-shell { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 0; align-items: stretch; height: 100%; max-height: 100%; overflow: hidden; border-top: 1px solid #e5e5e5; }
-    .world-main-pane { display: grid; grid-template-rows: auto 1fr; min-height: 0; overflow: hidden; }
-    .world-mode-menu { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid #e5e5e5; background: #fbfbfb; overflow-x: auto; white-space: nowrap; flex-wrap: nowrap; min-height: 35px; box-sizing: border-box; }
-    .world-mode-spacer { flex: 1 1 auto; min-width: 16px; }
-    .world-mode-button { border-radius: 999px; padding: 5px 11px; font-size: 12px; }
-    .world-mode-active { background: var(--accent, #375a7f); color: white; border-color: var(--accent, #375a7f); }
-    .world-command-toggle { border-radius: 999px; padding: 5px 11px; font-size: 12px; }
-    .world-command-hint { color: #777; font-size: 11px; font-family: var(--mono); }
-    .world-command-palette { border-bottom: 1px solid #e5e5e5; background: #fff; padding: 12px; display: grid; gap: 10px; }
-    .world-command-head { display: flex; gap: 8px; align-items: center; }
-    .world-command-input { flex: 1 1 auto; min-width: 0; font: 13px var(--mono); padding: 9px 11px; border: 1px solid #ddd; border-radius: 10px; }
-    .world-command-list { display: grid; gap: 6px; max-height: 320px; overflow: auto; }
-    .world-command-item { text-align: left; border: 1px solid #eee; border-radius: 8px; padding: 8px 10px; background: #fafafa; cursor: pointer; }
-    .world-command-item strong { display: block; font-size: 13px; }
-    .world-command-meta { color: #777; font-size: 11px; font-family: var(--mono); }
-    .world-command-result { border: 1px solid #e7ddc8; border-radius: 10px; padding: 10px 12px; background: #faf8f1; display: grid; gap: 8px; }
-    .world-command-result strong { font-size: 13px; }
-    .world-command-result-grid { display: grid; gap: 4px; }
-    .world-command-result-row { display: grid; grid-template-columns: 88px 1fr; gap: 8px; font-size: 12px; }
-    .world-command-result-key { color: #777; font-family: var(--mono); }
-    .world-command-result-value { overflow-wrap: anywhere; font-family: var(--mono); }
-    .world-command-result-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-    .world-command-empty { color: #777; font-size: 12px; padding: 6px 2px; }
-    .world-graph-inspector { border-right: 1px solid #ddd; background: #fff; padding: 14px; min-height: 0; height: 100%; max-height: 100%; overflow-y: scroll; overflow-x: hidden; font-size: 12px; box-sizing: border-box; }
-    .world-graph-inspector h2 { margin: 0 0 8px; font-size: 1rem; }
-    .world-tutorial-panel { display: grid; gap: 10px; margin-bottom: 14px; padding: 12px; border: 1px solid #ddd; border-radius: 10px; background: #faf8f1; }
-    .world-tutorial-panel h2 { margin: 0; font-size: 1rem; }
-    .world-tutorial-meta { color: #777; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
-    .world-tutorial-summary { color: #555; line-height: 1.5; }
-    .world-tutorial-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-    .world-tutorial-list { display: grid; gap: 6px; }
-    .world-tutorial-item { border: 1px solid #e8e1cf; border-radius: 8px; padding: 8px 9px; background: rgba(255,255,255,.78); }
-    .world-tutorial-item p { margin: 4px 0 0; color: #555; line-height: 1.45; }
-    .world-inspector-row { display: grid; grid-template-columns: 84px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f2f2f2; }
-    .world-inspector-key { color: #777; font-weight: 700; }
-    .world-inspector-list { display: grid; gap: 4px; margin-top: 8px; }
-    .world-inspector-item { border: 1px solid #eee; border-radius: 6px; padding: 5px 7px; background: #fafafa; text-align: left; cursor: pointer; }
-    .world-version-item { display: grid; gap: 6px; }
-    .world-version-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-    .world-version-status { margin-top: 8px; padding: 8px 10px; border-radius: 6px; background: #f6f6f6; border: 1px solid #e4e4e4; }
-    .world-version-status[data-level="error"] { background: #fff1f1; border-color: #f1c9c9; color: #8a2e2e; }
-    .world-version-status[data-level="ok"] { background: #eef8ef; border-color: #cde6cf; color: #265f31; }
-    .world-ref-button { appearance: none; border: 0; background: none; color: var(--accent, #375a7f); padding: 0; cursor: pointer; font: inherit; text-align: left; text-decoration: underline; }
-    .world-kind-button { appearance: none; border: 0; border-radius: 999px; background: #eee; padding: 2px 7px; cursor: pointer; font: inherit; }
-    .world-graph-canvas { position: relative; width: 100%; height: 100%; min-height: 0; overflow: scroll; border: 0; border-radius: 0; background: #fff; box-sizing: border-box; }
-    .world-graph-content { position: relative; }
-    .world-document-view, .world-primitive-browser { height: 100%; overflow: auto; box-sizing: border-box; padding: 16px; background: #fff; }
-    .world-witness-browser { height: 100%; overflow: auto; box-sizing: border-box; padding: 16px; background: #fff; display: grid; gap: 10px; align-content: start; }
-    .world-witness-card { border: 1px solid #eee; border-radius: 8px; padding: 10px 12px; background: #fafafa; display: grid; gap: 6px; }
-    .world-witness-card pre { margin: 0; white-space: pre-wrap; font-size: 11px; background: #fff; border: 1px solid #eee; border-radius: 6px; padding: 8px; overflow: auto; }
-    .world-source-workbench { display: grid; grid-template-columns: 260px minmax(0, 1fr); height: 100%; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #1e1e1e; color: #d4d4d4; }
-    .world-source-sidebar { background: #252526; border-right: 1px solid #333; padding: 10px; overflow: auto; }
-    .world-source-file-button { display: block; width: 100%; text-align: left; border: 0; border-radius: 4px; background: transparent; color: #ccc; padding: 6px 8px; font: 12px var(--mono); cursor: pointer; }
-    .world-source-file-button:hover, .world-source-file-active { background: #37373d; color: #f2f2f2; }
-    .world-source-ref:hover { color: #dcdcaa; background: #2a2d2e; }
-    .world-source-editor { overflow: auto; min-width: 0; }
-    .world-source-title { position: sticky; top: 0; z-index: 2; background: #2d2d2d; color: #eee; padding: 8px 12px; border-bottom: 1px solid #3a3a3a; font: 12px var(--mono); }
-    .world-source-code { display: table; width: 100%; font: 12px/1.5 var(--mono); }
-    .world-source-line { display: table-row; }
-    .world-source-line-number { display: table-cell; width: 44px; padding: 0 10px; text-align: right; color: #858585; background: #1e1e1e; user-select: none; border-right: 1px solid #2a2a2a; }
-    .world-source-line-code { display: table-cell; white-space: pre-wrap; padding: 0 12px; }
-    .world-source-highlight .world-source-line-code { background: rgba(255, 213, 0, .18); outline: 1px solid rgba(255, 213, 0, .35); }
-    .world-source-ref { color: #9cdcfe; background: transparent; border: 0; padding: 0; font: inherit; text-decoration: underline; cursor: pointer; }
-    .world-source-empty { padding: 16px; color: #ccc; }
-    .world-primitive-grid { display: grid; grid-template-columns: 220px 280px minmax(0, 1fr); gap: 16px; }
-    .world-primitive-list { display: grid; gap: 6px; align-content: start; }
-    .world-primitive-item { text-align: left; border: 1px solid #eee; border-radius: 6px; padding: 6px 8px; background: #fafafa; cursor: pointer; }
-    .world-graph-svg { position: absolute; inset: 0; pointer-events: none; }
-    .world-context-box { position: absolute; border: 2px solid #d7d7d7; border-radius: 14px; background: rgba(250,250,250,.78); box-sizing: border-box; }
-    .world-context-label { position: absolute; left: 12px; top: 8px; font-weight: 700; font-size: 12px; color: #555; text-transform: uppercase; letter-spacing: .06em; }
-    .world-node { position: absolute; width: 190px; min-height: 48px; padding: 8px; border: 1px solid #ccc; border-radius: 8px; background: white; box-shadow: 0 1px 2px rgba(0,0,0,.08); font-size: 12px; cursor: pointer; }
-    .world-node-selected { outline: 3px solid var(--accent, #333); outline-offset: 2px; box-shadow: 0 0 0 5px rgba(55,90,127,.12); }
-    .world-node-step { border-style: dashed; background: #fbfbff; }
-    .world-node-api { border-color: #c79b45; background: #fff9ed; }
-    .world-node-process { border-color: #b8c7e0; background: #f8fbff; }
-    .world-node-context, .world-node-context-ref { border-color: #aaa; background: #f7f7f7; }
-    .world-node-widget, .world-node-layout { border-color: #6ca278; background: #f4fff6; }
-    .world-node-capability { border-color: #9a7cc0; background: #fbf7ff; }
-    .world-node-trait, .world-node-valueType, .world-node-processSpec { border-color: #4c8f8f; background: #f2fffe; }
-    .world-node-vocabulary { border-color: #999; background: #f7f7f7; }
-    .world-node a { color: var(--accent, #333); font-weight: 700; text-decoration: none; }
-    .world-node-kind { color: #777; font-size: 11px; }
-    .world-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
-    .world-badge { background: #f0f0f0; border-radius: 999px; padding: 2px 6px; font-size: 10px; }
-    .world-edge-props { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
-    .world-value-list { color: #555; display: grid; gap: 4px; }
-    .world-value-widget { display: grid; gap: 3px; border: 1px solid #eee; border-radius: 6px; padding: 5px; background: #fff; }
-    .world-value-type { color: #777; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
-    .world-value-record { display: grid; gap: 4px; }
-    .world-value-record-row { display: grid; grid-template-columns: 72px 1fr; gap: 6px; }
-    .world-source-ast { margin: 6px 0 0; max-height: 180px; overflow: auto; white-space: pre-wrap; background: #fff; border: 1px solid #eee; border-radius: 6px; padding: 6px; font-size: 11px; font-family: var(--mono); }
-    .world-edge-label { font-size: 10px; fill: #777; }
-    .world-edge-ownership { stroke: #c7352f; stroke-width: 2.5; }
-    .world-edge-process { stroke: #5577aa; stroke-dasharray: 4 3; }
-    .world-edge-capability { stroke: #777; stroke-dasharray: 2 3; }
-    .world-edge-relation { stroke: #ddd; }
-    .surface-inspector-toggle { position: fixed; left: 16px; bottom: 16px; z-index: 10; border-radius: 999px; padding: 9px 14px; background: rgba(255,255,255,.96); box-shadow: 0 6px 20px rgba(0,0,0,.14); }
-    .surface-inspector-panel { position: fixed; left: 16px; bottom: 68px; z-index: 10; width: 360px; max-width: calc(100vw - 32px); max-height: calc(100vh - 96px); overflow: auto; border: 1px solid #ddd; border-radius: 14px; background: rgba(255,255,255,.98); box-shadow: 0 16px 36px rgba(0,0,0,.18); padding: 14px; display: grid; gap: 10px; }
-    .surface-inspector-panel h2 { margin: 0; font-size: 1rem; }
-    .surface-inspector-meta { color: #777; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; font-family: var(--mono); }
-    .surface-inspector-summary { color: #555; line-height: 1.45; }
-    .surface-inspector-grid { display: grid; gap: 6px; }
-    .surface-inspector-row { display: grid; grid-template-columns: 92px 1fr; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f1f1f1; }
-    .surface-inspector-label { color: #777; font-weight: 700; font-family: var(--mono); }
-    .surface-inspector-value { min-width: 0; overflow-wrap: anywhere; font-family: var(--mono); }
-    .surface-inspector-form { display: grid; gap: 8px; }
-    .surface-inspector-field { display: grid; gap: 4px; font-size: 12px; color: #555; }
-    .surface-inspector-field span { font-family: var(--mono); color: #777; }
-    .surface-inspector-field input, .surface-inspector-field textarea, .surface-inspector-field select { width: 100%; box-sizing: border-box; border: 1px solid #ddd; border-radius: 8px; background: #fff; padding: 8px; font-family: var(--mono); font-size: 12px; }
-    .surface-inspector-field textarea { min-height: 72px; resize: vertical; }
-    .surface-inspector-actions { display: flex; flex-wrap: wrap; gap: 6px; }
-    .surface-inspector-actions button { font-size: 12px; }
-    .surface-inspector-list { display: grid; gap: 6px; }
-    .surface-inspector-item { border: 1px solid #eee; border-radius: 8px; padding: 8px 9px; background: #fafafa; }
-    .surface-inspector-item strong { display: block; margin-bottom: 4px; font-size: 12px; }
-    .surface-inspector-status { padding: 8px 10px; border-radius: 8px; border: 1px solid #e3e3e3; background: #f7f7f7; }
-    .surface-inspector-status[data-level="ok"] { background: #eef8ef; border-color: #cde6cf; color: #265f31; }
-    .surface-inspector-status[data-level="error"] { background: #fff1f1; border-color: #f1c9c9; color: #8a2e2e; }
-    .surface-inspector-menu { position: fixed; z-index: 11; min-width: 220px; max-width: min(320px, calc(100vw - 24px)); border: 1px solid #ddd; border-radius: 12px; background: rgba(255,255,255,.98); box-shadow: 0 16px 36px rgba(0,0,0,.18); padding: 8px; display: grid; gap: 6px; }
-    .surface-inspector-menu button { text-align: left; width: 100%; background: #fafafa; }
-    .surface-inspector-menu button:hover { background: #f1f1f1; }
-    .surface-inspector-menu p { margin: 0; color: #555; font-size: 12px; line-height: 1.4; padding: 4px 2px; }
-    .surface-command-toggle { position: fixed; right: 16px; bottom: 16px; z-index: 10; border-radius: 999px; padding: 9px 14px; background: rgba(255,255,255,.96); box-shadow: 0 6px 20px rgba(0,0,0,.14); }
-    .surface-command-palette { position: fixed; left: 50%; top: 16px; transform: translateX(-50%); z-index: 12; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; border: 1px solid #ddd; border-radius: 14px; background: rgba(255,255,255,.98); box-shadow: 0 16px 36px rgba(0,0,0,.18); padding: 12px; display: grid; gap: 10px; }
-    .surface-command-palette .world-command-list { max-height: min(420px, calc(100vh - 160px)); }
-    [data-surface-inspector-selected="true"] { outline: 3px solid var(--accent, #333); outline-offset: 4px; border-radius: 8px; box-shadow: 0 0 0 8px rgba(51, 51, 51, .12); }
-    [data-widget-version] { border-left: 8px solid var(--version-color, #ddd); padding-left: 12px; border-radius: 8px; }
-    [data-tutorial-focus-scope="true"], [data-tutorial-current] { position: relative; z-index: 9; }
-    [data-tutorial-current] { outline: 3px solid var(--accent, #333); outline-offset: 4px; border-radius: 8px; scroll-margin-top: 60px; animation: tutorial-focus-pulse 1.35s ease-in-out infinite; }
-    [data-tutorial-changed="true"] { box-shadow: 0 0 0 3px rgba(51, 51, 51, .12); animation: tutorial-changed-pulse 1.1s ease-in-out 2; }
-    [data-tutorial-changed="true"] strong { animation: tutorial-text-pulse 1.1s ease-in-out 2; }
-    .tutorial-dimmer { position: fixed; inset: 0; z-index: 7; background: rgba(17, 17, 17, .38); backdrop-filter: blur(2px); pointer-events: none; }
-    .tutorial-overlay { position: fixed; width: 340px; max-width: calc(100vw - 24px); z-index: 10; background: rgba(255,255,255,.98); border: 1px solid #ddd; border-radius: 14px; padding: 14px; box-shadow: 0 16px 36px rgba(0,0,0,.18); pointer-events: none; }
-    .tutorial-overlay h3 { margin: 0 0 8px; font-size: 1rem; }
-    .tutorial-overlay p { margin: 0 0 10px; color: #555; line-height: 1.45; }
-    .tutorial-overlay-meta { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #777; margin-bottom: 6px; }
-    .tutorial-concept-list { display: grid; gap: 8px; margin: 0 0 10px; }
-    .tutorial-concept { border: 1px solid #ddd; border-radius: 10px; padding: 9px 10px; background: rgba(248,248,248,.92); }
-    .tutorial-concept strong { display: block; margin-bottom: 3px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #333; }
-    .tutorial-concept span { display: block; font-size: 13px; line-height: 1.4; color: #555; }
-    .tutorial-overlay button, .tutorial-overlay-handle { pointer-events: auto; }
-    .tutorial-overlay-handle { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin: -4px -4px 10px; padding: 4px; cursor: grab; user-select: none; }
-    .tutorial-overlay-handle:active { cursor: grabbing; }
-    .tutorial-handle-copy { min-width: 0; }
-    .tutorial-handle-kicker { font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: #777; }
-    .tutorial-handle-grip { color: #777; font-size: 18px; line-height: 1; padding-top: 2px; }
-    .tutorial-click-pulse { position: fixed; width: 22px; height: 22px; margin-left: -11px; margin-top: -11px; border-radius: 999px; border: 2px solid rgba(51, 51, 51, .55); background: rgba(51, 51, 51, .12); z-index: 11; pointer-events: none; animation: tutorial-click-pulse .55s ease-out forwards; }
-    .tutorial-auto-click { animation: tutorial-button-click .5s ease-out; }
-    .tutorial-resume { position: fixed; right: 16px; bottom: 16px; z-index: 10; }
-    body.tutorial-dragging { user-select: none; }
-    @keyframes tutorial-focus-pulse {
-      0%, 100% { outline-color: rgba(51, 51, 51, 1); box-shadow: 0 0 0 0 rgba(51, 51, 51, .08); }
-      50% { outline-color: rgba(51, 51, 51, .65); box-shadow: 0 0 0 10px rgba(51, 51, 51, .1); }
-    }
-    @keyframes tutorial-changed-pulse {
-      0%, 100% { transform: scale(1); }
-      45% { transform: scale(1.01); }
-    }
-    @keyframes tutorial-text-pulse {
-      0%, 100% { font-weight: 600; opacity: 1; }
-      50% { font-weight: 400; opacity: .82; }
-    }
-    @keyframes tutorial-click-pulse {
-      0% { transform: scale(.35); opacity: 1; }
-      100% { transform: scale(2.6); opacity: 0; }
-    }
-    @keyframes tutorial-button-click {
-      0% { transform: scale(1); }
-      35% { transform: scale(.95); }
-      100% { transform: scale(1); }
-    }
-    .world-inspector-key, .world-inspector-item, .world-badge, .world-value-list, .world-value-type, .world-value-record-row,
-    .world-context-label, .world-node-kind, .world-node a, .world-source-ref, .tutorial-overlay-meta, .tutorial-handle-kicker {
-      font-family: var(--mono);
-    }
-  </style>
-</head>`;
+  const guidanceConfig = appConfig.guidance ?? appConfig.tutorial ?? null;
+  return `<!doctype html>\n<html>\n${renderWidgetPageHead(title, pageTheme)}\n<body${bodyAttrs ? " " + bodyAttrs : ""}>\n${renderWidget(root, options)}\n${templates.map(template => renderWidgetTemplate(template, options)).join("\n")}\n${program ? renderClientEngine({ ...program, config: { ...appConfig, typeModel, pageChrome: pageTheme } }) : ""}\n${guidanceConfig ? renderGuidanceClient(guidanceConfig) : ""}\n</body>\n</html>`;
 }
 
 function renderWidgetTemplate(widget, options = {}) {
@@ -297,15 +91,23 @@ function renderWidget(widget, options = {}) {
   const attrs = renderAttrs(widget);
 
   switch (widget.kind) {
+    case "Fragment":
+      return children;
     case "Page":
       return `<main${attrs}>\n${children}\n</main>`;
     case "Box":
     case "Section":
       return `<section${attrs}>\n${children}\n</section>`;
+    case "Header":
+      return `<header${attrs}>\n${children}\n</header>`;
     case "Heading": {
       const level = clamp(Number(widget.props.level ?? 1), 1, 6);
       return `<h${level}${attrs}>${escapeHtml(widget.props.text ?? "")}</h${level}>`;
     }
+    case "Paragraph":
+      return `<p${attrs}>${escapeHtml(widget.props.text ?? "")}</p>`;
+    case "Small":
+      return `<small${attrs}>${escapeHtml(widget.props.text ?? "")}</small>`;
     case "Text":
       return `<div${attrs}>${escapeHtml(widget.props.text ?? "")}</div>`;
     case "Label":
@@ -362,6 +164,11 @@ function renderValueEditor(widget, typeModel, attrs) {
 
 function renderAttrs(widget) {
   const widgetId = widget.props.widgetId ?? widget.id;
+  const guidanceTarget = typeof widget.props.guidanceTarget === "string" && widget.props.guidanceTarget !== ""
+    ? widget.props.guidanceTarget
+    : (typeof widget.props.tutorialTarget === "string" && widget.props.tutorialTarget !== ""
+        ? widget.props.tutorialTarget
+        : "");
   const parts = [`data-widget="${escapeAttr(widgetId)}"`];
   if (widget.version) parts.push(`data-widget-version="${escapeAttr(widget.version)}"`);
   if (widget.props.domId) parts.push(`id="${escapeAttr(widget.props.domId)}"`);
@@ -372,8 +179,9 @@ function renderAttrs(widget) {
     parts.push(`data-${escapeAttr(widget.props.role)}`);
   }
   if (widget.props.action) parts.push(`data-action="${escapeAttr(widget.props.action)}"`);
-  if (typeof widget.props.tutorialTarget === "string" && widget.props.tutorialTarget !== "") {
-    parts.push(`data-tutorial-target="${escapeAttr(widget.props.tutorialTarget)}"`);
+  if (guidanceTarget) {
+    parts.push(`data-guidance-target="${escapeAttr(guidanceTarget)}"`);
+    parts.push(`data-tutorial-target="${escapeAttr(guidanceTarget)}"`);
   }
   if (widget.props.type && widget.kind !== "Button") parts.push(`type="${escapeAttr(widget.props.type)}"`);
   if (widget.versionIndex != null) parts.push(`style="--version-color: ${escapeAttr(versionColor(widget.versionIndex))}"`);
@@ -387,7 +195,7 @@ function renderAttrs(widget) {
 }
 
 function renderExtraAttrs(widget, consumed = []) {
-  const consumedSet = new Set(["class", "role", "action", "hidden", "template", "tutorialTarget", "widgetId", "domId", "open", ...consumed]);
+  const consumedSet = new Set(["class", "role", "action", "hidden", "template", "guidanceTarget", "tutorialTarget", "widgetId", "domId", "open", ...consumed]);
   const entries = Object.entries(widget.props || {})
     .filter(([key, value]) => !consumedSet.has(key) && !key.startsWith("event") && !key.startsWith("data-") && !key.startsWith("aria-") && value != null && typeof value !== "object");
   if (entries.length === 0) return "";
@@ -411,7 +219,9 @@ function clamp(value, min, max) {
 
 function renderClientEngine(program) {
   const json = JSON.stringify(program).replace(/</g, "\\u003c");
-  const commandTutorial = program.config?.tutorial ? tutorialDefinition(TODO_TUTORIAL_ID) : null;
+  const commandTutorial = program.config?.guidance?.definition
+    ?? program.config?.tutorial?.definition
+    ?? null;
   const commandTutorialJson = JSON.stringify(commandTutorial).replace(/</g, "\\u003c");
   const frontendProgramScriptId = typeof program.config?.frontendProgramScriptId === "string" && program.config.frontendProgramScriptId.trim()
     ? program.config.frontendProgramScriptId.trim()
@@ -419,14 +229,19 @@ function renderClientEngine(program) {
   const engine = String.raw`(async () => {
   ${renderSurfaceCommandActionsFactory()}
   ${renderSurfaceCommandIdentityActionsFactory()}
+  ${renderSurfaceCommandViewFactory()}
   ${renderSurfaceInspectorActionsFactory()}
   ${renderSurfaceInspectorFormActionsFactory()}
   ${renderSurfaceInspectorOverlayViewFactory()}
+  ${renderSurfaceInspectorPanelViewFactory()}
   ${renderSurfaceInspectorVersionActionsFactory()}
   ${renderWorldCommandActionsFactory()}
+  ${renderWorldBrowserViewFactory()}
   ${renderWorldGraphActionsFactory()}
+  ${renderWorldGraphViewFactory()}
   ${renderWorldPostRenderFactory()}
   ${renderWorldShellViewFactory()}
+  ${renderWorldSurfaceViewFactory()}
   ${renderWorldTutorialActionsFactory()}
   const frontendProgramScriptId = ${JSON.stringify(frontendProgramScriptId)};
   let program = JSON.parse(document.getElementById(frontendProgramScriptId).textContent);
@@ -847,56 +662,17 @@ function renderClientEngine(program) {
     const body = await response.json().catch(() => ({}));
     return { ok: response.ok, status: response.status, body, proposalId };
   };
-  const renderSurfaceInspectorEditor = () => {
-    const widgetId = selectedSurfaceWidgetId();
-    if (!widgetId) return '';
-    const authoredWidget = selectedSurfaceWidgetAuthored();
-    const versionRows = selectedSurfaceWidgetVersions();
-    if (versionRows.length) {
-      return '<section><div class="surface-inspector-meta">Live Save-Back</div><div class="surface-inspector-summary">Versioned widgets still use the dedicated version controls. This first save-back slice intentionally blocks direct editing for souls with authored widget versions.</div></section>';
-    }
-    if (!state.surfaceInspectorWidgetsLoaded) {
-      return '<section><div class="surface-inspector-meta">Live Save-Back</div><div class="surface-inspector-summary">Loading authored widget state...</div></section>';
-    }
-    if (state.surfaceInspectorWidgetsError) {
-      return '<section><div class="surface-inspector-meta">Live Save-Back</div><div class="surface-inspector-summary">Authored widget state is unavailable right now.</div></section>';
-    }
-    if (!authoredWidget) {
-      return '<section><div class="surface-inspector-meta">Live Save-Back</div><div class="surface-inspector-summary">This selected element is not currently backed by a directly editable authored widget row.</div></section>';
-    }
-    const authority = selectedSurfaceWidgetEditAuthority();
-    const props = authoredWidget.props || {};
-    const hiddenChecked = props.hidden === true ? ' checked' : '';
-    if (!authority.ok) {
-      if (!currentActor()) {
-        return '<section><div class="surface-inspector-meta">Live Save-Back</div><div class="surface-inspector-summary">' + escapeHtml(authority.reason || 'This widget is read-only right now.') + '</div></section>';
-      }
-      return '<section><div class="surface-inspector-meta">Live Save-Back</div>'
-        + '<div class="surface-inspector-summary">' + escapeHtml(authority.reason || 'This widget is read-only right now.') + '</div>'
-        + '<form class="surface-inspector-form" data-surface-inspector-proposal-form data-widget-id="' + escapeHtml(widgetId) + '">'
-        + '<label class="surface-inspector-field"><span>Text</span><textarea name="text" rows="3">' + escapeHtml(String(props.text ?? '')) + '</textarea></label>'
-        + '<label class="surface-inspector-field"><span>Title</span><input name="title" value="' + escapeHtml(String(props.title ?? '')) + '" /></label>'
-        + '<label class="surface-inspector-field"><span>Class</span><input name="class" value="' + escapeHtml(String(props.class ?? '')) + '" /></label>'
-        + '<label class="surface-inspector-field"><span>Hidden</span><input name="hidden" type="checkbox"' + hiddenChecked + ' /></label>'
-        + '<label class="surface-inspector-field"><span>Reason</span><input name="reason" placeholder="Why should this shared widget change?" /></label>'
-        + '<div class="surface-inspector-actions"><button type="submit" data-surface-inspector-propose>Propose Save-Back</button></div>'
-        + '</form>'
-        + '<div class="surface-inspector-summary">Direct save is blocked here, but you can create a real <code>widget.update</code> proposal from this live surface for later approval.</div>'
-        + '</section>';
-    }
-    return '<section><div class="surface-inspector-meta">Live Save-Back</div>'
-      + '<form class="surface-inspector-form" data-surface-inspector-edit-form data-widget-id="' + escapeHtml(widgetId) + '">'
-      + '<label class="surface-inspector-field"><span>Text</span><textarea name="text" rows="3">' + escapeHtml(String(props.text ?? '')) + '</textarea></label>'
-      + '<label class="surface-inspector-field"><span>Title</span><input name="title" value="' + escapeHtml(String(props.title ?? '')) + '" /></label>'
-      + '<label class="surface-inspector-field"><span>Class</span><input name="class" value="' + escapeHtml(String(props.class ?? '')) + '" /></label>'
-      + '<label class="surface-inspector-field"><span>Hidden</span><input name="hidden" type="checkbox"' + hiddenChecked + ' /></label>'
-      + '<div class="surface-inspector-actions"><button type="submit" data-surface-inspector-save>Save Widget</button></div>'
-      + '</form>'
-      + '<div class="surface-inspector-summary">Writes a real <code>widget.update</code> witness for the selected widget. This first slice edits <code>text</code>, <code>title</code>, <code>class</code>, and <code>hidden</code>.</div>'
-      + '</section>';
-  };
+  const renderSurfaceInspectorEditor = () => renderSurfaceInspectorEditorView({
+    widgetId: selectedSurfaceWidgetId(),
+    authoredWidget: selectedSurfaceWidgetAuthored(),
+    versionRows: selectedSurfaceWidgetVersions(),
+    widgetsLoaded: state.surfaceInspectorWidgetsLoaded,
+    widgetsError: state.surfaceInspectorWidgetsError,
+    authority: selectedSurfaceWidgetEditAuthority(),
+    currentActorPresent: Boolean(currentActor()),
+    escapeHtml
+  });
   const renderSurfaceInspectorPanel = () => {
-    if (!liveSurfaceInspectable || state.surfaceInspectorOpen !== true) return '';
     const widgetId = selectedSurfaceWidgetId();
     const selectedNode = selectedSurfaceWidgetNode();
     const selectedElement = selectedSurfaceWidgetElement();
@@ -904,106 +680,41 @@ function renderClientEngine(program) {
     const versionState = selectedSurfaceWidgetVersionState();
     const versionRows = selectedSurfaceWidgetVersions();
     const versionAuthority = versionRows.length ? selectedSurfaceWidgetEditAuthority() : { ok: false, reason: '' };
-    const canProposeVersion = !versionAuthority.ok && Boolean(currentActor());
     const processSelection = selectedSurfaceInspectorProcessSelection();
-    const summary = widgetId
-      ? (selectedNode
-        ? ('Inspecting ' + widgetId + ' as a real ' + String(selectedNode.kind || 'thing') + ' node. Use the handoff buttons to jump into witnesses, source, process, or the world surface.')
-        : ('Inspecting ' + widgetId + ' from the live page. World metadata is loading or not yet available.'))
-      : 'Right-click any widget on this page to inspect it. This first slice is truthful inspect/handoff/version control plus narrow save-back for non-versioned widget text/title/class edits.';
-    const rows = widgetId
-      ? [
-          ['Widget', widgetId],
-          ['Kind', selectedNode?.kind || selectedElement?.getAttribute?.('data-kind') || surfaceInspectorTagLabel(selectedElement) || 'widget'],
-          ['Context', selectedNode?.context || ''],
-          ['Element', surfaceInspectorTagLabel(selectedElement)],
-          ['Source', selectedSource?.file || ''],
-          ['Process', processSelection?.event || '']
-        ].filter(([, value]) => value)
-      : [];
-    const actions = widgetId
-      ? [
-          '<button type="button" data-surface-inspector-world>Open In World</button>',
-          '<button type="button" data-surface-inspector-world-mode="witness">Show Witnesses</button>',
-          selectedSource?.file ? '<button type="button" data-surface-inspector-world-mode="source">Show Source</button>' : '',
-          processSelection ? '<button type="button" data-surface-inspector-open-process>Open Process View</button>' : ''
-        ].filter(Boolean).join('')
-      : '';
-    const versions = versionRows.length
-      ? '<section><div class="surface-inspector-meta">Widget Versions</div><div class="surface-inspector-list">' + versionRows.map(row =>
-          '<div class="surface-inspector-item">'
-            + '<strong>' + escapeHtml(row.version || row.soul || '') + (row.isActive ? ' [active]' : '') + '</strong>'
-            + (row.transitionFromActive ? '<div class="surface-inspector-summary">Transition: ' + escapeHtml(row.transitionFromActive) + '</div>' : '')
-            + (!row.isActive
-              ? (versionAuthority.ok
-                ? '<div class="surface-inspector-actions"><button type="button" data-surface-inspector-activate="' + escapeHtml(row.soul || '') + '" data-surface-inspector-version="' + escapeHtml(row.version || '') + '">Activate</button></div>'
-                : (canProposeVersion
-                  ? '<form class="surface-inspector-form" data-surface-inspector-version-proposal-form data-surface-inspector-proposal-process="widgetVersion.activate" data-surface-inspector-proposal-soul="' + escapeHtml(row.soul || '') + '" data-surface-inspector-proposal-version="' + escapeHtml(row.version || '') + '">'
-                    + '<label class="surface-inspector-field"><span>Reason</span><input name="reason" placeholder="Why should this version go live?" /></label>'
-                    + '<div class="surface-inspector-actions"><button type="submit" data-surface-inspector-propose-version="activate">Propose Activate</button></div>'
-                  + '</form>'
-                  : '<div class="surface-inspector-summary">' + escapeHtml(versionAuthority.reason || 'Sign in to propose version changes.') + '</div>'))
-              : '')
-          + '</div>'
-        ).join('') + '</div>'
-        + (versionState?.rollbackAvailable
-          ? (versionAuthority.ok
-            ? '<div class="surface-inspector-actions"><button type="button" data-surface-inspector-rollback="' + escapeHtml(versionState.soul || '') + '">Rollback To ' + escapeHtml(versionState.rollbackVersion || 'previous') + '</button></div>'
-            : (canProposeVersion
-              ? '<form class="surface-inspector-form" data-surface-inspector-version-proposal-form data-surface-inspector-proposal-process="widgetVersion.rollback" data-surface-inspector-proposal-soul="' + escapeHtml(versionState.soul || '') + '" data-surface-inspector-proposal-version="' + escapeHtml(versionState.rollbackVersion || '') + '">'
-                + '<label class="surface-inspector-field"><span>Reason</span><input name="reason" placeholder="Why should this version be restored?" /></label>'
-                + '<div class="surface-inspector-actions"><button type="submit" data-surface-inspector-propose-version="rollback">Propose Rollback To ' + escapeHtml(versionState.rollbackVersion || 'previous') + '</button></div>'
-              + '</form>'
-              : '<div class="surface-inspector-summary">' + escapeHtml(versionAuthority.reason || 'Sign in to propose version changes.') + '</div>'))
-          : '')
-        + (!versionAuthority.ok && canProposeVersion
-          ? '<div class="surface-inspector-summary">Direct version changes are blocked here, but you can create a real version-change proposal from this live surface for later approval.</div>'
-          : '')
-        + '</section>'
-      : '';
-    const status = state.surfaceInspectorStatus?.message
-      ? '<div class="surface-inspector-status" data-level="' + escapeHtml(state.surfaceInspectorStatus.level || 'ok') + '">' + escapeHtml(state.surfaceInspectorStatus.message) + '</div>'
-      : '';
-    const graphError = state.surfaceInspectorGraphError
-      ? '<div class="surface-inspector-status" data-level="error">' + escapeHtml(state.surfaceInspectorGraphError) + '</div>'
-      : '';
-    return '<aside class="surface-inspector-panel" data-surface-inspector-panel>'
-      + '<div class="surface-inspector-meta">Live Page Inspector</div>'
-      + '<h2>' + escapeHtml(widgetId || 'Inspect Page') + '</h2>'
-      + '<div class="surface-inspector-summary">' + escapeHtml(summary) + '</div>'
-      + status
-      + graphError
-      + '<div class="surface-inspector-actions">'
-        + '<button type="button" data-surface-inspector-close>Close Inspector</button>'
-        + (widgetId ? '<button type="button" data-surface-inspector-clear>Clear Selection</button>' : '')
-        + '<button type="button" data-surface-inspector-refresh>Refresh Metadata</button>'
-      + '</div>'
-      + (rows.length
-        ? '<div class="surface-inspector-grid">' + rows.map(([label, value]) =>
-            '<div class="surface-inspector-row"><div class="surface-inspector-label">' + escapeHtml(label) + '</div><div class="surface-inspector-value">' + escapeHtml(value) + '</div></div>'
-          ).join('') + '</div>'
-        : '')
-      + (actions ? '<div class="surface-inspector-actions">' + actions + '</div>' : '')
-      + versions
-      + renderSurfaceInspectorEditor()
-    + '</aside>';
+    return renderSurfaceInspectorPanelView({
+      liveSurfaceInspectable,
+      surfaceInspectorOpen: state.surfaceInspectorOpen === true,
+      widgetId,
+      selectedNodeKind: selectedNode?.kind || selectedElement?.getAttribute?.('data-kind') || surfaceInspectorTagLabel(selectedElement) || 'widget',
+      selectedNodeContext: selectedNode?.context || '',
+      selectedElementTag: surfaceInspectorTagLabel(selectedElement),
+      selectedSourceFile: selectedSource?.file || '',
+      processEvent: processSelection?.event || '',
+      versionState,
+      versionRows,
+      versionAuthority,
+      currentActorPresent: Boolean(currentActor()),
+      statusMessage: state.surfaceInspectorStatus?.message || '',
+      statusLevel: state.surfaceInspectorStatus?.level || 'ok',
+      graphError: state.surfaceInspectorGraphError || '',
+      editorHtml: renderSurfaceInspectorEditor(),
+      escapeHtml
+    });
   };
   const renderSurfaceInspectorMenu = () => {
-    if (!liveSurfaceInspectable || !state.surfaceInspectorMenu?.widgetId) return '';
-    const widgetId = String(state.surfaceInspectorMenu.widgetId || '');
-    const x = Math.max(12, Math.min(Number(state.surfaceInspectorMenu.x) || 12, window.innerWidth - 236));
-    const y = Math.max(12, Math.min(Number(state.surfaceInspectorMenu.y) || 12, window.innerHeight - 220));
     const selectedSource = selectedSurfaceWidgetSource();
     const processSelection = selectedSurfaceInspectorProcessSelection();
-    return '<div class="surface-inspector-menu" data-surface-inspector-menu style="left:' + x + 'px;top:' + y + 'px">'
-      + '<div class="surface-inspector-meta">Widget</div>'
-      + '<p>' + escapeHtml(widgetId) + '</p>'
-      + '<button type="button" data-surface-inspector-select>Inspect Widget</button>'
-      + '<button type="button" data-surface-inspector-world>Open In World</button>'
-      + '<button type="button" data-surface-inspector-world-mode="witness">Show Witnesses</button>'
-      + (selectedSource?.file ? '<button type="button" data-surface-inspector-world-mode="source">Show Source</button>' : '')
-      + (processSelection ? '<button type="button" data-surface-inspector-open-process>Open Process View</button>' : '')
-    + '</div>';
+    return renderSurfaceInspectorMenuView({
+      liveSurfaceInspectable,
+      widgetId: String(state.surfaceInspectorMenu?.widgetId || ''),
+      x: Number(state.surfaceInspectorMenu?.x) || 12,
+      y: Number(state.surfaceInspectorMenu?.y) || 12,
+      selectedSourceFile: selectedSource?.file || '',
+      hasProcessSelection: Boolean(processSelection),
+      windowWidth: window.innerWidth,
+      windowHeight: window.innerHeight,
+      escapeHtml
+    });
   };
   const liveSurfaceWidgetRows = () => {
     if (!liveSurfaceInspectable) return [];
@@ -1273,74 +984,22 @@ function renderClientEngine(program) {
       .sort((a, b) => (b.score - a.score) || String(a.title).localeCompare(String(b.title)))
       .slice(0, query ? 24 : 12);
   };
-  const renderSurfaceWhoamiResult = whoami => {
-    if (!whoami) return '';
-    const contextOptions = [''].concat(
-      [...new Set([
-        whoami.homeContextValue || '',
-        ...((whoami.contextOptions || []).map(value => String(value || '')).filter(Boolean))
-      ])]
-    );
-    const editStatus = whoami.statusMessage
-      ? '<div class="surface-inspector-status" data-level="' + escapeHtml(whoami.statusLevel || 'ok') + '">' + escapeHtml(whoami.statusMessage) + '</div>'
-      : '';
-    const inlineEditor = whoami.authenticated
-      ? (whoami.editorReady
-          ? '<form class="surface-inspector-form" data-surface-command-identity-form data-identity-id="' + escapeHtml(whoami.identity || '') + '">'
-              + '<label class="surface-inspector-field"><span>Label</span><input name="label" value="' + escapeHtml(String(whoami.title || '')) + '" /></label>'
-              + '<label class="surface-inspector-field"><span>Username</span><input name="username" value="' + escapeHtml(String(whoami.username || '')) + '" /></label>'
-              + '<label class="surface-inspector-field"><span>New Password</span><input name="password" type="password" placeholder="leave unchanged" /></label>'
-              + '<label class="surface-inspector-field"><span>Home Context</span><select name="homeContext">' + contextOptions.map(value =>
-                  '<option value="' + escapeHtml(value) + '"' + (value === String(whoami.homeContextValue || '') ? ' selected' : '') + '>' + escapeHtml(value || '(none)') + '</option>'
-                ).join('') + '</select></label>'
-              + '<label class="surface-inspector-field"><span>Home Perspective</span><input name="homePerspective" value="' + escapeHtml(String(whoami.homePerspectiveValue || '')) + '" /></label>'
-              + '<div class="surface-inspector-actions"><button type="submit" data-surface-command-identity-save>Save Identity Here</button></div>'
-            + '</form>'
-          : '<div class="world-command-meta">' + escapeHtml(whoami.editorError || (whoami.editorLoading ? 'Loading inline identity editor...' : 'Inline identity editor is unavailable right now.')) + '</div>')
-      : '';
-    return '<section class="world-command-result" data-surface-command-result="whoami">'
-      + '<strong>' + escapeHtml(whoami.title) + '</strong>'
-      + '<div class="world-command-meta">' + escapeHtml(whoami.subtitle || '') + '</div>'
-      + '<div class="world-command-result-grid">' + (whoami.rows || []).map(([key, value]) =>
-          '<div class="world-command-result-row"><div class="world-command-result-key">' + escapeHtml(key) + '</div><div class="world-command-result-value">' + escapeHtml(value) + '</div></div>'
-        ).join('') + '</div>'
-      + '<div class="world-command-meta">' + escapeHtml(whoami.note || '') + '</div>'
-      + editStatus
-      + inlineEditor
-      + '<div class="world-command-result-actions">'
-        + (whoami.identity ? '<button type="button" data-surface-command-result-world>Open User</button>' : '')
-        + (whoami.source?.file ? '<button type="button" data-surface-command-result-source>Open Source</button>' : '')
-        + (whoami.bootstrapHref ? '<button type="button" data-surface-command-result-bootstrap>Edit In Bootstrap</button>' : '')
-      + '</div>'
-    + '</section>';
-  };
+  const renderSurfaceWhoamiResult = whoami => renderSurfaceWhoamiResultView({ whoami, escapeHtml });
   const renderSurfaceCommandPalette = () => {
-    if (!liveSurfaceInspectable || !state.surfaceCommandOpen) return '';
     const query = String(state.surfaceCommandQuery || '');
     const items = visibleSurfaceCommands();
     const whoami = state.surfaceCommandResult?.kind === 'whoami' ? state.surfaceCommandResult : null;
-    const graphNotice = state.surfaceInspectorGraphError
-      ? '<div class="surface-inspector-status" data-level="error">' + escapeHtml(state.surfaceInspectorGraphError) + '</div>'
-      : (!state.surfaceInspectorGraphLoaded
-          ? '<div class="world-command-meta">Loading world graph metadata for capabilities, routes, and source handoffs...</div>'
-          : '');
-    const currentSelection = selectedSurfaceWidgetId()
-      ? '<div class="world-command-meta">Selected widget / ' + escapeHtml(selectedSurfaceWidgetId()) + '</div>'
-      : '<div class="world-command-meta">No widget selected yet. Search current-page widgets to inspect them in place.</div>';
-    const results = items.length
-      ? items.map((item, index) => '<button class="world-command-item" data-surface-command-run="' + index + '"><strong>' + escapeHtml(item.title) + '</strong><span class="world-command-meta">' + escapeHtml(item.type) + (item.subtitle ? ' / ' + escapeHtml(item.subtitle) : '') + '</span></button>').join('')
-      : '<div class="world-command-empty">No matching pages, widgets, capabilities, or commands.</div>';
-    const resultCard = renderSurfaceWhoamiResult(whoami);
-    return '<section class="surface-command-palette world-command-palette" data-surface-command-palette>'
-      + '<div class="world-command-head">'
-        + '<input class="world-command-input" data-surface-command-input placeholder="Search pages, widgets, capabilities, execution, commands..." value="' + escapeHtml(query) + '" />'
-        + '<button class="world-command-toggle" data-surface-command-close>Close</button>'
-      + '</div>'
-      + currentSelection
-      + graphNotice
-      + resultCard
-      + '<div class="world-command-list">' + results + '</div>'
-    + '</section>';
+    return renderSurfaceCommandPaletteView({
+      liveSurfaceInspectable,
+      surfaceCommandOpen: state.surfaceCommandOpen,
+      query,
+      items,
+      graphError: state.surfaceInspectorGraphError || '',
+      graphLoaded: state.surfaceInspectorGraphLoaded === true,
+      currentSelectionId: selectedSurfaceWidgetId(),
+      whoami,
+      escapeHtml
+    });
   };
   const executeSurfaceCommand = async item => {
     if (!item?.action) return;
@@ -1793,7 +1452,7 @@ function renderClientEngine(program) {
     }
     const requestId = (state.worldTutorialRequestId || 0) + 1;
     state.worldTutorialRequestId = requestId;
-    const url = '/api/tutorial-progress/' + encodeURIComponent(commandTutorial.id);
+    const url = '/api/guidance-progress/' + encodeURIComponent(commandTutorial.id);
     const res = await fetch(url, requestOptions({}, { url }));
     const body = await res.json().catch(() => ({ progress: null }));
     if (state.worldTutorialRequestId !== requestId) return;
@@ -1813,7 +1472,7 @@ function renderClientEngine(program) {
       state.worldTutorialLoaded = true;
       return { ok: true, body: { progress: state.worldTutorialProgress } };
     }
-    const url = '/api/tutorial-progress/' + encodeURIComponent(commandTutorial.id);
+    const url = '/api/guidance-progress/' + encodeURIComponent(commandTutorial.id);
     const response = await fetch(url, requestOptions({
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
@@ -1834,7 +1493,7 @@ function renderClientEngine(program) {
       state.worldTutorialLoaded = true;
       return { ok: true, body: { progress: null } };
     }
-    const url = '/api/tutorial-progress/' + encodeURIComponent(commandTutorial.id);
+    const url = '/api/guidance-progress/' + encodeURIComponent(commandTutorial.id);
     const response = await fetch(url, requestOptions({ method: 'DELETE' }, { url }));
     const body = await response.json().catch(() => ({ progress: null }));
     state.worldTutorialProgress = null;
@@ -2058,18 +1717,10 @@ function renderClientEngine(program) {
     const primitiveIndex = buildPrimitiveIndex();
     const sourceFiles = [...new Map(nodes.flatMap(n => (n.sources || []).map(src => [src.file, src])).filter(([file]) => file).sort((a, b) => String(a[0]).localeCompare(String(b[0])))).values()];
     const currentMode = () => state.worldGraphMode || 'graph';
-    const modeButton = (mode, label) => '<button class="world-mode-button ' + (currentMode() === mode ? 'world-mode-active' : '') + '" data-world-mode="' + mode + '">' + label + '</button>';
-    const renderModeMenu = () => '<nav class="world-mode-menu">' +
-      modeButton('graph', 'Graph') +
-      modeButton('things', 'Thing List') +
-      modeButton('primitive', 'Primitive Browser') +
-      modeButton('witness', 'Witness Browser') +
-      modeButton('source', 'Source Browser') +
-      modeButton('process', 'Process Explorer') +
-      '<span class="world-mode-spacer"></span>' +
-      '<button class="world-command-toggle" data-world-command-toggle data-tutorial-target="world-command-toggle">Search / Command</button>' +
-      '<span class="world-command-hint">Ctrl+K</span>' +
-      '</nav>';
+    const renderModeMenu = () => renderWorldModeMenuView({
+      currentMode: currentMode(),
+      escapeHtml
+    });
     const linkRef = id => byId[id]
       ? '<button class="world-ref-button" data-world-select="' + escapeHtml(id) + '">' + escapeHtml(id) + '</button>'
       : '<button class="world-ref-button" data-world-primitive="' + escapeHtml(String(id || '')) + '" data-world-primitive-kind="unresolved-ref">' + escapeHtml(String(id || '')) + '</button>';
@@ -2423,28 +2074,12 @@ function renderClientEngine(program) {
         .sort((a, b) => (b.score - a.score) || String(a.title).localeCompare(String(b.title)))
         .slice(0, query ? 24 : 12);
     };
-    const renderWorldCommandPalette = () => {
-      if (!state.worldCommandOpen) return '';
-      const query = String(state.worldCommandQuery || '');
-      const items = visibleWorldCommands();
-      const results = items.length
-        ? items.map((item, index) => '<button class="world-command-item" data-world-command-run="' + index + '"><strong>' + escapeHtml(item.title) + '</strong><span class="world-command-meta">' + escapeHtml(item.type) + (item.tier ? ' / ' + item.tier : '') + (item.subtitle ? ' / ' + item.subtitle : '') + '</span></button>').join('')
-        : '<div class="world-command-empty">No matching surfaces, objects, or commands.</div>';
-      return '<section class="world-command-palette" data-world-command-palette>' +
-        '<div class="world-command-head">' +
-        '<input class="world-command-input" data-world-command-input placeholder="Search pages, widgets, capabilities, execution, commands..." value="' + escapeHtml(query) + '" />' +
-        '<button class="world-command-toggle" data-world-command-close>Close</button>' +
-        '</div>' +
-        '<div class="world-command-list">' + results + '</div>' +
-        '</section>';
-    };
-    const renderWorldTutorialConceptList = (concepts, emptyText) => (
-      '<div class="tutorial-concept-list">' +
-      (concepts.length
-        ? concepts.map(concept => '<div class="tutorial-concept"><strong>' + escapeHtml(concept.label) + '</strong><span>' + escapeHtml(concept.summary) + '</span></div>').join('')
-        : '<div class="tutorial-concept"><span>' + escapeHtml(emptyText) + '</span></div>') +
-      '</div>'
-    );
+    const renderWorldCommandPalette = () => renderWorldCommandPaletteView({
+      worldCommandOpen: state.worldCommandOpen,
+      query: String(state.worldCommandQuery || ''),
+      items: visibleWorldCommands(),
+      escapeHtml
+    });
     const renderWorldTutorialPanel = () => {
       if (!state.session?.authenticated) return '';
       const progress = state.worldTutorialProgress;
@@ -2480,251 +2115,74 @@ function renderClientEngine(program) {
                 : (commandTutorialReplayScopeKeyFor(progress)
                     ? ('Replaying this scope from here: ' + (step?.title || '') + '. This replays guidance only and does not roll back app state.')
                     : (step ? (step.title + ' (' + step.chapterId + ' / ' + step.page + ')') : 'Tutorial in progress.'));
-      const disabledList = disabledRows.length
-        ? '<div class="world-tutorial-list" data-world-tutorial-disabled-list>' + disabledRows.map(row =>
-          '<div class="world-tutorial-item"><strong>' + escapeHtml(row.label) + '</strong><p>' + escapeHtml((row.pageLabel ? (row.pageLabel + ' / ') : '') + (row.currentStepTitle ? ('Current step there: ' + row.currentStepTitle + '.') : (row.type === 'context' ? 'Sourcery is disabled for this context, but you can re-enable it without resetting progress.' : 'Sourcery is disabled for this scope, but you can re-enable it without resetting progress.'))) + '</p><div class="actions">' + (row.target ? '<button type="button" class="secondary" data-world-tutorial-focus-scope-target="' + escapeHtml(row.target) + '">Show This Control</button>' : '') + (row.type === 'context' ? '<button type="button" class="secondary" data-world-tutorial-enable-context="' + escapeHtml(row.contextId) + '">Enable This Context</button>' : '<button type="button" class="secondary" data-world-tutorial-enable-scope="' + escapeHtml(row.scopeKey) + '">Enable Sourcery Here</button>') + (row.href ? '<button type="button" class="secondary" data-world-tutorial-open-scope="' + escapeHtml(row.href) + '">Open Surface</button>' : '') + '</div></div>'
-        ).join('') + '</div>'
-        : '<div class="world-tutorial-list" data-world-tutorial-disabled-list><div class="world-tutorial-item"><p>No disabled Sourcery scopes right now.</p></div></div>';
-      return '<section class="world-tutorial-panel" data-world-tutorial-panel>' +
-        '<div class="world-tutorial-meta">Sourcery / ' + escapeHtml(surface.kind) + '</div>' +
-        '<h2>' + escapeHtml(step?.title || 'Tutorial status') + '</h2>' +
-        '<div class="world-tutorial-summary">' + escapeHtml(summary) + '</div>' +
-        '<div class="world-tutorial-actions">' +
-          (disabledRows.length ? '<button type="button" class="secondary" data-world-tutorial-show-disabled>Show Disabled Sourcery Scopes</button>' : '') +
-          (step?.target && surface.kind === 'active' ? '<button type="button" class="secondary" data-world-tutorial-focus-target="' + escapeHtml(step.target) + '">Show Current Control</button>' : '') +
-          (progress && !progress.completedAt ? '<button type="button" class="secondary" data-world-tutorial-resume>' + escapeHtml(surface.kind === 'offpage' ? ('Continue On ' + commandTutorialPageLabel(surface.page)) : (surface.kind === 'disabled-context' ? 'Enable Sourcery In This Context' : (surface.kind === 'disabled' ? 'Enable Sourcery Here' : 'Resume Tutorial'))) + '</button>' : '') +
-          (surface.kind === 'active' && previous ? '<button type="button" class="secondary" data-world-tutorial-back>Back</button>' : '') +
-          (surface.kind === 'active' && step ? '<button type="button" data-world-tutorial-next>' + escapeHtml(step.nextLabel || 'Next') + '</button>' : '') +
-          (progress && !progress.completedAt ? '<button type="button" class="secondary" data-world-tutorial-restart-chapter>Restart Chapter</button>' : '') +
-          (progress && !progress.completedAt && step ? '<button type="button" class="secondary" data-world-tutorial-restart-step>Restart From This Scope</button>' : '') +
-          (surface.kind === 'active' && step?.page === 'world' ? '<button type="button" class="secondary" data-world-tutorial-disable>Disable Sourcery Here</button>' : '') +
-          (surface.kind === 'active' && currentSurfaceContext ? '<button type="button" class="secondary" data-world-tutorial-disable-context>Disable Sourcery In This Context</button>' : '') +
-          (progress && !progress.completedAt && !progress.hidden ? '<button type="button" class="secondary" data-world-tutorial-exit>Exit</button>' : '') +
-          (progress ? '<button type="button" class="secondary" data-world-tutorial-reset>Reset</button>' : '') +
-        '</div>' +
-        renderWorldTutorialConceptList(currentConcepts, 'This step uses the current product surface without unlocking a new concept.') +
-        renderWorldTutorialConceptList(revealedConcepts, 'No concepts revealed on this surface yet.') +
-        disabledList +
-      '</section>';
+      return renderWorldTutorialPanelView({
+        sessionAuthenticated: Boolean(state.session?.authenticated),
+        progress,
+        error: state.worldTutorialError || '',
+        step,
+        surfaceKind: surface.kind,
+        summary,
+        disabledRows,
+        previousStep: previous,
+        currentSurfaceContext,
+        currentConcepts,
+        revealedConcepts,
+        resumeLabel: surface.kind === 'offpage'
+          ? ('Continue On ' + commandTutorialPageLabel(surface.page))
+          : (surface.kind === 'disabled-context'
+            ? 'Enable Sourcery In This Context'
+            : (surface.kind === 'disabled' ? 'Enable Sourcery Here' : 'Resume Tutorial')),
+        escapeHtml
+      });
     };
-    const renderInspector = () => {
-      if (state.worldGraphSelectedKind) {
-        const kind = state.worldGraphSelectedKind;
-        const matches = nodes.filter(n => (n.kind || 'thing') === kind).sort((a, b) => String(a.label || a.id).localeCompare(String(b.label || b.id)));
-        return '<h2>' + escapeHtml(kind) + ' list</h2>' +
-          '<div class="world-inspector-row"><span class="world-inspector-key">count</span><span>' + matches.length + '</span></div>' +
-          '<button class="world-ref-button" data-world-clear-kind>Back to selected object</button>' +
-          '<div class="world-inspector-list">' + matches.map(n =>
-            '<button class="world-inspector-item" data-world-select="' + escapeHtml(n.id) + '"><strong>' + escapeHtml(n.label || n.id) + '</strong><br><span class="world-node-kind">' + escapeHtml(n.context || '') + '</span></button>'
-          ).join('') + '</div>';
-      }
-      const node = byId[selectedId];
-      const incoming = edges.filter(e => e.to === selectedId).slice(0, 24);
-      const outgoing = edges.filter(e => e.from === selectedId).slice(0, 24);
-      if (!node) return '<h2>Selection</h2><p>Select a node in the graph.</p>';
-      const rows = [
-        ['id', linkRef(node.id)],
-        ['label', escapeHtml(String(node.label || node.id))],
-        ['kind', linkKind(node.kind || 'thing')],
-        ['surface', node.surfaceLabel ? escapeHtml(String(node.surfaceLabel)) : ''],
-        ['context', node.context ? linkRef(node.context) : ''],
-        ['href', node.href ? escapeHtml(String(node.href)) : '']
-      ].filter(([, v]) => v !== null && v !== undefined && String(v) !== '');
-      const badges = (node.badges || []).map(b => '<span class="world-badge">' + escapeHtml(String(b.label || b)) + '</span>').join('');
-      const valueRef = value => {
-        if (typeof value === 'string' && byId[value]) return linkRef(value);
-        if (typeof value === 'string') return linkPrimitive('string', value);
-        if (typeof value === 'number') return linkPrimitive('number', value);
-        if (typeof value === 'boolean') return linkPrimitive('boolean', value);
-        if (Array.isArray(value)) return '<span class="world-value-list">' + value.map(valueRef).join('') + '</span>';
-        if (value && typeof value === 'object') return renderTypedValue(value);
-        return linkPrimitive('null', value ?? 'null');
-      };
-      const renderTypedValue = value => {
-        if (!value || typeof value !== 'object' || !value.type) return '<code>' + escapeHtml(JSON.stringify(value)) + '</code>';
-        const type = '<span class="world-value-type">' + escapeHtml(value.type) + '</span>';
-        if (value.type === 'ref') return '<span class="world-value-widget">' + type + linkRef(value.target) + '</span>';
-        if (value.type === 'list') return '<span class="world-value-widget">' + type + '<span class="world-value-list">' + (value.items || []).map(renderTypedValue).join('') + '</span></span>';
-        if (value.type === 'record') {
-          const rows = Object.entries(value.fields || {}).map(([k, v]) => '<span class="world-value-record-row"><span class="world-inspector-key">' + escapeHtml(k) + '</span><span>' + renderTypedValue(v) + '</span></span>').join('');
-          return '<span class="world-value-widget">' + type + '<span class="world-value-record">' + rows + '</span></span>';
-        }
-        const primitiveValue = value.value ?? (value.type === 'null' ? 'null' : '');
-        return '<span class="world-value-widget">' + type + '<span>' + linkPrimitive(value.type, primitiveValue) + '</span></span>';
-      };
-      const propertyList = (title, props) => '<div class="world-inspector-list"><strong>' + title + '</strong>' + ((props || []).length ? props.map(p =>
-        '<div class="world-inspector-row"><span class="world-inspector-key">' + escapeHtml(p.key) + '</span><span>' + valueRef(p.value) + '</span></div>'
-      ).join('') : '<div class="world-node-kind">none</div>') + '</div>';
-      const edgeItem = (e, dir) => {
-        const other = dir === 'in' ? e.from : e.to;
-        const props = (e.properties || []).length ? '<div class="world-edge-props">' + e.properties.map(p => '<span class="world-badge">' + escapeHtml(p.key) + '=' + escapeHtml(JSON.stringify(p.value)) + '</span>').join('') + '</div>' : '';
-        return '<div class="world-inspector-item">' + linkRef(other) + '<br><span class="world-node-kind">' + escapeHtml(e.rel || '') + '</span>' + props + '</div>';
-      };
-      const edgeList = (title, list, dir) => '<div class="world-inspector-list"><strong>' + title + '</strong>' + (list.length ? list.map(e => edgeItem(e, dir)).join('') : '<div class="world-node-kind">none</div>') + '</div>';
-      const associationPropertyList = (node.associationProperties || []).length ? '<div class="world-inspector-list"><strong>Association properties</strong>' + node.associationProperties.slice(0, 24).map(a =>
-        '<div class="world-inspector-item">' + linkRef(a.from) + ' <span class="world-node-kind">' + escapeHtml(a.rel) + '</span> ' + linkRef(a.to) +
-        '<div class="world-edge-props">' + (a.properties || []).map(p => '<span class="world-badge">' + escapeHtml(p.key) + '=' + escapeHtml(JSON.stringify(p.value)) + '</span>').join('') + '</div></div>'
-      ).join('') + '</div>' : '';
-      const sourceList = (node.sources || []).length ? '<div class="world-inspector-list"><strong>Source definition</strong>' + node.sources.slice(-6).reverse().map(src =>
-        '<div class="world-inspector-item"><div>' + escapeHtml(src.section || '') + '</div><button class="world-ref-button" data-world-source-file="' + escapeHtml(src.file || '') + '" data-world-source-focus="' + escapeHtml(node.id) + '">' + escapeHtml(src.file || '') + (src.line != null ? ' (line ' + src.line + ')' : '') + '</button><pre class="world-source-ast">' + escapeHtml(JSON.stringify(src.values || {}, null, 2)) + '</pre></div>'
-      ).join('') + '</div>' : '';
-      const witnessList = (node.recentWitnesses || []).length ? '<div class="world-inspector-list"><strong>Recent witnesses</strong>' + node.recentWitnesses.slice(0, 6).map(entry =>
-        '<div class="world-inspector-item"><div><strong>' + escapeHtml(entry.process || entry.id) + '</strong></div><div class="world-node-kind">' + escapeHtml(entry.actor || '') + '</div><button class="world-ref-button" data-world-mode="witness">Open witness browser</button></div>'
-      ).join('') + '</div>' : '';
-      const processList = (node.processEvents || []).length
-        ? '<div class="world-inspector-list"><strong>Process explorer</strong>' + node.processEvents.map(entry =>
-          '<div class="world-inspector-item"><div><strong>' + escapeHtml(entry.event) + '</strong></div><div class="world-node-kind">' + escapeHtml(String(entry.stepCount || 0)) + ' steps / ' + escapeHtml(String(entry.asyncCount || 0)) + ' async</div><button class="world-ref-button" data-world-open-process-program="' + escapeHtml(node.id) + '" data-world-open-process-event="' + escapeHtml(entry.event) + '">Open process view</button></div>'
-        ).join('') + '</div>'
-        : (node.processSelection?.program && node.processSelection?.event
-          ? '<div class="world-inspector-list"><strong>Process explorer</strong><div class="world-inspector-item"><div><strong>' + escapeHtml(node.processSelection.event) + '</strong></div><div class="world-node-kind">' + escapeHtml(node.processSelection.program) + '</div><button class="world-ref-button" data-world-open-process-program="' + escapeHtml(node.processSelection.program) + '" data-world-open-process-event="' + escapeHtml(node.processSelection.event) + '">Open process view</button></div></div>'
-          : '');
-      const versionState = node.widgetVersionState || null;
-      const versionStatus = state.worldGraphVersionStatus && state.worldGraphVersionStatus.soul === node.id
-        ? '<div class="world-version-status" data-level="' + escapeHtml(state.worldGraphVersionStatus.level || 'info') + '">' + escapeHtml(state.worldGraphVersionStatus.message || '') + '</div>'
-        : '';
-      const widgetVersionList = (node.widgetVersions || []).length ? '<div class="world-inspector-list"><strong>Widget versions</strong>' +
-        '<div class="world-inspector-row"><span class="world-inspector-key">active</span><span>' + (versionState?.activeVersion ? escapeHtml(versionState.activeVersion) : 'none') + '</span></div>' +
-        node.widgetVersions.map(entry => {
-          const badges = [
-            entry.isActive ? 'active' : '',
-            entry.transitionFromActive ? ('from current: ' + entry.transitionFromActive) : '',
-            entry.transitionToActive ? ('to current: ' + entry.transitionToActive) : ''
-          ].filter(Boolean).map(label => '<span class="world-badge">' + escapeHtml(label) + '</span>').join('');
-          const actions = entry.isActive
-            ? ''
-            : '<div class="world-version-actions"><button class="world-ref-button" data-world-widget-activate="' + escapeHtml(entry.soul) + '" data-world-widget-version="' + escapeHtml(entry.version) + '">Activate</button></div>';
-          return '<div class="world-inspector-item world-version-item"><div><strong>' + escapeHtml(entry.version) + '</strong></div><div class="world-node-kind">' + escapeHtml(entry.kind || 'widget') + ' / index ' + escapeHtml(String(entry.index ?? 0)) + '</div><div class="world-badges">' + badges + '</div>' + actions + '<pre class="world-source-ast">' + escapeHtml(JSON.stringify(entry.propsPreview ?? {}, null, 2)) + '</pre></div>';
-        }).join('') +
-        (versionState?.rollbackAvailable ? '<div class="world-version-actions"><button class="world-ref-button" data-world-widget-rollback="' + escapeHtml(versionState.soul) + '">Rollback to ' + escapeHtml(versionState.rollbackVersion || '') + '</button></div>' : '') +
-        ((versionState?.history || []).length ? '<div class="world-inspector-list"><strong>Activation history</strong>' + versionState.history.slice(-6).reverse().map(entry => '<div class="world-inspector-item"><strong>' + escapeHtml(entry.version || '') + '</strong><br><span class="world-node-kind">' + escapeHtml(entry.actor || '') + ' / ' + escapeHtml(entry.witnessId || '') + '</span></div>').join('') + '</div>' : '') +
-        versionStatus +
-        '</div>' : '';
-      return '<h2>Selected Object</h2>' +
-        rows.map(([k, v]) => '<div class="world-inspector-row"><span class="world-inspector-key">' + escapeHtml(k) + '</span><span>' + v + '</span></div>').join('') +
-        '<div class="world-badges">' + badges + '</div>' +
-        propertyList('Object properties', node.properties) +
-        propertyList('Values', node.values) +
-        edgeList('Associations from this object', outgoing, 'out') +
-        edgeList('Associations to this object', incoming, 'in') +
-        associationPropertyList +
-        processList +
-        widgetVersionList +
-        witnessList +
-        sourceList;
-    };
-    const sourceDefinitionRange = (text, focusId) => {
-      const node = byId[focusId] || byId[selectedId];
-      const src = (node?.sources || []).slice(-1)[0];
-      if (!src || !text) return null;
-      const lines = text.split(/\r?\n/);
-      if (src.line != null) {
-        const startLine = src.line - 1;
-        let endLine = lines.length - 1;
-        for (let i = startLine + 1; i < lines.length; i++) {
-          if (/^\s*\[\[?/.test(lines[i]) && i > startLine) { endLine = i - 1; break; }
-        }
-        return { start: startLine, end: endLine };
-      }
-      const candidates = [src.values?.id, src.values?.soul, src.values?.version, focusId].filter(Boolean).map(String);
-      const section = src.section ? '[[' + src.section + ']]' : null;
-      let startLine = -1;
-      for (let i = 0; i < lines.length; i++) {
-        const nearSection = !section || lines[i].trim() === section;
-        const hasCandidate = candidates.some(c => lines[i].includes('"' + c + '"') || lines[i].includes(c));
-        if (nearSection || hasCandidate) {
-          if (nearSection) {
-            for (let j = i; j < Math.min(lines.length, i + 12); j++) {
-              if (candidates.some(c => lines[j].includes('"' + c + '"') || lines[j].includes(c))) { startLine = i; break; }
-            }
-          }
-          if (startLine < 0 && hasCandidate) startLine = Math.max(0, i - 2);
-          if (startLine >= 0) break;
-        }
-      }
-      if (startLine < 0) return null;
-      let endLine = lines.length - 1;
-      for (let i = startLine + 1; i < lines.length; i++) {
-        if (/^\s*\[\[?/.test(lines[i]) && i > startLine + 1) { endLine = i - 1; break; }
-      }
-      return { start: startLine, end: endLine };
-    };
-    const renderSourceText = (text, focusId) => {
-      const range = sourceDefinitionRange(text, focusId);
-      const ids = Object.keys(byId).filter(id => id && id.length > 2).sort((a, b) => b.length - a.length).slice(0, 400);
-      const linkLine = line => {
-        let out = escapeHtml(line);
-        for (const id of ids) {
-          const escaped = escapeHtml(id).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-          out = out.replace(new RegExp('(&quot;)?\\b' + escaped + '\\b(&quot;)?', 'g'), match => '<button class="world-source-ref" data-world-select="' + escapeHtml(id) + '">' + match + '</button>');
-        }
-        return out;
-      };
-      return text.split(/\r?\n/).map((line, i) => {
-        const highlighted = range && i >= range.start && i <= range.end;
-        const lineNumAttrs = highlighted && focusId ? ' data-world-jump-to-graph="' + escapeHtml(focusId) + '" title="Jump to object in graph"' : '';
-        return '<div class="world-source-line ' + (highlighted ? 'world-source-highlight' : '') + '"><span class="world-source-line-number"' + lineNumAttrs + '>' + (i + 1) + '</span><span class="world-source-line-code">' + linkLine(line) + '</span></div>';
-      }).join('');
-    };
-    const renderSourceDocument = () => {
-      const doc = state.worldGraphSource;
-      const selectedFile = doc?.file || sourceFiles[0]?.file || '';
-      const sidebar = '<aside class="world-source-sidebar"><strong>Source files</strong>' + (sourceFiles.length ? sourceFiles.map(src => '<button class="world-source-file-button ' + (src.file === selectedFile ? 'world-source-file-active' : '') + '" data-world-source-file="' + escapeHtml(src.file || '') + '">' + escapeHtml((src.file || '').split(/[\\/]/).slice(-2).join('/')) + '</button>').join('') : '<div class="world-source-empty">No witnessed source files.</div>') + '</aside>';
-      const body = doc
-        ? '<section class="world-source-editor"><div class="world-source-title">' + escapeHtml(doc.file || 'Source') + '</div><div class="world-source-code">' + renderSourceText(doc.text || '', state.worldGraphSourceFocus || selectedId) + '</div></section>'
-        : '<section class="world-source-editor"><div class="world-source-title">Source Browser</div><div class="world-source-empty">Select a source file. Definitions linked to the selected object will be highlighted.</div></section>';
-      return '<div class="world-document-view"><div class="world-source-workbench">' + sidebar + body + '</div></div>';
-    };
-    const renderThingList = () => {
-      const kinds = [...new Set(nodes.map(n => n.kind || 'thing'))].sort();
-      const selectedKind = state.worldGraphSelectedKind || 'thing';
-      const items = nodes.filter(n => (n.kind || 'thing') === selectedKind).sort((a, b) => String(a.label || a.id).localeCompare(String(b.label || b.id)));
-      return '<div class="world-primitive-browser"><h2>Thing List</h2><div class="world-primitive-grid"><div class="world-primitive-list"><strong>Kinds</strong>' + kinds.map(k => '<button class="world-primitive-item" data-world-kind="' + escapeHtml(k) + '">' + escapeHtml(k) + ' <span class="world-node-kind">' + nodes.filter(n => (n.kind || 'thing') === k).length + '</span></button>').join('') + '</div><div class="world-primitive-list" style="grid-column: span 2"><strong>' + escapeHtml(selectedKind) + '</strong>' + items.map(n => '<button class="world-primitive-item" data-world-select="' + escapeHtml(n.id) + '"><strong>' + escapeHtml(n.label || n.id) + '</strong><br><span class="world-node-kind">' + escapeHtml(n.context || '') + '</span></button>').join('') + '</div></div></div>';
-    };
-    const renderWitnessBrowser = () => {
-      const node = byId[selectedId];
-      const witnesses = node?.recentWitnesses || [];
-      if (!node) return '<div class="world-witness-browser"><h2>Witness Browser</h2><div class="world-command-empty">Select an object to inspect its witnessed history.</div></div>';
-      return '<div class="world-witness-browser"><h2>Witness Browser</h2><div class="world-command-meta">' + escapeHtml(String(node.label || node.id)) + ' / ' + escapeHtml(node.kind || 'thing') + '</div>' +
-        (witnesses.length
-          ? witnesses.map(entry => '<article class="world-witness-card"><div><strong>' + escapeHtml(entry.process || entry.id) + '</strong></div><div class="world-command-meta">' + escapeHtml(entry.id || '') + (entry.actor ? ' / actor ' + escapeHtml(entry.actor) : '') + (entry.cause ? ' / cause ' + escapeHtml(entry.cause) : '') + '</div><pre>' + escapeHtml(JSON.stringify(entry.body ?? {}, null, 2)) + '</pre></article>').join('')
-          : '<div class="world-command-empty">No recent witnessed history for this object.</div>') +
-        '</div>';
-    };
-    const renderProcessExplorer = () => '<div class="world-primitive-browser"><h2>Process Explorer</h2><div class="world-primitive-list"><a class="world-primitive-item" href="/process"><strong>Open Process View</strong><br><span class="world-node-kind">Dedicated process graph, run inspector, and replay</span></a></div></div>';
-    const renderPrimitiveBrowser = () => {
-      const selectedKind = state.worldGraphSelectedPrimitiveKind || [...primitiveIndex.keys()][0] || '';
-      const bucket = primitiveIndex.get(selectedKind) || new Map();
-      const selectedValue = state.worldGraphSelectedPrimitiveValue || '';
-      const kinds = [...primitiveIndex.keys()].sort();
-      const items = [...bucket.values()].sort((a, b) => a.value.localeCompare(b.value));
-      const selectedItem = bucket.get(selectedValue) || items[0] || null;
-      const refs = selectedItem ? [...selectedItem.where].sort() : [];
-      return '<div class="world-primitive-browser"><h2>Primitive browser</h2><div class="world-primitive-grid"><div class="world-primitive-list"><strong>Kinds</strong>' + kinds.map(k => '<button class="world-primitive-item" data-world-primitive-kind-only="' + escapeHtml(k) + '">' + escapeHtml(k) + ' <span class="world-node-kind">' + (primitiveIndex.get(k)?.size || 0) + '</span></button>').join('') + '</div><div class="world-primitive-list"><strong>' + escapeHtml(selectedKind || 'none') + '</strong>' + items.map(item => '<button class="world-primitive-item" data-world-primitive="' + escapeHtml(item.value) + '" data-world-primitive-kind="' + escapeHtml(selectedKind) + '">' + escapeHtml(item.value) + '<br><span class="world-node-kind">count ' + item.count + '</span></button>').join('') + '</div><div class="world-primitive-list"><strong>References</strong>' + refs.map(ref => { const id = String(ref).split('.')[0].split('→')[0]; return '<button class="world-primitive-item" data-world-select="' + escapeHtml(byId[id] ? id : '') + '" data-world-primitive-ref="' + escapeHtml(ref) + '">' + escapeHtml(ref) + '</button>'; }).join('') + '</div></div></div>';
-    };
-    const marker = '<defs><marker id="world-arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L7,3 z" fill="#777" /></marker><marker id="world-arrow-owner" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L7,3 z" fill="#c7352f" /></marker></defs>';
+    const renderInspector = () => renderWorldInspectorView({
+      selectedKind: state.worldGraphSelectedKind || '',
+      nodes,
+      selectedId,
+      byId,
+      edges,
+      worldGraphVersionStatus: state.worldGraphVersionStatus,
+      linkRef,
+      linkKind,
+      linkPrimitive,
+      escapeHtml
+    });
     const renderCanvas = () => {
-      if (currentMode() === 'source') return renderSourceDocument();
-      if (currentMode() === 'primitive') return renderPrimitiveBrowser();
-      if (currentMode() === 'things') return renderThingList();
-      if (currentMode() === 'witness') return renderWitnessBrowser();
-      if (currentMode() === 'process') return renderProcessExplorer();
-      const svg = '<svg class="world-graph-svg" width="' + width + '" height="' + height + '">' + marker + edges.map(e => {
-        const a = byId[e.from], b = byId[e.to];
-        if (!a || !b) return '';
-        const x1 = (a.x || 0) + 190, y1 = (a.y || 0) + 28, x2 = (b.x || 0), y2 = (b.y || 0) + 28;
-        const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
-        const style = e.style || 'relation';
-        const markerId = style === 'ownership' ? 'world-arrow-owner' : 'world-arrow';
-        return '<line class="world-edge-' + escapeHtml(style) + '" x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" marker-end="url(#' + markerId + ')" />' +
-          '<text class="world-edge-label" x="' + mx + '" y="' + (my - 3) + '">' + escapeHtml(String(e.rel || '')) + '</text>';
-      }).join('') + '</svg>';
-      const groupHtml = groups.map(g => '<div class="world-context-box" style="left:' + (g.x || 0) + 'px;top:' + (g.y || 0) + 'px;width:' + (g.width || 0) + 'px;height:' + (g.height || 0) + 'px"><div class="world-context-label">' + escapeHtml(g.label || g.id || '') + '</div></div>').join('');
-      const html = nodes.map(n => '<div class="world-node world-node-' + escapeHtml(n.kind || 'thing') + (n.id === selectedId ? ' world-node-selected' : '') + '" data-world-node-id="' + escapeHtml(n.id) + '" style="left:' + (n.x || 0) + 'px;top:' + (n.y || 0) + 'px">' +
-        '<div class="world-node-kind">' + escapeHtml(n.kind || 'thing') + '</div>' +
-        '<a href="' + escapeHtml(n.href || '#') + '" title="' + escapeHtml(n.id) + '">' + escapeHtml(String(n.label || n.id)) + '</a>' +
-        '<div class="world-badges">' + (n.badges || []).map(b => '<span class="world-badge">' + escapeHtml(String(b.label || b)) + '</span>').join('') + '</div>' +
-        '</div>').join('');
-      return '<div class="world-graph-canvas"><div class="world-graph-content" style="width:' + width + 'px;height:' + height + 'px">' + groupHtml + svg + html + '</div></div>';
+      if (currentMode() === 'source') return renderWorldSourceDocumentView({
+        doc: state.worldGraphSource,
+        sourceFiles,
+        worldGraphSourceFocus: state.worldGraphSourceFocus,
+        selectedId,
+        byId,
+        escapeHtml
+      });
+      if (currentMode() === 'primitive') return renderWorldPrimitiveBrowserView({
+        primitiveIndex,
+        selectedKind: state.worldGraphSelectedPrimitiveKind,
+        selectedValue: state.worldGraphSelectedPrimitiveValue,
+        byId,
+        escapeHtml
+      });
+      if (currentMode() === 'things') return renderWorldThingListView({
+        nodes,
+        selectedKind: state.worldGraphSelectedKind || 'thing',
+        escapeHtml
+      });
+      if (currentMode() === 'witness') return renderWorldWitnessBrowserView({
+        selectedNode: byId[selectedId] || null,
+        escapeHtml
+      });
+      if (currentMode() === 'process') return renderWorldProcessExplorerView();
+      return renderWorldGraphCanvasView({
+        width,
+        height,
+        nodes,
+        edges,
+        groups,
+        byId,
+        selectedId,
+        escapeHtml
+      });
     };
     const openSourceFile = async (file, focusId = selectedId) => {
       if (!file) return;
@@ -2902,11 +2360,11 @@ function renderClientEngine(program) {
       if (action.kind === 'tutorial-enable-scope') {
         if (!state.session?.authenticated || !state.worldTutorialProgress) return;
         const nextProgress = clearWorldTutorialScopeDisabled(state.worldTutorialProgress, action.scopeKey);
-        const response = await fetch('/api/tutorial-progress/' + encodeURIComponent(commandTutorial.id), requestOptions({
+        const response = await fetch('/api/guidance-progress/' + encodeURIComponent(commandTutorial.id), requestOptions({
           method: 'PUT',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(nextProgress)
-        }, { url: '/api/tutorial-progress/' + encodeURIComponent(commandTutorial.id) }));
+        }, { url: '/api/guidance-progress/' + encodeURIComponent(commandTutorial.id) }));
         const body = await response.json().catch(() => ({}));
         state.worldTutorialProgress = response.ok
           ? normalizeWorldTutorialProgress(body.progress || nextProgress)
@@ -2921,11 +2379,11 @@ function renderClientEngine(program) {
       if (action.kind === 'tutorial-enable-context') {
         if (!state.session?.authenticated || !state.worldTutorialProgress) return;
         const nextProgress = clearWorldTutorialContextDisabled(state.worldTutorialProgress, action.contextId || currentSurfaceContext);
-        const response = await fetch('/api/tutorial-progress/' + encodeURIComponent(commandTutorial.id), requestOptions({
+        const response = await fetch('/api/guidance-progress/' + encodeURIComponent(commandTutorial.id), requestOptions({
           method: 'PUT',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(nextProgress)
-        }, { url: '/api/tutorial-progress/' + encodeURIComponent(commandTutorial.id) }));
+        }, { url: '/api/guidance-progress/' + encodeURIComponent(commandTutorial.id) }));
         const body = await response.json().catch(() => ({}));
         state.worldTutorialProgress = response.ok
           ? normalizeWorldTutorialProgress(body.progress || nextProgress)
@@ -2944,11 +2402,11 @@ function renderClientEngine(program) {
             hidden: false,
             replayScopeKey: null
           };
-          await fetch('/api/tutorial-progress/' + encodeURIComponent(commandTutorial.id), requestOptions({
+          await fetch('/api/guidance-progress/' + encodeURIComponent(commandTutorial.id), requestOptions({
             method: 'PUT',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(nextProgress)
-          }, { url: '/api/tutorial-progress/' + encodeURIComponent(commandTutorial.id) })).catch(() => {});
+          }, { url: '/api/guidance-progress/' + encodeURIComponent(commandTutorial.id) })).catch(() => {});
           state.worldTutorialProgress = normalizeWorldTutorialProgress(nextProgress);
           state.worldTutorialLoaded = true;
         }
@@ -3466,4 +2924,5 @@ function escapeHtml(value) {
 function escapeAttr(value) {
   return escapeHtml(value);
 }
+
 

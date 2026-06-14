@@ -6,7 +6,7 @@ import desire/v3-alpha
 // dataflow that stays in the IR; the faithful/grounded duality reduces to a
 // method-keyed sign (tangential_sign) plus THREE irreducible numerical kernels
 // at the symmetry break — fill_angle, gravity_area, cf_mass_moment — lowered to
-// plugins/chart-runtime/mill-force-kernels.js. Faithful to
+// app/chart-functions/mill-force-kernels.js. Faithful to
 // example-ports/engentus/js/mill_force_model.js (DEFAULT_INPUTS).
 
 model MillForce {

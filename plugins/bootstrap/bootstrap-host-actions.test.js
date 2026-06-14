@@ -1,16 +1,32 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
+import {
+  bootstrapHostActionContractsByAction,
+  loadBootstrapHostActionContracts
+} from "./bootstrap-host-action-contracts.js";
 import {
   bindBootstrapHostActions,
   renderBootstrapHostActionFactory,
   runBootstrapHostAction
 } from "./bootstrap-host-actions.js";
 
+test("bootstrap host action contracts load from authored WTOML", async () => {
+  const source = await readFile(new URL("./bootstrap-host-action-contracts.wtoml", import.meta.url), "utf8");
+  const contracts = loadBootstrapHostActionContracts();
+
+  assert.equal(source.includes('action = "open-app"'), true);
+  assert.equal(source.includes('desktopMethod = "revealWorldHome"'), true);
+  assert.equal(contracts["desktop-open-world"].successStatus, "Switching to the selected world home.");
+  assert.equal(contracts["desktop-reveal-world"].failureFallbackStatus, "Unable to reveal world home.");
+});
+
 test("runBootstrapHostAction delegates open-app to the provided opener with tutorial-aware advance", async () => {
   const calls = [];
   const result = await runBootstrapHostAction({
     action: "open-app",
     tutorialStep: () => ({ id: "open-app" }),
+    contractsByAction: bootstrapHostActionContractsByAction,
     openAppHome: async options => {
       calls.push(options);
       return { opened: true, from: "test" };
@@ -41,16 +57,19 @@ test("runBootstrapHostAction updates desktop status for desktop action outcomes"
 
   const openResult = await runBootstrapHostAction({
     action: "desktop-open-world",
+    contractsByAction: bootstrapHostActionContractsByAction,
     desktopApi: () => desktop,
     setDesktopStatus: message => statuses.push(message)
   });
   const createResult = await runBootstrapHostAction({
     action: "desktop-create-world",
+    contractsByAction: bootstrapHostActionContractsByAction,
     desktopApi: () => desktop,
     setDesktopStatus: message => statuses.push(message)
   });
   const revealResult = await runBootstrapHostAction({
     action: "desktop-reveal-world",
+    contractsByAction: bootstrapHostActionContractsByAction,
     desktopApi: () => desktop,
     setDesktopStatus: message => statuses.push(message)
   });
@@ -70,6 +89,7 @@ test("runBootstrapHostAction reports unknown actions explicitly", async () => {
   const bootstrapStatuses = [];
   const result = await runBootstrapHostAction({
     action: "mystery",
+    contractsByAction: bootstrapHostActionContractsByAction,
     setBootstrapStatus: message => bootstrapStatuses.push(message)
   });
 
@@ -90,6 +110,7 @@ test("bindBootstrapHostActions registers the shared host bridge and routes match
     target,
     tutorialStep: () => ({ id: "other" }),
     openAppHome: async () => ({ opened: true }),
+    contractsByAction: bootstrapHostActionContractsByAction,
     desktopApi: () => ({
       async openWorldHome() {
         return { ok: true };
@@ -109,6 +130,7 @@ test("renderBootstrapHostActionFactory exposes the shared browser seam", () => {
 
   assert.equal(factory.includes("const bindBootstrapHostActions ="), true);
   assert.equal(factory.includes("const runBootstrapHostAction ="), true);
-  assert.equal(factory.includes('if (action === "desktop-open-world")'), true);
-  assert.equal(factory.includes('if (action === "desktop-reveal-world")'), true);
+  assert.equal(factory.includes("const bootstrapHostActionContractsByAction ="), true);
+  assert.equal(factory.includes("const contractForAction ="), true);
+  assert.equal(factory.includes("desktop-open-world"), true);
 });

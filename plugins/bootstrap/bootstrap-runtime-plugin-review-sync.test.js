@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   bindBootstrapRuntimePluginReviewSync,
+  createBootstrapRuntimePluginReviewSyncHandler,
   loadBootstrapRuntimePluginReview,
   renderBootstrapRuntimePluginReviewSyncFactory,
   resolveBootstrapRuntimePluginReviewSelection,
@@ -140,20 +141,13 @@ test("runtime plugin review selector updates selected plugin without changing pa
   );
 });
 
-test("runtime plugin review sync binds the documented change listeners", () => {
-  const runnerEvents = [];
-  const pluginEvents = [];
+test("runtime plugin review sync binds the documented host event and handles authored review triggers", async () => {
+  const events = [];
   const runner = {
-    value: "demo_server",
-    addEventListener(name, handler) {
-      runnerEvents.push([name, handler]);
-    }
+    value: "demo_server"
   };
   const plugin = {
-    value: "plugin.inspect",
-    addEventListener(name, handler) {
-      pluginEvents.push([name, handler]);
-    }
+    value: "plugin.inspect"
   };
   let review = {
     serverRunner: "demo_server",
@@ -161,7 +155,12 @@ test("runtime plugin review sync binds the documented change listeners", () => {
   };
   const calls = [];
 
-  const handlers = bindBootstrapRuntimePluginReviewSync({
+  const handler = bindBootstrapRuntimePluginReviewSync({
+    target: {
+      addEventListener(name, registered) {
+        events.push([name, registered]);
+      }
+    },
     byId: id => id === "runtime-plugin-review-runner" ? runner : id === "runtime-plugin-review-plugin" ? plugin : null,
     request: async () => ({
       serverRunner: "demo_server",
@@ -179,18 +178,26 @@ test("runtime plugin review sync binds the documented change listeners", () => {
     setStatus: (id, value) => calls.push(["setStatus", id, value])
   });
 
-  assert.equal(typeof handlers.runnerHandler, "function");
-  assert.equal(typeof handlers.pluginHandler, "function");
-  assert.deepEqual(runnerEvents.map(([name]) => name), ["change"]);
-  assert.deepEqual(pluginEvents.map(([name]) => name), ["change"]);
+  assert.equal(typeof handler, "function");
+  assert.deepEqual(events.map(([name]) => name), ["witness:bootstrap-runtime-plugin-review-sync"]);
 
   plugin.value = "plugin.inspect";
-  handlers.pluginHandler();
+  assert.deepEqual(
+    await handler({ detail: { source: "bootstrap-page-main", trigger: "plugin" } }),
+    { handled: true }
+  );
   assert.equal(calls.at(-1)?.[0], "renderPage");
+
+  await handler({ detail: { source: "bootstrap-page-main", trigger: "server-runner" } });
+  assert.equal(calls.at(-1)?.[0], "renderPage");
+
+  const ignored = createBootstrapRuntimePluginReviewSyncHandler();
+  assert.deepEqual(await ignored({ detail: { source: "other", trigger: "plugin" } }), { handled: false });
 
   const factory = renderBootstrapRuntimePluginReviewSyncFactory();
   assert.equal(factory.includes("const resolveBootstrapRuntimePluginReviewSelection ="), true);
   assert.equal(factory.includes("const loadBootstrapRuntimePluginReview ="), true);
   assert.equal(factory.includes("const selectBootstrapRuntimePluginReviewPlugin ="), true);
+  assert.equal(factory.includes("const createBootstrapRuntimePluginReviewSyncHandler ="), true);
   assert.equal(factory.includes("const bindBootstrapRuntimePluginReviewSync ="), true);
 });

@@ -7,5 +7,5 @@ test("authoring plugin is a pure meta package over extracted authoring child plu
 
   assert.equal(manifest.runtime, undefined);
   assert.equal(manifest.activatesBundles, undefined);
-  assert.deepEqual(manifest.dependsOnPlugins, ["plugin.bootstrap", "plugin.authoring-core", "plugin.capability-authoring", "plugin.program-authoring", "plugin.server-runner-authoring", "plugin.mcp-authoring", "plugin.proposals", "plugin.tutorial"]);
+  assert.deepEqual(manifest.dependsOnPlugins, ["plugin.bootstrap", "plugin.authoring-core", "plugin.capability-authoring", "plugin.program-authoring", "plugin.server-runner-authoring", "plugin.mcp-authoring", "plugin.proposals"]);
 });

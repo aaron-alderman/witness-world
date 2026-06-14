@@ -9,12 +9,15 @@ import {
   SUPPORTED_BACKEND_OPS,
   activeBackendProgramDefinition
 } from "./backend-programs.js";
+import { renderInactiveRuntimeWidgetPage } from "./runtime-page-fallbacks.js";
+import { normalizePathname, renderSurfaceShellPage } from "./runtime-surface-shell.js";
+import { createGuidanceBundleHandlers, guidanceConfigForSession } from "./runtime-guidance.js";
 
-function widgetPageTutorialSurface(world, {
+function widgetPageGuidanceSurface(world, {
   route = null,
   rootWidget = null,
   frontendProgramId = null,
-  tutorialPage = null
+  guidancePage = null
 } = {}) {
   const witnesses = world.allWitnesses();
   const routeRows = new Map(moduleProjectors.routes(witnesses).map(row => [row.id, row]));
@@ -24,7 +27,7 @@ function widgetPageTutorialSurface(world, {
   const programRow = frontendProgramId ? programRows.get(frontendProgramId) ?? null : null;
   const widgetRow = rootWidget ? widgetRows.get(rootWidget) ?? null : null;
   return {
-    page: typeof tutorialPage === "string" && tutorialPage.trim() ? tutorialPage.trim() : null,
+    page: typeof guidancePage === "string" && guidancePage.trim() ? guidancePage.trim() : null,
     context: programRow?.context ?? widgetRow?.context ?? routeRow?.context ?? null,
     routeId: routeRow?.id ?? route?.id ?? null,
     rootWidgetId: widgetRow?.id ?? rootWidget ?? null,
@@ -48,6 +51,9 @@ export function createCoreRuntimeBundleHandlers({
   sessionCookieHeader,
   clearSessionCookieHeader,
   tutorialProgressFor,
+  setTutorialProgress,
+  guidanceProgressFor,
+  setGuidanceProgress,
   runtimeProfile,
   requestedRuntimeProfile = null,
   currentBackendCapabilities,
@@ -58,13 +64,28 @@ export function createCoreRuntimeBundleHandlers({
   getRuntimePluginReviews,
   invokeRouteHandler,
   supportedBackendOps = SUPPORTED_BACKEND_OPS,
-  coreHooks = {}
+  coreHooks = {},
+  runtimeContributions = null
 }) {
-  const renderWidgetPageHook = coreHooks.renderWidgetPage ?? ((_world, { rootWidget }) => `<!doctype html>
-<html><head><meta charset="utf-8"><title>${rootWidget || "Runtime"}</title></head>
-<body><main><h1>${rootWidget || "Runtime"}</h1><p>Widget rendering is not active in this runtime composition.</p></main></body></html>`);
-  const projectEdenPageThemeHook = coreHooks.projectEdenPageTheme ?? (() => null);
-  const appTutorialConfigForSessionHook = coreHooks.appTutorialConfigForSession ?? (() => null);
+  const renderWidgetPageHook = coreHooks.renderWidgetPage ?? ((_world, { rootWidget }) => renderInactiveRuntimeWidgetPage({ rootWidget }));
+  const projectPagePresentationThemeHook = coreHooks.projectPagePresentationTheme
+    ?? coreHooks.projectEdenPageTheme
+    ?? (() => null);
+  const buildMountedChartRuntimeHook = coreHooks.buildMountedChartRuntime
+    ?? (() => null);
+  const guidanceConfigForSessionHook = coreHooks.guidanceConfigForSession
+    ?? coreHooks.appGuidanceConfigForSession
+    ?? coreHooks.appTutorialConfigForSession
+    ?? (() => null);
+  const guidanceHandlers = createGuidanceBundleHandlers({
+    sendJson,
+    readJson,
+    tutorialProgressFor,
+    setTutorialProgress,
+    guidanceProgressFor,
+    setGuidanceProgress,
+    runtimeContributions
+  });
   const lowerCaseHeaders = headers => Object.fromEntries(
     Object.entries(headers ?? {}).map(([key, value]) => [String(key).toLowerCase(), Array.isArray(value) ? value.map(String) : String(value ?? "")])
   );
@@ -310,6 +331,7 @@ export function createCoreRuntimeBundleHandlers({
     }
   };
   return {
+    ...guidanceHandlers,
     "session.read": async ({ res, requestActor, requestIdentity, requestSession }) => {
       world.observe({
         process: "session.read",
@@ -393,19 +415,32 @@ export function createCoreRuntimeBundleHandlers({
         claims: [relation(frontendHost, "rendered", route.serves || rootWidget)],
         body: { route: route.path }
       });
-      const pageTheme = projectEdenPageThemeHook(requestVisibleWitnesses(requestSession?.actor || null, appContext), {
+      const pageTheme = projectPagePresentationThemeHook(requestVisibleWitnesses(requestSession?.actor || null, appContext), {
         actor: requestSession?.actor || null,
         pageId: rootWidget
       });
-      const tutorialSurface = widgetPageTutorialSurface(world, {
-        route,
-        rootWidget,
-        frontendProgramId: params.frontendProgram ?? null,
-        tutorialPage: "app"
-      });
-      send(res, 200, "text/html", renderWidgetPageHook(world, {
-        actor: frontendHost,
-        rootWidget,
+        const guidanceSurface = widgetPageGuidanceSurface(world, {
+          route,
+          rootWidget,
+          frontendProgramId: params.frontendProgram ?? null,
+          guidancePage: "app"
+        });
+        const guidance = guidanceConfigForSession({
+          requestSession,
+          tutorialProgressFor,
+          guidanceProgressFor,
+          runtimeContributions,
+          surface: guidanceSurface
+        });
+        const compatibilityTutorial = guidance ?? guidanceConfigForSessionHook({
+          requestSession,
+          tutorialProgressFor,
+          guidanceProgressFor,
+          surface: guidanceSurface
+        });
+        send(res, 200, "text/html", renderWidgetPageHook(world, {
+          actor: frontendHost,
+          rootWidget,
         frontendProgram: params.frontendProgram ?? null,
         appConfig: {
           actors: requestActors(appContext),
@@ -413,14 +448,40 @@ export function createCoreRuntimeBundleHandlers({
           excludeWidgetRoles,
           pageChrome: pageTheme,
           liveProjection: params.liveProjection !== false,
-          runtimeSurfaces: appContext.runtimeSurfaceEntries ?? [],
-          surfaceContext: tutorialSurface.context,
-          surfaceRouteId: tutorialSurface.routeId,
-          surfaceRootWidgetId: tutorialSurface.rootWidgetId,
-          surfaceProgramId: tutorialSurface.frontendProgramId,
-          tutorial: appTutorialConfigForSessionHook({ requestSession, tutorialProgressFor, surface: tutorialSurface })
-        }
-      }));
+            runtimeSurfaces: appContext.runtimeSurfaceEntries ?? [],
+            surfaceContext: guidanceSurface.context,
+            surfaceRouteId: guidanceSurface.routeId,
+            surfaceRootWidgetId: guidanceSurface.rootWidgetId,
+            surfaceProgramId: guidanceSurface.frontendProgramId,
+            guidance,
+            tutorial: compatibilityTutorial
+          }
+        }));
+      },
+
+    "page.surface": async ({ res, route, requestUrl }) => {
+      const rootSurfaceId = route?.params?.rootSurface ?? null;
+      if (!rootSurfaceId) {
+        sendJson(res, 404, { error: "surface page not configured", route: route?.id ?? null });
+        return;
+      }
+      const html = renderSurfaceShellPage(world, {
+        rootSurfaceId,
+        requestPathname: normalizePathname(requestUrl?.pathname ?? route?.path ?? "/"),
+        route,
+        buildMountedChartRuntime: buildMountedChartRuntimeHook
+      });
+      if (!html) {
+        sendJson(res, 404, { error: "surface page not found", rootSurface: rootSurfaceId });
+        return;
+      }
+      world.observe({
+        process: "frontend.render",
+        actor: frontendHost,
+        claims: [relation(frontendHost, "rendered", route?.serves || rootSurfaceId)],
+        body: { route: requestUrl?.pathname ?? route?.path ?? "/", rootSurface: rootSurfaceId }
+      });
+      send(res, 200, "text/html", html);
     },
 
     "runtime.diagnostics.read": async ({ res, appContext }) => {

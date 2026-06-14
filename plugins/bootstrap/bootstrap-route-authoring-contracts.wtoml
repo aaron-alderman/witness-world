@@ -1,0 +1,34 @@
+[[bootstrapRouteAuthoringPolicy]]
+routeKind = "backendProgram"
+responseKind = "json"
+enabledFields = ["backendProgramSoul"]
+fieldSummary = "Enabled fields: backend program soul. Disabled fields: page, root widget, frontend program, live projection."
+missingBackendProgramSoulIssue = "choose a backend program soul"
+
+[[bootstrapRouteAuthoringPolicy]]
+routeKind = "page"
+responseKind = "page"
+enabledFields = ["page", "rootWidget", "rootWidgetRef", "frontendProgram", "liveProjection"]
+fieldSummary = "Enabled fields: page, root widget, frontend program, live projection."
+
+[[bootstrapRouteAuthoringPolicy]]
+routeKind = "stream"
+responseKind = "stream"
+enabledFields = []
+fieldSummary = "Uses stream transport only. Page and backend-program fields are disabled."
+
+[[bootstrapRouteAuthoringPolicy]]
+routeKind = "json"
+responseKind = "json"
+enabledFields = []
+fieldSummary = "Backend JSON route. Page and backend-program fields are disabled."
+
+[[bootstrapRouteAuthoringHandlerRule]]
+handler = "page.home"
+requiresRootWidget = true
+missingRootWidgetIssue = "choose a root widget for this page handler"
+
+[[bootstrapRouteAuthoringHandlerRule]]
+handler = "page.world"
+requiresRootWidget = true
+missingRootWidgetIssue = "choose a root widget for this page handler"

@@ -17,6 +17,7 @@ import {
 } from "../../src/backend-programs.js";
 import { listSupportedMcpTools } from "../mcp/mcp-tools.js";
 import { typeModelProjection } from "../../src/type-model.js";
+import { buildBootstrapContributionState } from "./bootstrap-contribution-state.js";
 
 export function createBootstrapReadModels({
   world,
@@ -177,6 +178,7 @@ export function createBootstrapReadModels({
       runtimePluginInstalls,
       pluginPackages: pluginCatalog.packages
     });
+    const bootstrapContributionState = buildBootstrapContributionState(appContext?.runtimeContributions);
     const operator = await getRuntimeOperatorState(appContext);
     return {
       contexts,
@@ -195,6 +197,7 @@ export function createBootstrapReadModels({
       runtimePluginInstalls,
       runtimePluginAvailability,
       pluginCatalog,
+      ...bootstrapContributionState,
       operator,
       mcp: mcpBootstrapState({ mcpServers, mcpToolInstalls, appContext }),
       mcpServers,

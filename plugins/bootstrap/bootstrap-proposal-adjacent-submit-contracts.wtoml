@@ -1,0 +1,33 @@
+[[bootstrapProposalAdjacentSubmit]]
+family = "runtime-plugin-install"
+url = "/api/proposals"
+bodyBuilder = "runtimePluginProposalBody"
+action = "install"
+resolveServerRunner = false
+
+[[bootstrapProposalAdjacentSubmit]]
+family = "runtime-plugin-remove"
+url = "/api/proposals"
+bodyBuilder = "runtimePluginProposalBody"
+action = "remove"
+resolveServerRunner = false
+
+[[bootstrapProposalAdjacentSubmit]]
+family = "mcp-server"
+url = "/api/proposals"
+bodyBuilder = "mcpServerProposalBody"
+resolveServerRunner = false
+
+[[bootstrapProposalAdjacentSubmit]]
+family = "mcp-tool-install"
+url = "/api/proposals"
+bodyBuilder = "mcpToolProposalBody"
+action = "install"
+resolveServerRunner = true
+
+[[bootstrapProposalAdjacentSubmit]]
+family = "mcp-tool-remove"
+url = "/api/proposals"
+bodyBuilder = "mcpToolProposalBody"
+action = "remove"
+resolveServerRunner = true

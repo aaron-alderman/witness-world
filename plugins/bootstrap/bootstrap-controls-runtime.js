@@ -3,8 +3,9 @@ import { createBootstrapBackendControlsSyncDepsBuilder } from "./bootstrap-contr
 import { createBootstrapProposalControlsSyncDepsBuilder } from "./bootstrap-proposal-controls-sync.js";
 import { createBootstrapProposalAdjacentSyncDepsBuilder } from "./bootstrap-proposal-adjacent-sync.js";
 import { createBootstrapRuntimeIntegrationDirectControlsSyncDepsBuilder } from "./bootstrap-runtime-integration-direct-controls-sync.js";
-import { buildBootstrapRuntimeIntegrationState } from "./bootstrap-runtime-integration-state.js";
+import { createBootstrapRouteAuthoringSyncDepsBuilder } from "./bootstrap-route-authoring-sync.js";
 import { createBootstrapScopedControlsSyncDepsBuilder } from "./bootstrap-scoped-controls-sync.js";
+import { buildBootstrapRuntimeIntegrationState } from "./bootstrap-runtime-integration-state.js";
 import { createBootstrapDomHelpers } from "./bootstrap-dom-helpers.js";
 import { createBootstrapLiveStateReaders } from "./bootstrap-live-state.js";
 
@@ -41,14 +42,22 @@ export function createBootstrapControlsRuntimeFromBootstrap({
       liveState,
       dom
     }),
+    capabilityControls: createBootstrapCapabilityControlsRuntime({
+      target: resolvedTarget,
+      liveState,
+      dom
+    }),
     buildProposalAdjacentSyncDeps: createBootstrapProposalAdjacentSyncDepsBuilder({
       state,
       liveState,
-      dom,
-      buildBootstrapRuntimeIntegrationStateFn
+      dom
     }),
-    capabilityControls: createBootstrapCapabilityControlsRuntime({
-      target: resolvedTarget,
+    buildScopedControlsSyncDeps: createBootstrapScopedControlsSyncDepsBuilder({
+      state,
+      liveState,
+      dom
+    }),
+    buildRouteAuthoringSyncDeps: createBootstrapRouteAuthoringSyncDepsBuilder({
       liveState,
       dom
     }),
@@ -57,11 +66,6 @@ export function createBootstrapControlsRuntimeFromBootstrap({
         state,
         liveState,
         dom
-      }),
-    buildScopedControlsSyncDeps: createBootstrapScopedControlsSyncDepsBuilder({
-      state,
-      liveState,
-      dom
-    })
+      })
   };
 }

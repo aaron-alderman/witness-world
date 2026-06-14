@@ -62,9 +62,12 @@ test("desktop launcher recent-world helper renders empty and populated rows with
   });
   assert.equal(root.children.length, 1);
   assert.equal(root.children[0].tagName, "BUTTON");
+  assert.equal(root.children[0].className.includes("surface-link-item"), true);
   assert.equal(root.children[0].dataset.worldHome, "C:/worlds/demo");
   assert.equal(root.children[0].children[0].tagName, "STRONG");
+  assert.equal(root.children[0].children[0].className, "surface-mono");
   assert.equal(root.children[0].children[0].textContent, "C:/worlds/demo");
+  assert.equal(root.children[0].children[1].className, "surface-note");
   assert.equal(root.children[0].children[1].textContent, "Open this world directly");
 });
 

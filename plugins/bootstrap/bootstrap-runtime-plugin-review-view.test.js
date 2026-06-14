@@ -91,13 +91,13 @@ test("runtime plugin review view builds detail HTML and note text for the select
           }
         }
       ]
-    },
-    escapeHtml: value => String(value)
+    }
   });
 
-  assert.equal(view.detailHtml.includes("Inspect Bundle Bridge"), true);
-  assert.equal(view.detailHtml.includes("Remove Preview"), true);
-  assert.equal(view.detailHtml.includes("Operator Summary"), true);
+  assert.equal(Array.isArray(view.detailItems), true);
+  assert.equal(view.detailItems.some(item => item.title === "Operator Summary"), true);
+  assert.equal(view.detailItems.some(item => item.title === "Inspect Bundle Bridge"), true);
+  assert.equal(view.detailItems.some(item => item.title === "Remove Preview"), true);
   assert.equal(view.noteText.includes("Installed on profile"), true);
 });
 
@@ -105,7 +105,7 @@ test("runtime plugin review view falls back to empty guidance when no runner or 
   const noRunner = buildBootstrapRuntimePluginReviewView({
     review: { serverRunner: null, packages: [], selectedPluginId: "" }
   });
-  assert.equal(noRunner.detailHtml.includes("Create a server runner"), true);
+  assert.equal(noRunner.detailItems[0].emptyText.includes("Create a server runner"), true);
 
   const noRow = buildBootstrapRuntimePluginReviewView({
     review: {
@@ -115,7 +115,7 @@ test("runtime plugin review view falls back to empty guidance when no runner or 
       note: "Runtime plugin review shows authored runner intent only."
     }
   });
-  assert.equal(noRow.detailHtml.includes("No discovered plugin packages"), true);
+  assert.equal(noRow.detailItems[0].emptyText.includes("No discovered plugin packages"), true);
 });
 
 test("runtime plugin review view factory exposes the shared browser helpers", () => {

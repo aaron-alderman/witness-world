@@ -1,3 +1,8 @@
+import {
+  normalizeGuidanceDefinitionEntry,
+  normalizeStarterBlueprintEntry
+} from "./runtime-guidance.js";
+
 function providerIdentity(provider = {}, fallbackIndex = 0) {
   return String(provider.id || provider.key || provider.name || `${provider.kind || "provider"}:${fallbackIndex}`);
 }
@@ -36,6 +41,10 @@ export function collectActiveRuntimeContributions({
   const staticAssetProviders = [];
   const staticAssetFiles = new Map();
   const moduleProjectors = {};
+  const guidanceDefinitions = [];
+  const guidanceDefinitionIndex = new Map();
+  const starterBlueprints = [];
+  const starterBlueprintIndex = new Map();
 
   for (const { provider, providerId } of collectProviders(bundles)) {
     if (!provider || typeof provider !== "object") continue;
@@ -105,6 +114,30 @@ export function collectActiveRuntimeContributions({
         }
         staticAssetFiles.set(name, filePath);
       }
+      continue;
+    }
+    if (provider.kind === "guidanceDefinitions") {
+      for (const rawEntry of provider.definitions ?? []) {
+        const entry = normalizeGuidanceDefinitionEntry(rawEntry, providerId);
+        const id = entry.id;
+        if (guidanceDefinitionIndex.has(id) && guidanceDefinitionIndex.get(id) !== entry) {
+          throw new Error(`duplicate runtime contribution ${id} from ${providerId}`);
+        }
+        guidanceDefinitions.push(entry);
+        guidanceDefinitionIndex.set(id, entry);
+      }
+      continue;
+    }
+    if (provider.kind === "starterBlueprints") {
+      for (const rawEntry of provider.blueprints ?? []) {
+        const entry = normalizeStarterBlueprintEntry(rawEntry, providerId);
+        const id = entry.id;
+        if (starterBlueprintIndex.has(id) && starterBlueprintIndex.get(id) !== entry) {
+          throw new Error(`duplicate runtime contribution ${id} from ${providerId}`);
+        }
+        starterBlueprints.push(entry);
+        starterBlueprintIndex.set(id, entry);
+      }
     }
   }
 
@@ -118,6 +151,10 @@ export function collectActiveRuntimeContributions({
     capabilityDefinitions: Object.freeze(capabilityDefinitions),
     moduleProjectors: Object.freeze(moduleProjectors),
     staticAssetProviders: Object.freeze(staticAssetProviders),
-    staticAssetFiles
+    staticAssetFiles,
+    guidanceDefinitions: Object.freeze(guidanceDefinitions),
+    guidanceDefinitionIndex,
+    starterBlueprints: Object.freeze(starterBlueprints),
+    starterBlueprintIndex
   });
 }

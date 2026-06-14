@@ -119,6 +119,7 @@ test("surface command identity binder wires identity-form submits through the sh
 
 test("surface command identity actions factory exposes the shared browser helpers", () => {
   const factory = renderSurfaceCommandIdentityActionsFactory();
+  assert.equal(factory.includes("const readSurfaceCommandIdentityFields ="), true);
   assert.equal(factory.includes("const bindSurfaceCommandIdentityActions ="), true);
   assert.equal(factory.includes("const submitSurfaceCommandIdentityForm ="), true);
 });

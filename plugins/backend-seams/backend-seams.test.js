@@ -68,8 +68,17 @@ test("backend-seams plugin owns practical backend support service registry", asy
 
 test("backend-seams declares repair actions through authored semantic click handlers", async () => {
   const pageSource = await readFile(new URL("./backend-seams-page.wtoml", import.meta.url), "utf8");
+  const pageModuleSource = await readFile(new URL("./backend-seams-page.js", import.meta.url), "utf8");
   const html = renderBackendSeamsPage(diagnosticsFixture());
 
+  assert.equal(pageSource.includes('class = "surface-status"'), true);
+  assert.equal(pageSource.includes('class = "surface-empty surface-empty-state"'), true);
+  assert.equal(pageSource.includes('class = "status"'), false);
+  assert.equal(pageModuleSource.includes('from "../../src/runtime-page-state.js"'), true);
+  assert.equal(pageModuleSource.includes("renderRuntimePageInitialStateScript("), true);
+  assert.equal(pageModuleSource.includes("injectRuntimePageMarkupBeforeProgram("), true);
+  assert.equal(pageModuleSource.includes("function serializeJsonScript"), false);
+  assert.equal(pageModuleSource.includes("function injectBeforeFrontendProgram"), false);
   assert.equal(pageSource.includes('action = "retryAssetIngest"'), true);
   assert.equal(pageSource.includes('on = "click:retryAssetIngest"'), true);
   assert.equal(pageSource.includes('action = "refreshAssetSearch"'), true);

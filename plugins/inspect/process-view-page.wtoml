@@ -11,7 +11,7 @@ children = ["process_page_header", "process_page_status", "process_page_shell"]
 
 [[box]]
 id = "process_page_header"
-class = "surface-header-bar"
+class = "surface-header-bar surface-toolbar"
 children = ["process_page_title", "process_page_back_link", "process_page_world_link"]
 
 [[heading]]
@@ -34,7 +34,7 @@ class = "surface-link-chip"
 [[text]]
 id = "process_page_status"
 text = "Loading process view..."
-class = "status"
+class = "surface-status"
 
 [[box]]
 id = "process_page_shell"
@@ -166,7 +166,7 @@ class = "surface-note surface-mono"
 id = "process_catalog_empty_template"
 template = true
 text = "No authored processes."
-class = "surface-empty"
+class = "surface-empty surface-empty-state"
 
 [[box]]
 id = "process_run_item_template"
@@ -195,7 +195,7 @@ class = "surface-note surface-mono"
 id = "process_run_empty_template"
 template = true
 text = "No recorded runs yet."
-class = "surface-empty"
+class = "surface-empty surface-empty-state"
 
 [[box]]
 id = "process_layer_template"
@@ -221,7 +221,7 @@ class = "surface-grid-auto"
 id = "process_layer_empty_template"
 template = true
 text = "Select an authored process."
-class = "surface-empty"
+class = "surface-empty surface-empty-state"
 
 [[box]]
 id = "process_node_template"
@@ -325,7 +325,7 @@ class = "surface-note"
 id = "process_run_card_empty_template"
 template = true
 text = "No run selected."
-class = "surface-card surface-empty"
+class = "surface-empty surface-empty-state"
 
 [[box]]
 id = "process_replay_card_template"
@@ -396,7 +396,7 @@ data-url-prefix = "${item.rangeUrlPrefix}"
 id = "process_replay_card_empty_template"
 template = true
 text = "No run selected."
-class = "surface-card surface-empty"
+class = "surface-empty surface-empty-state"
 
 [[box]]
 id = "process_selected_node_card_template"
@@ -443,7 +443,7 @@ class = "${item.status ? 'surface-note' : 'surface-note surface-hidden'}"
 id = "process_selected_node_card_empty_template"
 template = true
 text = "Select a node."
-class = "surface-card surface-empty"
+class = "surface-empty surface-empty-state"
 
 [[box]]
 id = "process_timeline_item_template"
@@ -477,7 +477,7 @@ class = "${item.message ? 'surface-note' : 'surface-note surface-hidden'}"
 id = "process_timeline_empty_template"
 template = true
 text = "No node events yet."
-class = "surface-empty"
+class = "surface-empty surface-empty-state"
 
 [[box]]
 id = "process_request_item_template"
@@ -511,7 +511,7 @@ class = "${item.message ? 'surface-note' : 'surface-note surface-hidden'}"
 id = "process_request_empty_template"
 template = true
 text = "No correlated requests for this node."
-class = "surface-empty"
+class = "surface-empty surface-empty-state"
 
 [[frontendProgram]]
 id = "process_page_program"

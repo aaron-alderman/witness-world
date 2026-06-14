@@ -47,6 +47,10 @@ function exactRoute(method, path, handler, params = {}) {
   return { kind: "exact", method, path, handler, params };
 }
 
+function patternRoute(method, pattern, handler, paramNames = []) {
+  return { kind: "pattern", method, pattern, handler, paramNames };
+}
+
 function surfaceEntry({
   id,
   title,
@@ -141,6 +145,12 @@ const INTERNAL_BUNDLE_MANIFESTS = [
         exactRoute("GET", "/api/session", "session.read"),
         exactRoute("POST", "/api/session", "session.open"),
         exactRoute("DELETE", "/api/session", "session.logout"),
+        patternRoute("GET", /^\/api\/guidance-progress\/([^/]+)$/, "guidance.progress.read", ["guidanceId"]),
+        patternRoute("PUT", /^\/api\/guidance-progress\/([^/]+)$/, "guidance.progress.write", ["guidanceId"]),
+        patternRoute("DELETE", /^\/api\/guidance-progress\/([^/]+)$/, "guidance.progress.delete", ["guidanceId"]),
+        patternRoute("GET", /^\/api\/tutorial-progress\/([^/]+)$/, "guidance.progress.read", ["tutorialId"]),
+        patternRoute("PUT", /^\/api\/tutorial-progress\/([^/]+)$/, "guidance.progress.write", ["tutorialId"]),
+        patternRoute("DELETE", /^\/api\/tutorial-progress\/([^/]+)$/, "guidance.progress.delete", ["tutorialId"]),
         exactRoute("GET", "/api/runtime/diagnostics", "runtime.diagnostics.read"),
         exactRoute("GET", "/api/runtime/plugins", "runtime.plugins.read"),
         exactRoute("GET", "/api/runtime/plugin-reviews", "runtime.pluginReviews.read")

@@ -5,23 +5,23 @@ program = "bootstrap_proposal_create_controls_program"
 
 [[box]]
 id = "bootstrap_proposal_create_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_proposal_create_form", "bootstrap_proposal_create_status"]
 
 [[form]]
 id = "bootstrap_proposal_create_form"
 domId = "proposal-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_proposal_create_row_one", "bootstrap_proposal_create_row_two", "bootstrap_proposal_body_field", "bootstrap_proposal_reason_field", "bootstrap_proposal_help", "bootstrap_proposal_create_actions"]
 
 [[box]]
 id = "bootstrap_proposal_create_row_one"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_proposal_id_field", "bootstrap_proposal_process_field"]
 
 [[box]]
 id = "bootstrap_proposal_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_proposal_id_text", "bootstrap_proposal_id_input"]
 
 [[text]]
@@ -35,7 +35,7 @@ placeholder = "proposal.route.home"
 
 [[box]]
 id = "bootstrap_proposal_process_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_proposal_process_text", "bootstrap_proposal_process_select"]
 
 [[text]]
@@ -49,12 +49,12 @@ name = "targetProcess"
 
 [[box]]
 id = "bootstrap_proposal_create_row_two"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_proposal_kind_field", "bootstrap_proposal_target_field"]
 
 [[box]]
 id = "bootstrap_proposal_kind_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_proposal_kind_text", "bootstrap_proposal_kind_input"]
 
 [[text]]
@@ -68,7 +68,7 @@ placeholder = "route"
 
 [[box]]
 id = "bootstrap_proposal_target_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_proposal_target_text", "bootstrap_proposal_target_input"]
 
 [[text]]
@@ -82,7 +82,7 @@ placeholder = "home_route"
 
 [[box]]
 id = "bootstrap_proposal_body_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_proposal_body_text", "bootstrap_proposal_body_input"]
 
 [[text]]
@@ -96,7 +96,7 @@ text = "{}"
 
 [[box]]
 id = "bootstrap_proposal_reason_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_proposal_reason_text", "bootstrap_proposal_reason_input"]
 
 [[text]]
@@ -111,12 +111,12 @@ placeholder = "why this should be approved"
 [[text]]
 id = "bootstrap_proposal_help"
 domId = "proposal-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[box]]
 id = "bootstrap_proposal_create_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_proposal_create_submit"]
 
 [[button]]
@@ -127,7 +127,7 @@ type = "submit"
 [[text]]
 id = "bootstrap_proposal_create_status"
 domId = "proposal-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -178,31 +178,10 @@ into = "bootstrapProposalCreateDraft"
 
 [[step]]
 order = 2
-op = "postJson"
-on = "submit:bootstrap_proposal_create_form"
-url = "/api/proposals"
-from = "bootstrapProposalCreateDraft"
-into = "bootstrapProposalCreateResult"
-
-[[step]]
-order = 3
-op = "setText"
-on = "submit:bootstrap_proposal_create_form"
-widget = "bootstrap_proposal_create_status"
-text = "Saved."
-
-[[step]]
-order = 4
-op = "clearForm"
-on = "submit:bootstrap_proposal_create_form"
-widget = "bootstrap_proposal_create_form"
-
-[[step]]
-order = 5
 op = "dispatchDomEvent"
 on = "submit:bootstrap_proposal_create_form"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-proposal-create-controls", reason = "proposal-create" }
+eventName = "witness:bootstrap-proposal-submit"
+detail = { source = "bootstrap-proposal-create-controls", family = "create", formId = "proposal-form", statusId = "proposal-status", id = "${state.bootstrapProposalCreateDraft.id}", targetProcess = "${state.bootstrapProposalCreateDraft.targetProcess}", targetKind = "${state.bootstrapProposalCreateDraft.targetKind}", targetId = "${state.bootstrapProposalCreateDraft.targetId}", bodyJson = "${state.bootstrapProposalCreateDraft.bodyJson}", reason = "${state.bootstrapProposalCreateDraft.reason}" }
 
 [[step]]
 order = 0

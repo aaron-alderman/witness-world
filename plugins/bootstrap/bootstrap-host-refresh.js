@@ -1,5 +1,10 @@
+import {
+  bootstrapHostRefreshAllowedSources
+} from "./bootstrap-host-refresh-contracts.js";
+
 export function renderBootstrapHostRefreshFactory() {
   return String.raw`
+    const bootstrapHostRefreshAllowedSources = ${JSON.stringify(bootstrapHostRefreshAllowedSources)};
     const bindBootstrapHostRefresh = ${bindBootstrapHostRefresh.toString()};
   `;
 }
@@ -8,17 +13,7 @@ export function bindBootstrapHostRefresh({
   target,
   refresh = async () => {},
   setBootstrapStatus = () => {},
-  allowedSources = [
-    "bootstrap-top-cards",
-    "bootstrap-backend-authoring-controls",
-    "bootstrap-backend-version-controls",
-    "bootstrap-proposal-create-controls",
-    "bootstrap-proposal-review-controls",
-    "bootstrap-scoped-controls",
-    "bootstrap-remove-controls",
-    "bootstrap-capability-controls",
-    "bootstrap-starter-controls"
-  ]
+  allowedSources = bootstrapHostRefreshAllowedSources
 } = {}) {
   target.addEventListener("witness:host-refresh", event => {
     if (!allowedSources.includes(event?.detail?.source)) return;

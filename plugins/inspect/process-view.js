@@ -6,6 +6,10 @@ import { backendProgramVersionDefinition, backendProgramVersionsProjection } fro
 import { pathLabel, pathBreadcrumb } from "../../src/process-graph.js";
 import { createWorld } from "../../src/kernel.js";
 import { applyWitnessToml } from "../../src/dsl.js";
+import {
+  injectRuntimePageMarkupBeforeProgram,
+  renderRuntimePageInitialStateScript
+} from "../../src/runtime-page-state.js";
 import { renderWidgetPage } from "./widget-page.js";
 
 const ASYNC_OPS = new Set(["fetchJson", "postJson", "patchJson", "deleteJson", "initSession", "setSession", "logout", "refreshProjection", "request.readJson", "handler.invoke", "run"]);
@@ -172,8 +176,8 @@ export function renderProcessPage(model, { currentPath = "/process" } = {}) {
       initialStateInto: "processPage"
     }
   });
-  const initialState = `<script type="application/json" id="process-page-initial-state">${serializeJsonScript(buildProcessPageState(model, currentPath))}</script>`;
-  return injectBeforeFrontendProgram(html, initialState);
+  const initialState = renderRuntimePageInitialStateScript("process-page-initial-state", buildProcessPageState(model, currentPath));
+  return injectRuntimePageMarkupBeforeProgram(html, initialState);
 }
 
 function buildProcessPageState(model, currentPath) {
@@ -371,21 +375,6 @@ function replayRangeUrlPrefix(basePath, selection) {
   });
 }
 
-function serializeJsonScript(value) {
-  return JSON.stringify(value).replace(/[<>&]/g, char => {
-    if (char === "<") return "\\u003c";
-    if (char === ">") return "\\u003e";
-    return "\\u0026";
-  });
-}
-
-function injectBeforeFrontendProgram(html, addition) {
-  const anchor = '<script type="application/json" id="witness-frontend-program">';
-  if (html.includes(anchor)) return html.replace(anchor, `${addition}\n${anchor}`);
-  return html.includes("</body>")
-    ? html.replace("</body>", `${addition}\n</body>`)
-    : `${html}\n${addition}`;
-}
 
 export function isFrontendProcessEventProcess(value) {
   return PROCESS_EVENT_PROCESSES.has(String(value || ""));

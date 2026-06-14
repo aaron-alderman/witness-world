@@ -1,0 +1,17 @@
+[[bootstrapProposalSubmit]]
+family = "create"
+url = "/api/proposals"
+successText = "Saved."
+bodyFields = ["id", "targetProcess", "targetKind", "targetId", "bodyJson", "reason"]
+
+[[bootstrapProposalSubmit]]
+family = "approve"
+urlTemplate = "/api/proposals/${id}/approve"
+successText = "Approved."
+bodyFields = []
+
+[[bootstrapProposalSubmit]]
+family = "reject"
+urlTemplate = "/api/proposals/${id}/reject"
+successText = "Rejected."
+bodyFields = ["reason"]

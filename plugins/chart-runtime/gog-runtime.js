@@ -156,7 +156,7 @@ function planLayer(layer, evaluated, fills) {
   return { ...base, primitives: [] };
 }
 
-// ── polar frame (cross-section, rose) ────────────────────────────────────────────
+// ── polar frame (radial polygons, wedges, and linework) ─────────────────────────
 
 function planPolarChart(viewBody, evaluated, opts = {}) {
   const width = opts.width ?? 600;
@@ -539,10 +539,7 @@ export function drawChart(container, plan, d3) {
   if (plan.frame === "polar") return drawPolarChart(container, plan, d3);
   if (plan.frame === "disc") return drawDiscChart(container, plan, d3);
   const { width, height, margin, scales } = plan;
-  d3.select(container).selectAll("svg.gog").remove();
-  const svg = d3.select(container).append("svg")
-    .attr("class", "gog").attr("width", "100%").attr("height", "100%")
-    .attr("viewBox", `0 0 ${width} ${height}`);
+  const svg = selectChartSvg(container, d3, width, height);
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
   const x = v => (v - scales.x.domain[0]) / ((scales.x.domain[1] - scales.x.domain[0]) || 1) * plan.innerW;
@@ -630,10 +627,7 @@ function drawPolarChart(container, plan, d3) {
   const { width, height, center, maxRadius, scales } = plan;
   const rScale = v => (v - scales.r.domain[0]) / ((scales.r.domain[1] - scales.r.domain[0]) || 1) * maxRadius;
   const toXY = (theta, r) => [center.x + rScale(r) * Math.sin(theta), center.y - rScale(r) * Math.cos(theta)];
-  d3.select(container).selectAll("svg.gog").remove();
-  const svg = d3.select(container).append("svg")
-    .attr("class", "gog").attr("width", "100%").attr("height", "100%")
-    .attr("viewBox", `0 0 ${width} ${height}`);
+  const svg = selectChartSvg(container, d3, width, height);
   // grid rings
   for (const frac of [0.25, 0.5, 0.75, 1]) {
     svg.append("circle").attr("cx", center.x).attr("cy", center.y).attr("r", maxRadius * frac)
@@ -662,12 +656,11 @@ function drawPolarChart(container, plan, d3) {
 }
 
 function drawDiscChart(container, plan, d3) {
+  const tag = String(container?.tagName ?? "").toLowerCase();
+  if (tag === "canvas") return drawDiscChartCanvas(container, plan);
   const { width, height, center, scale, discRadius } = plan;
   const toPx = (x, y) => [center.x + x * scale, center.y - y * scale]; // data y-up → screen y-down
-  d3.select(container).selectAll("svg.gog").remove();
-  const svg = d3.select(container).append("svg")
-    .attr("class", "gog").attr("width", "100%").attr("height", "100%")
-    .attr("viewBox", `0 0 ${width} ${height}`);
+  const svg = selectChartSvg(container, d3, width, height);
 
   // bounding disc
   svg.append("circle").attr("cx", center.x).attr("cy", center.y).attr("r", discRadius * scale)
@@ -733,9 +726,151 @@ function drawDiscChart(container, plan, d3) {
   return node;
 }
 
+function drawDiscChartCanvas(canvas, plan) {
+  const { width, height, center, scale, discRadius } = plan;
+  const toPx = (x, y) => [center.x + x * scale, center.y - y * scale];
+  const ctx = prepareCanvas2d(canvas, width, height);
+
+  const particleLayer = plan.layers.find(layer => layer.mark === "particles") ?? null;
+  const staticLayers = plan.layers.filter(layer => layer.mark !== "particles");
+
+  const drawStatic = () => {
+    clearCanvas(ctx, width, height);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, discRadius * scale, 0, Math.PI * 2);
+    ctx.fillStyle = "#0d1a2e";
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "#475569";
+    ctx.stroke();
+
+    for (const layer of staticLayers) {
+      if (layer.mark === "polygon" || layer.mark === "line") {
+        for (const prim of layer.primitives ?? []) {
+          const pts = prim.points?.filter(p => Number.isFinite(p.x) && Number.isFinite(p.y)).map(p => toPx(p.x, p.y)) ?? [];
+          if (!pts.length) continue;
+          ctx.beginPath();
+          ctx.moveTo(pts[0][0], pts[0][1]);
+          for (let index = 1; index < pts.length; index += 1) ctx.lineTo(pts[index][0], pts[index][1]);
+          if (layer.closed) ctx.closePath();
+          if (layer.fill) {
+            ctx.fillStyle = layer.fill;
+            ctx.globalAlpha = layer.fill ? 0.35 : 1;
+            ctx.fill();
+            ctx.globalAlpha = 1;
+          }
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = layer.stroke ?? "#5AAABF";
+          ctx.stroke();
+        }
+      } else if (layer.mark === "point") {
+        for (const prim of layer.primitives ?? []) {
+          if (!Number.isFinite(prim.x) || !Number.isFinite(prim.y)) continue;
+          const [cx, cy] = toPx(prim.x, prim.y);
+          const colour = layer.stroke ?? "#dc2626";
+          ctx.beginPath();
+          ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+          ctx.strokeStyle = colour;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(cx - 8, cy);
+          ctx.lineTo(cx + 8, cy);
+          ctx.moveTo(cx, cy - 8);
+          ctx.lineTo(cx, cy + 8);
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.restore();
+  };
+
+  const drawParticles = frame => {
+    if (!particleLayer) return;
+    ctx.save();
+    ctx.fillStyle = particleLayer.stroke ?? "#EC7424";
+    for (const point of frame.points?.filter(p => p.inDisc !== false && Number.isFinite(p.x) && Number.isFinite(p.y)) ?? []) {
+      const [cx, cy] = toPx(point.x, point.y);
+      ctx.beginPath();
+      ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  };
+
+  const renderFrame = frame => {
+    drawStatic();
+    if (frame) drawParticles(frame);
+  };
+
+  renderFrame(particleLayer?.frames?.[0] ?? null);
+
+  const node = canvas;
+  if (particleLayer && particleLayer.frames?.length) {
+    const playback = plan.playback ?? {};
+    const frames = particleLayer.frames;
+    const tValues = frames.map(f => f.t);
+    let playing = true;
+    node.scrubTo = index => {
+      playing = false;
+      renderFrame(frames[Math.max(0, Math.min(frames.length - 1, index | 0))] ?? null);
+    };
+    node.scrubToValue = value => {
+      playing = false;
+      renderFrame(frames[frameIndexForValue(tValues, value)] ?? null);
+    };
+    node.play = () => { playing = true; };
+    if (frames.length > 1 && tValues[0] != null && typeof requestAnimationFrame === "function") {
+      let startTs = null;
+      const step = ts => {
+        if (startTs == null) startTs = ts;
+        if (playing) renderFrame(frames[frameIndexForElapsed(tValues, (ts - startTs) / 1000, playback)] ?? null);
+        requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    }
+  }
+  return node;
+}
+
 // cool→warm ramp for force magnitude wedges
 function forceColour(v, min, max) {
   const t = Math.max(0, Math.min(1, (v - min) / ((max - min) || 1)));
   const lerp = (a, b) => Math.round(a + (b - a) * t);
   return `rgb(${lerp(52, 236)},${lerp(76, 116)},${lerp(108, 36)})`; // #344C6C → #EC7424
+}
+
+function selectChartSvg(container, d3, width, height) {
+  const tag = String(container?.tagName ?? "").toLowerCase();
+  if (tag === "svg") {
+    const svg = d3.select(container);
+    svg.selectAll("*").remove();
+    return svg
+      .attr("class", "gog")
+      .attr("width", "100%")
+      .attr("height", "100%")
+      .attr("viewBox", `0 0 ${width} ${height}`);
+  }
+  d3.select(container).selectAll("svg.gog").remove();
+  return d3.select(container).append("svg")
+    .attr("class", "gog")
+    .attr("width", "100%")
+    .attr("height", "100%")
+    .attr("viewBox", `0 0 ${width} ${height}`);
+}
+
+function prepareCanvas2d(canvas, width, height) {
+  const dpr = globalThis.devicePixelRatio && Number.isFinite(globalThis.devicePixelRatio)
+    ? globalThis.devicePixelRatio
+    : 1;
+  canvas.width = Math.max(1, Math.round(width * dpr));
+  canvas.height = Math.max(1, Math.round(height * dpr));
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+
+function clearCanvas(ctx, width, height) {
+  ctx.clearRect(0, 0, width, height);
 }

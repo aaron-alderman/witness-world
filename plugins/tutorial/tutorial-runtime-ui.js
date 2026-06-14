@@ -1,26 +1,21 @@
-import { TODO_TUTORIAL_ID, todoStarterBlueprint, todoTutorialDefinition } from "./tutorials.js";
+import { guidanceConfigForSession } from "../../src/runtime-guidance.js";
+import { TODO_TUTORIAL_ID } from "./tutorials.js";
 
-export function appTutorialConfigForSession({
+export function appGuidanceConfigForSession({
   requestSession,
+  guidanceProgressFor,
   tutorialProgressFor,
+  guidanceId = null,
   tutorialId = TODO_TUTORIAL_ID,
   surface = null
 }) {
-  return tutorialProgressFor(requestSession, tutorialId)
-    ? {
-        id: tutorialId,
-        surfacePage: surface?.page ?? null,
-        surfaceContext: surface?.context ?? null,
-        surfaceRouteId: surface?.routeId ?? null,
-        surfaceRootWidgetId: surface?.rootWidgetId ?? null,
-        surfaceProgramId: surface?.frontendProgramId ?? null
-      }
-    : null;
+  return guidanceConfigForSession({
+    requestSession,
+    guidanceProgressFor,
+    tutorialProgressFor,
+    guidanceId: guidanceId ?? tutorialId,
+    surface
+  });
 }
 
-export function bootstrapTutorialPageData() {
-  return {
-    tutorial: todoTutorialDefinition(),
-    blueprint: todoStarterBlueprint()
-  };
-}
+export const appTutorialConfigForSession = appGuidanceConfigForSession;

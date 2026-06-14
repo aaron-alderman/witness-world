@@ -1,10 +1,49 @@
 export function renderBootstrapStateListRenderFactory() {
   return String.raw`
+    const renderBootstrapStateItems = ${renderBootstrapStateItems.toString()};
     const renderBootstrapStateList = ${renderBootstrapStateList.toString()};
     const mcpServerInventoryLabel = ${mcpServerInventoryLabel.toString()};
     const mcpToolInventoryLabel = ${mcpToolInventoryLabel.toString()};
     const renderBootstrapStateInventory = ${renderBootstrapStateInventory.toString()};
   `;
+}
+
+export function renderBootstrapStateItems({
+  id,
+  items = [],
+  byId = () => null,
+  document = null
+} = {}) {
+  const root = byId(id);
+  if (!root || !document?.createElement) return;
+  root.innerHTML = "";
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "surface-state-item surface-empty";
+    empty.textContent = "None yet.";
+    root.append(empty);
+    return;
+  }
+  for (const spec of items) {
+    const item = document.createElement("div");
+    item.className = spec.className || (spec.emptyText ? "surface-state-item surface-empty" : "surface-state-item");
+    if (spec.emptyText) {
+      item.textContent = spec.emptyText;
+      root.append(item);
+      continue;
+    }
+    if (spec.title) {
+      const title = document.createElement("strong");
+      title.textContent = spec.title;
+      item.append(title);
+    }
+    for (const text of spec.codes || []) {
+      const code = document.createElement("code");
+      code.textContent = text;
+      item.append(code);
+    }
+    root.append(item);
+  }
 }
 
 export function renderBootstrapStateList({
@@ -23,7 +62,7 @@ export function renderBootstrapStateList({
   root.innerHTML = "";
   if (!rows.length) {
     const empty = document.createElement("div");
-    empty.className = "state-item muted";
+    empty.className = "surface-state-item surface-empty";
     empty.textContent = "None yet.";
     root.append(empty);
     stateSnapshots.set(id, nextKeys);
@@ -33,7 +72,7 @@ export function renderBootstrapStateList({
     const key = rowKey(row);
     nextKeys.add(key);
     const item = document.createElement("div");
-    item.className = "state-item";
+    item.className = "surface-state-item";
     if (previousKeys.size && !previousKeys.has(key)) item.setAttribute("data-tutorial-changed", "true");
     const title = document.createElement("strong");
     title.textContent = label(row);

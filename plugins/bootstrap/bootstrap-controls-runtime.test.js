@@ -46,7 +46,7 @@ function withDomGlobals(callback) {
   }
 }
 
-test("bootstrap shared controls runtime owns state-to-live-runtime wiring for backend, proposal, scoped, direct runtime integration, and capability seams", () => {
+test("bootstrap shared controls runtime owns state-to-live-runtime wiring for backend, proposal, proposal-adjacent, scoped, route, direct runtime integration, and capability seams", () => {
   withDomGlobals(() => {
     const previousWindow = globalThis.window;
     const previousDocument = globalThis.document;
@@ -286,20 +286,25 @@ test("bootstrap shared controls runtime owns state-to-live-runtime wiring for ba
       assert.equal(proposalControlsDeps.readSelectValue("proposal-approve-id"), "proposal.one");
       assert.equal(proposalControlsDeps.readFieldValue("proposal-form", "targetId"), "program.beta");
 
-      const proposalDeps = runtime.buildProposalAdjacentSyncDeps();
-      assert.deepEqual(proposalDeps.authored, state.bootstrapState);
-      assert.deepEqual(proposalDeps.session, state.session);
-      assert.equal(proposalDeps.runtimeProfile, "full");
-
-      const scopedDeps = runtime.buildScopedControlsSyncDeps();
-      assert.deepEqual(scopedDeps.authored, state.bootstrapState);
-      assert.deepEqual(scopedDeps.session, state.session);
-      assert.deepEqual(scopedDeps.contextBindableTargets("ctx.next"), [{ id: "widget.next", context: "ctx.next" }]);
-
       const directDeps = runtime.buildRuntimeIntegrationDirectControlsSyncDeps();
       assert.deepEqual(directDeps.authored, state.bootstrapState);
       assert.equal(directDeps.runtimeProfile, "full");
       assert.equal(directDeps.readFieldValue("mcp-server-form", "serviceIdentity"), "identity.demo");
+
+      const proposalAdjacentDeps = runtime.buildProposalAdjacentSyncDeps();
+      assert.deepEqual(proposalAdjacentDeps.authored, state.bootstrapState);
+      assert.deepEqual(proposalAdjacentDeps.session, state.session);
+      assert.equal(proposalAdjacentDeps.runtimeProfile, "full");
+      assert.equal(proposalAdjacentDeps.readFieldValue("mcp-server-form", "serviceIdentity"), "identity.demo");
+
+      const scopedDeps = runtime.buildScopedControlsSyncDeps();
+      assert.deepEqual(scopedDeps.authored, state.bootstrapState);
+      assert.deepEqual(scopedDeps.session, state.session);
+      assert.equal(scopedDeps.readSelectValue("context-binding-target"), "widget.current");
+
+      const routeDeps = runtime.buildRouteAuthoringSyncDeps();
+      assert.deepEqual(routeDeps.model, state.model);
+      assert.equal(typeof routeDeps.readFieldValue, "function");
 
       runtime.capabilityControls.bind();
       const renderResult = runtime.capabilityControls.render();
@@ -308,6 +313,9 @@ test("bootstrap shared controls runtime owns state-to-live-runtime wiring for ba
       assert.equal(capabilityStatus.textContent.includes("supports placements: routePage"), true);
       assert.equal(capabilityTarget.value, "route.admin");
       assert.equal(capabilityButton.disabled, false);
+      assert.equal("buildProposalAdjacentSyncDeps" in runtime, true);
+      assert.equal("buildScopedControlsSyncDeps" in runtime, true);
+      assert.equal("buildRouteAuthoringSyncDeps" in runtime, true);
     } finally {
       globalThis.window = previousWindow;
       globalThis.document = previousDocument;

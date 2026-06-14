@@ -1,0 +1,14 @@
+[[bootstrapBackendAuthoringSubmit]]
+family = "program"
+url = "/api/backend-programs"
+bodyFields = ["soul", "label", "context"]
+
+[[bootstrapBackendAuthoringSubmit]]
+family = "program-version"
+url = "/api/backend-program-versions"
+bodyFields = ["soul", "version", "index", "context", "transitionFrom", "transitionStrategy"]
+
+[[bootstrapBackendAuthoringSubmit]]
+family = "step"
+url = "/api/backend-steps"
+bodyFields = ["version", "event", "op", "order", "paramsJson", "whenJson", "repeatJson", "afterJson"]

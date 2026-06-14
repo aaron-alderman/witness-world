@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
 import { moduleProjectors } from "../src/modules.js";
-import { expectNoRuntimeErrors, launchBrowser, startUiDemoServer } from "./support/harness.js";
+import { expectNoRuntimeErrors, launchBrowser, startUiDemoServer as startUiDemoServerBase } from "./support/harness.js";
+
+const edenDslPath = path.join(process.cwd(), "examples", "eden/app.wtoml");
+
+function startUiDemoServer(options = {}) {
+  return startUiDemoServerBase({
+    dslPath: edenDslPath,
+    ...options
+  });
+}
 
 async function openSessionCookie(url, { username = "aaron", password = username } = {}) {
   const response = await fetch(`${url}/api/session`, {

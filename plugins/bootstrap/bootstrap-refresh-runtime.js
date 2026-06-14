@@ -28,8 +28,10 @@ export async function runBootstrapRefresh({
   desktopApi = () => null,
   loadRuntimePluginReviewFn = loadBootstrapRuntimePluginReview,
   runtimePluginReviewRequestState = { current: 0 },
+  loadGuidanceProgress = null,
   loadTutorialProgress = async () => {},
   render = () => {},
+  requestMaybeAdvanceGuidance = null,
   requestMaybeAdvanceTutorial = async () => {},
   setRuntimePluginReview = review => {
     state.runtimePluginReview = review;
@@ -54,8 +56,8 @@ export async function runBootstrapRefresh({
     setReview: setRuntimePluginReview,
     runtimeProfile: state.model?.runtimeProfile || "full"
   });
-  await loadTutorialProgress();
+  await (loadGuidanceProgress ?? loadTutorialProgress)();
   render();
-  await requestMaybeAdvanceTutorial();
+  await (requestMaybeAdvanceGuidance ?? requestMaybeAdvanceTutorial)();
   render();
 }

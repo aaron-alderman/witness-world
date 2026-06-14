@@ -6,7 +6,7 @@ import {
   normalizeDesirePlusToDesire
 } from "../src/desire/index.js";
 import { evaluateModel } from "../plugins/chart-runtime/dataflow-eval.js";
-import { millForceKernels } from "../plugins/chart-runtime/mill-force-kernels.js";
+import { millForceKernels } from "../examples/engentus/app/chart-functions/mill-force-kernels.js";
 import { planChart } from "../plugins/chart-runtime/gog-runtime.js";
 
 const appDir = path.join(process.cwd(), "examples_rvm", "engentus", "app");

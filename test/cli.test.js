@@ -35,10 +35,11 @@ test("bootstrap CLI starts a blank-world bootstrap server", async () => {
       "bundle-server-runner-authoring",
       "bundle-mcp-authoring",
       "bundle-proposals",
+      "bundle-starter",
       "bundle-tutorial"
     ].sort());
     assert.equal(diagnostics.startupRunner?.bootstrapOnly, true);
-    assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.capability-authoring", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.tutorial"]);
+    assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.capability-authoring", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.starter", "plugin.tutorial"]);
   } finally {
     if (!child.killed) child.kill("SIGINT");
     await onceExit(child);
@@ -61,6 +62,7 @@ test("bootstrap CLI starts a blank-world bootstrap server", async () => {
     "bundle-server-runner-authoring",
     "bundle-mcp-authoring",
     "bundle-proposals",
+    "bundle-starter",
     "bundle-tutorial"
   ].sort());
   assert.match(stdout, /Operator runtime plugins:\s+plugin\.authoring/);
@@ -218,8 +220,8 @@ test("bootstrap CLI activates local runtime plugins through --runtime-plugin", a
   try {
     const url = await waitForServerUrl(() => stdout);
     const diagnostics = await fetch(`${url}/api/runtime/diagnostics`).then(response => response.json());
-    assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.capability-authoring", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.tutorial"]);
-    assert.deepEqual([...diagnostics.plugins.addedBundleIds].sort(), ["bundle-authoring-core", "bundle-bootstrap", "bundle-capability-authoring", "bundle-mcp-authoring", "bundle-program-authoring", "bundle-proposals", "bundle-server-runner-authoring", "bundle-tutorial"]);
+    assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.capability-authoring", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring"]);
+    assert.deepEqual([...diagnostics.plugins.addedBundleIds].sort(), ["bundle-authoring-core", "bundle-bootstrap", "bundle-capability-authoring", "bundle-mcp-authoring", "bundle-program-authoring", "bundle-proposals", "bundle-server-runner-authoring"]);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring-core"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-bootstrap"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-capability-authoring"), true);
@@ -227,7 +229,7 @@ test("bootstrap CLI activates local runtime plugins through --runtime-plugin", a
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-server-runner-authoring"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-mcp-authoring"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-proposals"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-tutorial"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-tutorial"), false);
     assert.equal((await fetch(`${url}/_bootstrap`)).status, 200);
   } finally {
     if (!child.killed) child.kill("SIGINT");

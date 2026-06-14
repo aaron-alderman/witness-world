@@ -1,5 +1,5 @@
 import os from "node:os";
-import { createLogger } from "./logger.js";
+import { createLogger, normalizeLogger } from "./logger.js";
 import { resolveRuntimeConfig as resolveRuntimeConfigUtil } from "./runtime-config-utils.js";
 import {
   declareBackendHost as declareBackendHostUtil,
@@ -28,6 +28,7 @@ export async function startServer(world, {
   serverRunnerId = null,
   port = 0,
   runtimeRoot = os.tmpdir(),
+  appProject = null,
   logger = createLogger(),
   mcpInternalToken = null,
   runtimeProfile = null,
@@ -40,12 +41,14 @@ export async function startServer(world, {
       ? DEFAULT_BOOTSTRAP_RUNTIME_PROFILE
       : DEFAULT_RUNTIME_PROFILE
   );
+  const activeLogger = normalizeLogger(logger);
   return startRuntimeServer(world, {
     actor,
     serverRunnerId,
     port,
     runtimeRoot,
-    logger,
+    appProject,
+    logger: activeLogger,
     mcpInternalToken,
     runtimeProfile: selectedRuntimeProfile,
     runtimePluginIds,

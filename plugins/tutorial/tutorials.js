@@ -1,31 +1,77 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const todoStarterBlueprintDocument = JSON.parse(
-  fs.readFileSync(path.join(__dirname, "todo-starter-blueprint.json"), "utf8")
-);
+import {
+  advanceTutorialProgress,
+  createTutorialProgress,
+  firstTutorialStepInChapter,
+  guidanceChapterScopeKey,
+  guidanceContextCatalog,
+  guidanceContextInfo,
+  guidanceDisabledContextIds,
+  guidanceDisabledPagesFromScopeKeys,
+  guidanceDisabledScopeKeys,
+  guidancePageScopeKey,
+  guidancePages,
+  guidanceReplayScopeKey,
+  guidanceRevealedConcepts,
+  guidanceScopeCatalog,
+  guidanceScopeInfo,
+  guidanceStep,
+  guidanceStepConcepts,
+  guidanceStepIndex,
+  guidanceStepScope,
+  guidanceStepSurfaceContext,
+  isGuidanceContextDisabled,
+  isGuidanceScopeDisabled,
+  mergeTutorialProgress,
+  nextTutorialStep,
+  normalizeGuidanceDisabledContextIds,
+  normalizeGuidanceDisabledPages,
+  normalizeGuidanceDisabledScopeKeys,
+  normalizeGuidanceProgress,
+  normalizeGuidanceReplayStep,
+  previousTutorialStep,
+  restartGuidanceChapter,
+  restartGuidanceFromHere,
+  restartGuidanceFromScope,
+  retreatGuidanceProgress,
+  setGuidanceContextDisabled,
+  setGuidancePageDisabled,
+  setGuidanceScopeDisabled,
+  skipGuidanceChapter,
+  tutorialChapterScopeKey,
+  tutorialContextCatalog,
+  tutorialContextInfo,
+  tutorialDisabledContextIds,
+  tutorialDisabledPagesFromScopeKeys,
+  tutorialDisabledScopeKeys,
+  tutorialPageScopeKey,
+  tutorialPages,
+  tutorialReplayScopeKey,
+  tutorialRevealedConcepts,
+  tutorialScopeCatalog,
+  tutorialScopeInfo,
+  tutorialStep,
+  tutorialStepConcepts,
+  tutorialStepIndex,
+  tutorialStepScope,
+  tutorialStepSurfaceContext,
+  isTutorialContextDisabled,
+  isTutorialScopeDisabled,
+  normalizeTutorialDisabledContextIds,
+  normalizeTutorialDisabledPages,
+  normalizeTutorialDisabledScopeKeys,
+  normalizeTutorialProgress,
+  normalizeTutorialReplayStep,
+  restartTutorialChapter,
+  restartTutorialFromHere,
+  restartTutorialFromScope,
+  setTutorialContextDisabled,
+  setTutorialPageDisabled,
+  setTutorialScopeDisabled,
+  skipTutorialChapter
+} from "../../src/runtime-guidance-model.js";
+import { todoTutorialSeed } from "./todo-tutorial-seed.js";
 
 export const TODO_TUTORIAL_ID = "todo-from-scratch";
-
-function uniqueStrings(values) {
-  return [...new Set((Array.isArray(values) ? values : []).map(String).map(value => value.trim()).filter(Boolean))];
-}
-
-function tutorialPageLabel(page) {
-  return page === "app" ? "App" : (page === "bootstrap" ? "Bootstrap" : (page === "world" ? "World" : String(page || "")));
-}
-
-export function tutorialPageScopeKey(page) {
-  const normalized = typeof page === "string" ? page.trim() : "";
-  return normalized ? `page:${normalized}` : null;
-}
-
-export function tutorialChapterScopeKey(chapterId) {
-  const normalized = typeof chapterId === "string" ? chapterId.trim() : "";
-  return normalized ? `chapter:${normalized}` : null;
-}
 
 function normalizeScopeFields(scope = {}) {
   return Object.fromEntries(Object.entries(scope).filter(([, value]) => value != null && value !== ""));
@@ -44,7 +90,7 @@ function pageScope(page, label = null) {
         scopeKey: tutorialPageScopeKey(scopePage),
         scopeKind: "page",
         scopePage,
-        scopeLabel: label || tutorialPageLabel(scopePage)
+        scopeLabel: label || (page === "app" ? "App" : (page === "bootstrap" ? "Bootstrap" : "World"))
       })
     : {};
 }
@@ -167,7 +213,9 @@ function tutorialScopeAnchorsFromWidgets(page, widgets = []) {
   }
   const anchors = [];
   for (const row of rows) {
-    const target = typeof row?.tutorialTarget === "string" ? row.tutorialTarget.trim() : "";
+    const target = typeof row?.guidanceTarget === "string" && row.guidanceTarget.trim()
+      ? row.guidanceTarget.trim()
+      : (typeof row?.tutorialTarget === "string" ? row.tutorialTarget.trim() : "");
     if (!row?.id || !target) continue;
     const label = tutorialScopeLabelFromWidget(row, childrenByParent) || row.id;
     const isSection = row.kind === "Box" || row.kind === "Section" || row.kind === "Form";
@@ -189,10 +237,6 @@ function tutorialStepsWithConcepts(steps, concepts) {
   return steps.map(step => tutorialStepWithConcepts(step, concepts));
 }
 
-export function todoStarterBlueprint() {
-  return JSON.parse(JSON.stringify(todoStarterBlueprintDocument));
-}
-
 function bootstrapStep(id, chapterId, title, body, target, payload, completeWhen, nextLabel = "Next", scope = null) {
   return withStepScope({ id, chapterId, page: "bootstrap", title, body, target, payload, completeWhen, nextLabel }, scope || pageScope("bootstrap"));
 }
@@ -212,7 +256,7 @@ function worldStep(id, chapterId, title, body, target, payload, completeWhen, ne
 }
 
 export function todoTutorialDefinition() {
-  const blueprint = todoStarterBlueprint();
+  const blueprint = todoTutorialSeed();
   const bootstrapIdentityScope = sectionScope("bootstrap", "identity-form", "Identity form");
   const bootstrapSessionScope = sectionScope("bootstrap", "session-form", "Session form");
   const bootstrapRunnerScope = sectionScope("bootstrap", "runner-form", "Runtime runner form");
@@ -415,6 +459,8 @@ export function todoTutorialDefinition() {
   return {
     id: TODO_TUTORIAL_ID,
     title: "Build The Todo App From Scratch",
+    bootstrapCardBadge: "Guided Tutorial",
+    summary: "This tutorial uses the real bootstrap builders and the real runtime. It teaches identities, runner wiring, widgets, programs, routes, mounts, and then continues into the live app to exercise real behavior.",
     concepts,
     scopes,
     steps
@@ -425,457 +471,74 @@ export function tutorialDefinition(id) {
   return id === TODO_TUTORIAL_ID ? todoTutorialDefinition() : null;
 }
 
-export function tutorialPages(tutorial) {
-  const pages = [];
-  for (const step of tutorial?.steps ?? []) {
-    if (typeof step?.page !== "string" || !step.page.trim() || pages.includes(step.page)) continue;
-    pages.push(step.page);
-  }
-  return pages;
-}
-
-export function normalizeTutorialDisabledPages(tutorial, disabledPages = []) {
-  const knownPages = new Set(tutorialPages(tutorial));
-  return uniqueStrings(disabledPages).filter(page => knownPages.has(page));
-}
-
-export function tutorialStepPage(tutorial, stepId) {
-  return tutorialStep(tutorial, stepId)?.page ?? null;
-}
-
-export function normalizeTutorialReplayStep(tutorial, replayStepId) {
-  const id = typeof replayStepId === "string" ? replayStepId : "";
-  return tutorialStep(tutorial, id)?.id ?? null;
-}
-
-function tutorialScopeRecordInfo(record) {
-  if (!record || typeof record !== "object") return null;
-  const scopeKey = typeof record.scopeKey === "string" && record.scopeKey.trim()
-    ? record.scopeKey.trim()
-    : (record.page === "world" ? "world" : tutorialPageScopeKey(record.page));
-  if (!scopeKey) return null;
-  const scopeKind = typeof record.scopeKind === "string" && record.scopeKind.trim()
-    ? record.scopeKind.trim()
-    : (scopeKey === "world"
-        ? "world"
-        : (scopeKey.startsWith("section:")
-            ? "section"
-            : (scopeKey.startsWith("widget:")
-                ? "widget"
-                : (scopeKey.startsWith("chapter:")
-                    ? "chapter"
-                    : "page"))));
-  const scopePage = typeof record.scopePage === "string" && record.scopePage.trim()
-    ? record.scopePage.trim()
-    : (scopeKind === "world" ? "world" : (typeof record.page === "string" && record.page.trim() ? record.page.trim() : null));
-  return normalizeScopeFields({
-    key: scopeKey,
-    kind: scopeKind,
-    page: scopePage,
-    label: typeof record.scopeLabel === "string" && record.scopeLabel.trim() ? record.scopeLabel.trim() : (record.title || null),
-    chapterId: record.chapterId || null,
-    sectionId: typeof record.scopeSectionId === "string" && record.scopeSectionId.trim() ? record.scopeSectionId.trim() : null,
-    widgetId: typeof record.scopeWidgetId === "string" && record.scopeWidgetId.trim() ? record.scopeWidgetId.trim() : null,
-    target: typeof record.target === "string" && record.target.trim() ? record.target.trim() : null
-  });
-}
-
-function tutorialStepScopeInfo(step) {
-  return tutorialScopeRecordInfo(step);
-}
-
-function tutorialStepSurfaceContextInfo(step) {
-  if (!step || typeof step !== "object") return null;
-  const contextId = typeof step.surfaceContextId === "string" && step.surfaceContextId.trim()
-    ? step.surfaceContextId.trim()
-    : null;
-  if (!contextId) return null;
-  return normalizeScopeFields({
-    id: contextId,
-    label: typeof step.surfaceContextLabel === "string" && step.surfaceContextLabel.trim()
-      ? step.surfaceContextLabel.trim()
-      : tutorialContextLabel(contextId)
-  });
-}
-
-function addTutorialScopeInfo(map, info) {
-  if (!info?.key) return;
-  const existing = map.get(info.key);
-  if (!existing) {
-    map.set(info.key, { ...info });
-    return;
-  }
-  map.set(info.key, {
-    ...existing,
-    ...Object.fromEntries(Object.entries(info).filter(([, value]) => value != null && value !== ""))
-  });
-}
-
-export function tutorialScopeCatalog(tutorial) {
-  const scopes = new Map();
-  for (const page of tutorialPages(tutorial)) {
-    addTutorialScopeInfo(scopes, {
-      key: tutorialPageScopeKey(page),
-      kind: "page",
-      page,
-      label: tutorialPageLabel(page)
-    });
-    if (page === "world") addTutorialScopeInfo(scopes, { key: "world", kind: "world", page: "world", label: "World surface" });
-  }
-  for (const scope of tutorial?.scopes ?? []) addTutorialScopeInfo(scopes, tutorialScopeRecordInfo(scope));
-  for (const step of tutorial?.steps ?? []) {
-    addTutorialScopeInfo(scopes, tutorialStepScopeInfo(step));
-    addTutorialScopeInfo(scopes, {
-      key: tutorialChapterScopeKey(step.chapterId),
-      kind: "chapter",
-      chapterId: step.chapterId || null,
-      label: step.chapterId || null
-    });
-  }
-  return scopes;
-}
-
-export function tutorialContextCatalog(tutorial) {
-  const contexts = new Map();
-  for (const step of tutorial?.steps ?? []) {
-    const surfaceContext = tutorialStepSurfaceContextInfo(step);
-    if (!surfaceContext?.id || contexts.has(surfaceContext.id)) continue;
-    contexts.set(surfaceContext.id, { ...surfaceContext });
-  }
-  return contexts;
-}
-
-export function tutorialContextInfo(tutorial, contextId) {
-  const id = typeof contextId === "string" ? contextId.trim() : "";
-  if (!id) return null;
-  return tutorialContextCatalog(tutorial).get(id) ?? null;
-}
-
-export function tutorialScopeInfo(tutorial, scopeKey) {
-  const key = typeof scopeKey === "string" ? scopeKey.trim() : "";
-  if (!key) return null;
-  return tutorialScopeCatalog(tutorial).get(key) ?? null;
-}
-
-export function tutorialStepScope(tutorial, stepIdOrStep) {
-  const step = typeof stepIdOrStep === "string" ? tutorialStep(tutorial, stepIdOrStep) : stepIdOrStep;
-  if (!step) return null;
-  const scoped = tutorialStepScopeInfo(step);
-  if (!scoped?.key) return null;
-  return tutorialScopeInfo(tutorial, scoped.key) || scoped;
-}
-
-export function tutorialStepSurfaceContext(tutorial, stepIdOrStep) {
-  const step = typeof stepIdOrStep === "string" ? tutorialStep(tutorial, stepIdOrStep) : stepIdOrStep;
-  if (!step) return null;
-  const surfaceContext = tutorialStepSurfaceContextInfo(step);
-  if (!surfaceContext?.id) return null;
-  return tutorialContextInfo(tutorial, surfaceContext.id) || surfaceContext;
-}
-
-export function tutorialDisabledPagesFromScopeKeys(tutorial, disabledScopeKeys = []) {
-  const pages = [];
-  for (const key of uniqueStrings(disabledScopeKeys)) {
-    const scope = tutorialScopeInfo(tutorial, key);
-    if (!scope) continue;
-    if (scope.kind === "page" && scope.page) pages.push(scope.page);
-    if (scope.kind === "world") pages.push("world");
-  }
-  return normalizeTutorialDisabledPages(tutorial, pages);
-}
-
-export function normalizeTutorialDisabledScopeKeys(tutorial, disabledScopeKeys = [], disabledPages = []) {
-  const candidates = [];
-  for (const key of uniqueStrings(disabledScopeKeys)) candidates.push(key);
-  for (const page of normalizeTutorialDisabledPages(tutorial, disabledPages)) {
-    const pageKey = tutorialPageScopeKey(page);
-    if (pageKey) candidates.push(pageKey);
-    if (page === "world") candidates.push("world");
-  }
-  return uniqueStrings(candidates).filter(key => tutorialScopeInfo(tutorial, key));
-}
-
-export function normalizeTutorialDisabledContextIds(tutorial, disabledContextIds = []) {
-  return uniqueStrings(disabledContextIds).filter(contextId => tutorialContextInfo(tutorial, contextId));
-}
-
-function tutorialReplayScopeKeyCandidate(tutorial, progress) {
-  const step = tutorialStep(tutorial, progress?.stepId);
-  if (!step) return null;
-  const currentScope = tutorialStepScope(tutorial, step);
-  const chapterScopeKey = tutorialChapterScopeKey(step.chapterId);
-  const explicitKey = typeof progress?.replayScopeKey === "string" ? progress.replayScopeKey.trim() : "";
-  if (explicitKey) {
-    const explicitScope = tutorialScopeInfo(tutorial, explicitKey);
-    if (explicitScope && (explicitScope.key === currentScope?.key || explicitScope.key === chapterScopeKey)) return explicitScope.key;
-  }
-  const legacyReplayStepId = normalizeTutorialReplayStep(tutorial, progress?.replayStepId);
-  if (legacyReplayStepId && legacyReplayStepId === step.id) return currentScope?.key || null;
-  return null;
-}
-
-export function tutorialReplayScopeKey(tutorial, progress) {
-  return tutorialReplayScopeKeyCandidate(tutorial, progress);
-}
-
-function tutorialScopeAncestors(tutorial, scopeKey) {
-  const scope = tutorialScopeInfo(tutorial, scopeKey);
-  if (!scope?.key) return [];
-  const keys = [scope.key];
-  if (scope.kind === "widget" || scope.kind === "section") {
-    const pageKey = tutorialPageScopeKey(scope.page);
-    if (pageKey) keys.push(pageKey);
-    if (scope.page === "world") keys.push("world");
-  } else if (scope.kind === "page" && scope.page === "world") {
-    keys.push("world");
-  } else if (scope.kind === "world") {
-    const pageKey = tutorialPageScopeKey("world");
-    if (pageKey) keys.push(pageKey);
-  }
-  return uniqueStrings(keys);
-}
-
-export function tutorialDisabledScopeKeys(tutorial, progress) {
-  return normalizeTutorialDisabledScopeKeys(tutorial, progress?.disabledScopeKeys, progress?.disabledPages);
-}
-
-export function tutorialDisabledContextIds(tutorial, progress) {
-  return normalizeTutorialDisabledContextIds(tutorial, progress?.disabledContextIds);
-}
-
-export function isTutorialScopeDisabled(tutorial, progress, scopeKey) {
-  if (!progress) return false;
-  const disabled = new Set(tutorialDisabledScopeKeys(tutorial, progress));
-  return tutorialScopeAncestors(tutorial, scopeKey).some(key => disabled.has(key));
-}
-
-export function isTutorialContextDisabled(tutorial, progress, contextId) {
-  if (!progress) return false;
-  return tutorialDisabledContextIds(tutorial, progress).includes(typeof contextId === "string" ? contextId.trim() : "");
-}
-
-export function normalizeTutorialProgress(tutorial, progress) {
-  if (!progress || typeof progress !== "object") return null;
-  const fallbackStep = tutorial?.steps?.[0] ?? null;
-  const step = tutorialStep(tutorial, progress.stepId) ?? fallbackStep;
-  const stepId = step?.id ?? null;
-  const replayScopeKey = tutorialReplayScopeKeyCandidate(tutorial, { ...progress, stepId });
-  const disabledScopeKeys = normalizeTutorialDisabledScopeKeys(tutorial, progress.disabledScopeKeys, progress.disabledPages);
-  const disabledContextIds = normalizeTutorialDisabledContextIds(tutorial, progress.disabledContextIds);
-  return {
-    tutorialId: tutorial?.id || TODO_TUTORIAL_ID,
-    chapterId: step?.chapterId || null,
-    stepId,
-    chapterStatus: typeof progress.chapterStatus === "string" ? progress.chapterStatus : (step ? "in_progress" : "idle"),
-    draftInputs: progress.draftInputs && typeof progress.draftInputs === "object" ? progress.draftInputs : {},
-    completedAt: typeof progress.completedAt === "string" ? progress.completedAt : null,
-    hidden: progress.hidden === true,
-    disabledScopeKeys,
-    disabledContextIds,
-    replayScopeKey,
-    disabledPages: tutorialDisabledPagesFromScopeKeys(tutorial, disabledScopeKeys),
-    replayStepId: replayScopeKey && stepId ? stepId : null
-  };
-}
-
-export function createTutorialProgress(tutorial, stepId = tutorial?.steps?.[0]?.id || null) {
-  const step = tutorialStep(tutorial, stepId) ?? tutorial?.steps?.[0] ?? null;
-  return normalizeTutorialProgress(tutorial, {
-    tutorialId: tutorial?.id || TODO_TUTORIAL_ID,
-    chapterId: step?.chapterId || null,
-    stepId: step?.id || null,
-    chapterStatus: step ? "in_progress" : "idle",
-    draftInputs: {},
-    completedAt: null,
-    hidden: false,
-    disabledScopeKeys: [],
-    disabledContextIds: [],
-    replayScopeKey: null
-  });
-}
-
-export function tutorialStepConcepts(tutorial, stepId) {
-  const concepts = new Map((tutorial?.concepts ?? []).map(concept => [concept.id, concept]));
-  return [...new Set((tutorialStep(tutorial, stepId)?.concepts ?? []).map(String))]
-    .map(id => concepts.get(id))
-    .filter(Boolean);
-}
-
-export function tutorialRevealedConcepts(tutorial, progressOrStepId) {
-  const stepId = typeof progressOrStepId === "string" ? progressOrStepId : progressOrStepId?.stepId;
-  const currentIndex = progressOrStepId?.completedAt
-    ? ((tutorial?.steps?.length ?? 1) - 1)
-    : tutorialStepIndex(tutorial, stepId);
-  if (currentIndex < 0) return [];
-  const concepts = new Map((tutorial?.concepts ?? []).map(concept => [concept.id, concept]));
-  const revealedIds = [];
-  for (const step of tutorial?.steps?.slice(0, currentIndex + 1) ?? []) {
-    for (const conceptId of [...new Set((step?.concepts ?? []).map(String))]) {
-      if (!revealedIds.includes(conceptId) && concepts.has(conceptId)) revealedIds.push(conceptId);
-    }
-  }
-  return revealedIds.map(id => concepts.get(id)).filter(Boolean);
-}
-
-export function isTutorialPageDisabled(tutorial, progress, page) {
-  if (!(typeof page === "string" && page.trim())) return false;
-  return isTutorialScopeDisabled(tutorial, progress, tutorialPageScopeKey(page));
-}
-
-export function setTutorialPageDisabled(tutorial, progress, page, disabled = true) {
-  return setTutorialScopeDisabled(tutorial, progress, tutorialPageScopeKey(page), disabled);
-}
-
-export function setTutorialScopeDisabled(tutorial, progress, scopeKey, disabled = true) {
-  if (!progress) return null;
-  const current = normalizeTutorialProgress(tutorial, progress);
-  const targetScope = tutorialScopeInfo(tutorial, scopeKey);
-  if (!current || !targetScope?.key) return current;
-  const disabledScopeKeys = new Set(tutorialDisabledScopeKeys(tutorial, current));
-  if (disabled) disabledScopeKeys.add(targetScope.key);
-  else disabledScopeKeys.delete(targetScope.key);
-  return normalizeTutorialProgress(tutorial, {
-    ...current,
-    disabledScopeKeys: [...disabledScopeKeys]
-  });
-}
-
-export function setTutorialContextDisabled(tutorial, progress, contextId, disabled = true) {
-  if (!progress) return null;
-  const current = normalizeTutorialProgress(tutorial, progress);
-  const targetContext = tutorialContextInfo(tutorial, contextId);
-  if (!current || !targetContext?.id) return current;
-  const disabledContextIds = new Set(tutorialDisabledContextIds(tutorial, current));
-  if (disabled) disabledContextIds.add(targetContext.id);
-  else disabledContextIds.delete(targetContext.id);
-  return normalizeTutorialProgress(tutorial, {
-    ...current,
-    disabledContextIds: [...disabledContextIds]
-  });
-}
-
-export function restartTutorialFromScope(tutorial, progress, scopeKey, stepId = progress?.stepId) {
-  const current = tutorialStep(tutorial, stepId);
-  if (!current) return createTutorialProgress(tutorial);
-  const replayScope = tutorialScopeInfo(tutorial, scopeKey);
-  return normalizeTutorialProgress(tutorial, {
-    ...(progress ?? createTutorialProgress(tutorial, current.id)),
-    chapterId: current.chapterId,
-    stepId: current.id,
-    chapterStatus: "in_progress",
-    completedAt: null,
-    hidden: false,
-    draftInputs: {},
-    replayScopeKey: replayScope?.key || tutorialStepScope(tutorial, current)?.key || null
-  });
-}
-
-export function restartTutorialFromHere(tutorial, progress, stepId = progress?.stepId) {
-  const current = tutorialStep(tutorial, stepId);
-  return restartTutorialFromScope(tutorial, progress, tutorialStepScope(tutorial, current)?.key, current?.id);
-}
-
-export function tutorialStepIndex(tutorial, stepId) {
-  return tutorial?.steps?.findIndex(step => step.id === stepId) ?? -1;
-}
-
-export function tutorialStep(tutorial, stepId) {
-  return tutorial?.steps?.find(step => step.id === stepId) ?? null;
-}
-
-export function nextTutorialStep(tutorial, stepId) {
-  const index = tutorialStepIndex(tutorial, stepId);
-  if (index < 0) return tutorial?.steps?.[0] ?? null;
-  return tutorial.steps[index + 1] ?? null;
-}
-
-export function previousTutorialStep(tutorial, stepId) {
-  const index = tutorialStepIndex(tutorial, stepId);
-  if (index <= 0) return null;
-  return tutorial.steps[index - 1] ?? null;
-}
-
-export function firstTutorialStepInChapter(tutorial, chapterId) {
-  if (!tutorial?.steps?.length || !chapterId) return null;
-  return tutorial.steps.find(step => step.chapterId === chapterId) ?? null;
-}
-
-export function skipTutorialChapter(tutorial, progress) {
-  const current = tutorialStep(tutorial, progress?.stepId);
-  if (!current) return createTutorialProgress(tutorial);
-  const next = tutorial.steps.find(step => step.chapterId !== current.chapterId && tutorialStepIndex(tutorial, step.id) > tutorialStepIndex(tutorial, current.id));
-  if (!next) {
-    return normalizeTutorialProgress(tutorial, { ...progress, chapterStatus: "completed", completedAt: progress.completedAt || new Date().toISOString(), replayScopeKey: null });
-  }
-  return normalizeTutorialProgress(tutorial, { ...progress, chapterId: next.chapterId, stepId: next.id, chapterStatus: "in_progress", replayScopeKey: null });
-}
-
-export function advanceTutorialProgress(tutorial, progress) {
-  const next = nextTutorialStep(tutorial, progress?.stepId);
-  if (!next) {
-    return normalizeTutorialProgress(tutorial, { ...progress, chapterStatus: "completed", completedAt: progress?.completedAt || new Date().toISOString(), replayScopeKey: null });
-  }
-  return normalizeTutorialProgress(tutorial, {
-    ...progress,
-    chapterId: next.chapterId,
-    stepId: next.id,
-    chapterStatus: "in_progress",
-    completedAt: null,
-    replayScopeKey: null
-  });
-}
-
-export function retreatTutorialProgress(tutorial, progress) {
-  const previous = previousTutorialStep(tutorial, progress?.stepId);
-  if (!previous) return progress;
-  return normalizeTutorialProgress(tutorial, {
-    ...progress,
-    chapterId: previous.chapterId,
-    stepId: previous.id,
-    chapterStatus: "in_progress",
-    completedAt: null,
-    replayScopeKey: null
-  });
-}
-
-export function restartTutorialChapter(tutorial, progress, chapterId = progress?.chapterId) {
-  const first = firstTutorialStepInChapter(tutorial, chapterId);
-  if (!first) return createTutorialProgress(tutorial);
-  return normalizeTutorialProgress(tutorial, {
-    ...(progress ?? createTutorialProgress(tutorial, first.id)),
-    chapterId: first.chapterId,
-    stepId: first.id,
-    chapterStatus: "in_progress",
-    completedAt: null,
-    hidden: false,
-    draftInputs: {},
-    replayScopeKey: null
-  });
-}
-
-export function mergeTutorialProgress(tutorial, localProgress, remoteProgress) {
-  if (localProgress?.completedAt && !remoteProgress?.completedAt) return normalizeTutorialProgress(tutorial, localProgress);
-  if (remoteProgress?.completedAt && !localProgress?.completedAt) return normalizeTutorialProgress(tutorial, remoteProgress);
-  const localIndex = tutorialStepIndex(tutorial, localProgress?.stepId);
-  const remoteIndex = tutorialStepIndex(tutorial, remoteProgress?.stepId);
-  if (remoteIndex > localIndex) return normalizeTutorialProgress(tutorial, remoteProgress);
-  if (localIndex > remoteIndex) return normalizeTutorialProgress(tutorial, localProgress);
-  if (!localProgress) return normalizeTutorialProgress(tutorial, remoteProgress) ?? null;
-  if (!remoteProgress) return normalizeTutorialProgress(tutorial, localProgress) ?? null;
-  const localNormalized = normalizeTutorialProgress(tutorial, localProgress);
-  const remoteNormalized = normalizeTutorialProgress(tutorial, remoteProgress);
-  if (localProgress.hidden === false && remoteProgress.hidden === true) {
-    return localNormalized;
-  }
-  if (remoteProgress.hidden === false && localProgress.hidden === true) {
-    return remoteNormalized;
-  }
-  return normalizeTutorialProgress(tutorial, {
-    ...remoteNormalized,
-    hidden: remoteNormalized.hidden,
-    disabledScopeKeys: [...new Set([...tutorialDisabledScopeKeys(tutorial, remoteNormalized), ...tutorialDisabledScopeKeys(tutorial, localNormalized)])],
-    disabledContextIds: [...new Set([...tutorialDisabledContextIds(tutorial, remoteNormalized), ...tutorialDisabledContextIds(tutorial, localNormalized)])],
-    replayScopeKey: tutorialReplayScopeKey(tutorial, localNormalized) || tutorialReplayScopeKey(tutorial, remoteNormalized) || null
-  });
-}
-
+export {
+  advanceTutorialProgress,
+  createTutorialProgress,
+  firstTutorialStepInChapter,
+  guidanceChapterScopeKey,
+  guidanceContextCatalog,
+  guidanceContextInfo,
+  guidanceDisabledContextIds,
+  guidanceDisabledPagesFromScopeKeys,
+  guidanceDisabledScopeKeys,
+  guidancePageScopeKey,
+  guidancePages,
+  guidanceReplayScopeKey,
+  guidanceRevealedConcepts,
+  guidanceScopeCatalog,
+  guidanceScopeInfo,
+  guidanceStep,
+  guidanceStepConcepts,
+  guidanceStepIndex,
+  guidanceStepScope,
+  guidanceStepSurfaceContext,
+  isGuidanceContextDisabled,
+  isGuidanceScopeDisabled,
+  mergeTutorialProgress,
+  nextTutorialStep,
+  normalizeGuidanceDisabledContextIds,
+  normalizeGuidanceDisabledPages,
+  normalizeGuidanceDisabledScopeKeys,
+  normalizeGuidanceProgress,
+  normalizeGuidanceReplayStep,
+  previousTutorialStep,
+  restartGuidanceChapter,
+  restartGuidanceFromHere,
+  restartGuidanceFromScope,
+  retreatGuidanceProgress,
+  setGuidanceContextDisabled,
+  setGuidancePageDisabled,
+  setGuidanceScopeDisabled,
+  skipGuidanceChapter,
+  tutorialChapterScopeKey,
+  tutorialContextCatalog,
+  tutorialContextInfo,
+  tutorialDisabledContextIds,
+  tutorialDisabledPagesFromScopeKeys,
+  tutorialDisabledScopeKeys,
+  tutorialPageScopeKey,
+  tutorialPages,
+  tutorialReplayScopeKey,
+  tutorialRevealedConcepts,
+  tutorialScopeCatalog,
+  tutorialScopeInfo,
+  tutorialStep,
+  tutorialStepConcepts,
+  tutorialStepIndex,
+  tutorialStepScope,
+  tutorialStepSurfaceContext,
+  isTutorialContextDisabled,
+  isTutorialScopeDisabled,
+  normalizeTutorialDisabledContextIds,
+  normalizeTutorialDisabledPages,
+  normalizeTutorialDisabledScopeKeys,
+  normalizeTutorialProgress,
+  normalizeTutorialReplayStep,
+  restartTutorialChapter,
+  restartTutorialFromHere,
+  restartTutorialFromScope,
+  setTutorialContextDisabled,
+  setTutorialPageDisabled,
+  setTutorialScopeDisabled,
+  skipTutorialChapter
+};

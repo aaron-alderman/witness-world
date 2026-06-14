@@ -114,10 +114,12 @@ test("backend state sync helpers derive authoring and version views from current
   assert.equal(versionView.rollback.selectedSoul, "program.alpha");
 });
 
-test("control sync binders route backend events through the shared deps seam", () => {
+test("control sync binders route backend events through the shared deps seam and rebuild deps on each event", () => {
   const listeners = new Map();
   let backendAuthoring = 0;
   let backendVersion = 0;
+  let authoringSoul = "program.alpha";
+  let versionSoul = "program.alpha";
 
   const target = {
     addEventListener(eventName, handler) {
@@ -130,7 +132,7 @@ test("control sync binders route backend events through the shared deps seam", (
     buildDeps: () => ({
       syncBootstrapBackendAuthoringControlsStateFn: () => {
         backendAuthoring += 1;
-        return { selectedVersionSoul: "program.alpha" };
+        return { selectedVersionSoul: authoringSoul };
       },
       applyBootstrapBackendAuthoringControlsStateFn: () => { backendAuthoring += 1; }
     })
@@ -140,21 +142,34 @@ test("control sync binders route backend events through the shared deps seam", (
     buildDeps: () => ({
       syncBootstrapBackendVersionControlsStateFn: () => {
         backendVersion += 1;
-        return { activate: { selectedSoul: "program.alpha" } };
+        return { activate: { selectedSoul: versionSoul } };
       },
       applyBootstrapBackendVersionControlsStateFn: () => { backendVersion += 1; }
     })
   });
 
-  listeners.get("witness:bootstrap-backend-authoring-sync")?.({
+  const firstAuthoring = listeners.get("witness:bootstrap-backend-authoring-sync")?.({
     detail: { source: "bootstrap-backend-authoring-controls" }
   });
-  listeners.get("witness:bootstrap-backend-help-sync")?.({
+  const firstVersion = listeners.get("witness:bootstrap-backend-help-sync")?.({
     detail: { source: "bootstrap-backend-version-controls" }
   });
+  assert.equal(firstAuthoring?.view?.selectedVersionSoul, "program.alpha");
+  assert.equal(firstVersion?.view?.activate?.selectedSoul, "program.alpha");
 
-  assert.equal(backendAuthoring, 2);
-  assert.equal(backendVersion, 2);
+  authoringSoul = "program.beta";
+  versionSoul = "program.beta";
+  const secondAuthoring = listeners.get("witness:bootstrap-backend-authoring-sync")?.({
+    detail: { source: "bootstrap-backend-authoring-controls" }
+  });
+  const secondVersion = listeners.get("witness:bootstrap-backend-help-sync")?.({
+    detail: { source: "bootstrap-backend-version-controls" }
+  });
+  assert.equal(secondAuthoring?.view?.selectedVersionSoul, "program.beta");
+  assert.equal(secondVersion?.view?.activate?.selectedSoul, "program.beta");
+
+  assert.equal(backendAuthoring, 4);
+  assert.equal(backendVersion, 4);
 });
 
 test("backend render helper preserves authoring-before-version sync/apply ordering", () => {

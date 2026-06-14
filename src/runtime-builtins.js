@@ -10,7 +10,7 @@ const TRAITS = [
 ];
 
 const VALUE_TYPES = [
-  { id: "widget.kind", label: "Widget Kind", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["Page", "Box", "Section", "Heading", "Text", "Form", "Input", "Select", "Option", "Button", "Link", "List", "ValueEditor"] } },
+  { id: "widget.kind", label: "Widget Kind", compatibleWith: ["textual", "enumerated"], editor: { control: "select", options: ["Fragment", "Page", "Box", "Section", "Header", "Heading", "Paragraph", "Small", "Text", "Form", "Input", "Select", "Option", "Button", "Link", "List", "ValueEditor"] } },
   { id: "widget.id", label: "Widget Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "widget.parent", label: "Parent Widget", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "widget.order", label: "Widget Order", compatibleWith: ["numeric"], editor: { control: "number" } },
@@ -34,6 +34,7 @@ const VALUE_TYPES = [
   { id: "widget.template", label: "Widget Template", compatibleWith: ["boolean"], editor: { control: "checkbox" } },
   { id: "widget.attach", label: "Widget Attach", compatibleWith: ["boolean"], editor: { control: "checkbox" } },
   { id: "widget.level", label: "Widget Level", compatibleWith: ["numeric"], editor: { control: "number" } },
+  { id: "widget.guidanceTarget", label: "Widget Guidance Target", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "identity.id", label: "Identity Id", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "identity.actor", label: "Identity Actor", compatibleWith: ["textual"], editor: { control: "text" } },
   { id: "identity.label", label: "Identity Label", compatibleWith: ["textual"], editor: { control: "text" } },
@@ -109,7 +110,8 @@ const PROCESS_SPECS = [
       { name: "context", accepts: "context.id", required: false },
       { name: "template", accepts: "widget.template", required: false },
       { name: "attach", accepts: "widget.attach", required: false },
-      { name: "level", accepts: "widget.level", required: false }
+      { name: "level", accepts: "widget.level", required: false },
+      { name: "guidanceTarget", accepts: "widget.guidanceTarget", required: false }
     ],
     outputs: [
       { name: "id", accepts: "widget.id", required: true },

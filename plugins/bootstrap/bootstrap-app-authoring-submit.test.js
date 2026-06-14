@@ -1,11 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import {
+  bootstrapAppAuthoringSubmitContractsByFamily,
+  loadBootstrapAppAuthoringSubmitContracts
+} from "./bootstrap-app-authoring-submit-contracts.js";
 import {
   bindBootstrapAppAuthoringSubmit,
   buildBootstrapAppAuthoringSubmitRequest,
   renderBootstrapAppAuthoringSubmitFactory,
   runBootstrapAppAuthoringSubmit
 } from "./bootstrap-app-authoring-submit.js";
+
+test("bootstrap app authoring submit contracts load from authored WTOML", async () => {
+  const source = await readFile(new URL("./bootstrap-app-authoring-submit-contracts.wtoml", import.meta.url), "utf8");
+  const contracts = loadBootstrapAppAuthoringSubmitContracts();
+
+  assert.equal(source.includes('family = "widget"'), true);
+  assert.equal(source.includes('strategy = "firstNonBlank"'), true);
+  assert.equal(source.includes('family = "route"'), true);
+  assert.equal(contracts.widget.url, "/api/widgets");
+  assert.equal(contracts.widget.checkboxes, "boolean");
+  assert.deepEqual(contracts.widget.dropFields, ["guidanceTarget", "tutorialTarget"]);
+  assert.equal(Array.isArray(contracts.widget.fields), true);
+  assert.equal(contracts.route.url, "/api/routes");
+});
 
 test("bootstrap app authoring submit request builder preserves create-form payload contracts", () => {
   assert.deepEqual(
@@ -36,7 +55,7 @@ test("bootstrap app authoring submit request builder preserves create-form paylo
         id: "page_root",
         kind: "Page",
         parent: "",
-        tutorialTarget: "",
+        guidanceTarget: "",
         attach: false,
         template: true,
         order: "0",
@@ -50,7 +69,7 @@ test("bootstrap app authoring submit request builder preserves create-form paylo
       body: {
         id: "page_root",
         kind: "Page",
-        tutorialTarget: "page_root",
+        guidanceTarget: "page_root",
         attach: false,
         template: true,
         order: 0,
@@ -101,6 +120,7 @@ test("bootstrap app authoring submit helper posts, resets, and refreshes on succ
       formId: "step-form",
       statusId: "step-status"
     },
+    contractsByFamily: bootstrapAppAuthoringSubmitContractsByFamily,
     readFormData: () => ({
       program: "landing_program",
       event: "load",
@@ -143,6 +163,7 @@ test("bootstrap app authoring submit helper reports errors without reset or refr
       formId: "runner-form",
       statusId: "runner-status"
     },
+    contractsByFamily: bootstrapAppAuthoringSubmitContractsByFamily,
     readFormData: () => ({
       id: "demo_server"
     }),
@@ -176,6 +197,7 @@ test("bootstrap app authoring submit bridge binds one documented event family", 
   assert.equal(typeof registered, "function");
 
   const factory = renderBootstrapAppAuthoringSubmitFactory();
+  assert.equal(factory.includes("const bootstrapAppAuthoringSubmitContractsByFamily ="), true);
   assert.equal(factory.includes("const buildBootstrapAppAuthoringSubmitRequest ="), true);
   assert.equal(factory.includes("const runBootstrapAppAuthoringSubmit ="), true);
   assert.equal(factory.includes("const bindBootstrapAppAuthoringSubmit ="), true);

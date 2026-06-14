@@ -23,6 +23,10 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
       "session.logout",
       "backendProgram.run",
       "page.home",
+      "page.surface",
+      "guidance.progress.read",
+      "guidance.progress.write",
+      "guidance.progress.delete",
       "runtime.diagnostics.read",
       "runtime.plugins.read",
       "runtime.pluginReviews.read"
@@ -30,17 +34,25 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
     handlerMetadata: {
       "backendProgram.run": { routeKind: "backendProgram", responseKind: "json" },
       "page.home": { routeKind: "page", responseKind: "page", methods: ["GET"] },
+      "page.surface": { routeKind: "page", responseKind: "page", methods: ["GET"] },
       "session.read": { routeKind: "json", responseKind: "json", methods: ["GET"] },
       "session.open": { routeKind: "json", responseKind: "json", methods: ["POST"] },
-      "session.logout": { routeKind: "json", responseKind: "json", methods: ["DELETE"] }
+      "session.logout": { routeKind: "json", responseKind: "json", methods: ["DELETE"] },
+      "guidance.progress.read": { routeKind: "json", responseKind: "json", methods: ["GET"] },
+      "guidance.progress.write": { routeKind: "json", responseKind: "json", methods: ["PUT"] },
+      "guidance.progress.delete": { routeKind: "json", responseKind: "json", methods: ["DELETE"] }
     },
-    pageHandlers: ["page.home"],
+    pageHandlers: ["page.home", "page.surface"],
     dispatchHandlers: [
       "session.read",
       "session.open",
       "session.logout",
       "backendProgram.run",
       "page.home",
+      "page.surface",
+      "guidance.progress.read",
+      "guidance.progress.write",
+      "guidance.progress.delete",
       "runtime.diagnostics.read",
       "runtime.plugins.read",
       "runtime.pluginReviews.read"

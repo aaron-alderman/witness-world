@@ -12,7 +12,7 @@ import desire/v3-alpha
 // and the WHOLE cataracting trajectory field). The symmetry break is just TWO
 // lowered leaves — segment_half_angle (the fill solver, θ−sinθ=2πJ) and the
 // charge-polygon centroid charge_com_x/charge_com_y — in
-// plugins/chart-runtime/mill-charge-kernels.js. The "stochastic" launch jitter
+// app/chart-functions/mill-charge-kernels.js. The "stochastic" launch jitter
 // enters as the injected seeded sampler spread/vjit/tphase (reproducible; the
 // particle axis is the future Monte-Carlo ensemble axis). Faithful to
 // example-ports/engentus/js/mill_physics.js + mill_canvas.js (_advanceCataracting).

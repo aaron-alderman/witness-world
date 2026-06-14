@@ -4,23 +4,23 @@ context = "frontend"
 
 [[box]]
 id = "bootstrap_capability_create_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_create_form", "bootstrap_capability_create_status"]
 
 [[form]]
 id = "bootstrap_capability_create_form"
 domId = "capability-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_create_grid_primary", "bootstrap_capability_create_grid_secondary", "bootstrap_capability_create_context_grid", "bootstrap_capability_create_depends_field", "bootstrap_capability_create_provenance_field", "bootstrap_capability_create_public_api_field", "bootstrap_capability_create_config_field", "bootstrap_capability_create_internals_field", "bootstrap_capability_create_authority_field", "bootstrap_capability_create_actions"]
 
 [[box]]
 id = "bootstrap_capability_create_grid_primary"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_capability_create_id_field", "bootstrap_capability_create_label_field"]
 
 [[box]]
 id = "bootstrap_capability_create_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_create_id_text", "bootstrap_capability_create_id_input"]
 
 [[text]]
@@ -34,7 +34,7 @@ placeholder = "notes.sidebar"
 
 [[box]]
 id = "bootstrap_capability_create_label_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_create_label_text", "bootstrap_capability_create_label_input"]
 
 [[text]]
@@ -48,12 +48,12 @@ placeholder = "Notes Sidebar"
 
 [[box]]
 id = "bootstrap_capability_create_grid_secondary"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_capability_create_version_field", "bootstrap_capability_create_placement_field"]
 
 [[box]]
 id = "bootstrap_capability_create_version_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_create_version_text", "bootstrap_capability_create_version_input"]
 
 [[text]]
@@ -67,7 +67,7 @@ placeholder = "0.1.0"
 
 [[box]]
 id = "bootstrap_capability_create_placement_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_create_placement_text", "bootstrap_capability_create_placement_input"]
 
 [[text]]
@@ -81,12 +81,12 @@ value = "[\"context\"]"
 
 [[box]]
 id = "bootstrap_capability_create_context_grid"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_capability_create_context_field", "bootstrap_capability_create_context_spacer"]
 
 [[box]]
 id = "bootstrap_capability_create_context_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_create_context_text", "bootstrap_capability_create_context_select"]
 
 [[text]]
@@ -103,7 +103,7 @@ id = "bootstrap_capability_create_context_spacer"
 
 [[box]]
 id = "bootstrap_capability_create_depends_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_create_depends_text", "bootstrap_capability_create_depends_input"]
 
 [[text]]
@@ -117,7 +117,7 @@ value = "[]"
 
 [[box]]
 id = "bootstrap_capability_create_provenance_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_create_provenance_text", "bootstrap_capability_create_provenance_input"]
 
 [[text]]
@@ -131,7 +131,7 @@ value = "{\"source\":\"local\"}"
 
 [[box]]
 id = "bootstrap_capability_create_public_api_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_create_public_api_text", "bootstrap_capability_create_public_api_input"]
 
 [[text]]
@@ -145,7 +145,7 @@ value = "[]"
 
 [[box]]
 id = "bootstrap_capability_create_config_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_create_config_text", "bootstrap_capability_create_config_input"]
 
 [[text]]
@@ -159,7 +159,7 @@ value = "[]"
 
 [[box]]
 id = "bootstrap_capability_create_internals_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_create_internals_text", "bootstrap_capability_create_internals_input"]
 
 [[text]]
@@ -173,7 +173,7 @@ value = "[]"
 
 [[box]]
 id = "bootstrap_capability_create_authority_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_create_authority_text", "bootstrap_capability_create_authority_input"]
 
 [[text]]
@@ -187,7 +187,7 @@ value = "[]"
 
 [[box]]
 id = "bootstrap_capability_create_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_capability_create_submit"]
 
 [[button]]
@@ -198,7 +198,7 @@ type = "submit"
 [[text]]
 id = "bootstrap_capability_create_status"
 domId = "capability-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -225,34 +225,10 @@ schema = "capability.define"
 [[step]]
 program = "bootstrap_capability_create_controls_program"
 order = 2
-op = "postJson"
-on = "submit:bootstrap_capability_create_form"
-url = "/api/capabilities"
-from = "bootstrapCapabilityCreateDraft"
-into = "bootstrapCapabilityCreateResult"
-
-[[step]]
-program = "bootstrap_capability_create_controls_program"
-order = 3
-op = "setText"
-on = "submit:bootstrap_capability_create_form"
-widget = "bootstrap_capability_create_status"
-text = "Saved."
-
-[[step]]
-program = "bootstrap_capability_create_controls_program"
-order = 4
-op = "clearForm"
-on = "submit:bootstrap_capability_create_form"
-widget = "bootstrap_capability_create_form"
-
-[[step]]
-program = "bootstrap_capability_create_controls_program"
-order = 5
 op = "dispatchDomEvent"
 on = "submit:bootstrap_capability_create_form"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-capability-controls", reason = "capability-create" }
+eventName = "witness:bootstrap-capability-submit"
+detail = { source = "bootstrap-capability-controls", family = "capability-create", formId = "capability-form", statusId = "capability-status", id = "${state.bootstrapCapabilityCreateDraft.id}", label = "${state.bootstrapCapabilityCreateDraft.label}", version = "${state.bootstrapCapabilityCreateDraft.version}", provenanceJson = "${state.bootstrapCapabilityCreateDraft.provenanceJson}", dependsOnJson = "${state.bootstrapCapabilityCreateDraft.dependsOnJson}", publicApiJson = "${state.bootstrapCapabilityCreateDraft.publicApiJson}", configJson = "${state.bootstrapCapabilityCreateDraft.configJson}", internalsJson = "${state.bootstrapCapabilityCreateDraft.internalsJson}", authorityJson = "${state.bootstrapCapabilityCreateDraft.authorityJson}", placementJson = "${state.bootstrapCapabilityCreateDraft.placementJson}", context = "${state.bootstrapCapabilityCreateDraft.context}" }
 
 [[step]]
 program = "bootstrap_capability_create_controls_program"
@@ -265,23 +241,23 @@ text = "${event.message}"
 
 [[box]]
 id = "bootstrap_capability_install_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_install_form", "bootstrap_capability_install_help", "bootstrap_capability_install_status"]
 
 [[form]]
 id = "bootstrap_capability_install_form"
 domId = "capability-install-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_install_grid", "bootstrap_capability_install_target_field", "bootstrap_capability_install_actions"]
 
 [[box]]
 id = "bootstrap_capability_install_grid"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_capability_install_capability_field", "bootstrap_capability_install_kind_field"]
 
 [[box]]
 id = "bootstrap_capability_install_capability_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_install_capability_text", "bootstrap_capability_install_capability_select"]
 
 [[text]]
@@ -295,7 +271,7 @@ name = "capability"
 
 [[box]]
 id = "bootstrap_capability_install_kind_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_install_kind_text", "bootstrap_capability_install_kind_select"]
 
 [[text]]
@@ -309,7 +285,7 @@ name = "targetKind"
 
 [[box]]
 id = "bootstrap_capability_install_target_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_install_target_text", "bootstrap_capability_install_target_select"]
 
 [[text]]
@@ -323,7 +299,7 @@ name = "target"
 
 [[box]]
 id = "bootstrap_capability_install_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_capability_install_submit"]
 
 [[button]]
@@ -334,13 +310,13 @@ type = "submit"
 [[text]]
 id = "bootstrap_capability_install_help"
 domId = "capability-install-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[text]]
 id = "bootstrap_capability_install_status"
 domId = "capability-install-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -391,34 +367,10 @@ schema = "capability.install"
 [[step]]
 program = "bootstrap_capability_install_controls_program"
 order = 2
-op = "postJson"
-on = "submit:bootstrap_capability_install_form"
-url = "/api/capability-installs"
-from = "bootstrapCapabilityInstallDraft"
-into = "bootstrapCapabilityInstallResult"
-
-[[step]]
-program = "bootstrap_capability_install_controls_program"
-order = 3
-op = "setText"
-on = "submit:bootstrap_capability_install_form"
-widget = "bootstrap_capability_install_status"
-text = "Saved."
-
-[[step]]
-program = "bootstrap_capability_install_controls_program"
-order = 4
-op = "clearForm"
-on = "submit:bootstrap_capability_install_form"
-widget = "bootstrap_capability_install_form"
-
-[[step]]
-program = "bootstrap_capability_install_controls_program"
-order = 5
 op = "dispatchDomEvent"
 on = "submit:bootstrap_capability_install_form"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-capability-controls", reason = "capability-install" }
+eventName = "witness:bootstrap-capability-submit"
+detail = { source = "bootstrap-capability-controls", family = "capability-install", formId = "capability-install-form", statusId = "capability-install-status", capability = "${state.bootstrapCapabilityInstallDraft.capability}", target = "${state.bootstrapCapabilityInstallDraft.target}", targetKind = "${state.bootstrapCapabilityInstallDraft.targetKind}" }
 
 [[step]]
 program = "bootstrap_capability_install_controls_program"

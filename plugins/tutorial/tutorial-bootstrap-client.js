@@ -286,7 +286,7 @@ export function renderBootstrapTutorialStateFactory() {
           options.headers = { "content-type": "application/json" };
           options.body = JSON.stringify(body);
         }
-        return request("/api/tutorial-progress/" + encodeURIComponent(tutorial.id), options);
+        return request("/api/guidance-progress/" + encodeURIComponent(tutorial.id), options);
       };
       const persistTutorialProgress = async progress => {
         state.tutorialProgress = normalizeProgress(progress);

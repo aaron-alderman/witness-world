@@ -98,3 +98,18 @@ test("requestWidgetDefine returns structured type gate failures outside the demo
   assert.equal(result.witness.body.failures.some(f => f.field === "kind"), true);
   assert.equal(result.witness.body.failures.some(f => f.field === "order"), true);
 });
+
+test("requestWidgetDefine keeps detached widgets detached even when a root fallback exists", () => {
+  const world = seededWorld();
+  const result = requestWidgetDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: { id: "detached_page", kind: "Heading", text: "Detached", attach: false },
+    defaultParent: "root"
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 201);
+  assert.equal(result.widget.parent, null);
+  assert.equal(world.allWitnesses().some(w => w.process === "attachWidget" && w.body?.child === "detached_page"), false);
+});

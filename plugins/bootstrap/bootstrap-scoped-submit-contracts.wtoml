@@ -1,0 +1,59 @@
+[[bootstrapScopedSubmit]]
+family = "context-binding-create"
+url = "/api/context-bindings"
+successText = "Saved."
+resetOnSuccess = true
+bodyFields = ["context", "name", "target"]
+
+[[bootstrapScopedSubmit]]
+family = "context-export-create"
+url = "/api/context-exports"
+successText = "Saved."
+resetOnSuccess = true
+bodyFields = ["context", "name", "target"]
+
+[[bootstrapScopedSubmit]]
+family = "context-import-create"
+url = "/api/context-imports"
+successText = "Saved."
+resetOnSuccess = true
+bodyFields = ["context", "sourceContext", "exportName", "name"]
+
+[[bootstrapScopedSubmit]]
+family = "stewardship-create"
+url = "/api/stewardships"
+successText = "Saved."
+resetOnSuccess = true
+bodyFields = ["steward", "target", "targetKind"]
+
+[[bootstrapScopedSubmit]]
+family = "context-binding-remove"
+url = "/api/context-bindings"
+method = "DELETE"
+successText = "Removed."
+resetOnSuccess = false
+bodyFields = ["context", "name", "target"]
+
+[[bootstrapScopedSubmit]]
+family = "context-export-remove"
+url = "/api/context-exports"
+method = "DELETE"
+successText = "Removed."
+resetOnSuccess = false
+bodyFields = ["context", "name", "target"]
+
+[[bootstrapScopedSubmit]]
+family = "context-import-remove"
+url = "/api/context-imports"
+method = "DELETE"
+successText = "Removed."
+resetOnSuccess = false
+bodyFields = ["context", "sourceContext", "exportName", "name"]
+
+[[bootstrapScopedSubmit]]
+family = "stewardship-remove"
+url = "/api/stewardships"
+method = "DELETE"
+successText = "Removed."
+resetOnSuccess = false
+bodyFields = ["steward", "target", "targetKind"]

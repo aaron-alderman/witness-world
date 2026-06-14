@@ -1,0 +1,14 @@
+{
+  "id": "plugin.starter",
+  "version": "0.1.0",
+  "displayName": "Starter Content Plugin",
+  "description": "Contributes starter blueprints for bootstrap and other consumers.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-starter"
+  ],
+  "contributes": {}
+}

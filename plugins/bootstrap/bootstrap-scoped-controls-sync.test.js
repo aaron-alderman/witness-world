@@ -320,6 +320,80 @@ test("scoped bootstrap dep-builder seam resolves browser globals and live state 
   });
 });
 
+test("scoped sync binding re-resolves live state and DOM reads on each event", () => {
+  const bindingContext = {
+    value: "ctx.current",
+    options: [{ value: "ctx.current" }, { value: "ctx.next" }]
+  };
+  const bindingTarget = {
+    value: "widget.current",
+    options: [{ value: "widget.current" }, { value: "widget.next" }]
+  };
+  const button = { disabled: false };
+  const nodes = new Map([
+    ["context-binding-context", bindingContext],
+    ["context-binding-target", bindingTarget],
+    ["context-binding-form", {
+      querySelector(selector) {
+        if (selector === 'button[type="submit"]') return button;
+        return null;
+      }
+    }]
+  ]);
+  const state = {
+    bootstrapState: { identities: [], contexts: [{ id: "ctx.current" }] },
+    session: { authenticated: false },
+    model: {
+      contextBindableTargets: [{ id: "widget.current", context: "ctx.current" }],
+      stewardshipTargetKinds: ["context"]
+    }
+  };
+  const liveState = {
+    authored: () => state.bootstrapState || {},
+    session: () => state.session || {},
+    contextRows: () => state.bootstrapState?.contexts || [],
+    contextBindableTargets: contextId => (state.model?.contextBindableTargets || []).filter(row => !row.context || row.context === contextId),
+    contextScopeRows: () => [],
+    contextExportRows: () => [],
+    stewardshipTargetKinds: () => state.model?.stewardshipTargetKinds || [],
+    stewardshipTargetsFor: targetKind => targetKind === "context" ? (state.bootstrapState?.contexts || []) : []
+  };
+  const buildDeps = createBootstrapScopedControlsSyncDepsBuilder({
+    liveState,
+    dom: {
+      byId: id => nodes.get(id) || null
+    }
+  });
+  const target = {
+    addEventListener(eventName, handler) {
+      this.eventName = eventName;
+      this.handler = handler;
+    }
+  };
+
+  bindBootstrapScopedControlsSync({ target, buildDeps });
+  assert.equal(target.eventName, "witness:bootstrap-dependent-select-sync");
+
+  const first = target.handler({ detail: { source: "bootstrap-scoped-controls", family: "context-binding-target" } });
+  assert.equal(first.handled, true);
+  assert.equal(first.view.bindingCreateContext.selectedContextId, "ctx.current");
+  assert.equal(first.view.bindingCreate.selectedTargetId, "widget.current");
+
+  state.bootstrapState = { identities: [{ id: "identity.aaron" }], contexts: [{ id: "ctx.next" }] };
+  state.session = { authenticated: true };
+  state.model = {
+    contextBindableTargets: [{ id: "widget.next", context: "ctx.next" }],
+    stewardshipTargetKinds: ["context", "perspective"]
+  };
+  bindingContext.value = "ctx.next";
+  bindingTarget.value = "widget.next";
+
+  const second = target.handler({ detail: { source: "bootstrap-scoped-controls", family: "context-binding-target" } });
+  assert.equal(second.handled, true);
+  assert.equal(second.view.bindingCreateContext.selectedContextId, "ctx.next");
+  assert.equal(second.view.bindingCreate.selectedTargetId, "widget.next");
+});
+
 test("scoped sync dep builder exposes the shared live dependency packet directly", () => {
   const button = { disabled: false };
   const nodes = new Map([

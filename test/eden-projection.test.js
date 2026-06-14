@@ -52,6 +52,11 @@ test("eden neighborhood projection returns the authored first neighborhood", asy
   const commonsSurface = model.surfaces.find(surface => surface.id === "eden.surface.commons");
   assert.equal(commonsSurface.panelKind, "organization");
   assert.equal(commonsSurface.runtime.mode, "organization");
+  assert.equal(commonsSurface.runtime.proposalTemplate.targetProcess, "widget.define");
+  assert.equal(
+    commonsSurface.runtime.proposalTemplate.body?.tutorialTarget,
+    commonsSurface.runtime.proposalTemplate.body?.id
+  );
   const processSurface = model.surfaces.find(surface => surface.id === "eden.surface.process");
   assert.equal(processSurface.panelKind, "processView");
   assert.equal(processSurface.processProgram, "todo_frontend_program");

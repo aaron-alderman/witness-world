@@ -32,7 +32,7 @@ async function openSession(serverUrl, { username = "aaron", password = username 
 function widgetInput(input) {
   const id = typeof input?.id === "string" && input.id.trim() ? input.id.trim() : "widget";
   return {
-    tutorialTarget: input?.tutorialTarget ?? id,
+    guidanceTarget: input?.guidanceTarget ?? input?.tutorialTarget ?? id,
     ...input
   };
 }
@@ -99,6 +99,7 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
       "bundle-program-authoring",
       "bundle-proposals",
       "bundle-server-runner-authoring",
+      "bundle-starter",
       "bundle-tutorial"
     ].sort());
     assert.equal(diagnostics.startupRunner?.bootstrapOnly, true);
@@ -493,7 +494,7 @@ test("a bootstrap-authored runner and home route take over without restarting th
   }
 });
 
-test("tutorial progress syncs into the authenticated session store", async () => {
+test("guidance progress syncs into the authenticated session store", async () => {
   const { server } = await startBlankServer();
   try {
     await fetch(`${server.url}/api/identities`, {
@@ -512,16 +513,16 @@ test("tutorial progress syncs into the authenticated session store", async () =>
     const login = await openSession(server.url);
     assert.equal(login.response.status, 200);
 
-    const empty = await fetch(`${server.url}/api/tutorial-progress/todo-from-scratch`, {
+    const empty = await fetch(`${server.url}/api/guidance-progress/todo-from-scratch`, {
       headers: { cookie: login.cookie }
     }).then(response => response.json());
     assert.equal(empty.progress, null);
 
-    const written = await fetch(`${server.url}/api/tutorial-progress/todo-from-scratch`, {
+    const written = await fetch(`${server.url}/api/guidance-progress/todo-from-scratch`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: login.cookie },
       body: JSON.stringify({
-        tutorialId: "todo-from-scratch",
+        guidanceId: "todo-from-scratch",
         chapterId: "identity",
         stepId: "identity:create",
         chapterStatus: "in_progress",
@@ -535,7 +536,7 @@ test("tutorial progress syncs into the authenticated session store", async () =>
     }).then(response => response.json());
     assert.equal(written.progress.stepId, "identity:create");
 
-    const readBack = await fetch(`${server.url}/api/tutorial-progress/todo-from-scratch`, {
+    const readBack = await fetch(`${server.url}/api/guidance-progress/todo-from-scratch`, {
       headers: { cookie: login.cookie }
     }).then(response => response.json());
     assert.equal(readBack.progress.chapterId, "identity");
@@ -546,13 +547,13 @@ test("tutorial progress syncs into the authenticated session store", async () =>
     assert.equal(readBack.progress.replayScopeKey, "section:bootstrap:identity-form");
     assert.equal(readBack.progress.replayStepId, "identity:create");
 
-    const cleared = await fetch(`${server.url}/api/tutorial-progress/todo-from-scratch`, {
+    const cleared = await fetch(`${server.url}/api/guidance-progress/todo-from-scratch`, {
       method: "DELETE",
       headers: { cookie: login.cookie }
     }).then(response => response.json());
     assert.equal(cleared.ok, true);
 
-    const emptyAgain = await fetch(`${server.url}/api/tutorial-progress/todo-from-scratch`, {
+    const emptyAgain = await fetch(`${server.url}/api/guidance-progress/todo-from-scratch`, {
       headers: { cookie: login.cookie }
     }).then(response => response.json());
     assert.equal(emptyAgain.progress, null);

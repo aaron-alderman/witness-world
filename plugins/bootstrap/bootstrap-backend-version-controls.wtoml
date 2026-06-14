@@ -5,23 +5,23 @@ program = "bootstrap_backend_version_controls_program"
 
 [[box]]
 id = "bootstrap_backend_version_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_backend_activate_form", "bootstrap_backend_activate_status", "bootstrap_backend_rollback_form", "bootstrap_backend_rollback_status"]
 
 [[form]]
 id = "bootstrap_backend_activate_form"
 domId = "backend-program-activate-form"
-class = "stack"
+class = "surface-stack surface-mono"
 children = ["bootstrap_backend_activate_grid", "bootstrap_backend_activate_help", "bootstrap_backend_activate_actions"]
 
 [[box]]
 id = "bootstrap_backend_activate_grid"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_backend_activate_soul_field", "bootstrap_backend_activate_version_field"]
 
 [[box]]
 id = "bootstrap_backend_activate_soul_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_backend_activate_soul_text", "bootstrap_backend_activate_soul_select"]
 
 [[text]]
@@ -35,7 +35,7 @@ name = "soul"
 
 [[box]]
 id = "bootstrap_backend_activate_version_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_backend_activate_version_text", "bootstrap_backend_activate_version_select"]
 
 [[text]]
@@ -50,12 +50,12 @@ name = "version"
 [[text]]
 id = "bootstrap_backend_activate_help"
 domId = "backend-program-activate-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[box]]
 id = "bootstrap_backend_activate_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_backend_activate_submit"]
 
 [[button]]
@@ -66,23 +66,23 @@ type = "submit"
 [[text]]
 id = "bootstrap_backend_activate_status"
 domId = "backend-program-activate-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[form]]
 id = "bootstrap_backend_rollback_form"
 domId = "backend-program-rollback-form"
-class = "stack"
+class = "surface-stack surface-mono"
 children = ["bootstrap_backend_rollback_grid", "bootstrap_backend_rollback_help", "bootstrap_backend_rollback_actions"]
 
 [[box]]
 id = "bootstrap_backend_rollback_grid"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_backend_rollback_soul_field", "bootstrap_backend_rollback_spacer"]
 
 [[box]]
 id = "bootstrap_backend_rollback_soul_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_backend_rollback_soul_text", "bootstrap_backend_rollback_soul_select"]
 
 [[text]]
@@ -100,24 +100,24 @@ id = "bootstrap_backend_rollback_spacer"
 [[text]]
 id = "bootstrap_backend_rollback_help"
 domId = "backend-program-rollback-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[box]]
 id = "bootstrap_backend_rollback_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_backend_rollback_submit"]
 
 [[button]]
 id = "bootstrap_backend_rollback_submit"
 text = "Rollback Version"
 type = "submit"
-class = "secondary"
+class = "surface-button-secondary"
 
 [[text]]
 id = "bootstrap_backend_rollback_status"
 domId = "backend-program-rollback-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -147,25 +147,10 @@ into = "bootstrapBackendActivateDraft"
 
 [[step]]
 order = 2
-op = "postJson"
-on = "submit:bootstrap_backend_activate_form"
-url = "/api/backend-program-versions/${state.bootstrapBackendActivateDraft.soul}/activate"
-body = { version = "${state.bootstrapBackendActivateDraft.version}" }
-into = "bootstrapBackendActivateResult"
-
-[[step]]
-order = 3
-op = "setText"
-on = "submit:bootstrap_backend_activate_form"
-widget = "bootstrap_backend_activate_status"
-text = "Activated."
-
-[[step]]
-order = 4
 op = "dispatchDomEvent"
 on = "submit:bootstrap_backend_activate_form"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-backend-version-controls", reason = "backend-program-activate" }
+eventName = "witness:bootstrap-backend-version-submit"
+detail = { source = "bootstrap-backend-version-controls", family = "activate", statusId = "backend-program-activate-status", soul = "${state.bootstrapBackendActivateDraft.soul}", version = "${state.bootstrapBackendActivateDraft.version}" }
 
 [[step]]
 order = 0
@@ -183,25 +168,10 @@ into = "bootstrapBackendRollbackDraft"
 
 [[step]]
 order = 2
-op = "postJson"
-on = "submit:bootstrap_backend_rollback_form"
-url = "/api/backend-program-versions/${state.bootstrapBackendRollbackDraft.soul}/rollback"
-body = {}
-into = "bootstrapBackendRollbackResult"
-
-[[step]]
-order = 3
-op = "setText"
-on = "submit:bootstrap_backend_rollback_form"
-widget = "bootstrap_backend_rollback_status"
-text = "Rolled back."
-
-[[step]]
-order = 4
 op = "dispatchDomEvent"
 on = "submit:bootstrap_backend_rollback_form"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-backend-version-controls", reason = "backend-program-rollback" }
+eventName = "witness:bootstrap-backend-version-submit"
+detail = { source = "bootstrap-backend-version-controls", family = "rollback", statusId = "backend-program-rollback-status", soul = "${state.bootstrapBackendRollbackDraft.soul}" }
 
 [[step]]
 order = 0

@@ -15,18 +15,14 @@ actor = "aaron"
 serverRunner = "engentus_server"
 plugin = "plugin.chart-runtime"
 
-[[runtimePluginInstall]]
-actor = "aaron"
-serverRunner = "engentus_server"
-plugin = "plugin.engentus-example"
-
 [[route]]
 actor = "aaron"
 id = "engentus_home_route"
 method = "GET"
 path = "/"
-serves = "engentusView"
-handler = "page.engentus"
+serves = "engentusShell"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "login" }
 
 [[serve]]
 actor = "aaron"
@@ -38,13 +34,28 @@ actor = "aaron"
 id = "engentus_alias_route"
 method = "GET"
 path = "/engentus"
-serves = "engentusView"
-handler = "page.engentus"
+serves = "engentusShell"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "login" }
 
 [[serve]]
 actor = "aaron"
 serverRunner = "engentus_server"
 route = "engentus_alias_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_screen_route"
+method = "GET"
+path = "/engentus/:screen"
+serves = "engentusShell"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "login" }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_screen_route"
 
 [[desktopTarget]]
 id = "engentus_desktop"

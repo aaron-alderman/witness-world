@@ -9,7 +9,6 @@ import {
   restartTutorialFromHere,
   setTutorialContextDisabled,
   setTutorialScopeDisabled,
-  todoStarterBlueprint,
   todoTutorialDefinition,
   tutorialDisabledContextIds,
   tutorialDisabledScopeKeys,
@@ -20,6 +19,7 @@ import {
   tutorialStepScope,
   tutorialStepConcepts
 } from "../plugins/tutorial/tutorials.js";
+import { todoStarterBlueprint } from "../plugins/starter/starter-blueprints.js";
 
 test("tutorial concepts are authored per step and reveal progressively with progress", () => {
   const tutorial = todoTutorialDefinition();
@@ -172,7 +172,7 @@ test("tutorial scope catalog includes authored non-step anchors for shipped app 
   );
 });
 
-test("todo starter blueprint authors live app and world frontend surfaces into the frontend context", () => {
+test("starter blueprint authors live app and world frontend surfaces into the frontend context", () => {
   const blueprint = todoStarterBlueprint();
 
   assert.equal(blueprint.program.context, "frontend");
@@ -186,7 +186,7 @@ test("todo starter blueprint authors live app and world frontend surfaces into t
   assert.equal(worldRoute?.context, "frontend");
 });
 
-test("todo starter blueprint reloads from the authored document as a fresh clone per call", () => {
+test("starter blueprint reloads from the authored document as a fresh clone per call", () => {
   const first = todoStarterBlueprint();
   first.runner.id = "mutated_runner";
   first.widgets[0].id = "mutated_widget";

@@ -1,52 +1,66 @@
+import {
+  bootstrapRuntimeIntegrationDirectSubmitContractsByFamily
+} from "./bootstrap-runtime-integration-direct-submit-contracts.js";
+
 export function renderBootstrapRuntimeIntegrationDirectSubmitFactory() {
   return String.raw`
+    const bootstrapRuntimeIntegrationDirectSubmitContractsByFamily = ${JSON.stringify(bootstrapRuntimeIntegrationDirectSubmitContractsByFamily)};
+    const omitBlankStringFields = ${omitBlankStringFields.toString()};
+    const contractForFamily = ${contractForFamily.toString()};
+    const applyBootstrapRuntimeIntegrationDirectSubmitFieldRule = ${applyBootstrapRuntimeIntegrationDirectSubmitFieldRule.toString()};
     const buildBootstrapRuntimeIntegrationDirectSubmitRequest = ${buildBootstrapRuntimeIntegrationDirectSubmitRequest.toString()};
     const runBootstrapRuntimeIntegrationDirectSubmit = ${runBootstrapRuntimeIntegrationDirectSubmit.toString()};
     const bindBootstrapRuntimeIntegrationDirectSubmit = ${bindBootstrapRuntimeIntegrationDirectSubmit.toString()};
   `;
 }
 
-export function buildBootstrapRuntimeIntegrationDirectSubmitRequest({
-  detail = {}
-} = {}) {
-  const omitBlankStringFields = (record = {}) => Object.fromEntries(
+function omitBlankStringFields(record = {}) {
+  return Object.fromEntries(
     Object.entries(record).filter(([, value]) => value !== "")
   );
-  if (detail.family === "runtime-plugin-install") {
-    return {
-      url: "/api/runtime-plugin-installs",
-      body: {
-        serverRunner: detail.serverRunner || "",
-        plugin: detail.plugin || ""
-      }
-    };
+}
+
+function contractForFamily(family = "", contractsByFamily = bootstrapRuntimeIntegrationDirectSubmitContractsByFamily) {
+  const key = typeof family === "string" ? family.trim() : "";
+  return key ? (contractsByFamily[key] || null) : null;
+}
+
+function applyBootstrapRuntimeIntegrationDirectSubmitFieldRule({
+  body = {},
+  detail = {},
+  rule = {}
+} = {}) {
+  const name = typeof rule.name === "string" ? rule.name.trim() : "";
+  if (!name) return body;
+  const raw = detail?.[name];
+  body[name] = raw === "" || raw == null
+    ? (rule.defaultValue ?? "")
+    : raw;
+  return body;
+}
+
+export function buildBootstrapRuntimeIntegrationDirectSubmitRequest({
+  detail = {},
+  contractsByFamily = bootstrapRuntimeIntegrationDirectSubmitContractsByFamily
+} = {}) {
+  const contract = contractForFamily(detail.family, contractsByFamily);
+  if (!contract) return null;
+  let body = Object.fromEntries(
+    (contract.bodyFields || []).map(field => [field, detail[field] || ""])
+  );
+  for (const rule of contract.fields || []) {
+    body = applyBootstrapRuntimeIntegrationDirectSubmitFieldRule({ body, detail, rule });
   }
-  if (detail.family === "mcp-server") {
-    return {
-      url: "/api/mcp-servers",
-      body: omitBlankStringFields({
-        id: detail.id || "",
-        label: detail.label || "",
-        serverRunner: detail.serverRunner || "",
-        context: detail.context || "",
-        serviceIdentity: detail.serviceIdentity || "",
-        transportsJson: detail.transportsJson || ""
-      })
-    };
+  if (contract.omitBlankStrings === true) {
+    body = omitBlankStringFields(body);
   }
-  if (detail.family === "mcp-tool-install") {
-    return {
-      url: "/api/mcp-tool-installs",
-      body: {
-        server: detail.server || "",
-        tool: detail.tool || "",
-        actingMode: detail.actingMode || "delegated",
-        scopeContextsJson: detail.scopeContextsJson || "[]",
-        scopeTargetsJson: detail.scopeTargetsJson || "[]"
-      }
-    };
-  }
-  return null;
+  return {
+    url: contract.url || "",
+    ...(contract.method ? { method: contract.method } : {}),
+    body,
+    successText: contract.successText || "Saved.",
+    resetOnSuccess: contract.resetOnSuccess === true
+  };
 }
 
 export async function runBootstrapRuntimeIntegrationDirectSubmit({
@@ -54,14 +68,15 @@ export async function runBootstrapRuntimeIntegrationDirectSubmit({
   postJson = async () => ({}),
   refresh = async () => {},
   setStatus = () => {},
-  resetForm = () => {}
+  resetForm = () => {},
+  contractsByFamily = bootstrapRuntimeIntegrationDirectSubmitContractsByFamily
 } = {}) {
-  const request = buildBootstrapRuntimeIntegrationDirectSubmitRequest({ detail });
+  const request = buildBootstrapRuntimeIntegrationDirectSubmitRequest({ detail, contractsByFamily });
   if (!request) return false;
   try {
-    await postJson(request.url, request.body);
-    setStatus(detail.statusId, "Saved.");
-    resetForm(detail.formId);
+    await postJson(request.url, request.body, request.method || "POST");
+    setStatus(detail.statusId, request.successText || "Saved.");
+    if (request.resetOnSuccess && detail.formId) resetForm(detail.formId);
     await refresh();
     return true;
   } catch (error) {
@@ -75,7 +90,8 @@ export function bindBootstrapRuntimeIntegrationDirectSubmit({
   postJson = async () => ({}),
   refresh = async () => {},
   setStatus = () => {},
-  resetForm = () => {}
+  resetForm = () => {},
+  contractsByFamily = bootstrapRuntimeIntegrationDirectSubmitContractsByFamily
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
   if (!resolvedTarget?.addEventListener) return null;
@@ -84,7 +100,8 @@ export function bindBootstrapRuntimeIntegrationDirectSubmit({
     postJson,
     refresh,
     setStatus,
-    resetForm
+    resetForm,
+    contractsByFamily
   });
   resolvedTarget.addEventListener("witness:bootstrap-runtime-integration-direct-submit", handler);
   return handler;

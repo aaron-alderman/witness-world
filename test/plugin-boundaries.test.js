@@ -125,13 +125,42 @@ const PRACTICAL_BACKEND_CHILD_OWNERSHIP = Object.freeze({
 
 const GENERIC_PLUGIN_SRC_IMPORT_TARGETS = Object.freeze([
   "src/backend-programs.js",
+  "src/desire/host-op-migration.js",
+  "src/desire/index.js",
+  "src/dsl.js",
   "src/gates.js",
   "src/ids.js",
   "src/kernel.js",
   "src/modules.js",
   "src/process-graph.js",
   "src/projectors-core.js",
+  "src/runtime-builtins.js",
   "src/runtime-config-utils.js",
+  "src/runtime-guidance-bootstrap-client.js",
+  "src/runtime-guidance-bootstrap-controller-client.js",
+  "src/runtime-guidance-bootstrap-ui.js",
+  "src/runtime-guidance-client-adapter.js",
+  "src/runtime-guidance-client-bootstrap.js",
+  "src/runtime-guidance-client-interactions.js",
+  "src/runtime-guidance-client-runtime.js",
+  "src/runtime-guidance-client-state.js",
+  "src/runtime-guidance-client.js",
+  "src/runtime-guidance-disabled-scopes-actions.js",
+  "src/runtime-guidance-disabled-scopes-view.js",
+  "src/runtime-guidance-model.js",
+  "src/runtime-guidance-overlay-actions.js",
+  "src/runtime-guidance-overlay-dom.js",
+  "src/runtime-guidance-overlay-drag.js",
+  "src/runtime-guidance-overlay-interactions.js",
+  "src/runtime-guidance-overlay-view.js",
+  "src/runtime-guidance-progress-runtime.js",
+  "src/runtime-guidance-progress-state.js",
+  "src/runtime-guidance-runtime-actions.js",
+  "src/runtime-guidance.js",
+  "src/runtime-page-state.js",
+  "src/runtime-presentation.js",
+  "src/runtime-surface-kit.js",
+  "src/runtime-widget-page.js",
   "src/type-model.js",
   "src/widgets.js"
 ]);
@@ -183,6 +212,7 @@ const REMOVED_PLUGIN_SRC_STUBS = Object.freeze([
 ]);
 
 const LARGE_SRC_CEREMONY_ALLOWLIST = Object.freeze({
+  "src/app-project.js": "generic app projection and authored app composition ceremony",
   "src/backend-programs.js": "stable authored backend-program ABI",
   "src/cli.js": "CLI transport and startup orchestration",
   "src/desktop-session-manager.js": "desktop runtime lifecycle ceremony",
@@ -192,11 +222,21 @@ const LARGE_SRC_CEREMONY_ALLOWLIST = Object.freeze({
   "src/runtime-builtins.js": "core builtin traits, universal capabilities, and generic process specs",
   "src/runtime-bundles.js": "seed-backed profile and bundle composition mechanics",
   "src/runtime-core-handlers.js": "core session, diagnostics, runtime catalog, home page hook invocation, and backend-program ABI dispatch",
+  "src/runtime-guidance-bootstrap-client.js": "core guidance progress client runtime and session persistence helpers",
+  "src/runtime-guidance-bootstrap-controller-client.js": "core guidance overlay controller and authored bootstrap guidance interaction ceremony",
+  "src/runtime-guidance-client-adapter.js": "core live guidance client projection and runtime snapshot helpers",
+  "src/runtime-guidance-model.js": "core guidance progress normalization, scope disabling, and authored guidance state helpers",
+  "src/runtime-guidance-overlay-actions.js": "core live guidance overlay action choreography",
+  "src/runtime-guidance-overlay-view.js": "core live guidance overlay rendering and disabled-scope panel projection",
+  "src/runtime-guidance-progress-state.js": "core live guidance surface-state and disabled-scope derivation helpers",
   "src/runtime-operator-service.js": "operator filesystem/import/export service ceremony",
   "src/runtime-plugin-loader.js": "plugin runtime ABI validation and active module loading",
   "src/runtime-plugin-utils.js": "plugin discovery, validation, dependency expansion, catalog, review, and composition read models",
+  "src/runtime-presentation.js": "core page presentation themes, CSS variable emission, and shared surface-kit styling",
   "src/runtime-route-handlers.js": "generic route assembly, active dependency delegation, inactive guards, and diagnostics ceremony",
   "src/runtime-server.js": "server startup, lifecycle, transport, and active static asset dispatch",
+  "src/runtime-surface-shell.js": "generic authored surface shell rendering and route-aware surface projection",
+  "src/runtime-widget-page.js": "generic authored widget-page rendering and lightweight frontend program runtime",
   "src/type-model.js": "generic type model",
   "src/widgets.js": "generic authored-widget ABI"
 });
@@ -307,6 +347,8 @@ test("runtime profiles are seed-backed and global first-party plugin registries 
   assert.equal(runtimeBundleHandlersSource.includes("FIRST_PARTY_PLUGIN_HANDLER_CATALOGS"), false);
   assert.deepEqual(profileSeed.profiles.full.plugins, [
     "plugin.authoring",
+    "plugin.tutorial",
+    "plugin.starter",
     "plugin.inspect",
     "plugin.canvas",
     "plugin.mcp",
@@ -316,6 +358,36 @@ test("runtime profiles are seed-backed and global first-party plugin registries 
   ]);
   assert.deepEqual(runtimeProfilePluginIds("full"), profileSeed.profiles.full.plugins);
   assert.equal(catalogSeed.bundles.some(bundle => bundle.id === "bundle-inspect" && bundle.plugin === "plugin.inspect"), true);
+});
+
+test("bootstrap consumes generic guidance and starter registries without tutorial-owned imports", async () => {
+  const bootstrapManifest = JSON.parse(await fs.readFile(path.join(pluginsRoot, "bootstrap", "plugin.json"), "utf8"));
+  const bootstrapReadModelsSource = await fs.readFile(path.join(pluginsRoot, "bootstrap", "bootstrap-read-models.js"), "utf8");
+  const bootstrapPageScriptSource = await fs.readFile(path.join(pluginsRoot, "bootstrap", "bootstrap-page-script.js"), "utf8");
+  const tutorialRuntimeSource = await fs.readFile(path.join(pluginsRoot, "tutorial", "runtime.js"), "utf8");
+  const starterRuntimeSource = await fs.readFile(path.join(pluginsRoot, "starter", "runtime.js"), "utf8");
+  const tutorialManifest = JSON.parse(await fs.readFile(path.join(pluginsRoot, "tutorial", "plugin.json"), "utf8"));
+  const starterManifest = JSON.parse(await fs.readFile(path.join(pluginsRoot, "starter", "plugin.json"), "utf8"));
+
+  assert.deepEqual(bootstrapManifest.dependsOnPlugins ?? [], []);
+  assert.equal(bootstrapReadModelsSource.includes("runtimeContributions?.guidanceDefinitions"), true);
+  assert.equal(bootstrapReadModelsSource.includes("runtimeContributions?.starterBlueprints"), true);
+  assert.equal(bootstrapReadModelsSource.includes("../tutorial/"), false);
+  assert.equal(bootstrapReadModelsSource.includes("../starter/"), false);
+  assert.equal(bootstrapPageScriptSource.includes("./bootstrap-guidance-runtime.js"), true);
+  assert.equal(bootstrapPageScriptSource.includes("./bootstrap-guidance-runtime-view.js"), true);
+  assert.equal(bootstrapPageScriptSource.includes("./bootstrap-tutorial-runtime.js"), false);
+  assert.equal(bootstrapPageScriptSource.includes("./bootstrap-tutorial-runtime-view.js"), false);
+
+  assert.deepEqual(tutorialManifest.dependsOnPlugins ?? [], []);
+  assert.deepEqual(starterManifest.dependsOnPlugins ?? [], []);
+  assert.equal(tutorialRuntimeSource.includes('kind: "guidanceDefinitions"'), true);
+  assert.equal(tutorialRuntimeSource.includes('kind: "starterBlueprints"'), false);
+  assert.equal(tutorialRuntimeSource.includes("createGuidanceBundleHandlers"), false);
+  assert.equal(tutorialRuntimeSource.includes("routes = Object.freeze([])"), true);
+  assert.equal(starterRuntimeSource.includes('kind: "starterBlueprints"'), true);
+  assert.equal(starterRuntimeSource.includes('kind: "guidanceDefinitions"'), false);
+  assert.equal(starterRuntimeSource.includes("routes = Object.freeze([])"), true);
 });
 
 test("src widgets module stays generic authored-widget ABI plus compatibility exports", async () => {
@@ -440,7 +512,6 @@ test("plugin-to-src import audit stays explicitly classified", async () => {
   const demoRuntimeBuiltinsSource = await fs.readFile(path.join(pluginsRoot, "demo", "runtime-builtins.js"), "utf8");
   const mcpAuthoringRuntimeBuiltinsSource = await fs.readFile(path.join(pluginsRoot, "mcp-authoring", "runtime-builtins.js"), "utf8");
   const mcpAuthoringRuntimeSource = await fs.readFile(path.join(pluginsRoot, "mcp-authoring", "runtime.js"), "utf8");
-  const tutorialRuntimeBuiltinsSource = await fs.readFile(path.join(pluginsRoot, "tutorial", "runtime-builtins.js"), "utf8");
   const manifests = await Promise.all((await pluginPackages()).map(pkg => fs.readFile(path.join(pkg.pluginDir, "plugin.json"), "utf8").then(JSON.parse)));
   const manifestCapabilityIds = new Set(manifests.flatMap(manifest =>
     (manifest.contributes?.capabilities ?? []).map(entry => String(entry?.id ?? entry)).filter(Boolean)
@@ -455,6 +526,8 @@ test("plugin-to-src import audit stays explicitly classified", async () => {
   assert.equal(runtimeBuiltinsSource.includes("todo_delete_spec"), false);
   assert.equal(runtimeBuiltinsSource.includes("todoProjection"), false);
   assert.equal(runtimeBuiltinsSource.includes("privateNotesProjection"), false);
+  assert.equal(runtimeBuiltinsSource.includes("widget.guidanceTarget"), true);
+  assert.equal(runtimeBuiltinsSource.includes("guidanceTarget"), true);
   assert.equal(runtimeBuiltinsSource.includes("widget.tutorialTarget"), false);
   assert.equal(runtimeBuiltinsSource.includes("tutorialTarget"), false);
   assert.equal(runtimeBuiltinsSource.includes("mcp_server_define_spec"), false);
@@ -489,8 +562,7 @@ test("plugin-to-src import audit stays explicitly classified", async () => {
   assert.equal(mcpAuthoringRuntimeBuiltinsSource.includes("mcp_tool_install_spec"), true);
   assert.equal(mcpAuthoringRuntimeBuiltinsSource.includes("mcp_tool_remove_spec"), true);
   assert.equal(mcpAuthoringRuntimeSource.includes("mcpAuthoringRuntimeDeclarations"), true);
-  assert.equal(tutorialRuntimeBuiltinsSource.includes("widget.tutorialTarget"), true);
-  assert.equal(tutorialRuntimeBuiltinsSource.includes("tutorial_widget_target_spec"), true);
+  assert.equal(await pathExists(path.join(pluginsRoot, "tutorial", "runtime-builtins.js")), false);
 });
 
 test("DSL ownership keeps plugin activation core but feature declarations plugin-owned or generic", async () => {

@@ -672,7 +672,7 @@ function semanticRvmShape(kind, name, type, bodyLines, header = {}) {
         layers: readRepeatedSimpleValues(bodyLines, "layer").map(parseLayerLine).filter(Boolean),
         className: null,
         children: [],
-        props: {}
+        props: parsePropAssignments(bodyLines)
       };
     default:
       return null;

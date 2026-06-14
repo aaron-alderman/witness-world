@@ -7,9 +7,6 @@
   "runtime": {
     "entry": "./runtime.js"
   },
-  "dependsOnPlugins": [
-    "plugin.tutorial"
-  ],
   "activatesBundles": [
     "bundle-bootstrap"
   ],

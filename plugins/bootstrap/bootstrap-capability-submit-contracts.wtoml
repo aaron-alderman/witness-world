@@ -1,0 +1,21 @@
+[[bootstrapCapabilitySubmit]]
+family = "capability-create"
+url = "/api/capabilities"
+successText = "Saved."
+resetOnSuccess = true
+bodyFields = ["id", "label", "version", "provenanceJson", "dependsOnJson", "publicApiJson", "configJson", "internalsJson", "authorityJson", "placementJson", "context"]
+
+[[bootstrapCapabilitySubmit]]
+family = "capability-install"
+url = "/api/capability-installs"
+successText = "Saved."
+resetOnSuccess = true
+bodyFields = ["capability", "target", "targetKind"]
+
+[[bootstrapCapabilitySubmit]]
+family = "capability-remove"
+url = "/api/capability-installs"
+method = "DELETE"
+successText = "Removed."
+resetOnSuccess = false
+bodyFields = ["capability", "target", "targetKind"]

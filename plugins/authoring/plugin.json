@@ -11,8 +11,7 @@
     "plugin.program-authoring",
     "plugin.server-runner-authoring",
     "plugin.mcp-authoring",
-    "plugin.proposals",
-    "plugin.tutorial"
+    "plugin.proposals"
   ],
   "contributes": {}
 }

@@ -24,6 +24,25 @@ export function createLogger({ sink = console, level = process.env.WITNESS_LOG_L
   });
 }
 
+export function createNoopLogger() {
+  return Object.freeze({
+    error() {},
+    warn() {},
+    info() {},
+    debug() {}
+  });
+}
+
+export function normalizeLogger(logger) {
+  if (!logger || typeof logger !== "object") return createNoopLogger();
+  return Object.freeze({
+    error: typeof logger.error === "function" ? logger.error.bind(logger) : () => {},
+    warn: typeof logger.warn === "function" ? logger.warn.bind(logger) : () => {},
+    info: typeof logger.info === "function" ? logger.info.bind(logger) : () => {},
+    debug: typeof logger.debug === "function" ? logger.debug.bind(logger) : () => {}
+  });
+}
+
 function safeFields(fields) {
   const out = {};
   for (const [k, v] of Object.entries(fields ?? {})) {

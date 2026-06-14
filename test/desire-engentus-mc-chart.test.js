@@ -6,8 +6,8 @@ import {
   normalizeDesirePlusToDesire
 } from "../src/desire/index.js";
 import { evaluateModel } from "../plugins/chart-runtime/dataflow-eval.js";
-import { goodmanFunctions } from "../plugins/chart-runtime/goodman-stdlib.js";
-import { samplingFunctions } from "../plugins/chart-runtime/sampling.js";
+import { goodmanFunctions } from "../examples/engentus/app/chart-functions/goodman-stdlib.js";
+import { samplingFunctions } from "../examples/engentus/app/chart-functions/sampling.js";
 import { planChart } from "../plugins/chart-runtime/gog-runtime.js";
 
 const appDir = path.join(process.cwd(), "examples_rvm", "engentus", "app");

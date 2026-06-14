@@ -9,19 +9,19 @@ import {
 test("starter controls view disables starter when app is ready or editing is unavailable", () => {
   assert.deepEqual(buildBootstrapStarterControlsView({
     model: { appReady: true },
-    bootstrapState: { identities: [] },
+    bootstrapState: { identities: [], activeStarterBlueprint: { blueprint: {} } },
     session: { authenticated: false }
   }), { starterDisabled: true });
 
   assert.deepEqual(buildBootstrapStarterControlsView({
     model: { appReady: false },
-    bootstrapState: { identities: [{ id: "identity.aaron" }] },
+    bootstrapState: { identities: [{ id: "identity.aaron" }], activeStarterBlueprint: { blueprint: {} } },
     session: { authenticated: false }
   }), { starterDisabled: true });
 
   assert.deepEqual(buildBootstrapStarterControlsView({
     model: { appReady: false },
-    bootstrapState: { identities: [] },
+    bootstrapState: { identities: [], activeStarterBlueprint: { blueprint: {} } },
     session: { authenticated: false }
   }), { starterDisabled: false });
 });

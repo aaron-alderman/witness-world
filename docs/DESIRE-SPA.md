@@ -47,28 +47,31 @@ This doc is the honest status of the DESIRE SPA slice. Legend: ✅ done & node-v
   frames (the disc = equal-aspect centred xy), auto-fit scales. The `particles` mark emits one
   render frame per step of a time/phase axis it discovers in its field — the generic
   particle/field representation, animated by `drawChart`.
-- **`sampling.js`** — generic seeded MC sampler (`normal`/`lognormal`/`uniform`/`rand`), pure
-  functions of the `ensemble` sample index → reproducible draws. Injected like a std-lib (the
-  evaluator carries the reducers, this carries the per-sample draws); no domain logic.
+- App-authored helper modules can still provide seeded MC sampling or numerical leaves, but they
+  now live under the app boundary (`examples/engentus/app/chart-functions/`) and are loaded by URL
+  through the generic runtime rather than being bundled into `plugin.chart-runtime`.
 
-### Domain libraries (the only non-generic code)
+### App-authored chart-function libraries (the only non-generic code)
 
-- **`goodman-stdlib.js`** — honest one-liner fatigue functions (Goodman has no kernels).
-- **`mill-force-kernels.js`** — **the first compute kernels**: `fill_angle`, `gravity_area`,
-  `cf_mass_moment` (grid/Brent/Gauss-Legendre/shoelace) + `tangential_sign`. Injected like a
-  std-lib; the lowered leaves at the symmetry break.
-- **`mill-charge-kernels.js`** — the 3rd-science leaves: `segment_half_angle` (the fill solver,
-  Newton-Raphson on `θ−sinθ=2πJ`) + `charge_com_x`/`charge_com_y` (80-pt arc+chord shoelace
-  centroid), plus a **seeded sampler** (`spread`/`vjit`/`tphase`) — the "stochastic" cataracting
-  jitter as a reproducible injected function. Promotable to a generic sampling capability for MC.
+- **`examples/engentus/app/chart-functions/goodman-stdlib.js`** — honest one-liner fatigue
+  functions (Goodman has no kernels).
+- **`examples/engentus/app/chart-functions/mill-force-kernels.js`** — the first compute-kernel
+  leaves: `fill_angle`, `gravity_area`, `cf_mass_moment`, and `tangential_sign`.
+- **`examples/engentus/app/chart-functions/mill-charge-kernels.js`** — the 3rd-science leaves:
+  `segment_half_angle`, `charge_com_x`/`charge_com_y`, plus the seeded launch-jitter helpers.
+- **`examples/engentus/app/chart-functions/sampling.js`** — app-owned Monte Carlo sampling helpers
+  used by authored Engentus charts.
 
 ### The chart-runtime plugin (the dependency target — replaces direct routing)
 
 - **`plugin.json`** declares the **`chart.render`** capability; **`runtime.js`** resolves a
   witnessed `chart` over its `model` from the world and serves a self-contained page;
-  **`chart-page.js`** inlines the runtimes + domain lib into one ES module + embeds the spec;
+  **`chart-page.js`** inlines only the generic runtimes and imports authored helper modules by URL;
   **`chart-client.js`** is the browser boot. Co-located `chart-runtime.test.js`.
 - ✅ Registered in `store/seeds/first-party-plugin-catalog.json` as `plugin.chart-runtime`.
+- ✅ The hosted Engentus shell now mounts charts through the generic mounted-panel contract
+  instead of iframe shims, so the DESIRE app can serve the real authored shell while still
+  using the reusable chart runtime behind the shell boundary.
 
 ### Three science verticals
 
@@ -152,6 +155,13 @@ Deliberate divergences from the first plan (recorded honestly):
 - `test/desire-engentus-shell.test.js` — shell surfaces compose to the charts (all three apps,
   incl. the Goodman MC bands chart).
 - `plugins/chart-runtime/chart-runtime.test.js` — spec resolution, inlined-bundle validity, page HTML.
+- `test/engentus-frontend-host.test.js` — the hosted DESIRE app serves the real login/home/viewer
+  shell states and mounted chart content, with no backend pipeline witnesses loaded.
+- `test/engentus-browser-parity.test.js` — browser-level shell snapshots prove the served DESIRE
+  shell stays aligned with the authored Engentus presentation contract across login, home,
+  Goodman, mill-charge, mill-force, and signout.
+- `test/engentus-frontend-browser.test.js` — live browser flow covers login → home → module
+  viewer → signout routing and confirms mounted-panel chart handoff on the served app.
 - `test/desire.test.js` 45/45 — incl. broad-specimen over all engentus `.rvm` files (zero unknowns).
 - `test/plugin-boundaries.test.js` — chart-runtime is a valid package; generic runtimes import no `src/`.
 - Thesis grep: `dataflow-eval.js` + `gog-runtime.js` carry **no** domain terms (comments only).
@@ -173,7 +183,7 @@ Deliberate divergences from the first plan (recorded honestly):
 - ✅ **Monte-Carlo across sciences** — `axis sample = ensemble(N)` + `reduce p10/p50/p90 over
   sample` + `band`/`cloud` layers, demonstrated on Goodman (`BoltFatigueMC` + `GoodmanMCBands`).
   The prediction held exactly: stochasticity stayed "just another axis" (the `ensemble` kind) +
-  an injected seeded sampler (`sampling.js`); the only evaluator work was wiring a real `reduce`
+  an injected seeded sampler (now app-authored); the only evaluator work was wiring a real `reduce`
   (array-aware reducers). Reusable verbatim by any science.
 - 🟡 Probe / scrubber interactivity bound to axes (local rebind in `drawChart`). The binding
   logic is built and node-verified: **`probeReadout(plan, x)`** reads each cartesian layer's
@@ -186,11 +196,13 @@ Deliberate divergences from the first plan (recorded honestly):
 
 ### Integration
 
-- ⛔ Promote `mill-force-kernels.js` to a registered **`plugin.compute`** package
+- ⛔ Decide whether any app-authored chart-function library merits promotion to a registered
+  generic compute capability
   (plugin.json + co-located test).
-- ⛔ **Live browser render** for all sciences — serve the chart route, Playwright screenshot,
-  pixel-parity vs the SPA static charts. (Render path is built + node-verified; this is the paint.)
-- ⛔ Wire the shell surfaces to served routes / a real navigable page in the widget runtime.
+- ✅ Shell surfaces are now wired to served routes through generic core `page.surface`
+  handling, and the DESIRE app is a real navigable frontend rather than a placeholder card shell.
+- ✅ Live browser proof now covers the served Engentus shell and mounted chart handoff without
+  introducing an Engentus-specific runtime plugin.
 - ⛔ Investigate the unrelated full-suite hang (`node scripts/run-tests.mjs` stalls ~test 309 in a
   server/integration test — not our code; everything in our scope passes fast in isolation).
 
@@ -212,8 +224,8 @@ Deliberate divergences from the first plan (recorded honestly):
 
 ## Thesis scorecard
 
-- ✅ The reusable capabilities (`dataflow-eval`, `gog-runtime`, `sampling.js`) carry **no** domain
-  logic and only *grew* generic features (polar frame, `where`, param-resolved axes for the 2nd
+- ✅ The reusable capabilities (`dataflow-eval`, `gog-runtime`) carry **no** domain logic and only
+  *grew* generic features (polar frame, `where`, param-resolved axes for the 2nd
   science; the disc frame + `particles` mark for the 3rd; the `ensemble` axis, array-aware
   `reduce`, and `band`/`cloud` marks for MC). `dataflow-eval` was **not touched** for mill-charge
   (time/particles are just sweep axes) and grew only the generic `reduce`/`ensemble` for MC.

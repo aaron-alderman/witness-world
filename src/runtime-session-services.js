@@ -1,8 +1,35 @@
 import { randomUUID } from "node:crypto";
 
 export function createRuntimeSessionServices({ sessionStore }) {
+  const attachTutorialProgressAlias = (requestSession, guidanceProgress) => {
+    if (!requestSession || typeof requestSession !== "object") return requestSession ?? null;
+    requestSession.guidanceProgress = guidanceProgress;
+    Object.defineProperty(requestSession, "tutorialProgress", {
+      configurable: true,
+      enumerable: false,
+      get() {
+        return requestSession.guidanceProgress;
+      },
+      set(value) {
+        requestSession.guidanceProgress = value;
+      }
+    });
+    return requestSession;
+  };
+
+  const syncGuidanceProgressAlias = requestSession => {
+    if (!requestSession || typeof requestSession !== "object") return requestSession ?? null;
+    const guidanceProgress = requestSession.guidanceProgress && typeof requestSession.guidanceProgress === "object"
+      ? requestSession.guidanceProgress
+      : (requestSession.tutorialProgress && typeof requestSession.tutorialProgress === "object"
+          ? requestSession.tutorialProgress
+          : {});
+    return attachTutorialProgressAlias(requestSession, guidanceProgress);
+  };
+
   const createSessionForIdentity = identity => {
     const sessionId = randomUUID();
+    const guidanceProgress = {};
     const session = {
       id: sessionId,
       identity: identity.id,
@@ -10,10 +37,11 @@ export function createRuntimeSessionServices({ sessionStore }) {
       label: identity.label,
       homeContext: identity.homeContext ?? null,
       perspective: identity.homePerspective ?? null,
-      tutorialProgress: {}
+      guidanceProgress
     };
-    sessionStore.set(sessionId, session);
-    return session;
+    const syncedSession = attachTutorialProgressAlias(session, guidanceProgress);
+    sessionStore.set(sessionId, syncedSession);
+    return syncedSession;
   };
 
   const sessionResponseShape = session => ({
@@ -27,32 +55,37 @@ export function createRuntimeSessionServices({ sessionStore }) {
 
   const syncSessionIdentity = (requestSession, identity) => {
     if (!requestSession?.id || !identity || requestSession.identity !== identity.id) return requestSession ?? null;
-    const nextSession = {
+    const nextSession = syncGuidanceProgressAlias({
       ...requestSession,
       actor: identity.actor,
       label: identity.label,
       homeContext: identity.homeContext ?? null,
       perspective: identity.homePerspective ?? null
-    };
+    });
     sessionStore.set(nextSession.id, nextSession);
     return nextSession;
   };
 
-  const tutorialProgressFor = (requestSession, tutorialId) => requestSession?.tutorialProgress?.[tutorialId] ?? null;
-  const setTutorialProgress = (requestSession, tutorialId, progress) => {
+  const guidanceProgressFor = (requestSession, guidanceId) => {
+    const session = syncGuidanceProgressAlias(requestSession);
+    return session?.guidanceProgress?.[guidanceId] ?? null;
+  };
+  const setGuidanceProgress = (requestSession, guidanceId, progress) => {
     if (!requestSession?.id) return null;
-    requestSession.tutorialProgress = requestSession.tutorialProgress ?? {};
-    if (progress == null) delete requestSession.tutorialProgress[tutorialId];
-    else requestSession.tutorialProgress[tutorialId] = progress;
-    sessionStore.set(requestSession.id, requestSession);
-    return requestSession.tutorialProgress[tutorialId] ?? null;
+    const session = syncGuidanceProgressAlias(requestSession);
+    if (progress == null) delete session.guidanceProgress[guidanceId];
+    else session.guidanceProgress[guidanceId] = progress;
+    sessionStore.set(session.id, session);
+    return session.guidanceProgress[guidanceId] ?? null;
   };
 
   return {
     createSessionForIdentity,
     sessionResponseShape,
     syncSessionIdentity,
-    tutorialProgressFor,
-    setTutorialProgress
+    guidanceProgressFor,
+    setGuidanceProgress,
+    tutorialProgressFor: guidanceProgressFor,
+    setTutorialProgress: setGuidanceProgress
   };
 }

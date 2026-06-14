@@ -4,23 +4,23 @@ context = "frontend"
 
 [[box]]
 id = "bootstrap_runtime_plugin_remove_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_remove_form", "bootstrap_runtime_plugin_remove_help", "bootstrap_runtime_plugin_remove_status"]
 
 [[form]]
 id = "bootstrap_runtime_plugin_remove_form"
 domId = "runtime-plugin-remove-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_remove_grid", "bootstrap_runtime_plugin_remove_actions"]
 
 [[box]]
 id = "bootstrap_runtime_plugin_remove_grid"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_runtime_plugin_remove_runner_field", "bootstrap_runtime_plugin_remove_plugin_field"]
 
 [[box]]
 id = "bootstrap_runtime_plugin_remove_runner_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_remove_runner_text", "bootstrap_runtime_plugin_remove_runner_select"]
 
 [[text]]
@@ -34,7 +34,7 @@ name = "serverRunner"
 
 [[box]]
 id = "bootstrap_runtime_plugin_remove_plugin_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_remove_plugin_text", "bootstrap_runtime_plugin_remove_plugin_select"]
 
 [[text]]
@@ -48,25 +48,25 @@ name = "plugin"
 
 [[box]]
 id = "bootstrap_runtime_plugin_remove_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_runtime_plugin_remove_submit"]
 
 [[button]]
 id = "bootstrap_runtime_plugin_remove_submit"
-class = "secondary"
+class = "surface-button-secondary"
 text = "Remove Runtime Plugin"
 type = "submit"
 
 [[text]]
 id = "bootstrap_runtime_plugin_remove_help"
 domId = "runtime-plugin-remove-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[text]]
 id = "bootstrap_runtime_plugin_remove_status"
 domId = "runtime-plugin-remove-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -108,28 +108,10 @@ into = "bootstrapRuntimePluginRemoveDraft"
 [[step]]
 program = "bootstrap_runtime_plugin_remove_controls_program"
 order = 2
-op = "postJson"
-on = "submit:bootstrap_runtime_plugin_remove_form"
-url = "/api/runtime-plugin-installs"
-method = "DELETE"
-from = "bootstrapRuntimePluginRemoveDraft"
-into = "bootstrapRuntimePluginRemoveResult"
-
-[[step]]
-program = "bootstrap_runtime_plugin_remove_controls_program"
-order = 3
-op = "setText"
-on = "submit:bootstrap_runtime_plugin_remove_form"
-widget = "bootstrap_runtime_plugin_remove_status"
-text = "Removed."
-
-[[step]]
-program = "bootstrap_runtime_plugin_remove_controls_program"
-order = 4
 op = "dispatchDomEvent"
 on = "submit:bootstrap_runtime_plugin_remove_form"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-remove-controls", reason = "runtime-plugin-remove" }
+eventName = "witness:bootstrap-runtime-integration-direct-submit"
+detail = { source = "bootstrap-remove-controls", family = "runtime-plugin-remove", formId = "runtime-plugin-remove-form", statusId = "runtime-plugin-remove-status", serverRunner = "${state.bootstrapRuntimePluginRemoveDraft.serverRunner}", plugin = "${state.bootstrapRuntimePluginRemoveDraft.plugin}" }
 
 [[step]]
 program = "bootstrap_runtime_plugin_remove_controls_program"
@@ -142,23 +124,23 @@ text = "${event.message}"
 
 [[box]]
 id = "bootstrap_mcp_tool_remove_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_remove_form", "bootstrap_mcp_tool_remove_help", "bootstrap_mcp_tool_remove_status"]
 
 [[form]]
 id = "bootstrap_mcp_tool_remove_form"
 domId = "mcp-tool-remove-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_remove_grid", "bootstrap_mcp_tool_remove_actions"]
 
 [[box]]
 id = "bootstrap_mcp_tool_remove_grid"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_mcp_tool_remove_server_field", "bootstrap_mcp_tool_remove_tool_field"]
 
 [[box]]
 id = "bootstrap_mcp_tool_remove_server_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_remove_server_text", "bootstrap_mcp_tool_remove_server_select"]
 
 [[text]]
@@ -172,7 +154,7 @@ name = "server"
 
 [[box]]
 id = "bootstrap_mcp_tool_remove_tool_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_remove_tool_text", "bootstrap_mcp_tool_remove_tool_select"]
 
 [[text]]
@@ -186,25 +168,25 @@ name = "tool"
 
 [[box]]
 id = "bootstrap_mcp_tool_remove_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_mcp_tool_remove_submit"]
 
 [[button]]
 id = "bootstrap_mcp_tool_remove_submit"
-class = "secondary"
+class = "surface-button-secondary"
 text = "Remove MCP Tool"
 type = "submit"
 
 [[text]]
 id = "bootstrap_mcp_tool_remove_help"
 domId = "mcp-tool-remove-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[text]]
 id = "bootstrap_mcp_tool_remove_status"
 domId = "mcp-tool-remove-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -246,28 +228,10 @@ into = "bootstrapMcpToolRemoveDraft"
 [[step]]
 program = "bootstrap_mcp_tool_remove_controls_program"
 order = 2
-op = "postJson"
-on = "submit:bootstrap_mcp_tool_remove_form"
-url = "/api/mcp-tool-installs"
-method = "DELETE"
-from = "bootstrapMcpToolRemoveDraft"
-into = "bootstrapMcpToolRemoveResult"
-
-[[step]]
-program = "bootstrap_mcp_tool_remove_controls_program"
-order = 3
-op = "setText"
-on = "submit:bootstrap_mcp_tool_remove_form"
-widget = "bootstrap_mcp_tool_remove_status"
-text = "Removed."
-
-[[step]]
-program = "bootstrap_mcp_tool_remove_controls_program"
-order = 4
 op = "dispatchDomEvent"
 on = "submit:bootstrap_mcp_tool_remove_form"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-remove-controls", reason = "mcp-tool-remove" }
+eventName = "witness:bootstrap-runtime-integration-direct-submit"
+detail = { source = "bootstrap-remove-controls", family = "mcp-tool-remove", formId = "mcp-tool-remove-form", statusId = "mcp-tool-remove-status", server = "${state.bootstrapMcpToolRemoveDraft.server}", tool = "${state.bootstrapMcpToolRemoveDraft.tool}" }
 
 [[step]]
 program = "bootstrap_mcp_tool_remove_controls_program"
@@ -280,23 +244,23 @@ text = "${event.message}"
 
 [[box]]
 id = "bootstrap_capability_remove_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_remove_form", "bootstrap_capability_remove_help", "bootstrap_capability_remove_status"]
 
 [[form]]
 id = "bootstrap_capability_remove_form"
 domId = "capability-remove-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_remove_grid", "bootstrap_capability_remove_target_field", "bootstrap_capability_remove_actions"]
 
 [[box]]
 id = "bootstrap_capability_remove_grid"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_capability_remove_capability_field", "bootstrap_capability_remove_kind_field"]
 
 [[box]]
 id = "bootstrap_capability_remove_capability_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_remove_capability_text", "bootstrap_capability_remove_capability_select"]
 
 [[text]]
@@ -310,7 +274,7 @@ name = "capability"
 
 [[box]]
 id = "bootstrap_capability_remove_kind_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_remove_kind_text", "bootstrap_capability_remove_kind_select"]
 
 [[text]]
@@ -324,7 +288,7 @@ name = "targetKind"
 
 [[box]]
 id = "bootstrap_capability_remove_target_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_capability_remove_target_text", "bootstrap_capability_remove_target_select"]
 
 [[text]]
@@ -338,25 +302,25 @@ name = "target"
 
 [[box]]
 id = "bootstrap_capability_remove_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_capability_remove_submit"]
 
 [[button]]
 id = "bootstrap_capability_remove_submit"
-class = "secondary"
+class = "surface-button-secondary"
 text = "Remove Capability"
 type = "submit"
 
 [[text]]
 id = "bootstrap_capability_remove_help"
 domId = "capability-remove-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[text]]
 id = "bootstrap_capability_remove_status"
 domId = "capability-remove-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -406,28 +370,10 @@ into = "bootstrapCapabilityRemoveDraft"
 [[step]]
 program = "bootstrap_capability_remove_controls_program"
 order = 2
-op = "postJson"
-on = "submit:bootstrap_capability_remove_form"
-url = "/api/capability-installs"
-method = "DELETE"
-from = "bootstrapCapabilityRemoveDraft"
-into = "bootstrapCapabilityRemoveResult"
-
-[[step]]
-program = "bootstrap_capability_remove_controls_program"
-order = 3
-op = "setText"
-on = "submit:bootstrap_capability_remove_form"
-widget = "bootstrap_capability_remove_status"
-text = "Removed."
-
-[[step]]
-program = "bootstrap_capability_remove_controls_program"
-order = 4
 op = "dispatchDomEvent"
 on = "submit:bootstrap_capability_remove_form"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-remove-controls", reason = "capability-remove" }
+eventName = "witness:bootstrap-capability-submit"
+detail = { source = "bootstrap-remove-controls", family = "capability-remove", formId = "capability-remove-form", statusId = "capability-remove-status", capability = "${state.bootstrapCapabilityRemoveDraft.capability}", target = "${state.bootstrapCapabilityRemoveDraft.target}", targetKind = "${state.bootstrapCapabilityRemoveDraft.targetKind}" }
 
 [[step]]
 program = "bootstrap_capability_remove_controls_program"
@@ -440,23 +386,23 @@ text = "${event.message}"
 
 [[box]]
 id = "bootstrap_context_binding_remove_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_binding_remove_form", "bootstrap_context_binding_remove_status"]
 
 [[form]]
 id = "bootstrap_context_binding_remove_form"
 domId = "context-binding-remove-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_binding_remove_grid_one", "bootstrap_context_binding_remove_grid_two", "bootstrap_context_binding_remove_actions"]
 
 [[box]]
 id = "bootstrap_context_binding_remove_grid_one"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_context_binding_remove_context_field", "bootstrap_context_binding_remove_name_field"]
 
 [[box]]
 id = "bootstrap_context_binding_remove_context_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_binding_remove_context_text", "bootstrap_context_binding_remove_context_select"]
 
 [[text]]
@@ -470,7 +416,7 @@ name = "context"
 
 [[box]]
 id = "bootstrap_context_binding_remove_name_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_binding_remove_name_text", "bootstrap_context_binding_remove_name_input"]
 
 [[text]]
@@ -484,12 +430,12 @@ placeholder = "homePage"
 
 [[box]]
 id = "bootstrap_context_binding_remove_grid_two"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_context_binding_remove_target_field", "bootstrap_context_binding_remove_spacer"]
 
 [[box]]
 id = "bootstrap_context_binding_remove_target_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_binding_remove_target_text", "bootstrap_context_binding_remove_target_select"]
 
 [[text]]
@@ -506,7 +452,7 @@ id = "bootstrap_context_binding_remove_spacer"
 
 [[box]]
 id = "bootstrap_context_binding_remove_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_context_binding_remove_submit"]
 
 [[button]]
@@ -517,7 +463,7 @@ type = "submit"
 [[text]]
 id = "bootstrap_context_binding_remove_status"
 domId = "context-binding-remove-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -551,28 +497,10 @@ into = "bootstrapContextBindingRemoveDraft"
 [[step]]
 program = "bootstrap_context_binding_remove_controls_program"
 order = 2
-op = "postJson"
-on = "submit:bootstrap_context_binding_remove_form"
-url = "/api/context-bindings"
-method = "DELETE"
-from = "bootstrapContextBindingRemoveDraft"
-into = "bootstrapContextBindingRemoveResult"
-
-[[step]]
-program = "bootstrap_context_binding_remove_controls_program"
-order = 3
-op = "setText"
-on = "submit:bootstrap_context_binding_remove_form"
-widget = "bootstrap_context_binding_remove_status"
-text = "Removed."
-
-[[step]]
-program = "bootstrap_context_binding_remove_controls_program"
-order = 4
 op = "dispatchDomEvent"
 on = "submit:bootstrap_context_binding_remove_form"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-remove-controls", reason = "context-binding-remove" }
+eventName = "witness:bootstrap-scoped-submit"
+detail = { source = "bootstrap-remove-controls", family = "context-binding-remove", formId = "context-binding-remove-form", statusId = "context-binding-remove-status", context = "${state.bootstrapContextBindingRemoveDraft.context}", name = "${state.bootstrapContextBindingRemoveDraft.name}", target = "${state.bootstrapContextBindingRemoveDraft.target}" }
 
 [[step]]
 program = "bootstrap_context_binding_remove_controls_program"
@@ -585,23 +513,23 @@ text = "${event.message}"
 
 [[box]]
 id = "bootstrap_context_export_remove_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_export_remove_form", "bootstrap_context_export_remove_status"]
 
 [[form]]
 id = "bootstrap_context_export_remove_form"
 domId = "context-export-remove-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_export_remove_grid_one", "bootstrap_context_export_remove_grid_two", "bootstrap_context_export_remove_actions"]
 
 [[box]]
 id = "bootstrap_context_export_remove_grid_one"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_context_export_remove_context_field", "bootstrap_context_export_remove_name_field"]
 
 [[box]]
 id = "bootstrap_context_export_remove_context_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_export_remove_context_text", "bootstrap_context_export_remove_context_select"]
 
 [[text]]
@@ -615,7 +543,7 @@ name = "context"
 
 [[box]]
 id = "bootstrap_context_export_remove_name_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_export_remove_name_text", "bootstrap_context_export_remove_name_input"]
 
 [[text]]
@@ -629,12 +557,12 @@ placeholder = "homePage"
 
 [[box]]
 id = "bootstrap_context_export_remove_grid_two"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_context_export_remove_target_field", "bootstrap_context_export_remove_spacer"]
 
 [[box]]
 id = "bootstrap_context_export_remove_target_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_export_remove_target_text", "bootstrap_context_export_remove_target_select"]
 
 [[text]]
@@ -651,7 +579,7 @@ id = "bootstrap_context_export_remove_spacer"
 
 [[box]]
 id = "bootstrap_context_export_remove_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_context_export_remove_submit"]
 
 [[button]]
@@ -662,7 +590,7 @@ type = "submit"
 [[text]]
 id = "bootstrap_context_export_remove_status"
 domId = "context-export-remove-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -696,28 +624,10 @@ into = "bootstrapContextExportRemoveDraft"
 [[step]]
 program = "bootstrap_context_export_remove_controls_program"
 order = 2
-op = "postJson"
-on = "submit:bootstrap_context_export_remove_form"
-url = "/api/context-exports"
-method = "DELETE"
-from = "bootstrapContextExportRemoveDraft"
-into = "bootstrapContextExportRemoveResult"
-
-[[step]]
-program = "bootstrap_context_export_remove_controls_program"
-order = 3
-op = "setText"
-on = "submit:bootstrap_context_export_remove_form"
-widget = "bootstrap_context_export_remove_status"
-text = "Removed."
-
-[[step]]
-program = "bootstrap_context_export_remove_controls_program"
-order = 4
 op = "dispatchDomEvent"
 on = "submit:bootstrap_context_export_remove_form"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-remove-controls", reason = "context-export-remove" }
+eventName = "witness:bootstrap-scoped-submit"
+detail = { source = "bootstrap-remove-controls", family = "context-export-remove", formId = "context-export-remove-form", statusId = "context-export-remove-status", context = "${state.bootstrapContextExportRemoveDraft.context}", name = "${state.bootstrapContextExportRemoveDraft.name}", target = "${state.bootstrapContextExportRemoveDraft.target}" }
 
 [[step]]
 program = "bootstrap_context_export_remove_controls_program"
@@ -730,23 +640,23 @@ text = "${event.message}"
 
 [[box]]
 id = "bootstrap_context_import_remove_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_import_remove_form", "bootstrap_context_import_remove_status"]
 
 [[form]]
 id = "bootstrap_context_import_remove_form"
 domId = "context-import-remove-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_import_remove_grid_one", "bootstrap_context_import_remove_grid_two", "bootstrap_context_import_remove_actions"]
 
 [[box]]
 id = "bootstrap_context_import_remove_grid_one"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_context_import_remove_context_field", "bootstrap_context_import_remove_source_context_field"]
 
 [[box]]
 id = "bootstrap_context_import_remove_context_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_import_remove_context_text", "bootstrap_context_import_remove_context_select"]
 
 [[text]]
@@ -760,7 +670,7 @@ name = "context"
 
 [[box]]
 id = "bootstrap_context_import_remove_source_context_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_import_remove_source_context_text", "bootstrap_context_import_remove_source_context_select"]
 
 [[text]]
@@ -774,12 +684,12 @@ name = "sourceContext"
 
 [[box]]
 id = "bootstrap_context_import_remove_grid_two"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_context_import_remove_export_name_field", "bootstrap_context_import_remove_name_field"]
 
 [[box]]
 id = "bootstrap_context_import_remove_export_name_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_import_remove_export_name_text", "bootstrap_context_import_remove_export_name_select"]
 
 [[text]]
@@ -793,7 +703,7 @@ name = "exportName"
 
 [[box]]
 id = "bootstrap_context_import_remove_name_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_import_remove_name_text", "bootstrap_context_import_remove_name_input"]
 
 [[text]]
@@ -807,7 +717,7 @@ placeholder = "optional alias"
 
 [[box]]
 id = "bootstrap_context_import_remove_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_context_import_remove_submit"]
 
 [[button]]
@@ -818,7 +728,7 @@ type = "submit"
 [[text]]
 id = "bootstrap_context_import_remove_status"
 domId = "context-import-remove-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -852,28 +762,10 @@ into = "bootstrapContextImportRemoveDraft"
 [[step]]
 program = "bootstrap_context_import_remove_controls_program"
 order = 2
-op = "postJson"
-on = "submit:bootstrap_context_import_remove_form"
-url = "/api/context-imports"
-method = "DELETE"
-from = "bootstrapContextImportRemoveDraft"
-into = "bootstrapContextImportRemoveResult"
-
-[[step]]
-program = "bootstrap_context_import_remove_controls_program"
-order = 3
-op = "setText"
-on = "submit:bootstrap_context_import_remove_form"
-widget = "bootstrap_context_import_remove_status"
-text = "Removed."
-
-[[step]]
-program = "bootstrap_context_import_remove_controls_program"
-order = 4
 op = "dispatchDomEvent"
 on = "submit:bootstrap_context_import_remove_form"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-remove-controls", reason = "context-import-remove" }
+eventName = "witness:bootstrap-scoped-submit"
+detail = { source = "bootstrap-remove-controls", family = "context-import-remove", formId = "context-import-remove-form", statusId = "context-import-remove-status", context = "${state.bootstrapContextImportRemoveDraft.context}", sourceContext = "${state.bootstrapContextImportRemoveDraft.sourceContext}", exportName = "${state.bootstrapContextImportRemoveDraft.exportName}", name = "${state.bootstrapContextImportRemoveDraft.name}" }
 
 [[step]]
 program = "bootstrap_context_import_remove_controls_program"
@@ -886,23 +778,23 @@ text = "${event.message}"
 
 [[box]]
 id = "bootstrap_stewardship_remove_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_stewardship_remove_form", "bootstrap_stewardship_remove_status"]
 
 [[form]]
 id = "bootstrap_stewardship_remove_form"
 domId = "stewardship-remove-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_stewardship_remove_grid_one", "bootstrap_stewardship_remove_grid_two", "bootstrap_stewardship_remove_actions"]
 
 [[box]]
 id = "bootstrap_stewardship_remove_grid_one"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_stewardship_remove_steward_field", "bootstrap_stewardship_remove_target_field"]
 
 [[box]]
 id = "bootstrap_stewardship_remove_steward_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_stewardship_remove_steward_text", "bootstrap_stewardship_remove_steward_input"]
 
 [[text]]
@@ -916,7 +808,7 @@ placeholder = "callan"
 
 [[box]]
 id = "bootstrap_stewardship_remove_target_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_stewardship_remove_target_text", "bootstrap_stewardship_remove_target_select"]
 
 [[text]]
@@ -930,12 +822,12 @@ name = "target"
 
 [[box]]
 id = "bootstrap_stewardship_remove_grid_two"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_stewardship_remove_kind_field", "bootstrap_stewardship_remove_spacer"]
 
 [[box]]
 id = "bootstrap_stewardship_remove_kind_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_stewardship_remove_kind_text", "bootstrap_stewardship_remove_kind_select"]
 
 [[text]]
@@ -952,7 +844,7 @@ id = "bootstrap_stewardship_remove_spacer"
 
 [[box]]
 id = "bootstrap_stewardship_remove_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_stewardship_remove_submit"]
 
 [[button]]
@@ -963,7 +855,7 @@ type = "submit"
 [[text]]
 id = "bootstrap_stewardship_remove_status"
 domId = "stewardship-remove-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -997,28 +889,10 @@ into = "bootstrapStewardshipRemoveDraft"
 [[step]]
 program = "bootstrap_stewardship_remove_controls_program"
 order = 2
-op = "postJson"
-on = "submit:bootstrap_stewardship_remove_form"
-url = "/api/stewardships"
-method = "DELETE"
-from = "bootstrapStewardshipRemoveDraft"
-into = "bootstrapStewardshipRemoveResult"
-
-[[step]]
-program = "bootstrap_stewardship_remove_controls_program"
-order = 3
-op = "setText"
-on = "submit:bootstrap_stewardship_remove_form"
-widget = "bootstrap_stewardship_remove_status"
-text = "Removed."
-
-[[step]]
-program = "bootstrap_stewardship_remove_controls_program"
-order = 4
 op = "dispatchDomEvent"
 on = "submit:bootstrap_stewardship_remove_form"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-remove-controls", reason = "stewardship-remove" }
+eventName = "witness:bootstrap-scoped-submit"
+detail = { source = "bootstrap-remove-controls", family = "stewardship-remove", formId = "stewardship-remove-form", statusId = "stewardship-remove-status", steward = "${state.bootstrapStewardshipRemoveDraft.steward}", target = "${state.bootstrapStewardshipRemoveDraft.target}", targetKind = "${state.bootstrapStewardshipRemoveDraft.targetKind}" }
 
 [[step]]
 program = "bootstrap_stewardship_remove_controls_program"

@@ -1,0 +1,35 @@
+[[defaults]]
+actor = "frontendHost"
+context = "frontend"
+
+[[fragment]]
+id = "bootstrap_page_shell_root"
+children = ["bootstrap_page_shell_header", "bootstrap_page_shell_main_slot", "bootstrap_page_shell_aux_slot"]
+
+[[header]]
+id = "bootstrap_page_shell_header"
+class = "presentation-shell-header"
+children = ["bootstrap_page_shell_kicker", "bootstrap_page_shell_heading", "bootstrap_page_shell_copy"]
+
+[[small]]
+id = "bootstrap_page_shell_kicker"
+text = "Semi-Internal Bootstrap Seam"
+
+[[heading]]
+id = "bootstrap_page_shell_heading"
+level = 1
+text = "Recover And Author The App Boundary"
+
+[[paragraph]]
+id = "bootstrap_page_shell_copy"
+text = "This surface exists so a blank world can become a working app without exposing compiler and primitive machinery as the default user experience. App structures live here; deep substrate stays out of the way."
+
+[[box]]
+id = "bootstrap_page_shell_main_slot"
+domId = "bootstrap-page-main-slot"
+class = "presentation-main-region"
+
+[[box]]
+id = "bootstrap_page_shell_aux_slot"
+domId = "bootstrap-page-aux-slot"
+class = "presentation-auxiliary-region"

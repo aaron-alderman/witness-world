@@ -1,5 +1,6 @@
 export function renderSurfaceCommandIdentityActionsFactory() {
   return String.raw`
+    const readSurfaceCommandIdentityFields = ${readSurfaceCommandIdentityFields.toString()};
     const submitSurfaceCommandIdentityForm = ${submitSurfaceCommandIdentityForm.toString()};
     const bindSurfaceCommandIdentityActions = ${bindSurfaceCommandIdentityActions.toString()};
   `;

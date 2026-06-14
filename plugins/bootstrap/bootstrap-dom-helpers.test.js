@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import {
   createBootstrapDomHelpers,
   renderBootstrapDomHelpersFactory
@@ -79,6 +80,16 @@ test("bootstrap DOM helpers provide shared mechanical DOM reads and writes", () 
       }
     });
 
+    assert.deepEqual(Object.keys(helpers).sort(), [
+      "byId",
+      "fillSelect",
+      "formField",
+      "readFieldValue",
+      "readSelectValue",
+      "setSelectedValue",
+      "setStatus",
+      "setSubmitDisabled"
+    ]);
     assert.equal(helpers.byId("runtime-plugin-install-proposal-help"), statusNode);
 
     helpers.setStatus("runtime-plugin-install-proposal-help", "Installable on full.");
@@ -113,4 +124,24 @@ test("bootstrap DOM helper factory exposes the shared browser seam", () => {
   assert.equal(factory.includes("const createBootstrapDomHelpers ="), true);
   assert.equal(factory.includes("setSubmitDisabled"), true);
   assert.equal(factory.includes("readFieldValue"), true);
+});
+
+test("bootstrap DOM helpers stay mechanical and avoid bootstrap-specific recompute or request logic", async () => {
+  const source = await readFile(new URL("./bootstrap-dom-helpers.js", import.meta.url), "utf8");
+
+  assert.equal(source.includes("export function createBootstrapDomHelpers"), true);
+  assert.equal(source.includes("const byId ="), true);
+  assert.equal(source.includes("const setStatus ="), true);
+  assert.equal(source.includes("const formField ="), true);
+  assert.equal(source.includes("const fillSelect ="), true);
+  assert.equal(source.includes("const readSelectValue ="), true);
+  assert.equal(source.includes("const readFieldValue ="), true);
+  assert.equal(source.includes("const setSelectedValue ="), true);
+  assert.equal(source.includes("const setSubmitDisabled ="), true);
+  assert.equal(source.includes("postJson"), false);
+  assert.equal(source.includes("refresh"), false);
+  assert.equal(source.includes("resolveServerRunner"), false);
+  assert.equal(source.includes("buildBootstrap"), false);
+  assert.equal(source.includes("contextBindableTargets"), false);
+  assert.equal(source.includes("stewardshipTargetsFor"), false);
 });

@@ -27,7 +27,7 @@ function lastApiRequestBody(api, routePath) {
 function widgetInput(input) {
   const id = typeof input?.id === "string" && input.id.trim() ? input.id.trim() : "widget";
   return {
-    tutorialTarget: input?.tutorialTarget ?? id,
+    guidanceTarget: input?.guidanceTarget ?? input?.tutorialTarget ?? id,
     ...input
   };
 }
@@ -262,7 +262,7 @@ test("bootstrap UI can author backend programs, versions, and steps through auth
     await page.waitForFunction(() => document.getElementById("session-summary")?.textContent.includes("Signed in as Aaron"));
 
     await page.evaluate(() => {
-      const heading = [...document.querySelectorAll("summary strong")].find(node => node.textContent?.includes("Backend Programs"));
+      const heading = [...document.querySelectorAll("summary")].find(node => node.textContent?.includes("Backend Programs"));
       heading?.closest("details")?.setAttribute("open", "");
     });
     await waitUntil(async () => {

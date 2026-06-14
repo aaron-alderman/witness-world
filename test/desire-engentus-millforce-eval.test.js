@@ -6,7 +6,7 @@ import {
   normalizeDesirePlusToDesire
 } from "../src/desire/index.js";
 import { evaluateModel } from "../plugins/chart-runtime/dataflow-eval.js";
-import { millForceKernels } from "../plugins/chart-runtime/mill-force-kernels.js";
+import { millForceKernels } from "../examples/engentus/app/chart-functions/mill-force-kernels.js";
 import {
   millForcesFaithful,
   millForcesGrounded,

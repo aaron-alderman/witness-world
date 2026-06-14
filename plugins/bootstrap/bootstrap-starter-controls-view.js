@@ -12,8 +12,9 @@ export function buildBootstrapStarterControlsView({
 } = {}) {
   const identities = bootstrapState?.identities || [];
   const editingEnabled = session?.authenticated === true || !identities.length;
+  const starterAvailable = Boolean(bootstrapState?.activeStarterBlueprint?.blueprint);
   return {
-    starterDisabled: !editingEnabled || model?.appReady === true
+    starterDisabled: !starterAvailable || !editingEnabled || model?.appReady === true
   };
 }
 

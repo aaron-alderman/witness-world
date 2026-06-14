@@ -1,0 +1,83 @@
+[[bootstrapTopCardsSubmit]]
+family = "identity-submit"
+variant = "create"
+whenField = "editId"
+whenTruthy = false
+url = "/api/identities"
+method = "POST"
+successText = "Identity created."
+resetOnSuccess = true
+followUp = "refresh"
+bodyFields = ["id", "actor", "label", "username", "password", "homeContext", "homePerspective"]
+
+[[bootstrapTopCardsSubmitField]]
+family = "identity-submit"
+variant = "create"
+name = "id"
+strategy = "identityId"
+source = "id"
+fallbackSource = "username"
+
+[[bootstrapTopCardsSubmit]]
+family = "identity-submit"
+variant = "edit"
+whenField = "editId"
+whenTruthy = true
+urlTemplate = "/api/identities/${editId}"
+method = "PATCH"
+successText = "Identity updated."
+resetOnSuccess = false
+followUp = "refresh"
+bodyFields = ["label", "username", "password", "homeContext", "homePerspective"]
+
+[[bootstrapTopCardsSubmit]]
+family = "session-open"
+url = "/api/session"
+followUp = "refresh"
+bodyFields = ["username", "password"]
+
+[[bootstrapTopCardsSubmit]]
+family = "session-logout"
+url = "/api/session"
+method = "DELETE"
+followUp = "refresh"
+omitBody = true
+
+[[bootstrapTopCardsSubmit]]
+family = "operator-backup"
+url = "/api/operator/backups"
+followUp = "reload"
+bodyFields = ["label", "includeDerived"]
+
+[[bootstrapTopCardsSubmitField]]
+family = "operator-backup"
+name = "includeDerived"
+strategy = "boolean"
+
+[[bootstrapTopCardsSubmit]]
+family = "operator-export"
+url = "/api/operator/exports"
+followUp = "reload"
+bodyFields = ["label"]
+
+[[bootstrapTopCardsSubmit]]
+family = "operator-restore"
+url = "/api/operator/restores"
+followUp = "reload"
+bodyFields = ["artifactId", "preserveCurrent"]
+
+[[bootstrapTopCardsSubmitField]]
+family = "operator-restore"
+name = "preserveCurrent"
+strategy = "boolean"
+
+[[bootstrapTopCardsSubmit]]
+family = "operator-import"
+url = "/api/operator/imports"
+followUp = "reload"
+bodyFields = ["artifactId", "preserveCurrent"]
+
+[[bootstrapTopCardsSubmitField]]
+family = "operator-import"
+name = "preserveCurrent"
+strategy = "boolean"

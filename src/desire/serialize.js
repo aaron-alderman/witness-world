@@ -524,7 +524,8 @@ function serializeRvmChart(semantic) {
     Array.isArray(semantic.editable) && semantic.editable.length > 0
       ? simpleLine("editable", semantic.editable.join(", "))
       : null,
-    ...(semantic.layers ?? []).map(layer => simpleLine("layer", serializeLayer(layer)))
+    ...(semantic.layers ?? []).map(layer => simpleLine("layer", serializeLayer(layer))),
+    ...propLines(semantic.props)
   ], semantic.modelRef ? ` of ${semantic.modelRef}` : "");
 }
 

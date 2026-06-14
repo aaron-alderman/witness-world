@@ -63,6 +63,11 @@ function runtimeFile(name) {
 export const providers = Object.freeze([
   {
     kind: "coreHook",
+    id: "projectPagePresentationTheme",
+    hook: projectEdenPageTheme
+  },
+  {
+    kind: "coreHook",
     id: "projectEdenPageTheme",
     hook: projectEdenPageTheme
   },

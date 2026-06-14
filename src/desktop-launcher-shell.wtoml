@@ -1,0 +1,102 @@
+[[defaults]]
+actor = "frontendHost"
+context = "frontend"
+
+[[page]]
+id = "desktop_launcher_page"
+title = "Witness Desktop"
+class = "surface-page"
+children = ["desktop_launcher_shell"]
+
+[[box]]
+id = "desktop_launcher_shell"
+class = "surface-section surface-stack"
+children = ["desktop_launcher_kicker", "desktop_launcher_heading", "desktop_launcher_summary", "desktop_launcher_status", "desktop_launcher_runtime", "desktop_launcher_actions", "desktop_launcher_recent"]
+
+[[small]]
+id = "desktop_launcher_kicker"
+text = "Desktop Ownership Shell"
+class = "surface-accent surface-mono"
+
+[[heading]]
+id = "desktop_launcher_heading"
+level = 1
+text = "Choose A Local World"
+
+[[paragraph]]
+id = "desktop_launcher_summary"
+domId = "launcher-summary"
+text = "Loading desktop state..."
+class = "surface-lede"
+
+[[text]]
+id = "desktop_launcher_status"
+domId = "launcher-status"
+text = ""
+class = "surface-status"
+
+[[box]]
+id = "desktop_launcher_runtime"
+class = "surface-card surface-stack"
+children = ["desktop_launcher_runtime_heading", "desktop_launcher_runtime_profile_label", "desktop_launcher_runtime_profile_value", "desktop_launcher_runtime_status_label", "desktop_launcher_runtime_status_value"]
+
+[[heading]]
+id = "desktop_launcher_runtime_heading"
+level = 2
+text = "Desktop Runtime"
+class = "surface-card-title"
+
+[[text]]
+id = "desktop_launcher_runtime_profile_label"
+text = "Runtime Profile"
+class = "surface-card-label"
+
+[[text]]
+id = "desktop_launcher_runtime_profile_value"
+domId = "launcher-profile"
+text = "full"
+class = "surface-mono"
+
+[[text]]
+id = "desktop_launcher_runtime_status_label"
+text = "Runtime Status"
+class = "surface-card-label"
+
+[[text]]
+id = "desktop_launcher_runtime_status_value"
+domId = "launcher-runtime-status"
+text = "idle"
+class = "surface-mono"
+
+[[box]]
+id = "desktop_launcher_actions"
+class = "surface-actions"
+children = ["desktop_launcher_open_existing_world", "desktop_launcher_create_new_world"]
+
+[[button]]
+id = "desktop_launcher_open_existing_world"
+domId = "open-existing-world"
+text = "Open Existing World"
+type = "button"
+
+[[button]]
+id = "desktop_launcher_create_new_world"
+domId = "create-new-world"
+text = "Create New World"
+type = "button"
+
+[[box]]
+id = "desktop_launcher_recent"
+class = "surface-section surface-stack"
+children = ["desktop_launcher_recent_heading", "desktop_launcher_recent_worlds"]
+
+[[heading]]
+id = "desktop_launcher_recent_heading"
+level = 2
+text = "Recent Worlds"
+class = "surface-card-title"
+
+[[box]]
+id = "desktop_launcher_recent_worlds"
+domId = "recent-worlds"
+class = "surface-list"

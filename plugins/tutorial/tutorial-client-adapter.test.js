@@ -37,7 +37,7 @@ test("tutorial client api request helper preserves the request contract", async 
 
   assert.deepEqual(result, { ok: true });
   assert.deepEqual(calls, [[
-    "/api/tutorial-progress/todo",
+    "/api/guidance-progress/todo",
     "PUT",
     "application/json",
     JSON.stringify({ stepId: "a" })
@@ -100,8 +100,8 @@ test("tutorial client progress adapter exposes api and save wrappers through the
 
   assert.deepEqual(progress, { stepId: "a", normalized: true });
   assert.deepEqual(calls, [
-    ["/api/tutorial-progress/todo", "GET"],
-    ["/api/tutorial-progress/todo", "PUT"]
+    ["/api/guidance-progress/todo", "GET"],
+    ["/api/guidance-progress/todo", "PUT"]
   ]);
 });
 

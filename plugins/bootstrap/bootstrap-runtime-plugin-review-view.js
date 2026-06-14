@@ -74,7 +74,6 @@ export function buildBootstrapRuntimePluginPreviewSummary({
 
 export function buildBootstrapRuntimePluginReviewView({
   review = null,
-  escapeHtml = value => String(value),
   runtimeProfile = "full"
 } = {}) {
   const cloneForDisplay = value => {
@@ -84,12 +83,12 @@ export function buildBootstrapRuntimePluginReviewView({
     }
     return value;
   };
-  const formatRuntimePluginValue = value => escapeHtml(JSON.stringify(cloneForDisplay(value), null, 2));
+  const formatRuntimePluginValue = value => JSON.stringify(cloneForDisplay(value), null, 2);
   const defaultNote = review?.note || "Runtime plugin review shows authored runner intent only.";
 
   if (!review?.serverRunner) {
     return {
-      detailHtml: '<div class="state-item muted">Create a server runner to review runtime plugin composition.</div>',
+      detailItems: [{ emptyText: "Create a server runner to review runtime plugin composition." }],
       noteText: defaultNote
     };
   }
@@ -97,15 +96,12 @@ export function buildBootstrapRuntimePluginReviewView({
   const row = runtimePluginReviewRows(review).find(entry => entry.plugin === (review.selectedPluginId || "")) || null;
   if (!row) {
     return {
-      detailHtml: '<div class="state-item muted">No discovered plugin packages for this server runner.</div>',
+      detailItems: [{ emptyText: "No discovered plugin packages for this server runner." }],
       noteText: defaultNote
     };
   }
 
   const preview = row.installed ? row.removePreview : row.installPreview;
-  const renderCodeItems = values => values.length
-    ? values.map(value => '<div class="state-item"><code>' + formatRuntimePluginValue(value) + '</code></div>').join("")
-    : '<div class="state-item muted">None.</div>';
   const previewDelta = preview?.delta ? [
     { addedBundleIds: preview.delta.addedBundleIds, removedBundleIds: preview.delta.removedBundleIds },
     { addedCapabilityIds: preview.delta.addedCapabilityIds, removedCapabilityIds: preview.delta.removedCapabilityIds },
@@ -122,78 +118,85 @@ export function buildBootstrapRuntimePluginReviewView({
     row,
     runtimeProfile
   });
-
-  return {
-    detailHtml: [
-      '<div class="state-item">',
-      '<strong>Operator Summary</strong>',
-      '<code>' + escapeHtml(reviewSummary) + '</code>',
-      '</div>',
-      '<div class="state-item">',
-      '<strong>' + escapeHtml(row.displayName || row.plugin) + '</strong>',
-      '<code>' + escapeHtml(row.plugin) + (row.version ? " [" + escapeHtml(row.version) + "]" : "") + '</code>',
-      '<code>' + formatRuntimePluginValue({
-        statusBadges: row.statusBadges,
-        installed: row.installed,
-        installable: row.installable,
-        missingPackage: row.missingPackage,
-        discoveryPath: row.discoveryPath,
-        description: row.description
-      }) + '</code>',
-      '</div>',
-      '<div class="state-item">',
-      '<strong>Metadata And Trust</strong>',
-      '<code>' + formatRuntimePluginValue({
+  const detailItems = [
+    {
+      title: "Operator Summary",
+      codes: [reviewSummary]
+    },
+    {
+      title: row.displayName || row.plugin,
+      codes: [
+        row.plugin + (row.version ? " [" + row.version + "]" : ""),
+        formatRuntimePluginValue({
+          statusBadges: row.statusBadges,
+          installed: row.installed,
+          installable: row.installable,
+          missingPackage: row.missingPackage,
+          discoveryPath: row.discoveryPath,
+          description: row.description
+        })
+      ]
+    },
+    {
+      title: "Metadata And Trust",
+      codes: [formatRuntimePluginValue({
         execution: row.execution,
         trust: row.trust,
         provenance: row.metadata?.provenance ?? null,
         permissions: row.metadata?.permissions ?? [],
         compatibleRuntimeProfiles: row.metadata?.compatibleRuntimeProfiles ?? [],
         compatibleShells: row.metadata?.compatibleShells ?? []
-      }) + '</code>',
-      '</div>',
-      '<div class="state-item">',
-      '<strong>Dependencies</strong>',
-      '<code>' + formatRuntimePluginValue({
+      })]
+    },
+    {
+      title: "Dependencies",
+      codes: [formatRuntimePluginValue({
         direct: row.dependencies?.direct ?? [],
         missing: row.dependencies?.missing ?? [],
         reverseDependents: row.dependencies?.reverseDependents ?? [],
         blockingReasons: row.blockingReasons ?? []
-      }) + '</code>',
-      '</div>',
-      '<div class="state-item">',
-      '<strong>Declared Manifest Contributions</strong>',
-      renderCodeItems([
-        { capabilities: row.declaredManifestContributions?.capabilities ?? [] },
-        { routes: row.declaredManifestContributions?.routes ?? [] },
-        { surfaces: row.declaredManifestContributions?.surfaces ?? [] },
-        { providers: row.declaredManifestContributions?.providers ?? [] }
-      ]),
-      '</div>',
-      '<div class="state-item">',
-      '<strong>Resolved Executable Contributions</strong>',
-      renderCodeItems([
-        { bundles: row.resolvedBundles ?? [] },
-        { capabilities: row.resolvedRuntimeContributions?.capabilities ?? [] },
-        { routes: row.resolvedRuntimeContributions?.routes ?? [] },
-        { surfaces: row.resolvedRuntimeContributions?.surfaces ?? [] },
-        { handlerSets: row.resolvedRuntimeContributions?.handlerSets ?? [] }
-      ]),
-      '</div>',
-      '<div class="state-item">',
-      '<strong>Current Runner Composition</strong>',
-      '<code>' + formatRuntimePluginValue(row.currentComposition || review.currentComposition || null) + '</code>',
-      '</div>',
-      '<div class="state-item">',
-      '<strong>' + (row.installed ? "Remove Preview" : "Install Preview") + '</strong>',
-      '<code>' + formatRuntimePluginValue(preview || {
-        available: false,
-        note: row.installed ? "Plugin is not currently authored on this runner." : "Plugin is already authored on this runner."
-      }) + '</code>',
-      (preview?.available && preview?.delta?.effectiveNoOp ? '<div class="state-item muted">Effective runtime composition is unchanged for this action.</div>' : ''),
-      (previewDelta.length ? renderCodeItems(previewDelta) : ''),
-      '</div>'
-    ].join(""),
+      })]
+    },
+    {
+      title: "Declared Manifest Contributions",
+      codes: [
+        formatRuntimePluginValue({ capabilities: row.declaredManifestContributions?.capabilities ?? [] }),
+        formatRuntimePluginValue({ routes: row.declaredManifestContributions?.routes ?? [] }),
+        formatRuntimePluginValue({ surfaces: row.declaredManifestContributions?.surfaces ?? [] }),
+        formatRuntimePluginValue({ providers: row.declaredManifestContributions?.providers ?? [] })
+      ]
+    },
+    {
+      title: "Resolved Executable Contributions",
+      codes: [
+        formatRuntimePluginValue({ bundles: row.resolvedBundles ?? [] }),
+        formatRuntimePluginValue({ capabilities: row.resolvedRuntimeContributions?.capabilities ?? [] }),
+        formatRuntimePluginValue({ routes: row.resolvedRuntimeContributions?.routes ?? [] }),
+        formatRuntimePluginValue({ surfaces: row.resolvedRuntimeContributions?.surfaces ?? [] }),
+        formatRuntimePluginValue({ handlerSets: row.resolvedRuntimeContributions?.handlerSets ?? [] })
+      ]
+    },
+    {
+      title: "Current Runner Composition",
+      codes: [formatRuntimePluginValue(row.currentComposition || review.currentComposition || null)]
+    },
+    {
+      title: row.installed ? "Remove Preview" : "Install Preview",
+      codes: [
+        formatRuntimePluginValue(preview || {
+          available: false,
+          note: row.installed ? "Plugin is not currently authored on this runner." : "Plugin is already authored on this runner."
+        }),
+        ...previewDelta.map(formatRuntimePluginValue)
+      ]
+    }
+  ];
+  if (preview?.available && preview?.delta?.effectiveNoOp) {
+    detailItems.push({ emptyText: "Effective runtime composition is unchanged for this action." });
+  }
+
+  return {
+    detailItems,
     noteText: defaultNote + (reviewSummary ? " " + reviewSummary : "")
   };
 }

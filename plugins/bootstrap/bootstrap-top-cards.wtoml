@@ -6,11 +6,11 @@ program = "bootstrap_top_cards_program"
 [[box]]
 id = "bootstrap_top_cards_root"
 class = "surface-page"
-children = ["bootstrap_tutorial_card_slot", "bootstrap_status_card", "bootstrap_desktop_card", "bootstrap_operator_card", "bootstrap_identity_card", "bootstrap_session_card"]
+children = ["bootstrap_guidance_card_slot", "bootstrap_status_card", "bootstrap_desktop_card", "bootstrap_operator_card", "bootstrap_identity_card", "bootstrap_session_card"]
 
 [[box]]
-id = "bootstrap_tutorial_card_slot"
-domId = "bootstrap-tutorial-card-slot"
+id = "bootstrap_guidance_card_slot"
+domId = "bootstrap-guidance-card-slot"
 
 [[box]]
 id = "bootstrap_status_card"
@@ -19,7 +19,7 @@ children = ["bootstrap_status_badge", "bootstrap_status_heading", "bootstrap_sum
 
 [[text]]
 id = "bootstrap_status_badge"
-class = "badge"
+class = "surface-badge"
 text = "Platform Harness"
 
 [[heading]]
@@ -30,6 +30,7 @@ text = "Bootstrap Status"
 [[text]]
 id = "bootstrap_summary_text"
 domId = "bootstrap-summary"
+class = "surface-mono"
 text = "Loading bootstrap state..."
 
 [[box]]
@@ -41,7 +42,7 @@ children = ["bootstrap_open_app_link", "bootstrap_refresh_button"]
 id = "bootstrap_open_app_link"
 domId = "open-app-link"
 href = "/"
-tutorialTarget = "open-app-link"
+guidanceTarget = "open-app-link"
 action = "openBootstrapAppHome"
 children = ["bootstrap_open_app_button"]
 
@@ -49,20 +50,20 @@ children = ["bootstrap_open_app_button"]
 id = "bootstrap_open_app_button"
 text = "Open App"
 type = "button"
-class = "secondary"
+class = "surface-button-secondary"
 
 [[button]]
 id = "bootstrap_refresh_button"
 domId = "refresh-bootstrap"
 text = "Refresh"
 type = "button"
-class = "secondary"
+class = "surface-button-secondary"
 action = "refreshBootstrapHost"
 
 [[text]]
 id = "bootstrap_status_message"
 domId = "bootstrap-status"
-class = "status"
+class = "surface-status surface-mono"
 text = ""
 
 [[box]]
@@ -72,7 +73,7 @@ children = ["bootstrap_desktop_badge", "bootstrap_desktop_heading", "bootstrap_d
 
 [[text]]
 id = "bootstrap_desktop_badge"
-class = "badge"
+class = "surface-badge"
 text = "Desktop"
 
 [[heading]]
@@ -83,7 +84,7 @@ text = "Local World Ownership"
 [[text]]
 id = "bootstrap_desktop_summary"
 domId = "desktop-summary"
-class = "muted"
+class = "surface-note surface-mono"
 text = "Desktop shell unavailable in this session."
 
 [[box]]
@@ -96,7 +97,7 @@ id = "bootstrap_desktop_open_button"
 domId = "desktop-open-world"
 text = "Open Existing World"
 type = "button"
-class = "secondary"
+class = "surface-button-secondary"
 action = "openBootstrapDesktopWorld"
 
 [[button]]
@@ -104,7 +105,7 @@ id = "bootstrap_desktop_create_button"
 domId = "desktop-create-world"
 text = "Create New World"
 type = "button"
-class = "secondary"
+class = "surface-button-secondary"
 action = "createBootstrapDesktopWorld"
 
 [[button]]
@@ -112,13 +113,13 @@ id = "bootstrap_desktop_reveal_button"
 domId = "desktop-reveal-world"
 text = "Reveal World Home"
 type = "button"
-class = "secondary"
+class = "surface-button-secondary"
 action = "revealBootstrapDesktopWorld"
 
 [[text]]
 id = "bootstrap_desktop_status"
 domId = "desktop-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[box]]
@@ -128,7 +129,7 @@ children = ["bootstrap_operator_badge", "bootstrap_operator_heading", "bootstrap
 
 [[text]]
 id = "bootstrap_operator_badge"
-class = "badge"
+class = "surface-badge"
 text = "Operator"
 
 [[heading]]
@@ -144,7 +145,7 @@ text = "Loading operator state..."
 [[text]]
 id = "bootstrap_operator_warning"
 domId = "operator-warning"
-class = "surface-note muted note"
+class = "surface-note surface-note-callout"
 text = "Restore and import replace current world truth. Use preserve-current when you need a safety backup first."
 
 [[heading]]
@@ -155,12 +156,12 @@ text = "Backup And Export"
 [[form]]
 id = "bootstrap_operator_backup_form"
 domId = "operator-backup-form"
-class = "surface-stack"
+class = "surface-stack surface-mono"
 children = ["bootstrap_operator_backup_grid", "bootstrap_operator_backup_actions"]
 
 [[box]]
 id = "bootstrap_operator_backup_grid"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_operator_backup_label_field", "bootstrap_operator_backup_include_field"]
 
 [[box]]
@@ -204,18 +205,18 @@ type = "submit"
 [[text]]
 id = "bootstrap_operator_backup_status"
 domId = "operator-backup-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[form]]
 id = "bootstrap_operator_export_form"
 domId = "operator-export-form"
-class = "surface-stack"
+class = "surface-stack surface-mono"
 children = ["bootstrap_operator_export_grid", "bootstrap_operator_export_actions"]
 
 [[box]]
 id = "bootstrap_operator_export_grid"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_operator_export_label_field", "bootstrap_operator_export_spacer"]
 
 [[box]]
@@ -248,7 +249,7 @@ type = "submit"
 [[text]]
 id = "bootstrap_operator_export_status"
 domId = "operator-export-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[heading]]
@@ -259,12 +260,12 @@ text = "Restore And Import"
 [[form]]
 id = "bootstrap_operator_restore_form"
 domId = "operator-restore-form"
-class = "surface-stack"
+class = "surface-stack surface-mono"
 children = ["bootstrap_operator_restore_grid", "bootstrap_operator_restore_actions"]
 
 [[box]]
 id = "bootstrap_operator_restore_grid"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_operator_restore_artifact_field", "bootstrap_operator_restore_preserve_field"]
 
 [[box]]
@@ -308,18 +309,18 @@ type = "submit"
 [[text]]
 id = "bootstrap_operator_restore_status"
 domId = "operator-restore-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[form]]
 id = "bootstrap_operator_import_form"
 domId = "operator-import-form"
-class = "surface-stack"
+class = "surface-stack surface-mono"
 children = ["bootstrap_operator_import_grid", "bootstrap_operator_import_actions"]
 
 [[box]]
 id = "bootstrap_operator_import_grid"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_operator_import_artifact_field", "bootstrap_operator_import_preserve_field"]
 
 [[box]]
@@ -363,7 +364,7 @@ type = "submit"
 [[text]]
 id = "bootstrap_operator_import_status"
 domId = "operator-import-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[box]]
@@ -377,13 +378,13 @@ children = ["bootstrap_operator_backups_kicker", "bootstrap_operator_backups_lis
 
 [[text]]
 id = "bootstrap_operator_backups_kicker"
-class = "kicker"
+class = "surface-kicker"
 text = "Backups"
 
 [[box]]
 id = "bootstrap_operator_backups_list"
 domId = "state-operator-backups"
-class = "surface-list state-list"
+class = "surface-list surface-state-list"
 
 [[box]]
 id = "bootstrap_operator_exports_section"
@@ -391,13 +392,13 @@ children = ["bootstrap_operator_exports_kicker", "bootstrap_operator_exports_lis
 
 [[text]]
 id = "bootstrap_operator_exports_kicker"
-class = "kicker"
+class = "surface-kicker"
 text = "Exports"
 
 [[box]]
 id = "bootstrap_operator_exports_list"
 domId = "state-operator-exports"
-class = "surface-list state-list"
+class = "surface-list surface-state-list"
 
 [[box]]
 id = "bootstrap_operator_imports_section"
@@ -405,13 +406,13 @@ children = ["bootstrap_operator_imports_kicker", "bootstrap_operator_imports_lis
 
 [[text]]
 id = "bootstrap_operator_imports_kicker"
-class = "kicker"
+class = "surface-kicker"
 text = "Imports"
 
 [[box]]
 id = "bootstrap_operator_imports_list"
 domId = "state-operator-imports"
-class = "surface-list state-list"
+class = "surface-list surface-state-list"
 
 [[box]]
 id = "bootstrap_operator_activity_section"
@@ -419,13 +420,13 @@ children = ["bootstrap_operator_activity_kicker", "bootstrap_operator_activity_l
 
 [[text]]
 id = "bootstrap_operator_activity_kicker"
-class = "kicker"
+class = "surface-kicker"
 text = "Recent Activity"
 
 [[box]]
 id = "bootstrap_operator_activity_list"
 domId = "state-operator-activity"
-class = "surface-list state-list"
+class = "surface-list surface-state-list"
 
 [[box]]
 id = "bootstrap_identity_card"
@@ -434,7 +435,7 @@ children = ["bootstrap_identity_badge", "bootstrap_identity_heading", "bootstrap
 
 [[text]]
 id = "bootstrap_identity_badge"
-class = "badge"
+class = "surface-badge"
 text = "Identity"
 
 [[heading]]
@@ -451,8 +452,8 @@ text = "Create the first user when the world is blank. After identities exist, n
 [[form]]
 id = "bootstrap_identity_form"
 domId = "identity-form"
-class = "surface-stack"
-tutorialTarget = "identity-form"
+class = "surface-stack surface-mono"
+guidanceTarget = "identity-form"
 children = ["bootstrap_identity_edit_id_input", "bootstrap_identity_row_one", "bootstrap_identity_row_two", "bootstrap_identity_row_three", "bootstrap_identity_row_four", "bootstrap_identity_actions"]
 
 [[input]]
@@ -462,7 +463,7 @@ type = "hidden"
 
 [[box]]
 id = "bootstrap_identity_row_one"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_identity_id_field", "bootstrap_identity_actor_field"]
 
 [[box]]
@@ -478,7 +479,7 @@ text = "Identity Id"
 id = "bootstrap_identity_id_input"
 name = "id"
 placeholder = "identity.aaron"
-tutorialTarget = "identity-id"
+guidanceTarget = "identity-id"
 
 [[box]]
 id = "bootstrap_identity_actor_field"
@@ -493,11 +494,11 @@ text = "Actor"
 id = "bootstrap_identity_actor_input"
 name = "actor"
 placeholder = "aaron"
-tutorialTarget = "identity-actor"
+guidanceTarget = "identity-actor"
 
 [[box]]
 id = "bootstrap_identity_row_two"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_identity_label_field", "bootstrap_identity_username_field"]
 
 [[box]]
@@ -513,7 +514,7 @@ text = "Label"
 id = "bootstrap_identity_label_input"
 name = "label"
 placeholder = "Aaron"
-tutorialTarget = "identity-label"
+guidanceTarget = "identity-label"
 
 [[box]]
 id = "bootstrap_identity_username_field"
@@ -528,11 +529,11 @@ text = "Username"
 id = "bootstrap_identity_username_input"
 name = "username"
 placeholder = "aaron"
-tutorialTarget = "identity-username"
+guidanceTarget = "identity-username"
 
 [[box]]
 id = "bootstrap_identity_row_three"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_identity_password_field", "bootstrap_identity_perspective_field"]
 
 [[box]]
@@ -548,7 +549,7 @@ text = "Password"
 id = "bootstrap_identity_password_input"
 name = "password"
 placeholder = "aaron"
-tutorialTarget = "identity-password"
+guidanceTarget = "identity-password"
 
 [[box]]
 id = "bootstrap_identity_perspective_field"
@@ -563,11 +564,11 @@ text = "Home Perspective"
 id = "bootstrap_identity_perspective_input"
 name = "homePerspective"
 placeholder = "aaron:personal"
-tutorialTarget = "identity-perspective"
+guidanceTarget = "identity-perspective"
 
 [[box]]
 id = "bootstrap_identity_row_four"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_identity_home_context_field", "bootstrap_identity_home_context_spacer"]
 
 [[box]]
@@ -597,21 +598,21 @@ id = "bootstrap_identity_submit_button"
 domId = "identity-submit-button"
 text = "Create Identity"
 type = "submit"
-tutorialTarget = "identity-submit"
+guidanceTarget = "identity-submit"
 
 [[button]]
 id = "bootstrap_identity_new_button"
 domId = "identity-create-new"
 text = "New Identity"
 type = "button"
-class = "secondary"
+class = "surface-button-secondary"
 hidden = true
 action = "clearBootstrapIdentityEdit"
 
 [[text]]
 id = "bootstrap_identity_status"
 domId = "identity-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[box]]
@@ -621,7 +622,7 @@ children = ["bootstrap_session_badge", "bootstrap_session_heading", "bootstrap_s
 
 [[text]]
 id = "bootstrap_session_badge"
-class = "badge"
+class = "surface-badge"
 text = "Session"
 
 [[heading]]
@@ -632,13 +633,13 @@ text = "Sign In To Keep Editing"
 [[form]]
 id = "bootstrap_session_form"
 domId = "session-form"
-class = "surface-stack"
-tutorialTarget = "session-form"
+class = "surface-stack surface-mono"
+guidanceTarget = "session-form"
 children = ["bootstrap_session_grid", "bootstrap_session_actions"]
 
 [[box]]
 id = "bootstrap_session_grid"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_session_username_field", "bootstrap_session_password_field"]
 
 [[box]]
@@ -654,7 +655,7 @@ text = "Username"
 id = "bootstrap_session_username_input"
 name = "username"
 autocomplete = "username"
-tutorialTarget = "session-username"
+guidanceTarget = "session-username"
 
 [[box]]
 id = "bootstrap_session_password_field"
@@ -670,7 +671,7 @@ id = "bootstrap_session_password_input"
 name = "password"
 type = "password"
 autocomplete = "current-password"
-tutorialTarget = "session-password"
+guidanceTarget = "session-password"
 
 [[box]]
 id = "bootstrap_session_actions"
@@ -681,21 +682,21 @@ children = ["bootstrap_session_submit_button", "bootstrap_session_logout_button"
 id = "bootstrap_session_submit_button"
 text = "Sign In"
 type = "submit"
-tutorialTarget = "session-submit"
+guidanceTarget = "session-submit"
 
 [[button]]
 id = "bootstrap_session_logout_button"
 domId = "logout-session"
 text = "Logout"
 type = "button"
-class = "secondary"
+class = "surface-button-secondary"
 action = "logoutBootstrapSession"
-tutorialTarget = "session-logout"
+guidanceTarget = "session-logout"
 
 [[text]]
 id = "bootstrap_session_summary"
 domId = "session-summary"
-class = "muted"
+class = "surface-note surface-mono"
 text = "Loading session..."
 
 [[frontendProgram]]
@@ -874,21 +875,19 @@ text = "Creating identity..."
 
 [[step]]
 order = 2
-op = "patchJson"
+op = "dispatchDomEvent"
 on = "submit:bootstrap_identity_form"
 when = { path = "bootstrapIdentityDraft.editId", truthy = true }
-url = "/api/identities/${state.bootstrapIdentityDraft.editId}"
-body = { label = "${state.bootstrapIdentityDraft.label}", username = "${state.bootstrapIdentityDraft.username}", password = "${state.bootstrapIdentityDraft.password}", homeContext = "${state.bootstrapIdentityDraft.homeContext}", homePerspective = "${state.bootstrapIdentityDraft.homePerspective}" }
-into = "bootstrapIdentityResult"
+eventName = "witness:bootstrap-top-cards-submit"
+detail = { source = "bootstrap-top-cards", family = "identity-submit", formId = "identity-form", statusId = "identity-status", editId = "${state.bootstrapIdentityDraft.editId}", id = "${state.bootstrapIdentityDraft.id}", actor = "${state.bootstrapIdentityDraft.actor}", label = "${state.bootstrapIdentityDraft.label}", username = "${state.bootstrapIdentityDraft.username}", password = "${state.bootstrapIdentityDraft.password}", homeContext = "${state.bootstrapIdentityDraft.homeContext}", homePerspective = "${state.bootstrapIdentityDraft.homePerspective}" }
 
 [[step]]
 order = 2
-op = "postJson"
+op = "dispatchDomEvent"
 on = "submit:bootstrap_identity_form"
 when = { path = "bootstrapIdentityDraft.editId", falsy = true }
-url = "/api/identities"
-body = { id = "${state.bootstrapIdentityDraft.id || ('identity.' + String(state.bootstrapIdentityDraft.username || '').trim())}", actor = "${state.bootstrapIdentityDraft.actor}", label = "${state.bootstrapIdentityDraft.label}", username = "${state.bootstrapIdentityDraft.username}", password = "${state.bootstrapIdentityDraft.password}", homeContext = "${state.bootstrapIdentityDraft.homeContext}", homePerspective = "${state.bootstrapIdentityDraft.homePerspective}" }
-into = "bootstrapIdentityResult"
+eventName = "witness:bootstrap-top-cards-submit"
+detail = { source = "bootstrap-top-cards", family = "identity-submit", formId = "identity-form", statusId = "identity-status", editId = "${state.bootstrapIdentityDraft.editId}", id = "${state.bootstrapIdentityDraft.id}", actor = "${state.bootstrapIdentityDraft.actor}", label = "${state.bootstrapIdentityDraft.label}", username = "${state.bootstrapIdentityDraft.username}", password = "${state.bootstrapIdentityDraft.password}", homeContext = "${state.bootstrapIdentityDraft.homeContext}", homePerspective = "${state.bootstrapIdentityDraft.homePerspective}" }
 
 [[step]]
 order = 3
@@ -905,26 +904,6 @@ on = "submit:bootstrap_identity_form"
 when = { path = "bootstrapIdentityDraft.editId", falsy = true }
 widget = "bootstrap_identity_status"
 text = "Identity created."
-
-[[step]]
-order = 4
-op = "clearForm"
-on = "submit:bootstrap_identity_form"
-when = { path = "bootstrapIdentityDraft.editId", falsy = true }
-widget = "bootstrap_identity_form"
-
-[[step]]
-order = 5
-op = "refreshProjection"
-on = "submit:bootstrap_identity_form"
-when = { path = "bootstrapIdentityDraft.editId", truthy = true }
-
-[[step]]
-order = 6
-op = "dispatchDomEvent"
-on = "submit:bootstrap_identity_form"
-eventName = "witness:host-refresh"
-detail = { source = "bootstrap-top-cards", reason = "identity-form-submit" }
 
 [[step]]
 order = 0
@@ -974,16 +953,18 @@ into = "bootstrapSessionDraft"
 
 [[step]]
 order = 2
-op = "postJson"
+op = "dispatchDomEvent"
 on = "submit:bootstrap_session_form"
-url = "/api/session"
-from = "bootstrapSessionDraft"
-into = "bootstrapSessionResult"
+eventName = "witness:bootstrap-top-cards-submit"
+detail = { source = "bootstrap-top-cards", family = "session-open", statusId = "bootstrap-status", username = "${state.bootstrapSessionDraft.username}", password = "${state.bootstrapSessionDraft.password}" }
 
 [[step]]
 order = 3
-op = "reloadPage"
-on = "submit:bootstrap_session_form"
+op = "setText"
+on = "error"
+when = { path = "event.event", equals = "submit:bootstrap_session_form" }
+widget = "bootstrap_status_message"
+text = "${event.message}"
 
 [[step]]
 order = 0
@@ -994,15 +975,10 @@ text = "Signing out..."
 
 [[step]]
 order = 1
-op = "deleteJson"
+op = "dispatchDomEvent"
 on = "click:logoutBootstrapSession"
-url = "/api/session"
-into = "bootstrapSessionResult"
-
-[[step]]
-order = 2
-op = "reloadPage"
-on = "click:logoutBootstrapSession"
+eventName = "witness:bootstrap-top-cards-submit"
+detail = { source = "bootstrap-top-cards", family = "session-logout", statusId = "bootstrap-status" }
 
 [[step]]
 order = 0
@@ -1028,16 +1004,10 @@ into = "bootstrapOperatorBackupDraft"
 
 [[step]]
 order = 2
-op = "postJson"
+op = "dispatchDomEvent"
 on = "submit:bootstrap_operator_backup_form"
-url = "/api/operator/backups"
-from = "bootstrapOperatorBackupDraft"
-into = "bootstrapOperatorBackupResult"
-
-[[step]]
-order = 3
-op = "reloadPage"
-on = "submit:bootstrap_operator_backup_form"
+eventName = "witness:bootstrap-top-cards-submit"
+detail = { source = "bootstrap-top-cards", family = "operator-backup", statusId = "operator-backup-status", label = "${state.bootstrapOperatorBackupDraft.label}", includeDerived = "${state.bootstrapOperatorBackupDraft.includeDerived}" }
 
 [[step]]
 order = 1
@@ -1048,16 +1018,10 @@ into = "bootstrapOperatorExportDraft"
 
 [[step]]
 order = 2
-op = "postJson"
+op = "dispatchDomEvent"
 on = "submit:bootstrap_operator_export_form"
-url = "/api/operator/exports"
-from = "bootstrapOperatorExportDraft"
-into = "bootstrapOperatorExportResult"
-
-[[step]]
-order = 3
-op = "reloadPage"
-on = "submit:bootstrap_operator_export_form"
+eventName = "witness:bootstrap-top-cards-submit"
+detail = { source = "bootstrap-top-cards", family = "operator-export", statusId = "operator-export-status", label = "${state.bootstrapOperatorExportDraft.label}" }
 
 [[step]]
 order = 0
@@ -1084,16 +1048,10 @@ into = "bootstrapOperatorRestoreDraft"
 
 [[step]]
 order = 2
-op = "postJson"
+op = "dispatchDomEvent"
 on = "submit:bootstrap_operator_restore_form"
-url = "/api/operator/restores"
-from = "bootstrapOperatorRestoreDraft"
-into = "bootstrapOperatorRestoreResult"
-
-[[step]]
-order = 3
-op = "reloadPage"
-on = "submit:bootstrap_operator_restore_form"
+eventName = "witness:bootstrap-top-cards-submit"
+detail = { source = "bootstrap-top-cards", family = "operator-restore", statusId = "operator-restore-status", artifactId = "${state.bootstrapOperatorRestoreDraft.artifactId}", preserveCurrent = "${state.bootstrapOperatorRestoreDraft.preserveCurrent}" }
 
 [[step]]
 order = 0
@@ -1120,16 +1078,10 @@ into = "bootstrapOperatorImportDraft"
 
 [[step]]
 order = 2
-op = "postJson"
+op = "dispatchDomEvent"
 on = "submit:bootstrap_operator_import_form"
-url = "/api/operator/imports"
-from = "bootstrapOperatorImportDraft"
-into = "bootstrapOperatorImportResult"
-
-[[step]]
-order = 3
-op = "reloadPage"
-on = "submit:bootstrap_operator_import_form"
+eventName = "witness:bootstrap-top-cards-submit"
+detail = { source = "bootstrap-top-cards", family = "operator-import", statusId = "operator-import-status", artifactId = "${state.bootstrapOperatorImportDraft.artifactId}", preserveCurrent = "${state.bootstrapOperatorImportDraft.preserveCurrent}" }
 
 [[step]]
 order = 0

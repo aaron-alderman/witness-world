@@ -4,23 +4,23 @@ context = "frontend"
 
 [[box]]
 id = "bootstrap_runtime_plugin_install_proposal_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_install_proposal_form", "bootstrap_runtime_plugin_install_proposal_help", "bootstrap_runtime_plugin_install_proposal_status"]
 
 [[form]]
 id = "bootstrap_runtime_plugin_install_proposal_form"
 domId = "runtime-plugin-install-proposal-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_install_proposal_row_one", "bootstrap_runtime_plugin_install_proposal_row_two", "bootstrap_runtime_plugin_install_proposal_actions"]
 
 [[box]]
 id = "bootstrap_runtime_plugin_install_proposal_row_one"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_runtime_plugin_install_proposal_id_field", "bootstrap_runtime_plugin_install_proposal_runner_field"]
 
 [[box]]
 id = "bootstrap_runtime_plugin_install_proposal_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_install_proposal_id_text", "bootstrap_runtime_plugin_install_proposal_id_input"]
 
 [[text]]
@@ -34,7 +34,7 @@ placeholder = "proposal.runtimePlugin.install.inspect"
 
 [[box]]
 id = "bootstrap_runtime_plugin_install_proposal_runner_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_install_proposal_runner_text", "bootstrap_runtime_plugin_install_proposal_runner_select"]
 
 [[text]]
@@ -48,12 +48,12 @@ name = "serverRunner"
 
 [[box]]
 id = "bootstrap_runtime_plugin_install_proposal_row_two"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_runtime_plugin_install_proposal_plugin_field", "bootstrap_runtime_plugin_install_proposal_reason_field"]
 
 [[box]]
 id = "bootstrap_runtime_plugin_install_proposal_plugin_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_install_proposal_plugin_text", "bootstrap_runtime_plugin_install_proposal_plugin_select"]
 
 [[text]]
@@ -67,7 +67,7 @@ name = "plugin"
 
 [[box]]
 id = "bootstrap_runtime_plugin_install_proposal_reason_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_install_proposal_reason_text", "bootstrap_runtime_plugin_install_proposal_reason_input"]
 
 [[text]]
@@ -81,7 +81,7 @@ placeholder = "why this plugin should be enabled"
 
 [[box]]
 id = "bootstrap_runtime_plugin_install_proposal_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_runtime_plugin_install_proposal_submit"]
 
 [[button]]
@@ -92,13 +92,13 @@ type = "submit"
 [[text]]
 id = "bootstrap_runtime_plugin_install_proposal_help"
 domId = "runtime-plugin-install-proposal-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[text]]
 id = "bootstrap_runtime_plugin_install_proposal_status"
 domId = "runtime-plugin-install-proposal-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -147,23 +147,23 @@ detail = { source = "bootstrap-proposal-adjacent-controls", family = "runtime-pl
 
 [[box]]
 id = "bootstrap_runtime_plugin_remove_proposal_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_remove_proposal_form", "bootstrap_runtime_plugin_remove_proposal_help", "bootstrap_runtime_plugin_remove_proposal_status"]
 
 [[form]]
 id = "bootstrap_runtime_plugin_remove_proposal_form"
 domId = "runtime-plugin-remove-proposal-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_remove_proposal_row_one", "bootstrap_runtime_plugin_remove_proposal_row_two", "bootstrap_runtime_plugin_remove_proposal_actions"]
 
 [[box]]
 id = "bootstrap_runtime_plugin_remove_proposal_row_one"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_runtime_plugin_remove_proposal_id_field", "bootstrap_runtime_plugin_remove_proposal_runner_field"]
 
 [[box]]
 id = "bootstrap_runtime_plugin_remove_proposal_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_remove_proposal_id_text", "bootstrap_runtime_plugin_remove_proposal_id_input"]
 
 [[text]]
@@ -177,7 +177,7 @@ placeholder = "proposal.runtimePlugin.remove.inspect"
 
 [[box]]
 id = "bootstrap_runtime_plugin_remove_proposal_runner_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_remove_proposal_runner_text", "bootstrap_runtime_plugin_remove_proposal_runner_select"]
 
 [[text]]
@@ -191,12 +191,12 @@ name = "serverRunner"
 
 [[box]]
 id = "bootstrap_runtime_plugin_remove_proposal_row_two"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_runtime_plugin_remove_proposal_plugin_field", "bootstrap_runtime_plugin_remove_proposal_reason_field"]
 
 [[box]]
 id = "bootstrap_runtime_plugin_remove_proposal_plugin_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_remove_proposal_plugin_text", "bootstrap_runtime_plugin_remove_proposal_plugin_select"]
 
 [[text]]
@@ -210,7 +210,7 @@ name = "plugin"
 
 [[box]]
 id = "bootstrap_runtime_plugin_remove_proposal_reason_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_remove_proposal_reason_text", "bootstrap_runtime_plugin_remove_proposal_reason_input"]
 
 [[text]]
@@ -224,7 +224,7 @@ placeholder = "why this plugin should be removed"
 
 [[box]]
 id = "bootstrap_runtime_plugin_remove_proposal_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_runtime_plugin_remove_proposal_submit"]
 
 [[button]]
@@ -235,13 +235,13 @@ type = "submit"
 [[text]]
 id = "bootstrap_runtime_plugin_remove_proposal_help"
 domId = "runtime-plugin-remove-proposal-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[text]]
 id = "bootstrap_runtime_plugin_remove_proposal_status"
 domId = "runtime-plugin-remove-proposal-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -290,23 +290,23 @@ detail = { source = "bootstrap-proposal-adjacent-controls", family = "runtime-pl
 
 [[box]]
 id = "bootstrap_mcp_server_proposal_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_proposal_form", "bootstrap_mcp_server_proposal_help", "bootstrap_mcp_server_proposal_status"]
 
 [[form]]
 id = "bootstrap_mcp_server_proposal_form"
 domId = "mcp-server-proposal-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_proposal_row_one", "bootstrap_mcp_server_proposal_row_two", "bootstrap_mcp_server_proposal_row_three", "bootstrap_mcp_server_proposal_transports_field", "bootstrap_mcp_server_proposal_reason_field", "bootstrap_mcp_server_proposal_actions"]
 
 [[box]]
 id = "bootstrap_mcp_server_proposal_row_one"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_mcp_server_proposal_id_field", "bootstrap_mcp_server_proposal_server_id_field"]
 
 [[box]]
 id = "bootstrap_mcp_server_proposal_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_proposal_id_text", "bootstrap_mcp_server_proposal_id_input"]
 
 [[text]]
@@ -320,7 +320,7 @@ placeholder = "proposal.mcpServer.define.personal"
 
 [[box]]
 id = "bootstrap_mcp_server_proposal_server_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_proposal_server_id_text", "bootstrap_mcp_server_proposal_server_id_input"]
 
 [[text]]
@@ -334,12 +334,12 @@ placeholder = "personal_mcp"
 
 [[box]]
 id = "bootstrap_mcp_server_proposal_row_two"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_mcp_server_proposal_label_field", "bootstrap_mcp_server_proposal_runner_field"]
 
 [[box]]
 id = "bootstrap_mcp_server_proposal_label_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_proposal_label_text", "bootstrap_mcp_server_proposal_label_input"]
 
 [[text]]
@@ -353,7 +353,7 @@ placeholder = "Personal MCP"
 
 [[box]]
 id = "bootstrap_mcp_server_proposal_runner_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_proposal_runner_text", "bootstrap_mcp_server_proposal_runner_select"]
 
 [[text]]
@@ -367,12 +367,12 @@ name = "serverRunner"
 
 [[box]]
 id = "bootstrap_mcp_server_proposal_row_three"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_mcp_server_proposal_context_field", "bootstrap_mcp_server_proposal_service_identity_field"]
 
 [[box]]
 id = "bootstrap_mcp_server_proposal_context_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_proposal_context_text", "bootstrap_mcp_server_proposal_context_select"]
 
 [[text]]
@@ -386,7 +386,7 @@ name = "context"
 
 [[box]]
 id = "bootstrap_mcp_server_proposal_service_identity_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_proposal_service_identity_text", "bootstrap_mcp_server_proposal_service_identity_input"]
 
 [[text]]
@@ -400,7 +400,7 @@ placeholder = "aaron"
 
 [[box]]
 id = "bootstrap_mcp_server_proposal_transports_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_proposal_transports_text", "bootstrap_mcp_server_proposal_transports_input"]
 
 [[text]]
@@ -414,7 +414,7 @@ text = "[\"stdio\",\"http\"]"
 
 [[box]]
 id = "bootstrap_mcp_server_proposal_reason_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_proposal_reason_text", "bootstrap_mcp_server_proposal_reason_input"]
 
 [[text]]
@@ -428,7 +428,7 @@ placeholder = "why this MCP server should be authored"
 
 [[box]]
 id = "bootstrap_mcp_server_proposal_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_mcp_server_proposal_submit"]
 
 [[button]]
@@ -439,13 +439,13 @@ type = "submit"
 [[text]]
 id = "bootstrap_mcp_server_proposal_help"
 domId = "mcp-server-proposal-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[text]]
 id = "bootstrap_mcp_server_proposal_status"
 domId = "mcp-server-proposal-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -502,23 +502,23 @@ detail = { source = "bootstrap-proposal-adjacent-controls", family = "mcp-server
 
 [[box]]
 id = "bootstrap_mcp_tool_install_proposal_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_proposal_form", "bootstrap_mcp_tool_install_proposal_help", "bootstrap_mcp_tool_install_proposal_status"]
 
 [[form]]
 id = "bootstrap_mcp_tool_install_proposal_form"
 domId = "mcp-tool-install-proposal-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_proposal_row_one", "bootstrap_mcp_tool_install_proposal_row_two", "bootstrap_mcp_tool_install_proposal_scope_contexts_field", "bootstrap_mcp_tool_install_proposal_scope_targets_field", "bootstrap_mcp_tool_install_proposal_reason_field", "bootstrap_mcp_tool_install_proposal_actions"]
 
 [[box]]
 id = "bootstrap_mcp_tool_install_proposal_row_one"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_mcp_tool_install_proposal_id_field", "bootstrap_mcp_tool_install_proposal_server_field"]
 
 [[box]]
 id = "bootstrap_mcp_tool_install_proposal_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_proposal_id_text", "bootstrap_mcp_tool_install_proposal_id_input"]
 
 [[text]]
@@ -532,7 +532,7 @@ placeholder = "proposal.mcpTool.install.world.read"
 
 [[box]]
 id = "bootstrap_mcp_tool_install_proposal_server_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_proposal_server_text", "bootstrap_mcp_tool_install_proposal_server_select"]
 
 [[text]]
@@ -546,12 +546,12 @@ name = "server"
 
 [[box]]
 id = "bootstrap_mcp_tool_install_proposal_row_two"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_mcp_tool_install_proposal_tool_field", "bootstrap_mcp_tool_install_proposal_acting_mode_field"]
 
 [[box]]
 id = "bootstrap_mcp_tool_install_proposal_tool_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_proposal_tool_text", "bootstrap_mcp_tool_install_proposal_tool_select"]
 
 [[text]]
@@ -565,7 +565,7 @@ name = "tool"
 
 [[box]]
 id = "bootstrap_mcp_tool_install_proposal_acting_mode_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_proposal_acting_mode_text", "bootstrap_mcp_tool_install_proposal_acting_mode_select"]
 
 [[text]]
@@ -579,7 +579,7 @@ name = "actingMode"
 
 [[box]]
 id = "bootstrap_mcp_tool_install_proposal_scope_contexts_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_proposal_scope_contexts_text", "bootstrap_mcp_tool_install_proposal_scope_contexts_input"]
 
 [[text]]
@@ -593,7 +593,7 @@ text = "[]"
 
 [[box]]
 id = "bootstrap_mcp_tool_install_proposal_scope_targets_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_proposal_scope_targets_text", "bootstrap_mcp_tool_install_proposal_scope_targets_input"]
 
 [[text]]
@@ -607,7 +607,7 @@ text = "[]"
 
 [[box]]
 id = "bootstrap_mcp_tool_install_proposal_reason_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_proposal_reason_text", "bootstrap_mcp_tool_install_proposal_reason_input"]
 
 [[text]]
@@ -621,7 +621,7 @@ placeholder = "why this MCP tool should be installed"
 
 [[box]]
 id = "bootstrap_mcp_tool_install_proposal_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_mcp_tool_install_proposal_submit"]
 
 [[button]]
@@ -632,13 +632,13 @@ type = "submit"
 [[text]]
 id = "bootstrap_mcp_tool_install_proposal_help"
 domId = "mcp-tool-install-proposal-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[text]]
 id = "bootstrap_mcp_tool_install_proposal_status"
 domId = "mcp-tool-install-proposal-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -695,23 +695,23 @@ detail = { source = "bootstrap-proposal-adjacent-controls", family = "mcp-tool-i
 
 [[box]]
 id = "bootstrap_mcp_tool_remove_proposal_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_remove_proposal_form", "bootstrap_mcp_tool_remove_proposal_help", "bootstrap_mcp_tool_remove_proposal_status"]
 
 [[form]]
 id = "bootstrap_mcp_tool_remove_proposal_form"
 domId = "mcp-tool-remove-proposal-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_remove_proposal_row_one", "bootstrap_mcp_tool_remove_proposal_row_two", "bootstrap_mcp_tool_remove_proposal_actions"]
 
 [[box]]
 id = "bootstrap_mcp_tool_remove_proposal_row_one"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_mcp_tool_remove_proposal_id_field", "bootstrap_mcp_tool_remove_proposal_server_field"]
 
 [[box]]
 id = "bootstrap_mcp_tool_remove_proposal_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_remove_proposal_id_text", "bootstrap_mcp_tool_remove_proposal_id_input"]
 
 [[text]]
@@ -725,7 +725,7 @@ placeholder = "proposal.mcpTool.remove.world.read"
 
 [[box]]
 id = "bootstrap_mcp_tool_remove_proposal_server_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_remove_proposal_server_text", "bootstrap_mcp_tool_remove_proposal_server_select"]
 
 [[text]]
@@ -739,12 +739,12 @@ name = "server"
 
 [[box]]
 id = "bootstrap_mcp_tool_remove_proposal_row_two"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_mcp_tool_remove_proposal_tool_field", "bootstrap_mcp_tool_remove_proposal_reason_field"]
 
 [[box]]
 id = "bootstrap_mcp_tool_remove_proposal_tool_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_remove_proposal_tool_text", "bootstrap_mcp_tool_remove_proposal_tool_select"]
 
 [[text]]
@@ -758,7 +758,7 @@ name = "tool"
 
 [[box]]
 id = "bootstrap_mcp_tool_remove_proposal_reason_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_remove_proposal_reason_text", "bootstrap_mcp_tool_remove_proposal_reason_input"]
 
 [[text]]
@@ -772,7 +772,7 @@ placeholder = "why this MCP tool should be removed"
 
 [[box]]
 id = "bootstrap_mcp_tool_remove_proposal_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_mcp_tool_remove_proposal_submit"]
 
 [[button]]
@@ -783,13 +783,13 @@ type = "submit"
 [[text]]
 id = "bootstrap_mcp_tool_remove_proposal_help"
 domId = "mcp-tool-remove-proposal-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[text]]
 id = "bootstrap_mcp_tool_remove_proposal_status"
 domId = "mcp-tool-remove-proposal-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]

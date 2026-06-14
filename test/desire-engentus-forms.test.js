@@ -26,6 +26,10 @@ model BoltFatigue {
 
 chart GoodmanDiagram of BoltFatigue {
   frame cartesian
+  prop pageStylesheetHref = "/app-static/app/engentus-chart-pages.css"
+  prop bodyClass = "chart-page chart-page--goodman"
+  prop mountId = "chart-svg"
+  prop mountTag = "svg"
   x sm
   x.domain 0 650
   x.label "Mean stress"
@@ -60,6 +64,10 @@ chart GoodmanDiagram of BoltFatigue {
   assert.equal(chart.body.surfaceKind, "chart");
   assert.equal(chart.body.modelRef, "BoltFatigue");
   assert.equal(chart.body.frame, "cartesian");
+  assert.equal(chart.body.props.pageStylesheetHref, "/app-static/app/engentus-chart-pages.css");
+  assert.equal(chart.body.props.bodyClass, "chart-page chart-page--goodman");
+  assert.equal(chart.body.props.mountId, "chart-svg");
+  assert.equal(chart.body.props.mountTag, "svg");
   assert.deepEqual(chart.body.encoding.x, { field: "sm", domain: [0, 650], label: "Mean stress" });
   assert.deepEqual(chart.body.encoding.y, { field: "sigma_a", domain: [0, "auto"], label: null });
   assert.deepEqual(chart.body.editable, ["title", "band.fills", "annotations"]);

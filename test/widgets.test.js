@@ -68,6 +68,33 @@ text = "\${item.label}"
   assert.match(html, /\$\{item\.label\}/);
 });
 
+test("widget pages project canonical guidance targets while keeping tutorial selector compatibility", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[widget]]
+actor = "adam"
+id = "root"
+kind = "Page"
+props = { title = "Guidance Targets" }
+
+[[button]]
+actor = "adam"
+id = "cta"
+text = "Continue"
+guidanceTarget = "cta-button"
+
+[[attachWidget]]
+actor = "adam"
+parent = "root"
+child = "cta"
+order = 0
+`);
+
+  const html = renderWidgetPage(world, { actor: "frontendHost", rootWidget: "root" });
+  assert.match(html, /data-guidance-target="cta-button"/);
+  assert.match(html, /data-tutorial-target="cta-button"/);
+});
+
 test("frontend form interpreter reads forms and collection templates without hard-coded status fallback", () => {
   const world = createWorld();
   applyWitnessToml(world, `

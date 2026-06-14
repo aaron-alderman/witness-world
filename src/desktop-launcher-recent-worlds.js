@@ -14,12 +14,14 @@ export function createDesktopRecentWorldRow({
   const button = document?.createElement?.("button");
   if (!button) return null;
   button.type = "button";
-  button.className = "recent-row";
+  button.className = "surface-link-item recent-row";
   button.dataset.worldHome = String(worldHome);
 
   const title = document.createElement("strong");
+  title.className = "surface-mono";
   title.textContent = String(worldHome);
   const subtitle = document.createElement("span");
+  subtitle.className = "surface-note";
   subtitle.textContent = "Open this world directly";
   button.append(title, subtitle);
   return button;
@@ -37,6 +39,7 @@ export function renderDesktopRecentWorlds({
       root.replaceChildren();
       return;
     }
+    empty.className = "surface-note";
     empty.textContent = "No recent worlds yet.";
     root.replaceChildren(empty);
     return;

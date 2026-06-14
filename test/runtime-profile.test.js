@@ -163,7 +163,7 @@ test("minimal runtime profile does not expose bundle-owned search routes", async
   }
 });
 
-test("minimal runtime profile does not expose tutorial progress routes", async () => {
+test("minimal runtime profile does not expose guidance progress routes", async () => {
   const world = createWorld();
   applyMinimalPageDsl(world);
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "full" });
@@ -179,7 +179,7 @@ test("minimal runtime profile does not expose tutorial progress routes", async (
   assert.equal(server.ok, true);
 
   try {
-    const response = await fetch(`${server.url}/api/tutorial-progress/todo-from-scratch`);
+    const response = await fetch(`${server.url}/api/guidance-progress/todo-from-scratch`);
     assert.equal(response.status, 404);
   } finally {
     await server.close();
@@ -1047,10 +1047,11 @@ test("bootstrap default activation loads authoring plus bootstrap/tutorial depen
     const serverRunnerAuthoringPlugin = plugins.packages.find(row => row.id === "plugin.server-runner-authoring");
     const mcpAuthoringPlugin = plugins.packages.find(row => row.id === "plugin.mcp-authoring");
     const proposalsPlugin = plugins.packages.find(row => row.id === "plugin.proposals");
+    const starterPlugin = plugins.packages.find(row => row.id === "plugin.starter");
     const tutorialPlugin = plugins.packages.find(row => row.id === "plugin.tutorial");
 
-    assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.capability-authoring", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.tutorial"]);
-    assert.equal(diagnostics.plugins.loadedRuntimeCount, 8);
+    assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.capability-authoring", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.starter", "plugin.tutorial"]);
+    assert.equal(diagnostics.plugins.loadedRuntimeCount, 9);
     assert.equal(authoringPlugin.execution.mode, "meta-package");
     assert.equal(authoringPlugin.runtimeModule.loadStatus, "not-applicable");
     assert.deepEqual(authoringPlugin.runtimeModule.bundleIds, []);
@@ -1089,6 +1090,10 @@ test("bootstrap default activation loads authoring plus bootstrap/tutorial depen
     assert.equal(proposalsPlugin.runtimeModule.loadStatus, "loaded");
     assert.deepEqual(proposalsPlugin.runtimeModule.bundleIds, ["bundle-proposals"]);
     assert.equal(proposalsPlugin.resolvedBundles.some(row => row.id === "bundle-proposals"), true);
+    assert.equal(starterPlugin.execution.mode, "plugin-owned");
+    assert.equal(starterPlugin.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual(starterPlugin.runtimeModule.bundleIds, ["bundle-starter"]);
+    assert.equal(starterPlugin.resolvedBundles.some(row => row.id === "bundle-starter"), true);
     assert.equal(tutorialPlugin.execution.mode, "plugin-owned");
     assert.equal(tutorialPlugin.runtimeModule.loadStatus, "loaded");
     assert.deepEqual(tutorialPlugin.runtimeModule.bundleIds, ["bundle-tutorial"]);
@@ -1121,8 +1126,8 @@ test("maintained demo runs on minimal plus authored runtime plugins", async () =
     assert.equal(diagnostics.activeProfile, "minimal");
     assert.deepEqual([...diagnostics.plugins.authoredPluginIds].sort(), ["plugin.authoring", "plugin.canvas", "plugin.demo", "plugin.inspect"]);
     assert.deepEqual(diagnostics.plugins.operatorPluginIds, []);
-    assert.deepEqual([...diagnostics.plugins.effectivePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.canvas", "plugin.capability-authoring", "plugin.demo", "plugin.fs-json", "plugin.inspect", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.tutorial"].sort());
-    assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.canvas", "plugin.capability-authoring", "plugin.demo", "plugin.fs-json", "plugin.inspect", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring", "plugin.tutorial"].sort());
+    assert.deepEqual([...diagnostics.plugins.effectivePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.canvas", "plugin.capability-authoring", "plugin.demo", "plugin.fs-json", "plugin.inspect", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring"].sort());
+    assert.deepEqual([...diagnostics.plugins.activePluginIds].sort(), ["plugin.authoring", "plugin.authoring-core", "plugin.bootstrap", "plugin.canvas", "plugin.capability-authoring", "plugin.demo", "plugin.fs-json", "plugin.inspect", "plugin.mcp-authoring", "plugin.program-authoring", "plugin.proposals", "plugin.server-runner-authoring"].sort());
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-core-runtime"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-authoring-core"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-bootstrap"), true);
@@ -1150,7 +1155,7 @@ test("maintained demo runs on minimal plus authored runtime plugins", async () =
   }
 });
 
-test("maintained demo without authored runtime plugins loses optional plugin-owned behavior under minimal", async () => {
+test("maintained demo without authored runtime plugins does not start under minimal while the demo handler set remains authored", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
@@ -1184,26 +1189,8 @@ plugin = "plugin.demo"
     runtimeProfile: "minimal"
   });
 
-  assert.equal(server.ok, true);
-
-  try {
-    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
-
-    assert.equal(diagnostics.activeProfile, "minimal");
-    assert.deepEqual(diagnostics.plugins.authoredPluginIds, []);
-    assert.deepEqual(diagnostics.plugins.activePluginIds, []);
-    assert.deepEqual(diagnostics.activeBundles.map(bundle => bundle.id), ["bundle-core-runtime"]);
-
-    assert.equal((await fetch(`${server.url}/`)).status, 200);
-    assert.equal((await fetch(`${server.url}/_bootstrap`)).status, 404);
-    assert.equal((await fetch(`${server.url}/world`)).status, 404);
-    assert.equal((await fetch(`${server.url}/process`)).status, 404);
-    assert.equal((await fetch(`${server.url}/canvas`)).status, 404);
-    assert.equal((await fetch(`${server.url}/api/witnesses`)).status, 500);
-    assert.equal((await fetch(`${server.url}/api/world-graph`)).status, 500);
-  } finally {
-    await server.close();
-  }
+  assert.equal(server.ok, false);
+  assert.equal(server.reason, "unknown handler set");
 });
 
 test("full runtime plus plugin.inspect is a no-op in bundle composition but still reported honestly", async () => {
@@ -1242,14 +1229,14 @@ test("static handler catalog helpers stay core-only before plugin runtime loadin
   assert.equal(minimalHandlers.includes("page.home"), true);
   assert.equal(minimalHandlers.includes("page.world"), false);
   assert.equal(minimalHandlers.includes("db.sql.query"), false);
-  assert.deepEqual(minimalPageHandlers, ["page.home"]);
+  assert.deepEqual(minimalPageHandlers, ["page.home", "page.surface"]);
 
   assert.equal(fullHandlers.includes("page.home"), true);
   assert.equal(fullHandlers.includes("page.world"), false);
   assert.equal(fullHandlers.includes("db.sql.query"), false);
   assert.equal(fullHandlers.includes("canvas.process"), false);
   assert.equal(fullHandlers.includes("mcp.http"), false);
-  assert.deepEqual(fullPageHandlers, ["page.home"]);
+  assert.deepEqual(fullPageHandlers, ["page.home", "page.surface"]);
 });
 
 test("blank minimal runtime does not expose authoring bootstrap routes or fallback", async () => {

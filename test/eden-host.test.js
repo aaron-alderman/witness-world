@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
 import { moduleProjectors } from "../src/modules.js";
-import { startUiDemoServer } from "./support/harness.js";
+import { startUiDemoServer as startUiDemoServerBase } from "./support/harness.js";
+
+const edenDslPath = path.join(process.cwd(), "examples", "eden/app.wtoml");
+
+function startUiDemoServer(options = {}) {
+  return startUiDemoServerBase({
+    dslPath: edenDslPath,
+    ...options
+  });
+}
 
 test("eden canvas route renders the neighborhood shell without mutating root", async () => {
   const { server, url, close } = await startUiDemoServer();

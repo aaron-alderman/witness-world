@@ -79,7 +79,7 @@ test("tutorial client interactions adapter owns target lookup, highlight, focus,
   assert.equal(activeHighlightTarget, "todo_form");
   assert.equal(activeFocusScope, "scope.todo");
   assert.deepEqual(calls, [
-    ["query", '[data-tutorial-target="todo_form"]'],
+    ["query", '[data-guidance-target="todo_form"], [data-tutorial-target="todo_form"]'],
     ["clear", "todo_form", "scope.a"],
     ["highlight", null],
     ["focus-scope", null],

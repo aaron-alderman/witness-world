@@ -1,5 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import {
+  bootstrapRouteAuthoringContracts,
+  loadBootstrapRouteAuthoringContracts
+} from "./bootstrap-route-authoring-contracts.js";
 import {
   applyBootstrapRouteAuthoringView,
   bindBootstrapRouteAuthoringSync,
@@ -11,6 +16,17 @@ import {
   runBootstrapRouteAuthoringSync,
   syncBootstrapRouteAuthoringState
 } from "./bootstrap-route-authoring-sync.js";
+
+test("route authoring contracts load from authored WTOML", async () => {
+  const source = await readFile(new URL("./bootstrap-route-authoring-contracts.wtoml", import.meta.url), "utf8");
+  const contracts = loadBootstrapRouteAuthoringContracts();
+
+  assert.equal(source.includes('routeKind = "backendProgram"'), true);
+  assert.equal(source.includes('handler = "page.home"'), true);
+  assert.equal(contracts.policiesByRouteKind.backendProgram.responseKind, "json");
+  assert.equal(contracts.handlerRulesByHandler["page.world"].requiresRootWidget, true);
+  assert.equal(contracts.managedFields.includes("rootWidgetRef"), true);
+});
 
 function createRouteFormHarness() {
   const submitButton = { disabled: false };
@@ -73,7 +89,8 @@ test("route authoring view explains page handlers and preserves page fields", ()
         }
       }
     },
-    readFieldValue: harness.readFieldValue
+    readFieldValue: harness.readFieldValue,
+    routeAuthoringContracts: bootstrapRouteAuthoringContracts
   });
 
   assert.equal(view.enabledFields.page, true);
@@ -104,7 +121,8 @@ test("route authoring sync disables incompatible fields and blocks invalid backe
     formField: harness.formField,
     readFieldValue: harness.readFieldValue,
     setStatus: harness.setStatus,
-    setSubmitDisabled: harness.setSubmitDisabled
+    setSubmitDisabled: harness.setSubmitDisabled,
+    routeAuthoringContracts: bootstrapRouteAuthoringContracts
   });
 
   assert.equal(result.handled, true);
@@ -207,6 +225,9 @@ test("route authoring sync bridge binds one documented event family", () => {
   assert.deepEqual(handler({ detail: { source: "other" } }), { handled: false });
 
   const factory = renderBootstrapRouteAuthoringSyncFactory();
+  assert.equal(factory.includes("const bootstrapRouteAuthoringContracts ="), true);
+  assert.equal(factory.includes("const routeAuthoringPolicyForKind ="), true);
+  assert.equal(factory.includes("const routeAuthoringHandlerRuleForHandler ="), true);
   assert.equal(factory.includes("const buildBootstrapRouteAuthoringView ="), true);
   assert.equal(factory.includes("const applyBootstrapRouteAuthoringView ="), true);
   assert.equal(factory.includes("const syncBootstrapRouteAuthoringState ="), true);
@@ -217,13 +238,77 @@ test("route authoring sync bridge binds one documented event family", () => {
   assert.equal(factory.includes("const createBootstrapRouteAuthoringSyncDepsBuilder ="), true);
 });
 
+test("route authoring binding re-resolves model and form reads on each event", () => {
+  const harness = createRouteFormHarness();
+  const state = {
+    model: {
+      runtimeProfile: "full",
+      supportedHandlerMetadata: {
+        "page.home": {
+          routeKind: "page",
+          responseKind: "page",
+          methods: ["GET"]
+        }
+      }
+    }
+  };
+  const liveState = {
+    model: () => state.model || {}
+  };
+  const buildDeps = createBootstrapRouteAuthoringSyncDepsBuilder({
+    liveState,
+    dom: {
+      byId: harness.byId,
+      formField: harness.formField,
+      readFieldValue: harness.readFieldValue,
+      setStatus: harness.setStatus,
+      setSubmitDisabled: harness.setSubmitDisabled
+    }
+  });
+  const target = {
+    addEventListener(name, handler) {
+      this.name = name;
+      this.handler = handler;
+    }
+  };
+
+  harness.fields.handler.value = "page.home";
+  bindBootstrapRouteAuthoringSync({ target, buildDeps });
+  assert.equal(target.name, "witness:bootstrap-route-authoring-sync");
+
+  const first = target.handler({ detail: { source: "bootstrap-app-authoring-controls" } });
+  assert.equal(first.handled, true);
+  assert.equal(first.view.helpText.includes("page.home"), true);
+  assert.equal(first.view.enabledFields.page, true);
+
+  state.model = {
+    runtimeProfile: "minimal",
+    supportedHandlerMetadata: {
+      "backendProgram.run": {
+        routeKind: "backendProgram",
+        responseKind: "json",
+        methods: ["POST"]
+      }
+    }
+  };
+  harness.fields.handler.value = "backendProgram.run";
+  harness.fields.method.value = "POST";
+  harness.fields.backendProgramSoul.value = "todo.todos.list";
+
+  const second = target.handler({ detail: { source: "bootstrap-app-authoring-controls" } });
+  assert.equal(second.handled, true);
+  assert.equal(second.view.helpText.includes("backendProgram.run"), true);
+  assert.equal(second.view.enabledFields.backendProgramSoul, true);
+});
+
 test("route authoring state sync exposes the shared view contract", () => {
   const view = syncBootstrapRouteAuthoringState({
     model: {
       runtimeProfile: "full",
       supportedHandlerMetadata: {}
     },
-    readFieldValue: () => ""
+    readFieldValue: () => "",
+    routeAuthoringContracts: bootstrapRouteAuthoringContracts
   });
 
   assert.equal(view.helpText.includes("Select a handler"), true);

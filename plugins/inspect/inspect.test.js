@@ -6,6 +6,7 @@ import { activateWidgetVersion, defineWidgetVersion, defineWidgetVersionTransiti
 import { worldGraphProjection, astNodesProjection } from "./world-graph.js";
 import { processRunProjection, processViewProjection, renderProcessPage } from "./process-view.js";
 import { renderWidgetPage } from "./widget-page.js";
+import { createHandlers } from "./runtime.js";
 import { requestWidgetVersionActivation, rollbackWidgetVersion } from "./widget-versions.js";
 
 test("inspect plugin owns inspect bundle catalog, routes, and surfaces", async () => {
@@ -13,6 +14,42 @@ test("inspect plugin owns inspect bundle catalog, routes, and surfaces", async (
   assert.equal(source.includes('bundleId = "bundle-inspect"'), true);
   assert.equal(source.includes('"worldGraph.read"'), true);
   assert.equal(source.includes('id: "surface:world"'), true);
+});
+
+test("inspect handlers tolerate a missing logger for world graph reads", async () => {
+  const events = [];
+  const world = createWorld();
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    logger: null,
+    send() {},
+    sendJson(_res, status, body) {
+      events.push({ status, body });
+    },
+    readJson: async () => ({}),
+    sendGateFailure() {},
+    authorityServices: {
+      ensureTargetAuthority() {
+        return { ok: true };
+      }
+    },
+    requestActors: () => [],
+    requestVisibleWitnesses: () => [],
+    processSelection: () => ({}),
+    processViewInputs: () => ({ witnesses: [], observations: [] }),
+    frontendTraceProcesses: new Set()
+  });
+
+  await assert.doesNotReject(() => handlers["worldGraph.read"]({
+    res: {},
+    requestActor: "adam",
+    requestId: "req-1",
+    appContext: {}
+  }));
+  assert.equal(events[0]?.status, 200);
+  assert.equal(Array.isArray(events[0]?.body?.graph?.nodes), true);
 });
 
 test("inspect plugin owns world graph projections without a src compatibility facade", async () => {
@@ -31,6 +68,8 @@ test("inspect plugin owns world graph projections without a src compatibility fa
 
 test("inspect plugin owns process view projections and page rendering without a src compatibility facade", async () => {
   const pluginProcessView = await readFile(new URL("./process-view.js", import.meta.url), "utf8");
+  const processViewPageSource = await readFile(new URL("./process-view-page.wtoml", import.meta.url), "utf8");
+  const runtimePageStateSource = await readFile(new URL("../../src/runtime-page-state.js", import.meta.url), "utf8");
   const runtimeSource = await readFile(new URL("./runtime.js", import.meta.url), "utf8");
   const model = processViewProjection({ witnesses: [], observations: [] }, {});
 
@@ -39,9 +78,20 @@ test("inspect plugin owns process view projections and page rendering without a 
   assert.equal(typeof renderProcessPage, "function");
   assert.deepEqual(model.catalog, []);
   assert.match(renderProcessPage(model), /Process View/);
+  assert.equal(processViewPageSource.includes('class = "surface-header-bar surface-toolbar"'), true);
+  assert.equal(processViewPageSource.includes('surface-empty surface-empty-state'), true);
+  assert.equal(processViewPageSource.includes('class = "surface-status"'), true);
+  assert.equal(processViewPageSource.includes('class = "status"'), false);
   assert.equal(pluginProcessView.includes("export function processViewProjection"), true);
   assert.equal(pluginProcessView.includes("export function processRunProjection"), true);
   assert.equal(pluginProcessView.includes("export function renderProcessPage"), true);
+  assert.equal(pluginProcessView.includes('from "../../src/runtime-page-state.js"'), true);
+  assert.equal(pluginProcessView.includes("renderRuntimePageInitialStateScript("), true);
+  assert.equal(pluginProcessView.includes("injectRuntimePageMarkupBeforeProgram("), true);
+  assert.equal(pluginProcessView.includes("function serializeJsonScript"), false);
+  assert.equal(pluginProcessView.includes("function injectBeforeFrontendProgram"), false);
+  assert.equal(runtimePageStateSource.includes("export function renderRuntimePageInitialStateScript"), true);
+  assert.equal(runtimePageStateSource.includes("export function injectRuntimePageMarkupBeforeProgram"), true);
   assert.equal(runtimeSource.includes('from "./process-view.js"'), true);
   await assert.rejects(readFile(new URL("../../src/process-view.js", import.meta.url), "utf8"));
 });
@@ -50,37 +100,56 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   const pluginWidgetPage = await readFile(new URL("./widget-page.js", import.meta.url), "utf8");
   const surfaceCommandActionsSource = await readFile(new URL("./surface-command-actions.js", import.meta.url), "utf8");
   const surfaceCommandIdentityActionsSource = await readFile(new URL("./surface-command-identity-actions.js", import.meta.url), "utf8");
+  const surfaceCommandViewSource = await readFile(new URL("./surface-command-view.js", import.meta.url), "utf8");
   const surfaceInspectorActionsSource = await readFile(new URL("./surface-inspector-actions.js", import.meta.url), "utf8");
   const surfaceInspectorFormActionsSource = await readFile(new URL("./surface-inspector-form-actions.js", import.meta.url), "utf8");
   const surfaceInspectorOverlayViewSource = await readFile(new URL("./surface-inspector-overlay-view.js", import.meta.url), "utf8");
+  const surfaceInspectorPanelViewSource = await readFile(new URL("./surface-inspector-panel-view.js", import.meta.url), "utf8");
   const surfaceInspectorVersionActionsSource = await readFile(new URL("./surface-inspector-version-actions.js", import.meta.url), "utf8");
   const worldCommandActionsSource = await readFile(new URL("./world-command-actions.js", import.meta.url), "utf8");
+  const worldBrowserViewSource = await readFile(new URL("./world-browser-view.js", import.meta.url), "utf8");
   const worldGraphActionsSource = await readFile(new URL("./world-graph-actions.js", import.meta.url), "utf8");
+  const worldGraphViewSource = await readFile(new URL("./world-graph-view.js", import.meta.url), "utf8");
+  const widgetPageHeadSource = await readFile(new URL("./widget-page-head.js", import.meta.url), "utf8");
+  const widgetPageStylesSource = await readFile(new URL("./widget-page-styles.js", import.meta.url), "utf8");
   const worldPostRenderSource = await readFile(new URL("./world-post-render.js", import.meta.url), "utf8");
   const worldShellViewSource = await readFile(new URL("./world-shell-view.js", import.meta.url), "utf8");
+  const worldSurfaceViewSource = await readFile(new URL("./world-surface-view.js", import.meta.url), "utf8");
   const worldTutorialActionsSource = await readFile(new URL("./world-tutorial-actions.js", import.meta.url), "utf8");
   const surfaceKitSource = await readFile(new URL("./surface-kit-styles.js", import.meta.url), "utf8");
+  const runtimeSurfaceKitSource = await readFile(new URL("../../src/runtime-surface-kit.js", import.meta.url), "utf8");
+  const runtimeSurfaceCommandSource = await readFile(new URL("../../src/runtime-surface-command-primitives.js", import.meta.url), "utf8");
+  const runtimeSurfaceContentSource = await readFile(new URL("../../src/runtime-surface-content-primitives.js", import.meta.url), "utf8");
+  const runtimeSurfaceFormSource = await readFile(new URL("../../src/runtime-surface-form-controls.js", import.meta.url), "utf8");
+  const runtimeSurfaceInspectorSource = await readFile(new URL("../../src/runtime-surface-inspector-primitives.js", import.meta.url), "utf8");
+  const runtimeSurfaceTutorialSource = await readFile(new URL("../../src/runtime-surface-tutorial-primitives.js", import.meta.url), "utf8");
   const themeSource = await readFile(new URL("../eden/eden-page-theme.js", import.meta.url), "utf8");
   const runtimeSource = await readFile(new URL("./runtime.js", import.meta.url), "utf8");
   const srcWidgets = await readFile(new URL("../../src/widgets.js", import.meta.url), "utf8");
 
   assert.equal(typeof renderWidgetPage, "function");
   assert.equal(pluginWidgetPage.includes("export function renderWidgetPage"), true);
-  assert.equal(pluginWidgetPage.includes("renderTutorialClient"), true);
-  assert.equal(pluginWidgetPage.includes("resolveEdenPageTheme"), true);
+  assert.equal(pluginWidgetPage.includes("renderGuidanceClient"), true);
+  assert.equal(pluginWidgetPage.includes("tutorialDefinition"), false);
+  assert.equal(pluginWidgetPage.includes("resolvePagePresentationTheme"), true);
+  assert.equal(pluginWidgetPage.includes("resolveEdenPageTheme"), false);
   assert.equal(pluginWidgetPage.includes('from "./surface-command-actions.js"'), true);
   assert.equal(pluginWidgetPage.includes('from "./surface-command-identity-actions.js"'), true);
+  assert.equal(pluginWidgetPage.includes('from "./surface-command-view.js"'), true);
   assert.equal(pluginWidgetPage.includes('from "./surface-inspector-actions.js"'), true);
   assert.equal(pluginWidgetPage.includes('from "./surface-inspector-form-actions.js"'), true);
   assert.equal(pluginWidgetPage.includes('from "./surface-inspector-overlay-view.js"'), true);
+  assert.equal(pluginWidgetPage.includes('from "./surface-inspector-panel-view.js"'), true);
   assert.equal(pluginWidgetPage.includes('from "./surface-inspector-version-actions.js"'), true);
   assert.equal(pluginWidgetPage.includes('from "./world-command-actions.js"'), true);
+  assert.equal(pluginWidgetPage.includes('from "./world-browser-view.js"'), true);
   assert.equal(pluginWidgetPage.includes('from "./world-graph-actions.js"'), true);
+  assert.equal(pluginWidgetPage.includes('from "./world-graph-view.js"'), true);
   assert.equal(pluginWidgetPage.includes('from "./world-post-render.js"'), true);
   assert.equal(pluginWidgetPage.includes('from "./world-shell-view.js"'), true);
+  assert.equal(pluginWidgetPage.includes('from "./world-surface-view.js"'), true);
   assert.equal(pluginWidgetPage.includes('from "./world-tutorial-actions.js"'), true);
-  assert.equal(pluginWidgetPage.includes('from "./surface-kit-styles.js"'), true);
-  assert.equal(pluginWidgetPage.includes("renderEdenPageThemeCssVars"), true);
+  assert.equal(pluginWidgetPage.includes('from "./widget-page-head.js"'), true);
   assert.equal(pluginWidgetPage.includes("const processTraceEnabled = config.traceProcessEvents !== false;"), true);
   assert.equal(pluginWidgetPage.includes("if (checkboxes === 'boolean')"), true);
   assert.equal(pluginWidgetPage.includes("setQueryParam"), true);
@@ -92,16 +161,31 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(pluginWidgetPage.includes("if (step.op === 'setDisabled')"), true);
   assert.equal(pluginWidgetPage.includes("bindSurfaceCommandActions({"), true);
   assert.equal(pluginWidgetPage.includes("bindSurfaceCommandIdentityActions({"), true);
+  assert.equal(pluginWidgetPage.includes("renderSurfaceCommandPaletteView({"), true);
+  assert.equal(pluginWidgetPage.includes("renderSurfaceWhoamiResultView({"), true);
   assert.equal(pluginWidgetPage.includes("bindSurfaceInspectorActions({"), true);
   assert.equal(pluginWidgetPage.includes("bindSurfaceInspectorFormActions({"), true);
   assert.equal(pluginWidgetPage.includes("ensureSurfaceInspectorOverlayRoot({ documentTarget: document });"), true);
+  assert.equal(pluginWidgetPage.includes("renderSurfaceInspectorPanelView({"), true);
+  assert.equal(pluginWidgetPage.includes("renderSurfaceInspectorMenuView({"), true);
+  assert.equal(pluginWidgetPage.includes("renderSurfaceInspectorEditorView({"), true);
   assert.equal(pluginWidgetPage.includes("renderSurfaceInspectorOverlayView({"), true);
   assert.equal(pluginWidgetPage.includes("bindSurfaceInspectorVersionActions({"), true);
   assert.equal(pluginWidgetPage.includes("bindWorldCommandActions({"), true);
+  assert.equal(pluginWidgetPage.includes("renderWorldSourceDocumentView({"), true);
+  assert.equal(pluginWidgetPage.includes("renderWorldThingListView({"), true);
+  assert.equal(pluginWidgetPage.includes("renderWorldWitnessBrowserView({"), true);
+  assert.equal(pluginWidgetPage.includes("renderWorldProcessExplorerView()"), true);
+  assert.equal(pluginWidgetPage.includes("renderWorldPrimitiveBrowserView({"), true);
+  assert.equal(pluginWidgetPage.includes("renderWorldInspectorView({"), true);
+  assert.equal(pluginWidgetPage.includes("renderWorldGraphCanvasView({"), true);
   assert.equal(pluginWidgetPage.includes("bindWorldGraphActions({"), true);
   assert.equal(pluginWidgetPage.includes("queuePendingWorldSourceLoad({"), true);
   assert.equal(pluginWidgetPage.includes("runWorldPostRender({"), true);
   assert.equal(pluginWidgetPage.includes("renderWorldGraphShell({"), true);
+  assert.equal(pluginWidgetPage.includes("renderWorldModeMenuView({"), true);
+  assert.equal(pluginWidgetPage.includes("renderWorldCommandPaletteView({"), true);
+  assert.equal(pluginWidgetPage.includes("renderWorldTutorialPanelView({"), true);
   assert.equal(pluginWidgetPage.includes("bindWorldTutorialActions({"), true);
   assert.equal(pluginWidgetPage.includes("syncWorldCommandFocus({ root, state });"), false);
   assert.equal(pluginWidgetPage.includes("bindWorldCommandShortcuts({"), true);
@@ -128,6 +212,10 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(pluginWidgetPage.includes("overlay.querySelectorAll('[data-surface-inspector-version-proposal-form]').forEach(node => {"), false);
   assert.equal(pluginWidgetPage.includes("document.createElement('div');"), false);
   assert.equal(pluginWidgetPage.includes("overlay.innerHTML ="), true);
+  assert.equal(pluginWidgetPage.includes("Live Page Inspector"), false);
+  assert.equal(pluginWidgetPage.includes("No matching pages, widgets, capabilities, or commands."), false);
+  assert.equal(pluginWidgetPage.includes("Save Identity Here"), false);
+  assert.equal(pluginWidgetPage.includes("Propose Save-Back"), false);
   assert.equal(pluginWidgetPage.includes("root.querySelectorAll('[data-world-command-toggle]').forEach(el => {"), false);
   assert.equal(pluginWidgetPage.includes("root.querySelectorAll('[data-world-command-close]').forEach(el => {"), false);
   assert.equal(pluginWidgetPage.includes("root.querySelectorAll('[data-world-command-input]').forEach(el => {"), false);
@@ -162,14 +250,30 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(pluginWidgetPage.includes("const canvas = root.querySelector('.world-graph-canvas');"), false);
   assert.equal(pluginWidgetPage.includes("updateWorldTutorialApi();"), false);
   assert.equal(pluginWidgetPage.includes("syncWorldCommandFocus({ root, state });"), false);
+  assert.equal(pluginWidgetPage.includes("No matching surfaces, objects, or commands."), false);
+  assert.equal(pluginWidgetPage.includes("Show Disabled Sourcery Scopes"), false);
+  assert.equal(pluginWidgetPage.includes("Search / Command"), false);
+  assert.equal(pluginWidgetPage.includes("No witnessed source files."), false);
+  assert.equal(pluginWidgetPage.includes("Select a source file. Definitions linked to the selected object will be highlighted."), false);
+  assert.equal(pluginWidgetPage.includes("No recent witnessed history for this object."), false);
+  assert.equal(pluginWidgetPage.includes("Primitive browser"), false);
+  assert.equal(pluginWidgetPage.includes("<h2>Selected Object</h2>"), false);
+  assert.equal(pluginWidgetPage.includes("<strong>Activation history</strong>"), false);
+  assert.equal(pluginWidgetPage.includes("world-graph-svg"), false);
+  assert.equal(pluginWidgetPage.includes("world-context-box"), false);
   assert.equal(pluginWidgetPage.includes("await safeRun('load');"), true);
   assert.equal(pluginWidgetPage.includes(".surface-card-grid"), false);
+  assert.equal(pluginWidgetPage.includes(".world-graph-shell"), false);
   assert.equal(pluginWidgetPage.includes("--page-bg:"), false);
+  assert.equal(pluginWidgetPage.includes("function renderHead("), false);
   assert.equal(surfaceCommandActionsSource.includes("export function bindSurfaceCommandActions"), true);
   assert.equal(surfaceCommandActionsSource.includes("export function renderSurfaceCommandActionsFactory"), true);
   assert.equal(surfaceCommandIdentityActionsSource.includes("export function bindSurfaceCommandIdentityActions"), true);
   assert.equal(surfaceCommandIdentityActionsSource.includes("export async function submitSurfaceCommandIdentityForm"), true);
   assert.equal(surfaceCommandIdentityActionsSource.includes("export function renderSurfaceCommandIdentityActionsFactory"), true);
+  assert.equal(surfaceCommandViewSource.includes("export function renderSurfaceWhoamiResultView"), true);
+  assert.equal(surfaceCommandViewSource.includes("export function renderSurfaceCommandPaletteView"), true);
+  assert.equal(surfaceCommandViewSource.includes("export function renderSurfaceCommandViewFactory"), true);
   assert.equal(surfaceInspectorActionsSource.includes("export function bindSurfaceInspectorActions"), true);
   assert.equal(surfaceInspectorActionsSource.includes("export function renderSurfaceInspectorActionsFactory"), true);
   assert.equal(surfaceInspectorFormActionsSource.includes("export function bindSurfaceInspectorFormActions"), true);
@@ -180,6 +284,15 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(surfaceInspectorOverlayViewSource.includes("export function ensureSurfaceInspectorOverlayRoot"), true);
   assert.equal(surfaceInspectorOverlayViewSource.includes("export function renderSurfaceInspectorOverlayView"), true);
   assert.equal(surfaceInspectorOverlayViewSource.includes("export function renderSurfaceInspectorOverlayViewFactory"), true);
+  assert.equal(surfaceInspectorPanelViewSource.includes("export function renderSurfaceInspectorEditorView"), true);
+  assert.equal(surfaceInspectorPanelViewSource.includes("function renderSurfaceInspectorVersionsView"), true);
+  assert.equal(surfaceInspectorPanelViewSource.includes("export function renderSurfaceInspectorPanelView"), true);
+  assert.equal(surfaceInspectorPanelViewSource.includes("export function renderSurfaceInspectorMenuView"), true);
+  assert.equal(surfaceInspectorPanelViewSource.includes("export function renderSurfaceInspectorPanelViewFactory"), true);
+  assert.equal(surfaceInspectorPanelViewSource.includes("Live Page Inspector"), true);
+  assert.equal(surfaceInspectorPanelViewSource.includes("Propose Save-Back"), true);
+  assert.equal(surfaceCommandViewSource.includes("No matching pages, widgets, capabilities, or commands."), true);
+  assert.equal(surfaceCommandViewSource.includes("Save Identity Here"), true);
   assert.equal(surfaceInspectorVersionActionsSource.includes("export function bindSurfaceInspectorVersionActions"), true);
   assert.equal(surfaceInspectorVersionActionsSource.includes("export async function runSurfaceInspectorActivateAction"), true);
   assert.equal(surfaceInspectorVersionActionsSource.includes("export async function runSurfaceInspectorRollbackAction"), true);
@@ -188,8 +301,26 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(worldCommandActionsSource.includes("export function syncWorldCommandFocus"), true);
   assert.equal(worldCommandActionsSource.includes("export function bindWorldCommandShortcuts"), true);
   assert.equal(worldCommandActionsSource.includes("export function renderWorldCommandActionsFactory"), true);
+  assert.equal(worldBrowserViewSource.includes("export function renderWorldSourceDocumentView"), true);
+  assert.equal(worldBrowserViewSource.includes("export function renderWorldThingListView"), true);
+  assert.equal(worldBrowserViewSource.includes("export function renderWorldWitnessBrowserView"), true);
+  assert.equal(worldBrowserViewSource.includes("export function renderWorldProcessExplorerView"), true);
+  assert.equal(worldBrowserViewSource.includes("export function renderWorldPrimitiveBrowserView"), true);
+  assert.equal(worldBrowserViewSource.includes("export function renderWorldBrowserViewFactory"), true);
+  assert.equal(worldBrowserViewSource.includes("No witnessed source files."), true);
+  assert.equal(worldBrowserViewSource.includes("surface-empty-state"), true);
+  assert.equal(worldBrowserViewSource.includes("Select a source file. Definitions linked to the selected object will be highlighted."), true);
+  assert.equal(worldBrowserViewSource.includes("No recent witnessed history for this object."), true);
+  assert.equal(worldBrowserViewSource.includes("Primitive browser"), true);
   assert.equal(worldGraphActionsSource.includes("export function bindWorldGraphActions"), true);
   assert.equal(worldGraphActionsSource.includes("export function renderWorldGraphActionsFactory"), true);
+  assert.equal(worldGraphViewSource.includes("export function renderWorldInspectorView"), true);
+  assert.equal(worldGraphViewSource.includes("export function renderWorldGraphCanvasView"), true);
+  assert.equal(worldGraphViewSource.includes("export function renderWorldGraphViewFactory"), true);
+  assert.equal(worldGraphViewSource.includes("<h2>Selected Object</h2>"), true);
+  assert.equal(worldGraphViewSource.includes("<strong>Activation history</strong>"), true);
+  assert.equal(worldGraphViewSource.includes("world-graph-svg"), true);
+  assert.equal(worldGraphViewSource.includes("world-context-box"), true);
   assert.equal(worldPostRenderSource.includes("export function queuePendingWorldSourceLoad"), true);
   assert.equal(worldPostRenderSource.includes("export function syncWorldGraphViewport"), true);
   assert.equal(worldPostRenderSource.includes("export function syncWorldTutorialRenderState"), true);
@@ -197,16 +328,95 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(worldPostRenderSource.includes("export function renderWorldPostRenderFactory"), true);
   assert.equal(worldShellViewSource.includes("export function renderWorldGraphShell"), true);
   assert.equal(worldShellViewSource.includes("export function renderWorldShellViewFactory"), true);
+  assert.equal(worldSurfaceViewSource.includes("export function renderWorldModeMenuView"), true);
+  assert.equal(worldSurfaceViewSource.includes("export function renderWorldCommandPaletteView"), true);
+  assert.equal(worldSurfaceViewSource.includes("export function renderWorldTutorialConceptListView"), true);
+  assert.equal(worldSurfaceViewSource.includes("export function renderWorldTutorialPanelView"), true);
+  assert.equal(worldSurfaceViewSource.includes("export function renderWorldSurfaceViewFactory"), true);
+  assert.equal(worldSurfaceViewSource.includes("No matching surfaces, objects, or commands."), true);
+  assert.equal(worldSurfaceViewSource.includes("Show Disabled Sourcery Scopes"), true);
+  assert.equal(worldSurfaceViewSource.includes("Search / Command"), true);
   assert.equal(worldTutorialActionsSource.includes("export function bindWorldTutorialActions"), true);
   assert.equal(worldTutorialActionsSource.includes("export function renderWorldTutorialActionsFactory"), true);
-  assert.equal(surfaceKitSource.includes("export const SHARED_SURFACE_KIT_CSS"), true);
-  assert.equal(surfaceKitSource.includes(".surface-card-grid"), true);
-  assert.equal(surfaceKitSource.includes(".surface-link-chip"), true);
-  assert.equal(themeSource.includes("export function renderEdenPageThemeCssVars"), true);
+  assert.equal(widgetPageHeadSource.includes("export function renderWidgetPageHead"), true);
+  assert.equal(widgetPageHeadSource.includes("renderPagePresentationHead"), true);
+  assert.equal(widgetPageHeadSource.includes("renderEdenPageThemeCssVars"), false);
+  assert.equal(widgetPageHeadSource.includes("SHARED_SURFACE_KIT_CSS"), false);
+  assert.equal(widgetPageHeadSource.includes("INSPECT_WIDGET_PAGE_CSS"), true);
+  assert.equal(widgetPageStylesSource.includes("export const INSPECT_WIDGET_PAGE_CSS"), true);
+  assert.equal(widgetPageStylesSource.includes(".world-graph-shell"), true);
+  assert.equal(widgetPageStylesSource.includes(".world-mode-menu"), true);
+  assert.equal(widgetPageStylesSource.includes(".session-panel, .private-notes"), false);
+  assert.equal(widgetPageStylesSource.includes(".value-editor-field {"), false);
+  assert.equal(widgetPageStylesSource.includes(".widget-editor input"), false);
+  assert.equal(widgetPageStylesSource.includes(".world-tutorial-actions"), false);
+  assert.equal(widgetPageStylesSource.includes(".world-inspector-item {"), false);
+  assert.equal(widgetPageStylesSource.includes(".world-primitive-item {"), false);
+  assert.equal(widgetPageStylesSource.includes(".world-version-status"), false);
+  assert.equal(widgetPageStylesSource.includes(".world-version-actions"), false);
+  assert.equal(widgetPageStylesSource.includes(".world-command-palette"), false);
+  assert.equal(widgetPageStylesSource.includes(".surface-command-palette"), false);
+  assert.equal(widgetPageStylesSource.includes(".surface-inspector-panel"), false);
+  assert.equal(widgetPageStylesSource.includes(".tutorial-overlay"), false);
+  assert.equal(widgetPageStylesSource.includes('[data-tutorial-current]'), false);
+  assert.equal(surfaceKitSource.includes("export { SHARED_SURFACE_KIT_CSS }"), true);
+  assert.equal(surfaceKitSource.includes('../../src/runtime-surface-kit.js'), true);
+  assert.equal(runtimeSurfaceKitSource.includes('from "./runtime-surface-command-primitives.js"'), true);
+  assert.equal(runtimeSurfaceKitSource.includes('from "./runtime-surface-content-primitives.js"'), true);
+  assert.equal(runtimeSurfaceKitSource.includes('from "./runtime-surface-form-controls.js"'), true);
+  assert.equal(runtimeSurfaceKitSource.includes('from "./runtime-surface-inspector-primitives.js"'), true);
+  assert.equal(runtimeSurfaceKitSource.includes('from "./runtime-surface-tutorial-primitives.js"'), true);
+  assert.equal(runtimeSurfaceKitSource.includes("SHARED_SURFACE_COMMAND_PRIMITIVES_CSS"), true);
+  assert.equal(runtimeSurfaceKitSource.includes("SHARED_SURFACE_FORM_CONTROLS_CSS"), true);
+  assert.equal(runtimeSurfaceKitSource.includes("SHARED_SURFACE_CONTENT_PRIMITIVES_CSS"), true);
+  assert.equal(runtimeSurfaceKitSource.includes("SHARED_SURFACE_INSPECTOR_PRIMITIVES_CSS"), true);
+  assert.equal(runtimeSurfaceKitSource.includes("SHARED_SURFACE_TUTORIAL_PRIMITIVES_CSS"), true);
+  assert.equal(runtimeSurfaceCommandSource.includes("export const SHARED_SURFACE_COMMAND_PRIMITIVES_CSS"), true);
+  assert.equal(runtimeSurfaceCommandSource.includes(".world-command-palette"), true);
+  assert.equal(runtimeSurfaceCommandSource.includes(".surface-command-palette"), true);
+  assert.equal(runtimeSurfaceCommandSource.includes(".world-command-result"), true);
+  assert.equal(runtimeSurfaceContentSource.includes("export const SHARED_SURFACE_CONTENT_PRIMITIVES_CSS"), true);
+  assert.equal(runtimeSurfaceContentSource.includes(".surface-card-grid"), true);
+  assert.equal(runtimeSurfaceContentSource.includes(".surface-shell-2"), true);
+  assert.equal(runtimeSurfaceContentSource.includes(".surface-pane"), true);
+  assert.equal(runtimeSurfaceContentSource.includes(".surface-split-pane"), true);
+  assert.equal(runtimeSurfaceContentSource.includes(".surface-empty-state"), true);
+  assert.equal(runtimeSurfaceContentSource.includes(".surface-toolbar"), true);
+  assert.equal(runtimeSurfaceContentSource.includes(".surface-toolbar-spacer"), true);
+  assert.equal(runtimeSurfaceContentSource.includes(".surface-status"), true);
+  assert.equal(runtimeSurfaceContentSource.includes(".surface-status-box"), true);
+  assert.equal(runtimeSurfaceContentSource.includes(".surface-item-list"), true);
+  assert.equal(runtimeSurfaceContentSource.includes(".surface-item-button"), true);
+  assert.equal(runtimeSurfaceContentSource.includes(".surface-actions-compact"), true);
+  assert.equal(runtimeSurfaceContentSource.includes(".status"), true);
+  assert.equal(runtimeSurfaceFormSource.includes("export const SHARED_SURFACE_FORM_CONTROLS_CSS"), true);
+  assert.equal(runtimeSurfaceFormSource.includes("button:hover"), true);
+  assert.equal(runtimeSurfaceFormSource.includes("select {"), true);
+  assert.equal(runtimeSurfaceFormSource.includes(".surface-form"), true);
+  assert.equal(runtimeSurfaceFormSource.includes(".surface-field"), true);
+  assert.equal(runtimeSurfaceFormSource.includes(".value-editor-field"), true);
+  assert.equal(runtimeSurfaceInspectorSource.includes("export const SHARED_SURFACE_INSPECTOR_PRIMITIVES_CSS"), true);
+  assert.equal(runtimeSurfaceInspectorSource.includes(".surface-inspector-panel"), true);
+  assert.equal(runtimeSurfaceInspectorSource.includes(".surface-inspector-menu"), true);
+  assert.equal(runtimeSurfaceInspectorSource.includes(".surface-inspector-form"), false);
+  assert.equal(runtimeSurfaceInspectorSource.includes(".surface-inspector-status"), false);
+  assert.equal(runtimeSurfaceInspectorSource.includes('[data-surface-inspector-selected="true"]'), true);
+  assert.equal(runtimeSurfaceTutorialSource.includes("export const SHARED_SURFACE_TUTORIAL_PRIMITIVES_CSS"), true);
+  assert.equal(runtimeSurfaceTutorialSource.includes(".tutorial-overlay"), true);
+  assert.equal(runtimeSurfaceTutorialSource.includes(".tutorial-suggestion-list"), true);
+  assert.equal(runtimeSurfaceTutorialSource.includes(".tutorial-disabled-item"), true);
+  assert.equal(runtimeSurfaceTutorialSource.includes(".tutorial-hidden"), true);
+  assert.equal(runtimeSurfaceTutorialSource.includes(".tutorial-resume"), true);
+  assert.equal(runtimeSurfaceTutorialSource.includes('[data-tutorial-current]'), true);
+  assert.equal(runtimeSurfaceTutorialSource.includes("@keyframes tutorial-focus-pulse"), true);
+  assert.equal(themeSource.includes("renderEdenPageThemeCssVars"), true);
+  assert.equal(themeSource.includes('../../src/runtime-presentation.js'), true);
   assert.equal(runtimeSource.includes('from "./widget-page.js"'), true);
   assert.equal(srcWidgets.includes("function renderDocument"), false);
-  assert.equal(srcWidgets.includes("renderTutorialClient"), false);
+  assert.equal(srcWidgets.includes("renderGuidanceClient"), false);
+  assert.equal(srcWidgets.includes("tutorialDefinition"), false);
   assert.equal(srcWidgets.includes("resolveEdenPageTheme"), false);
+  assert.equal(srcWidgets.includes("resolvePagePresentationTheme"), false);
   assert.equal(srcWidgets.includes("../plugins/inspect/widget-page.js"), false);
 });
 

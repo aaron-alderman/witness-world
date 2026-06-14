@@ -6,9 +6,9 @@ import {
   normalizeDesirePlusToDesire
 } from "../src/desire/index.js";
 import { evaluateModel } from "../plugins/chart-runtime/dataflow-eval.js";
-import { goodmanFunctions } from "../plugins/chart-runtime/goodman-stdlib.js";
-import { samplingFunctions } from "../plugins/chart-runtime/sampling.js";
-import { millChargeKernels } from "../plugins/chart-runtime/mill-charge-kernels.js";
+import { goodmanFunctions } from "../examples/engentus/app/chart-functions/goodman-stdlib.js";
+import { samplingFunctions } from "../examples/engentus/app/chart-functions/sampling.js";
+import { millChargeKernels } from "../examples/engentus/app/chart-functions/mill-charge-kernels.js";
 import { planChart, probeReadout, frameIndexForValue } from "../plugins/chart-runtime/gog-runtime.js";
 
 // ── Probe / scrubber: the axis-binding logic behind drawChart's interactivity ─────

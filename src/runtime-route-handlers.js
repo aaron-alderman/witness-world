@@ -32,6 +32,7 @@ import {
   readRuntimePluginCatalog,
   readRuntimePluginReviews
 } from "./runtime-plugin-utils.js";
+import { renderInactiveBackendSeamsPage } from "./runtime-page-fallbacks.js";
 
 const unavailable = name => () => {
   throw new Error(`${name} is unavailable in the active runtime composition`);
@@ -111,7 +112,7 @@ export function createRuntimeRouteHandlers({
   const streamReadableToFileImpl = streamReadableToFile ?? supportServices.streamReadableToFile ?? unavailableAsync("streamReadableToFile");
   const streamFileToFileImpl = streamFileToFile ?? supportServices.streamFileToFile ?? unavailableAsync("streamFileToFile");
   const parseStreamFailureLimitImpl = parseStreamFailureLimit ?? supportServices.parseStreamFailureLimit ?? (() => 0);
-  const renderBackendSeamsPageImpl = supportServices.renderBackendSeamsPage ?? (() => "<!doctype html><html><body>Backend seams plugin is inactive.</body></html>");
+  const renderBackendSeamsPageImpl = supportServices.renderBackendSeamsPage ?? (() => renderInactiveBackendSeamsPage());
   const notificationTitleImpl = supportServices.notificationTitle ?? (row => row?.title ?? row?.id ?? "Notification");
   const notificationReadShapeImpl = supportServices.notificationReadShape ?? unavailable("notificationReadShape");
   const outboundReadShapeImpl = supportServices.outboundReadShape ?? unavailable("outboundReadShape");
@@ -407,6 +408,8 @@ export function createRuntimeRouteHandlers({
     createSessionForIdentity,
     sessionResponseShape,
     syncSessionIdentity,
+    guidanceProgressFor,
+    setGuidanceProgress,
     tutorialProgressFor,
     setTutorialProgress
   } = createRuntimeSessionServicesImpl({ sessionStore });
@@ -635,12 +638,15 @@ export function createRuntimeRouteHandlers({
       authOAuthLinkTitle,
       currentIdentityIndex,
       sessionStore,
+      runtimeContributions,
       sanitizeAuthOauthSegment,
       createIdentity,
       createSessionForIdentity,
       oauthLinksForRunner,
       sessionCookieHeader,
       clearSessionCookieHeader,
+      guidanceProgressFor,
+      setGuidanceProgress,
       tutorialProgressFor,
       setTutorialProgress,
       currentMcpServerIndex,

@@ -1,0 +1,11 @@
+[[bootstrapBackendVersionSubmit]]
+family = "activate"
+urlTemplate = "/api/backend-program-versions/${soul}/activate"
+successText = "Activated."
+bodyFields = ["version"]
+
+[[bootstrapBackendVersionSubmit]]
+family = "rollback"
+urlTemplate = "/api/backend-program-versions/${soul}/rollback"
+successText = "Rolled back."
+bodyFields = []

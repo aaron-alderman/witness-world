@@ -1,42 +1,99 @@
+import {
+  bootstrapProposalAdjacentSubmitContractsByFamily
+} from "./bootstrap-proposal-adjacent-submit-contracts.js";
+
 export function renderBootstrapProposalAdjacentSubmitFactory() {
   return String.raw`
+    const bootstrapProposalAdjacentSubmitContractsByFamily = ${JSON.stringify(bootstrapProposalAdjacentSubmitContractsByFamily)};
+    const contractForFamily = ${contractForFamily.toString()};
+    const buildBootstrapProposalAdjacentSubmitBody = ${buildBootstrapProposalAdjacentSubmitBody.toString()};
+    const buildBootstrapProposalAdjacentSubmitRequest = ${buildBootstrapProposalAdjacentSubmitRequest.toString()};
     const runBootstrapProposalAdjacentSubmit = ${runBootstrapProposalAdjacentSubmit.toString()};
     const bindBootstrapProposalAdjacentSubmit = ${bindBootstrapProposalAdjacentSubmit.toString()};
   `;
 }
 
+function contractForFamily(family = "", contractsByFamily = bootstrapProposalAdjacentSubmitContractsByFamily) {
+  const key = typeof family === "string" ? family.trim() : "";
+  return key ? (contractsByFamily[key] || null) : null;
+}
+
+export function buildBootstrapProposalAdjacentSubmitBody({
+  contract = null,
+  detail = {},
+  resolveServerRunner = server => server,
+  runtimePluginProposalBodyFn = null,
+  mcpServerProposalBodyFn = null,
+  mcpToolProposalBodyFn = null
+} = {}) {
+  if (!contract) return null;
+  const builderName = typeof contract.bodyBuilder === "string" ? contract.bodyBuilder.trim() : "";
+  const action = typeof contract.action === "string" ? contract.action.trim() : "";
+  if (builderName === "runtimePluginProposalBody" && typeof runtimePluginProposalBodyFn === "function") {
+    return runtimePluginProposalBodyFn(detail, action);
+  }
+  if (builderName === "mcpServerProposalBody" && typeof mcpServerProposalBodyFn === "function") {
+    return mcpServerProposalBodyFn(detail);
+  }
+  if (builderName === "mcpToolProposalBody" && typeof mcpToolProposalBodyFn === "function") {
+    const nextDetail = contract.resolveServerRunner === true
+      ? { ...detail, serverRunner: resolveServerRunner(detail.server) }
+      : detail;
+    return mcpToolProposalBodyFn(nextDetail, action);
+  }
+  return null;
+}
+
+export function buildBootstrapProposalAdjacentSubmitRequest({
+  detail = {},
+  resolveServerRunner = server => server,
+  runtimePluginProposalBodyFn = null,
+  mcpServerProposalBodyFn = null,
+  mcpToolProposalBodyFn = null,
+  contractsByFamily = bootstrapProposalAdjacentSubmitContractsByFamily
+} = {}) {
+  const contract = contractForFamily(detail.family, contractsByFamily);
+  if (!contract) return null;
+  const body = buildBootstrapProposalAdjacentSubmitBody({
+    contract,
+    detail,
+    resolveServerRunner,
+    runtimePluginProposalBodyFn,
+    mcpServerProposalBodyFn,
+    mcpToolProposalBodyFn
+  });
+  if (!body) return null;
+  return {
+    url: contract.url || "/api/proposals",
+    body,
+    successText: contract.successText || "Saved."
+  };
+}
+
 export async function runBootstrapProposalAdjacentSubmit({
   detail = {},
-  proposalCreate = async () => {},
+  postJson = async () => ({}),
   refresh = async () => {},
   setStatus = () => {},
   resetForm = () => {},
   resolveServerRunner = server => server,
   runtimePluginProposalBodyFn = null,
   mcpServerProposalBodyFn = null,
-  mcpToolProposalBodyFn = null
+  mcpToolProposalBodyFn = null,
+  contractsByFamily = bootstrapProposalAdjacentSubmitContractsByFamily
 } = {}) {
   try {
-    if (detail.family === "runtime-plugin-install") {
-      await proposalCreate(runtimePluginProposalBodyFn(detail, "install"));
-    } else if (detail.family === "runtime-plugin-remove") {
-      await proposalCreate(runtimePluginProposalBodyFn(detail, "remove"));
-    } else if (detail.family === "mcp-server") {
-      await proposalCreate(mcpServerProposalBodyFn(detail));
-    } else if (detail.family === "mcp-tool-install") {
-      await proposalCreate(mcpToolProposalBodyFn({
-        ...detail,
-        serverRunner: resolveServerRunner(detail.server)
-      }, "install"));
-    } else if (detail.family === "mcp-tool-remove") {
-      await proposalCreate(mcpToolProposalBodyFn({
-        ...detail,
-        serverRunner: resolveServerRunner(detail.server)
-      }, "remove"));
-    } else {
-      return false;
-    }
-    setStatus(detail.statusId, "Saved.");
+    const request = buildBootstrapProposalAdjacentSubmitRequest({
+      detail,
+      resolveServerRunner,
+      runtimePluginProposalBodyFn,
+      mcpServerProposalBodyFn,
+      mcpToolProposalBodyFn,
+      contractsByFamily
+    });
+    if (!request) return false;
+    await postJson(request.url, request.body);
+    setStatus(detail.statusId, request.successText);
     resetForm(detail.formId);
     await refresh();
     return true;
@@ -48,14 +105,15 @@ export async function runBootstrapProposalAdjacentSubmit({
 
 export function bindBootstrapProposalAdjacentSubmit({
   target = null,
-  proposalCreate = async () => {},
+  postJson = async () => ({}),
   refresh = async () => {},
   setStatus = () => {},
   resetForm = () => {},
   resolveServerRunner = server => server,
   runtimePluginProposalBodyFn = null,
   mcpServerProposalBodyFn = null,
-  mcpToolProposalBodyFn = null
+  mcpToolProposalBodyFn = null,
+  contractsByFamily = bootstrapProposalAdjacentSubmitContractsByFamily
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
   if (!resolvedTarget?.addEventListener) return null;
@@ -64,14 +122,15 @@ export function bindBootstrapProposalAdjacentSubmit({
     if (detail.source !== "bootstrap-proposal-adjacent-controls") return false;
     return runBootstrapProposalAdjacentSubmit({
       detail,
-      proposalCreate,
+      postJson,
       refresh,
       setStatus,
       resetForm,
       resolveServerRunner,
       runtimePluginProposalBodyFn,
       mcpServerProposalBodyFn,
-      mcpToolProposalBodyFn
+      mcpToolProposalBodyFn,
+      contractsByFamily
     });
   };
   resolvedTarget.addEventListener("witness:bootstrap-proposal-adjacent-submit", handler);

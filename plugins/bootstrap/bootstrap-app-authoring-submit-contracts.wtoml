@@ -1,0 +1,73 @@
+[[bootstrapAppAuthoringSubmit]]
+family = "context"
+url = "/api/contexts"
+
+[[bootstrapAppAuthoringSubmit]]
+family = "perspective"
+url = "/api/perspectives"
+
+[[bootstrapAppAuthoringSubmit]]
+family = "widget"
+url = "/api/widgets"
+checkboxes = "boolean"
+omitBlankStrings = true
+dropFields = ["guidanceTarget", "tutorialTarget"]
+
+[[bootstrapAppAuthoringSubmitField]]
+family = "widget"
+name = "guidanceTarget"
+strategy = "firstNonBlank"
+sources = ["guidanceTarget", "tutorialTarget", "id"]
+blankAsUndefined = true
+
+[[bootstrapAppAuthoringSubmitField]]
+family = "widget"
+name = "attach"
+strategy = "boolean"
+
+[[bootstrapAppAuthoringSubmitField]]
+family = "widget"
+name = "template"
+strategy = "boolean"
+
+[[bootstrapAppAuthoringSubmitField]]
+family = "widget"
+name = "order"
+strategy = "integer"
+
+[[bootstrapAppAuthoringSubmitField]]
+family = "widget"
+name = "level"
+strategy = "integer"
+
+[[bootstrapAppAuthoringSubmit]]
+family = "program"
+url = "/api/frontend-programs"
+
+[[bootstrapAppAuthoringSubmit]]
+family = "step"
+url = "/api/frontend-steps"
+
+[[bootstrapAppAuthoringSubmitField]]
+family = "step"
+name = "order"
+strategy = "integer"
+
+[[bootstrapAppAuthoringSubmit]]
+family = "route"
+url = "/api/routes"
+checkboxes = "boolean"
+omitBlankStrings = true
+
+[[bootstrapAppAuthoringSubmitField]]
+family = "route"
+name = "liveProjection"
+strategy = "boolean"
+
+[[bootstrapAppAuthoringSubmit]]
+family = "serve"
+url = "/api/serve-mounts"
+
+[[bootstrapAppAuthoringSubmit]]
+family = "runner"
+url = "/api/server-runners"

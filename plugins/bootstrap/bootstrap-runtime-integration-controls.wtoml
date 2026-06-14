@@ -4,23 +4,23 @@ context = "frontend"
 
 [[box]]
 id = "bootstrap_runtime_plugin_install_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_install_form", "bootstrap_runtime_plugin_install_help", "bootstrap_runtime_plugin_install_status"]
 
 [[form]]
 id = "bootstrap_runtime_plugin_install_form"
 domId = "runtime-plugin-install-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_install_grid", "bootstrap_runtime_plugin_install_actions"]
 
 [[box]]
 id = "bootstrap_runtime_plugin_install_grid"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_runtime_plugin_install_runner_field", "bootstrap_runtime_plugin_install_plugin_field"]
 
 [[box]]
 id = "bootstrap_runtime_plugin_install_runner_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_install_runner_text", "bootstrap_runtime_plugin_install_runner_select"]
 
 [[text]]
@@ -34,7 +34,7 @@ name = "serverRunner"
 
 [[box]]
 id = "bootstrap_runtime_plugin_install_plugin_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runtime_plugin_install_plugin_text", "bootstrap_runtime_plugin_install_plugin_select"]
 
 [[text]]
@@ -48,7 +48,7 @@ name = "plugin"
 
 [[box]]
 id = "bootstrap_runtime_plugin_install_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_runtime_plugin_install_submit"]
 
 [[button]]
@@ -59,13 +59,13 @@ type = "submit"
 [[text]]
 id = "bootstrap_runtime_plugin_install_help"
 domId = "runtime-plugin-install-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[text]]
 id = "bootstrap_runtime_plugin_install_status"
 domId = "runtime-plugin-install-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -123,23 +123,23 @@ text = "${event.message}"
 
 [[box]]
 id = "bootstrap_mcp_server_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_form", "bootstrap_mcp_server_help", "bootstrap_mcp_server_status"]
 
 [[form]]
 id = "bootstrap_mcp_server_form"
 domId = "mcp-server-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_row_one", "bootstrap_mcp_server_row_two", "bootstrap_mcp_server_row_three", "bootstrap_mcp_server_actions"]
 
 [[box]]
 id = "bootstrap_mcp_server_row_one"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_mcp_server_id_field", "bootstrap_mcp_server_label_field"]
 
 [[box]]
 id = "bootstrap_mcp_server_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_id_text", "bootstrap_mcp_server_id_input"]
 
 [[text]]
@@ -153,7 +153,7 @@ placeholder = "personal_mcp"
 
 [[box]]
 id = "bootstrap_mcp_server_label_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_label_text", "bootstrap_mcp_server_label_input"]
 
 [[text]]
@@ -167,12 +167,12 @@ placeholder = "Personal MCP"
 
 [[box]]
 id = "bootstrap_mcp_server_row_two"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_mcp_server_runner_field", "bootstrap_mcp_server_context_field"]
 
 [[box]]
 id = "bootstrap_mcp_server_runner_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_runner_text", "bootstrap_mcp_server_runner_select"]
 
 [[text]]
@@ -186,7 +186,7 @@ name = "serverRunner"
 
 [[box]]
 id = "bootstrap_mcp_server_context_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_context_text", "bootstrap_mcp_server_context_select"]
 
 [[text]]
@@ -200,12 +200,12 @@ name = "context"
 
 [[box]]
 id = "bootstrap_mcp_server_row_three"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_mcp_server_service_identity_field", "bootstrap_mcp_server_transports_field"]
 
 [[box]]
 id = "bootstrap_mcp_server_service_identity_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_service_identity_text", "bootstrap_mcp_server_service_identity_input"]
 
 [[text]]
@@ -219,7 +219,7 @@ placeholder = "aaron"
 
 [[box]]
 id = "bootstrap_mcp_server_transports_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_server_transports_text", "bootstrap_mcp_server_transports_input"]
 
 [[text]]
@@ -233,7 +233,7 @@ value = "[\"stdio\",\"http\"]"
 
 [[box]]
 id = "bootstrap_mcp_server_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_mcp_server_submit"]
 
 [[button]]
@@ -244,13 +244,13 @@ type = "submit"
 [[text]]
 id = "bootstrap_mcp_server_help"
 domId = "mcp-server-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[text]]
 id = "bootstrap_mcp_server_status"
 domId = "mcp-server-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -316,23 +316,23 @@ text = "${event.message}"
 
 [[box]]
 id = "bootstrap_mcp_tool_install_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_form", "bootstrap_mcp_tool_install_help", "bootstrap_mcp_tool_install_status"]
 
 [[form]]
 id = "bootstrap_mcp_tool_install_form"
 domId = "mcp-tool-install-form"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_row_one", "bootstrap_mcp_tool_install_row_two", "bootstrap_mcp_tool_install_scope_contexts_field", "bootstrap_mcp_tool_install_scope_targets_field", "bootstrap_mcp_tool_install_actions"]
 
 [[box]]
 id = "bootstrap_mcp_tool_install_row_one"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_mcp_tool_install_server_field", "bootstrap_mcp_tool_install_tool_field"]
 
 [[box]]
 id = "bootstrap_mcp_tool_install_server_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_server_text", "bootstrap_mcp_tool_install_server_select"]
 
 [[text]]
@@ -346,7 +346,7 @@ name = "server"
 
 [[box]]
 id = "bootstrap_mcp_tool_install_tool_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_tool_text", "bootstrap_mcp_tool_install_tool_select"]
 
 [[text]]
@@ -360,12 +360,12 @@ name = "tool"
 
 [[box]]
 id = "bootstrap_mcp_tool_install_row_two"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_mcp_tool_install_acting_mode_field", "bootstrap_mcp_tool_install_spacer"]
 
 [[box]]
 id = "bootstrap_mcp_tool_install_acting_mode_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_acting_mode_text", "bootstrap_mcp_tool_install_acting_mode_select"]
 
 [[text]]
@@ -382,7 +382,7 @@ id = "bootstrap_mcp_tool_install_spacer"
 
 [[box]]
 id = "bootstrap_mcp_tool_install_scope_contexts_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_scope_contexts_text", "bootstrap_mcp_tool_install_scope_contexts_input"]
 
 [[text]]
@@ -396,7 +396,7 @@ value = "[]"
 
 [[box]]
 id = "bootstrap_mcp_tool_install_scope_targets_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_mcp_tool_install_scope_targets_text", "bootstrap_mcp_tool_install_scope_targets_input"]
 
 [[text]]
@@ -410,7 +410,7 @@ value = "[]"
 
 [[box]]
 id = "bootstrap_mcp_tool_install_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_mcp_tool_install_submit"]
 
 [[button]]
@@ -421,13 +421,13 @@ type = "submit"
 [[text]]
 id = "bootstrap_mcp_tool_install_help"
 domId = "mcp-tool-install-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[text]]
 id = "bootstrap_mcp_tool_install_status"
 domId = "mcp-tool-install-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]

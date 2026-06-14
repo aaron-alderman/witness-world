@@ -11,7 +11,7 @@ export function renderWorldGraphShell({
   commandPalette = "",
   canvas = ""
 } = {}) {
-  return '<div class="world-graph-shell"><aside class="world-graph-inspector" data-world-inspector>'
+  return '<div class="surface-shell-2 world-graph-shell"><aside class="surface-pane surface-stack world-graph-inspector" data-world-inspector>'
     + tutorialPanel
     + inspector
     + '</aside><section class="world-main-pane">'

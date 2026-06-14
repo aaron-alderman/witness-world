@@ -138,7 +138,13 @@ function propsFromWidgetInput(input) {
   }
   if (typeof input.dataId === "string" && input.dataId !== "") props["data-id"] = input.dataId;
   if (typeof input.dataDone === "string" && input.dataDone !== "") props["data-done"] = input.dataDone;
-  if (typeof input.tutorialTarget === "string" && input.tutorialTarget !== "") props["data-tutorial-target"] = input.tutorialTarget;
+  const guidanceTarget = typeof input.guidanceTarget === "string" && input.guidanceTarget !== ""
+    ? input.guidanceTarget
+    : (typeof input.tutorialTarget === "string" && input.tutorialTarget !== "" ? input.tutorialTarget : "");
+  if (guidanceTarget) {
+    props["data-guidance-target"] = guidanceTarget;
+    props["data-tutorial-target"] = guidanceTarget;
+  }
   if (input.template === true) props.template = true;
   if (Number.isFinite(Number(input.level))) props.level = Number(input.level);
   return props;
@@ -942,9 +948,11 @@ export function requestWidgetDefine(world, {
     ...(resolvedParent.target ? { parent: resolvedParent.target } : {})
   };
   const attach = input.attach !== false;
-  const parent = typeof input.parent === "string" && input.parent.trim()
-    ? input.parent.trim()
-    : defaultParent;
+  const parent = attach
+    ? (typeof input.parent === "string" && input.parent.trim()
+        ? input.parent.trim()
+        : defaultParent)
+    : null;
   if (attach && !parent) {
     const witness = fail(world, {
       process: "widget.define.failed",

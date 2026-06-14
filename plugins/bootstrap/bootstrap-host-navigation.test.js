@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  continueBootstrapGuidanceOnPage,
   continueBootstrapTutorialOnPage,
   openBootstrapAppHome,
   renderBootstrapHostNavigationFactory
@@ -47,10 +48,10 @@ test("bootstrap host navigation re-checks freshness and handles same-url handoff
   assert.equal(calls.includes("reload-app"), true);
 });
 
-test("bootstrap tutorial page continuation delegates app handoff and reloads same-page bootstrap/world routes", async () => {
+test("bootstrap guidance page continuation delegates app handoff and reloads same-page bootstrap/world routes", async () => {
   const calls = [];
   const appResult = { opened: true, mode: "assign", target: "http://bootstrap.local/" };
-  assert.deepEqual(await continueBootstrapTutorialOnPage({
+  assert.deepEqual(await continueBootstrapGuidanceOnPage({
     page: "app",
     openAppHome: async options => {
       calls.push(["openAppHome", options]);
@@ -58,7 +59,7 @@ test("bootstrap tutorial page continuation delegates app handoff and reloads sam
     }
   }), appResult);
 
-  const bootstrapResult = await continueBootstrapTutorialOnPage({
+  const bootstrapResult = await continueBootstrapGuidanceOnPage({
     page: "bootstrap",
     currentHref: "http://bootstrap.local/_bootstrap",
     currentPathname: "/_bootstrap",
@@ -66,7 +67,7 @@ test("bootstrap tutorial page continuation delegates app handoff and reloads sam
   });
   assert.deepEqual(bootstrapResult, { continued: true, mode: "reload", target: "http://bootstrap.local/_bootstrap" });
 
-  const worldResult = await continueBootstrapTutorialOnPage({
+  const worldResult = await continueBootstrapGuidanceOnPage({
     page: "world",
     currentHref: "http://bootstrap.local/_bootstrap",
     currentPathname: "/_bootstrap",
@@ -74,10 +75,12 @@ test("bootstrap tutorial page continuation delegates app handoff and reloads sam
   });
   assert.deepEqual(worldResult, { continued: true, mode: "assign", target: "http://bootstrap.local/world" });
   assert.equal(calls.some(entry => Array.isArray(entry) && entry[0] === "openAppHome"), true);
+  assert.equal(continueBootstrapTutorialOnPage, continueBootstrapGuidanceOnPage);
 });
 
 test("bootstrap host navigation factory exposes the shared browser seam", () => {
   const factory = renderBootstrapHostNavigationFactory();
   assert.equal(factory.includes("const openBootstrapAppHome ="), true);
-  assert.equal(factory.includes("const continueBootstrapTutorialOnPage ="), true);
+  assert.equal(factory.includes("const continueBootstrapGuidanceOnPage ="), true);
+  assert.equal(factory.includes("const continueBootstrapTutorialOnPage = continueBootstrapGuidanceOnPage;"), true);
 });

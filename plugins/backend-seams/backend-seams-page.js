@@ -3,7 +3,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createWorld } from "../../src/kernel.js";
 import { applyWitnessToml } from "../../src/dsl.js";
-import { renderWidgetPage } from "../inspect/widget-page.js";
+import {
+  injectRuntimePageMarkupBeforeProgram,
+  renderRuntimePageInitialStateScript
+} from "../../src/runtime-page-state.js";
+import { renderRuntimeWidgetPage } from "../../src/runtime-widget-page.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendSeamsWtoml = fs.readFileSync(path.join(__dirname, "backend-seams-page.wtoml"), "utf8");
@@ -22,22 +26,6 @@ const resourceLinks = [
 
 function count(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
-}
-
-function serializeJsonScript(value) {
-  return JSON.stringify(value).replace(/[<>&]/g, char => {
-    if (char === "<") return "\\u003c";
-    if (char === ">") return "\\u003e";
-    return "\\u0026";
-  });
-}
-
-function injectBeforeFrontendProgram(html, addition) {
-  const anchor = '<script type="application/json" id="witness-frontend-program">';
-  if (html.includes(anchor)) return html.replace(anchor, `${addition}\n${anchor}`);
-  return html.includes("</body>")
-    ? html.replace("</body>", `${addition}\n</body>`)
-    : `${html}\n${addition}`;
 }
 
 export function buildBackendSeamsViewModel(diagnostics, runtime = diagnostics?.runtime ?? null) {
@@ -84,7 +72,7 @@ export function renderBackendSeamsPage(diagnostics) {
   const model = buildBackendSeamsViewModel(diagnostics);
   const world = createWorld();
   applyWitnessToml(world, backendSeamsWtoml);
-  const html = renderWidgetPage(world, {
+  const html = renderRuntimeWidgetPage(world, {
     actor: "frontendHost",
     rootWidget: "backend_seams_page",
     frontendProgram: "backend_seams_program",
@@ -93,6 +81,6 @@ export function renderBackendSeamsPage(diagnostics) {
       initialStateInto: "diagnosticsResponse"
     }
   });
-  const initialState = `<script type="application/json" id="backend-seams-initial-state">${serializeJsonScript(model)}</script>`;
-  return injectBeforeFrontendProgram(html, initialState);
+  const initialState = renderRuntimePageInitialStateScript("backend-seams-initial-state", model);
+  return injectRuntimePageMarkupBeforeProgram(html, initialState);
 }

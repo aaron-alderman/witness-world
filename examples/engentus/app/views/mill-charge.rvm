@@ -11,6 +11,17 @@ import desire/v3-alpha
 // Cross-section: charge region + centre-of-mass + the cataracting particle stream
 chart MillChargeCrossSection of MillCharge {
   frame disc
+  prop pageStylesheetHref = "/app-static/app/engentus-chart-pages.css"
+  prop bodyClass = "chart-page chart-page--mill-charge"
+  prop viewportClass = "chart-page__viewport"
+  prop hostClass = "chart-page__host chart-page__host--mill-charge"
+  prop mountId = "mill-canvas"
+  prop mountClass = "chart-page__mount chart-page__mount--mill-charge"
+  prop mountTag = "canvas"
+  prop functionsModules = "/app-static/app/chart-functions/mill-charge-kernels.js"
+  prop functionsExports = "millChargeKernels"
+  prop pageBackground = "#ffffff"
+
   x bx
   y by
   r millRadius

@@ -91,6 +91,7 @@ export async function startAppRuntime({
     serverRunnerId: runner.id,
     port,
     runtimeRoot: operatorContract.directories.runtimeRoot,
+    appProject,
     logger,
     mcpInternalToken,
     runtimeProfile: runtimeProfileInfo.id,

@@ -770,6 +770,111 @@ test("runtime server dispatches mounted routes and owns lifecycle outside host.j
   assert.equal(closedServer, true);
 });
 
+test("runtime server tolerates null logger during request handling", async () => {
+  const routes = [{
+    id: "hello_route",
+    serverRunner: "runner-1",
+    method: "GET",
+    path: "/hello",
+    handler: "demo.hello"
+  }];
+  const world = createWitnessWorld({ routes });
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: true,
+    handlerSet: "demo"
+  };
+  let requestHandler = null;
+  let closedBootstrap = false;
+  const runtimeContext = {
+    handlers: {
+      "demo.hello": async ({ res }) => {
+        res.writeHead(200, { "content-type": "text/plain" });
+        res.end("hello");
+      }
+    },
+    close() {
+      closedBootstrap = true;
+    }
+  };
+
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    logger: null,
+    runtimeProfile: "full"
+  }, {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities: () => new Set(["http.serve", "dom.render"]),
+    readJson: async () => ({}),
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    sendJson: (res, status, body) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    },
+    defaultHostCapabilitiesForProfile: () => [],
+    ensureRuntimeBuiltins: () => {},
+    runtimeBundleSummaryForProfile: profile => ({ profile, bundles: [], dispatchHandlers: ["demo.hello"] }),
+    runtimeSurfaceEntriesForProfile: () => [],
+    dispatchHandlerIdsForProfile: () => ["demo.hello"],
+    handlerSetFactoriesForProfile: () => ({}),
+    handlerSetDefinitionsForProfile: () => ({}),
+    providedCapabilityIdsForProfile: () => [],
+    startupRequiredHostCapabilitiesForProfile: (_profile, hostKind) => hostKind === "backend" ? ["http.serve"] : ["dom.render"],
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [{ id: "adam", label: "Adam" }],
+      storage: {},
+      visibleWitnesses: () => world.allWitnesses()
+    }),
+    createRuntimeResolverForServer: () => ({
+      runtimeContexts: new Map([["runner-1", runtimeContext]]),
+      resolveActiveRuntime: async () => ({ runner, context: runtimeContext })
+    }),
+    httpModule: {
+      createServer(handler) {
+        requestHandler = handler;
+        return {
+          listen(_port, _host, callback) {
+            callback();
+          },
+          address() {
+            return { port: 4321 };
+          },
+          closeAllConnections() {},
+          close(callback) {
+            callback();
+          }
+        };
+      }
+    }
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(typeof requestHandler, "function");
+
+  const req = {
+    method: "GET",
+    url: "/hello",
+    headers: {},
+    on() {}
+  };
+  const res = createResponse();
+  await requestHandler(req, res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body, "hello");
+
+  await server.close();
+  assert.equal(closedBootstrap, true);
+});
+
 test("runtime server exposes core runtime diagnostics through the generic route table", async () => {
   const world = createWitnessWorld();
   const runner = {

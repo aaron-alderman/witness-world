@@ -465,6 +465,97 @@ test("proposal-adjacent sync binding registers one listener and routes through t
   ]);
 });
 
+test("proposal-adjacent sync binding re-resolves live state and DOM reads on each event", () => {
+  const runnerSelect = {
+    value: "runner.current",
+    options: [{ value: "runner.current" }, { value: "runner.next" }]
+  };
+  const pluginSelect = {
+    value: "plugin.demo",
+    options: [{ value: "plugin.demo" }, { value: "plugin.alt" }]
+  };
+  const state = {
+    bootstrapState: {
+      identities: [],
+      serverRunners: [{ id: "runner.current" }],
+      runtimePluginAvailability: [{ serverRunner: "runner.current", plugin: "plugin.demo" }]
+    },
+    session: { authenticated: false },
+    model: { runtimeProfile: "minimal", supportedMcpActingModes: ["delegated"] }
+  };
+  const liveState = {
+    authored: () => state.bootstrapState || {},
+    session: () => state.session || {},
+    model: () => state.model || {},
+    runtimeProfile: () => state.model?.runtimeProfile || "full",
+    supportedMcpActingModes: () => state.model?.supportedMcpActingModes || [],
+    runtimeIntegrationState: () => ({
+      runtimePluginAvailabilityForRunner: runnerId => (state.bootstrapState?.runtimePluginAvailability || []).filter(row => row.serverRunner === runnerId),
+      runtimePluginAvailabilityRow: (runnerId, pluginId) => (state.bootstrapState?.runtimePluginAvailability || []).find(row => row.serverRunner === runnerId && row.plugin === pluginId) || null,
+      mcpSupportedTools: () => [],
+      mcpInstalledToolsForServer: () => [],
+      mcpServerRow: () => null,
+      mcpSupportedToolRow: () => null,
+      mcpScopeSummary: () => "unscoped"
+    })
+  };
+  const buildDeps = createBootstrapProposalAdjacentSyncDepsBuilder({
+    liveState,
+    dom: {
+      byId(id) {
+        if (id === "runtime-plugin-install-proposal-runner") return runnerSelect;
+        if (id === "runtime-plugin-install-proposal-plugin") return pluginSelect;
+        if (id === "runtime-plugin-install-proposal-form") {
+          return {
+            querySelector(selector) {
+              if (selector === 'button[type="submit"]') return { disabled: false };
+              return null;
+            }
+          };
+        }
+        return null;
+      }
+    },
+    buildServerRunnerOptions: rows => rows.map(row => ({ value: row.id, label: row.id })),
+    buildRuntimePluginInstallOptions: ({ availabilityRows = [] } = {}) => availabilityRows.map(row => ({ value: row.plugin, label: row.plugin })),
+    buildRuntimePluginControlView: ({ row, profile }) => ({
+      helpText: `runner=${row?.serverRunner || ""};plugin=${row?.plugin || ""};profile=${profile}`,
+      submitDisabled: false
+    })
+  });
+  const target = {
+    addEventListener(eventName, handler) {
+      this.eventName = eventName;
+      this.handler = handler;
+    }
+  };
+
+  bindBootstrapProposalAdjacentSync({ target, buildDeps });
+  assert.equal(target.eventName, "witness:bootstrap-proposal-adjacent-sync");
+
+  const first = target.handler({ detail: { source: "bootstrap-proposal-adjacent-controls", family: "runtime-plugin-install" } });
+  assert.equal(first.handled, true);
+  assert.equal(first.view.runtimePluginInstall.selectedRunnerId, "runner.current");
+  assert.equal(first.view.runtimePluginInstall.selectedPluginId, "plugin.demo");
+  assert.equal(first.view.runtimePluginInstall.helpText, "runner=runner.current;plugin=plugin.demo;profile=minimal");
+
+  state.bootstrapState = {
+    identities: [{ id: "identity.aaron" }],
+    serverRunners: [{ id: "runner.next" }],
+    runtimePluginAvailability: [{ serverRunner: "runner.next", plugin: "plugin.alt" }]
+  };
+  state.session = { authenticated: true };
+  state.model = { runtimeProfile: "full", supportedMcpActingModes: ["delegated", "service"] };
+  runnerSelect.value = "runner.next";
+  pluginSelect.value = "plugin.alt";
+
+  const second = target.handler({ detail: { source: "bootstrap-proposal-adjacent-controls", family: "runtime-plugin-install" } });
+  assert.equal(second.handled, true);
+  assert.equal(second.view.runtimePluginInstall.selectedRunnerId, "runner.next");
+  assert.equal(second.view.runtimePluginInstall.selectedPluginId, "plugin.alt");
+  assert.equal(second.view.runtimePluginInstall.helpText, "runner=runner.next;plugin=plugin.alt;profile=full");
+});
+
 test("proposal-adjacent sync dep builder exposes the shared live dependency packet directly", () => {
   const button = { disabled: false };
   const nodes = new Map([

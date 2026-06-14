@@ -1,7 +1,16 @@
+import {
+  bootstrapAppAuthoringSubmitContractsByFamily
+} from "./bootstrap-app-authoring-submit-contracts.js";
+
 export function renderBootstrapAppAuthoringSubmitFactory() {
   return String.raw`
+    const bootstrapAppAuthoringSubmitContractsByFamily = ${JSON.stringify(bootstrapAppAuthoringSubmitContractsByFamily)};
     const coerceInteger = ${coerceInteger.toString()};
+    const firstNonBlank = ${firstNonBlank.toString()};
     const omitBlankStringFields = ${omitBlankStringFields.toString()};
+    const contractForFamily = ${contractForFamily.toString()};
+    const checkboxesModeForFamily = ${checkboxesModeForFamily.toString()};
+    const applyBootstrapAppAuthoringSubmitFieldRule = ${applyBootstrapAppAuthoringSubmitFieldRule.toString()};
     const readBootstrapAuthoringFormDataFromDocument = ${readBootstrapAuthoringFormDataFromDocument.toString()};
     const buildBootstrapAppAuthoringSubmitRequest = ${buildBootstrapAppAuthoringSubmitRequest.toString()};
     const runBootstrapAppAuthoringSubmit = ${runBootstrapAppAuthoringSubmit.toString()};
@@ -13,21 +22,67 @@ function coerceInteger(value) {
   return value === "" || value == null ? undefined : Number(value);
 }
 
+function firstNonBlank(values = []) {
+  for (const value of values) {
+    if (value == null) continue;
+    if (typeof value === "string" && value.trim() === "") continue;
+    return value;
+  }
+  return undefined;
+}
+
 function omitBlankStringFields(record = {}) {
   return Object.fromEntries(
     Object.entries(record).filter(([, value]) => value !== "")
   );
 }
 
+function contractForFamily(family = "", contractsByFamily = bootstrapAppAuthoringSubmitContractsByFamily) {
+  const key = typeof family === "string" ? family.trim() : "";
+  return key ? (contractsByFamily[key] || null) : null;
+}
+
+function checkboxesModeForFamily(family = "", contractsByFamily = bootstrapAppAuthoringSubmitContractsByFamily) {
+  return contractForFamily(family, contractsByFamily)?.checkboxes || null;
+}
+
+function applyBootstrapAppAuthoringSubmitFieldRule({
+  rule = {},
+  data = {},
+  body = {}
+} = {}) {
+  const name = typeof rule.name === "string" ? rule.name.trim() : "";
+  if (!name) return body;
+  const strategy = typeof rule.strategy === "string" ? rule.strategy.trim() : "";
+  const source = typeof rule.source === "string" && rule.source.trim()
+    ? rule.source.trim()
+    : name;
+  if (strategy === "firstNonBlank") {
+    body[name] = firstNonBlank((rule.sources || []).map(key => data?.[key]));
+    return body;
+  }
+  if (strategy === "integer") {
+    body[name] = coerceInteger(data?.[source]);
+    return body;
+  }
+  if (strategy === "boolean") {
+    body[name] = data?.[source] === true;
+    return body;
+  }
+  body[name] = data?.[source];
+  return body;
+}
+
 function readBootstrapAuthoringFormDataFromDocument({
   formId = "",
   family = "",
+  contractsByFamily = bootstrapAppAuthoringSubmitContractsByFamily,
   document = globalThis?.document || null
 } = {}) {
   const form = document?.getElementById?.(formId);
   if (!form) throw new Error("missing bootstrap form: " + formId);
   const data = Object.fromEntries(new FormData(form).entries());
-  if (family === "widget" || family === "route") {
+  if (checkboxesModeForFamily(family, contractsByFamily) === "boolean") {
     for (const field of Array.from(form.elements || [])) {
       if (!field?.name || field?.type !== "checkbox") continue;
       data[field.name] = Boolean(field.checked);
@@ -38,70 +93,25 @@ function readBootstrapAuthoringFormDataFromDocument({
 
 export function buildBootstrapAppAuthoringSubmitRequest({
   detail = {},
-  data = {}
+  data = {},
+  contractsByFamily = bootstrapAppAuthoringSubmitContractsByFamily
 } = {}) {
-  if (detail.family === "context") {
-    return {
-      url: "/api/contexts",
-      body: data
-    };
+  const contract = contractForFamily(detail.family, contractsByFamily);
+  if (!contract) return null;
+  let body = { ...(data || {}) };
+  if (contract.omitBlankStrings === true) {
+    body = omitBlankStringFields(body);
   }
-  if (detail.family === "perspective") {
-    return {
-      url: "/api/perspectives",
-      body: data
-    };
+  for (const field of contract.dropFields || []) {
+    delete body[field];
   }
-  if (detail.family === "widget") {
-    return {
-      url: "/api/widgets",
-      body: {
-        ...omitBlankStringFields(data),
-        tutorialTarget: data.tutorialTarget || data.id || undefined,
-        attach: data.attach === true,
-        template: data.template === true,
-        order: coerceInteger(data.order),
-        level: coerceInteger(data.level)
-      }
-    };
+  for (const rule of contract.fields || []) {
+    body = applyBootstrapAppAuthoringSubmitFieldRule({ rule, data, body });
   }
-  if (detail.family === "program") {
-    return {
-      url: "/api/frontend-programs",
-      body: data
-    };
-  }
-  if (detail.family === "step") {
-    return {
-      url: "/api/frontend-steps",
-      body: {
-        ...data,
-        order: coerceInteger(data.order)
-      }
-    };
-  }
-  if (detail.family === "route") {
-    return {
-      url: "/api/routes",
-      body: {
-        ...omitBlankStringFields(data),
-        liveProjection: data.liveProjection === true
-      }
-    };
-  }
-  if (detail.family === "serve") {
-    return {
-      url: "/api/serve-mounts",
-      body: data
-    };
-  }
-  if (detail.family === "runner") {
-    return {
-      url: "/api/server-runners",
-      body: data
-    };
-  }
-  return null;
+  return {
+    url: contract.url || "",
+    body
+  };
 }
 
 export async function runBootstrapAppAuthoringSubmit({
@@ -110,13 +120,15 @@ export async function runBootstrapAppAuthoringSubmit({
   refresh = async () => {},
   setStatus = () => {},
   resetForm = () => {},
+  contractsByFamily = bootstrapAppAuthoringSubmitContractsByFamily,
   readFormData = payload => readBootstrapAuthoringFormDataFromDocument(payload)
 } = {}) {
   const data = readFormData({
     formId: detail.formId || "",
-    family: detail.family || ""
+    family: detail.family || "",
+    contractsByFamily
   });
-  const request = buildBootstrapAppAuthoringSubmitRequest({ detail, data });
+  const request = buildBootstrapAppAuthoringSubmitRequest({ detail, data, contractsByFamily });
   if (!request) return false;
   try {
     await postJson(request.url, request.body);
@@ -136,6 +148,7 @@ export function bindBootstrapAppAuthoringSubmit({
   refresh = async () => {},
   setStatus = () => {},
   resetForm = () => {},
+  contractsByFamily = bootstrapAppAuthoringSubmitContractsByFamily,
   readFormData = payload => readBootstrapAuthoringFormDataFromDocument(payload)
 } = {}) {
   const resolvedTarget = target || globalThis?.window || globalThis || null;
@@ -146,6 +159,7 @@ export function bindBootstrapAppAuthoringSubmit({
     refresh,
     setStatus,
     resetForm,
+    contractsByFamily,
     readFormData
   });
   resolvedTarget.addEventListener("witness:bootstrap-app-authoring-submit", handler);

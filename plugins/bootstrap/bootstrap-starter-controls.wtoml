@@ -5,12 +5,12 @@ program = "bootstrap_starter_controls_program"
 
 [[box]]
 id = "bootstrap_starter_controls_root"
-class = "card surface-card surface-stack"
+class = "surface-card surface-stack"
 children = ["bootstrap_starter_badge", "bootstrap_starter_details"]
 
 [[text]]
 id = "bootstrap_starter_badge"
-class = "badge"
+class = "surface-badge"
 text = "Fast Path"
 
 [[details]]
@@ -23,8 +23,8 @@ text = "Advanced Shortcut"
 
 [[text]]
 id = "bootstrap_starter_note"
-class = "surface-note muted note"
-text = "This remains available as a quick seam for experienced users. It is not used by the tutorial."
+class = "surface-note surface-note-callout"
+text = "This remains available as a quick seam for experienced users. It is not required by the active guidance flow."
 
 [[box]]
 id = "bootstrap_starter_actions"
@@ -37,12 +37,12 @@ domId = "create-todo-starter"
 text = "Create Todo Starter"
 type = "button"
 action = "createBootstrapTodoStarter"
-tutorialTarget = "create-todo-starter"
+guidanceTarget = "create-todo-starter"
 
 [[text]]
 id = "bootstrap_starter_status"
 domId = "starter-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]

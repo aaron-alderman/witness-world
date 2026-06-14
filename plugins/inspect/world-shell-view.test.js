@@ -14,7 +14,8 @@ test("world shell view renders the graph shell from shared segments", () => {
     canvas: "<div>Canvas</div>"
   });
 
-  assert.equal(html.includes('class="world-graph-shell"'), true);
+  assert.equal(html.includes('class="surface-shell-2 world-graph-shell"'), true);
+  assert.equal(html.includes('class="surface-pane surface-stack world-graph-inspector"'), true);
   assert.equal(html.includes('data-world-inspector'), true);
   assert.equal(html.includes("<section>Tutorial</section>"), true);
   assert.equal(html.includes("<div>Canvas</div>"), true);

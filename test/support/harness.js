@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import fs from "node:fs/promises";
 import { chromium } from "playwright";
+import { loadAppProject } from "../../src/app-project.js";
 import { createWorld } from "../../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../../src/host.js";
 import { applyWitnessDocs, applyWitnessToml, loadWitnessAppFile } from "../../src/dsl.js";
@@ -37,6 +38,7 @@ export async function startUiServer({
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile });
   declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile });
 
+  const appProject = await loadAppProject(dslPath);
   const loaded = await loadWitnessAppFile(dslPath);
   applyWitnessDocs(world, loaded.witnessDocs);
   for (const desire of loaded.authoredDesireDocs) applyDesire(world, desire);
@@ -46,6 +48,7 @@ export async function startUiServer({
     actor: "adam",
     serverRunnerId,
     runtimeRoot,
+    appProject,
     runtimeProfile,
     logger
   });

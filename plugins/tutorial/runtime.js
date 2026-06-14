@@ -1,6 +1,4 @@
-import { createTutorialBundleHandlers } from "./tutorial-handlers.js";
-import { appTutorialConfigForSession } from "./tutorial-runtime-ui.js";
-import { TUTORIAL_RUNTIME_BUILTIN_SEEDS } from "./runtime-builtins.js";
+import { TODO_TUTORIAL_ID, todoTutorialDefinition } from "./tutorials.js";
 
 function patternRoute(method, pattern, handler, paramNames = []) {
   return Object.freeze({ kind: "pattern", method, pattern, handler, paramNames });
@@ -11,36 +9,28 @@ export const bundleId = "bundle-tutorial";
 export const handlerCatalog = Object.freeze({
   authorableHandlers: Object.freeze([]),
   pageHandlers: Object.freeze([]),
-  dispatchHandlers: Object.freeze([
-    "tutorial.progress.read",
-    "tutorial.progress.write",
-    "tutorial.progress.delete"
-  ]),
+  dispatchHandlers: Object.freeze([]),
   handlerMetadata: Object.freeze({})
 });
 
-export const routes = Object.freeze([
-  patternRoute("GET", /^\/api\/tutorial-progress\/([^/]+)$/, "tutorial.progress.read", Object.freeze(["tutorialId"])),
-  patternRoute("PUT", /^\/api\/tutorial-progress\/([^/]+)$/, "tutorial.progress.write", Object.freeze(["tutorialId"])),
-  patternRoute("DELETE", /^\/api\/tutorial-progress\/([^/]+)$/, "tutorial.progress.delete", Object.freeze(["tutorialId"]))
-]);
+export const routes = Object.freeze([]);
 
 export const surfaces = Object.freeze([]);
 
 export const providers = Object.freeze([
   {
-    kind: "coreHook",
-    id: "appTutorialConfigForSession",
-    hook: appTutorialConfigForSession
-  },
-  {
-    kind: "runtimeBuiltinSeeds",
-    ...TUTORIAL_RUNTIME_BUILTIN_SEEDS
+    kind: "guidanceDefinitions",
+    definitions: Object.freeze([{
+      id: TODO_TUTORIAL_ID,
+      title: "Build The Todo App From Scratch",
+      definition: todoTutorialDefinition(),
+      defaultForBootstrap: true
+    }])
   }
 ]);
 
 export function createHandlers(deps) {
-  return createTutorialBundleHandlers(deps);
+  return {};
 }
 
 export default {

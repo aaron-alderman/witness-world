@@ -122,9 +122,8 @@ test("starter plan resolves host placeholders and picked fields generically from
   ]);
 });
 
-test("starter plan loads the tutorial-owned starter blueprint by default", () => {
+test("starter plan degrades cleanly when no starter blueprint is contributed", () => {
   const plan = buildBootstrapStarterPlan();
 
-  assert.equal(plan.requests.some(request => request.url === "/api/server-runners" && request.body?.id === "demo_server"), true);
-  assert.equal(plan.requests.some(request => request.url === "/api/runtime-plugin-installs" && request.body?.plugin === "plugin.demo"), true);
+  assert.deepEqual(plan, { requests: [] });
 });

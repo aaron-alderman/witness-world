@@ -168,7 +168,7 @@ machinery against a thin spec" to "faithful model against real oracles".
   model); loose duplicate removed.** The Goodman fatigue physics is *already* a DESIRE model:
   `examples_rvm/engentus/app/models/goodman.rvm` (`BoltFatigue`) composes `goodman_sa`, `sn_hannover`,
   `shore_a_to_E_pa`, `bolt_bending_stiffness`, the γ stiffness-share, `F_shear`, and
-  `bolt_bending_sigma_a` as honest derives over `plugins/chart-runtime/goodman-stdlib.js` — "stays
+  `bolt_bending_sigma_a` as honest derives over `examples/engentus/app/chart-functions/goodman-stdlib.js` — "stays
   fully in the IR, zero kernels," run by `evaluateModel` and covered by the chart-tranche eval tests.
   A standalone `fatigue-kernel.mjs` (added earlier in this push) re-ported the same R math plus a
   time-trajectory; on the **full-model-ization** decision it was a **duplicate of already-integrated

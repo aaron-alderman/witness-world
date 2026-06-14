@@ -1,13 +1,33 @@
+import {
+  bootstrapHostActionContractsByAction
+} from "./bootstrap-host-action-contracts.js";
+
 export function renderBootstrapHostActionFactory() {
   return String.raw`
+    const bootstrapHostActionContractsByAction = ${JSON.stringify(bootstrapHostActionContractsByAction)};
+    const contractForAction = ${contractForAction.toString()};
+    const statusSetterForTarget = ${statusSetterForTarget.toString()};
     const runBootstrapHostAction = ${runBootstrapHostAction.toString()};
     const bindBootstrapHostActions = ${bindBootstrapHostActions.toString()};
   `;
 }
 
+function contractForAction(action = "", contractsByAction = bootstrapHostActionContractsByAction) {
+  const key = typeof action === "string" ? action.trim() : "";
+  return key ? (contractsByAction[key] || null) : null;
+}
+
+function statusSetterForTarget(statusTarget = "bootstrap", {
+  setBootstrapStatus = () => {},
+  setDesktopStatus = () => {}
+} = {}) {
+  return statusTarget === "desktop" ? setDesktopStatus : setBootstrapStatus;
+}
+
 export function bindBootstrapHostActions({
   target,
   source = "bootstrap-top-cards",
+  guidanceStep = () => null,
   tutorialStep = () => null,
   openAppHome = async () => ({ opened: false, reason: "missing-opener" }),
   desktopApi = () => null,
@@ -20,6 +40,7 @@ export function bindBootstrapHostActions({
     try {
       await runBootstrapHostAction({
         action,
+        guidanceStep,
         tutorialStep,
         openAppHome,
         desktopApi,
@@ -35,46 +56,42 @@ export function bindBootstrapHostActions({
 
 export async function runBootstrapHostAction({
   action = "",
+  guidanceStep = () => null,
   tutorialStep = () => null,
   openAppHome = async () => ({ opened: false, reason: "missing-opener" }),
   desktopApi = () => null,
   setBootstrapStatus = () => {},
-  setDesktopStatus = () => {}
+  setDesktopStatus = () => {},
+  contractsByAction = bootstrapHostActionContractsByAction
 } = {}) {
-  if (action === "open-app") {
-    const current = tutorialStep();
-    return openAppHome({ advance: current?.id === "open-app" });
+  const contract = contractForAction(action, contractsByAction);
+  if (!contract) {
+    setBootstrapStatus(`Unknown bootstrap host action: ${action || "(blank)"}`);
+    return { handled: false, reason: "unknown-action", action };
   }
-  if (action === "desktop-open-world") {
+  if (contract.kind === "openAppHome") {
+    const current = guidanceStep() ?? tutorialStep();
+    return openAppHome({ advance: current?.id === contract.advanceFromCurrentStepId });
+  }
+  if (contract.kind === "desktopApi") {
     const api = desktopApi();
     if (!api) return { handled: false, reason: "desktop-unavailable" };
-    const result = await api.openWorldHome();
+    const method = typeof contract.desktopMethod === "string" ? contract.desktopMethod.trim() : "";
+    const fn = method ? api?.[method] : null;
+    if (typeof fn !== "function") return { handled: false, reason: "desktop-method-unavailable", action, method };
+    const result = await fn.call(api);
+    const setStatus = statusSetterForTarget(contract.statusTarget, { setBootstrapStatus, setDesktopStatus });
     if (result?.canceled) {
-      setDesktopStatus("Open world canceled.");
-      return { handled: true, action, result, status: "Open world canceled." };
+      const status = contract.canceledStatus || "Action canceled.";
+      setStatus(status);
+      return { handled: true, action, result, status };
     }
-    setDesktopStatus("Switching to the selected world home.");
-    return { handled: true, action, result, status: "Switching to the selected world home." };
-  }
-  if (action === "desktop-create-world") {
-    const api = desktopApi();
-    if (!api) return { handled: false, reason: "desktop-unavailable" };
-    const result = await api.createWorldHome();
-    if (result?.canceled) {
-      setDesktopStatus("Create world canceled.");
-      return { handled: true, action, result, status: "Create world canceled." };
-    }
-    setDesktopStatus("Switching to the new world home.");
-    return { handled: true, action, result, status: "Switching to the new world home." };
-  }
-  if (action === "desktop-reveal-world") {
-    const api = desktopApi();
-    if (!api) return { handled: false, reason: "desktop-unavailable" };
-    const result = await api.revealWorldHome();
+    const failureReasonField = typeof contract.failureReasonField === "string" ? contract.failureReasonField.trim() : "";
+    const failureReason = failureReasonField ? result?.[failureReasonField] : "";
     const status = result?.ok === false
-      ? (result.reason || "Unable to reveal world home.")
-      : "Revealed current world home.";
-    setDesktopStatus(status);
+      ? (failureReason || contract.failureFallbackStatus || "Action failed.")
+      : (contract.successStatus || "");
+    if (status) setStatus(status);
     return { handled: true, action, result, status };
   }
   setBootstrapStatus(`Unknown bootstrap host action: ${action || "(blank)"}`);

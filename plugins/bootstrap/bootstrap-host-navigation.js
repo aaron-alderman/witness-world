@@ -1,7 +1,8 @@
 export function renderBootstrapHostNavigationFactory() {
   return String.raw`
     const openBootstrapAppHome = ${openBootstrapAppHome.toString()};
-    const continueBootstrapTutorialOnPage = ${continueBootstrapTutorialOnPage.toString()};
+    const continueBootstrapGuidanceOnPage = ${continueBootstrapGuidanceOnPage.toString()};
+    const continueBootstrapTutorialOnPage = continueBootstrapGuidanceOnPage;
   `;
 }
 
@@ -43,7 +44,7 @@ export async function openBootstrapAppHome({
   return { opened: true, mode: "assign", target: target.toString() };
 }
 
-export async function continueBootstrapTutorialOnPage({
+export async function continueBootstrapGuidanceOnPage({
   page = "",
   openAppHome = async () => ({ opened: false, reason: "missing-opener" }),
   currentHref = "http://bootstrap.local/_bootstrap",
@@ -65,3 +66,5 @@ export async function continueBootstrapTutorialOnPage({
   }
   return { continued: false, mode: "ignored" };
 }
+
+export const continueBootstrapTutorialOnPage = continueBootstrapGuidanceOnPage;

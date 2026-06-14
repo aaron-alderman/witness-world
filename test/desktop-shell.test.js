@@ -60,9 +60,12 @@ test("desktop launcher page reports a clear status when the desktop bridge is un
   const html = renderDesktopLauncherPage();
 
   assert.equal(html.includes("Desktop bridge unavailable. Restart the desktop shell."), true);
-  assert.equal(html.includes("window.witnessDesktop"), true);
+  assert.equal(html.includes("windowTarget?.witnessDesktop"), true);
+  assert.equal(html.includes("runDesktopLauncherAction"), true);
+  assert.equal(html.includes("bindDesktopLauncherAction"), true);
   assert.equal(html.includes("renderDesktopRecentWorlds"), true);
   assert.equal(html.includes("bindDesktopRecentWorlds"), true);
+  assert.equal(html.includes("startDesktopLauncherRuntime"), true);
   assert.equal(html.includes("root.innerHTML = rows.map"), false);
 });
 

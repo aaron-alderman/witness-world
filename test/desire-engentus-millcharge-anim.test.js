@@ -6,7 +6,7 @@ import {
   normalizeDesirePlusToDesire
 } from "../src/desire/index.js";
 import { evaluateModel } from "../plugins/chart-runtime/dataflow-eval.js";
-import { millChargeKernels } from "../plugins/chart-runtime/mill-charge-kernels.js";
+import { millChargeKernels } from "../examples/engentus/app/chart-functions/mill-charge-kernels.js";
 import { planChart, frameIndexForElapsed } from "../plugins/chart-runtime/gog-runtime.js";
 
 // ── MC-anim: the disc-frame animation polish (cadence + wall-collision clipping) ──

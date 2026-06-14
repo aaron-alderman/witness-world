@@ -5,7 +5,7 @@ import {
   renderBootstrapShellRenderRuntimeFactory
 } from "./bootstrap-shell-render-runtime.js";
 
-test("bootstrap shell render runtime sequences extracted render helpers and publishes tutorial state", () => {
+test("bootstrap shell render runtime sequences extracted render helpers and publishes guidance state", () => {
   const calls = [];
   const publishedSnapshots = [];
   const state = {
@@ -19,6 +19,7 @@ test("bootstrap shell render runtime sequences extracted render helpers and publ
     session: { authenticated: true, actor: "tester", label: "Tester" },
     desktopShell: { shellId: "desktop-shell" },
     runtimePluginReview: { serverRunner: "runner.main", selectedPluginId: "plugin.canvas" },
+    guidanceProgress: { stepId: "step.open", chapterId: "chapter.bootstrap" },
     tutorialProgress: { stepId: "step.open", chapterId: "chapter.bootstrap" }
   };
 
@@ -70,19 +71,19 @@ test("bootstrap shell render runtime sequences extracted render helpers and publ
     applyBootstrapShellViewStateFn: () => {
       calls.push("shell-view-apply");
     },
-    renderTutorialCard: () => {
-      calls.push("tutorial-card");
+    renderGuidanceCard: () => {
+      calls.push("guidance-card");
     },
-    renderTutorialOverlay: () => {
-      calls.push("tutorial-overlay");
+    renderGuidanceOverlay: () => {
+      calls.push("guidance-overlay");
     },
-    buildBootstrapTutorialRuntimeViewFn: ({ tutorialProgress, currentSurfacePage }) => ({
-      stepId: tutorialProgress.stepId,
+    buildBootstrapGuidanceRuntimeViewFn: ({ guidanceProgress, currentSurfacePage }) => ({
+      stepId: guidanceProgress.stepId,
       surfacePage: currentSurfacePage
     }),
-    publishTutorialRuntimeView: snapshot => {
+    publishGuidanceRuntimeView: snapshot => {
       publishedSnapshots.push(snapshot);
-      calls.push("tutorial-publish");
+      calls.push("guidance-publish");
     },
     buildBootstrapShellStatusViewFn: ({ model, session, desktopShell }) => ({
       bootstrapSummary: model.appReady ? "ready" : "not-ready",
@@ -113,9 +114,9 @@ test("bootstrap shell render runtime sequences extracted render helpers and publ
     "review-detail",
     ["shell-view-sync", "tester"],
     "shell-view-apply",
-    "tutorial-card",
-    "tutorial-overlay",
-    "tutorial-publish"
+    "guidance-card",
+    "guidance-overlay",
+    "guidance-publish"
   ]);
   assert.deepEqual(publishedSnapshots, [{
     stepId: "step.open",

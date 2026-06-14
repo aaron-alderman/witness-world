@@ -184,7 +184,8 @@ export function edenOrganizationProposalBody(actor, { contextId = null, widgetId
     kind: "Text",
     text: `${edenOrganizationContextLabel(actor)} is open for shared stewardship.`,
     attach: false,
-    context: resolvedContextId
+    context: resolvedContextId,
+    tutorialTarget: resolvedWidgetId
   };
 }
 

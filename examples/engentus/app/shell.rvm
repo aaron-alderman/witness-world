@@ -1,149 +1,518 @@
 import desire/v3-alpha
 
-// ── Engentus SPA shell, as DESIRE surfaces ─────────────────────────────────────
-//
-// The whole app from front screen → app screen → science → chart, expressed as a
-// tree of `view` (surface) nodes — faithful DESIRE, no direct route wiring. The
-// app screen composes down to the GoodmanDiagram chart (views/goodman.rvm), which
-// is rendered by the chart.render capability that plugin.chart-runtime contributes.
-// Module → plugin dependency; the platform installs the plugin.
+// Engentus shell authored as DESIRE surfaces.
+// The shell owns login, home, module routing, and signout.
+// The mini-app content behind the shell stays route-backed through plugin.chart-runtime.
 
-// ── Auth: login / sign-out ──
+view EngentusToolbar {
+  kind sidebar
+  class engentus-toolbar
+  prop role = "toolbar"
+}
+
 view EngentusLogin {
   kind auth-screen
   class engentus-login
+  prop domId = "view-login"
+  prop routeKey = "login"
+  prop routePath = "/engentus/login"
+  prop title = "Welcome back"
+  prop subtitle = "Sign in to your Engentus account"
+  prop heroTitle = "Structural Intelligence for SAG Mills"
+  prop heroAccent = "SAG Mills"
+  prop heroBody = "Real-time fatigue monitoring and predictive analysis for critical liner fasteners — from bolt load to remaining life."
+  prop feature1Title = "Real-time bolt load monitoring"
+  prop feature2Title = "Goodman fatigue diagram analysis"
+  prop feature3Title = "Monte Carlo life prediction"
+  prop feature4Title = "Multi-site fleet management"
+  prop secondaryActionHref = "/engentus/home"
+  prop primaryActionLabel = "Sign in"
+  prop primaryActionHref = "/engentus/home"
+  prop helpLabel = "Forgot password?"
+  prop helpHref = "#"
+  prop footnoteHtml = "By signing in you agree to Engentus's <a href=\"#\">Terms of Service</a> and <a href=\"#\">Privacy Policy</a>."
+  prop footnote = "By signing in you agree to Engentus's Terms of Service and Privacy Policy."
+  prop footerText = "© 2025 Engentus Pty Ltd. All rights reserved."
   children {
-    engentus_brand
-    login_hero
-    login_form
+    EngentusToolbar
   }
 }
 
 view EngentusSignout {
   kind auth-screen
   class engentus-signout
+  prop domId = "view-signout"
+  prop routeKey = "signout"
+  prop routePath = "/engentus/signout"
+  prop title = "You've been signed out"
+  prop subtitle = "Your session has ended securely.\nThank you for using Mill-iQ™."
+  prop heroTitle = "Structural Intelligence for SAG Mills"
+  prop heroAccent = "SAG Mills"
+  prop heroBody = "Real-time fatigue monitoring and predictive analysis for critical liner fasteners — from bolt load to remaining life."
+  prop feature1Title = "Real-time bolt load monitoring"
+  prop feature2Title = "Goodman fatigue diagram analysis"
+  prop feature3Title = "Monte Carlo life prediction"
+  prop feature4Title = "Multi-site fleet management"
+  prop primaryActionLabel = "Sign back in"
+  prop primaryActionHref = "/engentus/login"
+  prop footnote = "Mill-iQ™ is a product of Engentus Pty Ltd"
+  prop footerText = "© 2025 Engentus Pty Ltd. All rights reserved."
   children {
-    engentus_brand
-    signout_confirm
-  }
-}
-
-// ── Home: news rail + module grid of "apps" ──
-view EngentusHome {
-  kind app-shell
-  class engentus-home
-  children {
-    engentus_toolbar
-    news_panel
-    module_grid
+    EngentusToolbar
   }
 }
 
 view NewsPanel {
   kind sidebar
   class news-rail
-  children {
-    news_live_indicator
-    news_list
-  }
-}
-
-view ModuleGrid {
-  kind grid
-  class module-grid
-  children {
-    card_goodman
-    card_mill_charge
-    card_mill_force
-  }
-}
-
-// the three sciences as cards; Goodman is active, the others locked (matches SPA)
-view ModuleCardGoodman {
-  kind module-card
-  class active
-  children {
-    card_goodman_icon
-    card_goodman_title
-  }
+  prop role = "news"
+  prop domId = "news-panel"
+  prop headerLabel = "Feed"
+  prop liveLabel = "Live"
+  prop item1Tone = "alert"
+  prop item1Category = "Alert"
+  prop item1Title = "Sensor B7 on M48 reporting anomalous load readings — review recommended before next measurement window"
+  prop item1Time = "2h ago"
+  prop item2Tone = "platform"
+  prop item2Category = "Platform"
+  prop item2Title = "Scheduled maintenance window: API gateway Sunday 02:00–04:00 AWST"
+  prop item2Time = "6h ago"
+  prop item3Tone = "product"
+  prop item3Category = "Product"
+  prop item3Title = "Mill-iQ™ Fatigue Module v2.1.0 — Goodman diagram now supports multi-scenario ANOVA export"
+  prop item3Time = "1d ago"
+  prop item4Tone = "product"
+  prop item4Category = "Product"
+  prop item4Title = "M48 maintenance window complete — 3 bolt sets recalibrated and re-zeroed"
+  prop item4Time = "2d ago"
+  prop item5Tone = "industry"
+  prop item5Category = "Industry"
+  prop item5Title = "AS 4024 annex revision published — updated fatigue factors for mining fasteners now available"
+  prop item5Time = "3d ago"
+  prop item6Tone = "platform"
+  prop item6Category = "Platform"
+  prop item6Title = "New firmware v2.3.1 available for LinerSense o310 sensors"
+  prop item6Time = "4d ago"
+  prop item7Tone = "industry"
+  prop item7Category = "Industry"
+  prop item7Title = "MCA publishes updated guidelines on real-time structural monitoring for SAG mills"
+  prop item7Time = "1w ago"
 }
 
 view ModuleCardMillCharge {
   kind module-card
   class active
-  children {
-    card_mill_charge_icon
-    card_mill_charge_title
-  }
+  prop routeKey = "mill-charge"
+  prop href = "/engentus/mill-charge"
+  prop assetSrc = "/app-static/app/assets/module-mill-charge.svg"
+  prop title = "Mill Charge Motion"
+  prop description = "2D charge shape, regime & power proxy"
+  prop state = "available"
+  prop statusLabel = "Available"
+  prop assetRef = "CHARGE"
+}
+
+view ModuleCardGoodman {
+  kind module-card
+  class active
+  prop routeKey = "goodman"
+  prop href = "/engentus/goodman"
+  prop assetSrc = "/app-static/app/assets/module-goodman.svg"
+  prop title = "Goodman Fatigue Diagram"
+  prop description = "SN curve analysis with Monte Carlo simulation"
+  prop state = "available"
+  prop statusLabel = "Available"
+  prop assetRef = "GOODMAN"
 }
 
 view ModuleCardMillForce {
   kind module-card
   class active
+  prop routeKey = "mill-force"
+  prop href = "/engentus/mill-force"
+  prop assetSrc = "/app-static/app/assets/module-mill-force.svg"
+  prop title = "Mill Force Analysis"
+  prop description = "Liner force distribution with dual-model comparison"
+  prop state = "available"
+  prop statusLabel = "Available"
+  prop assetRef = "FORCE"
+}
+
+view ModuleCardTensionTimeSeries {
+  kind module-card
+  class locked
+  prop assetSrc = "/app-static/app/assets/module-locked-wave.svg"
+  prop title = "Tension Time Series"
+  prop description = "Bolt load over measurement windows"
+  prop state = "locked"
+  prop statusLabel = "Coming Soon"
+}
+
+view ModuleCardBoltLoadDistribution {
+  kind module-card
+  class locked
+  prop assetSrc = "/app-static/app/assets/module-locked-bars.svg"
+  prop title = "Bolt Load Distribution"
+  prop description = "Spatial load mapping across positions"
+  prop state = "locked"
+  prop statusLabel = "Coming Soon"
+}
+
+view ModuleCardChannelHealthMonitor {
+  kind module-card
+  class locked
+  prop assetSrc = "/app-static/app/assets/module-locked-heatmap.svg"
+  prop title = "Channel Health Monitor"
+  prop description = "Sensor integrity and diagnostic status"
+  prop state = "locked"
+  prop statusLabel = "Coming Soon"
+}
+
+view ModuleCardCalibrationWorkspace {
+  kind module-card
+  class locked
+  prop assetSrc = "/app-static/app/assets/module-locked-scatter.svg"
+  prop title = "Calibration Workspace"
+  prop description = "Two-stage bolt calibration tooling"
+  prop state = "locked"
+  prop statusLabel = "Coming Soon"
+}
+
+view ModuleCardMaintenanceForecaster {
+  kind module-card
+  class locked
+  prop assetSrc = "/app-static/app/assets/module-locked-bars.svg"
+  prop title = "Maintenance Forecaster"
+  prop description = "Predictive maintenance scheduling"
+  prop state = "locked"
+  prop statusLabel = "Coming Soon"
+}
+
+view ModuleCardSensorFleetOverview {
+  kind module-card
+  class locked
+  prop assetSrc = "/app-static/app/assets/module-locked-heatmap.svg"
+  prop title = "Sensor Fleet Overview"
+  prop description = "Device status and connectivity"
+  prop state = "locked"
+  prop statusLabel = "Coming Soon"
+}
+
+view ModuleCardReportBuilder {
+  kind module-card
+  class locked
+  prop assetSrc = "/app-static/app/assets/module-locked-wave.svg"
+  prop title = "Report Builder"
+  prop description = "PDF and data export for field reports"
+  prop state = "locked"
+  prop statusLabel = "Coming Soon"
+}
+
+view ModuleCardAlertTimeline {
+  kind module-card
+  class locked
+  prop assetSrc = "/app-static/app/assets/module-locked-scatter.svg"
+  prop title = "Alert Timeline"
+  prop description = "Event history and notification log"
+  prop state = "locked"
+  prop statusLabel = "Coming Soon"
+}
+
+view ModuleCardMillComparison {
+  kind module-card
+  class locked
+  prop assetSrc = "/app-static/app/assets/module-locked-bars.svg"
+  prop title = "Mill Comparison"
+  prop description = "Cross-site benchmark analysis"
+  prop state = "locked"
+  prop statusLabel = "Coming Soon"
+}
+
+view ModuleCardTorqueAnalysis {
+  kind module-card
+  class locked
+  prop assetSrc = "/app-static/app/assets/module-locked-wave.svg"
+  prop title = "Torque Analysis"
+  prop description = "Torque–tension relationship modelling"
+  prop state = "locked"
+  prop statusLabel = "Coming Soon"
+}
+
+view ModuleCardVibrationSpectrum {
+  kind module-card
+  class locked
+  prop assetSrc = "/app-static/app/assets/module-locked-wave.svg"
+  prop title = "Vibration Spectrum"
+  prop description = "FFT and frequency domain analysis"
+  prop state = "locked"
+  prop statusLabel = "Coming Soon"
+}
+
+view ModuleCardLifeCycleEstimator {
+  kind module-card
+  class locked
+  prop assetSrc = "/app-static/app/assets/module-locked-scatter.svg"
+  prop title = "Life Cycle Estimator"
+  prop description = "Remaining useful life projections"
+  prop state = "locked"
+  prop statusLabel = "Coming Soon"
+}
+
+view ModuleCardApiDataExplorer {
+  kind module-card
+  class locked
+  prop assetSrc = "/app-static/app/assets/module-locked-heatmap.svg"
+  prop title = "API Data Explorer"
+  prop description = "Raw data query and inspection"
+  prop state = "locked"
+  prop statusLabel = "Coming Soon"
+}
+
+view ModuleCardHistoricalArchive {
+  kind module-card
+  class locked
+  prop assetSrc = "/app-static/app/assets/module-locked-bars.svg"
+  prop title = "Historical Archive"
+  prop description = "Long-term trend and archive analysis"
+  prop state = "locked"
+  prop statusLabel = "Coming Soon"
+}
+
+view ModuleCardComplianceDashboard {
+  kind module-card
+  class locked
+  prop assetSrc = "/app-static/app/assets/module-locked-heatmap.svg"
+  prop title = "Compliance Dashboard"
+  prop description = "Standards and certification tracking"
+  prop state = "locked"
+  prop statusLabel = "Coming Soon"
+}
+
+view ModuleGrid {
+  kind grid
+  class module-grid
+  prop domId = "module-grid"
   children {
-    card_mill_force_icon
-    card_mill_force_title
+    ModuleCardMillCharge
+    ModuleCardGoodman
+    ModuleCardMillForce
+    ModuleCardTensionTimeSeries
+    ModuleCardBoltLoadDistribution
+    ModuleCardChannelHealthMonitor
+    ModuleCardCalibrationWorkspace
+    ModuleCardMaintenanceForecaster
+    ModuleCardSensorFleetOverview
+    ModuleCardReportBuilder
+    ModuleCardAlertTimeline
+    ModuleCardMillComparison
+    ModuleCardTorqueAnalysis
+    ModuleCardVibrationSpectrum
+    ModuleCardLifeCycleEstimator
+    ModuleCardApiDataExplorer
+    ModuleCardHistoricalArchive
+    ModuleCardComplianceDashboard
   }
 }
 
-// ── App screen: LHS controls + the chart canvas ──
+view EngentusHome {
+  kind app-shell
+  class engentus-home
+  prop domId = "view-home"
+  prop shellTemplate = "sidebar-grid"
+  prop routeKey = "home"
+  prop routePath = "/engentus/home"
+  prop mainRegionDomId = "module-area"
+  prop title = "Analysis Modules"
+  prop subtitle = "Select a module to begin analysis"
+  prop pillClass = "mill-pill"
+  prop pillText = "⚙ M48 – Goldfields"
+  prop signoutHref = "/engentus/signout"
+  children {
+    EngentusToolbar
+    NewsPanel
+    ModuleGrid
+  }
+}
+
+view GoodmanSidebar {
+  kind sidebar
+  class goodman-controls
+  prop domId = "sb"
+  prop scrollDomId = "sb-scroll"
+  prop section1Title = "Scenario View"
+  prop section1DomId = "sec-static"
+  prop section1ContentHtml = "<div id='static-params-html'></div>"
+  prop section2Title = "Simulations"
+  prop section2DomId = "sec-mc"
+  prop section2Style = "display:none"
+  prop section2TitleActionLabel = "+ New"
+  prop section2TitleActionDomId = "new-sim-btn"
+  prop section2ContentHtml = "<div id='sim-list'></div>"
+  prop section3Title = "Run Config"
+  prop section3DomId = "sec-run"
+  prop section3Style = "display:none"
+  prop section3ContentHtml = "<div class='mc-row'><label>Bolts per set</label><input type='number' id='cfg-n' value='500' min='50' max='5000' step='50'></div><div class='mc-row'><label>Duration (months)</label><input type='number' id='cfg-tmax' value='24' min='3' max='60' step='1'></div><div class='mc-row'><label>Time step (months)</label><input type='number' id='cfg-dt' value='0.5' min='0.1' max='2' step='0.1'></div><div class='run-row'><button class='rbtn go' id='btn-run'>▶ Run</button><button class='rbtn pause' id='btn-pause' disabled>⏸</button><button class='rbtn stop' id='btn-stop' disabled>■</button></div><div class='prog-wrap'><div class='prog-fill' id='prog-fill'></div></div><div class='prog-lbl' id='prog-lbl'>Ready</div>"
+  prop section4Title = "Chart Style"
+  prop section4DomId = "sec-edit"
+  prop section4Style = "display:none"
+  prop section4ContentHtml = "<div id='edit-panel-html'></div>"
+  prop section5Title = "Bolt Sets"
+  prop section5TitleActionLabel = "+ New"
+  prop section5TitleActionDomId = "new-bs-btn"
+  prop section5ContentHtml = "<div id='bs-list'></div>"
+  prop section6Title = "Fatigue Life Regions"
+  prop section6ContentHtml = "<div id='legend-html'></div>"
+  prop section6NoteHtml = "<p style='font-size:9.5px;color:var(--t2);margin-top:6px;line-height:1.5'>Hannover M48 combined SN, 50% survival, m=4.6. Goodman line: &sigma;<sub>a</sub> = &sigma;<sub>lim</sub>(1&minus;&sigma;<sub>m</sub>/UTS).</p>"
+}
+
 view EngentusApp {
   kind app-shell
   class engentus-app
+  prop domId = "view-goodman"
+  prop routeKey = "goodman"
+  prop routePath = "/engentus/goodman"
+  prop pageModuleHref = "/app-static/app/presenters/engentus-goodman-presenter.js"
+  prop shellTemplate = "viewer-sidebar-main"
+  prop shellBodyDomId = "body"
+  prop mainRegionDomId = "chart-area"
+  prop mainBeforeFrameHtml = "<div id='scr' class='hidden'><button id='play-btn' type='button'>&#9654;</button><input type='range' id='time-sl' min='0' max='24' step='0.05' value='0'><span id='t-lbl'>t = 0.0 mo</span><span class='fail-badge' id='fail-badge'></span><div id='spd-wrap'><label style='font-size:10px;color:var(--t2);flex-shrink:0'>Speed</label><input type='range' id='spd-sl' min='0.1' max='20' step='0.1' value='1'><span id='spd-lbl'>1.0&times;</span></div><div id='trail-wrap'><input type='checkbox' id='trail-cb'><label for='trail-cb'>Trail</label></div></div>"
+  prop mainAfterFrameHtml = "<div id='wl' style='display:block'></div>"
+  prop frameWrapDomId = "chart-wrap"
+  prop frameDomId = "chart-svg"
+  prop toolsDomId = "tb-goodman-tools"
+  prop title = "Goodman Fatigue Diagram"
+  prop subtitle = "SN curve analysis with Monte Carlo simulation"
+  prop mountMode = "mounted-panel"
+  prop brandClickable = "true"
+  prop backHref = "/engentus/home"
+  prop signoutHref = "/engentus/signout"
+  prop toolbarMode1Label = "Static"
+  prop toolbarMode1Key = "static"
+  prop toolbarMode2Label = "Monte Carlo"
+  prop toolbarMode2Key = "mc"
+  prop toolbarMode3Label = "✏ Edit"
+  prop toolbarMode3Key = "edit"
+  prop toolbarAction1Label = "📈 CDF"
+  prop toolbarAction1Key = "cdf"
+  prop toolbarAction2Label = "📊 Stats"
+  prop toolbarAction2Key = "stats"
+  prop toolbarAction3Label = "🔬 ANOVA"
+  prop toolbarAction3Key = "anova"
   children {
-    engentus_toolbar
-    goodman_scrubber
-    goodman_sidebar
+    EngentusToolbar
+    GoodmanSidebar
     GoodmanDiagram
     GoodmanMCBands
   }
 }
 
-// sidebar that drives the model params (bolt sets, MC config, probe)
-view GoodmanSidebar {
+view MillChargeSidebar {
   kind sidebar
-  class goodman-controls
+  class mill-charge-controls
+  prop domId = "mill-sb"
+  prop scrollDomId = "mill-sb-scroll"
+}
+
+view MillChargeMetrics {
+  kind sidebar
+  class mill-charge-metrics
+  prop role = "metrics"
+  prop domId = "mill-metrics"
+  prop headerDomId = "mill-metrics-hdr"
+  prop panelDomId = "mill-metrics-panel"
+  prop headerLabel = "Metrics"
+}
+
+view EngentusMillChargeApp {
+  kind app-shell
+  class engentus-mill-charge
+  prop domId = "view-mill"
+  prop routeKey = "mill-charge"
+  prop routePath = "/engentus/mill-charge"
+  prop pageModuleHref = "/app-static/app/presenters/engentus-mill-charge-presenter.js"
+  prop shellTemplate = "viewer-sidebar-main-metrics"
+  prop shellBodyDomId = "mill-body"
+  prop mainRegionDomId = "mill-main"
+  prop frameWrapDomId = "mill-canvas-wrap"
+  prop frameDomId = "mill-canvas"
+  prop title = "Mill Charge Motion"
+  prop subtitle = "2D charge shape, regime and power proxy"
+  prop mountMode = "mounted-panel"
+  prop brandClickable = "true"
+  prop backHref = "/engentus/home"
+  prop signoutHref = "/engentus/signout"
   children {
-    bolt_set_list
-    mc_config
-    probe_controls
+    EngentusToolbar
+    MillChargeSidebar
+    MillChargeMetrics
+    MillChargeCrossSection
   }
 }
 
-// ── Mill-force app screen: cross-section + force-vs-angle + rose ──
+view MillForceSidebar {
+  kind sidebar
+  class mill-force-controls
+  prop domId = "mill-force-sb"
+  prop scrollDomId = "mill-force-sb-scroll"
+}
+
 view EngentusMillForceApp {
   kind app-shell
   class engentus-mill-force
+  prop domId = "view-mill-force"
+  prop routeKey = "mill-force"
+  prop routePath = "/engentus/mill-force"
+  prop pageModuleHref = "/app-static/app/presenters/engentus-mill-force-presenter.js"
+  prop shellTemplate = "viewer-sidebar-tabs"
+  prop shellBodyDomId = "mill-force-body"
+  prop mainRegionDomId = "mill-force-chart-area"
+  prop tabsDomId = "mill-force-chart-tabs"
+  prop frameWrapDomId = "mill-force-chart-wrap"
+  prop frameIdPrefix = "mill-force-svg-"
+  prop tabClass = "mill-force-cht-tab"
+  prop title = "Mill Force Analysis"
+  prop subtitle = "Liner force distribution with dual-model comparison"
+  prop mountMode = "mounted-panel"
+  prop brandClickable = "true"
+  prop backHref = "/engentus/home"
+  prop signoutHref = "/engentus/signout"
+  prop chartTab1Label = "Cross-section"
+  prop chartTab1Key = "cross"
+  prop chartTab2Label = "Force vs Angle"
+  prop chartTab2Key = "force"
+  prop chartTab3Label = "Force Rose"
+  prop chartTab3Key = "rose"
   children {
-    engentus_toolbar
-    mill_force_sidebar
+    EngentusToolbar
+    MillForceSidebar
     MillForceCross
     MillForceAngle
     MillForceRose
   }
 }
 
-// ── Mill-charge app screen: the rotating-charge cross-section ──
-view EngentusMillChargeApp {
-  kind app-shell
-  class engentus-mill-charge
-  children {
-    engentus_toolbar
-    mill_charge_sidebar
-    MillChargeCrossSection
-  }
-}
-
-// ── App root: the router over the screens ──
 view EngentusRoot {
   kind app-root
   class engentus-spa
+  prop stylesheetHref = "/app-static/app/engentus-shell.css"
+  prop brandName = "Engentus"
+  prop productName = "Mill-iQ™"
+  prop brandLogoSrc = "/app-static/img/engentus.png"
+  prop productLogoSrc = "/app-static/img/mill-iq.png"
+  prop heroProductLogoSrc = "/app-static/img/mill-iq.png"
+  prop profileInitials = "AA"
+  prop profileName = "Aaron A."
+  prop profileRole = "Lead Engineer"
+  prop siteLabel = "Mill: M48 – Goldfields"
+  prop homeHref = "/engentus/home"
+  prop signoutHref = "/engentus/signout"
+  prop footerText = "© 2025 Engentus Pty Ltd. All rights reserved."
   children {
     EngentusLogin
     EngentusHome
     EngentusApp
-    EngentusMillForceApp
     EngentusMillChargeApp
+    EngentusMillForceApp
     EngentusSignout
   }
 }

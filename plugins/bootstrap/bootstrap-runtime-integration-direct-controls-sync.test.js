@@ -349,3 +349,83 @@ test("direct runtime integration sync bridge routes semantic families through on
   assert.equal(registered[0][0], "witness:bootstrap-runtime-integration-direct-sync");
   assert.equal(typeof bound, "function");
 });
+
+test("direct runtime integration sync binding re-resolves live state and DOM reads on each event", () => {
+  const runnerSelect = {
+    value: "runner.current",
+    options: [{ value: "runner.current" }, { value: "runner.next" }]
+  };
+  const pluginSelect = {
+    value: "plugin.demo",
+    options: [{ value: "plugin.demo" }, { value: "plugin.alt" }]
+  };
+  const state = {
+    bootstrapState: {
+      serverRunners: [{ id: "runner.current" }],
+      runtimePluginAvailability: [{ serverRunner: "runner.current", plugin: "plugin.demo" }]
+    },
+    model: { runtimeProfile: "minimal", supportedMcpActingModes: ["delegated"] }
+  };
+  const liveState = {
+    authored: () => state.bootstrapState || {},
+    model: () => state.model || {},
+    runtimeProfile: () => state.model?.runtimeProfile || "full",
+    supportedMcpActingModes: () => state.model?.supportedMcpActingModes || [],
+    runtimeIntegrationState: () => ({
+      runtimePluginAvailabilityForRunner: runnerId => (state.bootstrapState?.runtimePluginAvailability || []).filter(row => row.serverRunner === runnerId),
+      runtimePluginAvailabilityRow: (runnerId, pluginId) => (state.bootstrapState?.runtimePluginAvailability || []).find(row => row.serverRunner === runnerId && row.plugin === pluginId) || null,
+      mcpSupportedTools: () => [],
+      mcpInstalledToolsForServer: () => [],
+      mcpServerRow: () => null,
+      mcpSupportedToolRow: () => null,
+      mcpScopeSummary: () => "unscoped"
+    })
+  };
+  const buildDeps = createBootstrapRuntimeIntegrationDirectControlsSyncDepsBuilder({
+    liveState,
+    dom: {
+      byId(id) {
+        if (id === "runtime-plugin-install-runner") return runnerSelect;
+        if (id === "runtime-plugin-install-plugin") return pluginSelect;
+        if (id === "runtime-plugin-install-form") {
+          return {
+            querySelector(selector) {
+              if (selector === 'button[type="submit"]') return { disabled: false };
+              return null;
+            }
+          };
+        }
+        return null;
+      }
+    }
+  });
+  const target = {
+    addEventListener(name, handler) {
+      this.name = name;
+      this.handler = handler;
+    }
+  };
+
+  bindBootstrapRuntimeIntegrationDirectControlsSync({ target, buildDeps });
+  assert.equal(target.name, "witness:bootstrap-runtime-integration-direct-sync");
+
+  const first = target.handler({ detail: { family: "runtime-plugin-install" } });
+  assert.equal(first.handled, true);
+  assert.equal(first.view.runtimePluginInstall.selectedRunnerId, "runner.current");
+  assert.equal(first.view.runtimePluginInstall.selectedPluginId, "plugin.demo");
+  assert.equal(first.view.runtimePluginInstall.helpText.includes("profile minimal"), true);
+
+  state.bootstrapState = {
+    serverRunners: [{ id: "runner.next" }],
+    runtimePluginAvailability: [{ serverRunner: "runner.next", plugin: "plugin.alt" }]
+  };
+  state.model = { runtimeProfile: "full", supportedMcpActingModes: ["delegated", "service"] };
+  runnerSelect.value = "runner.next";
+  pluginSelect.value = "plugin.alt";
+
+  const second = target.handler({ detail: { family: "runtime-plugin-install" } });
+  assert.equal(second.handled, true);
+  assert.equal(second.view.runtimePluginInstall.selectedRunnerId, "runner.next");
+  assert.equal(second.view.runtimePluginInstall.selectedPluginId, "plugin.alt");
+  assert.equal(second.view.runtimePluginInstall.helpText.includes("profile full"), true);
+});

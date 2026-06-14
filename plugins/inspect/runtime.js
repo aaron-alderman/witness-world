@@ -5,6 +5,7 @@ import {
   frontendProgramsProjection,
   widgetDefinitions
 } from "../../src/widgets.js";
+import { guidanceConfigForSession } from "../../src/runtime-guidance.js";
 import { renderWidgetPage } from "./widget-page.js";
 import { requestWidgetVersionActivation, rollbackWidgetVersion } from "./widget-versions.js";
 import { worldGraphProjection, astNodesProjection } from "./world-graph.js";
@@ -196,9 +197,15 @@ export function createHandlers({
   requestVisibleWitnesses,
   processSelection,
   processViewInputs,
-  frontendTraceProcesses
+  frontendTraceProcesses,
+  tutorialProgressFor,
+  guidanceProgressFor,
+  runtimeContributions = null
 }) {
   const { ensureTargetAuthority } = authorityServices;
+  const logInfo = typeof logger?.info === "function"
+    ? (event, fields) => logger.info(event, fields)
+    : () => {};
   const widgetVersionProposalId = (targetProcess, soul) => {
     const processPart = String(targetProcess || "widgetVersion.action").replace(/[^A-Za-z0-9_.:-]+/g, "-");
     const soulPart = String(soul || "widget").replace(/[^A-Za-z0-9_.:-]+/g, "-");
@@ -334,7 +341,7 @@ export function createHandlers({
       });
     },
 
-    "page.world": async ({ res, route, appContext }) => {
+    "page.world": async ({ res, route, requestSession, appContext }) => {
       const params = route.params ?? {};
       const rootWidget = params.rootWidget ?? null;
       if (!rootWidget) {
@@ -353,6 +360,13 @@ export function createHandlers({
         frontendProgramId: params.frontendProgram ?? null,
         tutorialPage: "world"
       });
+      const guidance = guidanceConfigForSession({
+        requestSession,
+        tutorialProgressFor,
+        guidanceProgressFor,
+        runtimeContributions,
+        surface: tutorialSurface
+      });
       send(res, 200, "text/html", renderWidgetPage(world, {
         actor: frontendHost,
         rootWidget,
@@ -365,7 +379,9 @@ export function createHandlers({
           surfaceContext: tutorialSurface.context,
           surfaceRouteId: tutorialSurface.routeId,
           surfaceRootWidgetId: tutorialSurface.rootWidgetId,
-          surfaceProgramId: tutorialSurface.frontendProgramId
+          surfaceProgramId: tutorialSurface.frontendProgramId,
+          guidance,
+          tutorial: guidance
         }
       }));
     },
@@ -418,7 +434,7 @@ export function createHandlers({
         byFile: Object.fromEntries([...ast.byFile.entries()].map(([file, nodes]) => [file, nodes])),
         byTarget: Object.fromEntries([...ast.byTarget.entries()].map(([target, nodes]) => [target, nodes]))
       };
-      logger.info("worldGraph.projected", { requestId, witnesses: visible.length, nodes: graph.nodes.length, edges: graph.edges.length });
+      logInfo("worldGraph.projected", { requestId, witnesses: visible.length, nodes: graph.nodes.length, edges: graph.edges.length });
       sendJson(res, 200, { graph, astNodes });
     },
 

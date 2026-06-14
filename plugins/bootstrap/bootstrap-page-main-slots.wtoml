@@ -1,0 +1,231 @@
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-top-cards-slot"
+wtomlFile = "bootstrap-top-cards.wtoml"
+rootWidget = "bootstrap_top_cards_root"
+frontendProgram = "bootstrap_top_cards_program"
+frontendProgramScriptId = "witness-bootstrap-top-cards-program"
+initialStateScriptId = "witness-bootstrap-top-cards-initial-state"
+initialStateInto = "bootstrapIdentityView"
+initialStateSource = "bootstrapIdentityView"
+replacementSlotDomId = "bootstrap-guidance-card-slot"
+replacementContentSource = "guidanceCard"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-governance-contexts-slot"
+wtomlFile = "bootstrap-app-authoring-controls.wtoml"
+rootWidget = "bootstrap_context_authoring_controls_root"
+frontendProgram = "bootstrap_context_authoring_controls_program"
+frontendProgramScriptId = "witness-bootstrap-context-authoring-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-context-binding-create-slot"
+wtomlFile = "bootstrap-scoped-controls.wtoml"
+rootWidget = "bootstrap_context_binding_create_controls_root"
+frontendProgram = "bootstrap_context_binding_create_controls_program"
+frontendProgramScriptId = "witness-bootstrap-context-binding-create-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-context-binding-remove-slot"
+wtomlFile = "bootstrap-remove-controls.wtoml"
+rootWidget = "bootstrap_context_binding_remove_controls_root"
+frontendProgram = "bootstrap_context_binding_remove_controls_program"
+frontendProgramScriptId = "witness-bootstrap-context-binding-remove-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-context-export-create-slot"
+wtomlFile = "bootstrap-scoped-controls.wtoml"
+rootWidget = "bootstrap_context_export_create_controls_root"
+frontendProgram = "bootstrap_context_export_create_controls_program"
+frontendProgramScriptId = "witness-bootstrap-context-export-create-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-context-export-remove-slot"
+wtomlFile = "bootstrap-remove-controls.wtoml"
+rootWidget = "bootstrap_context_export_remove_controls_root"
+frontendProgram = "bootstrap_context_export_remove_controls_program"
+frontendProgramScriptId = "witness-bootstrap-context-export-remove-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-context-import-create-slot"
+wtomlFile = "bootstrap-scoped-controls.wtoml"
+rootWidget = "bootstrap_context_import_create_controls_root"
+frontendProgram = "bootstrap_context_import_create_controls_program"
+frontendProgramScriptId = "witness-bootstrap-context-import-create-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-context-import-remove-slot"
+wtomlFile = "bootstrap-remove-controls.wtoml"
+rootWidget = "bootstrap_context_import_remove_controls_root"
+frontendProgram = "bootstrap_context_import_remove_controls_program"
+frontendProgramScriptId = "witness-bootstrap-context-import-remove-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-stewardship-create-slot"
+wtomlFile = "bootstrap-scoped-controls.wtoml"
+rootWidget = "bootstrap_stewardship_create_controls_root"
+frontendProgram = "bootstrap_stewardship_create_controls_program"
+frontendProgramScriptId = "witness-bootstrap-stewardship-create-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-stewardship-remove-slot"
+wtomlFile = "bootstrap-remove-controls.wtoml"
+rootWidget = "bootstrap_stewardship_remove_controls_root"
+frontendProgram = "bootstrap_stewardship_remove_controls_program"
+frontendProgramScriptId = "witness-bootstrap-stewardship-remove-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-proposal-create-slot"
+wtomlFile = "bootstrap-proposal-create-controls.wtoml"
+rootWidget = "bootstrap_proposal_create_controls_root"
+frontendProgram = "bootstrap_proposal_create_controls_program"
+frontendProgramScriptId = "witness-bootstrap-proposal-create-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-proposal-review-slot"
+wtomlFile = "bootstrap-proposal-review-controls.wtoml"
+rootWidget = "bootstrap_proposal_review_controls_root"
+frontendProgram = "bootstrap_proposal_review_controls_program"
+frontendProgramScriptId = "witness-bootstrap-proposal-review-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-widgets-slot"
+wtomlFile = "bootstrap-app-authoring-controls.wtoml"
+rootWidget = "bootstrap_widget_authoring_controls_root"
+frontendProgram = "bootstrap_widget_authoring_controls_program"
+frontendProgramScriptId = "witness-bootstrap-widget-authoring-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-frontend-programs-slot"
+wtomlFile = "bootstrap-app-authoring-controls.wtoml"
+rootWidget = "bootstrap_frontend_program_authoring_controls_root"
+frontendProgram = "bootstrap_frontend_program_authoring_controls_program"
+frontendProgramScriptId = "witness-bootstrap-frontend-program-authoring-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-backend-authoring-slot"
+wtomlFile = "bootstrap-backend-authoring-controls.wtoml"
+rootWidget = "bootstrap_backend_authoring_controls_root"
+frontendProgram = "bootstrap_backend_authoring_controls_program"
+frontendProgramScriptId = "witness-bootstrap-backend-authoring-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-backend-version-slot"
+wtomlFile = "bootstrap-backend-version-controls.wtoml"
+rootWidget = "bootstrap_backend_version_controls_root"
+frontendProgram = "bootstrap_backend_version_controls_program"
+frontendProgramScriptId = "witness-bootstrap-backend-version-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-route-mounts-slot"
+wtomlFile = "bootstrap-app-authoring-controls.wtoml"
+rootWidget = "bootstrap_route_mount_authoring_controls_root"
+frontendProgram = "bootstrap_route_mount_authoring_controls_program"
+frontendProgramScriptId = "witness-bootstrap-route-mount-authoring-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-runtime-wiring-slot"
+wtomlFile = "bootstrap-app-authoring-controls.wtoml"
+rootWidget = "bootstrap_runner_authoring_controls_root"
+frontendProgram = "bootstrap_runner_authoring_controls_program"
+frontendProgramScriptId = "witness-bootstrap-runner-authoring-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-runtime-plugin-install-slot"
+wtomlFile = "bootstrap-runtime-integration-controls.wtoml"
+rootWidget = "bootstrap_runtime_plugin_install_controls_root"
+frontendProgram = "bootstrap_runtime_plugin_install_controls_program"
+frontendProgramScriptId = "witness-bootstrap-runtime-plugin-install-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-runtime-plugin-remove-slot"
+wtomlFile = "bootstrap-remove-controls.wtoml"
+rootWidget = "bootstrap_runtime_plugin_remove_controls_root"
+frontendProgram = "bootstrap_runtime_plugin_remove_controls_program"
+frontendProgramScriptId = "witness-bootstrap-runtime-plugin-remove-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-runtime-plugin-install-proposal-slot"
+wtomlFile = "bootstrap-proposal-adjacent-controls.wtoml"
+rootWidget = "bootstrap_runtime_plugin_install_proposal_controls_root"
+frontendProgram = "bootstrap_runtime_plugin_install_proposal_controls_program"
+frontendProgramScriptId = "witness-bootstrap-runtime-plugin-install-proposal-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-runtime-plugin-remove-proposal-slot"
+wtomlFile = "bootstrap-proposal-adjacent-controls.wtoml"
+rootWidget = "bootstrap_runtime_plugin_remove_proposal_controls_root"
+frontendProgram = "bootstrap_runtime_plugin_remove_proposal_controls_program"
+frontendProgramScriptId = "witness-bootstrap-runtime-plugin-remove-proposal-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-mcp-server-controls-slot"
+wtomlFile = "bootstrap-runtime-integration-controls.wtoml"
+rootWidget = "bootstrap_mcp_server_controls_root"
+frontendProgram = "bootstrap_mcp_server_controls_program"
+frontendProgramScriptId = "witness-bootstrap-mcp-server-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-mcp-tool-install-controls-slot"
+wtomlFile = "bootstrap-runtime-integration-controls.wtoml"
+rootWidget = "bootstrap_mcp_tool_install_controls_root"
+frontendProgram = "bootstrap_mcp_tool_install_controls_program"
+frontendProgramScriptId = "witness-bootstrap-mcp-tool-install-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-mcp-tool-remove-controls-slot"
+wtomlFile = "bootstrap-remove-controls.wtoml"
+rootWidget = "bootstrap_mcp_tool_remove_controls_root"
+frontendProgram = "bootstrap_mcp_tool_remove_controls_program"
+frontendProgramScriptId = "witness-bootstrap-mcp-tool-remove-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-mcp-server-proposal-slot"
+wtomlFile = "bootstrap-proposal-adjacent-controls.wtoml"
+rootWidget = "bootstrap_mcp_server_proposal_controls_root"
+frontendProgram = "bootstrap_mcp_server_proposal_controls_program"
+frontendProgramScriptId = "witness-bootstrap-mcp-server-proposal-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-mcp-tool-install-proposal-slot"
+wtomlFile = "bootstrap-proposal-adjacent-controls.wtoml"
+rootWidget = "bootstrap_mcp_tool_install_proposal_controls_root"
+frontendProgram = "bootstrap_mcp_tool_install_proposal_controls_program"
+frontendProgramScriptId = "witness-bootstrap-mcp-tool-install-proposal-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-mcp-tool-remove-proposal-slot"
+wtomlFile = "bootstrap-proposal-adjacent-controls.wtoml"
+rootWidget = "bootstrap_mcp_tool_remove_proposal_controls_root"
+frontendProgram = "bootstrap_mcp_tool_remove_proposal_controls_program"
+frontendProgramScriptId = "witness-bootstrap-mcp-tool-remove-proposal-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-capability-create-slot"
+wtomlFile = "bootstrap-capability-controls.wtoml"
+rootWidget = "bootstrap_capability_create_controls_root"
+frontendProgram = "bootstrap_capability_create_controls_program"
+frontendProgramScriptId = "witness-bootstrap-capability-create-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-capability-install-slot"
+wtomlFile = "bootstrap-capability-controls.wtoml"
+rootWidget = "bootstrap_capability_install_controls_root"
+frontendProgram = "bootstrap_capability_install_controls_program"
+frontendProgramScriptId = "witness-bootstrap-capability-install-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-capability-remove-slot"
+wtomlFile = "bootstrap-remove-controls.wtoml"
+rootWidget = "bootstrap_capability_remove_controls_root"
+frontendProgram = "bootstrap_capability_remove_controls_program"
+frontendProgramScriptId = "witness-bootstrap-capability-remove-controls-program"
+
+[[bootstrapPageSlot]]
+slotDomId = "bootstrap-starter-controls-slot"
+wtomlFile = "bootstrap-starter-controls.wtoml"
+rootWidget = "bootstrap_starter_controls_root"
+frontendProgram = "bootstrap_starter_controls_program"
+frontendProgramScriptId = "witness-bootstrap-starter-controls-program"
+initialStateScriptId = "witness-bootstrap-starter-controls-initial-state"
+initialStateInto = "bootstrapStarterPlan"
+initialStateSource = "bootstrapStarterPlan"

@@ -10,6 +10,20 @@ import desire/v3-alpha
 
 chart GoodmanDiagram of BoltFatigue {
   frame cartesian
+  prop pageStylesheetHref = "/app-static/app/engentus-chart-pages.css"
+  prop bodyClass = "chart-page chart-page--goodman"
+  prop viewportClass = "chart-page__viewport"
+  prop hostClass = "chart-page__host chart-page__host--goodman"
+  prop mountId = "chart-svg"
+  prop mountClass = "chart-page__mount chart-page__mount--goodman"
+  prop mountTag = "svg"
+  prop functionsModules = "/app-static/app/chart-functions/goodman-stdlib.js"
+  prop functionsExports = "goodmanFunctions"
+  prop overlayCanvasId = "mc-canvas"
+  prop overlayCanvasClass = "chart-page__overlay-canvas"
+  prop tooltipId = "chart-tip"
+  prop tooltipClass = "chart-page__tooltip chart-page__tooltip--goodman"
+  prop pageBackground = "#ffffff"
 
   x sm
   x.domain 0 650
@@ -37,6 +51,21 @@ chart GoodmanDiagram of BoltFatigue {
 // band/cloud marks over the reduced fields produced by `reduce … over sample`.
 chart GoodmanMCBands of BoltFatigueMC {
   frame cartesian
+  prop pageStylesheetHref = "/app-static/app/engentus-chart-pages.css"
+  prop bodyClass = "chart-page chart-page--goodman"
+  prop viewportClass = "chart-page__viewport"
+  prop hostClass = "chart-page__host chart-page__host--goodman"
+  prop mountId = "chart-svg"
+  prop mountClass = "chart-page__mount chart-page__mount--goodman"
+  prop mountTag = "svg"
+  prop functionsModules = "/app-static/app/chart-functions/goodman-stdlib.js,/app-static/app/chart-functions/sampling.js"
+  prop functionsExports = "goodmanFunctions,samplingFunctions"
+  prop overlayCanvasId = "mc-canvas"
+  prop overlayCanvasClass = "chart-page__overlay-canvas"
+  prop tooltipId = "chart-tip"
+  prop tooltipClass = "chart-page__tooltip chart-page__tooltip--goodman"
+  prop pageBackground = "#ffffff"
+
   x sm
   x.domain 0 650
   x.label "Mean stress σm (MPa)"

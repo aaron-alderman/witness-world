@@ -33,7 +33,7 @@
       "status": "none"
     }
   },
-  "author": "Engentus port",
+  "author": "Witness Runtime",
   "license": "MIT",
   "contributes": {
     "capabilities": [

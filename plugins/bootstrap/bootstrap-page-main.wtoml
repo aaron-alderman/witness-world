@@ -1,0 +1,771 @@
+[[defaults]]
+actor = "frontendHost"
+context = "frontend"
+
+[[page]]
+id = "bootstrap_page_main_root"
+children = ["bootstrap_left_column", "bootstrap_right_column"]
+
+[[box]]
+id = "bootstrap_left_column"
+class = "presentation-column column"
+children = ["bootstrap_top_cards_slot", "bootstrap_governance_card", "bootstrap_app_surface_card", "bootstrap_starter_controls_slot"]
+
+[[box]]
+id = "bootstrap_top_cards_slot"
+domId = "bootstrap-top-cards-slot"
+
+[[box]]
+id = "bootstrap_governance_card"
+class = "surface-card surface-stack"
+children = ["bootstrap_governance_badge", "bootstrap_governance_heading", "bootstrap_governance_copy", "bootstrap_governance_contexts", "bootstrap_governance_scope", "bootstrap_governance_stewardship", "bootstrap_governance_proposals"]
+
+[[text]]
+id = "bootstrap_governance_badge"
+class = "surface-badge"
+text = "Governance"
+
+[[heading]]
+id = "bootstrap_governance_heading"
+level = 2
+text = "Contexts, Stewardship, And Proposals"
+
+[[text]]
+id = "bootstrap_governance_copy"
+text = "This slice makes authority explicit. Scoped objects can be authored under a context, stewardship can be delegated, and guarded writes can be proposed for later approval."
+
+[[details]]
+id = "bootstrap_governance_contexts"
+open = true
+children = ["bootstrap_governance_contexts_summary", "bootstrap_governance_contexts_slot"]
+
+[[summary]]
+id = "bootstrap_governance_contexts_summary"
+text = "Contexts"
+
+[[box]]
+id = "bootstrap_governance_contexts_slot"
+domId = "bootstrap-governance-contexts-slot"
+
+[[details]]
+id = "bootstrap_governance_scope"
+children = ["bootstrap_governance_scope_summary", "bootstrap_context_binding_create_slot", "bootstrap_context_binding_remove_slot", "bootstrap_context_export_create_slot", "bootstrap_context_export_remove_slot", "bootstrap_context_import_create_slot", "bootstrap_context_import_remove_slot"]
+
+[[summary]]
+id = "bootstrap_governance_scope_summary"
+text = "Naming And Scope"
+
+[[box]]
+id = "bootstrap_context_binding_create_slot"
+domId = "bootstrap-context-binding-create-slot"
+
+[[box]]
+id = "bootstrap_context_binding_remove_slot"
+domId = "bootstrap-context-binding-remove-slot"
+
+[[box]]
+id = "bootstrap_context_export_create_slot"
+domId = "bootstrap-context-export-create-slot"
+
+[[box]]
+id = "bootstrap_context_export_remove_slot"
+domId = "bootstrap-context-export-remove-slot"
+
+[[box]]
+id = "bootstrap_context_import_create_slot"
+domId = "bootstrap-context-import-create-slot"
+
+[[box]]
+id = "bootstrap_context_import_remove_slot"
+domId = "bootstrap-context-import-remove-slot"
+
+[[details]]
+id = "bootstrap_governance_stewardship"
+children = ["bootstrap_governance_stewardship_summary", "bootstrap_stewardship_create_slot", "bootstrap_stewardship_remove_slot"]
+
+[[summary]]
+id = "bootstrap_governance_stewardship_summary"
+text = "Stewardship"
+
+[[box]]
+id = "bootstrap_stewardship_create_slot"
+domId = "bootstrap-stewardship-create-slot"
+
+[[box]]
+id = "bootstrap_stewardship_remove_slot"
+domId = "bootstrap-stewardship-remove-slot"
+
+[[details]]
+id = "bootstrap_governance_proposals"
+children = ["bootstrap_governance_proposals_summary", "bootstrap_proposal_create_slot", "bootstrap_proposal_review_slot"]
+
+[[summary]]
+id = "bootstrap_governance_proposals_summary"
+text = "Proposals"
+
+[[box]]
+id = "bootstrap_proposal_create_slot"
+domId = "bootstrap-proposal-create-slot"
+
+[[box]]
+id = "bootstrap_proposal_review_slot"
+domId = "bootstrap-proposal-review-slot"
+
+[[box]]
+id = "bootstrap_app_surface_card"
+class = "surface-card surface-stack"
+children = ["bootstrap_app_surface_badge", "bootstrap_app_surface_heading", "bootstrap_app_surface_copy", "bootstrap_widgets_details", "bootstrap_frontend_programs_details", "bootstrap_backend_programs_details", "bootstrap_route_mounts_details", "bootstrap_runtime_wiring_details", "bootstrap_runtime_plugins_details", "bootstrap_mcp_details", "bootstrap_capabilities_details"]
+
+[[text]]
+id = "bootstrap_app_surface_badge"
+class = "surface-badge"
+text = "App Surface"
+
+[[heading]]
+id = "bootstrap_app_surface_heading"
+level = 2
+text = "Focused Builders"
+
+[[text]]
+id = "bootstrap_app_surface_copy"
+text = "These forms edit app-visible structures. Advanced step conditions and params use JSON when needed, but the main surface stays oriented around the app rather than the substrate."
+
+[[details]]
+id = "bootstrap_widgets_details"
+open = true
+children = ["bootstrap_widgets_summary", "bootstrap_widgets_slot"]
+
+[[summary]]
+id = "bootstrap_widgets_summary"
+text = "Widgets"
+
+[[box]]
+id = "bootstrap_widgets_slot"
+domId = "bootstrap-widgets-slot"
+
+[[details]]
+id = "bootstrap_frontend_programs_details"
+children = ["bootstrap_frontend_programs_summary", "bootstrap_frontend_programs_slot"]
+
+[[summary]]
+id = "bootstrap_frontend_programs_summary"
+text = "Frontend Programs"
+
+[[box]]
+id = "bootstrap_frontend_programs_slot"
+domId = "bootstrap-frontend-programs-slot"
+
+[[details]]
+id = "bootstrap_backend_programs_details"
+children = ["bootstrap_backend_programs_summary", "bootstrap_backend_authoring_slot", "bootstrap_backend_version_slot"]
+
+[[summary]]
+id = "bootstrap_backend_programs_summary"
+text = "Backend Programs"
+
+[[box]]
+id = "bootstrap_backend_authoring_slot"
+domId = "bootstrap-backend-authoring-slot"
+
+[[box]]
+id = "bootstrap_backend_version_slot"
+domId = "bootstrap-backend-version-slot"
+
+[[details]]
+id = "bootstrap_route_mounts_details"
+children = ["bootstrap_route_mounts_summary", "bootstrap_route_mounts_slot"]
+
+[[summary]]
+id = "bootstrap_route_mounts_summary"
+text = "Routes And Mounts"
+
+[[box]]
+id = "bootstrap_route_mounts_slot"
+domId = "bootstrap-route-mounts-slot"
+
+[[details]]
+id = "bootstrap_runtime_wiring_details"
+children = ["bootstrap_runtime_wiring_summary", "bootstrap_runtime_wiring_slot"]
+
+[[summary]]
+id = "bootstrap_runtime_wiring_summary"
+text = "Runtime Wiring"
+
+[[box]]
+id = "bootstrap_runtime_wiring_slot"
+domId = "bootstrap-runtime-wiring-slot"
+
+[[details]]
+id = "bootstrap_runtime_plugins_details"
+children = ["bootstrap_runtime_plugins_summary", "bootstrap_runtime_plugins_note", "bootstrap_runtime_plugins_note_muted", "bootstrap_runtime_plugin_review_stack", "bootstrap_runtime_plugin_install_slot", "bootstrap_runtime_plugin_remove_slot", "bootstrap_runtime_plugin_install_proposal_slot", "bootstrap_runtime_plugin_remove_proposal_slot"]
+
+[[summary]]
+id = "bootstrap_runtime_plugins_summary"
+text = "Runtime Plugins"
+
+[[text]]
+id = "bootstrap_runtime_plugins_note"
+class = "surface-note surface-note-callout"
+text = "Runtime plugin installs are authored on a specific server runner. Local plugin packages stay bundle-bridge only in this slice."
+
+[[text]]
+id = "bootstrap_runtime_plugins_note_muted"
+class = "surface-note surface-note-callout"
+text = "Bootstrap review shows durable authored runner intent only. CLI and environment plugin overlays are excluded here and remain visible in runtime diagnostics/startup reporting."
+
+[[box]]
+id = "bootstrap_runtime_plugin_review_stack"
+class = "surface-stack"
+children = ["bootstrap_runtime_plugin_review_grid", "bootstrap_runtime_plugin_review_note", "bootstrap_runtime_plugin_review_detail"]
+
+[[box]]
+id = "bootstrap_runtime_plugin_review_grid"
+class = "surface-grid-2"
+children = ["bootstrap_runtime_plugin_review_runner_label", "bootstrap_runtime_plugin_review_plugin_label"]
+
+[[label]]
+id = "bootstrap_runtime_plugin_review_runner_label"
+children = ["bootstrap_runtime_plugin_review_runner_text", "bootstrap_runtime_plugin_review_runner_select"]
+
+[[text]]
+id = "bootstrap_runtime_plugin_review_runner_text"
+text = "Review Server Runner"
+
+[[select]]
+id = "bootstrap_runtime_plugin_review_runner_select"
+domId = "runtime-plugin-review-runner"
+name = "runtimePluginReviewRunner"
+
+[[label]]
+id = "bootstrap_runtime_plugin_review_plugin_label"
+children = ["bootstrap_runtime_plugin_review_plugin_text", "bootstrap_runtime_plugin_review_plugin_select"]
+
+[[text]]
+id = "bootstrap_runtime_plugin_review_plugin_text"
+text = "Review Plugin"
+
+[[select]]
+id = "bootstrap_runtime_plugin_review_plugin_select"
+domId = "runtime-plugin-review-plugin"
+name = "runtimePluginReviewPlugin"
+
+[[text]]
+id = "bootstrap_runtime_plugin_review_note"
+class = "surface-note surface-note-callout"
+domId = "runtime-plugin-review-note"
+text = ""
+
+[[box]]
+id = "bootstrap_runtime_plugin_review_detail"
+domId = "runtime-plugin-review-detail"
+class = "surface-state-list"
+
+[[frontendProgram]]
+id = "bootstrap_page_main_program"
+rootWidget = "bootstrap_page_main_root"
+
+[[step]]
+program = "bootstrap_page_main_program"
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_runtime_plugin_review_runner_select"
+eventName = "witness:bootstrap-runtime-plugin-review-sync"
+detail = { source = "bootstrap-page-main", family = "runtime-plugin-review", trigger = "server-runner" }
+
+[[step]]
+program = "bootstrap_page_main_program"
+order = 0
+op = "dispatchDomEvent"
+on = "change:bootstrap_runtime_plugin_review_plugin_select"
+eventName = "witness:bootstrap-runtime-plugin-review-sync"
+detail = { source = "bootstrap-page-main", family = "runtime-plugin-review", trigger = "plugin" }
+
+[[box]]
+id = "bootstrap_runtime_plugin_install_slot"
+domId = "bootstrap-runtime-plugin-install-slot"
+
+[[box]]
+id = "bootstrap_runtime_plugin_remove_slot"
+domId = "bootstrap-runtime-plugin-remove-slot"
+
+[[box]]
+id = "bootstrap_runtime_plugin_install_proposal_slot"
+domId = "bootstrap-runtime-plugin-install-proposal-slot"
+
+[[box]]
+id = "bootstrap_runtime_plugin_remove_proposal_slot"
+domId = "bootstrap-runtime-plugin-remove-proposal-slot"
+
+[[details]]
+id = "bootstrap_mcp_details"
+children = ["bootstrap_mcp_summary", "bootstrap_mcp_note", "bootstrap_mcp_inventory_grid", "bootstrap_mcp_server_controls_slot", "bootstrap_mcp_tool_install_controls_slot", "bootstrap_mcp_tool_remove_controls_slot", "bootstrap_mcp_server_proposal_slot", "bootstrap_mcp_tool_install_proposal_slot", "bootstrap_mcp_tool_remove_proposal_slot"]
+
+[[summary]]
+id = "bootstrap_mcp_summary"
+text = "MCP"
+
+[[text]]
+id = "bootstrap_mcp_note"
+class = "surface-note surface-note-callout"
+text = "MCP servers and tool installs stay shell-facing in this slice. Transport visibility is descriptive, delegated mode runs as the caller, service mode requires a configured serviceIdentity, and scope JSON narrows where an installed tool may act."
+
+[[box]]
+id = "bootstrap_mcp_inventory_grid"
+class = "surface-grid-auto"
+children = ["bootstrap_mcp_servers_inventory_box", "bootstrap_mcp_tools_inventory_box"]
+
+[[box]]
+id = "bootstrap_mcp_servers_inventory_box"
+children = ["bootstrap_mcp_servers_kicker", "bootstrap_mcp_server_inventory"]
+
+[[text]]
+id = "bootstrap_mcp_servers_kicker"
+class = "surface-kicker"
+text = "MCP Servers"
+
+[[box]]
+id = "bootstrap_mcp_server_inventory"
+domId = "mcp-server-inventory"
+class = "surface-state-list"
+
+[[box]]
+id = "bootstrap_mcp_tools_inventory_box"
+children = ["bootstrap_mcp_tools_kicker", "bootstrap_mcp_tool_inventory"]
+
+[[text]]
+id = "bootstrap_mcp_tools_kicker"
+class = "surface-kicker"
+text = "Installed MCP Tools"
+
+[[box]]
+id = "bootstrap_mcp_tool_inventory"
+domId = "mcp-tool-inventory"
+class = "surface-state-list"
+
+[[box]]
+id = "bootstrap_mcp_server_controls_slot"
+domId = "bootstrap-mcp-server-controls-slot"
+
+[[box]]
+id = "bootstrap_mcp_tool_install_controls_slot"
+domId = "bootstrap-mcp-tool-install-controls-slot"
+
+[[box]]
+id = "bootstrap_mcp_tool_remove_controls_slot"
+domId = "bootstrap-mcp-tool-remove-controls-slot"
+
+[[box]]
+id = "bootstrap_mcp_server_proposal_slot"
+domId = "bootstrap-mcp-server-proposal-slot"
+
+[[box]]
+id = "bootstrap_mcp_tool_install_proposal_slot"
+domId = "bootstrap-mcp-tool-install-proposal-slot"
+
+[[box]]
+id = "bootstrap_mcp_tool_remove_proposal_slot"
+domId = "bootstrap-mcp-tool-remove-proposal-slot"
+
+[[details]]
+id = "bootstrap_capabilities_details"
+children = ["bootstrap_capabilities_summary", "bootstrap_capability_create_slot", "bootstrap_capability_install_slot", "bootstrap_capability_remove_slot"]
+
+[[summary]]
+id = "bootstrap_capabilities_summary"
+text = "Capabilities"
+
+[[box]]
+id = "bootstrap_capability_create_slot"
+domId = "bootstrap-capability-create-slot"
+
+[[box]]
+id = "bootstrap_capability_install_slot"
+domId = "bootstrap-capability-install-slot"
+
+[[box]]
+id = "bootstrap_capability_remove_slot"
+domId = "bootstrap-capability-remove-slot"
+
+[[box]]
+id = "bootstrap_starter_controls_slot"
+domId = "bootstrap-starter-controls-slot"
+
+[[box]]
+id = "bootstrap_right_column"
+class = "presentation-column column"
+children = ["bootstrap_authored_state_card"]
+
+[[box]]
+id = "bootstrap_authored_state_card"
+class = "surface-card surface-stack"
+guidanceTarget = "authored-state"
+children = ["bootstrap_authored_state_badge", "bootstrap_authored_state_heading", "bootstrap_authored_state_copy", "bootstrap_authored_state_stack"]
+
+[[text]]
+id = "bootstrap_authored_state_badge"
+class = "surface-badge"
+text = "Current World"
+
+[[heading]]
+id = "bootstrap_authored_state_heading"
+level = 2
+text = "Authored State"
+
+[[text]]
+id = "bootstrap_authored_state_copy"
+text = "The active guidance uses the same authored structures shown here. Nothing is hidden behind a fake wizard layer."
+
+[[box]]
+id = "bootstrap_authored_state_stack"
+class = "surface-stack"
+children = ["bootstrap_state_contexts_section", "bootstrap_state_context_bindings_section", "bootstrap_state_context_exports_section", "bootstrap_state_context_imports_section", "bootstrap_state_context_scopes_section", "bootstrap_state_perspectives_section", "bootstrap_state_stewardships_section", "bootstrap_state_proposals_section", "bootstrap_state_authority_section", "bootstrap_state_identities_section", "bootstrap_state_widgets_section", "bootstrap_state_programs_section", "bootstrap_state_steps_section", "bootstrap_state_backend_programs_section", "bootstrap_state_backend_versions_section", "bootstrap_state_backend_steps_section", "bootstrap_state_routes_section", "bootstrap_state_serves_section", "bootstrap_state_runners_section", "bootstrap_state_capabilities_section", "bootstrap_state_capability_installs_section", "bootstrap_state_runtime_plugin_installs_section", "bootstrap_state_runtime_plugin_availability_section", "bootstrap_state_mcp_servers_section", "bootstrap_state_mcp_tool_installs_section"]
+
+[[section]]
+id = "bootstrap_state_contexts_section"
+children = ["bootstrap_state_contexts_heading", "bootstrap_state_contexts_list"]
+
+[[heading]]
+id = "bootstrap_state_contexts_heading"
+level = 3
+text = "Contexts"
+
+[[box]]
+id = "bootstrap_state_contexts_list"
+domId = "state-contexts"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_context_bindings_section"
+children = ["bootstrap_state_context_bindings_heading", "bootstrap_state_context_bindings_list"]
+
+[[heading]]
+id = "bootstrap_state_context_bindings_heading"
+level = 3
+text = "Context Bindings"
+
+[[box]]
+id = "bootstrap_state_context_bindings_list"
+domId = "state-context-bindings"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_context_exports_section"
+children = ["bootstrap_state_context_exports_heading", "bootstrap_state_context_exports_list"]
+
+[[heading]]
+id = "bootstrap_state_context_exports_heading"
+level = 3
+text = "Context Exports"
+
+[[box]]
+id = "bootstrap_state_context_exports_list"
+domId = "state-context-exports"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_context_imports_section"
+children = ["bootstrap_state_context_imports_heading", "bootstrap_state_context_imports_list"]
+
+[[heading]]
+id = "bootstrap_state_context_imports_heading"
+level = 3
+text = "Context Imports"
+
+[[box]]
+id = "bootstrap_state_context_imports_list"
+domId = "state-context-imports"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_context_scopes_section"
+children = ["bootstrap_state_context_scopes_heading", "bootstrap_state_context_scopes_list"]
+
+[[heading]]
+id = "bootstrap_state_context_scopes_heading"
+level = 3
+text = "Context Scope"
+
+[[box]]
+id = "bootstrap_state_context_scopes_list"
+domId = "state-context-scopes"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_perspectives_section"
+children = ["bootstrap_state_perspectives_heading", "bootstrap_state_perspectives_list"]
+
+[[heading]]
+id = "bootstrap_state_perspectives_heading"
+level = 3
+text = "Perspectives"
+
+[[box]]
+id = "bootstrap_state_perspectives_list"
+domId = "state-perspectives"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_stewardships_section"
+children = ["bootstrap_state_stewardships_heading", "bootstrap_state_stewardships_list"]
+
+[[heading]]
+id = "bootstrap_state_stewardships_heading"
+level = 3
+text = "Stewardships"
+
+[[box]]
+id = "bootstrap_state_stewardships_list"
+domId = "state-stewardships"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_proposals_section"
+children = ["bootstrap_state_proposals_heading", "bootstrap_state_proposals_list"]
+
+[[heading]]
+id = "bootstrap_state_proposals_heading"
+level = 3
+text = "Proposals"
+
+[[box]]
+id = "bootstrap_state_proposals_list"
+domId = "state-proposals"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_authority_section"
+children = ["bootstrap_state_authority_heading", "bootstrap_state_authority_list"]
+
+[[heading]]
+id = "bootstrap_state_authority_heading"
+level = 3
+text = "Authority"
+
+[[box]]
+id = "bootstrap_state_authority_list"
+domId = "state-authority"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_identities_section"
+children = ["bootstrap_state_identities_heading", "bootstrap_state_identities_list"]
+
+[[heading]]
+id = "bootstrap_state_identities_heading"
+level = 3
+text = "Identities"
+
+[[box]]
+id = "bootstrap_state_identities_list"
+domId = "state-identities"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_widgets_section"
+children = ["bootstrap_state_widgets_heading", "bootstrap_state_widgets_list"]
+
+[[heading]]
+id = "bootstrap_state_widgets_heading"
+level = 3
+text = "Widgets"
+
+[[box]]
+id = "bootstrap_state_widgets_list"
+domId = "state-widgets"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_programs_section"
+children = ["bootstrap_state_programs_heading", "bootstrap_state_programs_list"]
+
+[[heading]]
+id = "bootstrap_state_programs_heading"
+level = 3
+text = "Frontend Programs"
+
+[[box]]
+id = "bootstrap_state_programs_list"
+domId = "state-programs"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_steps_section"
+children = ["bootstrap_state_steps_heading", "bootstrap_state_steps_list"]
+
+[[heading]]
+id = "bootstrap_state_steps_heading"
+level = 3
+text = "Frontend Steps"
+
+[[box]]
+id = "bootstrap_state_steps_list"
+domId = "state-steps"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_backend_programs_section"
+children = ["bootstrap_state_backend_programs_heading", "bootstrap_state_backend_programs_list"]
+
+[[heading]]
+id = "bootstrap_state_backend_programs_heading"
+level = 3
+text = "Backend Programs"
+
+[[box]]
+id = "bootstrap_state_backend_programs_list"
+domId = "state-backend-programs"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_backend_versions_section"
+children = ["bootstrap_state_backend_versions_heading", "bootstrap_state_backend_versions_list"]
+
+[[heading]]
+id = "bootstrap_state_backend_versions_heading"
+level = 3
+text = "Backend Versions"
+
+[[box]]
+id = "bootstrap_state_backend_versions_list"
+domId = "state-backend-program-versions"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_backend_steps_section"
+children = ["bootstrap_state_backend_steps_heading", "bootstrap_state_backend_steps_list"]
+
+[[heading]]
+id = "bootstrap_state_backend_steps_heading"
+level = 3
+text = "Backend Steps"
+
+[[box]]
+id = "bootstrap_state_backend_steps_list"
+domId = "state-backend-steps"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_routes_section"
+children = ["bootstrap_state_routes_heading", "bootstrap_state_routes_list"]
+
+[[heading]]
+id = "bootstrap_state_routes_heading"
+level = 3
+text = "Routes"
+
+[[box]]
+id = "bootstrap_state_routes_list"
+domId = "state-routes"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_serves_section"
+children = ["bootstrap_state_serves_heading", "bootstrap_state_serves_list"]
+
+[[heading]]
+id = "bootstrap_state_serves_heading"
+level = 3
+text = "Serve Mounts"
+
+[[box]]
+id = "bootstrap_state_serves_list"
+domId = "state-serves"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_runners_section"
+children = ["bootstrap_state_runners_heading", "bootstrap_state_runners_list"]
+
+[[heading]]
+id = "bootstrap_state_runners_heading"
+level = 3
+text = "Server Runners"
+
+[[box]]
+id = "bootstrap_state_runners_list"
+domId = "state-runners"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_capabilities_section"
+children = ["bootstrap_state_capabilities_heading", "bootstrap_state_capabilities_list"]
+
+[[heading]]
+id = "bootstrap_state_capabilities_heading"
+level = 3
+text = "Capabilities"
+
+[[box]]
+id = "bootstrap_state_capabilities_list"
+domId = "state-capabilities"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_capability_installs_section"
+children = ["bootstrap_state_capability_installs_heading", "bootstrap_state_capability_installs_list"]
+
+[[heading]]
+id = "bootstrap_state_capability_installs_heading"
+level = 3
+text = "Capability Installs"
+
+[[box]]
+id = "bootstrap_state_capability_installs_list"
+domId = "state-capability-installs"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_runtime_plugin_installs_section"
+children = ["bootstrap_state_runtime_plugin_installs_heading", "bootstrap_state_runtime_plugin_installs_list"]
+
+[[heading]]
+id = "bootstrap_state_runtime_plugin_installs_heading"
+level = 3
+text = "Runtime Plugin Installs"
+
+[[box]]
+id = "bootstrap_state_runtime_plugin_installs_list"
+domId = "state-runtime-plugin-installs"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_runtime_plugin_availability_section"
+children = ["bootstrap_state_runtime_plugin_availability_heading", "bootstrap_state_runtime_plugin_availability_list"]
+
+[[heading]]
+id = "bootstrap_state_runtime_plugin_availability_heading"
+level = 3
+text = "Runtime Plugin Availability"
+
+[[box]]
+id = "bootstrap_state_runtime_plugin_availability_list"
+domId = "state-runtime-plugin-availability"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_mcp_servers_section"
+children = ["bootstrap_state_mcp_servers_heading", "bootstrap_state_mcp_servers_list"]
+
+[[heading]]
+id = "bootstrap_state_mcp_servers_heading"
+level = 3
+text = "MCP Servers"
+
+[[box]]
+id = "bootstrap_state_mcp_servers_list"
+domId = "state-mcp-servers"
+class = "surface-state-list"
+
+[[section]]
+id = "bootstrap_state_mcp_tool_installs_section"
+children = ["bootstrap_state_mcp_tool_installs_heading", "bootstrap_state_mcp_tool_installs_list"]
+
+[[heading]]
+id = "bootstrap_state_mcp_tool_installs_heading"
+level = 3
+text = "MCP Tool Installs"
+
+[[box]]
+id = "bootstrap_state_mcp_tool_installs_list"
+domId = "state-mcp-tool-installs"
+class = "surface-state-list"

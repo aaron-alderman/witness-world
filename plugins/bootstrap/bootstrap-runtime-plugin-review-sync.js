@@ -3,6 +3,7 @@ export function renderBootstrapRuntimePluginReviewSyncFactory() {
     const resolveBootstrapRuntimePluginReviewSelection = ${resolveBootstrapRuntimePluginReviewSelection.toString()};
     const loadBootstrapRuntimePluginReview = ${loadBootstrapRuntimePluginReview.toString()};
     const selectBootstrapRuntimePluginReviewPlugin = ${selectBootstrapRuntimePluginReviewPlugin.toString()};
+    const createBootstrapRuntimePluginReviewSyncHandler = ${createBootstrapRuntimePluginReviewSyncHandler.toString()};
     const bindBootstrapRuntimePluginReviewSync = ${bindBootstrapRuntimePluginReviewSync.toString()};
   `;
 }
@@ -78,7 +79,7 @@ export function selectBootstrapRuntimePluginReviewPlugin({
   };
 }
 
-export function bindBootstrapRuntimePluginReviewSync({
+export function createBootstrapRuntimePluginReviewSyncHandler({
   byId = () => null,
   request = async () => ({}),
   requestState = { current: 0 },
@@ -88,36 +89,64 @@ export function bindBootstrapRuntimePluginReviewSync({
   renderPage = () => {},
   setStatus = () => {}
 } = {}) {
-  const runner = byId("runtime-plugin-review-runner");
-  const plugin = byId("runtime-plugin-review-plugin");
-  if (!runner?.addEventListener || !plugin?.addEventListener) return null;
-  const runnerHandler = async () => {
+  return async event => {
+    const detail = event?.detail || {};
+    if (detail.source !== "bootstrap-page-main") return { handled: false };
+    const runner = byId("runtime-plugin-review-runner");
+    const plugin = byId("runtime-plugin-review-plugin");
     try {
-      await loadBootstrapRuntimePluginReview({
-        serverRunnerId: runner?.value || "",
-        request,
-        requestState,
-        currentReview: getReview(),
-        getCurrentSelectedPluginId: () => plugin?.value || getReview()?.selectedPluginId || "",
-        setReview,
-        runtimeProfile: getRuntimeProfile()
-      });
-      renderPage();
+      if (detail.trigger === "server-runner") {
+        await loadBootstrapRuntimePluginReview({
+          serverRunnerId: runner?.value || "",
+          request,
+          requestState,
+          currentReview: getReview(),
+          getCurrentSelectedPluginId: () => plugin?.value || getReview()?.selectedPluginId || "",
+          setReview,
+          runtimeProfile: getRuntimeProfile()
+        });
+        renderPage();
+        return { handled: true };
+      }
+      if (detail.trigger === "plugin") {
+        setReview(selectBootstrapRuntimePluginReviewPlugin({
+          review: getReview(),
+          selectedPluginId: plugin?.value || ""
+        }));
+        renderPage();
+        return { handled: true };
+      }
     } catch (error) {
       setStatus("runtime-plugin-review-note", error.message);
+      return { handled: true, error };
     }
+    return { handled: false };
   };
-  const pluginHandler = () => {
-    setReview(selectBootstrapRuntimePluginReviewPlugin({
-      review: getReview(),
-      selectedPluginId: plugin?.value || ""
-    }));
-    renderPage();
-  };
-  runner.addEventListener("change", runnerHandler);
-  plugin.addEventListener("change", pluginHandler);
-  return {
-    runnerHandler,
-    pluginHandler
-  };
+}
+
+export function bindBootstrapRuntimePluginReviewSync({
+  target = null,
+  byId = () => null,
+  request = async () => ({}),
+  requestState = { current: 0 },
+  getReview = () => null,
+  setReview = () => {},
+  getRuntimeProfile = () => "full",
+  renderPage = () => {},
+  setStatus = () => {}
+} = {}) {
+  const resolvedTarget = target || globalThis?.window || globalThis || null;
+  if (!resolvedTarget?.addEventListener) return null;
+  const handler = createBootstrapRuntimePluginReviewSyncHandler({
+    byId,
+    request,
+    requestState,
+    getReview,
+    setReview,
+    getRuntimeProfile,
+    renderPage,
+    setStatus
+  });
+  resolvedTarget.addEventListener("witness:bootstrap-runtime-plugin-review-sync", handler);
+  return handler;
 }

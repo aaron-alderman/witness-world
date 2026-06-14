@@ -4,24 +4,24 @@ context = "frontend"
 
 [[box]]
 id = "bootstrap_context_authoring_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_form", "bootstrap_context_status", "bootstrap_perspective_form", "bootstrap_perspective_status"]
 
 [[form]]
 id = "bootstrap_context_form"
 domId = "context-form"
-class = "stack"
-tutorialTarget = "context-form"
+class = "surface-stack surface-mono"
+guidanceTarget = "context-form"
 children = ["bootstrap_context_grid_primary", "bootstrap_context_grid_secondary", "bootstrap_context_actions"]
 
 [[box]]
 id = "bootstrap_context_grid_primary"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_context_id_field", "bootstrap_context_label_field"]
 
 [[box]]
 id = "bootstrap_context_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_id_text", "bootstrap_context_id_input"]
 
 [[text]]
@@ -35,7 +35,7 @@ placeholder = "team.platform"
 
 [[box]]
 id = "bootstrap_context_label_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_label_text", "bootstrap_context_label_input"]
 
 [[text]]
@@ -49,12 +49,12 @@ placeholder = "Platform Team"
 
 [[box]]
 id = "bootstrap_context_grid_secondary"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_context_parent_field", "bootstrap_context_stewards_field"]
 
 [[box]]
 id = "bootstrap_context_parent_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_parent_text", "bootstrap_context_parent_select"]
 
 [[text]]
@@ -68,7 +68,7 @@ name = "parent"
 
 [[box]]
 id = "bootstrap_context_stewards_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_context_stewards_text", "bootstrap_context_stewards_input"]
 
 [[text]]
@@ -82,7 +82,7 @@ text = "[]"
 
 [[box]]
 id = "bootstrap_context_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_context_submit"]
 
 [[button]]
@@ -93,23 +93,23 @@ type = "submit"
 [[text]]
 id = "bootstrap_context_status"
 domId = "context-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[form]]
 id = "bootstrap_perspective_form"
 domId = "perspective-form"
-class = "stack"
+class = "surface-stack surface-mono"
 children = ["bootstrap_perspective_grid_primary", "bootstrap_perspective_grid_secondary", "bootstrap_perspective_actions"]
 
 [[box]]
 id = "bootstrap_perspective_grid_primary"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_perspective_id_field", "bootstrap_perspective_title_field"]
 
 [[box]]
 id = "bootstrap_perspective_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_perspective_id_text", "bootstrap_perspective_id_input"]
 
 [[text]]
@@ -123,7 +123,7 @@ placeholder = "aaron:workspace"
 
 [[box]]
 id = "bootstrap_perspective_title_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_perspective_title_text", "bootstrap_perspective_title_input"]
 
 [[text]]
@@ -137,12 +137,12 @@ placeholder = "Aaron Workspace"
 
 [[box]]
 id = "bootstrap_perspective_grid_secondary"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_perspective_context_field", "bootstrap_perspective_spacer"]
 
 [[box]]
 id = "bootstrap_perspective_context_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_perspective_context_text", "bootstrap_perspective_context_select"]
 
 [[text]]
@@ -156,11 +156,11 @@ name = "context"
 
 [[box]]
 id = "bootstrap_perspective_spacer"
-class = "stack"
+class = "surface-stack"
 
 [[box]]
 id = "bootstrap_perspective_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_perspective_submit"]
 
 [[button]]
@@ -171,7 +171,7 @@ type = "submit"
 [[text]]
 id = "bootstrap_perspective_status"
 domId = "perspective-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -212,24 +212,24 @@ detail = { source = "bootstrap-app-authoring-controls", family = "perspective", 
 
 [[box]]
 id = "bootstrap_widget_authoring_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_form", "bootstrap_widget_status"]
 
 [[form]]
 id = "bootstrap_widget_form"
 domId = "widget-form"
-class = "stack"
-tutorialTarget = "widget-form"
+class = "surface-stack surface-mono"
+guidanceTarget = "widget-form"
 children = ["bootstrap_widget_grid_identity", "bootstrap_widget_grid_parent", "bootstrap_widget_grid_order", "bootstrap_widget_grid_context", "bootstrap_widget_grid_text_title", "bootstrap_widget_grid_role_class", "bootstrap_widget_grid_name_type", "bootstrap_widget_grid_placeholder_autocomplete", "bootstrap_widget_grid_href_action", "bootstrap_widget_grid_label_value_type", "bootstrap_widget_grid_data", "bootstrap_widget_grid_tutorial_level", "bootstrap_widget_grid_event", "bootstrap_widget_grid_flags", "bootstrap_widget_actions"]
 
 [[box]]
 id = "bootstrap_widget_grid_identity"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_widget_id_field", "bootstrap_widget_kind_field"]
 
 [[box]]
 id = "bootstrap_widget_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_id_text", "bootstrap_widget_id_input"]
 
 [[text]]
@@ -240,11 +240,11 @@ text = "Id"
 id = "bootstrap_widget_id_input"
 name = "id"
 placeholder = "todo_title"
-tutorialTarget = "widget-id"
+guidanceTarget = "widget-id"
 
 [[box]]
 id = "bootstrap_widget_kind_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_kind_text", "bootstrap_widget_kind_select"]
 
 [[text]]
@@ -255,16 +255,16 @@ text = "Kind"
 id = "bootstrap_widget_kind_select"
 domId = "widget-kind"
 name = "kind"
-tutorialTarget = "widget-kind"
+guidanceTarget = "widget-kind"
 
 [[box]]
 id = "bootstrap_widget_grid_parent"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_widget_parent_field", "bootstrap_widget_parent_ref_field"]
 
 [[box]]
 id = "bootstrap_widget_parent_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_parent_text", "bootstrap_widget_parent_select"]
 
 [[text]]
@@ -275,11 +275,11 @@ text = "Parent"
 id = "bootstrap_widget_parent_select"
 domId = "widget-parent"
 name = "parent"
-tutorialTarget = "widget-parent"
+guidanceTarget = "widget-parent"
 
 [[box]]
 id = "bootstrap_widget_parent_ref_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_parent_ref_text", "bootstrap_widget_parent_ref_input"]
 
 [[text]]
@@ -293,12 +293,12 @@ placeholder = "context name"
 
 [[box]]
 id = "bootstrap_widget_grid_order"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_widget_order_field", "bootstrap_widget_order_spacer"]
 
 [[box]]
 id = "bootstrap_widget_order_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_order_text", "bootstrap_widget_order_input"]
 
 [[text]]
@@ -310,20 +310,20 @@ id = "bootstrap_widget_order_input"
 name = "order"
 type = "number"
 placeholder = "0"
-tutorialTarget = "widget-order"
+guidanceTarget = "widget-order"
 
 [[box]]
 id = "bootstrap_widget_order_spacer"
-class = "stack"
+class = "surface-stack"
 
 [[box]]
 id = "bootstrap_widget_grid_context"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_widget_context_field", "bootstrap_widget_context_spacer"]
 
 [[box]]
 id = "bootstrap_widget_context_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_context_text", "bootstrap_widget_context_select"]
 
 [[text]]
@@ -337,16 +337,16 @@ name = "context"
 
 [[box]]
 id = "bootstrap_widget_context_spacer"
-class = "stack"
+class = "surface-stack"
 
 [[box]]
 id = "bootstrap_widget_grid_text_title"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_widget_text_field", "bootstrap_widget_title_field"]
 
 [[box]]
 id = "bootstrap_widget_text_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_text_text", "bootstrap_widget_text_input"]
 
 [[text]]
@@ -356,11 +356,11 @@ text = "Text"
 [[input]]
 id = "bootstrap_widget_text_input"
 name = "text"
-tutorialTarget = "widget-text"
+guidanceTarget = "widget-text"
 
 [[box]]
 id = "bootstrap_widget_title_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_title_text", "bootstrap_widget_title_input"]
 
 [[text]]
@@ -370,16 +370,16 @@ text = "Title"
 [[input]]
 id = "bootstrap_widget_title_input"
 name = "title"
-tutorialTarget = "widget-title"
+guidanceTarget = "widget-title"
 
 [[box]]
 id = "bootstrap_widget_grid_role_class"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_widget_role_field", "bootstrap_widget_class_field"]
 
 [[box]]
 id = "bootstrap_widget_role_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_role_text", "bootstrap_widget_role_input"]
 
 [[text]]
@@ -389,11 +389,11 @@ text = "Role"
 [[input]]
 id = "bootstrap_widget_role_input"
 name = "role"
-tutorialTarget = "widget-role"
+guidanceTarget = "widget-role"
 
 [[box]]
 id = "bootstrap_widget_class_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_class_text", "bootstrap_widget_class_input"]
 
 [[text]]
@@ -403,16 +403,16 @@ text = "Class"
 [[input]]
 id = "bootstrap_widget_class_input"
 name = "class"
-tutorialTarget = "widget-class"
+guidanceTarget = "widget-class"
 
 [[box]]
 id = "bootstrap_widget_grid_name_type"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_widget_name_field", "bootstrap_widget_type_field"]
 
 [[box]]
 id = "bootstrap_widget_name_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_name_text", "bootstrap_widget_name_input"]
 
 [[text]]
@@ -422,11 +422,11 @@ text = "Name"
 [[input]]
 id = "bootstrap_widget_name_input"
 name = "name"
-tutorialTarget = "widget-name"
+guidanceTarget = "widget-name"
 
 [[box]]
 id = "bootstrap_widget_type_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_type_text", "bootstrap_widget_type_input"]
 
 [[text]]
@@ -436,16 +436,16 @@ text = "Type"
 [[input]]
 id = "bootstrap_widget_type_input"
 name = "type"
-tutorialTarget = "widget-type"
+guidanceTarget = "widget-type"
 
 [[box]]
 id = "bootstrap_widget_grid_placeholder_autocomplete"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_widget_placeholder_field", "bootstrap_widget_autocomplete_field"]
 
 [[box]]
 id = "bootstrap_widget_placeholder_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_placeholder_text", "bootstrap_widget_placeholder_input"]
 
 [[text]]
@@ -455,11 +455,11 @@ text = "Placeholder"
 [[input]]
 id = "bootstrap_widget_placeholder_input"
 name = "placeholder"
-tutorialTarget = "widget-placeholder"
+guidanceTarget = "widget-placeholder"
 
 [[box]]
 id = "bootstrap_widget_autocomplete_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_autocomplete_text", "bootstrap_widget_autocomplete_input"]
 
 [[text]]
@@ -469,16 +469,16 @@ text = "Autocomplete"
 [[input]]
 id = "bootstrap_widget_autocomplete_input"
 name = "autocomplete"
-tutorialTarget = "widget-autocomplete"
+guidanceTarget = "widget-autocomplete"
 
 [[box]]
 id = "bootstrap_widget_grid_href_action"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_widget_href_field", "bootstrap_widget_action_field"]
 
 [[box]]
 id = "bootstrap_widget_href_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_href_text", "bootstrap_widget_href_input"]
 
 [[text]]
@@ -488,11 +488,11 @@ text = "Href"
 [[input]]
 id = "bootstrap_widget_href_input"
 name = "href"
-tutorialTarget = "widget-href"
+guidanceTarget = "widget-href"
 
 [[box]]
 id = "bootstrap_widget_action_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_action_text", "bootstrap_widget_action_input"]
 
 [[text]]
@@ -502,16 +502,16 @@ text = "Action"
 [[input]]
 id = "bootstrap_widget_action_input"
 name = "action"
-tutorialTarget = "widget-action"
+guidanceTarget = "widget-action"
 
 [[box]]
 id = "bootstrap_widget_grid_label_value_type"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_widget_label_field", "bootstrap_widget_value_type_field"]
 
 [[box]]
 id = "bootstrap_widget_label_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_label_text", "bootstrap_widget_label_input"]
 
 [[text]]
@@ -521,11 +521,11 @@ text = "Label"
 [[input]]
 id = "bootstrap_widget_label_input"
 name = "label"
-tutorialTarget = "widget-label"
+guidanceTarget = "widget-label"
 
 [[box]]
 id = "bootstrap_widget_value_type_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_value_type_text", "bootstrap_widget_value_type_input"]
 
 [[text]]
@@ -535,16 +535,16 @@ text = "Value Type"
 [[input]]
 id = "bootstrap_widget_value_type_input"
 name = "valueType"
-tutorialTarget = "widget-value-type"
+guidanceTarget = "widget-value-type"
 
 [[box]]
 id = "bootstrap_widget_grid_data"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_widget_data_id_field", "bootstrap_widget_data_done_field"]
 
 [[box]]
 id = "bootstrap_widget_data_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_data_id_text", "bootstrap_widget_data_id_input"]
 
 [[text]]
@@ -554,11 +554,11 @@ text = "Data Id"
 [[input]]
 id = "bootstrap_widget_data_id_input"
 name = "dataId"
-tutorialTarget = "widget-data-id"
+guidanceTarget = "widget-data-id"
 
 [[box]]
 id = "bootstrap_widget_data_done_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_data_done_text", "bootstrap_widget_data_done_input"]
 
 [[text]]
@@ -568,30 +568,30 @@ text = "Data Done"
 [[input]]
 id = "bootstrap_widget_data_done_input"
 name = "dataDone"
-tutorialTarget = "widget-data-done"
+guidanceTarget = "widget-data-done"
 
 [[box]]
-id = "bootstrap_widget_grid_tutorial_level"
-class = "grid two"
-children = ["bootstrap_widget_tutorial_target_field", "bootstrap_widget_level_field"]
+id = "bootstrap_widget_grid_guidance_level"
+class = "surface-grid-2"
+children = ["bootstrap_widget_guidance_target_field", "bootstrap_widget_level_field"]
 
 [[box]]
-id = "bootstrap_widget_tutorial_target_field"
-class = "stack"
-children = ["bootstrap_widget_tutorial_target_text", "bootstrap_widget_tutorial_target_input"]
+id = "bootstrap_widget_guidance_target_field"
+class = "surface-stack"
+children = ["bootstrap_widget_guidance_target_text", "bootstrap_widget_guidance_target_input"]
 
 [[text]]
-id = "bootstrap_widget_tutorial_target_text"
-text = "Tutorial Target"
+id = "bootstrap_widget_guidance_target_text"
+text = "Guidance Target"
 
 [[input]]
-id = "bootstrap_widget_tutorial_target_input"
-name = "tutorialTarget"
-tutorialTarget = "widget-tutorial-target"
+id = "bootstrap_widget_guidance_target_input"
+name = "guidanceTarget"
+guidanceTarget = "widget-guidance-target"
 
 [[box]]
 id = "bootstrap_widget_level_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_level_text", "bootstrap_widget_level_input"]
 
 [[text]]
@@ -602,16 +602,16 @@ text = "Heading Level"
 id = "bootstrap_widget_level_input"
 name = "level"
 type = "number"
-tutorialTarget = "widget-level"
+guidanceTarget = "widget-level"
 
 [[box]]
 id = "bootstrap_widget_grid_event"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_widget_event_soul_field", "bootstrap_widget_event_version_field"]
 
 [[box]]
 id = "bootstrap_widget_event_soul_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_event_soul_text", "bootstrap_widget_event_soul_input"]
 
 [[text]]
@@ -621,11 +621,11 @@ text = "Event Soul"
 [[input]]
 id = "bootstrap_widget_event_soul_input"
 name = "eventSoul"
-tutorialTarget = "widget-event-soul"
+guidanceTarget = "widget-event-soul"
 
 [[box]]
 id = "bootstrap_widget_event_version_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_event_version_text", "bootstrap_widget_event_version_input"]
 
 [[text]]
@@ -635,37 +635,37 @@ text = "Event Version"
 [[input]]
 id = "bootstrap_widget_event_version_input"
 name = "eventVersion"
-tutorialTarget = "widget-event-version"
+guidanceTarget = "widget-event-version"
 
 [[box]]
 id = "bootstrap_widget_grid_flags"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_widget_template_field", "bootstrap_widget_attach_field"]
 
 [[box]]
 id = "bootstrap_widget_template_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_template_text", "bootstrap_widget_template_input"]
 
 [[text]]
 id = "bootstrap_widget_template_text"
-class = "kicker"
+class = "surface-kicker"
 text = "Template"
 
 [[input]]
 id = "bootstrap_widget_template_input"
 name = "template"
 type = "checkbox"
-tutorialTarget = "widget-template"
+guidanceTarget = "widget-template"
 
 [[box]]
 id = "bootstrap_widget_attach_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_widget_attach_text", "bootstrap_widget_attach_input"]
 
 [[text]]
 id = "bootstrap_widget_attach_text"
-class = "kicker"
+class = "surface-kicker"
 text = "Attach To Parent"
 
 [[input]]
@@ -673,23 +673,23 @@ id = "bootstrap_widget_attach_input"
 name = "attach"
 type = "checkbox"
 checked = true
-tutorialTarget = "widget-attach"
+guidanceTarget = "widget-attach"
 
 [[box]]
 id = "bootstrap_widget_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_widget_submit"]
 
 [[button]]
 id = "bootstrap_widget_submit"
 text = "Create Widget"
 type = "submit"
-tutorialTarget = "widget-submit"
+guidanceTarget = "widget-submit"
 
 [[text]]
 id = "bootstrap_widget_status"
 domId = "widget-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -714,24 +714,24 @@ detail = { source = "bootstrap-app-authoring-controls", family = "widget", formI
 
 [[box]]
 id = "bootstrap_frontend_program_authoring_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_program_form", "bootstrap_program_status", "bootstrap_step_form", "bootstrap_step_status"]
 
 [[form]]
 id = "bootstrap_program_form"
 domId = "program-form"
-class = "stack"
-tutorialTarget = "program-form"
+class = "surface-stack surface-mono"
+guidanceTarget = "program-form"
 children = ["bootstrap_program_grid_primary", "bootstrap_program_grid_secondary", "bootstrap_program_grid_context", "bootstrap_program_actions"]
 
 [[box]]
 id = "bootstrap_program_grid_primary"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_program_id_field", "bootstrap_program_root_widget_field"]
 
 [[box]]
 id = "bootstrap_program_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_program_id_text", "bootstrap_program_id_input"]
 
 [[text]]
@@ -741,11 +741,11 @@ text = "Program Id"
 [[input]]
 id = "bootstrap_program_id_input"
 name = "id"
-tutorialTarget = "program-id"
+guidanceTarget = "program-id"
 
 [[box]]
 id = "bootstrap_program_root_widget_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_program_root_widget_text", "bootstrap_program_root_widget_select"]
 
 [[text]]
@@ -756,16 +756,16 @@ text = "Root Widget"
 id = "bootstrap_program_root_widget_select"
 domId = "program-root-widget"
 name = "rootWidget"
-tutorialTarget = "program-root-widget"
+guidanceTarget = "program-root-widget"
 
 [[box]]
 id = "bootstrap_program_grid_secondary"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_program_root_widget_ref_field", "bootstrap_program_root_widget_ref_spacer"]
 
 [[box]]
 id = "bootstrap_program_root_widget_ref_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_program_root_widget_ref_text", "bootstrap_program_root_widget_ref_input"]
 
 [[text]]
@@ -779,16 +779,16 @@ placeholder = "context name"
 
 [[box]]
 id = "bootstrap_program_root_widget_ref_spacer"
-class = "stack"
+class = "surface-stack"
 
 [[box]]
 id = "bootstrap_program_grid_context"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_program_context_field", "bootstrap_program_context_spacer"]
 
 [[box]]
 id = "bootstrap_program_context_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_program_context_text", "bootstrap_program_context_select"]
 
 [[text]]
@@ -802,40 +802,40 @@ name = "context"
 
 [[box]]
 id = "bootstrap_program_context_spacer"
-class = "stack"
+class = "surface-stack"
 
 [[box]]
 id = "bootstrap_program_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_program_submit"]
 
 [[button]]
 id = "bootstrap_program_submit"
 text = "Create Program"
 type = "submit"
-tutorialTarget = "program-submit"
+guidanceTarget = "program-submit"
 
 [[text]]
 id = "bootstrap_program_status"
 domId = "program-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[form]]
 id = "bootstrap_step_form"
 domId = "step-form"
-class = "stack"
-tutorialTarget = "step-form"
+class = "surface-stack surface-mono"
+guidanceTarget = "step-form"
 children = ["bootstrap_step_grid_primary", "bootstrap_step_grid_secondary", "bootstrap_step_params_field", "bootstrap_step_when_field", "bootstrap_step_repeat_field", "bootstrap_step_after_field", "bootstrap_step_actions"]
 
 [[box]]
 id = "bootstrap_step_grid_primary"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_step_program_field", "bootstrap_step_event_field"]
 
 [[box]]
 id = "bootstrap_step_program_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_step_program_text", "bootstrap_step_program_select"]
 
 [[text]]
@@ -846,11 +846,11 @@ text = "Program"
 id = "bootstrap_step_program_select"
 domId = "step-program"
 name = "program"
-tutorialTarget = "step-program"
+guidanceTarget = "step-program"
 
 [[box]]
 id = "bootstrap_step_event_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_step_event_text", "bootstrap_step_event_input"]
 
 [[text]]
@@ -861,16 +861,16 @@ text = "Event"
 id = "bootstrap_step_event_input"
 name = "event"
 placeholder = "load"
-tutorialTarget = "step-event"
+guidanceTarget = "step-event"
 
 [[box]]
 id = "bootstrap_step_grid_secondary"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_step_op_field", "bootstrap_step_order_field"]
 
 [[box]]
 id = "bootstrap_step_op_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_step_op_text", "bootstrap_step_op_select"]
 
 [[text]]
@@ -881,11 +881,11 @@ text = "Operation"
 id = "bootstrap_step_op_select"
 domId = "step-op"
 name = "op"
-tutorialTarget = "step-op"
+guidanceTarget = "step-op"
 
 [[box]]
 id = "bootstrap_step_order_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_step_order_text", "bootstrap_step_order_input"]
 
 [[text]]
@@ -897,11 +897,11 @@ id = "bootstrap_step_order_input"
 name = "order"
 type = "number"
 value = "0"
-tutorialTarget = "step-order"
+guidanceTarget = "step-order"
 
 [[box]]
 id = "bootstrap_step_params_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_step_params_text", "bootstrap_step_params_input"]
 
 [[text]]
@@ -912,11 +912,11 @@ text = "Params JSON"
 id = "bootstrap_step_params_input"
 name = "paramsJson"
 placeholder = "{\"widget\":\"todo_status\",\"text\":\"Ready\"}"
-tutorialTarget = "step-params"
+guidanceTarget = "step-params"
 
 [[box]]
 id = "bootstrap_step_when_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_step_when_text", "bootstrap_step_when_input"]
 
 [[text]]
@@ -927,11 +927,11 @@ text = "When JSON"
 id = "bootstrap_step_when_input"
 name = "whenJson"
 placeholder = "{\"path\":\"session.authenticated\",\"truthy\":true}"
-tutorialTarget = "step-when"
+guidanceTarget = "step-when"
 
 [[box]]
 id = "bootstrap_step_repeat_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_step_repeat_text", "bootstrap_step_repeat_input"]
 
 [[text]]
@@ -942,11 +942,11 @@ text = "Repeat JSON"
 id = "bootstrap_step_repeat_input"
 name = "repeatJson"
 placeholder = "{\"forEach\":{\"from\":\"todoResponse.todos\",\"as\":\"item\"}}"
-tutorialTarget = "step-repeat"
+guidanceTarget = "step-repeat"
 
 [[box]]
 id = "bootstrap_step_after_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_step_after_text", "bootstrap_step_after_input"]
 
 [[text]]
@@ -957,23 +957,23 @@ text = "After JSON"
 id = "bootstrap_step_after_input"
 name = "afterJson"
 placeholder = "[\"program=todo_frontend_program/trigger=load/step[1]/operation=fetchJson\"]"
-tutorialTarget = "step-after"
+guidanceTarget = "step-after"
 
 [[box]]
 id = "bootstrap_step_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_step_submit"]
 
 [[button]]
 id = "bootstrap_step_submit"
 text = "Create Step"
 type = "submit"
-tutorialTarget = "step-submit"
+guidanceTarget = "step-submit"
 
 [[text]]
 id = "bootstrap_step_status"
 domId = "step-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -1014,24 +1014,24 @@ detail = { source = "bootstrap-app-authoring-controls", family = "step", formId 
 
 [[box]]
 id = "bootstrap_route_mount_authoring_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_route_form", "bootstrap_route_status", "bootstrap_serve_form", "bootstrap_serve_status"]
 
 [[form]]
 id = "bootstrap_route_form"
 domId = "route-form"
-class = "stack"
-tutorialTarget = "route-form"
+class = "surface-stack surface-mono"
+guidanceTarget = "route-form"
 children = ["bootstrap_route_grid_identity", "bootstrap_route_grid_context", "bootstrap_route_grid_serves", "bootstrap_route_grid_method", "bootstrap_route_grid_handler", "bootstrap_route_grid_backend", "bootstrap_route_grid_root_widget", "bootstrap_route_grid_frontend_program", "bootstrap_route_live_projection_field", "bootstrap_route_help", "bootstrap_route_actions"]
 
 [[box]]
 id = "bootstrap_route_grid_identity"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_route_id_field", "bootstrap_route_path_field"]
 
 [[box]]
 id = "bootstrap_route_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_route_id_text", "bootstrap_route_id_input"]
 
 [[text]]
@@ -1041,11 +1041,11 @@ text = "Route Id"
 [[input]]
 id = "bootstrap_route_id_input"
 name = "id"
-tutorialTarget = "route-id"
+guidanceTarget = "route-id"
 
 [[box]]
 id = "bootstrap_route_path_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_route_path_text", "bootstrap_route_path_input"]
 
 [[text]]
@@ -1056,16 +1056,16 @@ text = "Path"
 id = "bootstrap_route_path_input"
 name = "path"
 placeholder = "/"
-tutorialTarget = "route-path"
+guidanceTarget = "route-path"
 
 [[box]]
 id = "bootstrap_route_grid_context"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_route_context_field", "bootstrap_route_context_spacer"]
 
 [[box]]
 id = "bootstrap_route_context_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_route_context_text", "bootstrap_route_context_select"]
 
 [[text]]
@@ -1079,16 +1079,16 @@ name = "context"
 
 [[box]]
 id = "bootstrap_route_context_spacer"
-class = "stack"
+class = "surface-stack"
 
 [[box]]
 id = "bootstrap_route_grid_serves"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_route_serves_field", "bootstrap_route_serves_ref_field"]
 
 [[box]]
 id = "bootstrap_route_serves_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_route_serves_text", "bootstrap_route_serves_input"]
 
 [[text]]
@@ -1098,11 +1098,11 @@ text = "Serves"
 [[input]]
 id = "bootstrap_route_serves_input"
 name = "serves"
-tutorialTarget = "route-serves"
+guidanceTarget = "route-serves"
 
 [[box]]
 id = "bootstrap_route_serves_ref_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_route_serves_ref_text", "bootstrap_route_serves_ref_input"]
 
 [[text]]
@@ -1116,12 +1116,12 @@ placeholder = "context name"
 
 [[box]]
 id = "bootstrap_route_grid_method"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_route_method_field", "bootstrap_route_method_spacer"]
 
 [[box]]
 id = "bootstrap_route_method_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_route_method_text", "bootstrap_route_method_select"]
 
 [[text]]
@@ -1132,20 +1132,20 @@ text = "Method"
 id = "bootstrap_route_method_select"
 domId = "route-method"
 name = "method"
-tutorialTarget = "route-method"
+guidanceTarget = "route-method"
 
 [[box]]
 id = "bootstrap_route_method_spacer"
-class = "stack"
+class = "surface-stack"
 
 [[box]]
 id = "bootstrap_route_grid_handler"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_route_handler_field", "bootstrap_route_page_field"]
 
 [[box]]
 id = "bootstrap_route_handler_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_route_handler_text", "bootstrap_route_handler_select"]
 
 [[text]]
@@ -1156,11 +1156,11 @@ text = "Handler"
 id = "bootstrap_route_handler_select"
 domId = "route-handler"
 name = "handler"
-tutorialTarget = "route-handler"
+guidanceTarget = "route-handler"
 
 [[box]]
 id = "bootstrap_route_page_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_route_page_text", "bootstrap_route_page_input"]
 
 [[text]]
@@ -1171,16 +1171,16 @@ text = "Page Name"
 id = "bootstrap_route_page_input"
 name = "page"
 placeholder = "home"
-tutorialTarget = "route-page"
+guidanceTarget = "route-page"
 
 [[box]]
 id = "bootstrap_route_grid_backend"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_route_backend_program_field", "bootstrap_route_backend_program_spacer"]
 
 [[box]]
 id = "bootstrap_route_backend_program_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_route_backend_program_text", "bootstrap_route_backend_program_select"]
 
 [[text]]
@@ -1194,16 +1194,16 @@ name = "backendProgramSoul"
 
 [[box]]
 id = "bootstrap_route_backend_program_spacer"
-class = "stack"
+class = "surface-stack"
 
 [[box]]
 id = "bootstrap_route_grid_root_widget"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_route_root_widget_field", "bootstrap_route_root_widget_ref_field"]
 
 [[box]]
 id = "bootstrap_route_root_widget_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_route_root_widget_text", "bootstrap_route_root_widget_select"]
 
 [[text]]
@@ -1214,11 +1214,11 @@ text = "Root Widget"
 id = "bootstrap_route_root_widget_select"
 domId = "route-root-widget"
 name = "rootWidget"
-tutorialTarget = "route-root-widget"
+guidanceTarget = "route-root-widget"
 
 [[box]]
 id = "bootstrap_route_root_widget_ref_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_route_root_widget_ref_text", "bootstrap_route_root_widget_ref_input"]
 
 [[text]]
@@ -1232,12 +1232,12 @@ placeholder = "context name"
 
 [[box]]
 id = "bootstrap_route_grid_frontend_program"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_route_frontend_program_field", "bootstrap_route_frontend_program_spacer"]
 
 [[box]]
 id = "bootstrap_route_frontend_program_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_route_frontend_program_text", "bootstrap_route_frontend_program_select"]
 
 [[text]]
@@ -1248,20 +1248,20 @@ text = "Frontend Program"
 id = "bootstrap_route_frontend_program_select"
 domId = "route-frontend-program"
 name = "frontendProgram"
-tutorialTarget = "route-frontend-program"
+guidanceTarget = "route-frontend-program"
 
 [[box]]
 id = "bootstrap_route_frontend_program_spacer"
-class = "stack"
+class = "surface-stack"
 
 [[box]]
 id = "bootstrap_route_live_projection_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_route_live_projection_text", "bootstrap_route_live_projection_input"]
 
 [[text]]
 id = "bootstrap_route_live_projection_text"
-class = "kicker"
+class = "surface-kicker"
 text = "Live Projection"
 
 [[input]]
@@ -1269,46 +1269,46 @@ id = "bootstrap_route_live_projection_input"
 name = "liveProjection"
 type = "checkbox"
 checked = true
-tutorialTarget = "route-live-projection"
+guidanceTarget = "route-live-projection"
 
 [[text]]
 id = "bootstrap_route_help"
 domId = "route-help"
-class = "note muted"
+class = "surface-note surface-note-callout"
 text = ""
 
 [[box]]
 id = "bootstrap_route_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_route_submit"]
 
 [[button]]
 id = "bootstrap_route_submit"
 text = "Create Route"
 type = "submit"
-tutorialTarget = "route-submit"
+guidanceTarget = "route-submit"
 
 [[text]]
 id = "bootstrap_route_status"
 domId = "route-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[form]]
 id = "bootstrap_serve_form"
 domId = "serve-form"
-class = "stack"
-tutorialTarget = "serve-form"
+class = "surface-stack surface-mono"
+guidanceTarget = "serve-form"
 children = ["bootstrap_serve_grid_primary", "bootstrap_serve_grid_context", "bootstrap_serve_grid_refs", "bootstrap_serve_actions"]
 
 [[box]]
 id = "bootstrap_serve_grid_primary"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_serve_runner_field", "bootstrap_serve_route_field"]
 
 [[box]]
 id = "bootstrap_serve_runner_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_serve_runner_text", "bootstrap_serve_runner_select"]
 
 [[text]]
@@ -1319,11 +1319,11 @@ text = "Server Runner"
 id = "bootstrap_serve_runner_select"
 domId = "serve-server-runner"
 name = "serverRunner"
-tutorialTarget = "serve-server-runner"
+guidanceTarget = "serve-server-runner"
 
 [[box]]
 id = "bootstrap_serve_route_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_serve_route_text", "bootstrap_serve_route_select"]
 
 [[text]]
@@ -1334,16 +1334,16 @@ text = "Route"
 id = "bootstrap_serve_route_select"
 domId = "serve-route"
 name = "route"
-tutorialTarget = "serve-route"
+guidanceTarget = "serve-route"
 
 [[box]]
 id = "bootstrap_serve_grid_context"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_serve_context_field", "bootstrap_serve_context_spacer"]
 
 [[box]]
 id = "bootstrap_serve_context_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_serve_context_text", "bootstrap_serve_context_select"]
 
 [[text]]
@@ -1357,16 +1357,16 @@ name = "context"
 
 [[box]]
 id = "bootstrap_serve_context_spacer"
-class = "stack"
+class = "surface-stack"
 
 [[box]]
 id = "bootstrap_serve_grid_refs"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_serve_runner_ref_field", "bootstrap_serve_route_ref_field"]
 
 [[box]]
 id = "bootstrap_serve_runner_ref_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_serve_runner_ref_text", "bootstrap_serve_runner_ref_input"]
 
 [[text]]
@@ -1380,7 +1380,7 @@ placeholder = "context name"
 
 [[box]]
 id = "bootstrap_serve_route_ref_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_serve_route_ref_text", "bootstrap_serve_route_ref_input"]
 
 [[text]]
@@ -1394,19 +1394,19 @@ placeholder = "context name"
 
 [[box]]
 id = "bootstrap_serve_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_serve_submit"]
 
 [[button]]
 id = "bootstrap_serve_submit"
 text = "Create Serve Mount"
 type = "submit"
-tutorialTarget = "serve-submit"
+guidanceTarget = "serve-submit"
 
 [[text]]
 id = "bootstrap_serve_status"
 domId = "serve-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]
@@ -1479,24 +1479,24 @@ detail = { source = "bootstrap-app-authoring-controls", family = "serve", formId
 
 [[box]]
 id = "bootstrap_runner_authoring_controls_root"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runner_form", "bootstrap_runner_status"]
 
 [[form]]
 id = "bootstrap_runner_form"
 domId = "runner-form"
-class = "stack"
-tutorialTarget = "runner-form"
+class = "surface-stack surface-mono"
+guidanceTarget = "runner-form"
 children = ["bootstrap_runner_grid_identity", "bootstrap_runner_grid_context", "bootstrap_runner_grid_hosts", "bootstrap_runner_grid_host_refs", "bootstrap_runner_grid_projections", "bootstrap_runner_actions"]
 
 [[box]]
 id = "bootstrap_runner_grid_identity"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_runner_id_field", "bootstrap_runner_handler_set_field"]
 
 [[box]]
 id = "bootstrap_runner_id_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runner_id_text", "bootstrap_runner_id_input"]
 
 [[text]]
@@ -1507,11 +1507,11 @@ text = "Runner Id"
 id = "bootstrap_runner_id_input"
 name = "id"
 value = "demo_server"
-tutorialTarget = "runner-id"
+guidanceTarget = "runner-id"
 
 [[box]]
 id = "bootstrap_runner_handler_set_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runner_handler_set_text", "bootstrap_runner_handler_set_select"]
 
 [[text]]
@@ -1522,16 +1522,16 @@ text = "Handler Set"
 id = "bootstrap_runner_handler_set_select"
 domId = "runner-handler-set"
 name = "handlerSet"
-tutorialTarget = "runner-handler-set"
+guidanceTarget = "runner-handler-set"
 
 [[box]]
 id = "bootstrap_runner_grid_context"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_runner_context_field", "bootstrap_runner_context_spacer"]
 
 [[box]]
 id = "bootstrap_runner_context_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runner_context_text", "bootstrap_runner_context_select"]
 
 [[text]]
@@ -1545,16 +1545,16 @@ name = "context"
 
 [[box]]
 id = "bootstrap_runner_context_spacer"
-class = "stack"
+class = "surface-stack"
 
 [[box]]
 id = "bootstrap_runner_grid_hosts"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_runner_backend_host_field", "bootstrap_runner_frontend_host_field"]
 
 [[box]]
 id = "bootstrap_runner_backend_host_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runner_backend_host_text", "bootstrap_runner_backend_host_select"]
 
 [[text]]
@@ -1565,11 +1565,11 @@ text = "Backend Host"
 id = "bootstrap_runner_backend_host_select"
 domId = "runner-backend-host"
 name = "backendHost"
-tutorialTarget = "runner-backend-host"
+guidanceTarget = "runner-backend-host"
 
 [[box]]
 id = "bootstrap_runner_frontend_host_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runner_frontend_host_text", "bootstrap_runner_frontend_host_select"]
 
 [[text]]
@@ -1580,16 +1580,16 @@ text = "Frontend Host"
 id = "bootstrap_runner_frontend_host_select"
 domId = "runner-frontend-host"
 name = "frontendHost"
-tutorialTarget = "runner-frontend-host"
+guidanceTarget = "runner-frontend-host"
 
 [[box]]
 id = "bootstrap_runner_grid_host_refs"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_runner_backend_host_ref_field", "bootstrap_runner_frontend_host_ref_field"]
 
 [[box]]
 id = "bootstrap_runner_backend_host_ref_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runner_backend_host_ref_text", "bootstrap_runner_backend_host_ref_input"]
 
 [[text]]
@@ -1603,7 +1603,7 @@ placeholder = "context name"
 
 [[box]]
 id = "bootstrap_runner_frontend_host_ref_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runner_frontend_host_ref_text", "bootstrap_runner_frontend_host_ref_input"]
 
 [[text]]
@@ -1617,12 +1617,12 @@ placeholder = "context name"
 
 [[box]]
 id = "bootstrap_runner_grid_projections"
-class = "grid two"
+class = "surface-grid-2"
 children = ["bootstrap_runner_todo_projection_field", "bootstrap_runner_private_notes_projection_field"]
 
 [[box]]
 id = "bootstrap_runner_todo_projection_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runner_todo_projection_text", "bootstrap_runner_todo_projection_input"]
 
 [[text]]
@@ -1633,11 +1633,11 @@ text = "Todo Projection"
 id = "bootstrap_runner_todo_projection_input"
 name = "todoProjection"
 value = "witness-world-bootstrap-todos.json"
-tutorialTarget = "runner-todo-projection"
+guidanceTarget = "runner-todo-projection"
 
 [[box]]
 id = "bootstrap_runner_private_notes_projection_field"
-class = "stack"
+class = "surface-stack"
 children = ["bootstrap_runner_private_notes_projection_text", "bootstrap_runner_private_notes_projection_input"]
 
 [[text]]
@@ -1648,23 +1648,23 @@ text = "Private Notes Projection"
 id = "bootstrap_runner_private_notes_projection_input"
 name = "privateNotesProjection"
 value = "witness-world-bootstrap-private-notes.json"
-tutorialTarget = "runner-private-notes-projection"
+guidanceTarget = "runner-private-notes-projection"
 
 [[box]]
 id = "bootstrap_runner_actions"
-class = "actions"
+class = "surface-actions"
 children = ["bootstrap_runner_submit"]
 
 [[button]]
 id = "bootstrap_runner_submit"
 text = "Create Server Runner"
 type = "submit"
-tutorialTarget = "runner-submit"
+guidanceTarget = "runner-submit"
 
 [[text]]
 id = "bootstrap_runner_status"
 domId = "runner-status"
-class = "status"
+class = "surface-status"
 text = ""
 
 [[frontendProgram]]

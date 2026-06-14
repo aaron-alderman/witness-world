@@ -85,11 +85,13 @@ test("generic handler factories are resolved from materialized active runtime bu
 
 test("runtime profiles are seed plugin presets with core-only static composition", () => {
   assert.deepEqual(runtimeProfilePluginIds("minimal"), []);
-  assert.deepEqual(runtimeProfilePluginIds("authoring"), ["plugin.authoring"]);
+  assert.deepEqual(runtimeProfilePluginIds("authoring"), ["plugin.authoring", "plugin.tutorial", "plugin.starter"]);
   assert.deepEqual(runtimeProfilePluginIds("inspect"), ["plugin.inspect"]);
   assert.deepEqual(runtimeProfilePluginIds("practical-backend"), ["plugin.practical-backend"]);
   assert.deepEqual(runtimeProfilePluginIds("full"), [
     "plugin.authoring",
+    "plugin.tutorial",
+    "plugin.starter",
     "plugin.inspect",
     "plugin.canvas",
     "plugin.mcp",
@@ -107,16 +109,13 @@ test("runtime profiles are seed plugin presets with core-only static composition
 test("handler sets, routes, and surfaces are absent until owning plugin runtimes are loaded", async () => {
   assert.equal(Object.prototype.hasOwnProperty.call(handlerSetDefinitionsForProfile("full"), "demo"), false);
   assert.equal(runtimeSurfaceEntriesForProfile("full", "world-command").some(surface => surface.id === "surface:world-mode:graph"), false);
-  assert.equal(runtimeRouteEntriesForProfile("authoring").some(route => route.handler === "tutorial.progress.read"), false);
 
   const fullOptions = await loadedOptions("full");
   const fullHandlerSets = handlerSetDefinitionsForProfile("full", fullOptions);
   const fullSurfaces = runtimeSurfaceEntriesForProfile("full", "world-command", fullOptions);
-  const fullRoutes = runtimeRouteEntriesForProfile("full", fullOptions);
 
   assert.equal(Object.prototype.hasOwnProperty.call(fullHandlerSets, "demo"), true);
   assert.equal(fullSurfaces.some(surface => surface.id === "surface:world-mode:graph"), true);
-  assert.equal(fullRoutes.some(route => route.handler === "tutorial.progress.read"), true);
 });
 
 test("route and dispatch ownership varies by loaded plugin composition", async () => {

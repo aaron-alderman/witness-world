@@ -4,6 +4,7 @@ import {
   mcpServerInventoryLabel,
   mcpToolInventoryLabel,
   renderBootstrapStateInventory,
+  renderBootstrapStateItems,
   renderBootstrapStateList,
   renderBootstrapStateListRenderFactory
 } from "./bootstrap-state-list-render.js";
@@ -53,6 +54,7 @@ test("bootstrap state list render marks newly added rows after the first render"
     stateSnapshots,
     rowKey: row => row.id
   });
+  assert.equal(root.children[0].className, "surface-state-item");
   assert.equal(root.children[0].attributes?.get?.("data-tutorial-changed"), undefined);
 
   root.children = [];
@@ -66,6 +68,27 @@ test("bootstrap state list render marks newly added rows after the first render"
     rowKey: row => row.id
   });
   assert.equal(root.children[1].attributes.get("data-tutorial-changed"), "true");
+});
+
+test("bootstrap state item render writes structured sections without HTML string assembly", () => {
+  const document = createDocument();
+  const root = createRoot();
+
+  renderBootstrapStateItems({
+    id: "runtime-plugin-review-detail",
+    items: [
+      { title: "Operator Summary", codes: ["Installed on profile full."] },
+      { emptyText: "Effective runtime composition is unchanged for this action." }
+    ],
+    byId: id => id === "runtime-plugin-review-detail" ? root : null,
+    document
+  });
+
+  assert.equal(root.children[0].className, "surface-state-item");
+  assert.equal(root.children[0].children[0].textContent, "Operator Summary");
+  assert.equal(root.children[0].children[1].textContent, "Installed on profile full.");
+  assert.equal(root.children[1].className, "surface-state-item surface-empty");
+  assert.equal(root.children[1].textContent, "Effective runtime composition is unchanged for this action.");
 });
 
 test("bootstrap state inventory render fans authored and operator rows into the documented DOM ids", () => {
@@ -94,6 +117,7 @@ test("bootstrap state inventory render fans authored and operator rows into the 
     rowKey: row => row.id || JSON.stringify(row)
   });
 
+  assert.equal(roots.get("state-contexts").children[0].className, "surface-state-item");
   assert.equal(roots.get("state-contexts").children[0].children[0].textContent, "ctx.root");
   assert.equal(roots.get("state-runtime-plugin-availability").children[0].children[0].textContent, "demo_server :: plugin.inspect [installed]");
   assert.equal(roots.get("mcp-server-inventory").children[0].children[0].textContent, "mcp.demo @demo_server [stdio] [active runtime]");
@@ -111,6 +135,7 @@ test("bootstrap state list helpers expose inventory labels and browser factory s
   );
 
   const factory = renderBootstrapStateListRenderFactory();
+  assert.equal(factory.includes("const renderBootstrapStateItems ="), true);
   assert.equal(factory.includes("const renderBootstrapStateList ="), true);
   assert.equal(factory.includes("const mcpServerInventoryLabel ="), true);
   assert.equal(factory.includes("const mcpToolInventoryLabel ="), true);

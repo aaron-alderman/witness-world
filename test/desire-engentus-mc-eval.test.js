@@ -6,8 +6,8 @@ import {
   normalizeDesirePlusToDesire
 } from "../src/desire/index.js";
 import { evaluateModel } from "../plugins/chart-runtime/dataflow-eval.js";
-import { goodmanFunctions } from "../plugins/chart-runtime/goodman-stdlib.js";
-import { samplingFunctions } from "../plugins/chart-runtime/sampling.js";
+import { goodmanFunctions } from "../examples/engentus/app/chart-functions/goodman-stdlib.js";
+import { samplingFunctions } from "../examples/engentus/app/chart-functions/sampling.js";
 
 // ── MC: the Monte-Carlo machinery (ensemble axis + percentile reductions) ─────────
 // BoltFatigueMC adds a `sample = ensemble(N)` axis, draws the applied force per sample

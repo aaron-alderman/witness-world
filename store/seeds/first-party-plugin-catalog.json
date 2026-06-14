@@ -11,6 +11,7 @@
     { "id": "plugin.mcp-authoring", "directory": "mcp-authoring", "order": 16 },
     { "id": "plugin.proposals", "directory": "proposals", "order": 17 },
     { "id": "plugin.tutorial", "directory": "tutorial", "order": 18 },
+    { "id": "plugin.starter", "directory": "starter", "order": 19 },
     { "id": "plugin.inspect", "directory": "inspect", "order": 30 },
     { "id": "plugin.canvas", "directory": "canvas", "order": 40 },
     { "id": "plugin.mcp", "directory": "mcp", "order": 50 },
@@ -31,7 +32,6 @@
     { "id": "plugin.demo", "directory": "demo", "order": 90 },
     { "id": "plugin.eden", "directory": "eden", "order": 91 },
     { "id": "plugin.chart-runtime", "directory": "chart-runtime", "order": 92 },
-    { "id": "plugin.engentus-example", "directory": "engentus-example", "order": 93 },
     { "id": "plugin.notes-sidebar", "directory": "notes-sidebar", "order": 100 }
   ],
   "bundles": [
@@ -75,7 +75,13 @@
       "id": "bundle-tutorial",
       "plugin": "plugin.tutorial",
       "displayName": "Tutorial",
-      "description": "Tutorial progress APIs and runtime-owned tutorial continuity."
+      "description": "Tutorial guidance definitions layered on the core guidance runtime."
+    },
+    {
+      "id": "bundle-starter",
+      "plugin": "plugin.starter",
+      "displayName": "Starter Content",
+      "description": "Starter blueprint catalog contributions for bootstrap and other shells."
     },
     {
       "id": "bundle-authoring-core",
@@ -196,12 +202,6 @@
       "plugin": "plugin.chart-runtime",
       "displayName": "Chart Runtime",
       "description": "Generic chart rendering capability, chart page handler, and grammar-of-graphics runtime."
-    },
-    {
-      "id": "bundle-engentus-example",
-      "plugin": "plugin.engentus-example",
-      "displayName": "Engentus Frontend Example",
-      "description": "Frontend-only Engentus shell page handler that composes authored DESIRE surfaces with the chart runtime."
     }
   ]
 }

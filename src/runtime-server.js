@@ -1,5 +1,6 @@
 import http from "node:http";
 import fs from "node:fs/promises";
+import path from "node:path";
 import { relation } from "./kernel.js";
 import { createModuleProjectorContext, ensureCapabilityDefinition, installCapability, moduleProjectors } from "./modules.js";
 import {
@@ -56,6 +57,7 @@ export async function startRuntimeServer(world, {
   serverRunnerId = null,
   port = 0,
   runtimeRoot,
+  appProject = null,
   logger,
   mcpInternalToken = null,
   runtimeProfile = DEFAULT_RUNTIME_PROFILE,
@@ -96,6 +98,12 @@ export async function startRuntimeServer(world, {
     applyRuntimePluginLoadState: applyRuntimePluginLoadStateImpl = applyRuntimePluginLoadState,
     collectActiveRuntimeContributions: collectActiveRuntimeContributionsImpl = collectActiveRuntimeContributions
   } = deps;
+  const logInfo = typeof logger?.info === "function"
+    ? (event, fields) => logger.info(event, fields)
+    : () => {};
+  const logError = typeof logger?.error === "function"
+    ? (event, fields) => logger.error(event, fields)
+    : () => {};
 
   const runtimePluginRoot = resolveRuntimePluginRootImpl({ env });
   const configuredRuntimePluginIds = resolveConfiguredRuntimePluginIdsImpl({ env, runtimePluginIds });
@@ -275,6 +283,7 @@ export async function startRuntimeServer(world, {
     world,
     serverRunner,
     runtimeRoot,
+    appProject,
     sendJson,
     readJson,
     handlerSetFactories,
@@ -365,6 +374,7 @@ export async function startRuntimeServer(world, {
     bootstrapRunner: serverRunner,
     bootstrapContext: appContext,
     runtimeRoot,
+    appProject,
     sendJson,
     readJson,
     handlerSetFactories,
@@ -381,6 +391,36 @@ export async function startRuntimeServer(world, {
   const { runtimeContexts, resolveActiveRuntime } = runtimeResolver;
   const staticPluginFiles = runtimeContributions.staticAssetFiles ?? new Map();
   const sseClients = new Set();
+  const appStaticRoot = appContext.appRoot;
+  const APP_STATIC_PREFIX = "/app-static/";
+
+  function mimeTypeForAppStatic(filePath) {
+    switch (path.extname(filePath).toLowerCase()) {
+      case ".css":
+        return "text/css; charset=utf-8";
+      case ".js":
+        return "text/javascript; charset=utf-8";
+      case ".svg":
+        return "image/svg+xml";
+      case ".png":
+        return "image/png";
+      case ".jpg":
+      case ".jpeg":
+        return "image/jpeg";
+      case ".gif":
+        return "image/gif";
+      case ".webp":
+        return "image/webp";
+      case ".ico":
+        return "image/x-icon";
+      case ".json":
+        return "application/json; charset=utf-8";
+      case ".txt":
+        return "text/plain; charset=utf-8";
+      default:
+        return "application/octet-stream";
+    }
+  }
   let sseLastCount = world.allWitnesses().length;
   const sseWatcher = setInterval(() => {
     const count = world.allWitnesses().length;
@@ -404,12 +444,30 @@ export async function startRuntimeServer(world, {
     const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
     let matchedRoute = null;
     const witnessCountBefore = world.allWitnesses().length;
-    logger.info("http.request.start", { requestId, method: req.method, url: req.url, actor: requestContext.actor });
+    logInfo("http.request.start", { requestId, method: req.method, url: req.url, actor: requestContext.actor });
     res.on("finish", () => {
-      logger.info("http.request.finish", { requestId, method: req.method, url: req.url, statusCode: res.statusCode, durationMs: Date.now() - startedAt });
+      logInfo("http.request.finish", { requestId, method: req.method, url: req.url, statusCode: res.statusCode, durationMs: Date.now() - startedAt });
     });
 
     try {
+      if (req.method === "GET" && appStaticRoot && requestUrl.pathname.startsWith(APP_STATIC_PREFIX)) {
+        const relativePath = decodeURIComponent(requestUrl.pathname.slice(APP_STATIC_PREFIX.length));
+        const resolvedPath = path.resolve(appStaticRoot, relativePath);
+        const relative = path.relative(appStaticRoot, resolvedPath);
+        if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+          sendJson(res, 404, { error: "not found" });
+          return;
+        }
+        try {
+          const bytes = await fsModule.readFile(resolvedPath);
+          res.writeHead(200, { "content-type": mimeTypeForAppStatic(resolvedPath), "cache-control": "no-cache" });
+          res.end(bytes);
+        } catch {
+          sendJson(res, 404, { error: "not found" });
+        }
+        return;
+      }
+
       if (req.method === "GET" && req.url?.startsWith("/canvas-lib/")) {
         const name = decodeURIComponent(req.url.slice("/canvas-lib/".length));
         const resolvedFile = staticPluginFiles.get(name);
@@ -523,7 +581,7 @@ export async function startRuntimeServer(world, {
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      logger.error("http.request.failed", { requestId, method: req.method, url: req.url, actor: requestContext.actor, durationMs: Date.now() - startedAt, error: err });
+      logError("http.request.failed", { requestId, method: req.method, url: req.url, actor: requestContext.actor, durationMs: Date.now() - startedAt, error: err });
       world.observe({
         process: "server.request.failed",
         actor: backendHost,

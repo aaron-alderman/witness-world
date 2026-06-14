@@ -10,6 +10,21 @@ import desire/v3-alpha
 // Force vs angle (cartesian): radial / tangential / resultant for the grounded model
 chart MillForceAngle of MillForce {
   frame cartesian
+  prop pageStylesheetHref = "/app-static/app/engentus-chart-pages.css"
+  prop bodyClass = "chart-page chart-page--mill-force"
+  prop viewportClass = "chart-page__viewport"
+  prop hostClass = "chart-page__host chart-page__host--mill-force"
+  prop mountId = "mill-force-svg-force"
+  prop mountClass = "chart-page__mount chart-page__mount--mill-force"
+  prop mountTag = "svg"
+  prop functionsModules = "/app-static/app/chart-functions/mill-force-kernels.js"
+  prop functionsExports = "millForceKernels"
+  prop overlayCanvasId = "mill-force-mc-canvas"
+  prop overlayCanvasClass = "chart-page__overlay-canvas"
+  prop tooltipId = "mill-force-tip"
+  prop tooltipClass = "chart-page__tooltip chart-page__tooltip--mill-force"
+  prop pageBackground = "#ffffff"
+
   x tBar
   x.domain 0 auto
   x.label "Segment angle θ (rad)"
@@ -24,6 +39,21 @@ chart MillForceAngle of MillForce {
 // Force rose (polar): resultant magnitude per segment, traced as a closed polygon
 chart MillForceRose of MillForce {
   frame polar
+  prop pageStylesheetHref = "/app-static/app/engentus-chart-pages.css"
+  prop bodyClass = "chart-page chart-page--mill-force"
+  prop viewportClass = "chart-page__viewport"
+  prop hostClass = "chart-page__host chart-page__host--mill-force"
+  prop mountId = "mill-force-svg-rose"
+  prop mountClass = "chart-page__mount chart-page__mount--mill-force"
+  prop mountTag = "svg"
+  prop functionsModules = "/app-static/app/chart-functions/mill-force-kernels.js"
+  prop functionsExports = "millForceKernels"
+  prop overlayCanvasId = "mill-force-mc-canvas"
+  prop overlayCanvasClass = "chart-page__overlay-canvas"
+  prop tooltipId = "mill-force-tip"
+  prop tooltipClass = "chart-page__tooltip chart-page__tooltip--mill-force"
+  prop pageBackground = "#ffffff"
+
   theta tBar
   r F_resultant
   r.domain 0 auto
@@ -33,6 +63,21 @@ chart MillForceRose of MillForce {
 // Cross-section (polar): per-segment wedge coloured by resultant force
 chart MillForceCross of MillForce {
   frame polar
+  prop pageStylesheetHref = "/app-static/app/engentus-chart-pages.css"
+  prop bodyClass = "chart-page chart-page--mill-force"
+  prop viewportClass = "chart-page__viewport"
+  prop hostClass = "chart-page__host chart-page__host--mill-force"
+  prop mountId = "mill-force-svg-cross"
+  prop mountClass = "chart-page__mount chart-page__mount--mill-force"
+  prop mountTag = "svg"
+  prop functionsModules = "/app-static/app/chart-functions/mill-force-kernels.js"
+  prop functionsExports = "millForceKernels"
+  prop overlayCanvasId = "mill-force-mc-canvas"
+  prop overlayCanvasClass = "chart-page__overlay-canvas"
+  prop tooltipId = "mill-force-tip"
+  prop tooltipClass = "chart-page__tooltip chart-page__tooltip--mill-force"
+  prop pageBackground = "#ffffff"
+
   theta tBar
   r F_resultant
   r.domain 0 auto

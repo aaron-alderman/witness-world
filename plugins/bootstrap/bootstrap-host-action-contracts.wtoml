@@ -1,0 +1,30 @@
+[[bootstrapHostAction]]
+action = "open-app"
+kind = "openAppHome"
+advanceFromCurrentStepId = "open-app"
+statusTarget = "bootstrap"
+
+[[bootstrapHostAction]]
+action = "desktop-open-world"
+kind = "desktopApi"
+desktopMethod = "openWorldHome"
+statusTarget = "desktop"
+successStatus = "Switching to the selected world home."
+canceledStatus = "Open world canceled."
+
+[[bootstrapHostAction]]
+action = "desktop-create-world"
+kind = "desktopApi"
+desktopMethod = "createWorldHome"
+statusTarget = "desktop"
+successStatus = "Switching to the new world home."
+canceledStatus = "Create world canceled."
+
+[[bootstrapHostAction]]
+action = "desktop-reveal-world"
+kind = "desktopApi"
+desktopMethod = "revealWorldHome"
+statusTarget = "desktop"
+successStatus = "Revealed current world home."
+failureReasonField = "reason"
+failureFallbackStatus = "Unable to reveal world home."

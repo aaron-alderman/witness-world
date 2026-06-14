@@ -22,7 +22,7 @@ class = "surface-lede"
 [[text]]
 id = "backend_seams_status"
 text = "Loading diagnostics..."
-class = "status"
+class = "surface-status"
 
 [[box]]
 id = "backend_seams_summary_section"
@@ -145,7 +145,7 @@ data-asset-id = "${item.id}"
 id = "backend_seams_ingest_empty_template"
 template = true
 text = "No asset ingestion repairs are currently queued for operator action."
-class = "surface-note"
+class = "surface-empty surface-empty-state"
 
 [[box]]
 id = "backend_seams_search_item_template"
@@ -179,7 +179,7 @@ data-asset-id = "${item.id}"
 id = "backend_seams_search_empty_template"
 template = true
 text = "No stale asset-backed search entries are waiting for repair."
-class = "surface-note"
+class = "surface-empty surface-empty-state"
 
 [[link]]
 id = "backend_seams_link_template"

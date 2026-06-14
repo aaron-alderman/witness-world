@@ -1,0 +1,122 @@
+:root {
+  --dk: #2C3C63;
+  --mid: #344C6C;
+  --brd: #3D5880;
+  --t1: #f1f5f9;
+  --t2: #94a3b8;
+  --t3: #475569;
+  --blue: #8CC4D4;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body.chart-page {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #fff;
+  color: var(--t3);
+}
+
+.chart-page__viewport,
+.chart-page__host {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.chart-page__mount {
+  display: block;
+}
+
+.chart-page__overlay-canvas {
+  display: block;
+}
+
+.chart-page__tooltip {
+  opacity: 0;
+}
+
+#chart-svg,
+#mc-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#mc-canvas {
+  pointer-events: none;
+}
+
+#chart-tip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(15,23,42,.9);
+  color: var(--t1);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity .1s;
+  line-height: 1.7;
+  z-index: 20;
+  white-space: nowrap;
+}
+
+#mill-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 10px;
+}
+
+#mill-force-svg-cross,
+#mill-force-svg-force,
+#mill-force-svg-rose {
+  width: 100%;
+  height: 100%;
+}
+
+#mill-force-mc-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+#mill-force-tip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(29,39,83,.95);
+  color: #f1f5f9;
+  padding: 8px 12px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  z-index: 100;
+  display: none;
+  border: 1px solid var(--brd);
+  box-shadow: 0 4px 12px rgba(0,0,0,.4);
+}
+
+.chart-page--mill-charge .chart-page__host,
+.chart-page--mill-force .chart-page__host,
+.chart-page--goodman .chart-page__host {
+  background: #fff;
+}
+
+svg.gog {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+svg.gog text {
+  font-size: 11px;
+  fill: #475569;
+}

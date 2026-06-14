@@ -1,0 +1,26 @@
+[[bootstrapHostRefreshSource]]
+source = "bootstrap-top-cards"
+
+[[bootstrapHostRefreshSource]]
+source = "bootstrap-backend-authoring-controls"
+
+[[bootstrapHostRefreshSource]]
+source = "bootstrap-backend-version-controls"
+
+[[bootstrapHostRefreshSource]]
+source = "bootstrap-proposal-create-controls"
+
+[[bootstrapHostRefreshSource]]
+source = "bootstrap-proposal-review-controls"
+
+[[bootstrapHostRefreshSource]]
+source = "bootstrap-scoped-controls"
+
+[[bootstrapHostRefreshSource]]
+source = "bootstrap-remove-controls"
+
+[[bootstrapHostRefreshSource]]
+source = "bootstrap-capability-controls"
+
+[[bootstrapHostRefreshSource]]
+source = "bootstrap-starter-controls"

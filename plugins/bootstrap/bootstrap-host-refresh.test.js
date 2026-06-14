@@ -1,9 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
+import {
+  bootstrapHostRefreshAllowedSources,
+  loadBootstrapHostRefreshSources
+} from "./bootstrap-host-refresh-contracts.js";
 import {
   bindBootstrapHostRefresh,
   renderBootstrapHostRefreshFactory
 } from "./bootstrap-host-refresh.js";
+
+test("bootstrap host refresh sources load from authored WTOML", async () => {
+  const source = await readFile(new URL("./bootstrap-host-refresh-contracts.wtoml", import.meta.url), "utf8");
+  const allowedSources = loadBootstrapHostRefreshSources();
+
+  assert.equal(source.includes('source = "bootstrap-top-cards"'), true);
+  assert.equal(source.includes('source = "bootstrap-starter-controls"'), true);
+  assert.equal(allowedSources.includes("bootstrap-capability-controls"), true);
+  assert.equal(bootstrapHostRefreshAllowedSources.includes("bootstrap-remove-controls"), true);
+});
 
 test("bindBootstrapHostRefresh refreshes for allowed authored sources", async () => {
   const listeners = new Map();
@@ -16,6 +31,7 @@ test("bindBootstrapHostRefresh refreshes for allowed authored sources", async ()
 
   bindBootstrapHostRefresh({
     target,
+    allowedSources: bootstrapHostRefreshAllowedSources,
     refresh: async () => {
       calls.push("refresh");
     }
@@ -39,6 +55,7 @@ test("bindBootstrapHostRefresh ignores unknown sources and reports refresh failu
 
   bindBootstrapHostRefresh({
     target,
+    allowedSources: bootstrapHostRefreshAllowedSources,
     refresh: async () => {
       throw new Error("refresh failed");
     },
@@ -57,6 +74,7 @@ test("bindBootstrapHostRefresh ignores unknown sources and reports refresh failu
 test("renderBootstrapHostRefreshFactory exposes the shared browser seam", () => {
   const factory = renderBootstrapHostRefreshFactory();
 
+  assert.equal(factory.includes("const bootstrapHostRefreshAllowedSources ="), true);
   assert.equal(factory.includes("const bindBootstrapHostRefresh ="), true);
   assert.equal(factory.includes('"bootstrap-capability-controls"'), true);
   assert.equal(factory.includes('"bootstrap-starter-controls"'), true);

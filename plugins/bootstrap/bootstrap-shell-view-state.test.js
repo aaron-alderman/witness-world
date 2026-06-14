@@ -11,6 +11,7 @@ test("bootstrap shell view state sync projects starter, desktop, and form access
     model: { appReady: false },
     bootstrapState: {
       identities: [{ id: "identity.aaron" }],
+      activeStarterBlueprint: { blueprint: {} },
       operator: { mutations: { enabled: true } }
     },
     session: { authenticated: true },
