@@ -37,6 +37,9 @@ grant runtime authority to copied JS or presenter code.
   states: CDF declares the no-run chart message, Stats declares the reference
   table header plus "No completed simulations", and ANOVA declares the
   reference statistic block/box-plot shell plus the insufficient-groups state.
+- Goodman floating window chrome now uses the reference titles for CDF,
+  Summary Statistics, and ANOVA, keeping the visible copy authored in
+  `shell.rvm` rather than supplied by a copied window controller.
 - Goodman run-state UI is authored through process state: Run switches to
   Monte Carlo mode, config fields lock while running/paused, Pause/Resume/Stop
   controls patch visibility/disabled state, reference run/pause/stop labels are

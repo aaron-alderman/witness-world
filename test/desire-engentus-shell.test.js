@@ -237,6 +237,9 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("GoodmanStaticProbeMeanStressField")?.body?.bindings[0]?.prop, "value");
   assert.equal(surfaces.get("GoodmanStaticProbeMeanStressField")?.body?.interactions[0]?.action?.state, "GoodmanStaticProbeMeanStress");
   assert.equal(surfaces.get("GoodmanTrailToggle")?.body?.interactions[0]?.action?.state, "GoodmanTrailVisible");
+  assert.equal(surfaces.get("GoodmanCdfWindowTitle")?.body?.props?.text, "📈 Failure CDF — Bolt Survival Over Time");
+  assert.equal(surfaces.get("GoodmanStatsWindowTitle")?.body?.props?.text, "📊 Summary Statistics");
+  assert.equal(surfaces.get("GoodmanAnovaWindowTitle")?.body?.props?.text, "🔬 ANOVA — Between-Group Comparison");
   assert.equal(surfaces.get("MillForceTabCrossSection")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("MillForceTabForceVsAngle")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("MillForceTabForceRose")?.body?.bindings[0]?.prop, "className");

@@ -4720,7 +4720,7 @@ view GoodmanCdfWindowTitle {
   kind text
   class fw-title
   prop tag = "div"
-  prop text = "Failure CDF"
+  prop text = "📈 Failure CDF — Bolt Survival Over Time"
 }
 
 view GoodmanCdfWindowClose {
@@ -4966,7 +4966,7 @@ view GoodmanStatsWindowTitle {
   kind text
   class fw-title
   prop tag = "div"
-  prop text = "Simulation Stats"
+  prop text = "📊 Summary Statistics"
 }
 
 view GoodmanStatsWindowClose {
@@ -5220,7 +5220,7 @@ view GoodmanAnovaWindowTitle {
   kind text
   class fw-title
   prop tag = "div"
-  prop text = "ANOVA"
+  prop text = "🔬 ANOVA — Between-Group Comparison"
 }
 
 view GoodmanAnovaWindowClose {
