@@ -51,6 +51,15 @@ enum GoodmanMode {
   }
 }
 
+enum GoodmanRunStatus {
+  cases {
+    ready
+    running
+    paused
+    stopped
+  }
+}
+
 state EngentusProfileMenuVisible: bool {
   initial false
 }
@@ -77,6 +86,58 @@ state MillForceActiveAnalysisMode: MillForceAnalysisMode {
 
 state GoodmanActiveMode: GoodmanMode {
   initial static
+}
+
+state GoodmanCdfWindowVisible: bool {
+  initial false
+}
+
+state GoodmanStatsWindowVisible: bool {
+  initial false
+}
+
+state GoodmanAnovaWindowVisible: bool {
+  initial false
+}
+
+state GoodmanRunStatusState: GoodmanRunStatus {
+  initial ready
+}
+
+state GoodmanRunBoltsPerSet: number {
+  initial 500
+}
+
+state GoodmanRunDurationMonths: number {
+  initial 24
+}
+
+state GoodmanRunStepMonths: number {
+  initial 0.5
+}
+
+state GoodmanScrubTimeMonths: number {
+  initial 0
+}
+
+state GoodmanPlaybackSpeed: number {
+  initial 1
+}
+
+state GoodmanTrailVisible: bool {
+  initial false
+}
+
+state GoodmanChartGridVisible: bool {
+  initial true
+}
+
+state GoodmanChartAnnotationsVisible: bool {
+  initial true
+}
+
+state GoodmanChartPointSize: number {
+  initial 4
 }
 
 state MillForcePercentCrit: number {
@@ -289,6 +350,47 @@ derive MillForceLinerHeightText {
   prop suffix = " m"
 }
 
+derive GoodmanRunBoltsPerSetText {
+  kind format
+  source GoodmanRunBoltsPerSet
+  prop digits = 0
+}
+
+derive GoodmanRunDurationText {
+  kind format
+  source GoodmanRunDurationMonths
+  prop digits = 0
+  prop suffix = " mo"
+}
+
+derive GoodmanRunStepText {
+  kind format
+  source GoodmanRunStepMonths
+  prop digits = 1
+  prop suffix = " mo"
+}
+
+derive GoodmanScrubTimeText {
+  kind format
+  source GoodmanScrubTimeMonths
+  prop digits = 1
+  prop suffix = " mo"
+}
+
+derive GoodmanPlaybackSpeedText {
+  kind format
+  source GoodmanPlaybackSpeed
+  prop digits = 1
+  prop suffix = "x"
+}
+
+derive GoodmanChartPointSizeText {
+  kind format
+  source GoodmanChartPointSize
+  prop digits = 0
+  prop suffix = " px"
+}
+
 event EngentusSignInRequested {
 }
 
@@ -380,6 +482,61 @@ event GoodmanShowEditRequested {
   }
 }
 
+event GoodmanToggleCdfWindowRequested {
+  writes {
+    GoodmanCdfWindowVisible: true
+  }
+}
+
+event GoodmanToggleStatsWindowRequested {
+  writes {
+    GoodmanStatsWindowVisible: true
+  }
+}
+
+event GoodmanToggleAnovaWindowRequested {
+  writes {
+    GoodmanAnovaWindowVisible: true
+  }
+}
+
+event GoodmanCloseCdfWindowRequested {
+  writes {
+    GoodmanCdfWindowVisible: false
+  }
+}
+
+event GoodmanCloseStatsWindowRequested {
+  writes {
+    GoodmanStatsWindowVisible: false
+  }
+}
+
+event GoodmanCloseAnovaWindowRequested {
+  writes {
+    GoodmanAnovaWindowVisible: false
+  }
+}
+
+event GoodmanRunRequested {
+  writes {
+    GoodmanRunStatusState: running
+    GoodmanActiveMode: mc
+  }
+}
+
+event GoodmanPauseRunRequested {
+  writes {
+    GoodmanRunStatusState: paused
+  }
+}
+
+event GoodmanStopRunRequested {
+  writes {
+    GoodmanRunStatusState: stopped
+  }
+}
+
 event MillChargePresetHardOreRequested {
   writes {
     MillChargeInternalFriction: 42
@@ -451,6 +608,19 @@ process EngentusShellNavigation {
     MillForceLinerMass
     MillForceLinerHeight
     GoodmanActiveMode
+    GoodmanCdfWindowVisible
+    GoodmanStatsWindowVisible
+    GoodmanAnovaWindowVisible
+    GoodmanRunStatusState
+    GoodmanRunBoltsPerSet
+    GoodmanRunDurationMonths
+    GoodmanRunStepMonths
+    GoodmanScrubTimeMonths
+    GoodmanPlaybackSpeed
+    GoodmanTrailVisible
+    GoodmanChartGridVisible
+    GoodmanChartAnnotationsVisible
+    GoodmanChartPointSize
   }
   handles {
     EngentusSignInRequested
@@ -469,6 +639,15 @@ process EngentusShellNavigation {
     GoodmanShowStaticRequested
     GoodmanShowMonteCarloRequested
     GoodmanShowEditRequested
+    GoodmanToggleCdfWindowRequested
+    GoodmanToggleStatsWindowRequested
+    GoodmanToggleAnovaWindowRequested
+    GoodmanCloseCdfWindowRequested
+    GoodmanCloseStatsWindowRequested
+    GoodmanCloseAnovaWindowRequested
+    GoodmanRunRequested
+    GoodmanPauseRunRequested
+    GoodmanStopRunRequested
     MillChargePresetHardOreRequested
     MillChargePresetAverageOreRequested
     MillChargePresetClayeyOreRequested
@@ -2286,6 +2465,11 @@ view GoodmanActionCdf {
   class goodman-action-cdf
   prop label = "CDF"
   prop actionKey = "cdf"
+  prop tag = "button"
+  prop buttonType = "button"
+  interactions {
+    on click self deliver GoodmanToggleCdfWindowRequested
+  }
 }
 
 view GoodmanActionStats {
@@ -2293,6 +2477,11 @@ view GoodmanActionStats {
   class goodman-action-stats
   prop label = "Stats"
   prop actionKey = "stats"
+  prop tag = "button"
+  prop buttonType = "button"
+  interactions {
+    on click self deliver GoodmanToggleStatsWindowRequested
+  }
 }
 
 view GoodmanActionAnova {
@@ -2300,6 +2489,11 @@ view GoodmanActionAnova {
   class goodman-action-anova
   prop label = "ANOVA"
   prop actionKey = "anova"
+  prop tag = "button"
+  prop buttonType = "button"
+  interactions {
+    on click self deliver GoodmanToggleAnovaWindowRequested
+  }
 }
 
 view GoodmanWindowToolbar {
@@ -2312,17 +2506,107 @@ view GoodmanWindowToolbar {
   }
 }
 
-view GoodmanScenarioHost {
-  kind host
-  class goodman-scenario-host
-}
-
 view GoodmanScenarioSection {
   kind section
   class goodman-scenario-section
   prop title = "Scenario View"
   children {
-    GoodmanScenarioHost
+    GoodmanScenarioProbeRow
+    GoodmanScenarioMeanStressRow
+    GoodmanScenarioAltStressRow
+    GoodmanScenarioSlipRow
+  }
+}
+
+view GoodmanScenarioProbeLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Probe"
+}
+
+view GoodmanScenarioProbeValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "Static response"
+}
+
+view GoodmanScenarioProbeRow {
+  kind metric-row
+  class info-row
+  children {
+    GoodmanScenarioProbeLabel
+    GoodmanScenarioProbeValue
+  }
+}
+
+view GoodmanScenarioMeanStressLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Mean stress"
+}
+
+view GoodmanScenarioMeanStressValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "0-650 MPa"
+}
+
+view GoodmanScenarioMeanStressRow {
+  kind metric-row
+  class info-row
+  children {
+    GoodmanScenarioMeanStressLabel
+    GoodmanScenarioMeanStressValue
+  }
+}
+
+view GoodmanScenarioAltStressLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Alternating stress"
+}
+
+view GoodmanScenarioAltStressValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "Bolt bending curve"
+}
+
+view GoodmanScenarioAltStressRow {
+  kind metric-row
+  class info-row
+  children {
+    GoodmanScenarioAltStressLabel
+    GoodmanScenarioAltStressValue
+  }
+}
+
+view GoodmanScenarioSlipLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Slip threshold"
+}
+
+view GoodmanScenarioSlipValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "Rendered as vertical rule"
+}
+
+view GoodmanScenarioSlipRow {
+  kind metric-row
+  class info-row
+  children {
+    GoodmanScenarioSlipLabel
+    GoodmanScenarioSlipValue
   }
 }
 
@@ -2331,11 +2615,81 @@ view GoodmanSimulationNewAction {
   class goodman-simulation-new
   prop label = "+ New"
   prop actionKey = "new-simulation"
+  prop tag = "button"
+  prop buttonType = "button"
 }
 
-view GoodmanSimulationListHost {
-  kind host
-  class goodman-simulation-list-host
+view GoodmanSimulationPrimaryDot {
+  kind marker
+  class sim-dot
+  prop style = "background:#38bdf8"
+}
+
+view GoodmanSimulationPrimaryName {
+  kind text
+  class sim-name
+  prop tag = "span"
+  prop text = "Baseline M48 liner bolts"
+}
+
+view GoodmanSimulationPrimaryBadge {
+  kind text
+  class sim-badge idle
+  prop tag = "span"
+  prop text = "idle"
+  bindings {
+    text from state GoodmanRunStatusState map ready idle running running paused paused stopped stopped default idle
+    className from state GoodmanRunStatusState map ready idle running running paused stale stopped stopped default idle
+  }
+}
+
+view GoodmanSimulationPrimaryRow {
+  kind list-row
+  class sim-row on
+  children {
+    GoodmanSimulationPrimaryDot
+    GoodmanSimulationPrimaryName
+    GoodmanSimulationPrimaryBadge
+  }
+}
+
+view GoodmanSimulationCompareDot {
+  kind marker
+  class sim-dot
+  prop style = "background:#a78bfa"
+}
+
+view GoodmanSimulationCompareName {
+  kind text
+  class sim-name
+  prop tag = "span"
+  prop text = "Maintenance comparison"
+}
+
+view GoodmanSimulationCompareBadge {
+  kind text
+  class sim-badge idle
+  prop tag = "span"
+  prop text = "idle"
+}
+
+view GoodmanSimulationCompareRow {
+  kind list-row
+  class sim-row
+  children {
+    GoodmanSimulationCompareDot
+    GoodmanSimulationCompareName
+    GoodmanSimulationCompareBadge
+  }
+}
+
+view GoodmanSimulationList {
+  kind list
+  class goodman-simulation-list
+  children {
+    GoodmanSimulationPrimaryRow
+    GoodmanSimulationCompareRow
+  }
 }
 
 view GoodmanSimulationSection {
@@ -2344,7 +2698,7 @@ view GoodmanSimulationSection {
   prop title = "Simulations"
   children {
     GoodmanSimulationNewAction
-    GoodmanSimulationListHost
+    GoodmanSimulationList
   }
 }
 
@@ -2358,6 +2712,12 @@ view GoodmanRunConfigBoltsPerSetField {
   prop min = 50
   prop max = 5000
   prop step = 50
+  bindings {
+    value from state GoodmanRunBoltsPerSet
+  }
+  interactions {
+    on input self set GoodmanRunBoltsPerSet eventValue
+  }
 }
 
 view GoodmanRunConfigDurationField {
@@ -2370,6 +2730,12 @@ view GoodmanRunConfigDurationField {
   prop min = 3
   prop max = 60
   prop step = 1
+  bindings {
+    value from state GoodmanRunDurationMonths
+  }
+  interactions {
+    on input self set GoodmanRunDurationMonths eventValue
+  }
 }
 
 view GoodmanRunConfigStepField {
@@ -2382,6 +2748,12 @@ view GoodmanRunConfigStepField {
   prop min = 0.1
   prop max = 2
   prop step = 0.1
+  bindings {
+    value from state GoodmanRunStepMonths
+  }
+  interactions {
+    on input self set GoodmanRunStepMonths eventValue
+  }
 }
 
 view GoodmanRunActionStart {
@@ -2389,6 +2761,11 @@ view GoodmanRunActionStart {
   class rbtn go
   prop label = "Run"
   prop actionKey = "run"
+  prop tag = "button"
+  prop buttonType = "button"
+  interactions {
+    on click self deliver GoodmanRunRequested
+  }
 }
 
 view GoodmanRunActionPause {
@@ -2397,6 +2774,14 @@ view GoodmanRunActionPause {
   prop label = "Pause"
   prop actionKey = "pause"
   prop disabled = true
+  prop tag = "button"
+  prop buttonType = "button"
+  bindings {
+    disabled from state GoodmanRunStatusState map running false default true
+  }
+  interactions {
+    on click self deliver GoodmanPauseRunRequested
+  }
 }
 
 view GoodmanRunActionStop {
@@ -2405,6 +2790,14 @@ view GoodmanRunActionStop {
   prop label = "Stop"
   prop actionKey = "stop"
   prop disabled = true
+  prop tag = "button"
+  prop buttonType = "button"
+  bindings {
+    disabled from state GoodmanRunStatusState map running false paused false default true
+  }
+  interactions {
+    on click self deliver GoodmanStopRunRequested
+  }
 }
 
 view GoodmanRunActionGroup {
@@ -2426,6 +2819,9 @@ view GoodmanRunProgressLabel {
   kind progress-label
   class prog-lbl
   prop text = "Ready"
+  bindings {
+    text from state GoodmanRunStatusState map ready Ready running Running paused Paused stopped Stopped default Ready
+  }
 }
 
 view GoodmanRunProgress {
@@ -2450,9 +2846,96 @@ view GoodmanRunConfigSection {
   }
 }
 
-view GoodmanChartStyleHost {
-  kind host
+view GoodmanChartGridToggle {
+  kind input
+  class mc-row
+  prop tag = "input"
+  prop inputType = "checkbox"
+  prop label = "Grid"
+  prop checked = true
+  bindings {
+    checked from state GoodmanChartGridVisible
+  }
+  interactions {
+    on change self set GoodmanChartGridVisible eventChecked
+  }
+}
+
+view GoodmanChartAnnotationsToggle {
+  kind input
+  class mc-row
+  prop tag = "input"
+  prop inputType = "checkbox"
+  prop label = "Annotations"
+  prop checked = true
+  bindings {
+    checked from state GoodmanChartAnnotationsVisible
+  }
+  interactions {
+    on change self set GoodmanChartAnnotationsVisible eventChecked
+  }
+}
+
+view GoodmanChartPointSizeLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Point size"
+}
+
+view GoodmanChartPointSizeValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "4 px"
+  bindings {
+    text from projection GoodmanChartPointSizeText
+  }
+}
+
+view GoodmanChartPointSizeTop {
+  kind row
+  class prow-top
+  children {
+    GoodmanChartPointSizeLabel
+    GoodmanChartPointSizeValue
+  }
+}
+
+view GoodmanChartPointSizeInput {
+  kind input
+  class mill-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 1
+  prop max = 12
+  prop step = 1
+  prop value = 4
+  bindings {
+    value from state GoodmanChartPointSize
+  }
+  interactions {
+    on input self set GoodmanChartPointSize eventValue
+  }
+}
+
+view GoodmanChartPointSizeRow {
+  kind control-row
+  class prow
+  children {
+    GoodmanChartPointSizeTop
+    GoodmanChartPointSizeInput
+  }
+}
+
+view GoodmanChartStyleControls {
+  kind control-group
   class goodman-chart-style-host
+  children {
+    GoodmanChartGridToggle
+    GoodmanChartAnnotationsToggle
+    GoodmanChartPointSizeRow
+  }
 }
 
 view GoodmanChartStyleSection {
@@ -2460,7 +2943,7 @@ view GoodmanChartStyleSection {
   class goodman-chart-style-section
   prop title = "Chart Style"
   children {
-    GoodmanChartStyleHost
+    GoodmanChartStyleControls
   }
 }
 
@@ -2469,11 +2952,132 @@ view GoodmanBoltSetsNewAction {
   class goodman-boltset-new
   prop label = "+ New"
   prop actionKey = "new-bolt-set"
+  prop tag = "button"
+  prop buttonType = "button"
 }
 
-view GoodmanBoltSetsHost {
-  kind host
+view GoodmanBoltSetPrimarySwatch {
+  kind marker
+  class leg-sw
+  prop style = "background:#38bdf8"
+}
+
+view GoodmanBoltSetPrimaryName {
+  kind text
+  class sim-name
+  prop tag = "span"
+  prop text = "M48 Baseline"
+}
+
+view GoodmanBoltSetPrimaryHeader {
+  kind row
+  class sim-row on
+  children {
+    GoodmanBoltSetPrimarySwatch
+    GoodmanBoltSetPrimaryName
+  }
+}
+
+view GoodmanBoltSetPrimaryClampRow {
+  kind metric-row
+  class info-row
+  children {
+    GoodmanBoltSetClampLabel
+    GoodmanBoltSetClampValue
+  }
+}
+
+view GoodmanBoltSetClampLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Clamp load"
+}
+
+view GoodmanBoltSetClampValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "980 kN"
+}
+
+view GoodmanBoltSetDiameterRow {
+  kind metric-row
+  class info-row
+  children {
+    GoodmanBoltSetDiameterLabel
+    GoodmanBoltSetDiameterValue
+  }
+}
+
+view GoodmanBoltSetDiameterLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Shank / minor"
+}
+
+view GoodmanBoltSetDiameterValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "48 / 42 mm"
+}
+
+view GoodmanBoltSetPrimaryCard {
+  kind card
+  class goodman-bolt-set-card
+  children {
+    GoodmanBoltSetPrimaryHeader
+    GoodmanBoltSetPrimaryClampRow
+    GoodmanBoltSetDiameterRow
+  }
+}
+
+view GoodmanBoltSetMaintenanceSwatch {
+  kind marker
+  class leg-sw
+  prop style = "background:#f59e0b"
+}
+
+view GoodmanBoltSetMaintenanceName {
+  kind text
+  class sim-name
+  prop tag = "span"
+  prop text = "Worn liner case"
+}
+
+view GoodmanBoltSetMaintenanceHeader {
+  kind row
+  class sim-row
+  children {
+    GoodmanBoltSetMaintenanceSwatch
+    GoodmanBoltSetMaintenanceName
+  }
+}
+
+view GoodmanBoltSetMaintenanceNote {
+  kind note
+  class info-row
+  prop text = "Higher alternating load comparison case"
+}
+
+view GoodmanBoltSetMaintenanceCard {
+  kind card
+  class goodman-bolt-set-card
+  children {
+    GoodmanBoltSetMaintenanceHeader
+    GoodmanBoltSetMaintenanceNote
+  }
+}
+
+view GoodmanBoltSetsList {
+  kind list
   class goodman-bolt-sets-host
+  children {
+    GoodmanBoltSetPrimaryCard
+    GoodmanBoltSetMaintenanceCard
+  }
 }
 
 view GoodmanBoltSetsSection {
@@ -2482,13 +3086,84 @@ view GoodmanBoltSetsSection {
   prop title = "Bolt Sets"
   children {
     GoodmanBoltSetsNewAction
-    GoodmanBoltSetsHost
+    GoodmanBoltSetsList
   }
 }
 
-view GoodmanFatigueLegendHost {
-  kind host
+view GoodmanLegendInfiniteSwatch {
+  kind marker
+  class leg-sw
+  prop style = "background:#38bdf8"
+}
+
+view GoodmanLegendInfiniteText {
+  kind text
+  class leg-label
+  prop tag = "span"
+  prop text = "Infinite life region"
+}
+
+view GoodmanLegendInfiniteRow {
+  kind legend-row
+  class leg-row
+  children {
+    GoodmanLegendInfiniteSwatch
+    GoodmanLegendInfiniteText
+  }
+}
+
+view GoodmanLegendFiniteSwatch {
+  kind marker
+  class leg-sw
+  prop style = "background:#f59e0b"
+}
+
+view GoodmanLegendFiniteText {
+  kind text
+  class leg-label
+  prop tag = "span"
+  prop text = "Finite life region"
+}
+
+view GoodmanLegendFiniteRow {
+  kind legend-row
+  class leg-row
+  children {
+    GoodmanLegendFiniteSwatch
+    GoodmanLegendFiniteText
+  }
+}
+
+view GoodmanLegendUnsafeSwatch {
+  kind marker
+  class leg-sw
+  prop style = "background:#ef4444"
+}
+
+view GoodmanLegendUnsafeText {
+  kind text
+  class leg-label
+  prop tag = "span"
+  prop text = "Yield / unsafe boundary"
+}
+
+view GoodmanLegendUnsafeRow {
+  kind legend-row
+  class leg-row
+  children {
+    GoodmanLegendUnsafeSwatch
+    GoodmanLegendUnsafeText
+  }
+}
+
+view GoodmanFatigueLegend {
+  kind legend
   class goodman-fatigue-legend-host
+  children {
+    GoodmanLegendInfiniteRow
+    GoodmanLegendFiniteRow
+    GoodmanLegendUnsafeRow
+  }
 }
 
 view GoodmanFatigueLegendNote {
@@ -2502,7 +3177,7 @@ view GoodmanFatigueLegendSection {
   class goodman-fatigue-legend-section
   prop title = "Fatigue Life Regions"
   children {
-    GoodmanFatigueLegendHost
+    GoodmanFatigueLegend
     GoodmanFatigueLegendNote
   }
 }
@@ -2528,6 +3203,11 @@ view GoodmanPlayAction {
   prop label = "Play"
   prop actionKey = "play"
   prop domId = "play-btn"
+  prop tag = "button"
+  prop buttonType = "button"
+  interactions {
+    on click self deliver GoodmanRunRequested
+  }
 }
 
 view GoodmanTimeSlider {
@@ -2540,6 +3220,12 @@ view GoodmanTimeSlider {
   prop max = 24
   prop step = 0.05
   prop value = 0
+  bindings {
+    value from state GoodmanScrubTimeMonths
+  }
+  interactions {
+    on input self set GoodmanScrubTimeMonths eventValue
+  }
 }
 
 view GoodmanTimeLabel {
@@ -2547,6 +3233,9 @@ view GoodmanTimeLabel {
   class goodman-time-label
   prop domId = "t-lbl"
   prop text = "t = 0.0 mo"
+  bindings {
+    text from projection GoodmanScrubTimeText
+  }
 }
 
 view GoodmanFailureBadge {
@@ -2566,6 +3255,12 @@ view GoodmanSpeedSlider {
   prop max = 20
   prop step = 0.1
   prop value = 1
+  bindings {
+    value from state GoodmanPlaybackSpeed
+  }
+  interactions {
+    on input self set GoodmanPlaybackSpeed eventValue
+  }
 }
 
 view GoodmanSpeedLabel {
@@ -2573,6 +3268,9 @@ view GoodmanSpeedLabel {
   class goodman-speed-label
   prop domId = "spd-lbl"
   prop text = "1.0x"
+  bindings {
+    text from projection GoodmanPlaybackSpeedText
+  }
 }
 
 view GoodmanSpeedGroup {
@@ -2589,6 +3287,13 @@ view GoodmanTrailToggle {
   class goodman-trail-toggle
   prop label = "Trail"
   prop inputId = "trail-cb"
+  prop inputType = "checkbox"
+  bindings {
+    checked from state GoodmanTrailVisible
+  }
+  interactions {
+    on change self set GoodmanTrailVisible eventChecked
+  }
 }
 
 view GoodmanScrubber {
@@ -2615,10 +3320,153 @@ view GoodmanChartRegion {
   }
 }
 
+view GoodmanCdfWindowTitle {
+  kind text
+  class fw-title
+  prop tag = "div"
+  prop text = "Failure CDF"
+}
+
+view GoodmanCdfWindowClose {
+  kind action
+  class fw-btn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Close"
+  interactions {
+    on click self deliver GoodmanCloseCdfWindowRequested
+  }
+}
+
+view GoodmanCdfWindowHeader {
+  kind header
+  class fw-tb
+  children {
+    GoodmanCdfWindowTitle
+    GoodmanCdfWindowClose
+  }
+}
+
+view GoodmanCdfWindowBody {
+  kind body
+  class fw-body
+  prop text = "CDF will bind to completed Monte Carlo failure-time results. Current authored shell exposes the window lifecycle and target dataset."
+}
+
+view GoodmanCdfWindow {
+  kind floating-window
+  class fw goodman-window cdf-window
+  prop hidden = true
+  bindings {
+    visible from state GoodmanCdfWindowVisible
+  }
+  children {
+    GoodmanCdfWindowHeader
+    GoodmanCdfWindowBody
+  }
+}
+
+view GoodmanStatsWindowTitle {
+  kind text
+  class fw-title
+  prop tag = "div"
+  prop text = "Simulation Stats"
+}
+
+view GoodmanStatsWindowClose {
+  kind action
+  class fw-btn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Close"
+  interactions {
+    on click self deliver GoodmanCloseStatsWindowRequested
+  }
+}
+
+view GoodmanStatsWindowHeader {
+  kind header
+  class fw-tb
+  children {
+    GoodmanStatsWindowTitle
+    GoodmanStatsWindowClose
+  }
+}
+
+view GoodmanStatsWindowBody {
+  kind body
+  class fw-body
+  prop text = "Stats will bind to per-simulation summary rows after the Monte Carlo result store is authored."
+}
+
+view GoodmanStatsWindow {
+  kind floating-window
+  class fw goodman-window stats-window
+  prop hidden = true
+  bindings {
+    visible from state GoodmanStatsWindowVisible
+  }
+  children {
+    GoodmanStatsWindowHeader
+    GoodmanStatsWindowBody
+  }
+}
+
+view GoodmanAnovaWindowTitle {
+  kind text
+  class fw-title
+  prop tag = "div"
+  prop text = "ANOVA"
+}
+
+view GoodmanAnovaWindowClose {
+  kind action
+  class fw-btn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Close"
+  interactions {
+    on click self deliver GoodmanCloseAnovaWindowRequested
+  }
+}
+
+view GoodmanAnovaWindowHeader {
+  kind header
+  class fw-tb
+  children {
+    GoodmanAnovaWindowTitle
+    GoodmanAnovaWindowClose
+  }
+}
+
+view GoodmanAnovaWindowBody {
+  kind body
+  class fw-body
+  prop text = "ANOVA will compare completed simulation groups once repeated result collections are authored."
+}
+
+view GoodmanAnovaWindow {
+  kind floating-window
+  class fw goodman-window anova-window
+  prop hidden = true
+  bindings {
+    visible from state GoodmanAnovaWindowVisible
+  }
+  children {
+    GoodmanAnovaWindowHeader
+    GoodmanAnovaWindowBody
+  }
+}
+
 view GoodmanWindowLayer {
-  kind host
+  kind window-layer
   class goodman-window-layer
   prop domId = "wl"
+  children {
+    GoodmanCdfWindow
+    GoodmanStatsWindow
+    GoodmanAnovaWindow
+  }
 }
 
 view GoodmanViewerRegion {

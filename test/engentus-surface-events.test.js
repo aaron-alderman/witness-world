@@ -305,6 +305,85 @@ test("Engentus Goodman modes switch authored chart views through process state",
   }
 });
 
+test("Engentus Goodman authored sidebar controls and windows update process state", { timeout: 45000 }, async () => {
+  const server = await startUiServer({
+    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
+    serverRunnerId: "engentus_server",
+    devMode: false
+  });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    await page.goto(`${server.url}/engentus/goodman`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
+
+    assert.equal(await page.locator("#surface-goodmancdfwindow[hidden]").count(), 1);
+    await page.click("#surface-goodmanactioncdf");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanCdfWindowVisible") === true
+    );
+    await page.waitForFunction(() =>
+      !document.querySelector("#surface-goodmancdfwindow")?.hasAttribute("hidden")
+    );
+    await page.click("#surface-goodmancdfwindowclose");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanCdfWindowVisible") === false
+    );
+    assert.equal(await page.locator("#surface-goodmancdfwindow[hidden]").count(), 1);
+
+    await page.locator("#cfg-n").fill("750");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunBoltsPerSet") === 750
+    );
+    await page.locator("#time-sl").fill("6.5");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanScrubTimeMonths") === 6.5
+    );
+    assert.match(await page.textContent("#t-lbl"), /6\.5 mo/);
+
+    await page.locator("#trail-cb").check();
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanTrailVisible") === true
+    );
+    await page.locator("#surface-goodmanchartannotationstoggle").uncheck();
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanChartAnnotationsVisible") === false
+    );
+
+    await page.click("#surface-goodmanrunactionstart");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") === "running"
+    );
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "mc"
+    );
+    assert.equal(await page.textContent("#surface-goodmanrunprogresslabel"), "Running");
+    assert.equal(await page.evaluate(() =>
+      document.querySelector("#surface-goodmanrunactionpause")?.disabled
+    ), false);
+    assert.equal(await page.evaluate(() =>
+      document.querySelector("#surface-goodmanrunactionstop")?.disabled
+    ), false);
+
+    await page.click("#surface-goodmanrunactionpause");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") === "paused"
+    );
+    assert.equal(await page.textContent("#surface-goodmanrunprogresslabel"), "Paused");
+    await page.click("#surface-goodmanrunactionstop");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") === "stopped"
+    );
+    assert.equal(await page.textContent("#surface-goodmanrunprogresslabel"), "Stopped");
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
 test("Engentus Mill Charge controls mutate authored process state through generic bindings", { timeout: 45000 }, async () => {
   const server = await startUiServer({
     dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),

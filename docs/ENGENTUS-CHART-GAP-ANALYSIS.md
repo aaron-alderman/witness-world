@@ -11,6 +11,11 @@ grant runtime authority to copied JS or presenter code.
 - Goodman mode switching now drives authored process state for Static, Monte
   Carlo, and Edit; Static/Edit show `GoodmanDiagram` and Monte Carlo shows
   `GoodmanMCBands` through separate chart mounts.
+- Goodman sidebar/window structure has an authored first-pass control loop:
+  scenario/probe info, simulation rows, chart-style controls, bolt-set cards,
+  fatigue legend rows, scrubber controls, CDF/Stats/ANOVA window visibility, and
+  run-status controls are expressed in `shell.rvm` and driven by
+  `EngentusShellNavigation` state.
 - Mill Charge chart: `MillChargeCrossSection` mounts live in
   `/engentus/mill-charge`, accepts authored parameter bindings, updates derived
   RHS metrics, and keeps its transient animation phase during parameter changes.
@@ -25,11 +30,14 @@ grant runtime authority to copied JS or presenter code.
 
 ## Known Gaps
 
-- Goodman simulation lifecycle, scrubber playback, CDF/Stats/ANOVA windows, and
-  bolt-set editing remain to be authored.
-- Goodman sidebar sections still include placeholders where the reference app
-  dynamically renders parameter/edit/list content. Those must become authored
-  state/process/projection surfaces or explicitly justified leaf helpers.
+- Goodman simulation lifecycle, animated scrubber playback, CDF/Stats/ANOVA
+  result datasets, and bolt-set edit/clone/delete/new behavior remain to be
+  authored. The current Goodman windows are lifecycle/content placeholders, not
+  statistical parity.
+- Goodman dynamic repeated collections remain a gap. Current simulation and
+  bolt-set rows are explicit authored first-pass rows; full reference parity
+  still needs authored collection/repeated-action semantics or a justified
+  platform primitive.
 - Mill Force still needs faithful model selection, compare-view behavior, Monte
   Carlo controls/execution, tooltip/overlay behavior, and full reference result
   projection. The current result rows are an initial chart-output binding proof,

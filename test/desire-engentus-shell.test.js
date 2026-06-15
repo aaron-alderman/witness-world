@@ -61,6 +61,12 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.ok(messages.has("GoodmanShowStaticRequested"));
   assert.ok(messages.has("GoodmanShowMonteCarloRequested"));
   assert.ok(messages.has("GoodmanShowEditRequested"));
+  assert.ok(messages.has("GoodmanToggleCdfWindowRequested"));
+  assert.ok(messages.has("GoodmanToggleStatsWindowRequested"));
+  assert.ok(messages.has("GoodmanToggleAnovaWindowRequested"));
+  assert.ok(messages.has("GoodmanRunRequested"));
+  assert.ok(messages.has("GoodmanPauseRunRequested"));
+  assert.ok(messages.has("GoodmanStopRunRequested"));
   assert.equal(types.get("EngentusShellRoute")?.body?.role, "enum");
   assert.equal(types.get("EngentusShellActiveRoute")?.body?.role, "state");
   assert.equal(types.get("EngentusShellAuthState")?.body?.role, "enum");
@@ -75,6 +81,10 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(types.get("MillForceTotalFill")?.body?.role, "state");
   assert.equal(types.get("GoodmanMode")?.body?.role, "enum");
   assert.equal(types.get("GoodmanActiveMode")?.body?.role, "state");
+  assert.equal(types.get("GoodmanRunStatus")?.body?.role, "enum");
+  assert.equal(types.get("GoodmanRunStatusState")?.body?.role, "state");
+  assert.equal(types.get("GoodmanCdfWindowVisible")?.body?.role, "state");
+  assert.equal(types.get("GoodmanRunBoltsPerSet")?.body?.role, "state");
   assert.equal(surfaces.get("EngentusRoot")?.body?.processRef, "EngentusShellNavigation");
   assert.equal(surfaces.get("EngentusLoginBook")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("EngentusLoginPasswordField")?.body?.bindings[0]?.prop, "inputType");
@@ -143,9 +153,26 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
       action: { kind: "deliver", message: "GoodmanShowMonteCarloRequested" }
     }
   ]);
+  assert.deepEqual(surfaces.get("GoodmanActionCdf")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "GoodmanToggleCdfWindowRequested" }
+    }
+  ]);
+  assert.deepEqual(surfaces.get("GoodmanRunActionStart")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "GoodmanRunRequested" }
+    }
+  ]);
   assert.equal(surfaces.get("GoodmanModeStatic")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("GoodmanModeMonteCarlo")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("GoodmanModeEdit")?.body?.bindings[0]?.prop, "className");
+  assert.equal(surfaces.get("GoodmanCdfWindow")?.body?.bindings[0]?.prop, "visible");
+  assert.equal(surfaces.get("GoodmanRunConfigBoltsPerSetField")?.body?.bindings[0]?.prop, "value");
+  assert.equal(surfaces.get("GoodmanTrailToggle")?.body?.interactions[0]?.action?.state, "GoodmanTrailVisible");
   assert.equal(surfaces.get("MillForceTabCrossSection")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("MillForceTabForceVsAngle")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("MillForceTabForceRose")?.body?.bindings[0]?.prop, "className");
@@ -261,6 +288,41 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanMCBands"
   ]);
 
+  assert.deepEqual(surfaces.get("GoodmanScenarioSection")?.body?.children, [
+    "GoodmanScenarioProbeRow",
+    "GoodmanScenarioMeanStressRow",
+    "GoodmanScenarioAltStressRow",
+    "GoodmanScenarioSlipRow"
+  ]);
+
+  assert.deepEqual(surfaces.get("GoodmanSimulationList")?.body?.children, [
+    "GoodmanSimulationPrimaryRow",
+    "GoodmanSimulationCompareRow"
+  ]);
+
+  assert.deepEqual(surfaces.get("GoodmanChartStyleControls")?.body?.children, [
+    "GoodmanChartGridToggle",
+    "GoodmanChartAnnotationsToggle",
+    "GoodmanChartPointSizeRow"
+  ]);
+
+  assert.deepEqual(surfaces.get("GoodmanBoltSetsList")?.body?.children, [
+    "GoodmanBoltSetPrimaryCard",
+    "GoodmanBoltSetMaintenanceCard"
+  ]);
+
+  assert.deepEqual(surfaces.get("GoodmanFatigueLegend")?.body?.children, [
+    "GoodmanLegendInfiniteRow",
+    "GoodmanLegendFiniteRow",
+    "GoodmanLegendUnsafeRow"
+  ]);
+
+  assert.deepEqual(surfaces.get("GoodmanWindowLayer")?.body?.children, [
+    "GoodmanCdfWindow",
+    "GoodmanStatsWindow",
+    "GoodmanAnovaWindow"
+  ]);
+
   assert.deepEqual(surfaces.get("EngentusApp")?.body?.children, [
     "EngentusAppChrome",
     "EngentusGoodmanHeader",
@@ -363,6 +425,29 @@ test("the Mill Charge shell authors controls, presets, and metrics rather than e
     "MillChargeMetricCataracting",
     "MillChargeRegimeBadge"
   ]);
+});
+
+test("the Goodman shell authors sidebar and window content rather than empty host placeholders", async () => {
+  const desire = await shellDesire();
+  const surfaces = nodeMap(desire, "surface");
+  const source = await shellSource();
+
+  for (const removed of [
+    "GoodmanScenarioHost",
+    "GoodmanSimulationListHost",
+    "GoodmanChartStyleHost",
+    "GoodmanBoltSetsHost",
+    "GoodmanFatigueLegendHost"
+  ]) {
+    assert.equal(surfaces.has(removed), false, `${removed} should not remain a surface`);
+    assert.equal(source.includes(`view ${removed}`), false, `${removed} should not remain in shell source`);
+  }
+
+  assert.equal(surfaces.get("GoodmanCdfWindow")?.body?.surfaceKind, "floating-window");
+  assert.equal(surfaces.get("GoodmanStatsWindow")?.body?.surfaceKind, "floating-window");
+  assert.equal(surfaces.get("GoodmanAnovaWindow")?.body?.surfaceKind, "floating-window");
+  assert.equal(surfaces.get("GoodmanRunProgressLabel")?.body?.bindings[0]?.source?.kind, "state");
+  assert.equal(surfaces.get("GoodmanSimulationPrimaryBadge")?.body?.bindings[0]?.source?.state, "GoodmanRunStatusState");
 });
 
 test("the module shells declare process and capability dependencies semantically", async () => {
