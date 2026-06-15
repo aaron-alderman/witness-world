@@ -106,7 +106,7 @@ function planLayer(layer, evaluated, fills) {
   if (layer.mark === "line") {
     const yField = fields[enc.y];
     if (!yField) return { ...base, primitives: [] };
-    const where = parseWhere(enc.where, axes);
+    const where = parseWhere(enc.where, axes, evaluated);
     const iterAxis = iterationAxis(layer, yField, axes);
     const xField = enc.x && fields[enc.x] ? fields[enc.x] : null;
     const iterVals = axes[iterAxis]?.values ?? [];
@@ -199,7 +199,7 @@ function planPolarLayer(layer, evaluated) {
   const axes = evaluated.axes ?? {};
   const enc = layer.encode ?? {};
   const base = { name: layer.name, mark: layer.mark, encode: enc };
-  const where = parseWhere(enc.where, axes);
+  const where = parseWhere(enc.where, axes, evaluated);
 
   if (layer.mark === "polygon" || layer.mark === "line") {
     const rField = fields[enc.r];
@@ -323,7 +323,7 @@ function planDiscLayer(layer, evaluated) {
   const axes = evaluated.axes ?? {};
   const enc = layer.encode ?? {};
   const base = { name: layer.name, mark: layer.mark, encode: enc };
-  const where = parseWhere(enc.where, axes);
+  const where = parseWhere(enc.where, axes, evaluated);
 
   if (layer.mark === "polygon" || layer.mark === "line") {
     const xField = fields[enc.x];
@@ -415,13 +415,18 @@ function valueAt(field, coord) {
   return v;
 }
 
-// "method=grounded" -> { method: <index> }; numeric values coerced
-function parseWhere(token, axes) {
+// "method=grounded" -> { method: <index> }; "method=param.active_method"
+// resolves through evaluated model params so authored chart surfaces can bind
+// a slice to process-owned state without shell-local chart branching.
+function parseWhere(token, axes, evaluated = {}) {
   if (!token || typeof token !== "string" || !token.includes("=")) return {};
   const [ax, raw] = token.split("=");
   const vals = axes[ax]?.values ?? [];
-  const asNum = Number(raw);
-  const needle = raw !== "" && !Number.isNaN(asNum) ? asNum : raw;
+  const trimmed = String(raw ?? "").trim();
+  const paramName = trimmed.startsWith("param.") ? trimmed.slice("param.".length) : null;
+  const rawNeedle = paramName ? evaluated.params?.[paramName] : trimmed;
+  const asNum = Number(rawNeedle);
+  const needle = rawNeedle !== "" && !Number.isNaN(asNum) ? asNum : rawNeedle;
   const idx = vals.indexOf(needle);
   return idx >= 0 ? { [ax]: idx } : {};
 }

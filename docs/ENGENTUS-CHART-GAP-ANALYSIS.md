@@ -31,6 +31,10 @@ grant runtime authority to copied JS or presenter code.
   selection, compare-mode explanatory rows, Monte Carlo sample count,
   free-parameter toggles, and run/clear status all live in `shell.rvm` and
   mutate process state through generic bindings.
+- Mill Force chart model selection now flows through `chart.render` as an
+  authored chart parameter: the force, rose, and cross-section chart layers
+  slice `method` from `param.active_method`, which is bound to
+  `MillForceActiveModel`.
 
 ## Known Gaps
 
@@ -42,10 +46,10 @@ grant runtime authority to copied JS or presenter code.
   bolt-set rows are explicit authored first-pass rows; full reference parity
   still needs authored collection/repeated-action semantics or a justified
   platform primitive.
-- Mill Force still needs chart-level model filtering/dual compare rendering,
-  Monte Carlo execution/overlay behavior, tooltip behavior, and full reference
-  result projection. The current result rows and MC controls are authored shell
-  proofs, not final numerical/visual parity.
+- Mill Force still needs dual compare rendering, Monte Carlo execution/overlay
+  behavior, tooltip behavior, and full reference result projection. The current
+  result rows and MC controls are authored shell proofs, not final
+  numerical/visual parity.
 - No app-local browser runtime, presenter, or controller seam should be added to
   close these gaps. The next work should continue through authored surfaces,
   process state, projections, and explicit capability bindings.

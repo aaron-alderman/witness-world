@@ -599,15 +599,20 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveModel") === "faithful"
     );
+    await page.waitForFunction(() =>
+      document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.active_method === "faithful"
+    );
     assert.deepEqual(await page.evaluate(() => ({
       groundedClass: document.querySelector("#surface-millforcemodelgrounded")?.className,
       faithfulClass: document.querySelector("#surface-millforcemodelfaithful")?.className,
+      chartMethod: document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.active_method,
       modelRow: [...document.querySelectorAll(".mill-force-result-row")]
         .map(row => row.textContent)
         .find(text => text.includes("Model"))
     })), {
       groundedClass: "mill-force-pill",
       faithfulClass: "mill-force-pill active",
+      chartMethod: "faithful",
       modelRow: "ModelFaithful"
     });
 

@@ -22,11 +22,12 @@ async function setup() {
   const model = await loadBody("models/mill-force.rvm", "dataflow", "MillForce");
   const evaluated = evaluateModel(model, { functions: millForceKernels });
   const g = evaluated.axes.method.values.indexOf("grounded");
+  const f = evaluated.axes.method.values.indexOf("faithful");
   const N = evaluated.axes.segment.values.length;
-  return { evaluated, g, N };
+  return { model, evaluated, g, f, N };
 }
 
-test("MillForceAngle plans cartesian lines over segment angle, sliced to grounded", async () => {
+test("MillForceAngle plans cartesian lines over segment angle, sliced to active model", async () => {
   const { evaluated, g, N } = await setup();
   const view = await loadBody("views/mill-force.rvm", "surface", "MillForceAngle");
   const plan = planChart(view, evaluated, { width: 800, height: 520 });
@@ -45,6 +46,37 @@ test("MillForceAngle plans cartesian lines over segment angle, sliced to grounde
   }
   assert.equal(plan.layers.find(l => l.name === "fres").primitives[0].points[8].y,
     evaluated.fields.F_resultant.data[8][g]);
+});
+
+test("MillForce charts can slice faithful data through an authored chart param", async () => {
+  const { model, f } = await setup();
+  const evaluated = evaluateModel(model, {
+    functions: millForceKernels,
+    params: { active_method: "faithful" }
+  });
+  const angle = await loadBody("views/mill-force.rvm", "surface", "MillForceAngle");
+  const rose = await loadBody("views/mill-force.rvm", "surface", "MillForceRose");
+  const cross = await loadBody("views/mill-force.rvm", "surface", "MillForceCross");
+
+  assert.equal(evaluated.params.active_method, "faithful");
+
+  const anglePlan = planChart(angle, evaluated, { width: 800, height: 520 });
+  assert.equal(
+    anglePlan.layers.find(l => l.name === "fres").primitives[0].points[8].y,
+    evaluated.fields.F_resultant.data[8][f]
+  );
+
+  const rosePlan = planChart(rose, evaluated, { width: 600, height: 600 });
+  assert.equal(
+    rosePlan.layers.find(l => l.name === "rose").primitives[0].points[7].r,
+    evaluated.fields.F_resultant.data[7][f]
+  );
+
+  const crossPlan = planChart(cross, evaluated, { width: 600, height: 600 });
+  assert.equal(
+    crossPlan.layers.find(l => l.name === "liners").primitives[10].theta1,
+    evaluated.fields.t2.data[10][f]
+  );
 });
 
 test("MillForceRose plans a polar polygon of resultant magnitude", async () => {
@@ -101,7 +133,8 @@ test("MillForce charts bind authored shell inputs into chart params", async () =
       "param.rho_ore",
       "param.depth",
       "param.m_liner",
-      "param.height"
+      "param.height",
+      "param.active_method"
     ]) {
       assert.equal(boundProps.has(prop), true, `${chartName} missing ${prop}`);
     }
