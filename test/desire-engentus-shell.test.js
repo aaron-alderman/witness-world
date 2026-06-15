@@ -176,10 +176,10 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
       action: { kind: "deliver", message: "MillForceShowCompareModeRequested" }
     }
   ]);
-  assert.deepEqual(surfaces.get("MillForceModelFaithful")?.body?.interactions, [
+  assert.deepEqual(surfaces.get("MillForceModelFaithfulInput")?.body?.interactions, [
     {
       target: "self",
-      event: "click",
+      event: "change",
       action: { kind: "deliver", message: "MillForceSelectFaithfulModelRequested" }
     }
   ]);
@@ -256,6 +256,17 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("MillForceCompareToeDeltaValue")?.body?.bindings[0]?.source?.output, "phiPrimeDeltaText");
   assert.equal(surfaces.get("MillForceCompareRadialDeltaValue")?.body?.bindings[0]?.source?.output, "F_r_max_delta_text");
   assert.equal(surfaces.get("MillForceCompareResultantDeltaValue")?.body?.bindings[0]?.source?.output, "F_resultant_max_delta_text");
+  assert.equal(surfaces.get("MillForceModelGroundedInput")?.body?.props?.inputType, "radio");
+  assert.equal(surfaces.get("MillForceModelGroundedInput")?.body?.props?.name, "mill-force-model-sel");
+  assert.equal(surfaces.get("MillForceModelGroundedInput")?.body?.bindings[0]?.prop, "checked");
+  assert.equal(surfaces.get("MillForceModelGroundedInput")?.body?.bindings[0]?.source?.state, "MillForceActiveModel");
+  assert.equal(surfaces.get("MillForceModelFaithfulInput")?.body?.props?.inputType, "radio");
+  assert.equal(surfaces.get("MillForceModelFaithfulInput")?.body?.props?.name, "mill-force-model-sel");
+  assert.deepEqual(surfaces.get("MillForceModelChoices")?.body?.children, [
+    "MillForceModelGroundedLabel",
+    "MillForceModelFaithfulLabel"
+  ]);
+  assert.equal(surfaces.has("MillForceModelNote"), false);
   assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.surfaceKind, "form-field");
   assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.className, "mc-row");
   assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.props?.label, "Samples");

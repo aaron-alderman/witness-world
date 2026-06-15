@@ -95,6 +95,10 @@ grant runtime authority to copied JS or presenter code.
   free-parameter rows with reference sigma labels, reference-aligned run/clear
   labels, Clear disabled state, and run/clear status all live in `shell.rvm`
   and mutate process state through generic bindings.
+- Mill Force single-mode model selection now matches the reference control
+  shape more closely: the grounded/faithful selector is authored as radio
+  labels in `shell.rvm`, not as a DESIRE-local pill abstraction, while still
+  driving `MillForceActiveModel` through the existing process messages.
 - Mill Force chart model selection now flows through `chart.render` as an
   authored chart parameter: the force, rose, and cross-section chart layers
   slice `method` from `param.active_method`, which is bound to

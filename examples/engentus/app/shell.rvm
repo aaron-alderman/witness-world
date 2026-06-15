@@ -7196,47 +7196,75 @@ view MillForceModelTitle {
   prop text = "Model"
 }
 
-view MillForceModelGrounded {
-  kind action
-  class mill-force-pill
-  prop tag = "button"
-  prop buttonType = "button"
-  prop label = "Grounded"
+view MillForceModelGroundedInput {
+  kind input
+  prop tag = "input"
+  prop inputType = "radio"
+  prop name = "mill-force-model-sel"
+  prop value = "grounded"
   bindings {
-    className from state MillForceActiveModel map grounded active default ""
+    checked from state MillForceActiveModel map grounded true default false
   }
   interactions {
-    on click self deliver MillForceSelectGroundedModelRequested
+    on change self deliver MillForceSelectGroundedModelRequested
   }
 }
 
-view MillForceModelFaithful {
-  kind action
-  class mill-force-pill
-  prop tag = "button"
-  prop buttonType = "button"
-  prop label = "Faithful"
-  bindings {
-    className from state MillForceActiveModel map faithful active default ""
-  }
-  interactions {
-    on click self deliver MillForceSelectFaithfulModelRequested
-  }
+view MillForceModelGroundedText {
+  kind text
+  class mill-force-model-grounded-text
+  prop tag = "span"
+  prop text = "Grounded"
 }
 
-view MillForceModelPills {
-  kind action-row
-  class mill-force-mode-pills
+view MillForceModelGroundedLabel {
+  kind label
+  class mill-force-model-option
+  prop tag = "label"
   children {
-    MillForceModelGrounded
-    MillForceModelFaithful
+    MillForceModelGroundedInput
+    MillForceModelGroundedText
   }
 }
 
-view MillForceModelNote {
-  kind note
-  class mill-force-rd
-  prop text = "Single mode shows one authored model selection. Compare mode keeps faithful and grounded visible as paired representations."
+view MillForceModelFaithfulInput {
+  kind input
+  prop tag = "input"
+  prop inputType = "radio"
+  prop name = "mill-force-model-sel"
+  prop value = "faithful"
+  bindings {
+    checked from state MillForceActiveModel map faithful true default false
+  }
+  interactions {
+    on change self deliver MillForceSelectFaithfulModelRequested
+  }
+}
+
+view MillForceModelFaithfulText {
+  kind text
+  class mill-force-model-faithful-text
+  prop tag = "span"
+  prop text = "Faithful"
+}
+
+view MillForceModelFaithfulLabel {
+  kind label
+  class mill-force-model-option
+  prop tag = "label"
+  children {
+    MillForceModelFaithfulInput
+    MillForceModelFaithfulText
+  }
+}
+
+view MillForceModelChoices {
+  kind action-row
+  class mill-force-model-radios
+  children {
+    MillForceModelGroundedLabel
+    MillForceModelFaithfulLabel
+  }
 }
 
 view MillForceModelSection {
@@ -7247,8 +7275,7 @@ view MillForceModelSection {
   }
   children {
     MillForceModelTitle
-    MillForceModelPills
-    MillForceModelNote
+    MillForceModelChoices
   }
 }
 

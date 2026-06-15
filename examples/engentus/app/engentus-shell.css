@@ -1285,6 +1285,28 @@ input[type=range],
   border-color: rgba(140,196,212,.35);
 }
 
+.mill-force-model-radios {
+  display: flex;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.mill-force-model-option {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.mill-force-model-grounded-text {
+  color: var(--blue);
+}
+
+.mill-force-model-faithful-text {
+  color: var(--ylw);
+}
+
 .mill-force-cht-tab {
   background: none;
   border: 1px solid transparent;

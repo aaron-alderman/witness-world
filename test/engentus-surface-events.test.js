@@ -1056,7 +1056,7 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       model: "grounded"
     });
 
-    await page.click("#surface-millforcemodelfaithful");
+    await page.locator("#surface-millforcemodelfaithfulinput").check();
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveModel") === "faithful"
     );
@@ -1064,15 +1064,19 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.active_method === "faithful"
     );
     assert.deepEqual(await page.evaluate(() => ({
-      groundedClass: document.querySelector("#surface-millforcemodelgrounded")?.className,
-      faithfulClass: document.querySelector("#surface-millforcemodelfaithful")?.className,
+      groundedChecked: document.querySelector("#surface-millforcemodelgroundedinput")?.checked,
+      faithfulChecked: document.querySelector("#surface-millforcemodelfaithfulinput")?.checked,
+      modelChoiceClass: document.querySelector(".mill-force-model-radios")?.className,
+      modelNoteExists: Boolean(document.querySelector("#surface-millforcemodelnote")),
       chartMethod: document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.active_method,
       modelRow: [...document.querySelectorAll(".mill-force-result-row")]
         .map(row => row.textContent)
         .find(text => text.includes("Model"))
     })), {
-      groundedClass: "mill-force-pill",
-      faithfulClass: "mill-force-pill active",
+      groundedChecked: false,
+      faithfulChecked: true,
+      modelChoiceClass: "mill-force-model-radios",
+      modelNoteExists: false,
       chartMethod: "faithful",
       modelRow: "ModelFaithful"
     });
