@@ -144,7 +144,11 @@ chart MillForceCross of MillForce {
   }
 
   theta tBar
-  r F_resultant
-  r.domain 0 auto
-  layer liners = wedge over segment | theta0:t1 theta1:t2 value:F_resultant where:method=param.active_method
+  r radius
+  r.domain 0 radius
+  layer shell = circle | r:radius stroke:slate width:1.5
+  layer inner = circle | r:rInner stroke:slate width:0.8 dash:true opacity:0.65
+  layer liners = annular-wedge over segment | theta0:t1 theta1:t2 r0:rInner r1:radius value:F_resultant where:method=param.active_method unless:param.analysis_mode=compare
+  layer grounded_liners = annular-wedge over segment | theta0:t1 theta1:t2 r0:rCompareMid r1:radius value:F_resultant where:method=grounded when:param.analysis_mode=compare
+  layer faithful_liners = annular-wedge over segment | theta0:t1 theta1:t2 r0:rInner r1:rCompareMid value:F_resultant where:method=faithful fill:ylw stroke:dk opacity:0.74 when:param.analysis_mode=compare
 }

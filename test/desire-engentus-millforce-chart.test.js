@@ -162,21 +162,55 @@ test("MillForceRose plans a polar polygon of resultant magnitude", async () => {
   }
 });
 
-test("MillForceCross plans per-segment polar wedges with angular bounds + force value", async () => {
+test("MillForceCross plans per-segment annular liner bands with angular bounds + force value", async () => {
   const { evaluated, g, N } = await setup();
   const view = await loadBody("views/mill-force.rvm", "surface", "MillForceCross");
   const plan = planChart(view, evaluated, { width: 600, height: 600 });
 
   assert.equal(plan.frame, "polar");
+  assert.equal(plan.scales.r.field, "radius");
+  assert.equal(plan.scales.r.domain[1], evaluated.params.radius);
+  assert.equal(plan.layers.find(l => l.name === "shell").mark, "circle");
+  assert.equal(plan.layers.find(l => l.name === "shell").primitives[0].r, evaluated.params.radius);
+  assert.equal(plan.layers.find(l => l.name === "inner").primitives[0].r, evaluated.fields.rInner.data);
   const liners = plan.layers.find(l => l.name === "liners");
-  assert.equal(liners.mark, "wedge");
+  assert.equal(liners.mark, "annular-wedge");
   assert.equal(liners.primitives.length, N);
   for (const s of [0, 10, 19]) {
     const w = liners.primitives[s];
     assert.equal(w.theta0, evaluated.fields.t1.data[s]);       // t1 is over `segment` only (method-independent)
     assert.equal(w.theta1, evaluated.fields.t2.data[s][g]);    // t2 depends on gamma → method-dependent
+    assert.equal(w.r0, evaluated.fields.rInner.data);
+    assert.equal(w.r1, evaluated.params.radius);
     assert.equal(w.value, evaluated.fields.F_resultant.data[s][g]);
   }
+});
+
+test("MillForceCross compare mode renders grounded and faithful annular bands", async () => {
+  const { model, g, f, N } = await setup();
+  const evaluated = evaluateModel(model, {
+    functions: millForceKernels,
+    params: {
+      active_method: "grounded",
+      analysis_mode: "compare"
+    }
+  });
+  const view = await loadBody("views/mill-force.rvm", "surface", "MillForceCross");
+  const plan = planChart(view, evaluated, { width: 600, height: 600 });
+
+  assert.equal(plan.layers.find(l => l.name === "liners").hidden, true);
+  const grounded = plan.layers.find(l => l.name === "grounded_liners");
+  const faithful = plan.layers.find(l => l.name === "faithful_liners");
+  assert.equal(grounded.mark, "annular-wedge");
+  assert.equal(faithful.mark, "annular-wedge");
+  assert.equal(grounded.primitives.length, N);
+  assert.equal(faithful.primitives.length, N);
+  assert.equal(grounded.primitives[10].r0, evaluated.fields.rCompareMid.data);
+  assert.equal(grounded.primitives[10].r1, evaluated.params.radius);
+  assert.equal(grounded.primitives[10].value, evaluated.fields.F_resultant.data[10][g]);
+  assert.equal(faithful.primitives[10].r0, evaluated.fields.rInner.data);
+  assert.equal(faithful.primitives[10].r1, evaluated.fields.rCompareMid.data);
+  assert.equal(faithful.primitives[10].value, evaluated.fields.F_resultant.data[10][f]);
 });
 
 test("MillForce charts bind authored shell inputs into chart params", async () => {

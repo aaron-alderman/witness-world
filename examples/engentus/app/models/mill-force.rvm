@@ -36,6 +36,7 @@ model MillForce {
   // ── honest geometry (stays in IR) ──
   derive omega   = sqrt(g / radius) * percent_crit
   derive rInner  = radius - height
+  derive rCompareMid = rInner + height / 2
   derive dTheta  = 2 * pi / N_segments
   derive J_ore   = J_total - J_balls
   derive rho_pulp  = rho_ore / ((1 - percent_solids) * rho_ore + percent_solids)

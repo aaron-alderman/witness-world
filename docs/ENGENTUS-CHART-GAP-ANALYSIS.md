@@ -39,6 +39,10 @@ grant runtime authority to copied JS or presenter code.
   force-vs-angle and force-rose charts: `param.analysis_mode` selects compare
   layers that render grounded and faithful model traces from the existing
   `method` axis.
+- Mill Force cross-section now uses authored polar shell geometry rather than
+  centre-filled pie slices: `circle` guide layers and `annular-wedge` liner
+  bands render the shell, inner radius, single-model liner ring, and compare
+  mode grounded/faithful split rings.
 
 ## Known Gaps
 
@@ -50,10 +54,9 @@ grant runtime authority to copied JS or presenter code.
   bolt-set rows are explicit authored first-pass rows; full reference parity
   still needs authored collection/repeated-action semantics or a justified
   platform primitive.
-- Mill Force still needs cross-section compare rendering, Monte Carlo
-  execution/overlay behavior, tooltip behavior, and full reference result
-  projection. The current result rows and MC controls are authored shell proofs,
-  not final numerical/visual parity.
+- Mill Force still needs Monte Carlo execution/overlay behavior, tooltip
+  behavior, and full reference result projection. The current result rows and
+  MC controls are authored shell proofs, not final numerical/visual parity.
 - No app-local browser runtime, presenter, or controller seam should be added to
   close these gaps. The next work should continue through authored surfaces,
   process state, projections, and explicit capability bindings.

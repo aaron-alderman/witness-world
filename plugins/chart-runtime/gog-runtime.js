@@ -179,7 +179,8 @@ function planPolarChart(viewBody, evaluated, opts = {}) {
   const layers = (viewBody.layers ?? []).map(layer => planPolarLayer(layer, evaluated));
 
   const rDomainSpec = enc.r?.domain ?? [0, "auto"];
-  const rMax = rDomainSpec[1] === "auto" || rDomainSpec[1] == null ? autoPolarRMax(layers) : Number(rDomainSpec[1]);
+  const authoredRMax = scalarRef(rDomainSpec[1], evaluated) ?? Number(rDomainSpec[1]);
+  const rMax = rDomainSpec[1] === "auto" || rDomainSpec[1] == null ? autoPolarRMax(layers) : authoredRMax;
   const thetaDomain = enc.theta?.domain && enc.theta.domain[0] !== "auto"
     ? enc.theta.domain.map(Number) : [0, 2 * Math.PI];
 
@@ -231,6 +232,44 @@ function planPolarLayer(layer, evaluated) {
     return { ...base, primitives };
   }
 
+  if (layer.mark === "annular-wedge") {
+    const t0Field = fields[enc.theta0];
+    const t1Field = fields[enc.theta1];
+    const vField = fields[enc.value ?? enc.r] ?? null;
+    if (!t0Field || !t1Field) return { ...base, primitives: [] };
+    const iterAxis = iterationAxis(layer, vField ?? t1Field, axes);
+    const primitives = (axes[iterAxis]?.values ?? []).map((_, i) => {
+      const coord = { [iterAxis]: i, ...where };
+      return {
+        theta0: valueAt(t0Field, coord),
+        theta1: valueAt(t1Field, coord),
+        r0: channelValue(enc.r0, evaluated, coord) ?? 0,
+        r1: channelValue(enc.r1 ?? enc.r, evaluated, coord) ?? channelValue(enc.r, evaluated, coord) ?? 0,
+        value: vField ? valueAt(vField, coord) : channelValue(enc.value, evaluated, coord)
+      };
+    });
+    return {
+      ...base,
+      fill: enc.fill ? colorRef(enc.fill, evaluated, enc.fillMap) : null,
+      stroke: enc.stroke ? colorRef(enc.stroke, evaluated, enc.strokeMap) : null,
+      opacity: enc.opacity == null ? 0.85 : Number(enc.opacity),
+      primitives
+    };
+  }
+
+  if (layer.mark === "circle") {
+    const radius = channelValue(enc.r, evaluated, where);
+    return {
+      ...base,
+      fill: enc.fill ? colorRef(enc.fill, evaluated, enc.fillMap) : "none",
+      stroke: enc.stroke ? colorRef(enc.stroke, evaluated, enc.strokeMap) : "#e2e8f0",
+      width: Number(enc.width) || 1,
+      dash: enc.dash === true,
+      opacity: enc.opacity == null ? 1 : Number(enc.opacity),
+      primitives: Number.isFinite(radius) ? [{ r: radius }] : []
+    };
+  }
+
   return { ...base, primitives: [] };
 }
 
@@ -238,8 +277,19 @@ function autoPolarRMax(layers) {
   let max = 0;
   for (const layer of layers) {
     for (const prim of layer.primitives ?? []) {
-      if (prim.points) for (const p of prim.points) { if (Number.isFinite(p.r) && p.r > max) max = p.r; }
-      else if (Number.isFinite(prim.value) && prim.value > max) max = prim.value;
+      if (prim.points) {
+        for (const p of prim.points) if (Number.isFinite(p.r) && p.r > max) max = p.r;
+        continue;
+      }
+      if (Number.isFinite(prim.r1)) {
+        if (prim.r1 > max) max = prim.r1;
+        continue;
+      }
+      if (Number.isFinite(prim.r)) {
+        if (prim.r > max) max = prim.r;
+        continue;
+      }
+      if (Number.isFinite(prim.value) && prim.value > max) max = prim.value;
     }
   }
   return max > 0 ? max * 1.08 : 1;
@@ -466,6 +516,14 @@ function scalarRef(token, evaluated) {
   // a param value materialized as an axis-less constant
   const param = evaluated.params?.[token];
   return param ?? null;
+}
+
+function channelValue(token, evaluated, coord = {}) {
+  if (token == null) return null;
+  if (typeof token === "number") return token;
+  const field = evaluated.fields?.[token];
+  if (field) return field.axes.length === 0 ? field.data : valueAt(field, coord);
+  return scalarRef(token, evaluated);
 }
 
 function predicateValue(token, evaluated) {
@@ -798,9 +856,72 @@ function drawPolarChart(container, plan, d3) {
           .attr("d", `M ${center.x} ${center.y} L ${r0.join(" ")} L ${r1.join(" ")} Z`)
           .attr("fill", forceColour(prim.value, 0, vmax)).attr("opacity", 0.85);
       }
+    } else if (layer.mark === "annular-wedge") {
+      const values = layer.primitives.map(p => p.value).filter(Number.isFinite);
+      const min = values.length ? Math.min(...values) : 0;
+      const max = values.length ? Math.max(...values) : 1;
+      for (const prim of layer.primitives) {
+        const path = annularWedgePath(prim, { center, rScale });
+        if (!path) continue;
+        svg.append("path")
+          .attr("d", path)
+          .attr("fill", layer.fill ?? forceColour(prim.value, min, max))
+          .attr("stroke", layer.stroke ?? "#2C3C63")
+          .attr("stroke-width", 0.5)
+          .attr("opacity", layer.opacity ?? 0.85);
+      }
+    } else if (layer.mark === "circle") {
+      for (const prim of layer.primitives) {
+        svg.append("circle")
+          .attr("cx", center.x)
+          .attr("cy", center.y)
+          .attr("r", rScale(prim.r))
+          .attr("fill", layer.fill ?? "none")
+          .attr("stroke", layer.stroke ?? "#e2e8f0")
+          .attr("stroke-width", layer.width ?? 1)
+          .attr("stroke-dasharray", layer.dash ? "4,3" : null)
+          .attr("opacity", layer.opacity ?? 1);
+      }
     }
   }
   return svg.node();
+}
+
+function annularWedgePath(prim, { center, rScale }) {
+  const r0 = Math.max(0, Number(prim.r0) || 0);
+  const r1 = Math.max(r0, Number(prim.r1) || 0);
+  const theta0 = Number(prim.theta0);
+  const theta1 = Number(prim.theta1);
+  if (!Number.isFinite(theta0) || !Number.isFinite(theta1) || !(r1 > 0)) return null;
+  const outerR = rScale(r1);
+  const innerR = rScale(r0);
+  const large = Math.abs(theta1 - theta0) > Math.PI ? 1 : 0;
+  const outer0 = [
+    center.x + outerR * Math.sin(theta0),
+    center.y - outerR * Math.cos(theta0)
+  ];
+  const outer1 = [
+    center.x + outerR * Math.sin(theta1),
+    center.y - outerR * Math.cos(theta1)
+  ];
+  const inner1 = [
+    center.x + innerR * Math.sin(theta1),
+    center.y - innerR * Math.cos(theta1)
+  ];
+  const inner0 = [
+    center.x + innerR * Math.sin(theta0),
+    center.y - innerR * Math.cos(theta0)
+  ];
+  if (innerR <= 0) {
+    return `M ${center.x} ${center.y} L ${outer0.join(" ")} A ${outerR} ${outerR} 0 ${large} 1 ${outer1.join(" ")} Z`;
+  }
+  return [
+    `M ${outer0.join(" ")}`,
+    `A ${outerR} ${outerR} 0 ${large} 1 ${outer1.join(" ")}`,
+    `L ${inner1.join(" ")}`,
+    `A ${innerR} ${innerR} 0 ${large} 0 ${inner0.join(" ")}`,
+    "Z"
+  ].join(" ");
 }
 
 function drawDiscChart(container, plan, d3) {
