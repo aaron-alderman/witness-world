@@ -3548,14 +3548,11 @@ view GoodmanSidebar {
 view GoodmanPlayAction {
   kind action
   class goodman-play-action
-  prop label = "Play"
+  prop label = "▶"
   prop actionKey = "play"
   prop domId = "play-btn"
   prop tag = "button"
   prop buttonType = "button"
-  interactions {
-    on click self deliver GoodmanRunRequested
-  }
 }
 
 view GoodmanTimeSlider {

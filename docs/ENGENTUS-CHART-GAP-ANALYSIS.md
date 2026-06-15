@@ -39,6 +39,9 @@ grant runtime authority to copied JS or presenter code.
   `GoodmanRunDurationMonths` binds to the time slider `max` attribute through
   the generic form-control binding path, matching the reference relationship
   between run config and timeline controls without app-local controller code.
+- Goodman scrubber Play is no longer wired to the run action. It carries the
+  reference play label but does not yet implement animated timeline playback,
+  avoiding the previous false behavior where Play started a Monte Carlo run.
 - Mill Charge chart: `MillChargeCrossSection` mounts live in
   `/engentus/mill-charge`, accepts authored parameter bindings, updates derived
   RHS metrics, and keeps its transient animation phase during parameter changes.

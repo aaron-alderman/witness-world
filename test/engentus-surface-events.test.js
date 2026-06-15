@@ -371,6 +371,15 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanScrubTimeMonths") === 6.5
     );
     assert.match(await page.textContent("#t-lbl"), /6\.5 mo/);
+    assert.equal(await page.textContent("#play-btn"), "▶");
+    await page.click("#play-btn");
+    assert.deepEqual(await page.evaluate(() => ({
+      runStatus: window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState"),
+      activeMode: window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode")
+    })), {
+      runStatus: "ready",
+      activeMode: "static"
+    });
 
     await page.locator("#surface-goodmanstaticappliedshearfield").evaluate(input => {
       input.value = "25000";
