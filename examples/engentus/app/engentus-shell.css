@@ -834,6 +834,18 @@ a {
   justify-content: space-between;
 }
 
+.ssec-title button {
+  background: none;
+  border: none;
+  color: var(--blue);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0;
+}
+
+.ssec-title button:hover { color: var(--blu2); }
+
 .sidebar-list,
 .metric-list {
   list-style: none;
@@ -1070,6 +1082,45 @@ a {
 .leg-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px }
 .leg-sw { width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; opacity: .85 }
 .leg-row span { font-size: 10.5px; color: var(--t2) }
+
+.info-box { background: rgba(0,0,0,.2); border-radius: 5px; padding: 8px 10px; margin-top: 4px }
+.info-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--t2); margin-bottom: 3px }
+.info-row:last-child { margin-bottom: 0 }
+.info-value { font-weight: 600; font-variant-numeric: tabular-nums }
+
+.save-sim-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 6px 0;
+  background: var(--blue);
+  color: var(--dk);
+  border: none;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: .3px;
+  opacity: .9;
+}
+
+.save-sim-btn:hover { opacity: 1; }
+
+.bs-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  cursor: pointer;
+  border-radius: 5px;
+  transition: background .1s;
+}
+
+.bs-head:hover { background: rgba(255,255,255,.07); }
+.bs-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0 }
+.bs-name { flex: 1; font-size: 12px; font-weight: 500 }
+.bs-actions { display: flex; gap: 3px }
+.bs-act { background: none; border: none; color: var(--t2); cursor: pointer; font-size: 11px; padding: 1px 4px; border-radius: 3px }
+.bs-act:hover { background: rgba(255,255,255,.1); color: var(--t1) }
 
 .bs-edit-form { display: none; padding: 6px 8px 8px; background: rgba(0,0,0,.18); border-top: 1px solid var(--brd) }
 .bs-edit-form.open { display: block }

@@ -239,10 +239,10 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("GoodmanRunLockNote")?.body?.bindings[0]?.source?.map?.done, true);
   assert.equal(surfaces.get("GoodmanRunProgressFill")?.body?.bindings[0]?.prop, "style");
   assert.match(surfaces.get("GoodmanRunProgressFill")?.body?.bindings[0]?.source?.map?.done, /width:100%/);
-  assert.equal(surfaces.get("GoodmanStaticAppliedShearField")?.body?.bindings[0]?.prop, "value");
-  assert.equal(surfaces.get("GoodmanStaticAppliedShearField")?.body?.interactions[0]?.action?.state, "GoodmanStaticAppliedShear");
-  assert.equal(surfaces.get("GoodmanStaticProbeMeanStressField")?.body?.bindings[0]?.prop, "value");
-  assert.equal(surfaces.get("GoodmanStaticProbeMeanStressField")?.body?.interactions[0]?.action?.state, "GoodmanStaticProbeMeanStress");
+  assert.equal(surfaces.get("GoodmanStaticAppliedShearInput")?.body?.bindings[0]?.prop, "value");
+  assert.equal(surfaces.get("GoodmanStaticAppliedShearInput")?.body?.interactions[0]?.action?.state, "GoodmanStaticAppliedShear");
+  assert.equal(surfaces.get("GoodmanStaticProbeMeanStressInput")?.body?.bindings[0]?.prop, "value");
+  assert.equal(surfaces.get("GoodmanStaticProbeMeanStressInput")?.body?.interactions[0]?.action?.state, "GoodmanStaticProbeMeanStress");
   assert.equal(surfaces.get("GoodmanTrailToggle")?.body?.interactions[0]?.action?.state, "GoodmanTrailVisible");
   assert.equal(surfaces.get("GoodmanCdfWindowTitle")?.body?.props?.text, "📈 Failure CDF — Bolt Survival Over Time");
   assert.equal(surfaces.get("GoodmanStatsWindowTitle")?.body?.props?.text, "📊 Summary Statistics");
@@ -501,8 +501,19 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanDiagram",
     "GoodmanMCBands"
   ]);
+  assert.deepEqual(surfaces.get("GoodmanChartArea")?.body?.children, [
+    "GoodmanScrubber",
+    "GoodmanChartRegion",
+    "GoodmanWindowLayer"
+  ]);
+  assert.deepEqual(surfaces.get("GoodmanBody")?.body?.children, [
+    "GoodmanSidebar",
+    "GoodmanChartArea"
+  ]);
+  assert.equal(surfaces.get("GoodmanBody")?.body?.props?.domId, "body");
 
   assert.deepEqual(surfaces.get("GoodmanScenarioSection")?.body?.children, [
+    "GoodmanScenarioTitle",
     "GoodmanStaticAppliedShearField",
     "GoodmanStaticRpmField",
     "GoodmanStaticEnduranceLimitField",
@@ -515,7 +526,7 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanSaveStaticSimulationAction"
   ]);
   assert.equal(surfaces.get("GoodmanScenarioSection")?.body?.bindings[0]?.prop, "visible");
-  assert.equal(surfaces.get("GoodmanStaticEnduranceLimitField")?.body?.props?.label, "σ_lim endurance");
+  assert.equal(surfaces.get("GoodmanStaticEnduranceLimitLabel")?.body?.props?.text, "σ_lim endurance");
   assert.equal(surfaces.get("GoodmanScenarioSection")?.body?.bindings[0]?.source?.state, "GoodmanActiveMode");
   assert.equal(surfaces.get("GoodmanSimulationSection")?.body?.props?.hidden, true);
   assert.equal(surfaces.get("GoodmanSimulationSection")?.body?.bindings[0]?.source?.map?.mc, true);
@@ -651,8 +662,7 @@ test("the shell is structured through explicit child regions instead of flattene
     "EngentusGoodmanHeader",
     "GoodmanModesToolbar",
     "GoodmanWindowToolbar",
-    "GoodmanSidebar",
-    "GoodmanViewerRegion"
+    "GoodmanBody"
   ]);
 
   assert.deepEqual(surfaces.get("MillForceTabs")?.body?.children, [

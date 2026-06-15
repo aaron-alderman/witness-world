@@ -472,7 +472,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "static"
     );
-    await page.locator("#surface-goodmanstaticappliedshearfield").evaluate(input => {
+    await page.locator("#surface-goodmanstaticappliedshearinput").evaluate(input => {
       input.value = "25000";
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
@@ -482,7 +482,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       document.querySelector("#chart-svg")?.__chartController?.spec?.params?.F_alt_applied_N === 25000
     );
-    await page.locator("#surface-goodmanstaticrpmfield").evaluate(input => {
+    await page.locator("#surface-goodmanstaticrpminput").evaluate(input => {
       input.value = "12.5";
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
@@ -492,7 +492,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       document.querySelector("#chart-svg")?.__chartController?.spec?.params?.rpm === 12.5
     );
-    await page.locator("#surface-goodmanstaticprobemeanstressfield").evaluate(input => {
+    await page.locator("#surface-goodmanstaticprobemeanstressinput").evaluate(input => {
       input.value = "425";
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });

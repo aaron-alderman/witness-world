@@ -234,6 +234,9 @@ function renderAttributes(surface, tagName) {
     const href = staticTextValue(props, "href") ?? "#";
     attrs.push(`href="${escapeAttr(href)}"`);
   }
+  if ((tagName === "a" || tagName === "button") && staticTextValue(props, "title")) {
+    attrs.push(`title="${escapeAttr(staticTextValue(props, "title"))}"`);
+  }
   if (tagName === "button") {
     const buttonType = staticTextValue(props, "buttonType");
     if (buttonType) attrs.push(`type="${escapeAttr(buttonType)}"`);
@@ -378,7 +381,6 @@ function renderSurfaceBody(surface, surfaces, tagName = "div", options = {}) {
   const iconActionContent =
     childHtml
     && (text || label)
-    && !title
     && !subtitle
     && !body
     && !description
@@ -424,7 +426,6 @@ function renderSurfaceBody(surface, surfaces, tagName = "div", options = {}) {
   const directActionLabel =
     !childHtml
     && label
-    && !title
     && !subtitle
     && !body
     && !text

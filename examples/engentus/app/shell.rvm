@@ -2795,14 +2795,21 @@ view GoodmanWindowToolbar {
   }
 }
 
+view GoodmanScenarioTitle {
+  kind text
+  class ssec-title
+  prop tag = "div"
+  prop text = "Scenario View"
+}
+
 view GoodmanScenarioSection {
   kind section
-  class goodman-scenario-section
-  prop title = "Scenario View"
+  class ssec goodman-scenario-section
   bindings {
     visible from state GoodmanActiveMode map static true default false
   }
   children {
+    GoodmanScenarioTitle
     GoodmanStaticAppliedShearField
     GoodmanStaticRpmField
     GoodmanStaticEnduranceLimitField
@@ -2816,6 +2823,13 @@ view GoodmanScenarioSection {
   }
 }
 
+view GoodmanStaticAppliedShearLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Applied shear F"
+}
+
 view GoodmanStaticAppliedShearValue {
   kind text
   class pval
@@ -2826,12 +2840,20 @@ view GoodmanStaticAppliedShearValue {
   }
 }
 
-view GoodmanStaticAppliedShearField {
+view GoodmanStaticAppliedShearTop {
+  kind row
+  class prow-top
+  children {
+    GoodmanStaticAppliedShearLabel
+    GoodmanStaticAppliedShearValue
+  }
+}
+
+view GoodmanStaticAppliedShearInput {
   kind input
-  class prow goodman-static-control
+  class goodman-static-control-input
   prop tag = "input"
   prop inputType = "range"
-  prop label = "Applied shear F"
   prop min = 500
   prop max = 100000
   prop step = 500
@@ -2842,9 +2864,22 @@ view GoodmanStaticAppliedShearField {
   interactions {
     on input self set GoodmanStaticAppliedShear eventValue
   }
+}
+
+view GoodmanStaticAppliedShearField {
+  kind control-row
+  class prow goodman-static-control
   children {
-    GoodmanStaticAppliedShearValue
+    GoodmanStaticAppliedShearTop
+    GoodmanStaticAppliedShearInput
   }
+}
+
+view GoodmanStaticRpmLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Mill speed"
 }
 
 view GoodmanStaticRpmValue {
@@ -2857,12 +2892,20 @@ view GoodmanStaticRpmValue {
   }
 }
 
-view GoodmanStaticRpmField {
+view GoodmanStaticRpmTop {
+  kind row
+  class prow-top
+  children {
+    GoodmanStaticRpmLabel
+    GoodmanStaticRpmValue
+  }
+}
+
+view GoodmanStaticRpmInput {
   kind input
-  class prow goodman-static-control
+  class goodman-static-control-input
   prop tag = "input"
   prop inputType = "range"
-  prop label = "Mill speed"
   prop min = 5
   prop max = 20
   prop step = 0.5
@@ -2873,9 +2916,22 @@ view GoodmanStaticRpmField {
   interactions {
     on input self set GoodmanStaticRpm eventValue
   }
+}
+
+view GoodmanStaticRpmField {
+  kind control-row
+  class prow goodman-static-control
   children {
-    GoodmanStaticRpmValue
+    GoodmanStaticRpmTop
+    GoodmanStaticRpmInput
   }
+}
+
+view GoodmanStaticProbeMeanStressLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Probe preload"
 }
 
 view GoodmanStaticProbeMeanStressValue {
@@ -2888,12 +2944,20 @@ view GoodmanStaticProbeMeanStressValue {
   }
 }
 
-view GoodmanStaticProbeMeanStressField {
+view GoodmanStaticProbeMeanStressTop {
+  kind row
+  class prow-top
+  children {
+    GoodmanStaticProbeMeanStressLabel
+    GoodmanStaticProbeMeanStressValue
+  }
+}
+
+view GoodmanStaticProbeMeanStressInput {
   kind input
-  class prow goodman-static-control
+  class goodman-static-control-input
   prop tag = "input"
   prop inputType = "range"
-  prop label = "Probe preload"
   prop min = 0
   prop max = 600
   prop step = 5
@@ -2904,8 +2968,14 @@ view GoodmanStaticProbeMeanStressField {
   interactions {
     on input self set GoodmanStaticProbeMeanStress eventValue
   }
+}
+
+view GoodmanStaticProbeMeanStressField {
+  kind control-row
+  class prow goodman-static-control
   children {
-    GoodmanStaticProbeMeanStressValue
+    GoodmanStaticProbeMeanStressTop
+    GoodmanStaticProbeMeanStressInput
   }
 }
 
@@ -2919,12 +2989,36 @@ view GoodmanStaticEnduranceLimitValue {
   }
 }
 
+view GoodmanStaticEnduranceLimitLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "σ_lim endurance"
+}
+
+view GoodmanStaticEnduranceLimitTop {
+  kind row
+  class prow-top
+  children {
+    GoodmanStaticEnduranceLimitLabel
+    GoodmanStaticEnduranceLimitValue
+  }
+}
+
 view GoodmanStaticEnduranceLimitField {
-  kind input
+  kind control-row
   class prow goodman-static-control
+  children {
+    GoodmanStaticEnduranceLimitTop
+    GoodmanStaticEnduranceLimitInput
+  }
+}
+
+view GoodmanStaticEnduranceLimitInput {
+  kind input
+  class goodman-static-control-input
   prop tag = "input"
   prop inputType = "range"
-  prop label = "σ_lim endurance"
   prop min = 20
   prop max = 120
   prop step = 1
@@ -2934,9 +3028,6 @@ view GoodmanStaticEnduranceLimitField {
   }
   interactions {
     on input self set GoodmanStaticEnduranceLimit eventValue
-  }
-  children {
-    GoodmanStaticEnduranceLimitValue
   }
 }
 
@@ -2950,12 +3041,36 @@ view GoodmanStaticSlopeValue {
   }
 }
 
+view GoodmanStaticSlopeLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "SN slope m"
+}
+
+view GoodmanStaticSlopeTop {
+  kind row
+  class prow-top
+  children {
+    GoodmanStaticSlopeLabel
+    GoodmanStaticSlopeValue
+  }
+}
+
 view GoodmanStaticSlopeField {
-  kind input
+  kind control-row
   class prow goodman-static-control
+  children {
+    GoodmanStaticSlopeTop
+    GoodmanStaticSlopeInput
+  }
+}
+
+view GoodmanStaticSlopeInput {
+  kind input
+  class goodman-static-control-input
   prop tag = "input"
   prop inputType = "range"
-  prop label = "SN slope m"
   prop min = 2
   prop max = 8
   prop step = 0.1
@@ -2965,9 +3080,6 @@ view GoodmanStaticSlopeField {
   }
   interactions {
     on input self set GoodmanStaticSlope eventValue
-  }
-  children {
-    GoodmanStaticSlopeValue
   }
 }
 
@@ -3081,7 +3193,6 @@ view GoodmanSaveStaticSimulationAction {
   prop tag = "button"
   prop buttonType = "button"
   prop label = "⊕ Save as Simulation"
-  prop title = "Create a Monte Carlo simulation from the current bolt set state"
   interactions {
     on click self deliver GoodmanSaveStaticSimulationRequested
   }
@@ -3093,6 +3204,28 @@ view GoodmanSimulationNewAction {
   prop label = "+ New simulation"
   prop tag = "button"
   prop buttonType = "button"
+}
+
+view GoodmanSimulationTitleLabel {
+  kind text
+  prop tag = "span"
+  prop text = "Simulations"
+}
+
+view GoodmanSimulationTitleNewAction {
+  kind section-action
+  prop label = "+ New"
+  prop tag = "button"
+  prop buttonType = "button"
+}
+
+view GoodmanSimulationTitle {
+  kind section-header
+  class ssec-title
+  children {
+    GoodmanSimulationTitleLabel
+    GoodmanSimulationTitleNewAction
+  }
 }
 
 view GoodmanSimulationEmptyState {
@@ -3113,13 +3246,13 @@ view GoodmanSimulationList {
 
 view GoodmanSimulationSection {
   kind section
-  class goodman-simulation-section
-  prop title = "Simulations"
+  class ssec goodman-simulation-section
   prop hidden = true
   bindings {
     visible from state GoodmanActiveMode map mc true default false
   }
   children {
+    GoodmanSimulationTitle
     GoodmanSimulationList
   }
 }
@@ -3294,15 +3427,22 @@ view GoodmanRunLockNote {
   }
 }
 
+view GoodmanRunConfigTitle {
+  kind text
+  class ssec-title
+  prop tag = "div"
+  prop text = "Run Config"
+}
+
 view GoodmanRunConfigSection {
   kind section
-  class goodman-run-config-section
-  prop title = "Run Config"
+  class ssec goodman-run-config-section
   prop hidden = true
   bindings {
     visible from state GoodmanActiveMode map mc true default false
   }
   children {
+    GoodmanRunConfigTitle
     GoodmanRunConfigBoltsPerSetField
     GoodmanRunConfigDurationField
     GoodmanRunConfigStepField
@@ -3699,15 +3839,22 @@ view GoodmanChartStyleControls {
   }
 }
 
+view GoodmanChartStyleTitle {
+  kind text
+  class ssec-title
+  prop tag = "div"
+  prop text = "Chart Style"
+}
+
 view GoodmanChartStyleSection {
   kind section
-  class goodman-chart-style-section
-  prop title = "Chart Style"
+  class ssec goodman-chart-style-section
   prop hidden = true
   bindings {
     visible from state GoodmanActiveMode map edit true default false
   }
   children {
+    GoodmanChartStyleTitle
     GoodmanChartStyleControls
   }
 }
@@ -3721,9 +3868,24 @@ view GoodmanBoltSetsNewAction {
   prop buttonType = "button"
 }
 
+view GoodmanBoltSetsTitleLabel {
+  kind text
+  prop tag = "span"
+  prop text = "Bolt Sets"
+}
+
+view GoodmanBoltSetsTitle {
+  kind section-header
+  class ssec-title
+  children {
+    GoodmanBoltSetsTitleLabel
+    GoodmanBoltSetsNewAction
+  }
+}
+
 view GoodmanBoltSetPrimarySwatch {
   kind marker
-  class leg-sw
+  class bs-dot
   prop style = "background:#dc2626"
 }
 
@@ -3742,7 +3904,6 @@ view GoodmanBoltSetPrimaryEditAction {
   class bs-act
   prop tag = "button"
   prop buttonType = "button"
-  prop title = "Edit name/colour"
   prop label = "✎"
 }
 
@@ -3751,7 +3912,6 @@ view GoodmanBoltSetPrimaryCloneAction {
   class bs-act
   prop tag = "button"
   prop buttonType = "button"
-  prop title = "Clone"
   prop label = "⎘"
 }
 
@@ -3760,7 +3920,6 @@ view GoodmanBoltSetPrimaryDeleteAction {
   class bs-act
   prop tag = "button"
   prop buttonType = "button"
-  prop title = "Delete"
   prop label = "✕"
 }
 
@@ -3966,7 +4125,6 @@ view GoodmanBoltSetUtsToggleText {
 view GoodmanBoltSetUtsFreeToggle {
   kind action
   class free-tog
-  prop title = "Sample from distribution"
   children {
     GoodmanBoltSetUtsToggleTrack
     GoodmanBoltSetUtsToggleText
@@ -4361,10 +4519,9 @@ view GoodmanBoltSetsList {
 
 view GoodmanBoltSetsSection {
   kind section
-  class goodman-bolt-sets-section
-  prop title = "Bolt Sets"
+  class ssec goodman-bolt-sets-section
   children {
-    GoodmanBoltSetsNewAction
+    GoodmanBoltSetsTitle
     GoodmanBoltSetsList
   }
 }
@@ -4451,11 +4608,18 @@ view GoodmanFatigueLegendNote {
   prop text = "Hannover M48 combined SN, 50% survival, m=4.6. Goodman line: alternating stress limit scales with mean stress to UTS."
 }
 
+view GoodmanFatigueLegendTitle {
+  kind text
+  class ssec-title
+  prop tag = "div"
+  prop text = "Fatigue Life Regions"
+}
+
 view GoodmanFatigueLegendSection {
   kind section
-  class goodman-fatigue-legend-section
-  prop title = "Fatigue Life Regions"
+  class ssec goodman-fatigue-legend-section
   children {
+    GoodmanFatigueLegendTitle
     GoodmanFatigueLegend
     GoodmanFatigueLegendNote
   }
@@ -5164,14 +5328,24 @@ view GoodmanWindowLayer {
   }
 }
 
-view GoodmanViewerRegion {
+view GoodmanChartArea {
   kind viewer
-  class goodman-viewer-region
+  class goodman-chart-area
   prop domId = "chart-area"
   children {
     GoodmanScrubber
     GoodmanChartRegion
     GoodmanWindowLayer
+  }
+}
+
+view GoodmanBody {
+  kind body
+  class goodman-body
+  prop domId = "body"
+  children {
+    GoodmanSidebar
+    GoodmanChartArea
   }
 }
 
@@ -5192,8 +5366,7 @@ view EngentusApp {
     EngentusGoodmanHeader
     GoodmanModesToolbar
     GoodmanWindowToolbar
-    GoodmanSidebar
-    GoodmanViewerRegion
+    GoodmanBody
   }
 }
 
