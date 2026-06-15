@@ -160,6 +160,10 @@ grant runtime authority to copied JS or presenter code.
   fields are collapsed through the active authored model parameter, then exposed
   as scalar chart capability outputs for fill angle, shoulder angle, toe angle,
   omega, charge density, max radial force, and max resultant force.
+- Mill Force Results shell now follows the oracle row set only: fill,
+  shoulder, toe, omega, charge density, max radial force, and max resultant
+  force. Earlier debug/status rows for active mode/model were removed from the
+  authored Results section rather than treated as product UI.
 - Mill Force model/MC shell controls are now authored: grounded/faithful model
   selection, compare-mode explanatory rows, reference-shaped Monte Carlo sample
   count input,
@@ -301,7 +305,8 @@ grant runtime authority to copied JS or presenter code.
   deltas now exist as authored scalar outputs and inline percent readouts, and
   the cross-section chart now carries authored legend/force-scale annotations,
   while the force-vs-angle chart carries authored kN scaling, legend, charge
-  band, and zero-line chrome.
+  band, and zero-line chrome. The Results section no longer carries non-oracle
+  mode/model debug rows.
   The compare panel is still a first-pass authored analysis view rather than
   final reference parity.
 - No app-local browser runtime, presenter, or controller seam should be added to

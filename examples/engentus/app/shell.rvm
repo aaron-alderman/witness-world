@@ -6969,58 +6969,6 @@ view MillForceMaxResultantRow {
   }
 }
 
-view MillForceModeStateLabel {
-  kind text
-  class mill-force-rl
-  prop tag = "span"
-  prop text = "Mode"
-}
-
-view MillForceModeStateValue {
-  kind text
-  class mill-force-rv
-  prop tag = "span"
-  prop text = "Single"
-  bindings {
-    text from state MillForceActiveAnalysisMode map static Single compare Compare mc "Monte Carlo" default Single
-  }
-}
-
-view MillForceModeStateRow {
-  kind metric-row
-  class mill-force-result-row
-  children {
-    MillForceModeStateLabel
-    MillForceModeStateValue
-  }
-}
-
-view MillForceModelStateLabel {
-  kind text
-  class mill-force-rl
-  prop tag = "span"
-  prop text = "Model"
-}
-
-view MillForceModelStateValue {
-  kind text
-  class mill-force-rv
-  prop tag = "span"
-  prop text = "Grounded"
-  bindings {
-    text from state MillForceActiveModel map grounded Grounded faithful Faithful default Grounded
-  }
-}
-
-view MillForceModelStateRow {
-  kind metric-row
-  class mill-force-result-row
-  children {
-    MillForceModelStateLabel
-    MillForceModelStateValue
-  }
-}
-
 view MillForceResultsSection {
   kind section
   class ssec
@@ -7033,8 +6981,6 @@ view MillForceResultsSection {
     MillForceChargeDensityRow
     MillForceMaxRadialRow
     MillForceMaxResultantRow
-    MillForceModeStateRow
-    MillForceModelStateRow
   }
 }
 

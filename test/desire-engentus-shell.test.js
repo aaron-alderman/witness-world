@@ -260,6 +260,18 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("MillForceChargeDensityValue")?.body?.bindings[0]?.source?.output, "rhoChargeText");
   assert.equal(surfaces.get("MillForceMaxRadialValue")?.body?.bindings[0]?.source?.output, "F_r_max_text");
   assert.equal(surfaces.get("MillForceMaxResultantValue")?.body?.bindings[0]?.source?.output, "F_resultant_max_text");
+  assert.deepEqual(surfaces.get("MillForceResultsSection")?.body?.children, [
+    "MillForceResultsTitle",
+    "MillForceFillAngleRow",
+    "MillForceShoulderAngleRow",
+    "MillForceToeAngleRow",
+    "MillForceOmegaRow",
+    "MillForceChargeDensityRow",
+    "MillForceMaxRadialRow",
+    "MillForceMaxResultantRow"
+  ]);
+  assert.equal(surfaces.has("MillForceModeStateRow"), false);
+  assert.equal(surfaces.has("MillForceModelStateRow"), false);
   assert.equal(surfaces.get("MillForceCompareFillDeltaValue")?.body?.bindings[0]?.source?.output, "gammaDeltaText");
   assert.equal(surfaces.get("MillForceCompareToeDeltaValue")?.body?.bindings[0]?.source?.output, "phiPrimeDeltaText");
   assert.equal(surfaces.get("MillForceCompareRadialDeltaValue")?.body?.bindings[0]?.source?.output, "F_r_max_delta_text");

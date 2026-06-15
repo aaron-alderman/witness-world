@@ -1046,7 +1046,7 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       modelChoiceClass: document.querySelector(".mill-force-model-radios")?.className,
       modelNoteExists: Boolean(document.querySelector("#surface-millforcemodelnote")),
       chartMethod: document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.active_method,
-      modelRow: [...document.querySelectorAll(".mill-force-result-row")]
+      modelResultRow: [...document.querySelectorAll(".mill-force-result-row")]
         .map(row => row.textContent)
         .find(text => text.includes("Model"))
     })), {
@@ -1055,7 +1055,7 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       modelChoiceClass: "mill-force-model-radios",
       modelNoteExists: false,
       chartMethod: "faithful",
-      modelRow: "ModelFaithful"
+      modelResultRow: undefined
     });
 
     const speedRow = sliderRow(page, "Speed N/Nc");
@@ -1098,14 +1098,14 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       single: document.querySelector("#surface-millforcemodesingle")?.className,
       compare: document.querySelector("#surface-millforcemodecompare")?.className,
       forceChartMode: document.querySelector("#mill-force-svg-force")?.__chartController?.spec?.params?.analysis_mode,
-      modeRow: [...document.querySelectorAll(".mill-force-result-row")]
+      modeResultRow: [...document.querySelectorAll(".mill-force-result-row")]
         .map(row => row.textContent)
         .find(text => text.includes("Mode"))
     }));
     assert.equal(modeState.single, "mill-force-pill");
     assert.equal(modeState.compare, "mill-force-pill active");
     assert.equal(modeState.forceChartMode, "compare");
-    assert.match(modeState.modeRow, /Compare/);
+    assert.equal(modeState.modeResultRow, undefined);
     const chartAnnotationText = await page.evaluate(() => ({
       texts: [...document.querySelectorAll("#mill-force-svg-cross text")].map(node => node.textContent),
       max: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.F_resultant_scale_max_text,
