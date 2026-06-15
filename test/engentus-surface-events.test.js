@@ -361,6 +361,15 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunBoltsPerSet") === 750
     );
+    assert.deepEqual(await page.evaluate(() => ({
+      runLabel: document.querySelector("#surface-goodmanrunactionstart")?.textContent,
+      pauseLabel: document.querySelector("#surface-goodmanrunactionpause")?.textContent,
+      stopLabel: document.querySelector("#surface-goodmanrunactionstop")?.textContent
+    })), {
+      runLabel: "▶ Run",
+      pauseLabel: "⏸",
+      stopLabel: "■"
+    });
     await page.locator("#cfg-tmax").fill("36");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunDurationMonths") === 36

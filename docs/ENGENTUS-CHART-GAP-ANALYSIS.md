@@ -30,8 +30,9 @@ grant runtime authority to copied JS or presenter code.
   reference statistic block/box-plot shell plus the insufficient-groups state.
 - Goodman run-state UI is authored through process state: Run switches to
   Monte Carlo mode, config fields lock while running/paused, Pause/Resume/Stop
-  controls patch visibility/disabled state, and the progress label/fill/lock
-  note reflect `GoodmanRunStatusState` without app-local controller code.
+  controls patch visibility/disabled state, reference run/pause/stop labels are
+  authored in `shell.rvm`, and the progress label/fill/lock note reflect
+  `GoodmanRunStatusState` without app-local controller code.
 - Goodman Monte Carlo chart evaluation now consumes authored run sample count:
   `GoodmanRunBoltsPerSet` binds to `GoodmanMCBands.param.n_samples`, so the
   ensemble axis re-evaluates from process-owned run config.

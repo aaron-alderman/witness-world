@@ -201,6 +201,8 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("GoodmanTimeSlider")?.body?.bindings[1]?.source?.state, "GoodmanRunDurationMonths");
   assert.equal(surfaces.get("GoodmanPlayAction")?.body?.props?.label, "▶");
   assert.equal(surfaces.get("GoodmanPlayAction")?.body?.interactions?.length ?? 0, 0);
+  assert.equal(surfaces.get("GoodmanRunActionStart")?.body?.props?.label, "▶ Run");
+  assert.equal(surfaces.get("GoodmanRunActionStop")?.body?.props?.label, "■");
   assert.equal(surfaces.get("GoodmanRunActionStart")?.body?.bindings[0]?.prop, "disabled");
   assert.equal(surfaces.get("GoodmanRunActionPause")?.body?.bindings[0]?.prop, "visible");
   assert.equal(surfaces.get("GoodmanRunActionResume")?.body?.bindings[0]?.prop, "visible");

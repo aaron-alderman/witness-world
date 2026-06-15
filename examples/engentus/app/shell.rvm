@@ -3070,7 +3070,7 @@ view GoodmanRunConfigStepField {
 view GoodmanRunActionStart {
   kind action
   class rbtn go
-  prop label = "Run"
+  prop label = "▶ Run"
   prop actionKey = "run"
   prop tag = "button"
   prop buttonType = "button"
@@ -3119,7 +3119,7 @@ view GoodmanRunActionResume {
 view GoodmanRunActionStop {
   kind action
   class rbtn stop
-  prop label = "Stop"
+  prop label = "■"
   prop actionKey = "stop"
   prop disabled = true
   prop tag = "button"
