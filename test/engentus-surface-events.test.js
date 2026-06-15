@@ -639,15 +639,20 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveAnalysisMode") === "compare"
     );
+    await page.waitForFunction(() =>
+      document.querySelector("#mill-force-svg-force")?.__chartController?.spec?.params?.analysis_mode === "compare"
+    );
     const modeState = await page.evaluate(() => ({
       single: document.querySelector("#surface-millforcemodesingle")?.className,
       compare: document.querySelector("#surface-millforcemodecompare")?.className,
+      forceChartMode: document.querySelector("#mill-force-svg-force")?.__chartController?.spec?.params?.analysis_mode,
       modeRow: [...document.querySelectorAll(".mill-force-result-row")]
         .map(row => row.textContent)
         .find(text => text.includes("Mode"))
     }));
     assert.equal(modeState.single, "mill-force-pill");
     assert.equal(modeState.compare, "mill-force-pill active");
+    assert.equal(modeState.forceChartMode, "compare");
     assert.match(modeState.modeRow, /Compare/);
     assert.deepEqual(await page.evaluate(() => ({
       modelHidden: document.querySelector("#surface-millforcemodelsection")?.hasAttribute("hidden"),

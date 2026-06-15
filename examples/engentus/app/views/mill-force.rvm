@@ -41,6 +41,7 @@ chart MillForceAngle of MillForce {
     param.m_liner from state MillForceLinerMass
     param.height from state MillForceLinerHeight
     param.active_method from state MillForceActiveModel
+    param.analysis_mode from state MillForceActiveAnalysisMode
   }
 
   x tBar
@@ -49,9 +50,15 @@ chart MillForceAngle of MillForce {
   y force
   y.domain 0 auto
   y.label "Force (N)"
-  layer fr   = line over segment | x:tBar y:F_r where:method=param.active_method stroke:blue
-  layer ft   = line over segment | x:tBar y:F_t where:method=param.active_method stroke:red
-  layer fres = line over segment | x:tBar y:F_resultant where:method=param.active_method stroke:ylw width:2.4
+  layer fr   = line over segment | x:tBar y:F_r where:method=param.active_method stroke:blue unless:param.analysis_mode=compare
+  layer ft   = line over segment | x:tBar y:F_t where:method=param.active_method stroke:red unless:param.analysis_mode=compare
+  layer fres = line over segment | x:tBar y:F_resultant where:method=param.active_method stroke:ylw width:2.4 unless:param.analysis_mode=compare
+  layer grounded_fr   = line over segment | x:tBar y:F_r where:method=grounded stroke:blue when:param.analysis_mode=compare
+  layer grounded_ft   = line over segment | x:tBar y:F_t where:method=grounded stroke:red when:param.analysis_mode=compare
+  layer grounded_fres = line over segment | x:tBar y:F_resultant where:method=grounded stroke:ylw width:2.4 when:param.analysis_mode=compare
+  layer faithful_fr   = line over segment | x:tBar y:F_r where:method=faithful stroke:slate dash:true when:param.analysis_mode=compare
+  layer faithful_ft   = line over segment | x:tBar y:F_t where:method=faithful stroke:pur dash:true when:param.analysis_mode=compare
+  layer faithful_fres = line over segment | x:tBar y:F_resultant where:method=faithful stroke:dk width:2.4 dash:true when:param.analysis_mode=compare
 }
 
 // Force rose (polar): resultant magnitude per segment, traced as a closed polygon
@@ -88,12 +95,15 @@ chart MillForceRose of MillForce {
     param.m_liner from state MillForceLinerMass
     param.height from state MillForceLinerHeight
     param.active_method from state MillForceActiveModel
+    param.analysis_mode from state MillForceActiveAnalysisMode
   }
 
   theta tBar
   r F_resultant
   r.domain 0 auto
-  layer rose = polygon over segment | theta:tBar r:F_resultant where:method=param.active_method stroke:blue fill:blue
+  layer rose = polygon over segment | theta:tBar r:F_resultant where:method=param.active_method stroke:blue fill:blue unless:param.analysis_mode=compare
+  layer grounded_rose = polygon over segment | theta:tBar r:F_resultant where:method=grounded stroke:blue fill:blue when:param.analysis_mode=compare
+  layer faithful_rose = polygon over segment | theta:tBar r:F_resultant where:method=faithful stroke:ylw fill:ylw when:param.analysis_mode=compare
 }
 
 // Cross-section (polar): per-segment wedge coloured by resultant force
@@ -130,6 +140,7 @@ chart MillForceCross of MillForce {
     param.m_liner from state MillForceLinerMass
     param.height from state MillForceLinerHeight
     param.active_method from state MillForceActiveModel
+    param.analysis_mode from state MillForceActiveAnalysisMode
   }
 
   theta tBar

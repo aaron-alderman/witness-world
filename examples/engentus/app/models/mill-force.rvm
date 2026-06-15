@@ -31,6 +31,7 @@ model MillForce {
   param m_liner        = 0.0
   param height         = 0.5
   param active_method  = grounded
+  param analysis_mode  = static
 
   // ── honest geometry (stays in IR) ──
   derive omega   = sqrt(g / radius) * percent_crit

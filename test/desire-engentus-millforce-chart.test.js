@@ -79,6 +79,70 @@ test("MillForce charts can slice faithful data through an authored chart param",
   );
 });
 
+test("MillForceAngle compare mode renders grounded and faithful layer pairs", async () => {
+  const { model, g, f, N } = await setup();
+  const evaluated = evaluateModel(model, {
+    functions: millForceKernels,
+    params: {
+      active_method: "grounded",
+      analysis_mode: "compare"
+    }
+  });
+  const view = await loadBody("views/mill-force.rvm", "surface", "MillForceAngle");
+  const plan = planChart(view, evaluated, { width: 800, height: 520 });
+
+  assert.equal(plan.layers.find(l => l.name === "fres").hidden, true);
+  const grounded = plan.layers.find(l => l.name === "grounded_fres");
+  const faithful = plan.layers.find(l => l.name === "faithful_fres");
+  assert.equal(grounded.hidden, undefined);
+  assert.equal(faithful.hidden, undefined);
+  assert.equal(grounded.primitives[0].points.length, N);
+  assert.equal(faithful.primitives[0].points.length, N);
+  assert.equal(grounded.primitives[0].points[8].y, evaluated.fields.F_resultant.data[8][g]);
+  assert.equal(faithful.primitives[0].points[8].y, evaluated.fields.F_resultant.data[8][f]);
+});
+
+test("MillForceRose compare mode renders both model traces", async () => {
+  const { model, g, f, N } = await setup();
+  const evaluated = evaluateModel(model, {
+    functions: millForceKernels,
+    params: {
+      active_method: "grounded",
+      analysis_mode: "compare"
+    }
+  });
+  const view = await loadBody("views/mill-force.rvm", "surface", "MillForceRose");
+  const plan = planChart(view, evaluated, { width: 600, height: 600 });
+
+  assert.equal(plan.layers.find(l => l.name === "rose").hidden, true);
+  const grounded = plan.layers.find(l => l.name === "grounded_rose");
+  const faithful = plan.layers.find(l => l.name === "faithful_rose");
+  assert.equal(grounded.primitives[0].points.length, N);
+  assert.equal(faithful.primitives[0].points.length, N);
+  assert.equal(grounded.primitives[0].points[7].r, evaluated.fields.F_resultant.data[7][g]);
+  assert.equal(faithful.primitives[0].points[7].r, evaluated.fields.F_resultant.data[7][f]);
+});
+
+test("MillForce compare layers stay hidden outside compare mode", async () => {
+  const { model, g } = await setup();
+  const evaluated = evaluateModel(model, {
+    functions: millForceKernels,
+    params: {
+      active_method: "grounded",
+      analysis_mode: "static"
+    }
+  });
+  const view = await loadBody("views/mill-force.rvm", "surface", "MillForceAngle");
+  const plan = planChart(view, evaluated, { width: 800, height: 520 });
+
+  assert.equal(plan.layers.find(l => l.name === "grounded_fres").hidden, true);
+  assert.equal(plan.layers.find(l => l.name === "faithful_fres").hidden, true);
+  assert.equal(
+    plan.layers.find(l => l.name === "fres").primitives[0].points[8].y,
+    evaluated.fields.F_resultant.data[8][g]
+  );
+});
+
 test("MillForceRose plans a polar polygon of resultant magnitude", async () => {
   const { evaluated, g, N } = await setup();
   const view = await loadBody("views/mill-force.rvm", "surface", "MillForceRose");
@@ -134,7 +198,8 @@ test("MillForce charts bind authored shell inputs into chart params", async () =
       "param.depth",
       "param.m_liner",
       "param.height",
-      "param.active_method"
+      "param.active_method",
+      "param.analysis_mode"
     ]) {
       assert.equal(boundProps.has(prop), true, `${chartName} missing ${prop}`);
     }

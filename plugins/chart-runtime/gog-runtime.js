@@ -85,6 +85,7 @@ function planLayer(layer, evaluated, fills) {
   const axes = evaluated.axes ?? {};
   const enc = layer.encode ?? {};
   const base = { name: layer.name, mark: layer.mark, encode: enc };
+  if (!layerPredicateMatches(enc, evaluated)) return { ...base, primitives: [], hidden: true };
 
   if (layer.mark === "area") {
     // one area per category in `over` (e.g. lifetime); generic "from baseline".
@@ -199,6 +200,7 @@ function planPolarLayer(layer, evaluated) {
   const axes = evaluated.axes ?? {};
   const enc = layer.encode ?? {};
   const base = { name: layer.name, mark: layer.mark, encode: enc };
+  if (!layerPredicateMatches(enc, evaluated)) return { ...base, primitives: [], hidden: true };
   const where = parseWhere(enc.where, axes, evaluated);
 
   if (layer.mark === "polygon" || layer.mark === "line") {
@@ -323,6 +325,7 @@ function planDiscLayer(layer, evaluated) {
   const axes = evaluated.axes ?? {};
   const enc = layer.encode ?? {};
   const base = { name: layer.name, mark: layer.mark, encode: enc };
+  if (!layerPredicateMatches(enc, evaluated)) return { ...base, primitives: [], frames: [], hidden: true };
   const where = parseWhere(enc.where, axes, evaluated);
 
   if (layer.mark === "polygon" || layer.mark === "line") {
@@ -463,6 +466,37 @@ function scalarRef(token, evaluated) {
   // a param value materialized as an axis-less constant
   const param = evaluated.params?.[token];
   return param ?? null;
+}
+
+function predicateValue(token, evaluated) {
+  const key = String(token ?? "").trim();
+  if (!key) return undefined;
+  if (key.startsWith("param.")) return evaluated.params?.[key.slice("param.".length)];
+  return scalarRef(key, evaluated);
+}
+
+function coercePredicateLiteral(raw) {
+  const value = String(raw ?? "").trim();
+  if (value === "true") return true;
+  if (value === "false") return false;
+  const number = Number(value);
+  return value !== "" && !Number.isNaN(number) ? number : value;
+}
+
+function predicateMatches(token, evaluated) {
+  const text = String(token ?? "").trim();
+  if (!text) return true;
+  const equals = text.indexOf("=");
+  if (equals < 0) return Boolean(predicateValue(text, evaluated));
+  const left = text.slice(0, equals).trim();
+  const right = coercePredicateLiteral(text.slice(equals + 1));
+  return predicateValue(left, evaluated) === right;
+}
+
+function layerPredicateMatches(enc, evaluated) {
+  if (enc.when != null && !predicateMatches(enc.when, evaluated)) return false;
+  if (enc.unless != null && predicateMatches(enc.unless, evaluated)) return false;
+  return true;
 }
 
 function parseColorMap(map) {
