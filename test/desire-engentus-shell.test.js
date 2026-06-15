@@ -234,7 +234,13 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("MillForceCompareToeDeltaValue")?.body?.bindings[0]?.source?.output, "phiPrimeDeltaText");
   assert.equal(surfaces.get("MillForceCompareRadialDeltaValue")?.body?.bindings[0]?.source?.output, "F_r_max_delta_text");
   assert.equal(surfaces.get("MillForceCompareResultantDeltaValue")?.body?.bindings[0]?.source?.output, "F_resultant_max_delta_text");
-  assert.equal(surfaces.get("MillForceMcSamplesInput")?.body?.interactions[0]?.action?.state, "MillForceMcSamples");
+  assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.surfaceKind, "form-field");
+  assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.className, "mc-row");
+  assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.props?.label, "Samples");
+  assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.props?.inputId, "mill-force-mc-n");
+  assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.props?.inputStyle, "width:70px");
+  assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.bindings[0]?.source?.state, "MillForceMcSamples");
+  assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.interactions[0]?.action?.state, "MillForceMcSamples");
   assert.equal(surfaces.get("MillForceMcJTotalToggle")?.body?.interactions[0]?.action?.value?.kind, "eventChecked");
   assert.equal(surfaces.get("MillForceMcRunAction")?.body?.props?.label, "▶ Run");
   assert.equal(surfaces.get("MillForceMcClearAction")?.body?.props?.label, "✕ Clear");

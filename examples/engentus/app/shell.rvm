@@ -413,13 +413,6 @@ derive MillForceLinerHeightText {
   prop suffix = " m"
 }
 
-derive MillForceMcSamplesText {
-  kind format
-  source MillForceMcSamples
-  prop digits = 0
-  prop suffix = " samples"
-}
-
 derive GoodmanRunBoltsPerSetText {
   kind format
   source GoodmanRunBoltsPerSet
@@ -6114,37 +6107,13 @@ view MillForceMcTitleText {
   prop text = "Monte Carlo Config"
 }
 
-view MillForceMcSamplesLabel {
-  kind text
-  class plabel
-  prop tag = "span"
-  prop text = "Samples"
-}
-
-view MillForceMcSamplesValue {
-  kind text
-  class pval
-  prop tag = "span"
-  prop text = "200 samples"
-  bindings {
-    text from projection MillForceMcSamplesText
-  }
-}
-
-view MillForceMcSamplesTop {
-  kind row
-  class prow-top
-  children {
-    MillForceMcSamplesLabel
-    MillForceMcSamplesValue
-  }
-}
-
-view MillForceMcSamplesInput {
-  kind input
-  class mill-force-mc-samples
-  prop tag = "input"
+view MillForceMcSamplesRow {
+  kind form-field
+  class mc-row
+  prop label = "Samples"
   prop inputType = "number"
+  prop inputId = "mill-force-mc-n"
+  prop inputStyle = "width:70px"
   prop min = 50
   prop max = 2000
   prop step = 50
@@ -6157,20 +6126,11 @@ view MillForceMcSamplesInput {
   }
 }
 
-view MillForceMcSamplesRow {
-  kind control-row
-  class prow
-  children {
-    MillForceMcSamplesTop
-    MillForceMcSamplesInput
-  }
-}
-
 view MillForceMcVaryTitle {
   kind text
   class ssec-title
   prop tag = "div"
-  prop text = "Vary parameters"
+  prop text = "Vary parameters:"
 }
 
 view MillForceMcJTotalToggle {

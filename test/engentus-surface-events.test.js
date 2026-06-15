@@ -849,15 +849,21 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       mcHidden: document.querySelector("#surface-millforcemcsection")?.hasAttribute("hidden"),
       runLabel: document.querySelector("#surface-millforcemcrunaction")?.textContent,
       clearLabel: document.querySelector("#surface-millforcemcclearaction")?.textContent,
-      clearDisabled: document.querySelector("#surface-millforcemcclearaction")?.disabled
+      clearDisabled: document.querySelector("#surface-millforcemcclearaction")?.disabled,
+      samplesRowClass: document.querySelector("#surface-millforcemcsamplesrow")?.className,
+      samplesLabel: document.querySelector("#surface-millforcemcsamplesrow label")?.textContent,
+      samplesInputStyle: document.querySelector("#mill-force-mc-n")?.getAttribute("style")
     })), {
       compareHidden: true,
       mcHidden: false,
       runLabel: "▶ Run",
       clearLabel: "✕ Clear",
-      clearDisabled: true
+      clearDisabled: true,
+      samplesRowClass: "mc-row",
+      samplesLabel: "Samples",
+      samplesInputStyle: "width:70px"
     });
-    await page.locator("#surface-millforcemcsamplesinput").fill("350");
+    await page.locator("#mill-force-mc-n").fill("350");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcSamples") === 350
     );

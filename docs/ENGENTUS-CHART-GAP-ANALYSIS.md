@@ -59,7 +59,8 @@ grant runtime authority to copied JS or presenter code.
   as scalar chart capability outputs for fill angle, shoulder angle, toe angle,
   omega, charge density, max radial force, and max resultant force.
 - Mill Force model/MC shell controls are now authored: grounded/faithful model
-  selection, compare-mode explanatory rows, Monte Carlo sample count,
+  selection, compare-mode explanatory rows, reference-shaped Monte Carlo sample
+  count input,
   free-parameter toggles, reference-aligned run/clear labels, Clear disabled
   state, and run/clear status all live in `shell.rvm` and mutate process state
   through generic bindings.
