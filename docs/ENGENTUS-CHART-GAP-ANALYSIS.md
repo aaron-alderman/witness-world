@@ -65,6 +65,11 @@ grant runtime authority to copied JS or presenter code.
   chart params. The primary bolt-set expansion is now process-owned authored
   state; generated parameter rows and clone/delete/new behavior remain explicit
   collection/runtime gaps rather than a JS controller workaround.
+- Goodman default bolt-set identities now follow the reference store:
+  the authored shell starts with "No Jemtec" using the red `#dc2626` swatch
+  and "Jemtec" using the blue `#8CC4D4` swatch. The second card remains a
+  static authored default identity until generated bolt-set parameter rows are
+  available through authored collection semantics.
 - Goodman Monte Carlo chart evaluation now consumes authored run sample count:
   `GoodmanRunBoltsPerSet` binds to `GoodmanMCBands.param.n_samples`, so the
   ensemble axis re-evaluates from process-owned run config.

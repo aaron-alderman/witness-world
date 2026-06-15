@@ -503,6 +503,16 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanBoltSetPrimaryCloneAction",
     "GoodmanBoltSetPrimaryDeleteAction"
   ]);
+  assert.deepEqual(surfaces.get("GoodmanBoltSetMaintenanceCard")?.body?.children, [
+    "GoodmanBoltSetMaintenanceHeader"
+  ]);
+  assert.deepEqual(surfaces.get("GoodmanBoltSetMaintenanceHeader")?.body?.children, [
+    "GoodmanBoltSetMaintenanceSwatch",
+    "GoodmanBoltSetMaintenanceName"
+  ]);
+  assert.equal(surfaces.get("GoodmanBoltSetMaintenanceName")?.body?.props?.text, "Jemtec");
+  assert.equal(surfaces.get("GoodmanBoltSetMaintenanceSwatch")?.body?.props?.style, "background:#8CC4D4");
+  assert.equal(surfaces.has("GoodmanBoltSetMaintenanceNote"), false);
   assert.equal(surfaces.get("GoodmanBoltSetPrimaryChevron")?.body?.surfaceKind, "action");
   assert.equal(surfaces.get("GoodmanBoltSetPrimaryChevron")?.body?.interactions[0]?.action?.state, "GoodmanBoltPrimaryParamsOpen");
   assert.deepEqual(surfaces.get("GoodmanBoltSetPrimaryEditForm")?.body?.children, [

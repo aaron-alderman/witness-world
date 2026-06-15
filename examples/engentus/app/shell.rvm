@@ -4368,14 +4368,14 @@ view GoodmanBoltSetPrimaryCard {
 view GoodmanBoltSetMaintenanceSwatch {
   kind marker
   class leg-sw
-  prop style = "background:#f59e0b"
+  prop style = "background:#8CC4D4"
 }
 
 view GoodmanBoltSetMaintenanceName {
   kind text
   class sim-name
   prop tag = "span"
-  prop text = "Worn liner case"
+  prop text = "Jemtec"
 }
 
 view GoodmanBoltSetMaintenanceHeader {
@@ -4387,18 +4387,11 @@ view GoodmanBoltSetMaintenanceHeader {
   }
 }
 
-view GoodmanBoltSetMaintenanceNote {
-  kind note
-  class info-row
-  prop text = "Higher alternating load comparison case"
-}
-
 view GoodmanBoltSetMaintenanceCard {
   kind card
   class goodman-bolt-set-card
   children {
     GoodmanBoltSetMaintenanceHeader
-    GoodmanBoltSetMaintenanceNote
   }
 }
 
