@@ -115,7 +115,11 @@ function planLayer(layer, evaluated, fills) {
     const iterVals = axes[iterAxis]?.values ?? [];
     const points = iterVals.map((axVal, i) => {
       const coord = { [iterAxis]: i, ...where };
-      return { x: xField ? valueAt(xField, coord) : axVal, y: valueAt(yField, coord) };
+      return {
+        x: xField ? valueAt(xField, coord) : axVal,
+        y: valueAt(yField, coord),
+        tooltip: tooltipValuesForEncoding(enc, evaluated, coord, axes)
+      };
     });
     return { ...base, stroke: colorToken(enc.stroke), width: Number(enc.width) || 2, dash: enc.dash === true, primitives: [{ points }] };
   }
@@ -653,6 +657,21 @@ function interpAtX(points, x, key) {
   return last[key];
 }
 
+function tooltipAtX(points, x) {
+  if (!points || points.length === 0) return {};
+  let best = null;
+  let bestDistance = Infinity;
+  for (const point of points) {
+    if (!Number.isFinite(point?.x)) continue;
+    const distance = Math.abs(point.x - x);
+    if (distance < bestDistance) {
+      best = point;
+      bestDistance = distance;
+    }
+  }
+  return best?.tooltip && typeof best.tooltip === "object" ? best.tooltip : {};
+}
+
 // Probe: read each cartesian layer's value(s) at a given x along the x-axis. Pure — the
 // host (a drag handler in drawChart) calls this on pointer-move to rebind the probe overlay
 // locally, without re-evaluating the model. Returns { x, readings:[{layer,mark,…}] }.
@@ -662,7 +681,7 @@ export function probeReadout(plan, x) {
     if (layer.mark === "line" || layer.mark === "cloud") {
       for (const prim of layer.primitives ?? []) {
         const y = interpAtX(prim.points, x, "y");
-        if (y != null) readings.push({ layer: layer.name, mark: layer.mark, y, sample: prim.sample });
+        if (y != null) readings.push({ layer: layer.name, mark: layer.mark, y, sample: prim.sample, tooltip: tooltipAtX(prim.points, x) });
       }
     } else if (layer.mark === "band") {
       const pts = layer.primitives?.[0]?.points;
@@ -848,7 +867,14 @@ export function drawChart(container, plan, d3) {
   if (probeLayer && Number.isFinite(probeLayer.primitives?.[0]?.x)) renderProbe(probeLayer.primitives[0].x);
 
   const node = svg.node();
-  node.probeAt = renderProbe; // host hook: programmatic local rebind → returns the readout
+  node.probeAt = renderProbe; // host hook: programmatic local rebind -> returns the readout
+  node.probeAtPoint = (xPx, yPx) => {
+    const plotX = Number(xPx) - margin.left;
+    const plotY = Number(yPx) - margin.top;
+    if (!Number.isFinite(plotX) || !Number.isFinite(plotY)) return null;
+    if (plotX < 0 || plotX > plan.innerW || plotY < 0 || plotY > plan.innerH) return null;
+    return renderProbe(invertX(plotX));
+  };
   node.projectPoint = (xVal, yVal) => ({
     x: x(xVal) + margin.left,
     y: y(yVal) + margin.top

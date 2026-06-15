@@ -868,6 +868,36 @@ test("Engentus Mill Force tabs switch authored chart views through process state
       rose: true,
       forceClass: "mill-force-cht-tab active"
     });
+    const forceProbeTarget = await page.evaluate(() => {
+      const svg = document.querySelector("#mill-force-svg-force");
+      const plan = svg?.__chartController?.plan;
+      const point = plan?.layers
+        ?.find(layer => layer.name === "fres")
+        ?.primitives
+        ?.[0]
+        ?.points
+        ?.find(item => item?.tooltip?.method);
+      if (!point) return null;
+      const projected = svg.__chartController.node.projectPoint(point.x, point.y);
+      const readout = svg.__chartController.node.probeAtPoint(projected.x, projected.y);
+      return { x: projected.x, y: projected.y, reading: readout?.readings?.find(item => item?.tooltip?.method) ?? null };
+    });
+    assert.equal(forceProbeTarget?.reading?.tooltip?.method, "grounded");
+    assert.equal(typeof forceProbeTarget?.reading?.tooltip?.F_resultant_N, "number");
+    await page.evaluate(({ x, y }) => {
+      const svg = document.querySelector("#mill-force-svg-force");
+      const rect = svg.getBoundingClientRect();
+      const target = svg.parentElement ?? svg;
+      target.dispatchEvent(new MouseEvent("mousemove", {
+        bubbles: true,
+        clientX: rect.left + x,
+        clientY: rect.top + y
+      }));
+    }, { x: forceProbeTarget.x, y: forceProbeTarget.y });
+    await page.waitForFunction(() => {
+      const tip = document.querySelector("#mill-force-force-tip");
+      return tip && getComputedStyle(tip).display !== "none" && /F Resultant N/i.test(tip.textContent || "");
+    });
 
     await page.click("#surface-millforcetabforcerose");
     await page.waitForFunction(() =>
@@ -883,6 +913,39 @@ test("Engentus Mill Force tabs switch authored chart views through process state
       force: true,
       rose: false,
       roseClass: "mill-force-cht-tab active"
+    });
+    const roseProbeTarget = await page.evaluate(() => {
+      const svg = document.querySelector("#mill-force-svg-rose");
+      const plan = svg?.__chartController?.plan;
+      const point = plan?.layers
+        ?.find(layer => layer.name === "rose")
+        ?.primitives
+        ?.[0]
+        ?.points
+        ?.find(item => item?.tooltip?.method);
+      if (!point) return null;
+      const [r0, r1] = plan.scales.r.domain;
+      const rPx = (point.r - r0) / ((r1 - r0) || 1) * plan.maxRadius;
+      const x = plan.center.x + rPx * Math.sin(point.theta);
+      const y = plan.center.y - rPx * Math.cos(point.theta);
+      const readout = svg.__chartController.node.probeAtPoint(x, y);
+      return { x, y, tooltip: readout?.tooltip ?? null };
+    });
+    assert.equal(roseProbeTarget?.tooltip?.method, "grounded");
+    assert.equal(typeof roseProbeTarget?.tooltip?.F_resultant_N, "number");
+    await page.evaluate(({ x, y }) => {
+      const svg = document.querySelector("#mill-force-svg-rose");
+      const rect = svg.getBoundingClientRect();
+      const target = svg.parentElement ?? svg;
+      target.dispatchEvent(new MouseEvent("mousemove", {
+        bubbles: true,
+        clientX: rect.left + x,
+        clientY: rect.top + y
+      }));
+    }, { x: roseProbeTarget.x, y: roseProbeTarget.y });
+    await page.waitForFunction(() => {
+      const tip = document.querySelector("#mill-force-rose-tip");
+      return tip && getComputedStyle(tip).display !== "none" && /F Resultant N/i.test(tip.textContent || "");
     });
   } finally {
     await browser.close();

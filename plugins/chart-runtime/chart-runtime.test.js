@@ -214,6 +214,35 @@ test("polar chart plans preserve authored tooltip channels on primitives", async
   }
 });
 
+test("cartesian chart plans preserve authored tooltip channels on line points", async () => {
+  const source = chartRuntimeBundleSource()
+    + "\nexport { evaluateModel, planChart };\n";
+  const tmp = path.join(os.tmpdir(), `chart-bundle-line-tooltip-${process.pid}.mjs`);
+  fs.writeFileSync(tmp, source, "utf8");
+  try {
+    const mod = await import(pathToFileURL(tmp).href);
+    const appFns = await import(pathToFileURL(path.join(appDir, "chart-functions", "mill-force-kernels.js")).href);
+    const world = await worldWithFiles(["models/mill-force.rvm", "views/mill-force.rvm"]);
+    const spec = resolveChartSpec(world.allWitnesses(), "MillForceAngle");
+    const evaluated = mod.evaluateModel(spec.model, {
+      functions: appFns.millForceKernels,
+      params: { active_method: "grounded", analysis_mode: "static" }
+    });
+    const plan = mod.planChart(spec.view, evaluated, { width: 720, height: 420 });
+    const resultant = plan.layers.find(layer => layer.name === "fres");
+    const first = resultant?.primitives?.[0]?.points?.[0];
+
+    assert.ok(first, "expected force-vs-angle line points");
+    assert.equal(first.tooltip.liner, 1);
+    assert.equal(first.tooltip.method, "grounded");
+    assert.equal(typeof first.tooltip.F_r_N, "number");
+    assert.equal(typeof first.tooltip.F_t_N, "number");
+    assert.equal(typeof first.tooltip.F_resultant_N, "number");
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+});
+
 test("page.chart resolves the requested chart from requestUrl search params", async () => {
   const world = await worldWithFiles([
     "models/goodman.rvm",

@@ -131,7 +131,12 @@ function formatTooltipValue(value) {
 }
 
 function tooltipMarkup(readout = {}) {
-  const values = readout.tooltip && typeof readout.tooltip === "object" ? readout.tooltip : {};
+  const readingTooltip = Array.isArray(readout.readings)
+    ? readout.readings.find(reading => reading?.tooltip && Object.keys(reading.tooltip).length)?.tooltip
+    : null;
+  const values = readout.tooltip && typeof readout.tooltip === "object"
+    ? readout.tooltip
+    : (readingTooltip && typeof readingTooltip === "object" ? readingTooltip : {});
   const entries = Object.entries(values).filter(([, value]) => value != null && value !== "");
   if (!entries.length) return "";
   const [firstKey, firstValue] = entries[0];
