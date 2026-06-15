@@ -109,6 +109,12 @@ grant runtime authority to copied JS or presenter code.
   conversion as the oracle, so the authored slip rule lands on the visible
   chart rather than off-domain, and `GoodmanDiagram` declares the `▲slip` and
   `Yield boundary` labels as chart text layers.
+- Goodman static bolt-set curves now include both reference default responses:
+  "No Jemtec" is authored in red `#dc2626`, and "Jemtec" is authored in blue
+  `#8CC4D4` through the same `BoltFatigue` stiffness-share dataflow with the
+  Jemtec copper shear spring included as app-owned model structure. This is the
+  visible default curve alignment; generated/editable bolt-set collections
+  remain a separate authored collection gap.
 - Goodman scrubber range now follows authored run duration:
   `GoodmanRunDurationMonths` binds to the time slider `max` attribute through
   the generic form-control binding path, matching the reference relationship

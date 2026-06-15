@@ -79,9 +79,10 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   const lastCat = bands.primitives[bands.primitives.length - 1]; // lifetime index 0
   assert.equal(lastCat.points[60].y1, evaluated.fields.band.data[60][0]);
 
-  // curves: a single polyline over sm tracking the bolt response
+  // curves: the two reference bolt-set responses, No Jemtec and Jemtec.
   const curves = layer("curves");
   assert.equal(curves.mark, "line");
+  assert.equal(curves.stroke, "#dc2626");
   assert.equal(curves.primitives[0].points.length, sm.length);
   assert.equal(curves.primitives[0].points[120].y, evaluated.fields.curve.data[120]);
   assert.equal(curves.primitives[0].points[120].tooltip.sigma_m_MPa, sm[120]);
@@ -90,6 +91,23 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   assert.equal(
     curves.primitives[0].points[120].tooltip.damage_per_cycle_x10_6,
     evaluated.fields.damage_per_million.data[120]
+  );
+  const curveJemtec = layer("curve_jemtec");
+  assert.equal(curveJemtec.mark, "line");
+  assert.equal(curveJemtec.stroke, "#8CC4D4");
+  assert.equal(curveJemtec.primitives[0].points.length, sm.length);
+  assert.equal(curveJemtec.primitives[0].points[120].y, evaluated.fields.curve_jemtec.data[120]);
+  assert.equal(
+    curveJemtec.primitives[0].points[120].tooltip.F_shear_N,
+    evaluated.fields.F_shear_jemtec.data[120]
+  );
+  assert.equal(
+    curveJemtec.primitives[0].points[120].tooltip.damage_per_cycle_x10_6,
+    evaluated.fields.damage_per_million_jemtec.data[120]
+  );
+  assert.ok(
+    evaluated.fields.curve_jemtec.data[120] < evaluated.fields.curve.data[120],
+    "Jemtec copper spring should reduce the loaded bolt response"
   );
 
   // dashed Goodman guide lines: one category-split guide per authored lifetime boundary
@@ -144,7 +162,7 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   const probePoint = layer("probe_point");
   assert.equal(probePoint.mark, "point");
   assert.equal(probePoint.size, 5.5);
-  assert.equal(probePoint.fill, "#5AAABF");
+  assert.equal(probePoint.fill, "#dc2626");
   assert.equal(probePoint.stroke, "#ffffff");
   assert.deepEqual(probePoint.primitives, [{
     x: evaluated.params.probe_sm,
@@ -152,11 +170,19 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   }]);
   const curveLabel = layer("curve_label");
   assert.equal(curveLabel.mark, "text");
-  assert.equal(curveLabel.fill, "#5AAABF");
+  assert.equal(curveLabel.fill, "#dc2626");
   assert.deepEqual(curveLabel.primitives, [{
     x: evaluated.fields.curve_label_x.data,
     y: evaluated.fields.curve_label_y.data,
     label: "No Jemtec"
+  }]);
+  const curveJemtecLabel = layer("curve_label_jemtec");
+  assert.equal(curveJemtecLabel.mark, "text");
+  assert.equal(curveJemtecLabel.fill, "#8CC4D4");
+  assert.deepEqual(curveJemtecLabel.primitives, [{
+    x: evaluated.fields.curve_label_jemtec_x.data,
+    y: evaluated.fields.curve_label_jemtec_y.data,
+    label: "Jemtec"
   }]);
 });
 

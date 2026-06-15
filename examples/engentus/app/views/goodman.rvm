@@ -61,14 +61,16 @@ chart GoodmanDiagram of BoltFatigue {
   // layer stack (drawn bottom→top), each bound to a BoltFatigue channel
   layer bands  = area over lifetime | y:band fill:band.fills opacity:0.9
   layer glines = line over lifetime | y:band stroke:ylw width:1.2 dash:true opacity:0.9
-  layer curves = line over sm | y:curve stroke:blue width:2.2 tooltip.sigma_m_MPa:sm tooltip.sigma_a_MPa:curve tooltip.F_shear_N:F_shear tooltip.damage_per_cycle_x10_6:damage_per_million
+  layer curves = line over sm | y:curve stroke:"#dc2626" width:2.2 tooltip.sigma_m_MPa:sm tooltip.sigma_a_MPa:curve tooltip.F_shear_N:F_shear tooltip.damage_per_cycle_x10_6:damage_per_million
+  layer curve_jemtec = line over sm | y:curve_jemtec stroke:"#8CC4D4" width:2.2 tooltip.sigma_m_MPa:sm tooltip.sigma_a_MPa:curve_jemtec tooltip.F_shear_N:F_shear_jemtec tooltip.damage_per_cycle_x10_6:damage_per_million_jemtec
   layer slip   = rule | x:slip dash:true stroke:slate
   layer slip_label = text | x:slip_label_x y:slip_label_y label:"▲slip" fill:slate size:9 opacity:0.7
   layer yield  = line over sm | y:yield_line stroke:pur width:1.5 dash:true
   layer yield_label = text | x:yield_label_x y:yield_label_y label:"Yield boundary" fill:pur size:9.5 opacity:0.7
-  layer curve_label = text | x:curve_label_x y:curve_label_y label:"No Jemtec" fill:blue size:11 weight:600
+  layer curve_label = text | x:curve_label_x y:curve_label_y label:"No Jemtec" fill:"#dc2626" size:11 weight:600
+  layer curve_label_jemtec = text | x:curve_label_jemtec_x y:curve_label_jemtec_y label:"Jemtec" fill:"#8CC4D4" size:11 weight:600
   layer probe  = rule | x:probe_sm stroke:slate width:1 dash:true opacity:0.5
-  layer probe_point = point | x:probe_sm y:curve_probe fill:blue stroke:"#ffffff" width:2 size:5.5
+  layer probe_point = point | x:probe_sm y:curve_probe fill:"#dc2626" stroke:"#ffffff" width:2 size:5.5
 }
 
 // ── Goodman Monte-Carlo bands (over BoltFatigueMC) ─────────────────────────────
