@@ -6233,7 +6233,7 @@ view MillForceMcRunAction {
   class rbtn go
   prop tag = "button"
   prop buttonType = "button"
-  prop label = "Run"
+  prop label = "▶ Run"
   interactions {
     on click self deliver MillForceRunMonteCarloRequested
   }
@@ -6244,7 +6244,11 @@ view MillForceMcClearAction {
   class rbtn stop
   prop tag = "button"
   prop buttonType = "button"
-  prop label = "Clear"
+  prop label = "✕ Clear"
+  prop disabled = true
+  bindings {
+    disabled from state MillForceMcStatusState map running false default true
+  }
   interactions {
     on click self deliver MillForceClearMonteCarloRequested
   }

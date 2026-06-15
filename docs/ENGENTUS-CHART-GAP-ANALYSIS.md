@@ -56,8 +56,9 @@ grant runtime authority to copied JS or presenter code.
   omega, charge density, max radial force, and max resultant force.
 - Mill Force model/MC shell controls are now authored: grounded/faithful model
   selection, compare-mode explanatory rows, Monte Carlo sample count,
-  free-parameter toggles, and run/clear status all live in `shell.rvm` and
-  mutate process state through generic bindings.
+  free-parameter toggles, reference-aligned run/clear labels, Clear disabled
+  state, and run/clear status all live in `shell.rvm` and mutate process state
+  through generic bindings.
 - Mill Force chart model selection now flows through `chart.render` as an
   authored chart parameter: the force, rose, and cross-section chart layers
   slice `method` from `param.active_method`, which is bound to

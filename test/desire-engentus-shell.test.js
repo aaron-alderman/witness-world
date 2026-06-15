@@ -232,6 +232,10 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("MillForceCompareResultantDeltaValue")?.body?.bindings[0]?.source?.output, "F_resultant_max_delta_text");
   assert.equal(surfaces.get("MillForceMcSamplesInput")?.body?.interactions[0]?.action?.state, "MillForceMcSamples");
   assert.equal(surfaces.get("MillForceMcJTotalToggle")?.body?.interactions[0]?.action?.value?.kind, "eventChecked");
+  assert.equal(surfaces.get("MillForceMcRunAction")?.body?.props?.label, "▶ Run");
+  assert.equal(surfaces.get("MillForceMcClearAction")?.body?.props?.label, "✕ Clear");
+  assert.equal(surfaces.get("MillForceMcClearAction")?.body?.bindings[0]?.prop, "disabled");
+  assert.equal(surfaces.get("MillForceMcClearAction")?.body?.bindings[0]?.source?.state, "MillForceMcStatusState");
   assert.deepEqual(processes.get("EngentusShellNavigation")?.body?.rules, [
     {
       trigger: "EngentusSignInRequested",

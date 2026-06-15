@@ -828,10 +828,16 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     );
     assert.deepEqual(await page.evaluate(() => ({
       compareHidden: document.querySelector("#surface-millforcecomparesection")?.hasAttribute("hidden"),
-      mcHidden: document.querySelector("#surface-millforcemcsection")?.hasAttribute("hidden")
+      mcHidden: document.querySelector("#surface-millforcemcsection")?.hasAttribute("hidden"),
+      runLabel: document.querySelector("#surface-millforcemcrunaction")?.textContent,
+      clearLabel: document.querySelector("#surface-millforcemcclearaction")?.textContent,
+      clearDisabled: document.querySelector("#surface-millforcemcclearaction")?.disabled
     })), {
       compareHidden: true,
-      mcHidden: false
+      mcHidden: false,
+      runLabel: "▶ Run",
+      clearLabel: "✕ Clear",
+      clearDisabled: true
     });
     await page.locator("#surface-millforcemcsamplesinput").fill("350");
     await page.waitForFunction(() =>
@@ -846,11 +852,13 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcStatusState") === "running"
     );
     assert.equal(await page.textContent("#surface-millforcemcstatustext"), "Run requested");
+    assert.equal(await page.locator("#surface-millforcemcclearaction").isEnabled(), true);
     await page.click("#surface-millforcemcclearaction");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcStatusState") === "cleared"
     );
     assert.equal(await page.textContent("#surface-millforcemcstatustext"), "Cleared");
+    assert.equal(await page.locator("#surface-millforcemcclearaction").isEnabled(), false);
   } finally {
     await browser.close();
     await server.close();
