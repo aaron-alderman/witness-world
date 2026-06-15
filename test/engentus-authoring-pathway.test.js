@@ -168,15 +168,18 @@ test("canonical docs encode the single-track canonical authoring pathway probe",
   assert.match(desireSpa, /canonical authoring pathway probe/i);
   assert.match(desireSpa, /minimal static authored `page\.surface` projection/i);
   assert.match(desireSpa, /route-selected alternate authored `page\.surface` output/i);
+  assert.match(desireSpa, /URL -> route-state synchronization/i);
   assert.match(policy, /canonical authoring pathway probe/i);
   assert.match(policy, /Blocked means stop, not improvise/i);
   assert.match(policy, /There is no second lane/i);
+  assert.match(policy, /route\/state equivalence/i);
   assert.match(pathwayPlaybook, /Canonical Authoring Pathway Probe/i);
   assert.match(pathwayPlaybook, /minimal static authored `page\.surface` projection/i);
-  assert.match(pathwayPlaybook, /route-selected alternate authored surface output is\s+the next rung/i);
+  assert.match(pathwayPlaybook, /route-selected alternate authored `page\.surface` output/i);
+  assert.match(pathwayPlaybook, /URL -> route-state synchronization/i);
 });
 
-test("canonical authoring pathway probe proves the first static page.surface rung", { timeout: 10000 }, async () => {
+test("canonical authoring pathway probe proves route-selected surface output and stops next at route-state synchronization", { timeout: 10000 }, async () => {
   const server = await startAuthoringProbeServer();
   try {
     const result = await runCanonicalAuthoringPathwayProbe(server.url);
@@ -186,20 +189,35 @@ test("canonical authoring pathway probe proves the first static page.surface run
     assert.equal(result.capabilityChecks.publicProcessCreate, true);
     assert.equal(result.capabilityChecks.publicTypeCreate, true);
     assert.equal(result.capabilityChecks.publicProjectionCreate, true);
+    assert.equal(result.capabilityChecks.publicMessageCreate, true);
     assert.equal(result.capabilityChecks.legacyWidgetCreateHidden, true);
     assert.equal(result.capabilityChecks.legacyFrontendProgramHidden, true);
     assert.equal(result.pathwayProbe.surfaceHttpStatus, 200);
+    assert.equal(result.pathwayProbe.alternateSurfaceHttpStatus, 200);
     assert.equal(result.pathwayProbe.staticSurfaceProjectionVisible, true);
+    assert.equal(result.pathwayProbe.routeSelectedSurfaceVisible, true);
     assert.equal(result.pathwayProbe.blockedResetHostVisible, false);
-    assert.equal(result.pathwayProbe.firstBlockedRung, null);
-    assert.equal(result.blockers.firstBlocked, null);
+    assert.equal(result.pathwayProbe.firstBlockedRung, "urlToRouteState");
+    assert.equal(result.blockers.firstBlocked?.limitationType, "platform");
+    assert.match(result.blockers.firstBlocked?.missingPrimitive ?? "", /URL -> route-state synchronization/);
     assert.deepEqual(result.pathwayProbe.rungResults.map(row => row.id), [
       "matrixBaseline",
       "canonicalActionsExist",
-      "staticSurfaceProjection"
+      "staticSurfaceProjection",
+      "routeSelectedSurface",
+      "urlToRouteState"
     ]);
-    assert.equal(result.pathwayProbe.rungResults.every(row => row.status === "supported"), true);
+    assert.deepEqual(result.pathwayProbe.rungResults.map(row => row.status), [
+      "supported",
+      "supported",
+      "supported",
+      "supported",
+      "blocked"
+    ]);
     assert.equal(result.stateChecks.rootSurfacePresent, true);
+    assert.equal(result.stateChecks.routeStateProcessPresent, true);
+    assert.equal(result.stateChecks.routeStateTypePresent, true);
+    assert.equal(result.stateChecks.routeStateMessagePresent, true);
   } finally {
     await server.close();
   }
@@ -283,7 +301,12 @@ test("live constrained MCP keeps canonical authoring actions available while pag
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.projection, "blocked");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.blockedResetHost.status, "supported");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.staticSurfaceProjection.status, "supported");
-    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.routeSelectedSurface.status, "blocked");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.routeSelectedSurface.status, "supported");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.urlToRouteState.status, "blocked");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.interactionToRouteState.status, "blocked");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.routeStateToUrl.status, "blocked");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.sameDocumentSurfaceRefresh.status, "blocked");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.routingCluster.status, "blocked");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.interactiveSurfaceExecution.status, "blocked");
   } finally {
     await server.close();

@@ -25,9 +25,14 @@ implementation seam, and not a second platform initiative.
 1. matrix baseline
 2. canonical actions still exist
 3. minimal static authored `page.surface` projection
+4. route-selected alternate authored `page.surface` output
+5. URL -> route-state synchronization
+6. interaction -> route-state transition
+7. route-state -> URL synchronization
+8. same-document surface refresh after route-state change
 
-This tranche stops there. Route-selected alternate authored surface output is
-the next rung, not part of the first static proof.
+This routing cluster is all-or-nothing for green status, but the pathway still
+stops at the first blocked semantic and emits one structured blocked handoff.
 
 ## Current truth
 
@@ -35,12 +40,16 @@ What the pathway probe now proves:
 
 - a minimal surface tree can be authored through constrained MCP
 - `page.surface` can project one minimal authored static text payload
+- `page.surface` can serve alternate authored output by route
 - the reset host still exists as the honest fallback when no minimal static
   payload can be projected
 
 What remains blocked:
 
-- route-selected alternate authored surface output
+- URL -> route-state synchronization
+- interaction -> route-state transition
+- route-state -> URL synchronization
+- same-document surface refresh after route-state change
 - interactive `page.surface` execution
 - process/projection consumption by `page.surface`
 

@@ -41,32 +41,41 @@ function runtimeSpecForSurface(surface) {
   };
 }
 
-function describeAuthScreenRuntimeView(surface) {
-  const domId = surfaceDomId(surface, fallbackSurfaceDomId(surface, "surface-auth"));
-  return {
-    rootId: domId,
-    propTargets: {
-      title: [{ id: `${domId}__title`, mode: "formattedText" }],
-      subtitle: [{ id: `${domId}__subtitle`, mode: "formattedText" }],
-      heroTitle: [{ id: `${domId}__heroTitle`, mode: "formattedText" }],
-      heroBody: [{ id: `${domId}__heroBody`, mode: "formattedText" }],
-      footnote: [{ id: `${domId}__footnote`, mode: "formattedText" }],
-      primaryActionLabel: [{ id: `${domId}__primaryLabel`, mode: "text" }],
-      primaryActionHref: [{ id: `${domId}__primaryAction`, mode: "navHref" }]
-    },
-    interactionTargets: {
-      primaryAction: [{ id: `${domId}__primaryAction`, defaultEvent: "click" }]
-    }
-  };
+function normalizeViewTargets(value) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? structuredClone(value)
+    : {};
 }
 
-export function describeSurfaceRuntimeView(surface) {
-  if (surface?.surfaceKind === "auth-screen") return describeAuthScreenRuntimeView(surface);
+function normalizeRouteStateDescriptor(value) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? structuredClone(value)
+    : null;
+}
+
+function genericSurfaceRuntimeView(surface) {
+  const domId = surfaceDomId(surface, fallbackSurfaceDomId(surface));
   return {
-    rootId: surfaceDomId(surface, fallbackSurfaceDomId(surface)),
+    rootId: domId,
     propTargets: {},
     interactionTargets: {}
   };
+}
+
+export function describeSurfaceRuntimeView(surface, {
+  describeSurfaceRuntimeViewImpl = null
+} = {}) {
+  const described = typeof describeSurfaceRuntimeViewImpl === "function"
+    ? describeSurfaceRuntimeViewImpl(surface)
+    : null;
+  if (described && typeof described === "object" && !Array.isArray(described)) {
+    return {
+      rootId: trimString(described.rootId) || surfaceDomId(surface, fallbackSurfaceDomId(surface)),
+      propTargets: normalizeViewTargets(described.propTargets),
+      interactionTargets: normalizeViewTargets(described.interactionTargets)
+    };
+  }
+  return genericSurfaceRuntimeView(surface);
 }
 
 export function buildSurfaceRuntimeManifest({
@@ -76,7 +85,9 @@ export function buildSurfaceRuntimeManifest({
   surfaces,
   browserRuntimeCapabilities = [],
   rootSurfaceId = null,
-  requestPathname = "/"
+  requestPathname = "/",
+  describeSurfaceRuntimeViewImpl = null,
+  routeStateDescriptor = null
 }) {
   const surfaceEntries = [];
   const queue = [{ id: activeSurface.id, parentId: null }];
@@ -88,7 +99,7 @@ export function buildSurfaceRuntimeManifest({
     const surface = surfaces.get(next.id);
     if (!surface) continue;
     const runtime = runtimeSpecForSurface(surface);
-    const view = describeSurfaceRuntimeView(surface);
+    const view = describeSurfaceRuntimeView(surface, { describeSurfaceRuntimeViewImpl });
     surfaceEntries.push({
       id: surface.id,
       parentId: next.parentId,
@@ -117,7 +128,8 @@ export function buildSurfaceRuntimeManifest({
     requestPathname,
     browserRuntimeCapabilities: [...new Set((browserRuntimeCapabilities ?? []).map(value => String(value || "")).filter(Boolean))],
     surfaces: surfaceEntries,
-    processWitnesses
+    processWitnesses,
+    routeState: normalizeRouteStateDescriptor(routeStateDescriptor)
   };
 }
 
@@ -154,6 +166,10 @@ export function resolveSurfaceCapabilities(binding, runtimeCapabilities) {
     available: required.filter(value => installed.has(value)),
     missing: required.filter(value => !installed.has(value))
   };
+}
+
+export function resolveRouteStateDescriptor(manifest) {
+  return normalizeRouteStateDescriptor(manifest?.routeState);
 }
 
 function readBindingSource(source, processRuntime) {
@@ -194,8 +210,13 @@ export function patchSurfaceDom(document, surface, nextProps) {
       switch (target.mode) {
         case "navHref": {
           const href = trimString(value);
-          if (href) node.setAttribute("data-shell-nav-href", href);
-          else node.removeAttribute("data-shell-nav-href");
+          if (href) node.setAttribute("href", href);
+          else node.removeAttribute("href");
+          break;
+        }
+        case "visibility": {
+          if (value) node.removeAttribute("hidden");
+          else node.setAttribute("hidden", "");
           break;
         }
         case "formattedText":
@@ -219,6 +240,23 @@ function eventValueFromSpec(spec, event, processRuntime) {
   return null;
 }
 
+function createBlockedInteractionRuntime({
+  limitationType = "platform",
+  missingPrimitive,
+  reason
+} = {}) {
+  return {
+    blocked: {
+      limitationType,
+      missingPrimitive,
+      reason
+    },
+    refresh() {},
+    processRuntime: null,
+    destroy() {}
+  };
+}
+
 export function createSurfaceInteractionRuntime({
   document,
   window,
@@ -230,6 +268,19 @@ export function createSurfaceInteractionRuntime({
     : (() => {
         throw new Error("createProcessRuntime implementation required");
       });
+  const missingInteractionTargets = (manifest?.surfaces ?? []).some(surface =>
+    (surface?.runtime?.interactions?.length ?? 0) > 0
+      && Object.keys(surface?.view?.interactionTargets ?? {}).length === 0
+  );
+  if (missingInteractionTargets) {
+    window?.console?.error?.(
+      "surface interaction runtime blocked: missing generic interaction target descriptors"
+    );
+    return createBlockedInteractionRuntime({
+      missingPrimitive: "generic surface interaction target descriptors",
+      reason: "interactive surface execution cannot proceed until the host emits generic interaction target descriptors instead of surface-kind-specific conventions"
+    });
+  }
   const processRuntime = processRuntimeFactory({ witnesses: manifest.processWitnesses || [] });
   const disposers = [];
   const refresh = () => {

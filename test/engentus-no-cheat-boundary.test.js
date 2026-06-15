@@ -61,6 +61,21 @@ test("runtime-surface-shell stays a mechanical static/reset host without contami
   }
 });
 
+test("runtime-surface-interaction-runtime stays free of surface-kind-specific view assumptions", async () => {
+  const runtimeSource = await readFile(path.join(process.cwd(), "src", "runtime-surface-interaction-runtime.js"), "utf8");
+  const forbidden = [
+    "auth-screen",
+    "heroTitle",
+    "heroBody",
+    "primaryAction",
+    "surface-auth"
+  ];
+
+  for (const token of forbidden) {
+    assert.equal(runtimeSource.includes(token), false, `runtime-surface-interaction-runtime.js must not contain ${token}`);
+  }
+});
+
 test("engentus no longer ships executable presenter or client authority trees", async () => {
   const [presenterFiles, clientFiles, runtimeFiles] = await Promise.all([
     listJsFiles(path.join(process.cwd(), "examples", "engentus", "app", "presenters")),

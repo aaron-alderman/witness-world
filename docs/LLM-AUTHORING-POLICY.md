@@ -45,8 +45,10 @@ capability authority into a generic host.
 Current constrained truth is:
 
 - `page.surface` exists as a route host
-- it serves blocked/reset host output only
-- canonical projection/execution through `page.surface` is currently blocked
+- it supports minimal static authored projection
+- it supports route-selected alternate authored output
+- route/state equivalence and canonical interactive execution through
+  `page.surface` remain blocked
 
 Any future claim beyond that must be pathway-proven first.
 

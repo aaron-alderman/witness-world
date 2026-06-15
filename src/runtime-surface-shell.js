@@ -77,6 +77,14 @@ function describeSurface(surface) {
   };
 }
 
+function routeDefaultScreen(route) {
+  const paramsDefault = route?.params?.defaultScreen;
+  if (typeof paramsDefault === "string" && paramsDefault.trim()) return paramsDefault.trim();
+  const routeDefault = route?.defaultScreen;
+  if (typeof routeDefault === "string" && routeDefault.trim()) return routeDefault.trim();
+  return null;
+}
+
 function staticTextValue(props, key) {
   const value = props?.[key];
   if (typeof value !== "string") return null;
@@ -109,7 +117,7 @@ function selectStaticProjectionSurface({
   const defaultSurface = matchSurfaceByDefaultScreen({
     surfaces,
     rootSurfaceId,
-    defaultScreen: route?.defaultScreen ?? null
+    defaultScreen: routeDefaultScreen(route)
   });
   if (defaultSurface && hasStaticPayload(defaultSurface)) return defaultSurface;
   if (hasStaticPayload(rootSurface)) return rootSurface;
@@ -400,7 +408,7 @@ export function renderSurfaceShellFromMap({
     activeSurface: matchSurfaceByDefaultScreen({
       surfaces,
       rootSurfaceId,
-      defaultScreen: route?.defaultScreen ?? null
+      defaultScreen: routeDefaultScreen(route)
     }) ?? rootSurface
   });
 }

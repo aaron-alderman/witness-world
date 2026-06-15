@@ -43,10 +43,12 @@ That renderer has been removed.
 Current truth:
 
 - `page.surface` still resolves as a route host
-- it now serves a blocked/reset host page only
-- it does not claim static shell parity
+- it can project minimal authored static surface output
+- it can serve route-selected alternate authored surface output
+- it still exposes the blocked/reset host when no minimal authored payload can be projected
 - it does not claim canonical interactive execution
-- it does not claim `surface + process + projection` runtime support
+- it does not yet claim route/state equivalence support
+- it does not yet claim `surface + process + projection` runtime support
 
 The next honest work does not begin from the old shell host. It begins from the
 clean floor proved by the canonical authoring pathway probe.
@@ -69,7 +71,10 @@ clean floor proved by the canonical authoring pathway probe.
 
 ### Still blocked
 
-- route-selected alternate authored `page.surface` output
+- URL -> route-state synchronization on canonical `page.surface`
+- interaction -> route-state transitions on canonical `page.surface`
+- route-state -> URL synchronization on canonical `page.surface`
+- same-document surface refresh after route-state change
 - canonical interactive `page.surface` execution
 - faithful live Engentus shell behavior through the constrained pathway
 - Goodman, mill-charge, and mill-force live behavior on canonical seams
@@ -78,6 +83,31 @@ clean floor proved by the canonical authoring pathway probe.
 
 - minimal static authored `page.surface` projection for one text-bearing surface
   tree through the canonical authoring pathway probe
+- route-selected alternate authored `page.surface` output through the canonical
+  authoring pathway probe
+
+## Routing cluster
+
+The next canonical frontend unit is the routing cluster:
+
+1. route-selected authored surface output
+2. URL -> route-state synchronization
+3. interaction -> route-state transition
+4. route-state -> URL synchronization
+5. same-document surface refresh after route-state change
+
+For Engentus this is the shell prerequisite for:
+
+- login -> home
+- home -> Goodman
+- home -> mill-charge
+- home -> mill-force
+- any screen -> signout
+- direct route entry into the authored shell state
+
+Route and shell state are two representations of the same authored problem.
+The constrained pathway must prove them together on canonical seams before
+Engentus shell flow can move honestly.
 
 ## Restart lane
 

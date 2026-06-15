@@ -51,7 +51,12 @@ test("authoring capability matrix reports page.surface pathway semantics separat
   assert.equal(pageSurface.pairings.projection, "blocked");
   assert.equal(pageSurface.pathwaySemantics.blockedResetHost.status, "supported");
   assert.equal(pageSurface.pathwaySemantics.staticSurfaceProjection.status, "supported");
-  assert.equal(pageSurface.pathwaySemantics.routeSelectedSurface.status, "blocked");
+  assert.equal(pageSurface.pathwaySemantics.routeSelectedSurface.status, "supported");
+  assert.equal(pageSurface.pathwaySemantics.urlToRouteState.status, "blocked");
+  assert.equal(pageSurface.pathwaySemantics.interactionToRouteState.status, "blocked");
+  assert.equal(pageSurface.pathwaySemantics.routeStateToUrl.status, "blocked");
+  assert.equal(pageSurface.pathwaySemantics.sameDocumentSurfaceRefresh.status, "blocked");
+  assert.equal(pageSurface.pathwaySemantics.routingCluster.status, "blocked");
   assert.equal(pageSurface.pathwaySemantics.interactiveSurfaceExecution.status, "blocked");
 });
 

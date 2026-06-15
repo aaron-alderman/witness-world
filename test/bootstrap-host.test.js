@@ -529,7 +529,7 @@ test("a bootstrap-authored runner and home route take over without restarting th
   }
 });
 
-test("canonical authoring pathway probe uses the matrix and proves the first static page.surface rung", { timeout: 10000 }, async () => {
+test("canonical authoring pathway probe proves route-selected authored output and stops next at route-state synchronization", { timeout: 10000 }, async () => {
   const { server } = await startBlankServer({ runtimePluginIds: ["plugin.mcp"] });
   try {
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
@@ -541,21 +541,24 @@ test("canonical authoring pathway probe uses the matrix and proves the first sta
     assert.equal(result.ok, true);
     assert.deepEqual(result.capabilityChecks.canonicalFrontendModel, ["surface", "process", "projection", "capability"]);
     assert.equal(result.capabilityChecks.publicSurfaceCreate, true);
-    assert.equal(result.capabilityChecks.publicProcessCreate, true);
-    assert.equal(result.capabilityChecks.publicTypeCreate, true);
-    assert.equal(result.capabilityChecks.publicProjectionCreate, true);
-    assert.equal(result.capabilityChecks.legacyWidgetCreateHidden, true);
-    assert.equal(result.capabilityChecks.legacyFrontendProgramHidden, true);
-    assert.equal(result.pathwayProbe.surfaceHttpStatus, 200);
-    assert.equal(result.pathwayProbe.staticSurfaceProjectionVisible, true);
-    assert.equal(result.pathwayProbe.blockedResetHostVisible, false);
-    assert.equal(result.pathwayProbe.firstBlockedRung, null);
-    assert.equal(result.blockers.firstBlocked, null);
-    assert.equal(result.stateChecks.rootSurfacePresent, true);
-  } finally {
-    await server.close();
-  }
-});
+      assert.equal(result.capabilityChecks.publicProcessCreate, true);
+      assert.equal(result.capabilityChecks.publicTypeCreate, true);
+      assert.equal(result.capabilityChecks.publicProjectionCreate, true);
+      assert.equal(result.capabilityChecks.publicMessageCreate, true);
+      assert.equal(result.capabilityChecks.legacyWidgetCreateHidden, true);
+      assert.equal(result.capabilityChecks.legacyFrontendProgramHidden, true);
+      assert.equal(result.pathwayProbe.surfaceHttpStatus, 200);
+      assert.equal(result.pathwayProbe.alternateSurfaceHttpStatus, 200);
+      assert.equal(result.pathwayProbe.staticSurfaceProjectionVisible, true);
+      assert.equal(result.pathwayProbe.routeSelectedSurfaceVisible, true);
+      assert.equal(result.pathwayProbe.blockedResetHostVisible, false);
+      assert.equal(result.pathwayProbe.firstBlockedRung, "urlToRouteState");
+      assert.equal(result.blockers.firstBlocked?.limitationType, "platform");
+      assert.equal(result.stateChecks.rootSurfacePresent, true);
+    } finally {
+      await server.close();
+    }
+  });
 
 test("guidance progress syncs into the authenticated session store", async () => {
   const { server } = await startBlankServer();
