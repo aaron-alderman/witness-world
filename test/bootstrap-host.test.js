@@ -529,7 +529,7 @@ test("a bootstrap-authored runner and home route take over without restarting th
   }
 });
 
-test("authoring replay probe uses the canonical matrix and exposes the canonical interactive page.surface path", { timeout: 10000 }, async () => {
+test("authoring replay probe uses the canonical matrix and reports the page.surface reset host block", { timeout: 10000 }, async () => {
   const { server } = await startBlankServer({ runtimePluginIds: ["plugin.mcp"] });
   try {
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
@@ -547,14 +547,11 @@ test("authoring replay probe uses the canonical matrix and exposes the canonical
     assert.equal(result.capabilityChecks.legacyWidgetCreateHidden, true);
     assert.equal(result.capabilityChecks.legacyFrontendProgramHidden, true);
     assert.equal(result.replay.surfaceHttpStatus, 200);
-    assert.equal(result.replay.surfaceAuthoredContentVisible, true);
+    assert.equal(result.replay.surfaceBlockedHostVisible, true);
     assert.equal(result.replay.surfaceHomeHttpStatus, 200);
-    assert.equal(result.replay.surfaceHomeAuthoredContentVisible, true);
-    assert.equal(result.replay.navTargetVisible, true);
-    assert.equal(result.replay.interactiveHttpStatus, 200);
-    assert.equal(result.replay.interactiveRuntimeVisible, true);
-    assert.equal(result.blockers.canonicalSurfaceAuthoring, null);
-    assert.equal(result.blockers.canonicalInteraction, null);
+    assert.equal(result.replay.surfaceHomeBlockedHostVisible, true);
+    assert.equal(result.replay.firstBlockedRung, "page.surface");
+    assert.equal(result.blockers.firstBlocked.limitationType, "platform");
     assert.equal(result.stateChecks.processPresent, true);
     assert.equal(result.stateChecks.typePresent, true);
     assert.equal(result.stateChecks.projectionPresent, true);

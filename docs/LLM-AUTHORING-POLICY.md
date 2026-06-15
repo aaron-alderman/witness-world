@@ -2,7 +2,7 @@
 
 This repo supports an explicit constrained authoring mode for app/product work.
 
-## Rule
+## Constitutional rule
 
 LLM-mediated app authoring is `plugin.authoring` only.
 
@@ -16,65 +16,44 @@ The canonical public frontend model in constrained mode is:
 `DESIRE+` remains an internal lowering/debug layer, not a public MCP write
 surface.
 
-That means the allowed write path is the first-party authoring substrate:
-
-- `plugin.authoring-core`
-- `plugin.program-authoring`
-- `plugin.server-runner-authoring`
-- `plugin.capability-authoring`
-- `plugin.mcp-authoring`
-- `plugin.proposals` for read/inspection only during constrained sessions
-
-## Forbidden fallback
+## Hard boundaries
 
 In `mcp_only` mode the LLM must not:
 
-- patch repo-tracked app/runtime files directly
+- patch repo-tracked app/runtime files directly as an app-authoring fallback
 - generate custom JS/TS runtime fallback artifacts
-- edit `src/` or `plugins/` as an app-authoring workaround
+- edit `src/` or `plugins/` to work around missing authoring/runtime support
 - create browser runtimes, presenters, controllers, or client facades
 - create proposal artifacts automatically
 
 Blocked means stop, not improvise.
 
-The operational method for finding that blocked point is documented in
-`docs/AUTHORING-REPLAY-PLAYBOOK.md`.
+## One proof lane
 
-## Machine-readable truth
+When the constrained pathway advances, it advances only by extending the
+canonical replay proof and the corresponding machine-readable capability-matrix
+truth.
 
-Constrained sessions must not infer the active frontend authoring model from
-tool names or old examples alone.
+There is no second lane for temporary generic frontend work outside that replay
+gate.
 
-The runtime exposes a machine-readable capability matrix through constrained
-inspection so a session can see:
+## Current `page.surface` truth
 
-- which frontend concepts are public and canonical
-- which concepts are legacy-only
-- which runtime consumers exist
-- which pairings are supported vs blocked
+The old `runtime-surface-shell` path was removed because it embedded app and
+capability authority into a generic host.
 
-That matrix, not prose alone, is the primary guardrail against drift.
+Current constrained truth is:
 
-## Limitation types
+- `page.surface` exists as a route host
+- it serves blocked/reset host output only
+- canonical projection/execution through `page.surface` is currently blocked
 
-Blocked handoffs should identify which class of limitation was hit:
-
-- language limitation
-  - the current DESIRE authoring language cannot express the requirement
-- platform limitation
-  - the requirement is expressible in DESIRE terms, but first-party lowering,
-    runtime, or authoring APIs do not yet support it live
-- policy limitation
-  - a technically possible workaround exists, but constrained mode forbids it
-
-The current Engentus blocker should be read as a platform limitation unless and
-until replay proves that the missing behavior cannot be expressed in DESIRE
-terms at all.
+Any future claim beyond that must be replay-proven first.
 
 ## Blocked handoff
 
-When current authoring cannot express the requested change, the session must end
-with a structured blocked handoff containing:
+When current authoring cannot express or run the requested change, the session
+must end with a structured blocked handoff containing:
 
 - `limitationType`
 - `goal`
@@ -83,27 +62,5 @@ with a structured blocked handoff containing:
 - `minimumHumanAction`
 - `proof`
 
-The human platform lane then decides whether to widen the substrate, change the
-runtime, open a proposal, or reject the request.
-
-For Engentus, `surface.create` is now part of the allowed authoring substrate.
-The replay now proves that a minimal authored `page.surface` shell can serve
-live.
-
-The first canonical interactive `page.surface` slice is now available in the
-platform:
-
-- `process.create` is now implemented as a first-party semantic authoring
-  handler and emits real DESIRE `process` witnesses
-- `type.create` is now implemented as the minimum supporting semantic create
-  for process-owned interactive state
-- `projection.create` is now implemented as a first-party semantic authoring
-  handler and emits real DESIRE `projection` witnesses
-- `frontendProgram.create` / `frontendStep.create` are now legacy-only and
-  must not be used as the fallback interactive story for constrained sessions
-
-That means the stop point moves forward again: it is no longer "the canonical
-`surface + process + projection` interaction path is missing". The next stop,
-if one appears, must come from trying to move real app behavior such as the
-Engentus shell flow and Goodman-first live slice onto that canonical path
-without falling back to handwritten JS or platform mutation.
+The replay and capability matrix are the machine-readable sources of truth for
+that stop point.

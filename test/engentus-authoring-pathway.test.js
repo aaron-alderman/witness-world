@@ -7,7 +7,6 @@ import { createWorld } from "../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
 import { MCP_PROTOCOL_VERSION } from "../plugins/mcp/mcp-tools.js";
 import { runReplayProbe } from "../scripts/mcp-authoring-replay-probe.mjs";
-import { expectNoRuntimeErrors, launchBrowser } from "./support/harness.js";
 
 async function tempRuntimeRoot() {
   return fs.mkdtemp(path.join(os.tmpdir(), "witness-engentus-authoring-pathway-"));
@@ -159,55 +158,49 @@ async function mcpToolCall(serverUrl, serverId, token, name, args, id = 1) {
   return result.body.result;
 }
 
-test("canonical docs encode the staged Engentus authoring pathway and the next honest blocker", async () => {
+test("canonical docs encode the reset single-track replay pathway", async () => {
   const [desireSpa, policy, replayPlaybook] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "docs", "DESIRE-SPA.md"), "utf8"),
     fs.readFile(path.join(process.cwd(), "docs", "LLM-AUTHORING-POLICY.md"), "utf8"),
     fs.readFile(path.join(process.cwd(), "docs", "AUTHORING-REPLAY-PLAYBOOK.md"), "utf8")
   ]);
 
-  assert.match(desireSpa, /## Authoring pathway/);
-  assert.match(desireSpa, /1\. Constitutional gate/);
-  assert.match(desireSpa, /2\. Boundary gate/);
-  assert.match(desireSpa, /3\. Generic projection gate/);
-  assert.match(desireSpa, /4\. Surface authoring gate/);
-  assert.match(desireSpa, /surface authoring gate is now green for minimal served shells via\s+`surface\.create`/i);
-  assert.match(desireSpa, /canonical semantic interaction gate is now green/i);
-  assert.match(desireSpa, /surface \+ process \+ projection \+ capability/i);
-  assert.match(desireSpa, /no app-local browser runtime seam/i);
-  assert.match(policy, /plugin\.authoring/i);
+  assert.match(desireSpa, /plugin\.authoring/i);
+  assert.match(desireSpa, /single-track method/i);
+  assert.match(desireSpa, /page\.surface` still resolves as a route host/i);
+  assert.match(desireSpa, /blocked\/reset host page only/i);
+  assert.match(desireSpa, /there is one approved advancement lane/i);
+  assert.match(policy, /plugin\.authoring` only/i);
   assert.match(policy, /Blocked means stop, not improvise/i);
-  assert.match(policy, /`surface\.create` is now part of the allowed authoring substrate/i);
-  assert.match(policy, /machine-readable capability matrix/i);
-  assert.match(policy, /process\.create/i);
-  assert.match(policy, /projection\.create/i);
-  assert.match(policy, /type\.create/i);
-  assert.match(replayPlaybook, /# Authoring Replay Playbook/);
+  assert.match(policy, /There is no second lane/i);
+  assert.match(policy, /serves blocked\/reset host output only/i);
   assert.match(replayPlaybook, /Stop at the first missing primitive/i);
-  assert.match(replayPlaybook, /Capability-matrix gate/i);
-  assert.match(replayPlaybook, /page\.surface/i);
+  assert.match(replayPlaybook, /page\.surface` resolves to blocked\/reset host output/i);
+  assert.match(replayPlaybook, /only approved proof lane/i);
 });
 
-test("MCP replay now proves canonical surface serving and exposes the canonical interactive page.surface path", { timeout: 10000 }, async () => {
+test("MCP replay now proves the blocked reset host and emits one structured blocked handoff", { timeout: 10000 }, async () => {
   const server = await startAuthoringProbeServer();
   try {
     const result = await runReplayProbe(server.url);
     assert.equal(result.ok, true);
     assert.deepEqual(result.capabilityChecks.canonicalFrontendModel, ["surface", "process", "projection", "capability"]);
+    assert.equal(result.capabilityChecks.publicSurfaceCreate, true);
+    assert.equal(result.capabilityChecks.publicProcessCreate, true);
+    assert.equal(result.capabilityChecks.publicTypeCreate, true);
+    assert.equal(result.capabilityChecks.publicProjectionCreate, true);
     assert.equal(result.capabilityChecks.legacyWidgetCreateHidden, true);
     assert.equal(result.capabilityChecks.legacyFrontendProgramHidden, true);
     assert.equal(result.replay.surfaceHttpStatus, 200);
-    assert.equal(result.replay.surfaceAuthoredContentVisible, true);
+    assert.equal(result.replay.surfaceBlockedHostVisible, true);
     assert.equal(result.replay.surfaceHomeHttpStatus, 200);
-    assert.equal(result.replay.surfaceHomeAuthoredContentVisible, true);
-    assert.equal(result.replay.navTargetVisible, true);
-    assert.equal(result.replay.interactiveHttpStatus, 200);
-    assert.equal(result.replay.interactiveRuntimeVisible, true);
+    assert.equal(result.replay.surfaceHomeBlockedHostVisible, true);
+    assert.equal(result.replay.firstBlockedRung, "page.surface");
     assert.equal(result.stateChecks.processPresent, true);
     assert.equal(result.stateChecks.typePresent, true);
     assert.equal(result.stateChecks.projectionPresent, true);
-    assert.equal(result.blockers.canonicalSurfaceAuthoring, null);
-    assert.equal(result.blockers.canonicalInteraction, null);
+    assert.equal(result.blockers.firstBlocked.limitationType, "platform");
+    assert.match(result.blockers.firstBlocked.missingPrimitive, /blocked reset host/i);
   } finally {
     await server.close();
   }
@@ -244,7 +237,7 @@ test("live constrained MCP discovery exposes canonical frontend actions and hide
   }
 });
 
-test("live constrained MCP supports canonical interaction authoring and page.surface reports the interactive pairing as supported", { timeout: 10000 }, async () => {
+test("live constrained MCP keeps canonical authoring actions available while page.surface remains blocked", { timeout: 10000 }, async () => {
   const server = await startAuthoringProbeServer();
   try {
     const { mcpServerId, token } = await provisionAuthoringMcpServer(server.url);
@@ -285,35 +278,13 @@ test("live constrained MCP supports canonical interaction authoring and page.sur
     assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.projection.status, "supported");
     assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.process.status, "supported");
     assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.type.status, "supported");
-    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.process, "supported");
-    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.projection, "supported");
-    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].interactiveProjection, "supported");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].status, "blocked");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.surface, "blocked");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.process, "blocked");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.projection, "blocked");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].interactiveProjection, "blocked");
+    assert.match(matrixAfter.structuredContent.runtimeConsumers["page.surface"].reason, /removed because it embedded app and capability authority/i);
   } finally {
-    await server.close();
-  }
-});
-
-test("canonical interactive page.surface demo executes state, projection, and DOM patching in the browser", { timeout: 10000 }, async () => {
-  const server = await startAuthoringProbeServer();
-  const browser = await launchBrowser();
-  try {
-    const result = await runReplayProbe(server.url);
-    const domId = result.replay.interactiveDomId;
-    await browser.page.goto(`${server.url}${result.replay.interactiveRoutePath}`);
-    await browser.page.waitForFunction(targetId => {
-      const title = document.getElementById(`${targetId}__title`);
-      const subtitle = document.getElementById(`${targetId}__subtitle`);
-      return title?.textContent === "Interactive replay" && subtitle?.textContent === "true";
-    }, domId);
-
-    await browser.page.locator(`#${domId}__primaryAction`).click();
-    await browser.page.waitForFunction(targetId => {
-      const subtitle = document.getElementById(`${targetId}__subtitle`);
-      return subtitle?.textContent === "false";
-    }, domId);
-    await expectNoRuntimeErrors(browser.runtime);
-  } finally {
-    await browser.close();
     await server.close();
   }
 });

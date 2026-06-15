@@ -235,7 +235,7 @@ const LARGE_SRC_CEREMONY_ALLOWLIST = Object.freeze({
   "src/runtime-presentation.js": "core page presentation themes, CSS variable emission, and shared surface-kit styling",
   "src/runtime-route-handlers.js": "generic route assembly, active dependency delegation, inactive guards, and diagnostics ceremony",
   "src/runtime-server.js": "server startup, lifecycle, transport, and active static asset dispatch",
-  "src/runtime-surface-shell.js": "generic authored surface shell rendering and route-aware surface projection",
+  "src/runtime-surface-shell.js": "generic surface route host reset and blocked host projection",
   "src/runtime-widget-page.js": "generic authored widget-page rendering and lightweight frontend program runtime",
   "src/type-model.js": "generic type model",
   "src/widgets.js": "generic authored-widget ABI"

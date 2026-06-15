@@ -291,16 +291,16 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
     runtimeConsumers: {
       "page.surface": {
         consumes: ["surface", "process", "projection"],
-        status: "supported",
-        staticProjection: "supported",
-        interactiveProjection: "supported",
+        status: "blocked",
+        staticProjection: "blocked",
+        interactiveProjection: "blocked",
         pairings: {
-          surface: "supported",
-          process: "supported",
-          projection: "supported"
+          surface: "blocked",
+          process: "blocked",
+          projection: "blocked"
         },
-        limitationType: null,
-        reason: null
+        limitationType: "platform",
+        reason: "the old page.surface renderer was removed because it embedded app and capability authority into a generic host"
       },
       "page.home": {
         consumes: ["widget", "frontendProgram"],
@@ -312,12 +312,16 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
       {
         authoring: ["surface"],
         runtime: "page.surface",
-        status: "supported"
+        status: "blocked",
+        limitationType: "platform",
+        reason: "page.surface now serves only the blocked reset host while canonical projection is rebuilt through replay"
       },
       {
         authoring: ["surface", "process", "projection"],
         runtime: "page.surface",
-        status: "supported"
+        status: "blocked",
+        limitationType: "platform",
+        reason: "the prior page.surface runtime path was removed because it embedded app and capability authority"
       },
       {
         authoring: ["widget", "frontendProgram", "frontendStep"],

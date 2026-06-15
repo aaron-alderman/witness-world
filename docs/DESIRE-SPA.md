@@ -1,279 +1,87 @@
-# DESIRE-SPA - Engentus rescue status
+# DESIRE-SPA
 
-A faithful re-expression of the hand-coded Mill-iQ SPA (`example-ports/engentus/`)
-in the DESIRE IR. The goal is not a plugin wrapper around the app - it is to
-say the app in the language, lowering only at genuine symmetry breaks.
+A faithful re-expression of the hand-coded Mill-iQ SPA
+(`example-ports/engentus/`) in the DESIRE IR. The goal is not a plugin wrapper
+around the app. The goal is to say the app in the language, lowering only at
+genuine symmetry breaks.
 
-This document is the canonical Engentus planning and status document. The app
-README is secondary and should only point back here.
+This is the canonical Engentus architecture and status document. The app README
+is secondary and should point back here.
 
-Repo-wide constrained LLM app-authoring policy now lives in
-`docs/LLM-AUTHORING-POLICY.md`. Engentus is subject to that policy; it is not a
-special exemption case.
-
-The replay method for finding the next honest authoring gap is documented in
-`docs/AUTHORING-REPLAY-PLAYBOOK.md`.
-
-## How to read blockers
-
-When this document says "blocker" or "missing primitive", it must be clear
-which layer is actually limited:
-
-- `RVM/WTOML` limitation
-  - the authored language cannot yet say the needed thing in DESIRE terms
-- platform/runtime limitation
-  - the authored language can say it, but the first-party runtime, lowering, or
-    authoring substrate cannot yet project or execute it live
-- policy limitation
-  - the platform might be technically patchable, but constrained authoring mode
-    forbids solving it by direct runtime edits, handwritten JS, or other escape
-    hatches
-
-For the current Engentus replay, the blocker is primarily a platform/runtime
-limitation at the authoring substrate boundary, not yet a proven `RVM/WTOML`
-language limitation. The replay proves that authored `surface` trees can be
-declared and served, but there is still no first-party surface-scoped
-interaction authoring path analogous to the existing widget-rooted flow.
+Repo-wide constrained LLM authoring policy lives in
+`docs/LLM-AUTHORING-POLICY.md`. The replay method for finding the next honest
+gap lives in `docs/AUTHORING-REPLAY-PLAYBOOK.md`.
 
 ## Thesis
 
-- The shell, copy, route states, assets, and CSS belong to the app layer.
-- The shell must remain authored in `RVM/WTOML` style. The browser must not
-  boot into a handwritten JS facade that reconstructs the app UI independently
-  of the authored DESIRE program.
-- Core runtime code must stay light. It may host, route, load, inject
-  capabilities, and manage lifecycle; it must not become a second UI language
-  or a hidden frontend authority seam.
-- `plugin.chart-runtime` is a real reusable capability boundary.
-- Any lowered JS must justify itself as one of:
-  - host/runtime infrastructure that every app could plausibly need
-  - an explicit optional reusable capability
-  - app-owned helper code at a true symmetry break
-- Optional capabilities must not be baked into the core surface host contract.
-  If an app needs charts, windows, or other non-universal behavior, that must
-  be resolved explicitly rather than assumed by core.
-- The reference app is an oracle for parity comparison only. It is not to be
-  executed as hidden frontend authority.
-- In constrained authoring sessions, Engentus work must go through the
-  first-party `plugin.authoring` substrate only. If current authoring cannot
-  express the needed frontend behavior, the correct result is a blocked handoff
-  into the human platform lane rather than handwritten JS or runtime patching.
+- App structure, routes, views, copy, assets, and CSS belong to the app layer.
+- The app must be authored in DESIRE terms. Handwritten browser facades must
+  not regain authority over shell structure or app flow.
+- The constrained public frontend model is
+  `surface + process + projection + capability`.
+- `plugin.authoring` is the only constrained write path.
+- Blocked means stop, not improvise.
 
-## Canonical frontend seam
+## Single-track method
 
-- The constrained public frontend baseline is `surface + process + projection + capability`.
-- `DESIRE+` remains internal-only as the lowering/debug layer; it is not the
-  public constrained MCP write surface.
-- Interactive shell/view state should be process-owned by default. Surfaces and
-  projections present that state; they do not become a second hidden state
-  owner.
+There is one approved advancement lane for constrained frontend work:
 
-- `examples/engentus/app/shell.rvm` and related authored DESIRE files remain
-  the source of truth for shell structure, route states, copy, and UI
-  composition.
-- Lowering is allowed to produce executable browser artifacts, but those
-  artifacts must remain derivative of the authored DESIRE frontend rather than
-  a parallel handwritten renderer.
-- The core shell runtime in `src/runtime-surface-shell.js` must stay
-  mechanical only:
-  - route and path selection
-  - authored shell projection
-  - emitting the minimal authored runtime manifest/bootstrap needed by the
-    separate interactive surface consumer
-- The core shell runtime in `src/runtime-surface-shell.js` must not:
-  - assemble app-specific DOM from hidden controller logic
-  - own app state shape or reducers
-  - interpret product-local selectors or templates
-  - embed chart, window, Goodman, or other product-local behavior
-  - execute DESIRE processes or recompute projections
-  - patch browser DOM after interaction
-  - introduce a second source language or app-local bootstrap seam
-- App behavior may consume optional capabilities, but only through explicit
-  seams. The existence of a capability must never move authority for the shell
-  out of the authored DESIRE program.
+1. read the machine-readable authoring/runtime matrix
+2. replay the next canonical authoring step
+3. stop at the first blocked semantic
+4. emit one structured blocked handoff and classify the blocker honestly
 
-## What The Split Buys
+There is no second generic frontend initiative beside this replay/pathway. If
+Engentus moves honestly, it moves only by advancing that replay ladder.
 
-- Static shell projection can be tested and reasoned about independently of the
-  interactive browser loop.
-- The interactive `page.surface` consumer can execute the canonical
-  `surface + process + projection` path without smuggling that authority back
-  into the shell projector.
-- Capability-dependent behavior stays behind an explicit runtime boundary
-  instead of becoming an ambient assumption of every served surface page.
-- If the interactive consumer is missing or blocked, the platform can fail
-  honestly with a static shell and a visible runtime diagnostic instead of
-  inventing shell-local behavior or app-local JS authority.
+## Current reset truth
 
-## Authoring pathway
+The previous `page.surface` renderer in `src/runtime-surface-shell.js` was
+false authority. It embedded app and capability behavior into a generic host.
+That renderer has been removed.
 
-The Engentus pathway must be tested as an ordered ladder so the next blocker is
-always honest and local:
+Current truth:
 
-1. Constitutional gate
-   - `DESIRE-SPA.md` and `LLM-AUTHORING-POLICY.md` agree on authored DESIRE
-     authority, `plugin.authoring` confinement, and blocked handoff behavior.
-2. Boundary gate
-   - no presenter seam
-   - no app-local browser runtime seam
-   - no bespoke app authority in core host/runtime code
-3. Generic projection gate
-   - authored widget pages project live through the default runtime path
-4. Surface authoring gate
-   - MCP authoring can declare and serve a minimal `page.surface`
-5. Canonical semantic interaction gate
-   - route/view/state/control behavior is authored and lowered through
-     `surface + process + projection`, not rebuilt by app JS or routed back
-     through legacy widget programs
-6. Capability resolution gate
-   - optional capabilities are declared by the app and resolved explicitly by
-     runtime/plugin composition
-7. Engentus shell gate
-   - login/home/viewer/signout shell structure, copy, assets, and CSS are
-     authored in DESIRE and match the reference shell
-8. Goodman-first live gate
-   - Goodman supported flow runs on authored declarations plus explicit
-     capability seams
-9. Full parity gate
-   - Goodman, then mill-charge, then mill-force, with structure/CSS/live proof
-     kept separate
+- `page.surface` still resolves as a route host
+- it now serves a blocked/reset host page only
+- it does not claim static shell parity
+- it does not claim canonical interactive execution
+- it does not claim `surface + process + projection` runtime support
 
-The surface authoring gate is now green for minimal served shells via
-`surface.create`.
-
-The canonical semantic interaction gate is now green for the first minimal
-proof slice. Surface serving can now declare and route multiple shell states,
-and `page.surface` now exposes a first-party canonical interactive path for a
-minimal `surface + process + projection` slice.
-
-What is now available on the canonical path:
-
-- `process.create` is now part of the real first-party constrained authoring
-  substrate and can emit semantic DESIRE `process` witnesses
-- `type.create` is now available as the minimum supporting primitive for
-  process-owned interactive state
-- `projection.create` is now part of the real first-party constrained
-  authoring substrate and can emit semantic DESIRE `projection` witnesses
-- `page.surface` now separates static shell projection from the interactive
-  surface runtime consumer instead of treating the shell projector as the app
-  controller
-- `frontendProgram.create` / `frontendStep.create` are legacy-only and must not
-  be treated as the fallback interaction path for Engentus
-
-The next honest target is therefore no longer "make `page.surface` execute the
-canonical model at all". It is "move the Engentus shell flow and then the
-Goodman-first live slice onto that corrected canonical path without regressing
-back to app-local authority."
+The next honest work does not begin from the old shell host. It begins from the
+clean blocked floor proved by the replay/pathway test.
 
 ## Current honest state
 
-### Salvageable progress
+### Green floor
 
-- `examples/engentus/app.wtoml` serves Engentus through core `page.surface`
-  routes instead of an Engentus runtime plugin.
-- `src/runtime-surface-shell.js` is a generic route-aware shell projector for
-  authored `surface` trees.
-- `plugin.chart-runtime` remains the reusable chart capability boundary.
-- `examples/engentus/app/shell.rvm` is the primary authored source of shell
-  structure, copy, route keys, ids, and chrome.
-- Engentus keeps app-owned shell/chart CSS, images, module SVGs, and
-  chart-function helpers under the app boundary.
-- The direct HTML parity and CSS parity harness is worth keeping because it
-  measures authored projection quality without delegating authority to the
-  reference runtime.
+- constrained authoring policy truth
+- machine-readable capability-matrix truth
+- replay/pathway blocked-handoff truth
+- no-cheat boundary truth
+- authored Engentus source structure under `examples/engentus`
 
-### False progress / regressions
+### Removed false authority
 
-- `pageModuleHref` / presenter bootstraps were introduced as a hidden live
-  execution seam for Engentus routes. That is not a faithful DESIRE seam.
-- Copied `examples/engentus/app/presenters/*` controller code and
-  `examples/engentus/app/client/*` shared runtime code became executable
-  frontend authority. That is explicitly out of bounds for this slice.
-- Allowing core browser runtime code to accumulate bespoke app rendering logic
-  is the same category of mistake in a different location. That too creates a
-  dangerous hidden authority seam and must be removed.
-- `examples/engentus/app/helpers/goodman-study.js` still carries too much
-  frontend authority today. It should shrink toward leaf numerical/statistical
-  helpers while state, routes, view composition, and interaction intent move
-  into authored DESIRE declarations.
-- The README drifted into blessing that seam instead of pointing back to this
-  document.
-- Browser-level parity was previously claimed as complete while the live served
-  app still depended on the forbidden seam and had failing browser proofs.
-- The app-local browser runtime seam (`clientRendererHref`, runtime JSON
-  bootstraps, and similar escape hatches) is also forbidden and must stay out
-  of Engentus authored surfaces.
+- bespoke shell rendering in `src/runtime-surface-shell.js`
+- shell/product/chart/layout behavior blessed as generic `page.surface` truth
+- tests that encoded that contaminated renderer as the correct frontend path
 
-### Still-unfinished proof obligations
+### Still blocked
 
-- Rebuild Goodman, mill-charge, and mill-force live module behavior on
-  thesis-aligned seams:
-  - authored shell state and props
-  - a host-only core browser seam
-  - optional reusable capability seams where genuinely justified
-  - app-owned helper code only where a real symmetry break remains
-- Rebuild the browser execution path so the served app is driven by lowered
-  DESIRE-owned frontend artifacts rather than handwritten browser facades or
-  bespoke core render helpers.
-- Continue moving Goodman-side UI/state authority out of `goodman-study.js`
-  and into authored `RVM/WTOML`, keeping JS only for true leaf mechanics and
-  statistics where the language does not yet express them cleanly.
-- Re-establish browser integration proof for the supported flow:
-  - login -> home -> Goodman / mill-charge / mill-force -> signout
-  - no dynamic import 404s
-  - no copied presenter/client authority
-  - no core-owned bespoke app renderer
-- Re-establish live browser parity against the reference flow after that rebuild.
+- canonical static `page.surface` projection
+- canonical interactive `page.surface` execution
+- faithful live Engentus shell behavior through the constrained pathway
+- Goodman, mill-charge, and mill-force live behavior on canonical seams
 
-Until those proofs are green again, live module execution parity is not complete.
+## Restart lane
 
-## Accepted boundaries
+The restart lane is:
 
-### Keep
+1. keep docs, matrix, replay, and boundaries aligned
+2. prove the next honest canonical `page.surface` semantic through replay
+3. stop at the first missing primitive
+4. only then widen platform/runtime behavior through the human platform lane
 
-- Core `page.surface` route handling
-- `src/runtime-surface-shell.js` for genuinely app-neutral shell behavior
-- `plugin.chart-runtime`
-- App-owned shell/assets/CSS/chart-function helpers
-- HTML/CSS parity tests and reference comparison harness
-
-### Remove
-
-- `pageModuleHref` / `pageModuleExport` as Engentus shell bootstraps
-- `examples/engentus/app/presenters/*` as executable app authority
-- `examples/engentus/app/client/*` as executable shared frontend runtime
-- Bespoke app rendering and interaction machinery inside core shell/runtime
-  code
-- Any handwritten browser facade that reconstructs the shell outside authored
-  `RVM/WTOML`
-- Any doc or test language that treats those seams as acceptable architecture
-
-## Proof categories
-
-These categories should stay explicit and separate:
-
-- DESIRE model/chart/shell node proof
-- Generic shell runtime proof
-- Chart-runtime boundary proof
-- Direct HTML parity proof
-- CSS parity proof
-- Host-only browser runtime proof
-- Browser shell-route proof
-- Browser live execution proof
-- Boundary / no-cheat proof
-
-The structure/CSS parity categories can be green before live execution proof is
-green. They are not the same thing.
-
-## Focused commands
-
-The rescue keeps these proof commands as the honest baseline:
-
-```powershell
-node --test test/desire-engentus-shell.test.js test/runtime-surface-shell.test.js test/runtime-core-surface-page.test.js
-node --test test/engentus-html-parity.test.js test/engentus-frontend-host.test.js
-node --test test/engentus-browser-parity.test.js test/engentus-no-cheat-boundary.test.js test/engentus-authoring-pathway.test.js
-```
-
-When the live module rebuild lands, browser integration and reference-vs-DESIRE
-live parity should be promoted back into this list.
+Engentus remains the downstream oracle. `example-ports/engentus/` remains the
+reference for expected HTML/CSS outcomes, not executable frontend authority.

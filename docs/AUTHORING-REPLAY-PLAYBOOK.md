@@ -1,112 +1,55 @@
 # Authoring Replay Playbook
 
-Use this playbook whenever an app slice must stay inside constrained
-`plugin.authoring` work and the next platform gap needs to be identified
-honestly.
+Use this playbook whenever frontend work must stay inside constrained
+`plugin.authoring` mode.
 
 ## Purpose
 
-The replay is not a demo and it is not a workaround path. It is a diagnostic
-ladder for finding the first missing authoring primitive without widening the
-platform speculatively.
+The replay is the only approved proof lane for constrained frontend progress.
+It is not a workaround lane and it is not a second platform initiative.
 
-## Core rules
+## Rules
 
-1. Author only through the first-party MCP authoring surface.
-2. Use the reference app only as an oracle for expected outcomes.
-3. Prove the smallest possible slice at each rung.
+1. Read the machine-readable authoring/runtime matrix first.
+2. Author only through the first-party MCP authoring surface.
+3. Prove the smallest possible canonical step.
 4. Stop at the first missing primitive.
-5. Record the blocker as a structured handoff, not as handwritten JS or a core
-   runtime patch.
+5. Record one structured blocked handoff.
 
-## Method
+## Current ladder
 
-1. Read the machine-readable authoring/runtime capability matrix first.
-2. Pick one gate from the canonical pathway.
-3. Author the smallest artifact that could satisfy that gate.
-4. Serve it through the real runtime path.
-5. Verify the live result directly.
-6. Attempt the next authored step immediately after the proved one.
-7. If that step cannot be expressed, capture the blocker and stop.
+1. constrained matrix baseline
+2. canonical actions still exist
+3. `page.surface` resolves to blocked/reset host output
+4. replay emits one structured blocked handoff
 
-## What counts as good evidence
+This is the only approved next step. No Engentus-specific shell replay begins
+until the clean floor above is stable and truthful.
 
-- HTTP success alone is not enough.
-- The served HTML must contain authored content that distinguishes success from
-  fallback.
-- If routing is in scope, at least two distinct request paths must resolve to
-  distinct authored outputs.
-- If navigation is in scope, the rendered HTML must contain the authored target
-  that the generic runtime host will use.
-- If a proposed next primitive does not exist, prove that through the actual
-  first-party authoring surface rather than by assumption.
+## Current stop point
 
-## Classifying the blocker
+`page.surface` is currently blocked for canonical frontend projection and
+execution.
 
-Before recording a blocked handoff, classify it:
+Reason:
 
-- language limitation
-  - the current DESIRE language cannot say the needed app intent
-- platform limitation
-  - the intent is DESIRE-shaped, but first-party authoring APIs, lowering, or
-    runtime projection do not yet support it
-- policy limitation
-  - a workaround exists, but constrained mode forbids using it
+- the previous renderer path was removed because it embedded app and capability
+  authority into a generic host
 
-Do not casually label a blocker as an `RVM/WTOML` limitation. First prove that
-the gap is not merely missing authoring/runtime support for an otherwise DESIRE-
-shaped concept.
+That means replay currently proves blocked/reset truth, not live authored shell
+truth.
 
-## Current Engentus replay sequence
+## Evidence rules
 
-1. Capability-matrix gate
-   - Read the constrained authoring/runtime matrix first.
-   - Confirm the public canonical frontend model is
-     `surface + process + projection + capability`.
-   - Confirm legacy widget-program actions are not part of the constrained
-     public MCP surface.
-2. Surface serving proof
-   - MCP authors a tiny `page.surface` shell tree.
-   - The route serves real authored shell HTML.
-3. Multi-screen surface proof
-   - MCP authors more than one surface state under the same root.
-   - Distinct request paths resolve to distinct authored shell states.
-4. Canonical interaction-authoring probe
-   - Try to express the next interactive step through the canonical public
-     primitives.
-   - `process.create`, `type.create`, and `projection.create` should now
-     succeed through the first-party authoring substrate.
-   - `page.surface` should expose the split canonical interaction runtime for a
-     minimal authored surface/process/projection proof.
+- HTTP success alone is not enough
+- matrix claims must match replay-proven truth
+- supported means replay-proven now
+- blocked means replay hit the stop point now
+- no later rung may run after the first blocked rung
 
-## Current insight
+## Anti-patterns
 
-After `surface.create`, the previous honest blocker was the runtime consumer
-gap for canonical `surface + process + projection` interaction on
-`page.surface`. That gap is now closed for the first minimal proof slice.
-
-The replay shows that:
-
-- constrained inspection can state the intended public frontend model directly
-- surface trees can now be authored through MCP
-- semantic DESIRE processes can now be authored through MCP
-- semantic DESIRE state types can now be authored through MCP
-- semantic DESIRE projections can now be authored through MCP
-- `page.surface` can route between authored shell states live
-- generic shell navigation targets can be authored and lowered
-- legacy widget-program authoring is quarantined rather than used as fallback
-- `page.surface` now reports the canonical interactive pairing as supported
-- the served surface can expose a first-party interaction runtime without
-  routing authority back through the shell projector
-
-In other words: the next honest platform question is no longer "what is the
-runtime execution seam?" It is "how far can Engentus now be moved onto that
-seam before the next real platform limitation appears?"
-
-## Anti-patterns this playbook avoids
-
-- jumping straight to the reference app's most complex screen
-- widening core runtime code before the authored gap is proven
-- creating app-local JS to bridge a missing authoring primitive
-- copying reference controller logic and calling it progress
-- letting green tests outrun architectural truth
+- widening runtime behavior ahead of the next replay rung
+- rebuilding app flow in handwritten JS
+- leaving wrong-behavior tests around as traps to be “fixed”
+- treating old `page.surface` shell output as canonical truth

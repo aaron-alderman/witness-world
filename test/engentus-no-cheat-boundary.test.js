@@ -36,6 +36,31 @@ test("engentus shell and core runtime do not expose the presenter bootstrap seam
   assert.equal(runtimeSource.includes("renderSurfaceBrowserRuntime"), false);
 });
 
+test("runtime-surface-shell stays a blocked reset host without contaminated shell concepts", async () => {
+  const runtimeSource = await readFile(path.join(process.cwd(), "src", "runtime-surface-shell.js"), "utf8");
+  const forbidden = [
+    "auth-screen",
+    "module-card",
+    "mounted-panel",
+    "iframe",
+    "/chart?chart=",
+    "sidebar-grid",
+    "viewer-sidebar-main",
+    "viewer-sidebar-main-metrics",
+    "viewer-sidebar-tabs",
+    "profile-menu",
+    "password-toggle",
+    "tab-group",
+    "buildMountedChartRuntime",
+    "surfaceRuntimeManifest",
+    "createSurfaceInteractionRuntime"
+  ];
+
+  for (const token of forbidden) {
+    assert.equal(runtimeSource.includes(token), false, `runtime-surface-shell.js must not contain ${token}`);
+  }
+});
+
 test("engentus no longer ships executable presenter or client authority trees", async () => {
   const [presenterFiles, clientFiles, runtimeFiles] = await Promise.all([
     listJsFiles(path.join(process.cwd(), "examples", "engentus", "app", "presenters")),

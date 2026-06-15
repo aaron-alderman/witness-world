@@ -129,10 +129,6 @@ export async function runReplayProbe(serverUrl, {
   const surfaceRoutePath = `/${stamp}-surface`;
   const surfaceScreenRouteId = `${stamp}_surface_screen_route`;
   const surfaceHomePath = `${surfaceRoutePath}/home`;
-  const interactiveRootId = `${stamp}_interactive_root`;
-  const interactiveScreenId = `${stamp}_interactive_screen`;
-  const interactiveRouteId = `${stamp}_interactive_route`;
-  const interactiveRoutePath = `/${stamp}-interactive`;
 
   const createRunner = await requestJson(baseUrl, "/api/server-runners", {
     cookie: sessionCookie,
@@ -204,13 +200,6 @@ export async function runReplayProbe(serverUrl, {
     throw new Error(`replay authoring write failed: ${JSON.stringify(creationErrors[0]?.structuredContent ?? null)}`);
   }
 
-  const state = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
-    view: "bootstrapState"
-  }, 17);
-  if (state.isError) {
-    throw new Error(`world.read failed: ${JSON.stringify(state.structuredContent ?? null)}`);
-  }
-
   const authoringTool = listSupportedMcpTools().find(tool => tool.name === "authoring.write");
   const actionEnum = authoringTool?.inputSchema?.properties?.action?.enum ?? [];
   const createdSurfaces = await write("surface.create", [
@@ -232,9 +221,9 @@ export async function runReplayProbe(serverUrl, {
         routeKey: "login",
         routePath: surfaceRoutePath,
         title: "Replay surface login",
-        subtitle: "Surface projection is live",
-        heroTitle: "Hello from MCP surface authoring",
-        heroBody: "This shell was authored through MCP replay only.",
+        subtitle: "Canonical surface route seed",
+        heroTitle: "Replay seed login",
+        heroBody: "Surface witnesses exist even while page.surface is reset.",
         primaryActionLabel: "Continue",
         primaryActionHref: surfaceHomePath
       }
@@ -247,9 +236,9 @@ export async function runReplayProbe(serverUrl, {
         routeKey: "home",
         routePath: surfaceHomePath,
         title: "Replay surface home",
-        subtitle: "Route-selected surface state is live",
-        heroTitle: "Home screen reached through authored routing",
-        heroBody: "The surface host resolved the active view from the request path.",
+        subtitle: "Canonical surface route seed",
+        heroTitle: "Replay seed home",
+        heroBody: "This witness exists only to prove the blocked reset route host.",
         primaryActionLabel: "Stay here",
         primaryActionHref: surfaceHomePath
       }
@@ -288,40 +277,6 @@ export async function runReplayProbe(serverUrl, {
     route: surfaceScreenRouteId
   }, 22);
 
-  const surfaceCreationErrors = [
-    createdSurfaces,
-    createdSurfaceRoute,
-    createdSurfaceServe,
-    createdSurfaceScreenRoute,
-    createdSurfaceScreenServe
-  ].filter(result => result?.isError);
-  if (surfaceCreationErrors.length) {
-    throw new Error(`replay surface authoring failed: ${JSON.stringify(surfaceCreationErrors[0]?.structuredContent ?? null)}`);
-  }
-
-  const surfacePage = await fetch(`${baseUrl}${surfaceRoutePath}`);
-  const surfaceHtml = await surfacePage.text();
-  const surfaceAuthoredContentVisible = /Replay surface login/.test(surfaceHtml) && /Hello from MCP surface authoring/.test(surfaceHtml);
-  const navTargetVisible = surfaceHtml.includes(`data-shell-nav-href="${surfaceHomePath}"`);
-  const surfaceHomePage = await fetch(`${baseUrl}${surfaceHomePath}`);
-  const surfaceHomeHtml = await surfaceHomePage.text();
-  const surfaceHomeAuthoredContentVisible = /Replay surface home/.test(surfaceHomeHtml)
-    && /Home screen reached through authored routing/.test(surfaceHomeHtml);
-  const surfaceBlocked = !surfaceAuthoredContentVisible
-    ? buildBlockedAuthoringHandoff({
-        limitationType: "platform",
-        goal: "author and serve a minimal page.surface shell through MCP-only replay",
-        attemptedAuthoringPath: "authoring.write(surface.create/route.create/serve.create)",
-        missingPrimitive: "surface authoring is exposed but the authored shell did not project live through page.surface",
-        minimumHumanAction: "fix the generic surface authoring-to-page.surface projection path before advancing to richer frontend expressivity gaps",
-        proof: [
-          `authoring.write advertises surface.create: ${actionEnum.includes("surface.create")}`,
-          `surface route ${surfaceRoutePath} served with HTTP ${surfacePage.status}`,
-          `surface HTML contained authored shell content: ${surfaceAuthoredContentVisible}`
-        ]
-      })
-    : null;
-
   const processAttempt = await write("process.create", {
     id: `${stamp}_process`,
     context: contextId,
@@ -335,7 +290,7 @@ export async function runReplayProbe(serverUrl, {
     context: contextId,
     role: "state",
     valueType: "text",
-    initial: "Interactive replay"
+    initial: "Replay title"
   }, 24);
   const openTypeAttempt = await write("type.create", {
     id: `${stamp}_open_state`,
@@ -349,79 +304,56 @@ export async function runReplayProbe(serverUrl, {
     context: contextId,
     projectionKind: "bool_not",
     source: `${stamp}_open_state`,
-    props: {
-      surface: interactiveRootId
-    }
+    props: {}
   }, 26);
-  const interactiveSurfaces = await write("surface.create", [
-    {
-      id: interactiveRootId,
-      surfaceKind: "app-root",
-      context: contextId,
-      children: [interactiveScreenId],
-      props: {
-        brandName: "DESIRE",
-        productName: "Interactive Replay"
-      }
-    },
-    {
-      id: interactiveScreenId,
-      surfaceKind: "auth-screen",
-      context: contextId,
-      processRef: `${stamp}_process`,
-      projectionRefs: [`${stamp}_projection`],
-      bindings: [
-        { prop: "title", source: { kind: "state", state: `${stamp}_title_state` } },
-        { prop: "subtitle", source: { kind: "projection", projection: `${stamp}_projection` } }
-      ],
-      interactions: [
-        { target: "primaryAction", event: "click", action: { kind: "setState", state: `${stamp}_open_state`, value: { kind: "toggleState", state: `${stamp}_open_state` } } }
-      ],
-      props: {
-        domId: `${stamp}_interactive_surface`,
-        routeKey: "login",
-        routePath: interactiveRoutePath,
-        title: "Static fallback",
-        subtitle: "Static subtitle",
-        heroTitle: "Interactive replay",
-        heroBody: "Canonical page.surface interaction runtime is present.",
-        primaryActionLabel: "Toggle"
-      }
-    }
-  ], 27);
-  const interactiveRoute = await write("route.create", {
-    id: interactiveRouteId,
-    context: contextId,
-    path: interactiveRoutePath,
-    method: "GET",
-    handler: "page.surface",
-    serves: interactiveRootId,
-    rootSurface: interactiveRootId,
-    defaultScreen: "login"
-  }, 28);
-  const interactiveServe = await write("serve.create", {
-    serverRunner: runnerId,
-    route: interactiveRouteId
-  }, 29);
 
-  const interactiveCreationErrors = [
+  const surfaceCreationErrors = [
+    createdSurfaces,
+    createdSurfaceRoute,
+    createdSurfaceServe,
+    createdSurfaceScreenRoute,
+    createdSurfaceScreenServe,
     processAttempt,
     titleTypeAttempt,
     openTypeAttempt,
-    projectionAttempt,
-    interactiveSurfaces,
-    interactiveRoute,
-    interactiveServe
+    projectionAttempt
   ].filter(result => result?.isError);
-  if (interactiveCreationErrors.length) {
-    throw new Error(`replay interactive authoring failed: ${JSON.stringify(interactiveCreationErrors[0]?.structuredContent ?? null)}`);
+  if (surfaceCreationErrors.length) {
+    throw new Error(`replay surface authoring failed: ${JSON.stringify(surfaceCreationErrors[0]?.structuredContent ?? null)}`);
   }
 
-  const interactivePage = await fetch(`${baseUrl}${interactiveRoutePath}`);
-  const interactiveHtml = await interactivePage.text();
-  const interactiveRuntimeVisible = /surfaceRuntimeManifest/.test(interactiveHtml)
-    && /createSurfaceInteractionRuntime/.test(interactiveHtml)
-    && /Interactive replay/.test(interactiveHtml);
+  const surfacePage = await fetch(`${baseUrl}${surfaceRoutePath}`);
+  const surfaceHtml = await surfacePage.text();
+  const surfaceBlockedHostVisible = /page\.surface reset host/i.test(surfaceHtml)
+    && /blocked_reset_host/i.test(surfaceHtml)
+    && /Canonical projection must restart through the constrained replay\s+pathway/i.test(surfaceHtml);
+  const surfaceHomePage = await fetch(`${baseUrl}${surfaceHomePath}`);
+  const surfaceHomeHtml = await surfaceHomePage.text();
+  const surfaceHomeBlockedHostVisible = /page\.surface reset host/i.test(surfaceHomeHtml)
+    && /blocked_reset_host/i.test(surfaceHomeHtml)
+    && /activeSurface\.routeKey/.test(surfaceHomeHtml);
+  const blockedHandoff = buildBlockedAuthoringHandoff({
+    limitationType: "platform",
+    goal: "project or execute canonical page.surface frontend behavior through constrained replay",
+    attemptedAuthoringPath: "authoring.write(surface.create/process.create/type.create/projection.create/route.create/serve.create)",
+    missingPrimitive: "page.surface currently exposes only the blocked reset host after removal of the false-authority renderer",
+    minimumHumanAction: "rebuild canonical page.surface projection and execution through the replay lane instead of restoring shell-local authority",
+    proof: [
+      `authoring.write advertises surface.create: ${actionEnum.includes("surface.create")}`,
+      `authoring.write advertises process.create: ${actionEnum.includes("process.create")}`,
+      `authoring.write advertises projection.create: ${actionEnum.includes("projection.create")}`,
+      `surface route ${surfaceRoutePath} served with HTTP ${surfacePage.status}`,
+      `surface home route ${surfaceHomePath} served with HTTP ${surfaceHomePage.status}`,
+      `surface route returned blocked reset host: ${surfaceBlockedHostVisible}`,
+      `surface home route returned blocked reset host: ${surfaceHomeBlockedHostVisible}`
+    ]
+  });
+  const finalState = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
+    view: "bootstrapState"
+  }, 27);
+  if (finalState.isError) {
+    throw new Error(`world.read failed: ${JSON.stringify(finalState.structuredContent ?? null)}`);
+  }
 
   return {
     ok: true,
@@ -438,15 +370,12 @@ export async function runReplayProbe(serverUrl, {
       surfaceScreenRouteId,
       surfaceRoutePath,
       surfaceHomePath,
-      interactiveRoutePath,
-      interactiveDomId: `${stamp}_interactive_surface`,
       surfaceHttpStatus: surfacePage.status,
-      surfaceAuthoredContentVisible,
+      surfaceBlockedHostVisible,
       surfaceHomeHttpStatus: surfaceHomePage.status,
-      surfaceHomeAuthoredContentVisible,
-      navTargetVisible,
-      interactiveHttpStatus: interactivePage.status,
-      interactiveRuntimeVisible
+      surfaceHomeBlockedHostVisible,
+      firstBlockedRung: "page.surface",
+      blockedHandoff
     },
     capabilityChecks: {
       canonicalFrontendModel: [...(authoringMatrix?.baseline?.publicFrontendModel ?? [])],
@@ -458,27 +387,26 @@ export async function runReplayProbe(serverUrl, {
       legacyFrontendProgramHidden: !actionEnum.includes("frontendProgram.create")
     },
     stateChecks: {
-      runnerPresent: state.structuredContent.serverRunners.some(row => row.id === runnerId),
-      surfaceRoutePresent: state.structuredContent.routes.some(row => row.id === surfaceRouteId && row.handler === "page.surface"),
-      surfaceScreenRoutePresent: state.structuredContent.routes.some(row => row.id === surfaceScreenRouteId && row.handler === "page.surface"),
-      surfaceServedRoutePresent: state.structuredContent.servedRoutes.some(row => row.id === surfaceRouteId && row.serverRunner === runnerId),
-      surfaceScreenServedRoutePresent: state.structuredContent.servedRoutes.some(row => row.id === surfaceScreenRouteId && row.serverRunner === runnerId),
-      processPresent: state.structuredContent.witnesses
-        ? state.structuredContent.witnesses.some(row => row.process === "desire.defineProcess" && row.body?.id === `${stamp}_process`)
+      runnerPresent: finalState.structuredContent.serverRunners.some(row => row.id === runnerId),
+      surfaceRoutePresent: finalState.structuredContent.routes.some(row => row.id === surfaceRouteId && row.handler === "page.surface"),
+      surfaceScreenRoutePresent: finalState.structuredContent.routes.some(row => row.id === surfaceScreenRouteId && row.handler === "page.surface"),
+      surfaceServedRoutePresent: finalState.structuredContent.servedRoutes.some(row => row.id === surfaceRouteId && row.serverRunner === runnerId),
+      surfaceScreenServedRoutePresent: finalState.structuredContent.servedRoutes.some(row => row.id === surfaceScreenRouteId && row.serverRunner === runnerId),
+      processPresent: finalState.structuredContent.witnesses
+        ? finalState.structuredContent.witnesses.some(row => row.process === "desire.defineProcess" && row.body?.id === `${stamp}_process`)
         : true,
-      typePresent: state.structuredContent.witnesses
-        ? state.structuredContent.witnesses.some(row => row.process === "desire.defineType" && row.body?.id === `${stamp}_title_state`)
+      typePresent: finalState.structuredContent.witnesses
+        ? finalState.structuredContent.witnesses.some(row => row.process === "desire.defineType" && row.body?.id === `${stamp}_title_state`)
         : true,
-      projectionPresent: state.structuredContent.witnesses
-        ? state.structuredContent.witnesses.some(row => row.process === "desire.defineProjection" && row.body?.id === `${stamp}_projection`)
+      projectionPresent: finalState.structuredContent.witnesses
+        ? finalState.structuredContent.witnesses.some(row => row.process === "desire.defineProjection" && row.body?.id === `${stamp}_projection`)
         : true,
-      rootSurfacePresent: state.structuredContent.witnesses
-        ? state.structuredContent.witnesses.some(row => row.process === "desire.defineSurface" && row.body?.id === surfaceRootId)
+      rootSurfacePresent: finalState.structuredContent.witnesses
+        ? finalState.structuredContent.witnesses.some(row => row.process === "desire.defineSurface" && row.body?.id === surfaceRootId)
         : true
     },
     blockers: {
-      canonicalSurfaceAuthoring: surfaceBlocked,
-      canonicalInteraction: null
+      firstBlocked: blockedHandoff
     }
   };
 }
@@ -494,6 +422,9 @@ async function main(argv = process.argv.slice(2)) {
     process.exit(1);
   }
   if (result.replay.surfaceHttpStatus !== 200 || result.replay.surfaceHomeHttpStatus !== 200) {
+    process.exit(1);
+  }
+  if (!result.replay.surfaceBlockedHostVisible || !result.replay.surfaceHomeBlockedHostVisible) {
     process.exit(1);
   }
 }
