@@ -75,9 +75,10 @@ chart GoodmanDiagram of BoltFatigue {
 
 // ── Goodman Monte-Carlo bands (over BoltFatigueMC) ─────────────────────────────
 //
-// The same σa-vs-σm frame, now showing the ensemble: a faint per-sample `cloud`, the
-// p10..p90 `band`, and the p50 median line. Exercises the generic GoG runtime's new
-// band/cloud marks over the reduced fields produced by `reduce … over sample`.
+// The same σa-vs-σm frame, now showing the authored first-pass MC reduction:
+// the p10..p90 `band` and p50 median line. The reference clears the static
+// distribution cloud in MC mode; simulation dots belong to the later
+// failure-time/canvas path, not a false per-sample spaghetti overlay here.
 chart GoodmanMCBands of BoltFatigueMC {
   frame cartesian
   prop pageStylesheetHref = "/app-static/app/engentus-chart-pages.css"
@@ -121,7 +122,6 @@ chart GoodmanMCBands of BoltFatigueMC {
   y.domain 0 auto
   y.label "Alternating bending stress σa (MPa)"
 
-  layer cloud = cloud over sample | x:sm y:curve_s stroke:slate
   layer band  = band over sm | x:sm y0:sa_p10 y1:sa_p90 fill:blue opacity:0.25
   layer med   = line over sm | y:sa_p50 stroke:blue width:2.2
 }

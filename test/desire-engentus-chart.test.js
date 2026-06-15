@@ -229,9 +229,17 @@ test("Goodman Monte Carlo chart binds authored run config into the ensemble mode
     functions: { ...goodmanFunctions, ...samplingFunctions },
     params: { n_samples: 24 }
   });
+  const plan = planChart(view, evaluated, { width: 800, height: 520 });
+  const layer = name => plan.layers.find(candidate => candidate.name === name);
   assert.equal(evaluated.axes.sample.values.length, 24);
   assert.equal(evaluated.fields.sa_p50.axes.includes("sample"), false);
   assert.equal(evaluated.fields.sa_p50.axes.includes("sm"), true);
+  assert.equal(layer("cloud"), undefined);
+  assert.equal(layer("band").mark, "band");
+  assert.equal(layer("band").primitives[0].points[25].y0, evaluated.fields.sa_p10.data[25]);
+  assert.equal(layer("band").primitives[0].points[25].y1, evaluated.fields.sa_p90.data[25]);
+  assert.equal(layer("med").mark, "line");
+  assert.equal(layer("med").primitives[0].points[25].y, evaluated.fields.sa_p50.data[25]);
 });
 
 test("Mill Force chart plans preserve authored kN lines and reference chrome", async () => {

@@ -128,6 +128,11 @@ grant runtime authority to copied JS or presenter code.
 - Goodman scrubber Play is no longer wired to the run action. It carries the
   reference play label but does not yet implement animated timeline playback,
   avoiding the previous false behavior where Play started a Monte Carlo run.
+- Goodman Monte Carlo chart no longer invents a per-sample spaghetti cloud.
+  The reference clears the static distribution cloud in MC mode; simulation
+  dots belong to the later failure-time/canvas path. The authored MC chart now
+  keeps only the first-pass p10/p90 band and p50 median line until that real
+  simulation path exists.
 - Mill Charge chart: `MillChargeCrossSection` mounts live in
   `/engentus/mill-charge`, accepts authored parameter bindings, updates derived
   RHS metrics, and keeps its transient animation phase during parameter changes.
