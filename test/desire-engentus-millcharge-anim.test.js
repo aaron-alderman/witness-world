@@ -14,7 +14,7 @@ import { planChart, frameIndexForElapsed } from "../plugins/chart-runtime/gog-ru
 // pure logic it drives — frame cadence over the time axis and disc clipping — is
 // node-verified here.
 
-const appDir = path.join(process.cwd(), "examples_rvm", "engentus", "app");
+const appDir = path.join(process.cwd(), "examples", "engentus", "app");
 
 async function loadBody(file, kind, name) {
   const desire = normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(path.join(appDir, file)));

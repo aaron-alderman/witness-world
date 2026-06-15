@@ -40,8 +40,26 @@ const KIND_BY_PROCESS = {
 
 const DERIVE_OPS = {
   bool_not: ([x]) => !truthy(x),
+  format: ([x], body) => formatProjectionValue(x, body?.props ?? {}),
   identity: ([x]) => x
 };
+
+function formatProjectionValue(value, props = {}) {
+  if (value == null || value === "") return "";
+  const scale = props.style === "percent"
+    ? 100
+    : (props.scale != null ? Number(props.scale) : 1);
+  const numeric = Number(value) * (Number.isFinite(scale) ? scale : 1);
+  const hasNumeric = Number.isFinite(numeric);
+  const digits = props.digits != null ? Number(props.digits) : null;
+  const suffix = props.suffix != null
+    ? String(props.suffix)
+    : (props.style === "percent" ? "%" : "");
+  const body = hasNumeric
+    ? (Number.isFinite(digits) ? numeric.toFixed(Math.max(0, digits)) : String(numeric))
+    : String(value);
+  return `${body}${suffix}`;
+}
 
 function truthy(v) {
   if (typeof v === "boolean") return v;
@@ -123,7 +141,7 @@ export function createProcessRuntime(world, options = {}) {
     const out = {};
     for (const d of derives) {
       const op = DERIVE_OPS[d.body.projectionKind];
-      out[d.id] = op ? op([state.get(d.body.source)]) : undefined;
+      out[d.id] = op ? op([state.get(d.body.source)], d.body) : undefined;
     }
     return out;
   }
@@ -388,10 +406,13 @@ const KIND_BY_PROCESS = {
 
 const DERIVE_OPS = {
   bool_not: ([x]) => !truthy(x),
+  format: ([x], body) => formatProjectionValue(x, body?.props ?? {}),
   identity: ([x]) => x
 };
 
 ${truthy.toString()}
+
+${formatProjectionValue.toString()}
 
 ${witnessesOf.toString()}
 

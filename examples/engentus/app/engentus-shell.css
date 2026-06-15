@@ -1109,7 +1109,6 @@ body.edit-mode #chart-svg [data-editable]:hover { opacity: .75 }
   display: block;
   border: 0;
   border-radius: 10px;
-  background: #fff;
 }
 
 #mill-metrics {
@@ -1133,6 +1132,87 @@ body.edit-mode #chart-svg [data-editable]:hover { opacity: .75 }
 }
 
 #mill-metrics-panel { padding: 10px 12px; }
+
+.prow {
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prow-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.plabel {
+  font-size: 11px;
+  color: var(--t2);
+}
+
+.pval {
+  font-size: 11px;
+  color: var(--blue);
+  font-weight: 600;
+}
+
+input[type=range],
+.mill-slider {
+  width: 100%;
+  accent-color: var(--blue);
+  height: 3px;
+  cursor: pointer;
+}
+
+.mill-preset-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  background: rgba(0,0,0,.18);
+  border: 1px solid var(--brd);
+  border-radius: 5px;
+  color: var(--t1);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background .1s, border-color .1s;
+}
+
+.mill-preset-btn:hover {
+  background: rgba(140,196,212,.12);
+  border-color: rgba(140,196,212,.35);
+}
+
+.mill-metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 9px;
+}
+
+.mill-metric-lbl {
+  font-size: 11px;
+  color: var(--t2);
+}
+
+.mill-metric-val {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--blue);
+  font-variant-numeric: tabular-nums;
+}
+
+.mill-regime-badge {
+  margin-top: 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-align: center;
+}
 
 .metric-group {
   background: rgba(0,0,0,.2);

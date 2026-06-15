@@ -1,3 +1,5 @@
+import { surfaceDomId } from "./runtime-surface-dom-identity.js";
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -221,7 +223,7 @@ function elementTagForSurface(surface) {
 function renderAttributes(surface, tagName) {
   const props = readProps(surface);
   const attrs = [];
-  const domId = staticTextValue(props, "domId");
+  const domId = surfaceDomId(surface, { requireRuntimeAttachment: true });
   if (domId) attrs.push(`id="${escapeAttr(domId)}"`);
   const classNames = readClassNames(surface);
   if (classNames.length) attrs.push(`class="${escapeAttr(classNames.join(" "))}"`);
@@ -235,6 +237,24 @@ function renderAttributes(surface, tagName) {
   if (tagName === "button") {
     const buttonType = staticTextValue(props, "buttonType");
     if (buttonType) attrs.push(`type="${escapeAttr(buttonType)}"`);
+    if (props.disabled === true) attrs.push("disabled");
+  }
+  if (tagName === "input") {
+    const inputType = staticTextValue(props, "inputType") ?? staticTextValue(props, "type") ?? "text";
+    attrs.push(`type="${escapeAttr(inputType)}"`);
+    for (const [propName, attrName] of [
+      ["placeholder", "placeholder"],
+      ["autocomplete", "autocomplete"],
+      ["name", "name"],
+      ["min", "min"],
+      ["max", "max"],
+      ["step", "step"],
+      ["value", "value"]
+    ]) {
+      const value = props[propName];
+      if (value != null && value !== "") attrs.push(`${attrName}="${escapeAttr(value)}"`);
+    }
+    if (props.checked === true) attrs.push("checked");
     if (props.disabled === true) attrs.push("disabled");
   }
   if (tagName === "img") {
@@ -321,11 +341,11 @@ function renderFieldControl(surface, surfaces) {
   ].join("");
 }
 
-function renderSurfaceBody(surface, surfaces, tagName = "div") {
+function renderSurfaceBody(surface, surfaces, tagName = "div", options = {}) {
   const props = readProps(surface);
   const rawHtml = staticTextValue(props, "rawHtml");
   const childHtml = childSurfaceIds(surface)
-    .map(childId => renderSurfaceNode(surfaces, childId))
+    .map(childId => renderSurfaceNode(surfaces, childId, options))
     .filter(Boolean)
     .join("");
   if (rawHtml && !childHtml) return rawHtml;
@@ -513,13 +533,21 @@ function renderSurfaceBody(surface, surfaces, tagName = "div") {
   return fragments.join("");
 }
 
-function renderSurfaceNode(surfaces, surfaceId) {
+function renderSurfaceNode(surfaces, surfaceId, options = {}) {
   const surface = surfaces.get(surfaceId);
   if (!surface) return "";
+  for (const renderer of options.surfaceRenderers ?? []) {
+    if (!renderer || typeof renderer.renderSurface !== "function") continue;
+    const rendered = renderer.renderSurface(surface, {
+      surfaces,
+      renderSurface: childId => renderSurfaceNode(surfaces, childId, options)
+    });
+    if (typeof rendered === "string") return rendered;
+  }
   const tagName = elementTagForSurface(surface);
   const attrs = renderAttributes(surface, tagName);
-  if (tagName === "img") return `<img${attrs}>`;
-  const body = renderSurfaceBody(surface, surfaces, tagName);
+  if (isVoidTag(tagName)) return `<${tagName}${attrs}>`;
+  const body = renderSurfaceBody(surface, surfaces, tagName, options);
   const props = readProps(surface);
   const rawHtml = staticTextValue(props, "rawHtml");
   if (
@@ -534,9 +562,9 @@ function renderSurfaceNode(surfaces, surfaceId) {
   return `<${tagName}${attrs}>${body}</${tagName}>`;
 }
 
-export function renderSurfaceStaticFragment(surfaces, surfaceId) {
+export function renderSurfaceStaticFragment(surfaces, surfaceId, options = {}) {
   if (!(surfaces instanceof Map) || !surfaceId) return "";
-  return renderSurfaceNode(surfaces, surfaceId);
+  return renderSurfaceNode(surfaces, surfaceId, options);
 }
 
 function inferredDocumentTitle(activeSurface, surfaces) {
@@ -559,7 +587,8 @@ function renderSurfaceDocument({
   requestPathname,
   rootSurface,
   activeSurface,
-  surfaces
+  surfaces,
+  surfaceRenderers = []
 }) {
   const rootProps = readProps(rootSurface);
   const stylesheetHref = staticTextValue(rootProps, "stylesheetHref");
@@ -567,7 +596,7 @@ function renderSurfaceDocument({
   const activeInfo = describeSurface(activeSurface);
   const bodyClass = readClassNames(rootSurface).join(" ");
   const bodyClassAttr = bodyClass ? ` class="${escapeAttr(bodyClass)}"` : "";
-  const html = renderSurfaceNode(surfaces, activeSurface.id);
+  const html = renderSurfaceNode(surfaces, activeSurface.id, { surfaceRenderers });
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -641,13 +670,15 @@ export function renderSurfaceShellFromMap({
   surfaces,
   rootSurfaceId,
   requestPathname = "/",
-  route = null
+  route = null,
+  surfaceRenderers = []
 } = {}) {
   const state = resolveSurfaceShellFromMap({
     surfaces,
     rootSurfaceId,
     requestPathname,
-    route
+    route,
+    surfaceRenderers
   });
   return state?.html ?? null;
 }
@@ -656,7 +687,8 @@ export function resolveSurfaceShellFromMap({
   surfaces,
   rootSurfaceId,
   requestPathname = "/",
-  route = null
+  route = null,
+  surfaceRenderers = []
 } = {}) {
   if (!(surfaces instanceof Map) || !rootSurfaceId) return null;
   const rootSurface = surfaces.get(rootSurfaceId);
@@ -673,7 +705,8 @@ export function resolveSurfaceShellFromMap({
       requestPathname: normalizedPathname,
       rootSurface,
       activeSurface,
-      surfaces
+      surfaces,
+      surfaceRenderers
     });
     return {
       html,
@@ -702,25 +735,29 @@ export function resolveSurfaceShellFromMap({
 export function renderSurfaceShellPage(world, {
   rootSurfaceId,
   requestPathname = "/",
-  route = null
+  route = null,
+  surfaceRenderers = []
 } = {}) {
   return renderSurfaceShellFromMap({
     surfaces: readSurfaceMapFromWorld(world),
     rootSurfaceId,
     requestPathname,
-    route
+    route,
+    surfaceRenderers
   });
 }
 
 export function resolveSurfaceShellPage(world, {
   rootSurfaceId,
   requestPathname = "/",
-  route = null
+  route = null,
+  surfaceRenderers = []
 } = {}) {
   return resolveSurfaceShellFromMap({
     surfaces: readSurfaceMapFromWorld(world),
     rootSurfaceId,
     requestPathname,
-    route
+    route,
+    surfaceRenderers
   });
 }

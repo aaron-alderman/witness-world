@@ -249,6 +249,7 @@ function planDiscChart(viewBody, evaluated, opts = {}) {
   const width = opts.width ?? 600;
   const height = opts.height ?? 600;
   const margin = opts.margin ?? { top: 24, right: 24, bottom: 24, left: 24 };
+  const props = viewBody.props ?? {};
   const innerW = width - margin.left - margin.right;
   const innerH = height - margin.top - margin.bottom;
   const maxRadius = Math.min(innerW, innerH) / 2;
@@ -269,6 +270,10 @@ function planDiscChart(viewBody, evaluated, opts = {}) {
 
   return {
     frame: "disc", width, height, margin, maxRadius, discRadius, scale, playback,
+    presentation: {
+      discBackground: props.discBackground ?? "#0d1a2e",
+      shellStroke: props.shellStroke ?? "#64748b"
+    },
     center: { x: margin.left + innerW / 2, y: margin.top + innerH / 2 },
     scales: {
       x: { field: enc.x?.field ?? "x", label: enc.x?.label ?? "" },
@@ -330,7 +335,7 @@ function planDiscLayer(layer, evaluated) {
       return { x: valueAt(xField, coord), y: valueAt(yField, coord) };
     });
     return {
-      ...base, stroke: colorToken(enc.stroke), fill: enc.fill ? colorToken(enc.fill) : null,
+      ...base, stroke: colorRef(enc.stroke, evaluated, enc.strokeMap), fill: enc.fill ? colorRef(enc.fill, evaluated, enc.fillMap) : null,
       closed: layer.mark === "polygon", primitives: [{ points }]
     };
   }
@@ -338,7 +343,29 @@ function planDiscLayer(layer, evaluated) {
   if (layer.mark === "point") {
     const xVal = scalarRef(enc.x, evaluated);
     const yVal = scalarRef(enc.y, evaluated);
-    return { ...base, stroke: colorToken(enc.stroke), primitives: xVal == null ? [] : [{ x: xVal, y: yVal }] };
+    return { ...base, stroke: colorRef(enc.stroke, evaluated, enc.strokeMap), primitives: xVal == null ? [] : [{ x: xVal, y: yVal }] };
+  }
+
+  if (layer.mark === "radial-line") {
+    const theta = scalarRef(enc.theta, evaluated);
+    return {
+      ...base,
+      stroke: colorRef(enc.stroke, evaluated, enc.strokeMap),
+      dash: enc.dash === true,
+      label: enc.label == null ? null : String(enc.label),
+      primitives: Number.isFinite(theta) ? [{ theta }] : []
+    };
+  }
+
+  if (layer.mark === "lifters") {
+    return {
+      ...base,
+      count: Number(enc.count) || 10,
+      fill: colorRef(enc.fill ?? "#94a3b8", evaluated, enc.fillMap),
+      height: Number(enc.height) || 0.055,
+      width: Number(enc.width) || 0.028,
+      primitives: [{}]
+    };
   }
 
   if (layer.mark === "particles") {
@@ -355,10 +382,10 @@ function planDiscLayer(layer, evaluated) {
       return { x: valueAt(xField, coord), y: valueAt(yField, coord) };
     });
     if (!animAxis) {
-      return { ...base, stroke: colorToken(enc.stroke), animAxis: null, frames: [{ t: null, points: frameFor({}) }] };
+      return { ...base, stroke: colorRef(enc.stroke, evaluated, enc.strokeMap), animAxis: null, frames: [{ t: null, points: frameFor({}) }] };
     }
     const frames = (axes[animAxis]?.values ?? []).map((tv, k) => ({ t: tv, points: frameFor({ [animAxis]: k }) }));
-    return { ...base, stroke: colorToken(enc.stroke), animAxis, frames };
+    return { ...base, stroke: colorRef(enc.stroke, evaluated, enc.strokeMap), animAxis, frames };
   }
 
   return { ...base, primitives: [] };
@@ -431,6 +458,22 @@ function scalarRef(token, evaluated) {
   // a param value materialized as an axis-less constant
   const param = evaluated.params?.[token];
   return param ?? null;
+}
+
+function parseColorMap(map) {
+  if (!map || typeof map !== "string") return null;
+  return Object.fromEntries(String(map)
+    .split(",")
+    .map(entry => entry.split("="))
+    .filter(parts => parts.length === 2 && parts[0].trim())
+    .map(([key, value]) => [key.trim(), value.trim()]));
+}
+
+function colorRef(token, evaluated, map = null) {
+  const value = scalarRef(token, evaluated);
+  const mapped = parseColorMap(map)?.[String(value)];
+  if (mapped) return colorToken(mapped);
+  return colorToken(value ?? token);
 }
 
 function autoYMax(layers) {
@@ -810,17 +853,29 @@ function drawDiscChartCanvas(canvas, plan) {
   const ctx = prepareCanvas2d(canvas, width, height);
 
   const particleLayer = plan.layers.find(layer => layer.mark === "particles") ?? null;
-  const staticLayers = plan.layers.filter(layer => layer.mark !== "particles");
+  const lifterLayers = plan.layers.filter(layer => layer.mark === "lifters");
+  const radialLayers = plan.layers.filter(layer => layer.mark === "radial-line");
+  const staticLayers = plan.layers.filter(layer =>
+    !["particles", "lifters", "radial-line"].includes(layer.mark)
+  );
+  const presentation = plan.presentation ?? {};
+  const previousState = canvas.__discChartRuntimeState && typeof canvas.__discChartRuntimeState === "object"
+    ? canvas.__discChartRuntimeState
+    : {};
+  let wallAngle = Number(previousState.wallAngle) || 0;
+  let elapsed = Number(previousState.elapsed) || 0;
 
   const drawStatic = () => {
     clearCanvas(ctx, width, height);
     ctx.save();
     ctx.beginPath();
     ctx.arc(center.x, center.y, discRadius * scale, 0, Math.PI * 2);
-    ctx.fillStyle = "#0d1a2e";
-    ctx.fill();
+    if (presentation.discBackground !== "transparent") {
+      ctx.fillStyle = presentation.discBackground ?? "#0d1a2e";
+      ctx.fill();
+    }
     ctx.lineWidth = 2;
-    ctx.strokeStyle = "#475569";
+    ctx.strokeStyle = presentation.shellStroke ?? "#64748b";
     ctx.stroke();
 
     for (const layer of staticLayers) {
@@ -864,6 +919,65 @@ function drawDiscChartCanvas(canvas, plan) {
     ctx.restore();
   };
 
+  const drawLifters = () => {
+    for (const layer of lifterLayers) {
+      const count = Math.max(0, layer.count | 0);
+      const liftH = discRadius * scale * layer.height;
+      const liftW = discRadius * scale * layer.width;
+      for (let index = 0; index < count; index += 1) {
+        const baseAngle = wallAngle + (index / count) * Math.PI * 2;
+        ctx.save();
+        ctx.translate(center.x, center.y);
+        ctx.rotate(baseAngle);
+        ctx.translate(discRadius * scale - liftH / 2, 0);
+        ctx.beginPath();
+        ctx.rect(-liftH / 2, -liftW / 2, liftH, liftW);
+        ctx.fillStyle = layer.fill ?? "#94a3b8";
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(center.x, center.y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = "#475569";
+    ctx.fill();
+    ctx.restore();
+  };
+
+  const drawRadials = () => {
+    for (const layer of radialLayers) {
+      for (const prim of layer.primitives ?? []) {
+        if (!Number.isFinite(prim.theta)) continue;
+        const canvasAngle = -prim.theta;
+        const ex = center.x + discRadius * scale * Math.cos(canvasAngle);
+        const ey = center.y + discRadius * scale * Math.sin(canvasAngle);
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(center.x, center.y);
+        ctx.lineTo(ex, ey);
+        ctx.strokeStyle = layer.stroke ?? "#fbbf24";
+        ctx.lineWidth = 1.2;
+        if (layer.dash) ctx.setLineDash([4, 3]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(ex, ey, 4, 0, Math.PI * 2);
+        ctx.fillStyle = layer.stroke ?? "#fbbf24";
+        ctx.fill();
+        if (layer.label) {
+          const off = 14;
+          ctx.font = "bold 10px sans-serif";
+          ctx.fillStyle = layer.stroke ?? "#fbbf24";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText(layer.label, ex + Math.cos(canvasAngle) * off, ey + Math.sin(canvasAngle) * off);
+        }
+        ctx.restore();
+      }
+    }
+  };
+
   const drawParticles = frame => {
     if (!particleLayer) return;
     ctx.save();
@@ -880,29 +994,41 @@ function drawDiscChartCanvas(canvas, plan) {
   const renderFrame = frame => {
     drawStatic();
     if (frame) drawParticles(frame);
+    drawLifters();
+    drawRadials();
   };
 
-  renderFrame(particleLayer?.frames?.[0] ?? null);
-
   const node = canvas;
+  const persistState = () => {
+    canvas.__discChartRuntimeState = { wallAngle, elapsed };
+  };
   if (particleLayer && particleLayer.frames?.length) {
     const playback = plan.playback ?? {};
     const frames = particleLayer.frames;
     const tValues = frames.map(f => f.t);
+    renderFrame(frames[frameIndexForElapsed(tValues, elapsed, playback)] ?? frames[0] ?? null);
+    persistState();
     let playing = true;
     let destroyed = false;
+    let lastTs = null;
     node.scrubTo = index => {
       playing = false;
-      renderFrame(frames[Math.max(0, Math.min(frames.length - 1, index | 0))] ?? null);
+      const frameIndex = Math.max(0, Math.min(frames.length - 1, index | 0));
+      elapsed = tValues[frameIndex] ?? elapsed;
+      renderFrame(frames[frameIndex] ?? null);
+      persistState();
     };
     node.scrubToValue = value => {
       playing = false;
+      elapsed = Number(value) || 0;
       renderFrame(frames[frameIndexForValue(tValues, value)] ?? null);
+      persistState();
     };
     node.play = () => { playing = true; };
     node.pause = () => { playing = false; };
     node.destroy = () => {
       destroyed = true;
+      persistState();
       clearCanvas(ctx, width, height);
     };
     if (frames.length > 1 && tValues[0] != null && typeof requestAnimationFrame === "function") {
@@ -910,11 +1036,21 @@ function drawDiscChartCanvas(canvas, plan) {
       const step = ts => {
         if (destroyed) return;
         if (startTs == null) startTs = ts;
-        if (playing) renderFrame(frames[frameIndexForElapsed(tValues, (ts - startTs) / 1000, playback)] ?? null);
+        const dt = lastTs == null ? 0 : Math.min((ts - lastTs) / 1000, 0.05);
+        lastTs = ts;
+        if (playing) {
+          wallAngle -= dt * (playback.wallSpeed ?? 2.35);
+          elapsed += dt;
+          persistState();
+          renderFrame(frames[frameIndexForElapsed(tValues, elapsed, playback)] ?? null);
+        }
         requestAnimationFrame(step);
       };
       requestAnimationFrame(step);
     }
+  } else {
+    renderFrame(null);
+    persistState();
   }
   if (typeof node.destroy !== "function") {
     node.destroy = () => clearCanvas(ctx, width, height);

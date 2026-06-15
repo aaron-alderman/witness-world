@@ -72,7 +72,7 @@ export function resolveChartSpec(witnesses, chartName) {
   if (!model) return null;
   return {
     model: { axes: model.axes ?? [], params: model.params ?? [], derives: model.derives ?? [], reduces: model.reduces ?? [] },
-    view: { frame: view.frame, encoding: view.encoding ?? {}, editable: view.editable ?? [], layers: view.layers ?? [], modelRef: view.modelRef },
+    view: { frame: view.frame, encoding: view.encoding ?? {}, editable: view.editable ?? [], layers: view.layers ?? [], modelRef: view.modelRef, props: view.props ?? {} },
     params: {},
     pageProps: view.props ?? {}
   };
@@ -109,11 +109,28 @@ export function createHandlers(deps = {}) {
   };
 }
 
-export function buildMountedChartRuntime({ world, activeSurface } = {}) {
+export function buildMountedChartRuntime({ world, activeSurface, rootSurface } = {}) {
   const witnesses = typeof world?.allWitnesses === "function" ? world.allWitnesses() : [];
-  const chartIds = Array.isArray(activeSurface?.children)
-    ? activeSurface.children.filter(Boolean)
-    : [];
+  const surfaces = new Map(
+    witnesses
+      .filter(witness => witness.process === "desire.defineSurface" && witness.body?.id)
+      .map(witness => [witness.body.id, witness.body])
+  );
+  const chartIds = [];
+  const traversalRoot = rootSurface ?? activeSurface;
+  const queue = traversalRoot?.id
+    ? [traversalRoot.id]
+    : (Array.isArray(activeSurface?.children) ? [...activeSurface.children] : []);
+  const seen = new Set();
+  while (queue.length) {
+    const surfaceId = String(queue.shift() || "").trim();
+    if (!surfaceId || seen.has(surfaceId)) continue;
+    seen.add(surfaceId);
+    const surface = surfaces.get(surfaceId);
+    if (!surface) continue;
+    if (surface.surfaceKind === "chart") chartIds.push(surface.id);
+    if (Array.isArray(surface.children)) queue.push(...surface.children);
+  }
   const resolvedCharts = chartIds
     .map(chartId => ({ chartId, spec: resolveChartSpec(witnesses, chartId) }))
     .filter(entry => entry.spec);
@@ -178,6 +195,24 @@ export function buildMountedChartRuntime({ world, activeSurface } = {}) {
   };
 }
 
+export function createSurfaceCapabilityRenderer(context = {}) {
+  const mounted = buildMountedChartRuntime(context);
+  if (!mounted) return null;
+  return {
+    capability: "chart.render",
+    stylesheetHrefs: mounted.stylesheetHrefs,
+    scriptSrcs: mounted.scriptSrcs,
+    inlineCss: mounted.inlineCss,
+    scriptBody: mounted.scriptBody,
+    renderSurface(surface) {
+      if (surface?.surfaceKind !== "chart") return null;
+      return mounted.renderMountedChart(surface, {
+        mountMode: "mounted-panel"
+      });
+    }
+  };
+}
+
 export const providers = Object.freeze([
   {
     kind: "staticAssetProvider",
@@ -193,6 +228,12 @@ export const providers = Object.freeze([
     kind: "coreHook",
     id: "buildMountedChartRuntime",
     hook: buildMountedChartRuntime
+  },
+  {
+    kind: "surfaceCapabilityRenderer",
+    id: "chart-runtime.surfaceCapabilityRenderer",
+    capability: "chart.render",
+    factory: createSurfaceCapabilityRenderer
   }
 ]);
 

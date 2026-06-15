@@ -503,7 +503,8 @@ export function createCoreRuntimeBundleHandlers({
         browserRuntimeCapabilities: (appContext?.runtimeContributions?.capabilityDefinitions ?? [])
           .map(definition => typeof definition?.id === "string" ? definition.id : "")
           .filter(Boolean),
-        routeStateDescriptor: route?.params?.routeState ?? null
+        routeStateDescriptor: route?.params?.routeState ?? null,
+        surfaceCapabilityRenderers: appContext?.runtimeContributions?.surfaceCapabilityRenderers ?? []
       });
       if (!html) {
         sendJson(res, 404, { error: "surface page not found", rootSurface: rootSurfaceId });

@@ -1,26 +1,13 @@
 import { renderProcessRuntimeModuleSource } from "./desire/process-eval.js";
+import { surfaceDomId } from "./runtime-surface-dom-identity.js";
 
 function trimString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
-function stableDomToken(value) {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function fallbackSurfaceDomId(surface, prefix = "surface") {
-  const routeKey = trimString(surface?.props?.routeKey);
-  const surfaceId = trimString(surface?.id);
-  const token = stableDomToken(routeKey || surfaceId || surface?.surfaceKind || "node");
-  return token ? `${prefix}-${token}` : prefix;
-}
-
-function surfaceDomId(surface, fallback = "") {
-  return trimString(surface?.props?.domId) || fallback;
+function resolvedSurfaceDomId(surface) {
+  const props = surface?.props && typeof surface.props === "object" ? surface.props : {};
+  return trimString(props.mountId) ?? surfaceDomId(surface, { requireRuntimeAttachment: true });
 }
 
 function normalizeRuntimeArray(value) {
@@ -95,21 +82,35 @@ function classTokensForSurface(surface) {
 }
 
 function genericSurfaceRuntimeView(surface) {
-  const domId = surfaceDomId(surface, fallbackSurfaceDomId(surface));
+  const domId = resolvedSurfaceDomId(surface);
   const props = surface?.props && typeof surface.props === "object" ? surface.props : {};
   const inputId = trimString(props.inputId);
+  const isDirectInput = (trimString(props.tag) ?? "").toLowerCase() === "input";
   const propTargets = {};
   if (domId) {
     propTargets.className = [{ id: domId, mode: "className", baseClass: classTokensForSurface(surface).join(" ") }];
     propTargets.text = [{ id: domId, mode: "text" }];
+    propTargets.style = [{ id: domId, mode: "attribute", attr: "style" }];
     propTargets.visible = [{ id: domId, mode: "visibility" }];
     propTargets.disabled = [{ id: domId, mode: "disabled" }];
+    if (isDirectInput) {
+      propTargets.inputType = [{ id: domId, mode: "attribute", attr: "type" }];
+      propTargets.value = [{ id: domId, mode: "value" }];
+      propTargets.checked = [{ id: domId, mode: "checked" }];
+    }
   }
   if (inputId) {
     propTargets.inputType = [{ id: inputId, mode: "attribute", attr: "type" }];
     propTargets.inputValue = [{ id: inputId, mode: "value" }];
     propTargets.checked = [{ id: inputId, mode: "checked" }];
     propTargets.disabled = [...(propTargets.disabled ?? []), { id: inputId, mode: "disabled" }];
+  }
+  if (domId) {
+    for (const binding of surface?.bindings ?? []) {
+      const prop = trimString(binding?.prop);
+      if (!prop || propTargets[prop]) continue;
+      propTargets[prop] = [{ id: domId, mode: "capabilityProp", prop }];
+    }
   }
   return {
     rootId: domId,
@@ -128,7 +129,7 @@ export function describeSurfaceRuntimeView(surface, {
     : null;
   if (described && typeof described === "object" && !Array.isArray(described)) {
     return {
-      rootId: trimString(described.rootId) || surfaceDomId(surface, fallbackSurfaceDomId(surface)),
+      rootId: trimString(described.rootId) || resolvedSurfaceDomId(surface),
       propTargets: normalizeViewTargets(described.propTargets),
       interactionTargets: normalizeViewTargets(described.interactionTargets)
     };
@@ -262,12 +263,20 @@ function activeRuntimeSurfaceIds(surfaceById, activeSurfaceId) {
   return active;
 }
 
-function readBindingSource(source, processRuntime) {
+function readCapabilityOutput(source, capabilityOutputs = {}) {
+  const surfaceId = trimString(source?.surface);
+  const output = trimString(source?.output);
+  if (!surfaceId || !output) return undefined;
+  return capabilityOutputs[surfaceId]?.[output];
+}
+
+function readBindingSource(source, processRuntime, capabilityOutputs = {}) {
   if (!source || typeof source !== "object") return undefined;
   let value;
   if (source.kind === "literal") value = source.value;
   else if (source.kind === "state") value = processRuntime.value(source.state);
   else if (source.kind === "projection") value = processRuntime.derive(source.projection);
+  else if (source.kind === "capability") value = readCapabilityOutput(source, capabilityOutputs);
   else return undefined;
   if (source.map && typeof source.map === "object" && !Array.isArray(source.map)) {
     const key = String(value);
@@ -277,12 +286,12 @@ function readBindingSource(source, processRuntime) {
   return value;
 }
 
-function overlaySurfaceProps(surface, processRuntime) {
+function overlaySurfaceProps(surface, processRuntime, capabilityOutputs = {}) {
   const nextProps = { ...(surface?.props || {}) };
   for (const binding of surface?.runtime?.bindings ?? []) {
     const prop = trimString(binding?.prop);
     if (!prop) continue;
-    const nextValue = readBindingSource(binding.source, processRuntime);
+    const nextValue = readBindingSource(binding.source, processRuntime, capabilityOutputs);
     if (nextValue !== undefined) nextProps[prop] = nextValue;
   }
   return nextProps;
@@ -311,6 +320,12 @@ export function patchSurfaceDom(document, surface, nextProps) {
           if (!attr) break;
           if (value == null || value === false) node.removeAttribute(attr);
           else node.setAttribute(attr, String(value));
+          break;
+        }
+        case "capabilityProp": {
+          if (typeof node.__surfaceCapabilityController?.updateProps === "function") {
+            node.__surfaceCapabilityController.updateProps({ [target.prop || prop]: value });
+          }
           break;
         }
         case "checked":
@@ -451,6 +466,15 @@ function parseFirstElement(document, html) {
   return template.content.firstElementChild;
 }
 
+function bootSurfaceCapabilities(window, root) {
+  const hooks = Array.isArray(window?.__surfaceCapabilityBootHooks)
+    ? window.__surfaceCapabilityBootHooks
+    : [];
+  for (const hook of hooks) {
+    if (typeof hook === "function") hook(root);
+  }
+}
+
 function clearRouteUnderlay(document) {
   const layer = document?.getElementById?.("surface-route-underlay");
   if (layer?.parentNode) layer.parentNode.removeChild(layer);
@@ -520,7 +544,20 @@ export function createSurfaceInteractionRuntime({
   const processRuntime = processRuntimeFactory({ witnesses: manifest.processWitnesses || [] });
   const disposers = [];
   const runtimeDisposers = [];
+  const capabilityOutputs = {};
+  const readExistingCapabilityOutputs = root => {
+    const queryRoot = root ?? document;
+    const nodes = [];
+    if (typeof queryRoot?.matches === "function" && queryRoot.matches("[data-surface-id]")) nodes.push(queryRoot);
+    if (typeof queryRoot?.querySelectorAll === "function") nodes.push(...queryRoot.querySelectorAll("[data-surface-id]"));
+    for (const node of nodes) {
+      const surfaceId = trimString(node.getAttribute?.("data-surface-id"));
+      if (!surfaceId || !node.__surfaceCapabilityOutputs) continue;
+      capabilityOutputs[surfaceId] = node.__surfaceCapabilityOutputs;
+    }
+  };
   const refresh = () => {
+    readExistingCapabilityOutputs(document);
     const activeIds = activeRuntimeSurfaceIds(surfaceById, activeSurfaceId);
     for (const surface of manifest.surfaces ?? []) {
       if (!activeIds.has(surface.id)) continue;
@@ -529,7 +566,7 @@ export function createSurfaceInteractionRuntime({
       if (!binding.processRef) continue;
       const capabilities = resolveSurfaceCapabilities(binding, manifest.browserRuntimeCapabilities);
       if (capabilities.missing.length) continue;
-      const nextProps = overlaySurfaceProps(surface, processRuntime);
+      const nextProps = overlaySurfaceProps(surface, processRuntime, capabilityOutputs);
       if (surface.id === activeSurfaceId) updateRouteUnderlay(document, manifest, surface, nextProps);
       patchSurfaceDom(document, surface, nextProps);
     }
@@ -549,6 +586,7 @@ export function createSurfaceInteractionRuntime({
     currentRoot.replaceWith(nextRoot);
     activeSurfaceId = target.surfaceId;
     manifest.activeSurfaceId = target.surfaceId;
+    bootSurfaceCapabilities(window, nextRoot);
     clearRouteUnderlay(document);
     return true;
   };
@@ -581,6 +619,14 @@ export function createSurfaceInteractionRuntime({
     };
     window.addEventListener("popstate", onPopState);
     runtimeDisposers.push(() => window.removeEventListener?.("popstate", onPopState));
+    const onCapabilityOutput = event => {
+      const surfaceId = trimString(event?.detail?.surfaceId);
+      if (!surfaceId) return;
+      capabilityOutputs[surfaceId] = event.detail?.outputs ?? {};
+      syncRouteAndRefresh();
+    };
+    window.addEventListener("surface-capability-output", onCapabilityOutput);
+    runtimeDisposers.push(() => window.removeEventListener?.("surface-capability-output", onCapabilityOutput));
   }
 
   const bindInteractions = () => {
@@ -668,6 +714,7 @@ function browserHelpersSource() {
   return new Map((manifest?.surfaces ?? []).map(surface => [surface.id, surface]));
 }`,
     eventValueFromSpec.toString(),
+    readCapabilityOutput.toString(),
     readBindingSource.toString(),
     overlaySurfaceProps.toString(),
     resolveSurfaceRuntimeBinding.toString(),
@@ -680,6 +727,7 @@ function browserHelpersSource() {
     syncUrlToRouteState.toString(),
     syncRouteStateToUrl.toString(),
     parseFirstElement.toString(),
+    bootSurfaceCapabilities.toString(),
     clearRouteUnderlay.toString(),
     updateRouteUnderlay.toString(),
     `function formatInlineText(value) { return SURFACE_INTERACTION_FORMATTERS.formattedText(value); }`,

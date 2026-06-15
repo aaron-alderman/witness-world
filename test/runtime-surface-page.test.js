@@ -69,3 +69,121 @@ test("runtime-surface-page composes static surface HTML with the generic interac
   assert.match(html, /createSurfaceInteractionRuntime/);
   assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
 });
+
+test("runtime-surface-page emits generic fallback ids for interactive surfaces without authored domId", () => {
+  const html = renderSurfacePage(fakeWorld([
+    {
+      process: "desire.defineMessage",
+      body: { id: "OpenMillCharge", role: "event", writes: {} }
+    },
+    {
+      process: "desire.defineProcess",
+      body: {
+        id: "ShellNavigation",
+        state: [],
+        handles: ["OpenMillCharge"],
+        emits: [],
+        rules: []
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SurfaceRoot",
+        surfaceKind: "app-root",
+        processRef: "ShellNavigation",
+        children: ["ModuleCardMillCharge"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "ModuleCardMillCharge",
+        surfaceKind: "module-card",
+        props: {
+          tag: "div",
+          routeKey: "mill-charge",
+          title: "Mill Charge Motion"
+        },
+        interactions: [
+          {
+            target: "self",
+            event: "click",
+            action: { kind: "deliver", message: "OpenMillCharge" }
+          }
+        ]
+      }
+    }
+  ]), {
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/home"
+  });
+
+  assert.match(html, /<div id="surface-modulecardmillcharge"/);
+  assert.match(html, /"rootId":"surface-modulecardmillcharge"/);
+  assert.match(html, /"interactionTargets":\{"self":\[\{"id":"surface-modulecardmillcharge"\}\]\}/);
+  assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
+});
+
+test("runtime-surface-page projects authored input tags with normal form attributes", () => {
+  const html = renderSurfacePage(fakeWorld([
+    {
+      process: "desire.defineType",
+      body: { id: "MillChargeSpeedFrac", role: "state", valueType: "number", initial: 0.75 }
+    },
+    {
+      process: "desire.defineProcess",
+      body: {
+        id: "MillChargeControls",
+        state: ["MillChargeSpeedFrac"],
+        handles: [],
+        emits: [],
+        rules: []
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SurfaceRoot",
+        surfaceKind: "app-root",
+        processRef: "MillChargeControls",
+        children: ["SpeedInput"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SpeedInput",
+        surfaceKind: "input",
+        className: "mill-slider",
+        props: {
+          tag: "input",
+          domId: "speed-input",
+          inputType: "range",
+          min: 0.4,
+          max: 0.99,
+          step: 0.01,
+          value: 0.75
+        },
+        bindings: [
+          { prop: "value", source: { kind: "state", state: "MillChargeSpeedFrac" } }
+        ],
+        interactions: [
+          {
+            target: "self",
+            event: "input",
+            action: { kind: "setState", state: "MillChargeSpeedFrac", value: { kind: "eventValue" } }
+          }
+        ]
+      }
+    }
+  ]), {
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/mill-charge"
+  });
+
+  assert.match(html, /<input id="speed-input" class="[^"]*mill-slider[^"]*" type="range" min="0.4" max="0.99" step="0.01" value="0.75">/);
+  assert.match(html, /"event":"input"/);
+  assert.match(html, /"kind":"eventValue"/);
+  assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
+});

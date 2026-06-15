@@ -16,7 +16,7 @@ import { chargeGeometry, cataractingIndex } from "../example-ports/engentus/js/m
 // jitter is a seeded sampler, so the field is reproducible.
 
 async function loadModelBody() {
-  const file = path.join(process.cwd(), "examples_rvm", "engentus", "app", "models", "mill-charge.rvm");
+  const file = path.join(process.cwd(), "examples", "engentus", "app", "models", "mill-charge.rvm");
   const desire = normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(file));
   const model = desire.nodes.find(n => n.kind === "dataflow" && n.name === "MillCharge");
   assert.ok(model, "MillCharge dataflow node not found");

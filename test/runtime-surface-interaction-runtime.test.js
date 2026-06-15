@@ -17,6 +17,7 @@ test("describeSurfaceRuntimeView stays generic by default", () => {
   assert.deepEqual(view.propTargets, {
     className: [{ id: "surface-login", mode: "className", baseClass: "" }],
     text: [{ id: "surface-login", mode: "text" }],
+    style: [{ id: "surface-login", mode: "attribute", attr: "style" }],
     visible: [{ id: "surface-login", mode: "visibility" }],
     disabled: [{ id: "surface-login", mode: "disabled" }]
   });

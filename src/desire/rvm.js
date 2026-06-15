@@ -676,6 +676,7 @@ function semanticRvmShape(kind, name, type, bodyLines, header = {}) {
         encoding: parseChartEncoding(bodyLines),
         editable: splitCommaList(readSimpleValue(bodyLines, "editable")),
         layers: readRepeatedSimpleValues(bodyLines, "layer").map(parseLayerLine).filter(Boolean),
+        bindings: parseSurfaceBindingsBlock(bodyLines),
         className: null,
         children: [],
         props: parsePropAssignments(bodyLines)
@@ -1123,6 +1124,10 @@ function parseSurfaceInteractionsBlock(bodyLines) {
         const rawValue = setMatch[4].trim();
         const value = rawValue === "toggle"
           ? { kind: "toggleState", state: setMatch[3] }
+          : rawValue === "eventValue"
+            ? { kind: "eventValue" }
+            : rawValue === "eventChecked"
+              ? { kind: "eventChecked" }
           : { literal: parseScalarValue(rawValue) };
         return {
           target: setMatch[2],
@@ -1162,12 +1167,18 @@ function parseSurfaceBindingsBlock(bodyLines) {
     .filter(Boolean)
     .map(line => line.replace(/,$/, ""))
     .map(line => {
-      const match = line.match(/^([A-Za-z_][A-Za-z0-9_.-]*)\s+from\s+(state|projection)\s+([A-Za-z_][A-Za-z0-9_.-]*)(?:\s+map\s+(.+))?$/);
+      const match = line.match(/^([A-Za-z_][A-Za-z0-9_.-]*)\s+from\s+(state|projection|capability)\s+([A-Za-z_][A-Za-z0-9_.-]*)(?:\s+map\s+(.+))?$/);
       if (!match) return null;
       const [, prop, kind, sourceId, mapTail] = match;
       const source = kind === "projection"
         ? { kind: "projection", projection: sourceId }
-        : { kind: "state", state: sourceId };
+        : (kind === "capability"
+          ? {
+              kind: "capability",
+              surface: sourceId.includes(".") ? sourceId.slice(0, sourceId.lastIndexOf(".")) : sourceId,
+              output: sourceId.includes(".") ? sourceId.slice(sourceId.lastIndexOf(".") + 1) : null
+            }
+          : { kind: "state", state: sourceId });
       const valueMap = parseBindingMapTail(mapTail);
       if (valueMap) source.map = valueMap;
       return { prop, source };

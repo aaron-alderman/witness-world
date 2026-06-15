@@ -62,6 +62,13 @@ model MillCharge {
   derive comY       = charge_com_y(phiT, phiS, millRadius)
   derive comOffsetR = sqrt(comX^2 + comY^2) / millRadius
   derive catIdx     = max(0, min(1, (Fr - 0.4) / 0.5))
+  derive powerProxy = power_proxy(speedFrac, fillFrac, slurryContent, wallFriction, internalFriction, bulkDensity, millRadius)
+  derive regime     = regime_classify(speedFrac, fillFrac, slurryContent, wallFriction, internalFriction)
+  derive shoulderText    = deg_text(phiS)
+  derive toeText         = deg_text(phiT)
+  derive comOffsetText   = radius_text(comOffsetR)
+  derive powerText       = power_text(powerProxy)
+  derive cataractingText = pct_text(catIdx)
 
   // ── charge boundary (honest, over arc): arc toe→shoulder, closed by the chord ──
   derive phi_b = phiT + arcSpan * (arc / N_arc) over arc

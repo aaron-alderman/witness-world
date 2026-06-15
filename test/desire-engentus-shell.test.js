@@ -224,9 +224,92 @@ test("the shell is structured through explicit child regions instead of flattene
     "MillForceTabForceRose"
   ]);
 
+  assert.deepEqual(surfaces.get("EngentusMillChargeApp")?.body?.children, [
+    "EngentusAppChrome",
+    "MillChargeBody"
+  ]);
+
+  assert.deepEqual(surfaces.get("MillChargeBody")?.body?.children, [
+    "MillChargeSidebar",
+    "MillChargeViewer",
+    "MillChargeMetrics"
+  ]);
+
+  assert.deepEqual(surfaces.get("MillChargeSidebar")?.body?.children, [
+    "MillChargeSidebarScroll"
+  ]);
+
+  assert.deepEqual(surfaces.get("MillChargeSidebarScroll")?.body?.children, [
+    "MillChargeParameterSection",
+    "MillChargePresetSection"
+  ]);
+
+  assert.deepEqual(surfaces.get("MillChargeParameterSection")?.body?.children, [
+    "MillChargeParameterTitle",
+    "MillChargeSpeedRow",
+    "MillChargeFillRow",
+    "MillChargeSlurryRow",
+    "MillChargeWallFrictionRow",
+    "MillChargeInternalFrictionRow",
+    "MillChargeBulkDensityRow"
+  ]);
+
   assert.deepEqual(surfaces.get("EngentusHome")?.body?.children, [
     "EngentusHomeChrome",
     "EngentusHomeBody"
+  ]);
+});
+
+test("the Mill Charge shell authors controls, presets, and metrics rather than empty host placeholders", async () => {
+  const desire = await shellDesire();
+  const surfaces = nodeMap(desire, "surface");
+  const messages = nodeMap(desire, "message");
+  const types = nodeMap(desire, "type");
+  const process = nodeMap(desire, "process").get("EngentusShellNavigation")?.body;
+
+  for (const state of [
+    "MillChargeSpeedFrac",
+    "MillChargeFillFrac",
+    "MillChargeSlurryContent",
+    "MillChargeWallFriction",
+    "MillChargeInternalFriction",
+    "MillChargeBulkDensity"
+  ]) {
+    assert.equal(types.get(state)?.body?.role, "state");
+    assert.equal(types.get(state)?.body?.valueType, "number");
+    assert.ok(process?.state?.includes(state), `process missing state ${state}`);
+  }
+
+  assert.deepEqual(surfaces.get("MillChargeSpeedInput")?.body?.interactions, [
+    {
+      target: "self",
+      event: "input",
+      action: {
+        kind: "setState",
+        state: "MillChargeSpeedFrac",
+        value: { kind: "eventValue" }
+      }
+    }
+  ]);
+
+  assert.deepEqual(surfaces.get("MillChargePresetSection")?.body?.children, [
+    "MillChargePresetTitle",
+    "MillChargePresetHardOre",
+    "MillChargePresetAverageOre",
+    "MillChargePresetClayeyOre",
+    "MillChargePresetDenseSlurry"
+  ]);
+
+  assert.equal(messages.get("MillChargePresetHardOreRequested")?.body?.writes?.MillChargeInternalFriction, 42);
+  assert.equal(messages.get("MillChargePresetDenseSlurryRequested")?.body?.writes?.MillChargeSlurryContent, 0.72);
+
+  assert.deepEqual(surfaces.get("MillChargeMetricsPanel")?.body?.children, [
+    "MillChargeMetricShoulder",
+    "MillChargeMetricToe",
+    "MillChargeMetricCom",
+    "MillChargeMetricPower",
+    "MillChargeMetricCataracting",
+    "MillChargeRegimeBadge"
   ]);
 });
 
@@ -236,6 +319,7 @@ test("the module shells declare process and capability dependencies semantically
 
   const goodman = surfaces.get("EngentusApp");
   const millCharge = surfaces.get("EngentusMillChargeApp");
+  const millChargeCanvas = surfaces.get("MillChargeCanvasWrap");
   const millForce = surfaces.get("EngentusMillForceApp");
 
   assert.equal(goodman?.body?.processRef, "EngentusShellNavigation");
@@ -243,7 +327,8 @@ test("the module shells declare process and capability dependencies semantically
   assert.equal("dependsOnCapabilities" in (goodman?.body?.props ?? {}), false);
 
   assert.equal(millCharge?.body?.processRef, "EngentusShellNavigation");
-  assert.deepEqual(millCharge?.body?.capabilityRefs, ["chart.render"]);
+  assert.deepEqual(millCharge?.body?.capabilityRefs, []);
+  assert.deepEqual(millChargeCanvas?.body?.capabilityRefs, ["chart.render"]);
   assert.equal("dependsOnCapabilities" in (millCharge?.body?.props ?? {}), false);
 
   assert.equal(millForce?.body?.processRef, "EngentusShellNavigation");

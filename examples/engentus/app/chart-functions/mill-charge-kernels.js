@@ -7,7 +7,6 @@
  */
 
 const TWO_PI = 2 * Math.PI;
-
 function segmentHalfAngle(J) {
   const target = TWO_PI * Math.max(0.001, Math.min(0.999, J));
   let theta = 2 * Math.acos(1 - 2 * J);
@@ -52,6 +51,46 @@ function chargeCentroid(phiT, phiS, R) {
   return [cx / (6 * area * sign), cy / (6 * area * sign)];
 }
 
+function powerProxy(speedFrac, fillFrac, slurryContent, wallFriction, internalFriction, bulkDensity, millRadius) {
+  const rho = bulkDensity * (1 - slurryContent) + 1450 * slurryContent;
+  const omega = speedFrac * Math.sqrt(9.81 / millRadius);
+  const muWall = wallFriction * (1 - 0.4 * slurryContent);
+  const phi = internalFriction * (1 - 0.3 * slurryContent);
+  const Fr = speedFrac * speedFrac;
+  const base = Math.asin(Math.min(Fr, 1));
+  const wallCorr = Math.atan(muWall * (1 - Fr) * 0.5);
+  const internalCorr = Math.atan(Math.tan(phi * Math.PI / 180) * Fr * 0.3);
+  const phiS = Math.min(base + wallCorr + internalCorr, Math.PI / 2);
+  const phiT = phiS - 2 * segmentHalfAngle(fillFrac);
+  const [comX] = chargeCentroid(phiT, phiS, millRadius);
+  const torque = rho * fillFrac * Math.PI * millRadius * millRadius * 9.81 * Math.abs(comX);
+  const power = omega * torque;
+  const refPhiS = Math.min(Math.asin(0.75 * 0.75) + Math.atan(0.5 * (1 - 0.75 * 0.75) * 0.5) + Math.atan(Math.tan(35 * Math.PI / 180) * 0.75 * 0.75 * 0.3), Math.PI / 2);
+  const refPhiT = refPhiS - 2 * segmentHalfAngle(0.30);
+  const [refComX] = chargeCentroid(refPhiT, refPhiS, millRadius);
+  const refPower = (0.75 * Math.sqrt(9.81 / millRadius)) * 1800 * 0.30 * Math.PI * millRadius * millRadius * 9.81 * Math.abs(refComX);
+  return refPower > 0 ? power / refPower : 0;
+}
+
+function cataractingIndex(speedFrac) {
+  const Fr = speedFrac * speedFrac;
+  return Math.max(0, Math.min(1, (Fr - 0.4) / 0.5));
+}
+
+function regimeClassify(speedFrac, fillFrac, slurryContent, wallFriction, internalFriction) {
+  const Fr = speedFrac * speedFrac;
+  const muEff = wallFriction * (1 - 0.4 * slurryContent);
+  const catIdx = cataractingIndex(speedFrac);
+  const phiRad = internalFriction * Math.PI / 180;
+  const catThresh = Math.max(0.08, 0.35 - Math.tan(phiRad) * 0.18);
+  if (Fr >= 0.97) return "centrifuging";
+  if (muEff < 0.12 && Fr < 0.7) return "slipping";
+  if (slurryContent > 0.62 && Fr < 0.60) return "pooling";
+  if (catIdx > catThresh) return "cataracting";
+  if (Fr >= 0.22) return "cascading";
+  return "rolling";
+}
+
 const SEED = 0x9e3779b9;
 function rand01(index) {
   let a = (Math.floor(index) + SEED) >>> 0;
@@ -66,6 +105,12 @@ export const millChargeKernels = {
   segment_half_angle: J => segmentHalfAngle(J),
   charge_com_x: (phiT, phiS, R) => chargeCentroid(phiT, phiS, R)[0],
   charge_com_y: (phiT, phiS, R) => chargeCentroid(phiT, phiS, R)[1],
+  deg_text: value => `${(((value * 180 / Math.PI) % 360 + 360) % 360).toFixed(1)}°`,
+  radius_text: value => `${Number(value).toFixed(3)} R`,
+  power_proxy: powerProxy,
+  power_text: value => `${Number(value).toFixed(2)} pu`,
+  pct_text: value => `${Math.round(Number(value) * 100)}%`,
+  regime_classify: regimeClassify,
   spread: (i, amp) => (rand01(i) - 0.5) * 2 * amp,
   vjit: i => 0.9 + rand01(i + 101) * 0.2,
   tphase: (i, tMax) => rand01(i + 211) * tMax

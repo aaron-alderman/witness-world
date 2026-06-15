@@ -9,7 +9,7 @@ import { evaluateModel } from "../plugins/chart-runtime/dataflow-eval.js";
 import { millChargeKernels } from "../examples/engentus/app/chart-functions/mill-charge-kernels.js";
 import { planChart } from "../plugins/chart-runtime/gog-runtime.js";
 
-const appDir = path.join(process.cwd(), "examples_rvm", "engentus", "app");
+const appDir = path.join(process.cwd(), "examples", "engentus", "app");
 
 async function loadBody(file, kind, name) {
   const desire = normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(path.join(appDir, file)));
@@ -37,6 +37,8 @@ test("MillChargeCrossSection plans a disc frame with charge polygon + COM + part
   const charge = plan.layers.find(l => l.name === "charge");
   assert.equal(charge.mark, "polygon");
   assert.equal(charge.closed, true);
+  assert.equal(charge.fill, "#7c2a1a");
+  assert.equal(charge.stroke, "#c94020");
   const nArc = evaluated.axes.arc.values.length; // N_arc + 1
   assert.equal(charge.primitives[0].points.length, nArc);
   for (const a of [0, 20, nArc - 1]) {
@@ -50,6 +52,22 @@ test("MillChargeCrossSection plans a disc frame with charge polygon + COM + part
   assert.equal(com.mark, "point");
   assert.equal(com.primitives[0].x, evaluated.fields.comX.data);
   assert.equal(com.primitives[0].y, evaluated.fields.comY.data);
+
+  const lifters = plan.layers.find(l => l.name === "lifters");
+  assert.equal(lifters.mark, "lifters");
+  assert.equal(lifters.count, 10);
+
+  const shoulder = plan.layers.find(l => l.name === "shoulder");
+  assert.equal(shoulder.mark, "radial-line");
+  assert.equal(shoulder.dash, true);
+  assert.equal(shoulder.label, "S");
+  assert.equal(shoulder.primitives[0].theta, evaluated.fields.phiS.data);
+
+  const toe = plan.layers.find(l => l.name === "toe");
+  assert.equal(toe.mark, "radial-line");
+  assert.equal(toe.dash, true);
+  assert.equal(toe.label, "T");
+  assert.equal(toe.primitives[0].theta, evaluated.fields.phiT.data);
 });
 
 test("the particles layer emits one frame per time step over the (particle, t) product", async () => {
@@ -60,6 +78,7 @@ test("the particles layer emits one frame per time step over the (particle, t) p
   const fall = plan.layers.find(l => l.name === "fall");
   assert.equal(fall.mark, "particles");
   assert.equal(fall.animAxis, "t");
+  assert.equal(fall.stroke, "#f87171");
 
   const tVals = evaluated.axes.t.values;
   const nPart = evaluated.axes.particle.values.length;

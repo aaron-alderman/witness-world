@@ -20,12 +20,26 @@ chart MillChargeCrossSection of MillCharge {
   prop mountTag = "canvas"
   prop functionsModules = "/app-static/app/chart-functions/mill-charge-kernels.js"
   prop functionsExports = "millChargeKernels"
-  prop pageBackground = "#ffffff"
+  prop pageBackground = "transparent"
+  prop discBackground = "#0d1a2e"
+  prop shellStroke = "#64748b"
+
+  bindings {
+    param.speedFrac from state MillChargeSpeedFrac
+    param.fillFrac from state MillChargeFillFrac
+    param.slurryContent from state MillChargeSlurryContent
+    param.wallFriction from state MillChargeWallFriction
+    param.internalFriction from state MillChargeInternalFriction
+    param.bulkDensity from state MillChargeBulkDensity
+  }
 
   x bx
   y by
   r millRadius
-  layer charge = polygon over arc | x:bx y:by fill:blue stroke:blue
+  layer charge = polygon over arc | x:bx y:by fill:regime fillMap:"rolling=#4a7c59,cascading=#7c5e1a,cataracting=#7c2a1a,centrifuging=#4a1a7c,pooling=#1a4a7c,slipping=#5a5a2a" stroke:regime strokeMap:"rolling=#5da870,cascading=#c9913a,cataracting=#c94020,centrifuging=#8b3ac9,pooling=#2a6ec9,slipping=#9a9a40"
   layer com    = point | x:comX y:comY
-  layer fall   = particles over particle | x:px y:py stroke:ylw
+  layer fall   = particles over particle | x:px y:py stroke:regime strokeMap:"rolling=#4ade80,cascading=#f59e0b,cataracting=#f87171,centrifuging=#a78bfa,pooling=#60a5fa,slipping=#fde047"
+  layer lifters = lifters | count:10 fill:"#94a3b8"
+  layer shoulder = radial-line | theta:phiS stroke:"#fbbf24" label:S dash:true
+  layer toe = radial-line | theta:phiT stroke:"#f87171" label:T dash:true
 }

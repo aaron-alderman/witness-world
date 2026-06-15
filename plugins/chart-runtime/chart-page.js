@@ -217,7 +217,7 @@ export function chartRuntimeAssets({
     scriptSrcs: ["https://d3js.org/d3.v7.min.js"],
     stylesheetHrefs: deps.stylesheetHrefs,
     inlineCss: chartRuntimeInlineCss({ standalone }),
-    scriptBody: `${chartRuntimeBundleSource()}\n\n${chartRuntimeFunctionsLoaderSource(deps.functionDeps)}\nbootChartsFromDom(document, __chartRuntimeFunctions);`
+    scriptBody: `${chartRuntimeBundleSource()}\n\n${chartRuntimeFunctionsLoaderSource(deps.functionDeps)}\nregisterChartSurfaceCapabilityBoot(__chartRuntimeFunctions);\nbootChartsFromDom(document, __chartRuntimeFunctions);`
   };
 }
 

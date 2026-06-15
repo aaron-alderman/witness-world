@@ -40,6 +40,7 @@ export function collectActiveRuntimeContributions({
   const capabilityDefinitions = [];
   const staticAssetProviders = [];
   const staticAssetFiles = new Map();
+  const surfaceCapabilityRenderers = [];
   const moduleProjectors = {};
   const guidanceDefinitions = [];
   const guidanceDefinitionIndex = new Map();
@@ -116,6 +117,19 @@ export function collectActiveRuntimeContributions({
       }
       continue;
     }
+    if (provider.kind === "surfaceCapabilityRenderer") {
+      const rendererId = String(provider.id || "");
+      const capability = String(provider.capability || "");
+      if (!rendererId || !capability || typeof provider.factory !== "function") {
+        throw new Error(`surface capability renderer provider ${providerId} must expose id, capability, and factory`);
+      }
+      surfaceCapabilityRenderers.push(Object.freeze({
+        id: rendererId,
+        capability,
+        factory: provider.factory
+      }));
+      continue;
+    }
     if (provider.kind === "guidanceDefinitions") {
       for (const rawEntry of provider.definitions ?? []) {
         const entry = normalizeGuidanceDefinitionEntry(rawEntry, providerId);
@@ -152,6 +166,7 @@ export function collectActiveRuntimeContributions({
     moduleProjectors: Object.freeze(moduleProjectors),
     staticAssetProviders: Object.freeze(staticAssetProviders),
     staticAssetFiles,
+    surfaceCapabilityRenderers: Object.freeze(surfaceCapabilityRenderers),
     guidanceDefinitions: Object.freeze(guidanceDefinitions),
     guidanceDefinitionIndex,
     starterBlueprints: Object.freeze(starterBlueprints),

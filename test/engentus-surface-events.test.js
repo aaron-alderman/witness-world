@@ -118,3 +118,185 @@ test("Engentus login click dispatches the authored process rule through the gene
     await server.close();
   }
 });
+
+test("Engentus Mill Charge route mounts the authored disc chart through chart.render", { timeout: 30000 }, async () => {
+  const server = await startUiServer({
+    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
+    serverRunnerId: "engentus_server",
+    devMode: false
+  });
+  try {
+    const response = await fetch(`${server.url}/engentus/mill-charge`);
+    const html = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(html, /id="view-mill"/);
+    assert.match(html, /id="mill-body"/);
+    assert.match(html, /id="mill-sb"/);
+    assert.match(html, /id="mill-sb-scroll"/);
+    assert.match(html, /Mill Parameters/);
+    assert.match(html, /Speed N\/N_c/);
+    assert.match(html, /id="mill-param-speedFrac" class="mill-slider" type="range"/);
+    assert.match(html, /Ore \/ Charge Type/);
+    assert.match(html, />Hard\/Blocky ore<\/button>/);
+    assert.match(html, /id="mill-metrics"/);
+    assert.match(html, /id="mill-metrics-panel"/);
+    assert.match(html, /COM offset/);
+    assert.match(html, /CATARACTING/);
+    assert.match(html, /<canvas id="mill-canvas" class="chart-page__mount chart-page__mount--mill-charge" data-chart-spec=/);
+    assert.match(html, /\/app-static\/app\/chart-functions\/mill-charge-kernels\.js/);
+    assert.match(html, /registerChartSurfaceCapabilityBoot\(__chartRuntimeFunctions\)/);
+    assert.match(html, /bootChartsFromDom\(document, __chartRuntimeFunctions\)/);
+    assert.doesNotMatch(html, /\/chart\?chart=MillChargeCrossSection/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("Engentus home module cards navigate through authored surface interactions", { timeout: 45000 }, async () => {
+  const server = await startUiServer({
+    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
+    serverRunnerId: "engentus_server",
+    devMode: false
+  });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    const cases = [
+      {
+        cardId: "surface-modulecardmillcharge",
+        routeKey: "mill-charge",
+        path: "/engentus/mill-charge",
+        viewId: "view-mill"
+      },
+      {
+        cardId: "surface-modulecardgoodman",
+        routeKey: "goodman",
+        path: "/engentus/goodman",
+        viewId: "view-goodman"
+      },
+      {
+        cardId: "surface-modulecardmillforce",
+        routeKey: "mill-force",
+        path: "/engentus/mill-force",
+        viewId: "view-mill-force"
+      }
+    ];
+
+    for (const item of cases) {
+      await page.goto(`${server.url}/engentus/home`, { waitUntil: "domcontentloaded" });
+      await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
+      await page.waitForSelector("#view-home");
+      await page.click(`#${item.cardId}`);
+      await page.waitForFunction(routeKey =>
+        window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === routeKey,
+        item.routeKey
+      );
+      assert.equal(new URL(page.url()).pathname, item.path);
+      await page.waitForSelector(`#${item.viewId}`);
+      if (item.routeKey === "mill-charge") {
+        await page.waitForFunction(() => Boolean(document.querySelector("#mill-canvas")?.__chartController));
+        const canvasSize = await page.evaluate(() => {
+          const canvas = document.querySelector("#mill-canvas");
+          return { width: canvas.width, height: canvas.height };
+        });
+        assert.equal(canvasSize.width, canvasSize.height);
+        assert.ok(canvasSize.width > 0);
+      }
+    }
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
+test("Engentus Mill Charge controls mutate authored process state through generic bindings", { timeout: 45000 }, async () => {
+  const server = await startUiServer({
+    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
+    serverRunnerId: "engentus_server",
+    devMode: false
+  });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    await page.goto(`${server.url}/engentus/mill-charge`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
+    await page.waitForSelector("#mill-param-speedFrac");
+    const initialMetrics = await page.textContent("#mill-metrics-panel");
+
+    await page.evaluate(() => {
+      const input = document.querySelector("#mill-param-speedFrac");
+      input.value = "0.82";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillChargeSpeedFrac") === 0.82
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#mill-pval-speedFrac")?.textContent === "82%"
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#mill-canvas")?.__chartController?.spec?.params?.speedFrac === 0.82
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#mill-metrics-panel")?.textContent?.includes("54%")
+    );
+    const speedMetrics = await page.textContent("#mill-metrics-panel");
+    assert.notEqual(speedMetrics, initialMetrics);
+    assert.match(speedMetrics, /CATARACTING/);
+    assert.match(speedMetrics, /54%/);
+    assert.equal(await page.evaluate(() =>
+      getComputedStyle(document.querySelector(".mill-regime-badge")).color
+    ), "rgb(248, 113, 113)");
+    const chartCanvas = await page.evaluate(() => {
+      const canvas = document.querySelector("#mill-canvas");
+      return {
+        width: canvas.width,
+        height: canvas.height,
+        background: getComputedStyle(canvas).backgroundColor
+      };
+    });
+    assert.equal(chartCanvas.width, chartCanvas.height);
+    assert.ok(chartCanvas.width > 0);
+    assert.equal(chartCanvas.background, "rgba(0, 0, 0, 0)");
+
+    await page.click("#surface-millchargepresetdenseslurry");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillChargeSlurryContent") === 0.72
+    );
+    assert.equal(await page.evaluate(() =>
+      window.__surfaceInteractionRuntime.processRuntime.value("MillChargeInternalFriction")
+    ), 30);
+    assert.equal(await page.evaluate(() =>
+      window.__surfaceInteractionRuntime.processRuntime.value("MillChargeBulkDensity")
+    ), 2100);
+    assert.equal(await page.inputValue("#mill-param-slurryContent"), "0.72");
+    assert.equal(await page.inputValue("#mill-param-internalFriction"), "30");
+    assert.equal(await page.inputValue("#mill-param-bulkDensity"), "2100");
+    assert.equal(await page.textContent("#mill-pval-slurryContent"), "0.72");
+    assert.equal(await page.textContent("#mill-pval-internalFriction"), "30°");
+    assert.equal(await page.textContent("#mill-pval-bulkDensity"), "2100");
+    assert.deepEqual(await page.evaluate(() => {
+      const params = document.querySelector("#mill-canvas")?.__chartController?.spec?.params ?? {};
+      return {
+        slurryContent: params.slurryContent,
+        internalFriction: params.internalFriction,
+        bulkDensity: params.bulkDensity
+      };
+    }), {
+      slurryContent: 0.72,
+      internalFriction: 30,
+      bulkDensity: 2100
+    });
+    assert.match(await page.textContent("#mill-metrics-panel"), /CATARACTING/);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
