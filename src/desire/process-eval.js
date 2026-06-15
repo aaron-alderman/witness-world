@@ -65,6 +65,10 @@ function coerce(raw, valueType) {
 
 export function createProcessRuntime(world, options = {}) {
   const runningState = options.runningState ?? "running";
+  const runtimeConfig = options.config ?? {};
+  const delayScheduler = options.delayScheduler
+    ?? (ms => new Promise(resolve => setTimeout(resolve, ms)));
+  const commandHandlers = options.commandHandlers ?? {};
   const witnesses = witnessesOf(world);
 
   // ── Index the spec from witnesses ──
@@ -214,6 +218,63 @@ export function createProcessRuntime(world, options = {}) {
     return record("deliver", eventId, proc, changes);
   }
 
+  function ruleFor(eventId) {
+    const proc = handlerOf.get(eventId);
+    const processDef = proc ? defs.get(proc) : null;
+    return (processDef?.body?.rules ?? []).find(rule => rule?.trigger === eventId) ?? null;
+  }
+
+  function configValue(path) {
+    const parts = String(path ?? "").replace(/^config\./, "").split(".").filter(Boolean);
+    let current = runtimeConfig;
+    for (const part of parts) {
+      if (!current || typeof current !== "object" || !(part in current)) return undefined;
+      current = current[part];
+    }
+    return current;
+  }
+
+  async function runRuleSteps(steps, eventId, proc) {
+    let lastObservation = null;
+    for (const step of steps ?? []) {
+      if (step?.kind === "setState") {
+        const changes = applyWrites({ [step.state]: step.value }, `${eventId}:${step.state}`);
+        lastObservation = record("rule.setState", `${eventId}:${step.state}`, proc, changes);
+        continue;
+      }
+      if (step?.kind === "delay") {
+        const ms = Number(step.ms ?? 0);
+        await delayScheduler(ms, { eventId, process: proc, step });
+        lastObservation = record("rule.delay", `${eventId}:${ms}ms`, proc, []);
+        continue;
+      }
+      if (step?.kind === "command") {
+        const handler = commandHandlers[step.command];
+        if (typeof handler !== "function") {
+          throw new Error(`rule command '${step.command}' has no runtime handler`);
+        }
+        await handler({ command: step.command, eventId, process: proc, state: snapshot(proc) });
+        lastObservation = record("rule.command", step.command, proc, []);
+        continue;
+      }
+      if (step?.kind === "option") {
+        const branch = truthy(configValue(step.config)) ? (step.real ?? []) : (step.else ?? []);
+        lastObservation = await runRuleSteps(branch, eventId, proc) ?? lastObservation;
+        continue;
+      }
+      throw new Error(`unknown process rule step kind '${step?.kind}'`);
+    }
+    return lastObservation;
+  }
+
+  async function deliverAuthored(eventId, payload = null) {
+    const proc = handlerOf.get(eventId);
+    if (!proc) throw new Error(`deliverAuthored: event '${eventId}' is handled by no process`);
+    const rule = ruleFor(eventId);
+    if (!rule) return deliver(eventId, payload);
+    return runRuleSteps(rule.steps ?? [], eventId, proc);
+  }
+
   function resolve(commandId, outcome = "success", payload = null) {
     const binding = adapterByCommand.get(commandId);
     if (!binding) throw new Error(`resolve: command '${commandId}' has no bound adapter`);
@@ -282,6 +343,7 @@ export function createProcessRuntime(world, options = {}) {
   return {
     dispatch,
     deliver,
+    deliverAuthored,
     resolve,
     step,
     requestFor,

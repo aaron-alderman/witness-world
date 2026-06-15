@@ -6,6 +6,7 @@ import { createWorld, projectors } from "../src/kernel.js";
 import {
   applyDesire,
   compileRvmFileToDesirePlus,
+  createProcessRuntime,
   normalizeDesirePlusToDesire
 } from "../src/desire/index.js";
 
@@ -44,6 +45,7 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
 
   assert.ok(processes.has("EngentusShellNavigation"));
   assert.ok(messages.has("EngentusSignInRequested"));
+  assert.ok(messages.has("EngentusSaveGuidedTourSession"));
   assert.ok(messages.has("EngentusSignOutRequested"));
   assert.ok(messages.has("EngentusNavigateHomeRequested"));
   assert.ok(messages.has("EngentusNavigateGoodmanRequested"));
@@ -51,7 +53,53 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.ok(messages.has("EngentusNavigateMillForceRequested"));
   assert.equal(types.get("EngentusShellRoute")?.body?.role, "enum");
   assert.equal(types.get("EngentusShellActiveRoute")?.body?.role, "state");
+  assert.equal(types.get("EngentusShellAuthState")?.body?.role, "enum");
+  assert.equal(types.get("EngentusShellAuthStatus")?.body?.role, "state");
   assert.equal(surfaces.get("EngentusRoot")?.body?.processRef, "EngentusShellNavigation");
+  assert.deepEqual(processes.get("EngentusShellNavigation")?.body?.rules, [
+    {
+      trigger: "EngentusSignInRequested",
+      steps: [
+        { kind: "setState", state: "EngentusShellAuthStatus", value: "pending" },
+        {
+          kind: "option",
+          config: "config.presentation.guidedTour",
+          real: [{ kind: "command", command: "EngentusSaveGuidedTourSession" }],
+          else: [{ kind: "delay", ms: 605 }]
+        },
+        { kind: "setState", state: "EngentusShellAuthStatus", value: "signedIn" },
+        { kind: "setState", state: "EngentusShellActiveRoute", value: "home" }
+      ]
+    }
+  ]);
+});
+
+test("the authored Engentus sign-in story runs through generic process rules with the delay branch", async () => {
+  const desire = await shellDesire();
+  const world = createWorld();
+  applyDesire(world, desire);
+  const delays = [];
+  const runtime = createProcessRuntime(world, {
+    config: { presentation: { guidedTour: false } },
+    delayScheduler: async ms => delays.push(ms)
+  });
+
+  assert.equal(runtime.value("EngentusShellActiveRoute"), "login");
+  assert.equal(runtime.value("EngentusShellAuthStatus"), "idle");
+
+  await runtime.deliverAuthored("EngentusSignInRequested");
+
+  assert.deepEqual(delays, [605]);
+  assert.equal(runtime.value("EngentusShellAuthStatus"), "signedIn");
+  assert.equal(runtime.value("EngentusShellActiveRoute"), "home");
+  assert.deepEqual(runtime.history("EngentusShellAuthStatus"), ["pending", "signedIn"]);
+  assert.deepEqual(runtime.history("EngentusShellActiveRoute"), ["home"]);
+  assert.deepEqual(runtime.trace.map(row => [row.kind, row.label]), [
+    ["rule.setState", "EngentusSignInRequested:EngentusShellAuthStatus"],
+    ["rule.delay", "EngentusSignInRequested:605ms"],
+    ["rule.setState", "EngentusSignInRequested:EngentusShellAuthStatus"],
+    ["rule.setState", "EngentusSignInRequested:EngentusShellActiveRoute"]
+  ]);
 });
 
 test("the shell is structured through explicit child regions instead of flattened screen props", async () => {

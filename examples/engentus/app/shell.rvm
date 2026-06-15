@@ -15,18 +15,29 @@ enum EngentusShellRoute {
   }
 }
 
+enum EngentusShellAuthState {
+  cases {
+    idle
+    pending
+    signedIn
+    signedOut
+  }
+}
+
 state EngentusShellActiveRoute: EngentusShellRoute {
   initial login
 }
 
+state EngentusShellAuthStatus: EngentusShellAuthState {
+  initial idle
+}
+
 event EngentusSignInRequested {
-  writes {
-    EngentusShellActiveRoute: home
-  }
 }
 
 event EngentusSignOutRequested {
   writes {
+    EngentusShellAuthStatus: signedOut
     EngentusShellActiveRoute: signout
   }
 }
@@ -55,9 +66,16 @@ event EngentusNavigateMillForceRequested {
   }
 }
 
+command EngentusSaveGuidedTourSession {
+  fields {
+    purpose: "auth-transition"
+  }
+}
+
 process EngentusShellNavigation {
   states {
     EngentusShellActiveRoute
+    EngentusShellAuthStatus
   }
   handles {
     EngentusSignInRequested
@@ -66,6 +84,24 @@ process EngentusShellNavigation {
     EngentusNavigateGoodmanRequested
     EngentusNavigateMillChargeRequested
     EngentusNavigateMillForceRequested
+  }
+  emits {
+    EngentusSaveGuidedTourSession
+  }
+  rules {
+    on EngentusSignInRequested {
+      set EngentusShellAuthStatus pending
+      option config.presentation.guidedTour {
+        real {
+          command EngentusSaveGuidedTourSession
+        }
+        else {
+          delay 605ms
+        }
+      }
+      set EngentusShellAuthStatus signedIn
+      set EngentusShellActiveRoute home
+    }
   }
 }
 

@@ -554,7 +554,8 @@ function semanticRvmShape(kind, name, type, bodyLines, header = {}) {
         name,
         state: parseSimpleEntries(bodyLines, "values").concat(parseSimpleEntries(bodyLines, "states")),
         handles: parseSimpleEntries(bodyLines, "handles"),
-        emits: parseSimpleEntries(bodyLines, "emits")
+        emits: parseSimpleEntries(bodyLines, "emits"),
+        rules: parseProcessRulesBlock(bodyLines)
       };
     case "value":
     case "state":
@@ -1063,6 +1064,105 @@ function parseCommandStepsBlock(bodyLines, blockName) {
     .map(line => line.trim())
     .filter(Boolean)
     .map(line => line.replace(/,$/, ""));
+}
+
+function parseProcessRulesBlock(bodyLines) {
+  const lines = extractNamedBlock(bodyLines, "rules");
+  const rules = [];
+  let index = 0;
+  while (index < lines.length) {
+    const trimmed = lines[index].trim();
+    const match = trimmed.match(/^on\s+([A-Za-z_][A-Za-z0-9_.-]*)\s*\{$/);
+    if (!match) {
+      index += 1;
+      continue;
+    }
+    const parsed = parseProcessRuleSteps(lines, index + 1);
+    rules.push({
+      trigger: match[1],
+      steps: parsed.steps
+    });
+    index = parsed.index;
+  }
+  return rules;
+}
+
+function parseProcessRuleSteps(lines, startIndex) {
+  const steps = [];
+  let index = startIndex;
+  while (index < lines.length) {
+    const trimmed = lines[index].trim();
+    if (!trimmed) {
+      index += 1;
+      continue;
+    }
+    if (trimmed === "}") return { steps, index: index + 1 };
+
+    const setMatch = trimmed.match(/^set\s+([A-Za-z_][A-Za-z0-9_.-]*)\s+(.+)$/);
+    if (setMatch) {
+      steps.push({
+        kind: "setState",
+        state: setMatch[1],
+        value: parseScalarValue(setMatch[2])
+      });
+      index += 1;
+      continue;
+    }
+
+    const delayMatch = trimmed.match(/^delay\s+(\d+(?:\.\d+)?)(ms|s)$/);
+    if (delayMatch) {
+      const amount = Number(delayMatch[1]);
+      steps.push({
+        kind: "delay",
+        ms: delayMatch[2] === "s" ? amount * 1000 : amount
+      });
+      index += 1;
+      continue;
+    }
+
+    const commandMatch = trimmed.match(/^command\s+([A-Za-z_][A-Za-z0-9_.-]*)$/);
+    if (commandMatch) {
+      steps.push({
+        kind: "command",
+        command: commandMatch[1]
+      });
+      index += 1;
+      continue;
+    }
+
+    const optionMatch = trimmed.match(/^option\s+([A-Za-z_][A-Za-z0-9_.-]*)\s*\{$/);
+    if (optionMatch) {
+      index += 1;
+      let real = [];
+      let fallback = [];
+      while (index < lines.length) {
+        const branch = lines[index].trim();
+        if (branch === "}") {
+          index += 1;
+          break;
+        }
+        const branchMatch = branch.match(/^(real|else)\s*\{$/);
+        if (!branchMatch) {
+          index += 1;
+          continue;
+        }
+        const parsedBranch = parseProcessRuleSteps(lines, index + 1);
+        if (branchMatch[1] === "real") real = parsedBranch.steps;
+        else fallback = parsedBranch.steps;
+        index = parsedBranch.index;
+      }
+      steps.push({
+        kind: "option",
+        config: optionMatch[1],
+        real,
+        else: fallback
+      });
+      continue;
+    }
+
+    index += 1;
+  }
+  return { steps, index };
 }
 
 function parsePropAssignments(bodyLines) {
