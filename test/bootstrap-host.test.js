@@ -89,7 +89,11 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
     assert.equal(model.supportedHandlerMetadata["backendProgram.run"].routeKind, "backendProgram");
     assert(model.supportedBackendOps.includes("handler.invoke"));
     assert(model.supportedFrontendOps.includes("renderCollection"));
+    assert.equal(model.authoringPolicy.mode, "mcp_only");
+    assert.equal(model.authoringPolicy.llmWritePath, "plugin.authoring");
     assert.equal(diagnostics.activeProfile, "authoring");
+    assert.equal(diagnostics.authoringPolicy.mode, "mcp_only");
+    assert.equal(diagnostics.authoringPolicy.proposalAccess, "read_only");
     assert.deepEqual([...diagnostics.activeBundles.map(bundle => bundle.id)].sort(), [
       "bundle-authoring-core",
       "bundle-core-runtime",
@@ -116,6 +120,8 @@ test("bootstrap state exposes operator contract and artifact inventory for world
     const state = await fetch(`${server.url}/api/bootstrap-state`).then(response => response.json());
     assert.equal(state.operator.contract.layout, "world-home-v1");
     assert.equal(state.operator.contract.worldHome, path.resolve(worldHome));
+    assert.equal(state.authoringPolicy.mode, "mcp_only");
+    assert.equal(state.authoringPolicy.llmWritePath, "plugin.authoring");
     assert.deepEqual(state.operator.inventory.backups, []);
     assert.deepEqual(state.operator.inventory.exports, []);
     assert.deepEqual(state.operator.inventory.imports, []);
@@ -128,6 +134,28 @@ test("bootstrap state exposes operator contract and artifact inventory for world
   } finally {
     await server.close();
     await fs.rm(worldHome, { recursive: true, force: true });
+  }
+});
+
+test("bootstrap mcp-only mode rejects direct runtime app source writes with a blocked handoff", async () => {
+  const { server } = await startBlankServer();
+  try {
+    const response = await fetch(`${server.url}/api/runtime/app-sources`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        edits: [{ path: "app/shell.rvm", content: "bad" }]
+      })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 403);
+    assert.equal(body.error, "blocked by MCP-authoring-only policy");
+    assert.equal(body.authoringPolicy.mode, "mcp_only");
+    assert.equal(body.blockedHandoff.attemptedAuthoringPath, "/api/runtime/app-sources");
+    assert.match(body.blockedHandoff.minimumHumanAction, /plugin\.authoring|human platform lane/i);
+  } finally {
+    await server.close();
   }
 });
 

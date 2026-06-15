@@ -48,8 +48,8 @@ export function createBootstrapBundleHandlers({
     });
   };
   return {
-    "bootstrap.model.read": async ({ res }) => {
-      sendJson(res, 200, await getBootstrapModel());
+    "bootstrap.model.read": async ({ res, appContext }) => {
+      sendJson(res, 200, await getBootstrapModel(appContext));
     },
 
     "bootstrap.state.read": async ({ res, requestActor, appContext }) => {
@@ -57,7 +57,7 @@ export function createBootstrapBundleHandlers({
     },
 
     "bootstrap.page": async ({ req, res, requestActor, appContext }) => {
-      const bootstrapModel = await getBootstrapModel();
+      const bootstrapModel = await getBootstrapModel(appContext);
       send(res, 200, "text/html; charset=utf-8", renderBootstrapPage({
         requestUrl: req?.url || "/_bootstrap",
         bootstrapState: await getBootstrapState(requestActor, appContext),

@@ -16,6 +16,13 @@ import {
 import { renderInactiveRuntimeWidgetPage } from "./runtime-page-fallbacks.js";
 import { normalizePathname, renderSurfaceShellPage } from "./runtime-surface-shell.js";
 import { createGuidanceBundleHandlers, guidanceConfigForSession } from "./runtime-guidance.js";
+import {
+  AUTHORING_MODE_MCP_ONLY,
+  blockedDirectMutationResponse,
+  cloneRuntimeAuthoringPolicy,
+  createRuntimeAuthoringPolicy,
+  defaultRuntimeAuthoringMode
+} from "./runtime-authoring-policy.js";
 
 function widgetPageGuidanceSurface(world, {
   route = null,
@@ -147,6 +154,14 @@ export function createCoreRuntimeBundleHandlers({
     return snapshotManager.injectDevClient(html, snapshotManager.getActiveSnapshot());
   };
   const revisionEventFrame = payload => `data: ${JSON.stringify(payload)}\n\n`;
+  const currentAuthoringPolicy = appContext => cloneRuntimeAuthoringPolicy(
+    appContext?.runtimeAuthoringPolicy
+    ?? createRuntimeAuthoringPolicy({
+      mode: defaultRuntimeAuthoringMode({
+        runtimeStartupMode: appContext?.runtimeStartupMode ?? "serve"
+      })
+    })
+  );
   const executeBackendProgramRoute = async ({
     req,
     res,
@@ -529,6 +544,19 @@ export function createCoreRuntimeBundleHandlers({
     },
 
     "app.source.write": async ({ req, res, appContext }) => {
+      const authoringPolicy = currentAuthoringPolicy(appContext);
+      if (authoringPolicy.mode === AUTHORING_MODE_MCP_ONLY) {
+        sendJson(res, 403, blockedDirectMutationResponse({
+          attemptedAuthoringPath: APP_SOURCE_WRITE_PATH,
+          goal: "mutate app sources through the runtime host",
+          minimumHumanAction: "stop and route the change through plugin.authoring or the human platform lane",
+          proof: [
+            "MCP-authoring-only mode forbids direct runtime/file fallback mutation",
+            "no proposal artifact may be created automatically"
+          ]
+        }));
+        return;
+      }
       const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
       if (!snapshotManager) {
         sendJson(res, 404, { error: "app source updates unavailable" });
@@ -582,7 +610,8 @@ export function createCoreRuntimeBundleHandlers({
         configuredPluginIds: pluginCatalog.configuredPluginIds,
         activePluginIds: pluginCatalog.activePluginIds,
         rejectedPlugins: pluginCatalog.rejectedPlugins,
-        pluginAddedBundleIds: pluginCatalog.addedBundleIds
+        pluginAddedBundleIds: pluginCatalog.addedBundleIds,
+        authoringPolicy: currentAuthoringPolicy(appContext)
       });
       diagnostics.appSnapshot = appContext?.appSnapshotManager?.diagnostics?.() ?? null;
       world.observe({

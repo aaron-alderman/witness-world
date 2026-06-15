@@ -118,6 +118,9 @@ test("POST source edits persist to disk and rebuild the active snapshot", async 
     serverRunnerId: "engentus_server"
   });
   try {
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(result => result.json());
+    assert.equal(diagnostics.authoringPolicy.mode, "unconstrained");
+
     const original = await readShell(app.shellPath);
     const updated = original.replace(
       'prop subtitle = "Select a module to begin analysis"',

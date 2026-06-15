@@ -159,6 +159,7 @@ test("runtime diagnostics summarize seed profile and loaded composition separate
   });
 
   assert.equal(diagnostics.activeProfile, "minimal");
+  assert.equal(diagnostics.authoringPolicy.mode, "unconstrained");
   assert.deepEqual(diagnostics.profilePluginIds, []);
   assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
   assert.equal(diagnostics.surfaces.some(surface => surface.id === "surface:process-view"), true);
@@ -198,4 +199,5 @@ test("runtime diagnostics include authored, operator, and effective runtime plug
   assert.deepEqual(diagnostics.plugins.operatorPluginIds, ["plugin.canvas"]);
   assert.deepEqual(diagnostics.plugins.effectivePluginIds, ["plugin.inspect", "plugin.canvas"]);
   assert.deepEqual(diagnostics.plugins.rejectedPlugins[0].requestedSources, ["operator"]);
+  assert.equal(diagnostics.authoringPolicy.mode, "unconstrained");
 });

@@ -7,6 +7,10 @@ say the app in the language, lowering only at genuine symmetry breaks.
 This document is the canonical Engentus planning and status document. The app
 README is secondary and should only point back here.
 
+Repo-wide constrained LLM app-authoring policy now lives in
+`docs/LLM-AUTHORING-POLICY.md`. Engentus is subject to that policy; it is not a
+special exemption case.
+
 ## Thesis
 
 - The shell, copy, route states, assets, and CSS belong to the app layer.
@@ -26,6 +30,10 @@ README is secondary and should only point back here.
   be resolved explicitly rather than assumed by core.
 - The reference app is an oracle for parity comparison only. It is not to be
   executed as hidden frontend authority.
+- In constrained authoring sessions, Engentus work must go through the
+  first-party `plugin.authoring` substrate only. If current authoring cannot
+  express the needed frontend behavior, the correct result is a blocked handoff
+  into the human platform lane rather than handwritten JS or runtime patching.
 
 ## Canonical frontend seam
 

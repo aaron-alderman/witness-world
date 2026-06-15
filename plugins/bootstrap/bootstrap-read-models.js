@@ -18,6 +18,11 @@ import {
 import { listSupportedMcpTools } from "../mcp/mcp-tools.js";
 import { typeModelProjection } from "../../src/type-model.js";
 import { buildBootstrapContributionState } from "./bootstrap-contribution-state.js";
+import {
+  cloneRuntimeAuthoringPolicy,
+  createRuntimeAuthoringPolicy,
+  defaultRuntimeAuthoringMode
+} from "../../src/runtime-authoring-policy.js";
 
 export function createBootstrapReadModels({
   world,
@@ -178,6 +183,14 @@ export function createBootstrapReadModels({
       runtimePluginInstalls,
       pluginPackages: pluginCatalog.packages
     });
+    const authoringPolicy = cloneRuntimeAuthoringPolicy(
+      appContext?.runtimeAuthoringPolicy
+      ?? createRuntimeAuthoringPolicy({
+        mode: defaultRuntimeAuthoringMode({
+          runtimeStartupMode: appContext?.runtimeStartupMode ?? "serve"
+        })
+      })
+    );
     const bootstrapContributionState = buildBootstrapContributionState(appContext?.runtimeContributions);
     const operator = await getRuntimeOperatorState(appContext);
     return {
@@ -196,6 +209,7 @@ export function createBootstrapReadModels({
       capabilityInstalls,
       runtimePluginInstalls,
       runtimePluginAvailability,
+      authoringPolicy,
       pluginCatalog,
       ...bootstrapContributionState,
       operator,
@@ -220,8 +234,8 @@ export function createBootstrapReadModels({
     };
   };
 
-  const bootstrapModel = async () => {
-    const authored = await bootstrapState();
+  const bootstrapModel = async (appContext = null) => {
+    const authored = await bootstrapState(null, appContext);
     const homeRoute = authored.servedRoutes.find(route => route.method === "GET" && route.path === "/" && route.handler === "page.home");
     const appReady = Boolean(homeRoute && homeRoute.params?.rootWidget);
     const typeModel = world.project(typeModelProjection);
@@ -246,6 +260,7 @@ export function createBootstrapReadModels({
       supportedMcpActingModes: ["delegated", "service"],
       supportedMcpTools: listSupportedMcpTools(),
       runtimeProfile,
+      authoringPolicy: authored.authoringPolicy,
       runtimeBundles: runtimeBundleSummary?.bundles ?? [],
       runtimeRoutes: runtimeBundleSummary?.routes ?? [],
       runtimeSurfaces: runtimeBundleSummary?.surfaces ?? [],

@@ -34,8 +34,10 @@ test("shared blank runtime launcher starts a desktop runtime against a named wor
     assert.deepEqual(diagnostics.shells.activeShellIds, ["desktop"]);
     assert.equal(diagnostics.shells.shells.some(shell => shell.id === "desktop" && shell.active === true), true);
     assert.equal(diagnostics.shells.shells.some(shell => shell.id === "browser" && shell.active === true), false);
+    assert.equal(diagnostics.authoringPolicy.mode, "mcp_only");
     assert.equal(diagnostics.operator.layout, "world-home-v1");
     assert.equal(diagnostics.operator.worldHome, path.resolve(worldHome));
+    assert.equal(state.authoringPolicy.mode, "mcp_only");
     assert.equal(state.operator.contract.layout, "world-home-v1");
     assert.equal(state.operator.contract.worldHome, path.resolve(worldHome));
   } finally {

@@ -7,6 +7,11 @@ import {
 } from "./runtime-builtins.js";
 import { buildRuntimeShellDiagnostics } from "./runtime-shell-contract.js";
 import {
+  cloneRuntimeAuthoringPolicy,
+  createRuntimeAuthoringPolicy,
+  defaultRuntimeAuthoringMode
+} from "./runtime-authoring-policy.js";
+import {
   firstPartyBundleRows,
   runtimeProfilePresetsFromSeeds
 } from "./runtime-store-seeds.js";
@@ -641,9 +646,16 @@ export function buildRuntimeDiagnosticsForProfile({
   effectivePluginIds = [],
   activePluginIds = [],
   rejectedPlugins = [],
-  pluginAddedBundleIds = []
+  pluginAddedBundleIds = [],
+  authoringPolicy = null
 } = {}) {
   const summary = runtimeBundleSummaryForProfile(profileName, { additionalBundleIds, bundleOverrides });
+  const effectiveAuthoringPolicy = cloneRuntimeAuthoringPolicy(
+    authoringPolicy
+    ?? createRuntimeAuthoringPolicy({
+      mode: defaultRuntimeAuthoringMode({ runtimeStartupMode: startupMode })
+    })
+  );
   return {
     requestedProfile: requestedProfile ?? profileName,
     activeProfile: summary.profile,
@@ -712,6 +724,7 @@ export function buildRuntimeDiagnosticsForProfile({
       activeBundleIds: summary.bundleIds,
       startupMode
     }),
+    authoringPolicy: effectiveAuthoringPolicy,
     operator: operatorContract
       ? {
           ...operatorContract,

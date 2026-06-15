@@ -46,6 +46,10 @@ import {
   resolveRuntimePluginRoot
 } from "./runtime-plugin-utils.js";
 import {
+  createRuntimeAuthoringPolicy,
+  defaultRuntimeAuthoringMode
+} from "./runtime-authoring-policy.js";
+import {
   applyRuntimePluginLoadState,
   loadRuntimePluginModules
 } from "./runtime-plugin-loader.js";
@@ -64,6 +68,7 @@ export async function startRuntimeServer(world, {
   runtimeProfile = DEFAULT_RUNTIME_PROFILE,
   runtimePluginIds = null,
   runtimeStartupMode = "serve",
+  runtimeAuthoringMode = null,
   runtimeOperatorContract = null,
   devMode = null,
   env = process.env
@@ -311,6 +316,9 @@ export async function startRuntimeServer(world, {
   appContext.requestedRuntimeProfile = runtimeProfile;
   appContext.runtimeProfile = activeRuntimeProfile;
   appContext.runtimeStartupMode = runtimeStartupMode;
+  appContext.runtimeAuthoringPolicy = createRuntimeAuthoringPolicy({
+    mode: runtimeAuthoringMode ?? defaultRuntimeAuthoringMode({ runtimeStartupMode })
+  });
   appContext.runtimeBundleSummary = resolvedRuntime;
   appContext.runtimeAdditionalBundleIds = additionalBundleIds;
   appContext.runtimeBundleOverrides = bundleOverrides;
