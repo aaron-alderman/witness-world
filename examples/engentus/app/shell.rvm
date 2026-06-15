@@ -7712,6 +7712,74 @@ view MillForceMcStatusText {
   }
 }
 
+view MillForceMcEnvelopeTitle {
+  kind text
+  class ssec-title
+  prop tag = "div"
+  prop text = "MC Envelope"
+  bindings {
+    visible from state MillForceMcStatusState map running true default false
+  }
+}
+
+view MillForceMcP10MaxLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "P10 max |F_r|"
+}
+
+view MillForceMcP10MaxValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "-"
+  bindings {
+    text from capability MillForceCross.F_r_p10_abs_max_text
+  }
+}
+
+view MillForceMcP10MaxRow {
+  kind metric-row
+  class mill-force-result-row
+  bindings {
+    visible from state MillForceMcStatusState map running true default false
+  }
+  children {
+    MillForceMcP10MaxLabel
+    MillForceMcP10MaxValue
+  }
+}
+
+view MillForceMcP90MaxLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "P90 max |F_r|"
+}
+
+view MillForceMcP90MaxValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "-"
+  bindings {
+    text from capability MillForceCross.F_r_p90_abs_max_text
+  }
+}
+
+view MillForceMcP90MaxRow {
+  kind metric-row
+  class mill-force-result-row
+  bindings {
+    visible from state MillForceMcStatusState map running true default false
+  }
+  children {
+    MillForceMcP90MaxLabel
+    MillForceMcP90MaxValue
+  }
+}
+
 view MillForceMcSection {
   kind section
   class ssec
@@ -7728,6 +7796,9 @@ view MillForceMcSection {
     MillForceMcHeightToggle
     MillForceMcActions
     MillForceMcStatusText
+    MillForceMcEnvelopeTitle
+    MillForceMcP10MaxRow
+    MillForceMcP90MaxRow
   }
 }
 

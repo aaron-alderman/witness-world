@@ -557,7 +557,10 @@ test("the shell is structured through explicit child regions instead of flattene
     "MillForceMcPercentSolidsToggle",
     "MillForceMcHeightToggle",
     "MillForceMcActions",
-    "MillForceMcStatusText"
+    "MillForceMcStatusText",
+    "MillForceMcEnvelopeTitle",
+    "MillForceMcP10MaxRow",
+    "MillForceMcP90MaxRow"
   ]);
   assert.deepEqual(surfaces.get("MillForceMcStatusText")?.body?.children, [
     "MillForceMcStatusReadyText",
@@ -567,6 +570,14 @@ test("the shell is structured through explicit child regions instead of flattene
   assert.equal(
     surfaces.get("MillForceMcStatusComputedText")?.body?.bindings?.[1]?.source?.output,
     "mc_sample_count_text"
+  );
+  assert.equal(
+    surfaces.get("MillForceMcP10MaxValue")?.body?.bindings?.[0]?.source?.output,
+    "F_r_p10_abs_max_text"
+  );
+  assert.equal(
+    surfaces.get("MillForceMcP90MaxValue")?.body?.bindings?.[0]?.source?.output,
+    "F_r_p90_abs_max_text"
   );
 
   assert.deepEqual(surfaces.get("EngentusMillChargeApp")?.body?.children, [

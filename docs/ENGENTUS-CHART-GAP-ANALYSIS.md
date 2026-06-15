@@ -132,9 +132,10 @@ grant runtime authority to copied JS or presenter code.
   p90 overlay uses `polar-quad` radial force bands and the p10 overlay uses the
   reusable `polar-point` glyph. The MC sample count/free toggles bind from
   process-owned shell state into `chart.render`, the model publishes a scalar
-  computed-sample summary back through `MillForceCross.*` capability outputs,
-  and the live route exposes the p10/p90 overlay plus computed-sample status
-  without app-local chart/controller JS.
+  computed-sample summary plus p10/p90 radial-force envelope summaries back
+  through `MillForceCross.*` capability outputs, and the live route exposes the
+  p10/p90 overlay plus computed MC panel summaries without app-local
+  chart/controller JS.
 
 ## Known Gaps
 
@@ -154,12 +155,13 @@ grant runtime authority to copied JS or presenter code.
 - Mill Force still needs full reference Monte Carlo result parity. The p10/p90
   cross-section overlay, p10 point glyph, and straight-sided radial force-bar
   geometry are now authored and live, and the MC panel reports computed sample
-  count from chart capability output after Run. The richer reference MC result
-  lifecycle, statistical summaries, and final compare/MC panel polish remain
-  first-pass gaps. Tooltip readout for the three stock charts now exists through
-  the generic chart tooltip seam. Compare deltas now exist as authored scalar
-  outputs and inline percent readouts, but the compare panel is still a
-  first-pass authored analysis view rather than final reference parity.
+  count plus p10/p90 radial-force envelope summaries from chart capability
+  output after Run. The richer reference MC result lifecycle and final
+  compare/MC panel polish remain first-pass gaps. Tooltip readout for the three
+  stock charts now exists through the generic chart tooltip seam. Compare
+  deltas now exist as authored scalar outputs and inline percent readouts, but
+  the compare panel is still a first-pass authored analysis view rather than
+  final reference parity.
 - No app-local browser runtime, presenter, or controller seam should be added to
   close these gaps. The next work should continue through authored surfaces,
   process state, projections, and explicit capability bindings.

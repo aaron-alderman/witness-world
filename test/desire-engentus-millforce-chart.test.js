@@ -295,6 +295,11 @@ test("MillForceCross Monte Carlo mode renders authored p10/p90 radial force band
   assert.deepEqual(evaluated.fields.mc_sample_count.axes, []);
   assert.equal(evaluated.fields.mc_sample_count.data, 80);
   assert.equal(evaluated.fields.mc_sample_count_text.data, "80 samples computed");
+  assert.deepEqual(evaluated.fields.F_r_p10_abs_max.axes, []);
+  assert.deepEqual(evaluated.fields.F_r_p90_abs_max.axes, []);
+  assert.match(evaluated.fields.F_r_p10_abs_max_text.data, /^\d+\.\d kN$/);
+  assert.match(evaluated.fields.F_r_p90_abs_max_text.data, /^\d+\.\d kN$/);
+  assert.ok(evaluated.fields.F_r_p90_abs_max.data >= evaluated.fields.F_r_p10_abs_max.data);
   assert.equal(p90.hidden, undefined);
   assert.equal(p10.hidden, undefined);
   assert.equal(p90.primitives.length, N);
