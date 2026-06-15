@@ -6,6 +6,16 @@ This repo supports an explicit constrained authoring mode for app/product work.
 
 LLM-mediated app authoring is `plugin.authoring` only.
 
+The canonical public frontend model in constrained mode is:
+
+- `surface`
+- `process`
+- `projection`
+- `capability`
+
+`DESIRE+` remains an internal lowering/debug layer, not a public MCP write
+surface.
+
 That means the allowed write path is the first-party authoring substrate:
 
 - `plugin.authoring-core`
@@ -27,11 +37,46 @@ In `mcp_only` mode the LLM must not:
 
 Blocked means stop, not improvise.
 
+The operational method for finding that blocked point is documented in
+`docs/AUTHORING-REPLAY-PLAYBOOK.md`.
+
+## Machine-readable truth
+
+Constrained sessions must not infer the active frontend authoring model from
+tool names or old examples alone.
+
+The runtime exposes a machine-readable capability matrix through constrained
+inspection so a session can see:
+
+- which frontend concepts are public and canonical
+- which concepts are legacy-only
+- which runtime consumers exist
+- which pairings are supported vs blocked
+
+That matrix, not prose alone, is the primary guardrail against drift.
+
+## Limitation types
+
+Blocked handoffs should identify which class of limitation was hit:
+
+- language limitation
+  - the current DESIRE authoring language cannot express the requirement
+- platform limitation
+  - the requirement is expressible in DESIRE terms, but first-party lowering,
+    runtime, or authoring APIs do not yet support it live
+- policy limitation
+  - a technically possible workaround exists, but constrained mode forbids it
+
+The current Engentus blocker should be read as a platform limitation unless and
+until replay proves that the missing behavior cannot be expressed in DESIRE
+terms at all.
+
 ## Blocked handoff
 
 When current authoring cannot express the requested change, the session must end
 with a structured blocked handoff containing:
 
+- `limitationType`
 - `goal`
 - `attemptedAuthoringPath`
 - `missingPrimitive`
@@ -42,6 +87,19 @@ The human platform lane then decides whether to widen the substrate, change the
 runtime, open a proposal, or reject the request.
 
 For Engentus, `surface.create` is now part of the allowed authoring substrate.
-The next honest blocker must be established only after replay proves that a
-minimal authored `page.surface` shell serves live through the same constrained
-path, not bypassed with app-local browser JS or direct runtime patching.
+The replay now proves that a minimal authored `page.surface` shell can serve
+live.
+
+The current next honest blocker is a platform limitation in the canonical
+frontend model itself:
+
+- `process.create` is part of the public constrained story, but not yet
+  implemented as a first-party authoring handler
+- `projection.create` is part of the public constrained story, but not yet
+  implemented as a first-party authoring handler
+- `frontendProgram.create` / `frontendStep.create` are now legacy-only and
+  must not be used as the fallback interactive story for constrained sessions
+
+That means the stop point is no longer "surface interaction is widget-rooted";
+it is "the canonical `surface + process + projection` interaction path is not
+implemented yet."

@@ -23,9 +23,12 @@ test("mcp-only authoring policy exposes plugin.authoring as the canonical write 
   assert.equal(policy.mode, AUTHORING_MODE_MCP_ONLY);
   assert.equal(policy.llmWritePath, "plugin.authoring");
   assert.equal(policy.authoringBundleIds.includes("plugin.authoring"), true);
-  assert.equal(policy.allowedHandlerIds.includes("frontendProgram.create"), true);
+  assert.equal(policy.allowedHandlerIds.includes("frontendProgram.create"), false);
   assert.equal(policy.allowedHandlerIds.includes("surface.create"), true);
-  assert.equal(policy.allowedHandlerIds.includes("widgets.update"), true);
+  assert.equal(policy.publicMcpActions.includes("process.create"), true);
+  assert.equal(policy.publicMcpActions.includes("projection.create"), true);
+  assert.equal(policy.publicMcpActions.includes("widget.create"), false);
+  assert.equal(policy.legacyMcpActions.includes("frontendProgram.create"), true);
   assert.equal(policy.proposalAccess, "read_only");
   assert.equal(policy.forbiddenMutations.includes("custom browser runtime files"), true);
   assert.equal(policy.stopOnLimitation, true);
@@ -44,11 +47,13 @@ test("blocked direct mutation response returns the structured blocked handoff sh
   assert.deepEqual(Object.keys(buildBlockedAuthoringHandoff()).sort(), [
     "attemptedAuthoringPath",
     "goal",
+    "limitationType",
     "minimumHumanAction",
     "missingPrimitive",
     "proof"
   ]);
   assert.equal(response.blockedHandoff.attemptedAuthoringPath, "/api/runtime/app-sources");
+  assert.equal(response.blockedHandoff.limitationType, "policy");
   assert.match(response.blockedHandoff.missingPrimitive, /policy forbids direct runtime\/file fallback mutation/);
 });
 

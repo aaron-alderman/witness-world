@@ -8,6 +8,7 @@ import {
 import { renderWidgetPage } from "./runtime-widget-page.js";
 import { buildRuntimeShellDiagnostics } from "./runtime-shell-contract.js";
 import {
+  buildRuntimeAuthoringCapabilityMatrix,
   cloneRuntimeAuthoringPolicy,
   createRuntimeAuthoringPolicy,
   defaultRuntimeAuthoringMode
@@ -727,6 +728,7 @@ export function buildRuntimeDiagnosticsForProfile({
       startupMode
     }),
     authoringPolicy: effectiveAuthoringPolicy,
+    authoringMatrix: buildRuntimeAuthoringCapabilityMatrix(effectiveAuthoringPolicy),
     operator: operatorContract
       ? {
           ...operatorContract,

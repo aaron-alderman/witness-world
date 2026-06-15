@@ -160,6 +160,9 @@ test("runtime diagnostics summarize seed profile and loaded composition separate
 
   assert.equal(diagnostics.activeProfile, "minimal");
   assert.equal(diagnostics.authoringPolicy.mode, "unconstrained");
+  assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.surface.status, "supported");
+  assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.process.status, "blocked");
+  assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.frontendProgram.status, "legacy_only");
   assert.deepEqual(diagnostics.profilePluginIds, []);
   assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
   assert.equal(diagnostics.surfaces.some(surface => surface.id === "surface:process-view"), true);

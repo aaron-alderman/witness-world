@@ -96,6 +96,10 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
     assert.equal(diagnostics.activeProfile, "authoring");
     assert.equal(diagnostics.authoringPolicy.mode, "mcp_only");
     assert.equal(diagnostics.authoringPolicy.proposalAccess, "read_only");
+    assert.deepEqual(diagnostics.authoringMatrix.baseline.publicFrontendModel, ["surface", "process", "projection", "capability"]);
+    assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.surface.status, "supported");
+    assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.process.status, "blocked");
+    assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.frontendProgram.status, "legacy_only");
     assert.deepEqual([...diagnostics.activeBundles.map(bundle => bundle.id)].sort(), [
       "bundle-authoring-core",
       "bundle-core-runtime",
@@ -525,7 +529,7 @@ test("a bootstrap-authored runner and home route take over without restarting th
   }
 });
 
-test("authoring replay probe renders live widget HTML and a minimal authored surface shell", { timeout: 10000 }, async () => {
+test("authoring replay probe uses the canonical matrix, proves minimal surface serving, and stops next at canonical interaction authoring", { timeout: 10000 }, async () => {
   const { server } = await startBlankServer({ runtimePluginIds: ["plugin.mcp"] });
   try {
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
@@ -535,13 +539,20 @@ test("authoring replay probe renders live widget HTML and a minimal authored sur
 
     const result = await runReplayProbe(server.url);
     assert.equal(result.ok, true);
-    assert.equal(result.replay.httpStatus, 200);
-    assert.equal(result.replay.fallbackActive, false);
-    assert.equal(result.replay.authoredContentVisible, true);
+    assert.deepEqual(result.capabilityChecks.canonicalFrontendModel, ["surface", "process", "projection", "capability"]);
+    assert.equal(result.capabilityChecks.publicSurfaceCreate, true);
+    assert.equal(result.capabilityChecks.publicProcessCreate, true);
+    assert.equal(result.capabilityChecks.publicProjectionCreate, true);
+    assert.equal(result.capabilityChecks.legacyWidgetCreateHidden, true);
+    assert.equal(result.capabilityChecks.legacyFrontendProgramHidden, true);
     assert.equal(result.replay.surfaceHttpStatus, 200);
     assert.equal(result.replay.surfaceAuthoredContentVisible, true);
-    assert.equal(result.blockers.widgetProjection, null);
-    assert.equal(result.blockers.surfaceAuthoring, null);
+    assert.equal(result.replay.surfaceHomeHttpStatus, 200);
+    assert.equal(result.replay.surfaceHomeAuthoredContentVisible, true);
+    assert.equal(result.replay.navTargetVisible, true);
+    assert.equal(result.blockers.canonicalSurfaceAuthoring, null);
+    assert.equal(result.blockers.canonicalInteraction.limitationType, "platform");
+    assert.equal(result.blockers.canonicalInteraction.missingPrimitive, "canonical interactive page.surface authoring is incomplete: process.create and projection.create are not implemented as first-party constrained primitives");
   } finally {
     await server.close();
   }

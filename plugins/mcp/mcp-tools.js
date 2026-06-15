@@ -1,3 +1,8 @@
+import {
+  buildBlockedAuthoringHandoff,
+  buildRuntimeAuthoringCapabilityMatrix
+} from "../../src/runtime-authoring-policy.js";
+
 export const MCP_PROTOCOL_VERSION = "2025-06-18";
 
 function jsonSchemaObject(properties, required = []) {
@@ -38,6 +43,63 @@ async function runJsonHandler(callHandler, request) {
   return jsonToolResult(response.body ?? {});
 }
 
+async function readRuntimeDiagnostics(callHandler) {
+  return callHandler({
+    handler: "runtime.diagnostics.read",
+    method: "GET",
+    path: "/api/runtime/diagnostics"
+  });
+}
+
+async function readAuthoringMatrix(callHandler) {
+  const diagnostics = await readRuntimeDiagnostics(callHandler);
+  if (diagnostics.status < 400 && diagnostics.body?.authoringMatrix) {
+    return jsonToolResult(diagnostics.body.authoringMatrix);
+  }
+  const bootstrapModel = await callHandler({
+    handler: "bootstrap.model.read",
+    method: "GET",
+    path: "/api/bootstrap-model"
+  });
+  if (bootstrapModel.status >= 400) {
+    const message = typeof bootstrapModel.body?.error === "string"
+      ? bootstrapModel.body.error
+      : `request failed with status ${bootstrapModel.status}`;
+    return errorToolResult(message, bootstrapModel.body && typeof bootstrapModel.body === "object" ? bootstrapModel.body : null);
+  }
+  return jsonToolResult(buildRuntimeAuthoringCapabilityMatrix(bootstrapModel.body?.authoringPolicy ?? null));
+}
+
+async function blockedCanonicalAuthoringAction(callHandler, {
+  action,
+  missingPrimitive,
+  minimumHumanAction,
+  proof = []
+}) {
+  const diagnostics = await readRuntimeDiagnostics(callHandler);
+  const authoringMatrix = diagnostics.status < 400 ? (diagnostics.body?.authoringMatrix ?? null) : null;
+  return errorToolResult("canonical authoring primitive is not implemented yet", {
+    action,
+    blockedHandoff: buildBlockedAuthoringHandoff({
+      limitationType: "platform",
+      goal: `author ${action} through the constrained MCP frontend surface`,
+      attemptedAuthoringPath: `authoring.write(${action})`,
+      missingPrimitive,
+      minimumHumanAction,
+      proof
+    }),
+    ...(authoringMatrix ? { authoringMatrix } : {})
+  });
+}
+
+function legacyAuthoringActionResult(action) {
+  return errorToolResult("legacy frontend authoring action is not available in constrained MCP mode", {
+    action,
+    legacy: true,
+    message: `${action} remains available only on the explicit legacy widget-program path`
+  });
+}
+
 function rawResult(response) {
   if (response.status >= 400) {
     const message = typeof response.body?.error === "string"
@@ -76,7 +138,7 @@ const TOOL_DEFINITIONS = [
     title: "World Read",
     description: "Read bootstrap state, witnesses, source, world graph, or process projections.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source"] },
+      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source", "authoringMatrix"] },
       offset: { type: "number" },
       runId: { type: "string" },
       replay: { type: "string" },
@@ -131,6 +193,8 @@ const TOOL_DEFINITIONS = [
             path: "/api/source",
             query: { file: args.sourceFile || "" }
           });
+        case "authoringMatrix":
+          return readAuthoringMatrix(callHandler);
         default:
           return errorToolResult("unknown world.read view", { view: args.view });
       }
@@ -157,10 +221,8 @@ const TOOL_DEFINITIONS = [
           "stewardship.create",
           "stewardship.remove",
           "surface.create",
-          "widget.create",
-          "widget.update",
-          "frontendProgram.create",
-          "frontendStep.create",
+          "process.create",
+          "projection.create",
           "route.create",
           "serve.create",
           "serverRunner.create",
@@ -224,20 +286,31 @@ const TOOL_DEFINITIONS = [
           return runJsonHandler(callHandler, { handler: "stewardship.remove", method: "DELETE", path: "/api/stewardships", body });
         case "surface.create":
           return runJsonHandler(callHandler, { handler: "surface.create", method: "POST", path: "/api/surfaces", body });
-        case "widget.create":
-          return runJsonHandler(callHandler, { handler: "widgets.create", method: "POST", path: "/api/widgets", body });
-        case "widget.update":
-          return runJsonHandler(callHandler, {
-            handler: "widgets.update",
-            method: "PATCH",
-            path: `/api/widgets/${encodeURIComponent(body.id || "")}`,
-            params: { id: body.id || "" },
-            body
+        case "process.create":
+          return blockedCanonicalAuthoringAction(callHandler, {
+            action: "process.create",
+            missingPrimitive: "no first-party process.create authoring handler exists yet",
+            minimumHumanAction: "add a first-party semantic process authoring path before using process-owned surface state in constrained MCP sessions",
+            proof: [
+              "the constrained public frontend baseline is surface + process + projection + capability",
+              "no process.create handler or route exists in the current first-party authoring bundles"
+            ]
           });
+        case "projection.create":
+          return blockedCanonicalAuthoringAction(callHandler, {
+            action: "projection.create",
+            missingPrimitive: "no first-party projection.create authoring handler exists yet",
+            minimumHumanAction: "add a first-party semantic projection authoring path before expecting constrained MCP sessions to lower interactive surface views canonically",
+            proof: [
+              "the constrained public frontend baseline is surface + process + projection + capability",
+              "no projection.create handler or route exists in the current first-party authoring bundles"
+            ]
+          });
+        case "widget.create":
+        case "widget.update":
         case "frontendProgram.create":
-          return runJsonHandler(callHandler, { handler: "frontendProgram.create", method: "POST", path: "/api/frontend-programs", body });
         case "frontendStep.create":
-          return runJsonHandler(callHandler, { handler: "frontendStep.create", method: "POST", path: "/api/frontend-steps", body });
+          return legacyAuthoringActionResult(args.action);
         case "route.create":
           return runJsonHandler(callHandler, { handler: "route.create", method: "POST", path: "/api/routes", body });
         case "serve.create":

@@ -25,6 +25,13 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
     contextIds: [],
     targetIds: ["run-1"]
   });
+  const worldRead = listSupportedMcpTools().find(tool => tool.name === "world.read");
+  const authoringWrite = listSupportedMcpTools().find(tool => tool.name === "authoring.write");
+  assert.equal(worldRead.inputSchema.properties.view.enum.includes("authoringMatrix"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("process.create"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("projection.create"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("frontendProgram.create"), false);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("widget.create"), false);
 });
 
 test("mcp plugin owns origin, principal, and scope support services", () => {

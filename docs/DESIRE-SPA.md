@@ -11,6 +11,30 @@ Repo-wide constrained LLM app-authoring policy now lives in
 `docs/LLM-AUTHORING-POLICY.md`. Engentus is subject to that policy; it is not a
 special exemption case.
 
+The replay method for finding the next honest authoring gap is documented in
+`docs/AUTHORING-REPLAY-PLAYBOOK.md`.
+
+## How to read blockers
+
+When this document says "blocker" or "missing primitive", it must be clear
+which layer is actually limited:
+
+- `RVM/WTOML` limitation
+  - the authored language cannot yet say the needed thing in DESIRE terms
+- platform/runtime limitation
+  - the authored language can say it, but the first-party runtime, lowering, or
+    authoring substrate cannot yet project or execute it live
+- policy limitation
+  - the platform might be technically patchable, but constrained authoring mode
+    forbids solving it by direct runtime edits, handwritten JS, or other escape
+    hatches
+
+For the current Engentus replay, the blocker is primarily a platform/runtime
+limitation at the authoring substrate boundary, not yet a proven `RVM/WTOML`
+language limitation. The replay proves that authored `surface` trees can be
+declared and served, but there is still no first-party surface-scoped
+interaction authoring path analogous to the existing widget-rooted flow.
+
 ## Thesis
 
 - The shell, copy, route states, assets, and CSS belong to the app layer.
@@ -36,6 +60,13 @@ special exemption case.
   into the human platform lane rather than handwritten JS or runtime patching.
 
 ## Canonical frontend seam
+
+- The constrained public frontend baseline is `surface + process + projection + capability`.
+- `DESIRE+` remains internal-only as the lowering/debug layer; it is not the
+  public constrained MCP write surface.
+- Interactive shell/view state should be process-owned by default. Surfaces and
+  projections present that state; they do not become a second hidden state
+  owner.
 
 - `examples/engentus/app/shell.rvm` and related authored DESIRE files remain
   the source of truth for shell structure, route states, copy, and UI
@@ -75,9 +106,10 @@ always honest and local:
    - authored widget pages project live through the default runtime path
 4. Surface authoring gate
    - MCP authoring can declare and serve a minimal `page.surface`
-5. Generic authored interaction gate
-   - route/view/state/control behavior is authored and lowered, not rebuilt by
-     app JS
+5. Canonical semantic interaction gate
+   - route/view/state/control behavior is authored and lowered through
+     `surface + process + projection`, not rebuilt by app JS or routed back
+     through legacy widget programs
 6. Capability resolution gate
    - optional capabilities are declared by the app and resolved explicitly by
      runtime/plugin composition
@@ -92,9 +124,23 @@ always honest and local:
      kept separate
 
 The surface authoring gate is now green for minimal served shells via
-`surface.create`. The next honest blocker must be established by the
-post-`surface.create` replay tranche before any richer Engentus live-behavior
-work resumes.
+`surface.create`.
+
+The current next honest blocker is the canonical semantic interaction gate.
+Surface serving can now declare and route multiple shell states, and the
+constrained capability matrix now makes the intended public model explicit.
+What is still missing is the first-party platform implementation for that
+canonical interaction model:
+
+- `process.create` is part of the public constrained frontend baseline, but no
+  first-party authoring handler exists yet
+- `projection.create` is part of the public constrained frontend baseline, but
+  no first-party authoring handler exists yet
+- `frontendProgram.create` / `frontendStep.create` are legacy-only and must not
+  be treated as the fallback interaction path for Engentus
+
+So the blocker is now a cleaner platform/runtime limitation: the canonical
+`surface + process + projection` path is not yet live.
 
 ## Current honest state
 

@@ -25,12 +25,8 @@ export const MCP_ONLY_ALLOWED_HANDLER_IDS = Object.freeze([
   "stewardship.create",
   "stewardship.remove",
   "surface.create",
-  "widgets.create",
-  "widgets.update",
   "route.create",
   "serve.create",
-  "frontendProgram.create",
-  "frontendStep.create",
   "serverRunner.create",
   "runtimePlugin.install",
   "runtimePlugin.remove",
@@ -40,6 +36,40 @@ export const MCP_ONLY_ALLOWED_HANDLER_IDS = Object.freeze([
   "mcpServer.create",
   "mcpTool.install",
   "mcpTool.remove"
+]);
+
+export const MCP_ONLY_PUBLIC_MCP_ACTIONS = Object.freeze([
+  "identity.create",
+  "identity.update",
+  "context.create",
+  "contextBinding.create",
+  "contextBinding.remove",
+  "contextExport.create",
+  "contextExport.remove",
+  "contextImport.create",
+  "contextImport.remove",
+  "perspective.create",
+  "stewardship.create",
+  "stewardship.remove",
+  "surface.create",
+  "process.create",
+  "projection.create",
+  "route.create",
+  "serve.create",
+  "serverRunner.create",
+  "capability.create",
+  "capability.install",
+  "capability.remove",
+  "mcpServer.create",
+  "mcpTool.install",
+  "mcpTool.remove"
+]);
+
+export const MCP_ONLY_LEGACY_MCP_ACTIONS = Object.freeze([
+  "widget.create",
+  "widget.update",
+  "frontendProgram.create",
+  "frontendStep.create"
 ]);
 
 export const MCP_ONLY_FORBIDDEN_MUTATIONS = Object.freeze([
@@ -54,6 +84,7 @@ export const MCP_ONLY_FORBIDDEN_MUTATIONS = Object.freeze([
 ]);
 
 export const BLOCKED_HANDOFF_FIELDS = Object.freeze([
+  "limitationType",
   "goal",
   "attemptedAuthoringPath",
   "missingPrimitive",
@@ -68,6 +99,7 @@ function uniqueStrings(values = []) {
 function cloneBlockedHandoff(blockedHandoff = null) {
   if (!blockedHandoff || typeof blockedHandoff !== "object") return null;
   return {
+    limitationType: blockedHandoff.limitationType ?? null,
     goal: blockedHandoff.goal ?? null,
     attemptedAuthoringPath: blockedHandoff.attemptedAuthoringPath ?? null,
     missingPrimitive: blockedHandoff.missingPrimitive ?? null,
@@ -83,6 +115,7 @@ export function defaultRuntimeAuthoringMode({ runtimeStartupMode = "serve" } = {
 }
 
 export function buildBlockedAuthoringHandoff({
+  limitationType = "platform",
   goal = null,
   attemptedAuthoringPath = null,
   missingPrimitive = null,
@@ -90,6 +123,7 @@ export function buildBlockedAuthoringHandoff({
   proof = []
 } = {}) {
   return {
+    limitationType,
     goal,
     attemptedAuthoringPath,
     missingPrimitive,
@@ -114,11 +148,20 @@ export function createRuntimeAuthoringPolicy({
     allowedHandlerIds: normalizedMode === AUTHORING_MODE_MCP_ONLY
       ? [...MCP_ONLY_ALLOWED_HANDLER_IDS]
       : [],
+    publicMcpActions: normalizedMode === AUTHORING_MODE_MCP_ONLY
+      ? [...MCP_ONLY_PUBLIC_MCP_ACTIONS]
+      : [],
+    legacyMcpActions: normalizedMode === AUTHORING_MODE_MCP_ONLY
+      ? [...MCP_ONLY_LEGACY_MCP_ACTIONS]
+      : [],
     proposalAccess: normalizedMode === AUTHORING_MODE_MCP_ONLY ? "read_only" : "normal",
     forbiddenMutations: normalizedMode === AUTHORING_MODE_MCP_ONLY
       ? [...MCP_ONLY_FORBIDDEN_MUTATIONS]
       : [],
     stopOnLimitation: normalizedMode === AUTHORING_MODE_MCP_ONLY,
+    canonicalFrontendModel: ["surface", "process", "projection", "capability"],
+    loweringLayer: "DESIRE+",
+    interactiveStateOwner: "process",
     blockedHandoffFields: [...BLOCKED_HANDOFF_FIELDS],
     blockedHandoff: cloneBlockedHandoff(blockedHandoff),
     status: blockedHandoff ? "blocked" : "ready",
@@ -140,6 +183,7 @@ export function blockedDirectMutationResponse({
   proof = []
 } = {}) {
   const blockedHandoff = buildBlockedAuthoringHandoff({
+    limitationType: "policy",
     goal,
     attemptedAuthoringPath,
     missingPrimitive: "authoring-mode policy forbids direct runtime/file fallback mutation",
@@ -158,4 +202,122 @@ export function blockedDirectMutationResponse({
 
 export function allowedHandlerIdSetForPolicy(policy = null) {
   return new Set(uniqueStrings(policy?.allowedHandlerIds ?? []));
+}
+
+function capabilityState({
+  publicAction = null,
+  publicActions = [],
+  runtimeConsumers = [],
+  status = "supported",
+  limitationType = null,
+  reason = null
+} = {}) {
+  return {
+    public: status !== "legacy_only",
+    status,
+    publicAction,
+    publicActions: [...publicActions],
+    runtimeConsumers: [...runtimeConsumers],
+    limitationType,
+    reason
+  };
+}
+
+export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
+  const normalizedPolicy = cloneRuntimeAuthoringPolicy(policy);
+  return {
+    mode: normalizedPolicy.mode,
+    baseline: {
+      publicFrontendModel: [...(normalizedPolicy.canonicalFrontendModel ?? [])],
+      loweringLayer: normalizedPolicy.loweringLayer,
+      interactiveStateOwner: normalizedPolicy.interactiveStateOwner
+    },
+    publicAuthoringConcepts: {
+      surface: capabilityState({
+        publicAction: "surface.create",
+        runtimeConsumers: ["page.surface"],
+        status: "supported"
+      }),
+      process: capabilityState({
+        publicAction: "process.create",
+        runtimeConsumers: [],
+        status: "blocked",
+        limitationType: "platform",
+        reason: "no first-party process.create authoring handler exists yet"
+      }),
+      projection: capabilityState({
+        publicAction: "projection.create",
+        runtimeConsumers: [],
+        status: "blocked",
+        limitationType: "platform",
+        reason: "no first-party projection.create authoring handler exists yet"
+      }),
+      capability: capabilityState({
+        publicActions: ["capability.create", "capability.install", "capability.remove"],
+        runtimeConsumers: ["runtime capability resolution"],
+        status: "supported"
+      }),
+      widget: capabilityState({
+        publicActions: ["widget.create", "widget.update"],
+        runtimeConsumers: ["page.home"],
+        status: "legacy_only",
+        reason: "widgets remain available only on the explicit legacy widget-program path"
+      }),
+      frontendProgram: capabilityState({
+        publicAction: "frontendProgram.create",
+        runtimeConsumers: ["page.home"],
+        status: "legacy_only",
+        reason: "frontend programs remain runnable only through the legacy widget-page host"
+      }),
+      frontendStep: capabilityState({
+        publicAction: "frontendStep.create",
+        runtimeConsumers: ["page.home"],
+        status: "legacy_only",
+        reason: "frontend steps remain runnable only through the legacy widget-page host"
+      })
+    },
+    runtimeConsumers: {
+      "page.surface": {
+        consumes: ["surface"],
+        status: "supported",
+        pairings: {
+          surface: "supported",
+          process: "blocked",
+          projection: "blocked"
+        },
+        limitationType: "platform",
+        reason: "page.surface projects authored shell structure, but it does not yet execute authored process/projection interaction semantics"
+      },
+      "page.home": {
+        consumes: ["widget", "frontendProgram"],
+        status: "legacy_only",
+        reason: "page.home remains the legacy widget-program runtime path"
+      }
+    },
+    pairings: [
+      {
+        authoring: ["surface"],
+        runtime: "page.surface",
+        status: "supported"
+      },
+      {
+        authoring: ["surface", "process", "projection"],
+        runtime: "page.surface",
+        status: "blocked",
+        limitationType: "platform",
+        reason: "the canonical interactive surface path is not fully implemented"
+      },
+      {
+        authoring: ["widget", "frontendProgram", "frontendStep"],
+        runtime: "page.home",
+        status: "legacy_only",
+        reason: "legacy widget-program execution remains available only outside the constrained public MCP baseline"
+      }
+    ],
+    constrainedMcp: {
+      publicActions: [...normalizedPolicy.publicMcpActions],
+      legacyHiddenActions: [...normalizedPolicy.legacyMcpActions],
+      directHandlerAllowlist: [...normalizedPolicy.allowedHandlerIds]
+    }
+  };
 }

@@ -122,16 +122,13 @@ export async function runReplayProbe(serverUrl, {
   const mcpServerId = `${stamp}_mcp`;
   const token = `${stamp}_token`;
   const contextId = `${stamp}_context`;
-  const rootWidgetId = `${stamp}_root`;
-  const headingWidgetId = `${stamp}_heading`;
-  const bodyWidgetId = `${stamp}_body`;
-  const programId = `${stamp}_program`;
-  const routeId = `${stamp}_route`;
-  const routePath = `/${stamp}`;
   const surfaceRootId = `${stamp}_surface_root`;
   const surfaceLoginId = `${stamp}_surface_login`;
+  const surfaceHomeId = `${stamp}_surface_home`;
   const surfaceRouteId = `${stamp}_surface_route`;
   const surfaceRoutePath = `/${stamp}-surface`;
+  const surfaceScreenRouteId = `${stamp}_surface_screen_route`;
+  const surfaceHomePath = `${surfaceRoutePath}/home`;
 
   const createRunner = await requestJson(baseUrl, "/api/server-runners", {
     cookie: sessionCookie,
@@ -189,50 +186,14 @@ export async function runReplayProbe(serverUrl, {
   const write = (action, body, id) => mcpToolCall(baseUrl, mcpServerId, token, "authoring.write", { action, body }, id);
   const created = [];
 
-  created.push(await write("context.create", { id: contextId, label: "Replay Frontend" }, 10));
-  created.push(await write("widget.create", {
-    id: rootWidgetId,
-    kind: "Page",
-    title: "Replay Landing",
-    context: contextId,
-    attach: false
-  }, 11));
-  created.push(await write("widget.create", {
-    id: headingWidgetId,
-    kind: "Heading",
-    context: contextId,
-    parent: rootWidgetId,
-    text: "Hello from MCP authoring",
-    level: 1,
-    order: 0
-  }, 12));
-  created.push(await write("widget.create", {
-    id: bodyWidgetId,
-    kind: "Text",
-    context: contextId,
-    parent: rootWidgetId,
-    text: "This page was authored through MCP replay only.",
-    order: 1
-  }, 13));
-  created.push(await write("frontendProgram.create", {
-    id: programId,
-    context: contextId,
-    rootWidget: rootWidgetId
-  }, 14));
-  created.push(await write("route.create", {
-    id: routeId,
-    context: contextId,
-    path: routePath,
-    method: "GET",
-    handler: "page.home",
-    serves: programId,
-    rootWidget: rootWidgetId,
-    frontendProgram: programId
-  }, 15));
-  created.push(await write("serve.create", {
-    serverRunner: runnerId,
-    route: routeId
-  }, 16));
+  const authoringMatrixRead = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
+    view: "authoringMatrix"
+  }, 10);
+  if (authoringMatrixRead.isError) {
+    throw new Error(`authoring matrix read failed: ${JSON.stringify(authoringMatrixRead.structuredContent ?? null)}`);
+  }
+  const authoringMatrix = authoringMatrixRead.structuredContent;
+  created.push(await write("context.create", { id: contextId, label: "Replay Frontend" }, 11));
 
   const creationErrors = created.filter(result => result?.isError);
   if (creationErrors.length) {
@@ -246,23 +207,6 @@ export async function runReplayProbe(serverUrl, {
     throw new Error(`world.read failed: ${JSON.stringify(state.structuredContent ?? null)}`);
   }
 
-  const page = await fetch(`${baseUrl}${routePath}`);
-  const html = await page.text();
-  const fallbackActive = /Widget rendering is not active in this runtime composition\./.test(html);
-  const authoredContentVisible = /Hello from MCP authoring/.test(html);
-  const widgetProjectionBlocked = fallbackActive || !authoredContentVisible
-    ? buildBlockedAuthoringHandoff({
-        goal: "project an MCP-authored widget page as live HTML",
-        attemptedAuthoringPath: "authoring.write(widget.create/frontendProgram.create/route.create/serve.create)",
-        missingPrimitive: "the authoring runtime composition does not currently install a live widget page renderer hook",
-        minimumHumanAction: "install or expose the generic widget-page projection hook in the authoring runtime before using MCP replay as a live frontend proof",
-        proof: [
-          `the authored route ${routePath} serves with HTTP ${page.status}`,
-          "the returned HTML is the shared inactive widget fallback instead of the authored widget tree"
-        ]
-      })
-    : null;
-
   const authoringTool = listSupportedMcpTools().find(tool => tool.name === "authoring.write");
   const actionEnum = authoringTool?.inputSchema?.properties?.action?.enum ?? [];
   const createdSurfaces = await write("surface.create", [
@@ -270,7 +214,7 @@ export async function runReplayProbe(serverUrl, {
       id: surfaceRootId,
       surfaceKind: "app-root",
       context: contextId,
-      children: [surfaceLoginId],
+      children: [surfaceLoginId, surfaceHomeId],
       props: {
         brandName: "DESIRE",
         productName: "Replay Surface"
@@ -282,12 +226,28 @@ export async function runReplayProbe(serverUrl, {
       context: contextId,
       props: {
         routeKey: "login",
+        routePath: surfaceRoutePath,
         title: "Replay surface login",
         subtitle: "Surface projection is live",
         heroTitle: "Hello from MCP surface authoring",
         heroBody: "This shell was authored through MCP replay only.",
         primaryActionLabel: "Continue",
-        primaryActionHref: surfaceRoutePath
+        primaryActionHref: surfaceHomePath
+      }
+    },
+    {
+      id: surfaceHomeId,
+      surfaceKind: "auth-screen",
+      context: contextId,
+      props: {
+        routeKey: "home",
+        routePath: surfaceHomePath,
+        title: "Replay surface home",
+        subtitle: "Route-selected surface state is live",
+        heroTitle: "Home screen reached through authored routing",
+        heroBody: "The surface host resolved the active view from the request path.",
+        primaryActionLabel: "Stay here",
+        primaryActionHref: surfaceHomePath
       }
     }
   ], 18);
@@ -308,7 +268,29 @@ export async function runReplayProbe(serverUrl, {
     route: surfaceRouteId
   }, 20);
 
-  const surfaceCreationErrors = [createdSurfaces, createdSurfaceRoute, createdSurfaceServe].filter(result => result?.isError);
+  const createdSurfaceScreenRoute = await write("route.create", {
+    id: surfaceScreenRouteId,
+    context: contextId,
+    path: `${surfaceRoutePath}/:screen`,
+    method: "GET",
+    handler: "page.surface",
+    serves: surfaceRootId,
+    rootSurface: surfaceRootId,
+    defaultScreen: "login"
+  }, 21);
+
+  const createdSurfaceScreenServe = await write("serve.create", {
+    serverRunner: runnerId,
+    route: surfaceScreenRouteId
+  }, 22);
+
+  const surfaceCreationErrors = [
+    createdSurfaces,
+    createdSurfaceRoute,
+    createdSurfaceServe,
+    createdSurfaceScreenRoute,
+    createdSurfaceScreenServe
+  ].filter(result => result?.isError);
   if (surfaceCreationErrors.length) {
     throw new Error(`replay surface authoring failed: ${JSON.stringify(surfaceCreationErrors[0]?.structuredContent ?? null)}`);
   }
@@ -316,8 +298,14 @@ export async function runReplayProbe(serverUrl, {
   const surfacePage = await fetch(`${baseUrl}${surfaceRoutePath}`);
   const surfaceHtml = await surfacePage.text();
   const surfaceAuthoredContentVisible = /Replay surface login/.test(surfaceHtml) && /Hello from MCP surface authoring/.test(surfaceHtml);
+  const navTargetVisible = surfaceHtml.includes(`data-shell-nav-href="${surfaceHomePath}"`);
+  const surfaceHomePage = await fetch(`${baseUrl}${surfaceHomePath}`);
+  const surfaceHomeHtml = await surfaceHomePage.text();
+  const surfaceHomeAuthoredContentVisible = /Replay surface home/.test(surfaceHomeHtml)
+    && /Home screen reached through authored routing/.test(surfaceHomeHtml);
   const surfaceBlocked = !surfaceAuthoredContentVisible
     ? buildBlockedAuthoringHandoff({
+        limitationType: "platform",
         goal: "author and serve a minimal page.surface shell through MCP-only replay",
         attemptedAuthoringPath: "authoring.write(surface.create/route.create/serve.create)",
         missingPrimitive: "surface authoring is exposed but the authored shell did not project live through page.surface",
@@ -330,6 +318,40 @@ export async function runReplayProbe(serverUrl, {
       })
     : null;
 
+  const processAttempt = await write("process.create", {
+    id: `${stamp}_process`,
+    context: contextId,
+    title: "Replay Process"
+  }, 23);
+  const projectionAttempt = await write("projection.create", {
+    id: `${stamp}_projection`,
+    context: contextId,
+    surface: surfaceRootId,
+    process: `${stamp}_process`
+  }, 24);
+  const canonicalInteractionBlocked = !surfaceBlocked && surfaceAuthoredContentVisible && surfaceHomeAuthoredContentVisible
+    ? buildBlockedAuthoringHandoff({
+        limitationType: "platform",
+        goal: "author canonical interactive page.surface behavior through constrained MCP replay",
+        attemptedAuthoringPath: "world.read(authoringMatrix) + authoring.write(surface.create/process.create/projection.create/route.create/serve.create)",
+        missingPrimitive: "canonical interactive page.surface authoring is incomplete: process.create and projection.create are not implemented as first-party constrained primitives",
+        minimumHumanAction: "add first-party semantic process and projection authoring paths, then bind page.surface to execute that canonical surface + process + projection model",
+        proof: [
+          `authoring matrix public frontend model: ${(authoringMatrix?.baseline?.publicFrontendModel ?? []).join(" + ")}`,
+          `authoring.write advertises process.create: ${actionEnum.includes("process.create")}`,
+          `authoring.write advertises projection.create: ${actionEnum.includes("projection.create")}`,
+          `authoring.write hides frontendProgram.create: ${!actionEnum.includes("frontendProgram.create")}`,
+          `authoring.write hides widget.create: ${!actionEnum.includes("widget.create")}`,
+          `default surface route ${surfaceRoutePath} served with HTTP ${surfacePage.status}`,
+          `screen route ${surfaceHomePath} served with HTTP ${surfaceHomePage.status}`,
+          `login HTML contained authored nav target to home: ${navTargetVisible}`,
+          `home HTML contained distinct route-selected content: ${surfaceHomeAuthoredContentVisible}`,
+          `process.create returned ${processAttempt?.structuredContent?.blockedHandoff?.missingPrimitive ?? processAttempt?.structuredContent?.error ?? "no error"}`,
+          `projection.create returned ${projectionAttempt?.structuredContent?.blockedHandoff?.missingPrimitive ?? projectionAttempt?.structuredContent?.error ?? "no error"}`
+        ]
+      })
+    : null;
+
   return {
     ok: true,
     serverUrl: baseUrl,
@@ -337,36 +359,41 @@ export async function runReplayProbe(serverUrl, {
       runtimeProfile: diagnostics.activeProfile,
       authoringPolicy: diagnostics.authoringPolicy
     },
+    authoringMatrix,
     replay: {
       runnerId,
       mcpServerId,
-      routeId,
-      routePath,
       surfaceRouteId,
+      surfaceScreenRouteId,
       surfaceRoutePath,
-      rootWidgetId,
-      programId,
-      httpStatus: page.status,
-      fallbackActive,
-      authoredContentVisible,
+      surfaceHomePath,
       surfaceHttpStatus: surfacePage.status,
-      surfaceAuthoredContentVisible
+      surfaceAuthoredContentVisible,
+      surfaceHomeHttpStatus: surfaceHomePage.status,
+      surfaceHomeAuthoredContentVisible,
+      navTargetVisible
+    },
+    capabilityChecks: {
+      canonicalFrontendModel: [...(authoringMatrix?.baseline?.publicFrontendModel ?? [])],
+      publicSurfaceCreate: actionEnum.includes("surface.create"),
+      publicProcessCreate: actionEnum.includes("process.create"),
+      publicProjectionCreate: actionEnum.includes("projection.create"),
+      legacyWidgetCreateHidden: !actionEnum.includes("widget.create"),
+      legacyFrontendProgramHidden: !actionEnum.includes("frontendProgram.create")
     },
     stateChecks: {
       runnerPresent: state.structuredContent.serverRunners.some(row => row.id === runnerId),
-      routePresent: state.structuredContent.routes.some(row => row.id === routeId && row.handler === "page.home"),
-      servedRoutePresent: state.structuredContent.servedRoutes.some(row => row.id === routeId && row.serverRunner === runnerId),
       surfaceRoutePresent: state.structuredContent.routes.some(row => row.id === surfaceRouteId && row.handler === "page.surface"),
+      surfaceScreenRoutePresent: state.structuredContent.routes.some(row => row.id === surfaceScreenRouteId && row.handler === "page.surface"),
       surfaceServedRoutePresent: state.structuredContent.servedRoutes.some(row => row.id === surfaceRouteId && row.serverRunner === runnerId),
-      programPresent: state.structuredContent.frontendPrograms.some(row => row.id === programId && row.rootWidget === rootWidgetId),
-      rootWidgetPresent: state.structuredContent.widgets.some(row => row.id === rootWidgetId),
+      surfaceScreenServedRoutePresent: state.structuredContent.servedRoutes.some(row => row.id === surfaceScreenRouteId && row.serverRunner === runnerId),
       rootSurfacePresent: state.structuredContent.witnesses
         ? state.structuredContent.witnesses.some(row => row.process === "desire.defineSurface" && row.body?.id === surfaceRootId)
         : true
     },
     blockers: {
-      widgetProjection: widgetProjectionBlocked,
-      surfaceAuthoring: surfaceBlocked
+      canonicalSurfaceAuthoring: surfaceBlocked,
+      canonicalInteraction: canonicalInteractionBlocked
     }
   };
 }
@@ -378,10 +405,10 @@ async function main(argv = process.argv.slice(2)) {
   const result = await runReplayProbe(serverUrl, { username, password });
   console.log(JSON.stringify(result, null, 2));
 
-  if (!result.stateChecks.runnerPresent || !result.stateChecks.routePresent || !result.stateChecks.servedRoutePresent) {
+  if (!result.stateChecks.runnerPresent) {
     process.exit(1);
   }
-  if (result.replay.httpStatus !== 200 || result.replay.surfaceHttpStatus !== 200) {
+  if (result.replay.surfaceHttpStatus !== 200 || result.replay.surfaceHomeHttpStatus !== 200) {
     process.exit(1);
   }
 }
