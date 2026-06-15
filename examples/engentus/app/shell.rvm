@@ -2655,6 +2655,9 @@ view GoodmanScenarioSection {
   kind section
   class goodman-scenario-section
   prop title = "Scenario View"
+  bindings {
+    visible from state GoodmanActiveMode map static true default false
+  }
   children {
     GoodmanStaticAppliedShearField
     GoodmanStaticRpmField
@@ -2997,6 +3000,10 @@ view GoodmanSimulationSection {
   kind section
   class goodman-simulation-section
   prop title = "Simulations"
+  prop hidden = true
+  bindings {
+    visible from state GoodmanActiveMode map mc true default false
+  }
   children {
     GoodmanSimulationNewAction
     GoodmanSimulationList
@@ -3177,6 +3184,10 @@ view GoodmanRunConfigSection {
   kind section
   class goodman-run-config-section
   prop title = "Run Config"
+  prop hidden = true
+  bindings {
+    visible from state GoodmanActiveMode map mc true default false
+  }
   children {
     GoodmanRunConfigBoltsPerSetField
     GoodmanRunConfigDurationField
@@ -3283,6 +3294,10 @@ view GoodmanChartStyleSection {
   kind section
   class goodman-chart-style-section
   prop title = "Chart Style"
+  prop hidden = true
+  bindings {
+    visible from state GoodmanActiveMode map edit true default false
+  }
   children {
     GoodmanChartStyleControls
   }

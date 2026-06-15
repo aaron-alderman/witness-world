@@ -33,6 +33,9 @@ grant runtime authority to copied JS or presenter code.
   controls patch visibility/disabled state, reference run/pause/stop labels are
   authored in `shell.rvm`, and the progress label/fill/lock note reflect
   `GoodmanRunStatusState` without app-local controller code.
+- Goodman sidebar sections now follow the reference mode gates through authored
+  `GoodmanActiveMode` bindings: Static shows scenario controls, Monte Carlo
+  shows simulations/run config/scrubber, and Edit shows chart-style controls.
 - Goodman Monte Carlo chart evaluation now consumes authored run sample count:
   `GoodmanRunBoltsPerSet` binds to `GoodmanMCBands.param.n_samples`, so the
   ensemble axis re-evaluates from process-owned run config.

@@ -371,6 +371,14 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanStaticEnduranceLimitField",
     "GoodmanStaticSlopeField"
   ]);
+  assert.equal(surfaces.get("GoodmanScenarioSection")?.body?.bindings[0]?.prop, "visible");
+  assert.equal(surfaces.get("GoodmanScenarioSection")?.body?.bindings[0]?.source?.state, "GoodmanActiveMode");
+  assert.equal(surfaces.get("GoodmanSimulationSection")?.body?.props?.hidden, true);
+  assert.equal(surfaces.get("GoodmanSimulationSection")?.body?.bindings[0]?.source?.map?.mc, true);
+  assert.equal(surfaces.get("GoodmanRunConfigSection")?.body?.props?.hidden, true);
+  assert.equal(surfaces.get("GoodmanRunConfigSection")?.body?.bindings[0]?.source?.map?.mc, true);
+  assert.equal(surfaces.get("GoodmanChartStyleSection")?.body?.props?.hidden, true);
+  assert.equal(surfaces.get("GoodmanChartStyleSection")?.body?.bindings[0]?.source?.map?.edit, true);
 
   assert.deepEqual(surfaces.get("GoodmanSimulationList")?.body?.children, [
     "GoodmanSimulationPrimaryRow",
