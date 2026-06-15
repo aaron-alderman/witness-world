@@ -215,6 +215,18 @@ test("MillForceCross plans per-segment annular liner bands with angular bounds +
   assert.equal(plan.layers.find(l => l.name === "shell").mark, "circle");
   assert.equal(plan.layers.find(l => l.name === "shell").primitives[0].r, evaluated.params.radius);
   assert.equal(plan.layers.find(l => l.name === "inner").primitives[0].r, evaluated.fields.rInner.data);
+  const chargeRegion = plan.layers.find(l => l.name === "charge_region");
+  assert.equal(chargeRegion.mark, "annular-wedge");
+  assert.equal(chargeRegion.fill, "#DCF0F5");
+  assert.equal(chargeRegion.stroke, "#5AAABF");
+  assert.equal(chargeRegion.opacity, 0.35);
+  assert.ok(chargeRegion.primitives.length >= 1);
+  for (const primitive of chargeRegion.primitives) {
+    assert.equal(primitive.theta0, evaluated.fields.phiPrime.data[g]);
+    assert.equal(primitive.theta1, evaluated.fields.phi.data);
+    assert.equal(primitive.r0, evaluated.fields.rInner.data);
+    assert.equal(primitive.r1, evaluated.params.radius);
+  }
   const liners = plan.layers.find(l => l.name === "liners");
   assert.equal(liners.mark, "annular-wedge");
   assert.equal(liners.primitives.length, N);
@@ -254,6 +266,18 @@ test("MillForceCross compare mode renders grounded and faithful annular bands", 
   assert.equal(plan.layers.find(l => l.name === "liners").hidden, true);
   const grounded = plan.layers.find(l => l.name === "grounded_liners");
   const faithful = plan.layers.find(l => l.name === "faithful_liners");
+  const chargeRegion = plan.layers.find(l => l.name === "charge_region");
+  const compareChargeRegion = plan.layers.find(l => l.name === "charge_region_compare");
+  assert.equal(chargeRegion.hidden, true);
+  assert.equal(compareChargeRegion.mark, "annular-wedge");
+  assert.equal(compareChargeRegion.fill, "#DCF0F5");
+  assert.ok(compareChargeRegion.primitives.length >= 1);
+  for (const primitive of compareChargeRegion.primitives) {
+    assert.equal(primitive.theta0, evaluated.fields.phiPrime.data[g]);
+    assert.equal(primitive.theta1, evaluated.fields.phi.data);
+    assert.equal(primitive.r0, evaluated.fields.rInner.data);
+    assert.equal(primitive.r1, evaluated.params.radius);
+  }
   assert.equal(grounded.mark, "annular-wedge");
   assert.equal(faithful.mark, "annular-wedge");
   assert.equal(grounded.primitives.length, N);
