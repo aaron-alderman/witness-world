@@ -220,6 +220,10 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("MillForceChargeDensityValue")?.body?.bindings[0]?.source?.output, "rhoChargeText");
   assert.equal(surfaces.get("MillForceMaxRadialValue")?.body?.bindings[0]?.source?.output, "F_r_max_text");
   assert.equal(surfaces.get("MillForceMaxResultantValue")?.body?.bindings[0]?.source?.output, "F_resultant_max_text");
+  assert.equal(surfaces.get("MillForceCompareFillDeltaValue")?.body?.bindings[0]?.source?.output, "gammaDeltaText");
+  assert.equal(surfaces.get("MillForceCompareToeDeltaValue")?.body?.bindings[0]?.source?.output, "phiPrimeDeltaText");
+  assert.equal(surfaces.get("MillForceCompareRadialDeltaValue")?.body?.bindings[0]?.source?.output, "F_r_max_delta_text");
+  assert.equal(surfaces.get("MillForceCompareResultantDeltaValue")?.body?.bindings[0]?.source?.output, "F_resultant_max_delta_text");
   assert.equal(surfaces.get("MillForceMcSamplesInput")?.body?.interactions[0]?.action?.state, "MillForceMcSamples");
   assert.equal(surfaces.get("MillForceMcJTotalToggle")?.body?.interactions[0]?.action?.value?.kind, "eventChecked");
   assert.deepEqual(processes.get("EngentusShellNavigation")?.body?.rules, [
@@ -386,6 +390,16 @@ test("the shell is structured through explicit child regions instead of flattene
     "MillForceModelSection",
     "MillForceCompareSection",
     "MillForceMcSection"
+  ]);
+
+  assert.deepEqual(surfaces.get("MillForceCompareSection")?.body?.children, [
+    "MillForceCompareTitle",
+    "MillForceCompareGroundedRow",
+    "MillForceCompareFaithfulRow",
+    "MillForceCompareFillDeltaRow",
+    "MillForceCompareToeDeltaRow",
+    "MillForceCompareRadialDeltaRow",
+    "MillForceCompareResultantDeltaRow"
   ]);
 
   assert.deepEqual(surfaces.get("MillForceMcSection")?.body?.children, [

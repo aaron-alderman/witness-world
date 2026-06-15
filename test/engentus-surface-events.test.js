@@ -787,15 +787,26 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     assert.equal(modeState.compare, "mill-force-pill active");
     assert.equal(modeState.forceChartMode, "compare");
     assert.match(modeState.modeRow, /Compare/);
-    assert.deepEqual(await page.evaluate(() => ({
+    const compareState = await page.evaluate(() => ({
       modelHidden: document.querySelector("#surface-millforcemodelsection")?.hasAttribute("hidden"),
       compareHidden: document.querySelector("#surface-millforcecomparesection")?.hasAttribute("hidden"),
-      compareText: document.querySelector("#surface-millforcecomparesection")?.textContent
-    })), {
-      modelHidden: true,
-      compareHidden: false,
-      compareText: "Compare ModelsGroundedGrid-search fill + grounded tangential signFaithfulReference root-find / force convention"
-    });
+      compareText: document.querySelector("#surface-millforcecomparesection")?.textContent,
+      deltaOutputs: {
+        fill: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.gammaDeltaText,
+        toe: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.phiPrimeDeltaText,
+        radial: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.F_r_max_delta_text,
+        resultant: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.F_resultant_max_delta_text
+      }
+    }));
+    assert.equal(compareState.modelHidden, true);
+    assert.equal(compareState.compareHidden, false);
+    assert.match(compareState.compareText, /Compare Models/);
+    assert.match(compareState.compareText, /Δ fill/);
+    assert.match(compareState.compareText, /Δ toe/);
+    assert.match(compareState.compareText, /Δ max F_r/);
+    assert.match(compareState.compareText, /Δ max \|F\|/);
+    assert.match(compareState.deltaOutputs.fill, /^[+-]?\d+\.\d(?:Â°|°)$/);
+    assert.match(compareState.deltaOutputs.resultant, /^[+-]?\d+\.\d kN$/);
 
     await page.getByRole("button", { name: "Monte Carlo" }).click();
     await page.waitForFunction(() =>

@@ -94,6 +94,10 @@ test("MillForce model authors sidebar result readouts as active-method scalar ou
   assert.equal(grounded.fields.phiPrimeText.axes.length, 0);
   assert.equal(grounded.fields.F_r_max_text.axes.length, 0);
   assert.equal(grounded.fields.F_resultant_max_text.axes.length, 0);
+  assert.equal(grounded.fields.gammaDeltaText.axes.length, 0);
+  assert.equal(grounded.fields.phiPrimeDeltaText.axes.length, 0);
+  assert.equal(grounded.fields.F_r_max_delta_text.axes.length, 0);
+  assert.equal(grounded.fields.F_resultant_max_delta_text.axes.length, 0);
   assert.equal(
     grounded.fields.gammaActive.data,
     grounded.fields.gamma.data[g]
@@ -110,6 +114,8 @@ test("MillForce model authors sidebar result readouts as active-method scalar ou
   assert.match(grounded.fields.omegaText.data, / rad\/s$/);
   assert.match(grounded.fields.rhoChargeText.data, / SG$/);
   assert.match(grounded.fields.F_r_max_text.data, / kN$/);
+  assert.match(grounded.fields.gammaDeltaText.data, /^[+-]?\d+\.\d(?:Â°|°)$/);
+  assert.match(grounded.fields.F_resultant_max_delta_text.data, /^[+-]?\d+\.\d kN$/);
 });
 
 test("MillForceAngle compare mode renders grounded and faithful layer pairs", async () => {

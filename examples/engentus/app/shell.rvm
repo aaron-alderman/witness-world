@@ -5964,6 +5964,110 @@ view MillForceCompareFaithfulRow {
   }
 }
 
+view MillForceCompareFillDeltaLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "Δ fill"
+}
+
+view MillForceCompareFillDeltaValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "+0.0°"
+  bindings {
+    text from capability MillForceCross.gammaDeltaText
+  }
+}
+
+view MillForceCompareFillDeltaRow {
+  kind metric-row
+  class mill-force-result-row
+  children {
+    MillForceCompareFillDeltaLabel
+    MillForceCompareFillDeltaValue
+  }
+}
+
+view MillForceCompareToeDeltaLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "Δ toe"
+}
+
+view MillForceCompareToeDeltaValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "+0.0°"
+  bindings {
+    text from capability MillForceCross.phiPrimeDeltaText
+  }
+}
+
+view MillForceCompareToeDeltaRow {
+  kind metric-row
+  class mill-force-result-row
+  children {
+    MillForceCompareToeDeltaLabel
+    MillForceCompareToeDeltaValue
+  }
+}
+
+view MillForceCompareRadialDeltaLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "Δ max F_r"
+}
+
+view MillForceCompareRadialDeltaValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "+0.0 kN"
+  bindings {
+    text from capability MillForceCross.F_r_max_delta_text
+  }
+}
+
+view MillForceCompareRadialDeltaRow {
+  kind metric-row
+  class mill-force-result-row
+  children {
+    MillForceCompareRadialDeltaLabel
+    MillForceCompareRadialDeltaValue
+  }
+}
+
+view MillForceCompareResultantDeltaLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "Δ max |F|"
+}
+
+view MillForceCompareResultantDeltaValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "+0.0 kN"
+  bindings {
+    text from capability MillForceCross.F_resultant_max_delta_text
+  }
+}
+
+view MillForceCompareResultantDeltaRow {
+  kind metric-row
+  class mill-force-result-row
+  children {
+    MillForceCompareResultantDeltaLabel
+    MillForceCompareResultantDeltaValue
+  }
+}
+
 view MillForceCompareSection {
   kind section
   class ssec
@@ -5974,6 +6078,10 @@ view MillForceCompareSection {
     MillForceCompareTitle
     MillForceCompareGroundedRow
     MillForceCompareFaithfulRow
+    MillForceCompareFillDeltaRow
+    MillForceCompareToeDeltaRow
+    MillForceCompareRadialDeltaRow
+    MillForceCompareResultantDeltaRow
   }
 }
 

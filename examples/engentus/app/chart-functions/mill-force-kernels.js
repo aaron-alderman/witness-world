@@ -9,6 +9,19 @@
 const TWO_PI = 2 * Math.PI;
 const METHOD_ORDER = ["faithful", "grounded"];
 
+function methodDelta(values) {
+  if (!Array.isArray(values)) return 0;
+  const faithful = values[METHOD_ORDER.indexOf("faithful")] ?? 0;
+  const grounded = values[METHOD_ORDER.indexOf("grounded")] ?? 0;
+  return Number(faithful) - Number(grounded);
+}
+
+function signedFixed(value, digits) {
+  const number = Number(value);
+  const sign = number > 0 ? "+" : "";
+  return `${sign}${number.toFixed(digits)}`;
+}
+
 const _GL64_X = [
   0.0243502926634244325089, 0.0729931217877990394495, 0.1214628509941929108768, 0.1696444204239928180374,
   0.2174236437400070841497, 0.2646871622087674163881, 0.3113228719902109561575, 0.3572201583376681159504,
@@ -186,6 +199,8 @@ export const millForceKernels = {
   omega_text: value => `${Number(value).toFixed(3)} rad/s`,
   rho_charge_text: value => `${Number(value).toFixed(3)} SG`,
   force_kn_text: value => `${(Number(value) / 1000).toFixed(1)} kN`,
+  deg_delta_text: values => `${signedFixed(methodDelta(values) * 180 / Math.PI, 1)}°`,
+  force_delta_kn_text: values => `${signedFixed(methodDelta(values) / 1000, 1)} kN`,
 
   fill_angle: (J, radius, height, method) =>
     method === "faithful" ? calcGammaFaithful(J, radius, height) : calcGammaGrounded(J),
