@@ -112,6 +112,349 @@ function buildRungResult(id, status, detail = null) {
   return { id, status, detail };
 }
 
+function assertMcpWriteOk(result, label) {
+  if (result?.isError) {
+    throw new Error(`${label} failed: ${JSON.stringify(result.structuredContent ?? null)}`);
+  }
+  return result;
+}
+
+async function authorEngentusShellFlowThroughMcp(write, {
+  runnerId,
+  stamp
+}) {
+  const contextId = `${stamp}_engentus_context`;
+  const basePath = `/${stamp}-engentus`;
+  const ids = {
+    routeState: `${stamp}_engentus_route_state`,
+    authStatus: `${stamp}_engentus_auth_status`,
+    profileMenuVisible: `${stamp}_engentus_profile_menu_visible`,
+    process: `${stamp}_engentus_shell_navigation`,
+    signIn: `${stamp}_engentus_sign_in`,
+    signOut: `${stamp}_engentus_sign_out`,
+    signBackIn: `${stamp}_engentus_sign_back_in`,
+    root: `${stamp}_engentus_root`,
+    login: `${stamp}_engentus_login`,
+    loginBook: `${stamp}_engentus_login_book`,
+    loginTitle: `${stamp}_engentus_login_title`,
+    microsoftButton: `${stamp}_engentus_ms_button`,
+    microsoftLabel: `${stamp}_engentus_ms_label`,
+    loginSubmit: `${stamp}_engentus_login_submit`,
+    loginSubmitLabel: `${stamp}_engentus_login_submit_label`,
+    home: `${stamp}_engentus_home`,
+    homeTitle: `${stamp}_engentus_home_title`,
+    profileButton: `${stamp}_engentus_profile_button`,
+    profileMenu: `${stamp}_engentus_profile_menu`,
+    profileSignout: `${stamp}_engentus_profile_signout`,
+    signout: `${stamp}_engentus_signout`,
+    signoutBook: `${stamp}_engentus_signout_book`,
+    signoutTitle: `${stamp}_engentus_signout_title`,
+    signBackButton: `${stamp}_engentus_sign_back_button`,
+    rootRoute: `${stamp}_engentus_root_route`,
+    screenRoute: `${stamp}_engentus_screen_route`,
+    rootServe: `${stamp}_engentus_root_serve`,
+    screenServe: `${stamp}_engentus_screen_serve`
+  };
+  const paths = {
+    root: basePath,
+    login: `${basePath}/login`,
+    home: `${basePath}/home`,
+    signout: `${basePath}/signout`
+  };
+
+  assertMcpWriteOk(await write("context.create", {
+    id: contextId,
+    label: "MCP-authored Engentus shell flow"
+  }, 100), "engentus context.create");
+
+  for (const [offset, body] of [
+    {
+      id: ids.routeState,
+      role: "state",
+      valueType: "text",
+      initial: "login"
+    },
+    {
+      id: ids.authStatus,
+      role: "state",
+      valueType: "text",
+      initial: "idle"
+    },
+    {
+      id: ids.profileMenuVisible,
+      role: "state",
+      valueType: "boolean",
+      initial: false
+    }
+  ].entries()) {
+    assertMcpWriteOk(await write("type.create", body, 101 + offset), `engentus type.create ${body.id}`);
+  }
+
+  for (const [offset, body] of [
+    { id: ids.signIn, role: "event" },
+    { id: ids.signOut, role: "event" },
+    { id: ids.signBackIn, role: "event" }
+  ].entries()) {
+    assertMcpWriteOk(await write("message.create", body, 110 + offset), `engentus message.create ${body.id}`);
+  }
+
+  assertMcpWriteOk(await write("process.create", {
+    id: ids.process,
+    state: [ids.routeState, ids.authStatus, ids.profileMenuVisible],
+    handles: [ids.signIn, ids.signOut, ids.signBackIn],
+    emits: [],
+    rules: [
+      {
+        trigger: ids.signIn,
+        steps: [
+          { kind: "setState", state: ids.authStatus, value: "pending" },
+          { kind: "delay", ms: 1250 },
+          { kind: "setState", state: ids.authStatus, value: "folding" },
+          { kind: "delay", ms: 920 },
+          { kind: "setState", state: ids.routeState, value: "home" },
+          { kind: "setState", state: ids.authStatus, value: "signedIn" }
+        ]
+      },
+      {
+        trigger: ids.signOut,
+        steps: [
+          { kind: "setState", state: ids.profileMenuVisible, value: false },
+          { kind: "setState", state: ids.authStatus, value: "signingOut" },
+          { kind: "setState", state: ids.routeState, value: "signout" },
+          { kind: "delay", ms: 950 },
+          { kind: "setState", state: ids.authStatus, value: "signedOut" }
+        ]
+      },
+      {
+        trigger: ids.signBackIn,
+        steps: [
+          { kind: "setState", state: ids.routeState, value: "login" },
+          { kind: "setState", state: ids.authStatus, value: "idle" }
+        ]
+      }
+    ]
+  }, 120), "engentus process.create");
+
+  const surfaceDocs = [
+    {
+      id: ids.root,
+      context: contextId,
+      surfaceKind: "app-root",
+      processRef: ids.process,
+      children: [ids.login, ids.home, ids.signout]
+    },
+    {
+      id: ids.login,
+      context: contextId,
+      surfaceKind: "auth-screen",
+      processRef: ids.process,
+      props: {
+        domId: "view-login",
+        routeKey: "login",
+        routePath: paths.login,
+        documentTitle: "Welcome back"
+      },
+      bindings: [
+        { prop: "routeUnderlay", source: { kind: "state", state: ids.authStatus, map: { folding: "home", default: "" } } }
+      ],
+      children: [ids.loginBook]
+    },
+    {
+      id: ids.loginBook,
+      context: contextId,
+      surfaceKind: "region",
+      className: "auth-book",
+      props: { domId: "login-auth-book" },
+      bindings: [
+        { prop: "className", source: { kind: "state", state: ids.authStatus, map: { folding: "folding", default: "" } } }
+      ],
+      children: [ids.loginTitle, ids.microsoftButton, ids.loginSubmit]
+    },
+    {
+      id: ids.loginTitle,
+      context: contextId,
+      surfaceKind: "screen-header",
+      props: { text: "Welcome back" }
+    },
+    {
+      id: ids.microsoftButton,
+      context: contextId,
+      surfaceKind: "action",
+      className: "ms-btn",
+      props: { tag: "button", domId: "ms-btn" },
+      bindings: [
+        { prop: "className", source: { kind: "state", state: ids.authStatus, map: { pending: "pending", folding: "pending", default: "" } } }
+      ],
+      interactions: [
+        { target: "self", event: "click", action: { kind: "deliver", message: ids.signIn } }
+      ],
+      children: [ids.microsoftLabel]
+    },
+    {
+      id: ids.microsoftLabel,
+      context: contextId,
+      surfaceKind: "text",
+      props: { domId: "ms-btn-label", text: "Sign in with Microsoft" },
+      bindings: [
+        { prop: "text", source: { kind: "state", state: ids.authStatus, map: { pending: "Signing in…", folding: "Signing in…", default: "Sign in with Microsoft" } } }
+      ]
+    },
+    {
+      id: ids.loginSubmit,
+      context: contextId,
+      surfaceKind: "action",
+      className: "auth-submit",
+      props: { tag: "button", domId: "login-submit" },
+      bindings: [
+        { prop: "disabled", source: { kind: "state", state: ids.authStatus, map: { pending: true, folding: true, default: false } } }
+      ],
+      children: [ids.loginSubmitLabel]
+    },
+    {
+      id: ids.loginSubmitLabel,
+      context: contextId,
+      surfaceKind: "text",
+      props: { domId: "login-submit-label", text: "Sign in" }
+    },
+    {
+      id: ids.home,
+      context: contextId,
+      surfaceKind: "app-shell",
+      processRef: ids.process,
+      props: {
+        domId: "module-area",
+        routeKey: "home",
+        routePath: paths.home,
+        title: "Analysis Modules",
+        subtitle: "Select a module to begin analysis"
+      },
+      children: [ids.homeTitle, ids.profileButton, ids.profileMenu]
+    },
+    {
+      id: ids.homeTitle,
+      context: contextId,
+      surfaceKind: "screen-header",
+      props: { text: "Analysis Modules" }
+    },
+    {
+      id: ids.profileButton,
+      context: contextId,
+      surfaceKind: "action",
+      props: { tag: "button", domId: "user-prof", label: "AA" },
+      interactions: [
+        { target: "self", event: "click", action: { kind: "setState", state: ids.profileMenuVisible, value: { kind: "toggleState", state: ids.profileMenuVisible } } }
+      ]
+    },
+    {
+      id: ids.profileMenu,
+      context: contextId,
+      surfaceKind: "menu",
+      props: { domId: "up-menu", hidden: true },
+      bindings: [
+        { prop: "visible", source: { kind: "state", state: ids.profileMenuVisible } }
+      ],
+      children: [ids.profileSignout]
+    },
+    {
+      id: ids.profileSignout,
+      context: contextId,
+      surfaceKind: "action",
+      className: "up-mi up-mi-signout",
+      props: { tag: "button", domId: "up-menu-signout", label: "Sign out" },
+      interactions: [
+        { target: "self", event: "click", action: { kind: "deliver", message: ids.signOut } }
+      ]
+    },
+    {
+      id: ids.signout,
+      context: contextId,
+      surfaceKind: "auth-screen",
+      processRef: ids.process,
+      props: {
+        domId: "view-signout",
+        routeKey: "signout",
+        routePath: paths.signout,
+        documentTitle: "You've been signed out"
+      },
+      bindings: [
+        { prop: "routeUnderlay", source: { kind: "state", state: ids.authStatus, map: { signingOut: "home", default: "" } } }
+      ],
+      children: [ids.signoutBook]
+    },
+    {
+      id: ids.signoutBook,
+      context: contextId,
+      surfaceKind: "region",
+      className: "auth-book",
+      props: { domId: "signout-auth-book" },
+      bindings: [
+        { prop: "className", source: { kind: "state", state: ids.authStatus, map: { signingOut: "incoming", default: "" } } }
+      ],
+      children: [ids.signoutTitle, ids.signBackButton]
+    },
+    {
+      id: ids.signoutTitle,
+      context: contextId,
+      surfaceKind: "screen-header",
+      props: { text: "You've been signed out" }
+    },
+    {
+      id: ids.signBackButton,
+      context: contextId,
+      surfaceKind: "action",
+      className: "auth-submit",
+      props: { tag: "button", domId: "sign-back-in", label: "Sign back in", href: paths.root },
+      interactions: [
+        { target: "self", event: "click", action: { kind: "deliver", message: ids.signBackIn } }
+      ]
+    }
+  ];
+
+  assertMcpWriteOk(await write("surface.create", surfaceDocs, 130), "engentus surface.create");
+
+  for (const [offset, body] of [
+    {
+      id: ids.rootRoute,
+      context: contextId,
+      path: paths.root,
+      method: "GET",
+      handler: "page.surface",
+      serves: ids.root,
+      rootSurface: ids.root,
+      defaultScreen: "login",
+      routeState: { process: ids.process, state: ids.routeState }
+    },
+    {
+      id: ids.screenRoute,
+      context: contextId,
+      path: `${basePath}/:screen`,
+      method: "GET",
+      handler: "page.surface",
+      serves: ids.root,
+      rootSurface: ids.root,
+      defaultScreen: "login",
+      routeState: { process: ids.process, state: ids.routeState }
+    }
+  ].entries()) {
+    assertMcpWriteOk(await write("route.create", body, 150 + offset), `engentus route.create ${body.id}`);
+  }
+
+  for (const [offset, route] of [ids.rootRoute, ids.screenRoute].entries()) {
+    assertMcpWriteOk(await write("serve.create", {
+      serverRunner: runnerId,
+      route
+    }, 160 + offset), `engentus serve.create ${route}`);
+  }
+
+  return {
+    contextId,
+    basePath,
+    ids,
+    paths,
+    authoredSurfaceCount: surfaceDocs.length
+  };
+}
+
 export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
   username = "aaron",
   password = "aaron"
@@ -394,6 +737,26 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     firstBlockedRung = "urlToRouteState";
   }
 
+  const engentusReauthoring = await authorEngentusShellFlowThroughMcp(write, {
+    runnerId,
+    stamp
+  });
+  const engentusLoginPage = await fetch(`${baseUrl}${engentusReauthoring.paths.login}`);
+  const engentusLoginHtml = await engentusLoginPage.text();
+  const engentusHomePage = await fetch(`${baseUrl}${engentusReauthoring.paths.home}`);
+  const engentusHomeHtml = await engentusHomePage.text();
+  const engentusSignoutPage = await fetch(`${baseUrl}${engentusReauthoring.paths.signout}`);
+  const engentusSignoutHtml = await engentusSignoutPage.text();
+  engentusReauthoring.servedChecks = {
+    loginHttpStatus: engentusLoginPage.status,
+    homeHttpStatus: engentusHomePage.status,
+    signoutHttpStatus: engentusSignoutPage.status,
+    loginVisible: /Welcome back/.test(engentusLoginHtml) && /ms-btn/.test(engentusLoginHtml),
+    homeVisible: /Analysis Modules/.test(engentusHomeHtml) && /module-area/.test(engentusHomeHtml),
+    signoutVisible: /You've been signed out/.test(engentusSignoutHtml) && /sign-back-in/.test(engentusSignoutHtml),
+    routeStateDescriptorPresent: /routeState/.test(engentusLoginHtml)
+  };
+
   const finalState = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
     view: "bootstrapState"
   }, 20);
@@ -426,6 +789,7 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
       authoringPolicy: diagnostics.authoringPolicy
     },
     authoringMatrix,
+    engentusReauthoring,
     pathwayProbe,
     replay: pathwayProbe,
     capabilityChecks: {
@@ -482,6 +846,15 @@ async function main(argv = process.argv.slice(2)) {
     process.exit(1);
   }
   if (!result.pathwayProbe.routeSelectedSurfaceVisible) {
+    process.exit(1);
+  }
+  if (!result.engentusReauthoring?.servedChecks?.loginVisible) {
+    process.exit(1);
+  }
+  if (!result.engentusReauthoring?.servedChecks?.homeVisible) {
+    process.exit(1);
+  }
+  if (!result.engentusReauthoring?.servedChecks?.signoutVisible) {
     process.exit(1);
   }
 }

@@ -298,13 +298,21 @@ test("route.create accepts page.surface rootSurface params and rejects missing r
       method: "GET",
       handler: "page.surface",
       rootSurface: "ReplayRoot",
-      defaultScreen: "login"
+      defaultScreen: "login",
+      routeState: {
+        process: "ReplayFlow",
+        state: "ReplayActiveRoute"
+      }
     },
     ...routeSupport()
   });
   assert.equal(okRoute.ok, true);
   assert.equal(okRoute.route.params.rootSurface, "ReplayRoot");
   assert.equal(okRoute.route.params.defaultScreen, "login");
+  assert.deepEqual(okRoute.route.params.routeState, {
+    process: "ReplayFlow",
+    state: "ReplayActiveRoute"
+  });
 
   const missingRootSurface = requestBootstrapRouteDefine(world, {
     actor: "aaron",

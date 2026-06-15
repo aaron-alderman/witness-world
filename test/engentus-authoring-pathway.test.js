@@ -7,6 +7,7 @@ import { createWorld } from "../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
 import { MCP_PROTOCOL_VERSION } from "../plugins/mcp/mcp-tools.js";
 import { runCanonicalAuthoringPathwayProbe } from "../scripts/mcp-authoring-replay-probe.mjs";
+import { launchBrowser } from "./support/harness.js";
 
 async function tempRuntimeRoot() {
   return fs.mkdtemp(path.join(os.tmpdir(), "witness-engentus-authoring-pathway-"));
@@ -179,7 +180,7 @@ test("canonical docs encode the single-track canonical authoring pathway probe",
   assert.match(pathwayPlaybook, /URL -> route-state synchronization/i);
 });
 
-test("canonical authoring pathway probe proves route-selected surface output and stops next at route-state synchronization", { timeout: 10000 }, async () => {
+test("canonical authoring pathway probe proves route-selected surface output and MCP-authors the Engentus shell flow", { timeout: 15000 }, async () => {
   const server = await startAuthoringProbeServer();
   try {
     const result = await runCanonicalAuthoringPathwayProbe(server.url);
@@ -218,6 +219,14 @@ test("canonical authoring pathway probe proves route-selected surface output and
     assert.equal(result.stateChecks.routeStateProcessPresent, true);
     assert.equal(result.stateChecks.routeStateTypePresent, true);
     assert.equal(result.stateChecks.routeStateMessagePresent, true);
+    assert.equal(result.engentusReauthoring.authoredSurfaceCount > 0, true);
+    assert.equal(result.engentusReauthoring.servedChecks.loginHttpStatus, 200);
+    assert.equal(result.engentusReauthoring.servedChecks.homeHttpStatus, 200);
+    assert.equal(result.engentusReauthoring.servedChecks.signoutHttpStatus, 200);
+    assert.equal(result.engentusReauthoring.servedChecks.loginVisible, true);
+    assert.equal(result.engentusReauthoring.servedChecks.homeVisible, true);
+    assert.equal(result.engentusReauthoring.servedChecks.signoutVisible, true);
+    assert.equal(result.engentusReauthoring.servedChecks.routeStateDescriptorPresent, true);
   } finally {
     await server.close();
   }
@@ -313,241 +322,50 @@ test("live constrained MCP keeps canonical authoring actions available while pag
   }
 });
 
-test("constrained MCP can reauthor the Engentus shell route cluster through canonical authoring primitives", { timeout: 10000 }, async () => {
+test("canonical pathway probe recreates the current Engentus shell flow through MCP calls only", { timeout: 30000 }, async () => {
   const server = await startAuthoringProbeServer();
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
   try {
-    const { mcpServerId, token, runnerId } = await provisionAuthoringMcpServer(server.url);
-    const stamp = `engentus_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-    const contextId = `${stamp}.context`;
-    const routeTypeId = `${stamp}.routeState`;
-    const processId = `${stamp}.shellNav`;
-    const messages = {
-      signIn: `${stamp}.signIn`,
-      signOut: `${stamp}.signOut`,
-      goHome: `${stamp}.goHome`,
-      goGoodman: `${stamp}.goGoodman`,
-      goMillCharge: `${stamp}.goMillCharge`,
-      goMillForce: `${stamp}.goMillForce`
-    };
-    const rootId = `${stamp}.root`;
-    const loginId = `${stamp}.login`;
-    const homeId = `${stamp}.home`;
-    const goodmanId = `${stamp}.goodman`;
-    const millChargeId = `${stamp}.millCharge`;
-    const millForceId = `${stamp}.millForce`;
-    const signoutId = `${stamp}.signout`;
-    const loginHeaderId = `${stamp}.loginHeader`;
-    const homeHeaderId = `${stamp}.homeHeader`;
-    const goodmanHeaderId = `${stamp}.goodmanHeader`;
-    const millChargeHeaderId = `${stamp}.millChargeHeader`;
-    const millForceHeaderId = `${stamp}.millForceHeader`;
-    const signoutHeaderId = `${stamp}.signoutHeader`;
-    const routeId = `${stamp}.route`;
+    const result = await runCanonicalAuthoringPathwayProbe(server.url);
+    const { page } = browser;
+    const paths = result.engentusReauthoring.paths;
+    await page.goto(`${server.url}${paths.login}`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
+    assert.equal(await page.textContent("#ms-btn-label"), "Sign in with Microsoft");
+    await page.click("#ms-btn");
+    await page.waitForFunction(() =>
+      document.querySelector("#ms-btn-label")?.textContent === "Signing in…"
+    );
+    await page.waitForFunction(() =>
+      [...document.querySelectorAll("#login-auth-book")].some(node => node.classList.contains("folding"))
+    );
+    assert.equal(await page.locator("#surface-route-underlay #module-area").count(), 1);
+    await page.waitForURL(`${server.url}${paths.home}`);
+    await page.waitForSelector("#module-area");
+    assert.equal(new URL(page.url()).pathname, paths.home);
+    assert.match(await page.textContent("#module-area"), /Analysis Modules/);
+    assert.equal(await page.locator("#surface-route-underlay").count(), 0);
 
-    const stateProcess = await mcpToolCall(server.url, mcpServerId, token, "authoring.write", {
-      action: "context.create",
-      body: { id: contextId, label: "Engentus constrained reauthoring" }
-    }, 20);
-    assert.equal(stateProcess.isError, false);
+    await page.click("#user-prof");
+    await page.waitForSelector("#up-menu:not([hidden])");
+    await page.click("#up-menu-signout");
+    await page.waitForSelector("#view-signout");
+    assert.equal(new URL(page.url()).pathname, paths.signout);
+    assert.equal(await page.locator("#signout-auth-book.incoming").count(), 1);
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.trace?.some(row => row.label?.includes("950ms"))
+    );
 
-    const typeResult = await mcpToolCall(server.url, mcpServerId, token, "authoring.write", {
-      action: "type.create",
-      body: { id: routeTypeId, role: "state", valueType: "text", initial: "/engentus/login" }
-    }, 21);
-    assert.equal(typeResult.isError, false);
-
-    const processResult = await mcpToolCall(server.url, mcpServerId, token, "authoring.write", {
-      action: "process.create",
-      body: {
-        id: processId,
-        state: [routeTypeId],
-        handles: Object.values(messages),
-        emits: [],
-        rules: []
-      }
-    }, 22);
-    assert.equal(processResult.isError, false);
-
-    for (const [messageKey, messageId] of Object.entries(messages)) {
-      const nextRoute = ({
-        signIn: "/engentus/home",
-        signOut: "/engentus/signout",
-        goHome: "/engentus/home",
-        goGoodman: "/engentus/goodman",
-        goMillCharge: "/engentus/mill-charge",
-        goMillForce: "/engentus/mill-force"
-      })[messageKey];
-      const messageResult = await mcpToolCall(server.url, mcpServerId, token, "authoring.write", {
-        action: "message.create",
-        body: {
-          id: messageId,
-          role: "event",
-          writes: {
-            [routeTypeId]: nextRoute
-          }
-        }
-      }, 23 + Object.keys(messages).indexOf(messageKey));
-      assert.equal(messageResult.isError, false);
-    }
-
-    const surfaces = await mcpToolCall(server.url, mcpServerId, token, "authoring.write", {
-      action: "surface.create",
-      body: [
-        {
-          id: rootId,
-          context: contextId,
-          surfaceKind: "app-root",
-          processRef: processId,
-          children: [loginId, homeId, goodmanId, millChargeId, millForceId, signoutId]
-        },
-        {
-          id: loginId,
-          context: contextId,
-          surfaceKind: "auth-screen",
-          processRef: processId,
-          props: { routeKey: "login", routePath: "/engentus/login" },
-          children: [loginHeaderId]
-        },
-        {
-          id: loginHeaderId,
-          context: contextId,
-          surfaceKind: "screen-header",
-          props: {
-            title: "Welcome back",
-            subtitle: "Sign in to your Engentus account"
-          }
-        },
-        {
-          id: homeId,
-          context: contextId,
-          surfaceKind: "app-shell",
-          processRef: processId,
-          props: { routeKey: "home", routePath: "/engentus/home" },
-          children: [homeHeaderId]
-        },
-        {
-          id: homeHeaderId,
-          context: contextId,
-          surfaceKind: "screen-header",
-          props: {
-            title: "Analysis Modules",
-            subtitle: "Select a module to begin analysis"
-          }
-        },
-        {
-          id: goodmanId,
-          context: contextId,
-          surfaceKind: "app-shell",
-          processRef: processId,
-          capabilityRefs: ["chart.render"],
-          props: { routeKey: "goodman", routePath: "/engentus/goodman" },
-          children: [goodmanHeaderId]
-        },
-        {
-          id: goodmanHeaderId,
-          context: contextId,
-          surfaceKind: "screen-header",
-          props: {
-            title: "Goodman Fatigue Diagram",
-            subtitle: "SN curve analysis with Monte Carlo simulation"
-          }
-        },
-        {
-          id: millChargeId,
-          context: contextId,
-          surfaceKind: "app-shell",
-          processRef: processId,
-          capabilityRefs: ["chart.render"],
-          props: { routeKey: "mill-charge", routePath: "/engentus/mill-charge" },
-          children: [millChargeHeaderId]
-        },
-        {
-          id: millChargeHeaderId,
-          context: contextId,
-          surfaceKind: "screen-header",
-          props: {
-            title: "Mill Charge Motion",
-            subtitle: "2D charge shape, regime and power proxy"
-          }
-        },
-        {
-          id: millForceId,
-          context: contextId,
-          surfaceKind: "app-shell",
-          processRef: processId,
-          capabilityRefs: ["chart.render"],
-          props: { routeKey: "mill-force", routePath: "/engentus/mill-force" },
-          children: [millForceHeaderId]
-        },
-        {
-          id: millForceHeaderId,
-          context: contextId,
-          surfaceKind: "screen-header",
-          props: {
-            title: "Mill Force Analysis",
-            subtitle: "Liner force distribution with dual-model comparison"
-          }
-        },
-        {
-          id: signoutId,
-          context: contextId,
-          surfaceKind: "auth-screen",
-          processRef: processId,
-          props: { routeKey: "signout", routePath: "/engentus/signout" },
-          children: [signoutHeaderId]
-        },
-        {
-          id: signoutHeaderId,
-          context: contextId,
-          surfaceKind: "screen-header",
-          props: {
-            title: "You've been signed out",
-            subtitle: "Your session has ended securely."
-          }
-        }
-      ]
-    }, 40);
-    assert.equal(surfaces.isError, false);
-
-    const routeCreate = await mcpToolCall(server.url, mcpServerId, token, "authoring.write", {
-      action: "route.create",
-      body: {
-        id: routeId,
-        context: contextId,
-        path: "/engentus/:screen",
-        method: "GET",
-        handler: "page.surface",
-        serves: rootId,
-        rootSurface: rootId,
-        defaultScreen: "login"
-      }
-    }, 41);
-    assert.equal(routeCreate.isError, false);
-
-    const serveCreate = await mcpToolCall(server.url, mcpServerId, token, "authoring.write", {
-      action: "serve.create",
-      body: {
-        serverRunner: runnerId,
-        route: routeId
-      }
-    }, 42);
-    assert.equal(serveCreate.isError, false);
-
-    const [loginHtml, homeHtml, goodmanHtml, signoutHtml] = await Promise.all([
-      fetch(`${server.url}/engentus/login`).then(result => result.text()),
-      fetch(`${server.url}/engentus/home`).then(result => result.text()),
-      fetch(`${server.url}/engentus/goodman`).then(result => result.text()),
-      fetch(`${server.url}/engentus/signout`).then(result => result.text())
-    ]);
-
-    assert.match(loginHtml, /Welcome back/);
-    assert.match(homeHtml, /Analysis Modules/);
-    assert.match(homeHtml, /Select a module to begin analysis/);
-    assert.match(goodmanHtml, /Goodman Fatigue Diagram/);
-    assert.match(signoutHtml, /You've been signed out/);
-    assert.match(homeHtml, /activeSurface=.*\.home/i);
-    assert.match(goodmanHtml, /activeSurface=.*\.goodman/i);
+    await page.click("#sign-back-in");
+    await page.waitForSelector("#view-login");
+    assert.equal(new URL(page.url()).pathname, paths.login);
+    assert.equal(await page.locator("#signout-auth-book.folding").count(), 0);
+    assert.equal(await page.locator("#surface-route-underlay").count(), 0);
   } finally {
+    await browser.close();
     await server.close();
   }
 });

@@ -1378,6 +1378,16 @@ export function requestBootstrapRouteDefine(world, {
   if (typeof body.frontendProgram === "string" && body.frontendProgram.trim()) params.frontendProgram = body.frontendProgram.trim();
   if (typeof body.page === "string" && body.page.trim()) params.page = body.page.trim();
   if (typeof body.defaultScreen === "string" && body.defaultScreen.trim()) params.defaultScreen = body.defaultScreen.trim();
+  if (body.routeState && typeof body.routeState === "object" && !Array.isArray(body.routeState)) {
+    const process = trimOptionalString(body.routeState.process) ?? trimOptionalString(body.routeState.processRef);
+    const state = trimOptionalString(body.routeState.state) ?? trimOptionalString(body.routeState.stateRef);
+    if (state) {
+      params.routeState = {
+        ...(process ? { process } : {}),
+        state
+      };
+    }
+  }
   if (body.liveProjection === true) params.liveProjection = true;
   if (Array.isArray(body.excludeWidgetRoles) && body.excludeWidgetRoles.length) params.excludeWidgetRoles = [...body.excludeWidgetRoles];
   if (typeof body.defaultRootWidget === "string" && body.defaultRootWidget.trim()) params.rootWidget = body.defaultRootWidget.trim();
@@ -1387,6 +1397,7 @@ export function requestBootstrapRouteDefine(world, {
     || body.frontendProgram
     || body.page
     || params.defaultScreen
+    || params.routeState
     || body.liveProjection === true
     || (Array.isArray(body.excludeWidgetRoles) && body.excludeWidgetRoles.length)
     || (typeof body.defaultRootWidget === "string" && body.defaultRootWidget.trim())
