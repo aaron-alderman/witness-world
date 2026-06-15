@@ -13,6 +13,7 @@ Repo-wide constrained LLM authoring policy lives in
 for finding the next honest gap lives in `docs/AUTHORING-REPLAY-PLAYBOOK.md`.
 The required read-first runtime ownership map lives in
 `docs/RUNTIME-STACK-MAP.md`.
+Internal reference import/uplift design lives in `docs/WHTML-WCSS-UPLIFT.md`.
 
 ## Thesis
 
@@ -35,6 +36,33 @@ There is one approved advancement lane for constrained frontend work:
 
 There is no second generic frontend initiative beside this pathway probe. If
 Engentus moves honestly, it moves only by advancing that pathway ladder.
+
+## Internal uplift workspace
+
+`WHTML/WCSS` is the internal Engentus import/uplift workspace. It captures
+reference HTML/CSS evidence, including inline styles, plus a symmetry graph for
+shared presentation laws and localized symmetry breaks.
+
+It is not:
+
+- a runtime
+- a public MCP authoring noun
+- a second proof lane
+- permission to bypass `plugin.authoring`
+
+It feeds the same authored targets already recognized by this document:
+
+- widget emission for concrete/imported UI representation
+- surface emission for the constrained `surface + process + projection` path
+
+The three Engentus tracks therefore stay connected:
+
+1. the real app serving path
+2. mechanical HTML/CSS parity against `example-ports/engentus/`
+3. MCP-only reconstruction through the canonical authoring pathway probe
+
+Uplift output is candidate authored evidence. It is not executable frontend
+authority until it passes through the existing serving and pathway gates.
 
 ## Current reset truth
 

@@ -12,6 +12,11 @@ The canonical authoring pathway probe is the only approved proof lane for
 constrained frontend progress. It is not a runtime concept, not an
 implementation seam, and not a second platform initiative.
 
+`WHTML/WCSS` may prepare internal uplift evidence from a reference oracle, but
+it does not change this proof lane. Uplift output must still become existing
+authored material and pass through this pathway before it counts as constrained
+frontend progress.
+
 ## Rules
 
 1. Read the machine-readable authoring/runtime matrix first.
@@ -60,6 +65,8 @@ What remains blocked:
 - supported means proven by the current pathway probe
 - blocked means not yet proven or explicitly failed on the pathway probe
 - no later rung may run after the first blocked rung
+- WHTML/WCSS evidence can inform candidate authored input, but cannot mark a
+  pathway rung supported by itself
 
 ## Anti-patterns
 
@@ -67,3 +74,5 @@ What remains blocked:
 - rebuilding app flow in handwritten JS
 - leaving wrong-behavior tests around as traps to be “fixed”
 - treating the pathway probe as a frontend runtime concept
+- treating WHTML/WCSS as a public MCP noun, runtime lane, or shortcut around the
+  canonical pathway

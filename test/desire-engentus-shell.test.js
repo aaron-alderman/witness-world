@@ -69,6 +69,10 @@ test("the shell is structured through explicit child regions instead of flattene
 
   assert.deepEqual(surfaces.get("NewsPanel")?.body?.children, [
     "NewsFeedHeader",
+    "NewsFeedList"
+  ]);
+
+  assert.deepEqual(surfaces.get("NewsFeedList")?.body?.children, [
     "NewsFeedAlertReading",
     "NewsFeedMaintenanceWindow",
     "NewsFeedGoodmanRelease",

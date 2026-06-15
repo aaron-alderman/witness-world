@@ -4,6 +4,8 @@ This repo supports an explicit constrained authoring mode for app/product work.
 
 The required read-first map of the existing runtime stack and concern ownership
 lives in `docs/RUNTIME-STACK-MAP.md`.
+The internal reference import/uplift workspace is described in
+`docs/WHTML-WCSS-UPLIFT.md`.
 
 ## Constitutional rule
 
@@ -39,6 +41,22 @@ capability-matrix truth.
 
 There is no second lane for temporary generic frontend work outside that pathway
 gate.
+
+## Internal uplift is not authoring permission
+
+`WHTML/WCSS` may be used as an internal import/uplift workspace for reference
+HTML/CSS evidence. It is not a public constrained authoring surface.
+
+In `mcp_only` mode the LLM still may not:
+
+- call public `whtml.create` or `wcss.create` actions, because none exist
+- treat uplift output as a custom runtime or app-local controller
+- bypass `plugin.authoring` with generated JS, direct file edits, or route-local
+  browser facades
+
+Uplift can produce candidate widget or surface authored material, but public
+frontend progress is still proved only through the canonical authoring pathway
+probe and the capability matrix.
 
 ## Current `page.surface` truth
 

@@ -400,8 +400,8 @@ view EngentusAppChrome {
 
 view EngentusAuthFooter {
   kind footer
-  class engentus-auth-footer
-  prop text = "Copyright 2025 Engentus Pty Ltd. All rights reserved."
+  class auth-footer
+  prop text = "© 2025 Engentus Pty Ltd. All rights reserved."
 }
 
 view EngentusHeroLogo {
@@ -423,13 +423,13 @@ view EngentusFormLogoImage {
 view EngentusHeroTagline {
   kind text
   class auth-tagline
-  prop text = "Structural Intelligence for SAG Mills"
+  prop rawHtml = "Structural Intelligence<br>for <em>SAG Mills</em>"
 }
 
 view EngentusHeroSubtitle {
   kind text
   class auth-sub
-  prop text = "Real-time fatigue monitoring and predictive analysis for critical liner fasteners, from bolt load to remaining life."
+  prop text = "Real-time fatigue monitoring and predictive analysis for critical liner fasteners — from bolt load to remaining life."
 }
 
 view EngentusFeatureRealtimeLoadDot {
@@ -585,6 +585,7 @@ view EngentusLoginRememberField {
 
 view EngentusLoginPrimaryAction {
   kind action
+  prop tag = "button"
   prop domId = "ms-btn"
   class ms-btn
   prop label = "Sign in with Microsoft"
@@ -658,6 +659,7 @@ view EngentusLoginForgotRow {
 
 view EngentusLoginSubmitAction {
   kind action
+  prop tag = "button"
   class auth-submit
   prop label = "Sign in"
   prop href = "/engentus/home"
@@ -816,73 +818,237 @@ view EngentusSignout {
 
 view NewsFeedHeader {
   kind section-header
-  class news-feed-header
-  prop label = "Feed"
-  prop status = "Live"
+  class news-hdr
+  children {
+    NewsFeedHeaderLabel
+    NewsFeedLiveStatus
+  }
+}
+
+view NewsFeedHeaderLabel {
+  kind text
+  prop text = "Feed"
+}
+
+view NewsFeedLiveStatus {
+  kind group
+  class news-live
+  children {
+    NewsFeedLiveDot
+    NewsFeedLiveLabel
+  }
+}
+
+view NewsFeedLiveDot {
+  kind decoration
+  class news-live-dot
+}
+
+view NewsFeedLiveLabel {
+  kind text
+  prop text = "Live"
 }
 
 view NewsFeedAlertReading {
-  kind feed-entry
-  class tone-alert
-  prop category = "Alert"
-  prop title = "Sensor B7 on M48 reporting anomalous load readings - review recommended before next measurement window."
-  prop time = "2h ago"
+  kind item
+  class news-item ni-alert
+  children {
+    NewsFeedAlertReadingCategory
+    NewsFeedAlertReadingTitle
+    NewsFeedAlertReadingTime
+  }
+}
+
+view NewsFeedAlertReadingCategory {
+  kind text
+  class ni-cat
+  prop text = "Alert"
+}
+
+view NewsFeedAlertReadingTitle {
+  kind text
+  class ni-title
+  prop text = "Sensor B7 on M48 reporting anomalous load readings — review recommended before next measurement window"
+}
+
+view NewsFeedAlertReadingTime {
+  kind text
+  class ni-time
+  prop text = "2h ago"
 }
 
 view NewsFeedMaintenanceWindow {
-  kind feed-entry
-  class tone-platform
-  prop category = "Platform"
-  prop title = "Scheduled maintenance window: API gateway Sunday 02:00-04:00 AWST."
-  prop time = "6h ago"
+  kind item
+  class news-item ni-platform
+  children {
+    NewsFeedMaintenanceWindowCategory
+    NewsFeedMaintenanceWindowTitle
+    NewsFeedMaintenanceWindowTime
+  }
+}
+
+view NewsFeedMaintenanceWindowCategory {
+  kind text
+  class ni-cat
+  prop text = "Platform"
+}
+
+view NewsFeedMaintenanceWindowTitle {
+  kind text
+  class ni-title
+  prop text = "Scheduled maintenance window: API gateway Sunday 02:00–04:00 AWST"
+}
+
+view NewsFeedMaintenanceWindowTime {
+  kind text
+  class ni-time
+  prop text = "6h ago"
 }
 
 view NewsFeedGoodmanRelease {
-  kind feed-entry
-  class tone-product
-  prop category = "Product"
-  prop title = "Mill-iQ Fatigue Module v2.1.0 now supports multi-scenario ANOVA export."
-  prop time = "1d ago"
+  kind item
+  class news-item ni-product
+  children {
+    NewsFeedGoodmanReleaseCategory
+    NewsFeedGoodmanReleaseTitle
+    NewsFeedGoodmanReleaseTime
+  }
+}
+
+view NewsFeedGoodmanReleaseCategory {
+  kind text
+  class ni-cat
+  prop text = "Product"
+}
+
+view NewsFeedGoodmanReleaseTitle {
+  kind text
+  class ni-title
+  prop text = "Mill-iQ™ Fatigue Module v2.1.0 — Goodman diagram now supports multi-scenario ANOVA export"
+}
+
+view NewsFeedGoodmanReleaseTime {
+  kind text
+  class ni-time
+  prop text = "1d ago"
 }
 
 view NewsFeedRecalibration {
-  kind feed-entry
-  class tone-product
-  prop category = "Product"
-  prop title = "M48 maintenance window complete - 3 bolt sets recalibrated and re-zeroed."
-  prop time = "2d ago"
+  kind item
+  class news-item ni-product
+  children {
+    NewsFeedRecalibrationCategory
+    NewsFeedRecalibrationTitle
+    NewsFeedRecalibrationTime
+  }
+}
+
+view NewsFeedRecalibrationCategory {
+  kind text
+  class ni-cat
+  prop text = "Product"
+}
+
+view NewsFeedRecalibrationTitle {
+  kind text
+  class ni-title
+  prop text = "M48 maintenance window complete — 3 bolt sets recalibrated and re-zeroed"
+}
+
+view NewsFeedRecalibrationTime {
+  kind text
+  class ni-time
+  prop text = "2d ago"
 }
 
 view NewsFeedStandardsUpdate {
-  kind feed-entry
-  class tone-industry
-  prop category = "Industry"
-  prop title = "AS 4024 annex revision published with updated fatigue factors for mining fasteners."
-  prop time = "3d ago"
+  kind item
+  class news-item ni-industry
+  children {
+    NewsFeedStandardsUpdateCategory
+    NewsFeedStandardsUpdateTitle
+    NewsFeedStandardsUpdateTime
+  }
+}
+
+view NewsFeedStandardsUpdateCategory {
+  kind text
+  class ni-cat
+  prop text = "Industry"
+}
+
+view NewsFeedStandardsUpdateTitle {
+  kind text
+  class ni-title
+  prop text = "AS 4024 annex revision published — updated fatigue factors for mining fasteners now available"
+}
+
+view NewsFeedStandardsUpdateTime {
+  kind text
+  class ni-time
+  prop text = "3d ago"
 }
 
 view NewsFeedFirmwareUpdate {
-  kind feed-entry
-  class tone-platform
-  prop category = "Platform"
-  prop title = "Firmware v2.3.1 is available for LinerSense o310 sensors."
-  prop time = "4d ago"
+  kind item
+  class news-item ni-platform
+  children {
+    NewsFeedFirmwareUpdateCategory
+    NewsFeedFirmwareUpdateTitle
+    NewsFeedFirmwareUpdateTime
+  }
+}
+
+view NewsFeedFirmwareUpdateCategory {
+  kind text
+  class ni-cat
+  prop text = "Platform"
+}
+
+view NewsFeedFirmwareUpdateTitle {
+  kind text
+  class ni-title
+  prop text = "New firmware v2.3.1 available for LinerSense o310 sensors"
+}
+
+view NewsFeedFirmwareUpdateTime {
+  kind text
+  class ni-time
+  prop text = "4d ago"
 }
 
 view NewsFeedMonitoringGuidance {
-  kind feed-entry
-  class tone-industry
-  prop category = "Industry"
-  prop title = "MCA published updated guidance on real-time structural monitoring for SAG mills."
-  prop time = "1w ago"
+  kind item
+  class news-item ni-industry
+  children {
+    NewsFeedMonitoringGuidanceCategory
+    NewsFeedMonitoringGuidanceTitle
+    NewsFeedMonitoringGuidanceTime
+  }
 }
 
-view NewsPanel {
-  kind sidebar
-  class news-rail
-  prop domId = "news-panel"
+view NewsFeedMonitoringGuidanceCategory {
+  kind text
+  class ni-cat
+  prop text = "Industry"
+}
+
+view NewsFeedMonitoringGuidanceTitle {
+  kind text
+  class ni-title
+  prop text = "MCA publishes updated guidelines on real-time structural monitoring for SAG mills"
+}
+
+view NewsFeedMonitoringGuidanceTime {
+  kind text
+  class ni-time
+  prop text = "1w ago"
+}
+
+view NewsFeedList {
+  kind list
+  class news-list
   children {
-    NewsFeedHeader
     NewsFeedAlertReading
     NewsFeedMaintenanceWindow
     NewsFeedGoodmanRelease
@@ -890,6 +1056,15 @@ view NewsPanel {
     NewsFeedStandardsUpdate
     NewsFeedFirmwareUpdate
     NewsFeedMonitoringGuidance
+  }
+}
+
+view NewsPanel {
+  kind sidebar
+  prop domId = "news-panel"
+  children {
+    NewsFeedHeader
+    NewsFeedList
   }
 }
 
@@ -959,6 +1134,7 @@ view ModuleStatusComingSoon {
 view ModuleCardMillCharge {
   kind module-card
   class mod-card active
+  prop tag = "div"
   prop routeKey = "mill-charge"
   prop href = "/engentus/mill-charge"
   prop assetRef = "CHARGE"
@@ -974,6 +1150,7 @@ view ModuleCardMillCharge {
 view ModuleCardGoodman {
   kind module-card
   class mod-card active
+  prop tag = "div"
   prop routeKey = "goodman"
   prop href = "/engentus/goodman"
   prop assetRef = "GOODMAN"
@@ -989,6 +1166,7 @@ view ModuleCardGoodman {
 view ModuleCardMillForce {
   kind module-card
   class mod-card active
+  prop tag = "div"
   prop routeKey = "mill-force"
   prop href = "/engentus/mill-force"
   prop assetRef = "FORCE"
