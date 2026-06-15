@@ -604,6 +604,13 @@ event GoodmanShowEditRequested {
   }
 }
 
+event GoodmanSaveStaticSimulationRequested {
+  writes {
+    GoodmanActiveMode: mc
+    GoodmanRunStatusState: ready
+  }
+}
+
 event GoodmanToggleCdfWindowRequested {
   writes {
     GoodmanCdfWindowVisible: true
@@ -783,6 +790,7 @@ process EngentusShellNavigation {
     GoodmanShowStaticRequested
     GoodmanShowMonteCarloRequested
     GoodmanShowEditRequested
+    GoodmanSaveStaticSimulationRequested
     GoodmanToggleCdfWindowRequested
     GoodmanToggleStatsWindowRequested
     GoodmanToggleAnovaWindowRequested
@@ -2664,6 +2672,7 @@ view GoodmanScenarioSection {
     GoodmanStaticProbeMeanStressField
     GoodmanStaticEnduranceLimitField
     GoodmanStaticSlopeField
+    GoodmanSaveStaticSimulationAction
   }
 }
 
@@ -2911,6 +2920,18 @@ view GoodmanScenarioSlipRow {
   children {
     GoodmanScenarioSlipLabel
     GoodmanScenarioSlipValue
+  }
+}
+
+view GoodmanSaveStaticSimulationAction {
+  kind action
+  class save-sim-btn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "⊕ Save as Simulation"
+  prop title = "Create a Monte Carlo simulation from the current bolt set state"
+  interactions {
+    on click self deliver GoodmanSaveStaticSimulationRequested
   }
 }
 

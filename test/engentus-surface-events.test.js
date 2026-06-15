@@ -277,6 +277,14 @@ test("Engentus Goodman modes switch authored chart views through process state",
       runConfigHidden: true,
       chartStyleHidden: true
     });
+    await page.click("#surface-goodmansavestaticsimulationaction");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "mc"
+    );
+    assert.equal(
+      await page.locator("#surface-goodmansimulationsection").evaluate(node => node.hasAttribute("hidden")),
+      false
+    );
 
     await page.click("#surface-goodmanmodemontecarlo");
     await page.waitForFunction(() =>

@@ -36,6 +36,10 @@ grant runtime authority to copied JS or presenter code.
 - Goodman sidebar sections now follow the reference mode gates through authored
   `GoodmanActiveMode` bindings: Static shows scenario controls, Monte Carlo
   shows simulations/run config/scrubber, and Edit shows chart-style controls.
+- Goodman Static now exposes the reference "Save as Simulation" action as an
+  authored process message that moves into Monte Carlo mode. Dynamic simulation
+  creation remains part of the repeated-collection gap rather than a JS
+  workaround.
 - Goodman Monte Carlo chart evaluation now consumes authored run sample count:
   `GoodmanRunBoltsPerSet` binds to `GoodmanMCBands.param.n_samples`, so the
   ensemble axis re-evaluates from process-owned run config.

@@ -65,6 +65,7 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.ok(messages.has("GoodmanShowStaticRequested"));
   assert.ok(messages.has("GoodmanShowMonteCarloRequested"));
   assert.ok(messages.has("GoodmanShowEditRequested"));
+  assert.ok(messages.has("GoodmanSaveStaticSimulationRequested"));
   assert.ok(messages.has("GoodmanToggleCdfWindowRequested"));
   assert.ok(messages.has("GoodmanToggleStatsWindowRequested"));
   assert.ok(messages.has("GoodmanToggleAnovaWindowRequested"));
@@ -180,6 +181,13 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
       target: "self",
       event: "click",
       action: { kind: "deliver", message: "GoodmanToggleCdfWindowRequested" }
+    }
+  ]);
+  assert.deepEqual(surfaces.get("GoodmanSaveStaticSimulationAction")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "GoodmanSaveStaticSimulationRequested" }
     }
   ]);
   assert.deepEqual(surfaces.get("GoodmanRunActionStart")?.body?.interactions, [
@@ -369,7 +377,8 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanStaticRpmField",
     "GoodmanStaticProbeMeanStressField",
     "GoodmanStaticEnduranceLimitField",
-    "GoodmanStaticSlopeField"
+    "GoodmanStaticSlopeField",
+    "GoodmanSaveStaticSimulationAction"
   ]);
   assert.equal(surfaces.get("GoodmanScenarioSection")?.body?.bindings[0]?.prop, "visible");
   assert.equal(surfaces.get("GoodmanScenarioSection")?.body?.bindings[0]?.source?.state, "GoodmanActiveMode");
