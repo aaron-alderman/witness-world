@@ -62,9 +62,10 @@ grant runtime authority to copied JS or presenter code.
   ensemble axis re-evaluates from process-owned run config.
 - Goodman Monte Carlo now exposes first-pass scalar chart summaries for authored
   windows: `BoltFatigueMC` reduces the mounted MC bands to sample count and
-  p10/p50/p90 stress summary text outputs, `chart.render` publishes them as
-  `GoodmanMCBands.*` capability outputs, and the Stats/CDF windows consume those
-  outputs through authored surface bindings after the run state becomes active.
+  p10/p50/p90 plus standard-deviation stress summary text outputs,
+  `chart.render` publishes them as `GoodmanMCBands.*` capability outputs, and
+  the Stats/CDF windows consume those outputs through authored surface bindings
+  after the run state becomes active.
 - Goodman scrubber range now follows authored run duration:
   `GoodmanRunDurationMonths` binds to the time slider `max` attribute through
   the generic form-control binding path, matching the reference relationship

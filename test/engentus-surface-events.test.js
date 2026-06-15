@@ -639,6 +639,10 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     assert.match(statsWindowText, /Primary Bolt Set/);
     assert.match(statsWindowText, /750/);
     assert.match(statsWindowText, /\d+\.\d MPa/);
+    assert.equal(await page.evaluate(() =>
+      document.querySelector("#chart-svg-mc")?.__surfaceCapabilityOutputs?.mc_sa_p50_std_text
+        === document.querySelector("#surface-goodmanstatsdatastd")?.textContent
+    ), true);
     assert.equal(await page.locator("#surface-goodmanstatsemptyrow[hidden]").count(), 1);
     await page.click("#surface-goodmanactioncdf");
     await page.waitForFunction(() =>

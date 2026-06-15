@@ -681,6 +681,10 @@ test("the Goodman shell authors sidebar and window content rather than empty hos
     "GoodmanStatsHeadP50",
     "GoodmanStatsHeadP90"
   ]);
+  assert.equal(
+    surfaces.get("GoodmanStatsDataStd")?.body?.bindings?.[0]?.source?.output,
+    "mc_sa_p50_std_text"
+  );
   assert.deepEqual(surfaces.get("GoodmanAnovaWindowBody")?.body?.children, [
     "GoodmanAnovaStatBlock",
     "GoodmanAnovaNote",

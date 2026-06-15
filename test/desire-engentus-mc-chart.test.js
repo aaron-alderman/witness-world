@@ -67,11 +67,13 @@ test("GoodmanMCBands exposes scalar summary outputs for authored windows", async
   assert.deepEqual(evaluated.fields.mc_sample_count.axes, []);
   assert.deepEqual(evaluated.fields.mc_sa_p10_min.axes, []);
   assert.deepEqual(evaluated.fields.mc_sa_p50_mean.axes, []);
+  assert.deepEqual(evaluated.fields.mc_sa_p50_std.axes, []);
   assert.deepEqual(evaluated.fields.mc_sa_p90_max.axes, []);
   assert.equal(evaluated.fields.mc_sample_count.data, evaluated.params.n_samples);
   assert.match(evaluated.fields.mc_sample_count_text.data, /^\d+$/);
   assert.match(evaluated.fields.mc_sa_p10_min_text.data, /^\d+\.\d MPa$/);
   assert.match(evaluated.fields.mc_sa_p50_mean_text.data, /^\d+\.\d MPa$/);
+  assert.match(evaluated.fields.mc_sa_p50_std_text.data, /^\d+\.\d MPa$/);
   assert.match(evaluated.fields.mc_sa_p90_max_text.data, /^\d+\.\d MPa$/);
 });
 

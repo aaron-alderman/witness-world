@@ -4982,6 +4982,9 @@ view GoodmanStatsDataStd {
   kind text
   prop tag = "td"
   prop text = "-"
+  bindings {
+    text from capability GoodmanMCBands.mc_sa_p50_std_text
+  }
 }
 
 view GoodmanStatsDataP10 {
