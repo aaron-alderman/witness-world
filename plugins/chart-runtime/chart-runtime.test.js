@@ -83,6 +83,50 @@ test("chart page stays a code-first runtime assembly seam instead of depending o
   assert.equal(source.includes('"goodmanFunctions"'), false);
 });
 
+test("cartesian band mark supports category-split primitives generically", () => {
+  const view = {
+    frame: "cartesian",
+    encoding: {
+      x: { field: "x", domain: [0, 1] },
+      y: { field: "upper", domain: [0, 20] }
+    },
+    bandFills: ["#111111", "#222222"],
+    layers: [{
+      name: "zones",
+      mark: "band",
+      over: ["x", "zone"],
+      encode: {
+        x: "x",
+        y0: "lower",
+        y1: "upper",
+        fill: "band.fills",
+        opacity: 0.72
+      }
+    }]
+  };
+  const evaluated = {
+    axes: {
+      x: { kind: "sweep", values: [0, 1] },
+      zone: { kind: "category", values: ["a", "b"] }
+    },
+    fields: {
+      x: { axes: ["x"], data: [0, 1] },
+      lower: { axes: ["x", "zone"], data: [[0, 10], [1, 11]] },
+      upper: { axes: ["x", "zone"], data: [[5, 15], [6, 16]] }
+    }
+  };
+
+  const plan = planChart(view, evaluated, { width: 200, height: 120 });
+  const zones = plan.layers.find(layer => layer.name === "zones");
+
+  assert.equal(zones.mark, "band");
+  assert.equal(zones.opacity, 0.72);
+  assert.deepEqual(zones.primitives.map(primitive => primitive.category), ["a", "b"]);
+  assert.deepEqual(zones.primitives.map(primitive => primitive.fill), ["#111111", "#222222"]);
+  assert.deepEqual(zones.primitives[1].points.map(point => point.y0), [10, 11]);
+  assert.deepEqual(zones.primitives[1].points.map(point => point.y1), [15, 16]);
+});
+
 test("shared chart runtime sources stay free of app-specific defaults", () => {
   const runtimeSource = fs.readFileSync(new URL("./runtime.js", import.meta.url), "utf8");
   const gogSource = fs.readFileSync(new URL("./gog-runtime.js", import.meta.url), "utf8");

@@ -5,14 +5,17 @@ import desire/v3-alpha
 // A product-type dataflow graph (DESIRE `model` form). Output is a product over
 // named axes: `sm` (mean-stress sweep) and `lifetime` (the band boundaries).
 // Goodman has NO symmetry break — every leaf below is an honest composition of
-// std-lib functions (sn_hannover, goodman_sa, …), so this model lowers to ZERO
-// numeric kernels. It stays fully in the IR. (Mirrors example-ports/engentus
-// js/physics.js: bolt_static_point / goodman_sa / sn_hannover.)
+// std-lib functions (sn_hannover, goodman_sa, …). The only helper-level
+// symmetry break in this model is the visual Goodman band-zone selection:
+// current dataflow has no indexed/case expression, so the four reference
+// background zones are selected by app-owned pure helpers rather than by a
+// shell/controller runtime.
 
 model BoltFatigue {
   // ── axes: the named dimensions of the output tensor ──
   axis sm       = sweep(0, 650, 1.6)
   axis lifetime = category(0.5, 2, 6)
+  axis band_zone = category(0, 1, 2, 3)
 
   // ── params (scalars; the `sample` ensemble axis attaches a dist later) ──
   param rpm                 = 9.0
@@ -43,6 +46,11 @@ model BoltFatigue {
   derive cycles    = months_to_cycles(lifetime, rpm) over lifetime
   derive fat_limit = sn_hannover(cycles, sigma_lim, m_slope) over lifetime
   derive band      = goodman_sa(sm, fat_limit, uts, ys) over sm, lifetime
+  derive fat_limit_0_5 = sn_hannover(months_to_cycles(0.5, rpm), sigma_lim, m_slope)
+  derive fat_limit_2 = sn_hannover(months_to_cycles(2, rpm), sigma_lim, m_slope)
+  derive fat_limit_6 = sn_hannover(months_to_cycles(6, rpm), sigma_lim, m_slope)
+  derive band_zone_y0 = goodman_band_y0(band_zone, sm, fat_limit_0_5, fat_limit_2, fat_limit_6, uts, ys) over sm, band_zone
+  derive band_zone_y1 = goodman_band_y1(band_zone, sm, fat_limit_0_5, fat_limit_2, fat_limit_6, uts, ys) over sm, band_zone
 
   // ── yield line (chart.js: y = 600 - x) ──
   derive yield_line = ys - sm over sm

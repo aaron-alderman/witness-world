@@ -70,15 +70,16 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   const layer = name => plan.layers.find(l => l.name === name);
   const sm = evaluated.axes.sm.values;
 
-  // bands: one area per lifetime (3), each spanning the full sm sweep, y1 = band data
+  // bands: four reference background zones between Goodman curves/yield boundary.
   const bands = layer("bands");
-  assert.equal(bands.mark, "area");
-  assert.equal(bands.primitives.length, evaluated.axes.lifetime.values.length);
+  assert.equal(bands.mark, "band");
+  assert.equal(bands.primitives.length, evaluated.axes.band_zone.values.length);
   for (const prim of bands.primitives) assert.equal(prim.points.length, sm.length);
-  // a band primitive's y1 matches the evaluated band tensor (primitives are reversed,
-  // so the longest-life category is at index 0)
-  const lastCat = bands.primitives[bands.primitives.length - 1]; // lifetime index 0
-  assert.equal(lastCat.points[60].y1, evaluated.fields.band.data[60][0]);
+  assert.deepEqual(bands.primitives.map(primitive => primitive.category), [0, 1, 2, 3]);
+  assert.deepEqual(bands.primitives.map(primitive => primitive.fill), ["#bbf7d0", "#d9f99d", "#fef08a", "#fde68a"]);
+  assert.equal(bands.primitives[0].points[60].y0, evaluated.fields.band_zone_y0.data[60][0]);
+  assert.equal(bands.primitives[0].points[60].y1, evaluated.fields.band_zone_y1.data[60][0]);
+  assert.equal(bands.primitives[3].points[60].y1, evaluated.fields.yield_line.data[60]);
 
   // curves: the two reference bolt-set responses, No Jemtec and Jemtec.
   const curves = layer("curves");

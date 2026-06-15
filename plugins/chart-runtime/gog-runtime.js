@@ -149,11 +149,30 @@ function planLayer(layer, evaluated, fills, opts = {}) {
     if (!y0Field || !y1Field) return { ...base, primitives: [] };
     const iterAxis = iterationAxis(layer, y1Field, axes);
     const xField = enc.x && fields[enc.x] ? fields[enc.x] : null;
-    const points = (axes[iterAxis]?.values ?? []).map((axVal, i) => {
-      const coord = { [iterAxis]: i };
-      return { x: xField ? valueAt(xField, coord) : axVal, y0: valueAt(y0Field, coord), y1: valueAt(y1Field, coord) };
+    const categoryAxis = (layer.over ?? []).find(axisName =>
+      axisName !== iterAxis
+      && axes[axisName]?.kind === "category"
+      && y0Field.axes?.includes(axisName)
+      && y1Field.axes?.includes(axisName)
+    );
+    const categoryValues = categoryAxis ? (axes[categoryAxis]?.values ?? []) : [null];
+    const primitives = categoryValues.map((category, categoryIndex) => {
+      const points = (axes[iterAxis]?.values ?? []).map((axVal, i) => {
+        const coord = { [iterAxis]: i, ...(categoryAxis ? { [categoryAxis]: categoryIndex } : {}) };
+        return { x: xField ? valueAt(xField, coord) : axVal, y0: valueAt(y0Field, coord), y1: valueAt(y1Field, coord) };
+      });
+      return {
+        category,
+        fill: enc.fill === "band.fills" ? fills[categoryIndex % fills.length] : null,
+        points
+      };
     });
-    return { ...base, fill: enc.fill ? colorToken(enc.fill) : "#5AAABF", opacity: Number(enc.opacity) || 0.25, primitives: [{ points }] };
+    return {
+      ...base,
+      fill: enc.fill && enc.fill !== "band.fills" ? colorToken(enc.fill) : "#5AAABF",
+      opacity: Number(enc.opacity) || 0.25,
+      primitives
+    };
   }
 
   if (layer.mark === "cloud") {
@@ -939,7 +958,7 @@ export function drawChart(container, plan, d3) {
         const top = prim.points.filter(p => Number.isFinite(p.y1)).map(p => `${x(p.x)},${y(p.y1)}`);
         const bottom = prim.points.filter(p => Number.isFinite(p.y0)).slice().reverse().map(p => `${x(p.x)},${y(p.y0)}`);
         g.append("polygon").attr("points", [...top, ...bottom].join(" "))
-          .attr("fill", layer.fill).attr("opacity", layer.opacity);
+          .attr("fill", prim.fill ?? layer.fill).attr("opacity", layer.opacity);
       }
     } else if (layer.mark === "cloud") {
       for (const prim of layer.primitives) {

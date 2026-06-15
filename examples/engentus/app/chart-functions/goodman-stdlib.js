@@ -25,6 +25,20 @@ export const goodmanFunctions = {
     return sm <= xi ? Math.max(0, fl * (1 - sm / uts)) : Math.max(0, ys - sm);
   },
 
+  goodman_band_y0: (zone, sm, flA, flB, flC, uts, ys) => {
+    const limits = [flA, flB, flC].sort((a, b) => a - b);
+    const index = Math.max(0, Math.min(3, Math.round(Number(zone) || 0)));
+    if (index === 0) return 0;
+    return goodmanFunctions.goodman_sa(sm, limits[index - 1], uts, ys);
+  },
+
+  goodman_band_y1: (zone, sm, flA, flB, flC, uts, ys) => {
+    const limits = [flA, flB, flC].sort((a, b) => a - b);
+    const index = Math.max(0, Math.min(3, Math.round(Number(zone) || 0)));
+    if (index >= limits.length) return Math.max(0, ys - sm);
+    return goodmanFunctions.goodman_sa(sm, limits[index], uts, ys);
+  },
+
   sigma_a_equiv: (sigmaA, sigmaM, uts) =>
     uts > sigmaM + 1e-9 ? sigmaA * uts / (uts - sigmaM) : (sigmaA > 0 ? Infinity : 0),
 

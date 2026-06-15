@@ -115,6 +115,12 @@ grant runtime authority to copied JS or presenter code.
   Jemtec copper shear spring included as app-owned model structure. This is the
   visible default curve alignment; generated/editable bolt-set collections
   remain a separate authored collection gap.
+- Goodman static background bands now match the reference zone construction
+  more closely. `BoltFatigue` authors four band-zone fields between the sorted
+  lifetime Goodman limits and the yield boundary, while `plugin.chart-runtime`
+  supports generic category-split cartesian `band` primitives. This replaces
+  the earlier false shape where the chart filled three independent lifetime
+  curves down to baseline.
 - Goodman scrubber range now follows authored run duration:
   `GoodmanRunDurationMonths` binds to the time slider `max` attribute through
   the generic form-control binding path, matching the reference relationship
