@@ -12,6 +12,7 @@ import {
   requestBootstrapStewardshipGrant,
   requestBootstrapStewardshipRevoke,
   requestSurfaceDefine,
+  requestProcessDefine,
   requestBootstrapRouteDefine,
   requestBootstrapServeDefine,
   requestWidgetDefine,
@@ -315,6 +316,29 @@ export function createAuthoringCoreBundleHandlers({
       sendJson(res, result.status, {
         ...(result.single ? { surface: result.surfaces[0], witness: result.witnesses[0] ?? null } : { surfaces: result.surfaces, witnesses: result.witnesses })
       });
+    },
+
+    "process.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const context = body && typeof body === "object" && !Array.isArray(body)
+        ? (body.context ?? null)
+        : null;
+      const auth = context ? ensureContextAuthority(gate.actor, context) : { ok: true };
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestProcessDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { process: result.process, witness: result.witness });
     },
 
     "route.create": async ({ req, res, requestActor }) => {

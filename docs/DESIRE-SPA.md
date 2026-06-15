@@ -132,15 +132,16 @@ constrained capability matrix now makes the intended public model explicit.
 What is still missing is the first-party platform implementation for that
 canonical interaction model:
 
-- `process.create` is part of the public constrained frontend baseline, but no
-  first-party authoring handler exists yet
+- `process.create` is now part of the real first-party constrained authoring
+  substrate and can emit semantic DESIRE `process` witnesses
 - `projection.create` is part of the public constrained frontend baseline, but
   no first-party authoring handler exists yet
 - `frontendProgram.create` / `frontendStep.create` are legacy-only and must not
   be treated as the fallback interaction path for Engentus
 
-So the blocker is now a cleaner platform/runtime limitation: the canonical
-`surface + process + projection` path is not yet live.
+So the blocker is now narrower and cleaner: `surface + process` authoring is
+real, but the canonical `surface + process + projection` interactive path is
+still not live because `projection.create` is missing.
 
 ## Current honest state
 

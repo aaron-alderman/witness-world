@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
-import { requestBootstrapRouteDefine, requestSurfaceDefine } from "../plugins/authoring-core/authoring-core-processes.js";
+import { requestBootstrapRouteDefine, requestProcessDefine, requestSurfaceDefine } from "../plugins/authoring-core/authoring-core-processes.js";
 
 function routeSupport() {
   return {
@@ -104,6 +104,56 @@ test("requestSurfaceDefine rejects malformed, duplicate, and inconsistent surfac
   });
   assert.equal(inconsistent.ok, false);
   assert.equal(inconsistent.status, 400);
+});
+
+test("requestProcessDefine emits a real DESIRE process witness and source annotation", () => {
+  const world = createWorld();
+  const result = requestProcessDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: {
+      id: "ReplayFlow",
+      context: "frontend",
+      state: ["mode"],
+      handles: ["InputChanged"],
+      emits: ["ModeChanged"],
+      rules: [{ when: "InputChanged", then: "ModeChanged" }]
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 201);
+  assert.equal(result.process.id, "ReplayFlow");
+  assert.equal(result.witness?.process, "desire.defineProcess");
+  assert.equal(world.allWitnesses().some(witness => witness.process === "desire.defineProcess" && witness.body?.id === "ReplayFlow"), true);
+  assert.equal(world.allWitnesses().some(witness => witness.process === "dsl.source.annotate" && witness.body?.target === "ReplayFlow"), true);
+});
+
+test("requestProcessDefine rejects malformed and duplicate process docs", () => {
+  const world = createWorld();
+
+  const malformed = requestProcessDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: []
+  });
+  assert.equal(malformed.ok, false);
+  assert.equal(malformed.status, 400);
+
+  const created = requestProcessDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: { id: "ReplayFlow" }
+  });
+  assert.equal(created.ok, true);
+
+  const duplicate = requestProcessDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: { id: "ReplayFlow" }
+  });
+  assert.equal(duplicate.ok, false);
+  assert.equal(duplicate.status, 409);
 });
 
 test("route.create accepts page.surface rootSurface params and rejects missing rootSurface", () => {

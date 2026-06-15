@@ -98,7 +98,7 @@ test("blank world falls back to bootstrap instead of failing hard", async () => 
     assert.equal(diagnostics.authoringPolicy.proposalAccess, "read_only");
     assert.deepEqual(diagnostics.authoringMatrix.baseline.publicFrontendModel, ["surface", "process", "projection", "capability"]);
     assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.surface.status, "supported");
-    assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.process.status, "blocked");
+    assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.process.status, "supported");
     assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.frontendProgram.status, "legacy_only");
     assert.deepEqual([...diagnostics.activeBundles.map(bundle => bundle.id)].sort(), [
       "bundle-authoring-core",
@@ -529,7 +529,7 @@ test("a bootstrap-authored runner and home route take over without restarting th
   }
 });
 
-test("authoring replay probe uses the canonical matrix, proves minimal surface serving, and stops next at canonical interaction authoring", { timeout: 10000 }, async () => {
+test("authoring replay probe uses the canonical matrix, proves minimal surface serving, and stops next at canonical projection authoring", { timeout: 10000 }, async () => {
   const { server } = await startBlankServer({ runtimePluginIds: ["plugin.mcp"] });
   try {
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
@@ -552,7 +552,8 @@ test("authoring replay probe uses the canonical matrix, proves minimal surface s
     assert.equal(result.replay.navTargetVisible, true);
     assert.equal(result.blockers.canonicalSurfaceAuthoring, null);
     assert.equal(result.blockers.canonicalInteraction.limitationType, "platform");
-    assert.equal(result.blockers.canonicalInteraction.missingPrimitive, "canonical interactive page.surface authoring is incomplete: process.create and projection.create are not implemented as first-party constrained primitives");
+    assert.equal(result.stateChecks.processPresent, true);
+    assert.equal(result.blockers.canonicalInteraction.missingPrimitive, "canonical interactive page.surface authoring is incomplete: projection.create is not implemented as a first-party constrained primitive");
   } finally {
     await server.close();
   }

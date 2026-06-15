@@ -287,15 +287,7 @@ const TOOL_DEFINITIONS = [
         case "surface.create":
           return runJsonHandler(callHandler, { handler: "surface.create", method: "POST", path: "/api/surfaces", body });
         case "process.create":
-          return blockedCanonicalAuthoringAction(callHandler, {
-            action: "process.create",
-            missingPrimitive: "no first-party process.create authoring handler exists yet",
-            minimumHumanAction: "add a first-party semantic process authoring path before using process-owned surface state in constrained MCP sessions",
-            proof: [
-              "the constrained public frontend baseline is surface + process + projection + capability",
-              "no process.create handler or route exists in the current first-party authoring bundles"
-            ]
-          });
+          return runJsonHandler(callHandler, { handler: "process.create", method: "POST", path: "/api/processes", body });
         case "projection.create":
           return blockedCanonicalAuthoringAction(callHandler, {
             action: "projection.create",

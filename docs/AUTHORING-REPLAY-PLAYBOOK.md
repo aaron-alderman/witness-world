@@ -74,29 +74,33 @@ shaped concept.
 4. Canonical interaction-authoring probe
    - Try to express the next interactive step through the canonical public
      primitives.
-   - If `process.create` / `projection.create` are missing, record that as the
-     blocker rather than touching the legacy widget-program path.
+   - `process.create` should now succeed through the first-party authoring
+     substrate.
+   - If `projection.create` is missing, record that as the blocker rather than
+     touching the legacy widget-program path.
 
 ## Current insight
 
 After `surface.create`, the honest next blocker is not shell serving. It is the
-missing canonical `process + projection` interaction path for `page.surface`.
+missing canonical `projection` interaction path for `page.surface` on top of
+real `surface + process` authoring.
 
 The replay shows that:
 
 - constrained inspection can state the intended public frontend model directly
 - surface trees can now be authored through MCP
+- semantic DESIRE processes can now be authored through MCP
 - `page.surface` can route between authored shell states live
 - generic shell navigation targets can be authored and lowered
 - legacy widget-program authoring is quarantined rather than used as fallback
-- canonical `process.create` / `projection.create` are still missing
+- canonical `projection.create` is still missing
 
-In other words: `process.create and projection.create` are the next honest
-platform gap on the canonical constrained path.
+In other words: `projection.create` is now the next honest platform gap on the
+canonical constrained path.
 
 So the next platform question is not "can we serve a shell?" It is "what is the
 first-party authoring/runtime path for canonical `surface + process +
-projection` interaction semantics?"
+projection` interaction semantics once `projection.create` exists?"
 
 ## Anti-patterns this playbook avoids
 

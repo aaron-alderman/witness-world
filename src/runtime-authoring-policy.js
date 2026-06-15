@@ -25,6 +25,7 @@ export const MCP_ONLY_ALLOWED_HANDLER_IDS = Object.freeze([
   "stewardship.create",
   "stewardship.remove",
   "surface.create",
+  "process.create",
   "route.create",
   "serve.create",
   "serverRunner.create",
@@ -241,9 +242,7 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
       process: capabilityState({
         publicAction: "process.create",
         runtimeConsumers: [],
-        status: "blocked",
-        limitationType: "platform",
-        reason: "no first-party process.create authoring handler exists yet"
+        status: "supported"
       }),
       projection: capabilityState({
         publicAction: "projection.create",

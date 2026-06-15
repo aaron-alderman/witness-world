@@ -255,6 +255,59 @@ function surfaceCreateNode(doc, { actor, backendHost, index }) {
   });
 }
 
+function processCreateDoc(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("process doc must be an object");
+  }
+  const id = trimOptionalString(body.id);
+  if (!id) throw new Error("process doc requires id");
+  return {
+    id,
+    state: Array.isArray(body.state) ? structuredClone(body.state) : [],
+    handles: Array.isArray(body.handles) ? structuredClone(body.handles) : [],
+    emits: Array.isArray(body.emits) ? structuredClone(body.emits) : [],
+    rules: Array.isArray(body.rules) ? structuredClone(body.rules) : [],
+    actor: trimOptionalString(body.actor),
+    owner: trimOptionalString(body.owner),
+    context: trimOptionalString(body.context)
+  };
+}
+
+function validateProcessCreateDoc(world, body) {
+  const doc = processCreateDoc(body);
+  if (exists(world, doc.id)) throw new Error(`process id already exists: ${doc.id}`);
+  return doc;
+}
+
+function processCreateNode(doc, { actor, backendHost }) {
+  return createDesireNode({
+    kind: "process",
+    name: doc.id,
+    body: {
+      state: structuredClone(doc.state),
+      handles: structuredClone(doc.handles),
+      emits: structuredClone(doc.emits),
+      rules: structuredClone(doc.rules)
+    },
+    meta: {
+      provenance: {
+        file: "authoring://plugin.authoring/process.create",
+        sourceLanguage: "authoring",
+        sourceKind: "process",
+        startLine: 1,
+        endLine: 1,
+        startColumn: 1,
+        endColumn: null,
+        originNodeId: null,
+        via: [`authoring:process.create:${doc.id}`],
+        actor: doc.actor ?? actor ?? backendHost,
+        owner: doc.owner ?? actor ?? backendHost,
+        context: doc.context ?? null
+      }
+    }
+  });
+}
+
 export function requestBootstrapIdentityDefine(world, {
   actor,
   backendHost,
@@ -831,6 +884,64 @@ export function requestSurfaceDefine(world, {
     single: normalized.single,
     surfaces: docs.map(doc => surfaceIndex.get(doc.id) ?? { id: doc.id }),
     witnesses: surfaceWitnesses
+  };
+}
+
+export function requestProcessDefine(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  let doc;
+  try {
+    doc = validateProcessCreateDoc(world, body);
+  } catch (error) {
+    return {
+      ok: false,
+      status: /already exists/i.test(error instanceof Error ? error.message : "")
+        ? 409
+        : 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  let desire;
+  try {
+    desire = createDesireDocument([
+      processCreateNode(doc, { actor, backendHost })
+    ]);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  let witnesses;
+  try {
+    witnesses = applyDesire(world, desire);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  const witness = witnesses.find(entry =>
+    entry.process === "desire.defineProcess"
+    && typeof entry.body?.id === "string"
+    && entry.body.id === doc.id
+  ) ?? null;
+  return {
+    ok: true,
+    status: 201,
+    process: witness?.body ?? { id: doc.id },
+    witness
   };
 }
 

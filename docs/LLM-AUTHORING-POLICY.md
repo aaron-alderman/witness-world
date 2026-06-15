@@ -93,13 +93,14 @@ live.
 The current next honest blocker is a platform limitation in the canonical
 frontend model itself:
 
-- `process.create` is part of the public constrained story, but not yet
-  implemented as a first-party authoring handler
+- `process.create` is now implemented as a first-party semantic authoring
+  handler and emits real DESIRE `process` witnesses
 - `projection.create` is part of the public constrained story, but not yet
   implemented as a first-party authoring handler
 - `frontendProgram.create` / `frontendStep.create` are now legacy-only and
   must not be used as the fallback interactive story for constrained sessions
 
-That means the stop point is no longer "surface interaction is widget-rooted";
+That means the stop point is now narrower: it is no longer "surface
+interaction is widget-rooted" and it is no longer "process.create is missing";
 it is "the canonical `surface + process + projection` interaction path is not
-implemented yet."
+implemented yet because `projection.create` is still missing."
