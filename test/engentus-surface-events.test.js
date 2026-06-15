@@ -74,8 +74,9 @@ test("Engentus login click dispatches the authored process rule through the gene
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "home"
     );
+    assert.equal(await page.locator("#up-menu[hidden]").count(), 0);
     await page.click("#user-prof");
-    await page.waitForSelector("#up-menu:not([hidden])");
+    await page.waitForSelector("#up-menu.open");
     assert.deepEqual(await page.evaluate(() =>
       [...document.querySelectorAll("#up-menu .up-mi-icon")].map(node => node.textContent)
     ), ["👤", "⚙", "📋", "🏭", "↩"]);

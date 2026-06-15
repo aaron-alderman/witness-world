@@ -119,7 +119,8 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("EngentusRoot")?.body?.processRef, "EngentusShellNavigation");
   assert.equal(surfaces.get("EngentusLoginBook")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("EngentusLoginPasswordField")?.body?.bindings[0]?.prop, "inputType");
-  assert.equal(surfaces.get("EngentusProfileMenu")?.body?.bindings[0]?.prop, "visible");
+  assert.equal(surfaces.get("EngentusProfileMenu")?.body?.bindings[0]?.prop, "className");
+  assert.equal(surfaces.get("EngentusProfileMenu")?.body?.bindings[0]?.source?.map?.true, "open");
   assert.deepEqual(surfaces.get("EngentusLoginPrimaryAction")?.body?.interactions, [
     {
       target: "self",

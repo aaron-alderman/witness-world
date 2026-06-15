@@ -1179,9 +1179,8 @@ view EngentusProfileMenuSignout {
 view EngentusProfileMenu {
   kind menu
   prop domId = "up-menu"
-  prop hidden = true
   bindings {
-    visible from state EngentusProfileMenuVisible
+    className from state EngentusProfileMenuVisible map true open default ""
   }
   children {
     EngentusProfileMenuProfile

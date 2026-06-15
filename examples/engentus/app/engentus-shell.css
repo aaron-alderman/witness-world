@@ -200,8 +200,7 @@ a {
   display: none
 }
 
-#up-menu.open,
-#up-menu:not([hidden]) { display: block }
+#up-menu.open { display: block }
 
 .up-mi {
   display: flex;

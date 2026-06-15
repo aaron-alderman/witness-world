@@ -42,6 +42,10 @@ grant runtime authority to copied JS or presenter code.
 - Goodman floating window chrome now uses the reference titles for CDF,
   Summary Statistics, and ANOVA, keeping the visible copy authored in
   `shell.rvm` rather than supplied by a copied window controller.
+- The shared toolbar/profile dropdown now follows the reference class-based
+  menu contract: `EngentusProfileMenuVisible` drives the `open` class on
+  `#up-menu` through authored state instead of using a hidden-attribute
+  shortcut or page-local click script.
 - Goodman run-state UI is authored through process state: Run switches to
   Monte Carlo mode, config fields lock while running/paused, Pause/Resume/Stop
   controls patch visibility/disabled state, reference run/pause/stop labels are
