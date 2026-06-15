@@ -222,6 +222,7 @@ export const millForceKernels = {
   omega_text: value => `${Number(value).toFixed(3)} rad/s`,
   rho_charge_text: value => `${Number(value).toFixed(3)} SG`,
   force_kn_text: value => `${(Number(value) / 1000).toFixed(1)} kN`,
+  samples_computed_text: value => `${Math.round(Number(value) || 0)} samples computed`,
   deg_delta_text: values => `${signedFixed(methodDelta(values) * 180 / Math.PI, 1)}°`,
   force_delta_kn_text: values => `${signedFixed(methodDelta(values) / 1000, 1)} kN`,
   pct_delta_text: values => `${signedFixed(methodRelativeDeltaPercent(values), 2)}%`,

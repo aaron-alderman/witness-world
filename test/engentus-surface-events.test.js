@@ -1185,7 +1185,10 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcStatusState") === "running"
     );
-    assert.equal(await page.textContent("#surface-millforcemcstatustext"), "Run requested");
+    await page.waitForFunction(() =>
+      document.querySelector("#surface-millforcemcstatuscomputedtext")?.textContent === "350 samples computed"
+    );
+    assert.equal(await page.textContent("#surface-millforcemcstatuscomputedtext"), "350 samples computed");
     assert.equal(await page.locator("#surface-millforcemcclearaction").isEnabled(), true);
     await page.waitForFunction(() =>
       document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.analysis_mode === "mc"
@@ -1222,7 +1225,7 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcStatusState") === "cleared"
     );
-    assert.equal(await page.textContent("#surface-millforcemcstatustext"), "Cleared");
+    assert.equal(await page.textContent("#surface-millforcemcstatusclearedtext"), "Cleared");
     assert.equal(await page.locator("#surface-millforcemcclearaction").isEnabled(), false);
   } finally {
     await browser.close();

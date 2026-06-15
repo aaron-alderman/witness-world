@@ -7490,13 +7490,45 @@ view MillForceMcActions {
   }
 }
 
-view MillForceMcStatusText {
+view MillForceMcStatusReadyText {
   kind text
   class mill-force-rd
-  prop tag = "div"
+  prop tag = "span"
   prop text = "Ready"
   bindings {
-    text from state MillForceMcStatusState map ready Ready running "Run requested" cleared Cleared default Ready
+    visible from state MillForceMcStatusState map ready true default false
+  }
+}
+
+view MillForceMcStatusComputedText {
+  kind text
+  class mill-force-rd
+  prop tag = "span"
+  prop text = "Ready"
+  bindings {
+    visible from state MillForceMcStatusState map running true default false
+    text from capability MillForceCross.mc_sample_count_text
+  }
+}
+
+view MillForceMcStatusClearedText {
+  kind text
+  class mill-force-rd
+  prop tag = "span"
+  prop text = "Cleared"
+  bindings {
+    visible from state MillForceMcStatusState map cleared true default false
+  }
+}
+
+view MillForceMcStatusText {
+  kind section
+  class mill-force-rd
+  prop tag = "div"
+  children {
+    MillForceMcStatusReadyText
+    MillForceMcStatusComputedText
+    MillForceMcStatusClearedText
   }
 }
 

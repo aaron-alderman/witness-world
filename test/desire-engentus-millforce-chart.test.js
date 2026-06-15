@@ -292,6 +292,9 @@ test("MillForceCross Monte Carlo mode renders authored p10/p90 radial force band
   const p10 = plan.layers.find(l => l.name === "mc_p10");
   assert.equal(p90.mark, "polar-quad");
   assert.equal(p10.mark, "polar-point");
+  assert.deepEqual(evaluated.fields.mc_sample_count.axes, []);
+  assert.equal(evaluated.fields.mc_sample_count.data, 80);
+  assert.equal(evaluated.fields.mc_sample_count_text.data, "80 samples computed");
   assert.equal(p90.hidden, undefined);
   assert.equal(p10.hidden, undefined);
   assert.equal(p90.primitives.length, N);

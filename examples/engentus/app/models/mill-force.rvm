@@ -156,6 +156,8 @@ model MillForce {
   derive F_r_s = Fw_r_s + Fc_r_s over segment, sample
   reduce F_r_p10 = percentile(F_r_s, 10) over sample
   reduce F_r_p90 = percentile(F_r_s, 90) over sample
+  reduce mc_sample_count = count(percent_crit_s) over sample
+  derive mc_sample_count_text = samples_computed_text(mc_sample_count)
   reduce tBar_mc = mean(tBar_s) over sample
   reduce rInner_mc = mean(rInner_s) over sample
   derive mc_half_width = dTheta * 0.35

@@ -130,8 +130,10 @@ grant runtime authority to copied JS or presenter code.
   cross-section overlay layers expressed with generic polar chart marks. The
   p90 overlay uses `polar-quad` radial force bands and the p10 overlay uses the
   reusable `polar-point` glyph. The MC sample count/free toggles bind from
-  process-owned shell state into `chart.render`, and the live route exposes the
-  p10/p90 overlay without app-local chart/controller JS.
+  process-owned shell state into `chart.render`, the model publishes a scalar
+  computed-sample summary back through `MillForceCross.*` capability outputs,
+  and the live route exposes the p10/p90 overlay plus computed-sample status
+  without app-local chart/controller JS.
 
 ## Known Gaps
 
@@ -150,7 +152,8 @@ grant runtime authority to copied JS or presenter code.
   platform primitive.
 - Mill Force still needs full reference Monte Carlo result parity. The p10/p90
   cross-section overlay, p10 point glyph, and straight-sided radial force-bar
-  geometry are now authored and live, but the richer reference MC result
+  geometry are now authored and live, and the MC panel reports computed sample
+  count from chart capability output after Run. The richer reference MC result
   lifecycle, statistical summaries, and final compare/MC panel polish remain
   first-pass gaps. Tooltip readout for the three stock charts now exists through
   the generic chart tooltip seam. Compare deltas now exist as authored scalar

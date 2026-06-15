@@ -559,6 +559,15 @@ test("the shell is structured through explicit child regions instead of flattene
     "MillForceMcActions",
     "MillForceMcStatusText"
   ]);
+  assert.deepEqual(surfaces.get("MillForceMcStatusText")?.body?.children, [
+    "MillForceMcStatusReadyText",
+    "MillForceMcStatusComputedText",
+    "MillForceMcStatusClearedText"
+  ]);
+  assert.equal(
+    surfaces.get("MillForceMcStatusComputedText")?.body?.bindings?.[1]?.source?.output,
+    "mc_sample_count_text"
+  );
 
   assert.deepEqual(surfaces.get("EngentusMillChargeApp")?.body?.children, [
     "EngentusAppChrome",
