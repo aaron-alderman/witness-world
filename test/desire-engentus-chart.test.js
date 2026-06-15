@@ -262,4 +262,14 @@ test("Mill Force chart plans preserve authored kN lines and reference chrome", a
   assert.deepEqual(angleLayer("legend_ft_label").primitives, [{ x: 704, y: 35, label: "Tangential" }]);
   assert.deepEqual(angleLayer("legend_resultant_label").primitives, [{ x: 704, y: 55, label: "Resultant" }]);
   assert.deepEqual(roseLayer("title").primitives, [{ x: 260, y: 22, label: "Resultant Force Rose (per liner)" }]);
+  assert.equal(
+    evaluated.fields.mc_p90_len.data[0],
+    Math.abs(evaluated.fields.F_r_p90.data[0]) / Math.max(evaluated.fields.F_r_abs_max_all.data, 1)
+      * evaluated.fields.mc_bar_max_len.data
+  );
+  assert.equal(
+    evaluated.fields.mc_p10_len.data[0],
+    Math.abs(evaluated.fields.F_r_p10.data[0]) / Math.max(evaluated.fields.F_r_abs_max_all.data, 1)
+      * evaluated.fields.mc_bar_max_len.data
+  );
 });

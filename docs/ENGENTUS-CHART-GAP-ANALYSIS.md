@@ -235,6 +235,11 @@ grant runtime authority to copied JS or presenter code.
   through `MillForceCross.*` capability outputs, and the live route exposes the
   p10/p90 overlay plus computed MC panel summaries without app-local
   chart/controller JS.
+- Mill Force Monte Carlo overlay lengths now share the reference radial-force
+  scale with the deterministic grounded/faithful bars: p10/p90 overlay lengths
+  divide by `F_r_abs_max_all`, not the currently active model max. This keeps
+  the overlay geometry stable across model/mode selection while remaining in
+  authored model dataflow.
 
 ## Known Gaps
 

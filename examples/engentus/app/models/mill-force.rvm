@@ -189,8 +189,8 @@ model MillForce {
   derive mc_theta0 = tBar_mc - mc_half_width over segment
   derive mc_theta1 = tBar_mc + mc_half_width over segment
   derive mc_bar_max_len = radius * 0.55
-  derive mc_p90_len = abs(F_r_p90) / max(F_r_max_active, 1) * mc_bar_max_len over segment
-  derive mc_p10_len = abs(F_r_p10) / max(F_r_max_active, 1) * mc_bar_max_len over segment
+  derive mc_p90_len = abs(F_r_p90) / max(F_r_abs_max_all, 1) * mc_bar_max_len over segment
+  derive mc_p10_len = abs(F_r_p10) / max(F_r_abs_max_all, 1) * mc_bar_max_len over segment
   derive mc_p90_inner = max(0, rInner_mc - mc_p90_len) over segment
   derive mc_p10_r = max(0, rInner_mc - mc_p10_len) over segment
 }
