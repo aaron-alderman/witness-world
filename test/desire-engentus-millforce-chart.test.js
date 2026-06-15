@@ -100,6 +100,9 @@ test("MillForce model authors sidebar result readouts as active-method scalar ou
   assert.equal(grounded.fields.phiPrimeDeltaPercentText.axes.length, 0);
   assert.equal(grounded.fields.F_r_max_delta_text.axes.length, 0);
   assert.equal(grounded.fields.F_resultant_max_delta_text.axes.length, 0);
+  assert.equal(grounded.fields.F_resultant_scale_max_text.axes.length, 0);
+  assert.equal(grounded.fields.F_resultant_scale_min_text.axes.length, 0);
+  assert.equal(grounded.fields.F_resultant_scale_title.axes.length, 0);
   assert.equal(
     grounded.fields.gammaActive.data,
     grounded.fields.gamma.data[g]
@@ -116,6 +119,9 @@ test("MillForce model authors sidebar result readouts as active-method scalar ou
   assert.match(grounded.fields.omegaText.data, / rad\/s$/);
   assert.match(grounded.fields.rhoChargeText.data, / SG$/);
   assert.match(grounded.fields.F_r_max_text.data, / kN$/);
+  assert.match(grounded.fields.F_resultant_scale_max_text.data, /^\d+ kN$/);
+  assert.match(grounded.fields.F_resultant_scale_min_text.data, /^\d+ kN$/);
+  assert.equal(grounded.fields.F_resultant_scale_title.data, "|F|");
   assert.match(grounded.fields.gammaDeltaText.data, /^[+-]?\d+\.\d(?:Â°|°)$/);
   assert.match(grounded.fields.gammaDeltaPercentText.data, /^[+-]?\d+\.\d\d%$/);
   assert.match(grounded.fields.F_resultant_max_delta_text.data, /^[+-]?\d+\.\d kN$/);
@@ -303,6 +309,29 @@ test("MillForceCross plans per-segment annular liner bands with angular bounds +
     r: evaluated.fields.cardinal_label_r.data,
     label: "180°"
   }]);
+  const forceScaleHot = plan.layers.find(l => l.name === "force_scale_hot");
+  const forceScaleTitle = plan.layers.find(l => l.name === "force_scale_title");
+  const forceScaleMaxLabel = plan.layers.find(l => l.name === "force_scale_max_label");
+  const forceScaleMinLabel = plan.layers.find(l => l.name === "force_scale_min_label");
+  assert.equal(forceScaleHot.mark, "screen-rect");
+  assert.equal(forceScaleHot.fill, "#EC7424");
+  assert.deepEqual(forceScaleHot.primitives, [{ x: 16, y: 440, width: 10, height: 12, rx: 0 }]);
+  assert.deepEqual(forceScaleTitle.primitives, [{
+    x: 16,
+    y: 436,
+    label: "|F|"
+  }]);
+  assert.equal(forceScaleMaxLabel.mark, "screen-text");
+  assert.deepEqual(forceScaleMaxLabel.primitives, [{
+    x: 29,
+    y: 446,
+    label: evaluated.fields.F_resultant_scale_max_text.data
+  }]);
+  assert.deepEqual(forceScaleMinLabel.primitives, [{
+    x: 29,
+    y: 500,
+    label: evaluated.fields.F_resultant_scale_min_text.data
+  }]);
   const liners = plan.layers.find(l => l.name === "liners");
   assert.equal(liners.mark, "annular-wedge");
   assert.equal(liners.primitives.length, N);
@@ -377,6 +406,17 @@ test("MillForceCross compare mode renders grounded and faithful annular bands", 
     evaluated.fields.phiPrime.data[g],
     evaluated.fields.phiPrime.data[g]
   ]);
+  const groundedSwatch = plan.layers.find(l => l.name === "compare_grounded_swatch");
+  const groundedLabel = plan.layers.find(l => l.name === "compare_grounded_label");
+  const faithfulSwatch = plan.layers.find(l => l.name === "compare_faithful_swatch");
+  const faithfulLabel = plan.layers.find(l => l.name === "compare_faithful_label");
+  assert.equal(groundedSwatch.hidden, undefined);
+  assert.equal(groundedSwatch.fill, "#5AAABF");
+  assert.deepEqual(groundedSwatch.primitives, [{ x: 490, y: 520, width: 12, height: 8, rx: 0 }]);
+  assert.deepEqual(groundedLabel.primitives, [{ x: 506, y: 527, label: "Grounded" }]);
+  assert.equal(faithfulSwatch.fill, "#EC7424");
+  assert.deepEqual(faithfulSwatch.primitives, [{ x: 490, y: 538, width: 12, height: 8, rx: 0 }]);
+  assert.deepEqual(faithfulLabel.primitives, [{ x: 506, y: 545, label: "Faithful" }]);
   assert.equal(grounded.mark, "annular-wedge");
   assert.equal(faithful.mark, "annular-wedge");
   assert.equal(grounded.primitives.length, N);

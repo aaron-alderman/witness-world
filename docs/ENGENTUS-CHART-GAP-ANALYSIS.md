@@ -168,6 +168,12 @@ grant runtime authority to copied JS or presenter code.
   consumes `theta`, `r`, and literal/data-backed `label` channels, while
   `views/mill-force.rvm` declares the shoulder `φ`, toe `φ'`, and cardinal
   degree labels from model-owned geometry.
+- Mill Force cross-section legend and force colour-scale annotations are now
+  authored chart layers rather than shell-local SVG: generic `screen-rect` and
+  `screen-text` marks in `plugin.chart-runtime` draw anchored SVG-space
+  swatches and labels, while `views/mill-force.rvm` declares the compare-mode
+  Grounded/Faithful legend plus the reference `|F|` force scale. The max/min
+  kN labels are scalar outputs from `models/mill-force.rvm`.
 - Mill Force force bars now use a generic straight-sided polar rectangle mark:
   `polar-quad` is implemented in `plugin.chart-runtime` as a reusable polar
   primitive, while Mill Force declares the reference radial bar geometry in
@@ -216,11 +222,10 @@ grant runtime authority to copied JS or presenter code.
   output after Run. The richer reference MC result lifecycle and final
   compare/MC panel polish remain first-pass gaps. Tooltip readout for the three
   stock charts now exists through the generic chart tooltip seam. Compare
-  deltas now exist as authored scalar outputs and inline percent readouts, but
-  the compare panel is still a first-pass authored analysis view rather than
-  final reference parity. Legend/colour-scale text remains blocked on clean
-  generic chart annotation support; it should not be faked with shell-local SVG
-  or controller code.
+  deltas now exist as authored scalar outputs and inline percent readouts, and
+  the cross-section chart now carries authored legend/force-scale annotations,
+  but the compare panel is still a first-pass authored analysis view rather
+  than final reference parity.
 - No app-local browser runtime, presenter, or controller seam should be added to
   close these gaps. The next work should continue through authored surfaces,
   process state, projections, and explicit capability bindings.

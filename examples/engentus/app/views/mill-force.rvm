@@ -177,6 +177,18 @@ chart MillForceCross of MillForce {
   layer cardinal_0 = text | theta:1.5707963267948966 r:cardinal_label_r label:"0°" fill:"#475569" size:9
   layer cardinal_90 = text | theta:3.141592653589793 r:cardinal_label_r label:"90°" fill:"#475569" size:9
   layer cardinal_180 = text | theta:4.71238898038469 r:cardinal_label_r label:"180°" fill:"#475569" size:9
+  layer force_scale_title = screen-text | x:16 yAnchor:bottom y:164 label:F_resultant_scale_title fill:slate size:9
+  layer force_scale_hot = screen-rect | x:16 yAnchor:bottom y:160 width:10 height:12 fill:"#EC7424"
+  layer force_scale_warm = screen-rect | x:16 yAnchor:bottom y:148 width:10 height:12 fill:"#be6a3a"
+  layer force_scale_mid = screen-rect | x:16 yAnchor:bottom y:136 width:10 height:12 fill:"#906048"
+  layer force_scale_cool = screen-rect | x:16 yAnchor:bottom y:124 width:10 height:12 fill:"#62565a"
+  layer force_scale_cold = screen-rect | x:16 yAnchor:bottom y:112 width:10 height:12 fill:"#344c6c"
+  layer force_scale_max_label = screen-text | x:29 yAnchor:bottom y:154 label:F_resultant_scale_max_text fill:"#f1f5f9" size:9
+  layer force_scale_min_label = screen-text | x:29 yAnchor:bottom y:100 label:F_resultant_scale_min_text fill:"#f1f5f9" size:9
+  layer compare_grounded_swatch = screen-rect | xAnchor:right x:110 yAnchor:bottom y:80 width:12 height:8 fill:blue opacity:0.82 when:param.analysis_mode=compare
+  layer compare_grounded_label = screen-text | xAnchor:right x:94 yAnchor:bottom y:73 label:"Grounded" fill:"#f1f5f9" size:10 when:param.analysis_mode=compare
+  layer compare_faithful_swatch = screen-rect | xAnchor:right x:110 yAnchor:bottom y:62 width:12 height:8 fill:ylw opacity:0.82 when:param.analysis_mode=compare
+  layer compare_faithful_label = screen-text | xAnchor:right x:94 yAnchor:bottom y:55 label:"Faithful" fill:"#f1f5f9" size:10 when:param.analysis_mode=compare
   layer liners = annular-wedge over segment | theta0:t1 theta1:t2 r0:rInner r1:radius value:F_resultant where:method=param.active_method tooltip.liner:segment tooltip.method:param.active_method tooltip.mass_kg:m_charge tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
   layer force_bars = polar-quad over segment | theta0:force_bar_theta0 theta1:force_bar_theta1 r0:force_bar_inner r1:rInner value:F_r where:method=param.active_method fill:blue stroke:none opacity:0.82 tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r unless:param.analysis_mode=compare
   layer grounded_liners = annular-wedge over segment | theta0:t1 theta1:t2 r0:rCompareMid r1:radius value:F_resultant where:method=grounded tooltip.liner:segment tooltip.method:grounded tooltip.mass_kg:m_charge tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare

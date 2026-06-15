@@ -293,6 +293,40 @@ test("polar text plans preserve generic authored label channels", () => {
   assert.deepEqual(label.primitives, [{ theta: 0.4, r: 1.2, label: "φ" }]);
 });
 
+test("screen annotation marks resolve anchored SVG-space rectangles and text", () => {
+  const view = {
+    frame: "polar",
+    encoding: {
+      theta: { field: "theta" },
+      r: { field: "r", domain: [0, 1] }
+    },
+    layers: [
+      {
+        name: "swatch",
+        mark: "screen-rect",
+        encode: { xAnchor: "right", x: 24, yAnchor: "bottom", y: 32, width: 12, height: 8, fill: "blue", opacity: 0.82 }
+      },
+      {
+        name: "label",
+        mark: "screen-text",
+        encode: { x: 16, y: 20, label: "Legend", fill: "#f1f5f9", size: 9 }
+      }
+    ]
+  };
+  const plan = planChart(view, { axes: {}, fields: {} }, { width: 200, height: 180 });
+  const swatch = plan.layers.find(layer => layer.name === "swatch");
+  const label = plan.layers.find(layer => layer.name === "label");
+
+  assert.equal(swatch.mark, "screen-rect");
+  assert.equal(swatch.fill, "#5AAABF");
+  assert.equal(swatch.opacity, 0.82);
+  assert.deepEqual(swatch.primitives, [{ x: 176, y: 148, width: 12, height: 8, rx: 0 }]);
+  assert.equal(label.mark, "screen-text");
+  assert.equal(label.fill, "#f1f5f9");
+  assert.equal(label.size, 9);
+  assert.deepEqual(label.primitives, [{ x: 16, y: 20, label: "Legend" }]);
+});
+
 test("cartesian line plans split category overlays and preserve styled point/text marks", () => {
   const view = {
     frame: "cartesian",

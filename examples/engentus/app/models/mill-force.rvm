@@ -109,6 +109,11 @@ model MillForce {
   reduce F_resultant_max_by_method = pmax(F_resultant) over segment
   reduce F_resultant_max_active = pick_method(F_resultant_max_by_method, active_method) over method
   derive F_resultant_max_text = force_kn_text(F_resultant_max_active)
+  derive F_resultant_scale_max_text = force_kn0_text(F_resultant_max_active)
+  reduce F_resultant_min_by_method = pmin(F_resultant) over segment
+  reduce F_resultant_min_active = pick_method(F_resultant_min_by_method, active_method) over method
+  derive F_resultant_scale_min_text = force_kn0_text(F_resultant_min_active)
+  derive F_resultant_scale_title = force_abs_label()
   reduce F_resultant_max_delta_text = force_delta_kn_text(F_resultant_max_by_method) over method
 
   // ── cross-section force bars (reference straight-sided radial rectangles) ──

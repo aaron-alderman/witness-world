@@ -42,7 +42,7 @@ export function planChart(viewBody, evaluated, opts = {}) {
   const xField = enc.x?.field ?? "x";
 
   // build layer primitives first (so we can auto-fit x/y from what is actually drawn)
-  const layers = (viewBody.layers ?? []).map(layer => planLayer(layer, evaluated, fills));
+  const layers = (viewBody.layers ?? []).map(layer => planLayer(layer, evaluated, fills, { width, height }));
 
   const xDomainSpec = enc.x?.domain ?? [0, "auto"];
   const xExtent = autoXExtent(layers);
@@ -82,12 +82,15 @@ export function planChart(viewBody, evaluated, opts = {}) {
   };
 }
 
-function planLayer(layer, evaluated, fills) {
+function planLayer(layer, evaluated, fills, opts = {}) {
   const fields = evaluated.fields ?? {};
   const axes = evaluated.axes ?? {};
   const enc = layer.encode ?? {};
   const base = { name: layer.name, mark: layer.mark, encode: enc };
   if (!layerPredicateMatches(enc, evaluated)) return { ...base, primitives: [], hidden: true };
+  if (layer.mark === "screen-rect" || layer.mark === "screen-text") {
+    return planScreenLayer({ base, enc, evaluated, axes, width: opts.width ?? 800, height: opts.height ?? 520 });
+  }
 
   if (layer.mark === "area") {
     // one area per category in `over` (e.g. lifetime); generic "from baseline".
@@ -228,7 +231,7 @@ function planPolarChart(viewBody, evaluated, opts = {}) {
   const innerH = height - margin.top - margin.bottom;
   const maxRadius = Math.min(innerW, innerH) / 2;
   const enc = viewBody.encoding ?? {};
-  const layers = (viewBody.layers ?? []).map(layer => planPolarLayer(layer, evaluated));
+  const layers = (viewBody.layers ?? []).map(layer => planPolarLayer(layer, evaluated, { width, height }));
 
   const rDomainSpec = enc.r?.domain ?? [0, "auto"];
   const authoredRMax = scalarRef(rDomainSpec[1], evaluated) ?? Number(rDomainSpec[1]);
@@ -248,12 +251,15 @@ function planPolarChart(viewBody, evaluated, opts = {}) {
   };
 }
 
-function planPolarLayer(layer, evaluated) {
+function planPolarLayer(layer, evaluated, opts = {}) {
   const fields = evaluated.fields ?? {};
   const axes = evaluated.axes ?? {};
   const enc = layer.encode ?? {};
   const base = { name: layer.name, mark: layer.mark, encode: enc };
   if (!layerPredicateMatches(enc, evaluated)) return { ...base, primitives: [], hidden: true };
+  if (layer.mark === "screen-rect" || layer.mark === "screen-text") {
+    return planScreenLayer({ base, enc, evaluated, axes, width: opts.width ?? 600, height: opts.height ?? 600 });
+  }
   const where = parseWhere(enc.where, axes, evaluated);
 
   if (layer.mark === "polygon" || layer.mark === "line") {
@@ -374,9 +380,54 @@ function planPolarLayer(layer, evaluated) {
   return { ...base, primitives: [] };
 }
 
+function resolveScreenCoordinate(value, anchor, extent) {
+  const offset = Number(value) || 0;
+  const normalized = String(anchor ?? "start").trim();
+  if (normalized === "right" || normalized === "bottom" || normalized === "end") return extent - offset;
+  if (normalized === "center" || normalized === "middle") return extent / 2 + offset;
+  return offset;
+}
+
+function planScreenLayer({ base, enc, evaluated, axes, width, height }) {
+  const where = parseWhere(enc.where, axes, evaluated);
+  const x = resolveScreenCoordinate(channelValue(enc.x, evaluated, where) ?? enc.x, enc.xAnchor, width);
+  const y = resolveScreenCoordinate(channelValue(enc.y, evaluated, where) ?? enc.y, enc.yAnchor, height);
+  if (base.mark === "screen-rect") {
+    return {
+      ...base,
+      fill: enc.fill ? colorRef(enc.fill, evaluated, enc.fillMap) : "#475569",
+      stroke: enc.stroke ? colorRef(enc.stroke, evaluated, enc.strokeMap) : "none",
+      opacity: enc.opacity == null ? 1 : Number(enc.opacity),
+      primitives: Number.isFinite(x) && Number.isFinite(y)
+        ? [{
+            x,
+            y,
+            width: Number(channelValue(enc.width, evaluated, where) ?? enc.width) || 10,
+            height: Number(channelValue(enc.height, evaluated, where) ?? enc.height) || 10,
+            rx: Number(enc.rx) || 0
+          }]
+        : []
+    };
+  }
+  const label = textChannelValue(enc.label ?? enc.text, evaluated, where, axes);
+  return {
+    ...base,
+    fill: enc.fill ? colorRef(enc.fill, evaluated, enc.fillMap) : "#475569",
+    size: Number(enc.size) || 10,
+    weight: enc.weight ?? "normal",
+    opacity: enc.opacity == null ? 1 : Number(enc.opacity),
+    anchor: enc.anchor ?? "start",
+    baseline: enc.baseline ?? "middle",
+    primitives: Number.isFinite(x) && Number.isFinite(y) && label != null
+      ? [{ x, y, label: String(label) }]
+      : []
+  };
+}
+
 function autoPolarRMax(layers) {
   let max = 0;
   for (const layer of layers) {
+    if (String(layer.mark || "").startsWith("screen-")) continue;
     for (const prim of layer.primitives ?? []) {
       if (prim.points) {
         for (const p of prim.points) if (Number.isFinite(p.r) && p.r > max) max = p.r;
@@ -549,6 +600,7 @@ function autoDiscRadius(layers) {
   let max = 0;
   const consider = pts => { for (const p of pts) { const r = Math.hypot(p.x, p.y); if (Number.isFinite(r) && r > max) max = r; } };
   for (const layer of layers) {
+    if (String(layer.mark || "").startsWith("screen-")) continue;
     for (const prim of layer.primitives ?? []) {
       if (prim.points) consider(prim.points);
       else if (Number.isFinite(prim.x)) consider([prim]);
@@ -712,6 +764,7 @@ function colorRef(token, evaluated, map = null) {
 function autoYMax(layers) {
   let max = 0;
   for (const layer of layers) {
+    if (String(layer.mark || "").startsWith("screen-")) continue;
     for (const prim of layer.primitives ?? []) {
       if (prim.points) {
         for (const p of prim.points) {
@@ -847,7 +900,9 @@ export function drawChart(container, plan, d3) {
   const y = v => plan.innerH - (v - scales.y.domain[0]) / ((scales.y.domain[1] - scales.y.domain[0]) || 1) * plan.innerH;
 
   for (const layer of plan.layers) {
-    if (layer.mark === "area") {
+    if (layer.mark === "screen-rect" || layer.mark === "screen-text") {
+      drawScreenLayer(svg, layer);
+    } else if (layer.mark === "area") {
       for (const prim of layer.primitives) {
         const top = prim.points.map(p => `${x(p.x)},${y(p.y1)}`);
         const bottom = prim.points.slice().reverse().map(p => `${x(p.x)},${y(p.y0)}`);
@@ -1023,7 +1078,9 @@ function drawPolarChart(container, plan, d3) {
       .attr("fill", "none").attr("stroke", "#e2e8f0");
   }
   for (const layer of plan.layers) {
-    if (layer.mark === "polygon" || layer.mark === "line") {
+    if (layer.mark === "screen-rect" || layer.mark === "screen-text") {
+      drawScreenLayer(svg, layer);
+    } else if (layer.mark === "polygon" || layer.mark === "line") {
       for (const prim of layer.primitives) {
         const pts = prim.points.filter(p => Number.isFinite(p.r)).map(p => toXY(p.theta, p.r).join(","));
         const el = layer.closed ? svg.append("polygon") : svg.append("polyline");
@@ -1105,6 +1162,37 @@ function drawPolarChart(container, plan, d3) {
     svg.selectAll("*").remove();
   };
   return node;
+}
+
+function drawScreenLayer(svg, layer) {
+  if (layer.mark === "screen-rect") {
+    for (const prim of layer.primitives ?? []) {
+      svg.append("rect")
+        .attr("x", prim.x)
+        .attr("y", prim.y)
+        .attr("width", prim.width)
+        .attr("height", prim.height)
+        .attr("rx", prim.rx ?? 0)
+        .attr("fill", layer.fill)
+        .attr("stroke", layer.stroke ?? "none")
+        .attr("opacity", layer.opacity ?? 1);
+    }
+    return;
+  }
+  if (layer.mark === "screen-text") {
+    for (const prim of layer.primitives ?? []) {
+      svg.append("text")
+        .attr("x", prim.x)
+        .attr("y", prim.y)
+        .attr("fill", layer.fill)
+        .attr("font-size", `${layer.size ?? 10}px`)
+        .attr("font-weight", layer.weight ?? "normal")
+        .attr("text-anchor", layer.anchor ?? "start")
+        .attr("dominant-baseline", layer.baseline ?? "middle")
+        .attr("opacity", layer.opacity ?? 1)
+        .text(prim.label ?? "");
+    }
+  }
 }
 
 function normalizeAngle(theta) {

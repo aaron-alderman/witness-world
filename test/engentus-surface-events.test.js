@@ -1150,6 +1150,16 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     assert.equal(modeState.compare, "mill-force-pill active");
     assert.equal(modeState.forceChartMode, "compare");
     assert.match(modeState.modeRow, /Compare/);
+    const chartAnnotationText = await page.evaluate(() => ({
+      texts: [...document.querySelectorAll("#mill-force-svg-cross text")].map(node => node.textContent),
+      max: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.F_resultant_scale_max_text,
+      min: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.F_resultant_scale_min_text
+    }));
+    assert.equal(chartAnnotationText.texts.includes("Grounded"), true);
+    assert.equal(chartAnnotationText.texts.includes("Faithful"), true);
+    assert.equal(chartAnnotationText.texts.includes("|F|"), true);
+    assert.equal(chartAnnotationText.texts.includes(chartAnnotationText.max), true);
+    assert.equal(chartAnnotationText.texts.includes(chartAnnotationText.min), true);
     const compareState = await page.evaluate(() => ({
       modelHidden: document.querySelector("#surface-millforcemodelsection")?.hasAttribute("hidden"),
       compareHidden: document.querySelector("#surface-millforcecomparesection")?.hasAttribute("hidden"),
