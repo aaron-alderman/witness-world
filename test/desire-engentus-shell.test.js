@@ -241,7 +241,16 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.props?.inputStyle, "width:70px");
   assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.bindings[0]?.source?.state, "MillForceMcSamples");
   assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.interactions[0]?.action?.state, "MillForceMcSamples");
-  assert.equal(surfaces.get("MillForceMcJTotalToggle")?.body?.interactions[0]?.action?.value?.kind, "eventChecked");
+  assert.equal(surfaces.get("MillForceMcJTotalInput")?.body?.bindings[0]?.source?.state, "MillForceMcJTotalFree");
+  assert.equal(surfaces.get("MillForceMcJTotalInput")?.body?.interactions[0]?.action?.value?.kind, "eventChecked");
+  assert.deepEqual(surfaces.get("MillForceMcJTotalToggle")?.body?.children, [
+    "MillForceMcJTotalLabel",
+    "MillForceMcJTotalSigma"
+  ]);
+  assert.equal(surfaces.get("MillForceMcJTotalSigma")?.body?.props?.text, "σ=0.030");
+  assert.equal(surfaces.get("MillForceMcPercentCritSigma")?.body?.props?.text, "σ=0.050");
+  assert.equal(surfaces.get("MillForceMcPercentSolidsSigma")?.body?.props?.text, "σ=0.050");
+  assert.equal(surfaces.get("MillForceMcHeightSigma")?.body?.props?.text, "σ=0.020");
   assert.equal(surfaces.get("MillForceMcRunAction")?.body?.props?.label, "▶ Run");
   assert.equal(surfaces.get("MillForceMcClearAction")?.body?.props?.label, "✕ Clear");
   assert.equal(surfaces.get("MillForceMcClearAction")?.body?.bindings[0]?.prop, "disabled");

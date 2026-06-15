@@ -61,9 +61,9 @@ grant runtime authority to copied JS or presenter code.
 - Mill Force model/MC shell controls are now authored: grounded/faithful model
   selection, compare-mode explanatory rows, reference-shaped Monte Carlo sample
   count input,
-  free-parameter toggles, reference-aligned run/clear labels, Clear disabled
-  state, and run/clear status all live in `shell.rvm` and mutate process state
-  through generic bindings.
+  free-parameter rows with reference sigma labels, reference-aligned run/clear
+  labels, Clear disabled state, and run/clear status all live in `shell.rvm`
+  and mutate process state through generic bindings.
 - Mill Force chart model selection now flows through `chart.render` as an
   authored chart parameter: the force, rose, and cross-section chart layers
   slice `method` from `param.active_method`, which is bound to

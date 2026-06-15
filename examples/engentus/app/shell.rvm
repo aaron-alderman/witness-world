@@ -6133,10 +6133,10 @@ view MillForceMcVaryTitle {
   prop text = "Vary parameters:"
 }
 
-view MillForceMcJTotalToggle {
-  kind checkbox-field
-  class mc-row
-  prop label = "Fill fraction J"
+view MillForceMcJTotalInput {
+  kind input
+  class mill-force-mc-param-cb
+  prop tag = "input"
   prop inputType = "checkbox"
   bindings {
     checked from state MillForceMcJTotalFree
@@ -6146,10 +6146,41 @@ view MillForceMcJTotalToggle {
   }
 }
 
-view MillForceMcPercentCritToggle {
-  kind checkbox-field
+view MillForceMcJTotalLabelText {
+  kind text
+  prop tag = "span"
+  prop text = "Fill fraction J"
+}
+
+view MillForceMcJTotalLabel {
+  kind label
+  prop tag = "label"
+  children {
+    MillForceMcJTotalInput
+    MillForceMcJTotalLabelText
+  }
+}
+
+view MillForceMcJTotalSigma {
+  kind text
+  class mill-unit
+  prop tag = "span"
+  prop text = "σ=0.030"
+}
+
+view MillForceMcJTotalToggle {
+  kind row
   class mc-row
-  prop label = "Speed N/Nc"
+  children {
+    MillForceMcJTotalLabel
+    MillForceMcJTotalSigma
+  }
+}
+
+view MillForceMcPercentCritInput {
+  kind input
+  class mill-force-mc-param-cb
+  prop tag = "input"
   prop inputType = "checkbox"
   bindings {
     checked from state MillForceMcPercentCritFree
@@ -6159,10 +6190,41 @@ view MillForceMcPercentCritToggle {
   }
 }
 
-view MillForceMcPercentSolidsToggle {
-  kind checkbox-field
+view MillForceMcPercentCritLabelText {
+  kind text
+  prop tag = "span"
+  prop text = "Speed N/Nc"
+}
+
+view MillForceMcPercentCritLabel {
+  kind label
+  prop tag = "label"
+  children {
+    MillForceMcPercentCritInput
+    MillForceMcPercentCritLabelText
+  }
+}
+
+view MillForceMcPercentCritSigma {
+  kind text
+  class mill-unit
+  prop tag = "span"
+  prop text = "σ=0.050"
+}
+
+view MillForceMcPercentCritToggle {
+  kind row
   class mc-row
-  prop label = "Solids (mass)"
+  children {
+    MillForceMcPercentCritLabel
+    MillForceMcPercentCritSigma
+  }
+}
+
+view MillForceMcPercentSolidsInput {
+  kind input
+  class mill-force-mc-param-cb
+  prop tag = "input"
   prop inputType = "checkbox"
   bindings {
     checked from state MillForceMcPercentSolidsFree
@@ -6172,16 +6234,78 @@ view MillForceMcPercentSolidsToggle {
   }
 }
 
-view MillForceMcHeightToggle {
-  kind checkbox-field
+view MillForceMcPercentSolidsLabelText {
+  kind text
+  prop tag = "span"
+  prop text = "Solids (mass)"
+}
+
+view MillForceMcPercentSolidsLabel {
+  kind label
+  prop tag = "label"
+  children {
+    MillForceMcPercentSolidsInput
+    MillForceMcPercentSolidsLabelText
+  }
+}
+
+view MillForceMcPercentSolidsSigma {
+  kind text
+  class mill-unit
+  prop tag = "span"
+  prop text = "σ=0.050"
+}
+
+view MillForceMcPercentSolidsToggle {
+  kind row
   class mc-row
-  prop label = "Liner height"
+  children {
+    MillForceMcPercentSolidsLabel
+    MillForceMcPercentSolidsSigma
+  }
+}
+
+view MillForceMcHeightInput {
+  kind input
+  class mill-force-mc-param-cb
+  prop tag = "input"
   prop inputType = "checkbox"
   bindings {
     checked from state MillForceMcHeightFree
   }
   interactions {
     on change self set MillForceMcHeightFree eventChecked
+  }
+}
+
+view MillForceMcHeightLabelText {
+  kind text
+  prop tag = "span"
+  prop text = "Liner height"
+}
+
+view MillForceMcHeightLabel {
+  kind label
+  prop tag = "label"
+  children {
+    MillForceMcHeightInput
+    MillForceMcHeightLabelText
+  }
+}
+
+view MillForceMcHeightSigma {
+  kind text
+  class mill-unit
+  prop tag = "span"
+  prop text = "σ=0.020"
+}
+
+view MillForceMcHeightToggle {
+  kind row
+  class mc-row
+  children {
+    MillForceMcHeightLabel
+    MillForceMcHeightSigma
   }
 }
 

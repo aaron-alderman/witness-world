@@ -852,7 +852,9 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       clearDisabled: document.querySelector("#surface-millforcemcclearaction")?.disabled,
       samplesRowClass: document.querySelector("#surface-millforcemcsamplesrow")?.className,
       samplesLabel: document.querySelector("#surface-millforcemcsamplesrow label")?.textContent,
-      samplesInputStyle: document.querySelector("#mill-force-mc-n")?.getAttribute("style")
+      samplesInputStyle: document.querySelector("#mill-force-mc-n")?.getAttribute("style"),
+      mcParamRows: [...document.querySelectorAll("#surface-millforcemcsection .mc-row")]
+        .map(row => row.textContent.trim())
     })), {
       compareHidden: true,
       mcHidden: false,
@@ -861,13 +863,20 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       clearDisabled: true,
       samplesRowClass: "mc-row",
       samplesLabel: "Samples",
-      samplesInputStyle: "width:70px"
+      samplesInputStyle: "width:70px",
+      mcParamRows: [
+        "Samples",
+        "Fill fraction Jσ=0.030",
+        "Speed N/Ncσ=0.050",
+        "Solids (mass)σ=0.050",
+        "Liner heightσ=0.020"
+      ]
     });
     await page.locator("#mill-force-mc-n").fill("350");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcSamples") === 350
     );
-    await page.locator("#surface-millforcemcjtotaltoggle input").check();
+    await page.locator("#surface-millforcemcjtotalinput").check();
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcJTotalFree") === true
     );
