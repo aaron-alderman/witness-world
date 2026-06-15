@@ -37,6 +37,10 @@ export const goodmanFunctions = {
     return Math.pow(sigmaEquiv / sigmaLim, slope) / SN_ND;
   },
 
+  integer_text: value => `${Math.round(Number(value) || 0)}`,
+
+  mpa_text: value => `${Number(value).toFixed(1)} MPa`,
+
   shore_a_to_E_pa: shoreA =>
     1e6 * (0.0981 * (56 + 7.62336 * shoreA)) /
           (0.137505 * (254 - 2.54 * shoreA)),

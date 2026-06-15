@@ -60,6 +60,11 @@ grant runtime authority to copied JS or presenter code.
 - Goodman Monte Carlo chart evaluation now consumes authored run sample count:
   `GoodmanRunBoltsPerSet` binds to `GoodmanMCBands.param.n_samples`, so the
   ensemble axis re-evaluates from process-owned run config.
+- Goodman Monte Carlo now exposes first-pass scalar chart summaries for authored
+  windows: `BoltFatigueMC` reduces the mounted MC bands to sample count and
+  p10/p50/p90 stress summary text outputs, `chart.render` publishes them as
+  `GoodmanMCBands.*` capability outputs, and the Stats/CDF windows consume those
+  outputs through authored surface bindings after the run state becomes active.
 - Goodman scrubber range now follows authored run duration:
   `GoodmanRunDurationMonths` binds to the time slider `max` attribute through
   the generic form-control binding path, matching the reference relationship
@@ -122,14 +127,15 @@ grant runtime authority to copied JS or presenter code.
 
 ## Known Gaps
 
-- Goodman numerical simulation lifecycle, animated scrubber playback,
+- Goodman numerical simulation lifecycle, animated scrubber playback, full
   CDF/Stats/ANOVA result datasets, multi-bolt-set response curves, dynamic
   annotation row creation, generated bolt-set parameter rows, and
   clone/delete/new behavior remain to be authored. The current Goodman run
   controls, MC band chart, chart edit panel, deterministic chart readout,
   process-owned primary bolt-set expansion, bolt-set shell, and windows now
-  expose authored stateful shell/chart behavior, but they do not yet execute or
-  consume full reference Monte Carlo statistical datasets.
+  expose authored stateful shell/chart behavior and first-pass MC scalar
+  summaries, but they do not yet execute or consume full reference Monte Carlo
+  statistical datasets.
 - Goodman dynamic repeated collections remain a gap. Current simulation and
   bolt-set rows are explicit authored first-pass rows; full reference parity
   still needs authored collection/repeated-action semantics or a justified

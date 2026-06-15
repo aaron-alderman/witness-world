@@ -120,4 +120,12 @@ model BoltFatigueMC {
   reduce sa_p10 = percentile(curve_s, 10) over sample
   reduce sa_p50 = percentile(curve_s, 50) over sample
   reduce sa_p90 = percentile(curve_s, 90) over sample
+  reduce mc_sample_count = count(F_alt_s) over sample
+  reduce mc_sa_p10_min = pmin(sa_p10) over sm
+  reduce mc_sa_p50_mean = mean(sa_p50) over sm
+  reduce mc_sa_p90_max = pmax(sa_p90) over sm
+  derive mc_sample_count_text = integer_text(mc_sample_count)
+  derive mc_sa_p10_min_text = mpa_text(mc_sa_p10_min)
+  derive mc_sa_p50_mean_text = mpa_text(mc_sa_p50_mean)
+  derive mc_sa_p90_max_text = mpa_text(mc_sa_p90_max)
 }

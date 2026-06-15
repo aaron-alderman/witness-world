@@ -626,6 +626,26 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       document.querySelector("#chart-svg-mc")?.__chartController?.spec?.params?.n_samples === 750
     );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg-mc")?.__surfaceCapabilityOutputs?.mc_sample_count_text === "750"
+    );
+    await page.click("#surface-goodmanactionstats");
+    await page.waitForFunction(() =>
+      !document.querySelector("#surface-goodmanstatswindow")?.hasAttribute("hidden")
+      && /Current run/.test(document.querySelector("#surface-goodmanstatswindow")?.textContent || "")
+    );
+    const statsWindowText = await page.textContent("#surface-goodmanstatswindow");
+    assert.match(statsWindowText, /Current run/);
+    assert.match(statsWindowText, /Primary Bolt Set/);
+    assert.match(statsWindowText, /750/);
+    assert.match(statsWindowText, /\d+\.\d MPa/);
+    assert.equal(await page.locator("#surface-goodmanstatsemptyrow[hidden]").count(), 1);
+    await page.click("#surface-goodmanactioncdf");
+    await page.waitForFunction(() =>
+      !document.querySelector("#surface-goodmancdfwindow")?.hasAttribute("hidden")
+      && /Monte Carlo band summary/.test(document.querySelector("#surface-goodmancdfwindow")?.textContent || "")
+    );
+    assert.match(await page.textContent("#surface-goodmancdfwindow"), /Monte Carlo band summary is available/);
     assert.match(await page.textContent("#surface-goodmanrunprogresslabel"), /Running/);
     assert.deepEqual(await page.evaluate(() => ({
       runDisabled: document.querySelector("#surface-goodmanrunactionstart")?.disabled,

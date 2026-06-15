@@ -4755,6 +4755,9 @@ view GoodmanCdfEmptyText {
   class goodman-window-empty-text
   prop tag = "p"
   prop text = "Run a Monte Carlo simulation to see results."
+  bindings {
+    text from state GoodmanRunStatusState map running "Monte Carlo band summary is available from the authored chart model." default "Run a Monte Carlo simulation to see results."
+  }
 }
 
 view GoodmanCdfWindow {
@@ -4898,12 +4901,16 @@ view GoodmanStatsTableBody {
   prop tag = "tbody"
   children {
     GoodmanStatsEmptyRow
+    GoodmanStatsDataRow
   }
 }
 
 view GoodmanStatsEmptyRow {
   kind table-row
   prop tag = "tr"
+  bindings {
+    visible from state GoodmanRunStatusState map running false default true
+  }
   children {
     GoodmanStatsEmptyCell
   }
@@ -4914,6 +4921,94 @@ view GoodmanStatsEmptyCell {
   class goodman-window-empty-cell
   prop tag = "td"
   prop text = "No completed simulations."
+}
+
+view GoodmanStatsDataRow {
+  kind table-row
+  prop tag = "tr"
+  bindings {
+    visible from state GoodmanRunStatusState map running true default false
+  }
+  children {
+    GoodmanStatsDataSimulation
+    GoodmanStatsDataBoltSet
+    GoodmanStatsDataN
+    GoodmanStatsDataFailed
+    GoodmanStatsDataMean
+    GoodmanStatsDataStd
+    GoodmanStatsDataP10
+    GoodmanStatsDataP50
+    GoodmanStatsDataP90
+  }
+}
+
+view GoodmanStatsDataSimulation {
+  kind text
+  prop tag = "td"
+  prop text = "Current run"
+}
+
+view GoodmanStatsDataBoltSet {
+  kind text
+  prop tag = "td"
+  prop text = "Primary Bolt Set"
+}
+
+view GoodmanStatsDataN {
+  kind text
+  prop tag = "td"
+  prop text = "500"
+  bindings {
+    text from capability GoodmanMCBands.mc_sample_count_text
+  }
+}
+
+view GoodmanStatsDataFailed {
+  kind text
+  prop tag = "td"
+  prop text = "-"
+}
+
+view GoodmanStatsDataMean {
+  kind text
+  prop tag = "td"
+  prop text = "-"
+  bindings {
+    text from capability GoodmanMCBands.mc_sa_p50_mean_text
+  }
+}
+
+view GoodmanStatsDataStd {
+  kind text
+  prop tag = "td"
+  prop text = "-"
+}
+
+view GoodmanStatsDataP10 {
+  kind text
+  prop tag = "td"
+  prop text = "-"
+  bindings {
+    text from capability GoodmanMCBands.mc_sa_p10_min_text
+  }
+}
+
+view GoodmanStatsDataP50 {
+  kind text
+  prop tag = "td"
+  prop text = "-"
+  bindings {
+    text from capability GoodmanMCBands.mc_sa_p50_mean_text
+  }
+}
+
+view GoodmanStatsDataP90 {
+  kind text
+  prop tag = "td"
+  prop text = "-"
+  bindings {
+    text from capability GoodmanMCBands.mc_sa_p90_max_text
+  }
 }
 
 view GoodmanStatsWindow {
