@@ -80,6 +80,8 @@ export function createRuntimeRouteHandlers({
   runtimePluginRoot = null,
   runtimePluginIds = [],
   authoredRuntimePluginIds = [],
+  appSnapshotManager = null,
+  currentAppRenderWorld = null,
   supportedFrontendOps = [],
   supportedBackendOps = [],
   frontendTraceProcesses = [],
@@ -550,6 +552,10 @@ export function createRuntimeRouteHandlers({
       getRuntimePluginReviews,
       getRuntimeOperatorState: async appContext => appContext?.runtimeOperatorService?.state?.() ?? null,
       buildPluginCapabilitySourceIndex,
+      appSnapshotManager,
+      currentAppRenderWorld: typeof currentAppRenderWorld === "function"
+        ? currentAppRenderWorld
+        : (() => appSnapshotManager?.getActiveSnapshot()?.world ?? world),
       backendHosts,
       frontendHosts,
       mcpToolNames: mcpToolNamesImpl,

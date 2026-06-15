@@ -14,6 +14,7 @@ import {
   createRuntimeAppContext,
   createUnavailableRuntimeAppContext
 } from "./runtime-app-context.js";
+import { AppSnapshotManager } from "./app-snapshot-manager.js";
 import {
   createRuntimeAppContextForRunner,
   createRuntimeResolverForServer
@@ -64,6 +65,7 @@ export async function startRuntimeServer(world, {
   runtimePluginIds = null,
   runtimeStartupMode = "serve",
   runtimeOperatorContract = null,
+  devMode = null,
   env = process.env
 }, deps) {
   const {
@@ -104,6 +106,7 @@ export async function startRuntimeServer(world, {
   const logError = typeof logger?.error === "function"
     ? (event, fields) => logger.error(event, fields)
     : () => {};
+  const activeDevMode = devMode ?? (runtimeStartupMode === "serve" && appProject != null);
 
   const runtimePluginRoot = resolveRuntimePluginRootImpl({ env });
   const configuredRuntimePluginIds = resolveConfiguredRuntimePluginIdsImpl({ env, runtimePluginIds });
@@ -347,6 +350,24 @@ export async function startRuntimeServer(world, {
   });
   appContext.handlerSet = serverRunner.handlerSet ?? null;
   appContext.bootstrapOnly = serverRunner.bootstrapOnly === true;
+  appContext.devMode = activeDevMode === true;
+  if (appProject) {
+    const appSnapshotManager = await AppSnapshotManager.create({
+      appProject,
+      runtimeProfile: activeRuntimeProfile,
+      runtimePluginIds: configuredRuntimePluginIds,
+      env,
+      devMode: activeDevMode === true,
+      logger,
+      fsModule
+    });
+    appContext.appSnapshotManager = appSnapshotManager;
+    const priorClose = typeof appContext.close === "function" ? appContext.close.bind(appContext) : null;
+    appContext.close = () => {
+      appSnapshotManager.close();
+      priorClose?.();
+    };
+  }
   const storage = appContext.storage;
 
   const sessionStore = new Map();
@@ -364,9 +385,11 @@ export async function startRuntimeServer(world, {
     runtimeContributions,
     runtimePluginRoot,
     runtimePluginIds: effectiveRuntimePluginCatalog.operatorPluginIds,
-    authoredRuntimePluginIds: effectiveRuntimePluginCatalog.authoredPluginIds
+    authoredRuntimePluginIds: effectiveRuntimePluginCatalog.authoredPluginIds,
+    appSnapshotManager: appContext.appSnapshotManager ?? null,
+    currentAppRenderWorld: () => appContext.appSnapshotManager?.getActiveSnapshot()?.world ?? world
   });
-  const mountedRoutesFor = runnerId => world.project(moduleProjectors.servedRoutes)
+  const mountedRoutesFor = (runnerId, runtimeContext = null) => (runtimeContext?.appSnapshotManager?.getActiveSnapshot()?.world ?? world).project(moduleProjectors.servedRoutes)
     .filter(route => route.serverRunner === runnerId)
     .map(route => ({ ...route, matcher: compileRouteMatcher(route.path) }));
   const runtimeResolver = createRuntimeResolverForServerImpl({
@@ -439,6 +462,10 @@ export async function startRuntimeServer(world, {
     const startedAt = Date.now();
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     const runtime = await resolveActiveRuntime();
+    if (appContext.appSnapshotManager && runtime.context && !runtime.context.appSnapshotManager) {
+      runtime.context.appSnapshotManager = appContext.appSnapshotManager;
+      runtime.context.devMode = activeDevMode === true;
+    }
     attachEventsStream(runtime.context);
     const requestContext = resolveRequestContext(req, sessionStore, { allowActorHeader: runtime.runner.allowActorHeader === true });
     const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
@@ -483,7 +510,11 @@ export async function startRuntimeServer(world, {
         return;
       }
 
-      const mountedRouteTable = mountedRoutesFor(runtime.runner.id);
+      if (runtime.context?.devMode && runtime.context?.appSnapshotManager) {
+        await runtime.context.appSnapshotManager.ensureFresh({ trigger: "request" });
+      }
+
+      const mountedRouteTable = mountedRoutesFor(runtime.runner.id, runtime.context);
       const matched = matchDeclaredRoute(mountedRouteTable, req.method || "GET", requestUrl.pathname);
 
       if (shouldServeBootstrapFallback({
@@ -623,7 +654,7 @@ export async function startRuntimeServer(world, {
     claims: [
       relation(backendHost, "serves", serverRunner.id),
       relation(frontendHost, "renders", serverRunner.id),
-      ...mountedRoutesFor(serverRunner.id).map(route => relation(serverRunner.id, "serves", route.id))
+      ...mountedRoutesFor(serverRunner.id, appContext).map(route => relation(serverRunner.id, "serves", route.id))
     ],
       body: {
         url,
@@ -633,7 +664,7 @@ export async function startRuntimeServer(world, {
       handlerSet: serverRunner.handlerSet ?? null,
         actors: appContext.actors,
         storage,
-        routeCount: mountedRoutesFor(serverRunner.id).length,
+        routeCount: mountedRoutesFor(serverRunner.id, appContext).length,
         runtimePlugins: effectiveRuntimePluginCatalog.activePluginIds
       }
     });

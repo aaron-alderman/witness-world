@@ -59,6 +59,7 @@ async function runServe(args) {
       runtimeProfile: parsed.runtimeProfile,
       runtimeProfileExplicit: parsed.runtimeProfileExplicit,
       runtimePluginIds: parsed.runtimePluginIds,
+      devMode: parsed.devMode,
       worldHome: parsed.worldHome,
       cwd: process.cwd(),
       env: process.env
@@ -84,6 +85,7 @@ async function runServe(args) {
       `Manifest: ${appProject.manifestPath}`,
       `Server runner: ${runner.id}`,
       `Selected target: ${selection.serverRunner.id}`,
+      `Mode: ${parsed.devMode ? "dev" : "release"}`,
       `Runtime profile: ${runtimeProfile}`,
       `Persistence: ${operatorContract.persistence.mode}`,
       ...(operatorContract.worldHome ? [`World home: ${operatorContract.worldHome}`] : [])
@@ -400,7 +402,7 @@ async function runOperator(args) {
 }
 
 function parseServeArgs(args) {
-  const result = { appPath: null, serverRunnerId: null, port: 3000, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [] };
+  const result = { appPath: null, serverRunnerId: null, port: 3000, worldHome: null, runtimeProfile: DEFAULT_RUNTIME_PROFILE, runtimeProfileExplicit: false, runtimePluginIds: [], devMode: true };
   const queue = [...args];
   if (queue.length && !queue[0].startsWith("--")) result.appPath = queue.shift();
   while (queue.length) {
@@ -425,6 +427,14 @@ function parseServeArgs(args) {
     if (token === "--runtime-plugin") {
       const pluginId = queue.shift() ?? "";
       if (pluginId) result.runtimePluginIds.push(pluginId);
+      continue;
+    }
+    if (token === "--dev") {
+      result.devMode = true;
+      continue;
+    }
+    if (token === "--release") {
+      result.devMode = false;
       continue;
     }
   }
@@ -659,7 +669,7 @@ function reportOperatorReplace({
 function usageText() {
   return [
     "Usage:",
-    "  node src/cli.js serve <app-dir|app.wtoml> [--server <id>] [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
+    "  node src/cli.js serve <app-dir|app.wtoml> [--server <id>] [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>] [--release]",
     "  node src/cli.js bootstrap [--port <n>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
     "  node src/cli.js desktop [<app-dir|app.wtoml>] [--desktop-target <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",
     "  node src/cli.js mcp <app-dir|app.wtoml> [--mcp <id>] [--server <id>] [--transport <stdio|http>] [--port <n>] [--actor <id>] [--world-home <path>] [--runtime-profile <id>] [--runtime-plugin <id>]",

@@ -30,7 +30,8 @@ export async function startUiServer({
   serverRunnerId = "demo_server",
   extraWitnessToml = "",
   logger = silentLogger,
-  runtimeProfile = "full"
+  runtimeProfile = "full",
+  devMode = true
 } = {}) {
   const world = createWorld();
   const runtimeRoot = await tempRuntimeRoot();
@@ -50,7 +51,8 @@ export async function startUiServer({
     runtimeRoot,
     appProject,
     runtimeProfile,
-    logger
+    logger,
+    devMode
   });
 
   if (!server.ok) {

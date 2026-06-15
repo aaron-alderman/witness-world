@@ -1,5 +1,9 @@
 const SN_ND = 2e6;
 const REMOVE = Symbol("REMOVE");
+const LIFETIME_MONTHS = [0.5, 2, 6];
+const BAND_FILL = ["#bbf7d0", "#d9f99d", "#fef08a", "#fde68a"];
+const BAND_STROKE = ["#86efac", "#bef264", "#fde047", "#fbbf24"];
+const BOLT_SET_COLORS = ["#dc2626", "#8CC4D4", "#16a34a", "#f59e0b", "#7c3aed"];
 
 const K_F_HEAD = [3.0, 1.0];
 const K_F_NUT = [2.5, 2.5];
@@ -96,14 +100,14 @@ const DEFAULT_CHART_EDIT = {
   yLabel: "Alternating Bending Stress (MPa)",
   titleSize: 13,
   axisSize: 12,
-  bandFills: ["#bbf7d0", "#d9f99d", "#fef08a", "#fde68a"],
-  bandStrokes: ["#86efac", "#bef264", "#fde047", "#fbbf24"],
+  bandFills: BAND_FILL,
+  bandStrokes: BAND_STROKE,
   showGrid: true,
   annotations: []
 };
 
 export const DEFAULT_STATE = {
-  version: 7,
+  version: 8,
   boltSets: {
     bs_rubber: { id: "bs_rubber", name: "No Jemtec", color: "#dc2626", visible: true, params: _DP_RUBBER },
     bs_jemtec: { id: "bs_jemtec", name: "Jemtec", color: "#8CC4D4", visible: true, params: _DP_JEMTEC }
@@ -123,6 +127,7 @@ export const DEFAULT_STATE = {
     mode: "static",
     activeSimId: null,
     openBsSets: { bs_rubber: false, bs_jemtec: false },
+    editBoltSets: {},
     scrubber: { t: 0, tMax: 24, playing: false, speed: 1, showTrail: false },
     windows: {
       cdf: { xf: 0.56, yf: 0.07, wf: 0.39, hf: 0.46, visible: false, z: 10 },
@@ -230,6 +235,10 @@ function sectionPropsRound(D) {
 function boltSigmaAt(params, timeMonths) {
   const timeHours = timeMonths * 720;
   const sigmaM = params.preload_stress_MPa * preloadRelaxation(timeHours, params.tau_a, params.tau_b, params.tau_c) * params.preload_utilisation;
+  return boltStaticPoint(params, sigmaM, timeHours);
+}
+
+function boltStaticPoint(params, sigmaM, timeHours = 0) {
   const shank = sectionPropsRound(params.D_Shank);
   const minor = sectionPropsRound(params.D_minor);
   const Zhead = shank.I / shank.y;
@@ -325,6 +334,18 @@ function winFrac(frame) {
   };
 }
 
+function numberText(value, digits = 1, empty = "-") {
+  return Number.isFinite(value) ? Number(value).toFixed(digits) : empty;
+}
+
+function escapeText(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
 function anova(groups) {
   const values = groups.flatMap(group => group.values);
   const total = values.length;
@@ -344,7 +365,174 @@ function anova(groups) {
   const msBetween = between / df1;
   const msWithin = within / df2;
   const F = msBetween / msWithin;
-  return { F, df1, df2, p: 0, ssBet: between, ssWit: within, msBet: msBetween, msWit: msWithin, grand: grandMean };
+  return {
+    F,
+    df1,
+    df2,
+    p: 1 - fCdf(F, df1, df2),
+    ssBet: between,
+    ssWit: within,
+    msBet: msBetween,
+    msWit: msWithin,
+    grand: grandMean
+  };
+}
+
+function fCdf(F, d1, d2) {
+  if (!Number.isFinite(F) || F <= 0) return 0;
+  return 1 - ibeta(d2 / 2, d1 / 2, d2 / (d2 + d1 * F));
+}
+
+function ibeta(a, b, x) {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  if (x > (a + 1) / (a + b + 2)) return 1 - ibeta(b, a, 1 - x);
+  const lbab = lgamma(a) + lgamma(b) - lgamma(a + b);
+  const front = Math.exp(Math.log(x) * a + Math.log(1 - x) * b - lbab) / a;
+  let fraction = 1;
+  let C = 1;
+  let D = 1 - (a + b) / (a + 1) * x;
+  if (Math.abs(D) < 1e-30) D = 1e-30;
+  D = 1 / D;
+  fraction = D;
+  for (let m = 1; m <= 120; m += 1) {
+    let step = m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m));
+    D = 1 + step * D;
+    if (Math.abs(D) < 1e-30) D = 1e-30;
+    C = 1 + step / C;
+    if (Math.abs(C) < 1e-30) C = 1e-30;
+    D = 1 / D;
+    fraction *= D * C;
+
+    step = -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1));
+    D = 1 + step * D;
+    if (Math.abs(D) < 1e-30) D = 1e-30;
+    C = 1 + step / C;
+    if (Math.abs(C) < 1e-30) C = 1e-30;
+    D = 1 / D;
+    const delta = D * C;
+    fraction *= delta;
+    if (Math.abs(delta - 1) < 1e-10) break;
+  }
+  return front * fraction;
+}
+
+function lgamma(z) {
+  const coeffs = [
+    0.99999999999980993,
+    676.5203681218851,
+    -1259.1392167224028,
+    771.32342877765313,
+    -176.61502916214059,
+    12.507343278686905,
+    -0.13857109526572012,
+    9.9843695780195716e-6,
+    1.5056327351493116e-7
+  ];
+  if (z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - lgamma(1 - z);
+  let value = coeffs[0];
+  z -= 1;
+  for (let index = 1; index < coeffs.length; index += 1) value += coeffs[index] / (z + index);
+  const term = z + 7.5;
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(term) - term + Math.log(value);
+}
+
+function distFieldMeta(spec) {
+  switch (spec?.dist) {
+    case "normal":
+      return [
+        { key: "mean", label: "mean", value: spec.mean },
+        { key: "std", label: "std", value: spec.std }
+      ];
+    case "uniform":
+      return [
+        { key: "umin", label: "min", value: spec.umin },
+        { key: "umax", label: "max", value: spec.umax }
+      ];
+    case "lognormal":
+      return [
+        { key: "lm", label: "log-mean", value: spec.lm },
+        { key: "ls", label: "log-std", value: spec.ls }
+      ];
+    case "triangular":
+      return [
+        { key: "tri_a", label: "min", value: spec.tri_a },
+        { key: "tri_c", label: "mode", value: spec.tri_c },
+        { key: "tri_b", label: "max", value: spec.tri_b }
+      ];
+    default:
+      return [];
+  }
+}
+
+function legendRows() {
+  const sorted = [...LIFETIME_MONTHS].sort((a, b) => b - a);
+  return [
+    `> ${sorted[0]} months  safe`,
+    ...sorted.slice(0, -1).map((months, index) => `${sorted[index + 1]}-${months} months`),
+    `< ${sorted.at(-1)} months  imminent`
+  ].map((label, index) => ({
+    label,
+    fill: BAND_FILL[index],
+    stroke: BAND_STROKE[index]
+  }));
+}
+
+function staticInfoRows(state) {
+  const probe = state.staticView.probe;
+  const rows = [];
+  for (const boltSet of visibleBoltSets(state)) {
+    const params = chartParamsFromBoltSet(state, boltSet);
+    const result = boltStaticPoint({
+      ...Object.fromEntries(Object.entries(boltSet.params).map(([key, spec]) => [key, spec.value])),
+      F_alt_applied_N: state.staticView.F_alt_applied_N
+    }, probe);
+    const equivalent = Math.max(
+      goodmanEquivalent(result.sigma_a, Math.min(probe, params.uts * 0.999), params.uts),
+      0
+    );
+    const Ni = lifeCycles(equivalent, state.staticView.sigma_lim, state.staticView.m_slope);
+    const damagePerMillion = Number.isFinite(Ni) && Ni > 0 ? 1e6 / Ni : null;
+    const perBolt = state.staticView.F_alt_applied_N / Math.max(1, params.n_bolts) * params.angular_span_factor;
+    const slip = params.mu_joint > 0
+      ? perBolt / (params.mu_joint * 1e6 * params.A_s_nom * params.n_interfaces)
+      : Infinity;
+    rows.push({
+      id: boltSet.id,
+      name: boltSet.name,
+      color: boltSet.color,
+      items: [
+        { label: "Alt stress", value: `${numberText(result.sigma_a, 1)} MPa` },
+        { label: "F_shear", value: `${numberText(result.F_shear_alt, 0)} N` },
+        { label: "Damage/cyc x10^6", value: damagePerMillion != null && damagePerMillion < 0.001 ? "~0" : numberText(damagePerMillion, 3) },
+        { label: "Slip threshold", value: Number.isFinite(slip) && slip < 660 ? `${numberText(slip, 0)} MPa` : "> 660" }
+      ]
+    });
+  }
+  return {
+    probeLabel: `Probe at ${numberText(probe, 0)} MPa preload:`,
+    rows
+  };
+}
+
+function nextBoltSetColor(state) {
+  const used = new Set(Object.values(state.boltSets).map(boltSet => boltSet.color.toLowerCase()));
+  return BOLT_SET_COLORS.find(color => !used.has(color.toLowerCase())) ?? BOLT_SET_COLORS[Object.keys(state.boltSets).length % BOLT_SET_COLORS.length];
+}
+
+function sanitizeBoltSetIds(state, boltSetIds = []) {
+  const available = new Set(Object.keys(state.boltSets));
+  const filtered = boltSetIds.filter(id => available.has(id));
+  return filtered.length ? filtered : Object.keys(state.boltSets).slice(0, 2);
+}
+
+function patchAllSimulationBoltSetIds(state, removedBoltSetId = null) {
+  const patch = {};
+  for (const simulation of Object.values(state.simulations)) {
+    const nextIds = sanitizeBoltSetIds(state, simulation.boltSetIds.filter(id => id !== removedBoltSetId));
+    patch[simulation.id] = { boltSetIds: nextIds };
+  }
+  return patch;
 }
 
 export const goodmanStudyHelpers = {
@@ -374,13 +562,50 @@ export const goodmanStudyHelpers = {
       value: state.staticView[field.key]
     }));
   },
+  staticInfo(state) {
+    return staticInfoRows(state);
+  },
+  legendRows() {
+    return legendRows();
+  },
   chartEditControls(state) {
-    return [
-      { key: "bandFills.0", label: "Region 1", type: "color", value: state.chartEdit.bandFills[0] },
-      { key: "bandFills.1", label: "Region 2", type: "color", value: state.chartEdit.bandFills[1] },
-      { key: "bandFills.2", label: "Region 3", type: "color", value: state.chartEdit.bandFills[2] },
-      { key: "bandFills.3", label: "Region 4", type: "color", value: state.chartEdit.bandFills[3] }
-    ];
+    return {
+      groups: [
+        {
+          key: "labels",
+          title: "Labels",
+          controls: [
+            { key: "title", label: "Title", type: "text", value: state.chartEdit.title },
+            { key: "xLabel", label: "X axis", type: "text", value: state.chartEdit.xLabel },
+            { key: "yLabel", label: "Y axis", type: "text", value: state.chartEdit.yLabel },
+            { key: "titleSize", label: "Title size", type: "number", min: 8, max: 24, step: 1, value: state.chartEdit.titleSize },
+            { key: "axisSize", label: "Axis size", type: "number", min: 8, max: 20, step: 1, value: state.chartEdit.axisSize },
+            { key: "showGrid", label: "Show grid", type: "checkbox", value: state.chartEdit.showGrid !== false }
+          ]
+        },
+        {
+          key: "bands",
+          title: "Band Colours",
+          controls: state.chartEdit.bandFills.map((value, index) => ({
+            key: `bandFills.${index}`,
+            label: `Band ${index + 1}`,
+            type: "color",
+            value
+          }))
+        },
+        {
+          key: "annotations",
+          title: "Annotations",
+          annotations: (state.chartEdit.annotations ?? []).map(annotation => ({
+            ...annotation,
+            text: annotation.text ?? "",
+            xMPa: annotation.xMPa ?? 0,
+            yMPa: annotation.yMPa ?? 0,
+            color: annotation.color ?? "#1e293b"
+          }))
+        }
+      ]
+    };
   },
   boltSetCards(state) {
     return Object.values(state.boltSets).map(boltSet => ({
@@ -389,6 +614,7 @@ export const goodmanStudyHelpers = {
       color: boltSet.color,
       visible: boltSet.visible,
       open: !!state.ui.openBsSets[boltSet.id],
+      editing: !!state.ui.editBoltSets?.[boltSet.id],
       categories: Object.entries(PARAM_CATS).map(([key, label]) => ({
         key,
         label,
@@ -404,9 +630,16 @@ export const goodmanStudyHelpers = {
             step: meta.step,
             value: boltSet.params[paramKey]?.value,
             free: !!boltSet.params[paramKey]?.free,
+            dist: boltSet.params[paramKey]?.dist ?? "fixed",
+            distOptions: ["fixed", "normal", "uniform", "lognormal", "triangular"],
+            distFields: distFieldMeta(boltSet.params[paramKey]),
             displayValue: meta.format ? meta.format(boltSet.params[paramKey]?.value ?? 0) : String(boltSet.params[paramKey]?.value ?? "")
           }))
-      }))
+      })),
+      editForm: {
+        name: boltSet.name,
+        color: boltSet.color
+      }
     }));
   },
   simulationRows(state) {
@@ -430,6 +663,36 @@ export const goodmanStudyHelpers = {
     const preferred = visibleBoltSets(state)[0] ?? Object.values(state.boltSets)[0];
     return chartParamsFromBoltSet(state, preferred);
   },
+  chartPresentation(state) {
+    return {
+      bandFills: state.chartEdit.bandFills,
+      title: state.chartEdit.title,
+      xLabel: state.chartEdit.xLabel,
+      yLabel: state.chartEdit.yLabel,
+      titleSize: state.chartEdit.titleSize,
+      axisSize: state.chartEdit.axisSize,
+      showGrid: state.chartEdit.showGrid,
+      annotations: state.chartEdit.annotations
+    };
+  },
+  runConfigState(state) {
+    const sim = state.ui?.activeSimId ? state.simulations?.[state.ui.activeSimId] : null;
+    const running = sim?.status === "running";
+    const locked = running || sim?.status === "done";
+    return {
+      disabled: {
+        run: !sim || running,
+        pause: !running,
+        stop: !running,
+        config: locked
+      },
+      note: sim?.status === "done"
+        ? "Config locked - clone or create a new simulation to change"
+        : sim?.status === "running"
+          ? "Simulation running..."
+          : ""
+    };
+  },
   overlayScene(state, resultsBySimulation) {
     const simId = state.ui.activeSimId;
     const result = simId ? resultsBySimulation?.[simId] : null;
@@ -444,13 +707,18 @@ export const goodmanStudyHelpers = {
       const drawEvery = Math.max(1, Math.floor(boltData.n / 80));
       const rawIndex = result.tVals.length > 1 ? Math.round(time / (result.tVals[1] - result.tVals[0])) : 0;
       const stepIndex = Math.max(0, Math.min(result.tVals.length - 1, rawIndex));
+      const trailDepth = state.ui.scrubber.showTrail ? Math.min(18, stepIndex + 1) : 1;
       for (let boltIndex = 0; boltIndex < boltData.n; boltIndex += drawEvery) {
-        const offset = boltIndex * stride + stepIndex;
-        points.push({
-          x: boltData.sigma_p[offset],
-          y: boltData.sigma_a[offset],
-          failed: Number.isFinite(boltData.failureT[boltIndex]) && boltData.failureT[boltIndex] <= time
-        });
+        for (let trailIndex = 0; trailIndex < trailDepth; trailIndex += 1) {
+          const sampleStep = Math.max(0, stepIndex - trailIndex);
+          const offset = boltIndex * stride + sampleStep;
+          points.push({
+            x: boltData.sigma_p[offset],
+            y: boltData.sigma_a[offset],
+            failed: Number.isFinite(boltData.failureT[boltIndex]) && boltData.failureT[boltIndex] <= time,
+            trail: trailIndex
+          });
+        }
       }
       datasets.push({
         id: boltSetId,
@@ -458,7 +726,9 @@ export const goodmanStudyHelpers = {
         points
       });
     }
-    const activeSummary = Object.values(result.summary ?? {}).reduce((sum, row) => sum + (row.nFailed ?? 0), 0);
+    const activeSummary = Object.values(result.byBoltSet ?? {}).reduce((sum, boltData) => {
+      return sum + Array.from(boltData.failureT).filter(value => Number.isFinite(value) && value <= time).length;
+    }, 0);
     return {
       datasets,
       failureText: activeSummary ? `${activeSummary} failures` : ""
@@ -576,6 +846,81 @@ export const goodmanStudyHelpers = {
   },
   saveScenarioAsSimulation(state) {
     return this.createSimulation(state);
+  },
+  createBoltSet(state) {
+    const source = Object.values(state.boltSets)[0];
+    const id = nextId("bs");
+    return {
+      state: deepMerge(state, {
+        boltSets: {
+          [id]: {
+            ...clone(source),
+            id,
+            name: `Bolt Set ${Object.keys(state.boltSets).length + 1}`,
+            color: nextBoltSetColor(state),
+            visible: true
+          }
+        },
+        ui: {
+          openBsSets: { [id]: true },
+          editBoltSets: { [id]: true }
+        }
+      }),
+      boltSetId: id
+    };
+  },
+  cloneBoltSet(state, boltSetId) {
+    const source = state.boltSets[boltSetId];
+    if (!source) return { state, boltSetId: null };
+    const id = nextId("bs");
+    return {
+      state: deepMerge(state, {
+        boltSets: {
+          [id]: {
+            ...clone(source),
+            id,
+            name: `${source.name} (copy)`,
+            color: nextBoltSetColor(state),
+            visible: true
+          }
+        },
+        ui: {
+          openBsSets: { [id]: true }
+        }
+      }),
+      boltSetId: id
+    };
+  },
+  deleteBoltSet(state, boltSetId) {
+    if (!state.boltSets[boltSetId] || Object.keys(state.boltSets).length <= 1) return { state };
+    const interim = deepMerge(state, {
+      boltSets: { [boltSetId]: REMOVE },
+      ui: {
+        openBsSets: { [boltSetId]: REMOVE },
+        editBoltSets: { [boltSetId]: REMOVE }
+      }
+    });
+    return {
+      state: deepMerge(interim, {
+        simulations: patchAllSimulationBoltSetIds(interim, boltSetId)
+      })
+    };
+  },
+  setBoltSetEditor(state, boltSetId, editing) {
+    return deepMerge(state, {
+      ui: { editBoltSets: { [boltSetId]: !!editing } }
+    });
+  },
+  updateBoltSetMeta(state, boltSetId, patch) {
+    if (!state.boltSets[boltSetId]) return state;
+    return deepMerge(state, {
+      boltSets: {
+        [boltSetId]: {
+          name: patch.name ?? state.boltSets[boltSetId].name,
+          color: patch.color ?? state.boltSets[boltSetId].color
+        }
+      }
+    });
   },
   updateWindowFrame(state, windowId, frame) {
     return deepMerge(state, {

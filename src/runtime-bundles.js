@@ -151,6 +151,8 @@ const INTERNAL_BUNDLE_MANIFESTS = [
         patternRoute("GET", /^\/api\/tutorial-progress\/([^/]+)$/, "guidance.progress.read", ["tutorialId"]),
         patternRoute("PUT", /^\/api\/tutorial-progress\/([^/]+)$/, "guidance.progress.write", ["tutorialId"]),
         patternRoute("DELETE", /^\/api\/tutorial-progress\/([^/]+)$/, "guidance.progress.delete", ["tutorialId"]),
+        exactRoute("GET", "/api/runtime/app-revisions/events", "app.revision.events"),
+        exactRoute("POST", "/api/runtime/app-sources", "app.source.write"),
         exactRoute("GET", "/api/runtime/diagnostics", "runtime.diagnostics.read"),
         exactRoute("GET", "/api/runtime/plugins", "runtime.plugins.read"),
         exactRoute("GET", "/api/runtime/plugin-reviews", "runtime.pluginReviews.read")

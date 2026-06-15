@@ -18,9 +18,10 @@ async function listJsFiles(dirPath) {
 }
 
 test("engentus shell and core runtime do not expose the presenter bootstrap seam", async () => {
-  const [shellSource, runtimeSource] = await Promise.all([
+  const [shellSource, runtimeSource, browserHostSource] = await Promise.all([
     readFile(path.join(process.cwd(), "examples", "engentus", "app", "shell.rvm"), "utf8"),
-    readFile(path.join(process.cwd(), "src", "runtime-surface-shell.js"), "utf8")
+    readFile(path.join(process.cwd(), "src", "runtime-surface-shell.js"), "utf8"),
+    readFile(path.join(process.cwd(), "src", "runtime-surface-browser-client.js"), "utf8")
   ]);
 
   assert.equal(shellSource.includes("pageModuleHref"), false);
@@ -28,6 +29,11 @@ test("engentus shell and core runtime do not expose the presenter bootstrap seam
   assert.equal(runtimeSource.includes("pageModuleHref"), false);
   assert.equal(runtimeSource.includes("pageModuleExport"), false);
   assert.equal(runtimeSource.includes("bootstrapSurfacePage"), false);
+  assert.equal(browserHostSource.includes("bootParameterStudyShell"), false);
+  assert.equal(browserHostSource.includes("renderSimulationRows"), false);
+  assert.equal(browserHostSource.includes("renderBoltSetCards"), false);
+  assert.equal(browserHostSource.includes("Goodman"), false);
+  assert.equal(browserHostSource.includes("chart.render"), false);
 });
 
 test("engentus no longer ships executable presenter or client authority trees", async () => {

@@ -826,6 +826,7 @@ function renderShellDocument({
   activeSurface,
   surfaces,
   mountedChartRuntime = null,
+  browserRuntimeCapabilities = [],
   rootSurfaceId = null,
   requestPathname = "/"
 }) {
@@ -833,7 +834,13 @@ function renderShellDocument({
   const activeProps = surfaceProps(activeSurface);
   const title = firstTruthy(activeProps.title, rootProps.productName, root.id, "DESIRE app");
   const presentationAssets = pagePresentationAssets(root, activeSurface);
-  const browserClientConfig = surfaceBrowserClientConfig(activeSurface);
+  const browserClientConfig = surfaceBrowserClientConfig({
+    root,
+    activeSurface,
+    runtime: {
+      availableCapabilities: browserRuntimeCapabilities
+    }
+  });
   const stylesheetHrefs = uniqueTruthy([
     firstTruthy(activeProps.stylesheetHref, rootProps.stylesheetHref, null),
     ...presentationAssets.stylesheetHrefs,
@@ -887,7 +894,8 @@ export function renderSurfaceShellFromMap({
   requestPathname,
   route,
   world = null,
-  buildMountedChartRuntime = null
+  buildMountedChartRuntime = null,
+  browserRuntimeCapabilities = []
 }) {
   const root = surfaces.get(rootSurfaceId);
   if (!root || root.surfaceKind !== "app-root") return null;
@@ -907,6 +915,7 @@ export function renderSurfaceShellFromMap({
     activeSurface,
     surfaces,
     mountedChartRuntime,
+    browserRuntimeCapabilities,
     rootSurfaceId,
     requestPathname
   });
@@ -916,7 +925,8 @@ export function renderSurfaceShellPage(world, {
   rootSurfaceId,
   requestPathname,
   route,
-  buildMountedChartRuntime = null
+  buildMountedChartRuntime = null,
+  browserRuntimeCapabilities = []
 }) {
   return renderSurfaceShellFromMap({
     surfaces: readSurfaceMapFromWorld(world),
@@ -924,6 +934,7 @@ export function renderSurfaceShellPage(world, {
     requestPathname,
     route,
     world,
-    buildMountedChartRuntime
+    buildMountedChartRuntime,
+    browserRuntimeCapabilities
   });
 }

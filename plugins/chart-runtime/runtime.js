@@ -11,6 +11,8 @@
  * dependsOnCapabilities; the platform installs it. No direct route wiring in
  * the authored module.
  */
+import { APP_REVISION_EVENTS_PATH } from "../../src/app-snapshot-manager.js";
+import { fileURLToPath } from "node:url";
 import {
   chartRuntimeAssets,
   renderChartHtml,
@@ -35,6 +37,32 @@ export const routes = Object.freeze([
 export const surfaces = Object.freeze([]);
 export const capabilities = Object.freeze(["chart.render"]);
 
+function runtimeFile(name) {
+  return fileURLToPath(new URL(`./${name}`, import.meta.url));
+}
+
+function injectDevClient(html, { appRevision = 0, eventsPath = APP_REVISION_EVENTS_PATH } = {}) {
+  const runtime = `<script>
+(() => {
+  const currentRevision = ${JSON.stringify(Number(appRevision || 0))};
+  if (typeof EventSource !== "function") return;
+  const source = new EventSource(${JSON.stringify(eventsPath)});
+  source.onmessage = event => {
+    try {
+      const payload = JSON.parse(event.data || "{}");
+      if (Number(payload.appRevision || 0) <= currentRevision) return;
+      source.close();
+      window.location.reload();
+    } catch {}
+  };
+  source.onerror = () => {
+    try { source.close(); } catch {}
+  };
+})();
+</script>`;
+  return html.includes("</body>") ? html.replace("</body>", `${runtime}</body>`) : `${html}\n${runtime}`;
+}
+
 // resolve {model, view} for a chart node from the witnessed world
 export function resolveChartSpec(witnesses, chartName) {
   const find = (process, id) => witnesses.find(w => w.process === process && w.body?.id === id)?.body ?? null;
@@ -51,9 +79,9 @@ export function resolveChartSpec(witnesses, chartName) {
 }
 
 export function createHandlers(deps = {}) {
-  const { world, send, sendJson } = deps;
+  const { world, send, sendJson, currentAppRenderWorld } = deps;
   return {
-    "page.chart": async ({ res, route, requestUrl }) => {
+    "page.chart": async ({ res, route, requestUrl, appContext }) => {
       const chartName = route?.params?.chart
         ?? route?.query?.chart
         ?? requestUrl?.searchParams?.get("chart");
@@ -61,14 +89,22 @@ export function createHandlers(deps = {}) {
         if (sendJson) sendJson(res, 400, { error: "missing chart id" });
         return;
       }
-      const witnesses = typeof world?.allWitnesses === "function" ? world.allWitnesses() : [];
+      const renderWorld = appContext?.appSnapshotManager?.getActiveSnapshot()?.world
+        ?? (typeof currentAppRenderWorld === "function" ? currentAppRenderWorld() : null)
+        ?? world;
+      const witnesses = typeof renderWorld?.allWitnesses === "function" ? renderWorld.allWitnesses() : [];
       const spec = resolveChartSpec(witnesses, chartName);
       if (!spec) {
         if (sendJson) sendJson(res, 404, { error: `chart not found: ${chartName}` });
         return;
       }
-      const html = renderChartHtml({ title: chartName, spec, pageProps: spec.pageProps ?? {} });
-      if (send) send(res, 200, "text/html", html);
+      let html = renderChartHtml({ title: chartName, spec, pageProps: spec.pageProps ?? {} });
+      if (appContext?.devMode && appContext?.appSnapshotManager) {
+        html = injectDevClient(html, {
+          appRevision: appContext.appSnapshotManager.getActiveSnapshot()?.appRevision ?? 0
+        });
+      }
+      if (send) send(res, 200, "text/html", html, appContext?.devMode ? { "cache-control": "no-cache" } : {});
     }
   };
 }
@@ -143,6 +179,16 @@ export function buildMountedChartRuntime({ world, activeSurface } = {}) {
 }
 
 export const providers = Object.freeze([
+  {
+    kind: "staticAssetProvider",
+    id: "chart-runtime.static",
+    mount: "/canvas-lib/",
+    files: Object.freeze({
+      "chart-client.js": runtimeFile("chart-client.js"),
+      "dataflow-eval.js": runtimeFile("dataflow-eval.js"),
+      "gog-runtime.js": runtimeFile("gog-runtime.js")
+    })
+  },
   {
     kind: "coreHook",
     id: "buildMountedChartRuntime",

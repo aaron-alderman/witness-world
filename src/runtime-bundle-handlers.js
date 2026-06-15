@@ -27,6 +27,8 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
       "guidance.progress.read",
       "guidance.progress.write",
       "guidance.progress.delete",
+      "app.revision.events",
+      "app.source.write",
       "runtime.diagnostics.read",
       "runtime.plugins.read",
       "runtime.pluginReviews.read"
@@ -40,7 +42,9 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
       "session.logout": { routeKind: "json", responseKind: "json", methods: ["DELETE"] },
       "guidance.progress.read": { routeKind: "json", responseKind: "json", methods: ["GET"] },
       "guidance.progress.write": { routeKind: "json", responseKind: "json", methods: ["PUT"] },
-      "guidance.progress.delete": { routeKind: "json", responseKind: "json", methods: ["DELETE"] }
+      "guidance.progress.delete": { routeKind: "json", responseKind: "json", methods: ["DELETE"] },
+      "app.revision.events": { routeKind: "json", responseKind: "stream", methods: ["GET"] },
+      "app.source.write": { routeKind: "json", responseKind: "json", methods: ["POST"] }
     },
     pageHandlers: ["page.home", "page.surface"],
     dispatchHandlers: [
@@ -53,6 +57,8 @@ export const RUNTIME_BUNDLE_HANDLER_CATALOGS = Object.freeze({
       "guidance.progress.read",
       "guidance.progress.write",
       "guidance.progress.delete",
+      "app.revision.events",
+      "app.source.write",
       "runtime.diagnostics.read",
       "runtime.plugins.read",
       "runtime.pluginReviews.read"

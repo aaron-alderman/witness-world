@@ -10,14 +10,45 @@ README is secondary and should only point back here.
 ## Thesis
 
 - The shell, copy, route states, assets, and CSS belong to the app layer.
-- Generic rendering belongs in reusable runtime seams, not in Engentus-specific
-  shims.
+- The shell must remain authored in `RVM/WTOML` style. The browser must not
+  boot into a handwritten JS facade that reconstructs the app UI independently
+  of the authored DESIRE program.
+- Core runtime code must stay light. It may host, route, load, inject
+  capabilities, and manage lifecycle; it must not become a second UI language
+  or a hidden frontend authority seam.
 - `plugin.chart-runtime` is a real reusable capability boundary.
-- Any lowered JS must justify itself as universal runtime/presentation
-  infrastructure, explicit reusable chart capability, or app-owned helper code
-  at a true symmetry break.
+- Any lowered JS must justify itself as one of:
+  - host/runtime infrastructure that every app could plausibly need
+  - an explicit optional reusable capability
+  - app-owned helper code at a true symmetry break
+- Optional capabilities must not be baked into the core surface host contract.
+  If an app needs charts, windows, or other non-universal behavior, that must
+  be resolved explicitly rather than assumed by core.
 - The reference app is an oracle for parity comparison only. It is not to be
   executed as hidden frontend authority.
+
+## Canonical frontend seam
+
+- `examples/engentus/app/shell.rvm` and related authored DESIRE files remain
+  the source of truth for shell structure, route states, copy, and UI
+  composition.
+- Lowering is allowed to produce executable browser artifacts, but those
+  artifacts must remain derivative of the authored DESIRE frontend rather than
+  a parallel handwritten renderer.
+- `src/runtime-surface-browser-client.js` must be a host only:
+  - load the lowered app artifact
+  - provide universal platform services
+  - forward lifecycle and route changes
+  - tear down cleanly
+- `src/runtime-surface-browser-client.js` must not:
+  - assemble app DOM with bespoke render helpers
+  - own app state shape or reducers
+  - interpret app-specific selectors or templates
+  - embed chart, window, Goodman, or other product-local behavior
+  - introduce HTML-side authority contracts as a second source language
+- App behavior may consume optional capabilities, but only through explicit
+  seams. The existence of a capability must never move authority for the shell
+  out of the authored DESIRE program.
 
 ## Current honest state
 
@@ -43,6 +74,13 @@ README is secondary and should only point back here.
 - Copied `examples/engentus/app/presenters/*` controller code and
   `examples/engentus/app/client/*` shared runtime code became executable
   frontend authority. That is explicitly out of bounds for this slice.
+- Allowing core browser runtime code to accumulate bespoke app rendering logic
+  is the same category of mistake in a different location. That too creates a
+  dangerous hidden authority seam and must be removed.
+- `examples/engentus/app/helpers/goodman-study.js` still carries too much
+  frontend authority today. It should shrink toward leaf numerical/statistical
+  helpers while state, routes, view composition, and interaction intent move
+  into authored DESIRE declarations.
 - The README drifted into blessing that seam instead of pointing back to this
   document.
 - Browser-level parity was previously claimed as complete while the live served
@@ -53,13 +91,20 @@ README is secondary and should only point back here.
 - Rebuild Goodman, mill-charge, and mill-force live module behavior on
   thesis-aligned seams:
   - authored shell state and props
-  - generic shell runtime interactions
-  - reusable chart-runtime behavior
+  - a host-only core browser seam
+  - optional reusable capability seams where genuinely justified
   - app-owned helper code only where a real symmetry break remains
+- Rebuild the browser execution path so the served app is driven by lowered
+  DESIRE-owned frontend artifacts rather than handwritten browser facades or
+  bespoke core render helpers.
+- Continue moving Goodman-side UI/state authority out of `goodman-study.js`
+  and into authored `RVM/WTOML`, keeping JS only for true leaf mechanics and
+  statistics where the language does not yet express them cleanly.
 - Re-establish browser integration proof for the supported flow:
   - login -> home -> Goodman / mill-charge / mill-force -> signout
   - no dynamic import 404s
   - no copied presenter/client authority
+  - no core-owned bespoke app renderer
 - Re-establish live browser parity against the reference flow after that rebuild.
 
 Until those proofs are green again, live module execution parity is not complete.
@@ -79,6 +124,10 @@ Until those proofs are green again, live module execution parity is not complete
 - `pageModuleHref` / `pageModuleExport` as Engentus shell bootstraps
 - `examples/engentus/app/presenters/*` as executable app authority
 - `examples/engentus/app/client/*` as executable shared frontend runtime
+- Bespoke app rendering and interaction machinery inside
+  `src/runtime-surface-browser-client.js`
+- Any handwritten browser facade that reconstructs the shell outside authored
+  `RVM/WTOML`
 - Any doc or test language that treats those seams as acceptable architecture
 
 ## Proof categories
@@ -90,6 +139,7 @@ These categories should stay explicit and separate:
 - Chart-runtime boundary proof
 - Direct HTML parity proof
 - CSS parity proof
+- Host-only browser runtime proof
 - Browser shell-route proof
 - Browser live execution proof
 - Boundary / no-cheat proof

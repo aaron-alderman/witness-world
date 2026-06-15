@@ -95,6 +95,7 @@ test("page.surface respects authored mounted-panel shell props", async () => {
   const goodman = harness.takeLast();
   assert.match(goodman.body, /<svg id="chart-svg" class="chart-page__mount chart-page__mount--goodman" data-chart-spec=/);
   assert.match(goodman.body, /data-mount-mode="mounted-panel"/);
+  assert.match(goodman.body, /\/app-static\/app\/runtime\/engentus-browser-runtime\.js/);
   assert.doesNotMatch(goodman.body, /<iframe[^>]+src="\/chart\?chart=GoodmanDiagram"/);
 
   await harness.handlers["page.surface"]({
@@ -104,6 +105,7 @@ test("page.surface respects authored mounted-panel shell props", async () => {
   });
   const millForce = harness.takeLast();
   assert.match(millForce.body, /id="mill-force-svg-cross"/);
+  assert.match(millForce.body, /\/app-static\/app\/runtime\/engentus-browser-runtime\.js/);
   assert.match(millForce.body, /id="mill-force-svg-force"[^>]*style="display:none"/);
   assert.match(millForce.body, /id="mill-force-svg-rose"[^>]*style="display:none"/);
   assert.match(millForce.body, /id="mill-force-mc-canvas"/);

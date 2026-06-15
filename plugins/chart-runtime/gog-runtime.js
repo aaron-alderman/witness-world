@@ -67,7 +67,16 @@ export function planChart(viewBody, evaluated, opts = {}) {
       y: { domain: [yMin, yMax], range: [innerH, 0], field: enc.y?.field ?? "y", label: enc.y?.label ?? "" }
     },
     layers,
-    editable: viewBody.editable ?? []
+    editable: viewBody.editable ?? [],
+    presentation: {
+      title: viewBody.title ?? "",
+      xLabel: viewBody.xLabel ?? enc.x?.label ?? xField,
+      yLabel: viewBody.yLabel ?? enc.y?.label ?? "",
+      titleSize: Number(viewBody.titleSize) || 13,
+      axisSize: Number(viewBody.axisSize) || 12,
+      showGrid: viewBody.showGrid !== false,
+      annotations: Array.isArray(viewBody.annotations) ? viewBody.annotations : []
+    }
   };
 }
 
@@ -541,6 +550,7 @@ export function drawChart(container, plan, d3) {
   const { width, height, margin, scales } = plan;
   const svg = selectChartSvg(container, d3, width, height);
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+  const presentation = plan.presentation ?? {};
 
   const x = v => (v - scales.x.domain[0]) / ((scales.x.domain[1] - scales.x.domain[0]) || 1) * plan.innerW;
   const y = v => plan.innerH - (v - scales.y.domain[0]) / ((scales.y.domain[1] - scales.y.domain[0]) || 1) * plan.innerH;
@@ -588,9 +598,58 @@ export function drawChart(container, plan, d3) {
     }
   }
 
+  if (presentation.showGrid !== false) {
+    const gridStroke = "#e2e8f0";
+    const xTicks = 8;
+    const yTicks = 7;
+    for (let tick = 1; tick < xTicks; tick += 1) {
+      const px = plan.innerW * tick / xTicks;
+      g.append("line").attr("x1", px).attr("x2", px).attr("y1", 0).attr("y2", plan.innerH).attr("stroke", gridStroke);
+    }
+    for (let tick = 1; tick < yTicks; tick += 1) {
+      const py = plan.innerH * tick / yTicks;
+      g.append("line").attr("x1", 0).attr("x2", plan.innerW).attr("y1", py).attr("y2", py).attr("stroke", gridStroke);
+    }
+  }
+
   // axes
   g.append("line").attr("x1", 0).attr("y1", plan.innerH).attr("x2", plan.innerW).attr("y2", plan.innerH).attr("stroke", "#94a3b8");
   g.append("line").attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", plan.innerH).attr("stroke", "#94a3b8");
+  g.append("text")
+    .attr("x", plan.innerW / 2)
+    .attr("y", plan.innerH + 42)
+    .attr("text-anchor", "middle")
+    .attr("font-size", `${presentation.axisSize ?? 12}px`)
+    .attr("fill", "#64748b")
+    .text(presentation.xLabel ?? "");
+  g.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -plan.innerH / 2)
+    .attr("y", -52)
+    .attr("text-anchor", "middle")
+    .attr("font-size", `${presentation.axisSize ?? 12}px`)
+    .attr("fill", "#64748b")
+    .text(presentation.yLabel ?? "");
+  g.append("text")
+    .attr("x", plan.innerW / 2)
+    .attr("y", -10)
+    .attr("text-anchor", "middle")
+    .attr("font-size", `${presentation.titleSize ?? 13}px`)
+    .attr("font-weight", "600")
+    .attr("fill", "#0f172a")
+    .text(presentation.title ?? "");
+
+  for (const annotation of presentation.annotations ?? []) {
+    if (!annotation?.text || !Number.isFinite(annotation.xMPa) || !Number.isFinite(annotation.yMPa)) continue;
+    g.append("text")
+      .attr("x", x(annotation.xMPa))
+      .attr("y", y(annotation.yMPa))
+      .attr("text-anchor", "middle")
+      .attr("font-size", `${annotation.fontSize ?? 11}px`)
+      .attr("font-weight", annotation.fontWeight ?? "600")
+      .attr("fill", annotation.color ?? "#1e293b")
+      .text(annotation.text);
+  }
 
   // probe: a readout bound to the x-axis. Hover/drag re-renders ONLY this overlay via
   // probeReadout(plan, x) — a local rebind, no model re-evaluation.

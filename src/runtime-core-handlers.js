@@ -3,6 +3,10 @@ import {
   widgetDefinitions,
   frontendProgramsProjection
 } from "./widgets.js";
+import {
+  APP_REVISION_EVENTS_PATH,
+  APP_SOURCE_WRITE_PATH
+} from "./app-snapshot-manager.js";
 import { runProcessGraph } from "./process-graph.js";
 import { moduleProjectors } from "./modules.js";
 import {
@@ -65,7 +69,9 @@ export function createCoreRuntimeBundleHandlers({
   invokeRouteHandler,
   supportedBackendOps = SUPPORTED_BACKEND_OPS,
   coreHooks = {},
-  runtimeContributions = null
+  runtimeContributions = null,
+  appSnapshotManager = null,
+  currentAppRenderWorld = null
 }) {
   const renderWidgetPageHook = coreHooks.renderWidgetPage ?? ((_world, { rootWidget }) => renderInactiveRuntimeWidgetPage({ rootWidget }));
   const projectPagePresentationThemeHook = coreHooks.projectPagePresentationTheme
@@ -131,6 +137,16 @@ export function createCoreRuntimeBundleHandlers({
         label: null,
         perspective: null
       };
+  const devHtmlHeaders = appContext => appContext?.devMode ? { "cache-control": "no-cache" } : {};
+  const appRenderWorld = appContext => appContext?.appSnapshotManager?.getActiveSnapshot()?.world
+    ?? (typeof currentAppRenderWorld === "function" ? currentAppRenderWorld() : null)
+    ?? world;
+  const maybeInjectDevClient = (html, appContext) => {
+    const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
+    if (!snapshotManager || appContext?.devMode !== true) return html;
+    return snapshotManager.injectDevClient(html, snapshotManager.getActiveSnapshot());
+  };
+  const revisionEventFrame = payload => `data: ${JSON.stringify(payload)}\n\n`;
   const executeBackendProgramRoute = async ({
     req,
     res,
@@ -459,17 +475,24 @@ export function createCoreRuntimeBundleHandlers({
         }));
       },
 
-    "page.surface": async ({ res, route, requestUrl }) => {
+    "page.surface": async ({ res, route, requestUrl, appContext }) => {
       const rootSurfaceId = route?.params?.rootSurface ?? null;
       if (!rootSurfaceId) {
         sendJson(res, 404, { error: "surface page not configured", route: route?.id ?? null });
         return;
       }
-      const html = renderSurfaceShellPage(world, {
+      const renderWorld = appRenderWorld(appContext);
+      const html = renderSurfaceShellPage(renderWorld, {
         rootSurfaceId,
         requestPathname: normalizePathname(requestUrl?.pathname ?? route?.path ?? "/"),
         route,
-        buildMountedChartRuntime: buildMountedChartRuntimeHook
+        browserRuntimeCapabilities: (appContext?.runtimeContributions?.capabilityDefinitions ?? [])
+          .map(definition => typeof definition?.id === "string" ? definition.id : "")
+          .filter(Boolean),
+        buildMountedChartRuntime: args => buildMountedChartRuntimeHook({
+          ...args,
+          world: renderWorld
+        })
       });
       if (!html) {
         sendJson(res, 404, { error: "surface page not found", rootSurface: rootSurfaceId });
@@ -481,7 +504,49 @@ export function createCoreRuntimeBundleHandlers({
         claims: [relation(frontendHost, "rendered", route?.serves || rootSurfaceId)],
         body: { route: requestUrl?.pathname ?? route?.path ?? "/", rootSurface: rootSurfaceId }
       });
-      send(res, 200, "text/html", html);
+      send(res, 200, "text/html", maybeInjectDevClient(html, appContext), devHtmlHeaders(appContext));
+    },
+
+    "app.revision.events": async ({ req, res, appContext }) => {
+      const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
+      if (!snapshotManager || appContext?.devMode !== true) {
+        sendJson(res, 404, { error: "app revision events unavailable" });
+        return;
+      }
+      res.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive"
+      });
+      res.write(revisionEventFrame(snapshotManager.getLastRevisionEvent()));
+      const unsubscribe = snapshotManager.subscribe(event => {
+        res.write(revisionEventFrame(event));
+      });
+      req.on("close", () => {
+        unsubscribe();
+        try { res.end(); } catch {}
+      });
+    },
+
+    "app.source.write": async ({ req, res, appContext }) => {
+      const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
+      if (!snapshotManager) {
+        sendJson(res, 404, { error: "app source updates unavailable" });
+        return;
+      }
+      const body = await readJson(req);
+      try {
+        const result = await snapshotManager.applySourceEdits(body?.edits ?? [], { persist: true, trigger: "post" });
+        sendJson(res, 200, {
+          ...result,
+          endpoint: APP_SOURCE_WRITE_PATH
+        });
+      } catch (error) {
+        sendJson(res, 400, {
+          ok: false,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
     },
 
     "runtime.diagnostics.read": async ({ res, appContext }) => {
@@ -519,6 +584,7 @@ export function createCoreRuntimeBundleHandlers({
         rejectedPlugins: pluginCatalog.rejectedPlugins,
         pluginAddedBundleIds: pluginCatalog.addedBundleIds
       });
+      diagnostics.appSnapshot = appContext?.appSnapshotManager?.diagnostics?.() ?? null;
       world.observe({
         process: "runtime.diagnostics.read",
         actor: backendHost,

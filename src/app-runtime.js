@@ -10,6 +10,7 @@ export async function startAppRuntime({
   startupMode = "serve",
   port = 0,
   serverRunnerId = null,
+  devMode = null,
   runtimeProfile,
   runtimeProfileExplicit = false,
   runtimePluginIds = [],
@@ -97,7 +98,8 @@ export async function startAppRuntime({
     runtimeProfile: runtimeProfileInfo.id,
     runtimePluginIds: runtimePluginIds.length ? runtimePluginIds : null,
     runtimeStartupMode: startupMode,
-    runtimeOperatorContract: operatorContract
+    runtimeOperatorContract: operatorContract,
+    devMode: devMode ?? (startupMode === "serve")
   });
 
   return {
