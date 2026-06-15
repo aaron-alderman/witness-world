@@ -1154,6 +1154,33 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     );
     assert.equal(await page.textContent("#surface-millforcemcstatustext"), "Run requested");
     assert.equal(await page.locator("#surface-millforcemcclearaction").isEnabled(), true);
+    await page.waitForFunction(() =>
+      document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.analysis_mode === "mc"
+      && document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.n_samples === 350
+    );
+    const mcOverlay = await page.evaluate(() => {
+      const controller = document.querySelector("#mill-force-svg-cross")?.__chartController;
+      const p90 = controller?.plan?.layers?.find(layer => layer.name === "mc_p90");
+      const p10 = controller?.plan?.layers?.find(layer => layer.name === "mc_p10");
+      return {
+        sampleCount: controller?.spec?.params?.n_samples,
+        jTotalFree: controller?.spec?.params?.mc_J_total_free,
+        p90Hidden: p90?.hidden === true,
+        p10Hidden: p10?.hidden === true,
+        p90Count: p90?.primitives?.length ?? 0,
+        p10Count: p10?.primitives?.length ?? 0,
+        firstBandHasReadout: typeof p90?.primitives?.[0]?.tooltip?.F_r_p90_N === "number"
+      };
+    });
+    assert.deepEqual(mcOverlay, {
+      sampleCount: 350,
+      jTotalFree: true,
+      p90Hidden: false,
+      p10Hidden: false,
+      p90Count: 39,
+      p10Count: 39,
+      firstBandHasReadout: true
+    });
     await page.click("#surface-millforcemcclearaction");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcStatusState") === "cleared"

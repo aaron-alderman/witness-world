@@ -42,6 +42,11 @@ chart MillForceAngle of MillForce {
     param.height from state MillForceLinerHeight
     param.active_method from state MillForceActiveModel
     param.analysis_mode from state MillForceActiveAnalysisMode
+    param.n_samples from state MillForceMcSamples
+    param.mc_J_total_free from state MillForceMcJTotalFree
+    param.mc_percent_crit_free from state MillForceMcPercentCritFree
+    param.mc_percent_solids_free from state MillForceMcPercentSolidsFree
+    param.mc_height_free from state MillForceMcHeightFree
   }
 
   x tBar
@@ -96,6 +101,11 @@ chart MillForceRose of MillForce {
     param.height from state MillForceLinerHeight
     param.active_method from state MillForceActiveModel
     param.analysis_mode from state MillForceActiveAnalysisMode
+    param.n_samples from state MillForceMcSamples
+    param.mc_J_total_free from state MillForceMcJTotalFree
+    param.mc_percent_crit_free from state MillForceMcPercentCritFree
+    param.mc_percent_solids_free from state MillForceMcPercentSolidsFree
+    param.mc_height_free from state MillForceMcHeightFree
   }
 
   theta tBar
@@ -141,6 +151,11 @@ chart MillForceCross of MillForce {
     param.height from state MillForceLinerHeight
     param.active_method from state MillForceActiveModel
     param.analysis_mode from state MillForceActiveAnalysisMode
+    param.n_samples from state MillForceMcSamples
+    param.mc_J_total_free from state MillForceMcJTotalFree
+    param.mc_percent_crit_free from state MillForceMcPercentCritFree
+    param.mc_percent_solids_free from state MillForceMcPercentSolidsFree
+    param.mc_height_free from state MillForceMcHeightFree
   }
 
   theta tBar
@@ -151,4 +166,6 @@ chart MillForceCross of MillForce {
   layer liners = annular-wedge over segment | theta0:t1 theta1:t2 r0:rInner r1:radius value:F_resultant where:method=param.active_method tooltip.liner:segment tooltip.method:param.active_method tooltip.mass_kg:m_charge tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
   layer grounded_liners = annular-wedge over segment | theta0:t1 theta1:t2 r0:rCompareMid r1:radius value:F_resultant where:method=grounded tooltip.liner:segment tooltip.method:grounded tooltip.mass_kg:m_charge tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
   layer faithful_liners = annular-wedge over segment | theta0:t1 theta1:t2 r0:rInner r1:rCompareMid value:F_resultant where:method=faithful fill:ylw stroke:dk opacity:0.74 tooltip.liner:segment tooltip.method:faithful tooltip.mass_kg:m_charge tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
+  layer mc_p90 = annular-wedge over segment | theta0:mc_theta0 theta1:mc_theta1 r0:mc_p90_inner r1:rInner_mc value:F_r_p90 fill:blue stroke:blue opacity:0.15 tooltip.liner:segment tooltip.mc:"p90" tooltip.F_r_p90_N:F_r_p90 when:param.analysis_mode=mc
+  layer mc_p10 = annular-wedge over segment | theta0:mc_theta0 theta1:mc_theta1 r0:mc_p10_r r1:rInner_mc value:F_r_p10 fill:blue stroke:blue opacity:0.45 tooltip.liner:segment tooltip.mc:"p10" tooltip.F_r_p10_N:F_r_p10 when:param.analysis_mode=mc
 }

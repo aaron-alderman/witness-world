@@ -13,6 +13,7 @@ model MillForce {
   // ── axes ──
   axis segment = sweep(1, N_segments, 1)
   axis method  = category(faithful, grounded)
+  axis sample  = ensemble(n_samples)
 
   // ── params (DEFAULT_INPUTS) ──
   param percent_crit   = 0.9
@@ -31,7 +32,13 @@ model MillForce {
   param m_liner        = 0.0
   param height         = 0.5
   param active_method  = grounded
+  param mc_method      = grounded
   param analysis_mode  = static
+  param n_samples      = 200
+  param mc_J_total_free        = false
+  param mc_percent_crit_free   = false
+  param mc_percent_solids_free = false
+  param mc_height_free         = false
 
   // ── honest geometry (stays in IR) ──
   derive omega   = sqrt(g / radius) * percent_crit
@@ -102,4 +109,51 @@ model MillForce {
   reduce F_resultant_max_active = pick_method(F_resultant_max_by_method, active_method) over method
   derive F_resultant_max_text = force_kn_text(F_resultant_max_active)
   reduce F_resultant_max_delta_text = force_delta_kn_text(F_resultant_max_by_method) over method
+
+  // ── Monte Carlo cross-section overlay ──
+  //
+  // The reference overlays p10/p90 radial-force bars on the cross-section. The
+  // authored version keeps that as dataflow: sample the same four MC controls,
+  // run the grounded force chain per sample, then collapse the sample axis into
+  // segment-wise percentile radii consumed by the existing annular-wedge mark.
+  derive J_total_s = normal_param(sample, J_total, mc_J_total_free, 0.030, 11) over sample
+  derive percent_crit_s = normal_param(sample, percent_crit, mc_percent_crit_free, 0.050, 17) over sample
+  derive percent_solids_s = normal_param(sample, percent_solids, mc_percent_solids_free, 0.050, 23) over sample
+  derive height_s = normal_param(sample, height, mc_height_free, 0.020, 31) over sample
+  derive omega_s = sqrt(g / radius) * percent_crit_s over sample
+  derive rInner_s = radius - height_s over sample
+  derive J_ore_s = J_total_s - J_balls over sample
+  derive rho_pulp_s = rho_ore / ((1 - percent_solids_s) * rho_ore + percent_solids_s) over sample
+  derive rhoCharge_s = (J_balls / J_total_s * rho_ball + J_ore_s / J_total_s * rho_ore) * (1 - J_voids) + J_voids * rho_pulp_s over sample
+  derive phi_s = asin(sin(beta + alpha) * omega_s^2 * radius / g) + alpha + beta over sample
+  derive gamma_s = fill_angle(J_total_s, radius, height_s, mc_method) over sample
+  derive phiPrime_s = phi_s - gamma_s over sample
+  derive x1_s = rInner_s * sin(phi_s) over sample
+  derive y1_s = 0 - rInner_s * cos(phi_s) over sample
+  derive x2_s = rInner_s * sin(phiPrime_s) over sample
+  derive y2_s = 0 - rInner_s * cos(phiPrime_s) over sample
+  derive mFill_s = (y2_s - y1_s) / (x2_s - x1_s) over sample
+  derive cFill_s = y1_s - mFill_s * x1_s over sample
+  derive t1_s = phi_s - dTheta * (segment - 1) over segment, sample
+  derive t2_s = max(phiPrime_s, t1_s - dTheta) over segment, sample
+  derive tBar_s = (t1_s + t2_s) / 2 over segment, sample
+  derive A_gravity_s = gravity_area(t1_s, t2_s, rInner_s, radius, mFill_s, cFill_s, dTheta, phi_s, phiPrime_s, mc_method) over segment, sample
+  derive m_charge_s = A_gravity_s * depth * rhoCharge_s * 1000 over segment, sample
+  derive m_total_s = m_charge_s + m_liner over segment, sample
+  derive Fw_r_s = cos(tBar_s) * m_total_s * g over segment, sample
+  derive M_cf_s = cf_mass_moment(t1_s, t2_s, rInner_s, radius, mFill_s, cFill_s, dTheta, phi_s, phiPrime_s, depth, rhoCharge_s, mc_method) over segment, sample
+  derive Fc_r_s = omega_s^2 * (M_cf_s + radius * m_liner) over segment, sample
+  derive F_r_s = Fw_r_s + Fc_r_s over segment, sample
+  reduce F_r_p10 = percentile(F_r_s, 10) over sample
+  reduce F_r_p90 = percentile(F_r_s, 90) over sample
+  reduce tBar_mc = mean(tBar_s) over sample
+  reduce rInner_mc = mean(rInner_s) over sample
+  derive mc_half_width = dTheta * 0.35
+  derive mc_theta0 = tBar_mc - mc_half_width over segment
+  derive mc_theta1 = tBar_mc + mc_half_width over segment
+  derive mc_bar_max_len = radius * 0.55
+  derive mc_p90_len = abs(F_r_p90) / max(F_r_max_active, 1) * mc_bar_max_len over segment
+  derive mc_p10_len = abs(F_r_p10) / max(F_r_max_active, 1) * mc_bar_max_len over segment
+  derive mc_p90_inner = max(0, rInner_mc - mc_p90_len) over segment
+  derive mc_p10_r = max(0, rInner_mc - mc_p10_len) over segment
 }

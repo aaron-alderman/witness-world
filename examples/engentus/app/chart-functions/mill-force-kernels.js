@@ -9,6 +9,21 @@
 const TWO_PI = 2 * Math.PI;
 const METHOD_ORDER = ["faithful", "grounded"];
 
+function seededUnit(seed) {
+  let s = (Number(seed) || 0) | 0;
+  s = (s + 0x6D2B79F5) | 0;
+  let t = Math.imul(s ^ (s >>> 15), 1 | s);
+  t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+}
+
+function seededNormal(sample, salt) {
+  const base = Math.imul((Number(sample) | 0) + 1, 1103515245) + Math.imul(Number(salt) | 0, 2654435761);
+  const u1 = Math.max(1e-10, seededUnit(base));
+  const u2 = seededUnit(base + 1);
+  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(TWO_PI * u2);
+}
+
 function methodDelta(values) {
   if (!Array.isArray(values)) return 0;
   const faithful = values[METHOD_ORDER.indexOf("faithful")] ?? 0;
@@ -210,6 +225,8 @@ export const millForceKernels = {
   deg_delta_text: values => `${signedFixed(methodDelta(values) * 180 / Math.PI, 1)}°`,
   force_delta_kn_text: values => `${signedFixed(methodDelta(values) / 1000, 1)} kN`,
   pct_delta_text: values => `${signedFixed(methodRelativeDeltaPercent(values), 2)}%`,
+  normal_param: (sample, value, enabled, std, salt = 0) =>
+    enabled ? Number(value) + Number(std) * seededNormal(sample, salt) : Number(value),
 
   fill_angle: (J, radius, height, method) =>
     method === "faithful" ? calcGammaFaithful(J, radius, height) : calcGammaGrounded(J),

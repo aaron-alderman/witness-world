@@ -112,6 +112,13 @@ grant runtime authority to copied JS or presenter code.
   point-probe hooks, and displays authored tooltip elements for the
   cross-section, force-vs-angle, and force-rose charts without a
   Mill-Force-local controller.
+- Mill Force Monte Carlo now has an authored dataflow/chart first pass:
+  `MillForce` includes a `sample` ensemble axis, seeded normal sampling for the
+  four reference MC controls, segment-wise p10/p90 radial-force reductions, and
+  cross-section overlay layers expressed with the existing generic
+  `annular-wedge` mark. The MC sample count/free toggles bind from
+  process-owned shell state into `chart.render`, and the live route exposes the
+  p10/p90 overlay without app-local chart/controller JS.
 
 ## Known Gaps
 
@@ -127,11 +134,14 @@ grant runtime authority to copied JS or presenter code.
   bolt-set rows are explicit authored first-pass rows; full reference parity
   still needs authored collection/repeated-action semantics or a justified
   platform primitive.
-- Mill Force still needs Monte Carlo execution/overlay behavior and full
-  reference result parity. Tooltip readout for the three stock charts now exists
-  through the generic chart tooltip seam. Compare deltas now exist as authored
-  scalar outputs and inline percent readouts, but the compare panel is still a
-  first-pass authored analysis view rather than final reference parity.
+- Mill Force still needs full reference Monte Carlo result parity. The p10/p90
+  cross-section overlay is now authored and live, but the richer reference MC
+  result lifecycle, statistical summaries, force-bar exact polygon geometry,
+  and final compare/MC panel polish remain first-pass gaps. Tooltip readout for
+  the three stock charts now exists through the generic chart tooltip seam.
+  Compare deltas now exist as authored scalar outputs and inline percent
+  readouts, but the compare panel is still a first-pass authored analysis view
+  rather than final reference parity.
 - No app-local browser runtime, presenter, or controller seam should be added to
   close these gaps. The next work should continue through authored surfaces,
   process state, projections, and explicit capability bindings.

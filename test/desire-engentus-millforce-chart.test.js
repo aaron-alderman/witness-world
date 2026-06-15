@@ -255,6 +255,55 @@ test("MillForceCross compare mode renders grounded and faithful annular bands", 
   assert.equal(faithful.primitives[10].value, evaluated.fields.F_resultant.data[10][f]);
 });
 
+test("MillForceCross Monte Carlo mode renders authored p10/p90 radial force bands", async () => {
+  const { model, N } = await setup();
+  const evaluated = evaluateModel(model, {
+    functions: millForceKernels,
+    params: {
+      analysis_mode: "mc",
+      n_samples: 80,
+      mc_J_total_free: true,
+      mc_percent_crit_free: true,
+      mc_percent_solids_free: true,
+      mc_height_free: true
+    }
+  });
+  const view = await loadBody("views/mill-force.rvm", "surface", "MillForceCross");
+  const plan = planChart(view, evaluated, { width: 600, height: 600 });
+
+  const p90 = plan.layers.find(l => l.name === "mc_p90");
+  const p10 = plan.layers.find(l => l.name === "mc_p10");
+  assert.equal(p90.mark, "annular-wedge");
+  assert.equal(p10.mark, "annular-wedge");
+  assert.equal(p90.hidden, undefined);
+  assert.equal(p10.hidden, undefined);
+  assert.equal(p90.primitives.length, N);
+  assert.equal(p10.primitives.length, N);
+  for (const s of [0, 10, 19]) {
+    assert.equal(p90.primitives[s].theta0, evaluated.fields.mc_theta0.data[s]);
+    assert.equal(p90.primitives[s].theta1, evaluated.fields.mc_theta1.data[s]);
+    assert.equal(p90.primitives[s].r0, evaluated.fields.mc_p90_inner.data[s]);
+    assert.equal(p90.primitives[s].r1, evaluated.fields.rInner_mc.data);
+    assert.equal(p90.primitives[s].value, evaluated.fields.F_r_p90.data[s]);
+    assert.equal(typeof p90.primitives[s].tooltip.F_r_p90_N, "number");
+  }
+  assert.equal(plan.layers.find(l => l.name === "grounded_liners").hidden, true);
+  assert.equal(plan.layers.find(l => l.name === "faithful_liners").hidden, true);
+});
+
+test("MillForceCross hides Monte Carlo overlay outside Monte Carlo mode", async () => {
+  const { model } = await setup();
+  const evaluated = evaluateModel(model, {
+    functions: millForceKernels,
+    params: { analysis_mode: "static", n_samples: 40, mc_J_total_free: true }
+  });
+  const view = await loadBody("views/mill-force.rvm", "surface", "MillForceCross");
+  const plan = planChart(view, evaluated, { width: 600, height: 600 });
+
+  assert.equal(plan.layers.find(l => l.name === "mc_p90").hidden, true);
+  assert.equal(plan.layers.find(l => l.name === "mc_p10").hidden, true);
+});
+
 test("MillForce charts bind authored shell inputs into chart params", async () => {
   for (const chartName of ["MillForceCross", "MillForceAngle", "MillForceRose"]) {
     const view = await loadBody("views/mill-force.rvm", "surface", chartName);
@@ -275,7 +324,12 @@ test("MillForce charts bind authored shell inputs into chart params", async () =
       "param.m_liner",
       "param.height",
       "param.active_method",
-      "param.analysis_mode"
+      "param.analysis_mode",
+      "param.n_samples",
+      "param.mc_J_total_free",
+      "param.mc_percent_crit_free",
+      "param.mc_percent_solids_free",
+      "param.mc_height_free"
     ]) {
       assert.equal(boundProps.has(prop), true, `${chartName} missing ${prop}`);
     }
