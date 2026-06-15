@@ -110,6 +110,16 @@ model MillForce {
   derive F_resultant_max_text = force_kn_text(F_resultant_max_active)
   reduce F_resultant_max_delta_text = force_delta_kn_text(F_resultant_max_by_method) over method
 
+  // ── cross-section force bars (reference straight-sided radial rectangles) ──
+  derive F_r_abs = abs(F_r) over segment, method
+  reduce F_r_abs_max_all = pmax(F_r_abs) over segment, method
+  derive force_bar_half_width = dTheta * 0.25
+  derive force_bar_theta0 = tBar - force_bar_half_width over segment, method
+  derive force_bar_theta1 = tBar + force_bar_half_width over segment, method
+  derive force_bar_max_len = radius * 0.55
+  derive force_bar_len = F_r_abs / max(F_r_abs_max_all, 1) * force_bar_max_len over segment, method
+  derive force_bar_inner = max(0, rInner - force_bar_len) over segment, method
+
   // ── Monte Carlo cross-section overlay ──
   //
   // The reference overlays p10/p90 radial-force bars on the cross-section. The

@@ -242,7 +242,7 @@ function planPolarLayer(layer, evaluated) {
     return { ...base, primitives };
   }
 
-  if (layer.mark === "annular-wedge") {
+  if (layer.mark === "annular-wedge" || layer.mark === "polar-quad") {
     const t0Field = fields[enc.theta0];
     const t1Field = fields[enc.theta1];
     const vField = fields[enc.value ?? enc.r] ?? null;
@@ -912,12 +912,14 @@ function drawPolarChart(container, plan, d3) {
           .attr("d", `M ${center.x} ${center.y} L ${r0.join(" ")} L ${r1.join(" ")} Z`)
           .attr("fill", forceColour(prim.value, 0, vmax)).attr("opacity", 0.85);
       }
-    } else if (layer.mark === "annular-wedge") {
+    } else if (layer.mark === "annular-wedge" || layer.mark === "polar-quad") {
       const values = layer.primitives.map(p => p.value).filter(Number.isFinite);
       const min = values.length ? Math.min(...values) : 0;
       const max = values.length ? Math.max(...values) : 1;
       for (const prim of layer.primitives) {
-        const path = annularWedgePath(prim, { center, rScale });
+        const path = layer.mark === "polar-quad"
+          ? polarQuadPath(prim, { center, rScale })
+          : annularWedgePath(prim, { center, rScale });
         if (!path) continue;
         svg.append("path")
           .attr("d", path)
@@ -1051,6 +1053,29 @@ function annularWedgePath(prim, { center, rScale }) {
     `A ${outerR} ${outerR} 0 ${large} 1 ${outer1.join(" ")}`,
     `L ${inner1.join(" ")}`,
     `A ${innerR} ${innerR} 0 ${large} 0 ${inner0.join(" ")}`,
+    "Z"
+  ].join(" ");
+}
+
+function polarQuadPath(prim, { center, rScale }) {
+  const r0 = Math.max(0, Number(prim.r0) || 0);
+  const r1 = Math.max(r0, Number(prim.r1) || 0);
+  const theta0 = Number(prim.theta0);
+  const theta1 = Number(prim.theta1);
+  if (!Number.isFinite(theta0) || !Number.isFinite(theta1) || !(r1 > 0)) return null;
+  const point = (theta, radius) => [
+    center.x + rScale(radius) * Math.sin(theta),
+    center.y - rScale(radius) * Math.cos(theta)
+  ];
+  const outer0 = point(theta0, r1);
+  const outer1 = point(theta1, r1);
+  const inner1 = point(theta1, r0);
+  const inner0 = point(theta0, r0);
+  return [
+    `M ${outer0.join(" ")}`,
+    `L ${outer1.join(" ")}`,
+    `L ${inner1.join(" ")}`,
+    `L ${inner0.join(" ")}`,
     "Z"
   ].join(" ");
 }

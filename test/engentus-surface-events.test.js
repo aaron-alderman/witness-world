@@ -871,6 +871,7 @@ test("Engentus Mill Force tabs switch authored chart views through process state
     const probeTarget = await page.evaluate(() => {
       const svg = document.querySelector("#mill-force-svg-cross");
       const plan = svg?.__chartController?.plan;
+      const forceBars = plan?.layers?.find(layer => layer.name === "force_bars");
       const primitive = plan?.layers
         ?.find(layer => layer.name === "liners")
         ?.primitives
@@ -886,8 +887,16 @@ test("Engentus Mill Force tabs switch authored chart views through process state
       const x = plan.center.x + rPx * Math.sin(theta);
       const y = plan.center.y - rPx * Math.cos(theta);
       const readout = svg.__chartController.node.probeAtPoint(x, y);
-      return { x, y, tooltip: readout?.tooltip ?? null };
+      return {
+        x,
+        y,
+        forceBarMark: forceBars?.mark,
+        forceBarCount: forceBars?.primitives?.length ?? 0,
+        tooltip: readout?.tooltip ?? null
+      };
     });
+    assert.equal(probeTarget?.forceBarMark, "polar-quad");
+    assert.equal(probeTarget?.forceBarCount, 39);
     assert.equal(probeTarget?.tooltip?.method, "grounded");
     assert.equal(typeof probeTarget?.tooltip?.F_resultant_N, "number");
     await page.evaluate(({ x, y }) => {
@@ -1185,6 +1194,8 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       return {
         sampleCount: controller?.spec?.params?.n_samples,
         jTotalFree: controller?.spec?.params?.mc_J_total_free,
+        p90Mark: p90?.mark,
+        p10Mark: p10?.mark,
         p90Hidden: p90?.hidden === true,
         p10Hidden: p10?.hidden === true,
         p90Count: p90?.primitives?.length ?? 0,
@@ -1195,6 +1206,8 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     assert.deepEqual(mcOverlay, {
       sampleCount: 350,
       jTotalFree: true,
+      p90Mark: "polar-quad",
+      p10Mark: "polar-quad",
       p90Hidden: false,
       p10Hidden: false,
       p90Count: 39,

@@ -110,6 +110,12 @@ grant runtime authority to copied JS or presenter code.
   centre-filled pie slices: `circle` guide layers and `annular-wedge` liner
   bands render the shell, inner radius, single-model liner ring, and compare
   mode grounded/faithful split rings.
+- Mill Force force bars now use a generic straight-sided polar rectangle mark:
+  `polar-quad` is implemented in `plugin.chart-runtime` as a reusable polar
+  primitive, while Mill Force declares the reference radial bar geometry in
+  `models/mill-force.rvm` and `views/mill-force.rvm`. Single, compare, and MC
+  cross-section overlays now draw straight radial bar polygons rather than
+  relying on app-local canvas/controller code.
 - Mill Force tooltip data is now authored on chart layers: liner number, model
   method, charge mass where relevant, radial/tangential force, and resultant
   force flow through generic `tooltip.*` chart channels. The `chart.render`
@@ -141,13 +147,13 @@ grant runtime authority to copied JS or presenter code.
   still needs authored collection/repeated-action semantics or a justified
   platform primitive.
 - Mill Force still needs full reference Monte Carlo result parity. The p10/p90
-  cross-section overlay is now authored and live, but the richer reference MC
-  result lifecycle, statistical summaries, force-bar exact polygon geometry,
-  and final compare/MC panel polish remain first-pass gaps. Tooltip readout for
-  the three stock charts now exists through the generic chart tooltip seam.
-  Compare deltas now exist as authored scalar outputs and inline percent
-  readouts, but the compare panel is still a first-pass authored analysis view
-  rather than final reference parity.
+  cross-section overlay and straight-sided radial force-bar geometry are now
+  authored and live, but the richer reference MC result lifecycle, statistical
+  summaries, p10 point glyph exactness, and final compare/MC panel polish remain
+  first-pass gaps. Tooltip readout for the three stock charts now exists through
+  the generic chart tooltip seam. Compare deltas now exist as authored scalar
+  outputs and inline percent readouts, but the compare panel is still a
+  first-pass authored analysis view rather than final reference parity.
 - No app-local browser runtime, presenter, or controller seam should be added to
   close these gaps. The next work should continue through authored surfaces,
   process state, projections, and explicit capability bindings.

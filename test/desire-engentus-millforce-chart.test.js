@@ -226,6 +226,17 @@ test("MillForceCross plans per-segment annular liner bands with angular bounds +
     assert.equal(w.r1, evaluated.params.radius);
     assert.equal(w.value, evaluated.fields.F_resultant.data[s][g]);
   }
+  const forceBars = plan.layers.find(l => l.name === "force_bars");
+  assert.equal(forceBars.mark, "polar-quad");
+  assert.equal(forceBars.primitives.length, N);
+  for (const s of [0, 10, 19]) {
+    const bar = forceBars.primitives[s];
+    assert.equal(bar.theta0, evaluated.fields.force_bar_theta0.data[s][g]);
+    assert.equal(bar.theta1, evaluated.fields.force_bar_theta1.data[s][g]);
+    assert.equal(bar.r0, evaluated.fields.force_bar_inner.data[s][g]);
+    assert.equal(bar.r1, evaluated.fields.rInner.data);
+    assert.equal(bar.value, evaluated.fields.F_r.data[s][g]);
+  }
 });
 
 test("MillForceCross compare mode renders grounded and faithful annular bands", async () => {
@@ -253,6 +264,12 @@ test("MillForceCross compare mode renders grounded and faithful annular bands", 
   assert.equal(faithful.primitives[10].r0, evaluated.fields.rInner.data);
   assert.equal(faithful.primitives[10].r1, evaluated.fields.rCompareMid.data);
   assert.equal(faithful.primitives[10].value, evaluated.fields.F_resultant.data[10][f]);
+  const groundedBars = plan.layers.find(l => l.name === "grounded_force_bars");
+  const faithfulBars = plan.layers.find(l => l.name === "faithful_force_bars");
+  assert.equal(groundedBars.mark, "polar-quad");
+  assert.equal(faithfulBars.mark, "polar-quad");
+  assert.equal(groundedBars.primitives[10].r0, evaluated.fields.force_bar_inner.data[10][g]);
+  assert.equal(faithfulBars.primitives[10].r0, evaluated.fields.force_bar_inner.data[10][f]);
 });
 
 test("MillForceCross Monte Carlo mode renders authored p10/p90 radial force bands", async () => {
@@ -273,8 +290,8 @@ test("MillForceCross Monte Carlo mode renders authored p10/p90 radial force band
 
   const p90 = plan.layers.find(l => l.name === "mc_p90");
   const p10 = plan.layers.find(l => l.name === "mc_p10");
-  assert.equal(p90.mark, "annular-wedge");
-  assert.equal(p10.mark, "annular-wedge");
+  assert.equal(p90.mark, "polar-quad");
+  assert.equal(p10.mark, "polar-quad");
   assert.equal(p90.hidden, undefined);
   assert.equal(p10.hidden, undefined);
   assert.equal(p90.primitives.length, N);
