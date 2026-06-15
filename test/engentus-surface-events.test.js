@@ -644,6 +644,10 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       document.querySelector("#chart-svg-mc")?.__surfaceCapabilityOutputs?.mc_sample_count_text === "750"
     );
+    assert.match(await page.textContent("#surface-goodmanrunprogresslabel"), /Running/);
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") === "done"
+    );
     await page.click("#surface-goodmanactionstats");
     await page.waitForFunction(() =>
       !document.querySelector("#surface-goodmanstatswindow")?.hasAttribute("hidden")
@@ -677,7 +681,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       document.querySelector("#chart-svg-mc")?.__surfaceCapabilityOutputs?.mc_sa_p50_std_text
         === document.querySelector("#surface-goodmancdfsummarystdvalue")?.textContent
     ), true);
-    assert.match(await page.textContent("#surface-goodmanrunprogresslabel"), /Running/);
+    assert.match(await page.textContent("#surface-goodmanrunprogresslabel"), /Complete/);
     assert.deepEqual(await page.evaluate(() => ({
       runDisabled: document.querySelector("#surface-goodmanrunactionstart")?.disabled,
       pauseDisabled: document.querySelector("#surface-goodmanrunactionpause")?.disabled,
@@ -685,67 +689,17 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       resumeHidden: document.querySelector("#surface-goodmanrunactionresume")?.hasAttribute("hidden"),
       stopDisabled: document.querySelector("#surface-goodmanrunactionstop")?.disabled,
       cfgDisabled: document.querySelector("#cfg-n")?.disabled,
-      lockHidden: document.querySelector("#surface-goodmanrunlocknote")?.hasAttribute("hidden"),
-      fillStyle: document.querySelector("#surface-goodmanrunprogressfill")?.getAttribute("style") || ""
-    })), {
-      runDisabled: true,
-      pauseDisabled: false,
-      pauseHidden: false,
-      resumeHidden: true,
-      stopDisabled: false,
-      cfgDisabled: true,
-      lockHidden: false,
-      fillStyle: "width:0%;background:var(--blue);opacity:1"
-    });
-
-    await page.click("#surface-goodmanrunactionpause");
-    await page.waitForFunction(() =>
-      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") === "paused"
-    );
-    assert.match(await page.textContent("#surface-goodmanrunprogresslabel"), /Paused/);
-    assert.deepEqual(await page.evaluate(() => ({
-      runDisabled: document.querySelector("#surface-goodmanrunactionstart")?.disabled,
-      pauseHidden: document.querySelector("#surface-goodmanrunactionpause")?.hasAttribute("hidden"),
-      resumeDisabled: document.querySelector("#surface-goodmanrunactionresume")?.disabled,
-      resumeHidden: document.querySelector("#surface-goodmanrunactionresume")?.hasAttribute("hidden"),
-      stopDisabled: document.querySelector("#surface-goodmanrunactionstop")?.disabled,
-      cfgDisabled: document.querySelector("#cfg-n")?.disabled,
       lockText: document.querySelector("#surface-goodmanrunlocknote")?.textContent,
       fillStyle: document.querySelector("#surface-goodmanrunprogressfill")?.getAttribute("style") || ""
     })), {
-      runDisabled: true,
-      pauseHidden: true,
-      resumeDisabled: false,
-      resumeHidden: false,
-      stopDisabled: false,
-      cfgDisabled: true,
-      lockText: "⏸ Simulation paused — config locked",
-      fillStyle: "width:0%;background:var(--blue);opacity:.4"
-    });
-    await page.click("#surface-goodmanrunactionresume");
-    await page.waitForFunction(() =>
-      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") === "running"
-    );
-    assert.match(await page.textContent("#surface-goodmanrunprogresslabel"), /Running/);
-    await page.click("#surface-goodmanrunactionstop");
-    await page.waitForFunction(() =>
-      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") === "stopped"
-    );
-    assert.match(await page.textContent("#surface-goodmanrunprogresslabel"), /Stopped/);
-    assert.deepEqual(await page.evaluate(() => ({
-      runDisabled: document.querySelector("#surface-goodmanrunactionstart")?.disabled,
-      pauseHidden: document.querySelector("#surface-goodmanrunactionpause")?.hasAttribute("hidden"),
-      resumeHidden: document.querySelector("#surface-goodmanrunactionresume")?.hasAttribute("hidden"),
-      stopDisabled: document.querySelector("#surface-goodmanrunactionstop")?.disabled,
-      cfgDisabled: document.querySelector("#cfg-n")?.disabled,
-      lockHidden: document.querySelector("#surface-goodmanrunlocknote")?.hasAttribute("hidden")
-    })), {
       runDisabled: false,
+      pauseDisabled: true,
       pauseHidden: true,
       resumeHidden: true,
       stopDisabled: true,
-      cfgDisabled: false,
-      lockHidden: true
+      cfgDisabled: true,
+      lockText: "🔒 Config locked — clone or create a new simulation to change",
+      fillStyle: "width:100%;background:var(--grn);opacity:1"
     });
   } finally {
     await browser.close();

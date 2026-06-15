@@ -72,6 +72,7 @@ enum GoodmanRunStatus {
     ready
     running
     paused
+    done
     stopped
   }
 }
@@ -971,6 +972,12 @@ process EngentusShellNavigation {
       set MillForceMcStatusState calculating
       delay 120ms
       set MillForceMcStatusState running
+    }
+    on GoodmanRunRequested {
+      set GoodmanActiveMode mc
+      set GoodmanRunStatusState running
+      delay 220ms
+      set GoodmanRunStatusState done
     }
   }
 }
@@ -3135,7 +3142,7 @@ view GoodmanRunConfigBoltsPerSetField {
   prop step = 50
   bindings {
     value from state GoodmanRunBoltsPerSet
-    disabled from state GoodmanRunStatusState map running true paused true default false
+    disabled from state GoodmanRunStatusState map running true paused true done true default false
   }
   interactions {
     on input self set GoodmanRunBoltsPerSet eventValue
@@ -3154,7 +3161,7 @@ view GoodmanRunConfigDurationField {
   prop step = 1
   bindings {
     value from state GoodmanRunDurationMonths
-    disabled from state GoodmanRunStatusState map running true paused true default false
+    disabled from state GoodmanRunStatusState map running true paused true done true default false
   }
   interactions {
     on input self set GoodmanRunDurationMonths eventValue
@@ -3173,7 +3180,7 @@ view GoodmanRunConfigStepField {
   prop step = 0.1
   bindings {
     value from state GoodmanRunStepMonths
-    disabled from state GoodmanRunStatusState map running true paused true default false
+    disabled from state GoodmanRunStatusState map running true paused true done true default false
   }
   interactions {
     on input self set GoodmanRunStepMonths eventValue
@@ -3260,7 +3267,7 @@ view GoodmanRunProgressFill {
   kind progress-fill
   class prog-fill
   bindings {
-    style from state GoodmanRunStatusState map running "width:0%;background:var(--blue);opacity:1" paused "width:0%;background:var(--blue);opacity:.4" stopped "width:0%;background:var(--ylw);opacity:1" default "width:0%;background:var(--blue);opacity:1"
+    style from state GoodmanRunStatusState map running "width:0%;background:var(--blue);opacity:1" paused "width:0%;background:var(--blue);opacity:.4" done "width:100%;background:var(--grn);opacity:1" stopped "width:0%;background:var(--ylw);opacity:1" default "width:0%;background:var(--blue);opacity:1"
   }
 }
 
@@ -3269,7 +3276,7 @@ view GoodmanRunProgressLabel {
   class prog-lbl
   prop text = "Ready"
   bindings {
-    text from state GoodmanRunStatusState map ready Ready running "Running…" paused "⏸ Paused" stopped "■ Stopped" default Ready
+    text from state GoodmanRunStatusState map ready Ready running "Running…" paused "⏸ Paused" done "Complete ✓" stopped "■ Stopped" default Ready
   }
 }
 
@@ -3288,8 +3295,8 @@ view GoodmanRunLockNote {
   prop text = "Simulation running…"
   prop hidden = true
   bindings {
-    visible from state GoodmanRunStatusState map running true paused true default false
-    text from state GoodmanRunStatusState map running "⏳ Simulation running…" paused "⏸ Simulation paused — config locked" default ""
+    visible from state GoodmanRunStatusState map running true paused true done true default false
+    text from state GoodmanRunStatusState map running "⏳ Simulation running…" paused "⏸ Simulation paused — config locked" done "🔒 Config locked — clone or create a new simulation to change" default ""
   }
 }
 
@@ -4713,7 +4720,7 @@ view GoodmanCdfEmptyChart {
   kind empty-state
   class goodman-window-empty
   bindings {
-    visible from state GoodmanRunStatusState map running false default true
+    visible from state GoodmanRunStatusState map running false done false default true
   }
   children {
     GoodmanCdfEmptyText
@@ -4732,7 +4739,7 @@ view GoodmanCdfSummaryTable {
   class stbl
   prop tag = "table"
   bindings {
-    visible from state GoodmanRunStatusState map running true default false
+    visible from state GoodmanRunStatusState map running true done true default false
   }
   children {
     GoodmanCdfSummaryHead
@@ -4961,7 +4968,7 @@ view GoodmanStatsEmptyMessage {
   prop tag = "p"
   prop text = "No completed simulations."
   bindings {
-    visible from state GoodmanRunStatusState map running false default true
+    visible from state GoodmanRunStatusState map done false default true
   }
 }
 
@@ -4971,7 +4978,7 @@ view GoodmanStatsTable {
   prop tag = "table"
   prop hidden = true
   bindings {
-    visible from state GoodmanRunStatusState map running true default false
+    visible from state GoodmanRunStatusState map done true default false
   }
   children {
     GoodmanStatsTableHead

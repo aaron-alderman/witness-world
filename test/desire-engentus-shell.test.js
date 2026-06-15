@@ -232,7 +232,9 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("GoodmanRunActionResume")?.body?.bindings[0]?.prop, "visible");
   assert.equal(surfaces.get("GoodmanRunActionResume")?.body?.interactions[0]?.action?.message, "GoodmanResumeRunRequested");
   assert.equal(surfaces.get("GoodmanRunLockNote")?.body?.bindings[0]?.prop, "visible");
+  assert.equal(surfaces.get("GoodmanRunLockNote")?.body?.bindings[0]?.source?.map?.done, true);
   assert.equal(surfaces.get("GoodmanRunProgressFill")?.body?.bindings[0]?.prop, "style");
+  assert.match(surfaces.get("GoodmanRunProgressFill")?.body?.bindings[0]?.source?.map?.done, /width:100%/);
   assert.equal(surfaces.get("GoodmanStaticAppliedShearField")?.body?.bindings[0]?.prop, "value");
   assert.equal(surfaces.get("GoodmanStaticAppliedShearField")?.body?.interactions[0]?.action?.state, "GoodmanStaticAppliedShear");
   assert.equal(surfaces.get("GoodmanStaticProbeMeanStressField")?.body?.bindings[0]?.prop, "value");
@@ -346,6 +348,15 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
         { kind: "delay", ms: 120 },
         { kind: "setState", state: "MillForceMcStatusState", value: "running" }
       ]
+    },
+    {
+      trigger: "GoodmanRunRequested",
+      steps: [
+        { kind: "setState", state: "GoodmanActiveMode", value: "mc" },
+        { kind: "setState", state: "GoodmanRunStatusState", value: "running" },
+        { kind: "delay", ms: 220 },
+        { kind: "setState", state: "GoodmanRunStatusState", value: "done" }
+      ]
     }
   ]);
 });
@@ -401,6 +412,29 @@ test("the authored Mill Force Monte Carlo run has a visible calculating delay be
     ["rule.setState", "MillForceRunMonteCarloRequested:MillForceMcStatusState"],
     ["rule.delay", "MillForceRunMonteCarloRequested:120ms"],
     ["rule.setState", "MillForceRunMonteCarloRequested:MillForceMcStatusState"]
+  ]);
+});
+
+test("the authored Goodman Monte Carlo run completes through a process-owned done state", async () => {
+  const desire = await shellDesire();
+  const world = createWorld();
+  applyDesire(world, desire);
+  const delays = [];
+  const runtime = createProcessRuntime(world, {
+    delayScheduler: async ms => delays.push(ms)
+  });
+
+  await runtime.deliverAuthored("GoodmanRunRequested");
+
+  assert.deepEqual(delays, [220]);
+  assert.equal(runtime.value("GoodmanActiveMode"), "mc");
+  assert.equal(runtime.value("GoodmanRunStatusState"), "done");
+  assert.deepEqual(runtime.history("GoodmanRunStatusState"), ["running", "done"]);
+  assert.deepEqual(runtime.trace.slice(-4).map(observation => [observation.kind, observation.label]), [
+    ["rule.setState", "GoodmanRunRequested:GoodmanActiveMode"],
+    ["rule.setState", "GoodmanRunRequested:GoodmanRunStatusState"],
+    ["rule.delay", "GoodmanRunRequested:220ms"],
+    ["rule.setState", "GoodmanRunRequested:GoodmanRunStatusState"]
   ]);
 });
 
@@ -795,8 +829,11 @@ test("the Goodman shell authors sidebar and window content rather than empty hos
   ]);
   assert.equal(surfaces.get("GoodmanStatsEmptyMessage")?.body?.props?.text, "No completed simulations.");
   assert.equal(surfaces.get("GoodmanStatsEmptyMessage")?.body?.bindings?.[0]?.source?.state, "GoodmanRunStatusState");
+  assert.equal(surfaces.get("GoodmanStatsEmptyMessage")?.body?.bindings?.[0]?.source?.map?.done, false);
   assert.equal(surfaces.get("GoodmanStatsTable")?.body?.props?.hidden, true);
-  assert.equal(surfaces.get("GoodmanStatsTable")?.body?.bindings?.[0]?.source?.map?.running, true);
+  assert.equal(surfaces.get("GoodmanStatsTable")?.body?.bindings?.[0]?.source?.map?.done, true);
+  assert.equal(surfaces.get("GoodmanCdfSummaryTable")?.body?.bindings?.[0]?.source?.map?.running, true);
+  assert.equal(surfaces.get("GoodmanCdfSummaryTable")?.body?.bindings?.[0]?.source?.map?.done, true);
   assert.deepEqual(surfaces.get("GoodmanStatsHeaderRow")?.body?.children, [
     "GoodmanStatsHeadSimulation",
     "GoodmanStatsHeadBoltSet",

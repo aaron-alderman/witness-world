@@ -91,6 +91,12 @@ grant runtime authority to copied JS or presenter code.
   the Stats window and the CDF window's explicit stress-band summary table
   consume those outputs through authored surface bindings after the run state
   becomes active.
+- Goodman run completion now has an authored first-pass lifecycle instead of
+  treating `running` as the permanent result state: `GoodmanRunRequested` moves
+  the shell into MC mode, exposes the transient running state through the
+  process delay machinery, then lands in a process-owned `done` state. The
+  completed state drives the reference-shaped "Complete" progress label, green
+  full progress fill, locked config note, and Stats-window result visibility.
 - Goodman deterministic chart overlays now cover more of the reference static
   view without controller code: `GoodmanDiagram` authors dashed lifetime
   Goodman guide lines, the purple nominal yield boundary style, the probe point,
@@ -213,9 +219,11 @@ grant runtime authority to copied JS or presenter code.
   clone/delete/new behavior remain to be authored. The current Goodman run
   controls, MC band chart, chart edit panel, deterministic chart tooltip/static
   scenario readout, process-owned primary bolt-set expansion, bolt-set shell,
-  and windows now expose authored stateful shell/chart behavior and first-pass
-  MC scalar stress-band summaries, but they do not yet execute or consume full
-  reference Monte Carlo failure-time/CDF/statistical datasets.
+  completed-run state, and windows now expose authored stateful shell/chart
+  behavior and first-pass MC scalar stress-band summaries, but they do not yet
+  execute or consume full reference Monte Carlo failure-time/CDF/statistical
+  datasets. Cancellable chunked simulation progress remains a real platform/
+  authored-process gap; it should not be faked with page-local JS.
 - Goodman dynamic repeated collections remain a gap. Current simulation and
   bolt-set rows do not yet execute full collection creation/clone/delete
   semantics; full reference parity still needs authored collection/repeated-
