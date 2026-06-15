@@ -1047,12 +1047,17 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     assert.deepEqual(await page.evaluate(() => ({
       modelHidden: document.querySelector("#surface-millforcemodelsection")?.hasAttribute("hidden"),
       compareHidden: document.querySelector("#surface-millforcecomparesection")?.hasAttribute("hidden"),
-      mcHidden: document.querySelector("#surface-millforcemcsection")?.hasAttribute("hidden"),
+      mcSectionPresent: [...document.querySelectorAll(".ssec")]
+        .some(section => section.textContent.includes("Monte Carlo Config")),
+      mcBodyHidden: document.querySelector("#surface-millforcemcbody")?.hasAttribute("hidden"),
+      mcChevron: document.querySelector("#surface-millforcemcchevron")?.textContent,
       model: window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveModel")
     })), {
       modelHidden: false,
       compareHidden: true,
-      mcHidden: true,
+      mcSectionPresent: true,
+      mcBodyHidden: true,
+      mcChevron: "▼",
       model: "grounded"
     });
 
@@ -1132,6 +1137,10 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     const compareState = await page.evaluate(() => ({
       modelHidden: document.querySelector("#surface-millforcemodelsection")?.hasAttribute("hidden"),
       compareHidden: document.querySelector("#surface-millforcecomparesection")?.hasAttribute("hidden"),
+      mcSectionPresent: [...document.querySelectorAll(".ssec")]
+        .some(section => section.textContent.includes("Monte Carlo Config")),
+      mcBodyHidden: document.querySelector("#surface-millforcemcbody")?.hasAttribute("hidden"),
+      mcChevron: document.querySelector("#surface-millforcemcchevron")?.textContent,
       compareText: document.querySelector("#surface-millforcecomparesection")?.textContent,
       resultRows: [...document.querySelectorAll(".mill-force-result-row")].map(row => row.textContent),
       deltaOutputs: {
@@ -1145,6 +1154,9 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     }));
     assert.equal(compareState.modelHidden, true);
     assert.equal(compareState.compareHidden, false);
+    assert.equal(compareState.mcSectionPresent, true);
+    assert.equal(compareState.mcBodyHidden, true);
+    assert.equal(compareState.mcChevron, "▼");
     assert.match(compareState.compareText, /Compare Models/);
     assert.match(compareState.compareText, /Δ fill/);
     assert.match(compareState.compareText, /Δ toe/);
@@ -1162,18 +1174,23 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     );
     assert.deepEqual(await page.evaluate(() => ({
       compareHidden: document.querySelector("#surface-millforcecomparesection")?.hasAttribute("hidden"),
-      mcHidden: document.querySelector("#surface-millforcemcsection")?.hasAttribute("hidden"),
+      mcSectionPresent: [...document.querySelectorAll(".ssec")]
+        .some(section => section.textContent.includes("Monte Carlo Config")),
+      mcBodyHidden: document.querySelector("#surface-millforcemcbody")?.hasAttribute("hidden"),
+      mcChevron: document.querySelector("#surface-millforcemcchevron")?.textContent,
       runLabel: document.querySelector("#surface-millforcemcrunaction")?.textContent,
       clearLabel: document.querySelector("#surface-millforcemcclearaction")?.textContent,
       clearDisabled: document.querySelector("#surface-millforcemcclearaction")?.disabled,
       samplesRowClass: document.querySelector("#surface-millforcemcsamplesrow")?.className,
       samplesLabel: document.querySelector("#surface-millforcemcsamplesrow label")?.textContent,
       samplesInputStyle: document.querySelector("#mill-force-mc-n")?.getAttribute("style"),
-      mcParamRows: [...document.querySelectorAll("#surface-millforcemcsection .mc-row")]
+      mcParamRows: [...document.querySelectorAll("#surface-millforcemcbody .mc-row")]
         .map(row => row.textContent.trim())
     })), {
       compareHidden: true,
-      mcHidden: false,
+      mcSectionPresent: true,
+      mcBodyHidden: false,
+      mcChevron: "▲",
       runLabel: "▶ Run",
       clearLabel: "✕ Clear",
       clearDisabled: true,

@@ -87,6 +87,7 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(types.get("MillForceActiveModel")?.body?.role, "state");
   assert.equal(types.get("MillForceMcStatus")?.body?.role, "enum");
   assert.equal(types.get("MillForceMcStatusState")?.body?.role, "state");
+  assert.equal(types.get("MillForceMcConfigOpen")?.body?.role, "state");
   assert.equal(types.get("MillForceMcSamples")?.body?.role, "state");
   assert.equal(types.get("MillForcePercentCrit")?.body?.role, "state");
   assert.equal(types.get("MillForceTotalFill")?.body?.role, "state");
@@ -267,6 +268,16 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
     "MillForceModelFaithfulLabel"
   ]);
   assert.equal(surfaces.has("MillForceModelNote"), false);
+  assert.equal(surfaces.get("MillForceMcTitleText")?.body?.surfaceKind, "action");
+  assert.equal(surfaces.get("MillForceMcTitleText")?.body?.interactions[0]?.action?.state, "MillForceMcConfigOpen");
+  assert.equal(surfaces.get("MillForceMcTitleText")?.body?.interactions[0]?.action?.value?.kind, "toggleState");
+  assert.deepEqual(surfaces.get("MillForceMcTitleText")?.body?.children, [
+    "MillForceMcTitleLabel",
+    "MillForceMcChevron"
+  ]);
+  assert.equal(surfaces.get("MillForceMcChevron")?.body?.bindings[0]?.source?.state, "MillForceMcConfigOpen");
+  assert.equal(surfaces.get("MillForceMcBody")?.body?.bindings[0]?.prop, "visible");
+  assert.equal(surfaces.get("MillForceMcBody")?.body?.bindings[0]?.source?.state, "MillForceMcConfigOpen");
   assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.surfaceKind, "form-field");
   assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.className, "mc-row");
   assert.equal(surfaces.get("MillForceMcSamplesRow")?.body?.props?.label, "Samples");
@@ -561,6 +572,9 @@ test("the shell is structured through explicit child regions instead of flattene
 
   assert.deepEqual(surfaces.get("MillForceMcSection")?.body?.children, [
     "MillForceMcTitleText",
+    "MillForceMcBody"
+  ]);
+  assert.deepEqual(surfaces.get("MillForceMcBody")?.body?.children, [
     "MillForceMcSamplesRow",
     "MillForceMcVaryTitle",
     "MillForceMcJTotalToggle",

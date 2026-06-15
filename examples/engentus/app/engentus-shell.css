@@ -1307,6 +1307,13 @@ input[type=range],
   color: var(--ylw);
 }
 
+.mill-force-mc-toggle {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .mill-force-cht-tab {
   background: none;
   border: 1px solid transparent;

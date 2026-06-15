@@ -99,6 +99,11 @@ grant runtime authority to copied JS or presenter code.
   shape more closely: the grounded/faithful selector is authored as radio
   labels in `shell.rvm`, not as a DESIRE-local pill abstraction, while still
   driving `MillForceActiveModel` through the existing process messages.
+- Mill Force Monte Carlo config now keeps the reference shell shape: the
+  `Monte Carlo Config` section is always present with a process-owned
+  collapsed/open body and chevron, opens automatically when MC mode or Run is
+  selected, and remains implemented through authored state/visibility rather
+  than page-local DOM toggling.
 - Mill Force chart model selection now flows through `chart.render` as an
   authored chart parameter: the force, rose, and cross-section chart layers
   slice `method` from `param.active_method`, which is bound to

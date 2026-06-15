@@ -107,6 +107,10 @@ state MillForceMcStatusState: MillForceMcStatus {
   initial ready
 }
 
+state MillForceMcConfigOpen: bool {
+  initial false
+}
+
 state MillForceMcSamples: number {
   initial 200
 }
@@ -642,18 +646,21 @@ event MillForceShowForceRoseRequested {
 event MillForceShowSingleModeRequested {
   writes {
     MillForceActiveAnalysisMode: static
+    MillForceMcConfigOpen: false
   }
 }
 
 event MillForceShowCompareModeRequested {
   writes {
     MillForceActiveAnalysisMode: compare
+    MillForceMcConfigOpen: false
   }
 }
 
 event MillForceShowMonteCarloModeRequested {
   writes {
     MillForceActiveAnalysisMode: mc
+    MillForceMcConfigOpen: true
   }
 }
 
@@ -672,6 +679,7 @@ event MillForceSelectFaithfulModelRequested {
 event MillForceRunMonteCarloRequested {
   writes {
     MillForceActiveAnalysisMode: mc
+    MillForceMcConfigOpen: true
     MillForceMcStatusState: running
   }
 }
@@ -840,6 +848,7 @@ process EngentusShellNavigation {
     MillForceLinerHeight
     MillForceActiveModel
     MillForceMcStatusState
+    MillForceMcConfigOpen
     MillForceMcSamples
     MillForceMcJTotalFree
     MillForceMcPercentCritFree
@@ -7453,11 +7462,32 @@ view MillForceCompareSection {
   }
 }
 
-view MillForceMcTitleText {
+view MillForceMcTitleLabel {
   kind text
-  class ssec-title
-  prop tag = "div"
+  prop tag = "span"
   prop text = "Monte Carlo Config"
+}
+
+view MillForceMcChevron {
+  kind text
+  prop tag = "span"
+  prop text = "▼"
+  bindings {
+    text from state MillForceMcConfigOpen map true "▲" default "▼"
+  }
+}
+
+view MillForceMcTitleText {
+  kind action
+  class ssec-title mill-force-mc-toggle
+  prop tag = "div"
+  interactions {
+    on click self set MillForceMcConfigOpen toggle
+  }
+  children {
+    MillForceMcTitleLabel
+    MillForceMcChevron
+  }
 }
 
 view MillForceMcSamplesRow {
@@ -7807,14 +7837,13 @@ view MillForceMcP90MaxRow {
   }
 }
 
-view MillForceMcSection {
-  kind section
-  class ssec
+view MillForceMcBody {
+  kind body
+  class mill-force-mc-body
   bindings {
-    visible from state MillForceActiveAnalysisMode map mc true default false
+    visible from state MillForceMcConfigOpen
   }
   children {
-    MillForceMcTitleText
     MillForceMcSamplesRow
     MillForceMcVaryTitle
     MillForceMcJTotalToggle
@@ -7826,6 +7855,15 @@ view MillForceMcSection {
     MillForceMcEnvelopeTitle
     MillForceMcP10MaxRow
     MillForceMcP90MaxRow
+  }
+}
+
+view MillForceMcSection {
+  kind section
+  class ssec
+  children {
+    MillForceMcTitleText
+    MillForceMcBody
   }
 }
 
