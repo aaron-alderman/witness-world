@@ -35,14 +35,17 @@ test("engentus frontend serves the login shell and loads no pipeline witnesses",
     const goodmanHtml = await goodman.text();
     assert.match(goodmanHtml, /<svg id="chart-svg" class="chart-page__mount chart-page__mount--goodman" data-chart-spec=/);
     assert.doesNotMatch(goodmanHtml, /<iframe[^>]+src="\/chart\?chart=GoodmanDiagram"/);
-    assert.match(goodmanHtml, /engentus-goodman-presenter\.js/);
+    assert.doesNotMatch(goodmanHtml, /pageModuleHref/);
+    assert.doesNotMatch(goodmanHtml, /bootstrapSurfacePage/);
+    assert.doesNotMatch(goodmanHtml, /presenters\//);
 
     const millCharge = await fetch(`${url}/engentus/mill-charge`);
     assert.equal(millCharge.status, 200);
     const millChargePageHtml = await millCharge.text();
     assert.match(millChargePageHtml, /<canvas id="mill-canvas" class="chart-page__mount chart-page__mount--mill-charge" data-chart-spec=/);
     assert.doesNotMatch(millChargePageHtml, /<iframe[^>]+src="\/chart\?chart=MillChargeCrossSection"/);
-    assert.match(millChargePageHtml, /engentus-mill-charge-presenter\.js/);
+    assert.doesNotMatch(millChargePageHtml, /bootstrapSurfacePage/);
+    assert.doesNotMatch(millChargePageHtml, /presenters\//);
 
     const millForce = await fetch(`${url}/engentus/mill-force`);
     assert.equal(millForce.status, 200);
@@ -53,7 +56,8 @@ test("engentus frontend serves the login shell and loads no pipeline witnesses",
     assert.match(millForcePageHtml, /id="mill-force-mc-canvas"/);
     assert.match(millForcePageHtml, /id="mill-force-tip"/);
     assert.doesNotMatch(millForcePageHtml, /<iframe[^>]+src="\/chart\?chart=MillForceCross"/);
-    assert.match(millForcePageHtml, /engentus-mill-force-presenter\.js/);
+    assert.doesNotMatch(millForcePageHtml, /bootstrapSurfacePage/);
+    assert.doesNotMatch(millForcePageHtml, /presenters\//);
 
     const stylesheet = await fetch(`${url}/app-static/app/engentus-shell.css`);
     assert.equal(stylesheet.status, 200);

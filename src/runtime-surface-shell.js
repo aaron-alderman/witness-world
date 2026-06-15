@@ -231,26 +231,6 @@ function chartViewDescriptors(surface, surfaces) {
   }));
 }
 
-function mountedChartDescriptorsForSurface(surface, surfaces, mountedChartRuntime = null) {
-  return chartViewDescriptors(surface, surfaces)
-    .map(({ chart, viewKey }) => {
-      const descriptor = typeof mountedChartRuntime?.describeChartSurface === "function"
-        ? mountedChartRuntime.describeChartSurface(chart)
-        : null;
-      const pageProps = descriptor?.pageProps ?? surfaceProps(chart);
-      return {
-        surfaceId: chart.id,
-        title: firstTruthy(pageProps.title, chart.id),
-        viewKey,
-        mountElementId: firstTruthy(pageProps.mountId, null),
-        mountTag: firstTruthy(pageProps.mountTag, "div"),
-        overlayCanvasId: firstTruthy(pageProps.overlayCanvasId, null),
-        tooltipId: firstTruthy(pageProps.tooltipId, null),
-        pageProps
-      };
-    });
-}
-
 function pagePresentationAssets(root, activeSurface) {
   const rootProps = surfaceProps(root);
   const activeProps = surfaceProps(activeSurface);
@@ -262,21 +242,8 @@ function pagePresentationAssets(root, activeSurface) {
     scriptSrcs: uniqueTruthy([
       ...parseList(rootProps.pageScriptSrcs),
       ...parseList(activeProps.pageScriptSrcs)
-    ]),
-    moduleHref: firstTruthy(activeProps.pageModuleHref, rootProps.pageModuleHref, null),
-    moduleExport: firstTruthy(activeProps.pageModuleExport, rootProps.pageModuleExport, "bootstrapSurfacePage")
+    ])
   };
-}
-
-function inlineModuleBootstrap({ moduleHref = null, moduleExport = "bootstrapSurfacePage", context = {} } = {}) {
-  if (!moduleHref) return "";
-  return `<script type="module">
-      import { ${escapeHtml(moduleExport)} as __surfacePageBootstrap } from ${JSON.stringify(moduleHref)};
-      const __surfacePageContext = ${JSON.stringify(context)};
-      if (typeof __surfacePageBootstrap === "function") {
-        await __surfacePageBootstrap(__surfacePageContext);
-      }
-    </script>`;
 }
 
 function renderChartHostMarkup({
@@ -857,7 +824,6 @@ function renderShellDocument({
   const activeProps = surfaceProps(activeSurface);
   const title = firstTruthy(activeProps.title, rootProps.productName, root.id, "DESIRE app");
   const presentationAssets = pagePresentationAssets(root, activeSurface);
-  const mountedChartDescriptors = mountedChartDescriptorsForSurface(activeSurface, surfaces, mountedChartRuntime);
   const stylesheetHrefs = uniqueTruthy([
     firstTruthy(activeProps.stylesheetHref, rootProps.stylesheetHref, null),
     ...presentationAssets.stylesheetHrefs,
@@ -867,14 +833,6 @@ function renderShellDocument({
     ...presentationAssets.scriptSrcs,
     ...(mountedChartRuntime?.scriptSrcs ?? [])
   ]);
-  const surfacePageContext = {
-    rootSurfaceId: firstTruthy(rootSurfaceId, root.id),
-    activeSurfaceId: activeSurface.id,
-    activeRouteKey: firstTruthy(activeProps.routeKey, activeSurface.id),
-    activeRoutePath: firstTruthy(activeProps.routePath, requestPathname),
-    requestPathname,
-    mountedCharts: mountedChartDescriptors
-  };
   const bodyMarkup = activeSurface.surfaceKind === "auth-screen"
     ? authScreenMarkup(root, activeSurface)
     : activeSurface.surfaceKind === "app-shell"
@@ -908,11 +866,6 @@ function renderShellDocument({
   <body>
     ${bodyMarkup}
     ${mountedChartRuntime?.scriptBody ? `<script type="module">${mountedChartRuntime.scriptBody}</script>` : ""}
-    ${inlineModuleBootstrap({
-      moduleHref: presentationAssets.moduleHref,
-      moduleExport: presentationAssets.moduleExport,
-      context: surfacePageContext
-    })}
     <script>${renderSurfaceShellRuntime()}</script>
   </body>
 </html>`;

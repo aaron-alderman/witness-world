@@ -117,4 +117,7 @@ test("core surface shell renderer stays template-driven instead of encoding Enge
   assert.equal(source.includes('"view-mill-force"'), false);
   assert.equal(source.includes('"rose"'), false);
   assert.equal(source.includes("mill-pill"), false);
+  assert.equal(source.includes("pageModuleHref"), false);
+  assert.equal(source.includes("pageModuleExport"), false);
+  assert.equal(source.includes("bootstrapSurfacePage"), false);
 });
