@@ -52,6 +52,11 @@ grant runtime authority to copied JS or presenter code.
   authored process message that moves into Monte Carlo mode. Dynamic simulation
   creation remains part of the repeated-collection gap rather than a JS
   workaround.
+- Goodman Monte Carlo simulation list now starts from the reference empty
+  collection shape: the authored shell shows "No simulations yet." plus the
+  full-width "+ New simulation" action and no longer invents fixed Baseline /
+  Maintenance simulation rows. Creating, cloning, selecting, and deleting
+  simulations remain part of the authored repeated-collection/runtime gap.
 - Goodman bolt-set cards now include a reference-shaped first-pass authored
   structure: header actions, inline name/colour edit form, collapsed params
   wrapper, and a representative Material & Fatigue parameter group with range,
@@ -161,9 +166,9 @@ grant runtime authority to copied JS or presenter code.
   stress-band summaries, but they do not yet execute or consume full reference
   Monte Carlo failure-time/CDF/statistical datasets.
 - Goodman dynamic repeated collections remain a gap. Current simulation and
-  bolt-set rows are explicit authored first-pass rows; full reference parity
-  still needs authored collection/repeated-action semantics or a justified
-  platform primitive.
+  bolt-set rows do not yet execute full collection creation/clone/delete
+  semantics; full reference parity still needs authored collection/repeated-
+  action semantics or a justified platform primitive.
 - Mill Force still needs full reference Monte Carlo result parity. The p10/p90
   cross-section overlay, p10 point glyph, and straight-sided radial force-bar
   geometry are now authored and live, and the MC panel reports computed sample

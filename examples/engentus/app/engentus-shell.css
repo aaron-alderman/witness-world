@@ -1121,6 +1121,73 @@ body.edit-mode #chart-svg [data-editable]:hover { opacity: .75 }
 
 .toggle-chk-row { display: inline-flex; align-items: center; gap: 6px; cursor: pointer }
 
+.goodman-simulation-empty {
+  font-size: 11px;
+  color: var(--t2);
+  padding: 4px 0;
+  margin: 0;
+}
+
+.sim-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 7px;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-bottom: 2px;
+  transition: background .1s;
+}
+
+.sim-row:hover { background: rgba(255,255,255,.05); }
+.sim-row.on { background: rgba(140,196,212,.15); }
+
+.sim-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sim-name {
+  flex: 1;
+  font-size: 12px;
+  color: var(--t1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sim-badge {
+  font-size: 9px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.sim-badge.idle { background: rgba(255,255,255,.1); color: var(--t2); }
+.sim-badge.running { background: rgba(140,196,212,.3); color: #6CBDCF; }
+.sim-badge.done { background: rgba(22,163,74,.2); color: #86efac; }
+.sim-badge.stale { background: rgba(236,116,36,.2); color: #FDBA74; }
+.sim-badge.stopped { background: rgba(220,38,38,.15); color: #fca5a5; }
+
+.add-sim-btn {
+  width: 100%;
+  padding: 6px;
+  background: rgba(140,196,212,.12);
+  border: 1px dashed rgba(140,196,212,.4);
+  border-radius: 5px;
+  color: var(--blue);
+  font-size: 11.5px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all .15s;
+  margin-top: 4px;
+}
+
+.add-sim-btn:hover { background: rgba(140,196,212,.22); }
+
 #mill-canvas-wrap {
   flex: 1;
   display: flex;

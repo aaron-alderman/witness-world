@@ -433,9 +433,20 @@ test("the shell is structured through explicit child regions instead of flattene
   assert.equal(surfaces.get("GoodmanChartStyleSection")?.body?.bindings[0]?.source?.map?.edit, true);
 
   assert.deepEqual(surfaces.get("GoodmanSimulationList")?.body?.children, [
-    "GoodmanSimulationPrimaryRow",
-    "GoodmanSimulationCompareRow"
+    "GoodmanSimulationEmptyState",
+    "GoodmanSimulationNewAction"
   ]);
+  assert.equal(surfaces.get("GoodmanSimulationEmptyState")?.body?.props?.text, "No simulations yet.");
+  assert.equal(surfaces.get("GoodmanSimulationNewAction")?.body?.className, "add-sim-btn");
+  assert.equal(surfaces.get("GoodmanSimulationNewAction")?.body?.props?.label, "+ New simulation");
+  for (const removed of [
+    "GoodmanSimulationPrimaryRow",
+    "GoodmanSimulationCompareRow",
+    "GoodmanSimulationPrimaryName",
+    "GoodmanSimulationCompareName"
+  ]) {
+    assert.equal(surfaces.has(removed), false, `${removed} should not be an authored fixed simulation row`);
+  }
 
   assert.deepEqual(surfaces.get("GoodmanChartStyleControls")?.body?.children, [
     "GoodmanChartLabelsGroup",
@@ -750,7 +761,7 @@ test("the Goodman shell authors sidebar and window content rather than empty hos
     "GoodmanAnovaBoxPlot"
   ]);
   assert.equal(surfaces.get("GoodmanRunProgressLabel")?.body?.bindings[0]?.source?.kind, "state");
-  assert.equal(surfaces.get("GoodmanSimulationPrimaryBadge")?.body?.bindings[0]?.source?.state, "GoodmanRunStatusState");
+  assert.equal(surfaces.get("GoodmanSimulationEmptyState")?.body?.props?.text, "No simulations yet.");
 });
 
 test("the module shells declare process and capability dependencies semantically", async () => {

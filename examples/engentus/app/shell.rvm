@@ -3064,84 +3064,26 @@ view GoodmanSaveStaticSimulationAction {
 }
 
 view GoodmanSimulationNewAction {
-  kind section-action
-  class goodman-simulation-new
-  prop label = "+ New"
-  prop actionKey = "new-simulation"
+  kind action
+  class add-sim-btn
+  prop label = "+ New simulation"
   prop tag = "button"
   prop buttonType = "button"
 }
 
-view GoodmanSimulationPrimaryDot {
-  kind marker
-  class sim-dot
-  prop style = "background:#38bdf8"
-}
-
-view GoodmanSimulationPrimaryName {
+view GoodmanSimulationEmptyState {
   kind text
-  class sim-name
-  prop tag = "span"
-  prop text = "Baseline M48 liner bolts"
-}
-
-view GoodmanSimulationPrimaryBadge {
-  kind text
-  class sim-badge idle
-  prop tag = "span"
-  prop text = "idle"
-  bindings {
-    text from state GoodmanRunStatusState map ready idle running running paused paused stopped stopped default idle
-    className from state GoodmanRunStatusState map ready idle running running paused stale stopped stopped default idle
-  }
-}
-
-view GoodmanSimulationPrimaryRow {
-  kind list-row
-  class sim-row on
-  children {
-    GoodmanSimulationPrimaryDot
-    GoodmanSimulationPrimaryName
-    GoodmanSimulationPrimaryBadge
-  }
-}
-
-view GoodmanSimulationCompareDot {
-  kind marker
-  class sim-dot
-  prop style = "background:#a78bfa"
-}
-
-view GoodmanSimulationCompareName {
-  kind text
-  class sim-name
-  prop tag = "span"
-  prop text = "Maintenance comparison"
-}
-
-view GoodmanSimulationCompareBadge {
-  kind text
-  class sim-badge idle
-  prop tag = "span"
-  prop text = "idle"
-}
-
-view GoodmanSimulationCompareRow {
-  kind list-row
-  class sim-row
-  children {
-    GoodmanSimulationCompareDot
-    GoodmanSimulationCompareName
-    GoodmanSimulationCompareBadge
-  }
+  class goodman-simulation-empty
+  prop tag = "p"
+  prop text = "No simulations yet."
 }
 
 view GoodmanSimulationList {
   kind list
   class goodman-simulation-list
   children {
-    GoodmanSimulationPrimaryRow
-    GoodmanSimulationCompareRow
+    GoodmanSimulationEmptyState
+    GoodmanSimulationNewAction
   }
 }
 
@@ -3154,7 +3096,6 @@ view GoodmanSimulationSection {
     visible from state GoodmanActiveMode map mc true default false
   }
   children {
-    GoodmanSimulationNewAction
     GoodmanSimulationList
   }
 }
