@@ -379,6 +379,7 @@ view EngentusApp {
   prop frameWrapDomId = "chart-wrap"
   prop frameDomId = "chart-svg"
   prop toolsDomId = "tb-goodman-tools"
+  prop clientRuntimeConfigHref = "/app-static/app/runtime/goodman-shell.json"
   prop title = "Goodman Fatigue Diagram"
   prop subtitle = "SN curve analysis with Monte Carlo simulation"
   prop mountMode = "mounted-panel"

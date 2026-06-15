@@ -1,3 +1,8 @@
+import {
+  renderSurfaceBrowserRuntime,
+  surfaceBrowserClientConfig
+} from "./runtime-surface-browser.js";
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -261,6 +266,7 @@ function renderChartHostMarkup({
       mountMode,
       visible,
       viewKey,
+      fallbackId,
       includeOverlayCanvas,
       includeTooltip
     });
@@ -561,7 +567,7 @@ function iframeMarkup({
 function sidebarMainShellMarkup(root, surface, surfaces, mountedChartRuntime = null) {
   const props = surfaceProps(surface);
   const sidebar = primarySidebarSurface(surface, surfaces);
-  const chart = chartChildSurfaces(surface, surfaces)[0] ?? null;
+  const charts = chartViewDescriptors(surface, surfaces);
   const sidebarDomId = surfaceDomId(sidebar, "shell-sidebar");
   const mainBeforeFrameHtml = firstTruthy(props.mainBeforeFrameHtml, null);
   const mainAfterFrameHtml = firstTruthy(props.mainAfterFrameHtml, null);
@@ -577,13 +583,16 @@ function sidebarMainShellMarkup(root, surface, surfaces, mountedChartRuntime = n
         <div id="${escapeHtml(firstTruthy(props.mainRegionDomId, "shell-main"))}">
           ${mainBeforeFrameHtml ? rawHtml(mainBeforeFrameHtml) : ""}
           <div id="${escapeHtml(firstTruthy(props.frameWrapDomId, "shell-frame-wrap"))}">
-            ${chart ? renderChartHostMarkup({
-              chartSurface: chart,
+            ${charts.map((entry, index) => renderChartHostMarkup({
+              chartSurface: entry.chart,
               mountedChartRuntime,
               mountMode: firstTruthy(props.mountMode, "mounted-panel"),
-              visible: true,
-              fallbackId: firstTruthy(props.frameDomId, chart.id)
-            }) : ""}
+              visible: index === 0,
+              viewKey: entry.viewKey,
+              fallbackId: index === 0
+                ? firstTruthy(props.frameDomId, entry.chart.id)
+                : firstTruthy(props[`chartFrame${index + 1}DomId`], entry.chart.id)
+            })).join("")}
           </div>
           ${mainAfterFrameHtml ? rawHtml(mainAfterFrameHtml) : ""}
         </div>
@@ -824,6 +833,7 @@ function renderShellDocument({
   const activeProps = surfaceProps(activeSurface);
   const title = firstTruthy(activeProps.title, rootProps.productName, root.id, "DESIRE app");
   const presentationAssets = pagePresentationAssets(root, activeSurface);
+  const browserClientConfig = surfaceBrowserClientConfig(activeSurface);
   const stylesheetHrefs = uniqueTruthy([
     firstTruthy(activeProps.stylesheetHref, rootProps.stylesheetHref, null),
     ...presentationAssets.stylesheetHrefs,
@@ -866,7 +876,7 @@ function renderShellDocument({
   <body>
     ${bodyMarkup}
     ${mountedChartRuntime?.scriptBody ? `<script type="module">${mountedChartRuntime.scriptBody}</script>` : ""}
-    <script>${renderSurfaceShellRuntime()}</script>
+    <script type="module">${renderSurfaceBrowserRuntime(browserClientConfig)}</script>
   </body>
 </html>`;
 }

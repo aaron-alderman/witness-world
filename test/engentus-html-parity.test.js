@@ -452,6 +452,10 @@ test("engentus app-owned shell stylesheet preserves reference theme tokens and m
   const referenceCss = extractStyleBlock(referenceHtml);
 
   assert.deepEqual(rootVariableMap(projectedCss), rootVariableMap(referenceCss));
+  assert.equal(referenceCss.includes("@media (max-width: 1180px)"), false);
+  assert.equal(projectedCss.includes("@media (max-width: 1180px)"), false);
+  assert.equal(referenceCss.includes(".auth-signout-icon::before"), false);
+  assert.equal(projectedCss.includes(".auth-signout-icon::before"), false);
   for (const selector of [
     "body",
     "#tb",

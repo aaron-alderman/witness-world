@@ -572,11 +572,6 @@ img.product-img {
   line-height: 1.55;
 }
 
-.auth-signout-icon::before {
-  content: "\2713";
-  color: #15803d;
-}
-
 #view-home { flex: 1; display: flex; overflow: hidden; }
 
 #news-panel {
@@ -1187,12 +1182,6 @@ body.edit-mode #chart-svg [data-editable]:hover { opacity: .75 }
   overflow: hidden;
   position: relative;
   background: var(--dk);
-}
-
-@media (max-width: 1180px) {
-  #module-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 
 @media (max-width: 980px) {

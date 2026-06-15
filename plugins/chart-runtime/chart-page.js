@@ -157,6 +157,7 @@ const __chartRuntimeFunctions = Object.assign({}, ...__chartRuntimeFunctionDeps.
 export function renderChartMountMarkup({
   spec,
   pageProps = {},
+  mountIdOverride = "",
   mountAttributes = {},
   overlayCanvasAttributes = {},
   tooltipAttributes = {},
@@ -180,7 +181,7 @@ export function renderChartMountMarkup({
         includeOverlayCanvas: false
       })
     : "";
-  return `<${mountTagName}${attrMarkup("id", page.mountId)}${attrMarkup("class", page.mountClass)}${attrsMarkup({ "data-chart-spec": specJson, ...mountAttributes })}></${mountTagName}>${overlayCanvas}${tooltip}`;
+  return `<${mountTagName}${attrMarkup("id", firstNonEmpty(mountIdOverride, page.mountId))}${attrMarkup("class", page.mountClass)}${attrsMarkup({ "data-chart-spec": specJson, ...mountAttributes })}></${mountTagName}>${overlayCanvas}${tooltip}`;
 }
 
 export function renderChartOverlayMarkup({

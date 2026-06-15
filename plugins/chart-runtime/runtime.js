@@ -106,6 +106,7 @@ export function buildMountedChartRuntime({ world, activeSurface } = {}) {
       mountMode = "mounted-panel",
       viewKey = null,
       visible = true,
+      fallbackId = "",
       includeOverlayCanvas = true,
       includeTooltip = true
     } = {}) {
@@ -115,6 +116,7 @@ export function buildMountedChartRuntime({ world, activeSurface } = {}) {
       return renderChartMountMarkup({
         spec: chart.spec,
         pageProps: chart.pageProps,
+        mountIdOverride: fallbackId,
         mountAttributes: {
           "data-mount-mode": mountMode,
           "data-surface-id": chartSurface.id,

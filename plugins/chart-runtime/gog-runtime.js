@@ -620,6 +620,13 @@ export function drawChart(container, plan, d3) {
 
   const node = svg.node();
   node.probeAt = renderProbe; // host hook: programmatic local rebind → returns the readout
+  node.projectPoint = (xVal, yVal) => ({
+    x: x(xVal) + margin.left,
+    y: y(yVal) + margin.top
+  });
+  node.destroy = () => {
+    svg.selectAll("*").remove();
+  };
   return node;
 }
 
@@ -706,22 +713,34 @@ function drawDiscChart(container, plan, d3) {
       sel.exit().remove();
     };
     let playing = true;
+    let destroyed = false;
     // scrubber hooks: bind a slider/drag to the time axis. Scrubbing pauses playback and
     // re-renders ONLY the dots for that frame (local rebind), by index or by axis value.
     node.scrubTo = i => { playing = false; draw(frames[Math.max(0, Math.min(frames.length - 1, i | 0))]); };
     node.scrubToValue = v => { playing = false; draw(frames[frameIndexForValue(tValues, v)]); };
     node.play = () => { playing = true; };
+    node.pause = () => { playing = false; };
+    node.destroy = () => {
+      destroyed = true;
+      svg.selectAll("*").remove();
+    };
     if (frames.length === 1 || tValues[0] == null || typeof requestAnimationFrame !== "function") {
       draw(frames[0]);
     } else {
       let startTs = null;
       const step = ts => {
+        if (destroyed) return;
         if (startTs == null) startTs = ts;
         if (playing) draw(frames[frameIndexForElapsed(tValues, (ts - startTs) / 1000, playback)]);
         requestAnimationFrame(step);
       };
       requestAnimationFrame(step);
     }
+  }
+  if (typeof node.destroy !== "function") {
+    node.destroy = () => {
+      svg.selectAll("*").remove();
+    };
   }
   return node;
 }
@@ -812,6 +831,7 @@ function drawDiscChartCanvas(canvas, plan) {
     const frames = particleLayer.frames;
     const tValues = frames.map(f => f.t);
     let playing = true;
+    let destroyed = false;
     node.scrubTo = index => {
       playing = false;
       renderFrame(frames[Math.max(0, Math.min(frames.length - 1, index | 0))] ?? null);
@@ -821,15 +841,24 @@ function drawDiscChartCanvas(canvas, plan) {
       renderFrame(frames[frameIndexForValue(tValues, value)] ?? null);
     };
     node.play = () => { playing = true; };
+    node.pause = () => { playing = false; };
+    node.destroy = () => {
+      destroyed = true;
+      clearCanvas(ctx, width, height);
+    };
     if (frames.length > 1 && tValues[0] != null && typeof requestAnimationFrame === "function") {
       let startTs = null;
       const step = ts => {
+        if (destroyed) return;
         if (startTs == null) startTs = ts;
         if (playing) renderFrame(frames[frameIndexForElapsed(tValues, (ts - startTs) / 1000, playback)] ?? null);
         requestAnimationFrame(step);
       };
       requestAnimationFrame(step);
     }
+  }
+  if (typeof node.destroy !== "function") {
+    node.destroy = () => clearCanvas(ctx, width, height);
   }
   return node;
 }

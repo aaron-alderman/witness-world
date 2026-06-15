@@ -1,0 +1,54 @@
+{
+  "kind": "parameter-study-shell",
+  "helperModuleHref": "/app-static/app/helpers/goodman-study.js",
+  "helperExport": "goodmanStudyHelpers",
+  "windowLayerId": "wl",
+  "surfaceChartIds": {
+    "primary": "GoodmanDiagram",
+    "secondary": "GoodmanMCBands"
+  },
+  "modeChartIds": {
+    "static": "GoodmanDiagram",
+    "mc": "GoodmanDiagram",
+    "edit": "GoodmanDiagram"
+  },
+  "selectors": {
+    "modeButtons": "#tb-goodman-tools .mode-btn[data-mode]",
+    "windowButtons": "#tb-goodman-tools .tbw[data-win]",
+    "staticContainer": "#static-params-html",
+    "simulationContainer": "#sim-list",
+    "runConfigContainer": "#sec-run",
+    "editContainer": "#edit-panel-html",
+    "boltSetsContainer": "#bs-list",
+    "legendContainer": "#legend-html",
+    "scrubber": "#scr",
+    "timeSlider": "#time-sl",
+    "timeLabel": "#t-lbl",
+    "failBadge": "#fail-badge",
+    "playButton": "#play-btn",
+    "speedSlider": "#spd-sl",
+    "speedLabel": "#spd-lbl",
+    "trailCheckbox": "#trail-cb",
+    "newSimulationButton": "#new-sim-btn",
+    "newBoltSetButton": "#new-bs-btn",
+    "saveSimulationButton": "#save-sim-btn",
+    "progressFill": "#prog-fill",
+    "progressLabel": "#prog-lbl",
+    "runButton": "#btn-run",
+    "pauseButton": "#btn-pause",
+    "stopButton": "#btn-stop",
+    "runBoltsInput": "#cfg-n",
+    "runDurationInput": "#cfg-tmax",
+    "runStepInput": "#cfg-dt",
+    "staticSection": "#sec-static",
+    "mcSection": "#sec-mc",
+    "runSection": "#sec-run",
+    "editSection": "#sec-edit",
+    "chartCanvas": "#mc-canvas"
+  },
+  "windowDefs": {
+    "cdf": { "title": "Failure CDF - Bolt Survival Over Time" },
+    "stats": { "title": "Summary Statistics" },
+    "anova": { "title": "ANOVA - Between-Group Comparison" }
+  }
+}
