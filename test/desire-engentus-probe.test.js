@@ -16,7 +16,7 @@ import { planChart, probeReadout, frameIndexForValue } from "../plugins/chart-ru
 // binding — read model values at an arbitrary x (probe), map an axis value to a frame
 // (scrubber) — is node-verified here.
 
-const appDir = path.join(process.cwd(), "examples_rvm", "engentus", "app");
+const appDir = path.join(process.cwd(), "examples", "engentus", "app");
 
 async function loadBody(file, kind, name) {
   const desire = normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(path.join(appDir, file)));

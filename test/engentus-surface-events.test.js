@@ -170,19 +170,22 @@ test("Engentus home module cards navigate through authored surface interactions"
         cardId: "surface-modulecardmillcharge",
         routeKey: "mill-charge",
         path: "/engentus/mill-charge",
-        viewId: "view-mill"
+        viewId: "view-mill",
+        chartIds: ["mill-canvas"]
       },
       {
         cardId: "surface-modulecardgoodman",
         routeKey: "goodman",
         path: "/engentus/goodman",
-        viewId: "view-goodman"
+        viewId: "view-goodman",
+        chartIds: ["chart-svg"]
       },
       {
         cardId: "surface-modulecardmillforce",
         routeKey: "mill-force",
         path: "/engentus/mill-force",
-        viewId: "view-mill-force"
+        viewId: "view-mill-force",
+        chartIds: ["mill-force-svg-cross", "mill-force-svg-force", "mill-force-svg-rose"]
       }
     ];
 
@@ -197,14 +200,27 @@ test("Engentus home module cards navigate through authored surface interactions"
       );
       assert.equal(new URL(page.url()).pathname, item.path);
       await page.waitForSelector(`#${item.viewId}`);
+      for (const chartId of item.chartIds ?? []) {
+        await page.waitForFunction(id => Boolean(document.getElementById(id)?.__chartController), chartId);
+      }
       if (item.routeKey === "mill-charge") {
-        await page.waitForFunction(() => Boolean(document.querySelector("#mill-canvas")?.__chartController));
         const canvasSize = await page.evaluate(() => {
           const canvas = document.querySelector("#mill-canvas");
           return { width: canvas.width, height: canvas.height };
         });
         assert.equal(canvasSize.width, canvasSize.height);
         assert.ok(canvasSize.width > 0);
+      }
+      if (item.routeKey === "goodman") {
+        assert.equal(await page.evaluate(() =>
+          document.querySelector("#chart-svg")?.__chartController?.spec?.view?.modelRef
+        ), "BoltFatigue");
+      }
+      if (item.routeKey === "mill-force") {
+        assert.deepEqual(await page.evaluate(() =>
+          ["mill-force-svg-cross", "mill-force-svg-force", "mill-force-svg-rose"]
+            .map(id => document.getElementById(id)?.__chartController?.spec?.view?.modelRef)
+        ), ["MillForce", "MillForce", "MillForce"]);
       }
     }
   } finally {
@@ -295,6 +311,79 @@ test("Engentus Mill Charge controls mutate authored process state through generi
       bulkDensity: 2100
     });
     assert.match(await page.textContent("#mill-metrics-panel"), /CATARACTING/);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
+test("Engentus Mill Force tabs switch authored chart views through process state", { timeout: 45000 }, async () => {
+  const server = await startUiServer({
+    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
+    serverRunnerId: "engentus_server",
+    devMode: false
+  });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    await page.goto(`${server.url}/engentus/mill-force`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
+    await page.waitForFunction(() =>
+      Boolean(document.querySelector("#mill-force-svg-cross")?.__chartController)
+      && Boolean(document.querySelector("#mill-force-svg-force")?.__chartController)
+      && Boolean(document.querySelector("#mill-force-svg-rose")?.__chartController)
+    );
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveChartTab") === "cross"
+    );
+    assert.deepEqual(await page.evaluate(() => ({
+      cross: document.querySelector("#mill-force-svg-cross")?.hasAttribute("hidden"),
+      force: document.querySelector("#mill-force-svg-force")?.hasAttribute("hidden"),
+      rose: document.querySelector("#mill-force-svg-rose")?.hasAttribute("hidden"),
+      crossClass: document.querySelector("#surface-millforcetabcrosssection")?.className,
+      forceClass: document.querySelector("#surface-millforcetabforcevsangle")?.className
+    })), {
+      cross: false,
+      force: true,
+      rose: true,
+      crossClass: "mill-force-cht-tab active",
+      forceClass: "mill-force-cht-tab"
+    });
+
+    await page.click("#surface-millforcetabforcevsangle");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveChartTab") === "force"
+    );
+    assert.deepEqual(await page.evaluate(() => ({
+      cross: document.querySelector("#mill-force-svg-cross")?.hasAttribute("hidden"),
+      force: document.querySelector("#mill-force-svg-force")?.hasAttribute("hidden"),
+      rose: document.querySelector("#mill-force-svg-rose")?.hasAttribute("hidden"),
+      forceClass: document.querySelector("#surface-millforcetabforcevsangle")?.className
+    })), {
+      cross: true,
+      force: false,
+      rose: true,
+      forceClass: "mill-force-cht-tab active"
+    });
+
+    await page.click("#surface-millforcetabforcerose");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveChartTab") === "rose"
+    );
+    assert.deepEqual(await page.evaluate(() => ({
+      cross: document.querySelector("#mill-force-svg-cross")?.hasAttribute("hidden"),
+      force: document.querySelector("#mill-force-svg-force")?.hasAttribute("hidden"),
+      rose: document.querySelector("#mill-force-svg-rose")?.hasAttribute("hidden"),
+      roseClass: document.querySelector("#surface-millforcetabforcerose")?.className
+    })), {
+      cross: true,
+      force: true,
+      rose: false,
+      roseClass: "mill-force-cht-tab active"
+    });
   } finally {
     await browser.close();
     await server.close();

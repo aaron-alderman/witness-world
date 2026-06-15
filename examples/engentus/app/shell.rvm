@@ -27,6 +27,14 @@ enum EngentusShellAuthState {
   }
 }
 
+enum MillForceChartTab {
+  cases {
+    cross
+    force
+    rose
+  }
+}
+
 state EngentusProfileMenuVisible: bool {
   initial false
 }
@@ -41,6 +49,10 @@ state EngentusShellActiveRoute: EngentusShellRoute {
 
 state EngentusShellAuthStatus: EngentusShellAuthState {
   initial idle
+}
+
+state MillForceActiveChartTab: MillForceChartTab {
+  initial cross
 }
 
 state MillChargeSpeedFrac: number {
@@ -143,6 +155,24 @@ event EngentusNavigateMillForceRequested {
   }
 }
 
+event MillForceShowCrossSectionRequested {
+  writes {
+    MillForceActiveChartTab: cross
+  }
+}
+
+event MillForceShowForceVsAngleRequested {
+  writes {
+    MillForceActiveChartTab: force
+  }
+}
+
+event MillForceShowForceRoseRequested {
+  writes {
+    MillForceActiveChartTab: rose
+  }
+}
+
 event MillChargePresetHardOreRequested {
   writes {
     MillChargeInternalFriction: 42
@@ -197,6 +227,7 @@ process EngentusShellNavigation {
     MillChargeWallFriction
     MillChargeInternalFriction
     MillChargeBulkDensity
+    MillForceActiveChartTab
   }
   handles {
     EngentusSignInRequested
@@ -206,6 +237,9 @@ process EngentusShellNavigation {
     EngentusNavigateGoodmanRequested
     EngentusNavigateMillChargeRequested
     EngentusNavigateMillForceRequested
+    MillForceShowCrossSectionRequested
+    MillForceShowForceVsAngleRequested
+    MillForceShowForceRoseRequested
     MillChargePresetHardOreRequested
     MillChargePresetAverageOreRequested
     MillChargePresetClayeyOreRequested
@@ -2355,7 +2389,6 @@ view GoodmanChartRegion {
   prop domId = "chart-wrap"
   children {
     GoodmanDiagram
-    GoodmanMCBands
   }
 }
 
@@ -3071,23 +3104,41 @@ view MillForceSidebar {
 
 view MillForceTabCrossSection {
   kind tab
-  class mill-force-chart-tab
+  class mill-force-cht-tab
   prop label = "Cross-section"
   prop tabKey = "cross"
+  bindings {
+    className from state MillForceActiveChartTab map cross active default ""
+  }
+  interactions {
+    on click self deliver MillForceShowCrossSectionRequested
+  }
 }
 
 view MillForceTabForceVsAngle {
   kind tab
-  class mill-force-chart-tab
+  class mill-force-cht-tab
   prop label = "Force vs Angle"
   prop tabKey = "force"
+  bindings {
+    className from state MillForceActiveChartTab map force active default ""
+  }
+  interactions {
+    on click self deliver MillForceShowForceVsAngleRequested
+  }
 }
 
 view MillForceTabForceRose {
   kind tab
-  class mill-force-chart-tab
+  class mill-force-cht-tab
   prop label = "Force Rose"
   prop tabKey = "rose"
+  bindings {
+    className from state MillForceActiveChartTab map rose active default ""
+  }
+  interactions {
+    on click self deliver MillForceShowForceRoseRequested
+  }
 }
 
 view MillForceTabs {

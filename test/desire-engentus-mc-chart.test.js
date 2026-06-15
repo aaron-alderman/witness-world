@@ -10,7 +10,7 @@ import { goodmanFunctions } from "../examples/engentus/app/chart-functions/goodm
 import { samplingFunctions } from "../examples/engentus/app/chart-functions/sampling.js";
 import { planChart } from "../plugins/chart-runtime/gog-runtime.js";
 
-const appDir = path.join(process.cwd(), "examples_rvm", "engentus", "app");
+const appDir = path.join(process.cwd(), "examples", "engentus", "app");
 const FNS = { ...goodmanFunctions, ...samplingFunctions };
 
 async function loadBody(file, kind, name) {

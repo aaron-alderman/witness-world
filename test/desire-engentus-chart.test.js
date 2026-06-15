@@ -15,7 +15,7 @@ import { planChart } from "../plugins/chart-runtime/gog-runtime.js";
 
 async function loadBody(file, kind, name) {
   const desire = normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(
-    path.join(process.cwd(), "examples_rvm", "engentus", "app", file)
+    path.join(process.cwd(), "examples", "engentus", "app", file)
   ));
   const node = desire.nodes.find(n => n.kind === kind && n.name === name);
   assert.ok(node, `${kind} ${name} not found in ${file}`);

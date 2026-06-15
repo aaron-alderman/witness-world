@@ -19,11 +19,14 @@ chart MillForceAngle of MillForce {
   prop mountTag = "svg"
   prop functionsModules = "/app-static/app/chart-functions/mill-force-kernels.js"
   prop functionsExports = "millForceKernels"
-  prop overlayCanvasId = "mill-force-mc-canvas"
+  prop overlayCanvasId = "mill-force-force-canvas"
   prop overlayCanvasClass = "chart-page__overlay-canvas"
-  prop tooltipId = "mill-force-tip"
+  prop tooltipId = "mill-force-force-tip"
   prop tooltipClass = "chart-page__tooltip chart-page__tooltip--mill-force"
   prop pageBackground = "#ffffff"
+  bindings {
+    visible from state MillForceActiveChartTab map force true default false
+  }
 
   x tBar
   x.domain 0 auto
@@ -48,11 +51,14 @@ chart MillForceRose of MillForce {
   prop mountTag = "svg"
   prop functionsModules = "/app-static/app/chart-functions/mill-force-kernels.js"
   prop functionsExports = "millForceKernels"
-  prop overlayCanvasId = "mill-force-mc-canvas"
+  prop overlayCanvasId = "mill-force-rose-canvas"
   prop overlayCanvasClass = "chart-page__overlay-canvas"
-  prop tooltipId = "mill-force-tip"
+  prop tooltipId = "mill-force-rose-tip"
   prop tooltipClass = "chart-page__tooltip chart-page__tooltip--mill-force"
   prop pageBackground = "#ffffff"
+  bindings {
+    visible from state MillForceActiveChartTab map rose true default false
+  }
 
   theta tBar
   r F_resultant
@@ -72,11 +78,14 @@ chart MillForceCross of MillForce {
   prop mountTag = "svg"
   prop functionsModules = "/app-static/app/chart-functions/mill-force-kernels.js"
   prop functionsExports = "millForceKernels"
-  prop overlayCanvasId = "mill-force-mc-canvas"
+  prop overlayCanvasId = "mill-force-cross-canvas"
   prop overlayCanvasClass = "chart-page__overlay-canvas"
-  prop tooltipId = "mill-force-tip"
+  prop tooltipId = "mill-force-cross-tip"
   prop tooltipClass = "chart-page__tooltip chart-page__tooltip--mill-force"
   prop pageBackground = "#ffffff"
+  bindings {
+    visible from state MillForceActiveChartTab map cross true default false
+  }
 
   theta tBar
   r F_resultant

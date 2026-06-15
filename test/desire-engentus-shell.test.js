@@ -52,12 +52,17 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.ok(messages.has("EngentusNavigateGoodmanRequested"));
   assert.ok(messages.has("EngentusNavigateMillChargeRequested"));
   assert.ok(messages.has("EngentusNavigateMillForceRequested"));
+  assert.ok(messages.has("MillForceShowCrossSectionRequested"));
+  assert.ok(messages.has("MillForceShowForceVsAngleRequested"));
+  assert.ok(messages.has("MillForceShowForceRoseRequested"));
   assert.equal(types.get("EngentusShellRoute")?.body?.role, "enum");
   assert.equal(types.get("EngentusShellActiveRoute")?.body?.role, "state");
   assert.equal(types.get("EngentusShellAuthState")?.body?.role, "enum");
   assert.equal(types.get("EngentusShellAuthStatus")?.body?.role, "state");
   assert.equal(types.get("EngentusProfileMenuVisible")?.body?.role, "state");
   assert.equal(types.get("EngentusPasswordRevealed")?.body?.role, "state");
+  assert.equal(types.get("MillForceChartTab")?.body?.role, "enum");
+  assert.equal(types.get("MillForceActiveChartTab")?.body?.role, "state");
   assert.equal(surfaces.get("EngentusRoot")?.body?.processRef, "EngentusShellNavigation");
   assert.equal(surfaces.get("EngentusLoginBook")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("EngentusLoginPasswordField")?.body?.bindings[0]?.prop, "inputType");
@@ -105,6 +110,16 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
       action: { kind: "deliver", message: "EngentusSignOutRequested" }
     }
   ]);
+  assert.deepEqual(surfaces.get("MillForceTabForceVsAngle")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "MillForceShowForceVsAngleRequested" }
+    }
+  ]);
+  assert.equal(surfaces.get("MillForceTabCrossSection")?.body?.bindings[0]?.prop, "className");
+  assert.equal(surfaces.get("MillForceTabForceVsAngle")?.body?.bindings[0]?.prop, "className");
+  assert.equal(surfaces.get("MillForceTabForceRose")?.body?.bindings[0]?.prop, "className");
   assert.deepEqual(processes.get("EngentusShellNavigation")?.body?.rules, [
     {
       trigger: "EngentusSignInRequested",

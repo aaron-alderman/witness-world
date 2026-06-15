@@ -9,7 +9,7 @@ import { evaluateModel } from "../plugins/chart-runtime/dataflow-eval.js";
 import { millForceKernels } from "../examples/engentus/app/chart-functions/mill-force-kernels.js";
 import { planChart } from "../plugins/chart-runtime/gog-runtime.js";
 
-const appDir = path.join(process.cwd(), "examples_rvm", "engentus", "app");
+const appDir = path.join(process.cwd(), "examples", "engentus", "app");
 
 async function loadBody(file, kind, name) {
   const desire = normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(path.join(appDir, file)));
