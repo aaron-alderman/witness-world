@@ -791,9 +791,12 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       modelHidden: document.querySelector("#surface-millforcemodelsection")?.hasAttribute("hidden"),
       compareHidden: document.querySelector("#surface-millforcecomparesection")?.hasAttribute("hidden"),
       compareText: document.querySelector("#surface-millforcecomparesection")?.textContent,
+      resultRows: [...document.querySelectorAll(".mill-force-result-row")].map(row => row.textContent),
       deltaOutputs: {
         fill: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.gammaDeltaText,
+        fillPct: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.gammaDeltaPercentText,
         toe: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.phiPrimeDeltaText,
+        toePct: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.phiPrimeDeltaPercentText,
         radial: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.F_r_max_delta_text,
         resultant: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.F_resultant_max_delta_text
       }
@@ -806,6 +809,9 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     assert.match(compareState.compareText, /Δ max F_r/);
     assert.match(compareState.compareText, /Δ max \|F\|/);
     assert.match(compareState.deltaOutputs.fill, /^[+-]?\d+\.\d(?:Â°|°)$/);
+    assert.match(compareState.deltaOutputs.fillPct, /^[+-]?\d+\.\d\d%$/);
+    assert.equal(compareState.resultRows.some(text => /γ|Î³/.test(text) && /%/.test(text)), true);
+    assert.equal(compareState.resultRows.some(text => /toe/.test(text) && /%/.test(text)), true);
     assert.match(compareState.deltaOutputs.resultant, /^[+-]?\d+\.\d kN$/);
 
     await page.getByRole("button", { name: "Monte Carlo" }).click();

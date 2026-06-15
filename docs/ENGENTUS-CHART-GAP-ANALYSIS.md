@@ -61,8 +61,9 @@ grant runtime authority to copied JS or presenter code.
   `method` axis.
 - Mill Force compare readouts now come from authored dataflow reductions over
   the same `method` axis: fill/toe angle deltas and max radial/resultant force
-  deltas are exposed as scalar `chart.render` outputs and presented by the
-  Compare Models section.
+  deltas are exposed as scalar `chart.render` outputs. Fill/toe percentage
+  differences also render inline on the existing Results rows in Compare mode,
+  matching the reference table shape more closely.
 - Mill Force cross-section now uses authored polar shell geometry rather than
   centre-filled pie slices: `circle` guide layers and `annular-wedge` liner
   bands render the shell, inner radius, single-model liner ring, and compare
@@ -81,8 +82,8 @@ grant runtime authority to copied JS or presenter code.
   platform primitive.
 - Mill Force still needs Monte Carlo execution/overlay behavior, tooltip
   behavior, and full reference result parity. Compare deltas now exist as
-  authored scalar outputs, but they are still first-pass readouts rather than
-  final reference-equivalent analysis panels.
+  authored scalar outputs and inline percent readouts, but the compare panel is
+  still a first-pass authored analysis view rather than final reference parity.
 - No app-local browser runtime, presenter, or controller seam should be added to
   close these gaps. The next work should continue through authored surfaces,
   process state, projections, and explicit capability bindings.

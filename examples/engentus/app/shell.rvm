@@ -5610,6 +5610,18 @@ view MillForceFillAngleRow {
   children {
     MillForceFillAngleLabel
     MillForceFillAngleValue
+    MillForceFillAngleDiff
+  }
+}
+
+view MillForceFillAngleDiff {
+  kind text
+  class mill-force-rd
+  prop tag = "span"
+  prop text = "0.00%"
+  bindings {
+    visible from state MillForceActiveAnalysisMode map compare true default false
+    text from capability MillForceCross.gammaDeltaPercentText
   }
 }
 
@@ -5662,6 +5674,18 @@ view MillForceToeAngleRow {
   children {
     MillForceToeAngleLabel
     MillForceToeAngleValue
+    MillForceToeAngleDiff
+  }
+}
+
+view MillForceToeAngleDiff {
+  kind text
+  class mill-force-rd
+  prop tag = "span"
+  prop text = "0.00%"
+  bindings {
+    visible from state MillForceActiveAnalysisMode map compare true default false
+    text from capability MillForceCross.phiPrimeDeltaPercentText
   }
 }
 

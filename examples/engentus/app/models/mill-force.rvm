@@ -92,6 +92,8 @@ model MillForce {
   derive phiPrimeText = deg_text(phiPrimeActive)
   reduce gammaDeltaText = deg_delta_text(gamma) over method
   reduce phiPrimeDeltaText = deg_delta_text(phiPrime) over method
+  reduce gammaDeltaPercentText = pct_delta_text(gamma) over method
+  reduce phiPrimeDeltaPercentText = pct_delta_text(phiPrime) over method
   reduce F_r_max_by_method = pmax(F_r) over segment
   reduce F_r_max_active = pick_method(F_r_max_by_method, active_method) over method
   derive F_r_max_text = force_kn_text(F_r_max_active)

@@ -216,6 +216,10 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("MillForceFillAngleValue")?.body?.bindings[0]?.source?.output, "gammaText");
   assert.equal(surfaces.get("MillForceShoulderAngleValue")?.body?.bindings[0]?.source?.output, "phiText");
   assert.equal(surfaces.get("MillForceToeAngleValue")?.body?.bindings[0]?.source?.output, "phiPrimeText");
+  assert.equal(surfaces.get("MillForceFillAngleDiff")?.body?.bindings[0]?.prop, "visible");
+  assert.equal(surfaces.get("MillForceFillAngleDiff")?.body?.bindings[1]?.source?.output, "gammaDeltaPercentText");
+  assert.equal(surfaces.get("MillForceToeAngleDiff")?.body?.bindings[0]?.prop, "visible");
+  assert.equal(surfaces.get("MillForceToeAngleDiff")?.body?.bindings[1]?.source?.output, "phiPrimeDeltaPercentText");
   assert.equal(surfaces.get("MillForceOmegaValue")?.body?.bindings[0]?.source?.output, "omegaText");
   assert.equal(surfaces.get("MillForceChargeDensityValue")?.body?.bindings[0]?.source?.output, "rhoChargeText");
   assert.equal(surfaces.get("MillForceMaxRadialValue")?.body?.bindings[0]?.source?.output, "F_r_max_text");
@@ -390,6 +394,18 @@ test("the shell is structured through explicit child regions instead of flattene
     "MillForceModelSection",
     "MillForceCompareSection",
     "MillForceMcSection"
+  ]);
+
+  assert.deepEqual(surfaces.get("MillForceFillAngleRow")?.body?.children, [
+    "MillForceFillAngleLabel",
+    "MillForceFillAngleValue",
+    "MillForceFillAngleDiff"
+  ]);
+
+  assert.deepEqual(surfaces.get("MillForceToeAngleRow")?.body?.children, [
+    "MillForceToeAngleLabel",
+    "MillForceToeAngleValue",
+    "MillForceToeAngleDiff"
   ]);
 
   assert.deepEqual(surfaces.get("MillForceCompareSection")?.body?.children, [

@@ -22,6 +22,14 @@ function signedFixed(value, digits) {
   return `${sign}${number.toFixed(digits)}`;
 }
 
+function methodRelativeDeltaPercent(values) {
+  if (!Array.isArray(values)) return 0;
+  const faithful = Number(values[METHOD_ORDER.indexOf("faithful")] ?? 0);
+  const grounded = Number(values[METHOD_ORDER.indexOf("grounded")] ?? 0);
+  if (Math.abs(faithful) <= 1e-14) return 0;
+  return (faithful - grounded) / Math.abs(faithful) * 100;
+}
+
 const _GL64_X = [
   0.0243502926634244325089, 0.0729931217877990394495, 0.1214628509941929108768, 0.1696444204239928180374,
   0.2174236437400070841497, 0.2646871622087674163881, 0.3113228719902109561575, 0.3572201583376681159504,
@@ -201,6 +209,7 @@ export const millForceKernels = {
   force_kn_text: value => `${(Number(value) / 1000).toFixed(1)} kN`,
   deg_delta_text: values => `${signedFixed(methodDelta(values) * 180 / Math.PI, 1)}°`,
   force_delta_kn_text: values => `${signedFixed(methodDelta(values) / 1000, 1)} kN`,
+  pct_delta_text: values => `${signedFixed(methodRelativeDeltaPercent(values), 2)}%`,
 
   fill_angle: (J, radius, height, method) =>
     method === "faithful" ? calcGammaFaithful(J, radius, height) : calcGammaGrounded(J),
