@@ -16,6 +16,10 @@ grant runtime authority to copied JS or presenter code.
   fatigue legend rows, scrubber controls, CDF/Stats/ANOVA window visibility, and
   run-status controls are expressed in `shell.rvm` and driven by
   `EngentusShellNavigation` state.
+- Goodman chart-style controls now reach the mounted `chart.render` controller
+  through generic `presentation.*` capability props for grid visibility,
+  annotation visibility, and point size. The chart runtime accepts these as
+  view-presentation patches, not Goodman-specific logic.
 - Mill Charge chart: `MillChargeCrossSection` mounts live in
   `/engentus/mill-charge`, accepts authored parameter bindings, updates derived
   RHS metrics, and keeps its transient animation phase during parameter changes.

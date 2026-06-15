@@ -187,13 +187,22 @@ export function bootChartsFromDom(doc, functions = {}) {
     el.__surfaceCapabilityController = {
       updateProps(props = {}) {
         const params = {};
+        const view = {};
         for (const [key, value] of Object.entries(props ?? {})) {
-          if (!key.startsWith("param.")) continue;
-          const paramKey = key.slice("param.".length);
-          if (el.__chartController.spec?.params?.[paramKey] === value) continue;
-          params[paramKey] = value;
+          if (key.startsWith("param.")) {
+            const paramKey = key.slice("param.".length);
+            if (el.__chartController.spec?.params?.[paramKey] === value) continue;
+            params[paramKey] = value;
+          } else if (key.startsWith("presentation.")) {
+            const viewKey = key.slice("presentation.".length);
+            if (!viewKey || el.__chartController.spec?.view?.[viewKey] === value) continue;
+            view[viewKey] = value;
+          }
         }
-        if (Object.keys(params).length) el.__chartController.update({ params });
+        const patch = {};
+        if (Object.keys(params).length) patch.params = params;
+        if (Object.keys(view).length) patch.view = { ...el.__chartController.spec.view, ...view };
+        if (Object.keys(patch).length) el.__chartController.update(patch);
       }
     };
   }

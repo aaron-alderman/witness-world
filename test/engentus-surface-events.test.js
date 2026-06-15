@@ -348,9 +348,26 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanTrailVisible") === true
     );
+    await page.locator("#surface-goodmanchartgridtoggle").uncheck();
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanChartGridVisible") === false
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg")?.__chartController?.spec?.view?.showGrid === false
+    );
     await page.locator("#surface-goodmanchartannotationstoggle").uncheck();
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanChartAnnotationsVisible") === false
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg")?.__chartController?.spec?.view?.showAnnotations === false
+    );
+    await page.locator("#surface-goodmanchartpointsizeinput").fill("9");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanChartPointSize") === 9
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg")?.__chartController?.spec?.view?.pointSize === 9
     );
 
     await page.click("#surface-goodmanrunactionstart");

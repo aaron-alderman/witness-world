@@ -75,6 +75,8 @@ export function planChart(viewBody, evaluated, opts = {}) {
       titleSize: Number(viewBody.titleSize) || 13,
       axisSize: Number(viewBody.axisSize) || 12,
       showGrid: viewBody.showGrid !== false,
+      showAnnotations: viewBody.showAnnotations !== false,
+      pointSize: Number(viewBody.pointSize) || 4,
       annotations: Array.isArray(viewBody.annotations) ? viewBody.annotations : []
     }
   };
@@ -733,7 +735,7 @@ export function drawChart(container, plan, d3) {
     } else if (layer.mark === "point") {
       for (const prim of layer.primitives) {
         if (!Number.isFinite(prim.y)) continue;
-        g.append("circle").attr("cx", x(prim.x)).attr("cy", y(prim.y)).attr("r", 4);
+        g.append("circle").attr("cx", x(prim.x)).attr("cy", y(prim.y)).attr("r", presentation.pointSize ?? 4);
       }
     }
   }
@@ -779,7 +781,7 @@ export function drawChart(container, plan, d3) {
     .attr("fill", "#0f172a")
     .text(presentation.title ?? "");
 
-  for (const annotation of presentation.annotations ?? []) {
+  if (presentation.showAnnotations !== false) for (const annotation of presentation.annotations ?? []) {
     if (!annotation?.text || !Number.isFinite(annotation.xMPa) || !Number.isFinite(annotation.yMPa)) continue;
     g.append("text")
       .attr("x", x(annotation.xMPa))

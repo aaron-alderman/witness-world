@@ -34,6 +34,15 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   assert.equal(plan.scales.x.label, "Mean stress σm (MPa)");
   assert.equal(plan.scales.y.domain[0], 0);
   assert.ok(plan.scales.y.domain[1] > 0);
+  assert.deepEqual(viewBody.bindings.map(binding => binding.prop), [
+    "visible",
+    "presentation.showGrid",
+    "presentation.showAnnotations",
+    "presentation.pointSize"
+  ]);
+  assert.equal(plan.presentation.showGrid, true);
+  assert.equal(plan.presentation.showAnnotations, true);
+  assert.equal(plan.presentation.pointSize, 4);
 
   const layer = name => plan.layers.find(l => l.name === name);
   const sm = evaluated.axes.sm.values;

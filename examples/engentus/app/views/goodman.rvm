@@ -26,6 +26,9 @@ chart GoodmanDiagram of BoltFatigue {
   prop pageBackground = "#ffffff"
   bindings {
     visible from state GoodmanActiveMode map mc false default true
+    presentation.showGrid from state GoodmanChartGridVisible
+    presentation.showAnnotations from state GoodmanChartAnnotationsVisible
+    presentation.pointSize from state GoodmanChartPointSize
   }
 
   x sm
@@ -70,6 +73,9 @@ chart GoodmanMCBands of BoltFatigueMC {
   prop pageBackground = "#ffffff"
   bindings {
     visible from state GoodmanActiveMode map mc true default false
+    presentation.showGrid from state GoodmanChartGridVisible
+    presentation.showAnnotations from state GoodmanChartAnnotationsVisible
+    presentation.pointSize from state GoodmanChartPointSize
   }
 
   x sm
