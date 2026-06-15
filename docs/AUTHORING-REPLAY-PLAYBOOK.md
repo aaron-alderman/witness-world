@@ -74,33 +74,35 @@ shaped concept.
 4. Canonical interaction-authoring probe
    - Try to express the next interactive step through the canonical public
      primitives.
-   - `process.create` should now succeed through the first-party authoring
-     substrate.
-   - If `projection.create` is missing, record that as the blocker rather than
-     touching the legacy widget-program path.
+   - `process.create` and `projection.create` should now succeed through the
+     first-party authoring substrate.
+   - If `page.surface` still cannot execute the authored canonical interaction
+     model, record that runtime consumer gap rather than touching the legacy
+     widget-program path.
 
 ## Current insight
 
-After `surface.create`, the honest next blocker is not shell serving. It is the
-missing canonical `projection` interaction path for `page.surface` on top of
-real `surface + process` authoring.
+After `surface.create`, the honest next blocker is not shell serving and it is
+not missing semantic authoring. It is the runtime consumer gap for canonical
+`surface + process + projection` interaction on `page.surface`.
 
 The replay shows that:
 
 - constrained inspection can state the intended public frontend model directly
 - surface trees can now be authored through MCP
 - semantic DESIRE processes can now be authored through MCP
+- semantic DESIRE projections can now be authored through MCP
 - `page.surface` can route between authored shell states live
 - generic shell navigation targets can be authored and lowered
 - legacy widget-program authoring is quarantined rather than used as fallback
-- canonical `projection.create` is still missing
+- `page.surface` still reports the canonical interactive pairing as blocked
 
-In other words: `projection.create` is now the next honest platform gap on the
-canonical constrained path.
+In other words: the next honest platform gap is no longer authoring. It is the
+runtime execution seam for the canonical constrained path.
 
 So the next platform question is not "can we serve a shell?" It is "what is the
-first-party authoring/runtime path for canonical `surface + process +
-projection` interaction semantics once `projection.create` exists?"
+first-party runtime path for canonical `surface + process + projection`
+interaction semantics on `page.surface`?"
 
 ## Anti-patterns this playbook avoids
 

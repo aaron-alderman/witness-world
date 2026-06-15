@@ -553,7 +553,8 @@ test("authoring replay probe uses the canonical matrix, proves minimal surface s
     assert.equal(result.blockers.canonicalSurfaceAuthoring, null);
     assert.equal(result.blockers.canonicalInteraction.limitationType, "platform");
     assert.equal(result.stateChecks.processPresent, true);
-    assert.equal(result.blockers.canonicalInteraction.missingPrimitive, "canonical interactive page.surface authoring is incomplete: projection.create is not implemented as a first-party constrained primitive");
+    assert.equal(result.stateChecks.projectionPresent, true);
+    assert.equal(result.blockers.canonicalInteraction.missingPrimitive, "canonical interactive page.surface authoring is incomplete: page.surface does not yet execute the authored surface + process + projection interaction model");
   } finally {
     await server.close();
   }

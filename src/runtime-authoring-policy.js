@@ -26,6 +26,7 @@ export const MCP_ONLY_ALLOWED_HANDLER_IDS = Object.freeze([
   "stewardship.remove",
   "surface.create",
   "process.create",
+  "projection.create",
   "route.create",
   "serve.create",
   "serverRunner.create",
@@ -247,9 +248,7 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
       projection: capabilityState({
         publicAction: "projection.create",
         runtimeConsumers: [],
-        status: "blocked",
-        limitationType: "platform",
-        reason: "no first-party projection.create authoring handler exists yet"
+        status: "supported"
       }),
       capability: capabilityState({
         publicActions: ["capability.create", "capability.install", "capability.remove"],
@@ -304,7 +303,7 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
         runtime: "page.surface",
         status: "blocked",
         limitationType: "platform",
-        reason: "the canonical interactive surface path is not fully implemented"
+        reason: "the canonical interactive surface path is not yet executed by page.surface even though the authoring primitives now exist"
       },
       {
         authoring: ["widget", "frontendProgram", "frontendStep"],

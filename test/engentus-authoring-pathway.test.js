@@ -179,10 +179,11 @@ test("canonical docs encode the staged Engentus authoring pathway and the next h
   assert.match(policy, /`surface\.create` is now part of the allowed authoring substrate/i);
   assert.match(policy, /machine-readable capability matrix/i);
   assert.match(policy, /process\.create/i);
+  assert.match(policy, /projection\.create/i);
   assert.match(replayPlaybook, /# Authoring Replay Playbook/);
   assert.match(replayPlaybook, /Stop at the first missing primitive/i);
   assert.match(replayPlaybook, /Capability-matrix gate/i);
-  assert.match(replayPlaybook, /projection\.create/i);
+  assert.match(replayPlaybook, /page\.surface/i);
 });
 
 test("MCP replay now proves canonical surface serving and stops next at canonical projection authoring", { timeout: 10000 }, async () => {
@@ -199,10 +200,11 @@ test("MCP replay now proves canonical surface serving and stops next at canonica
     assert.equal(result.replay.surfaceHomeAuthoredContentVisible, true);
     assert.equal(result.replay.navTargetVisible, true);
     assert.equal(result.stateChecks.processPresent, true);
+    assert.equal(result.stateChecks.projectionPresent, true);
     assert.equal(result.blockers.canonicalSurfaceAuthoring, null);
     assert.equal(
       result.blockers.canonicalInteraction.missingPrimitive,
-      "canonical interactive page.surface authoring is incomplete: projection.create is not implemented as a first-party constrained primitive"
+      "canonical interactive page.surface authoring is incomplete: page.surface does not yet execute the authored surface + process + projection interaction model"
     );
   } finally {
     await server.close();
@@ -238,7 +240,7 @@ test("live constrained MCP discovery exposes canonical frontend actions and hide
   }
 });
 
-test("live constrained MCP supports process authoring and still blocks canonical projection authoring", { timeout: 10000 }, async () => {
+test("live constrained MCP supports process and projection authoring while page.surface remains the blocked runtime consumer", { timeout: 10000 }, async () => {
   const server = await startAuthoringProbeServer();
   try {
     const { mcpServerId, token } = await provisionAuthoringMcpServer(server.url);
@@ -258,13 +260,20 @@ test("live constrained MCP supports process authoring and still blocks canonical
 
     const projectionCreate = await mcpToolCall(server.url, mcpServerId, token, "authoring.write", {
       action: "projection.create",
-      body: { id: "projection.demo", context: "ctx.demo" }
+      body: { id: "projection.demo", projectionKind: "detail", source: "process.demo", props: {} }
     }, 5);
-    assert.equal(projectionCreate.isError, true);
-    assert.equal(projectionCreate.structuredContent.blockedHandoff.limitationType, "platform");
-    assert.match(projectionCreate.structuredContent.blockedHandoff.missingPrimitive, /no first-party projection\.create authoring handler exists yet/i);
-    assert.equal(projectionCreate.structuredContent.authoringMatrix.publicAuthoringConcepts.projection.status, "blocked");
-    assert.equal(projectionCreate.structuredContent.authoringMatrix.publicAuthoringConcepts.process.status, "supported");
+    assert.equal(projectionCreate.isError, false);
+    assert.equal(projectionCreate.structuredContent.projection.id, "projection.demo");
+    assert.equal(projectionCreate.structuredContent.witness.process, "desire.defineProjection");
+
+    const matrixAfter = await mcpToolCall(server.url, mcpServerId, token, "world.read", {
+      view: "authoringMatrix"
+    }, 6);
+    assert.equal(matrixAfter.isError, false);
+    assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.projection.status, "supported");
+    assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.process.status, "supported");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.process, "blocked");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.projection, "blocked");
   } finally {
     await server.close();
   }

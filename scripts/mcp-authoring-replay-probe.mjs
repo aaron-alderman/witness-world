@@ -329,16 +329,19 @@ export async function runReplayProbe(serverUrl, {
   const projectionAttempt = await write("projection.create", {
     id: `${stamp}_projection`,
     context: contextId,
-    surface: surfaceRootId,
-    process: `${stamp}_process`
+    projectionKind: "detail",
+    source: `${stamp}_process`,
+    props: {
+      surface: surfaceRootId
+    }
   }, 24);
   const canonicalInteractionBlocked = !surfaceBlocked && surfaceAuthoredContentVisible && surfaceHomeAuthoredContentVisible
     ? buildBlockedAuthoringHandoff({
         limitationType: "platform",
         goal: "author canonical interactive page.surface behavior through constrained MCP replay",
         attemptedAuthoringPath: "world.read(authoringMatrix) + authoring.write(surface.create/process.create/projection.create/route.create/serve.create)",
-        missingPrimitive: "canonical interactive page.surface authoring is incomplete: projection.create is not implemented as a first-party constrained primitive",
-        minimumHumanAction: "add a first-party semantic projection authoring path, then bind page.surface to execute the canonical surface + process + projection model",
+        missingPrimitive: "canonical interactive page.surface authoring is incomplete: page.surface does not yet execute the authored surface + process + projection interaction model",
+        minimumHumanAction: "bind page.surface to the canonical surface + process + projection runtime consumer path without falling back to legacy widget-program authoring",
         proof: [
           `authoring matrix public frontend model: ${(authoringMatrix?.baseline?.publicFrontendModel ?? []).join(" + ")}`,
           `authoring.write advertises process.create: ${actionEnum.includes("process.create")}`,
@@ -350,7 +353,8 @@ export async function runReplayProbe(serverUrl, {
           `login HTML contained authored nav target to home: ${navTargetVisible}`,
           `home HTML contained distinct route-selected content: ${surfaceHomeAuthoredContentVisible}`,
           `process.create returned ${processAttempt?.structuredContent?.witness?.process ?? processAttempt?.structuredContent?.error ?? "no error"}`,
-          `projection.create returned ${projectionAttempt?.structuredContent?.blockedHandoff?.missingPrimitive ?? projectionAttempt?.structuredContent?.error ?? "no error"}`
+          `projection.create returned ${projectionAttempt?.structuredContent?.witness?.process ?? projectionAttempt?.structuredContent?.error ?? "no error"}`,
+          `page.surface runtime pairings still report surface+process+projection as blocked: ${authoringMatrix?.runtimeConsumers?.["page.surface"]?.pairings?.projection ?? "unknown"}`
         ]
       })
     : null;
@@ -392,6 +396,9 @@ export async function runReplayProbe(serverUrl, {
       surfaceScreenServedRoutePresent: state.structuredContent.servedRoutes.some(row => row.id === surfaceScreenRouteId && row.serverRunner === runnerId),
       processPresent: state.structuredContent.witnesses
         ? state.structuredContent.witnesses.some(row => row.process === "desire.defineProcess" && row.body?.id === `${stamp}_process`)
+        : true,
+      projectionPresent: state.structuredContent.witnesses
+        ? state.structuredContent.witnesses.some(row => row.process === "desire.defineProjection" && row.body?.id === `${stamp}_projection`)
         : true,
       rootSurfacePresent: state.structuredContent.witnesses
         ? state.structuredContent.witnesses.some(row => row.process === "desire.defineSurface" && row.body?.id === surfaceRootId)

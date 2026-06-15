@@ -134,14 +134,14 @@ canonical interaction model:
 
 - `process.create` is now part of the real first-party constrained authoring
   substrate and can emit semantic DESIRE `process` witnesses
-- `projection.create` is part of the public constrained frontend baseline, but
-  no first-party authoring handler exists yet
+- `projection.create` is now part of the real first-party constrained
+  authoring substrate and can emit semantic DESIRE `projection` witnesses
 - `frontendProgram.create` / `frontendStep.create` are legacy-only and must not
   be treated as the fallback interaction path for Engentus
 
-So the blocker is now narrower and cleaner: `surface + process` authoring is
-real, but the canonical `surface + process + projection` interactive path is
-still not live because `projection.create` is missing.
+So the blocker is now narrower and cleaner: `surface + process + projection`
+authoring is real, but `page.surface` still does not execute that canonical
+interactive path live.
 
 ## Current honest state
 

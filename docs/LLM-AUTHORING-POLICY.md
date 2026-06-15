@@ -95,12 +95,13 @@ frontend model itself:
 
 - `process.create` is now implemented as a first-party semantic authoring
   handler and emits real DESIRE `process` witnesses
-- `projection.create` is part of the public constrained story, but not yet
-  implemented as a first-party authoring handler
+- `projection.create` is now implemented as a first-party semantic authoring
+  handler and emits real DESIRE `projection` witnesses
 - `frontendProgram.create` / `frontendStep.create` are now legacy-only and
   must not be used as the fallback interactive story for constrained sessions
 
 That means the stop point is now narrower: it is no longer "surface
-interaction is widget-rooted" and it is no longer "process.create is missing";
-it is "the canonical `surface + process + projection` interaction path is not
-implemented yet because `projection.create` is still missing."
+interaction is widget-rooted" and it is no longer "a canonical authoring
+primitive is missing"; it is "the canonical `surface + process + projection`
+interaction path is not implemented yet because `page.surface` still does not
+execute it."

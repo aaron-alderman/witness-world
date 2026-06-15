@@ -308,6 +308,59 @@ function processCreateNode(doc, { actor, backendHost }) {
   });
 }
 
+function projectionCreateDoc(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("projection doc must be an object");
+  }
+  const id = trimOptionalString(body.id);
+  if (!id) throw new Error("projection doc requires id");
+  return {
+    id,
+    projectionKind: trimOptionalString(body.projectionKind),
+    source: trimOptionalString(body.source),
+    props: body.props && typeof body.props === "object" && !Array.isArray(body.props)
+      ? structuredClone(body.props)
+      : {},
+    actor: trimOptionalString(body.actor),
+    owner: trimOptionalString(body.owner),
+    context: trimOptionalString(body.context)
+  };
+}
+
+function validateProjectionCreateDoc(world, body) {
+  const doc = projectionCreateDoc(body);
+  if (exists(world, doc.id)) throw new Error(`projection id already exists: ${doc.id}`);
+  return doc;
+}
+
+function projectionCreateNode(doc, { actor, backendHost }) {
+  return createDesireNode({
+    kind: "projection",
+    name: doc.id,
+    body: {
+      projectionKind: doc.projectionKind,
+      source: doc.source,
+      props: structuredClone(doc.props)
+    },
+    meta: {
+      provenance: {
+        file: "authoring://plugin.authoring/projection.create",
+        sourceLanguage: "authoring",
+        sourceKind: "projection",
+        startLine: 1,
+        endLine: 1,
+        startColumn: 1,
+        endColumn: null,
+        originNodeId: null,
+        via: [`authoring:projection.create:${doc.id}`],
+        actor: doc.actor ?? actor ?? backendHost,
+        owner: doc.owner ?? actor ?? backendHost,
+        context: doc.context ?? null
+      }
+    }
+  });
+}
+
 export function requestBootstrapIdentityDefine(world, {
   actor,
   backendHost,
@@ -941,6 +994,64 @@ export function requestProcessDefine(world, {
     ok: true,
     status: 201,
     process: witness?.body ?? { id: doc.id },
+    witness
+  };
+}
+
+export function requestProjectionDefine(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  let doc;
+  try {
+    doc = validateProjectionCreateDoc(world, body);
+  } catch (error) {
+    return {
+      ok: false,
+      status: /already exists/i.test(error instanceof Error ? error.message : "")
+        ? 409
+        : 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  let desire;
+  try {
+    desire = createDesireDocument([
+      projectionCreateNode(doc, { actor, backendHost })
+    ]);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  let witnesses;
+  try {
+    witnesses = applyDesire(world, desire);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  const witness = witnesses.find(entry =>
+    entry.process === "desire.defineProjection"
+    && typeof entry.body?.id === "string"
+    && entry.body.id === doc.id
+  ) ?? null;
+  return {
+    ok: true,
+    status: 201,
+    projection: witness?.body ?? { id: doc.id },
     witness
   };
 }

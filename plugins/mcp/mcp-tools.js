@@ -289,15 +289,7 @@ const TOOL_DEFINITIONS = [
         case "process.create":
           return runJsonHandler(callHandler, { handler: "process.create", method: "POST", path: "/api/processes", body });
         case "projection.create":
-          return blockedCanonicalAuthoringAction(callHandler, {
-            action: "projection.create",
-            missingPrimitive: "no first-party projection.create authoring handler exists yet",
-            minimumHumanAction: "add a first-party semantic projection authoring path before expecting constrained MCP sessions to lower interactive surface views canonically",
-            proof: [
-              "the constrained public frontend baseline is surface + process + projection + capability",
-              "no projection.create handler or route exists in the current first-party authoring bundles"
-            ]
-          });
+          return runJsonHandler(callHandler, { handler: "projection.create", method: "POST", path: "/api/projections", body });
         case "widget.create":
         case "widget.update":
         case "frontendProgram.create":

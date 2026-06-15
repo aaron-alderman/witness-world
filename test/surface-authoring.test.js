@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
-import { requestBootstrapRouteDefine, requestProcessDefine, requestSurfaceDefine } from "../plugins/authoring-core/authoring-core-processes.js";
+import { requestBootstrapRouteDefine, requestProcessDefine, requestProjectionDefine, requestSurfaceDefine } from "../plugins/authoring-core/authoring-core-processes.js";
 
 function routeSupport() {
   return {
@@ -151,6 +151,55 @@ test("requestProcessDefine rejects malformed and duplicate process docs", () => 
     actor: "aaron",
     backendHost: "backendHost",
     body: { id: "ReplayFlow" }
+  });
+  assert.equal(duplicate.ok, false);
+  assert.equal(duplicate.status, 409);
+});
+
+test("requestProjectionDefine emits a real DESIRE projection witness and source annotation", () => {
+  const world = createWorld();
+  const result = requestProjectionDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: {
+      id: "ReplayProjection",
+      context: "frontend",
+      projectionKind: "detail",
+      source: "ReplayFlow",
+      props: { layout: "stack" }
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 201);
+  assert.equal(result.projection.id, "ReplayProjection");
+  assert.equal(result.witness?.process, "desire.defineProjection");
+  assert.equal(world.allWitnesses().some(witness => witness.process === "desire.defineProjection" && witness.body?.id === "ReplayProjection"), true);
+  assert.equal(world.allWitnesses().some(witness => witness.process === "dsl.source.annotate" && witness.body?.target === "ReplayProjection"), true);
+});
+
+test("requestProjectionDefine rejects malformed and duplicate projection docs", () => {
+  const world = createWorld();
+
+  const malformed = requestProjectionDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: []
+  });
+  assert.equal(malformed.ok, false);
+  assert.equal(malformed.status, 400);
+
+  const created = requestProjectionDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: { id: "ReplayProjection" }
+  });
+  assert.equal(created.ok, true);
+
+  const duplicate = requestProjectionDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: { id: "ReplayProjection" }
   });
   assert.equal(duplicate.ok, false);
   assert.equal(duplicate.status, 409);
