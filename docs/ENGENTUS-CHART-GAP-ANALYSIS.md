@@ -23,6 +23,10 @@ grant runtime authority to copied JS or presenter code.
   through generic `presentation.*` capability props. The chart runtime accepts
   these as view-presentation patches, including nested values such as
   `bandFills.0`, not Goodman-specific logic.
+- Goodman chart label defaults now follow the oracle store copy exactly:
+  title `Goodman Fatigue Diagram — M48 Mill Liner Bolt`, x label
+  `Preload / Mean Stress  (MPa)`, and y label
+  `Alternating Bending Stress  (MPa)`.
 - Goodman static reference controls now exist as authored inputs in oracle
   sidebar order: applied shear, mill speed, `σ_lim endurance`, SN slope, and
   probe preload. Their process state binds into `GoodmanDiagram` model params

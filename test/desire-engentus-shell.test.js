@@ -105,8 +105,11 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(types.get("GoodmanStaticProbeMeanStress")?.body?.role, "state");
   assert.equal(types.get("GoodmanChartTitle")?.body?.role, "state");
   assert.equal(types.get("GoodmanChartTitle")?.body?.valueType, "string");
+  assert.equal(types.get("GoodmanChartTitle")?.body?.initial, "Goodman Fatigue Diagram — M48 Mill Liner Bolt");
   assert.equal(types.get("GoodmanChartXAxisLabel")?.body?.role, "state");
+  assert.equal(types.get("GoodmanChartXAxisLabel")?.body?.initial, "Preload / Mean Stress  (MPa)");
   assert.equal(types.get("GoodmanChartYAxisLabel")?.body?.role, "state");
+  assert.equal(types.get("GoodmanChartYAxisLabel")?.body?.initial, "Alternating Bending Stress  (MPa)");
   assert.equal(types.get("GoodmanChartTitleSize")?.body?.valueType, "number");
   assert.equal(types.get("GoodmanChartAxisSize")?.body?.valueType, "number");
   assert.equal(types.get("GoodmanChartBandFill1")?.body?.valueType, "string");
@@ -567,6 +570,9 @@ test("the shell is structured through explicit child regions instead of flattene
   assert.equal(surfaces.has("GoodmanChartPointSizeRow"), false);
   assert.equal(surfaces.get("GoodmanChartTitleInput")?.body?.bindings[0]?.source?.state, "GoodmanChartTitle");
   assert.equal(surfaces.get("GoodmanChartTitleInput")?.body?.interactions[0]?.action?.state, "GoodmanChartTitle");
+  assert.equal(surfaces.get("GoodmanChartTitleInput")?.body?.props?.value, "Goodman Fatigue Diagram — M48 Mill Liner Bolt");
+  assert.equal(surfaces.get("GoodmanChartXAxisInput")?.body?.props?.value, "Preload / Mean Stress  (MPa)");
+  assert.equal(surfaces.get("GoodmanChartYAxisInput")?.body?.props?.value, "Alternating Bending Stress  (MPa)");
   assert.equal(surfaces.get("GoodmanChartBand1Input")?.body?.props?.inputType, "color");
   assert.equal(surfaces.get("GoodmanChartBand1Input")?.body?.interactions[0]?.action?.state, "GoodmanChartBandFill1");
 

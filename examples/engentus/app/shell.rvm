@@ -206,15 +206,15 @@ state GoodmanChartGridVisible: bool {
 }
 
 state GoodmanChartTitle: string {
-  initial "Goodman Fatigue Diagram - M48 Mill Liner Bolt"
+  initial "Goodman Fatigue Diagram — M48 Mill Liner Bolt"
 }
 
 state GoodmanChartXAxisLabel: string {
-  initial "Preload / Mean Stress (MPa)"
+  initial "Preload / Mean Stress  (MPa)"
 }
 
 state GoodmanChartYAxisLabel: string {
-  initial "Alternating Bending Stress (MPa)"
+  initial "Alternating Bending Stress  (MPa)"
 }
 
 state GoodmanChartTitleSize: number {
@@ -3346,7 +3346,7 @@ view GoodmanChartTitleInput {
   class efield-input
   prop tag = "input"
   prop inputType = "text"
-  prop value = "Goodman Fatigue Diagram - M48 Mill Liner Bolt"
+  prop value = "Goodman Fatigue Diagram — M48 Mill Liner Bolt"
   bindings {
     value from state GoodmanChartTitle
   }
@@ -3376,7 +3376,7 @@ view GoodmanChartXAxisInput {
   class efield-input
   prop tag = "input"
   prop inputType = "text"
-  prop value = "Preload / Mean Stress (MPa)"
+  prop value = "Preload / Mean Stress  (MPa)"
   bindings {
     value from state GoodmanChartXAxisLabel
   }
@@ -3406,7 +3406,7 @@ view GoodmanChartYAxisInput {
   class efield-input
   prop tag = "input"
   prop inputType = "text"
-  prop value = "Alternating Bending Stress (MPa)"
+  prop value = "Alternating Bending Stress  (MPa)"
   bindings {
     value from state GoodmanChartYAxisLabel
   }
