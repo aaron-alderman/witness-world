@@ -267,6 +267,42 @@ test("MillForceCross plans per-segment annular liner bands with angular bounds +
     0,
     evaluated.params.radius
   ]);
+  const shoulderLabel = plan.layers.find(l => l.name === "shoulder_label");
+  const toeLabel = plan.layers.find(l => l.name === "toe_label");
+  assert.equal(shoulderLabel.mark, "text");
+  assert.equal(shoulderLabel.fill, "#f1f5f9");
+  assert.deepEqual(shoulderLabel.primitives, [{
+    theta: evaluated.fields.phi.data,
+    r: evaluated.fields.angle_label_r.data,
+    label: "φ"
+  }]);
+  assert.equal(toeLabel.mark, "text");
+  assert.equal(toeLabel.fill, "#475569");
+  assert.deepEqual(toeLabel.primitives, [{
+    theta: evaluated.fields.phiPrime.data[g],
+    r: evaluated.fields.angle_label_r.data,
+    label: "φ'"
+  }]);
+  assert.deepEqual(plan.layers.find(l => l.name === "cardinal_270").primitives, [{
+    theta: 0,
+    r: evaluated.fields.cardinal_label_r.data,
+    label: "270°"
+  }]);
+  assert.deepEqual(plan.layers.find(l => l.name === "cardinal_0").primitives, [{
+    theta: Math.PI / 2,
+    r: evaluated.fields.cardinal_label_r.data,
+    label: "0°"
+  }]);
+  assert.deepEqual(plan.layers.find(l => l.name === "cardinal_90").primitives, [{
+    theta: Math.PI,
+    r: evaluated.fields.cardinal_label_r.data,
+    label: "90°"
+  }]);
+  assert.deepEqual(plan.layers.find(l => l.name === "cardinal_180").primitives, [{
+    theta: 3 * Math.PI / 2,
+    r: evaluated.fields.cardinal_label_r.data,
+    label: "180°"
+  }]);
   const liners = plan.layers.find(l => l.name === "liners");
   assert.equal(liners.mark, "annular-wedge");
   assert.equal(liners.primitives.length, N);
@@ -326,6 +362,13 @@ test("MillForceCross compare mode renders grounded and faithful annular bands", 
   assert.equal(compareFillChord.opacity, 0.8);
   assert.equal(compareToeGuide.dash, true);
   assert.equal(compareToeGuide.opacity, 0.6);
+  assert.equal(plan.layers.find(l => l.name === "toe_label").hidden, true);
+  const compareToeLabel = plan.layers.find(l => l.name === "toe_label_compare");
+  assert.deepEqual(compareToeLabel.primitives, [{
+    theta: evaluated.fields.phiPrime.data[g],
+    r: evaluated.fields.angle_label_r.data,
+    label: "φ'"
+  }]);
   assert.deepEqual(compareFillChord.primitives[0].points.map(point => point.theta), [
     evaluated.fields.phi.data,
     evaluated.fields.phiPrime.data[g]

@@ -127,6 +127,8 @@ model MillForce {
   derive radial_guide_r = radius * guidePoint over guidePoint
   derive shoulder_guide_theta = phi over guidePoint
   derive toe_guide_theta = phiPrime over guidePoint, method
+  derive angle_label_r = radius * 1.06
+  derive cardinal_label_r = radius * 1.13
 
   // ── Monte Carlo cross-section overlay ──
   //

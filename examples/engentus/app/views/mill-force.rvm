@@ -170,6 +170,13 @@ chart MillForceCross of MillForce {
   layer shoulder_guide = line over guidePoint | theta:shoulder_guide_theta r:radial_guide_r stroke:"#f1f5f9" width:0.8 dash:true opacity:0.6
   layer toe_guide = line over guidePoint | theta:toe_guide_theta r:radial_guide_r where:method=param.active_method stroke:slate width:0.8 dash:true opacity:0.6 unless:param.analysis_mode=compare
   layer toe_guide_compare = line over guidePoint | theta:toe_guide_theta r:radial_guide_r where:method=grounded stroke:slate width:0.8 dash:true opacity:0.6 when:param.analysis_mode=compare
+  layer shoulder_label = text | theta:phi r:angle_label_r label:"φ" fill:"#f1f5f9" size:10
+  layer toe_label = text | theta:phiPrime r:angle_label_r where:method=param.active_method label:"φ'" fill:slate size:10 unless:param.analysis_mode=compare
+  layer toe_label_compare = text | theta:phiPrime r:angle_label_r where:method=grounded label:"φ'" fill:slate size:10 when:param.analysis_mode=compare
+  layer cardinal_270 = text | theta:0 r:cardinal_label_r label:"270°" fill:"#475569" size:9
+  layer cardinal_0 = text | theta:1.5707963267948966 r:cardinal_label_r label:"0°" fill:"#475569" size:9
+  layer cardinal_90 = text | theta:3.141592653589793 r:cardinal_label_r label:"90°" fill:"#475569" size:9
+  layer cardinal_180 = text | theta:4.71238898038469 r:cardinal_label_r label:"180°" fill:"#475569" size:9
   layer liners = annular-wedge over segment | theta0:t1 theta1:t2 r0:rInner r1:radius value:F_resultant where:method=param.active_method tooltip.liner:segment tooltip.method:param.active_method tooltip.mass_kg:m_charge tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
   layer force_bars = polar-quad over segment | theta0:force_bar_theta0 theta1:force_bar_theta1 r0:force_bar_inner r1:rInner value:F_r where:method=param.active_method fill:blue stroke:none opacity:0.82 tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r unless:param.analysis_mode=compare
   layer grounded_liners = annular-wedge over segment | theta0:t1 theta1:t2 r0:rCompareMid r1:radius value:F_resultant where:method=grounded tooltip.liner:segment tooltip.method:grounded tooltip.mass_kg:m_charge tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare

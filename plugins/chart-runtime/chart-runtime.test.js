@@ -255,6 +255,44 @@ test("polar line plans preserve generic authored style channels", () => {
   assert.deepEqual(guide.primitives[0].points.map(point => point.r), [0, 1]);
 });
 
+test("polar text plans preserve generic authored label channels", () => {
+  const view = {
+    frame: "polar",
+    encoding: {
+      theta: { field: "theta" },
+      r: { field: "r", domain: [0, 2] }
+    },
+    layers: [{
+      name: "label",
+      mark: "text",
+      encode: {
+        theta: "theta",
+        r: "r",
+        label: "φ",
+        fill: "#f1f5f9",
+        size: 10,
+        opacity: 0.8
+      }
+    }]
+  };
+  const evaluated = {
+    axes: {},
+    fields: {
+      theta: { axes: [], data: 0.4 },
+      r: { axes: [], data: 1.2 }
+    }
+  };
+
+  const plan = planChart(view, evaluated, { width: 200, height: 200 });
+  const label = plan.layers.find(layer => layer.name === "label");
+
+  assert.equal(label.mark, "text");
+  assert.equal(label.fill, "#f1f5f9");
+  assert.equal(label.size, 10);
+  assert.equal(label.opacity, 0.8);
+  assert.deepEqual(label.primitives, [{ theta: 0.4, r: 1.2, label: "φ" }]);
+});
+
 test("cartesian chart plans preserve authored tooltip channels on line points", async () => {
   const source = chartRuntimeBundleSource()
     + "\nexport { evaluateModel, planChart };\n";

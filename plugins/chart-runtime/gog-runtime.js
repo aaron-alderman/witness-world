@@ -308,6 +308,23 @@ function planPolarLayer(layer, evaluated) {
     };
   }
 
+  if (layer.mark === "text") {
+    const theta = channelValue(enc.theta, evaluated, where);
+    const r = channelValue(enc.r, evaluated, where);
+    const label = textChannelValue(enc.label ?? enc.text, evaluated, where, axes);
+    return {
+      ...base,
+      fill: enc.fill ? colorRef(enc.fill, evaluated, enc.fillMap) : "#475569",
+      size: Number(enc.size) || 10,
+      opacity: enc.opacity == null ? 1 : Number(enc.opacity),
+      anchor: enc.anchor ?? "middle",
+      baseline: enc.baseline ?? "middle",
+      primitives: Number.isFinite(theta) && Number.isFinite(r) && label != null
+        ? [{ theta, r, label: String(label) }]
+        : []
+    };
+  }
+
   return { ...base, primitives: [] };
 }
 
@@ -576,6 +593,18 @@ function tooltipValuesForEncoding(enc, evaluated, coord = {}, axes = {}) {
 }
 
 function tooltipChannelValue(token, evaluated, coord = {}, axes = {}) {
+  if (token == null) return null;
+  if (typeof token === "number" || typeof token === "boolean") return token;
+  const key = String(token);
+  if (key.startsWith("param.")) return evaluated.params?.[key.slice("param.".length)];
+  if (axes[key] && Object.prototype.hasOwnProperty.call(coord, key)) {
+    return axes[key]?.values?.[coord[key]];
+  }
+  const resolved = channelValue(token, evaluated, coord);
+  return resolved == null ? key : resolved;
+}
+
+function textChannelValue(token, evaluated, coord = {}, axes = {}) {
   if (token == null) return null;
   if (typeof token === "number" || typeof token === "boolean") return token;
   const key = String(token);
@@ -982,6 +1011,20 @@ function drawPolarChart(container, plan, d3) {
           .attr("stroke-width", layer.width ?? 1)
           .attr("stroke-dasharray", layer.dash ? "4,3" : null)
           .attr("opacity", layer.opacity ?? 1);
+      }
+    } else if (layer.mark === "text") {
+      for (const prim of layer.primitives) {
+        const [x, y] = toXY(prim.theta, prim.r);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        svg.append("text")
+          .attr("x", x)
+          .attr("y", y)
+          .attr("fill", layer.fill)
+          .attr("font-size", `${layer.size ?? 10}px`)
+          .attr("text-anchor", layer.anchor ?? "middle")
+          .attr("dominant-baseline", layer.baseline ?? "middle")
+          .attr("opacity", layer.opacity ?? 1)
+          .text(prim.label ?? "");
       }
     }
   }
