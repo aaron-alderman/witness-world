@@ -2799,6 +2799,10 @@ view GoodmanScenarioSection {
     GoodmanStaticProbeMeanStressField
     GoodmanStaticEnduranceLimitField
     GoodmanStaticSlopeField
+    GoodmanScenarioProbeRow
+    GoodmanScenarioMeanStressRow
+    GoodmanScenarioAltStressRow
+    GoodmanScenarioSlipRow
     GoodmanSaveStaticSimulationAction
   }
 }
@@ -2970,6 +2974,9 @@ view GoodmanScenarioProbeValue {
   class info-value
   prop tag = "span"
   prop text = "Static response"
+  bindings {
+    text from capability GoodmanDiagram.probe_shear_text
+  }
 }
 
 view GoodmanScenarioProbeRow {
@@ -2993,6 +3000,9 @@ view GoodmanScenarioMeanStressValue {
   class info-value
   prop tag = "span"
   prop text = "0-650 MPa"
+  bindings {
+    text from capability GoodmanDiagram.probe_mean_stress_text
+  }
 }
 
 view GoodmanScenarioMeanStressRow {
@@ -3016,6 +3026,9 @@ view GoodmanScenarioAltStressValue {
   class info-value
   prop tag = "span"
   prop text = "Bolt bending curve"
+  bindings {
+    text from capability GoodmanDiagram.probe_alt_stress_text
+  }
 }
 
 view GoodmanScenarioAltStressRow {
@@ -3039,6 +3052,9 @@ view GoodmanScenarioSlipValue {
   class info-value
   prop tag = "span"
   prop text = "Rendered as vertical rule"
+  bindings {
+    text from capability GoodmanDiagram.slip_threshold_text
+  }
 }
 
 view GoodmanScenarioSlipRow {

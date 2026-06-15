@@ -64,6 +64,11 @@ model BoltFatigue {
   derive probe_F_friction = mu_joint * (probe_sm * 1e6 * A_s_nom) * n_interfaces
   derive probe_F_shear = max(gamma * F_per_bolt, F_per_bolt - probe_F_friction)
   derive curve_probe = bolt_bending_sigma_a(probe_F_shear, L_grip, D_Shank, D_minor, head_direction, length_factor)
+  derive probe_damage_per_million = miner_dpc(curve_probe, probe_sm, sigma_lim, m_slope, uts) * 1000000
+  derive probe_mean_stress_text = mpa_text(probe_sm)
+  derive probe_alt_stress_text = mpa_text(curve_probe)
+  derive probe_shear_text = newton_text(probe_F_shear)
+  derive probe_damage_text = damage_per_million_text(probe_damage_per_million)
   derive curve_label_x = 533
   derive curve_label_F_friction = mu_joint * (curve_label_x * 1e6 * A_s_nom) * n_interfaces
   derive curve_label_F_shear = max(gamma * F_per_bolt, F_per_bolt - curve_label_F_friction)
@@ -71,6 +76,7 @@ model BoltFatigue {
 
   // ── slip threshold: friction yields to bending (vertical rule, scalar) ──
   derive slip = F_per_bolt / (mu_joint * A_s_nom * n_interfaces)
+  derive slip_threshold_text = slip_text(slip)
 }
 
 // ── Goodman bolt-fatigue, Monte-Carlo sibling ──────────────────────────────────

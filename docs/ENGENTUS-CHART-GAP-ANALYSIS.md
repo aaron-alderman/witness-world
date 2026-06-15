@@ -33,6 +33,11 @@ grant runtime authority to copied JS or presenter code.
   values are derived in `BoltFatigue`, preserved by the generic cartesian
   `chart.render` probe path, and displayed without a Goodman-local browser
   controller.
+- Goodman Static scenario rows now render deterministic chart capability
+  outputs instead of placeholder shell text: probe shear, probe mean stress,
+  probe alternating stress, and slip threshold are derived in `BoltFatigue`,
+  formatted by app-owned pure helpers, published by `GoodmanDiagram.*`, and
+  consumed by authored `shell.rvm` bindings.
 - Goodman CDF, Stats, and ANOVA windows now have authored empty states without
   fake result scaffolding: CDF declares the no-run chart message, Stats starts
   with the reference "No completed simulations." paragraph and only reveals the
@@ -195,11 +200,11 @@ grant runtime authority to copied JS or presenter code.
   multi-bolt-set response curves, dynamic annotation row creation,
   generated bolt-set parameter rows, and
   clone/delete/new behavior remain to be authored. The current Goodman run
-  controls, MC band chart, chart edit panel, deterministic chart readout,
-  process-owned primary bolt-set expansion, bolt-set shell, and windows now
-  expose authored stateful shell/chart behavior and first-pass MC scalar
-  stress-band summaries, but they do not yet execute or consume full reference
-  Monte Carlo failure-time/CDF/statistical datasets.
+  controls, MC band chart, chart edit panel, deterministic chart tooltip/static
+  scenario readout, process-owned primary bolt-set expansion, bolt-set shell,
+  and windows now expose authored stateful shell/chart behavior and first-pass
+  MC scalar stress-band summaries, but they do not yet execute or consume full
+  reference Monte Carlo failure-time/CDF/statistical datasets.
 - Goodman dynamic repeated collections remain a gap. Current simulation and
   bolt-set rows do not yet execute full collection creation/clone/delete
   semantics; full reference parity still needs authored collection/repeated-

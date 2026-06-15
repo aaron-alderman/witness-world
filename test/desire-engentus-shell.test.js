@@ -422,6 +422,10 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanStaticProbeMeanStressField",
     "GoodmanStaticEnduranceLimitField",
     "GoodmanStaticSlopeField",
+    "GoodmanScenarioProbeRow",
+    "GoodmanScenarioMeanStressRow",
+    "GoodmanScenarioAltStressRow",
+    "GoodmanScenarioSlipRow",
     "GoodmanSaveStaticSimulationAction"
   ]);
   assert.equal(surfaces.get("GoodmanScenarioSection")?.body?.bindings[0]?.prop, "visible");

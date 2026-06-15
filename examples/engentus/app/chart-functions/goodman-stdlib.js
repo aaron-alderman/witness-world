@@ -41,6 +41,20 @@ export const goodmanFunctions = {
 
   mpa_text: value => `${Number(value).toFixed(1)} MPa`,
 
+  newton_text: value => `${Math.round(Number(value) || 0).toLocaleString("en-US")} N`,
+
+  damage_per_million_text: value => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || Math.abs(numeric) < 0.0005) return "0.000 / 1M cycles";
+    return `${numeric.toFixed(3)} / 1M cycles`;
+  },
+
+  slip_text: value => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return "not reached";
+    return numeric > 650 ? "> 650 MPa" : `${numeric.toFixed(1)} MPa`;
+  },
+
   shore_a_to_E_pa: shoreA =>
     1e6 * (0.0981 * (56 + 7.62336 * shoreA)) /
           (0.137505 * (254 - 2.54 * shoreA)),

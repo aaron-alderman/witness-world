@@ -502,6 +502,15 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       document.querySelector("#chart-svg")?.__chartController?.spec?.params?.probe_sm === 425
     );
+    await page.waitForFunction(() =>
+      document.querySelector("#surface-goodmanscenariosection")?.textContent.includes("425.0 MPa")
+    );
+    await page.waitForFunction(() =>
+      /[\d,.]+ N/.test(document.querySelector("#surface-goodmanscenariosection")?.textContent || "")
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#surface-goodmanscenariosection")?.textContent.includes("> 650 MPa")
+    );
     await page.locator("#surface-goodmanboltsetprimaryeditnameinput").fill("No Jemtec Edited");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryNameState") === "No Jemtec Edited"

@@ -28,6 +28,11 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   const viewBody = await loadBody("views/goodman.rvm", "surface", "GoodmanDiagram");
   const evaluated = evaluateModel(modelBody, { functions: goodmanFunctions });
   const plan = planChart(viewBody, evaluated, { width: 800, height: 520 });
+  assert.equal(evaluated.fields.probe_mean_stress_text.data, "300.0 MPa");
+  assert.equal(evaluated.fields.probe_alt_stress_text.data, `${evaluated.fields.curve_probe.data.toFixed(1)} MPa`);
+  assert.equal(evaluated.fields.probe_shear_text.data, `${Math.round(evaluated.fields.probe_F_shear.data).toLocaleString("en-US")} N`);
+  assert.match(evaluated.fields.probe_damage_text.data, /\/ 1M cycles$/);
+  assert.equal(evaluated.fields.slip_threshold_text.data, "> 650 MPa");
 
   // frame + scales
   assert.equal(plan.frame, "cartesian");
@@ -131,6 +136,32 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
     x: evaluated.fields.curve_label_x.data,
     y: evaluated.fields.curve_label_y.data,
     label: "No Jemtec"
+  }]);
+});
+
+test("Goodman shell binds static readout rows to deterministic chart capability outputs", async () => {
+  const shell = await loadBody("shell.rvm", "surface", "GoodmanScenarioProbeValue");
+  assert.deepEqual(shell.bindings, [{
+    prop: "text",
+    source: { kind: "capability", surface: "GoodmanDiagram", output: "probe_shear_text" }
+  }]);
+
+  const mean = await loadBody("shell.rvm", "surface", "GoodmanScenarioMeanStressValue");
+  assert.deepEqual(mean.bindings, [{
+    prop: "text",
+    source: { kind: "capability", surface: "GoodmanDiagram", output: "probe_mean_stress_text" }
+  }]);
+
+  const alt = await loadBody("shell.rvm", "surface", "GoodmanScenarioAltStressValue");
+  assert.deepEqual(alt.bindings, [{
+    prop: "text",
+    source: { kind: "capability", surface: "GoodmanDiagram", output: "probe_alt_stress_text" }
+  }]);
+
+  const slip = await loadBody("shell.rvm", "surface", "GoodmanScenarioSlipValue");
+  assert.deepEqual(slip.bindings, [{
+    prop: "text",
+    source: { kind: "capability", surface: "GoodmanDiagram", output: "slip_threshold_text" }
   }]);
 });
 
