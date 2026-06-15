@@ -469,6 +469,51 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "edit"
     );
+    await page.locator("#surface-goodmancharttitleinput").fill("Edited Goodman Title");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanChartTitle") === "Edited Goodman Title"
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg")?.__chartController?.spec?.view?.title === "Edited Goodman Title"
+    );
+    await page.locator("#surface-goodmanchartxaxisinput").fill("Edited X Axis");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanChartXAxisLabel") === "Edited X Axis"
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg")?.__chartController?.spec?.view?.xLabel === "Edited X Axis"
+    );
+    await page.locator("#surface-goodmanchartyaxisinput").fill("Edited Y Axis");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanChartYAxisLabel") === "Edited Y Axis"
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg")?.__chartController?.spec?.view?.yLabel === "Edited Y Axis"
+    );
+    await page.locator("#surface-goodmancharttitlesizeinput").fill("17");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanChartTitleSize") === 17
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg")?.__chartController?.spec?.view?.titleSize === 17
+    );
+    await page.locator("#surface-goodmanchartaxissizeinput").fill("15");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanChartAxisSize") === 15
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg")?.__chartController?.spec?.view?.axisSize === 15
+    );
+    await page.locator("#surface-goodmanchartband1input").evaluate(input => {
+      input.value = "#c084fc";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanChartBandFill1") === "#c084fc"
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg")?.__chartController?.spec?.view?.bandFills?.[0] === "#c084fc"
+    );
     await page.locator("#surface-goodmanchartgridtoggle").uncheck();
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanChartGridVisible") === false

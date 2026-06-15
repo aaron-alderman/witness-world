@@ -16,10 +16,14 @@ grant runtime authority to copied JS or presenter code.
   fatigue legend rows, scrubber controls, CDF/Stats/ANOVA window visibility, and
   run-status controls are expressed in `shell.rvm` and driven by
   `EngentusShellNavigation` state.
-- Goodman chart-style controls now reach the mounted `chart.render` controller
-  through generic `presentation.*` capability props for grid visibility,
-  annotation visibility, and point size. The chart runtime accepts these as
-  view-presentation patches, not Goodman-specific logic.
+- Goodman chart-style controls now match the reference edit-panel shape more
+  closely: Labels, Band Colours, and Annotations are authored as explicit
+  RVM child groups. Title, X/Y axis labels, title size, axis size, grid,
+  annotation visibility, point size, and the four band colour states reach the
+  mounted `chart.render` controller through generic `presentation.*`
+  capability props. The chart runtime accepts these as view-presentation
+  patches, including nested values such as `bandFills.0`, not
+  Goodman-specific logic.
 - Goodman static reference controls now exist as authored inputs for applied
   shear, mill speed, probe mean stress, endurance limit, and SN slope; their
   process state binds into `GoodmanDiagram` model params through
@@ -92,10 +96,11 @@ grant runtime authority to copied JS or presenter code.
 ## Known Gaps
 
 - Goodman numerical simulation lifecycle, animated scrubber playback,
-  CDF/Stats/ANOVA result datasets, and bolt-set edit/clone/delete/new behavior
-  remain to be authored. The current Goodman run controls, MC band chart, and
-  windows now expose authored stateful shell/chart behavior, but they do not yet
-  execute or consume full reference Monte Carlo statistical datasets.
+  CDF/Stats/ANOVA result datasets, dynamic annotation row creation, and
+  bolt-set edit/clone/delete/new behavior remain to be authored. The current
+  Goodman run controls, MC band chart, chart edit panel, and windows now expose
+  authored stateful shell/chart behavior, but they do not yet execute or
+  consume full reference Monte Carlo statistical datasets.
 - Goodman dynamic repeated collections remain a gap. Current simulation and
   bolt-set rows are explicit authored first-pass rows; full reference parity
   still needs authored collection/repeated-action semantics or a justified

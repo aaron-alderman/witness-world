@@ -101,6 +101,13 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(types.get("GoodmanStaticEnduranceLimit")?.body?.role, "state");
   assert.equal(types.get("GoodmanStaticSlope")?.body?.role, "state");
   assert.equal(types.get("GoodmanStaticProbeMeanStress")?.body?.role, "state");
+  assert.equal(types.get("GoodmanChartTitle")?.body?.role, "state");
+  assert.equal(types.get("GoodmanChartTitle")?.body?.valueType, "string");
+  assert.equal(types.get("GoodmanChartXAxisLabel")?.body?.role, "state");
+  assert.equal(types.get("GoodmanChartYAxisLabel")?.body?.role, "state");
+  assert.equal(types.get("GoodmanChartTitleSize")?.body?.valueType, "number");
+  assert.equal(types.get("GoodmanChartAxisSize")?.body?.valueType, "number");
+  assert.equal(types.get("GoodmanChartBandFill1")?.body?.valueType, "string");
   assert.equal(surfaces.get("EngentusRoot")?.body?.processRef, "EngentusShellNavigation");
   assert.equal(surfaces.get("EngentusLoginBook")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("EngentusLoginPasswordField")?.body?.bindings[0]?.prop, "inputType");
@@ -395,10 +402,37 @@ test("the shell is structured through explicit child regions instead of flattene
   ]);
 
   assert.deepEqual(surfaces.get("GoodmanChartStyleControls")?.body?.children, [
-    "GoodmanChartGridToggle",
-    "GoodmanChartAnnotationsToggle",
+    "GoodmanChartLabelsGroup",
+    "GoodmanChartBandColoursGroup",
+    "GoodmanChartAnnotationsGroup",
     "GoodmanChartPointSizeRow"
   ]);
+  assert.deepEqual(surfaces.get("GoodmanChartLabelsGroup")?.body?.children, [
+    "GoodmanChartLabelsGroupTitle",
+    "GoodmanChartTitleRow",
+    "GoodmanChartXAxisRow",
+    "GoodmanChartYAxisRow",
+    "GoodmanChartTitleSizeRow",
+    "GoodmanChartAxisSizeRow",
+    "GoodmanChartGridRow"
+  ]);
+  assert.deepEqual(surfaces.get("GoodmanChartBandColoursGroup")?.body?.children, [
+    "GoodmanChartBandColoursGroupTitle",
+    "GoodmanChartBand1Row",
+    "GoodmanChartBand2Row",
+    "GoodmanChartBand3Row",
+    "GoodmanChartBand4Row"
+  ]);
+  assert.deepEqual(surfaces.get("GoodmanChartAnnotationsGroup")?.body?.children, [
+    "GoodmanChartAnnotationsGroupTitle",
+    "GoodmanChartAnnotationsToggle",
+    "GoodmanChartAnnotationList",
+    "GoodmanChartAddAnnotationAction"
+  ]);
+  assert.equal(surfaces.get("GoodmanChartTitleInput")?.body?.bindings[0]?.source?.state, "GoodmanChartTitle");
+  assert.equal(surfaces.get("GoodmanChartTitleInput")?.body?.interactions[0]?.action?.state, "GoodmanChartTitle");
+  assert.equal(surfaces.get("GoodmanChartBand1Input")?.body?.props?.inputType, "color");
+  assert.equal(surfaces.get("GoodmanChartBand1Input")?.body?.interactions[0]?.action?.state, "GoodmanChartBandFill1");
 
   assert.deepEqual(surfaces.get("GoodmanBoltSetsList")?.body?.children, [
     "GoodmanBoltSetPrimaryCard",

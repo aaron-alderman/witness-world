@@ -203,6 +203,42 @@ state GoodmanChartPointSize: number {
   initial 4
 }
 
+state GoodmanChartTitle: string {
+  initial "Goodman Fatigue Diagram - M48 Mill Liner Bolt"
+}
+
+state GoodmanChartXAxisLabel: string {
+  initial "Preload / Mean Stress (MPa)"
+}
+
+state GoodmanChartYAxisLabel: string {
+  initial "Alternating Bending Stress (MPa)"
+}
+
+state GoodmanChartTitleSize: number {
+  initial 13
+}
+
+state GoodmanChartAxisSize: number {
+  initial 12
+}
+
+state GoodmanChartBandFill1: string {
+  initial "#bbf7d0"
+}
+
+state GoodmanChartBandFill2: string {
+  initial "#d9f99d"
+}
+
+state GoodmanChartBandFill3: string {
+  initial "#fef08a"
+}
+
+state GoodmanChartBandFill4: string {
+  initial "#fde68a"
+}
+
 state MillForcePercentCrit: number {
   initial 0.90
 }
@@ -768,6 +804,15 @@ process EngentusShellNavigation {
     GoodmanChartGridVisible
     GoodmanChartAnnotationsVisible
     GoodmanChartPointSize
+    GoodmanChartTitle
+    GoodmanChartXAxisLabel
+    GoodmanChartYAxisLabel
+    GoodmanChartTitleSize
+    GoodmanChartAxisSize
+    GoodmanChartBandFill1
+    GoodmanChartBandFill2
+    GoodmanChartBandFill3
+    GoodmanChartBandFill4
   }
   handles {
     EngentusSignInRequested
@@ -3301,12 +3346,376 @@ view GoodmanChartPointSizeRow {
   }
 }
 
+view GoodmanChartLabelsGroupTitle {
+  kind text
+  class edit-group-title
+  prop tag = "div"
+  prop text = "Labels"
+}
+
+view GoodmanChartTitleLabel {
+  kind text
+  class efield-label
+  prop tag = "label"
+  prop text = "Title"
+}
+
+view GoodmanChartTitleInput {
+  kind input
+  class efield-input
+  prop tag = "input"
+  prop inputType = "text"
+  prop value = "Goodman Fatigue Diagram - M48 Mill Liner Bolt"
+  bindings {
+    value from state GoodmanChartTitle
+  }
+  interactions {
+    on input self set GoodmanChartTitle eventValue
+  }
+}
+
+view GoodmanChartTitleRow {
+  kind row
+  class efield-row
+  children {
+    GoodmanChartTitleLabel
+    GoodmanChartTitleInput
+  }
+}
+
+view GoodmanChartXAxisLabelText {
+  kind text
+  class efield-label
+  prop tag = "label"
+  prop text = "X axis"
+}
+
+view GoodmanChartXAxisInput {
+  kind input
+  class efield-input
+  prop tag = "input"
+  prop inputType = "text"
+  prop value = "Preload / Mean Stress (MPa)"
+  bindings {
+    value from state GoodmanChartXAxisLabel
+  }
+  interactions {
+    on input self set GoodmanChartXAxisLabel eventValue
+  }
+}
+
+view GoodmanChartXAxisRow {
+  kind row
+  class efield-row
+  children {
+    GoodmanChartXAxisLabelText
+    GoodmanChartXAxisInput
+  }
+}
+
+view GoodmanChartYAxisLabelText {
+  kind text
+  class efield-label
+  prop tag = "label"
+  prop text = "Y axis"
+}
+
+view GoodmanChartYAxisInput {
+  kind input
+  class efield-input
+  prop tag = "input"
+  prop inputType = "text"
+  prop value = "Alternating Bending Stress (MPa)"
+  bindings {
+    value from state GoodmanChartYAxisLabel
+  }
+  interactions {
+    on input self set GoodmanChartYAxisLabel eventValue
+  }
+}
+
+view GoodmanChartYAxisRow {
+  kind row
+  class efield-row
+  children {
+    GoodmanChartYAxisLabelText
+    GoodmanChartYAxisInput
+  }
+}
+
+view GoodmanChartTitleSizeLabel {
+  kind text
+  class efield-label
+  prop tag = "label"
+  prop text = "Title size"
+}
+
+view GoodmanChartTitleSizeInput {
+  kind input
+  class efield-input
+  prop tag = "input"
+  prop inputType = "number"
+  prop min = 8
+  prop max = 24
+  prop step = 1
+  prop value = 13
+  bindings {
+    value from state GoodmanChartTitleSize
+  }
+  interactions {
+    on input self set GoodmanChartTitleSize eventValue
+  }
+}
+
+view GoodmanChartTitleSizeRow {
+  kind row
+  class efield-row
+  children {
+    GoodmanChartTitleSizeLabel
+    GoodmanChartTitleSizeInput
+  }
+}
+
+view GoodmanChartAxisSizeLabel {
+  kind text
+  class efield-label
+  prop tag = "label"
+  prop text = "Axis size"
+}
+
+view GoodmanChartAxisSizeInput {
+  kind input
+  class efield-input
+  prop tag = "input"
+  prop inputType = "number"
+  prop min = 8
+  prop max = 20
+  prop step = 1
+  prop value = 12
+  bindings {
+    value from state GoodmanChartAxisSize
+  }
+  interactions {
+    on input self set GoodmanChartAxisSize eventValue
+  }
+}
+
+view GoodmanChartAxisSizeRow {
+  kind row
+  class efield-row
+  children {
+    GoodmanChartAxisSizeLabel
+    GoodmanChartAxisSizeInput
+  }
+}
+
+view GoodmanChartGridLabel {
+  kind text
+  class efield-label
+  prop tag = "label"
+  prop text = "Show grid"
+}
+
+view GoodmanChartGridRow {
+  kind row
+  class efield-row
+  children {
+    GoodmanChartGridLabel
+    GoodmanChartGridToggle
+  }
+}
+
+view GoodmanChartLabelsGroup {
+  kind group
+  class edit-group
+  children {
+    GoodmanChartLabelsGroupTitle
+    GoodmanChartTitleRow
+    GoodmanChartXAxisRow
+    GoodmanChartYAxisRow
+    GoodmanChartTitleSizeRow
+    GoodmanChartAxisSizeRow
+    GoodmanChartGridRow
+  }
+}
+
+view GoodmanChartBandColoursGroupTitle {
+  kind text
+  class edit-group-title
+  prop tag = "div"
+  prop text = "Band Colours"
+}
+
+view GoodmanChartBand1Label {
+  kind text
+  class efield-label
+  prop tag = "label"
+  prop text = "Band 1"
+}
+
+view GoodmanChartBand1Input {
+  kind input
+  class efield-input
+  prop tag = "input"
+  prop inputType = "color"
+  prop value = "#bbf7d0"
+  bindings {
+    value from state GoodmanChartBandFill1
+  }
+  interactions {
+    on input self set GoodmanChartBandFill1 eventValue
+  }
+}
+
+view GoodmanChartBand1Row {
+  kind row
+  class efield-row
+  children {
+    GoodmanChartBand1Label
+    GoodmanChartBand1Input
+  }
+}
+
+view GoodmanChartBand2Label {
+  kind text
+  class efield-label
+  prop tag = "label"
+  prop text = "Band 2"
+}
+
+view GoodmanChartBand2Input {
+  kind input
+  class efield-input
+  prop tag = "input"
+  prop inputType = "color"
+  prop value = "#d9f99d"
+  bindings {
+    value from state GoodmanChartBandFill2
+  }
+  interactions {
+    on input self set GoodmanChartBandFill2 eventValue
+  }
+}
+
+view GoodmanChartBand2Row {
+  kind row
+  class efield-row
+  children {
+    GoodmanChartBand2Label
+    GoodmanChartBand2Input
+  }
+}
+
+view GoodmanChartBand3Label {
+  kind text
+  class efield-label
+  prop tag = "label"
+  prop text = "Band 3"
+}
+
+view GoodmanChartBand3Input {
+  kind input
+  class efield-input
+  prop tag = "input"
+  prop inputType = "color"
+  prop value = "#fef08a"
+  bindings {
+    value from state GoodmanChartBandFill3
+  }
+  interactions {
+    on input self set GoodmanChartBandFill3 eventValue
+  }
+}
+
+view GoodmanChartBand3Row {
+  kind row
+  class efield-row
+  children {
+    GoodmanChartBand3Label
+    GoodmanChartBand3Input
+  }
+}
+
+view GoodmanChartBand4Label {
+  kind text
+  class efield-label
+  prop tag = "label"
+  prop text = "Band 4"
+}
+
+view GoodmanChartBand4Input {
+  kind input
+  class efield-input
+  prop tag = "input"
+  prop inputType = "color"
+  prop value = "#fde68a"
+  bindings {
+    value from state GoodmanChartBandFill4
+  }
+  interactions {
+    on input self set GoodmanChartBandFill4 eventValue
+  }
+}
+
+view GoodmanChartBand4Row {
+  kind row
+  class efield-row
+  children {
+    GoodmanChartBand4Label
+    GoodmanChartBand4Input
+  }
+}
+
+view GoodmanChartBandColoursGroup {
+  kind group
+  class edit-group
+  children {
+    GoodmanChartBandColoursGroupTitle
+    GoodmanChartBand1Row
+    GoodmanChartBand2Row
+    GoodmanChartBand3Row
+    GoodmanChartBand4Row
+  }
+}
+
+view GoodmanChartAnnotationsGroupTitle {
+  kind text
+  class edit-group-title
+  prop tag = "div"
+  prop text = "Annotations"
+}
+
+view GoodmanChartAnnotationList {
+  kind list
+  class annot-list
+}
+
+view GoodmanChartAddAnnotationAction {
+  kind action
+  class add-annot-btn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "+ Add annotation"
+}
+
+view GoodmanChartAnnotationsGroup {
+  kind group
+  class edit-group
+  children {
+    GoodmanChartAnnotationsGroupTitle
+    GoodmanChartAnnotationsToggle
+    GoodmanChartAnnotationList
+    GoodmanChartAddAnnotationAction
+  }
+}
+
 view GoodmanChartStyleControls {
   kind control-group
   class goodman-chart-style-host
   children {
-    GoodmanChartGridToggle
-    GoodmanChartAnnotationsToggle
+    GoodmanChartLabelsGroup
+    GoodmanChartBandColoursGroup
+    GoodmanChartAnnotationsGroup
     GoodmanChartPointSizeRow
   }
 }

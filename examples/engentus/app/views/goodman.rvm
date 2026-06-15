@@ -26,9 +26,18 @@ chart GoodmanDiagram of BoltFatigue {
   prop pageBackground = "#ffffff"
   bindings {
     visible from state GoodmanActiveMode map mc false default true
+    presentation.title from state GoodmanChartTitle
+    presentation.xLabel from state GoodmanChartXAxisLabel
+    presentation.yLabel from state GoodmanChartYAxisLabel
+    presentation.titleSize from state GoodmanChartTitleSize
+    presentation.axisSize from state GoodmanChartAxisSize
     presentation.showGrid from state GoodmanChartGridVisible
     presentation.showAnnotations from state GoodmanChartAnnotationsVisible
     presentation.pointSize from state GoodmanChartPointSize
+    presentation.bandFills.0 from state GoodmanChartBandFill1
+    presentation.bandFills.1 from state GoodmanChartBandFill2
+    presentation.bandFills.2 from state GoodmanChartBandFill3
+    presentation.bandFills.3 from state GoodmanChartBandFill4
     param.F_alt_applied_N from state GoodmanStaticAppliedShear
     param.rpm from state GoodmanStaticRpm
     param.sigma_lim from state GoodmanStaticEnduranceLimit
@@ -78,9 +87,18 @@ chart GoodmanMCBands of BoltFatigueMC {
   prop pageBackground = "#ffffff"
   bindings {
     visible from state GoodmanActiveMode map mc true default false
+    presentation.title from state GoodmanChartTitle
+    presentation.xLabel from state GoodmanChartXAxisLabel
+    presentation.yLabel from state GoodmanChartYAxisLabel
+    presentation.titleSize from state GoodmanChartTitleSize
+    presentation.axisSize from state GoodmanChartAxisSize
     presentation.showGrid from state GoodmanChartGridVisible
     presentation.showAnnotations from state GoodmanChartAnnotationsVisible
     presentation.pointSize from state GoodmanChartPointSize
+    presentation.bandFills.0 from state GoodmanChartBandFill1
+    presentation.bandFills.1 from state GoodmanChartBandFill2
+    presentation.bandFills.2 from state GoodmanChartBandFill3
+    presentation.bandFills.3 from state GoodmanChartBandFill4
     param.F_alt_applied_N from state GoodmanStaticAppliedShear
     param.n_samples from state GoodmanRunBoltsPerSet
   }
