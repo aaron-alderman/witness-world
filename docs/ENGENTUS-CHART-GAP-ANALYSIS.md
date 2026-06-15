@@ -86,6 +86,13 @@ grant runtime authority to copied JS or presenter code.
   the Stats window and the CDF window's explicit stress-band summary table
   consume those outputs through authored surface bindings after the run state
   becomes active.
+- Goodman deterministic chart overlays now cover more of the reference static
+  view without controller code: `GoodmanDiagram` authors dashed lifetime
+  Goodman guide lines, the purple nominal yield boundary style, the probe point,
+  and the primary bolt-set curve label. The generic chart runtime learned
+  category-split cartesian line primitives plus styled point/text marks, and
+  the RVM chart parser now preserves quoted layer-channel strings with spaces
+  such as `"No Jemtec"`.
 - Goodman scrubber range now follows authored run duration:
   `GoodmanRunDurationMonths` binds to the time slider `max` attribute through
   the generic form-control binding path, matching the reference relationship

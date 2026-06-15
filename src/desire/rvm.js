@@ -753,7 +753,7 @@ function parseLayerLine(tail) {
     ? splitCommaList(specTokens.slice(overIndex + 1).join(" "))
     : [];
   const encode = {};
-  for (const token of encPart.trim().split(/\s+/).filter(Boolean)) {
+  for (const token of tokenizeInlineAttrs(encPart.trim())) {
     const colon = token.indexOf(":");
     if (colon <= 0) continue;
     encode[token.slice(0, colon)] = parseScalarValue(token.slice(colon + 1));

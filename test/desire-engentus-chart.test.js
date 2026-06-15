@@ -87,19 +87,51 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
     evaluated.fields.damage_per_million.data[120]
   );
 
+  // dashed Goodman guide lines: one category-split guide per authored lifetime boundary
+  const glines = layer("glines");
+  assert.equal(glines.mark, "line");
+  assert.equal(glines.dash, true);
+  assert.equal(glines.width, 1.2);
+  assert.equal(glines.opacity, 0.9);
+  assert.equal(glines.primitives.length, evaluated.axes.lifetime.values.length);
+  assert.deepEqual(glines.primitives.map(primitive => primitive.category), evaluated.axes.lifetime.values);
+  assert.equal(glines.primitives[1].points[80].y, evaluated.fields.band.data[80][1]);
+
   // slip: a vertical rule at the scalar slip threshold
   const slip = layer("slip");
   assert.equal(slip.mark, "rule");
   assert.equal(slip.primitives[0].x, evaluated.fields.slip.data);
 
-  // yield: a polyline (y = ys - sm)
+  // yield: a polyline (y = ys - sm) with the reference dashed purple style
+  assert.equal(layer("yield").stroke, "#7c3aed");
+  assert.equal(layer("yield").width, 1.5);
+  assert.equal(layer("yield").dash, true);
   assert.equal(layer("yield").mark, "line");
   assert.equal(layer("yield").primitives[0].points[100].y, evaluated.fields.yield_line.data[100]);
 
   // probe: a vertical rule at the probe_sm param
   const probe = layer("probe");
   assert.equal(probe.mark, "rule");
+  assert.equal(probe.stroke, "#475569");
+  assert.equal(probe.opacity, 0.5);
   assert.equal(probe.primitives[0].x, evaluated.params.probe_sm);
+  const probePoint = layer("probe_point");
+  assert.equal(probePoint.mark, "point");
+  assert.equal(probePoint.size, 5.5);
+  assert.equal(probePoint.fill, "#5AAABF");
+  assert.equal(probePoint.stroke, "#ffffff");
+  assert.deepEqual(probePoint.primitives, [{
+    x: evaluated.params.probe_sm,
+    y: evaluated.fields.curve_probe.data
+  }]);
+  const curveLabel = layer("curve_label");
+  assert.equal(curveLabel.mark, "text");
+  assert.equal(curveLabel.fill, "#5AAABF");
+  assert.deepEqual(curveLabel.primitives, [{
+    x: evaluated.fields.curve_label_x.data,
+    y: evaluated.fields.curve_label_y.data,
+    label: "No Jemtec"
+  }]);
 });
 
 test("Goodman Monte Carlo chart binds authored run config into the ensemble model", async () => {

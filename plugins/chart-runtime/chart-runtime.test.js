@@ -293,6 +293,61 @@ test("polar text plans preserve generic authored label channels", () => {
   assert.deepEqual(label.primitives, [{ theta: 0.4, r: 1.2, label: "φ" }]);
 });
 
+test("cartesian line plans split category overlays and preserve styled point/text marks", () => {
+  const view = {
+    frame: "cartesian",
+    encoding: {
+      x: { field: "x", domain: [0, 1] },
+      y: { field: "y", domain: [0, 2] }
+    },
+    layers: [
+      {
+        name: "guide",
+        mark: "line",
+        over: ["kind"],
+        encode: { y: "y", stroke: "ylw", width: 1.2, dash: true, opacity: 0.9 }
+      },
+      {
+        name: "marker",
+        mark: "point",
+        encode: { x: "px", y: "py", fill: "blue", stroke: "#ffffff", width: 2, size: 5.5 }
+      },
+      {
+        name: "label",
+        mark: "text",
+        encode: { x: "px", y: "py", label: "Bolt A", fill: "blue", size: 11, weight: 600 }
+      }
+    ]
+  };
+  const evaluated = {
+    axes: {
+      x: { kind: "sweep", values: [0, 1] },
+      kind: { kind: "category", values: ["a", "b"] }
+    },
+    fields: {
+      y: { axes: ["x", "kind"], data: [[1, 2], [1.5, 2.5]] },
+      px: { axes: [], data: 0.75 },
+      py: { axes: [], data: 1.25 }
+    }
+  };
+
+  const plan = planChart(view, evaluated, { width: 200, height: 200 });
+  const guide = plan.layers.find(layer => layer.name === "guide");
+  const marker = plan.layers.find(layer => layer.name === "marker");
+  const label = plan.layers.find(layer => layer.name === "label");
+
+  assert.equal(guide.primitives.length, 2);
+  assert.deepEqual(guide.primitives.map(primitive => primitive.category), ["a", "b"]);
+  assert.deepEqual(guide.primitives[1].points.map(point => point.y), [2, 2.5]);
+  assert.equal(guide.dash, true);
+  assert.equal(guide.opacity, 0.9);
+  assert.deepEqual(marker.primitives, [{ x: 0.75, y: 1.25 }]);
+  assert.equal(marker.size, 5.5);
+  assert.equal(marker.stroke, "#ffffff");
+  assert.deepEqual(label.primitives, [{ x: 0.75, y: 1.25, label: "Bolt A" }]);
+  assert.equal(label.weight, 600);
+});
+
 test("cartesian chart plans preserve authored tooltip channels on line points", async () => {
   const source = chartRuntimeBundleSource()
     + "\nexport { evaluateModel, planChart };\n";

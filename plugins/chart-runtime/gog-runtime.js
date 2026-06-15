@@ -113,15 +113,27 @@ function planLayer(layer, evaluated, fills) {
     const iterAxis = iterationAxis(layer, yField, axes);
     const xField = enc.x && fields[enc.x] ? fields[enc.x] : null;
     const iterVals = axes[iterAxis]?.values ?? [];
-    const points = iterVals.map((axVal, i) => {
-      const coord = { [iterAxis]: i, ...where };
-      return {
-        x: xField ? valueAt(xField, coord) : axVal,
-        y: valueAt(yField, coord),
-        tooltip: tooltipValuesForEncoding(enc, evaluated, coord, axes)
-      };
-    });
-    return { ...base, stroke: colorToken(enc.stroke), width: Number(enc.width) || 2, dash: enc.dash === true, primitives: [{ points }] };
+    const categoryAxis = (layer.over ?? []).find(axisName => axes[axisName]?.kind === "category" && yField.axes?.includes(axisName));
+    const categoryValues = categoryAxis ? (axes[categoryAxis]?.values ?? []) : [null];
+    const primitives = categoryValues.map((category, categoryIndex) => ({
+      category,
+      points: iterVals.map((axVal, i) => {
+        const coord = { [iterAxis]: i, ...(categoryAxis ? { [categoryAxis]: categoryIndex } : {}), ...where };
+        return {
+          x: xField ? valueAt(xField, coord) : axVal,
+          y: valueAt(yField, coord),
+          tooltip: tooltipValuesForEncoding(enc, evaluated, coord, axes)
+        };
+      })
+    }));
+    return {
+      ...base,
+      stroke: colorToken(enc.stroke),
+      width: Number(enc.width) || 2,
+      dash: enc.dash === true,
+      opacity: enc.opacity == null ? 1 : Number(enc.opacity),
+      primitives
+    };
   }
 
   if (layer.mark === "band") {
@@ -160,13 +172,47 @@ function planLayer(layer, evaluated, fills) {
   if (layer.mark === "rule") {
     // vertical rule at x = <scalar field or param>
     const xVal = scalarRef(enc.x, evaluated);
-    return { ...base, stroke: colorToken(enc.stroke), dash: enc.dash === true, primitives: xVal == null ? [] : [{ x: xVal }] };
+    return {
+      ...base,
+      stroke: colorToken(enc.stroke),
+      width: Number(enc.width) || 1,
+      dash: enc.dash === true,
+      opacity: enc.opacity == null ? 1 : Number(enc.opacity),
+      primitives: xVal == null ? [] : [{ x: xVal }]
+    };
   }
 
   if (layer.mark === "point") {
     const xVal = scalarRef(enc.x, evaluated);
     const yVal = scalarRef(enc.y, evaluated);
-    return { ...base, primitives: (xVal == null) ? [] : [{ x: xVal, y: yVal }] };
+    return {
+      ...base,
+      fill: enc.fill ? colorRef(enc.fill, evaluated, enc.fillMap) : colorToken(enc.stroke ?? "blue"),
+      stroke: enc.stroke ? colorRef(enc.stroke, evaluated, enc.strokeMap) : "none",
+      width: Number(enc.width) || 1,
+      size: Number(enc.size) || 4,
+      opacity: enc.opacity == null ? 1 : Number(enc.opacity),
+      primitives: (xVal == null) ? [] : [{ x: xVal, y: yVal }]
+    };
+  }
+
+  if (layer.mark === "text") {
+    const where = parseWhere(enc.where, axes, evaluated);
+    const xVal = channelValue(enc.x, evaluated, where);
+    const yVal = channelValue(enc.y, evaluated, where);
+    const label = textChannelValue(enc.label ?? enc.text, evaluated, where, axes);
+    return {
+      ...base,
+      fill: enc.fill ? colorRef(enc.fill, evaluated, enc.fillMap) : "#475569",
+      size: Number(enc.size) || 11,
+      weight: enc.weight ?? "normal",
+      opacity: enc.opacity == null ? 1 : Number(enc.opacity),
+      anchor: enc.anchor ?? "middle",
+      baseline: enc.baseline ?? "middle",
+      primitives: Number.isFinite(xVal) && Number.isFinite(yVal) && label != null
+        ? [{ x: xVal, y: yVal, label: String(label) }]
+        : []
+    };
   }
 
   return { ...base, primitives: [] };
@@ -814,7 +860,8 @@ export function drawChart(container, plan, d3) {
         g.append("polyline")
           .attr("points", prim.points.filter(p => Number.isFinite(p.y)).map(p => `${x(p.x)},${y(p.y)}`).join(" "))
           .attr("fill", "none").attr("stroke", layer.stroke).attr("stroke-width", layer.width)
-          .attr("stroke-dasharray", layer.dash ? "5,4" : null);
+          .attr("stroke-dasharray", layer.dash ? "5,4" : null)
+          .attr("opacity", layer.opacity ?? 1);
       }
     } else if (layer.mark === "band") {
       for (const prim of layer.primitives) {
@@ -833,12 +880,36 @@ export function drawChart(container, plan, d3) {
       for (const prim of layer.primitives) {
         g.append("line")
           .attr("x1", x(prim.x)).attr("x2", x(prim.x)).attr("y1", 0).attr("y2", plan.innerH)
-          .attr("stroke", layer.stroke).attr("stroke-dasharray", layer.dash ? "4,4" : null);
+          .attr("stroke", layer.stroke)
+          .attr("stroke-width", layer.width ?? 1)
+          .attr("stroke-dasharray", layer.dash ? "4,4" : null)
+          .attr("opacity", layer.opacity ?? 1);
       }
     } else if (layer.mark === "point") {
       for (const prim of layer.primitives) {
         if (!Number.isFinite(prim.y)) continue;
-        g.append("circle").attr("cx", x(prim.x)).attr("cy", y(prim.y)).attr("r", presentation.pointSize ?? 4);
+        g.append("circle")
+          .attr("cx", x(prim.x))
+          .attr("cy", y(prim.y))
+          .attr("r", layer.size ?? presentation.pointSize ?? 4)
+          .attr("fill", layer.fill ?? "#5AAABF")
+          .attr("stroke", layer.stroke ?? "none")
+          .attr("stroke-width", layer.width ?? 1)
+          .attr("opacity", layer.opacity ?? 1);
+      }
+    } else if (layer.mark === "text") {
+      for (const prim of layer.primitives) {
+        if (!Number.isFinite(prim.x) || !Number.isFinite(prim.y)) continue;
+        g.append("text")
+          .attr("x", x(prim.x))
+          .attr("y", y(prim.y))
+          .attr("text-anchor", layer.anchor ?? "middle")
+          .attr("dominant-baseline", layer.baseline ?? "middle")
+          .attr("font-size", `${layer.size ?? 11}px`)
+          .attr("font-weight", layer.weight ?? "normal")
+          .attr("fill", layer.fill ?? "#475569")
+          .attr("opacity", layer.opacity ?? 1)
+          .text(prim.label ?? "");
       }
     }
   }

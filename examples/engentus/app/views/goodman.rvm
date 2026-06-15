@@ -60,10 +60,13 @@ chart GoodmanDiagram of BoltFatigue {
 
   // layer stack (drawn bottom→top), each bound to a BoltFatigue channel
   layer bands  = area over lifetime | y:band fill:band.fills opacity:0.9
+  layer glines = line over lifetime | y:band stroke:ylw width:1.2 dash:true opacity:0.9
   layer curves = line over sm | y:curve stroke:blue width:2.2 tooltip.sigma_m_MPa:sm tooltip.sigma_a_MPa:curve tooltip.F_shear_N:F_shear tooltip.damage_per_cycle_x10_6:damage_per_million
   layer slip   = rule | x:slip dash:true stroke:slate
-  layer yield  = line over sm | y:yield_line stroke:red dash:true
-  layer probe  = rule | x:probe_sm stroke:ylw
+  layer yield  = line over sm | y:yield_line stroke:pur width:1.5 dash:true
+  layer curve_label = text | x:curve_label_x y:curve_label_y label:"No Jemtec" fill:blue size:11 weight:600
+  layer probe  = rule | x:probe_sm stroke:slate width:1 dash:true opacity:0.5
+  layer probe_point = point | x:probe_sm y:curve_probe fill:blue stroke:"#ffffff" width:2 size:5.5
 }
 
 // ── Goodman Monte-Carlo bands (over BoltFatigueMC) ─────────────────────────────

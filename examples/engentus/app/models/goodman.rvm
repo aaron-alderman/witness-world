@@ -60,6 +60,15 @@ model BoltFatigue {
   derive curve      = bolt_bending_sigma_a(F_shear, L_grip, D_Shank, D_minor, head_direction, length_factor) over sm
   derive damage_per_million = miner_dpc(curve, sm, sigma_lim, m_slope, uts) * 1000000 over sm
 
+  // ── reference chart labels / probe markers as authored scalar geometry ──
+  derive probe_F_friction = mu_joint * (probe_sm * 1e6 * A_s_nom) * n_interfaces
+  derive probe_F_shear = max(gamma * F_per_bolt, F_per_bolt - probe_F_friction)
+  derive curve_probe = bolt_bending_sigma_a(probe_F_shear, L_grip, D_Shank, D_minor, head_direction, length_factor)
+  derive curve_label_x = 533
+  derive curve_label_F_friction = mu_joint * (curve_label_x * 1e6 * A_s_nom) * n_interfaces
+  derive curve_label_F_shear = max(gamma * F_per_bolt, F_per_bolt - curve_label_F_friction)
+  derive curve_label_y = bolt_bending_sigma_a(curve_label_F_shear, L_grip, D_Shank, D_minor, head_direction, length_factor)
+
   // ── slip threshold: friction yields to bending (vertical rule, scalar) ──
   derive slip = F_per_bolt / (mu_joint * A_s_nom * n_interfaces)
 }
