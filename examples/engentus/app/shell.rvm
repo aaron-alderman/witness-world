@@ -43,6 +43,21 @@ enum MillForceAnalysisMode {
   }
 }
 
+enum MillForceModelSelection {
+  cases {
+    grounded
+    faithful
+  }
+}
+
+enum MillForceMcStatus {
+  cases {
+    ready
+    running
+    cleared
+  }
+}
+
 enum GoodmanMode {
   cases {
     static
@@ -82,6 +97,34 @@ state MillForceActiveChartTab: MillForceChartTab {
 
 state MillForceActiveAnalysisMode: MillForceAnalysisMode {
   initial static
+}
+
+state MillForceActiveModel: MillForceModelSelection {
+  initial grounded
+}
+
+state MillForceMcStatusState: MillForceMcStatus {
+  initial ready
+}
+
+state MillForceMcSamples: number {
+  initial 200
+}
+
+state MillForceMcJTotalFree: bool {
+  initial false
+}
+
+state MillForceMcPercentCritFree: bool {
+  initial false
+}
+
+state MillForceMcPercentSolidsFree: bool {
+  initial false
+}
+
+state MillForceMcHeightFree: bool {
+  initial false
 }
 
 state GoodmanActiveMode: GoodmanMode {
@@ -350,6 +393,13 @@ derive MillForceLinerHeightText {
   prop suffix = " m"
 }
 
+derive MillForceMcSamplesText {
+  kind format
+  source MillForceMcSamples
+  prop digits = 0
+  prop suffix = " samples"
+}
+
 derive GoodmanRunBoltsPerSetText {
   kind format
   source GoodmanRunBoltsPerSet
@@ -461,6 +511,31 @@ event MillForceShowCompareModeRequested {
 event MillForceShowMonteCarloModeRequested {
   writes {
     MillForceActiveAnalysisMode: mc
+  }
+}
+
+event MillForceSelectGroundedModelRequested {
+  writes {
+    MillForceActiveModel: grounded
+  }
+}
+
+event MillForceSelectFaithfulModelRequested {
+  writes {
+    MillForceActiveModel: faithful
+  }
+}
+
+event MillForceRunMonteCarloRequested {
+  writes {
+    MillForceActiveAnalysisMode: mc
+    MillForceMcStatusState: running
+  }
+}
+
+event MillForceClearMonteCarloRequested {
+  writes {
+    MillForceMcStatusState: cleared
   }
 }
 
@@ -607,6 +682,13 @@ process EngentusShellNavigation {
     MillForceDepth
     MillForceLinerMass
     MillForceLinerHeight
+    MillForceActiveModel
+    MillForceMcStatusState
+    MillForceMcSamples
+    MillForceMcJTotalFree
+    MillForceMcPercentCritFree
+    MillForceMcPercentSolidsFree
+    MillForceMcHeightFree
     GoodmanActiveMode
     GoodmanCdfWindowVisible
     GoodmanStatsWindowVisible
@@ -636,6 +718,10 @@ process EngentusShellNavigation {
     MillForceShowSingleModeRequested
     MillForceShowCompareModeRequested
     MillForceShowMonteCarloModeRequested
+    MillForceSelectGroundedModelRequested
+    MillForceSelectFaithfulModelRequested
+    MillForceRunMonteCarloRequested
+    MillForceClearMonteCarloRequested
     GoodmanShowStaticRequested
     GoodmanShowMonteCarloRequested
     GoodmanShowEditRequested
@@ -5060,6 +5146,32 @@ view MillForceModeStateRow {
   }
 }
 
+view MillForceModelStateLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "Model"
+}
+
+view MillForceModelStateValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "Grounded"
+  bindings {
+    text from state MillForceActiveModel map grounded Grounded faithful Faithful default Grounded
+  }
+}
+
+view MillForceModelStateRow {
+  kind metric-row
+  class mill-force-result-row
+  children {
+    MillForceModelStateLabel
+    MillForceModelStateValue
+  }
+}
+
 view MillForceResultsSection {
   kind section
   class ssec
@@ -5068,6 +5180,7 @@ view MillForceResultsSection {
     MillForceOmegaRow
     MillForceChargeDensityRow
     MillForceModeStateRow
+    MillForceModelStateRow
   }
 }
 
@@ -5081,9 +5194,321 @@ view MillForceControlHost {
   }
 }
 
+view MillForceModelTitle {
+  kind text
+  class ssec-title
+  prop tag = "div"
+  prop text = "Model"
+}
+
+view MillForceModelGrounded {
+  kind action
+  class mill-force-pill
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Grounded"
+  bindings {
+    className from state MillForceActiveModel map grounded active default ""
+  }
+  interactions {
+    on click self deliver MillForceSelectGroundedModelRequested
+  }
+}
+
+view MillForceModelFaithful {
+  kind action
+  class mill-force-pill
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Faithful"
+  bindings {
+    className from state MillForceActiveModel map faithful active default ""
+  }
+  interactions {
+    on click self deliver MillForceSelectFaithfulModelRequested
+  }
+}
+
+view MillForceModelPills {
+  kind action-row
+  class mill-force-mode-pills
+  children {
+    MillForceModelGrounded
+    MillForceModelFaithful
+  }
+}
+
+view MillForceModelNote {
+  kind note
+  class mill-force-rd
+  prop text = "Single mode shows one authored model selection. Compare mode keeps faithful and grounded visible as paired representations."
+}
+
+view MillForceModelSection {
+  kind section
+  class ssec
+  bindings {
+    visible from state MillForceActiveAnalysisMode map static true default false
+  }
+  children {
+    MillForceModelTitle
+    MillForceModelPills
+    MillForceModelNote
+  }
+}
+
+view MillForceCompareTitle {
+  kind text
+  class ssec-title
+  prop tag = "div"
+  prop text = "Compare Models"
+}
+
+view MillForceCompareGroundedLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "Grounded"
+}
+
+view MillForceCompareGroundedValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "Grid-search fill + grounded tangential sign"
+}
+
+view MillForceCompareGroundedRow {
+  kind metric-row
+  class mill-force-result-row
+  children {
+    MillForceCompareGroundedLabel
+    MillForceCompareGroundedValue
+  }
+}
+
+view MillForceCompareFaithfulLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "Faithful"
+}
+
+view MillForceCompareFaithfulValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "Reference root-find / force convention"
+}
+
+view MillForceCompareFaithfulRow {
+  kind metric-row
+  class mill-force-result-row
+  children {
+    MillForceCompareFaithfulLabel
+    MillForceCompareFaithfulValue
+  }
+}
+
+view MillForceCompareSection {
+  kind section
+  class ssec
+  bindings {
+    visible from state MillForceActiveAnalysisMode map compare true default false
+  }
+  children {
+    MillForceCompareTitle
+    MillForceCompareGroundedRow
+    MillForceCompareFaithfulRow
+  }
+}
+
+view MillForceMcTitleText {
+  kind text
+  class ssec-title
+  prop tag = "div"
+  prop text = "Monte Carlo Config"
+}
+
+view MillForceMcSamplesLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Samples"
+}
+
+view MillForceMcSamplesValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "200 samples"
+  bindings {
+    text from projection MillForceMcSamplesText
+  }
+}
+
+view MillForceMcSamplesTop {
+  kind row
+  class prow-top
+  children {
+    MillForceMcSamplesLabel
+    MillForceMcSamplesValue
+  }
+}
+
+view MillForceMcSamplesInput {
+  kind input
+  class mill-force-mc-samples
+  prop tag = "input"
+  prop inputType = "number"
+  prop min = 50
+  prop max = 2000
+  prop step = 50
+  prop value = 200
+  bindings {
+    value from state MillForceMcSamples
+  }
+  interactions {
+    on input self set MillForceMcSamples eventValue
+  }
+}
+
+view MillForceMcSamplesRow {
+  kind control-row
+  class prow
+  children {
+    MillForceMcSamplesTop
+    MillForceMcSamplesInput
+  }
+}
+
+view MillForceMcVaryTitle {
+  kind text
+  class ssec-title
+  prop tag = "div"
+  prop text = "Vary parameters"
+}
+
+view MillForceMcJTotalToggle {
+  kind checkbox-field
+  class mc-row
+  prop label = "Fill fraction J"
+  prop inputType = "checkbox"
+  bindings {
+    checked from state MillForceMcJTotalFree
+  }
+  interactions {
+    on change self set MillForceMcJTotalFree eventChecked
+  }
+}
+
+view MillForceMcPercentCritToggle {
+  kind checkbox-field
+  class mc-row
+  prop label = "Speed N/Nc"
+  prop inputType = "checkbox"
+  bindings {
+    checked from state MillForceMcPercentCritFree
+  }
+  interactions {
+    on change self set MillForceMcPercentCritFree eventChecked
+  }
+}
+
+view MillForceMcPercentSolidsToggle {
+  kind checkbox-field
+  class mc-row
+  prop label = "Solids (mass)"
+  prop inputType = "checkbox"
+  bindings {
+    checked from state MillForceMcPercentSolidsFree
+  }
+  interactions {
+    on change self set MillForceMcPercentSolidsFree eventChecked
+  }
+}
+
+view MillForceMcHeightToggle {
+  kind checkbox-field
+  class mc-row
+  prop label = "Liner height"
+  prop inputType = "checkbox"
+  bindings {
+    checked from state MillForceMcHeightFree
+  }
+  interactions {
+    on change self set MillForceMcHeightFree eventChecked
+  }
+}
+
+view MillForceMcRunAction {
+  kind action
+  class rbtn go
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Run"
+  interactions {
+    on click self deliver MillForceRunMonteCarloRequested
+  }
+}
+
+view MillForceMcClearAction {
+  kind action
+  class rbtn stop
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Clear"
+  interactions {
+    on click self deliver MillForceClearMonteCarloRequested
+  }
+}
+
+view MillForceMcActions {
+  kind action-row
+  class run-row
+  children {
+    MillForceMcRunAction
+    MillForceMcClearAction
+  }
+}
+
+view MillForceMcStatusText {
+  kind text
+  class mill-force-rd
+  prop tag = "div"
+  prop text = "Ready"
+  bindings {
+    text from state MillForceMcStatusState map ready Ready running "Run requested" cleared Cleared default Ready
+  }
+}
+
+view MillForceMcSection {
+  kind section
+  class ssec
+  bindings {
+    visible from state MillForceActiveAnalysisMode map mc true default false
+  }
+  children {
+    MillForceMcTitleText
+    MillForceMcSamplesRow
+    MillForceMcVaryTitle
+    MillForceMcJTotalToggle
+    MillForceMcPercentCritToggle
+    MillForceMcPercentSolidsToggle
+    MillForceMcHeightToggle
+    MillForceMcActions
+    MillForceMcStatusText
+  }
+}
+
 view MillForceModelHost {
-  kind host
+  kind section-group
   class mill-force-model-host
+  children {
+    MillForceModelSection
+    MillForceCompareSection
+    MillForceMcSection
+  }
 }
 
 view MillForceSidebar {

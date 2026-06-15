@@ -583,6 +583,34 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     await page.goto(`${server.url}/engentus/mill-force`, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
     await page.waitForFunction(() => Boolean(document.querySelector("#mill-force-svg-cross")?.__chartController));
+    assert.deepEqual(await page.evaluate(() => ({
+      modelHidden: document.querySelector("#surface-millforcemodelsection")?.hasAttribute("hidden"),
+      compareHidden: document.querySelector("#surface-millforcecomparesection")?.hasAttribute("hidden"),
+      mcHidden: document.querySelector("#surface-millforcemcsection")?.hasAttribute("hidden"),
+      model: window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveModel")
+    })), {
+      modelHidden: false,
+      compareHidden: true,
+      mcHidden: true,
+      model: "grounded"
+    });
+
+    await page.click("#surface-millforcemodelfaithful");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveModel") === "faithful"
+    );
+    assert.deepEqual(await page.evaluate(() => ({
+      groundedClass: document.querySelector("#surface-millforcemodelgrounded")?.className,
+      faithfulClass: document.querySelector("#surface-millforcemodelfaithful")?.className,
+      modelRow: [...document.querySelectorAll(".mill-force-result-row")]
+        .map(row => row.textContent)
+        .find(text => text.includes("Model"))
+    })), {
+      groundedClass: "mill-force-pill",
+      faithfulClass: "mill-force-pill active",
+      modelRow: "ModelFaithful"
+    });
+
     const speedRow = sliderRow(page, "Speed N/Nc");
     const speedInput = speedRow.locator("input");
     const omegaBefore = await page.evaluate(() =>
@@ -616,6 +644,45 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     assert.equal(modeState.single, "mill-force-pill");
     assert.equal(modeState.compare, "mill-force-pill active");
     assert.match(modeState.modeRow, /Compare/);
+    assert.deepEqual(await page.evaluate(() => ({
+      modelHidden: document.querySelector("#surface-millforcemodelsection")?.hasAttribute("hidden"),
+      compareHidden: document.querySelector("#surface-millforcecomparesection")?.hasAttribute("hidden"),
+      compareText: document.querySelector("#surface-millforcecomparesection")?.textContent
+    })), {
+      modelHidden: true,
+      compareHidden: false,
+      compareText: "Compare ModelsGroundedGrid-search fill + grounded tangential signFaithfulReference root-find / force convention"
+    });
+
+    await page.getByRole("button", { name: "Monte Carlo" }).click();
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveAnalysisMode") === "mc"
+    );
+    assert.deepEqual(await page.evaluate(() => ({
+      compareHidden: document.querySelector("#surface-millforcecomparesection")?.hasAttribute("hidden"),
+      mcHidden: document.querySelector("#surface-millforcemcsection")?.hasAttribute("hidden")
+    })), {
+      compareHidden: true,
+      mcHidden: false
+    });
+    await page.locator("#surface-millforcemcsamplesinput").fill("350");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcSamples") === 350
+    );
+    await page.locator("#surface-millforcemcjtotaltoggle input").check();
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcJTotalFree") === true
+    );
+    await page.click("#surface-millforcemcrunaction");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcStatusState") === "running"
+    );
+    assert.equal(await page.textContent("#surface-millforcemcstatustext"), "Run requested");
+    await page.click("#surface-millforcemcclearaction");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcStatusState") === "cleared"
+    );
+    assert.equal(await page.textContent("#surface-millforcemcstatustext"), "Cleared");
   } finally {
     await browser.close();
     await server.close();

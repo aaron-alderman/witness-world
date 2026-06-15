@@ -58,6 +58,10 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.ok(messages.has("MillForceShowSingleModeRequested"));
   assert.ok(messages.has("MillForceShowCompareModeRequested"));
   assert.ok(messages.has("MillForceShowMonteCarloModeRequested"));
+  assert.ok(messages.has("MillForceSelectGroundedModelRequested"));
+  assert.ok(messages.has("MillForceSelectFaithfulModelRequested"));
+  assert.ok(messages.has("MillForceRunMonteCarloRequested"));
+  assert.ok(messages.has("MillForceClearMonteCarloRequested"));
   assert.ok(messages.has("GoodmanShowStaticRequested"));
   assert.ok(messages.has("GoodmanShowMonteCarloRequested"));
   assert.ok(messages.has("GoodmanShowEditRequested"));
@@ -77,6 +81,11 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(types.get("MillForceActiveChartTab")?.body?.role, "state");
   assert.equal(types.get("MillForceAnalysisMode")?.body?.role, "enum");
   assert.equal(types.get("MillForceActiveAnalysisMode")?.body?.role, "state");
+  assert.equal(types.get("MillForceModelSelection")?.body?.role, "enum");
+  assert.equal(types.get("MillForceActiveModel")?.body?.role, "state");
+  assert.equal(types.get("MillForceMcStatus")?.body?.role, "enum");
+  assert.equal(types.get("MillForceMcStatusState")?.body?.role, "state");
+  assert.equal(types.get("MillForceMcSamples")?.body?.role, "state");
   assert.equal(types.get("MillForcePercentCrit")?.body?.role, "state");
   assert.equal(types.get("MillForceTotalFill")?.body?.role, "state");
   assert.equal(types.get("GoodmanMode")?.body?.role, "enum");
@@ -146,6 +155,13 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
       action: { kind: "deliver", message: "MillForceShowCompareModeRequested" }
     }
   ]);
+  assert.deepEqual(surfaces.get("MillForceModelFaithful")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "MillForceSelectFaithfulModelRequested" }
+    }
+  ]);
   assert.deepEqual(surfaces.get("GoodmanModeMonteCarlo")?.body?.interactions, [
     {
       target: "self",
@@ -179,6 +195,8 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("MillForceSpeedInput")?.body?.bindings[0]?.prop, "value");
   assert.equal(surfaces.get("MillForceSpeedInput")?.body?.interactions[0]?.action?.state, "MillForcePercentCrit");
   assert.equal(surfaces.get("MillForceOmegaValue")?.body?.bindings[0]?.source?.kind, "capability");
+  assert.equal(surfaces.get("MillForceMcSamplesInput")?.body?.interactions[0]?.action?.state, "MillForceMcSamples");
+  assert.equal(surfaces.get("MillForceMcJTotalToggle")?.body?.interactions[0]?.action?.value?.kind, "eventChecked");
   assert.deepEqual(processes.get("EngentusShellNavigation")?.body?.rules, [
     {
       trigger: "EngentusSignInRequested",
@@ -336,6 +354,24 @@ test("the shell is structured through explicit child regions instead of flattene
     "MillForceTabCrossSection",
     "MillForceTabForceVsAngle",
     "MillForceTabForceRose"
+  ]);
+
+  assert.deepEqual(surfaces.get("MillForceModelHost")?.body?.children, [
+    "MillForceModelSection",
+    "MillForceCompareSection",
+    "MillForceMcSection"
+  ]);
+
+  assert.deepEqual(surfaces.get("MillForceMcSection")?.body?.children, [
+    "MillForceMcTitleText",
+    "MillForceMcSamplesRow",
+    "MillForceMcVaryTitle",
+    "MillForceMcJTotalToggle",
+    "MillForceMcPercentCritToggle",
+    "MillForceMcPercentSolidsToggle",
+    "MillForceMcHeightToggle",
+    "MillForceMcActions",
+    "MillForceMcStatusText"
   ]);
 
   assert.deepEqual(surfaces.get("EngentusMillChargeApp")?.body?.children, [
