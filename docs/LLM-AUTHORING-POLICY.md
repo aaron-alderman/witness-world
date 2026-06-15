@@ -41,7 +41,7 @@ with a structured blocked handoff containing:
 The human platform lane then decides whether to widen the substrate, change the
 runtime, open a proposal, or reject the request.
 
-For Engentus, the expected next honest blocked handoff after live widget
-projection is `surface.create`. That blocker must be addressed in the
-authoring substrate, not bypassed with app-local browser JS or direct runtime
-patching.
+For Engentus, `surface.create` is now part of the allowed authoring substrate.
+The next honest blocker must be established only after replay proves that a
+minimal authored `page.surface` shell serves live through the same constrained
+path, not bypassed with app-local browser JS or direct runtime patching.

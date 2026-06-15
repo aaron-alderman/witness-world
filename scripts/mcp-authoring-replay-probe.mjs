@@ -128,6 +128,10 @@ export async function runReplayProbe(serverUrl, {
   const programId = `${stamp}_program`;
   const routeId = `${stamp}_route`;
   const routePath = `/${stamp}`;
+  const surfaceRootId = `${stamp}_surface_root`;
+  const surfaceLoginId = `${stamp}_surface_login`;
+  const surfaceRouteId = `${stamp}_surface_route`;
+  const surfaceRoutePath = `/${stamp}-surface`;
 
   const createRunner = await requestJson(baseUrl, "/api/server-runners", {
     cookie: sessionCookie,
@@ -261,25 +265,70 @@ export async function runReplayProbe(serverUrl, {
 
   const authoringTool = listSupportedMcpTools().find(tool => tool.name === "authoring.write");
   const actionEnum = authoringTool?.inputSchema?.properties?.action?.enum ?? [];
-  const missingSurface = await mcpToolCall(baseUrl, mcpServerId, token, "authoring.write", {
-    action: "surface.create",
-    body: {
-      id: `${stamp}_surface`,
-      kind: "surface",
-      route: "/engentus"
+  const createdSurfaces = await write("surface.create", [
+    {
+      id: surfaceRootId,
+      surfaceKind: "app-root",
+      context: contextId,
+      children: [surfaceLoginId],
+      props: {
+        brandName: "DESIRE",
+        productName: "Replay Surface"
+      }
+    },
+    {
+      id: surfaceLoginId,
+      surfaceKind: "auth-screen",
+      context: contextId,
+      props: {
+        routeKey: "login",
+        title: "Replay surface login",
+        subtitle: "Surface projection is live",
+        heroTitle: "Hello from MCP surface authoring",
+        heroBody: "This shell was authored through MCP replay only.",
+        primaryActionLabel: "Continue",
+        primaryActionHref: surfaceRoutePath
+      }
     }
-  }, 18);
+  ], 18);
 
-  const surfaceBlocked = buildBlockedAuthoringHandoff({
-    goal: "author the Engentus shell through MCP-only authoring replay",
-    attemptedAuthoringPath: "authoring.write(surface.create)",
-    missingPrimitive: "surface.create is not exposed by the current MCP authoring surface",
-    minimumHumanAction: "add a generic surface/shell authoring primitive to plugin.authoring before continuing Engentus replay",
-    proof: [
-      `authoring.write advertises surface.create: ${actionEnum.includes("surface.create")}`,
-      `authoring.write(surface.create) returned ${missingSurface?.structuredContent?.error ?? "no error"}`
-    ]
-  });
+  const createdSurfaceRoute = await write("route.create", {
+    id: surfaceRouteId,
+    context: contextId,
+    path: surfaceRoutePath,
+    method: "GET",
+    handler: "page.surface",
+    serves: surfaceRootId,
+    rootSurface: surfaceRootId,
+    defaultScreen: "login"
+  }, 19);
+
+  const createdSurfaceServe = await write("serve.create", {
+    serverRunner: runnerId,
+    route: surfaceRouteId
+  }, 20);
+
+  const surfaceCreationErrors = [createdSurfaces, createdSurfaceRoute, createdSurfaceServe].filter(result => result?.isError);
+  if (surfaceCreationErrors.length) {
+    throw new Error(`replay surface authoring failed: ${JSON.stringify(surfaceCreationErrors[0]?.structuredContent ?? null)}`);
+  }
+
+  const surfacePage = await fetch(`${baseUrl}${surfaceRoutePath}`);
+  const surfaceHtml = await surfacePage.text();
+  const surfaceAuthoredContentVisible = /Replay surface login/.test(surfaceHtml) && /Hello from MCP surface authoring/.test(surfaceHtml);
+  const surfaceBlocked = !surfaceAuthoredContentVisible
+    ? buildBlockedAuthoringHandoff({
+        goal: "author and serve a minimal page.surface shell through MCP-only replay",
+        attemptedAuthoringPath: "authoring.write(surface.create/route.create/serve.create)",
+        missingPrimitive: "surface authoring is exposed but the authored shell did not project live through page.surface",
+        minimumHumanAction: "fix the generic surface authoring-to-page.surface projection path before advancing to richer frontend expressivity gaps",
+        proof: [
+          `authoring.write advertises surface.create: ${actionEnum.includes("surface.create")}`,
+          `surface route ${surfaceRoutePath} served with HTTP ${surfacePage.status}`,
+          `surface HTML contained authored shell content: ${surfaceAuthoredContentVisible}`
+        ]
+      })
+    : null;
 
   return {
     ok: true,
@@ -293,18 +342,27 @@ export async function runReplayProbe(serverUrl, {
       mcpServerId,
       routeId,
       routePath,
+      surfaceRouteId,
+      surfaceRoutePath,
       rootWidgetId,
       programId,
       httpStatus: page.status,
       fallbackActive,
-      authoredContentVisible
+      authoredContentVisible,
+      surfaceHttpStatus: surfacePage.status,
+      surfaceAuthoredContentVisible
     },
     stateChecks: {
       runnerPresent: state.structuredContent.serverRunners.some(row => row.id === runnerId),
       routePresent: state.structuredContent.routes.some(row => row.id === routeId && row.handler === "page.home"),
       servedRoutePresent: state.structuredContent.servedRoutes.some(row => row.id === routeId && row.serverRunner === runnerId),
+      surfaceRoutePresent: state.structuredContent.routes.some(row => row.id === surfaceRouteId && row.handler === "page.surface"),
+      surfaceServedRoutePresent: state.structuredContent.servedRoutes.some(row => row.id === surfaceRouteId && row.serverRunner === runnerId),
       programPresent: state.structuredContent.frontendPrograms.some(row => row.id === programId && row.rootWidget === rootWidgetId),
-      rootWidgetPresent: state.structuredContent.widgets.some(row => row.id === rootWidgetId)
+      rootWidgetPresent: state.structuredContent.widgets.some(row => row.id === rootWidgetId),
+      rootSurfacePresent: state.structuredContent.witnesses
+        ? state.structuredContent.witnesses.some(row => row.process === "desire.defineSurface" && row.body?.id === surfaceRootId)
+        : true
     },
     blockers: {
       widgetProjection: widgetProjectionBlocked,
@@ -323,7 +381,7 @@ async function main(argv = process.argv.slice(2)) {
   if (!result.stateChecks.runnerPresent || !result.stateChecks.routePresent || !result.stateChecks.servedRoutePresent) {
     process.exit(1);
   }
-  if (result.replay.httpStatus !== 200) {
+  if (result.replay.httpStatus !== 200 || result.replay.surfaceHttpStatus !== 200) {
     process.exit(1);
   }
 }

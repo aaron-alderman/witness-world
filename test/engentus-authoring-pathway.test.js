@@ -36,14 +36,14 @@ test("canonical docs encode the staged Engentus authoring pathway and the next h
   assert.match(desireSpa, /2\. Boundary gate/);
   assert.match(desireSpa, /3\. Generic projection gate/);
   assert.match(desireSpa, /4\. Surface authoring gate/);
-  assert.match(desireSpa, /Current next honest blocker .* `surface\.create`/s);
+  assert.match(desireSpa, /surface authoring gate is now green for minimal served shells via\s+`surface\.create`/i);
   assert.match(desireSpa, /no app-local browser runtime seam/i);
   assert.match(policy, /plugin\.authoring/i);
   assert.match(policy, /Blocked means stop, not improvise/i);
-  assert.match(policy, /next honest blocked handoff .* `surface\.create`/s);
+  assert.match(policy, /`surface\.create` is now part of the allowed authoring substrate/i);
 });
 
-test("MCP replay now passes generic widget projection and stops next at surface.create", { timeout: 10000 }, async () => {
+test("MCP replay now passes generic widget projection and serves a minimal authored surface live", { timeout: 10000 }, async () => {
   const server = await startAuthoringProbeServer();
   try {
     const result = await runReplayProbe(server.url);
@@ -51,8 +51,10 @@ test("MCP replay now passes generic widget projection and stops next at surface.
     assert.equal(result.replay.httpStatus, 200);
     assert.equal(result.replay.fallbackActive, false);
     assert.equal(result.replay.authoredContentVisible, true);
+    assert.equal(result.replay.surfaceHttpStatus, 200);
+    assert.equal(result.replay.surfaceAuthoredContentVisible, true);
     assert.equal(result.blockers.widgetProjection, null);
-    assert.equal(result.blockers.surfaceAuthoring.missingPrimitive, "surface.create is not exposed by the current MCP authoring surface");
+    assert.equal(result.blockers.surfaceAuthoring, null);
   } finally {
     await server.close();
   }

@@ -156,6 +156,7 @@ const TOOL_DEFINITIONS = [
           "perspective.create",
           "stewardship.create",
           "stewardship.remove",
+          "surface.create",
           "widget.create",
           "widget.update",
           "frontendProgram.create",
@@ -171,13 +172,21 @@ const TOOL_DEFINITIONS = [
           "mcpTool.remove"
         ]
       },
-      body: { type: "object" }
+      body: {
+        anyOf: [
+          { type: "object" },
+          { type: "array" }
+        ]
+      }
     }, ["action", "body"]),
     scope(args) {
-      const body = args?.body && typeof args.body === "object" ? args.body : {};
+      const body = args?.body;
+      const docs = Array.isArray(body)
+        ? body.filter(entry => entry && typeof entry === "object")
+        : (body && typeof body === "object" ? [body] : []);
       return scopeResult({
-        contexts: [body.context, body.parent, body.homeContext].filter(Boolean),
-        targets: [body.target, body.server, body.serverRunner, body.id].filter(Boolean)
+        contexts: docs.flatMap(doc => [doc.context, doc.parent, doc.homeContext]).filter(Boolean),
+        targets: docs.flatMap(doc => [doc.target, doc.server, doc.serverRunner, doc.id]).filter(Boolean)
       });
     },
     async run({ args, callHandler }) {
@@ -213,6 +222,8 @@ const TOOL_DEFINITIONS = [
           return runJsonHandler(callHandler, { handler: "stewardship.create", method: "POST", path: "/api/stewardships", body });
         case "stewardship.remove":
           return runJsonHandler(callHandler, { handler: "stewardship.remove", method: "DELETE", path: "/api/stewardships", body });
+        case "surface.create":
+          return runJsonHandler(callHandler, { handler: "surface.create", method: "POST", path: "/api/surfaces", body });
         case "widget.create":
           return runJsonHandler(callHandler, { handler: "widgets.create", method: "POST", path: "/api/widgets", body });
         case "widget.update":

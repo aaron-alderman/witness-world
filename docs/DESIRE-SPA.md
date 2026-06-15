@@ -91,8 +91,10 @@ always honest and local:
    - Goodman, then mill-charge, then mill-force, with structure/CSS/live proof
      kept separate
 
-Current next honest blocker after widget projection is the surface authoring
-gate: `surface.create`.
+The surface authoring gate is now green for minimal served shells via
+`surface.create`. The next honest blocker must be established by the
+post-`surface.create` replay tranche before any richer Engentus live-behavior
+work resumes.
 
 ## Current honest state
 

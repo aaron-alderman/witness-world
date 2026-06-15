@@ -33,6 +33,7 @@ import {
   rollbackBackendProgramVersion
 } from "../../src/backend-programs.js";
 import { processSpecFor, typeModelProjection, validateProcessInput, validateProcessOutput } from "../../src/type-model.js";
+import { applyDesire, createDesireDocument, createDesireNode } from "../../src/desire/index.js";
 
 
 
@@ -157,6 +158,101 @@ function patchFromWidgetUpdateInput(input, body) {
   }
   if (Object.prototype.hasOwnProperty.call(body ?? {}, "hidden") && typeof input.hidden === "boolean") patch.hidden = input.hidden;
   return patch;
+}
+
+function knownSurfaceIds(world) {
+  return new Set(
+    world.allWitnesses()
+      .filter(witness => witness.process === "desire.defineSurface" && typeof witness.body?.id === "string" && witness.body.id.trim())
+      .map(witness => witness.body.id.trim())
+  );
+}
+
+function normalizeSurfaceCreateBody(body) {
+  if (Array.isArray(body)) return { single: false, docs: body };
+  return { single: true, docs: [body] };
+}
+
+function trimOptionalString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function surfaceCreateDocAt(body, index) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error(`surface doc ${index + 1} must be an object`);
+  }
+  const id = trimOptionalString(body.id);
+  if (!id) throw new Error(`surface doc ${index + 1} requires id`);
+  return {
+    id,
+    surfaceKind: body.surfaceKind ?? null,
+    className: body.className ?? null,
+    children: Array.isArray(body.children) ? [...body.children] : [],
+    props: body.props && typeof body.props === "object" && !Array.isArray(body.props) ? { ...body.props } : {},
+    modelRef: body.modelRef ?? null,
+    frame: body.frame ?? null,
+    encoding: body.encoding && typeof body.encoding === "object" && !Array.isArray(body.encoding) ? structuredClone(body.encoding) : {},
+    editable: Array.isArray(body.editable) ? structuredClone(body.editable) : [],
+    layers: Array.isArray(body.layers) ? structuredClone(body.layers) : [],
+    actor: trimOptionalString(body.actor),
+    owner: trimOptionalString(body.owner),
+    context: trimOptionalString(body.context)
+  };
+}
+
+function validateSurfaceCreateDocs(world, docs) {
+  const existing = knownSurfaceIds(world);
+  const batchIds = new Set();
+  const normalized = docs.map((doc, index) => surfaceCreateDocAt(doc, index));
+  for (const doc of normalized) {
+    if (existing.has(doc.id)) throw new Error(`surface id already exists: ${doc.id}`);
+    if (batchIds.has(doc.id)) throw new Error(`duplicate surface id in request: ${doc.id}`);
+    batchIds.add(doc.id);
+  }
+  for (const doc of normalized) {
+    for (const child of doc.children) {
+      const childId = trimOptionalString(child);
+      if (!childId) throw new Error(`surface ${doc.id} has an invalid child reference`);
+      if (!existing.has(childId) && !batchIds.has(childId)) {
+        throw new Error(`surface ${doc.id} references unknown child surface: ${childId}`);
+      }
+    }
+  }
+  return normalized;
+}
+
+function surfaceCreateNode(doc, { actor, backendHost, index }) {
+  return createDesireNode({
+    kind: "surface",
+    name: doc.id,
+    body: {
+      surfaceKind: doc.surfaceKind,
+      className: doc.className,
+      children: [...doc.children],
+      props: structuredClone(doc.props),
+      modelRef: doc.modelRef,
+      frame: doc.frame,
+      encoding: structuredClone(doc.encoding),
+      editable: structuredClone(doc.editable),
+      layers: structuredClone(doc.layers)
+    },
+    meta: {
+      provenance: {
+        file: "authoring://plugin.authoring/surface.create",
+        sourceLanguage: "authoring",
+        sourceKind: "surface",
+        startLine: index + 1,
+        endLine: index + 1,
+        startColumn: 1,
+        endColumn: null,
+        originNodeId: null,
+        via: [`authoring:surface.create:${doc.id}`],
+        actor: doc.actor ?? actor ?? backendHost,
+        owner: doc.owner ?? actor ?? backendHost,
+        context: doc.context ?? null
+      }
+    }
+  });
 }
 
 export function requestBootstrapIdentityDefine(world, {
@@ -667,6 +763,77 @@ export function requestBootstrapStewardshipRevoke(world, {
   return { ok: true, status: 200, stewardship: input, witness };
 }
 
+export function requestSurfaceDefine(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  let normalized;
+  try {
+    normalized = normalizeSurfaceCreateBody(body);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witnesses: []
+    };
+  }
+
+  let docs;
+  try {
+    docs = validateSurfaceCreateDocs(world, normalized.docs);
+  } catch (error) {
+    return {
+      ok: false,
+      status: /already exists|duplicate/i.test(error instanceof Error ? error.message : "")
+        ? 409
+        : 400,
+      error: error instanceof Error ? error.message : String(error),
+      witnesses: []
+    };
+  }
+
+  let desire;
+  try {
+    desire = createDesireDocument(
+      docs.map((doc, index) => surfaceCreateNode(doc, { actor, backendHost, index }))
+    );
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witnesses: []
+    };
+  }
+
+  let witnesses;
+  try {
+    witnesses = applyDesire(world, desire);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witnesses: []
+    };
+  }
+
+  const surfaceWitnesses = witnesses.filter(witness =>
+    witness.process === "desire.defineSurface"
+    && typeof witness.body?.id === "string"
+  );
+  const surfaceIndex = new Map(surfaceWitnesses.map(witness => [witness.body.id, witness.body]));
+  return {
+    ok: true,
+    status: 201,
+    single: normalized.single,
+    surfaces: docs.map(doc => surfaceIndex.get(doc.id) ?? { id: doc.id }),
+    witnesses: surfaceWitnesses
+  };
+}
+
 export function requestBootstrapRouteDefine(world, {
   actor,
   backendHost,
@@ -747,11 +914,33 @@ export function requestBootstrapRouteDefine(world, {
     return { ok: false, status: 400, error: rootWidgetResolved.error, witness };
   }
   if (typeof rootWidgetResolved.target === "string" && rootWidgetResolved.target.trim()) params.rootWidget = rootWidgetResolved.target.trim();
+  const rootSurfaceResolved = resolveBodyRef(world, body, {
+    contextField: "context",
+    idField: "rootSurface",
+    refField: "rootSurfaceRef",
+    label: "route root surface"
+  });
+  if (!rootSurfaceResolved.ok) {
+    const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: rootSurfaceResolved.error } });
+    return { ok: false, status: 400, error: rootSurfaceResolved.error, witness };
+  }
+  if (typeof rootSurfaceResolved.target === "string" && rootSurfaceResolved.target.trim()) params.rootSurface = rootSurfaceResolved.target.trim();
   if (typeof body.frontendProgram === "string" && body.frontendProgram.trim()) params.frontendProgram = body.frontendProgram.trim();
   if (typeof body.page === "string" && body.page.trim()) params.page = body.page.trim();
+  if (typeof body.defaultScreen === "string" && body.defaultScreen.trim()) params.defaultScreen = body.defaultScreen.trim();
   if (body.liveProjection === true) params.liveProjection = true;
   if (Array.isArray(body.excludeWidgetRoles) && body.excludeWidgetRoles.length) params.excludeWidgetRoles = [...body.excludeWidgetRoles];
   if (typeof body.defaultRootWidget === "string" && body.defaultRootWidget.trim()) params.rootWidget = body.defaultRootWidget.trim();
+  const hasPageParams = Boolean(
+    params.rootWidget
+    || params.rootSurface
+    || body.frontendProgram
+    || body.page
+    || params.defaultScreen
+    || body.liveProjection === true
+    || (Array.isArray(body.excludeWidgetRoles) && body.excludeWidgetRoles.length)
+    || (typeof body.defaultRootWidget === "string" && body.defaultRootWidget.trim())
+  );
   const resolvedServes = servesResolved.target ?? input.serves ?? null;
   if (!resolvedServes) {
     const witness = fail(world, {
@@ -778,7 +967,7 @@ export function requestBootstrapRouteDefine(world, {
     });
     return { ok: false, status: 400, error: "backendProgram.run requires backendProgramSoul", witness };
   }
-  if (routeKind === "backendProgram" && (params.rootWidget || body.frontendProgram || body.page || body.liveProjection === true || Array.isArray(body.excludeWidgetRoles) || (typeof body.defaultRootWidget === "string" && body.defaultRootWidget.trim()))) {
+  if (routeKind === "backendProgram" && hasPageParams) {
     const witness = fail(world, {
       process: "route.define.failed",
       actor: actor || backendHost,
@@ -786,7 +975,7 @@ export function requestBootstrapRouteDefine(world, {
     });
     return { ok: false, status: 400, error: "backend program routes cannot also declare page/frontend params", witness };
   }
-  if (routeKind === "stream" && (params.rootWidget || body.frontendProgram || body.page || body.liveProjection === true || Array.isArray(body.excludeWidgetRoles) || (typeof body.defaultRootWidget === "string" && body.defaultRootWidget.trim()) || backendProgramSoul)) {
+  if (routeKind === "stream" && (hasPageParams || backendProgramSoul)) {
     const witness = fail(world, {
       process: "route.define.failed",
       actor: actor || backendHost,
@@ -813,6 +1002,14 @@ export function requestBootstrapRouteDefine(world, {
       body: { reason: "page routes require rootWidget", handler: input.handler }
     });
     return { ok: false, status: 400, error: "page routes require rootWidget", witness };
+  }
+  if (input.handler === "page.surface" && !params.rootSurface) {
+    const witness = fail(world, {
+      process: "route.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "page.surface routes require rootSurface", handler: input.handler }
+    });
+    return { ok: false, status: 400, error: "page.surface routes require rootSurface", witness };
   }
   defineRoute(world, {
     actor: actor || backendHost,

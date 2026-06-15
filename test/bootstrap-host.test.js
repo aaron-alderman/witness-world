@@ -525,7 +525,7 @@ test("a bootstrap-authored runner and home route take over without restarting th
   }
 });
 
-test("authoring replay probe renders live widget HTML and stops next at surface authoring", { timeout: 10000 }, async () => {
+test("authoring replay probe renders live widget HTML and a minimal authored surface shell", { timeout: 10000 }, async () => {
   const { server } = await startBlankServer({ runtimePluginIds: ["plugin.mcp"] });
   try {
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
@@ -538,8 +538,10 @@ test("authoring replay probe renders live widget HTML and stops next at surface 
     assert.equal(result.replay.httpStatus, 200);
     assert.equal(result.replay.fallbackActive, false);
     assert.equal(result.replay.authoredContentVisible, true);
+    assert.equal(result.replay.surfaceHttpStatus, 200);
+    assert.equal(result.replay.surfaceAuthoredContentVisible, true);
     assert.equal(result.blockers.widgetProjection, null);
-    assert.match(result.blockers.surfaceAuthoring.missingPrimitive, /surface\.create/);
+    assert.equal(result.blockers.surfaceAuthoring, null);
   } finally {
     await server.close();
   }

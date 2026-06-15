@@ -24,6 +24,7 @@ export const MCP_ONLY_ALLOWED_HANDLER_IDS = Object.freeze([
   "contextImport.remove",
   "stewardship.create",
   "stewardship.remove",
+  "surface.create",
   "widgets.create",
   "widgets.update",
   "route.create",

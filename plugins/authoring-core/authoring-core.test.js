@@ -18,6 +18,7 @@ const AUTHORING_CORE_HANDLER_IDS = [
   "contextImport.remove",
   "stewardship.create",
   "stewardship.remove",
+  "surface.create",
   "widgets.create",
   "widgets.update",
   "route.create",
@@ -37,6 +38,7 @@ const AUTHORING_CORE_PROCESS_EXPORTS = [
   "requestBootstrapContextImportRemove",
   "requestBootstrapStewardshipGrant",
   "requestBootstrapStewardshipRevoke",
+  "requestSurfaceDefine",
   "requestBootstrapRouteDefine",
   "requestBootstrapServeDefine",
   "requestWidgetDefine",
@@ -52,6 +54,7 @@ test("authoring-core plugin owns generic authoring routes and handlers", async (
   assert.equal(manifest.runtime.entry, "./runtime.js");
   assert.deepEqual(bundle.handlerCatalog.dispatchHandlers, AUTHORING_CORE_HANDLER_IDS);
   assert.equal(bundle.routes.some(route => route.path === "/api/contexts" && route.handler === "context.create"), true);
+  assert.equal(bundle.routes.some(route => route.path === "/api/surfaces" && route.handler === "surface.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/widgets" && route.handler === "widgets.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/routes" && route.handler === "route.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/serve-mounts" && route.handler === "serve.create"), true);
