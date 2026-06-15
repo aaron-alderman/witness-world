@@ -1069,6 +1069,8 @@ a {
 
 .bs-edit-form { display: none; padding: 6px 8px 8px; background: rgba(0,0,0,.18); border-top: 1px solid var(--brd) }
 .bs-edit-form.open { display: block }
+.bs-params { display: none; padding: 6px 8px 8px; border-top: 1px solid var(--brd) }
+.bs-params.open { display: block }
 
 .bs-ef-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px }
 .bs-ef-row label { font-size: 10px; color: var(--t2); width: 40px; flex-shrink: 0 }

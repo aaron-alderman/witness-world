@@ -464,6 +464,22 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       document.querySelector("#chart-svg")?.__chartController?.spec?.params?.probe_sm === 425
     );
+    await page.locator("#surface-goodmanboltsetprimaryeditnameinput").fill("No Jemtec Edited");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryNameState") === "No Jemtec Edited"
+    );
+    assert.equal(await page.textContent("#surface-goodmanboltsetprimaryname"), "No Jemtec Edited");
+    await page.locator("#surface-goodmanboltsetprimaryeditcolourinput").evaluate(input => {
+      input.value = "#22c55e";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryColorState") === "#22c55e"
+    );
+    assert.equal(
+      await page.locator(".bs-params").first().evaluate(node => getComputedStyle(node).display),
+      "none"
+    );
 
     await page.click("#surface-goodmanmodeedit");
     await page.waitForFunction(() =>

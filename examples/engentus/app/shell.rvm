@@ -239,6 +239,62 @@ state GoodmanChartBandFill4: string {
   initial "#fde68a"
 }
 
+state GoodmanBoltPrimaryNameState: string {
+  initial "No Jemtec"
+}
+
+state GoodmanBoltPrimaryColorState: string {
+  initial "#dc2626"
+}
+
+state GoodmanBoltPrimaryUts: number {
+  initial 1040
+}
+
+state GoodmanBoltPrimaryUtsFree: bool {
+  initial true
+}
+
+state GoodmanBoltPrimaryUtsDist: string {
+  initial "normal"
+}
+
+state GoodmanBoltPrimaryEnduranceLimit: number {
+  initial 50
+}
+
+state GoodmanBoltPrimaryEnduranceFree: bool {
+  initial true
+}
+
+state GoodmanBoltPrimaryEnduranceDist: string {
+  initial "normal"
+}
+
+state GoodmanBoltPrimarySnSlope: number {
+  initial 4.6
+}
+
+state GoodmanBoltPrimarySnSlopeFree: bool {
+  initial false
+}
+
+state GoodmanBoltPrimarySnSlopeDist: string {
+  initial "fixed"
+}
+
+state GoodmanBoltPrimaryYieldStress: number {
+  initial 600
+}
+
+state GoodmanBoltPrimaryYieldFree: bool {
+  initial false
+}
+
+state GoodmanBoltPrimaryYieldDist: string {
+  initial "fixed"
+}
+
 state MillForcePercentCrit: number {
   initial 0.90
 }
@@ -813,6 +869,20 @@ process EngentusShellNavigation {
     GoodmanChartBandFill2
     GoodmanChartBandFill3
     GoodmanChartBandFill4
+    GoodmanBoltPrimaryNameState
+    GoodmanBoltPrimaryColorState
+    GoodmanBoltPrimaryUts
+    GoodmanBoltPrimaryUtsFree
+    GoodmanBoltPrimaryUtsDist
+    GoodmanBoltPrimaryEnduranceLimit
+    GoodmanBoltPrimaryEnduranceFree
+    GoodmanBoltPrimaryEnduranceDist
+    GoodmanBoltPrimarySnSlope
+    GoodmanBoltPrimarySnSlopeFree
+    GoodmanBoltPrimarySnSlopeDist
+    GoodmanBoltPrimaryYieldStress
+    GoodmanBoltPrimaryYieldFree
+    GoodmanBoltPrimaryYieldDist
   }
   handles {
     EngentusSignInRequested
@@ -3752,15 +3822,138 @@ view GoodmanBoltSetPrimaryName {
   kind text
   class sim-name
   prop tag = "span"
-  prop text = "M48 Baseline"
+  prop text = "No Jemtec"
+  bindings {
+    text from state GoodmanBoltPrimaryNameState
+  }
+}
+
+view GoodmanBoltSetPrimaryEditAction {
+  kind action
+  class bs-act
+  prop tag = "button"
+  prop buttonType = "button"
+  prop title = "Edit name/colour"
+  prop label = "✎"
+}
+
+view GoodmanBoltSetPrimaryCloneAction {
+  kind action
+  class bs-act
+  prop tag = "button"
+  prop buttonType = "button"
+  prop title = "Clone"
+  prop label = "⎘"
+}
+
+view GoodmanBoltSetPrimaryDeleteAction {
+  kind action
+  class bs-act
+  prop tag = "button"
+  prop buttonType = "button"
+  prop title = "Delete"
+  prop label = "✕"
+}
+
+view GoodmanBoltSetPrimaryActions {
+  kind action-row
+  class bs-actions
+  children {
+    GoodmanBoltSetPrimaryEditAction
+    GoodmanBoltSetPrimaryCloneAction
+    GoodmanBoltSetPrimaryDeleteAction
+  }
+}
+
+view GoodmanBoltSetPrimaryChevron {
+  kind text
+  class bs-chev
+  prop tag = "span"
+  prop text = "▶"
 }
 
 view GoodmanBoltSetPrimaryHeader {
   kind row
-  class sim-row on
+  class bs-head
   children {
     GoodmanBoltSetPrimarySwatch
     GoodmanBoltSetPrimaryName
+    GoodmanBoltSetPrimaryActions
+    GoodmanBoltSetPrimaryChevron
+  }
+}
+
+view GoodmanBoltSetPrimaryEditNameLabel {
+  kind text
+  prop tag = "label"
+  prop text = "Name"
+}
+
+view GoodmanBoltSetPrimaryEditNameInput {
+  kind input
+  prop tag = "input"
+  prop inputType = "text"
+  prop value = "No Jemtec"
+  bindings {
+    value from state GoodmanBoltPrimaryNameState
+  }
+  interactions {
+    on input self set GoodmanBoltPrimaryNameState eventValue
+  }
+}
+
+view GoodmanBoltSetPrimaryEditNameRow {
+  kind row
+  class bs-ef-row
+  children {
+    GoodmanBoltSetPrimaryEditNameLabel
+    GoodmanBoltSetPrimaryEditNameInput
+  }
+}
+
+view GoodmanBoltSetPrimaryEditColourLabel {
+  kind text
+  prop tag = "label"
+  prop text = "Colour"
+}
+
+view GoodmanBoltSetPrimaryEditColourInput {
+  kind input
+  prop tag = "input"
+  prop inputType = "color"
+  prop value = "#dc2626"
+  bindings {
+    value from state GoodmanBoltPrimaryColorState
+  }
+  interactions {
+    on input self set GoodmanBoltPrimaryColorState eventValue
+  }
+}
+
+view GoodmanBoltSetPrimaryEditColourRow {
+  kind row
+  class bs-ef-row
+  children {
+    GoodmanBoltSetPrimaryEditColourLabel
+    GoodmanBoltSetPrimaryEditColourInput
+  }
+}
+
+view GoodmanBoltSetPrimaryEditSaveAction {
+  kind action
+  class bs-ef-save
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Save"
+}
+
+view GoodmanBoltSetPrimaryEditForm {
+  kind form
+  class bs-edit-form open
+  children {
+    GoodmanBoltSetPrimaryEditNameRow
+    GoodmanBoltSetPrimaryEditColourRow
+    GoodmanBoltSetPrimaryEditSaveAction
   }
 }
 
@@ -3810,13 +4003,401 @@ view GoodmanBoltSetDiameterValue {
   prop text = "48 / 42 mm"
 }
 
+view GoodmanBoltSetMaterialTitle {
+  kind text
+  class edit-group-title
+  prop tag = "div"
+  prop text = "Material & Fatigue"
+}
+
+view GoodmanBoltSetUtsLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "UTS (MPa)"
+}
+
+view GoodmanBoltSetUtsValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "1040"
+  bindings {
+    text from state GoodmanBoltPrimaryUts
+  }
+}
+
+view GoodmanBoltSetUtsToggleTrack {
+  kind marker
+  class tog-track on
+  children {
+    GoodmanBoltSetUtsToggleKnob
+  }
+}
+
+view GoodmanBoltSetUtsToggleKnob {
+  kind marker
+  class tog-knob
+}
+
+view GoodmanBoltSetUtsToggleText {
+  kind text
+  class tog-lbl
+  prop tag = "span"
+  prop text = "free"
+}
+
+view GoodmanBoltSetUtsFreeToggle {
+  kind action
+  class free-tog
+  prop title = "Sample from distribution"
+  children {
+    GoodmanBoltSetUtsToggleTrack
+    GoodmanBoltSetUtsToggleText
+  }
+  interactions {
+    on click self set GoodmanBoltPrimaryUtsFree toggle
+  }
+}
+
+view GoodmanBoltSetUtsTop {
+  kind row
+  class prow-top
+  children {
+    GoodmanBoltSetUtsLabel
+    GoodmanBoltSetUtsValue
+    GoodmanBoltSetUtsFreeToggle
+  }
+}
+
+view GoodmanBoltSetUtsSlider {
+  kind input
+  class mill-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 200
+  prop max = 1400
+  prop step = 10
+  prop value = 1040
+  bindings {
+    value from state GoodmanBoltPrimaryUts
+  }
+  interactions {
+    on input self set GoodmanBoltPrimaryUts eventValue
+  }
+}
+
+view GoodmanBoltSetUtsDistSelect {
+  kind select
+  class dist-sel
+  prop tag = "select"
+  children {
+    GoodmanBoltSetUtsDistFixed
+    GoodmanBoltSetUtsDistNormal
+    GoodmanBoltSetUtsDistUniform
+    GoodmanBoltSetUtsDistLognormal
+    GoodmanBoltSetUtsDistTriangular
+  }
+  interactions {
+    on change self set GoodmanBoltPrimaryUtsDist eventValue
+  }
+}
+
+view GoodmanBoltSetUtsDistFixed {
+  kind option
+  prop tag = "option"
+  prop text = "fixed"
+}
+
+view GoodmanBoltSetUtsDistNormal {
+  kind option
+  prop tag = "option"
+  prop text = "normal"
+}
+
+view GoodmanBoltSetUtsDistUniform {
+  kind option
+  prop tag = "option"
+  prop text = "uniform"
+}
+
+view GoodmanBoltSetUtsDistLognormal {
+  kind option
+  prop tag = "option"
+  prop text = "lognormal"
+}
+
+view GoodmanBoltSetUtsDistTriangular {
+  kind option
+  prop tag = "option"
+  prop text = "triangular"
+}
+
+view GoodmanBoltSetUtsDistMeanLabel {
+  kind text
+  prop tag = "label"
+  prop text = "mean"
+}
+
+view GoodmanBoltSetUtsDistMeanInput {
+  kind input
+  prop tag = "input"
+  prop inputType = "number"
+  prop step = "any"
+  prop value = 1040
+  bindings {
+    value from state GoodmanBoltPrimaryUts
+  }
+  interactions {
+    on input self set GoodmanBoltPrimaryUts eventValue
+  }
+}
+
+view GoodmanBoltSetUtsDistMean {
+  kind field
+  class dig
+  children {
+    GoodmanBoltSetUtsDistMeanLabel
+    GoodmanBoltSetUtsDistMeanInput
+  }
+}
+
+view GoodmanBoltSetUtsDistStdLabel {
+  kind text
+  prop tag = "label"
+  prop text = "std"
+}
+
+view GoodmanBoltSetUtsDistStdInput {
+  kind input
+  prop tag = "input"
+  prop inputType = "number"
+  prop step = "any"
+  prop value = 25
+}
+
+view GoodmanBoltSetUtsDistStd {
+  kind field
+  class dig
+  children {
+    GoodmanBoltSetUtsDistStdLabel
+    GoodmanBoltSetUtsDistStdInput
+  }
+}
+
+view GoodmanBoltSetUtsDistInputs {
+  kind row
+  class dist-inputs
+  children {
+    GoodmanBoltSetUtsDistMean
+    GoodmanBoltSetUtsDistStd
+  }
+}
+
+view GoodmanBoltSetUtsDistBox {
+  kind group
+  class dist-box open
+  children {
+    GoodmanBoltSetUtsDistSelect
+    GoodmanBoltSetUtsDistInputs
+  }
+}
+
+view GoodmanBoltSetUtsRow {
+  kind control-row
+  class param-row
+  children {
+    GoodmanBoltSetUtsTop
+    GoodmanBoltSetUtsSlider
+    GoodmanBoltSetUtsDistBox
+  }
+}
+
+view GoodmanBoltSetEnduranceLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Endurance limit σ_lim (MPa)"
+}
+
+view GoodmanBoltSetEnduranceValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "50"
+  bindings {
+    text from state GoodmanBoltPrimaryEnduranceLimit
+  }
+}
+
+view GoodmanBoltSetEnduranceTop {
+  kind row
+  class prow-top
+  children {
+    GoodmanBoltSetEnduranceLabel
+    GoodmanBoltSetEnduranceValue
+  }
+}
+
+view GoodmanBoltSetEnduranceSlider {
+  kind input
+  class mill-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 20
+  prop max = 120
+  prop step = 1
+  prop value = 50
+  bindings {
+    value from state GoodmanBoltPrimaryEnduranceLimit
+  }
+  interactions {
+    on input self set GoodmanBoltPrimaryEnduranceLimit eventValue
+  }
+}
+
+view GoodmanBoltSetEnduranceRow {
+  kind control-row
+  class param-row
+  children {
+    GoodmanBoltSetEnduranceTop
+    GoodmanBoltSetEnduranceSlider
+  }
+}
+
+view GoodmanBoltSetSnSlopeLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "SN slope m"
+}
+
+view GoodmanBoltSetSnSlopeValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "4.6"
+  bindings {
+    text from state GoodmanBoltPrimarySnSlope
+  }
+}
+
+view GoodmanBoltSetSnSlopeTop {
+  kind row
+  class prow-top
+  children {
+    GoodmanBoltSetSnSlopeLabel
+    GoodmanBoltSetSnSlopeValue
+  }
+}
+
+view GoodmanBoltSetSnSlopeSlider {
+  kind input
+  class mill-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 2
+  prop max = 8
+  prop step = 0.1
+  prop value = 4.6
+  bindings {
+    value from state GoodmanBoltPrimarySnSlope
+  }
+  interactions {
+    on input self set GoodmanBoltPrimarySnSlope eventValue
+  }
+}
+
+view GoodmanBoltSetSnSlopeRow {
+  kind control-row
+  class param-row
+  children {
+    GoodmanBoltSetSnSlopeTop
+    GoodmanBoltSetSnSlopeSlider
+  }
+}
+
+view GoodmanBoltSetYieldLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Yield stress (MPa)"
+}
+
+view GoodmanBoltSetYieldValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "600"
+  bindings {
+    text from state GoodmanBoltPrimaryYieldStress
+  }
+}
+
+view GoodmanBoltSetYieldTop {
+  kind row
+  class prow-top
+  children {
+    GoodmanBoltSetYieldLabel
+    GoodmanBoltSetYieldValue
+  }
+}
+
+view GoodmanBoltSetYieldSlider {
+  kind input
+  class mill-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 100
+  prop max = 1200
+  prop step = 10
+  prop value = 600
+  bindings {
+    value from state GoodmanBoltPrimaryYieldStress
+  }
+  interactions {
+    on input self set GoodmanBoltPrimaryYieldStress eventValue
+  }
+}
+
+view GoodmanBoltSetYieldRow {
+  kind control-row
+  class param-row
+  children {
+    GoodmanBoltSetYieldTop
+    GoodmanBoltSetYieldSlider
+  }
+}
+
+view GoodmanBoltSetMaterialGroup {
+  kind group
+  class edit-group
+  children {
+    GoodmanBoltSetMaterialTitle
+    GoodmanBoltSetUtsRow
+    GoodmanBoltSetEnduranceRow
+    GoodmanBoltSetSnSlopeRow
+    GoodmanBoltSetYieldRow
+  }
+}
+
+view GoodmanBoltSetPrimaryParams {
+  kind group
+  class bs-params
+  children {
+    GoodmanBoltSetMaterialGroup
+  }
+}
+
 view GoodmanBoltSetPrimaryCard {
   kind card
-  class goodman-bolt-set-card
+  class bs-item goodman-bolt-set-card
   children {
     GoodmanBoltSetPrimaryHeader
+    GoodmanBoltSetPrimaryEditForm
     GoodmanBoltSetPrimaryClampRow
     GoodmanBoltSetDiameterRow
+    GoodmanBoltSetPrimaryParams
   }
 }
 
@@ -3968,11 +4549,10 @@ view GoodmanFatigueLegendSection {
   }
 }
 
-view GoodmanSidebar {
-  kind sidebar
-  class goodman-controls
-  prop domId = "sb"
-  prop scrollDomId = "sb-scroll"
+view GoodmanSidebarScroll {
+  kind scroll-region
+  class goodman-sidebar-scroll
+  prop domId = "sb-scroll"
   children {
     GoodmanScenarioSection
     GoodmanSimulationSection
@@ -3980,6 +4560,15 @@ view GoodmanSidebar {
     GoodmanChartStyleSection
     GoodmanBoltSetsSection
     GoodmanFatigueLegendSection
+  }
+}
+
+view GoodmanSidebar {
+  kind sidebar
+  class goodman-controls
+  prop domId = "sb"
+  children {
+    GoodmanSidebarScroll
   }
 }
 

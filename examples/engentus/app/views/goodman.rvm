@@ -43,6 +43,8 @@ chart GoodmanDiagram of BoltFatigue {
     param.sigma_lim from state GoodmanStaticEnduranceLimit
     param.m_slope from state GoodmanStaticSlope
     param.probe_sm from state GoodmanStaticProbeMeanStress
+    param.uts from state GoodmanBoltPrimaryUts
+    param.ys from state GoodmanBoltPrimaryYieldStress
   }
 
   x sm
@@ -101,6 +103,8 @@ chart GoodmanMCBands of BoltFatigueMC {
     presentation.bandFills.3 from state GoodmanChartBandFill4
     param.F_alt_applied_N from state GoodmanStaticAppliedShear
     param.n_samples from state GoodmanRunBoltsPerSet
+    param.uts from state GoodmanBoltPrimaryUts
+    param.ys from state GoodmanBoltPrimaryYieldStress
   }
 
   x sm

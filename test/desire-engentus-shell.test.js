@@ -108,6 +108,12 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(types.get("GoodmanChartTitleSize")?.body?.valueType, "number");
   assert.equal(types.get("GoodmanChartAxisSize")?.body?.valueType, "number");
   assert.equal(types.get("GoodmanChartBandFill1")?.body?.valueType, "string");
+  assert.equal(types.get("GoodmanBoltPrimaryNameState")?.body?.valueType, "string");
+  assert.equal(types.get("GoodmanBoltPrimaryColorState")?.body?.valueType, "string");
+  assert.equal(types.get("GoodmanBoltPrimaryUts")?.body?.valueType, "number");
+  assert.equal(types.get("GoodmanBoltPrimaryUtsFree")?.body?.valueType, "bool");
+  assert.equal(types.get("GoodmanBoltPrimaryUtsDist")?.body?.valueType, "string");
+  assert.equal(types.get("GoodmanBoltPrimaryYieldStress")?.body?.valueType, "number");
   assert.equal(surfaces.get("EngentusRoot")?.body?.processRef, "EngentusShellNavigation");
   assert.equal(surfaces.get("EngentusLoginBook")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("EngentusLoginPasswordField")?.body?.bindings[0]?.prop, "inputType");
@@ -366,6 +372,10 @@ test("the shell is structured through explicit child regions instead of flattene
   ]);
 
   assert.deepEqual(surfaces.get("GoodmanSidebar")?.body?.children, [
+    "GoodmanSidebarScroll"
+  ]);
+
+  assert.deepEqual(surfaces.get("GoodmanSidebarScroll")?.body?.children, [
     "GoodmanScenarioSection",
     "GoodmanSimulationSection",
     "GoodmanRunConfigSection",
@@ -438,6 +448,45 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanBoltSetPrimaryCard",
     "GoodmanBoltSetMaintenanceCard"
   ]);
+  assert.deepEqual(surfaces.get("GoodmanBoltSetPrimaryCard")?.body?.children, [
+    "GoodmanBoltSetPrimaryHeader",
+    "GoodmanBoltSetPrimaryEditForm",
+    "GoodmanBoltSetPrimaryClampRow",
+    "GoodmanBoltSetDiameterRow",
+    "GoodmanBoltSetPrimaryParams"
+  ]);
+  assert.deepEqual(surfaces.get("GoodmanBoltSetPrimaryHeader")?.body?.children, [
+    "GoodmanBoltSetPrimarySwatch",
+    "GoodmanBoltSetPrimaryName",
+    "GoodmanBoltSetPrimaryActions",
+    "GoodmanBoltSetPrimaryChevron"
+  ]);
+  assert.deepEqual(surfaces.get("GoodmanBoltSetPrimaryActions")?.body?.children, [
+    "GoodmanBoltSetPrimaryEditAction",
+    "GoodmanBoltSetPrimaryCloneAction",
+    "GoodmanBoltSetPrimaryDeleteAction"
+  ]);
+  assert.deepEqual(surfaces.get("GoodmanBoltSetPrimaryEditForm")?.body?.children, [
+    "GoodmanBoltSetPrimaryEditNameRow",
+    "GoodmanBoltSetPrimaryEditColourRow",
+    "GoodmanBoltSetPrimaryEditSaveAction"
+  ]);
+  assert.deepEqual(surfaces.get("GoodmanBoltSetPrimaryParams")?.body?.children, [
+    "GoodmanBoltSetMaterialGroup"
+  ]);
+  assert.equal(surfaces.get("GoodmanBoltSetPrimaryParams")?.body?.className, "bs-params");
+  assert.deepEqual(surfaces.get("GoodmanBoltSetMaterialGroup")?.body?.children, [
+    "GoodmanBoltSetMaterialTitle",
+    "GoodmanBoltSetUtsRow",
+    "GoodmanBoltSetEnduranceRow",
+    "GoodmanBoltSetSnSlopeRow",
+    "GoodmanBoltSetYieldRow"
+  ]);
+  assert.equal(surfaces.get("GoodmanBoltSetPrimaryEditNameInput")?.body?.interactions[0]?.action?.state, "GoodmanBoltPrimaryNameState");
+  assert.equal(surfaces.get("GoodmanBoltSetPrimaryEditColourInput")?.body?.props?.inputType, "color");
+  assert.equal(surfaces.get("GoodmanBoltSetUtsSlider")?.body?.interactions[0]?.action?.state, "GoodmanBoltPrimaryUts");
+  assert.equal(surfaces.get("GoodmanBoltSetUtsFreeToggle")?.body?.interactions[0]?.action?.state, "GoodmanBoltPrimaryUtsFree");
+  assert.equal(surfaces.get("GoodmanBoltSetUtsDistSelect")?.body?.interactions[0]?.action?.state, "GoodmanBoltPrimaryUtsDist");
 
   assert.deepEqual(surfaces.get("GoodmanFatigueLegend")?.body?.children, [
     "GoodmanLegendInfiniteRow",

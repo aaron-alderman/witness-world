@@ -53,7 +53,9 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
     "param.rpm",
     "param.sigma_lim",
     "param.m_slope",
-    "param.probe_sm"
+    "param.probe_sm",
+    "param.uts",
+    "param.ys"
   ]);
   assert.equal(plan.presentation.showGrid, true);
   assert.equal(plan.presentation.showAnnotations, true);
@@ -101,6 +103,8 @@ test("Goodman Monte Carlo chart binds authored run config into the ensemble mode
   assert.equal(view.bindings.find(binding => binding.prop === "param.n_samples")?.source?.state, "GoodmanRunBoltsPerSet");
   assert.equal(view.bindings.find(binding => binding.prop === "presentation.title")?.source?.state, "GoodmanChartTitle");
   assert.equal(view.bindings.find(binding => binding.prop === "presentation.bandFills.0")?.source?.state, "GoodmanChartBandFill1");
+  assert.equal(view.bindings.find(binding => binding.prop === "param.uts")?.source?.state, "GoodmanBoltPrimaryUts");
+  assert.equal(view.bindings.find(binding => binding.prop === "param.ys")?.source?.state, "GoodmanBoltPrimaryYieldStress");
 
   const evaluated = evaluateModel(model, {
     functions: { ...goodmanFunctions, ...samplingFunctions },
