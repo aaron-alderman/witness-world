@@ -32,8 +32,6 @@ chart GoodmanDiagram of BoltFatigue {
     presentation.titleSize from state GoodmanChartTitleSize
     presentation.axisSize from state GoodmanChartAxisSize
     presentation.showGrid from state GoodmanChartGridVisible
-    presentation.showAnnotations from state GoodmanChartAnnotationsVisible
-    presentation.pointSize from state GoodmanChartPointSize
     presentation.bandFills.0 from state GoodmanChartBandFill1
     presentation.bandFills.1 from state GoodmanChartBandFill2
     presentation.bandFills.2 from state GoodmanChartBandFill3
@@ -105,8 +103,6 @@ chart GoodmanMCBands of BoltFatigueMC {
     presentation.titleSize from state GoodmanChartTitleSize
     presentation.axisSize from state GoodmanChartAxisSize
     presentation.showGrid from state GoodmanChartGridVisible
-    presentation.showAnnotations from state GoodmanChartAnnotationsVisible
-    presentation.pointSize from state GoodmanChartPointSize
     presentation.bandFills.0 from state GoodmanChartBandFill1
     presentation.bandFills.1 from state GoodmanChartBandFill2
     presentation.bandFills.2 from state GoodmanChartBandFill3

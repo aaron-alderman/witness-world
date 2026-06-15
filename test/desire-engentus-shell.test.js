@@ -540,8 +540,7 @@ test("the shell is structured through explicit child regions instead of flattene
   assert.deepEqual(surfaces.get("GoodmanChartStyleControls")?.body?.children, [
     "GoodmanChartLabelsGroup",
     "GoodmanChartBandColoursGroup",
-    "GoodmanChartAnnotationsGroup",
-    "GoodmanChartPointSizeRow"
+    "GoodmanChartAnnotationsGroup"
   ]);
   assert.deepEqual(surfaces.get("GoodmanChartLabelsGroup")?.body?.children, [
     "GoodmanChartLabelsGroupTitle",
@@ -561,10 +560,11 @@ test("the shell is structured through explicit child regions instead of flattene
   ]);
   assert.deepEqual(surfaces.get("GoodmanChartAnnotationsGroup")?.body?.children, [
     "GoodmanChartAnnotationsGroupTitle",
-    "GoodmanChartAnnotationsToggle",
     "GoodmanChartAnnotationList",
     "GoodmanChartAddAnnotationAction"
   ]);
+  assert.equal(surfaces.has("GoodmanChartAnnotationsToggle"), false);
+  assert.equal(surfaces.has("GoodmanChartPointSizeRow"), false);
   assert.equal(surfaces.get("GoodmanChartTitleInput")?.body?.bindings[0]?.source?.state, "GoodmanChartTitle");
   assert.equal(surfaces.get("GoodmanChartTitleInput")?.body?.interactions[0]?.action?.state, "GoodmanChartTitle");
   assert.equal(surfaces.get("GoodmanChartBand1Input")?.body?.props?.inputType, "color");

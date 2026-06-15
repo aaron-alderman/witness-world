@@ -205,14 +205,6 @@ state GoodmanChartGridVisible: bool {
   initial true
 }
 
-state GoodmanChartAnnotationsVisible: bool {
-  initial true
-}
-
-state GoodmanChartPointSize: number {
-  initial 4
-}
-
 state GoodmanChartTitle: string {
   initial "Goodman Fatigue Diagram - M48 Mill Liner Bolt"
 }
@@ -553,13 +545,6 @@ derive GoodmanPlaybackSpeedText {
   prop suffix = "x"
 }
 
-derive GoodmanChartPointSizeText {
-  kind format
-  source GoodmanChartPointSize
-  prop digits = 0
-  prop suffix = " px"
-}
-
 derive GoodmanStaticAppliedShearText {
   kind format
   source GoodmanStaticAppliedShear
@@ -883,8 +868,6 @@ process EngentusShellNavigation {
     GoodmanPlaybackSpeed
     GoodmanTrailVisible
     GoodmanChartGridVisible
-    GoodmanChartAnnotationsVisible
-    GoodmanChartPointSize
     GoodmanChartTitle
     GoodmanChartXAxisLabel
     GoodmanChartYAxisLabel
@@ -3344,73 +3327,6 @@ view GoodmanChartGridToggle {
   }
 }
 
-view GoodmanChartAnnotationsToggle {
-  kind input
-  class mc-row
-  prop tag = "input"
-  prop inputType = "checkbox"
-  prop label = "Annotations"
-  prop checked = true
-  bindings {
-    checked from state GoodmanChartAnnotationsVisible
-  }
-  interactions {
-    on change self set GoodmanChartAnnotationsVisible eventChecked
-  }
-}
-
-view GoodmanChartPointSizeLabel {
-  kind text
-  class plabel
-  prop tag = "span"
-  prop text = "Point size"
-}
-
-view GoodmanChartPointSizeValue {
-  kind text
-  class pval
-  prop tag = "span"
-  prop text = "4 px"
-  bindings {
-    text from projection GoodmanChartPointSizeText
-  }
-}
-
-view GoodmanChartPointSizeTop {
-  kind row
-  class prow-top
-  children {
-    GoodmanChartPointSizeLabel
-    GoodmanChartPointSizeValue
-  }
-}
-
-view GoodmanChartPointSizeInput {
-  kind input
-  class mill-slider
-  prop tag = "input"
-  prop inputType = "range"
-  prop min = 1
-  prop max = 12
-  prop step = 1
-  prop value = 4
-  bindings {
-    value from state GoodmanChartPointSize
-  }
-  interactions {
-    on input self set GoodmanChartPointSize eventValue
-  }
-}
-
-view GoodmanChartPointSizeRow {
-  kind control-row
-  class prow
-  children {
-    GoodmanChartPointSizeTop
-    GoodmanChartPointSizeInput
-  }
-}
-
 view GoodmanChartLabelsGroupTitle {
   kind text
   class edit-group-title
@@ -3768,7 +3684,6 @@ view GoodmanChartAnnotationsGroup {
   class edit-group
   children {
     GoodmanChartAnnotationsGroupTitle
-    GoodmanChartAnnotationsToggle
     GoodmanChartAnnotationList
     GoodmanChartAddAnnotationAction
   }
@@ -3781,7 +3696,6 @@ view GoodmanChartStyleControls {
     GoodmanChartLabelsGroup
     GoodmanChartBandColoursGroup
     GoodmanChartAnnotationsGroup
-    GoodmanChartPointSizeRow
   }
 }
 

@@ -19,11 +19,10 @@ grant runtime authority to copied JS or presenter code.
 - Goodman chart-style controls now match the reference edit-panel shape more
   closely: Labels, Band Colours, and Annotations are authored as explicit
   RVM child groups. Title, X/Y axis labels, title size, axis size, grid,
-  annotation visibility, point size, and the four band colour states reach the
-  mounted `chart.render` controller through generic `presentation.*`
-  capability props. The chart runtime accepts these as view-presentation
-  patches, including nested values such as `bandFills.0`, not
-  Goodman-specific logic.
+  and the four band colour states reach the mounted `chart.render` controller
+  through generic `presentation.*` capability props. The chart runtime accepts
+  these as view-presentation patches, including nested values such as
+  `bandFills.0`, not Goodman-specific logic.
 - Goodman static reference controls now exist as authored inputs in oracle
   sidebar order: applied shear, mill speed, `σ_lim endurance`, SN slope, and
   probe preload. Their process state binds into `GoodmanDiagram` model params

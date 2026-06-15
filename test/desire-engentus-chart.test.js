@@ -49,8 +49,6 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
     "presentation.titleSize",
     "presentation.axisSize",
     "presentation.showGrid",
-    "presentation.showAnnotations",
-    "presentation.pointSize",
     "presentation.bandFills.0",
     "presentation.bandFills.1",
     "presentation.bandFills.2",
@@ -64,8 +62,6 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
     "param.ys"
   ]);
   assert.equal(plan.presentation.showGrid, true);
-  assert.equal(plan.presentation.showAnnotations, true);
-  assert.equal(plan.presentation.pointSize, 4);
 
   const layer = name => plan.layers.find(l => l.name === name);
   const sm = evaluated.axes.sm.values;
