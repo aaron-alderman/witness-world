@@ -7,6 +7,7 @@ import {
 } from "../src/desire/index.js";
 import { evaluateModel } from "../plugins/chart-runtime/dataflow-eval.js";
 import { goodmanFunctions } from "../examples/engentus/app/chart-functions/goodman-stdlib.js";
+import { millForceKernels } from "../examples/engentus/app/chart-functions/mill-force-kernels.js";
 import { samplingFunctions } from "../examples/engentus/app/chart-functions/sampling.js";
 import { planChart } from "../plugins/chart-runtime/gog-runtime.js";
 
@@ -230,4 +231,24 @@ test("Goodman Monte Carlo chart binds authored run config into the ensemble mode
   assert.equal(evaluated.axes.sample.values.length, 24);
   assert.equal(evaluated.fields.sa_p50.axes.includes("sample"), false);
   assert.equal(evaluated.fields.sa_p50.axes.includes("sm"), true);
+});
+
+test("Mill Force chart plans preserve authored kN lines and reference chrome", async () => {
+  const modelBody = await loadBody("models/mill-force.rvm", "dataflow", "MillForce");
+  const angleBody = await loadBody("views/mill-force.rvm", "surface", "MillForceAngle");
+  const roseBody = await loadBody("views/mill-force.rvm", "surface", "MillForceRose");
+  const evaluated = evaluateModel(modelBody, { functions: millForceKernels });
+  const anglePlan = planChart(angleBody, evaluated, { width: 800, height: 520 });
+  const rosePlan = planChart(roseBody, evaluated, { width: 520, height: 520 });
+  const angleLayer = name => anglePlan.layers.find(layer => layer.name === name);
+  const roseLayer = name => rosePlan.layers.find(layer => layer.name === name);
+
+  assert.equal(anglePlan.scales.y.label, "Force (kN)");
+  assert.equal(angleLayer("fr").primitives[0].points[12].y, evaluated.fields.F_r_kN.data[12][1]);
+  assert.equal(angleLayer("ft").stroke, "#475569");
+  assert.equal(angleLayer("fres").stroke, "#f1f5f9");
+  assert.deepEqual(angleLayer("legend_fr_label").primitives, [{ x: 704, y: 15, label: "Radial" }]);
+  assert.deepEqual(angleLayer("legend_ft_label").primitives, [{ x: 704, y: 35, label: "Tangential" }]);
+  assert.deepEqual(angleLayer("legend_resultant_label").primitives, [{ x: 704, y: 55, label: "Resultant" }]);
+  assert.deepEqual(roseLayer("title").primitives, [{ x: 260, y: 22, label: "Resultant Force Rose (per liner)" }]);
 });

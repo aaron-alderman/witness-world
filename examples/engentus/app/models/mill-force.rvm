@@ -87,6 +87,9 @@ model MillForce {
   derive F_r = Fw_r + Fc_r over segment, method
   derive F_t = Fw_t over segment, method
   derive F_resultant = sqrt(F_r^2 + F_t^2) over segment, method
+  derive F_r_kN = F_r / 1000 over segment, method
+  derive F_t_kN = F_t / 1000 over segment, method
+  derive F_resultant_kN = F_resultant / 1000 over segment, method
 
   // ── scalar readouts for the authored results panel ──
   // Method-indexed values are reduced through the active authored model param,

@@ -54,16 +54,26 @@ chart MillForceAngle of MillForce {
   x.label "Segment angle θ (rad)"
   y force
   y.domain 0 auto
-  y.label "Force (N)"
-  layer fr   = line over segment | x:tBar y:F_r where:method=param.active_method stroke:blue tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
-  layer ft   = line over segment | x:tBar y:F_t where:method=param.active_method stroke:red tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
-  layer fres = line over segment | x:tBar y:F_resultant where:method=param.active_method stroke:ylw width:2.4 tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
-  layer grounded_fr   = line over segment | x:tBar y:F_r where:method=grounded stroke:blue tooltip.liner:segment tooltip.method:grounded tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
-  layer grounded_ft   = line over segment | x:tBar y:F_t where:method=grounded stroke:red tooltip.liner:segment tooltip.method:grounded tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
-  layer grounded_fres = line over segment | x:tBar y:F_resultant where:method=grounded stroke:ylw width:2.4 tooltip.liner:segment tooltip.method:grounded tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
-  layer faithful_fr   = line over segment | x:tBar y:F_r where:method=faithful stroke:slate dash:true tooltip.liner:segment tooltip.method:faithful tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
-  layer faithful_ft   = line over segment | x:tBar y:F_t where:method=faithful stroke:pur dash:true tooltip.liner:segment tooltip.method:faithful tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
-  layer faithful_fres = line over segment | x:tBar y:F_resultant where:method=faithful stroke:dk width:2.4 dash:true tooltip.liner:segment tooltip.method:faithful tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
+  y.label "Force (kN)"
+  layer fr   = line over segment | x:tBar y:F_r_kN where:method=param.active_method stroke:blue tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
+  layer ft   = line over segment | x:tBar y:F_t_kN where:method=param.active_method stroke:slate tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
+  layer fres = line over segment | x:tBar y:F_resultant_kN where:method=param.active_method stroke:"#f1f5f9" width:2.4 tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
+  layer grounded_fr   = line over segment | x:tBar y:F_r_kN where:method=grounded stroke:blue tooltip.liner:segment tooltip.method:grounded tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
+  layer grounded_ft   = line over segment | x:tBar y:F_t_kN where:method=grounded stroke:slate tooltip.liner:segment tooltip.method:grounded tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
+  layer grounded_fres = line over segment | x:tBar y:F_resultant_kN where:method=grounded stroke:"#f1f5f9" width:2.4 tooltip.liner:segment tooltip.method:grounded tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
+  layer faithful_fr   = line over segment | x:tBar y:F_r_kN where:method=faithful stroke:slate dash:true tooltip.liner:segment tooltip.method:faithful tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
+  layer faithful_ft   = line over segment | x:tBar y:F_t_kN where:method=faithful stroke:pur dash:true tooltip.liner:segment tooltip.method:faithful tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
+  layer faithful_fres = line over segment | x:tBar y:F_resultant_kN where:method=faithful stroke:dk width:2.4 dash:true tooltip.liner:segment tooltip.method:faithful tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
+  layer legend_fr_swatch = screen-rect | xAnchor:right x:120 y:22 width:18 height:3 fill:blue
+  layer legend_fr_label = screen-text | xAnchor:right x:96 y:15 label:"Radial" fill:"#f1f5f9" size:11
+  layer legend_ft_swatch = screen-rect | xAnchor:right x:120 y:42 width:18 height:3 fill:slate
+  layer legend_ft_label = screen-text | xAnchor:right x:96 y:35 label:"Tangential" fill:"#f1f5f9" size:11
+  layer legend_resultant_swatch = screen-rect | xAnchor:right x:120 y:62 width:18 height:3 fill:"#f1f5f9"
+  layer legend_resultant_label = screen-text | xAnchor:right x:96 y:55 label:"Resultant" fill:"#f1f5f9" size:11
+  layer legend_grounded_swatch = screen-rect | xAnchor:right x:120 y:94 width:14 height:2 fill:"#f1f5f9" when:param.analysis_mode=compare
+  layer legend_grounded_label = screen-text | xAnchor:right x:100 y:87 label:"grounded" fill:"#f1f5f9" size:10 when:param.analysis_mode=compare
+  layer legend_faithful_swatch = screen-rect | xAnchor:right x:120 y:108 width:14 height:2 fill:"#f1f5f9" opacity:0.65 when:param.analysis_mode=compare
+  layer legend_faithful_label = screen-text | xAnchor:right x:100 y:101 label:"faithful" fill:"#f1f5f9" size:10 when:param.analysis_mode=compare
 }
 
 // Force rose (polar): resultant magnitude per segment, traced as a closed polygon
@@ -111,6 +121,7 @@ chart MillForceRose of MillForce {
   theta tBar
   r F_resultant
   r.domain 0 auto
+  layer title = screen-text | xAnchor:center x:0 y:22 label:"Resultant Force Rose (per liner)" fill:"#f1f5f9" size:11
   layer rose = polygon over segment | theta:tBar r:F_resultant where:method=param.active_method stroke:blue fill:blue tooltip.liner:segment tooltip.method:param.active_method tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
   layer grounded_rose = polygon over segment | theta:tBar r:F_resultant where:method=grounded stroke:blue fill:blue tooltip.liner:segment tooltip.method:grounded tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
   layer faithful_rose = polygon over segment | theta:tBar r:F_resultant where:method=faithful stroke:ylw fill:ylw tooltip.liner:segment tooltip.method:faithful tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare

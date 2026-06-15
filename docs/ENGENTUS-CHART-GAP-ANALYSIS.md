@@ -209,6 +209,10 @@ grant runtime authority to copied JS or presenter code.
   point-probe hooks, and displays authored tooltip elements for the
   cross-section, force-vs-angle, and force-rose charts without a
   Mill-Force-local controller.
+- Mill Force force-vs-angle chart now uses authored kN fields for the plotted
+  force series, matching the reference y-axis unit rather than plotting raw
+  Newton values. The reference series legend and force-rose title are authored
+  as chart screen layers in `views/mill-force.rvm`.
 - Mill Force Monte Carlo now has an authored dataflow/chart first pass:
   `MillForce` includes a `sample` ensemble axis, seeded normal sampling for the
   four reference MC controls, segment-wise p10/p90 radial-force reductions, and
@@ -249,8 +253,11 @@ grant runtime authority to copied JS or presenter code.
   stock charts now exists through the generic chart tooltip seam. Compare
   deltas now exist as authored scalar outputs and inline percent readouts, and
   the cross-section chart now carries authored legend/force-scale annotations,
-  but the compare panel is still a first-pass authored analysis view rather
-  than final reference parity.
+  while the force-vs-angle chart carries authored kN scaling and legend chrome.
+  The force-vs-angle x-axis still needs the reference sorted physical display
+  degree transform; that should be expressed as authored data transform/sort
+  semantics rather than a chart-local controller shortcut. The compare panel is
+  still a first-pass authored analysis view rather than final reference parity.
 - No app-local browser runtime, presenter, or controller seam should be added to
   close these gaps. The next work should continue through authored surfaces,
   process state, projections, and explicit capability bindings.
