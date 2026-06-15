@@ -41,7 +41,7 @@ chart MillForceAngle of MillForce {
     param.m_liner from state MillForceLinerMass
     param.height from state MillForceLinerHeight
     param.active_method from state MillForceActiveModel
-    param.analysis_mode from state MillForceActiveAnalysisMode
+    param.analysis_mode from state MillForceChartAnalysisMode
     param.n_samples from state MillForceMcSamples
     param.mc_J_total_free from state MillForceMcJTotalFree
     param.mc_percent_crit_free from state MillForceMcPercentCritFree
@@ -110,7 +110,7 @@ chart MillForceRose of MillForce {
     param.m_liner from state MillForceLinerMass
     param.height from state MillForceLinerHeight
     param.active_method from state MillForceActiveModel
-    param.analysis_mode from state MillForceActiveAnalysisMode
+    param.analysis_mode from state MillForceChartAnalysisMode
     param.n_samples from state MillForceMcSamples
     param.mc_J_total_free from state MillForceMcJTotalFree
     param.mc_percent_crit_free from state MillForceMcPercentCritFree
@@ -161,7 +161,7 @@ chart MillForceCross of MillForce {
     param.m_liner from state MillForceLinerMass
     param.height from state MillForceLinerHeight
     param.active_method from state MillForceActiveModel
-    param.analysis_mode from state MillForceActiveAnalysisMode
+    param.analysis_mode from state MillForceChartAnalysisMode
     param.n_samples from state MillForceMcSamples
     param.mc_J_total_free from state MillForceMcJTotalFree
     param.mc_percent_crit_free from state MillForceMcPercentCritFree

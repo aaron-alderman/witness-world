@@ -27,25 +27,35 @@ async function setup() {
   return { model, evaluated, g, f, N };
 }
 
+function pointAtX(points, x) {
+  const point = points.find(candidate => candidate.x === x);
+  assert.ok(point, `point for x=${x} not found`);
+  return point;
+}
+
 test("MillForceAngle plans cartesian lines over segment angle, sliced to active model", async () => {
   const { evaluated, g, N } = await setup();
   const view = await loadBody("views/mill-force.rvm", "surface", "MillForceAngle");
   const plan = planChart(view, evaluated, { width: 800, height: 520 });
 
   assert.equal(plan.frame, "cartesian");
-  assert.equal(plan.scales.x.label, "Segment angle θ (rad)");
-  assert.ok(plan.scales.x.domain[1] > 0);            // auto-fit to tBar range
+  assert.equal(plan.scales.x.label, "θ (°, standard - 0° = East)");
+  assert.deepEqual(plan.scales.x.domain, [0, 360]);
   const fr = plan.layers.find(l => l.name === "fr");
   assert.equal(fr.mark, "line");
   assert.equal(fr.primitives[0].points.length, N);
-  // x = tBar[seg][grounded], y = F_r[seg][grounded]
+  // x = reference display degrees, y = force in kN.
   for (const s of [0, 5, 12, 20]) {
-    const pt = fr.primitives[0].points[s];
-    assert.equal(pt.x, evaluated.fields.tBar.data[s][g]);
-    assert.equal(pt.y, evaluated.fields.F_r.data[s][g]);
+    const pt = pointAtX(fr.primitives[0].points, evaluated.fields.display_angle_deg.data[s]);
+    assert.equal(pt.y, evaluated.fields.F_r_kN.data[s][g]);
   }
-  assert.equal(plan.layers.find(l => l.name === "fres").primitives[0].points[8].y,
-    evaluated.fields.F_resultant.data[8][g]);
+  assert.equal(
+    pointAtX(
+      plan.layers.find(l => l.name === "fres").primitives[0].points,
+      evaluated.fields.display_angle_deg.data[8]
+    ).y,
+    evaluated.fields.F_resultant_kN.data[8][g]
+  );
 });
 
 test("MillForce charts can slice faithful data through an authored chart param", async () => {
@@ -62,8 +72,11 @@ test("MillForce charts can slice faithful data through an authored chart param",
 
   const anglePlan = planChart(angle, evaluated, { width: 800, height: 520 });
   assert.equal(
-    anglePlan.layers.find(l => l.name === "fres").primitives[0].points[8].y,
-    evaluated.fields.F_resultant.data[8][f]
+    pointAtX(
+      anglePlan.layers.find(l => l.name === "fres").primitives[0].points,
+      evaluated.fields.display_angle_deg.data[8]
+    ).y,
+    evaluated.fields.F_resultant_kN.data[8][f]
   );
 
   const rosePlan = planChart(rose, evaluated, { width: 600, height: 600 });
@@ -146,8 +159,14 @@ test("MillForceAngle compare mode renders grounded and faithful layer pairs", as
   assert.equal(faithful.hidden, undefined);
   assert.equal(grounded.primitives[0].points.length, N);
   assert.equal(faithful.primitives[0].points.length, N);
-  assert.equal(grounded.primitives[0].points[8].y, evaluated.fields.F_resultant.data[8][g]);
-  assert.equal(faithful.primitives[0].points[8].y, evaluated.fields.F_resultant.data[8][f]);
+  assert.equal(
+    pointAtX(grounded.primitives[0].points, evaluated.fields.display_angle_deg.data[8]).y,
+    evaluated.fields.F_resultant_kN.data[8][g]
+  );
+  assert.equal(
+    pointAtX(faithful.primitives[0].points, evaluated.fields.display_angle_deg.data[8]).y,
+    evaluated.fields.F_resultant_kN.data[8][f]
+  );
 });
 
 test("MillForceRose compare mode renders both model traces", async () => {
@@ -186,8 +205,11 @@ test("MillForce compare layers stay hidden outside compare mode", async () => {
   assert.equal(plan.layers.find(l => l.name === "grounded_fres").hidden, true);
   assert.equal(plan.layers.find(l => l.name === "faithful_fres").hidden, true);
   assert.equal(
-    plan.layers.find(l => l.name === "fres").primitives[0].points[8].y,
-    evaluated.fields.F_resultant.data[8][g]
+    pointAtX(
+      plan.layers.find(l => l.name === "fres").primitives[0].points,
+      evaluated.fields.display_angle_deg.data[8]
+    ).y,
+    evaluated.fields.F_resultant_kN.data[8][g]
   );
 });
 
@@ -525,5 +547,11 @@ test("MillForce charts bind authored shell inputs into chart params", async () =
     ]) {
       assert.equal(boundProps.has(prop), true, `${chartName} missing ${prop}`);
     }
+    const analysisModeBinding = view.bindings.find(binding => binding.prop === "param.analysis_mode");
+    assert.equal(
+      analysisModeBinding?.source?.state,
+      "MillForceChartAnalysisMode",
+      `${chartName} must bind chart mode to computed overlay state`
+    );
   }
 });

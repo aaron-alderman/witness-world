@@ -257,6 +257,13 @@ grant runtime authority to copied JS or presenter code.
   divide by `F_r_abs_max_all`, not the currently active model max. This keeps
   the overlay geometry stable across model/mode selection while remaining in
   authored model dataflow.
+- Mill Force Monte Carlo overlay visibility now follows the reference
+  `mode + mc.results` distinction. The visible shell mode remains
+  `MillForceActiveAnalysisMode`, while chart overlays bind to
+  `MillForceChartAnalysisMode`, which only enters `mc` after the authored run
+  delay completes and returns to `static` on Clear. This removes the previous
+  false behavior where selecting or clearing MC could leave a stale overlay on
+  the chart.
 
 ## Known Gaps
 
@@ -280,7 +287,9 @@ grant runtime authority to copied JS or presenter code.
   cross-section overlay, p10 point glyph, and straight-sided radial force-bar
   geometry are now authored and live, and the MC panel reports computed sample
   count plus p10/p90 radial-force envelope summaries from chart capability
-  output after Run, with an authored calculating-to-computed status transition.
+  output after Run, with an authored calculating-to-computed status transition
+  and an authored Clear path that removes the overlay while preserving the MC
+  control panel state.
   The richer reference MC result datasets and final compare/MC panel polish
   remain first-pass gaps. Tooltip readout for the three
   stock charts now exists through the generic chart tooltip seam. Compare

@@ -83,6 +83,7 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(types.get("MillForceActiveChartTab")?.body?.role, "state");
   assert.equal(types.get("MillForceAnalysisMode")?.body?.role, "enum");
   assert.equal(types.get("MillForceActiveAnalysisMode")?.body?.role, "state");
+  assert.equal(types.get("MillForceChartAnalysisMode")?.body?.role, "state");
   assert.equal(types.get("MillForceModelSelection")?.body?.role, "enum");
   assert.equal(types.get("MillForceActiveModel")?.body?.role, "state");
   assert.equal(types.get("MillForceMcStatus")?.body?.role, "enum");
@@ -346,6 +347,7 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
         { kind: "setState", state: "MillForceMcConfigOpen", value: true },
         { kind: "setState", state: "MillForceMcStatusState", value: "calculating" },
         { kind: "delay", ms: 120 },
+        { kind: "setState", state: "MillForceChartAnalysisMode", value: "mc" },
         { kind: "setState", state: "MillForceMcStatusState", value: "running" }
       ]
     },
@@ -404,13 +406,15 @@ test("the authored Mill Force Monte Carlo run has a visible calculating delay be
 
   assert.deepEqual(delays, [120]);
   assert.equal(runtime.value("MillForceActiveAnalysisMode"), "mc");
+  assert.equal(runtime.value("MillForceChartAnalysisMode"), "mc");
   assert.equal(runtime.value("MillForceMcConfigOpen"), true);
   assert.equal(runtime.value("MillForceMcStatusState"), "running");
-  assert.deepEqual(runtime.trace.slice(-5).map(observation => [observation.kind, observation.label]), [
+  assert.deepEqual(runtime.trace.slice(-6).map(observation => [observation.kind, observation.label]), [
     ["rule.setState", "MillForceRunMonteCarloRequested:MillForceActiveAnalysisMode"],
     ["rule.setState", "MillForceRunMonteCarloRequested:MillForceMcConfigOpen"],
     ["rule.setState", "MillForceRunMonteCarloRequested:MillForceMcStatusState"],
     ["rule.delay", "MillForceRunMonteCarloRequested:120ms"],
+    ["rule.setState", "MillForceRunMonteCarloRequested:MillForceChartAnalysisMode"],
     ["rule.setState", "MillForceRunMonteCarloRequested:MillForceMcStatusState"]
   ]);
 });

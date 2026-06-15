@@ -1154,8 +1154,13 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveAnalysisMode") === "mc"
     );
+    await page.waitForFunction(() =>
+      document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.analysis_mode === "static"
+    );
     assert.deepEqual(await page.evaluate(() => ({
       compareHidden: document.querySelector("#surface-millforcecomparesection")?.hasAttribute("hidden"),
+      chartMode: document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.analysis_mode,
+      chartState: window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceChartAnalysisMode"),
       mcSectionPresent: [...document.querySelectorAll(".ssec")]
         .some(section => section.textContent.includes("Monte Carlo Config")),
       mcBodyHidden: document.querySelector("#surface-millforcemcbody")?.hasAttribute("hidden"),
@@ -1170,6 +1175,8 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
         .map(row => row.textContent.trim())
     })), {
       compareHidden: true,
+      chartMode: "static",
+      chartState: "static",
       mcSectionPresent: true,
       mcBodyHidden: false,
       mcChevron: "▲",
@@ -1203,6 +1210,9 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     assert.equal(await page.locator("#surface-millforcemcp90maxrow[hidden]").count(), 1);
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcStatusState") === "running"
+    );
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceChartAnalysisMode") === "mc"
     );
     await page.waitForFunction(() =>
       document.querySelector("#surface-millforcemcstatuscomputedtext")?.textContent === "350 samples computed"
@@ -1253,9 +1263,31 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcStatusState") === "cleared"
     );
+    await page.waitForFunction(() =>
+      document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.analysis_mode === "static"
+    );
     assert.equal(await page.textContent("#surface-millforcemcstatusclearedtext"), "Cleared");
     assert.equal(await page.locator("#surface-millforcemcp90maxrow[hidden]").count(), 1);
     assert.equal(await page.locator("#surface-millforcemcclearaction").isEnabled(), false);
+    assert.deepEqual(await page.evaluate(() => {
+      const runtime = window.__surfaceInteractionRuntime?.processRuntime;
+      const controller = document.querySelector("#mill-force-svg-cross")?.__chartController;
+      const p90 = controller?.plan?.layers?.find(layer => layer.name === "mc_p90");
+      const p10 = controller?.plan?.layers?.find(layer => layer.name === "mc_p10");
+      return {
+        activeMode: runtime?.value("MillForceActiveAnalysisMode"),
+        chartState: runtime?.value("MillForceChartAnalysisMode"),
+        chartMode: controller?.spec?.params?.analysis_mode,
+        p90Hidden: p90?.hidden === true,
+        p10Hidden: p10?.hidden === true
+      };
+    }), {
+      activeMode: "mc",
+      chartState: "static",
+      chartMode: "static",
+      p90Hidden: true,
+      p10Hidden: true
+    });
   } finally {
     await browser.close();
     await server.close();

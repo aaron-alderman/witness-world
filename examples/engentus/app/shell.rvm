@@ -101,6 +101,10 @@ state MillForceActiveAnalysisMode: MillForceAnalysisMode {
   initial static
 }
 
+state MillForceChartAnalysisMode: MillForceAnalysisMode {
+  initial static
+}
+
 state MillForceActiveModel: MillForceModelSelection {
   initial grounded
 }
@@ -648,6 +652,7 @@ event MillForceShowForceRoseRequested {
 event MillForceShowSingleModeRequested {
   writes {
     MillForceActiveAnalysisMode: static
+    MillForceChartAnalysisMode: static
     MillForceMcConfigOpen: false
   }
 }
@@ -655,6 +660,7 @@ event MillForceShowSingleModeRequested {
 event MillForceShowCompareModeRequested {
   writes {
     MillForceActiveAnalysisMode: compare
+    MillForceChartAnalysisMode: compare
     MillForceMcConfigOpen: false
   }
 }
@@ -662,6 +668,7 @@ event MillForceShowCompareModeRequested {
 event MillForceShowMonteCarloModeRequested {
   writes {
     MillForceActiveAnalysisMode: mc
+    MillForceChartAnalysisMode: static
     MillForceMcConfigOpen: true
   }
 }
@@ -681,6 +688,7 @@ event MillForceSelectFaithfulModelRequested {
 event MillForceRunMonteCarloRequested {
   writes {
     MillForceActiveAnalysisMode: mc
+    MillForceChartAnalysisMode: mc
     MillForceMcConfigOpen: true
     MillForceMcStatusState: running
   }
@@ -688,6 +696,7 @@ event MillForceRunMonteCarloRequested {
 
 event MillForceClearMonteCarloRequested {
   writes {
+    MillForceChartAnalysisMode: static
     MillForceMcStatusState: cleared
   }
 }
@@ -834,6 +843,7 @@ process EngentusShellNavigation {
     MillChargeBulkDensity
     MillForceActiveChartTab
     MillForceActiveAnalysisMode
+    MillForceChartAnalysisMode
     MillForcePercentCrit
     MillForceMu
     MillForceRadius
@@ -971,6 +981,7 @@ process EngentusShellNavigation {
       set MillForceMcConfigOpen true
       set MillForceMcStatusState calculating
       delay 120ms
+      set MillForceChartAnalysisMode mc
       set MillForceMcStatusState running
     }
     on GoodmanRunRequested {
