@@ -35,6 +35,14 @@ enum MillForceChartTab {
   }
 }
 
+enum MillForceAnalysisMode {
+  cases {
+    static
+    compare
+    mc
+  }
+}
+
 enum GoodmanMode {
   cases {
     static
@@ -63,8 +71,68 @@ state MillForceActiveChartTab: MillForceChartTab {
   initial cross
 }
 
+state MillForceActiveAnalysisMode: MillForceAnalysisMode {
+  initial static
+}
+
 state GoodmanActiveMode: GoodmanMode {
   initial static
+}
+
+state MillForcePercentCrit: number {
+  initial 0.90
+}
+
+state MillForceMu: number {
+  initial 0.30
+}
+
+state MillForceRadius: number {
+  initial 6.00
+}
+
+state MillForceBetaPrimeDeg: number {
+  initial 50
+}
+
+state MillForceSegmentCount: number {
+  initial 39
+}
+
+state MillForceTotalFill: number {
+  initial 0.30
+}
+
+state MillForceBallFill: number {
+  initial 0.10
+}
+
+state MillForceVoidFraction: number {
+  initial 0.40
+}
+
+state MillForcePercentSolids: number {
+  initial 0.75
+}
+
+state MillForceBallDensity: number {
+  initial 7.80
+}
+
+state MillForceOreDensity: number {
+  initial 3.10
+}
+
+state MillForceDepth: number {
+  initial 1.50
+}
+
+state MillForceLinerMass: number {
+  initial 0
+}
+
+state MillForceLinerHeight: number {
+  initial 0.50
 }
 
 state MillChargeSpeedFrac: number {
@@ -130,6 +198,97 @@ derive MillChargeBulkDensityText {
   prop digits = 0
 }
 
+derive MillForcePercentCritText {
+  kind format
+  source MillForcePercentCrit
+  prop digits = 2
+}
+
+derive MillForceMuText {
+  kind format
+  source MillForceMu
+  prop digits = 2
+}
+
+derive MillForceRadiusText {
+  kind format
+  source MillForceRadius
+  prop digits = 1
+  prop suffix = " m"
+}
+
+derive MillForceBetaPrimeText {
+  kind format
+  source MillForceBetaPrimeDeg
+  prop digits = 0
+  prop suffix = "°"
+}
+
+derive MillForceSegmentCountText {
+  kind format
+  source MillForceSegmentCount
+  prop digits = 0
+}
+
+derive MillForceTotalFillText {
+  kind format
+  source MillForceTotalFill
+  prop digits = 2
+}
+
+derive MillForceBallFillText {
+  kind format
+  source MillForceBallFill
+  prop digits = 2
+}
+
+derive MillForceVoidFractionText {
+  kind format
+  source MillForceVoidFraction
+  prop digits = 2
+}
+
+derive MillForcePercentSolidsText {
+  kind format
+  source MillForcePercentSolids
+  prop digits = 2
+}
+
+derive MillForceBallDensityText {
+  kind format
+  source MillForceBallDensity
+  prop digits = 1
+  prop suffix = " SG"
+}
+
+derive MillForceOreDensityText {
+  kind format
+  source MillForceOreDensity
+  prop digits = 1
+  prop suffix = " SG"
+}
+
+derive MillForceDepthText {
+  kind format
+  source MillForceDepth
+  prop digits = 1
+  prop suffix = " m"
+}
+
+derive MillForceLinerMassText {
+  kind format
+  source MillForceLinerMass
+  prop digits = 0
+  prop suffix = " kg"
+}
+
+derive MillForceLinerHeightText {
+  kind format
+  source MillForceLinerHeight
+  prop digits = 2
+  prop suffix = " m"
+}
+
 event EngentusSignInRequested {
 }
 
@@ -182,6 +341,24 @@ event MillForceShowForceVsAngleRequested {
 event MillForceShowForceRoseRequested {
   writes {
     MillForceActiveChartTab: rose
+  }
+}
+
+event MillForceShowSingleModeRequested {
+  writes {
+    MillForceActiveAnalysisMode: static
+  }
+}
+
+event MillForceShowCompareModeRequested {
+  writes {
+    MillForceActiveAnalysisMode: compare
+  }
+}
+
+event MillForceShowMonteCarloModeRequested {
+  writes {
+    MillForceActiveAnalysisMode: mc
   }
 }
 
@@ -258,6 +435,21 @@ process EngentusShellNavigation {
     MillChargeInternalFriction
     MillChargeBulkDensity
     MillForceActiveChartTab
+    MillForceActiveAnalysisMode
+    MillForcePercentCrit
+    MillForceMu
+    MillForceRadius
+    MillForceBetaPrimeDeg
+    MillForceSegmentCount
+    MillForceTotalFill
+    MillForceBallFill
+    MillForceVoidFraction
+    MillForcePercentSolids
+    MillForceBallDensity
+    MillForceOreDensity
+    MillForceDepth
+    MillForceLinerMass
+    MillForceLinerHeight
     GoodmanActiveMode
   }
   handles {
@@ -271,6 +463,9 @@ process EngentusShellNavigation {
     MillForceShowCrossSectionRequested
     MillForceShowForceVsAngleRequested
     MillForceShowForceRoseRequested
+    MillForceShowSingleModeRequested
+    MillForceShowCompareModeRequested
+    MillForceShowMonteCarloModeRequested
     GoodmanShowStaticRequested
     GoodmanShowMonteCarloRequested
     GoodmanShowEditRequested
@@ -3107,9 +3302,935 @@ view MillForceHeader {
   prop backHref = "/engentus/home"
 }
 
+view MillForceModeTitle {
+  kind text
+  class ssec-title
+  prop tag = "div"
+  prop text = "Analysis Mode"
+}
+
+view MillForceModeSingle {
+  kind action
+  class mill-force-pill
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Single"
+  bindings {
+    className from state MillForceActiveAnalysisMode map static active default ""
+  }
+  interactions {
+    on click self deliver MillForceShowSingleModeRequested
+  }
+}
+
+view MillForceModeCompare {
+  kind action
+  class mill-force-pill
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Compare"
+  bindings {
+    className from state MillForceActiveAnalysisMode map compare active default ""
+  }
+  interactions {
+    on click self deliver MillForceShowCompareModeRequested
+  }
+}
+
+view MillForceModeMonteCarlo {
+  kind action
+  class mill-force-pill
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Monte Carlo"
+  bindings {
+    className from state MillForceActiveAnalysisMode map mc active default ""
+  }
+  interactions {
+    on click self deliver MillForceShowMonteCarloModeRequested
+  }
+}
+
+view MillForceModePills {
+  kind action-row
+  class mill-force-mode-pills
+  children {
+    MillForceModeSingle
+    MillForceModeCompare
+    MillForceModeMonteCarlo
+  }
+}
+
+view MillForceModeSection {
+  kind section
+  class ssec
+  children {
+    MillForceModeTitle
+    MillForceModePills
+  }
+}
+
+view MillForceInputsTitle {
+  kind text
+  class ssec-title
+  prop tag = "div"
+  prop text = "Inputs"
+}
+
+view MillForceSpeedLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Speed N/Nc"
+}
+
+view MillForceSpeedValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "0.90"
+  bindings {
+    text from projection MillForcePercentCritText
+  }
+}
+
+view MillForceSpeedTop {
+  kind row
+  class prow-top
+  children {
+    MillForceSpeedLabel
+    MillForceSpeedValue
+  }
+}
+
+view MillForceSpeedInput {
+  kind input
+  class mill-force-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 0.50
+  prop max = 1.00
+  prop step = 0.01
+  prop value = 0.90
+  bindings {
+    value from state MillForcePercentCrit
+  }
+  interactions {
+    on input self set MillForcePercentCrit eventValue
+  }
+}
+
+view MillForceSpeedRow {
+  kind control-row
+  class prow
+  children {
+    MillForceSpeedTop
+    MillForceSpeedInput
+  }
+}
+
+view MillForceMuLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Wall friction μ"
+}
+
+view MillForceMuValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "0.30"
+  bindings {
+    text from projection MillForceMuText
+  }
+}
+
+view MillForceMuTop {
+  kind row
+  class prow-top
+  children {
+    MillForceMuLabel
+    MillForceMuValue
+  }
+}
+
+view MillForceMuInput {
+  kind input
+  class mill-force-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 0.10
+  prop max = 0.60
+  prop step = 0.01
+  prop value = 0.30
+  bindings {
+    value from state MillForceMu
+  }
+  interactions {
+    on input self set MillForceMu eventValue
+  }
+}
+
+view MillForceMuRow {
+  kind control-row
+  class prow
+  children {
+    MillForceMuTop
+    MillForceMuInput
+  }
+}
+
+view MillForceRadiusLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Shell radius"
+}
+
+view MillForceRadiusValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "6.0 m"
+  bindings {
+    text from projection MillForceRadiusText
+  }
+}
+
+view MillForceRadiusTop {
+  kind row
+  class prow-top
+  children {
+    MillForceRadiusLabel
+    MillForceRadiusValue
+  }
+}
+
+view MillForceRadiusInput {
+  kind input
+  class mill-force-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 1.00
+  prop max = 10.00
+  prop step = 0.10
+  prop value = 6.00
+  bindings {
+    value from state MillForceRadius
+  }
+  interactions {
+    on input self set MillForceRadius eventValue
+  }
+}
+
+view MillForceRadiusRow {
+  kind control-row
+  class prow
+  children {
+    MillForceRadiusTop
+    MillForceRadiusInput
+  }
+}
+
+view MillForceFaceAngleLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Liner face angle"
+}
+
+view MillForceFaceAngleValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "50°"
+  bindings {
+    text from projection MillForceBetaPrimeText
+  }
+}
+
+view MillForceFaceAngleTop {
+  kind row
+  class prow-top
+  children {
+    MillForceFaceAngleLabel
+    MillForceFaceAngleValue
+  }
+}
+
+view MillForceFaceAngleInput {
+  kind input
+  class mill-force-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 20
+  prop max = 80
+  prop step = 1
+  prop value = 50
+  bindings {
+    value from state MillForceBetaPrimeDeg
+  }
+  interactions {
+    on input self set MillForceBetaPrimeDeg eventValue
+  }
+}
+
+view MillForceFaceAngleRow {
+  kind control-row
+  class prow
+  children {
+    MillForceFaceAngleTop
+    MillForceFaceAngleInput
+  }
+}
+
+view MillForceSegmentCountLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Liner count"
+}
+
+view MillForceSegmentCountValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "39"
+  bindings {
+    text from projection MillForceSegmentCountText
+  }
+}
+
+view MillForceSegmentCountTop {
+  kind row
+  class prow-top
+  children {
+    MillForceSegmentCountLabel
+    MillForceSegmentCountValue
+  }
+}
+
+view MillForceSegmentCountInput {
+  kind input
+  class mill-force-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 12
+  prop max = 72
+  prop step = 1
+  prop value = 39
+  bindings {
+    value from state MillForceSegmentCount
+  }
+  interactions {
+    on input self set MillForceSegmentCount eventValue
+  }
+}
+
+view MillForceSegmentCountRow {
+  kind control-row
+  class prow
+  children {
+    MillForceSegmentCountTop
+    MillForceSegmentCountInput
+  }
+}
+
+view MillForceTotalFillLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Fill fraction J"
+}
+
+view MillForceTotalFillValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "0.30"
+  bindings {
+    text from projection MillForceTotalFillText
+  }
+}
+
+view MillForceTotalFillTop {
+  kind row
+  class prow-top
+  children {
+    MillForceTotalFillLabel
+    MillForceTotalFillValue
+  }
+}
+
+view MillForceTotalFillInput {
+  kind input
+  class mill-force-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 0.10
+  prop max = 0.45
+  prop step = 0.01
+  prop value = 0.30
+  bindings {
+    value from state MillForceTotalFill
+  }
+  interactions {
+    on input self set MillForceTotalFill eventValue
+  }
+}
+
+view MillForceTotalFillRow {
+  kind control-row
+  class prow
+  children {
+    MillForceTotalFillTop
+    MillForceTotalFillInput
+  }
+}
+
+view MillForceBallFillLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Ball fraction"
+}
+
+view MillForceBallFillValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "0.10"
+  bindings {
+    text from projection MillForceBallFillText
+  }
+}
+
+view MillForceBallFillTop {
+  kind row
+  class prow-top
+  children {
+    MillForceBallFillLabel
+    MillForceBallFillValue
+  }
+}
+
+view MillForceBallFillInput {
+  kind input
+  class mill-force-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 0.00
+  prop max = 0.30
+  prop step = 0.01
+  prop value = 0.10
+  bindings {
+    value from state MillForceBallFill
+  }
+  interactions {
+    on input self set MillForceBallFill eventValue
+  }
+}
+
+view MillForceBallFillRow {
+  kind control-row
+  class prow
+  children {
+    MillForceBallFillTop
+    MillForceBallFillInput
+  }
+}
+
+view MillForceVoidFractionLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Void fraction"
+}
+
+view MillForceVoidFractionValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "0.40"
+  bindings {
+    text from projection MillForceVoidFractionText
+  }
+}
+
+view MillForceVoidFractionTop {
+  kind row
+  class prow-top
+  children {
+    MillForceVoidFractionLabel
+    MillForceVoidFractionValue
+  }
+}
+
+view MillForceVoidFractionInput {
+  kind input
+  class mill-force-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 0.10
+  prop max = 0.60
+  prop step = 0.01
+  prop value = 0.40
+  bindings {
+    value from state MillForceVoidFraction
+  }
+  interactions {
+    on input self set MillForceVoidFraction eventValue
+  }
+}
+
+view MillForceVoidFractionRow {
+  kind control-row
+  class prow
+  children {
+    MillForceVoidFractionTop
+    MillForceVoidFractionInput
+  }
+}
+
+view MillForcePercentSolidsLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Solids (mass)"
+}
+
+view MillForcePercentSolidsValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "0.75"
+  bindings {
+    text from projection MillForcePercentSolidsText
+  }
+}
+
+view MillForcePercentSolidsTop {
+  kind row
+  class prow-top
+  children {
+    MillForcePercentSolidsLabel
+    MillForcePercentSolidsValue
+  }
+}
+
+view MillForcePercentSolidsInput {
+  kind input
+  class mill-force-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 0.30
+  prop max = 0.90
+  prop step = 0.01
+  prop value = 0.75
+  bindings {
+    value from state MillForcePercentSolids
+  }
+  interactions {
+    on input self set MillForcePercentSolids eventValue
+  }
+}
+
+view MillForcePercentSolidsRow {
+  kind control-row
+  class prow
+  children {
+    MillForcePercentSolidsTop
+    MillForcePercentSolidsInput
+  }
+}
+
+view MillForceBallDensityLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Ball density"
+}
+
+view MillForceBallDensityValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "7.8 SG"
+  bindings {
+    text from projection MillForceBallDensityText
+  }
+}
+
+view MillForceBallDensityTop {
+  kind row
+  class prow-top
+  children {
+    MillForceBallDensityLabel
+    MillForceBallDensityValue
+  }
+}
+
+view MillForceBallDensityInput {
+  kind input
+  class mill-force-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 3.00
+  prop max = 8.00
+  prop step = 0.10
+  prop value = 7.80
+  bindings {
+    value from state MillForceBallDensity
+  }
+  interactions {
+    on input self set MillForceBallDensity eventValue
+  }
+}
+
+view MillForceBallDensityRow {
+  kind control-row
+  class prow
+  children {
+    MillForceBallDensityTop
+    MillForceBallDensityInput
+  }
+}
+
+view MillForceOreDensityLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Ore density"
+}
+
+view MillForceOreDensityValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "3.1 SG"
+  bindings {
+    text from projection MillForceOreDensityText
+  }
+}
+
+view MillForceOreDensityTop {
+  kind row
+  class prow-top
+  children {
+    MillForceOreDensityLabel
+    MillForceOreDensityValue
+  }
+}
+
+view MillForceOreDensityInput {
+  kind input
+  class mill-force-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 2.00
+  prop max = 5.00
+  prop step = 0.10
+  prop value = 3.10
+  bindings {
+    value from state MillForceOreDensity
+  }
+  interactions {
+    on input self set MillForceOreDensity eventValue
+  }
+}
+
+view MillForceOreDensityRow {
+  kind control-row
+  class prow
+  children {
+    MillForceOreDensityTop
+    MillForceOreDensityInput
+  }
+}
+
+view MillForceDepthLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Mill depth"
+}
+
+view MillForceDepthValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "1.5 m"
+  bindings {
+    text from projection MillForceDepthText
+  }
+}
+
+view MillForceDepthTop {
+  kind row
+  class prow-top
+  children {
+    MillForceDepthLabel
+    MillForceDepthValue
+  }
+}
+
+view MillForceDepthInput {
+  kind input
+  class mill-force-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 0.50
+  prop max = 8.00
+  prop step = 0.10
+  prop value = 1.50
+  bindings {
+    value from state MillForceDepth
+  }
+  interactions {
+    on input self set MillForceDepth eventValue
+  }
+}
+
+view MillForceDepthRow {
+  kind control-row
+  class prow
+  children {
+    MillForceDepthTop
+    MillForceDepthInput
+  }
+}
+
+view MillForceLinerMassLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Liner mass"
+}
+
+view MillForceLinerMassValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "0 kg"
+  bindings {
+    text from projection MillForceLinerMassText
+  }
+}
+
+view MillForceLinerMassTop {
+  kind row
+  class prow-top
+  children {
+    MillForceLinerMassLabel
+    MillForceLinerMassValue
+  }
+}
+
+view MillForceLinerMassInput {
+  kind input
+  class mill-force-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 0
+  prop max = 500
+  prop step = 5
+  prop value = 0
+  bindings {
+    value from state MillForceLinerMass
+  }
+  interactions {
+    on input self set MillForceLinerMass eventValue
+  }
+}
+
+view MillForceLinerMassRow {
+  kind control-row
+  class prow
+  children {
+    MillForceLinerMassTop
+    MillForceLinerMassInput
+  }
+}
+
+view MillForceLinerHeightLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Liner height"
+}
+
+view MillForceLinerHeightValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "0.50 m"
+  bindings {
+    text from projection MillForceLinerHeightText
+  }
+}
+
+view MillForceLinerHeightTop {
+  kind row
+  class prow-top
+  children {
+    MillForceLinerHeightLabel
+    MillForceLinerHeightValue
+  }
+}
+
+view MillForceLinerHeightInput {
+  kind input
+  class mill-force-slider
+  prop tag = "input"
+  prop inputType = "range"
+  prop min = 0.05
+  prop max = 1.00
+  prop step = 0.01
+  prop value = 0.50
+  bindings {
+    value from state MillForceLinerHeight
+  }
+  interactions {
+    on input self set MillForceLinerHeight eventValue
+  }
+}
+
+view MillForceLinerHeightRow {
+  kind control-row
+  class prow
+  children {
+    MillForceLinerHeightTop
+    MillForceLinerHeightInput
+  }
+}
+
+view MillForceInputsSection {
+  kind section
+  class ssec
+  children {
+    MillForceInputsTitle
+    MillForceSpeedRow
+    MillForceMuRow
+    MillForceRadiusRow
+    MillForceFaceAngleRow
+    MillForceSegmentCountRow
+    MillForceTotalFillRow
+    MillForceBallFillRow
+    MillForceVoidFractionRow
+    MillForcePercentSolidsRow
+    MillForceBallDensityRow
+    MillForceOreDensityRow
+    MillForceDepthRow
+    MillForceLinerMassRow
+    MillForceLinerHeightRow
+  }
+}
+
+view MillForceResultsTitle {
+  kind text
+  class ssec-title
+  prop tag = "div"
+  prop text = "Results"
+}
+
+view MillForceOmegaLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "ω"
+}
+
+view MillForceOmegaValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "0.00 rad/s"
+  bindings {
+    text from capability MillForceCross.omega
+  }
+}
+
+view MillForceOmegaRow {
+  kind metric-row
+  class mill-force-result-row
+  children {
+    MillForceOmegaLabel
+    MillForceOmegaValue
+  }
+}
+
+view MillForceChargeDensityLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "ρ charge"
+}
+
+view MillForceChargeDensityValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "0.000 SG"
+  bindings {
+    text from capability MillForceCross.rhoCharge
+  }
+}
+
+view MillForceChargeDensityRow {
+  kind metric-row
+  class mill-force-result-row
+  children {
+    MillForceChargeDensityLabel
+    MillForceChargeDensityValue
+  }
+}
+
+view MillForceModeStateLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "Mode"
+}
+
+view MillForceModeStateValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "Single"
+  bindings {
+    text from state MillForceActiveAnalysisMode map static Single compare Compare mc "Monte Carlo" default Single
+  }
+}
+
+view MillForceModeStateRow {
+  kind metric-row
+  class mill-force-result-row
+  children {
+    MillForceModeStateLabel
+    MillForceModeStateValue
+  }
+}
+
+view MillForceResultsSection {
+  kind section
+  class ssec
+  children {
+    MillForceResultsTitle
+    MillForceOmegaRow
+    MillForceChargeDensityRow
+    MillForceModeStateRow
+  }
+}
+
 view MillForceControlHost {
-  kind host
+  kind section-group
   class mill-force-control-host
+  children {
+    MillForceModeSection
+    MillForceInputsSection
+    MillForceResultsSection
+  }
 }
 
 view MillForceModelHost {

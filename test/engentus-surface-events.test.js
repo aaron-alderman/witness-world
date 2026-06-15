@@ -488,3 +488,57 @@ test("Engentus Mill Force tabs switch authored chart views through process state
     await server.close();
   }
 });
+
+test("Engentus Mill Force controls update authored state, chart params, and results", { timeout: 45000 }, async () => {
+  const server = await startUiServer({
+    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
+    serverRunnerId: "engentus_server",
+    devMode: false
+  });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    await page.goto(`${server.url}/engentus/mill-force`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
+    await page.waitForFunction(() => Boolean(document.querySelector("#mill-force-svg-cross")?.__chartController));
+    const speedRow = sliderRow(page, "Speed N/Nc");
+    const speedInput = speedRow.locator("input");
+    const omegaBefore = await page.evaluate(() =>
+      document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.omega
+    );
+
+    await speedInput.fill("0.8");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForcePercentCrit") === 0.8
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.percent_crit === 0.8
+    );
+    await page.waitForFunction(previous =>
+      document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.omega !== previous,
+      omegaBefore
+    );
+    assert.match(await speedRow.textContent(), /0\.80/);
+
+    await page.getByRole("button", { name: "Compare" }).click();
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveAnalysisMode") === "compare"
+    );
+    const modeState = await page.evaluate(() => ({
+      single: document.querySelector("#surface-millforcemodesingle")?.className,
+      compare: document.querySelector("#surface-millforcemodecompare")?.className,
+      modeRow: [...document.querySelectorAll(".mill-force-result-row")]
+        .map(row => row.textContent)
+        .find(text => text.includes("Mode"))
+    }));
+    assert.equal(modeState.single, "mill-force-pill");
+    assert.equal(modeState.compare, "mill-force-pill active");
+    assert.match(modeState.modeRow, /Compare/);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});

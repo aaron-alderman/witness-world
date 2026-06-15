@@ -82,3 +82,28 @@ test("MillForceCross plans per-segment polar wedges with angular bounds + force 
     assert.equal(w.value, evaluated.fields.F_resultant.data[s][g]);
   }
 });
+
+test("MillForce charts bind authored shell inputs into chart params", async () => {
+  for (const chartName of ["MillForceCross", "MillForceAngle", "MillForceRose"]) {
+    const view = await loadBody("views/mill-force.rvm", "surface", chartName);
+    const boundProps = new Set(view.bindings.map(binding => binding.prop));
+    for (const prop of [
+      "param.percent_crit",
+      "param.mu",
+      "param.radius",
+      "param.beta_prime_deg",
+      "param.N_segments",
+      "param.J_total",
+      "param.J_balls",
+      "param.J_voids",
+      "param.percent_solids",
+      "param.rho_ball",
+      "param.rho_ore",
+      "param.depth",
+      "param.m_liner",
+      "param.height"
+    ]) {
+      assert.equal(boundProps.has(prop), true, `${chartName} missing ${prop}`);
+    }
+  }
+});

@@ -26,6 +26,20 @@ chart MillForceAngle of MillForce {
   prop pageBackground = "#ffffff"
   bindings {
     visible from state MillForceActiveChartTab map force true default false
+    param.percent_crit from state MillForcePercentCrit
+    param.mu from state MillForceMu
+    param.radius from state MillForceRadius
+    param.beta_prime_deg from state MillForceBetaPrimeDeg
+    param.N_segments from state MillForceSegmentCount
+    param.J_total from state MillForceTotalFill
+    param.J_balls from state MillForceBallFill
+    param.J_voids from state MillForceVoidFraction
+    param.percent_solids from state MillForcePercentSolids
+    param.rho_ball from state MillForceBallDensity
+    param.rho_ore from state MillForceOreDensity
+    param.depth from state MillForceDepth
+    param.m_liner from state MillForceLinerMass
+    param.height from state MillForceLinerHeight
   }
 
   x tBar
@@ -58,6 +72,20 @@ chart MillForceRose of MillForce {
   prop pageBackground = "#ffffff"
   bindings {
     visible from state MillForceActiveChartTab map rose true default false
+    param.percent_crit from state MillForcePercentCrit
+    param.mu from state MillForceMu
+    param.radius from state MillForceRadius
+    param.beta_prime_deg from state MillForceBetaPrimeDeg
+    param.N_segments from state MillForceSegmentCount
+    param.J_total from state MillForceTotalFill
+    param.J_balls from state MillForceBallFill
+    param.J_voids from state MillForceVoidFraction
+    param.percent_solids from state MillForcePercentSolids
+    param.rho_ball from state MillForceBallDensity
+    param.rho_ore from state MillForceOreDensity
+    param.depth from state MillForceDepth
+    param.m_liner from state MillForceLinerMass
+    param.height from state MillForceLinerHeight
   }
 
   theta tBar
@@ -85,6 +113,20 @@ chart MillForceCross of MillForce {
   prop pageBackground = "#ffffff"
   bindings {
     visible from state MillForceActiveChartTab map cross true default false
+    param.percent_crit from state MillForcePercentCrit
+    param.mu from state MillForceMu
+    param.radius from state MillForceRadius
+    param.beta_prime_deg from state MillForceBetaPrimeDeg
+    param.N_segments from state MillForceSegmentCount
+    param.J_total from state MillForceTotalFill
+    param.J_balls from state MillForceBallFill
+    param.J_voids from state MillForceVoidFraction
+    param.percent_solids from state MillForcePercentSolids
+    param.rho_ball from state MillForceBallDensity
+    param.rho_ore from state MillForceOreDensity
+    param.depth from state MillForceDepth
+    param.m_liner from state MillForceLinerMass
+    param.height from state MillForceLinerHeight
   }
 
   theta tBar

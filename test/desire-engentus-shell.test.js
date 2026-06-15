@@ -55,6 +55,9 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.ok(messages.has("MillForceShowCrossSectionRequested"));
   assert.ok(messages.has("MillForceShowForceVsAngleRequested"));
   assert.ok(messages.has("MillForceShowForceRoseRequested"));
+  assert.ok(messages.has("MillForceShowSingleModeRequested"));
+  assert.ok(messages.has("MillForceShowCompareModeRequested"));
+  assert.ok(messages.has("MillForceShowMonteCarloModeRequested"));
   assert.ok(messages.has("GoodmanShowStaticRequested"));
   assert.ok(messages.has("GoodmanShowMonteCarloRequested"));
   assert.ok(messages.has("GoodmanShowEditRequested"));
@@ -66,6 +69,10 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(types.get("EngentusPasswordRevealed")?.body?.role, "state");
   assert.equal(types.get("MillForceChartTab")?.body?.role, "enum");
   assert.equal(types.get("MillForceActiveChartTab")?.body?.role, "state");
+  assert.equal(types.get("MillForceAnalysisMode")?.body?.role, "enum");
+  assert.equal(types.get("MillForceActiveAnalysisMode")?.body?.role, "state");
+  assert.equal(types.get("MillForcePercentCrit")?.body?.role, "state");
+  assert.equal(types.get("MillForceTotalFill")?.body?.role, "state");
   assert.equal(types.get("GoodmanMode")?.body?.role, "enum");
   assert.equal(types.get("GoodmanActiveMode")?.body?.role, "state");
   assert.equal(surfaces.get("EngentusRoot")?.body?.processRef, "EngentusShellNavigation");
@@ -122,6 +129,13 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
       action: { kind: "deliver", message: "MillForceShowForceVsAngleRequested" }
     }
   ]);
+  assert.deepEqual(surfaces.get("MillForceModeCompare")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "MillForceShowCompareModeRequested" }
+    }
+  ]);
   assert.deepEqual(surfaces.get("GoodmanModeMonteCarlo")?.body?.interactions, [
     {
       target: "self",
@@ -135,6 +149,9 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("MillForceTabCrossSection")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("MillForceTabForceVsAngle")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("MillForceTabForceRose")?.body?.bindings[0]?.prop, "className");
+  assert.equal(surfaces.get("MillForceSpeedInput")?.body?.bindings[0]?.prop, "value");
+  assert.equal(surfaces.get("MillForceSpeedInput")?.body?.interactions[0]?.action?.state, "MillForcePercentCrit");
+  assert.equal(surfaces.get("MillForceOmegaValue")?.body?.bindings[0]?.source?.kind, "capability");
   assert.deepEqual(processes.get("EngentusShellNavigation")?.body?.rules, [
     {
       trigger: "EngentusSignInRequested",

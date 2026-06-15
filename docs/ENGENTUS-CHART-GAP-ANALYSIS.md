@@ -18,6 +18,10 @@ grant runtime authority to copied JS or presenter code.
   `MillForceRose` mount live in `/engentus/mill-force`; the shell currently
   shows the Cross-section chart as the initial tab state and switches between
   the three chart tabs through authored process state.
+- Mill Force now has an authored first-pass control/result loop: Single /
+  Compare / Monte Carlo mode state, the main reference input sliders, live chart
+  parameter rebinding, and initial scalar result rows are driven through
+  `EngentusShellNavigation` state and `chart.render` outputs.
 
 ## Known Gaps
 
@@ -26,8 +30,10 @@ grant runtime authority to copied JS or presenter code.
 - Goodman sidebar sections still include placeholders where the reference app
   dynamically renders parameter/edit/list content. Those must become authored
   state/process/projection surfaces or explicitly justified leaf helpers.
-- Mill Force model/mode controls, input sliders, results projection, Monte
-  Carlo controls, and tooltip/overlay behavior remain gaps.
+- Mill Force still needs faithful model selection, compare-view behavior, Monte
+  Carlo controls/execution, tooltip/overlay behavior, and full reference result
+  projection. The current result rows are an initial chart-output binding proof,
+  not final parity.
 - No app-local browser runtime, presenter, or controller seam should be added to
   close these gaps. The next work should continue through authored surfaces,
   process state, projections, and explicit capability bindings.
