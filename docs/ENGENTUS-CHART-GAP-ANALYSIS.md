@@ -49,7 +49,8 @@ grant runtime authority to copied JS or presenter code.
   wrapper, and a representative Material & Fatigue parameter group with range,
   free-toggle, and distribution-editor controls. Name/colour are process-owned
   state; UTS and yield are authored scalar states that bind into the Goodman
-  chart params. Full expansion and generated parameter rows remain explicit
+  chart params. The primary bolt-set expansion is now process-owned authored
+  state; generated parameter rows and clone/delete/new behavior remain explicit
   collection/runtime gaps rather than a JS controller workaround.
 - Goodman Monte Carlo chart evaluation now consumes authored run sample count:
   `GoodmanRunBoltsPerSet` binds to `GoodmanMCBands.param.n_samples`, so the
@@ -103,12 +104,12 @@ grant runtime authority to copied JS or presenter code.
 ## Known Gaps
 
 - Goodman numerical simulation lifecycle, animated scrubber playback,
-  CDF/Stats/ANOVA result datasets, dynamic annotation row creation, bolt-set
-  expansion, generated parameter rows, and clone/delete/new behavior remain to
-  be authored. The current Goodman run controls, MC band chart, chart edit
-  panel, bolt-set shell, and windows now expose authored stateful shell/chart
-  behavior, but they do not yet execute or consume full reference Monte Carlo
-  statistical datasets.
+  CDF/Stats/ANOVA result datasets, dynamic annotation row creation, generated
+  bolt-set parameter rows, and clone/delete/new behavior remain to be authored.
+  The current Goodman run controls, MC band chart, chart edit panel,
+  process-owned primary bolt-set expansion, bolt-set shell, and windows now
+  expose authored stateful shell/chart behavior, but they do not yet execute or
+  consume full reference Monte Carlo statistical datasets.
 - Goodman dynamic repeated collections remain a gap. Current simulation and
   bolt-set rows are explicit authored first-pass rows; full reference parity
   still needs authored collection/repeated-action semantics or a justified

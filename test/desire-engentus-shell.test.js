@@ -108,6 +108,7 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(types.get("GoodmanChartTitleSize")?.body?.valueType, "number");
   assert.equal(types.get("GoodmanChartAxisSize")?.body?.valueType, "number");
   assert.equal(types.get("GoodmanChartBandFill1")?.body?.valueType, "string");
+  assert.equal(types.get("GoodmanBoltPrimaryParamsOpen")?.body?.valueType, "bool");
   assert.equal(types.get("GoodmanBoltPrimaryNameState")?.body?.valueType, "string");
   assert.equal(types.get("GoodmanBoltPrimaryColorState")?.body?.valueType, "string");
   assert.equal(types.get("GoodmanBoltPrimaryUts")?.body?.valueType, "number");
@@ -466,6 +467,8 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanBoltSetPrimaryCloneAction",
     "GoodmanBoltSetPrimaryDeleteAction"
   ]);
+  assert.equal(surfaces.get("GoodmanBoltSetPrimaryChevron")?.body?.surfaceKind, "action");
+  assert.equal(surfaces.get("GoodmanBoltSetPrimaryChevron")?.body?.interactions[0]?.action?.state, "GoodmanBoltPrimaryParamsOpen");
   assert.deepEqual(surfaces.get("GoodmanBoltSetPrimaryEditForm")?.body?.children, [
     "GoodmanBoltSetPrimaryEditNameRow",
     "GoodmanBoltSetPrimaryEditColourRow",
@@ -475,6 +478,8 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanBoltSetMaterialGroup"
   ]);
   assert.equal(surfaces.get("GoodmanBoltSetPrimaryParams")?.body?.className, "bs-params");
+  assert.equal(surfaces.get("GoodmanBoltSetPrimaryParams")?.body?.bindings[0]?.prop, "className");
+  assert.equal(surfaces.get("GoodmanBoltSetPrimaryParams")?.body?.bindings[0]?.source?.state, "GoodmanBoltPrimaryParamsOpen");
   assert.deepEqual(surfaces.get("GoodmanBoltSetMaterialGroup")?.body?.children, [
     "GoodmanBoltSetMaterialTitle",
     "GoodmanBoltSetUtsRow",

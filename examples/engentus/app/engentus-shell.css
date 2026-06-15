@@ -1071,6 +1071,8 @@ a {
 .bs-edit-form.open { display: block }
 .bs-params { display: none; padding: 6px 8px 8px; border-top: 1px solid var(--brd) }
 .bs-params.open { display: block }
+.bs-chev { appearance: none; border: 0; background: transparent; color: var(--t2); cursor: pointer; font: inherit; padding: 0 2px; line-height: 1 }
+.bs-chev:hover { color: var(--t1) }
 
 .bs-ef-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px }
 .bs-ef-row label { font-size: 10px; color: var(--t2); width: 40px; flex-shrink: 0 }

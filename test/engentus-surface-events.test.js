@@ -480,6 +480,34 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       await page.locator(".bs-params").first().evaluate(node => getComputedStyle(node).display),
       "none"
     );
+    await page.click("#surface-goodmanboltsetprimarychevron");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryParamsOpen") === true
+    );
+    assert.equal(
+      await page.locator(".bs-params").first().evaluate(node => getComputedStyle(node).display),
+      "block"
+    );
+    await page.locator("#surface-goodmanboltsetutsslider").evaluate(input => {
+      input.value = "980";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryUts") === 980
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg")?.__chartController?.spec?.params?.uts === 980
+    );
+    await page.locator("#surface-goodmanboltsetyieldslider").evaluate(input => {
+      input.value = "720";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryYieldStress") === 720
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg")?.__chartController?.spec?.params?.ys === 720
+    );
 
     await page.click("#surface-goodmanmodeedit");
     await page.waitForFunction(() =>

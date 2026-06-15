@@ -247,6 +247,10 @@ state GoodmanBoltPrimaryColorState: string {
   initial "#dc2626"
 }
 
+state GoodmanBoltPrimaryParamsOpen: bool {
+  initial false
+}
+
 state GoodmanBoltPrimaryUts: number {
   initial 1040
 }
@@ -3815,7 +3819,7 @@ view GoodmanBoltSetsNewAction {
 view GoodmanBoltSetPrimarySwatch {
   kind marker
   class leg-sw
-  prop style = "background:#38bdf8"
+  prop style = "background:#dc2626"
 }
 
 view GoodmanBoltSetPrimaryName {
@@ -3866,10 +3870,17 @@ view GoodmanBoltSetPrimaryActions {
 }
 
 view GoodmanBoltSetPrimaryChevron {
-  kind text
+  kind action
   class bs-chev
-  prop tag = "span"
-  prop text = "▶"
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = ">"
+  bindings {
+    text from state GoodmanBoltPrimaryParamsOpen map true "v" default ">"
+  }
+  interactions {
+    on click self set GoodmanBoltPrimaryParamsOpen toggle
+  }
 }
 
 view GoodmanBoltSetPrimaryHeader {
@@ -4384,6 +4395,9 @@ view GoodmanBoltSetMaterialGroup {
 view GoodmanBoltSetPrimaryParams {
   kind group
   class bs-params
+  bindings {
+    className from state GoodmanBoltPrimaryParamsOpen map true open default ""
+  }
   children {
     GoodmanBoltSetMaterialGroup
   }
