@@ -922,7 +922,9 @@ test("Engentus Mill Force tabs switch authored chart views through process state
         ?.primitives
         ?.[0]
         ?.points
-        ?.find(item => item?.tooltip?.method);
+        ?.filter(item => item?.tooltip?.method && Number.isFinite(item.x) && Number.isFinite(item.y))
+        ?.sort((a, b) => Math.abs(a.x - 180) - Math.abs(b.x - 180))
+        ?.[0];
       if (!point) return null;
       const projected = svg.__chartController.node.projectPoint(point.x, point.y);
       const readout = svg.__chartController.node.probeAtPoint(projected.x, projected.y);

@@ -212,6 +212,12 @@ function calcGammaFaithful(J, r, h) {
 
 const calcGammaGrounded = J => brentq(g => (g - Math.sin(g)) / TWO_PI - J, 1e-9, TWO_PI - 1e-9);
 
+function physicalDisplayDeg(segment, phi, dTheta) {
+  const raw = Number(phi) - Number(dTheta) * (Number(segment) - 0.5);
+  const deg = (((raw * 180 / Math.PI) % 360) + 360) % 360;
+  return (deg + 180) % 360;
+}
+
 export const millForceKernels = {
   tangential_sign: method => (method === "faithful" ? 1 : -1),
   pick_method: (values, method) => {
@@ -228,6 +234,7 @@ export const millForceKernels = {
   deg_delta_text: values => `${signedFixed(methodDelta(values) * 180 / Math.PI, 1)}°`,
   force_delta_kn_text: values => `${signedFixed(methodDelta(values) / 1000, 1)} kN`,
   pct_delta_text: values => `${signedFixed(methodRelativeDeltaPercent(values), 2)}%`,
+  physical_display_deg: physicalDisplayDeg,
   normal_param: (sample, value, enabled, std, salt = 0) =>
     enabled ? Number(value) + Number(std) * seededNormal(sample, salt) : Number(value),
 

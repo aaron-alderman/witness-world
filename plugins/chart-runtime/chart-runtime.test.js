@@ -382,6 +382,38 @@ test("cartesian line plans split category overlays and preserve styled point/tex
   assert.equal(label.weight, 600);
 });
 
+test("cartesian line layers with explicit x fields are ordered by x value", () => {
+  const view = {
+    frame: "cartesian",
+    encoding: {
+      x: { field: "displayX", domain: [0, 360] },
+      y: { field: "y", domain: [0, 10] }
+    },
+    layers: [
+      {
+        name: "ordered",
+        mark: "line",
+        over: ["segment"],
+        encode: { x: "displayX", y: "y", stroke: "blue" }
+      }
+    ]
+  };
+  const evaluated = {
+    axes: {
+      segment: { kind: "sweep", values: [1, 2, 3] }
+    },
+    fields: {
+      displayX: { axes: ["segment"], data: [240, 10, 120] },
+      y: { axes: ["segment"], data: [1, 2, 3] }
+    }
+  };
+
+  const plan = planChart(view, evaluated, { width: 200, height: 200 });
+  const layer = plan.layers.find(row => row.name === "ordered");
+  assert.deepEqual(layer.primitives[0].points.map(point => point.x), [10, 120, 240]);
+  assert.deepEqual(layer.primitives[0].points.map(point => point.y), [2, 3, 1]);
+});
+
 test("cartesian chart plans preserve authored tooltip channels on line points", async () => {
   const source = chartRuntimeBundleSource()
     + "\nexport { evaluateModel, planChart };\n";
@@ -398,10 +430,12 @@ test("cartesian chart plans preserve authored tooltip channels on line points", 
     });
     const plan = mod.planChart(spec.view, evaluated, { width: 720, height: 420 });
     const resultant = plan.layers.find(layer => layer.name === "fres");
-    const first = resultant?.primitives?.[0]?.points?.[0];
+    const points = resultant?.primitives?.[0]?.points ?? [];
+    const first = points[0];
 
     assert.ok(first, "expected force-vs-angle line points");
-    assert.equal(first.tooltip.liner, 1);
+    assert.deepEqual(points.map(point => point.x), points.map(point => point.x).slice().sort((a, b) => a - b));
+    assert.equal(first.tooltip.liner, evaluated.fields.display_angle_deg.data.indexOf(first.x) + 1);
     assert.equal(first.tooltip.method, "grounded");
     assert.equal(typeof first.tooltip.F_r_N, "number");
     assert.equal(typeof first.tooltip.F_t_N, "number");

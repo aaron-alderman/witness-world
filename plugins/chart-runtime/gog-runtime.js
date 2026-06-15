@@ -118,17 +118,20 @@ function planLayer(layer, evaluated, fills, opts = {}) {
     const iterVals = axes[iterAxis]?.values ?? [];
     const categoryAxis = (layer.over ?? []).find(axisName => axes[axisName]?.kind === "category" && yField.axes?.includes(axisName));
     const categoryValues = categoryAxis ? (axes[categoryAxis]?.values ?? []) : [null];
-    const primitives = categoryValues.map((category, categoryIndex) => ({
-      category,
-      points: iterVals.map((axVal, i) => {
+    const primitives = categoryValues.map((category, categoryIndex) => {
+      const points = iterVals.map((axVal, i) => {
         const coord = { [iterAxis]: i, ...(categoryAxis ? { [categoryAxis]: categoryIndex } : {}), ...where };
         return {
           x: xField ? valueAt(xField, coord) : axVal,
           y: valueAt(yField, coord),
           tooltip: tooltipValuesForEncoding(enc, evaluated, coord, axes)
         };
-      })
-    }));
+      });
+      return {
+        category,
+        points: xField ? sortFiniteXPoints(points) : points
+      };
+    });
     return {
       ...base,
       stroke: colorToken(enc.stroke),
@@ -219,6 +222,19 @@ function planLayer(layer, evaluated, fills, opts = {}) {
   }
 
   return { ...base, primitives: [] };
+}
+
+function sortFiniteXPoints(points) {
+  return points.slice().sort((a, b) => {
+    const ax = Number(a.x);
+    const bx = Number(b.x);
+    const aFinite = Number.isFinite(ax);
+    const bFinite = Number.isFinite(bx);
+    if (aFinite && bFinite) return ax - bx;
+    if (aFinite) return -1;
+    if (bFinite) return 1;
+    return 0;
+  });
 }
 
 // ── polar frame (radial polygons, wedges, and linework) ─────────────────────────

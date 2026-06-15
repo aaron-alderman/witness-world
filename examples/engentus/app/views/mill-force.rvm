@@ -49,21 +49,21 @@ chart MillForceAngle of MillForce {
     param.mc_height_free from state MillForceMcHeightFree
   }
 
-  x tBar
-  x.domain 0 auto
-  x.label "Segment angle θ (rad)"
+  x display_angle_deg
+  x.domain 0 360
+  x.label "θ (°, standard - 0° = East)"
   y force
   y.domain 0 auto
   y.label "Force (kN)"
-  layer fr   = line over segment | x:tBar y:F_r_kN where:method=param.active_method stroke:blue tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
-  layer ft   = line over segment | x:tBar y:F_t_kN where:method=param.active_method stroke:slate tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
-  layer fres = line over segment | x:tBar y:F_resultant_kN where:method=param.active_method stroke:"#f1f5f9" width:2.4 tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
-  layer grounded_fr   = line over segment | x:tBar y:F_r_kN where:method=grounded stroke:blue tooltip.liner:segment tooltip.method:grounded tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
-  layer grounded_ft   = line over segment | x:tBar y:F_t_kN where:method=grounded stroke:slate tooltip.liner:segment tooltip.method:grounded tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
-  layer grounded_fres = line over segment | x:tBar y:F_resultant_kN where:method=grounded stroke:"#f1f5f9" width:2.4 tooltip.liner:segment tooltip.method:grounded tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
-  layer faithful_fr   = line over segment | x:tBar y:F_r_kN where:method=faithful stroke:slate dash:true tooltip.liner:segment tooltip.method:faithful tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
-  layer faithful_ft   = line over segment | x:tBar y:F_t_kN where:method=faithful stroke:pur dash:true tooltip.liner:segment tooltip.method:faithful tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
-  layer faithful_fres = line over segment | x:tBar y:F_resultant_kN where:method=faithful stroke:dk width:2.4 dash:true tooltip.liner:segment tooltip.method:faithful tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
+  layer fr   = line over segment | x:display_angle_deg y:F_r_kN where:method=param.active_method stroke:blue tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
+  layer ft   = line over segment | x:display_angle_deg y:F_t_kN where:method=param.active_method stroke:slate tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
+  layer fres = line over segment | x:display_angle_deg y:F_resultant_kN where:method=param.active_method stroke:"#f1f5f9" width:2.4 tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
+  layer grounded_fr   = line over segment | x:display_angle_deg y:F_r_kN where:method=grounded stroke:blue tooltip.liner:segment tooltip.method:grounded tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
+  layer grounded_ft   = line over segment | x:display_angle_deg y:F_t_kN where:method=grounded stroke:slate tooltip.liner:segment tooltip.method:grounded tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
+  layer grounded_fres = line over segment | x:display_angle_deg y:F_resultant_kN where:method=grounded stroke:"#f1f5f9" width:2.4 tooltip.liner:segment tooltip.method:grounded tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
+  layer faithful_fr   = line over segment | x:display_angle_deg y:F_r_kN where:method=faithful stroke:slate dash:true tooltip.liner:segment tooltip.method:faithful tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
+  layer faithful_ft   = line over segment | x:display_angle_deg y:F_t_kN where:method=faithful stroke:pur dash:true tooltip.liner:segment tooltip.method:faithful tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
+  layer faithful_fres = line over segment | x:display_angle_deg y:F_resultant_kN where:method=faithful stroke:dk width:2.4 dash:true tooltip.liner:segment tooltip.method:faithful tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
   layer legend_fr_swatch = screen-rect | xAnchor:right x:120 y:22 width:18 height:3 fill:blue
   layer legend_fr_label = screen-text | xAnchor:right x:96 y:15 label:"Radial" fill:"#f1f5f9" size:11
   layer legend_ft_swatch = screen-rect | xAnchor:right x:120 y:42 width:18 height:3 fill:slate

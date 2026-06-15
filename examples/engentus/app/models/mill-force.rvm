@@ -69,6 +69,7 @@ model MillForce {
   derive t1   = phi - dTheta * (segment - 1) over segment
   derive t2   = max(phiPrime, t1 - dTheta) over segment, method
   derive tBar = (t1 + t2) / 2 over segment, method
+  derive display_angle_deg = physical_display_deg(segment, phi, dTheta) over segment
 
   // ── per-segment charge mass: gravity_area is the SECOND kernel ──
   derive A_gravity = gravity_area(t1, t2, rInner, radius, mFill, cFill, dTheta, phi, phiPrime, method) over segment, method

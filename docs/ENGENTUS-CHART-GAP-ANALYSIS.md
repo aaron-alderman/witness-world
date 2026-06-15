@@ -213,6 +213,11 @@ grant runtime authority to copied JS or presenter code.
   force series, matching the reference y-axis unit rather than plotting raw
   Newton values. The reference series legend and force-rose title are authored
   as chart screen layers in `views/mill-force.rvm`.
+- Mill Force force-vs-angle chart now uses the reference physical display
+  degree x-axis: `models/mill-force.rvm` derives `display_angle_deg` from the
+  authored segment/phi/dTheta state, `views/mill-force.rvm` binds the cartesian
+  x channel to that field, and the generic chart runtime orders explicit-x line
+  points by x value so wraparound segments do not draw across the chart.
 - Mill Force Monte Carlo now has an authored dataflow/chart first pass:
   `MillForce` includes a `sample` ensemble axis, seeded normal sampling for the
   four reference MC controls, segment-wise p10/p90 radial-force reductions, and
@@ -254,10 +259,8 @@ grant runtime authority to copied JS or presenter code.
   deltas now exist as authored scalar outputs and inline percent readouts, and
   the cross-section chart now carries authored legend/force-scale annotations,
   while the force-vs-angle chart carries authored kN scaling and legend chrome.
-  The force-vs-angle x-axis still needs the reference sorted physical display
-  degree transform; that should be expressed as authored data transform/sort
-  semantics rather than a chart-local controller shortcut. The compare panel is
-  still a first-pass authored analysis view rather than final reference parity.
+  The compare panel is still a first-pass authored analysis view rather than
+  final reference parity.
 - No app-local browser runtime, presenter, or controller seam should be added to
   close these gaps. The next work should continue through authored surfaces,
   process state, projections, and explicit capability bindings.

@@ -243,8 +243,18 @@ test("Mill Force chart plans preserve authored kN lines and reference chrome", a
   const angleLayer = name => anglePlan.layers.find(layer => layer.name === name);
   const roseLayer = name => rosePlan.layers.find(layer => layer.name === name);
 
+  assert.deepEqual(anglePlan.scales.x.domain, [0, 360]);
+  assert.equal(anglePlan.scales.x.label, "θ (°, standard - 0° = East)");
   assert.equal(anglePlan.scales.y.label, "Force (kN)");
-  assert.equal(angleLayer("fr").primitives[0].points[12].y, evaluated.fields.F_r_kN.data[12][1]);
+  const radialPoints = angleLayer("fr").primitives[0].points;
+  assert.deepEqual(
+    radialPoints.map(point => point.x),
+    radialPoints.map(point => point.x).slice().sort((a, b) => a - b)
+  );
+  assert.equal(radialPoints[0].x, Math.min(...evaluated.fields.display_angle_deg.data));
+  assert.equal(radialPoints[0].y, evaluated.fields.F_r_kN.data[
+    evaluated.fields.display_angle_deg.data.indexOf(radialPoints[0].x)
+  ][1]);
   assert.equal(angleLayer("ft").stroke, "#475569");
   assert.equal(angleLayer("fres").stroke, "#f1f5f9");
   assert.deepEqual(angleLayer("legend_fr_label").primitives, [{ x: 704, y: 15, label: "Radial" }]);
