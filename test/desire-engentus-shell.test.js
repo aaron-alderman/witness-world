@@ -502,9 +502,9 @@ test("the shell is structured through explicit child regions instead of flattene
   assert.deepEqual(surfaces.get("GoodmanScenarioSection")?.body?.children, [
     "GoodmanStaticAppliedShearField",
     "GoodmanStaticRpmField",
-    "GoodmanStaticProbeMeanStressField",
     "GoodmanStaticEnduranceLimitField",
     "GoodmanStaticSlopeField",
+    "GoodmanStaticProbeMeanStressField",
     "GoodmanScenarioProbeRow",
     "GoodmanScenarioMeanStressRow",
     "GoodmanScenarioAltStressRow",
@@ -512,6 +512,7 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanSaveStaticSimulationAction"
   ]);
   assert.equal(surfaces.get("GoodmanScenarioSection")?.body?.bindings[0]?.prop, "visible");
+  assert.equal(surfaces.get("GoodmanStaticEnduranceLimitField")?.body?.props?.label, "σ_lim endurance");
   assert.equal(surfaces.get("GoodmanScenarioSection")?.body?.bindings[0]?.source?.state, "GoodmanActiveMode");
   assert.equal(surfaces.get("GoodmanSimulationSection")?.body?.props?.hidden, true);
   assert.equal(surfaces.get("GoodmanSimulationSection")?.body?.bindings[0]?.source?.map?.mc, true);

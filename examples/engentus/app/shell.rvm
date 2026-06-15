@@ -2822,9 +2822,9 @@ view GoodmanScenarioSection {
   children {
     GoodmanStaticAppliedShearField
     GoodmanStaticRpmField
-    GoodmanStaticProbeMeanStressField
     GoodmanStaticEnduranceLimitField
     GoodmanStaticSlopeField
+    GoodmanStaticProbeMeanStressField
     GoodmanScenarioProbeRow
     GoodmanScenarioMeanStressRow
     GoodmanScenarioAltStressRow
@@ -2941,7 +2941,7 @@ view GoodmanStaticEnduranceLimitField {
   class prow goodman-static-control
   prop tag = "input"
   prop inputType = "range"
-  prop label = "sigma_lim endurance"
+  prop label = "σ_lim endurance"
   prop min = 20
   prop max = 120
   prop step = 1

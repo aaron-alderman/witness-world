@@ -24,10 +24,10 @@ grant runtime authority to copied JS or presenter code.
   capability props. The chart runtime accepts these as view-presentation
   patches, including nested values such as `bandFills.0`, not
   Goodman-specific logic.
-- Goodman static reference controls now exist as authored inputs for applied
-  shear, mill speed, probe mean stress, endurance limit, and SN slope; their
-  process state binds into `GoodmanDiagram` model params through
-  `chart.render`.
+- Goodman static reference controls now exist as authored inputs in oracle
+  sidebar order: applied shear, mill speed, `σ_lim endurance`, SN slope, and
+  probe preload. Their process state binds into `GoodmanDiagram` model params
+  through `chart.render`.
 - Goodman deterministic chart readout now carries authored tooltip channels for
   mean stress, alternating stress, shear force, and damage per cycle x10^6. The
   values are derived in `BoltFatigue`, preserved by the generic cartesian
