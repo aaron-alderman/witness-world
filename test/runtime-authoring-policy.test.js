@@ -7,6 +7,7 @@ import {
   AUTHORING_MODE_UNCONSTRAINED,
   blockedDirectMutationResponse,
   buildBlockedAuthoringHandoff,
+  buildRuntimeAuthoringCapabilityMatrix,
   createRuntimeAuthoringPolicy,
   defaultRuntimeAuthoringMode
 } from "../src/runtime-authoring-policy.js";
@@ -38,6 +39,20 @@ test("mcp-only authoring policy exposes plugin.authoring as the canonical write 
   assert.equal(policy.proposalAccess, "read_only");
   assert.equal(policy.forbiddenMutations.includes("custom browser runtime files"), true);
   assert.equal(policy.stopOnLimitation, true);
+});
+
+test("authoring capability matrix reports page.surface pathway semantics separately", () => {
+  const matrix = buildRuntimeAuthoringCapabilityMatrix(createRuntimeAuthoringPolicy({ mode: AUTHORING_MODE_MCP_ONLY }));
+  const pageSurface = matrix.runtimeConsumers["page.surface"];
+
+  assert.equal(pageSurface.status, "partial");
+  assert.equal(pageSurface.pairings.surface, "supported");
+  assert.equal(pageSurface.pairings.process, "blocked");
+  assert.equal(pageSurface.pairings.projection, "blocked");
+  assert.equal(pageSurface.pathwaySemantics.blockedResetHost.status, "supported");
+  assert.equal(pageSurface.pathwaySemantics.staticSurfaceProjection.status, "supported");
+  assert.equal(pageSurface.pathwaySemantics.routeSelectedSurface.status, "blocked");
+  assert.equal(pageSurface.pathwaySemantics.interactiveSurfaceExecution.status, "blocked");
 });
 
 test("blocked direct mutation response returns the structured blocked handoff shape", () => {

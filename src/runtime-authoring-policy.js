@@ -229,6 +229,18 @@ function capabilityState({
   };
 }
 
+function pathwaySemanticState({
+  status = "blocked",
+  limitationType = null,
+  reason = null
+} = {}) {
+  return {
+    status,
+    limitationType,
+    reason
+  };
+}
+
 export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
   const normalizedPolicy = cloneRuntimeAuthoringPolicy(policy);
   return {
@@ -291,16 +303,38 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
     runtimeConsumers: {
       "page.surface": {
         consumes: ["surface", "process", "projection"],
-        status: "blocked",
-        staticProjection: "blocked",
+        status: "partial",
+        staticProjection: "supported",
         interactiveProjection: "blocked",
         pairings: {
-          surface: "blocked",
+          surface: "supported",
           process: "blocked",
           projection: "blocked"
         },
         limitationType: "platform",
-        reason: "the old page.surface renderer was removed because it embedded app and capability authority into a generic host"
+        reason: "page.surface now supports only the first static authored projection rung; route-selected and interactive semantics remain blocked",
+        pathwaySemantics: {
+          blockedResetHost: pathwaySemanticState({
+            status: "supported",
+            limitationType: null,
+            reason: "page.surface still exposes the blocked reset host when no minimal authored static payload can be projected"
+          }),
+          staticSurfaceProjection: pathwaySemanticState({
+            status: "supported",
+            limitationType: null,
+            reason: "page.surface can now project the first minimal authored static surface payload through the canonical authoring pathway probe"
+          }),
+          routeSelectedSurface: pathwaySemanticState({
+            status: "blocked",
+            limitationType: "platform",
+            reason: "route-selected alternate authored surface output has not yet been proven on the canonical authoring pathway probe"
+          }),
+          interactiveSurfaceExecution: pathwaySemanticState({
+            status: "blocked",
+            limitationType: "platform",
+            reason: "interactive page.surface execution remains unavailable after removal of the false-authority renderer"
+          })
+        }
       },
       "page.home": {
         consumes: ["widget", "frontendProgram"],
@@ -312,16 +346,16 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
       {
         authoring: ["surface"],
         runtime: "page.surface",
-        status: "blocked",
-        limitationType: "platform",
-        reason: "page.surface now serves only the blocked reset host while canonical projection is rebuilt through replay"
+        status: "supported",
+        limitationType: null,
+        reason: "page.surface supports only the first minimal static authored projection rung"
       },
       {
         authoring: ["surface", "process", "projection"],
         runtime: "page.surface",
         status: "blocked",
         limitationType: "platform",
-        reason: "the prior page.surface runtime path was removed because it embedded app and capability authority"
+        reason: "page.surface does not yet consume process or projection semantics on the canonical authoring pathway probe"
       },
       {
         authoring: ["widget", "frontendProgram", "frontendStep"],

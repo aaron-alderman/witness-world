@@ -6,7 +6,7 @@ import path from "node:path";
 import { createWorld } from "../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
 import { MCP_PROTOCOL_VERSION } from "../plugins/mcp/mcp-tools.js";
-import { runReplayProbe } from "../scripts/mcp-authoring-replay-probe.mjs";
+import { runCanonicalAuthoringPathwayProbe } from "../scripts/mcp-authoring-replay-probe.mjs";
 
 async function tempRuntimeRoot() {
   return fs.mkdtemp(path.join(os.tmpdir(), "witness-engentus-authoring-pathway-"));
@@ -158,31 +158,28 @@ async function mcpToolCall(serverUrl, serverId, token, name, args, id = 1) {
   return result.body.result;
 }
 
-test("canonical docs encode the reset single-track replay pathway", async () => {
-  const [desireSpa, policy, replayPlaybook] = await Promise.all([
+test("canonical docs encode the single-track canonical authoring pathway probe", async () => {
+  const [desireSpa, policy, pathwayPlaybook] = await Promise.all([
     fs.readFile(path.join(process.cwd(), "docs", "DESIRE-SPA.md"), "utf8"),
     fs.readFile(path.join(process.cwd(), "docs", "LLM-AUTHORING-POLICY.md"), "utf8"),
     fs.readFile(path.join(process.cwd(), "docs", "AUTHORING-REPLAY-PLAYBOOK.md"), "utf8")
   ]);
 
-  assert.match(desireSpa, /plugin\.authoring/i);
-  assert.match(desireSpa, /single-track method/i);
-  assert.match(desireSpa, /page\.surface` still resolves as a route host/i);
-  assert.match(desireSpa, /blocked\/reset host page only/i);
-  assert.match(desireSpa, /there is one approved advancement lane/i);
-  assert.match(policy, /plugin\.authoring` only/i);
+  assert.match(desireSpa, /canonical authoring pathway probe/i);
+  assert.match(desireSpa, /minimal static authored `page\.surface` projection/i);
+  assert.match(desireSpa, /route-selected alternate authored `page\.surface` output/i);
+  assert.match(policy, /canonical authoring pathway probe/i);
   assert.match(policy, /Blocked means stop, not improvise/i);
   assert.match(policy, /There is no second lane/i);
-  assert.match(policy, /serves blocked\/reset host output only/i);
-  assert.match(replayPlaybook, /Stop at the first missing primitive/i);
-  assert.match(replayPlaybook, /page\.surface` resolves to blocked\/reset host output/i);
-  assert.match(replayPlaybook, /only approved proof lane/i);
+  assert.match(pathwayPlaybook, /Canonical Authoring Pathway Probe/i);
+  assert.match(pathwayPlaybook, /minimal static authored `page\.surface` projection/i);
+  assert.match(pathwayPlaybook, /route-selected alternate authored surface output is\s+the next rung/i);
 });
 
-test("MCP replay now proves the blocked reset host and emits one structured blocked handoff", { timeout: 10000 }, async () => {
+test("canonical authoring pathway probe proves the first static page.surface rung", { timeout: 10000 }, async () => {
   const server = await startAuthoringProbeServer();
   try {
-    const result = await runReplayProbe(server.url);
+    const result = await runCanonicalAuthoringPathwayProbe(server.url);
     assert.equal(result.ok, true);
     assert.deepEqual(result.capabilityChecks.canonicalFrontendModel, ["surface", "process", "projection", "capability"]);
     assert.equal(result.capabilityChecks.publicSurfaceCreate, true);
@@ -191,16 +188,18 @@ test("MCP replay now proves the blocked reset host and emits one structured bloc
     assert.equal(result.capabilityChecks.publicProjectionCreate, true);
     assert.equal(result.capabilityChecks.legacyWidgetCreateHidden, true);
     assert.equal(result.capabilityChecks.legacyFrontendProgramHidden, true);
-    assert.equal(result.replay.surfaceHttpStatus, 200);
-    assert.equal(result.replay.surfaceBlockedHostVisible, true);
-    assert.equal(result.replay.surfaceHomeHttpStatus, 200);
-    assert.equal(result.replay.surfaceHomeBlockedHostVisible, true);
-    assert.equal(result.replay.firstBlockedRung, "page.surface");
-    assert.equal(result.stateChecks.processPresent, true);
-    assert.equal(result.stateChecks.typePresent, true);
-    assert.equal(result.stateChecks.projectionPresent, true);
-    assert.equal(result.blockers.firstBlocked.limitationType, "platform");
-    assert.match(result.blockers.firstBlocked.missingPrimitive, /blocked reset host/i);
+    assert.equal(result.pathwayProbe.surfaceHttpStatus, 200);
+    assert.equal(result.pathwayProbe.staticSurfaceProjectionVisible, true);
+    assert.equal(result.pathwayProbe.blockedResetHostVisible, false);
+    assert.equal(result.pathwayProbe.firstBlockedRung, null);
+    assert.equal(result.blockers.firstBlocked, null);
+    assert.deepEqual(result.pathwayProbe.rungResults.map(row => row.id), [
+      "matrixBaseline",
+      "canonicalActionsExist",
+      "staticSurfaceProjection"
+    ]);
+    assert.equal(result.pathwayProbe.rungResults.every(row => row.status === "supported"), true);
+    assert.equal(result.stateChecks.rootSurfacePresent, true);
   } finally {
     await server.close();
   }
@@ -237,7 +236,7 @@ test("live constrained MCP discovery exposes canonical frontend actions and hide
   }
 });
 
-test("live constrained MCP keeps canonical authoring actions available while page.surface remains blocked", { timeout: 10000 }, async () => {
+test("live constrained MCP keeps canonical authoring actions available while page.surface exposes pathway semantics", { timeout: 10000 }, async () => {
   const server = await startAuthoringProbeServer();
   try {
     const { mcpServerId, token } = await provisionAuthoringMcpServer(server.url);
@@ -278,12 +277,14 @@ test("live constrained MCP keeps canonical authoring actions available while pag
     assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.projection.status, "supported");
     assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.process.status, "supported");
     assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.type.status, "supported");
-    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].status, "blocked");
-    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.surface, "blocked");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].status, "partial");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.surface, "supported");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.process, "blocked");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.projection, "blocked");
-    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].interactiveProjection, "blocked");
-    assert.match(matrixAfter.structuredContent.runtimeConsumers["page.surface"].reason, /removed because it embedded app and capability authority/i);
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.blockedResetHost.status, "supported");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.staticSurfaceProjection.status, "supported");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.routeSelectedSurface.status, "blocked");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.interactiveSurfaceExecution.status, "blocked");
   } finally {
     await server.close();
   }

@@ -7,7 +7,7 @@ import { createWorld } from "../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
 import { resolveRuntimeOperatorPaths } from "../src/runtime-operator-contract.js";
 import { defineWidgetVersion, defineWidgetVersionTransition, activateWidgetVersion } from "../src/widgets.js";
-import { runReplayProbe } from "../scripts/mcp-authoring-replay-probe.mjs";
+import { runCanonicalAuthoringPathwayProbe } from "../scripts/mcp-authoring-replay-probe.mjs";
 
 async function tempRuntimeRoot() {
   return fs.mkdtemp(path.join(os.tmpdir(), "witness-bootstrap-host-"));
@@ -529,7 +529,7 @@ test("a bootstrap-authored runner and home route take over without restarting th
   }
 });
 
-test("authoring replay probe uses the canonical matrix and reports the page.surface reset host block", { timeout: 10000 }, async () => {
+test("canonical authoring pathway probe uses the matrix and proves the first static page.surface rung", { timeout: 10000 }, async () => {
   const { server } = await startBlankServer({ runtimePluginIds: ["plugin.mcp"] });
   try {
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
@@ -537,7 +537,7 @@ test("authoring replay probe uses the canonical matrix and reports the page.surf
     assert.equal(diagnostics.plugins.activePluginIds.includes("plugin.inspect"), false);
     assert.equal(diagnostics.plugins.activePluginIds.includes("plugin.mcp"), true);
 
-    const result = await runReplayProbe(server.url);
+    const result = await runCanonicalAuthoringPathwayProbe(server.url);
     assert.equal(result.ok, true);
     assert.deepEqual(result.capabilityChecks.canonicalFrontendModel, ["surface", "process", "projection", "capability"]);
     assert.equal(result.capabilityChecks.publicSurfaceCreate, true);
@@ -546,15 +546,12 @@ test("authoring replay probe uses the canonical matrix and reports the page.surf
     assert.equal(result.capabilityChecks.publicProjectionCreate, true);
     assert.equal(result.capabilityChecks.legacyWidgetCreateHidden, true);
     assert.equal(result.capabilityChecks.legacyFrontendProgramHidden, true);
-    assert.equal(result.replay.surfaceHttpStatus, 200);
-    assert.equal(result.replay.surfaceBlockedHostVisible, true);
-    assert.equal(result.replay.surfaceHomeHttpStatus, 200);
-    assert.equal(result.replay.surfaceHomeBlockedHostVisible, true);
-    assert.equal(result.replay.firstBlockedRung, "page.surface");
-    assert.equal(result.blockers.firstBlocked.limitationType, "platform");
-    assert.equal(result.stateChecks.processPresent, true);
-    assert.equal(result.stateChecks.typePresent, true);
-    assert.equal(result.stateChecks.projectionPresent, true);
+    assert.equal(result.pathwayProbe.surfaceHttpStatus, 200);
+    assert.equal(result.pathwayProbe.staticSurfaceProjectionVisible, true);
+    assert.equal(result.pathwayProbe.blockedResetHostVisible, false);
+    assert.equal(result.pathwayProbe.firstBlockedRung, null);
+    assert.equal(result.blockers.firstBlocked, null);
+    assert.equal(result.stateChecks.rootSurfacePresent, true);
   } finally {
     await server.close();
   }

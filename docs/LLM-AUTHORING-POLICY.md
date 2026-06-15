@@ -31,10 +31,10 @@ Blocked means stop, not improvise.
 ## One proof lane
 
 When the constrained pathway advances, it advances only by extending the
-canonical replay proof and the corresponding machine-readable capability-matrix
-truth.
+canonical authoring pathway probe and the corresponding machine-readable
+capability-matrix truth.
 
-There is no second lane for temporary generic frontend work outside that replay
+There is no second lane for temporary generic frontend work outside that pathway
 gate.
 
 ## Current `page.surface` truth
@@ -48,7 +48,7 @@ Current constrained truth is:
 - it serves blocked/reset host output only
 - canonical projection/execution through `page.surface` is currently blocked
 
-Any future claim beyond that must be replay-proven first.
+Any future claim beyond that must be pathway-proven first.
 
 ## Blocked handoff
 
@@ -62,5 +62,5 @@ must end with a structured blocked handoff containing:
 - `minimumHumanAction`
 - `proof`
 
-The replay and capability matrix are the machine-readable sources of truth for
-that stop point.
+The canonical authoring pathway probe and capability matrix are the
+machine-readable sources of truth for that stop point.

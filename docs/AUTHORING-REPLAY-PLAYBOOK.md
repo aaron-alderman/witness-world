@@ -1,12 +1,16 @@
-# Authoring Replay Playbook
+# Canonical Authoring Pathway Probe
 
-Use this playbook whenever frontend work must stay inside constrained
+This file keeps its legacy name, but the canonical term is
+`canonical authoring pathway probe`.
+
+Use this probe whenever frontend work must stay inside constrained
 `plugin.authoring` mode.
 
 ## Purpose
 
-The replay is the only approved proof lane for constrained frontend progress.
-It is not a workaround lane and it is not a second platform initiative.
+The canonical authoring pathway probe is the only approved proof lane for
+constrained frontend progress. It is not a runtime concept, not an
+implementation seam, and not a second platform initiative.
 
 ## Rules
 
@@ -18,38 +22,39 @@ It is not a workaround lane and it is not a second platform initiative.
 
 ## Current ladder
 
-1. constrained matrix baseline
+1. matrix baseline
 2. canonical actions still exist
-3. `page.surface` resolves to blocked/reset host output
-4. replay emits one structured blocked handoff
+3. minimal static authored `page.surface` projection
 
-This is the only approved next step. No Engentus-specific shell replay begins
-until the clean floor above is stable and truthful.
+This tranche stops there. Route-selected alternate authored surface output is
+the next rung, not part of the first static proof.
 
-## Current stop point
+## Current truth
 
-`page.surface` is currently blocked for canonical frontend projection and
-execution.
+What the pathway probe now proves:
 
-Reason:
+- a minimal surface tree can be authored through constrained MCP
+- `page.surface` can project one minimal authored static text payload
+- the reset host still exists as the honest fallback when no minimal static
+  payload can be projected
 
-- the previous renderer path was removed because it embedded app and capability
-  authority into a generic host
+What remains blocked:
 
-That means replay currently proves blocked/reset truth, not live authored shell
-truth.
+- route-selected alternate authored surface output
+- interactive `page.surface` execution
+- process/projection consumption by `page.surface`
 
 ## Evidence rules
 
 - HTTP success alone is not enough
-- matrix claims must match replay-proven truth
-- supported means replay-proven now
-- blocked means replay hit the stop point now
+- matrix claims must match pathway-proven truth
+- supported means proven by the current pathway probe
+- blocked means not yet proven or explicitly failed on the pathway probe
 - no later rung may run after the first blocked rung
 
 ## Anti-patterns
 
-- widening runtime behavior ahead of the next replay rung
+- widening runtime behavior ahead of the next pathway rung
 - rebuilding app flow in handwritten JS
 - leaving wrong-behavior tests around as traps to be “fixed”
-- treating old `page.surface` shell output as canonical truth
+- treating the pathway probe as a frontend runtime concept

@@ -36,7 +36,7 @@ test("engentus shell and core runtime do not expose the presenter bootstrap seam
   assert.equal(runtimeSource.includes("renderSurfaceBrowserRuntime"), false);
 });
 
-test("runtime-surface-shell stays a blocked reset host without contaminated shell concepts", async () => {
+test("runtime-surface-shell stays a mechanical static/reset host without contaminated shell concepts", async () => {
   const runtimeSource = await readFile(path.join(process.cwd(), "src", "runtime-surface-shell.js"), "utf8");
   const forbidden = [
     "auth-screen",

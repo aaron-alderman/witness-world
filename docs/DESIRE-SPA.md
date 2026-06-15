@@ -9,8 +9,8 @@ This is the canonical Engentus architecture and status document. The app README
 is secondary and should point back here.
 
 Repo-wide constrained LLM authoring policy lives in
-`docs/LLM-AUTHORING-POLICY.md`. The replay method for finding the next honest
-gap lives in `docs/AUTHORING-REPLAY-PLAYBOOK.md`.
+`docs/LLM-AUTHORING-POLICY.md`. The canonical authoring pathway probe method
+for finding the next honest gap lives in `docs/AUTHORING-REPLAY-PLAYBOOK.md`.
 
 ## Thesis
 
@@ -27,12 +27,12 @@ gap lives in `docs/AUTHORING-REPLAY-PLAYBOOK.md`.
 There is one approved advancement lane for constrained frontend work:
 
 1. read the machine-readable authoring/runtime matrix
-2. replay the next canonical authoring step
+2. run the canonical authoring pathway probe for the next canonical authoring step
 3. stop at the first blocked semantic
 4. emit one structured blocked handoff and classify the blocker honestly
 
-There is no second generic frontend initiative beside this replay/pathway. If
-Engentus moves honestly, it moves only by advancing that replay ladder.
+There is no second generic frontend initiative beside this pathway probe. If
+Engentus moves honestly, it moves only by advancing that pathway ladder.
 
 ## Current reset truth
 
@@ -49,7 +49,7 @@ Current truth:
 - it does not claim `surface + process + projection` runtime support
 
 The next honest work does not begin from the old shell host. It begins from the
-clean blocked floor proved by the replay/pathway test.
+clean floor proved by the canonical authoring pathway probe.
 
 ## Current honest state
 
@@ -57,7 +57,7 @@ clean blocked floor proved by the replay/pathway test.
 
 - constrained authoring policy truth
 - machine-readable capability-matrix truth
-- replay/pathway blocked-handoff truth
+- canonical authoring pathway probe truth
 - no-cheat boundary truth
 - authored Engentus source structure under `examples/engentus`
 
@@ -69,17 +69,22 @@ clean blocked floor proved by the replay/pathway test.
 
 ### Still blocked
 
-- canonical static `page.surface` projection
+- route-selected alternate authored `page.surface` output
 - canonical interactive `page.surface` execution
 - faithful live Engentus shell behavior through the constrained pathway
 - Goodman, mill-charge, and mill-force live behavior on canonical seams
+
+### Newly proved
+
+- minimal static authored `page.surface` projection for one text-bearing surface
+  tree through the canonical authoring pathway probe
 
 ## Restart lane
 
 The restart lane is:
 
-1. keep docs, matrix, replay, and boundaries aligned
-2. prove the next honest canonical `page.surface` semantic through replay
+1. keep docs, matrix, pathway probe, and boundaries aligned
+2. prove the next honest canonical `page.surface` semantic through the pathway probe
 3. stop at the first missing primitive
 4. only then widen platform/runtime behavior through the human platform lane
 
