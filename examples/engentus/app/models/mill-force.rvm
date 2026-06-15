@@ -14,6 +14,7 @@ model MillForce {
   axis segment = sweep(1, N_segments, 1)
   axis method  = category(faithful, grounded)
   axis sample  = ensemble(n_samples)
+  axis guidePoint = sweep(0, 1, 1)
 
   // ── params (DEFAULT_INPUTS) ──
   param percent_crit   = 0.9
@@ -119,6 +120,13 @@ model MillForce {
   derive force_bar_max_len = radius * 0.55
   derive force_bar_len = F_r_abs / max(F_r_abs_max_all, 1) * force_bar_max_len over segment, method
   derive force_bar_inner = max(0, rInner - force_bar_len) over segment, method
+
+  // ── cross-section reference guide geometry ──
+  derive fill_chord_theta = phi + (phiPrime - phi) * guidePoint over guidePoint, method
+  derive fill_chord_r = rInner over guidePoint
+  derive radial_guide_r = radius * guidePoint over guidePoint
+  derive shoulder_guide_theta = phi over guidePoint
+  derive toe_guide_theta = phiPrime over guidePoint, method
 
   // ── Monte Carlo cross-section overlay ──
   //

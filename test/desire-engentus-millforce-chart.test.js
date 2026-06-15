@@ -227,6 +227,37 @@ test("MillForceCross plans per-segment annular liner bands with angular bounds +
     assert.equal(primitive.r0, evaluated.fields.rInner.data);
     assert.equal(primitive.r1, evaluated.params.radius);
   }
+  const fillChord = plan.layers.find(l => l.name === "fill_chord");
+  const shoulderGuide = plan.layers.find(l => l.name === "shoulder_guide");
+  const toeGuide = plan.layers.find(l => l.name === "toe_guide");
+  assert.equal(fillChord.mark, "line");
+  assert.equal(fillChord.stroke, "#5AAABF");
+  assert.deepEqual(fillChord.primitives[0].points.map(point => point.theta), [
+    evaluated.fields.phi.data,
+    evaluated.fields.phiPrime.data[g]
+  ]);
+  assert.deepEqual(fillChord.primitives[0].points.map(point => point.r), [
+    evaluated.fields.rInner.data,
+    evaluated.fields.rInner.data
+  ]);
+  assert.equal(shoulderGuide.stroke, "#f1f5f9");
+  assert.deepEqual(shoulderGuide.primitives[0].points.map(point => point.theta), [
+    evaluated.fields.phi.data,
+    evaluated.fields.phi.data
+  ]);
+  assert.deepEqual(shoulderGuide.primitives[0].points.map(point => point.r), [
+    0,
+    evaluated.params.radius
+  ]);
+  assert.equal(toeGuide.stroke, "#475569");
+  assert.deepEqual(toeGuide.primitives[0].points.map(point => point.theta), [
+    evaluated.fields.phiPrime.data[g],
+    evaluated.fields.phiPrime.data[g]
+  ]);
+  assert.deepEqual(toeGuide.primitives[0].points.map(point => point.r), [
+    0,
+    evaluated.params.radius
+  ]);
   const liners = plan.layers.find(l => l.name === "liners");
   assert.equal(liners.mark, "annular-wedge");
   assert.equal(liners.primitives.length, N);
@@ -278,6 +309,18 @@ test("MillForceCross compare mode renders grounded and faithful annular bands", 
     assert.equal(primitive.r0, evaluated.fields.rInner.data);
     assert.equal(primitive.r1, evaluated.params.radius);
   }
+  assert.equal(plan.layers.find(l => l.name === "fill_chord").hidden, true);
+  assert.equal(plan.layers.find(l => l.name === "toe_guide").hidden, true);
+  const compareFillChord = plan.layers.find(l => l.name === "fill_chord_compare");
+  const compareToeGuide = plan.layers.find(l => l.name === "toe_guide_compare");
+  assert.deepEqual(compareFillChord.primitives[0].points.map(point => point.theta), [
+    evaluated.fields.phi.data,
+    evaluated.fields.phiPrime.data[g]
+  ]);
+  assert.deepEqual(compareToeGuide.primitives[0].points.map(point => point.theta), [
+    evaluated.fields.phiPrime.data[g],
+    evaluated.fields.phiPrime.data[g]
+  ]);
   assert.equal(grounded.mark, "annular-wedge");
   assert.equal(faithful.mark, "annular-wedge");
   assert.equal(grounded.primitives.length, N);

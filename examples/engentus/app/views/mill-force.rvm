@@ -165,6 +165,11 @@ chart MillForceCross of MillForce {
   layer inner = circle | r:rInner stroke:slate width:0.8 dash:true opacity:0.65
   layer charge_region = annular-wedge over method | theta0:phiPrime theta1:phi r0:rInner r1:radius fill:"#DCF0F5" stroke:blue opacity:0.35 where:method=param.active_method unless:param.analysis_mode=compare
   layer charge_region_compare = annular-wedge over method | theta0:phiPrime theta1:phi r0:rInner r1:radius fill:"#DCF0F5" stroke:blue opacity:0.35 where:method=grounded when:param.analysis_mode=compare
+  layer fill_chord = line over guidePoint | theta:fill_chord_theta r:fill_chord_r where:method=param.active_method stroke:blue unless:param.analysis_mode=compare
+  layer fill_chord_compare = line over guidePoint | theta:fill_chord_theta r:fill_chord_r where:method=grounded stroke:blue when:param.analysis_mode=compare
+  layer shoulder_guide = line over guidePoint | theta:shoulder_guide_theta r:radial_guide_r stroke:"#f1f5f9"
+  layer toe_guide = line over guidePoint | theta:toe_guide_theta r:radial_guide_r where:method=param.active_method stroke:slate unless:param.analysis_mode=compare
+  layer toe_guide_compare = line over guidePoint | theta:toe_guide_theta r:radial_guide_r where:method=grounded stroke:slate when:param.analysis_mode=compare
   layer liners = annular-wedge over segment | theta0:t1 theta1:t2 r0:rInner r1:radius value:F_resultant where:method=param.active_method tooltip.liner:segment tooltip.method:param.active_method tooltip.mass_kg:m_charge tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
   layer force_bars = polar-quad over segment | theta0:force_bar_theta0 theta1:force_bar_theta1 r0:force_bar_inner r1:rInner value:F_r where:method=param.active_method fill:blue stroke:none opacity:0.82 tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r unless:param.analysis_mode=compare
   layer grounded_liners = annular-wedge over segment | theta0:t1 theta1:t2 r0:rCompareMid r1:radius value:F_resultant where:method=grounded tooltip.liner:segment tooltip.method:grounded tooltip.mass_kg:m_charge tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant when:param.analysis_mode=compare
