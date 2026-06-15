@@ -1207,7 +1207,7 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       sampleCount: 350,
       jTotalFree: true,
       p90Mark: "polar-quad",
-      p10Mark: "polar-quad",
+      p10Mark: "polar-point",
       p90Hidden: false,
       p10Hidden: false,
       p90Count: 39,

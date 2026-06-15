@@ -291,7 +291,7 @@ test("MillForceCross Monte Carlo mode renders authored p10/p90 radial force band
   const p90 = plan.layers.find(l => l.name === "mc_p90");
   const p10 = plan.layers.find(l => l.name === "mc_p10");
   assert.equal(p90.mark, "polar-quad");
-  assert.equal(p10.mark, "polar-quad");
+  assert.equal(p10.mark, "polar-point");
   assert.equal(p90.hidden, undefined);
   assert.equal(p10.hidden, undefined);
   assert.equal(p90.primitives.length, N);
@@ -303,6 +303,10 @@ test("MillForceCross Monte Carlo mode renders authored p10/p90 radial force band
     assert.equal(p90.primitives[s].r1, evaluated.fields.rInner_mc.data);
     assert.equal(p90.primitives[s].value, evaluated.fields.F_r_p90.data[s]);
     assert.equal(typeof p90.primitives[s].tooltip.F_r_p90_N, "number");
+    assert.equal(p10.primitives[s].theta, evaluated.fields.tBar_mc.data[s]);
+    assert.equal(p10.primitives[s].r, evaluated.fields.mc_p10_r.data[s]);
+    assert.equal(p10.primitives[s].value, evaluated.fields.F_r_p10.data[s]);
+    assert.equal(typeof p10.primitives[s].tooltip.F_r_p10_N, "number");
   }
   assert.equal(plan.layers.find(l => l.name === "grounded_liners").hidden, true);
   assert.equal(plan.layers.find(l => l.name === "faithful_liners").hidden, true);

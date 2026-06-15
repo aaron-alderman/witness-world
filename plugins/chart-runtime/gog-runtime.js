@@ -268,6 +268,30 @@ function planPolarLayer(layer, evaluated) {
     };
   }
 
+  if (layer.mark === "polar-point") {
+    const rField = fields[enc.r];
+    const thetaField = fields[enc.theta];
+    if (!rField || !thetaField) return { ...base, primitives: [] };
+    const iterAxis = iterationAxis(layer, rField, axes);
+    const primitives = (axes[iterAxis]?.values ?? []).map((_, i) => {
+      const coord = { [iterAxis]: i, ...where };
+      return {
+        theta: valueAt(thetaField, coord),
+        r: valueAt(rField, coord),
+        value: channelValue(enc.value ?? enc.r, evaluated, coord),
+        tooltip: tooltipValuesForEncoding(enc, evaluated, coord, axes)
+      };
+    });
+    return {
+      ...base,
+      fill: enc.fill ? colorRef(enc.fill, evaluated, enc.fillMap) : "#5AAABF",
+      stroke: enc.stroke ? colorRef(enc.stroke, evaluated, enc.strokeMap) : "none",
+      size: Number(enc.size) || 2,
+      opacity: enc.opacity == null ? 1 : Number(enc.opacity),
+      primitives
+    };
+  }
+
   if (layer.mark === "circle") {
     const radius = channelValue(enc.r, evaluated, where);
     return {
@@ -928,6 +952,18 @@ function drawPolarChart(container, plan, d3) {
           .attr("stroke-width", 0.5)
           .attr("opacity", layer.opacity ?? 0.85);
       }
+    } else if (layer.mark === "polar-point") {
+      for (const prim of layer.primitives) {
+        const [x, y] = toXY(prim.theta, prim.r);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        svg.append("circle")
+          .attr("cx", x)
+          .attr("cy", y)
+          .attr("r", layer.size ?? 2)
+          .attr("fill", layer.fill ?? "#5AAABF")
+          .attr("stroke", layer.stroke ?? "none")
+          .attr("opacity", layer.opacity ?? 1);
+      }
     } else if (layer.mark === "circle") {
       for (const prim of layer.primitives) {
         svg.append("circle")
@@ -1010,6 +1046,10 @@ function polarProbeReadout(plan, x, y) {
             tooltip = point.tooltip ?? primitive.tooltip ?? {};
           }
         }
+      } else if (Number.isFinite(primitive.theta) && Number.isFinite(primitive.r)) {
+        const rDistance = Math.abs(pointer.r - primitive.r) / ((plan.scales.r.domain[1] - plan.scales.r.domain[0]) || 1);
+        const aDistance = angularDistance(pointer.theta, primitive.theta);
+        score = aDistance + rDistance;
       }
       if (score < bestScore) {
         bestScore = score;

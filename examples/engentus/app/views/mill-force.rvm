@@ -170,5 +170,5 @@ chart MillForceCross of MillForce {
   layer grounded_force_bars = polar-quad over segment | theta0:force_bar_theta0 theta1:force_bar_theta1 r0:force_bar_inner r1:rInner value:F_r where:method=grounded fill:blue stroke:none opacity:0.82 tooltip.liner:segment tooltip.method:grounded tooltip.F_r_N:F_r when:param.analysis_mode=compare
   layer faithful_force_bars = polar-quad over segment | theta0:force_bar_theta0 theta1:force_bar_theta1 r0:force_bar_inner r1:rInner value:F_r where:method=faithful fill:ylw stroke:none opacity:0.82 tooltip.liner:segment tooltip.method:faithful tooltip.F_r_N:F_r when:param.analysis_mode=compare
   layer mc_p90 = polar-quad over segment | theta0:mc_theta0 theta1:mc_theta1 r0:mc_p90_inner r1:rInner_mc value:F_r_p90 fill:blue stroke:blue opacity:0.15 tooltip.liner:segment tooltip.mc:"p90" tooltip.F_r_p90_N:F_r_p90 when:param.analysis_mode=mc
-  layer mc_p10 = polar-quad over segment | theta0:mc_theta0 theta1:mc_theta1 r0:mc_p10_r r1:rInner_mc value:F_r_p10 fill:blue stroke:blue opacity:0.45 tooltip.liner:segment tooltip.mc:"p10" tooltip.F_r_p10_N:F_r_p10 when:param.analysis_mode=mc
+  layer mc_p10 = polar-point over segment | theta:tBar_mc r:mc_p10_r value:F_r_p10 fill:blue opacity:0.5 size:2 tooltip.liner:segment tooltip.mc:"p10" tooltip.F_r_p10_N:F_r_p10 when:param.analysis_mode=mc
 }

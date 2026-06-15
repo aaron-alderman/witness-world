@@ -126,8 +126,9 @@ grant runtime authority to copied JS or presenter code.
 - Mill Force Monte Carlo now has an authored dataflow/chart first pass:
   `MillForce` includes a `sample` ensemble axis, seeded normal sampling for the
   four reference MC controls, segment-wise p10/p90 radial-force reductions, and
-  cross-section overlay layers expressed with the existing generic
-  `annular-wedge` mark. The MC sample count/free toggles bind from
+  cross-section overlay layers expressed with generic polar chart marks. The
+  p90 overlay uses `polar-quad` radial force bands and the p10 overlay uses the
+  reusable `polar-point` glyph. The MC sample count/free toggles bind from
   process-owned shell state into `chart.render`, and the live route exposes the
   p10/p90 overlay without app-local chart/controller JS.
 
@@ -147,9 +148,9 @@ grant runtime authority to copied JS or presenter code.
   still needs authored collection/repeated-action semantics or a justified
   platform primitive.
 - Mill Force still needs full reference Monte Carlo result parity. The p10/p90
-  cross-section overlay and straight-sided radial force-bar geometry are now
-  authored and live, but the richer reference MC result lifecycle, statistical
-  summaries, p10 point glyph exactness, and final compare/MC panel polish remain
+  cross-section overlay, p10 point glyph, and straight-sided radial force-bar
+  geometry are now authored and live, but the richer reference MC result
+  lifecycle, statistical summaries, and final compare/MC panel polish remain
   first-pass gaps. Tooltip readout for the three stock charts now exists through
   the generic chart tooltip seam. Compare deltas now exist as authored scalar
   outputs and inline percent readouts, but the compare panel is still a
