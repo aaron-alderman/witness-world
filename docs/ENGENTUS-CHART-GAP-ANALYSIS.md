@@ -104,6 +104,11 @@ grant runtime authority to copied JS or presenter code.
   category-split cartesian line primitives plus styled point/text marks, and
   the RVM chart parser now preserves quoted layer-channel strings with spaces
   such as `"No Jemtec"`.
+- Goodman static slip/yield annotations now follow the reference chart more
+  closely in authored dataflow: the slip threshold uses the same MPa-to-Pa
+  conversion as the oracle, so the authored slip rule lands on the visible
+  chart rather than off-domain, and `GoodmanDiagram` declares the `▲slip` and
+  `Yield boundary` labels as chart text layers.
 - Goodman scrubber range now follows authored run duration:
   `GoodmanRunDurationMonths` binds to the time slider `max` attribute through
   the generic form-control binding path, matching the reference relationship

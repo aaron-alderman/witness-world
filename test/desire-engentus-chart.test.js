@@ -32,7 +32,7 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   assert.equal(evaluated.fields.probe_alt_stress_text.data, `${evaluated.fields.curve_probe.data.toFixed(1)} MPa`);
   assert.equal(evaluated.fields.probe_shear_text.data, `${Math.round(evaluated.fields.probe_F_shear.data).toLocaleString("en-US")} N`);
   assert.match(evaluated.fields.probe_damage_text.data, /\/ 1M cycles$/);
-  assert.equal(evaluated.fields.slip_threshold_text.data, "> 650 MPa");
+  assert.equal(evaluated.fields.slip_threshold_text.data, "6.4 MPa");
 
   // frame + scales
   assert.equal(plan.frame, "cartesian");
@@ -106,6 +106,17 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   const slip = layer("slip");
   assert.equal(slip.mark, "rule");
   assert.equal(slip.primitives[0].x, evaluated.fields.slip.data);
+  assert.ok(evaluated.fields.slip.data > 0 && evaluated.fields.slip.data < 650);
+  const slipLabel = layer("slip_label");
+  assert.equal(slipLabel.mark, "text");
+  assert.equal(slipLabel.fill, "#475569");
+  assert.equal(slipLabel.size, 9);
+  assert.equal(slipLabel.opacity, 0.7);
+  assert.deepEqual(slipLabel.primitives, [{
+    x: evaluated.fields.slip_label_x.data,
+    y: evaluated.fields.slip_label_y.data,
+    label: "▲slip"
+  }]);
 
   // yield: a polyline (y = ys - sm) with the reference dashed purple style
   assert.equal(layer("yield").stroke, "#7c3aed");
@@ -113,6 +124,16 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   assert.equal(layer("yield").dash, true);
   assert.equal(layer("yield").mark, "line");
   assert.equal(layer("yield").primitives[0].points[100].y, evaluated.fields.yield_line.data[100]);
+  const yieldLabel = layer("yield_label");
+  assert.equal(yieldLabel.mark, "text");
+  assert.equal(yieldLabel.fill, "#7c3aed");
+  assert.equal(yieldLabel.size, 9.5);
+  assert.equal(yieldLabel.opacity, 0.7);
+  assert.deepEqual(yieldLabel.primitives, [{
+    x: evaluated.fields.yield_label_x.data,
+    y: evaluated.fields.yield_label_y.data,
+    label: "Yield boundary"
+  }]);
 
   // probe: a vertical rule at the probe_sm param
   const probe = layer("probe");
