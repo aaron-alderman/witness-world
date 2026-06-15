@@ -301,16 +301,16 @@ grant runtime authority to copied JS or presenter code.
   output after Run, with an authored calculating-to-computed status transition
   and an authored Clear path that removes the overlay while preserving the MC
   control panel state.
-  The richer reference MC result datasets and final compare/MC panel polish
-  remain first-pass gaps. Tooltip readout for the three
+  The richer reference MC result datasets and final MC panel polish remain
+  first-pass gaps. Tooltip readout for the three
   stock charts now exists through the generic chart tooltip seam. Compare
   deltas now exist as authored scalar outputs and inline percent readouts, and
   the cross-section chart now carries authored legend/force-scale annotations,
   while the force-vs-angle chart carries authored kN scaling, legend, charge
   band, and zero-line chrome. The Results section no longer carries non-oracle
   mode/model debug rows.
-  The compare panel is still a first-pass authored analysis view rather than
-  final reference parity.
+  Compare mode no longer has a separate panel; remaining compare parity work
+  should stay in inline result rows and chart layers.
 - No app-local browser runtime, presenter, or controller seam should be added to
   close these gaps. The next work should continue through authored surfaces,
   process state, projections, and explicit capability bindings.
