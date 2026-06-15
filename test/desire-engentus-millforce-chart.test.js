@@ -42,6 +42,20 @@ test("MillForceAngle plans cartesian lines over segment angle, sliced to active 
   assert.equal(plan.scales.x.label, "θ (°, standard - 0° = East)");
   assert.deepEqual(plan.scales.x.domain, [0, 360]);
   const fr = plan.layers.find(l => l.name === "fr");
+  const chargeZone = plan.layers.find(l => l.name === "charge_zone");
+  const zeroLine = plan.layers.find(l => l.name === "zero_line");
+  assert.equal(chargeZone.mark, "x-band");
+  assert.equal(chargeZone.fill, "#DCF0F5");
+  assert.equal(chargeZone.opacity, 0.12);
+  assert.deepEqual(chargeZone.primitives, [{
+    x0: evaluated.fields.charge_zone_x0.data,
+    x1: evaluated.fields.charge_zone_x1.data
+  }]);
+  assert.equal(zeroLine.mark, "h-rule");
+  assert.equal(zeroLine.stroke, "#475569");
+  assert.equal(zeroLine.width, 0.5);
+  assert.equal(zeroLine.dash, true);
+  assert.deepEqual(zeroLine.primitives, [{ y: 0 }]);
   assert.equal(fr.mark, "line");
   assert.equal(fr.primitives[0].points.length, N);
   // x = reference display degrees, y = force in kN.

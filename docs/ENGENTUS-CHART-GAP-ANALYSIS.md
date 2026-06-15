@@ -241,6 +241,11 @@ grant runtime authority to copied JS or presenter code.
   authored segment/phi/dTheta state, `views/mill-force.rvm` binds the cartesian
   x channel to that field, and the generic chart runtime orders explicit-x line
   points by x value so wraparound segments do not draw across the chart.
+- Mill Force force-vs-angle guide chrome now carries the reference charge-zone
+  band and dashed zero-force line. `models/mill-force.rvm` derives the grounded
+  `phiPrime` to `phi` display-degree extents as scalar chart fields, while
+  `plugin.chart-runtime` provides reusable cartesian `x-band` and `h-rule`
+  marks consumed by `views/mill-force.rvm`.
 - Mill Force Monte Carlo now has an authored dataflow/chart first pass:
   `MillForce` includes a `sample` ensemble axis, seeded normal sampling for the
   four reference MC controls, segment-wise p10/p90 radial-force reductions, and
@@ -295,7 +300,8 @@ grant runtime authority to copied JS or presenter code.
   stock charts now exists through the generic chart tooltip seam. Compare
   deltas now exist as authored scalar outputs and inline percent readouts, and
   the cross-section chart now carries authored legend/force-scale annotations,
-  while the force-vs-angle chart carries authored kN scaling and legend chrome.
+  while the force-vs-angle chart carries authored kN scaling, legend, charge
+  band, and zero-line chrome.
   The compare panel is still a first-pass authored analysis view rather than
   final reference parity.
 - No app-local browser runtime, presenter, or controller seam should be added to

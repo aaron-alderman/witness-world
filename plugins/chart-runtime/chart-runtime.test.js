@@ -128,6 +128,50 @@ test("cartesian band mark supports category-split primitives generically", () =>
   assert.deepEqual(zones.primitives[1].points.map(point => point.y1), [15, 16]);
 });
 
+test("cartesian guide marks support x-band and horizontal rule primitives generically", () => {
+  const view = {
+    frame: "cartesian",
+    encoding: {
+      x: { field: "x", domain: [0, 10] },
+      y: { field: "y", domain: [-2, 8] }
+    },
+    layers: [
+      {
+        name: "window",
+        mark: "x-band",
+        encode: { x0: "left", x1: "right", fill: "#ddeeff", opacity: 0.12 }
+      },
+      {
+        name: "zero",
+        mark: "h-rule",
+        encode: { y: "baseline", stroke: "slate", width: 0.5, dash: true }
+      }
+    ]
+  };
+  const evaluated = {
+    axes: {},
+    fields: {
+      left: { axes: [], data: 2 },
+      right: { axes: [], data: 7 },
+      baseline: { axes: [], data: 0 }
+    }
+  };
+
+  const plan = planChart(view, evaluated, { width: 200, height: 120 });
+  const band = plan.layers.find(layer => layer.name === "window");
+  const rule = plan.layers.find(layer => layer.name === "zero");
+
+  assert.equal(band.mark, "x-band");
+  assert.equal(band.fill, "#ddeeff");
+  assert.equal(band.opacity, 0.12);
+  assert.deepEqual(band.primitives, [{ x0: 2, x1: 7 }]);
+  assert.equal(rule.mark, "h-rule");
+  assert.equal(rule.stroke, "#475569");
+  assert.equal(rule.width, 0.5);
+  assert.equal(rule.dash, true);
+  assert.deepEqual(rule.primitives, [{ y: 0 }]);
+});
+
 test("shared chart runtime sources stay free of app-specific defaults", () => {
   const runtimeSource = fs.readFileSync(new URL("./runtime.js", import.meta.url), "utf8");
   const gogSource = fs.readFileSync(new URL("./gog-runtime.js", import.meta.url), "utf8");

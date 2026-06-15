@@ -278,6 +278,13 @@ test("Mill Force chart plans preserve authored kN lines and reference chrome", a
   ][1]);
   assert.equal(angleLayer("ft").stroke, "#475569");
   assert.equal(angleLayer("fres").stroke, "#f1f5f9");
+  assert.equal(angleLayer("charge_zone").mark, "x-band");
+  assert.deepEqual(angleLayer("charge_zone").primitives, [{
+    x0: evaluated.fields.charge_zone_x0.data,
+    x1: evaluated.fields.charge_zone_x1.data
+  }]);
+  assert.equal(angleLayer("zero_line").mark, "h-rule");
+  assert.deepEqual(angleLayer("zero_line").primitives, [{ y: 0 }]);
   assert.deepEqual(angleLayer("legend_fr_label").primitives, [{ x: 704, y: 15, label: "Radial" }]);
   assert.deepEqual(angleLayer("legend_ft_label").primitives, [{ x: 704, y: 35, label: "Tangential" }]);
   assert.deepEqual(angleLayer("legend_resultant_label").primitives, [{ x: 704, y: 55, label: "Resultant" }]);

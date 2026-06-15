@@ -175,6 +175,21 @@ function planLayer(layer, evaluated, fills, opts = {}) {
     };
   }
 
+  if (layer.mark === "x-band") {
+    const x0Val = scalarRef(enc.x0, evaluated);
+    const x1Val = scalarRef(enc.x1, evaluated);
+    return {
+      ...base,
+      fill: enc.fill ? colorRef(enc.fill, evaluated, enc.fillMap) : "#5AAABF",
+      stroke: enc.stroke ? colorRef(enc.stroke, evaluated, enc.strokeMap) : "none",
+      width: Number(enc.width) || 0,
+      opacity: enc.opacity == null ? 0.25 : Number(enc.opacity),
+      primitives: Number.isFinite(x0Val) && Number.isFinite(x1Val)
+        ? [{ x0: Math.min(x0Val, x1Val), x1: Math.max(x0Val, x1Val) }]
+        : []
+    };
+  }
+
   if (layer.mark === "cloud") {
     // faint per-sample spaghetti: one polyline per ensemble sample over the x axis
     const yField = fields[enc.y];
@@ -204,6 +219,18 @@ function planLayer(layer, evaluated, fills, opts = {}) {
       dash: enc.dash === true,
       opacity: enc.opacity == null ? 1 : Number(enc.opacity),
       primitives: xVal == null ? [] : [{ x: xVal }]
+    };
+  }
+
+  if (layer.mark === "h-rule") {
+    const yVal = scalarRef(enc.y, evaluated);
+    return {
+      ...base,
+      stroke: colorRef(enc.stroke, evaluated, enc.strokeMap),
+      width: Number(enc.width) || 1,
+      dash: enc.dash === true,
+      opacity: enc.opacity == null ? 1 : Number(enc.opacity),
+      primitives: Number.isFinite(yVal) ? [{ y: yVal }] : []
     };
   }
 
@@ -978,6 +1005,20 @@ export function drawChart(container, plan, d3) {
         g.append("polygon").attr("points", [...top, ...bottom].join(" "))
           .attr("fill", prim.fill ?? layer.fill).attr("opacity", layer.opacity);
       }
+    } else if (layer.mark === "x-band") {
+      for (const prim of layer.primitives) {
+        const x0 = x(prim.x0);
+        const x1 = x(prim.x1);
+        g.append("rect")
+          .attr("x", Math.min(x0, x1))
+          .attr("y", 0)
+          .attr("width", Math.abs(x1 - x0))
+          .attr("height", plan.innerH)
+          .attr("fill", layer.fill)
+          .attr("stroke", layer.stroke ?? "none")
+          .attr("stroke-width", layer.width ?? 0)
+          .attr("opacity", layer.opacity ?? 0.25);
+      }
     } else if (layer.mark === "cloud") {
       for (const prim of layer.primitives) {
         g.append("polyline")
@@ -988,6 +1029,15 @@ export function drawChart(container, plan, d3) {
       for (const prim of layer.primitives) {
         g.append("line")
           .attr("x1", x(prim.x)).attr("x2", x(prim.x)).attr("y1", 0).attr("y2", plan.innerH)
+          .attr("stroke", layer.stroke)
+          .attr("stroke-width", layer.width ?? 1)
+          .attr("stroke-dasharray", layer.dash ? "4,4" : null)
+          .attr("opacity", layer.opacity ?? 1);
+      }
+    } else if (layer.mark === "h-rule") {
+      for (const prim of layer.primitives) {
+        g.append("line")
+          .attr("x1", 0).attr("x2", plan.innerW).attr("y1", y(prim.y)).attr("y2", y(prim.y))
           .attr("stroke", layer.stroke)
           .attr("stroke-width", layer.width ?? 1)
           .attr("stroke-dasharray", layer.dash ? "4,4" : null)

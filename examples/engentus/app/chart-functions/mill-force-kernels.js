@@ -218,12 +218,18 @@ function physicalDisplayDeg(segment, phi, dTheta) {
   return (deg + 180) % 360;
 }
 
+function forceChartDisplayDeg(theta) {
+  const deg = (((Number(theta) * 180 / Math.PI) % 360) + 360) % 360;
+  return (deg + 180) % 360;
+}
+
 export const millForceKernels = {
   tangential_sign: method => (method === "faithful" ? 1 : -1),
   pick_method: (values, method) => {
     const index = METHOD_ORDER.indexOf(String(method || "grounded"));
     return Array.isArray(values) ? values[index >= 0 ? index : 1] : values;
   },
+  pick_grounded: values => Array.isArray(values) ? values[METHOD_ORDER.indexOf("grounded")] : values,
   deg_text: value => `${Number(value * 180 / Math.PI).toFixed(1)}°`,
   omega_text: value => `${Number(value).toFixed(3)} rad/s`,
   rho_charge_text: value => `${Number(value).toFixed(3)} SG`,
@@ -235,6 +241,7 @@ export const millForceKernels = {
   force_delta_kn_text: values => `${signedFixed(methodDelta(values) / 1000, 1)} kN`,
   pct_delta_text: values => `${signedFixed(methodRelativeDeltaPercent(values), 2)}%`,
   physical_display_deg: physicalDisplayDeg,
+  force_chart_display_deg: forceChartDisplayDeg,
   normal_param: (sample, value, enabled, std, salt = 0) =>
     enabled ? Number(value) + Number(std) * seededNormal(sample, salt) : Number(value),
 

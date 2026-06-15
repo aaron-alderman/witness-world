@@ -55,6 +55,8 @@ chart MillForceAngle of MillForce {
   y force
   y.domain 0 auto
   y.label "Force (kN)"
+  layer charge_zone = x-band | x0:charge_zone_x0 x1:charge_zone_x1 fill:"#DCF0F5" opacity:0.12
+  layer zero_line = h-rule | y:force_zero_kN stroke:slate width:0.5 dash:true
   layer fr   = line over segment | x:display_angle_deg y:F_r_kN where:method=param.active_method stroke:blue tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
   layer ft   = line over segment | x:display_angle_deg y:F_t_kN where:method=param.active_method stroke:slate tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
   layer fres = line over segment | x:display_angle_deg y:F_resultant_kN where:method=param.active_method stroke:"#f1f5f9" width:2.4 tooltip.liner:segment tooltip.method:param.active_method tooltip.F_r_N:F_r tooltip.F_t_N:F_t tooltip.F_resultant_N:F_resultant unless:param.analysis_mode=compare
