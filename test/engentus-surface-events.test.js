@@ -431,6 +431,9 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "mc"
     );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg-mc")?.__chartController?.spec?.params?.n_samples === 750
+    );
     assert.match(await page.textContent("#surface-goodmanrunprogresslabel"), /Running/);
     assert.deepEqual(await page.evaluate(() => ({
       runDisabled: document.querySelector("#surface-goodmanrunactionstart")?.disabled,

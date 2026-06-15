@@ -32,6 +32,9 @@ grant runtime authority to copied JS or presenter code.
   Monte Carlo mode, config fields lock while running/paused, Pause/Resume/Stop
   controls patch visibility/disabled state, and the progress label/fill/lock
   note reflect `GoodmanRunStatusState` without app-local controller code.
+- Goodman Monte Carlo chart evaluation now consumes authored run sample count:
+  `GoodmanRunBoltsPerSet` binds to `GoodmanMCBands.param.n_samples`, so the
+  ensemble axis re-evaluates from process-owned run config.
 - Mill Charge chart: `MillChargeCrossSection` mounts live in
   `/engentus/mill-charge`, accepts authored parameter bindings, updates derived
   RHS metrics, and keeps its transient animation phase during parameter changes.
@@ -73,9 +76,9 @@ grant runtime authority to copied JS or presenter code.
 
 - Goodman numerical simulation lifecycle, animated scrubber playback,
   CDF/Stats/ANOVA result datasets, and bolt-set edit/clone/delete/new behavior
-  remain to be authored. The current Goodman run controls and windows now
-  expose authored stateful shell behavior, but they do not yet execute or
-  consume real Monte Carlo statistical datasets.
+  remain to be authored. The current Goodman run controls, MC band chart, and
+  windows now expose authored stateful shell/chart behavior, but they do not yet
+  execute or consume full reference Monte Carlo statistical datasets.
 - Goodman dynamic repeated collections remain a gap. Current simulation and
   bolt-set rows are explicit authored first-pass rows; full reference parity
   still needs authored collection/repeated-action semantics or a justified

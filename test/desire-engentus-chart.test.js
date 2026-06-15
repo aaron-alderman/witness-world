@@ -7,6 +7,7 @@ import {
 } from "../src/desire/index.js";
 import { evaluateModel } from "../plugins/chart-runtime/dataflow-eval.js";
 import { goodmanFunctions } from "../examples/engentus/app/chart-functions/goodman-stdlib.js";
+import { samplingFunctions } from "../examples/engentus/app/chart-functions/sampling.js";
 import { planChart } from "../plugins/chart-runtime/gog-runtime.js";
 
 // ── M3: the GoG runtime turns the IR chart + evaluated model into a render plan ──
@@ -81,4 +82,20 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   const probe = layer("probe");
   assert.equal(probe.mark, "rule");
   assert.equal(probe.primitives[0].x, evaluated.params.probe_sm);
+});
+
+test("Goodman Monte Carlo chart binds authored run config into the ensemble model", async () => {
+  const view = await loadBody("views/goodman.rvm", "surface", "GoodmanMCBands");
+  const model = await loadBody("models/goodman.rvm", "dataflow", "BoltFatigueMC");
+  const boundProps = new Set(view.bindings.map(binding => binding.prop));
+  assert.equal(boundProps.has("param.n_samples"), true);
+  assert.equal(view.bindings.find(binding => binding.prop === "param.n_samples")?.source?.state, "GoodmanRunBoltsPerSet");
+
+  const evaluated = evaluateModel(model, {
+    functions: { ...goodmanFunctions, ...samplingFunctions },
+    params: { n_samples: 24 }
+  });
+  assert.equal(evaluated.axes.sample.values.length, 24);
+  assert.equal(evaluated.fields.sa_p50.axes.includes("sample"), false);
+  assert.equal(evaluated.fields.sa_p50.axes.includes("sm"), true);
 });
