@@ -3607,7 +3607,24 @@ view GoodmanCdfWindowHeader {
 view GoodmanCdfWindowBody {
   kind body
   class fw-body
-  prop text = "CDF will bind to completed Monte Carlo failure-time results. Current authored shell exposes the window lifecycle and target dataset."
+  children {
+    GoodmanCdfEmptyChart
+  }
+}
+
+view GoodmanCdfEmptyChart {
+  kind empty-state
+  class goodman-window-empty
+  children {
+    GoodmanCdfEmptyText
+  }
+}
+
+view GoodmanCdfEmptyText {
+  kind text
+  class goodman-window-empty-text
+  prop tag = "p"
+  prop text = "Run a Monte Carlo simulation to see results."
 }
 
 view GoodmanCdfWindow {
@@ -3653,7 +3670,120 @@ view GoodmanStatsWindowHeader {
 view GoodmanStatsWindowBody {
   kind body
   class fw-body
-  prop text = "Stats will bind to per-simulation summary rows after the Monte Carlo result store is authored."
+  children {
+    GoodmanStatsTable
+  }
+}
+
+view GoodmanStatsTable {
+  kind table
+  class stbl
+  prop tag = "table"
+  children {
+    GoodmanStatsTableHead
+    GoodmanStatsTableBody
+  }
+}
+
+view GoodmanStatsTableHead {
+  kind table-head
+  prop tag = "thead"
+  children {
+    GoodmanStatsHeaderRow
+  }
+}
+
+view GoodmanStatsHeaderRow {
+  kind table-row
+  prop tag = "tr"
+  children {
+    GoodmanStatsHeadSimulation
+    GoodmanStatsHeadBoltSet
+    GoodmanStatsHeadN
+    GoodmanStatsHeadFailed
+    GoodmanStatsHeadMean
+    GoodmanStatsHeadStd
+    GoodmanStatsHeadP10
+    GoodmanStatsHeadP50
+    GoodmanStatsHeadP90
+  }
+}
+
+view GoodmanStatsHeadSimulation {
+  kind text
+  prop tag = "th"
+  prop text = "Simulation"
+}
+
+view GoodmanStatsHeadBoltSet {
+  kind text
+  prop tag = "th"
+  prop text = "Bolt Set"
+}
+
+view GoodmanStatsHeadN {
+  kind text
+  prop tag = "th"
+  prop text = "n"
+}
+
+view GoodmanStatsHeadFailed {
+  kind text
+  prop tag = "th"
+  prop text = "% Failed"
+}
+
+view GoodmanStatsHeadMean {
+  kind text
+  prop tag = "th"
+  prop text = "Mean Tf"
+}
+
+view GoodmanStatsHeadStd {
+  kind text
+  prop tag = "th"
+  prop text = "Std"
+}
+
+view GoodmanStatsHeadP10 {
+  kind text
+  prop tag = "th"
+  prop text = "P10"
+}
+
+view GoodmanStatsHeadP50 {
+  kind text
+  prop tag = "th"
+  prop text = "P50"
+}
+
+view GoodmanStatsHeadP90 {
+  kind text
+  prop tag = "th"
+  prop text = "P90"
+}
+
+view GoodmanStatsTableBody {
+  kind table-body
+  prop tag = "tbody"
+  children {
+    GoodmanStatsEmptyRow
+  }
+}
+
+view GoodmanStatsEmptyRow {
+  kind table-row
+  prop tag = "tr"
+  children {
+    GoodmanStatsEmptyCell
+  }
+}
+
+view GoodmanStatsEmptyCell {
+  kind text
+  class goodman-window-empty-cell
+  prop tag = "td"
+  prop text = "No completed simulations."
 }
 
 view GoodmanStatsWindow {
@@ -3699,7 +3829,134 @@ view GoodmanAnovaWindowHeader {
 view GoodmanAnovaWindowBody {
   kind body
   class fw-body
-  prop text = "ANOVA will compare completed simulation groups once repeated result collections are authored."
+  children {
+    GoodmanAnovaStatBlock
+    GoodmanAnovaNote
+    GoodmanAnovaBoxPlot
+  }
+}
+
+view GoodmanAnovaStatBlock {
+  kind stats
+  class anova-stat
+  children {
+    GoodmanAnovaFStatistic
+    GoodmanAnovaDfBetween
+    GoodmanAnovaDfWithin
+    GoodmanAnovaPValue
+    GoodmanAnovaSignificance
+  }
+}
+
+view GoodmanAnovaFStatistic {
+  kind metric
+  class anova-kv
+  children {
+    GoodmanAnovaFStatisticLabel
+    GoodmanAnovaFStatisticValue
+  }
+}
+
+view GoodmanAnovaFStatisticLabel {
+  kind text
+  class anova-k
+  prop tag = "span"
+  prop text = "F-statistic"
+}
+
+view GoodmanAnovaFStatisticValue {
+  kind text
+  class anova-v
+  prop tag = "span"
+  prop text = "-"
+}
+
+view GoodmanAnovaDfBetween {
+  kind metric
+  class anova-kv
+  children {
+    GoodmanAnovaDfBetweenLabel
+    GoodmanAnovaDfBetweenValue
+  }
+}
+
+view GoodmanAnovaDfBetweenLabel {
+  kind text
+  class anova-k
+  prop tag = "span"
+  prop text = "df (between)"
+}
+
+view GoodmanAnovaDfBetweenValue {
+  kind text
+  class anova-v
+  prop tag = "span"
+  prop text = "-"
+}
+
+view GoodmanAnovaDfWithin {
+  kind metric
+  class anova-kv
+  children {
+    GoodmanAnovaDfWithinLabel
+    GoodmanAnovaDfWithinValue
+  }
+}
+
+view GoodmanAnovaDfWithinLabel {
+  kind text
+  class anova-k
+  prop tag = "span"
+  prop text = "df (within)"
+}
+
+view GoodmanAnovaDfWithinValue {
+  kind text
+  class anova-v
+  prop tag = "span"
+  prop text = "-"
+}
+
+view GoodmanAnovaPValue {
+  kind metric
+  class anova-kv
+  children {
+    GoodmanAnovaPValueLabel
+    GoodmanAnovaPValueValue
+  }
+}
+
+view GoodmanAnovaPValueLabel {
+  kind text
+  class anova-k
+  prop tag = "span"
+  prop text = "p-value"
+}
+
+view GoodmanAnovaPValueValue {
+  kind text
+  class anova-v
+  prop tag = "span"
+  prop text = "-"
+}
+
+view GoodmanAnovaSignificance {
+  kind status
+  class anova-sig no
+  prop tag = "span"
+  prop text = "Not significant"
+}
+
+view GoodmanAnovaNote {
+  kind text
+  class anova-note
+  prop tag = "p"
+  prop text = "Need >=2 groups with failed bolts for ANOVA."
+}
+
+view GoodmanAnovaBoxPlot {
+  kind chart-placeholder
+  class goodman-anova-box-plot
 }
 
 view GoodmanAnovaWindow {

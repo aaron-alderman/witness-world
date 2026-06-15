@@ -23,6 +23,10 @@ grant runtime authority to copied JS or presenter code.
 - Goodman static reference controls now exist as authored inputs for applied
   shear, mill speed, endurance limit, and SN slope; their process state binds
   into `GoodmanDiagram` model params through `chart.render`.
+- Goodman CDF, Stats, and ANOVA windows now have authored structured empty
+  states: CDF declares the no-run chart message, Stats declares the reference
+  table header plus "No completed simulations", and ANOVA declares the
+  reference statistic block/box-plot shell plus the insufficient-groups state.
 - Mill Charge chart: `MillChargeCrossSection` mounts live in
   `/engentus/mill-charge`, accepts authored parameter bindings, updates derived
   RHS metrics, and keeps its transient animation phase during parameter changes.
@@ -55,8 +59,8 @@ grant runtime authority to copied JS or presenter code.
 
 - Goodman simulation lifecycle, animated scrubber playback, CDF/Stats/ANOVA
   result datasets, and bolt-set edit/clone/delete/new behavior remain to be
-  authored. The current Goodman windows are lifecycle/content placeholders, not
-  statistical parity.
+  authored. The current Goodman windows now expose authored empty/result
+  structure, but they do not yet consume real Monte Carlo statistical datasets.
 - Goodman dynamic repeated collections remain a gap. Current simulation and
   bolt-set rows are explicit authored first-pass rows; full reference parity
   still needs authored collection/repeated-action semantics or a justified

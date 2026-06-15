@@ -488,6 +488,24 @@ test("the Goodman shell authors sidebar and window content rather than empty hos
   assert.equal(surfaces.get("GoodmanCdfWindow")?.body?.surfaceKind, "floating-window");
   assert.equal(surfaces.get("GoodmanStatsWindow")?.body?.surfaceKind, "floating-window");
   assert.equal(surfaces.get("GoodmanAnovaWindow")?.body?.surfaceKind, "floating-window");
+  assert.deepEqual(surfaces.get("GoodmanCdfWindowBody")?.body?.children, ["GoodmanCdfEmptyChart"]);
+  assert.deepEqual(surfaces.get("GoodmanStatsWindowBody")?.body?.children, ["GoodmanStatsTable"]);
+  assert.deepEqual(surfaces.get("GoodmanStatsHeaderRow")?.body?.children, [
+    "GoodmanStatsHeadSimulation",
+    "GoodmanStatsHeadBoltSet",
+    "GoodmanStatsHeadN",
+    "GoodmanStatsHeadFailed",
+    "GoodmanStatsHeadMean",
+    "GoodmanStatsHeadStd",
+    "GoodmanStatsHeadP10",
+    "GoodmanStatsHeadP50",
+    "GoodmanStatsHeadP90"
+  ]);
+  assert.deepEqual(surfaces.get("GoodmanAnovaWindowBody")?.body?.children, [
+    "GoodmanAnovaStatBlock",
+    "GoodmanAnovaNote",
+    "GoodmanAnovaBoxPlot"
+  ]);
   assert.equal(surfaces.get("GoodmanRunProgressLabel")?.body?.bindings[0]?.source?.kind, "state");
   assert.equal(surfaces.get("GoodmanSimulationPrimaryBadge")?.body?.bindings[0]?.source?.state, "GoodmanRunStatusState");
 });
