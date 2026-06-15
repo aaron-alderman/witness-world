@@ -175,6 +175,10 @@ state GoodmanStaticSlope: number {
   initial 4.6
 }
 
+state GoodmanStaticProbeMeanStress: number {
+  initial 300
+}
+
 state GoodmanScrubTimeMonths: number {
   initial 0
 }
@@ -484,6 +488,13 @@ derive GoodmanStaticSlopeText {
   prop digits = 1
 }
 
+derive GoodmanStaticProbeMeanStressText {
+  kind format
+  source GoodmanStaticProbeMeanStress
+  prop digits = 0
+  prop suffix = " MPa"
+}
+
 event EngentusSignInRequested {
 }
 
@@ -750,6 +761,7 @@ process EngentusShellNavigation {
     GoodmanStaticRpm
     GoodmanStaticEnduranceLimit
     GoodmanStaticSlope
+    GoodmanStaticProbeMeanStress
     GoodmanScrubTimeMonths
     GoodmanPlaybackSpeed
     GoodmanTrailVisible
@@ -2653,6 +2665,7 @@ view GoodmanScenarioSection {
   children {
     GoodmanStaticAppliedShearField
     GoodmanStaticRpmField
+    GoodmanStaticProbeMeanStressField
     GoodmanStaticEnduranceLimitField
     GoodmanStaticSlopeField
   }
@@ -2717,6 +2730,37 @@ view GoodmanStaticRpmField {
   }
   children {
     GoodmanStaticRpmValue
+  }
+}
+
+view GoodmanStaticProbeMeanStressValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "300 MPa"
+  bindings {
+    text from projection GoodmanStaticProbeMeanStressText
+  }
+}
+
+view GoodmanStaticProbeMeanStressField {
+  kind input
+  class prow goodman-static-control
+  prop tag = "input"
+  prop inputType = "range"
+  prop label = "Probe preload"
+  prop min = 0
+  prop max = 600
+  prop step = 5
+  prop value = 300
+  bindings {
+    value from state GoodmanStaticProbeMeanStress
+  }
+  interactions {
+    on input self set GoodmanStaticProbeMeanStress eventValue
+  }
+  children {
+    GoodmanStaticProbeMeanStressValue
   }
 }
 

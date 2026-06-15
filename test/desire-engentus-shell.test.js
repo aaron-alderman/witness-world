@@ -99,6 +99,7 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(types.get("GoodmanStaticRpm")?.body?.role, "state");
   assert.equal(types.get("GoodmanStaticEnduranceLimit")?.body?.role, "state");
   assert.equal(types.get("GoodmanStaticSlope")?.body?.role, "state");
+  assert.equal(types.get("GoodmanStaticProbeMeanStress")?.body?.role, "state");
   assert.equal(surfaces.get("EngentusRoot")?.body?.processRef, "EngentusShellNavigation");
   assert.equal(surfaces.get("EngentusLoginBook")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("EngentusLoginPasswordField")?.body?.bindings[0]?.prop, "inputType");
@@ -204,6 +205,8 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("GoodmanRunProgressFill")?.body?.bindings[0]?.prop, "style");
   assert.equal(surfaces.get("GoodmanStaticAppliedShearField")?.body?.bindings[0]?.prop, "value");
   assert.equal(surfaces.get("GoodmanStaticAppliedShearField")?.body?.interactions[0]?.action?.state, "GoodmanStaticAppliedShear");
+  assert.equal(surfaces.get("GoodmanStaticProbeMeanStressField")?.body?.bindings[0]?.prop, "value");
+  assert.equal(surfaces.get("GoodmanStaticProbeMeanStressField")?.body?.interactions[0]?.action?.state, "GoodmanStaticProbeMeanStress");
   assert.equal(surfaces.get("GoodmanTrailToggle")?.body?.interactions[0]?.action?.state, "GoodmanTrailVisible");
   assert.equal(surfaces.get("MillForceTabCrossSection")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("MillForceTabForceVsAngle")?.body?.bindings[0]?.prop, "className");
@@ -331,6 +334,7 @@ test("the shell is structured through explicit child regions instead of flattene
   assert.deepEqual(surfaces.get("GoodmanScenarioSection")?.body?.children, [
     "GoodmanStaticAppliedShearField",
     "GoodmanStaticRpmField",
+    "GoodmanStaticProbeMeanStressField",
     "GoodmanStaticEnduranceLimitField",
     "GoodmanStaticSlopeField"
   ]);

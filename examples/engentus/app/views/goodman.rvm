@@ -33,6 +33,7 @@ chart GoodmanDiagram of BoltFatigue {
     param.rpm from state GoodmanStaticRpm
     param.sigma_lim from state GoodmanStaticEnduranceLimit
     param.m_slope from state GoodmanStaticSlope
+    param.probe_sm from state GoodmanStaticProbeMeanStress
   }
 
   x sm

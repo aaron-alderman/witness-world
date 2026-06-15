@@ -21,8 +21,9 @@ grant runtime authority to copied JS or presenter code.
   annotation visibility, and point size. The chart runtime accepts these as
   view-presentation patches, not Goodman-specific logic.
 - Goodman static reference controls now exist as authored inputs for applied
-  shear, mill speed, endurance limit, and SN slope; their process state binds
-  into `GoodmanDiagram` model params through `chart.render`.
+  shear, mill speed, probe mean stress, endurance limit, and SN slope; their
+  process state binds into `GoodmanDiagram` model params through
+  `chart.render`.
 - Goodman CDF, Stats, and ANOVA windows now have authored structured empty
   states: CDF declares the no-run chart message, Stats declares the reference
   table header plus "No completed simulations", and ANOVA declares the

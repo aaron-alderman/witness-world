@@ -42,7 +42,8 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
     "param.F_alt_applied_N",
     "param.rpm",
     "param.sigma_lim",
-    "param.m_slope"
+    "param.m_slope",
+    "param.probe_sm"
   ]);
   assert.equal(plan.presentation.showGrid, true);
   assert.equal(plan.presentation.showAnnotations, true);

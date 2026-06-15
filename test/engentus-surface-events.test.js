@@ -387,6 +387,16 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       document.querySelector("#chart-svg")?.__chartController?.spec?.params?.rpm === 12.5
     );
+    await page.locator("#surface-goodmanstaticprobemeanstressfield").evaluate(input => {
+      input.value = "425";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanStaticProbeMeanStress") === 425
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg")?.__chartController?.spec?.params?.probe_sm === 425
+    );
 
     await page.locator("#trail-cb").check();
     await page.waitForFunction(() =>
