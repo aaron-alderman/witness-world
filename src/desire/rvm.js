@@ -652,6 +652,8 @@ function semanticRvmShape(kind, name, type, bodyLines, header = {}) {
         processRef: readSimpleValue(bodyLines, "process"),
         projectionRefs: parseSimpleEntries(bodyLines, "projections"),
         capabilityRefs: parseSimpleEntries(bodyLines, "capabilities"),
+        bindings: parseSurfaceBindingsBlock(bodyLines),
+        interactions: parseSurfaceInteractionsBlock(bodyLines),
         children: parseSimpleEntries(bodyLines, "children"),
         props: parsePropAssignments(bodyLines)
       };
@@ -923,6 +925,7 @@ function semanticInlineRvmShape(kind, name, type, { using = null, attrs = {}, ta
         processRef: attrs.process ?? null,
         projectionRefs: parseInlineList(attrs.projections),
         capabilityRefs: parseInlineList(attrs.capabilities),
+        bindings: [],
         children: parseInlineList(attrs.children),
         target,
         props: inlineProps(attrs, new Set(["kind", "class", "process", "projections", "capabilities", "children"]))
@@ -1085,6 +1088,91 @@ function parseProcessRulesBlock(bodyLines) {
     index = parsed.index;
   }
   return rules;
+}
+
+function parseSurfaceInteractionsBlock(bodyLines) {
+  return extractNamedBlock(bodyLines, "interactions")
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => line.replace(/,$/, ""))
+    .map(line => {
+      const deliverMatch = line.match(/^on\s+([A-Za-z_][A-Za-z0-9_.-]*)\s+([A-Za-z_][A-Za-z0-9_.-]*)\s+deliver\s+([A-Za-z_][A-Za-z0-9_.-]*)$/);
+      if (deliverMatch) {
+        return {
+          target: deliverMatch[2],
+          event: deliverMatch[1],
+          action: {
+            kind: "deliver",
+            message: deliverMatch[3]
+          }
+        };
+      }
+      const navigateMatch = line.match(/^on\s+([A-Za-z_][A-Za-z0-9_.-]*)\s+([A-Za-z_][A-Za-z0-9_.-]*)\s+navigate\s+(.+)$/);
+      if (navigateMatch) {
+        return {
+          target: navigateMatch[2],
+          event: navigateMatch[1],
+          action: {
+            kind: "navigate",
+            href: parseScalarValue(navigateMatch[3])
+          }
+        };
+      }
+      const setMatch = line.match(/^on\s+([A-Za-z_][A-Za-z0-9_.-]*)\s+([A-Za-z_][A-Za-z0-9_.-]*)\s+set\s+([A-Za-z_][A-Za-z0-9_.-]*)\s+(.+)$/);
+      if (setMatch) {
+        const rawValue = setMatch[4].trim();
+        const value = rawValue === "toggle"
+          ? { kind: "toggleState", state: setMatch[3] }
+          : { literal: parseScalarValue(rawValue) };
+        return {
+          target: setMatch[2],
+          event: setMatch[1],
+          action: {
+            kind: "setState",
+            state: setMatch[3],
+            value
+          }
+        };
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
+function parseBindingMapTail(tail) {
+  const text = String(tail ?? "").trim();
+  if (!text) return null;
+  const tokens = [];
+  const tokenPattern = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  let match;
+  while ((match = tokenPattern.exec(text))) {
+    tokens.push(match[1] ?? match[2] ?? match[3]);
+  }
+  if (tokens.length < 2) return null;
+  const map = {};
+  for (let i = 0; i + 1 < tokens.length; i += 2) {
+    map[String(parseScalarValue(tokens[i]))] = parseScalarValue(tokens[i + 1]);
+  }
+  return map;
+}
+
+function parseSurfaceBindingsBlock(bodyLines) {
+  return extractNamedBlock(bodyLines, "bindings")
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => line.replace(/,$/, ""))
+    .map(line => {
+      const match = line.match(/^([A-Za-z_][A-Za-z0-9_.-]*)\s+from\s+(state|projection)\s+([A-Za-z_][A-Za-z0-9_.-]*)(?:\s+map\s+(.+))?$/);
+      if (!match) return null;
+      const [, prop, kind, sourceId, mapTail] = match;
+      const source = kind === "projection"
+        ? { kind: "projection", projection: sourceId }
+        : { kind: "state", state: sourceId };
+      const valueMap = parseBindingMapTail(mapTail);
+      if (valueMap) source.map = valueMap;
+      return { prop, source };
+    })
+    .filter(Boolean);
 }
 
 function parseProcessRuleSteps(lines, startIndex) {

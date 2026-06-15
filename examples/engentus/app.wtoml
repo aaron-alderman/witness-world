@@ -22,7 +22,7 @@ method = "GET"
 path = "/"
 serves = "engentusShell"
 handler = "page.surface"
-params = { rootSurface = "EngentusRoot", defaultScreen = "login" }
+params = { rootSurface = "EngentusRoot", defaultScreen = "login", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" } }
 
 [[serve]]
 actor = "aaron"
@@ -36,7 +36,7 @@ method = "GET"
 path = "/engentus"
 serves = "engentusShell"
 handler = "page.surface"
-params = { rootSurface = "EngentusRoot", defaultScreen = "login" }
+params = { rootSurface = "EngentusRoot", defaultScreen = "login", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" } }
 
 [[serve]]
 actor = "aaron"
@@ -50,7 +50,7 @@ method = "GET"
 path = "/engentus/:screen"
 serves = "engentusShell"
 handler = "page.surface"
-params = { rootSurface = "EngentusRoot", defaultScreen = "login" }
+params = { rootSurface = "EngentusRoot", defaultScreen = "login", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" } }
 
 [[serve]]
 actor = "aaron"

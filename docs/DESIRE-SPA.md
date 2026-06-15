@@ -14,6 +14,8 @@ for finding the next honest gap lives in `docs/AUTHORING-REPLAY-PLAYBOOK.md`.
 The required read-first runtime ownership map lives in
 `docs/RUNTIME-STACK-MAP.md`.
 Internal reference import/uplift design lives in `docs/WHTML-WCSS-UPLIFT.md`.
+Reference behavior evidence read from the oracle JavaScript lives in
+`docs/ENGENTUS-ORACLE-BEHAVIOR-INVENTORY.md`.
 
 ## Thesis
 
@@ -42,6 +44,11 @@ Engentus moves honestly, it moves only by advancing that pathway ladder.
 `WHTML/WCSS` is the internal Engentus import/uplift workspace. It captures
 reference HTML/CSS evidence, including inline styles, plus a symmetry graph for
 shared presentation laws and localized symmetry breaks.
+
+Reference JavaScript may be read only as oracle evidence for behavior, timing,
+state, and leaf helper boundaries. That evidence is recorded in
+`docs/ENGENTUS-ORACLE-BEHAVIOR-INVENTORY.md`. It is not permission to copy the
+reference controllers or recreate an app-local browser runtime.
 
 It is not:
 

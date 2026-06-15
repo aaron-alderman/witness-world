@@ -47,6 +47,7 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.ok(messages.has("EngentusSignInRequested"));
   assert.ok(messages.has("EngentusSaveGuidedTourSession"));
   assert.ok(messages.has("EngentusSignOutRequested"));
+  assert.ok(messages.has("EngentusSignBackInRequested"));
   assert.ok(messages.has("EngentusNavigateHomeRequested"));
   assert.ok(messages.has("EngentusNavigateGoodmanRequested"));
   assert.ok(messages.has("EngentusNavigateMillChargeRequested"));
@@ -55,7 +56,55 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(types.get("EngentusShellActiveRoute")?.body?.role, "state");
   assert.equal(types.get("EngentusShellAuthState")?.body?.role, "enum");
   assert.equal(types.get("EngentusShellAuthStatus")?.body?.role, "state");
+  assert.equal(types.get("EngentusProfileMenuVisible")?.body?.role, "state");
+  assert.equal(types.get("EngentusPasswordRevealed")?.body?.role, "state");
   assert.equal(surfaces.get("EngentusRoot")?.body?.processRef, "EngentusShellNavigation");
+  assert.equal(surfaces.get("EngentusLoginBook")?.body?.bindings[0]?.prop, "className");
+  assert.equal(surfaces.get("EngentusLoginPasswordField")?.body?.bindings[0]?.prop, "inputType");
+  assert.equal(surfaces.get("EngentusProfileMenu")?.body?.bindings[0]?.prop, "visible");
+  assert.deepEqual(surfaces.get("EngentusLoginPrimaryAction")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "EngentusSignInRequested" }
+    }
+  ]);
+  assert.deepEqual(surfaces.get("EngentusLoginSubmitAction")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "EngentusSignInRequested" }
+    }
+  ]);
+  assert.deepEqual(surfaces.get("EngentusLoginPasswordToggle")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: {
+        kind: "setState",
+        state: "EngentusPasswordRevealed",
+        value: { kind: "toggleState", state: "EngentusPasswordRevealed" }
+      }
+    }
+  ]);
+  assert.deepEqual(surfaces.get("EngentusProfileSummary")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: {
+        kind: "setState",
+        state: "EngentusProfileMenuVisible",
+        value: { kind: "toggleState", state: "EngentusProfileMenuVisible" }
+      }
+    }
+  ]);
+  assert.deepEqual(surfaces.get("EngentusProfileMenuSignout")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "EngentusSignOutRequested" }
+    }
+  ]);
   assert.deepEqual(processes.get("EngentusShellNavigation")?.body?.rules, [
     {
       trigger: "EngentusSignInRequested",
@@ -65,10 +114,29 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
           kind: "option",
           config: "config.presentation.guidedTour",
           real: [{ kind: "command", command: "EngentusSaveGuidedTourSession" }],
-          else: [{ kind: "delay", ms: 605 }]
+          else: [{ kind: "delay", ms: 1250 }]
         },
-        { kind: "setState", state: "EngentusShellAuthStatus", value: "signedIn" },
-        { kind: "setState", state: "EngentusShellActiveRoute", value: "home" }
+        { kind: "setState", state: "EngentusShellAuthStatus", value: "folding" },
+        { kind: "delay", ms: 920 },
+        { kind: "setState", state: "EngentusShellActiveRoute", value: "home" },
+        { kind: "setState", state: "EngentusShellAuthStatus", value: "signedIn" }
+      ]
+    },
+    {
+      trigger: "EngentusSignOutRequested",
+      steps: [
+        { kind: "setState", state: "EngentusProfileMenuVisible", value: false },
+        { kind: "setState", state: "EngentusShellAuthStatus", value: "signingOut" },
+        { kind: "setState", state: "EngentusShellActiveRoute", value: "signout" },
+        { kind: "delay", ms: 950 },
+        { kind: "setState", state: "EngentusShellAuthStatus", value: "signedOut" }
+      ]
+    },
+    {
+      trigger: "EngentusSignBackInRequested",
+      steps: [
+        { kind: "setState", state: "EngentusShellActiveRoute", value: "login" },
+        { kind: "setState", state: "EngentusShellAuthStatus", value: "idle" }
       ]
     }
   ]);
@@ -89,16 +157,18 @@ test("the authored Engentus sign-in story runs through generic process rules wit
 
   await runtime.deliverAuthored("EngentusSignInRequested");
 
-  assert.deepEqual(delays, [605]);
+  assert.deepEqual(delays, [1250, 920]);
   assert.equal(runtime.value("EngentusShellAuthStatus"), "signedIn");
   assert.equal(runtime.value("EngentusShellActiveRoute"), "home");
-  assert.deepEqual(runtime.history("EngentusShellAuthStatus"), ["pending", "signedIn"]);
+  assert.deepEqual(runtime.history("EngentusShellAuthStatus"), ["pending", "folding", "signedIn"]);
   assert.deepEqual(runtime.history("EngentusShellActiveRoute"), ["home"]);
   assert.deepEqual(runtime.trace.map(row => [row.kind, row.label]), [
     ["rule.setState", "EngentusSignInRequested:EngentusShellAuthStatus"],
-    ["rule.delay", "EngentusSignInRequested:605ms"],
+    ["rule.delay", "EngentusSignInRequested:1250ms"],
     ["rule.setState", "EngentusSignInRequested:EngentusShellAuthStatus"],
-    ["rule.setState", "EngentusSignInRequested:EngentusShellActiveRoute"]
+    ["rule.delay", "EngentusSignInRequested:920ms"],
+    ["rule.setState", "EngentusSignInRequested:EngentusShellActiveRoute"],
+    ["rule.setState", "EngentusSignInRequested:EngentusShellAuthStatus"]
   ]);
 });
 

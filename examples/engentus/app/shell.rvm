@@ -1,8 +1,8 @@
 import desire/v3-alpha
 
 // Engentus is authored here as a composed shell definition first.
-// Shared navigation intent is declared semantically; interaction bindings
-// remain an authored-language gap rather than being smuggled through props.
+// Shared navigation intent, interaction bindings, and shell state projection
+// are declared semantically rather than being smuggled through app-local JS.
 
 enum EngentusShellRoute {
   cases {
@@ -19,9 +19,20 @@ enum EngentusShellAuthState {
   cases {
     idle
     pending
+    folding
     signedIn
+    signingOut
     signedOut
+    returning
   }
+}
+
+state EngentusProfileMenuVisible: bool {
+  initial false
+}
+
+state EngentusPasswordRevealed: bool {
+  initial false
 }
 
 state EngentusShellActiveRoute: EngentusShellRoute {
@@ -40,6 +51,9 @@ event EngentusSignOutRequested {
     EngentusShellAuthStatus: signedOut
     EngentusShellActiveRoute: signout
   }
+}
+
+event EngentusSignBackInRequested {
 }
 
 event EngentusNavigateHomeRequested {
@@ -76,10 +90,13 @@ process EngentusShellNavigation {
   states {
     EngentusShellActiveRoute
     EngentusShellAuthStatus
+    EngentusProfileMenuVisible
+    EngentusPasswordRevealed
   }
   handles {
     EngentusSignInRequested
     EngentusSignOutRequested
+    EngentusSignBackInRequested
     EngentusNavigateHomeRequested
     EngentusNavigateGoodmanRequested
     EngentusNavigateMillChargeRequested
@@ -96,11 +113,24 @@ process EngentusShellNavigation {
           command EngentusSaveGuidedTourSession
         }
         else {
-          delay 605ms
+          delay 1250ms
         }
       }
-      set EngentusShellAuthStatus signedIn
+      set EngentusShellAuthStatus folding
+      delay 920ms
       set EngentusShellActiveRoute home
+      set EngentusShellAuthStatus signedIn
+    }
+    on EngentusSignOutRequested {
+      set EngentusProfileMenuVisible false
+      set EngentusShellAuthStatus signingOut
+      set EngentusShellActiveRoute signout
+      delay 950ms
+      set EngentusShellAuthStatus signedOut
+    }
+    on EngentusSignBackInRequested {
+      set EngentusShellActiveRoute login
+      set EngentusShellAuthStatus idle
     }
   }
 }
@@ -161,6 +191,9 @@ view EngentusAppBrand {
   kind brand
   prop domId = "tb-brand"
   prop href = "/engentus/home"
+  interactions {
+    on click self deliver EngentusNavigateHomeRequested
+  }
   children {
     EngentusToolbarBrandLogo
     EngentusToolbarBrandDivider
@@ -299,9 +332,14 @@ view EngentusProfileMenuSignoutIcon {
 
 view EngentusProfileMenuSignout {
   kind menu-item
-  class up-mi
+  class up-mi up-mi-signout
+  prop domId = "up-menu-signout"
   prop style = "color:#f87171;cursor:pointer"
   prop text = "Sign out"
+  prop messageRef = "EngentusSignOutRequested"
+  interactions {
+    on click self deliver EngentusSignOutRequested
+  }
   children {
     EngentusProfileMenuSignoutIcon
   }
@@ -310,6 +348,10 @@ view EngentusProfileMenuSignout {
 view EngentusProfileMenu {
   kind menu
   prop domId = "up-menu"
+  prop hidden = true
+  bindings {
+    visible from state EngentusProfileMenuVisible
+  }
   children {
     EngentusProfileMenuProfile
     EngentusProfileMenuSettings
@@ -324,6 +366,9 @@ view EngentusProfileMenu {
 view EngentusProfileSummary {
   kind profile-summary
   prop domId = "user-prof"
+  interactions {
+    on click self set EngentusProfileMenuVisible toggle
+  }
   children {
     EngentusProfileAvatar
     EngentusProfileInfo
@@ -335,6 +380,9 @@ view EngentusProfileSummary {
 view EngentusHomeBrand {
   kind brand
   prop domId = "tb-brand"
+  interactions {
+    on click self deliver EngentusNavigateHomeRequested
+  }
   children {
     EngentusToolbarBrandLogo
     EngentusToolbarBrandDivider
@@ -607,6 +655,9 @@ view EngentusLoginPasswordField {
   prop autocomplete = "current-password"
   prop inputStyle = "padding-right:36px"
   prop inputWrapClass = "auth-pw-wrap"
+  bindings {
+    inputType from state EngentusPasswordRevealed map true text false password default password
+  }
   children {
     EngentusLoginPasswordToggle
   }
@@ -624,17 +675,34 @@ view EngentusLoginPrimaryAction {
   prop tag = "button"
   prop domId = "ms-btn"
   class ms-btn
-  prop label = "Sign in with Microsoft"
   prop href = "/engentus/home"
   prop messageRef = "EngentusSignInRequested"
+  bindings {
+    className from state EngentusShellAuthStatus map pending pending folding pending default ""
+    disabled from state EngentusShellAuthStatus map pending true folding true default false
+  }
+  interactions {
+    on click self deliver EngentusSignInRequested
+  }
   children {
     EngentusLoginMicrosoftIcon
+    EngentusLoginMicrosoftLabel
   }
 }
 
 view EngentusLoginMicrosoftIcon {
   kind leaf
   prop rawHtml = "<svg width='18' height='18' viewBox='0 0 21 21' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='0' width='10' height='10' fill='#f25022'/><rect x='11' y='0' width='10' height='10' fill='#7fba00'/><rect x='0' y='11' width='10' height='10' fill='#00a4ef'/><rect x='11' y='11' width='10' height='10' fill='#ffb900'/></svg>"
+}
+
+view EngentusLoginMicrosoftLabel {
+  kind text
+  prop tag = "span"
+  prop domId = "ms-btn-label"
+  prop text = "Sign in with Microsoft"
+  bindings {
+    text from state EngentusShellAuthStatus map pending "Signing in…" folding "Signing in…" default "Sign in with Microsoft"
+  }
 }
 
 view EngentusLoginDividerLeft {
@@ -669,14 +737,22 @@ view EngentusLoginPasswordToggle {
   class auth-pw-toggle
   prop tag = "button"
   prop buttonType = "button"
+  interactions {
+    on click self set EngentusPasswordRevealed toggle
+  }
   children {
     EngentusLoginPasswordToggleGlyph
   }
 }
 
 view EngentusLoginPasswordToggleGlyph {
-  kind leaf
-  prop rawHtml = "&#9673;"
+  kind text
+  prop tag = "span"
+  prop domId = "login-pw-toggle-glyph"
+  prop text = "◉"
+  bindings {
+    text from state EngentusPasswordRevealed map true "◎" false "◉" default "◉"
+  }
 }
 
 view EngentusLoginForgotAction {
@@ -696,10 +772,26 @@ view EngentusLoginForgotRow {
 view EngentusLoginSubmitAction {
   kind action
   prop tag = "button"
+  prop domId = "login-submit"
   class auth-submit
-  prop label = "Sign in"
   prop href = "/engentus/home"
   prop messageRef = "EngentusSignInRequested"
+  bindings {
+    disabled from state EngentusShellAuthStatus map pending true folding true default false
+  }
+  interactions {
+    on click self deliver EngentusSignInRequested
+  }
+  children {
+    EngentusLoginSubmitLabel
+  }
+}
+
+view EngentusLoginSubmitLabel {
+  kind text
+  prop tag = "span"
+  prop domId = "login-submit-label"
+  prop text = "Sign in"
 }
 
 view EngentusLoginFormLogo {
@@ -754,6 +846,10 @@ view EngentusLoginRight {
 view EngentusLoginBook {
   kind region
   class auth-book
+  prop domId = "login-auth-book"
+  bindings {
+    className from state EngentusShellAuthStatus map folding folding default ""
+  }
   children {
     EngentusLoginLeft
     EngentusLoginRight
@@ -768,6 +864,9 @@ view EngentusLogin {
   prop documentTitle = "Welcome back"
   prop routeKey = "login"
   prop routePath = "/engentus/login"
+  bindings {
+    routeUnderlay from state EngentusShellAuthStatus map folding home default ""
+  }
   children {
     EngentusLoginBook
   }
@@ -788,8 +887,14 @@ view EngentusSignoutSubtitle {
 view EngentusSignoutPrimaryAction {
   kind action
   class auth-submit
+  prop tag = "button"
+  prop domId = "sign-back-in"
   prop label = "Sign back in"
-  prop href = "/engentus/login"
+  prop href = "/engentus"
+  prop messageRef = "EngentusSignBackInRequested"
+  interactions {
+    on click self deliver EngentusSignBackInRequested
+  }
 }
 
 view EngentusSignoutLegal {
@@ -833,6 +938,10 @@ view EngentusSignoutRight {
 view EngentusSignoutBook {
   kind region
   class auth-book
+  prop domId = "signout-auth-book"
+  bindings {
+    className from state EngentusShellAuthStatus map signingOut incoming default ""
+  }
   children {
     EngentusSignoutLeft
     EngentusSignoutRight
@@ -847,6 +956,9 @@ view EngentusSignout {
   prop documentTitle = "You've been signed out"
   prop routeKey = "signout"
   prop routePath = "/engentus/signout"
+  bindings {
+    routeUnderlay from state EngentusShellAuthStatus map signingOut home default ""
+  }
   children {
     EngentusSignoutBook
   }
@@ -1175,6 +1287,9 @@ view ModuleCardMillCharge {
   prop href = "/engentus/mill-charge"
   prop assetRef = "CHARGE"
   prop messageRef = "EngentusNavigateMillChargeRequested"
+  interactions {
+    on click self deliver EngentusNavigateMillChargeRequested
+  }
   children {
     ModuleIconCharge
     ModuleCardMillChargeName
@@ -1191,6 +1306,9 @@ view ModuleCardGoodman {
   prop href = "/engentus/goodman"
   prop assetRef = "GOODMAN"
   prop messageRef = "EngentusNavigateGoodmanRequested"
+  interactions {
+    on click self deliver EngentusNavigateGoodmanRequested
+  }
   children {
     ModuleIconGoodman
     ModuleCardGoodmanName
@@ -1207,6 +1325,9 @@ view ModuleCardMillForce {
   prop href = "/engentus/mill-force"
   prop assetRef = "FORCE"
   prop messageRef = "EngentusNavigateMillForceRequested"
+  interactions {
+    on click self deliver EngentusNavigateMillForceRequested
+  }
   children {
     ModuleIconForce
     ModuleCardMillForceName

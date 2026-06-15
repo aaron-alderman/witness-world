@@ -41,10 +41,42 @@ It is evidence, not app semantics by itself.
 - declarations
 - variants where present
 - inline styles
+- computed styles observed in a browser
+- box/layout measurements observed in a browser
+- transition and animation timing properties observed in a browser
 - source provenance
 
 Inline styles belong to `WCSS`. They are style evidence attached to observed
 nodes, not a separate authoring escape hatch.
+
+Computed styles also belong to `WCSS`. They are not authored truth by
+themselves; they are observed evidence that correlates selectors, WHTML nodes,
+layout boxes, animation names, transition durations, and final rendered values.
+This lets parity work distinguish "the authored CSS says X" from "the browser
+actually rendered Y".
+
+Active interaction traces are intentionally adjacent but separate. A future
+`WAS` layer should witness triggers, timelines, route changes, delayed states,
+and DOM/style deltas over time. WCSS can record the style evidence involved in
+those traces, but it should not become the behavior trace itself.
+
+For Engentus, the reference JavaScript is also oracle evidence. Its behavior
+inventory is tracked in `docs/ENGENTUS-ORACLE-BEHAVIOR-INVENTORY.md`. Reading
+that code is allowed for uplift because it reveals delays, transition ordering,
+state ownership, and leaf helper boundaries that are not recoverable from a
+static DOM snapshot alone. Copying it back as runtime authority remains
+forbidden.
+
+Current Engentus WCSS capture is executable as an internal diagnostic:
+
+```powershell
+node scripts/engentus-wcss-capture.mjs http://localhost:56693/ login --format=wcss --out C:\tmp\engentus-login.wcss.json
+```
+
+The default capture artifact records raw browser evidence. `--format=wcss`
+consumes that evidence immediately by correlating it back to imported WHTML and
+emitting `WcssComputedStyleSet` entries. This makes the output usable by uplift
+tests and parity tooling rather than leaving it as screenshots or ad hoc JSON.
 
 ### Symmetry graph
 

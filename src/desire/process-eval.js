@@ -110,6 +110,7 @@ export function createProcessRuntime(world, options = {}) {
   // ── Mutable state (global value-id -> value; value names are spec-unique) ──
   const state = new Map();
   const trace = [];
+  const observers = new Set();
   let stepNo = 0;
 
   function seed() {
@@ -165,6 +166,7 @@ export function createProcessRuntime(world, options = {}) {
       derives: deriveSnapshot()
     };
     trace.push(obs);
+    for (const observer of observers) observer(obs);
     return obs;
   }
 
@@ -355,6 +357,11 @@ export function createProcessRuntime(world, options = {}) {
     derive: id => deriveSnapshot()[id],
     derives: deriveSnapshot,
     get trace() { return trace; },
+    subscribe(observer) {
+      if (typeof observer !== "function") return () => {};
+      observers.add(observer);
+      return () => observers.delete(observer);
+    },
     // the lifecycle history of one state value across the recorded trace
     history(stateId) {
       const seq = [];

@@ -39,6 +39,16 @@ function parseDeclarations(styleText = "") {
     .filter(Boolean);
 }
 
+function declarationsFromComputed(computed = {}, properties = []) {
+  return properties
+    .map(property => {
+      const value = computed?.[property];
+      if (value == null || value === "") return null;
+      return { property, value: String(value) };
+    })
+    .filter(Boolean);
+}
+
 function parseAttrs(raw = "") {
   const attrs = {};
   const attrSource = raw
@@ -70,6 +80,59 @@ function findWhtmlNode(root, nodeId) {
     if (!found && node.id === nodeId) found = node;
   });
   return found;
+}
+
+function textContentOf(node) {
+  if (!node) return "";
+  if (node.tag === "#text") return node.text ?? "";
+  return (node.children ?? []).map(textContentOf).join("");
+}
+
+function nodeSignature(node) {
+  if (!node || node.tag === "#text" || node.tag === "fragment") return null;
+  const attrs = node.attrs ?? {};
+  return {
+    tag: node.tag,
+    id: attrs.id || null,
+    className: attrs.class || null,
+    src: attrs.src || null,
+    text: textContentOf(node).replace(/\s+/g, " ").trim()
+  };
+}
+
+function recordSignature(record) {
+  return {
+    tag: record?.tag ?? null,
+    id: record?.id ?? null,
+    className: record?.className ?? null,
+    src: record?.src ?? null,
+    text: String(record?.text ?? "").replace(/\s+/g, " ").trim()
+  };
+}
+
+function signatureScore(left, right) {
+  if (!left || !right || left.tag !== right.tag) return -1;
+  let score = 1;
+  if (left.id && right.id && left.id === right.id) score += 100;
+  if (left.src && right.src && left.src === right.src) score += 60;
+  if (left.className && right.className && left.className === right.className) score += 30;
+  if (left.text && right.text && left.text === right.text) score += 10;
+  return score;
+}
+
+function bestWhtmlMatch(root, record, usedNodeIds = new Set()) {
+  const target = recordSignature(record);
+  let best = null;
+  let bestScore = -1;
+  walkWhtml(root, node => {
+    if (usedNodeIds.has(node.id)) return;
+    const score = signatureScore(nodeSignature(node), target);
+    if (score > bestScore) {
+      best = node;
+      bestScore = score;
+    }
+  });
+  return bestScore > 0 ? best : null;
 }
 
 export function createWhtmlNode({
@@ -122,6 +185,28 @@ export function createWcssInlineDeclarationSet({
     id,
     nodeId,
     declarations: declarations.map(declaration => ({ ...declaration })),
+    provenance: cloneProvenance(provenance)
+  };
+}
+
+export function createWcssComputedStyleSet({
+  id,
+  nodeId,
+  selector = null,
+  declarations = [],
+  box = null,
+  state = null,
+  provenance = {}
+} = {}) {
+  if (!id || !nodeId) throw new Error("WCSS computed style set requires id and nodeId");
+  return {
+    kind: "WcssComputedStyleSet",
+    id,
+    nodeId,
+    selector,
+    declarations: declarations.map(declaration => ({ ...declaration })),
+    box: box ? { ...box } : null,
+    state,
     provenance: cloneProvenance(provenance)
   };
 }
@@ -314,6 +399,138 @@ export function collectInlineDeclarationSets(root, {
   return sets;
 }
 
+export function correlateComputedStylesWithWhtml(root, records = [], {
+  properties = [],
+  idPrefix = "wcss:computed",
+  provenance = {}
+} = {}) {
+  const used = new Set();
+  const sets = [];
+  for (const [index, record] of records.entries()) {
+    const node = record.nodeId
+      ? findWhtmlNode(root, record.nodeId)
+      : bestWhtmlMatch(root, record, used);
+    if (!node) continue;
+    used.add(node.id);
+    const declarations = declarationsFromComputed(record.computed ?? record.declarations ?? {}, properties);
+    if (declarations.length === 0) continue;
+    sets.push(createWcssComputedStyleSet({
+      id: `${idPrefix}:${index}`,
+      nodeId: node.id,
+      selector: record.selector ?? null,
+      declarations,
+      box: record.box ?? null,
+      state: record.state ?? null,
+      provenance: {
+        ...provenance,
+        sourceSelector: record.selector ?? null,
+        observedIndex: index
+      }
+    }));
+  }
+  return sets;
+}
+
+export function importWcssComputedCapture(root, capture, {
+  idPrefix = "wcss:computed",
+  provenance = {}
+} = {}) {
+  if (!capture || capture.kind !== "EngentusWcssComputedCapture") {
+    throw new Error("importWcssComputedCapture expects an EngentusWcssComputedCapture artifact");
+  }
+  const records = (capture.records ?? []).filter(record => !record?.missing);
+  return correlateComputedStylesWithWhtml(root, records, {
+    properties: capture.properties ?? [],
+    idPrefix,
+    provenance: {
+      target: capture.target ?? null,
+      screen: capture.screen ?? null,
+      url: capture.url ?? null,
+      ...provenance
+    }
+  });
+}
+
+export function attachComputedStyleSets(snapshot, slice, computedStyleSets = []) {
+  if (!snapshot?.whtml?.slices?.[slice]) {
+    throw new Error(`attachComputedStyleSets: unknown WHTML slice '${slice}'`);
+  }
+  return {
+    ...snapshot,
+    wcss: {
+      ...(snapshot.wcss ?? {}),
+      computedStyleSets: [
+        ...((snapshot.wcss ?? {}).computedStyleSets ?? []),
+        ...computedStyleSets.map(set => structuredClone(set))
+      ]
+    }
+  };
+}
+
+export function deriveSymmetryGroupsFromComputedStyles(computedStyleSets = [], {
+  idPrefix = "wcss:symmetry",
+  minMembers = 2,
+  provenance = {}
+} = {}) {
+  const buckets = new Map();
+  for (const set of computedStyleSets) {
+    const signature = set.declarations
+      .map(declaration => `${declaration.property}:${declaration.value}`)
+      .sort()
+      .join(";");
+    if (!signature) continue;
+    const bucket = buckets.get(signature) ?? [];
+    bucket.push(set);
+    buckets.set(signature, bucket);
+  }
+  const groups = [];
+  let index = 0;
+  for (const members of buckets.values()) {
+    if (members.length < minMembers) continue;
+    groups.push(createSymmetryGroup({
+      id: `${idPrefix}:${index}`,
+      memberNodeIds: members.map(member => member.nodeId),
+      sharedDeclarations: members[0].declarations,
+      rationale: "observed nodes share identical computed presentation evidence",
+      provenance: {
+        ...provenance,
+        sourceSetIds: members.map(member => member.id)
+      }
+    }));
+    index += 1;
+  }
+  return groups;
+}
+
+export function deriveSymmetryBreaksFromComputedStyles(group, computedStyleSets = [], {
+  idPrefix = "wcss:break",
+  provenance = {}
+} = {}) {
+  const byNode = new Map(computedStyleSets.map(set => [set.nodeId, set]));
+  const shared = new Map((group?.sharedDeclarations ?? []).map(declaration => [declaration.property, declaration.value]));
+  const breaks = [];
+  for (const nodeId of group?.memberNodeIds ?? []) {
+    const set = byNode.get(nodeId);
+    if (!set) continue;
+    const deviations = set.declarations.filter(declaration =>
+      shared.has(declaration.property) && shared.get(declaration.property) !== declaration.value
+    );
+    if (deviations.length === 0) continue;
+    breaks.push(createSymmetryBreak({
+      id: `${idPrefix}:${breaks.length}`,
+      groupId: group.id,
+      nodeId,
+      declarations: deviations,
+      reason: "computed presentation evidence deviates from the symmetry group",
+      provenance: {
+        ...provenance,
+        sourceSetId: set.id
+      }
+    }));
+  }
+  return breaks;
+}
+
 export function serializeWhtmlNode(node) {
   if (!node) return "";
   if (node.tag === "fragment") return (node.children ?? []).map(serializeWhtmlNode).join("");
@@ -399,7 +616,8 @@ export function importEngentusReferenceUplift({
         idPrefix: "engentus:css:rule",
         provenance: { sourceFile, slice: "style" }
       }),
-      inlineDeclarationSets
+      inlineDeclarationSets,
+      computedStyleSets: []
     },
     symmetryGraph: {
       groups: [],

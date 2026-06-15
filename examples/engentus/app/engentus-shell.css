@@ -200,7 +200,8 @@ a {
   display: none
 }
 
-#up-menu.open { display: block }
+#up-menu.open,
+#up-menu:not([hidden]) { display: block }
 
 .up-mi {
   display: flex;
@@ -216,26 +217,13 @@ a {
 
 .up-mi:hover { background: rgba(255,255,255,.07) }
 .up-mi-icon {
-  font-size: 0;
+  font-size: 13px;
   width: 16px;
   text-align: center;
   flex-shrink: 0;
-  color: transparent;
-  position: relative;
-}
-
-.up-mi-icon::before {
-  font-size: 13px;
   color: var(--t2);
-  position: absolute;
-  inset: 0;
 }
 
-#up-menu .up-mi:nth-of-type(1) .up-mi-icon::before { content: "\1F464"; }
-#up-menu .up-mi:nth-of-type(2) .up-mi-icon::before { content: "\2699"; }
-#up-menu .up-mi:nth-of-type(3) .up-mi-icon::before { content: "\1F4CB"; }
-#up-menu .up-mi:nth-of-type(5) .up-mi-icon::before { content: "\1F3ED"; }
-#up-menu .up-mi-signout .up-mi-icon::before { content: "\21A9"; }
 .up-sep { height: 1px; background: var(--brd); margin: 3px 0 }
 .up-mi-signout { color: #f87171; }
 
@@ -274,6 +262,14 @@ a {
 }
 
 .auth-book.folding::after { opacity: 1; }
+.auth-book.folding { transform: rotateY(-90deg); }
+.auth-book.incoming {
+  transform: rotateY(90deg);
+  animation: authBookIncoming 0.9s cubic-bezier(0.77, 0, 0.175, 1) forwards;
+}
+
+@keyframes authBookIncoming { to { transform: rotateY(0deg); } }
+@keyframes authSpin { to { transform: rotate(360deg); } }
 
 #view-signout .auth-book { transform-origin: left center; }
 #view-signout .auth-book::after {
@@ -433,6 +429,30 @@ a {
 }
 
 .ms-btn:hover { background: #1a1a1a; }
+.ms-btn.pending,
+.auth-submit.pending {
+  pointer-events: none;
+  opacity: 0.92;
+}
+
+.ms-btn.pending svg,
+.ms-btn.folding svg {
+  display: none;
+}
+
+.ms-btn.pending::before {
+  content: "";
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255,255,255,.28);
+  border-top-color: rgba(255,255,255,.9);
+  border-radius: 50%;
+  animation: authSpin 0.65s linear infinite;
+  vertical-align: -2px;
+  margin-right: 5px;
+  flex-shrink: 0;
+}
 
 .auth-divider {
   display: flex;

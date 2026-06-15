@@ -5,8 +5,12 @@ import path from "node:path";
 import {
   addSymmetryBreak,
   addSymmetryGroup,
+  correlateComputedStylesWithWhtml,
   createSymmetryBreak,
   createSymmetryGroup,
+  deriveSymmetryBreaksFromComputedStyles,
+  deriveSymmetryGroupsFromComputedStyles,
+  importWcssComputedCapture,
   emitSurfaceFromWhtmlWcss,
   emitWidgetFromWhtmlWcss,
   importEngentusReferenceUplift,
@@ -42,11 +46,12 @@ async function engentusSnapshot() {
 }
 
 test("canonical docs define WHTML/WCSS as internal uplift, not a second public lane", async () => {
-  const [uplift, desireSpa, policy, playbook] = await Promise.all([
+  const [uplift, desireSpa, policy, playbook, behaviorInventory] = await Promise.all([
     readFile(path.join(process.cwd(), "docs", "WHTML-WCSS-UPLIFT.md"), "utf8"),
     readFile(path.join(process.cwd(), "docs", "DESIRE-SPA.md"), "utf8"),
     readFile(path.join(process.cwd(), "docs", "LLM-AUTHORING-POLICY.md"), "utf8"),
-    readFile(path.join(process.cwd(), "docs", "AUTHORING-REPLAY-PLAYBOOK.md"), "utf8")
+    readFile(path.join(process.cwd(), "docs", "AUTHORING-REPLAY-PLAYBOOK.md"), "utf8"),
+    readFile(path.join(process.cwd(), "docs", "ENGENTUS-ORACLE-BEHAVIOR-INVENTORY.md"), "utf8")
   ]);
 
   assert.match(uplift, /internal import and uplift workspace/i);
@@ -61,6 +66,11 @@ test("canonical docs define WHTML/WCSS as internal uplift, not a second public l
   assert.match(policy, /Internal uplift is not authoring permission/i);
   assert.match(policy, /none exist/i);
   assert.match(playbook, /WHTML\/WCSS evidence can inform candidate authored input/i);
+  assert.match(uplift, /reference JavaScript is also oracle evidence/i);
+  assert.match(desireSpa, /Reference JavaScript may be read only as oracle evidence/i);
+  assert.match(behaviorInventory, /must not be copied back as an app runtime/i);
+  assert.match(behaviorInventory, /WAS-style timeline/i);
+  assert.match(behaviorInventory, /Cross-Cutting Runtime Primitives Exposed By The Oracle/i);
 });
 
 test("Engentus reference import captures WHTML structure, WCSS stylesheet rules, and inline style evidence", async () => {
@@ -77,6 +87,7 @@ test("Engentus reference import captures WHTML structure, WCSS stylesheet rules,
   assert.ok(findNode(login.root, node => node.tag === "input" && node.attrs.id === "login-email"));
   assert.ok(snapshot.wcss.rules.some(rule => rule.selector === ".auth-form-wrap"));
   assert.ok(snapshot.wcss.rules.some(rule => rule.selector === "#module-area"));
+  assert.deepEqual(snapshot.wcss.computedStyleSets, []);
 
   const imageInline = snapshot.wcss.inlineDeclarationSets.find(set => {
     const node = findNode(login.root, candidate => candidate.id === set.nodeId);
@@ -86,6 +97,165 @@ test("Engentus reference import captures WHTML structure, WCSS stylesheet rules,
   assert.deepEqual(imageInline.declarations, [
     { property: "height", value: "30px" },
     { property: "width", value: "auto" }
+  ]);
+});
+
+test("WCSS correlates observed computed styles back to WHTML nodes", async () => {
+  const snapshot = await engentusSnapshot();
+  const loginRoot = snapshot.whtml.slices.loginForm.root;
+  const computed = correlateComputedStylesWithWhtml(loginRoot, [
+    {
+      selector: ".auth-form-wrap",
+      tag: "div",
+      className: "auth-form-wrap",
+      text: "Welcome back Sign in to your Engentus account",
+      computed: {
+        display: "block",
+        width: "372px",
+        fontSize: "12.5px"
+      },
+      box: { x: 806, y: 206, width: 372, height: 487 }
+    },
+    {
+      selector: "#login-email",
+      tag: "input",
+      id: "login-email",
+      className: "auth-input",
+      computed: {
+        display: "block",
+        width: "372px",
+        fontSize: "13.5px"
+      },
+      box: { x: 806, y: 514, width: 372, height: 39 }
+    }
+  ], {
+    properties: ["display", "width", "fontSize"],
+    provenance: { source: "oracle-computed-style" }
+  });
+
+  assert.equal(computed.length, 2);
+  assert.equal(computed[0].kind, "WcssComputedStyleSet");
+  assert.equal(computed[0].selector, ".auth-form-wrap");
+  assert.equal(computed[0].box.width, 372);
+  assert.ok(findNode(loginRoot, node => node.id === computed[0].nodeId && node.attrs.class === "auth-form-wrap"));
+  assert.ok(findNode(loginRoot, node => node.id === computed[1].nodeId && node.attrs.id === "login-email"));
+  assert.deepEqual(computed[1].declarations, [
+    { property: "display", value: "block" },
+    { property: "width", value: "372px" },
+    { property: "fontSize", value: "13.5px" }
+  ]);
+});
+
+test("WCSS consumes generated browser capture artifacts as computed style evidence", async () => {
+  const snapshot = await engentusSnapshot();
+  const loginRoot = snapshot.whtml.slices.loginForm.root;
+  const capture = {
+    kind: "EngentusWcssComputedCapture",
+    target: "reference",
+    screen: "login",
+    url: "http://localhost:56693/",
+    properties: ["display", "width", "height", "transitionDuration"],
+    records: [
+      {
+        selector: "#ms-btn",
+        tag: "button",
+        id: "ms-btn",
+        className: "ms-btn",
+        text: "Sign in with Microsoft",
+        box: { x: 806, y: 349, width: 372, height: 40 },
+        computed: {
+          display: "flex",
+          width: "372px",
+          height: "40px",
+          transitionDuration: "0.15s"
+        }
+      }
+    ]
+  };
+
+  const sets = importWcssComputedCapture(loginRoot, capture, {
+    idPrefix: "test:computed",
+    provenance: { source: "generated-capture-fixture" }
+  });
+
+  assert.equal(sets.length, 1);
+  assert.equal(sets[0].id, "test:computed:0");
+  assert.equal(sets[0].selector, "#ms-btn");
+  assert.ok(findNode(loginRoot, node => node.id === sets[0].nodeId && node.attrs.id === "ms-btn"));
+  assert.deepEqual(sets[0].declarations, [
+    { property: "display", value: "flex" },
+    { property: "width", value: "372px" },
+    { property: "height", value: "40px" },
+    { property: "transitionDuration", value: "0.15s" }
+  ]);
+  assert.deepEqual(sets[0].provenance, {
+    target: "reference",
+    screen: "login",
+    url: "http://localhost:56693/",
+    source: "generated-capture-fixture",
+    sourceSelector: "#ms-btn",
+    observedIndex: 0
+  });
+});
+
+test("WCSS derives symmetry groups and localized breaks from computed evidence", () => {
+  const computed = [
+    {
+      kind: "WcssComputedStyleSet",
+      id: "c:0",
+      nodeId: "feature:0",
+      declarations: [
+        { property: "display", value: "flex" },
+        { property: "gap", value: "11px" }
+      ]
+    },
+    {
+      kind: "WcssComputedStyleSet",
+      id: "c:1",
+      nodeId: "feature:1",
+      declarations: [
+        { property: "display", value: "flex" },
+        { property: "gap", value: "11px" }
+      ]
+    },
+    {
+      kind: "WcssComputedStyleSet",
+      id: "c:2",
+      nodeId: "feature:2",
+      declarations: [
+        { property: "display", value: "flex" },
+        { property: "gap", value: "14px" }
+      ]
+    }
+  ];
+
+  const groups = deriveSymmetryGroupsFromComputedStyles(computed);
+  assert.equal(groups.length, 1);
+  assert.deepEqual(groups[0].memberNodeIds, ["feature:0", "feature:1"]);
+  assert.deepEqual(groups[0].sharedDeclarations, [
+    { property: "display", value: "flex" },
+    { property: "gap", value: "11px" }
+  ]);
+
+  const broaderGroup = createSymmetryGroup({
+    id: "feature-row-law",
+    memberNodeIds: ["feature:0", "feature:1", "feature:2"],
+    sharedDeclarations: [
+      { property: "display", value: "flex" },
+      { property: "gap", value: "11px" }
+    ]
+  });
+  const breaks = deriveSymmetryBreaksFromComputedStyles(broaderGroup, computed);
+  assert.deepEqual(breaks, [
+    {
+      kind: "SymmetryBreak",
+      id: "wcss:break:0",
+      groupId: "feature-row-law",
+      nodeId: "feature:2",
+      declarations: [{ property: "gap", value: "14px" }],
+      reason: "computed presentation evidence deviates from the symmetry group",
+      provenance: { sourceSetId: "c:2" }
+    }
   ]);
 });
 

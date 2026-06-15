@@ -534,6 +534,11 @@ function renderSurfaceNode(surfaces, surfaceId) {
   return `<${tagName}${attrs}>${body}</${tagName}>`;
 }
 
+export function renderSurfaceStaticFragment(surfaces, surfaceId) {
+  if (!(surfaces instanceof Map) || !surfaceId) return "";
+  return renderSurfaceNode(surfaces, surfaceId);
+}
+
 function inferredDocumentTitle(activeSurface, surfaces) {
   const activePayload = readStaticPayload(activeSurface);
   if (activePayload.documentTitle) return activePayload.documentTitle;
@@ -638,6 +643,21 @@ export function renderSurfaceShellFromMap({
   requestPathname = "/",
   route = null
 } = {}) {
+  const state = resolveSurfaceShellFromMap({
+    surfaces,
+    rootSurfaceId,
+    requestPathname,
+    route
+  });
+  return state?.html ?? null;
+}
+
+export function resolveSurfaceShellFromMap({
+  surfaces,
+  rootSurfaceId,
+  requestPathname = "/",
+  route = null
+} = {}) {
   if (!(surfaces instanceof Map) || !rootSurfaceId) return null;
   const rootSurface = surfaces.get(rootSurfaceId);
   if (!rootSurface) return null;
@@ -647,19 +667,36 @@ export function renderSurfaceShellFromMap({
     requestPathname,
     route
   });
+  const normalizedPathname = normalizePathname(requestPathname);
   if (activeSurface && hasRenderableContent(activeSurface)) {
-    return renderSurfaceDocument({
-      requestPathname: normalizePathname(requestPathname),
+    const html = renderSurfaceDocument({
+      requestPathname: normalizedPathname,
       rootSurface,
       activeSurface,
       surfaces
     });
+    return {
+      html,
+      surfaces,
+      rootSurface,
+      activeSurface,
+      rootSurfaceId,
+      requestPathname: normalizedPathname
+    };
   }
-  return renderBlockedHostHtml({
-    requestPathname: normalizePathname(requestPathname),
+  const html = renderBlockedHostHtml({
+    requestPathname: normalizedPathname,
     rootSurface,
     activeSurface: activeSurface ?? rootSurface
   });
+  return {
+    html,
+    surfaces,
+    rootSurface,
+    activeSurface: activeSurface ?? rootSurface,
+    rootSurfaceId,
+    requestPathname: normalizedPathname
+  };
 }
 
 export function renderSurfaceShellPage(world, {
@@ -668,6 +705,19 @@ export function renderSurfaceShellPage(world, {
   route = null
 } = {}) {
   return renderSurfaceShellFromMap({
+    surfaces: readSurfaceMapFromWorld(world),
+    rootSurfaceId,
+    requestPathname,
+    route
+  });
+}
+
+export function resolveSurfaceShellPage(world, {
+  rootSurfaceId,
+  requestPathname = "/",
+  route = null
+} = {}) {
+  return resolveSurfaceShellFromMap({
     surfaces: readSurfaceMapFromWorld(world),
     rootSurfaceId,
     requestPathname,

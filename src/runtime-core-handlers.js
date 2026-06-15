@@ -14,7 +14,8 @@ import {
   activeBackendProgramDefinition
 } from "./backend-programs.js";
 import { renderInactiveRuntimeWidgetPage } from "./runtime-page-fallbacks.js";
-import { normalizePathname, renderSurfaceShellPage } from "./runtime-surface-shell.js";
+import { normalizePathname } from "./runtime-surface-shell.js";
+import { renderSurfacePage } from "./runtime-surface-page.js";
 import { createGuidanceBundleHandlers, guidanceConfigForSession } from "./runtime-guidance.js";
 import {
   AUTHORING_MODE_MCP_ONLY,
@@ -83,8 +84,6 @@ export function createCoreRuntimeBundleHandlers({
   const renderWidgetPageHook = coreHooks.renderWidgetPage ?? ((_world, { rootWidget }) => renderInactiveRuntimeWidgetPage({ rootWidget }));
   const projectPagePresentationThemeHook = coreHooks.projectPagePresentationTheme
     ?? coreHooks.projectEdenPageTheme
-    ?? (() => null);
-  const buildMountedChartRuntimeHook = coreHooks.buildMountedChartRuntime
     ?? (() => null);
   const guidanceConfigForSessionHook = coreHooks.guidanceConfigForSession
     ?? coreHooks.appGuidanceConfigForSession
@@ -497,17 +496,14 @@ export function createCoreRuntimeBundleHandlers({
         return;
       }
       const renderWorld = appRenderWorld(appContext);
-      const html = renderSurfaceShellPage(renderWorld, {
+      const html = renderSurfacePage(renderWorld, {
         rootSurfaceId,
         requestPathname: normalizePathname(requestUrl?.pathname ?? route?.path ?? "/"),
         route,
         browserRuntimeCapabilities: (appContext?.runtimeContributions?.capabilityDefinitions ?? [])
           .map(definition => typeof definition?.id === "string" ? definition.id : "")
           .filter(Boolean),
-        buildMountedChartRuntime: args => buildMountedChartRuntimeHook({
-          ...args,
-          world: renderWorld
-        })
+        routeStateDescriptor: route?.params?.routeState ?? null
       });
       if (!html) {
         sendJson(res, 404, { error: "surface page not found", rootSurface: rootSurfaceId });
