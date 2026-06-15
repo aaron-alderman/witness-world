@@ -208,8 +208,26 @@ function planLayer(layer, evaluated, fills, opts = {}) {
   }
 
   if (layer.mark === "point") {
-    const xVal = scalarRef(enc.x, evaluated);
-    const yVal = scalarRef(enc.y, evaluated);
+    const xField = fields[enc.x];
+    const yField = fields[enc.y];
+    const where = parseWhere(enc.where, axes, evaluated);
+    const iterAxis = yField?.axes?.length || xField?.axes?.length
+      ? iterationAxis(layer, yField ?? xField, axes)
+      : null;
+    const primitives = iterAxis
+      ? (axes[iterAxis]?.values ?? []).map((_, i) => {
+          const coord = { [iterAxis]: i, ...where };
+          return {
+            x: channelValue(enc.x, evaluated, coord),
+            y: channelValue(enc.y, evaluated, coord),
+            tooltip: tooltipValuesForEncoding(enc, evaluated, coord, axes)
+          };
+        })
+      : (() => {
+          const xVal = scalarRef(enc.x, evaluated);
+          const yVal = scalarRef(enc.y, evaluated);
+          return xVal == null ? [] : [{ x: xVal, y: yVal }];
+        })();
     return {
       ...base,
       fill: enc.fill ? colorRef(enc.fill, evaluated, enc.fillMap) : colorToken(enc.stroke ?? "blue"),
@@ -217,7 +235,7 @@ function planLayer(layer, evaluated, fills, opts = {}) {
       width: Number(enc.width) || 1,
       size: Number(enc.size) || 4,
       opacity: enc.opacity == null ? 1 : Number(enc.opacity),
-      primitives: (xVal == null) ? [] : [{ x: xVal, y: yVal }]
+      primitives
     };
   }
 

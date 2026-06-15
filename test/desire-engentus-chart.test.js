@@ -27,13 +27,13 @@ async function loadBody(file, kind, name) {
 test("planChart turns the Goodman chart + model into a faithful render plan", async () => {
   const modelBody = await loadBody("models/goodman.rvm", "dataflow", "BoltFatigue");
   const viewBody = await loadBody("views/goodman.rvm", "surface", "GoodmanDiagram");
-  const evaluated = evaluateModel(modelBody, { functions: goodmanFunctions });
+  const evaluated = evaluateModel(modelBody, { functions: { ...goodmanFunctions, ...samplingFunctions } });
   const plan = planChart(viewBody, evaluated, { width: 800, height: 520 });
   assert.equal(evaluated.fields.probe_mean_stress_text.data, "300.0 MPa");
   assert.equal(evaluated.fields.probe_alt_stress_text.data, `${evaluated.fields.curve_probe.data.toFixed(1)} MPa`);
   assert.equal(evaluated.fields.probe_shear_text.data, `${Math.round(evaluated.fields.probe_F_shear.data).toLocaleString("en-US")} N`);
   assert.match(evaluated.fields.probe_damage_text.data, /\/ 1M cycles$/);
-  assert.equal(evaluated.fields.slip_threshold_text.data, "6.4 MPa");
+  assert.equal(evaluated.fields.slip_threshold_text.data, `${evaluated.fields.slip.data.toFixed(1)} MPa`);
 
   // frame + scales
   assert.equal(plan.frame, "cartesian");
@@ -69,6 +69,7 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
 
   const layer = name => plan.layers.find(l => l.name === name);
   const sm = evaluated.axes.sm.values;
+  assert.equal(evaluated.axes.cloud_sample.values.length, 120);
 
   // bands: four reference background zones between Goodman curves/yield boundary.
   const bands = layer("bands");
@@ -80,6 +81,17 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   assert.equal(bands.primitives[0].points[60].y0, evaluated.fields.band_zone_y0.data[60][0]);
   assert.equal(bands.primitives[0].points[60].y1, evaluated.fields.band_zone_y1.data[60][0]);
   assert.equal(bands.primitives[3].points[60].y1, evaluated.fields.yield_line.data[60]);
+  const cloud = layer("cloud");
+  assert.equal(cloud.mark, "point");
+  assert.equal(cloud.primitives.length, 120);
+  assert.equal(cloud.primitives[0].x, evaluated.fields.cloud_sigma_m.data[0]);
+  assert.equal(cloud.primitives[0].y, evaluated.fields.cloud_sigma_a.data[0]);
+  assert.equal(cloud.fill, "#dc2626");
+  assert.equal(cloud.size, 2.4);
+  const cloudJemtec = layer("cloud_jemtec");
+  assert.equal(cloudJemtec.primitives.length, 120);
+  assert.equal(cloudJemtec.primitives[0].y, evaluated.fields.cloud_sigma_a_jemtec.data[0]);
+  assert.equal(cloudJemtec.fill, "#8CC4D4");
 
   // curves: the two reference bolt-set responses, No Jemtec and Jemtec.
   const curves = layer("curves");

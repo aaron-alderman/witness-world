@@ -15,15 +15,18 @@ function draw(state) {
 const SEED = 0x9e3779b9;
 const u01 = (i, salt) => draw((Math.floor(i) + SEED + salt) >>> 0);
 
-function standardNormal(i) {
-  const u1 = Math.max(1e-12, u01(i, 0x1000));
-  const u2 = u01(i, 0x2000);
+function standardNormal(i, salt = 0) {
+  const offset = Number(salt) || 0;
+  const u1 = Math.max(1e-12, u01(i, 0x1000 + offset));
+  const u2 = u01(i, 0x2000 + offset);
   return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
 }
 
 export const samplingFunctions = {
   uniform: (i, lo, hi) => lo + u01(i, 0x3000) * (hi - lo),
+  uniform_salt: (i, lo, hi, salt = 0) => lo + u01(i, 0x3000 + (Number(salt) || 0)) * (hi - lo),
   normal: (i, mean, std) => mean + std * standardNormal(i),
+  normal_salt: (i, mean, std, salt = 0) => mean + std * standardNormal(i, salt),
   lognormal: (i, median, sigma) => median * Math.exp(sigma * standardNormal(i)),
   rand: i => u01(i, 0)
 };

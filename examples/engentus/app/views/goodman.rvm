@@ -17,8 +17,8 @@ chart GoodmanDiagram of BoltFatigue {
   prop mountId = "chart-svg"
   prop mountClass = "chart-page__mount chart-page__mount--goodman"
   prop mountTag = "svg"
-  prop functionsModules = "/app-static/app/chart-functions/goodman-stdlib.js"
-  prop functionsExports = "goodmanFunctions"
+  prop functionsModules = "/app-static/app/chart-functions/goodman-stdlib.js,/app-static/app/chart-functions/sampling.js"
+  prop functionsExports = "goodmanFunctions,samplingFunctions"
   prop overlayCanvasId = "mc-canvas"
   prop overlayCanvasClass = "chart-page__overlay-canvas"
   prop tooltipId = "chart-tip"
@@ -60,6 +60,8 @@ chart GoodmanDiagram of BoltFatigue {
 
   // layer stack (drawn bottom→top), each bound to a BoltFatigue channel
   layer bands  = band over sm, band_zone | x:sm y0:band_zone_y0 y1:band_zone_y1 fill:band.fills opacity:0.72
+  layer cloud = point over cloud_sample | x:cloud_sigma_m y:cloud_sigma_a fill:"#dc2626" stroke:"#dc2626" width:0.5 size:2.4 opacity:0.22
+  layer cloud_jemtec = point over cloud_sample | x:cloud_sigma_m y:cloud_sigma_a_jemtec fill:"#8CC4D4" stroke:"#8CC4D4" width:0.5 size:2.4 opacity:0.22
   layer glines = line over lifetime | y:band stroke:ylw width:1.2 dash:true opacity:0.9
   layer curves = line over sm | y:curve stroke:"#dc2626" width:2.2 tooltip.sigma_m_MPa:sm tooltip.sigma_a_MPa:curve tooltip.F_shear_N:F_shear tooltip.damage_per_cycle_x10_6:damage_per_million
   layer curve_jemtec = line over sm | y:curve_jemtec stroke:"#8CC4D4" width:2.2 tooltip.sigma_m_MPa:sm tooltip.sigma_a_MPa:curve_jemtec tooltip.F_shear_N:F_shear_jemtec tooltip.damage_per_cycle_x10_6:damage_per_million_jemtec

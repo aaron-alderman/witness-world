@@ -38,8 +38,8 @@ test("resolveChartSpec assembles {model, view} from the witnessed world", async 
   assert.equal(spec.pageProps.bodyClass, "chart-page chart-page--goodman");
   assert.equal(spec.pageProps.mountId, "chart-svg");
   assert.equal(spec.pageProps.mountTag, "svg");
-  assert.equal(spec.pageProps.functionsModules, "/app-static/app/chart-functions/goodman-stdlib.js");
-  assert.equal(spec.pageProps.functionsExports, "goodmanFunctions");
+  assert.equal(spec.pageProps.functionsModules, "/app-static/app/chart-functions/goodman-stdlib.js,/app-static/app/chart-functions/sampling.js");
+  assert.equal(spec.pageProps.functionsExports, "goodmanFunctions,samplingFunctions");
   assert.ok(spec.model.axes.some(a => a.name === "sm"));
   assert.ok(spec.model.derives.some(d => d.name === "band"));
   assert.ok(spec.view.layers.some(l => l.name === "bands"));
@@ -53,6 +53,7 @@ test("the inlined chart runtime bundle is valid JS and still evaluates the model
   try {
     const mod = await import(pathToFileURL(tmp).href);
     const appFns = await import(pathToFileURL(path.join(appDir, "chart-functions", "goodman-stdlib.js")).href);
+    const samplingFns = await import(pathToFileURL(path.join(appDir, "chart-functions", "sampling.js")).href);
     assert.equal(typeof mod.evaluateModel, "function");
     assert.equal(typeof mod.planChart, "function");
     assert.equal(typeof mod.bootChartsFromDom, "function");
@@ -60,7 +61,7 @@ test("the inlined chart runtime bundle is valid JS and still evaluates the model
 
     const world = await worldWithGoodman();
     const spec = resolveChartSpec(world.allWitnesses(), "GoodmanDiagram");
-    const evaluated = mod.evaluateModel(spec.model, { functions: appFns.goodmanFunctions });
+    const evaluated = mod.evaluateModel(spec.model, { functions: { ...appFns.goodmanFunctions, ...samplingFns.samplingFunctions } });
     const plan = mod.planChart(spec.view, evaluated, { width: 800, height: 520 });
     assert.deepEqual(plan.scales.x.domain, [0, 650]);
     assert.ok(plan.layers.find(l => l.name === "bands").primitives.length > 0);
@@ -424,6 +425,48 @@ test("cartesian line plans split category overlays and preserve styled point/tex
   assert.equal(marker.stroke, "#ffffff");
   assert.deepEqual(label.primitives, [{ x: 0.75, y: 1.25, label: "Bolt A" }]);
   assert.equal(label.weight, 600);
+});
+
+test("cartesian point marks can project one primitive per authored axis value", () => {
+  const view = {
+    frame: "cartesian",
+    encoding: {
+      x: { field: "x", domain: [0, 4] },
+      y: { field: "y", domain: [0, 8] }
+    },
+    layers: [{
+      name: "samples",
+      mark: "point",
+      over: ["sample"],
+      encode: {
+        x: "sample_x",
+        y: "sample_y",
+        fill: "blue",
+        stroke: "#ffffff",
+        width: 0.5,
+        size: 2.4,
+        opacity: 0.22,
+        "tooltip.index": "sample"
+      }
+    }]
+  };
+  const evaluated = {
+    axes: {
+      sample: { kind: "ensemble", values: [0, 1, 2] }
+    },
+    fields: {
+      sample_x: { axes: ["sample"], data: [1, 2, 3] },
+      sample_y: { axes: ["sample"], data: [4, 5, 6] }
+    }
+  };
+
+  const plan = planChart(view, evaluated, { width: 200, height: 200 });
+  const samples = plan.layers.find(layer => layer.name === "samples");
+  assert.equal(samples.mark, "point");
+  assert.equal(samples.size, 2.4);
+  assert.equal(samples.opacity, 0.22);
+  assert.deepEqual(samples.primitives.map(point => [point.x, point.y]), [[1, 4], [2, 5], [3, 6]]);
+  assert.deepEqual(samples.primitives.map(point => point.tooltip.index), [0, 1, 2]);
 });
 
 test("cartesian line layers with explicit x fields are ordered by x value", () => {

@@ -26,11 +26,12 @@ async function loadBody(file, kind, name) {
 }
 
 const close = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b));
+const GOODMAN_FNS = { ...goodmanFunctions, ...samplingFunctions };
 
 // ── probe over the deterministic Goodman chart ──
 test("probeReadout reads the bolt-response curve at an exact x (no interpolation error)", async () => {
   const model = await loadBody("models/goodman.rvm", "dataflow", "BoltFatigue");
-  const ev = evaluateModel(model, { functions: goodmanFunctions });
+  const ev = evaluateModel(model, { functions: GOODMAN_FNS });
   const view = await loadBody("views/goodman.rvm", "surface", "GoodmanDiagram");
   const plan = planChart(view, ev, { width: 800, height: 520 });
 
@@ -40,15 +41,20 @@ test("probeReadout reads the bolt-response curve at an exact x (no interpolation
   const curve = out.readings.find(r => r.layer === "curves");
   assert.ok(curve, "expected a reading for the curve layer");
   assert.ok(close(curve.y, ev.fields.curve.data[i]), `curve@x: ${curve.y} vs ${ev.fields.curve.data[i]}`);
-  // the area bands report one reading per lifetime category
-  assert.equal(out.readings.filter(r => r.mark === "area").length, ev.axes.lifetime.values.length);
+  const band = out.readings.find(r => r.layer === "bands");
+  assert.ok(band, "expected a reading for the authored background band");
+  assert.ok(Number.isFinite(band.y0));
+  assert.ok(Number.isFinite(band.y1));
   // rules (slip/probe) are not data readings
   assert.ok(!out.readings.some(r => r.mark === "rule"));
+  // Static distribution cloud points are visual marks; point probing is not a
+  // supported chart-runtime contract yet.
+  assert.ok(!out.readings.some(r => r.mark === "point"));
 });
 
 test("probeReadout linearly interpolates between grid points", async () => {
   const model = await loadBody("models/goodman.rvm", "dataflow", "BoltFatigue");
-  const ev = evaluateModel(model, { functions: goodmanFunctions });
+  const ev = evaluateModel(model, { functions: GOODMAN_FNS });
   const plan = planChart(await loadBody("views/goodman.rvm", "surface", "GoodmanDiagram"), ev, {});
 
   const sm = ev.axes.sm.values;
@@ -73,8 +79,9 @@ test("probeReadout reads the p10/p90 band and per-sample cloud at x", async () =
   assert.ok(close(band.y1, ev.fields.sa_p90.data[i]), "band.y1 = p90@x");
   const med = out.readings.find(r => r.layer === "med");
   assert.ok(close(med.y, ev.fields.sa_p50.data[i]), "median reading = p50@x");
-  // one cloud reading per sample
-  assert.equal(out.readings.filter(r => r.mark === "cloud").length, ev.axes.sample.values.length);
+  // The reference clears the static distribution cloud in MC mode; do not
+  // reintroduce the previous invented per-sample MC cloud readout.
+  assert.equal(out.readings.filter(r => r.mark === "cloud").length, 0);
 });
 
 // ── scrubber: bind an axis value to the nearest frame ──

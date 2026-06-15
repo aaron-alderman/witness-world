@@ -133,6 +133,18 @@ grant runtime authority to copied JS or presenter code.
   dots belong to the later failure-time/canvas path. The authored MC chart now
   keeps only the first-pass p10/p90 band and p50 median line until that real
   simulation path exists.
+- Goodman static/edit distribution cloud now follows the oracle shape without
+  restoring the oracle controller: `BoltFatigue` authors the 120-sample
+  operating-point spread for the No Jemtec/Jemtec responses, while
+  `plugin.chart-runtime` projects axis-backed cartesian point marks
+  generically. Monte Carlo still clears this cloud, matching the reference
+  split between static cloud points and the later failure-time canvas path.
+- Goodman static and MC dataflow defaults now match the oracle Goodman store
+  for the unbound mechanical/reference values used by direct chart evaluation:
+  applied shear, RPM, SN limit/slope, UTS, friction coefficient, preload
+  utilisation, grip length, shank diameter, rubber Shore/thickness/area, and
+  length factor. Shell-owned process bindings still remain the live override
+  path for controls.
 - Mill Charge chart: `MillChargeCrossSection` mounts live in
   `/engentus/mill-charge`, accepts authored parameter bindings, updates derived
   RHS metrics, and keeps its transient animation phase during parameter changes.

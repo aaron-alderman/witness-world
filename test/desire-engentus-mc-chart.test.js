@@ -40,7 +40,6 @@ test("GoodmanMCBands plans a band between p10 and p90 over sm", async () => {
     assert.equal(pt.y0, evaluated.fields.sa_p10.data[i]);
     assert.equal(pt.y1, evaluated.fields.sa_p90.data[i]);
   }
-  // y-axis auto-fits above the band's upper edge
   const maxP90 = Math.max(...evaluated.fields.sa_p90.data);
   assert.ok(plan.scales.y.domain[1] >= maxP90);
 });
@@ -77,19 +76,7 @@ test("GoodmanMCBands exposes scalar summary outputs for authored windows", async
   assert.match(evaluated.fields.mc_sa_p90_max_text.data, /^\d+\.\d MPa$/);
 });
 
-test("the cloud emits one polyline per sample, each tracing curve_s over sm", async () => {
-  const { evaluated, plan } = await setup();
-  const cloud = plan.layers.find(l => l.name === "cloud");
-  assert.equal(cloud.mark, "cloud");
-  const nSamples = evaluated.axes.sample.values.length;
-  const N = evaluated.axes.sm.values.length;
-  assert.equal(cloud.primitives.length, nSamples);
-  assert.equal(cloud.primitives[0].points.length, N);
-  // sample s, mean-stress i → curve_s[i][s]
-  for (const s of [0, 10, nSamples - 1]) {
-    for (const i of [0, 90]) {
-      assert.equal(cloud.primitives[s].points[i].x, evaluated.axes.sm.values[i]);
-      assert.equal(cloud.primitives[s].points[i].y, evaluated.fields.curve_s.data[i][s]);
-    }
-  }
+test("GoodmanMCBands does not reintroduce a false per-sample cloud layer", async () => {
+  const { plan } = await setup();
+  assert.equal(plan.layers.some(l => l.name === "cloud" || l.mark === "cloud"), false);
 });

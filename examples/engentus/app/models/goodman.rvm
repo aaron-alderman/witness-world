@@ -16,30 +16,32 @@ model BoltFatigue {
   axis sm       = sweep(0, 650, 1.6)
   axis lifetime = category(0.5, 2, 6)
   axis band_zone = category(0, 1, 2, 3)
+  axis cloud_sample = ensemble(120)
 
   // ── params (scalars; the `sample` ensemble axis attaches a dist later) ──
-  param rpm                 = 9.0
-  param sigma_lim           = 60
-  param m_slope             = 5
-  param uts                 = 1000
+  param rpm                 = 11
+  param sigma_lim           = 50
+  param m_slope             = 4.6
+  param uts                 = 1040
   param ys                  = 600
-  param F_alt_applied_N     = 30000
+  param preload_stress_MPa  = 600
+  param F_alt_applied_N     = 10000
   param n_bolts             = 4
   param n_interfaces        = 2
-  param mu_joint            = 0.4
+  param mu_joint            = 0.30
   param angular_span_factor = 1.0
   param A_s_nom             = 0.001473
-  param preload_utilisation = 0.75
-  param L_grip              = 0.18
-  param D_Shank             = 0.044
+  param preload_utilisation = 0.65
+  param L_grip              = 0.105
+  param D_Shank             = 0.048
   param D_minor             = 0.041
   param E_bolt_GPa          = 200
   param head_direction      = 0
-  param length_factor       = 1.0
-  param rubber_shoreA       = 60
+  param length_factor       = 1.190
+  param rubber_shoreA       = 70
   param rubber_nu           = 0.49
-  param rubber_area_m2      = 0.045
-  param rubber_thickness_m  = 0.05
+  param rubber_area_m2      = 0.020
+  param rubber_thickness_m  = 0.010
   param probe_sm            = 300
 
   // ── Goodman background bands (pure composition over sm × lifetime) ──
@@ -72,6 +74,34 @@ model BoltFatigue {
   derive curve_jemtec = bolt_bending_sigma_a(F_shear_jemtec, L_grip, D_Shank, D_minor, head_direction, length_factor) over sm
   derive damage_per_million = miner_dpc(curve, sm, sigma_lim, m_slope, uts) * 1000000 over sm
   derive damage_per_million_jemtec = miner_dpc(curve_jemtec, sm, sigma_lim, m_slope, uts) * 1000000 over sm
+
+  // ── reference static distribution cloud ──
+  //
+  // The oracle samples 120 visible/free bolt instances at t=0 and draws small
+  // operating-point circles in static/edit modes. Keep this as authored
+  // dataflow, not a page-local canvas/controller path.
+  derive cloud_preload_stress = normal_salt(cloud_sample, preload_stress_MPa, 30, 101) over cloud_sample
+  derive cloud_preload_utilisation = uniform_salt(cloud_sample, 0.50, 0.85, 103) over cloud_sample
+  derive cloud_F_alt_applied_N = normal_salt(cloud_sample, F_alt_applied_N, 1000, 107) over cloud_sample
+  derive cloud_mu_joint = normal_salt(cloud_sample, mu_joint, 0.025, 109) over cloud_sample
+  derive cloud_rubber_shoreA = normal_salt(cloud_sample, rubber_shoreA, 2.5, 113) over cloud_sample
+  derive cloud_rubber_thickness_m = normal_salt(cloud_sample, rubber_thickness_m, 0.0005, 127) over cloud_sample
+  derive cloud_L_grip = normal_salt(cloud_sample, L_grip, 0.0025, 131) over cloud_sample
+  derive cloud_sigma_m = cloud_preload_stress * cloud_preload_utilisation over cloud_sample
+  derive cloud_E_r0 = shore_a_to_E_pa(cloud_rubber_shoreA) over cloud_sample
+  derive cloud_G_r = cloud_E_r0 / (2 * (1 + rubber_nu)) over cloud_sample
+  derive cloud_k_rub = cloud_G_r * rubber_area_m2 / cloud_rubber_thickness_m over cloud_sample
+  derive cloud_I_shank = pi * D_Shank^4 / 64
+  derive cloud_k_blt = bolt_bending_stiffness(E_bolt_GPa * 1e9, cloud_I_shank, cloud_L_grip, head_direction) * n_bolts over cloud_sample
+  derive cloud_gamma = cloud_k_blt / (cloud_k_blt + cloud_k_rub) over cloud_sample
+  derive cloud_k_jemtec = 44e9 * 8846.725e-6 / cloud_rubber_thickness_m over cloud_sample
+  derive cloud_gamma_jemtec = cloud_k_blt / (cloud_k_blt + cloud_k_rub + cloud_k_jemtec) over cloud_sample
+  derive cloud_F_per_bolt = cloud_F_alt_applied_N / n_bolts * angular_span_factor over cloud_sample
+  derive cloud_F_friction = cloud_mu_joint * (cloud_sigma_m * 1e6 * A_s_nom) * n_interfaces over cloud_sample
+  derive cloud_F_shear = max(cloud_gamma * cloud_F_per_bolt, cloud_F_per_bolt - cloud_F_friction) over cloud_sample
+  derive cloud_F_shear_jemtec = max(cloud_gamma_jemtec * cloud_F_per_bolt, cloud_F_per_bolt - cloud_F_friction) over cloud_sample
+  derive cloud_sigma_a = bolt_bending_sigma_a(cloud_F_shear, cloud_L_grip, D_Shank, D_minor, head_direction, length_factor) over cloud_sample
+  derive cloud_sigma_a_jemtec = bolt_bending_sigma_a(cloud_F_shear_jemtec, cloud_L_grip, D_Shank, D_minor, head_direction, length_factor) over cloud_sample
 
   // ── reference chart labels / probe markers as authored scalar geometry ──
   derive probe_F_friction = mu_joint * (probe_sm * 1e6 * A_s_nom) * n_interfaces
@@ -119,22 +149,22 @@ model BoltFatigueMC {
   param F_alt_sigma = 0.12
 
   // ── mechanical params (same as BoltFatigue) ──
-  param F_alt_applied_N     = 30000
+  param F_alt_applied_N     = 10000
   param n_bolts             = 4
   param n_interfaces        = 2
-  param mu_joint            = 0.4
+  param mu_joint            = 0.30
   param angular_span_factor = 1.0
   param A_s_nom             = 0.001473
-  param L_grip              = 0.18
-  param D_Shank             = 0.044
+  param L_grip              = 0.105
+  param D_Shank             = 0.048
   param D_minor             = 0.041
   param E_bolt_GPa          = 200
   param head_direction      = 0
-  param length_factor       = 1.0
-  param rubber_shoreA       = 60
+  param length_factor       = 1.190
+  param rubber_shoreA       = 70
   param rubber_nu           = 0.49
-  param rubber_area_m2      = 0.045
-  param rubber_thickness_m  = 0.05
+  param rubber_area_m2      = 0.020
+  param rubber_thickness_m  = 0.010
 
   // ── stiffness-share γ + friction (honest composition; same chain as BoltFatigue) ──
   derive E_r0       = shore_a_to_E_pa(rubber_shoreA)
