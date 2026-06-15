@@ -341,6 +341,11 @@ function validateDesireNodeBody(kind, body, path) {
       assertNullableString(body.className, `${path}.className`);
       assertArray(body.children ?? [], `${path}.children`);
       assertPlainObject(body.props ?? {}, `${path}.props`);
+      assertNullableString(body.processRef, `${path}.processRef`);
+      assertArray(body.projectionRefs ?? [], `${path}.projectionRefs`);
+      assertArray(body.capabilityRefs ?? [], `${path}.capabilityRefs`);
+      assertArray(body.bindings ?? [], `${path}.bindings`);
+      assertArray(body.interactions ?? [], `${path}.interactions`);
       assertNullableString(body.modelRef, `${path}.modelRef`);
       assertNullableString(body.frame, `${path}.frame`);
       assertPlainObject(body.encoding ?? {}, `${path}.encoding`);

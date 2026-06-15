@@ -731,6 +731,13 @@ function applyGenericSemanticDefinition(world, node) {
   if (node.kind === "surface") {
     if (node.body?.surfaceKind) claims.push(relation(name, "surfaceKind", node.body.surfaceKind));
     if (node.body?.className) claims.push(relation(name, "surfaceClass", node.body.className));
+    if (node.body?.processRef) claims.push(relation(name, "surfaceProcess", node.body.processRef));
+    for (const projection of node.body?.projectionRefs ?? []) {
+      if (projection) claims.push(relation(name, "consumesProjection", projection));
+    }
+    for (const capability of node.body?.capabilityRefs ?? []) {
+      if (capability) claims.push(relation(name, "dependsOnCapability", capability));
+    }
     if (node.body?.modelRef) claims.push(relation(name, "visualizesDataflow", node.body.modelRef));
     for (const child of node.body?.children ?? []) {
       if (child) claims.push(relation(name, "hasChildSurface", child));

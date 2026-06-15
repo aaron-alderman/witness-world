@@ -916,9 +916,12 @@ function semanticInlineRvmShape(kind, name, type, { using = null, attrs = {}, ta
         name,
         surfaceKind: attrs.kind ?? null,
         className: attrs.class ?? null,
+        processRef: attrs.process ?? null,
+        projectionRefs: parseInlineList(attrs.projections),
+        capabilityRefs: parseInlineList(attrs.capabilities),
         children: parseInlineList(attrs.children),
         target,
-        props: inlineProps(attrs, new Set(["kind", "class", "children"]))
+        props: inlineProps(attrs, new Set(["kind", "class", "process", "projections", "capabilities", "children"]))
       };
     case "process":
       return {

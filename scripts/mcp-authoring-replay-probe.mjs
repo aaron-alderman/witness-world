@@ -129,6 +129,10 @@ export async function runReplayProbe(serverUrl, {
   const surfaceRoutePath = `/${stamp}-surface`;
   const surfaceScreenRouteId = `${stamp}_surface_screen_route`;
   const surfaceHomePath = `${surfaceRoutePath}/home`;
+  const interactiveRootId = `${stamp}_interactive_root`;
+  const interactiveScreenId = `${stamp}_interactive_screen`;
+  const interactiveRouteId = `${stamp}_interactive_route`;
+  const interactiveRoutePath = `/${stamp}-interactive`;
 
   const createRunner = await requestJson(baseUrl, "/api/server-runners", {
     cookie: sessionCookie,
@@ -321,43 +325,103 @@ export async function runReplayProbe(serverUrl, {
   const processAttempt = await write("process.create", {
     id: `${stamp}_process`,
     context: contextId,
-    state: [],
+    state: [`${stamp}_title_state`, `${stamp}_open_state`],
     handles: [],
     emits: [],
     rules: []
   }, 23);
+  const titleTypeAttempt = await write("type.create", {
+    id: `${stamp}_title_state`,
+    context: contextId,
+    role: "state",
+    valueType: "text",
+    initial: "Interactive replay"
+  }, 24);
+  const openTypeAttempt = await write("type.create", {
+    id: `${stamp}_open_state`,
+    context: contextId,
+    role: "state",
+    valueType: "bool",
+    initial: false
+  }, 25);
   const projectionAttempt = await write("projection.create", {
     id: `${stamp}_projection`,
     context: contextId,
-    projectionKind: "detail",
-    source: `${stamp}_process`,
+    projectionKind: "bool_not",
+    source: `${stamp}_open_state`,
     props: {
-      surface: surfaceRootId
+      surface: interactiveRootId
     }
-  }, 24);
-  const canonicalInteractionBlocked = !surfaceBlocked && surfaceAuthoredContentVisible && surfaceHomeAuthoredContentVisible
-    ? buildBlockedAuthoringHandoff({
-        limitationType: "platform",
-        goal: "author canonical interactive page.surface behavior through constrained MCP replay",
-        attemptedAuthoringPath: "world.read(authoringMatrix) + authoring.write(surface.create/process.create/projection.create/route.create/serve.create)",
-        missingPrimitive: "canonical interactive page.surface authoring is incomplete: page.surface does not yet execute the authored surface + process + projection interaction model",
-        minimumHumanAction: "bind page.surface to the canonical surface + process + projection runtime consumer path without falling back to legacy widget-program authoring",
-        proof: [
-          `authoring matrix public frontend model: ${(authoringMatrix?.baseline?.publicFrontendModel ?? []).join(" + ")}`,
-          `authoring.write advertises process.create: ${actionEnum.includes("process.create")}`,
-          `authoring.write advertises projection.create: ${actionEnum.includes("projection.create")}`,
-          `authoring.write hides frontendProgram.create: ${!actionEnum.includes("frontendProgram.create")}`,
-          `authoring.write hides widget.create: ${!actionEnum.includes("widget.create")}`,
-          `default surface route ${surfaceRoutePath} served with HTTP ${surfacePage.status}`,
-          `screen route ${surfaceHomePath} served with HTTP ${surfaceHomePage.status}`,
-          `login HTML contained authored nav target to home: ${navTargetVisible}`,
-          `home HTML contained distinct route-selected content: ${surfaceHomeAuthoredContentVisible}`,
-          `process.create returned ${processAttempt?.structuredContent?.witness?.process ?? processAttempt?.structuredContent?.error ?? "no error"}`,
-          `projection.create returned ${projectionAttempt?.structuredContent?.witness?.process ?? projectionAttempt?.structuredContent?.error ?? "no error"}`,
-          `page.surface runtime pairings still report surface+process+projection as blocked: ${authoringMatrix?.runtimeConsumers?.["page.surface"]?.pairings?.projection ?? "unknown"}`
-        ]
-      })
-    : null;
+  }, 26);
+  const interactiveSurfaces = await write("surface.create", [
+    {
+      id: interactiveRootId,
+      surfaceKind: "app-root",
+      context: contextId,
+      children: [interactiveScreenId],
+      props: {
+        brandName: "DESIRE",
+        productName: "Interactive Replay"
+      }
+    },
+    {
+      id: interactiveScreenId,
+      surfaceKind: "auth-screen",
+      context: contextId,
+      processRef: `${stamp}_process`,
+      projectionRefs: [`${stamp}_projection`],
+      bindings: [
+        { prop: "title", source: { kind: "state", state: `${stamp}_title_state` } },
+        { prop: "subtitle", source: { kind: "projection", projection: `${stamp}_projection` } }
+      ],
+      interactions: [
+        { target: "primaryAction", event: "click", action: { kind: "setState", state: `${stamp}_open_state`, value: { kind: "toggleState", state: `${stamp}_open_state` } } }
+      ],
+      props: {
+        domId: `${stamp}_interactive_surface`,
+        routeKey: "login",
+        routePath: interactiveRoutePath,
+        title: "Static fallback",
+        subtitle: "Static subtitle",
+        heroTitle: "Interactive replay",
+        heroBody: "Canonical page.surface interaction runtime is present.",
+        primaryActionLabel: "Toggle"
+      }
+    }
+  ], 27);
+  const interactiveRoute = await write("route.create", {
+    id: interactiveRouteId,
+    context: contextId,
+    path: interactiveRoutePath,
+    method: "GET",
+    handler: "page.surface",
+    serves: interactiveRootId,
+    rootSurface: interactiveRootId,
+    defaultScreen: "login"
+  }, 28);
+  const interactiveServe = await write("serve.create", {
+    serverRunner: runnerId,
+    route: interactiveRouteId
+  }, 29);
+
+  const interactiveCreationErrors = [
+    processAttempt,
+    titleTypeAttempt,
+    openTypeAttempt,
+    projectionAttempt,
+    interactiveSurfaces,
+    interactiveRoute,
+    interactiveServe
+  ].filter(result => result?.isError);
+  if (interactiveCreationErrors.length) {
+    throw new Error(`replay interactive authoring failed: ${JSON.stringify(interactiveCreationErrors[0]?.structuredContent ?? null)}`);
+  }
+
+  const interactivePage = await fetch(`${baseUrl}${interactiveRoutePath}`);
+  const interactiveHtml = await interactivePage.text();
+  const interactiveRuntimeVisible = /surfaceRuntimeManifest/.test(interactiveHtml)
+    && /createSurfaceInteractionRuntime/.test(interactiveHtml)
+    && /Interactive replay/.test(interactiveHtml);
 
   return {
     ok: true,
@@ -374,16 +438,21 @@ export async function runReplayProbe(serverUrl, {
       surfaceScreenRouteId,
       surfaceRoutePath,
       surfaceHomePath,
+      interactiveRoutePath,
+      interactiveDomId: `${stamp}_interactive_surface`,
       surfaceHttpStatus: surfacePage.status,
       surfaceAuthoredContentVisible,
       surfaceHomeHttpStatus: surfaceHomePage.status,
       surfaceHomeAuthoredContentVisible,
-      navTargetVisible
+      navTargetVisible,
+      interactiveHttpStatus: interactivePage.status,
+      interactiveRuntimeVisible
     },
     capabilityChecks: {
       canonicalFrontendModel: [...(authoringMatrix?.baseline?.publicFrontendModel ?? [])],
       publicSurfaceCreate: actionEnum.includes("surface.create"),
       publicProcessCreate: actionEnum.includes("process.create"),
+      publicTypeCreate: actionEnum.includes("type.create"),
       publicProjectionCreate: actionEnum.includes("projection.create"),
       legacyWidgetCreateHidden: !actionEnum.includes("widget.create"),
       legacyFrontendProgramHidden: !actionEnum.includes("frontendProgram.create")
@@ -397,6 +466,9 @@ export async function runReplayProbe(serverUrl, {
       processPresent: state.structuredContent.witnesses
         ? state.structuredContent.witnesses.some(row => row.process === "desire.defineProcess" && row.body?.id === `${stamp}_process`)
         : true,
+      typePresent: state.structuredContent.witnesses
+        ? state.structuredContent.witnesses.some(row => row.process === "desire.defineType" && row.body?.id === `${stamp}_title_state`)
+        : true,
       projectionPresent: state.structuredContent.witnesses
         ? state.structuredContent.witnesses.some(row => row.process === "desire.defineProjection" && row.body?.id === `${stamp}_projection`)
         : true,
@@ -406,7 +478,7 @@ export async function runReplayProbe(serverUrl, {
     },
     blockers: {
       canonicalSurfaceAuthoring: surfaceBlocked,
-      canonicalInteraction: canonicalInteractionBlocked
+      canonicalInteraction: null
     }
   };
 }

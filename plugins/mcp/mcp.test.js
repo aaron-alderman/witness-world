@@ -29,7 +29,9 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   const authoringWrite = listSupportedMcpTools().find(tool => tool.name === "authoring.write");
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("authoringMatrix"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("process.create"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("type.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("projection.create"), true);
+  assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("message.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("frontendProgram.create"), false);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("widget.create"), false);
 });

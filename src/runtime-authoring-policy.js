@@ -26,7 +26,9 @@ export const MCP_ONLY_ALLOWED_HANDLER_IDS = Object.freeze([
   "stewardship.remove",
   "surface.create",
   "process.create",
+  "type.create",
   "projection.create",
+  "message.create",
   "route.create",
   "serve.create",
   "serverRunner.create",
@@ -55,7 +57,9 @@ export const MCP_ONLY_PUBLIC_MCP_ACTIONS = Object.freeze([
   "stewardship.remove",
   "surface.create",
   "process.create",
+  "type.create",
   "projection.create",
+  "message.create",
   "route.create",
   "serve.create",
   "serverRunner.create",
@@ -250,6 +254,16 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
         runtimeConsumers: [],
         status: "supported"
       }),
+      type: capabilityState({
+        publicAction: "type.create",
+        runtimeConsumers: ["page.surface"],
+        status: "supported"
+      }),
+      message: capabilityState({
+        publicAction: "message.create",
+        runtimeConsumers: ["page.surface"],
+        status: "supported"
+      }),
       capability: capabilityState({
         publicActions: ["capability.create", "capability.install", "capability.remove"],
         runtimeConsumers: ["runtime capability resolution"],
@@ -276,15 +290,17 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
     },
     runtimeConsumers: {
       "page.surface": {
-        consumes: ["surface"],
+        consumes: ["surface", "process", "projection"],
         status: "supported",
+        staticProjection: "supported",
+        interactiveProjection: "supported",
         pairings: {
           surface: "supported",
-          process: "blocked",
-          projection: "blocked"
+          process: "supported",
+          projection: "supported"
         },
-        limitationType: "platform",
-        reason: "page.surface projects authored shell structure, but it does not yet execute authored process/projection interaction semantics"
+        limitationType: null,
+        reason: null
       },
       "page.home": {
         consumes: ["widget", "frontendProgram"],
@@ -301,9 +317,7 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
       {
         authoring: ["surface", "process", "projection"],
         runtime: "page.surface",
-        status: "blocked",
-        limitationType: "platform",
-        reason: "the canonical interactive surface path is not yet executed by page.surface even though the authoring primitives now exist"
+        status: "supported"
       },
       {
         authoring: ["widget", "frontendProgram", "frontendStep"],

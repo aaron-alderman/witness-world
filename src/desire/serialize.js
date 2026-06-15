@@ -197,6 +197,11 @@ function semanticWtomlDoc(semantic) {
           className: semantic.className,
           children: semantic.children,
           props: semantic.props,
+          processRef: semantic.processRef,
+          projectionRefs: semantic.projectionRefs,
+          capabilityRefs: semantic.capabilityRefs,
+          bindings: semantic.bindings,
+          interactions: semantic.interactions,
           modelRef: semantic.modelRef,
           frame: semantic.frame,
           encoding: semantic.encoding,
@@ -387,6 +392,9 @@ function serializeSemanticRvmNode(node) {
     return block("view", semantic.name, [
       simpleLine("kind", semantic.surfaceKind),
       simpleLine("class", semantic.className),
+      simpleLine("process", semantic.processRef),
+      repeatedBlock("projections", semantic.projectionRefs ?? []),
+      repeatedBlock("capabilities", semantic.capabilityRefs ?? []),
       repeatedBlock("children", semantic.children ?? []),
       ...propLines(semantic.props)
     ]);

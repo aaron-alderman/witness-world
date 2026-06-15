@@ -271,6 +271,11 @@ function normalizeSemanticNode(node, versionFieldsByName) {
           className: semantic.className ?? null,
           children: semantic.children ?? [],
           props: semantic.props ?? {},
+          processRef: semantic.processRef ?? null,
+          projectionRefs: semantic.projectionRefs ?? [],
+          capabilityRefs: semantic.capabilityRefs ?? [],
+          bindings: semantic.bindings ?? [],
+          interactions: semantic.interactions ?? [],
           ...(semantic.surfaceKind === "chart"
             ? {
                 modelRef: semantic.modelRef ?? null,

@@ -13,7 +13,9 @@ import {
   requestBootstrapStewardshipRevoke,
   requestSurfaceDefine,
   requestProcessDefine,
+  requestTypeDefine,
   requestProjectionDefine,
+  requestMessageDefine,
   requestBootstrapRouteDefine,
   requestBootstrapServeDefine,
   requestWidgetDefine,
@@ -342,6 +344,29 @@ export function createAuthoringCoreBundleHandlers({
       sendJson(res, result.status, { process: result.process, witness: result.witness });
     },
 
+    "type.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const context = body && typeof body === "object" && !Array.isArray(body)
+        ? (body.context ?? null)
+        : null;
+      const auth = context ? ensureContextAuthority(gate.actor, context) : { ok: true };
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestTypeDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { type: result.type, witness: result.witness });
+    },
+
     "projection.create": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
@@ -363,6 +388,29 @@ export function createAuthoringCoreBundleHandlers({
         return;
       }
       sendJson(res, result.status, { projection: result.projection, witness: result.witness });
+    },
+
+    "message.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const context = body && typeof body === "object" && !Array.isArray(body)
+        ? (body.context ?? null)
+        : null;
+      const auth = context ? ensureContextAuthority(gate.actor, context) : { ok: true };
+      if (!auth.ok) {
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestMessageDefine(world, { actor: gate.actor, backendHost, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { message: result.message, witness: result.witness });
     },
 
     "route.create": async ({ req, res, requestActor }) => {

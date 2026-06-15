@@ -39,7 +39,8 @@ const KIND_BY_PROCESS = {
 };
 
 const DERIVE_OPS = {
-  bool_not: ([x]) => !truthy(x)
+  bool_not: ([x]) => !truthy(x),
+  identity: ([x]) => x
 };
 
 function truthy(v) {
@@ -303,4 +304,30 @@ export function createProcessRuntime(world, options = {}) {
     },
     counts: { processes: processes.length, policies: policies.length, derives: derives.length, adapters: adapterByCommand.size }
   };
+}
+
+export function renderProcessRuntimeModuleSource() {
+  return String.raw`
+const KIND_BY_PROCESS = {
+  "desire.defineProcess": "process",
+  "desire.defineMessage": "message",
+  "desire.defineType": "type",
+  "desire.defineBoundary": "boundary",
+  "desire.defineProjection": "projection",
+  "desire.definePolicy": "policy"
+};
+
+const DERIVE_OPS = {
+  bool_not: ([x]) => !truthy(x),
+  identity: ([x]) => x
+};
+
+${truthy.toString()}
+
+${witnessesOf.toString()}
+
+${coerce.toString()}
+
+${createProcessRuntime.toString()}
+`;
 }

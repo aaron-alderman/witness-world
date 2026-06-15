@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
-import { requestBootstrapRouteDefine, requestProcessDefine, requestProjectionDefine, requestSurfaceDefine } from "../plugins/authoring-core/authoring-core-processes.js";
+import { requestBootstrapRouteDefine, requestMessageDefine, requestProcessDefine, requestProjectionDefine, requestSurfaceDefine, requestTypeDefine } from "../plugins/authoring-core/authoring-core-processes.js";
 
 function routeSupport() {
   return {
@@ -37,6 +37,41 @@ test("requestSurfaceDefine emits real DESIRE surface witnesses for a single surf
   assert.deepEqual(result.witnesses.map(witness => witness.body?.id), ["ReplayRoot"]);
   assert.equal(world.allWitnesses().some(witness => witness.process === "desire.defineSurface" && witness.body?.id === "ReplayRoot"), true);
   assert.equal(world.allWitnesses().some(witness => witness.process === "dsl.source.annotate" && witness.body?.target === "ReplayRoot"), true);
+});
+
+test("requestSurfaceDefine preserves canonical runtime binding semantics on authored surfaces", () => {
+  const world = createWorld();
+  const result = requestSurfaceDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: {
+      id: "ReplayInteractive",
+      surfaceKind: "auth-screen",
+      processRef: "ReplayFlow",
+      projectionRefs: ["ReplayClosed"],
+      capabilityRefs: ["plugin.chart-runtime"],
+      bindings: [
+        { prop: "title", source: { kind: "state", state: "ReplayTitle" } }
+      ],
+      interactions: [
+        { target: "primaryAction", event: "click", action: { kind: "setState", state: "ReplayTitle", value: { literal: "Updated" } } }
+      ],
+      props: {
+        routeKey: "login",
+        title: "Initial"
+      }
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.surfaces[0].processRef, "ReplayFlow");
+  assert.deepEqual(result.surfaces[0].projectionRefs, ["ReplayClosed"]);
+  assert.deepEqual(result.surfaces[0].capabilityRefs, ["plugin.chart-runtime"]);
+  assert.equal(result.surfaces[0].bindings[0].prop, "title");
+  assert.equal(result.surfaces[0].interactions[0].target, "primaryAction");
+  const witness = world.allWitnesses().find(entry => entry.process === "desire.defineSurface" && entry.body?.id === "ReplayInteractive");
+  assert.equal(witness?.body?.processRef, "ReplayFlow");
+  assert.deepEqual(witness?.body?.projectionRefs, ["ReplayClosed"]);
 });
 
 test("requestSurfaceDefine accepts an ordered array and preserves witness order", () => {
@@ -127,6 +162,38 @@ test("requestProcessDefine emits a real DESIRE process witness and source annota
   assert.equal(result.witness?.process, "desire.defineProcess");
   assert.equal(world.allWitnesses().some(witness => witness.process === "desire.defineProcess" && witness.body?.id === "ReplayFlow"), true);
   assert.equal(world.allWitnesses().some(witness => witness.process === "dsl.source.annotate" && witness.body?.target === "ReplayFlow"), true);
+});
+
+test("requestTypeDefine and requestMessageDefine emit real DESIRE witnesses for canonical surface interaction support", () => {
+  const world = createWorld();
+  const typeResult = requestTypeDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: {
+      id: "ReplayTitle",
+      role: "state",
+      valueType: "text",
+      initial: "Initial title"
+    }
+  });
+  assert.equal(typeResult.ok, true);
+  assert.equal(typeResult.type.id, "ReplayTitle");
+  assert.equal(typeResult.witness?.process, "desire.defineType");
+
+  const messageResult = requestMessageDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: {
+      id: "ReplayToggle",
+      role: "event",
+      writes: {
+        ReplayTitle: "Updated title"
+      }
+    }
+  });
+  assert.equal(messageResult.ok, true);
+  assert.equal(messageResult.message.id, "ReplayToggle");
+  assert.equal(messageResult.witness?.process, "desire.defineMessage");
 });
 
 test("requestProcessDefine rejects malformed and duplicate process docs", () => {

@@ -529,7 +529,7 @@ test("a bootstrap-authored runner and home route take over without restarting th
   }
 });
 
-test("authoring replay probe uses the canonical matrix, proves minimal surface serving, and stops next at canonical projection authoring", { timeout: 10000 }, async () => {
+test("authoring replay probe uses the canonical matrix and exposes the canonical interactive page.surface path", { timeout: 10000 }, async () => {
   const { server } = await startBlankServer({ runtimePluginIds: ["plugin.mcp"] });
   try {
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
@@ -542,6 +542,7 @@ test("authoring replay probe uses the canonical matrix, proves minimal surface s
     assert.deepEqual(result.capabilityChecks.canonicalFrontendModel, ["surface", "process", "projection", "capability"]);
     assert.equal(result.capabilityChecks.publicSurfaceCreate, true);
     assert.equal(result.capabilityChecks.publicProcessCreate, true);
+    assert.equal(result.capabilityChecks.publicTypeCreate, true);
     assert.equal(result.capabilityChecks.publicProjectionCreate, true);
     assert.equal(result.capabilityChecks.legacyWidgetCreateHidden, true);
     assert.equal(result.capabilityChecks.legacyFrontendProgramHidden, true);
@@ -550,11 +551,13 @@ test("authoring replay probe uses the canonical matrix, proves minimal surface s
     assert.equal(result.replay.surfaceHomeHttpStatus, 200);
     assert.equal(result.replay.surfaceHomeAuthoredContentVisible, true);
     assert.equal(result.replay.navTargetVisible, true);
+    assert.equal(result.replay.interactiveHttpStatus, 200);
+    assert.equal(result.replay.interactiveRuntimeVisible, true);
     assert.equal(result.blockers.canonicalSurfaceAuthoring, null);
-    assert.equal(result.blockers.canonicalInteraction.limitationType, "platform");
+    assert.equal(result.blockers.canonicalInteraction, null);
     assert.equal(result.stateChecks.processPresent, true);
+    assert.equal(result.stateChecks.typePresent, true);
     assert.equal(result.stateChecks.projectionPresent, true);
-    assert.equal(result.blockers.canonicalInteraction.missingPrimitive, "canonical interactive page.surface authoring is incomplete: page.surface does not yet execute the authored surface + process + projection interaction model");
   } finally {
     await server.close();
   }

@@ -20,7 +20,9 @@ const AUTHORING_CORE_HANDLER_IDS = [
   "stewardship.remove",
   "surface.create",
   "process.create",
+  "type.create",
   "projection.create",
+  "message.create",
   "widgets.create",
   "widgets.update",
   "route.create",
@@ -42,7 +44,9 @@ const AUTHORING_CORE_PROCESS_EXPORTS = [
   "requestBootstrapStewardshipRevoke",
   "requestSurfaceDefine",
   "requestProcessDefine",
+  "requestTypeDefine",
   "requestProjectionDefine",
+  "requestMessageDefine",
   "requestBootstrapRouteDefine",
   "requestBootstrapServeDefine",
   "requestWidgetDefine",
@@ -60,7 +64,9 @@ test("authoring-core plugin owns generic authoring routes and handlers", async (
   assert.equal(bundle.routes.some(route => route.path === "/api/contexts" && route.handler === "context.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/surfaces" && route.handler === "surface.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/processes" && route.handler === "process.create"), true);
+  assert.equal(bundle.routes.some(route => route.path === "/api/types" && route.handler === "type.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/projections" && route.handler === "projection.create"), true);
+  assert.equal(bundle.routes.some(route => route.path === "/api/messages" && route.handler === "message.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/widgets" && route.handler === "widgets.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/routes" && route.handler === "route.create"), true);
   assert.equal(bundle.routes.some(route => route.path === "/api/serve-mounts" && route.handler === "serve.create"), true);

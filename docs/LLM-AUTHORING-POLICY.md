@@ -90,18 +90,20 @@ For Engentus, `surface.create` is now part of the allowed authoring substrate.
 The replay now proves that a minimal authored `page.surface` shell can serve
 live.
 
-The current next honest blocker is a platform limitation in the canonical
-frontend model itself:
+The first canonical interactive `page.surface` slice is now available in the
+platform:
 
 - `process.create` is now implemented as a first-party semantic authoring
   handler and emits real DESIRE `process` witnesses
+- `type.create` is now implemented as the minimum supporting semantic create
+  for process-owned interactive state
 - `projection.create` is now implemented as a first-party semantic authoring
   handler and emits real DESIRE `projection` witnesses
 - `frontendProgram.create` / `frontendStep.create` are now legacy-only and
   must not be used as the fallback interactive story for constrained sessions
 
-That means the stop point is now narrower: it is no longer "surface
-interaction is widget-rooted" and it is no longer "a canonical authoring
-primitive is missing"; it is "the canonical `surface + process + projection`
-interaction path is not implemented yet because `page.surface` still does not
-execute it."
+That means the stop point moves forward again: it is no longer "the canonical
+`surface + process + projection` interaction path is missing". The next stop,
+if one appears, must come from trying to move real app behavior such as the
+Engentus shell flow and Goodman-first live slice onto that canonical path
+without falling back to handwritten JS or platform mutation.

@@ -78,17 +78,32 @@ interaction authoring path analogous to the existing widget-rooted flow.
   mechanical only:
   - route and path selection
   - authored shell projection
-  - generic chrome behaviors such as navigation targets, password reveal, and
-    tab visibility
+  - emitting the minimal authored runtime manifest/bootstrap needed by the
+    separate interactive surface consumer
 - The core shell runtime in `src/runtime-surface-shell.js` must not:
   - assemble app-specific DOM from hidden controller logic
   - own app state shape or reducers
   - interpret product-local selectors or templates
   - embed chart, window, Goodman, or other product-local behavior
+  - execute DESIRE processes or recompute projections
+  - patch browser DOM after interaction
   - introduce a second source language or app-local bootstrap seam
 - App behavior may consume optional capabilities, but only through explicit
   seams. The existence of a capability must never move authority for the shell
   out of the authored DESIRE program.
+
+## What The Split Buys
+
+- Static shell projection can be tested and reasoned about independently of the
+  interactive browser loop.
+- The interactive `page.surface` consumer can execute the canonical
+  `surface + process + projection` path without smuggling that authority back
+  into the shell projector.
+- Capability-dependent behavior stays behind an explicit runtime boundary
+  instead of becoming an ambient assumption of every served surface page.
+- If the interactive consumer is missing or blocked, the platform can fail
+  honestly with a static shell and a visible runtime diagnostic instead of
+  inventing shell-local behavior or app-local JS authority.
 
 ## Authoring pathway
 
@@ -126,22 +141,29 @@ always honest and local:
 The surface authoring gate is now green for minimal served shells via
 `surface.create`.
 
-The current next honest blocker is the canonical semantic interaction gate.
-Surface serving can now declare and route multiple shell states, and the
-constrained capability matrix now makes the intended public model explicit.
-What is still missing is the first-party platform implementation for that
-canonical interaction model:
+The canonical semantic interaction gate is now green for the first minimal
+proof slice. Surface serving can now declare and route multiple shell states,
+and `page.surface` now exposes a first-party canonical interactive path for a
+minimal `surface + process + projection` slice.
+
+What is now available on the canonical path:
 
 - `process.create` is now part of the real first-party constrained authoring
   substrate and can emit semantic DESIRE `process` witnesses
+- `type.create` is now available as the minimum supporting primitive for
+  process-owned interactive state
 - `projection.create` is now part of the real first-party constrained
   authoring substrate and can emit semantic DESIRE `projection` witnesses
+- `page.surface` now separates static shell projection from the interactive
+  surface runtime consumer instead of treating the shell projector as the app
+  controller
 - `frontendProgram.create` / `frontendStep.create` are legacy-only and must not
   be treated as the fallback interaction path for Engentus
 
-So the blocker is now narrower and cleaner: `surface + process + projection`
-authoring is real, but `page.surface` still does not execute that canonical
-interactive path live.
+The next honest target is therefore no longer "make `page.surface` execute the
+canonical model at all". It is "move the Engentus shell flow and then the
+Goodman-first live slice onto that corrected canonical path without regressing
+back to app-local authority."
 
 ## Current honest state
 

@@ -26,9 +26,13 @@ test("mcp-only authoring policy exposes plugin.authoring as the canonical write 
   assert.equal(policy.allowedHandlerIds.includes("frontendProgram.create"), false);
   assert.equal(policy.allowedHandlerIds.includes("surface.create"), true);
   assert.equal(policy.allowedHandlerIds.includes("process.create"), true);
+  assert.equal(policy.allowedHandlerIds.includes("type.create"), true);
   assert.equal(policy.allowedHandlerIds.includes("projection.create"), true);
+  assert.equal(policy.allowedHandlerIds.includes("message.create"), true);
   assert.equal(policy.publicMcpActions.includes("process.create"), true);
+  assert.equal(policy.publicMcpActions.includes("type.create"), true);
   assert.equal(policy.publicMcpActions.includes("projection.create"), true);
+  assert.equal(policy.publicMcpActions.includes("message.create"), true);
   assert.equal(policy.publicMcpActions.includes("widget.create"), false);
   assert.equal(policy.legacyMcpActions.includes("frontendProgram.create"), true);
   assert.equal(policy.proposalAccess, "read_only");

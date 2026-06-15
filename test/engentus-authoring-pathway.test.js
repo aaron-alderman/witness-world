@@ -7,6 +7,7 @@ import { createWorld } from "../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
 import { MCP_PROTOCOL_VERSION } from "../plugins/mcp/mcp-tools.js";
 import { runReplayProbe } from "../scripts/mcp-authoring-replay-probe.mjs";
+import { expectNoRuntimeErrors, launchBrowser } from "./support/harness.js";
 
 async function tempRuntimeRoot() {
   return fs.mkdtemp(path.join(os.tmpdir(), "witness-engentus-authoring-pathway-"));
@@ -171,7 +172,7 @@ test("canonical docs encode the staged Engentus authoring pathway and the next h
   assert.match(desireSpa, /3\. Generic projection gate/);
   assert.match(desireSpa, /4\. Surface authoring gate/);
   assert.match(desireSpa, /surface authoring gate is now green for minimal served shells via\s+`surface\.create`/i);
-  assert.match(desireSpa, /current next honest blocker is the canonical semantic interaction gate/i);
+  assert.match(desireSpa, /canonical semantic interaction gate is now green/i);
   assert.match(desireSpa, /surface \+ process \+ projection \+ capability/i);
   assert.match(desireSpa, /no app-local browser runtime seam/i);
   assert.match(policy, /plugin\.authoring/i);
@@ -180,13 +181,14 @@ test("canonical docs encode the staged Engentus authoring pathway and the next h
   assert.match(policy, /machine-readable capability matrix/i);
   assert.match(policy, /process\.create/i);
   assert.match(policy, /projection\.create/i);
+  assert.match(policy, /type\.create/i);
   assert.match(replayPlaybook, /# Authoring Replay Playbook/);
   assert.match(replayPlaybook, /Stop at the first missing primitive/i);
   assert.match(replayPlaybook, /Capability-matrix gate/i);
   assert.match(replayPlaybook, /page\.surface/i);
 });
 
-test("MCP replay now proves canonical surface serving and stops next at canonical projection authoring", { timeout: 10000 }, async () => {
+test("MCP replay now proves canonical surface serving and exposes the canonical interactive page.surface path", { timeout: 10000 }, async () => {
   const server = await startAuthoringProbeServer();
   try {
     const result = await runReplayProbe(server.url);
@@ -199,13 +201,13 @@ test("MCP replay now proves canonical surface serving and stops next at canonica
     assert.equal(result.replay.surfaceHomeHttpStatus, 200);
     assert.equal(result.replay.surfaceHomeAuthoredContentVisible, true);
     assert.equal(result.replay.navTargetVisible, true);
+    assert.equal(result.replay.interactiveHttpStatus, 200);
+    assert.equal(result.replay.interactiveRuntimeVisible, true);
     assert.equal(result.stateChecks.processPresent, true);
+    assert.equal(result.stateChecks.typePresent, true);
     assert.equal(result.stateChecks.projectionPresent, true);
     assert.equal(result.blockers.canonicalSurfaceAuthoring, null);
-    assert.equal(
-      result.blockers.canonicalInteraction.missingPrimitive,
-      "canonical interactive page.surface authoring is incomplete: page.surface does not yet execute the authored surface + process + projection interaction model"
-    );
+    assert.equal(result.blockers.canonicalInteraction, null);
   } finally {
     await server.close();
   }
@@ -230,7 +232,9 @@ test("live constrained MCP discovery exposes canonical frontend actions and hide
     const actions = authoringWrite.inputSchema.properties.action.enum;
     assert.equal(actions.includes("surface.create"), true);
     assert.equal(actions.includes("process.create"), true);
+    assert.equal(actions.includes("type.create"), true);
     assert.equal(actions.includes("projection.create"), true);
+    assert.equal(actions.includes("message.create"), true);
     assert.equal(actions.includes("frontendProgram.create"), false);
     assert.equal(actions.includes("frontendStep.create"), false);
     assert.equal(actions.includes("widget.create"), false);
@@ -240,7 +244,7 @@ test("live constrained MCP discovery exposes canonical frontend actions and hide
   }
 });
 
-test("live constrained MCP supports process and projection authoring while page.surface remains the blocked runtime consumer", { timeout: 10000 }, async () => {
+test("live constrained MCP supports canonical interaction authoring and page.surface reports the interactive pairing as supported", { timeout: 10000 }, async () => {
   const server = await startAuthoringProbeServer();
   try {
     const { mcpServerId, token } = await provisionAuthoringMcpServer(server.url);
@@ -258,23 +262,58 @@ test("live constrained MCP supports process and projection authoring while page.
     assert.equal(processCreate.structuredContent.process.id, "process.demo");
     assert.equal(processCreate.structuredContent.witness.process, "desire.defineProcess");
 
+    const typeCreate = await mcpToolCall(server.url, mcpServerId, token, "authoring.write", {
+      action: "type.create",
+      body: { id: "state.demo", role: "state", valueType: "text", initial: "demo" }
+    }, 5);
+    assert.equal(typeCreate.isError, false);
+    assert.equal(typeCreate.structuredContent.type.id, "state.demo");
+    assert.equal(typeCreate.structuredContent.witness.process, "desire.defineType");
+
     const projectionCreate = await mcpToolCall(server.url, mcpServerId, token, "authoring.write", {
       action: "projection.create",
       body: { id: "projection.demo", projectionKind: "detail", source: "process.demo", props: {} }
-    }, 5);
+    }, 6);
     assert.equal(projectionCreate.isError, false);
     assert.equal(projectionCreate.structuredContent.projection.id, "projection.demo");
     assert.equal(projectionCreate.structuredContent.witness.process, "desire.defineProjection");
 
     const matrixAfter = await mcpToolCall(server.url, mcpServerId, token, "world.read", {
       view: "authoringMatrix"
-    }, 6);
+    }, 7);
     assert.equal(matrixAfter.isError, false);
     assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.projection.status, "supported");
     assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.process.status, "supported");
-    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.process, "blocked");
-    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.projection, "blocked");
+    assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.type.status, "supported");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.process, "supported");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.projection, "supported");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].interactiveProjection, "supported");
   } finally {
+    await server.close();
+  }
+});
+
+test("canonical interactive page.surface demo executes state, projection, and DOM patching in the browser", { timeout: 10000 }, async () => {
+  const server = await startAuthoringProbeServer();
+  const browser = await launchBrowser();
+  try {
+    const result = await runReplayProbe(server.url);
+    const domId = result.replay.interactiveDomId;
+    await browser.page.goto(`${server.url}${result.replay.interactiveRoutePath}`);
+    await browser.page.waitForFunction(targetId => {
+      const title = document.getElementById(`${targetId}__title`);
+      const subtitle = document.getElementById(`${targetId}__subtitle`);
+      return title?.textContent === "Interactive replay" && subtitle?.textContent === "true";
+    }, domId);
+
+    await browser.page.locator(`#${domId}__primaryAction`).click();
+    await browser.page.waitForFunction(targetId => {
+      const subtitle = document.getElementById(`${targetId}__subtitle`);
+      return subtitle?.textContent === "false";
+    }, domId);
+    await expectNoRuntimeErrors(browser.runtime);
+  } finally {
+    await browser.close();
     await server.close();
   }
 });

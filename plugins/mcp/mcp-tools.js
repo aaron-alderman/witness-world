@@ -222,7 +222,9 @@ const TOOL_DEFINITIONS = [
           "stewardship.remove",
           "surface.create",
           "process.create",
+          "type.create",
           "projection.create",
+          "message.create",
           "route.create",
           "serve.create",
           "serverRunner.create",
@@ -288,8 +290,12 @@ const TOOL_DEFINITIONS = [
           return runJsonHandler(callHandler, { handler: "surface.create", method: "POST", path: "/api/surfaces", body });
         case "process.create":
           return runJsonHandler(callHandler, { handler: "process.create", method: "POST", path: "/api/processes", body });
+        case "type.create":
+          return runJsonHandler(callHandler, { handler: "type.create", method: "POST", path: "/api/types", body });
         case "projection.create":
           return runJsonHandler(callHandler, { handler: "projection.create", method: "POST", path: "/api/projections", body });
+        case "message.create":
+          return runJsonHandler(callHandler, { handler: "message.create", method: "POST", path: "/api/messages", body });
         case "widget.create":
         case "widget.update":
         case "frontendProgram.create":

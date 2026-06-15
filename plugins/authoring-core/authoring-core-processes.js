@@ -189,6 +189,11 @@ function surfaceCreateDocAt(body, index) {
     className: body.className ?? null,
     children: Array.isArray(body.children) ? [...body.children] : [],
     props: body.props && typeof body.props === "object" && !Array.isArray(body.props) ? { ...body.props } : {},
+    processRef: trimOptionalString(body.processRef),
+    projectionRefs: Array.isArray(body.projectionRefs) ? structuredClone(body.projectionRefs) : [],
+    capabilityRefs: Array.isArray(body.capabilityRefs) ? structuredClone(body.capabilityRefs) : [],
+    bindings: Array.isArray(body.bindings) ? structuredClone(body.bindings) : [],
+    interactions: Array.isArray(body.interactions) ? structuredClone(body.interactions) : [],
     modelRef: body.modelRef ?? null,
     frame: body.frame ?? null,
     encoding: body.encoding && typeof body.encoding === "object" && !Array.isArray(body.encoding) ? structuredClone(body.encoding) : {},
@@ -230,6 +235,11 @@ function surfaceCreateNode(doc, { actor, backendHost, index }) {
       className: doc.className,
       children: [...doc.children],
       props: structuredClone(doc.props),
+      processRef: doc.processRef,
+      projectionRefs: structuredClone(doc.projectionRefs),
+      capabilityRefs: structuredClone(doc.capabilityRefs),
+      bindings: structuredClone(doc.bindings),
+      interactions: structuredClone(doc.interactions),
       modelRef: doc.modelRef,
       frame: doc.frame,
       encoding: structuredClone(doc.encoding),
@@ -353,6 +363,114 @@ function projectionCreateNode(doc, { actor, backendHost }) {
         endColumn: null,
         originNodeId: null,
         via: [`authoring:projection.create:${doc.id}`],
+        actor: doc.actor ?? actor ?? backendHost,
+        owner: doc.owner ?? actor ?? backendHost,
+        context: doc.context ?? null
+      }
+    }
+  });
+}
+
+function typeCreateDoc(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("type doc must be an object");
+  }
+  const id = trimOptionalString(body.id);
+  if (!id) throw new Error("type doc requires id");
+  return {
+    id,
+    role: trimOptionalString(body.role),
+    field: trimOptionalString(body.field),
+    versionKind: trimOptionalString(body.versionKind),
+    valueType: trimOptionalString(body.valueType),
+    initial: body.initial ?? null,
+    actor: trimOptionalString(body.actor),
+    owner: trimOptionalString(body.owner),
+    context: trimOptionalString(body.context)
+  };
+}
+
+function validateTypeCreateDoc(world, body) {
+  const doc = typeCreateDoc(body);
+  if (exists(world, doc.id)) throw new Error(`type id already exists: ${doc.id}`);
+  return doc;
+}
+
+function typeCreateNode(doc, { actor, backendHost }) {
+  return createDesireNode({
+    kind: "type",
+    name: doc.id,
+    body: {
+      role: doc.role,
+      field: doc.field,
+      versionKind: doc.versionKind,
+      valueType: doc.valueType,
+      initial: doc.initial
+    },
+    meta: {
+      provenance: {
+        file: "authoring://plugin.authoring/type.create",
+        sourceLanguage: "authoring",
+        sourceKind: "type",
+        startLine: 1,
+        endLine: 1,
+        startColumn: 1,
+        endColumn: null,
+        originNodeId: null,
+        via: [`authoring:type.create:${doc.id}`],
+        actor: doc.actor ?? actor ?? backendHost,
+        owner: doc.owner ?? actor ?? backendHost,
+        context: doc.context ?? null
+      }
+    }
+  });
+}
+
+function messageCreateDoc(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error("message doc must be an object");
+  }
+  const id = trimOptionalString(body.id);
+  if (!id) throw new Error("message doc requires id");
+  return {
+    id,
+    role: trimOptionalString(body.role),
+    fields: Array.isArray(body.fields) ? structuredClone(body.fields) : [],
+    writes: body.writes && typeof body.writes === "object" && !Array.isArray(body.writes)
+      ? structuredClone(body.writes)
+      : {},
+    actor: trimOptionalString(body.actor),
+    owner: trimOptionalString(body.owner),
+    context: trimOptionalString(body.context)
+  };
+}
+
+function validateMessageCreateDoc(world, body) {
+  const doc = messageCreateDoc(body);
+  if (exists(world, doc.id)) throw new Error(`message id already exists: ${doc.id}`);
+  return doc;
+}
+
+function messageCreateNode(doc, { actor, backendHost }) {
+  return createDesireNode({
+    kind: "message",
+    name: doc.id,
+    body: {
+      role: doc.role,
+      fields: structuredClone(doc.fields),
+      writes: structuredClone(doc.writes)
+    },
+    meta: {
+      provenance: {
+        file: "authoring://plugin.authoring/message.create",
+        sourceLanguage: "authoring",
+        sourceKind: "message",
+        startLine: 1,
+        endLine: 1,
+        startColumn: 1,
+        endColumn: null,
+        originNodeId: null,
+        via: [`authoring:message.create:${doc.id}`],
         actor: doc.actor ?? actor ?? backendHost,
         owner: doc.owner ?? actor ?? backendHost,
         context: doc.context ?? null
@@ -998,6 +1116,61 @@ export function requestProcessDefine(world, {
   };
 }
 
+export function requestTypeDefine(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  let doc;
+  try {
+    doc = validateTypeCreateDoc(world, body);
+  } catch (error) {
+    return {
+      ok: false,
+      status: /already exists/i.test(error instanceof Error ? error.message : "") ? 409 : 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  let desire;
+  try {
+    desire = createDesireDocument([
+      typeCreateNode(doc, { actor, backendHost })
+    ]);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  let witnesses;
+  try {
+    witnesses = applyDesire(world, desire);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  const witness = witnesses.find(
+    entry => entry.process === "desire.defineType"
+      && entry.body?.id === doc.id
+  ) ?? null;
+  return {
+    ok: true,
+    status: 201,
+    type: witness?.body ?? { id: doc.id },
+    witness
+  };
+}
+
 export function requestProjectionDefine(world, {
   actor,
   backendHost,
@@ -1052,6 +1225,61 @@ export function requestProjectionDefine(world, {
     ok: true,
     status: 201,
     projection: witness?.body ?? { id: doc.id },
+    witness
+  };
+}
+
+export function requestMessageDefine(world, {
+  actor,
+  backendHost,
+  body
+}) {
+  let doc;
+  try {
+    doc = validateMessageCreateDoc(world, body);
+  } catch (error) {
+    return {
+      ok: false,
+      status: /already exists/i.test(error instanceof Error ? error.message : "") ? 409 : 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  let desire;
+  try {
+    desire = createDesireDocument([
+      messageCreateNode(doc, { actor, backendHost })
+    ]);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  let witnesses;
+  try {
+    witnesses = applyDesire(world, desire);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  const witness = witnesses.find(
+    entry => entry.process === "desire.defineMessage"
+      && entry.body?.id === doc.id
+  ) ?? null;
+  return {
+    ok: true,
+    status: 201,
+    message: witness?.body ?? { id: doc.id },
     witness
   };
 }

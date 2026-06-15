@@ -1,3 +1,8 @@
+import {
+  buildSurfaceRuntimeManifest,
+  renderSurfaceInteractionRuntimeModule
+} from "./runtime-surface-interaction-runtime.js";
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -460,8 +465,8 @@ function authScreenMarkup(root, surface) {
           </div>
           <div class="auth-hero">
             ${imageMarkup(firstTruthy(rootProps.heroProductLogoSrc, rootProps.productLogoSrc, null), firstTruthy(rootProps.productName, "App"), "", 'style="height:42px;width:auto;margin-bottom:28px"')}
-            <div class="auth-tagline">${formattedInlineMarkup(firstTruthy(props.heroTitle, ""), { accent: firstTruthy(props.heroAccent, null) })}</div>
-            <p class="auth-sub">${formattedInlineMarkup(firstTruthy(props.heroBody, ""))}</p>
+            <div id="${escapeHtml(`${domId}__heroTitle`)}" class="auth-tagline">${formattedInlineMarkup(firstTruthy(props.heroTitle, ""), { accent: firstTruthy(props.heroAccent, null) })}</div>
+            <p id="${escapeHtml(`${domId}__heroBody`)}" class="auth-sub">${formattedInlineMarkup(firstTruthy(props.heroBody, ""))}</p>
             <ul class="auth-bullets">
               ${bullets.map(item => `<li class="auth-bullet"><span class="auth-bullet-dot"></span>${escapeHtml(item.title)}</li>`).join("")}
             </ul>
@@ -474,8 +479,8 @@ function authScreenMarkup(root, surface) {
               ${imageMarkup(firstTruthy(rootProps.productLogoSrc, null), firstTruthy(rootProps.productName, "App"), "", 'style="height:30px;width:auto"')}
             </div>
             ${isSignout ? '<div class="auth-signout-icon">✓</div>' : ""}
-            <h2 class="${isSignout ? "auth-so-title" : "auth-form-title"}">${formattedInlineMarkup(firstTruthy(props.title, ""))}</h2>
-            <p class="${isSignout ? "auth-so-sub" : "auth-form-sub"}">${formattedInlineMarkup(firstTruthy(props.subtitle, ""))}</p>
+            <h2 id="${escapeHtml(`${domId}__title`)}" class="${isSignout ? "auth-so-title" : "auth-form-title"}">${formattedInlineMarkup(firstTruthy(props.title, ""))}</h2>
+            <p id="${escapeHtml(`${domId}__subtitle`)}" class="${isSignout ? "auth-so-sub" : "auth-form-sub"}">${formattedInlineMarkup(firstTruthy(props.subtitle, ""))}</p>
             ${!isSignout ? `
               <button class="ms-btn" id="ms-btn" type="button"${navTargetAttr(firstTruthy(props.secondaryActionHref, props.primaryActionHref, "/"))}>
                 <svg width="18" height="18" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg">
@@ -504,8 +509,8 @@ function authScreenMarkup(root, surface) {
               </div>
               <div class="auth-forgot"><a href="${escapeHtml(firstTruthy(props.helpHref, "#"))}">${escapeHtml(firstTruthy(props.helpLabel, "Forgot password?"))}</a></div>
             ` : ""}
-            <button class="auth-submit" type="button"${navTargetAttr(firstTruthy(props.primaryActionHref, "/"))}>${escapeHtml(firstTruthy(props.primaryActionLabel, isSignout ? "Continue" : "Sign in"))}</button>
-            <div class="auth-form-footer"${isSignout ? ' style="margin-top:16px"' : ""}>${firstTruthy(props.footnoteHtml, null) ? rawHtml(props.footnoteHtml) : formattedInlineMarkup(firstTruthy(props.footnote, ""))}</div>
+            <button id="${escapeHtml(`${domId}__primaryAction`)}" class="auth-submit" type="button"${navTargetAttr(firstTruthy(props.primaryActionHref, null))}><span id="${escapeHtml(`${domId}__primaryLabel`)}">${escapeHtml(firstTruthy(props.primaryActionLabel, isSignout ? "Continue" : "Sign in"))}</span></button>
+            <div id="${escapeHtml(`${domId}__footnote`)}" class="auth-form-footer"${isSignout ? ' style="margin-top:16px"' : ""}>${firstTruthy(props.footnoteHtml, null) ? rawHtml(props.footnoteHtml) : formattedInlineMarkup(firstTruthy(props.footnote, ""))}</div>
           </div>
         </div>
       </div>
@@ -822,6 +827,7 @@ function renderShellDocument({
   surfaces,
   mountedChartRuntime = null,
   browserRuntimeCapabilities = [],
+  interactiveRuntimeManifest = null,
   rootSurfaceId = null,
   requestPathname = "/"
 }) {
@@ -871,6 +877,7 @@ function renderShellDocument({
   <body>
     ${bodyMarkup}
     ${mountedChartRuntime?.scriptBody ? `<script type="module">${mountedChartRuntime.scriptBody}</script>` : ""}
+    ${interactiveRuntimeManifest ? `<script type="module">${renderSurfaceInteractionRuntimeModule(interactiveRuntimeManifest)}</script>` : ""}
     <script type="module">${renderSurfaceShellRuntime()}</script>
   </body>
 </html>`;
@@ -898,12 +905,22 @@ export function renderSurfaceShellFromMap({
   const mountedChartRuntime = typeof buildMountedChartRuntime === "function"
     ? buildMountedChartRuntime({ world, root, activeSurface, surfaces, route, requestPathname })
     : null;
+  const interactiveRuntimeManifest = buildSurfaceRuntimeManifest({
+    world,
+    root,
+    activeSurface,
+    surfaces,
+    browserRuntimeCapabilities,
+    rootSurfaceId,
+    requestPathname
+  });
   return renderShellDocument({
     root,
     activeSurface,
     surfaces,
     mountedChartRuntime,
     browserRuntimeCapabilities,
+    interactiveRuntimeManifest,
     rootSurfaceId,
     requestPathname
   });
