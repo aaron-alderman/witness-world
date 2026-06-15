@@ -416,10 +416,11 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanAnovaWindowVisible") === true
     );
-    assert.match(await page.textContent("#surface-goodmananovawindow"), /ANOVA/);
-    assert.match(await page.textContent("#surface-goodmananovawindow"), /Between-Group Comparison/);
-    assert.match(await page.textContent("#surface-goodmananovawindow"), /F-statistic/);
-    assert.match(await page.textContent("#surface-goodmananovawindow"), /Need >=2 groups with failed bolts for ANOVA\./);
+    const anovaEmptyText = await page.textContent("#surface-goodmananovawindow");
+    assert.match(anovaEmptyText, /ANOVA/);
+    assert.match(anovaEmptyText, /Between-Group Comparison/);
+    assert.doesNotMatch(anovaEmptyText, /F-statistic/);
+    assert.match(anovaEmptyText, /Need >=2 groups with failed bolts for ANOVA\./);
     await page.click("#surface-goodmananovawindowclose");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanAnovaWindowVisible") === false
@@ -647,7 +648,8 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       document.querySelector("#chart-svg-mc")?.__surfaceCapabilityOutputs?.mc_sa_p50_std_text
         === document.querySelector("#surface-goodmanstatsdatastd")?.textContent
     ), true);
-    assert.equal(await page.locator("#surface-goodmanstatsemptyrow[hidden]").count(), 1);
+    assert.equal(await page.locator("#surface-goodmanstatsemptymessage[hidden]").count(), 1);
+    assert.equal(await page.locator("#surface-goodmanstatstable:not([hidden])").count(), 1);
     await page.click("#surface-goodmanactioncdf");
     await page.waitForFunction(() =>
       !document.querySelector("#surface-goodmancdfwindow")?.hasAttribute("hidden")

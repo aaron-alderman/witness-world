@@ -33,10 +33,12 @@ grant runtime authority to copied JS or presenter code.
   values are derived in `BoltFatigue`, preserved by the generic cartesian
   `chart.render` probe path, and displayed without a Goodman-local browser
   controller.
-- Goodman CDF, Stats, and ANOVA windows now have authored structured empty
-  states: CDF declares the no-run chart message, Stats declares the reference
-  table header plus "No completed simulations", and ANOVA declares the
-  reference statistic block/box-plot shell plus the insufficient-groups state.
+- Goodman CDF, Stats, and ANOVA windows now have authored empty states without
+  fake result scaffolding: CDF declares the no-run chart message, Stats starts
+  with the reference "No completed simulations." paragraph and only reveals the
+  first-pass scalar summary table after the authored run-summary state is
+  active, and ANOVA stays on the reference insufficient-groups message until
+  real failure-time groups exist.
 - Goodman floating window chrome now uses the reference titles for CDF,
   Summary Statistics, and ANOVA, keeping the visible copy authored in
   `shell.rvm` rather than supplied by a copied window controller.
@@ -162,8 +164,9 @@ grant runtime authority to copied JS or presenter code.
 ## Known Gaps
 
 - Goodman numerical simulation lifecycle, animated scrubber playback, full
-  CDF/Stats/ANOVA result datasets, multi-bolt-set response curves, dynamic
-  annotation row creation, generated bolt-set parameter rows, and
+  CDF/Stats/ANOVA result datasets, ANOVA statistic/box-plot rendering,
+  multi-bolt-set response curves, dynamic annotation row creation,
+  generated bolt-set parameter rows, and
   clone/delete/new behavior remain to be authored. The current Goodman run
   controls, MC band chart, chart edit panel, deterministic chart readout,
   process-owned primary bolt-set expansion, bolt-set shell, and windows now

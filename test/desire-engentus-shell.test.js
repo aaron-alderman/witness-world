@@ -749,7 +749,14 @@ test("the Goodman shell authors sidebar and window content rather than empty hos
     surfaces.get("GoodmanCdfSummaryStdValue")?.body?.bindings?.[0]?.source?.output,
     "mc_sa_p50_std_text"
   );
-  assert.deepEqual(surfaces.get("GoodmanStatsWindowBody")?.body?.children, ["GoodmanStatsTable"]);
+  assert.deepEqual(surfaces.get("GoodmanStatsWindowBody")?.body?.children, [
+    "GoodmanStatsEmptyMessage",
+    "GoodmanStatsTable"
+  ]);
+  assert.equal(surfaces.get("GoodmanStatsEmptyMessage")?.body?.props?.text, "No completed simulations.");
+  assert.equal(surfaces.get("GoodmanStatsEmptyMessage")?.body?.bindings?.[0]?.source?.state, "GoodmanRunStatusState");
+  assert.equal(surfaces.get("GoodmanStatsTable")?.body?.props?.hidden, true);
+  assert.equal(surfaces.get("GoodmanStatsTable")?.body?.bindings?.[0]?.source?.map?.running, true);
   assert.deepEqual(surfaces.get("GoodmanStatsHeaderRow")?.body?.children, [
     "GoodmanStatsHeadSimulation",
     "GoodmanStatsHeadBoltSet",
@@ -765,11 +772,18 @@ test("the Goodman shell authors sidebar and window content rather than empty hos
     surfaces.get("GoodmanStatsDataStd")?.body?.bindings?.[0]?.source?.output,
     "mc_sa_p50_std_text"
   );
-  assert.deepEqual(surfaces.get("GoodmanAnovaWindowBody")?.body?.children, [
+  assert.deepEqual(surfaces.get("GoodmanStatsTableBody")?.body?.children, ["GoodmanStatsDataRow"]);
+  assert.deepEqual(surfaces.get("GoodmanAnovaWindowBody")?.body?.children, ["GoodmanAnovaEmptyMessage"]);
+  assert.equal(surfaces.get("GoodmanAnovaEmptyMessage")?.body?.props?.text, "Need >=2 groups with failed bolts for ANOVA.");
+  for (const removed of [
+    "GoodmanStatsEmptyRow",
+    "GoodmanStatsEmptyCell",
     "GoodmanAnovaStatBlock",
-    "GoodmanAnovaNote",
+    "GoodmanAnovaFStatistic",
     "GoodmanAnovaBoxPlot"
-  ]);
+  ]) {
+    assert.equal(surfaces.has(removed), false, `${removed} should not remain as fake no-data window output`);
+  }
   assert.equal(surfaces.get("GoodmanRunProgressLabel")?.body?.bindings[0]?.source?.kind, "state");
   assert.equal(surfaces.get("GoodmanSimulationEmptyState")?.body?.props?.text, "No simulations yet.");
 });

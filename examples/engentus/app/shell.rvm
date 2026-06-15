@@ -4927,7 +4927,18 @@ view GoodmanStatsWindowBody {
   kind body
   class fw-body
   children {
+    GoodmanStatsEmptyMessage
     GoodmanStatsTable
+  }
+}
+
+view GoodmanStatsEmptyMessage {
+  kind text
+  class goodman-window-empty-message
+  prop tag = "p"
+  prop text = "No completed simulations."
+  bindings {
+    visible from state GoodmanRunStatusState map running false default true
   }
 }
 
@@ -4935,6 +4946,10 @@ view GoodmanStatsTable {
   kind table
   class stbl
   prop tag = "table"
+  prop hidden = true
+  bindings {
+    visible from state GoodmanRunStatusState map running true default false
+  }
   children {
     GoodmanStatsTableHead
     GoodmanStatsTableBody
@@ -5023,35 +5038,13 @@ view GoodmanStatsTableBody {
   kind table-body
   prop tag = "tbody"
   children {
-    GoodmanStatsEmptyRow
     GoodmanStatsDataRow
   }
-}
-
-view GoodmanStatsEmptyRow {
-  kind table-row
-  prop tag = "tr"
-  bindings {
-    visible from state GoodmanRunStatusState map running false default true
-  }
-  children {
-    GoodmanStatsEmptyCell
-  }
-}
-
-view GoodmanStatsEmptyCell {
-  kind text
-  class goodman-window-empty-cell
-  prop tag = "td"
-  prop text = "No completed simulations."
 }
 
 view GoodmanStatsDataRow {
   kind table-row
   prop tag = "tr"
-  bindings {
-    visible from state GoodmanRunStatusState map running true default false
-  }
   children {
     GoodmanStatsDataSimulation
     GoodmanStatsDataBoltSet
@@ -5181,133 +5174,15 @@ view GoodmanAnovaWindowBody {
   kind body
   class fw-body
   children {
-    GoodmanAnovaStatBlock
-    GoodmanAnovaNote
-    GoodmanAnovaBoxPlot
+    GoodmanAnovaEmptyMessage
   }
 }
 
-view GoodmanAnovaStatBlock {
-  kind stats
-  class anova-stat
-  children {
-    GoodmanAnovaFStatistic
-    GoodmanAnovaDfBetween
-    GoodmanAnovaDfWithin
-    GoodmanAnovaPValue
-    GoodmanAnovaSignificance
-  }
-}
-
-view GoodmanAnovaFStatistic {
-  kind metric
-  class anova-kv
-  children {
-    GoodmanAnovaFStatisticLabel
-    GoodmanAnovaFStatisticValue
-  }
-}
-
-view GoodmanAnovaFStatisticLabel {
+view GoodmanAnovaEmptyMessage {
   kind text
-  class anova-k
-  prop tag = "span"
-  prop text = "F-statistic"
-}
-
-view GoodmanAnovaFStatisticValue {
-  kind text
-  class anova-v
-  prop tag = "span"
-  prop text = "-"
-}
-
-view GoodmanAnovaDfBetween {
-  kind metric
-  class anova-kv
-  children {
-    GoodmanAnovaDfBetweenLabel
-    GoodmanAnovaDfBetweenValue
-  }
-}
-
-view GoodmanAnovaDfBetweenLabel {
-  kind text
-  class anova-k
-  prop tag = "span"
-  prop text = "df (between)"
-}
-
-view GoodmanAnovaDfBetweenValue {
-  kind text
-  class anova-v
-  prop tag = "span"
-  prop text = "-"
-}
-
-view GoodmanAnovaDfWithin {
-  kind metric
-  class anova-kv
-  children {
-    GoodmanAnovaDfWithinLabel
-    GoodmanAnovaDfWithinValue
-  }
-}
-
-view GoodmanAnovaDfWithinLabel {
-  kind text
-  class anova-k
-  prop tag = "span"
-  prop text = "df (within)"
-}
-
-view GoodmanAnovaDfWithinValue {
-  kind text
-  class anova-v
-  prop tag = "span"
-  prop text = "-"
-}
-
-view GoodmanAnovaPValue {
-  kind metric
-  class anova-kv
-  children {
-    GoodmanAnovaPValueLabel
-    GoodmanAnovaPValueValue
-  }
-}
-
-view GoodmanAnovaPValueLabel {
-  kind text
-  class anova-k
-  prop tag = "span"
-  prop text = "p-value"
-}
-
-view GoodmanAnovaPValueValue {
-  kind text
-  class anova-v
-  prop tag = "span"
-  prop text = "-"
-}
-
-view GoodmanAnovaSignificance {
-  kind status
-  class anova-sig no
-  prop tag = "span"
-  prop text = "Not significant"
-}
-
-view GoodmanAnovaNote {
-  kind text
-  class anova-note
+  class goodman-window-empty-message
   prop tag = "p"
   prop text = "Need >=2 groups with failed bolts for ANOVA."
-}
-
-view GoodmanAnovaBoxPlot {
-  kind chart-placeholder
-  class goodman-anova-box-plot
 }
 
 view GoodmanAnovaWindow {
