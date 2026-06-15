@@ -888,6 +888,7 @@ a {
 }
 
 #chart-svg,
+#chart-svg-mc,
 #mill-force-chart-wrap iframe {
   position: absolute;
   inset: 0;
@@ -897,7 +898,8 @@ a {
   display: block
 }
 
-#mc-canvas { pointer-events: none; }
+#mc-canvas,
+#mc-canvas-mc { pointer-events: none; }
 
 .chart-page__overlay-canvas {
   pointer-events: none;

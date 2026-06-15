@@ -55,6 +55,9 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.ok(messages.has("MillForceShowCrossSectionRequested"));
   assert.ok(messages.has("MillForceShowForceVsAngleRequested"));
   assert.ok(messages.has("MillForceShowForceRoseRequested"));
+  assert.ok(messages.has("GoodmanShowStaticRequested"));
+  assert.ok(messages.has("GoodmanShowMonteCarloRequested"));
+  assert.ok(messages.has("GoodmanShowEditRequested"));
   assert.equal(types.get("EngentusShellRoute")?.body?.role, "enum");
   assert.equal(types.get("EngentusShellActiveRoute")?.body?.role, "state");
   assert.equal(types.get("EngentusShellAuthState")?.body?.role, "enum");
@@ -63,6 +66,8 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(types.get("EngentusPasswordRevealed")?.body?.role, "state");
   assert.equal(types.get("MillForceChartTab")?.body?.role, "enum");
   assert.equal(types.get("MillForceActiveChartTab")?.body?.role, "state");
+  assert.equal(types.get("GoodmanMode")?.body?.role, "enum");
+  assert.equal(types.get("GoodmanActiveMode")?.body?.role, "state");
   assert.equal(surfaces.get("EngentusRoot")?.body?.processRef, "EngentusShellNavigation");
   assert.equal(surfaces.get("EngentusLoginBook")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("EngentusLoginPasswordField")?.body?.bindings[0]?.prop, "inputType");
@@ -117,6 +122,16 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
       action: { kind: "deliver", message: "MillForceShowForceVsAngleRequested" }
     }
   ]);
+  assert.deepEqual(surfaces.get("GoodmanModeMonteCarlo")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "GoodmanShowMonteCarloRequested" }
+    }
+  ]);
+  assert.equal(surfaces.get("GoodmanModeStatic")?.body?.bindings[0]?.prop, "className");
+  assert.equal(surfaces.get("GoodmanModeMonteCarlo")?.body?.bindings[0]?.prop, "className");
+  assert.equal(surfaces.get("GoodmanModeEdit")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("MillForceTabCrossSection")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("MillForceTabForceVsAngle")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("MillForceTabForceRose")?.body?.bindings[0]?.prop, "className");
@@ -222,6 +237,11 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanChartStyleSection",
     "GoodmanBoltSetsSection",
     "GoodmanFatigueLegendSection"
+  ]);
+
+  assert.deepEqual(surfaces.get("GoodmanChartRegion")?.body?.children, [
+    "GoodmanDiagram",
+    "GoodmanMCBands"
   ]);
 
   assert.deepEqual(surfaces.get("EngentusApp")?.body?.children, [

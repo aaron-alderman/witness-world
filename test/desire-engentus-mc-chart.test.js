@@ -45,6 +45,14 @@ test("GoodmanMCBands plans a band between p10 and p90 over sm", async () => {
   assert.ok(plan.scales.y.domain[1] >= maxP90);
 });
 
+test("GoodmanMCBands uses shell-safe unique mount and overlay ids", async () => {
+  const view = await loadBody("views/goodman.rvm", "surface", "GoodmanMCBands");
+  assert.equal(view.props.mountId, "chart-svg-mc");
+  assert.equal(view.props.overlayCanvasId, "mc-canvas-mc");
+  assert.equal(view.props.tooltipId, "chart-tip-mc");
+  assert.equal(view.bindings[0]?.prop, "visible");
+});
+
 test("the median line tracks p50", async () => {
   const { evaluated, plan } = await setup();
   const med = plan.layers.find(l => l.name === "med");

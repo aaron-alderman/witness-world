@@ -8,6 +8,9 @@ grant runtime authority to copied JS or presenter code.
 
 - Goodman deterministic chart: `GoodmanDiagram` mounts live in
   `/engentus/goodman` from `examples/engentus/app/views/goodman.rvm`.
+- Goodman mode switching now drives authored process state for Static, Monte
+  Carlo, and Edit; Static/Edit show `GoodmanDiagram` and Monte Carlo shows
+  `GoodmanMCBands` through separate chart mounts.
 - Mill Charge chart: `MillChargeCrossSection` mounts live in
   `/engentus/mill-charge`, accepts authored parameter bindings, updates derived
   RHS metrics, and keeps its transient animation phase during parameter changes.
@@ -18,10 +21,8 @@ grant runtime authority to copied JS or presenter code.
 
 ## Known Gaps
 
-- Goodman Monte Carlo mode is still a chart/model asset (`GoodmanMCBands`) but
-  is not yet the active live shell view. Mode switching, simulation lifecycle,
-  scrubber playback, CDF/Stats/ANOVA windows, and bolt-set editing remain to be
-  authored.
+- Goodman simulation lifecycle, scrubber playback, CDF/Stats/ANOVA windows, and
+  bolt-set editing remain to be authored.
 - Goodman sidebar sections still include placeholders where the reference app
   dynamically renders parameter/edit/list content. Those must become authored
   state/process/projection surfaces or explicitly justified leaf helpers.

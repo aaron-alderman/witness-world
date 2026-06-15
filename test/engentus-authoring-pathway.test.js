@@ -334,13 +334,13 @@ test("canonical pathway probe recreates the current Engentus shell flow through 
     const paths = result.engentusReauthoring.paths;
     await page.goto(`${server.url}${paths.login}`, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
-    assert.equal(await page.textContent("#ms-btn-label"), "Sign in with Microsoft");
-    await page.click("#ms-btn");
+    assert.equal(await page.textContent(".ms-btn span"), "Sign in with Microsoft");
+    await page.click(".ms-btn");
     await page.waitForFunction(() =>
-      document.querySelector("#ms-btn-label")?.textContent === "Signing in…"
+      document.querySelector(".ms-btn span")?.textContent === "Signing in…"
     );
     await page.waitForFunction(() =>
-      [...document.querySelectorAll("#login-auth-book")].some(node => node.classList.contains("folding"))
+      [...document.querySelectorAll("#view-login .auth-book")].some(node => node.classList.contains("folding"))
     );
     assert.equal(await page.locator("#surface-route-underlay #module-area").count(), 1);
     await page.waitForURL(`${server.url}${paths.home}`);
@@ -351,18 +351,18 @@ test("canonical pathway probe recreates the current Engentus shell flow through 
 
     await page.click("#user-prof");
     await page.waitForSelector("#up-menu:not([hidden])");
-    await page.click("#up-menu-signout");
+    await page.click(".up-mi-signout");
     await page.waitForSelector("#view-signout");
     assert.equal(new URL(page.url()).pathname, paths.signout);
-    assert.equal(await page.locator("#signout-auth-book.incoming").count(), 1);
+    assert.equal(await page.locator("#view-signout .auth-book.incoming").count(), 1);
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.trace?.some(row => row.label?.includes("950ms"))
     );
 
-    await page.click("#sign-back-in");
+    await page.getByRole("button", { name: "Sign back in" }).click();
     await page.waitForSelector("#view-login");
     assert.equal(new URL(page.url()).pathname, paths.login);
-    assert.equal(await page.locator("#signout-auth-book.folding").count(), 0);
+    assert.equal(await page.locator("#view-signout .auth-book.folding").count(), 0);
     assert.equal(await page.locator("#surface-route-underlay").count(), 0);
   } finally {
     await browser.close();

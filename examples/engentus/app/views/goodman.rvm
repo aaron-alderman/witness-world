@@ -24,6 +24,9 @@ chart GoodmanDiagram of BoltFatigue {
   prop tooltipId = "chart-tip"
   prop tooltipClass = "chart-page__tooltip chart-page__tooltip--goodman"
   prop pageBackground = "#ffffff"
+  bindings {
+    visible from state GoodmanActiveMode map mc false default true
+  }
 
   x sm
   x.domain 0 650
@@ -55,16 +58,19 @@ chart GoodmanMCBands of BoltFatigueMC {
   prop bodyClass = "chart-page chart-page--goodman"
   prop viewportClass = "chart-page__viewport"
   prop hostClass = "chart-page__host chart-page__host--goodman"
-  prop mountId = "chart-svg"
+  prop mountId = "chart-svg-mc"
   prop mountClass = "chart-page__mount chart-page__mount--goodman"
   prop mountTag = "svg"
   prop functionsModules = "/app-static/app/chart-functions/goodman-stdlib.js,/app-static/app/chart-functions/sampling.js"
   prop functionsExports = "goodmanFunctions,samplingFunctions"
-  prop overlayCanvasId = "mc-canvas"
+  prop overlayCanvasId = "mc-canvas-mc"
   prop overlayCanvasClass = "chart-page__overlay-canvas"
-  prop tooltipId = "chart-tip"
+  prop tooltipId = "chart-tip-mc"
   prop tooltipClass = "chart-page__tooltip chart-page__tooltip--goodman"
   prop pageBackground = "#ffffff"
+  bindings {
+    visible from state GoodmanActiveMode map mc true default false
+  }
 
   x sm
   x.domain 0 650

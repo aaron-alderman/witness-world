@@ -35,6 +35,14 @@ enum MillForceChartTab {
   }
 }
 
+enum GoodmanMode {
+  cases {
+    static
+    mc
+    edit
+  }
+}
+
 state EngentusProfileMenuVisible: bool {
   initial false
 }
@@ -53,6 +61,10 @@ state EngentusShellAuthStatus: EngentusShellAuthState {
 
 state MillForceActiveChartTab: MillForceChartTab {
   initial cross
+}
+
+state GoodmanActiveMode: GoodmanMode {
+  initial static
 }
 
 state MillChargeSpeedFrac: number {
@@ -173,6 +185,24 @@ event MillForceShowForceRoseRequested {
   }
 }
 
+event GoodmanShowStaticRequested {
+  writes {
+    GoodmanActiveMode: static
+  }
+}
+
+event GoodmanShowMonteCarloRequested {
+  writes {
+    GoodmanActiveMode: mc
+  }
+}
+
+event GoodmanShowEditRequested {
+  writes {
+    GoodmanActiveMode: edit
+  }
+}
+
 event MillChargePresetHardOreRequested {
   writes {
     MillChargeInternalFriction: 42
@@ -228,6 +258,7 @@ process EngentusShellNavigation {
     MillChargeInternalFriction
     MillChargeBulkDensity
     MillForceActiveChartTab
+    GoodmanActiveMode
   }
   handles {
     EngentusSignInRequested
@@ -240,6 +271,9 @@ process EngentusShellNavigation {
     MillForceShowCrossSectionRequested
     MillForceShowForceVsAngleRequested
     MillForceShowForceRoseRequested
+    GoodmanShowStaticRequested
+    GoodmanShowMonteCarloRequested
+    GoodmanShowEditRequested
     MillChargePresetHardOreRequested
     MillChargePresetAverageOreRequested
     MillChargePresetClayeyOreRequested
@@ -476,7 +510,6 @@ view EngentusProfileMenuSignoutIcon {
 view EngentusProfileMenuSignout {
   kind menu-item
   class up-mi up-mi-signout
-  prop domId = "up-menu-signout"
   prop style = "color:#f87171;cursor:pointer"
   prop text = "Sign out"
   prop messageRef = "EngentusSignOutRequested"
@@ -816,7 +849,6 @@ view EngentusLoginRememberField {
 view EngentusLoginPrimaryAction {
   kind action
   prop tag = "button"
-  prop domId = "ms-btn"
   class ms-btn
   prop href = "/engentus/home"
   prop messageRef = "EngentusSignInRequested"
@@ -841,7 +873,6 @@ view EngentusLoginMicrosoftIcon {
 view EngentusLoginMicrosoftLabel {
   kind text
   prop tag = "span"
-  prop domId = "ms-btn-label"
   prop text = "Sign in with Microsoft"
   bindings {
     text from state EngentusShellAuthStatus map pending "Signing in…" folding "Signing in…" default "Sign in with Microsoft"
@@ -891,7 +922,6 @@ view EngentusLoginPasswordToggle {
 view EngentusLoginPasswordToggleGlyph {
   kind text
   prop tag = "span"
-  prop domId = "login-pw-toggle-glyph"
   prop text = "◉"
   bindings {
     text from state EngentusPasswordRevealed map true "◎" false "◉" default "◉"
@@ -915,7 +945,6 @@ view EngentusLoginForgotRow {
 view EngentusLoginSubmitAction {
   kind action
   prop tag = "button"
-  prop domId = "login-submit"
   class auth-submit
   prop href = "/engentus/home"
   prop messageRef = "EngentusSignInRequested"
@@ -933,7 +962,6 @@ view EngentusLoginSubmitAction {
 view EngentusLoginSubmitLabel {
   kind text
   prop tag = "span"
-  prop domId = "login-submit-label"
   prop text = "Sign in"
 }
 
@@ -989,7 +1017,6 @@ view EngentusLoginRight {
 view EngentusLoginBook {
   kind region
   class auth-book
-  prop domId = "login-auth-book"
   bindings {
     className from state EngentusShellAuthStatus map folding folding default ""
   }
@@ -1031,7 +1058,6 @@ view EngentusSignoutPrimaryAction {
   kind action
   class auth-submit
   prop tag = "button"
-  prop domId = "sign-back-in"
   prop label = "Sign back in"
   prop href = "/engentus"
   prop messageRef = "EngentusSignBackInRequested"
@@ -1081,7 +1107,6 @@ view EngentusSignoutRight {
 view EngentusSignoutBook {
   kind region
   class auth-book
-  prop domId = "signout-auth-book"
   bindings {
     className from state EngentusShellAuthStatus map signingOut incoming default ""
   }
@@ -2014,23 +2039,41 @@ view EngentusGoodmanHeader {
 
 view GoodmanModeStatic {
   kind toolbar-mode
-  class toolbar-mode-static
+  class mode-btn
   prop label = "Static"
   prop modeKey = "static"
+  bindings {
+    className from state GoodmanActiveMode map static on default ""
+  }
+  interactions {
+    on click self deliver GoodmanShowStaticRequested
+  }
 }
 
 view GoodmanModeMonteCarlo {
   kind toolbar-mode
-  class toolbar-mode-mc
+  class mode-btn
   prop label = "Monte Carlo"
   prop modeKey = "mc"
+  bindings {
+    className from state GoodmanActiveMode map mc on default ""
+  }
+  interactions {
+    on click self deliver GoodmanShowMonteCarloRequested
+  }
 }
 
 view GoodmanModeEdit {
   kind toolbar-mode
-  class toolbar-mode-edit
+  class mode-btn
   prop label = "Edit"
   prop modeKey = "edit"
+  bindings {
+    className from state GoodmanActiveMode map edit on default ""
+  }
+  interactions {
+    on click self deliver GoodmanShowEditRequested
+  }
 }
 
 view GoodmanModesToolbar {
@@ -2077,14 +2120,12 @@ view GoodmanWindowToolbar {
 view GoodmanScenarioHost {
   kind host
   class goodman-scenario-host
-  prop domId = "static-params-html"
 }
 
 view GoodmanScenarioSection {
   kind section
   class goodman-scenario-section
   prop title = "Scenario View"
-  prop domId = "sec-static"
   children {
     GoodmanScenarioHost
   }
@@ -2095,20 +2136,17 @@ view GoodmanSimulationNewAction {
   class goodman-simulation-new
   prop label = "+ New"
   prop actionKey = "new-simulation"
-  prop domId = "new-sim-btn"
 }
 
 view GoodmanSimulationListHost {
   kind host
   class goodman-simulation-list-host
-  prop domId = "sim-list"
 }
 
 view GoodmanSimulationSection {
   kind section
   class goodman-simulation-section
   prop title = "Simulations"
-  prop domId = "sec-mc"
   children {
     GoodmanSimulationNewAction
     GoodmanSimulationListHost
@@ -2156,7 +2194,6 @@ view GoodmanRunActionStart {
   class rbtn go
   prop label = "Run"
   prop actionKey = "run"
-  prop domId = "btn-run"
 }
 
 view GoodmanRunActionPause {
@@ -2164,7 +2201,6 @@ view GoodmanRunActionPause {
   class rbtn pause
   prop label = "Pause"
   prop actionKey = "pause"
-  prop domId = "btn-pause"
   prop disabled = true
 }
 
@@ -2173,7 +2209,6 @@ view GoodmanRunActionStop {
   class rbtn stop
   prop label = "Stop"
   prop actionKey = "stop"
-  prop domId = "btn-stop"
   prop disabled = true
 }
 
@@ -2190,13 +2225,11 @@ view GoodmanRunActionGroup {
 view GoodmanRunProgressFill {
   kind progress-fill
   class prog-fill
-  prop domId = "prog-fill"
 }
 
 view GoodmanRunProgressLabel {
   kind progress-label
   class prog-lbl
-  prop domId = "prog-lbl"
   prop text = "Ready"
 }
 
@@ -2213,7 +2246,6 @@ view GoodmanRunConfigSection {
   kind section
   class goodman-run-config-section
   prop title = "Run Config"
-  prop domId = "sec-run"
   children {
     GoodmanRunConfigBoltsPerSetField
     GoodmanRunConfigDurationField
@@ -2226,14 +2258,12 @@ view GoodmanRunConfigSection {
 view GoodmanChartStyleHost {
   kind host
   class goodman-chart-style-host
-  prop domId = "edit-panel-html"
 }
 
 view GoodmanChartStyleSection {
   kind section
   class goodman-chart-style-section
   prop title = "Chart Style"
-  prop domId = "sec-edit"
   children {
     GoodmanChartStyleHost
   }
@@ -2244,13 +2274,11 @@ view GoodmanBoltSetsNewAction {
   class goodman-boltset-new
   prop label = "+ New"
   prop actionKey = "new-bolt-set"
-  prop domId = "new-bs-btn"
 }
 
 view GoodmanBoltSetsHost {
   kind host
   class goodman-bolt-sets-host
-  prop domId = "bs-list"
 }
 
 view GoodmanBoltSetsSection {
@@ -2266,7 +2294,6 @@ view GoodmanBoltSetsSection {
 view GoodmanFatigueLegendHost {
   kind host
   class goodman-fatigue-legend-host
-  prop domId = "legend-html"
 }
 
 view GoodmanFatigueLegendNote {
@@ -2389,6 +2416,7 @@ view GoodmanChartRegion {
   prop domId = "chart-wrap"
   children {
     GoodmanDiagram
+    GoodmanMCBands
   }
 }
 
@@ -3082,13 +3110,11 @@ view MillForceHeader {
 view MillForceControlHost {
   kind host
   class mill-force-control-host
-  prop domId = "mill-force-controls"
 }
 
 view MillForceModelHost {
   kind host
   class mill-force-model-host
-  prop domId = "mill-force-models"
 }
 
 view MillForceSidebar {
