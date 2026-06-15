@@ -99,8 +99,8 @@ test("dev-mode request refresh picks up authored source edits without restart", 
 
     await replaceShellText(
       app.shellPath,
-      'prop subtitle = "Select a module to begin analysis"',
-      'prop subtitle = "Dev refresh subtitle"'
+      'prop text = "Select a module to begin analysis"',
+      'prop text = "Dev refresh subtitle"'
     );
 
     const refreshed = await fetch(`${server.url}/engentus/home`).then(response => response.text());
@@ -123,8 +123,8 @@ test("POST source edits persist to disk and rebuild the active snapshot", async 
 
     const original = await readShell(app.shellPath);
     const updated = original.replace(
-      'prop subtitle = "Select a module to begin analysis"',
-      'prop subtitle = "POST updated subtitle"'
+      'prop text = "Select a module to begin analysis"',
+      'prop text = "POST updated subtitle"'
     );
     assert.notEqual(updated, original);
 
@@ -173,8 +173,8 @@ test("dev-mode fs.watch updates publish revision SSE and inject dev reload clien
 
     await replaceShellText(
       app.shellPath,
-      'prop subtitle = "Select a module to begin analysis"',
-      'prop subtitle = "Watcher pushed subtitle"'
+      'prop text = "Select a module to begin analysis"',
+      'prop text = "Watcher pushed subtitle"'
     );
 
     const watchEvent = await events.nextEvent({

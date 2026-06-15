@@ -648,6 +648,9 @@ function semanticRvmShape(kind, name, type, bodyLines, header = {}) {
         name,
         surfaceKind: readSimpleValue(bodyLines, "kind"),
         className: readSimpleValue(bodyLines, "class"),
+        processRef: readSimpleValue(bodyLines, "process"),
+        projectionRefs: parseSimpleEntries(bodyLines, "projections"),
+        capabilityRefs: parseSimpleEntries(bodyLines, "capabilities"),
         children: parseSimpleEntries(bodyLines, "children"),
         props: parsePropAssignments(bodyLines)
       };

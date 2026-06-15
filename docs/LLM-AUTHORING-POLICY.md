@@ -2,6 +2,9 @@
 
 This repo supports an explicit constrained authoring mode for app/product work.
 
+The required read-first map of the existing runtime stack and concern ownership
+lives in `docs/RUNTIME-STACK-MAP.md`.
+
 ## Constitutional rule
 
 LLM-mediated app authoring is `plugin.authoring` only.

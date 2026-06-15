@@ -41,6 +41,65 @@ test("runtime-surface-shell selects the authored alternate surface from route pa
 
   assert.match(html, /Alternate surface/);
   assert.match(html, /Alternate authored output\./);
-  assert.match(html, /activeSurface\.id<\/dt><dd>SurfaceAlternate<\/dd>/);
+  assert.match(html, /activeSurface=SurfaceAlternate/);
   assert.doesNotMatch(html, /Primary authored output\./);
+});
+
+test("runtime-surface-shell selects the authored route subtree by routePath before falling back", () => {
+  const surfaces = new Map([
+    ["SurfaceRoot", {
+      id: "SurfaceRoot",
+      surfaceKind: "app-root",
+      children: ["LoginScreen", "HomeScreen"]
+    }],
+    ["LoginScreen", {
+      id: "LoginScreen",
+      surfaceKind: "auth-screen",
+      props: {
+        routePath: "/login"
+      },
+      children: ["LoginHeader"]
+    }],
+    ["LoginHeader", {
+      id: "LoginHeader",
+      surfaceKind: "screen-header",
+      props: {
+        title: "Welcome back",
+        subtitle: "Sign in"
+      }
+    }],
+    ["HomeScreen", {
+      id: "HomeScreen",
+      surfaceKind: "app-shell",
+      props: {
+        routePath: "/home"
+      },
+      children: ["HomeHeader"]
+    }],
+    ["HomeHeader", {
+      id: "HomeHeader",
+      surfaceKind: "screen-header",
+      props: {
+        title: "Analysis Modules",
+        subtitle: "Select a module to begin analysis"
+      }
+    }]
+  ]);
+
+  const html = renderSurfaceShellFromMap({
+    surfaces,
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/home",
+    route: {
+      path: "/:screen",
+      params: {
+        defaultScreen: "login"
+      }
+    }
+  });
+
+  assert.match(html, /Analysis Modules/);
+  assert.match(html, /Select a module to begin analysis/);
+  assert.match(html, /activeSurface=HomeScreen/);
+  assert.doesNotMatch(html, /Welcome back/);
 });

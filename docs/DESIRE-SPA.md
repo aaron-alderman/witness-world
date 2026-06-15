@@ -11,6 +11,8 @@ is secondary and should point back here.
 Repo-wide constrained LLM authoring policy lives in
 `docs/LLM-AUTHORING-POLICY.md`. The canonical authoring pathway probe method
 for finding the next honest gap lives in `docs/AUTHORING-REPLAY-PLAYBOOK.md`.
+The required read-first runtime ownership map lives in
+`docs/RUNTIME-STACK-MAP.md`.
 
 ## Thesis
 

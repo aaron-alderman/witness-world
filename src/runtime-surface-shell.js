@@ -6,6 +6,10 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function escapeAttr(value) {
+  return escapeHtml(value);
+}
+
 export function normalizePathname(pathname) {
   const raw = String(pathname || "/").trim() || "/";
   if (raw === "/") return "/";
@@ -66,6 +70,92 @@ function matchSurfaceByDefaultScreen({
   return null;
 }
 
+function staticTextValue(props, key) {
+  const value = props?.[key];
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function matchSurfaceByRoutePath({
+  surfaces,
+  rootSurfaceId,
+  requestPathname = "/"
+}) {
+  const targetPath = normalizePathname(requestPathname);
+  if (!targetPath) return null;
+  let best = null;
+  let bestDepth = -1;
+  const queue = [{ surfaceId: rootSurfaceId, depth: 0 }];
+  const visited = new Set();
+  while (queue.length) {
+    const current = queue.shift();
+    const surfaceId = current?.surfaceId;
+    if (!surfaceId || visited.has(surfaceId)) continue;
+    visited.add(surfaceId);
+    const surface = surfaces.get(surfaceId);
+    if (!surface) continue;
+    const routePath = staticTextValue(readProps(surface), "routePath");
+    if (routePath && normalizePathname(routePath) === targetPath && current.depth > bestDepth) {
+      best = surface;
+      bestDepth = current.depth;
+    }
+    for (const childId of childSurfaceIds(surface)) {
+      queue.push({ surfaceId: childId, depth: current.depth + 1 });
+    }
+  }
+  return best;
+}
+
+function routeDefaultScreen(route) {
+  const paramsDefault = route?.params?.defaultScreen;
+  if (typeof paramsDefault === "string" && paramsDefault.trim()) return paramsDefault.trim();
+  const routeDefault = route?.defaultScreen;
+  if (typeof routeDefault === "string" && routeDefault.trim()) return routeDefault.trim();
+  return null;
+}
+
+function selectActiveSurface({
+  surfaces,
+  rootSurfaceId,
+  requestPathname = "/",
+  route = null
+}) {
+  const rootSurface = surfaces.get(rootSurfaceId) ?? null;
+  if (!rootSurface) return null;
+  return matchSurfaceByRoutePath({
+    surfaces,
+    rootSurfaceId,
+    requestPathname
+  }) ?? matchSurfaceByDefaultScreen({
+    surfaces,
+    rootSurfaceId,
+    defaultScreen: routeDefaultScreen(route)
+  }) ?? rootSurface;
+}
+
+function readStaticPayload(surface) {
+  const props = readProps(surface);
+  return {
+    documentTitle: staticTextValue(props, "documentTitle"),
+    title: staticTextValue(props, "title"),
+    subtitle: staticTextValue(props, "subtitle"),
+    body: staticTextValue(props, "body"),
+    text: staticTextValue(props, "text")
+  };
+}
+
+function staticPayloadScore(surface) {
+  const payload = readStaticPayload(surface);
+  let score = 0;
+  if (payload.documentTitle) score += 8;
+  if (payload.title) score += 4;
+  if (payload.subtitle) score += 3;
+  if (payload.body) score += 2;
+  if (payload.text) score += 1;
+  return score;
+}
+
 function describeSurface(surface) {
   if (!surface) return null;
   const props = readProps(surface);
@@ -77,182 +167,287 @@ function describeSurface(surface) {
   };
 }
 
-function routeDefaultScreen(route) {
-  const paramsDefault = route?.params?.defaultScreen;
-  if (typeof paramsDefault === "string" && paramsDefault.trim()) return paramsDefault.trim();
-  const routeDefault = route?.defaultScreen;
-  if (typeof routeDefault === "string" && routeDefault.trim()) return routeDefault.trim();
-  return null;
-}
-
-function staticTextValue(props, key) {
-  const value = props?.[key];
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed ? trimmed : null;
-}
-
-function readStaticPayload(surface) {
+function hasRenderableContent(surface) {
+  if (!surface) return false;
   const props = readProps(surface);
-  return {
-    title: staticTextValue(props, "title"),
-    subtitle: staticTextValue(props, "subtitle"),
-    body: staticTextValue(props, "body"),
-    text: staticTextValue(props, "text")
-  };
-}
-
-function hasStaticPayload(surface) {
-  const payload = readStaticPayload(surface);
-  return Boolean(payload.title || payload.subtitle || payload.body || payload.text);
-}
-
-function selectStaticProjectionSurface({
-  surfaces,
-  rootSurfaceId,
-  route = null
-}) {
-  const rootSurface = surfaces.get(rootSurfaceId) ?? null;
-  if (!rootSurface) return null;
-  const defaultSurface = matchSurfaceByDefaultScreen({
-    surfaces,
-    rootSurfaceId,
-    defaultScreen: routeDefaultScreen(route)
+  if (childSurfaceIds(surface).length) return true;
+  return Object.entries(props).some(([key, value]) => {
+    if (value == null) return false;
+    if (["routeKey", "routePath", "messageRef", "actionKey", "modeKey", "tabKey", "assetRef", "mountMode"].includes(key)) {
+      return false;
+    }
+    if (typeof value === "string") return value.trim().length > 0;
+    return typeof value !== "object";
   });
-  if (defaultSurface && hasStaticPayload(defaultSurface)) return defaultSurface;
-  if (hasStaticPayload(rootSurface)) return rootSurface;
-  for (const surface of collectSurfaceTree(surfaces, rootSurfaceId)) {
-    if (surface.id === rootSurfaceId) continue;
-    if (hasStaticPayload(surface)) return surface;
+}
+
+function readClassNames(surface) {
+  const tokens = [];
+  const push = value => {
+    if (typeof value !== "string") return;
+    for (const token of value.split(/\s+/)) {
+      const trimmed = token.trim();
+      if (trimmed) tokens.push(trimmed);
+    }
+  };
+  push(surface?.className);
+  const props = readProps(surface);
+  push(props.class);
+  push(props.className);
+  return [...new Set(tokens)];
+}
+
+function isVoidTag(tagName) {
+  return ["img", "input", "br", "hr", "meta", "link"].includes(tagName);
+}
+
+function normalizeTagName(value, fallback = "div") {
+  const tag = String(value || "").trim().toLowerCase();
+  if (!tag) return fallback;
+  if (!/^[a-z][a-z0-9-]*$/.test(tag)) return fallback;
+  return tag;
+}
+
+function elementTagForSurface(surface) {
+  const props = readProps(surface);
+  if (typeof props.tag === "string" && props.tag.trim()) {
+    return normalizeTagName(props.tag, "div");
   }
-  return null;
+  if (typeof props.href === "string" && props.href.trim()) return "a";
+  if (typeof props.inputType === "string" || typeof props.inputId === "string") return "div";
+  return "div";
 }
 
-function renderMetadataList(entries) {
-  return entries.map(([label, value]) => {
+function renderAttributes(surface, tagName) {
+  const props = readProps(surface);
+  const attrs = [];
+  const domId = staticTextValue(props, "domId");
+  if (domId) attrs.push(`id="${escapeAttr(domId)}"`);
+  const classNames = readClassNames(surface);
+  if (classNames.length) attrs.push(`class="${escapeAttr(classNames.join(" "))}"`);
+  if (props.hidden === true) attrs.push("hidden");
+  if (tagName === "a") {
+    const href = staticTextValue(props, "href") ?? "#";
+    attrs.push(`href="${escapeAttr(href)}"`);
+  }
+  if (tagName === "button") {
+    attrs.push(`type="${escapeAttr(staticTextValue(props, "buttonType") ?? "button")}"`);
+    if (props.disabled === true) attrs.push("disabled");
+  }
+  if (tagName === "img") {
+    const src = staticTextValue(props, "src")
+      ?? staticTextValue(props, "assetSrc")
+      ?? staticTextValue(props, "brandLogoSrc")
+      ?? staticTextValue(props, "productLogoSrc");
+    if (src) attrs.push(`src="${escapeAttr(src)}"`);
+    const alt = staticTextValue(props, "alt")
+      ?? staticTextValue(props, "title")
+      ?? staticTextValue(props, "label")
+      ?? "";
+    attrs.push(`alt="${escapeAttr(alt)}"`);
+  }
+  return attrs.length ? ` ${attrs.join(" ")}` : "";
+}
+
+function wrapText(tagName, className, text) {
+  const content = staticTextValue({ value: text }, "value");
+  if (!content) return "";
+  const classAttr = className ? ` class="${escapeAttr(className)}"` : "";
+  return `<${tagName}${classAttr}>${escapeHtml(content)}</${tagName}>`;
+}
+
+function renderImage(src, className, alt = "") {
+  const asset = staticTextValue({ asset: src }, "asset");
+  if (!asset) return "";
+  const classAttr = className ? ` class="${escapeAttr(className)}"` : "";
+  return `<img${classAttr} src="${escapeAttr(asset)}" alt="${escapeAttr(alt)}">`;
+}
+
+function renderFieldControl(surface) {
+  const props = readProps(surface);
+  const inputType = staticTextValue(props, "inputType") ?? "text";
+  const inputId = staticTextValue(props, "inputId");
+  const label = staticTextValue(props, "label");
+  const placeholder = staticTextValue(props, "placeholder");
+  const value = props.value;
+  const min = props.min;
+  const max = props.max;
+  const step = props.step;
+  const checked = Boolean(props.checked);
+  const disabled = Boolean(props.disabled);
+  const controlAttrs = [
+    inputId ? `id="${escapeAttr(inputId)}"` : "",
+    `type="${escapeAttr(inputType)}"`,
+    placeholder ? `placeholder="${escapeAttr(placeholder)}"` : "",
+    value != null && inputType !== "checkbox" ? `value="${escapeAttr(value)}"` : "",
+    min != null ? `min="${escapeAttr(min)}"` : "",
+    max != null ? `max="${escapeAttr(max)}"` : "",
+    step != null ? `step="${escapeAttr(step)}"` : "",
+    checked && inputType === "checkbox" ? "checked" : "",
+    disabled ? "disabled" : ""
+  ].filter(Boolean).join(" ");
+  if (inputType === "checkbox") {
     return [
-      "<div class=\"surface-host-reset__row\">",
-      `<dt>${escapeHtml(label)}</dt>`,
-      `<dd>${escapeHtml(value ?? "n/a")}</dd>`,
-      "</div>"
+      `<label${renderAttributes(surface, "label")}>`,
+      `<input ${controlAttrs}>`,
+      label ? `<span>${escapeHtml(label)}</span>` : "",
+      "</label>"
     ].join("");
-  }).join("");
+  }
+  return [
+    `<label${renderAttributes(surface, "label")}>`,
+    label ? `<span>${escapeHtml(label)}</span>` : "",
+    `<input ${controlAttrs}>`,
+    "</label>"
+  ].join("");
 }
 
-function renderStaticSurfaceHostHtml({
+function renderSurfaceBody(surface, surfaces) {
+  const props = readProps(surface);
+  const childHtml = childSurfaceIds(surface)
+    .map(childId => renderSurfaceNode(surfaces, childId))
+    .filter(Boolean)
+    .join("");
+  if (typeof props.inputType === "string" || typeof props.inputId === "string") {
+    return renderFieldControl(surface) + childHtml;
+  }
+
+  const fragments = [];
+  const label = staticTextValue(props, "label");
+  const title = staticTextValue(props, "title");
+  const subtitle = staticTextValue(props, "subtitle");
+  const body = staticTextValue(props, "body");
+  const text = staticTextValue(props, "text");
+  const description = staticTextValue(props, "description");
+  const category = staticTextValue(props, "category");
+  const time = staticTextValue(props, "time");
+  const status = staticTextValue(props, "status");
+  const statusLabel = staticTextValue(props, "statusLabel");
+  const name = staticTextValue(props, "name");
+  const role = staticTextValue(props, "role");
+  const initials = staticTextValue(props, "initials");
+  const accent = staticTextValue(props, "accent");
+  const href = staticTextValue(props, "href");
+  const backHref = staticTextValue(props, "backHref");
+  const brandName = staticTextValue(props, "brandName");
+  const productName = staticTextValue(props, "productName");
+  const brandLogoSrc = staticTextValue(props, "brandLogoSrc");
+  const productLogoSrc = staticTextValue(props, "productLogoSrc");
+  const assetSrc = staticTextValue(props, "assetSrc");
+
+  if (backHref) {
+    fragments.push(`<a class="surface-back-link" href="${escapeAttr(backHref)}">Back</a>`);
+  }
+  if (brandLogoSrc || productLogoSrc || brandName || productName) {
+    fragments.push([
+      '<div class="surface-brand-row">',
+      brandLogoSrc ? renderImage(brandLogoSrc, "brand-img", brandName || "brand") : "",
+      brandName ? `<span class="surface-brand-name">${escapeHtml(brandName)}</span>` : "",
+      brandLogoSrc && productLogoSrc ? '<span class="surface-brand-divider"></span>' : "",
+      productLogoSrc ? renderImage(productLogoSrc, "product-img", productName || "product") : "",
+      productName ? `<span class="surface-product-name">${escapeHtml(productName)}</span>` : "",
+      "</div>"
+    ].join(""));
+  }
+  if (assetSrc) {
+    fragments.push([
+      '<div class="surface-asset-wrap">',
+      renderImage(assetSrc, "surface-asset", title || label || "asset"),
+      "</div>"
+    ].join(""));
+  }
+  if (initials || name || role) {
+    fragments.push([
+      '<div class="surface-identity-summary">',
+      initials ? `<div class="surface-identity-initials">${escapeHtml(initials)}</div>` : "",
+      '<div class="surface-identity-copy">',
+      name ? `<div class="surface-identity-name">${escapeHtml(name)}</div>` : "",
+      role ? `<div class="surface-identity-role">${escapeHtml(role)}</div>` : "",
+      "</div>",
+      "</div>"
+    ].join(""));
+  }
+  if (label && !title) fragments.push(wrapText("div", "", label));
+  if (title) {
+    const resolvedTitle = accent ? title.replace(accent, "") : title;
+    if (accent && title.includes(accent)) {
+      fragments.push(`<h1>${escapeHtml(resolvedTitle.trim())} <em>${escapeHtml(accent)}</em></h1>`);
+    } else {
+      fragments.push(wrapText("h1", "", title));
+    }
+  }
+  if (subtitle) fragments.push(wrapText("p", "", subtitle));
+  if (body) fragments.push(wrapText("p", "", body));
+  if (description) fragments.push(wrapText("p", "", description));
+  if (text) fragments.push(wrapText("div", "", text));
+  if (category || time) {
+    fragments.push([
+      '<div class="surface-meta-row">',
+      category ? `<span class="surface-meta-category">${escapeHtml(category)}</span>` : "",
+      time ? `<span class="surface-meta-time">${escapeHtml(time)}</span>` : "",
+      "</div>"
+    ].join(""));
+  }
+  if (status || statusLabel) {
+    fragments.push(`<div class="surface-status-label">${escapeHtml(statusLabel ?? status)}</div>`);
+  }
+  if (href && elementTagForSurface(surface) !== "a" && label) {
+    fragments.push(`<a class="surface-inline-link" href="${escapeAttr(href)}">${escapeHtml(label)}</a>`);
+  }
+  fragments.push(childHtml);
+  return fragments.join("");
+}
+
+function renderSurfaceNode(surfaces, surfaceId) {
+  const surface = surfaces.get(surfaceId);
+  if (!surface) return "";
+  const tagName = elementTagForSurface(surface);
+  const attrs = renderAttributes(surface, tagName);
+  if (tagName === "img") return `<img${attrs}>`;
+  const body = renderSurfaceBody(surface, surfaces);
+  return `<${tagName}${attrs}>${body}</${tagName}>`;
+}
+
+function inferredDocumentTitle(activeSurface, surfaces) {
+  const activePayload = readStaticPayload(activeSurface);
+  if (activePayload.documentTitle) return activePayload.documentTitle;
+  let best = null;
+  let bestScore = -1;
+  for (const surface of collectSurfaceTree(surfaces, activeSurface.id)) {
+    const score = staticPayloadScore(surface);
+    if (score > bestScore) {
+      best = surface;
+      bestScore = score;
+    }
+  }
+  const resolved = readStaticPayload(best ?? activeSurface);
+  return resolved.documentTitle ?? resolved.title ?? activeSurface.id ?? "page.surface";
+}
+
+function renderSurfaceDocument({
   requestPathname,
   rootSurface,
-  activeSurface
+  activeSurface,
+  surfaces
 }) {
+  const rootProps = readProps(rootSurface);
+  const stylesheetHref = staticTextValue(rootProps, "stylesheetHref");
   const rootInfo = describeSurface(rootSurface);
   const activeInfo = describeSurface(activeSurface);
-  const payload = readStaticPayload(activeSurface);
-  const textBody = payload.body ?? payload.text;
+  const bodyClass = readClassNames(rootSurface).join(" ");
+  const bodyClassAttr = bodyClass ? ` class="${escapeAttr(bodyClass)}"` : "";
+  const html = renderSurfaceNode(surfaces, activeSurface.id);
   return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>${escapeHtml(payload.title ?? activeInfo?.id ?? "page.surface authored host")}</title>
-    <style>
-      :root {
-        color-scheme: light;
-        --surface-static-bg: #f5f1e8;
-        --surface-static-panel: #fffaf2;
-        --surface-static-ink: #1d1a16;
-        --surface-static-border: #d8c7ad;
-        --surface-static-accent: #2f5d50;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
-      body {
-        margin: 0;
-        min-height: 100vh;
-        background: linear-gradient(180deg, var(--surface-static-bg), #efe5d4);
-        color: var(--surface-static-ink);
-        font-family: Georgia, "Times New Roman", serif;
-      }
-
-      main {
-        width: min(760px, calc(100vw - 32px));
-        margin: 48px auto;
-        padding: 28px;
-        background: var(--surface-static-panel);
-        border: 1px solid var(--surface-static-border);
-        border-radius: 18px;
-        box-shadow: 0 18px 48px rgba(33, 19, 9, 0.08);
-      }
-
-      .surface-static__eyebrow {
-        margin: 0 0 12px;
-        font-size: 0.82rem;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--surface-static-accent);
-      }
-
-      h1 {
-        margin: 0;
-        font-size: 2rem;
-      }
-
-      .surface-static__subtitle {
-        margin: 10px 0 0;
-        font-size: 1rem;
-        color: rgba(29, 26, 22, 0.76);
-      }
-
-      .surface-static__body {
-        margin: 24px 0 0;
-        line-height: 1.6;
-      }
-
-      dl {
-        display: grid;
-        gap: 10px;
-        margin: 28px 0 0;
-      }
-
-      .surface-static__row {
-        display: grid;
-        grid-template-columns: 180px 1fr;
-        gap: 12px;
-        padding: 10px 12px;
-        border: 1px solid var(--surface-static-border);
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.72);
-      }
-
-      dt {
-        font-weight: 700;
-      }
-
-      dd {
-        margin: 0;
-        overflow-wrap: anywhere;
-      }
-    </style>
+    <title>${escapeHtml(inferredDocumentTitle(activeSurface, surfaces))}</title>
+    ${stylesheetHref ? `<link rel="stylesheet" href="${escapeAttr(stylesheetHref)}">` : ""}
   </head>
-  <body>
-    <main>
-      <p class="surface-static__eyebrow">Canonical Authoring Pathway Probe</p>
-      ${payload.title ? `<h1>${escapeHtml(payload.title)}</h1>` : `<h1>${escapeHtml(activeInfo?.id ?? "Authored surface")}</h1>`}
-      ${payload.subtitle ? `<p class="surface-static__subtitle">${escapeHtml(payload.subtitle)}</p>` : ""}
-      ${textBody ? `<div class="surface-static__body">${escapeHtml(textBody)}</div>` : ""}
-      <dl>
-        ${renderMetadataList([
-          ["status", "static_surface_projection"],
-          ["requestPathname", requestPathname],
-          ["rootSurface.id", rootInfo?.id],
-          ["rootSurface.surfaceKind", rootInfo?.surfaceKind],
-          ["activeSurface.id", activeInfo?.id],
-          ["activeSurface.surfaceKind", activeInfo?.surfaceKind]
-        ]).replaceAll("surface-host-reset__row", "surface-static__row")}
-      </dl>
-    </main>
+  <body${bodyClassAttr}>
+    <!-- witness-surface status=composed_static_surface requestPathname=${escapeAttr(requestPathname)} rootSurface=${escapeAttr(rootInfo?.id ?? "")} activeSurface=${escapeAttr(activeInfo?.id ?? "")} -->
+    ${html}
   </body>
 </html>`;
 }
@@ -271,110 +466,40 @@ function renderBlockedHostHtml({
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>page.surface reset host</title>
     <style>
-      :root {
-        color-scheme: light;
-        --surface-host-bg: #f5f1e8;
-        --surface-host-panel: #fffaf2;
-        --surface-host-ink: #1d1a16;
-        --surface-host-accent: #8b3d12;
-        --surface-host-border: #d8c7ad;
-      }
-
-      * {
-        box-sizing: border-box;
-      }
-
       body {
         margin: 0;
         min-height: 100vh;
-        background: linear-gradient(180deg, var(--surface-host-bg), #efe5d4);
-        color: var(--surface-host-ink);
+        background: #f5f1e8;
+        color: #1d1a16;
         font-family: Georgia, "Times New Roman", serif;
       }
-
       main {
         width: min(760px, calc(100vw - 32px));
         margin: 48px auto;
         padding: 28px;
-        background: var(--surface-host-panel);
-        border: 1px solid var(--surface-host-border);
+        background: #fffaf2;
+        border: 1px solid #d8c7ad;
         border-radius: 18px;
-        box-shadow: 0 18px 48px rgba(33, 19, 9, 0.08);
       }
-
-      h1 {
-        margin: 0 0 12px;
-        font-size: 2rem;
-      }
-
-      p {
-        line-height: 1.5;
-      }
-
-      .surface-host-reset__notice {
-        padding: 14px 16px;
-        margin: 20px 0 24px;
-        border-left: 4px solid var(--surface-host-accent);
-        background: rgba(139, 61, 18, 0.08);
-      }
-
-      dl {
-        display: grid;
-        gap: 10px;
-        margin: 24px 0 0;
-      }
-
-      .surface-host-reset__row {
-        display: grid;
-        grid-template-columns: 180px 1fr;
-        gap: 12px;
-        padding: 10px 12px;
-        border: 1px solid var(--surface-host-border);
-        border-radius: 12px;
-        background: rgba(255, 255, 255, 0.72);
-      }
-
-      dt {
-        font-weight: 700;
-      }
-
-      dd {
-        margin: 0;
-        overflow-wrap: anywhere;
-      }
-
-      code {
-        font-family: "Cascadia Code", Consolas, monospace;
-      }
+      dt { font-weight: 700; }
+      dd { margin: 0 0 12px; }
+      code { font-family: "Cascadia Code", Consolas, monospace; }
     </style>
   </head>
   <body>
     <main>
       <h1>page.surface reset host</h1>
-      <p>
-        The previous <code>page.surface</code> renderer was removed because it
-        embedded app and capability authority into a generic host.
-      </p>
-      <div class="surface-host-reset__notice">
-        Canonical projection must restart through the canonical authoring
-        pathway probe before live surface serving can be claimed again.
-      </div>
-      <p>
-        This route still resolves so the platform can report blocked truth
-        honestly while the canonical surface pathway is rebuilt from a clean
-        floor.
-      </p>
+      <p>The previous <code>page.surface</code> renderer was removed because it embedded app authority into a generic host.</p>
+      <p>The authored surface tree for this route is not yet renderable from the current generic projection floor.</p>
       <dl>
-        ${renderMetadataList([
-          ["status", "blocked_reset_host"],
-          ["requestPathname", requestPathname],
-          ["rootSurface.id", rootInfo?.id],
-          ["rootSurface.surfaceKind", rootInfo?.surfaceKind],
-          ["activeSurface.id", activeInfo?.id],
-          ["activeSurface.surfaceKind", activeInfo?.surfaceKind],
-          ["activeSurface.routeKey", activeInfo?.routeKey],
-          ["activeSurface.routePath", activeInfo?.routePath]
-        ])}
+        <dt>status</dt>
+        <dd>blocked_reset_host</dd>
+        <dt>requestPathname</dt>
+        <dd>${escapeHtml(requestPathname)}</dd>
+        <dt>rootSurface.id</dt>
+        <dd>${escapeHtml(rootInfo?.id ?? "n/a")}</dd>
+        <dt>activeSurface.id</dt>
+        <dd>${escapeHtml(activeInfo?.id ?? "n/a")}</dd>
       </dl>
     </main>
   </body>
@@ -390,26 +515,24 @@ export function renderSurfaceShellFromMap({
   if (!(surfaces instanceof Map) || !rootSurfaceId) return null;
   const rootSurface = surfaces.get(rootSurfaceId);
   if (!rootSurface) return null;
-  const activeSurface = selectStaticProjectionSurface({
+  const activeSurface = selectActiveSurface({
     surfaces,
     rootSurfaceId,
+    requestPathname,
     route
   });
-  if (activeSurface && hasStaticPayload(activeSurface)) {
-    return renderStaticSurfaceHostHtml({
+  if (activeSurface && hasRenderableContent(activeSurface)) {
+    return renderSurfaceDocument({
       requestPathname: normalizePathname(requestPathname),
       rootSurface,
-      activeSurface
+      activeSurface,
+      surfaces
     });
   }
   return renderBlockedHostHtml({
     requestPathname: normalizePathname(requestPathname),
     rootSurface,
-    activeSurface: matchSurfaceByDefaultScreen({
-      surfaces,
-      rootSurfaceId,
-      defaultScreen: routeDefaultScreen(route)
-    }) ?? rootSurface
+    activeSurface: activeSurface ?? rootSurface
   });
 }
 

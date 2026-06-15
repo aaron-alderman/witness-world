@@ -1,120 +1,612 @@
 import desire/v3-alpha
 
-// Engentus shell authored as DESIRE surfaces.
-// The shell owns login, home, module routing, and signout.
-// The mini-app content behind the shell stays route-backed through plugin.chart-runtime.
+// Engentus is authored here as a composed shell definition first.
+// Shared navigation intent is declared semantically; interaction bindings
+// remain an authored-language gap rather than being smuggled through props.
 
-view EngentusToolbar {
-  kind sidebar
-  class engentus-toolbar
-  prop role = "toolbar"
+enum EngentusShellRoute {
+  cases {
+    login
+    home
+    goodman
+    mill-charge
+    mill-force
+    signout
+  }
+}
+
+state EngentusShellActiveRoute: EngentusShellRoute {
+  initial login
+}
+
+event EngentusSignInRequested {
+  writes {
+    EngentusShellActiveRoute: home
+  }
+}
+
+event EngentusSignOutRequested {
+  writes {
+    EngentusShellActiveRoute: signout
+  }
+}
+
+event EngentusNavigateHomeRequested {
+  writes {
+    EngentusShellActiveRoute: home
+  }
+}
+
+event EngentusNavigateGoodmanRequested {
+  writes {
+    EngentusShellActiveRoute: goodman
+  }
+}
+
+event EngentusNavigateMillChargeRequested {
+  writes {
+    EngentusShellActiveRoute: mill-charge
+  }
+}
+
+event EngentusNavigateMillForceRequested {
+  writes {
+    EngentusShellActiveRoute: mill-force
+  }
+}
+
+process EngentusShellNavigation {
+  states {
+    EngentusShellActiveRoute
+  }
+  handles {
+    EngentusSignInRequested
+    EngentusSignOutRequested
+    EngentusNavigateHomeRequested
+    EngentusNavigateGoodmanRequested
+    EngentusNavigateMillChargeRequested
+    EngentusNavigateMillForceRequested
+  }
+}
+
+view EngentusAuthBrandLogo {
+  kind image
+  class brand-img
+  prop tag = "img"
+  prop src = "/app-static/img/engentus.png"
+  prop alt = "Engentus"
+}
+
+view EngentusAuthBrandDivider {
+  kind divider
+  class auth-brand-div
+}
+
+view EngentusAuthProductLogo {
+  kind image
+  class product-img
+  prop tag = "img"
+  prop src = "/app-static/img/mill-iq.png"
+  prop alt = "Mill-iQ"
+}
+
+view EngentusAuthBrand {
+  kind brand
+  class auth-brand
+  children {
+    EngentusAuthBrandLogo
+    EngentusAuthBrandDivider
+    EngentusAuthProductLogo
+  }
+}
+
+view EngentusToolbarBrandDivider {
+  kind divider
+  prop domId = "tb-divider"
+}
+
+view EngentusAppBrand {
+  kind brand
+  prop domId = "tb-brand"
+  prop href = "/engentus/home"
+  children {
+    EngentusAuthBrandLogo
+    EngentusToolbarBrandDivider
+    EngentusAuthProductLogo
+  }
+}
+
+view EngentusSiteSummary {
+  kind site-summary
+  class tb-site-summary
+  prop text = "Mill: M48 - Goldfields"
+}
+
+view EngentusToolbarMiddle {
+  kind toolbar-region
+  prop domId = "tb-goodman-tools"
+  children {
+    EngentusSiteSummary
+  }
+}
+
+view EngentusProfileAvatar {
+  kind avatar
+  prop domId = "up-avatar"
+  prop text = "AA"
+}
+
+view EngentusProfileName {
+  kind text
+  prop domId = "up-name"
+  prop text = "Aaron A."
+}
+
+view EngentusProfileRole {
+  kind text
+  prop domId = "up-role"
+  prop text = "Lead Engineer"
+}
+
+view EngentusProfileInfo {
+  kind profile-info
+  prop domId = "up-info"
+  children {
+    EngentusProfileName
+    EngentusProfileRole
+  }
+}
+
+view EngentusProfileCaret {
+  kind text
+  prop domId = "up-caret"
+  prop text = ""
+}
+
+view EngentusProfileSummary {
+  kind profile-summary
+  prop domId = "user-prof"
+  children {
+    EngentusProfileAvatar
+    EngentusProfileInfo
+    EngentusProfileCaret
+  }
+}
+
+view EngentusAppChrome {
+  kind chrome
+  prop domId = "tb"
+  children {
+    EngentusAppBrand
+    EngentusToolbarMiddle
+    EngentusProfileSummary
+  }
+}
+
+view EngentusAuthFooter {
+  kind footer
+  class engentus-auth-footer
+  prop text = "Copyright 2025 Engentus Pty Ltd. All rights reserved."
+}
+
+view EngentusHeroLogo {
+  kind image
+  class product-img
+  prop tag = "img"
+  prop src = "/app-static/img/mill-iq.png"
+  prop alt = "Mill-iQ"
+}
+
+view EngentusHeroTagline {
+  kind text
+  class auth-tagline
+  prop text = "Structural Intelligence for SAG Mills"
+}
+
+view EngentusHeroSubtitle {
+  kind text
+  class auth-sub
+  prop text = "Real-time fatigue monitoring and predictive analysis for critical liner fasteners, from bolt load to remaining life."
+}
+
+view EngentusFeatureRealtimeLoadDot {
+  kind bullet-dot
+  class auth-bullet-dot
+}
+
+view EngentusFeatureRealtimeLoadText {
+  kind text
+  prop text = "Real-time bolt load monitoring"
+}
+
+view EngentusFeatureRealtimeLoad {
+  kind feature-item
+  class auth-bullet
+  prop tag = "li"
+  children {
+    EngentusFeatureRealtimeLoadDot
+    EngentusFeatureRealtimeLoadText
+  }
+}
+
+view EngentusFeatureGoodmanAnalysisDot {
+  kind bullet-dot
+  class auth-bullet-dot
+}
+
+view EngentusFeatureGoodmanAnalysisText {
+  kind text
+  prop text = "Goodman fatigue diagram analysis"
+}
+
+view EngentusFeatureGoodmanAnalysis {
+  kind feature-item
+  class auth-bullet
+  prop tag = "li"
+  children {
+    EngentusFeatureGoodmanAnalysisDot
+    EngentusFeatureGoodmanAnalysisText
+  }
+}
+
+view EngentusFeatureMonteCarloDot {
+  kind bullet-dot
+  class auth-bullet-dot
+}
+
+view EngentusFeatureMonteCarloText {
+  kind text
+  prop text = "Monte Carlo life prediction"
+}
+
+view EngentusFeatureMonteCarlo {
+  kind feature-item
+  class auth-bullet
+  prop tag = "li"
+  children {
+    EngentusFeatureMonteCarloDot
+    EngentusFeatureMonteCarloText
+  }
+}
+
+view EngentusFeatureFleetManagementDot {
+  kind bullet-dot
+  class auth-bullet-dot
+}
+
+view EngentusFeatureFleetManagementText {
+  kind text
+  prop text = "Multi-site fleet management"
+}
+
+view EngentusFeatureFleetManagement {
+  kind feature-item
+  class auth-bullet
+  prop tag = "li"
+  children {
+    EngentusFeatureFleetManagementDot
+    EngentusFeatureFleetManagementText
+  }
+}
+
+view EngentusValueFeatures {
+  kind feature-list
+  class auth-bullets
+  prop tag = "ul"
+  children {
+    EngentusFeatureRealtimeLoad
+    EngentusFeatureGoodmanAnalysis
+    EngentusFeatureMonteCarlo
+    EngentusFeatureFleetManagement
+  }
+}
+
+view EngentusValueHero {
+  kind hero
+  class auth-hero
+  children {
+    EngentusHeroLogo
+    EngentusHeroTagline
+    EngentusHeroSubtitle
+    EngentusValueFeatures
+  }
+}
+
+view EngentusLoginHeader {
+  kind screen-header
+  class auth-form-title
+  prop text = "Welcome back"
+}
+
+view EngentusLoginSubtitle {
+  kind text
+  class auth-form-sub
+  prop text = "Sign in to your Engentus account"
+}
+
+view EngentusLoginEmailField {
+  kind form-field
+  class login-email-field
+  prop label = "Email"
+  prop inputType = "email"
+  prop inputId = "login-email"
+  prop placeholder = "name@engentus.com"
+}
+
+view EngentusLoginPasswordField {
+  kind form-field
+  class login-password-field
+  prop label = "Password"
+  prop inputType = "password"
+  prop inputId = "login-password"
+  prop placeholder = "Enter your password"
+}
+
+view EngentusLoginRememberField {
+  kind checkbox-field
+  class login-remember-field
+  prop label = "Remember this device"
+  prop inputId = "login-remember"
+}
+
+view EngentusLoginPrimaryAction {
+  kind action
+  class ms-btn
+  prop label = "Sign in with Microsoft"
+  prop href = "/engentus/home"
+  prop messageRef = "EngentusSignInRequested"
+}
+
+view EngentusLoginHelpAction {
+  kind action
+  class auth-submit
+  prop label = "Forgot password?"
+  prop href = "#"
+}
+
+view EngentusLoginFormLogo {
+  kind form-logo
+  class auth-form-logo
+  children {
+    EngentusHeroLogo
+  }
+}
+
+view EngentusLoginForm {
+  kind form-region
+  class auth-form-wrap
+  children {
+    EngentusLoginFormLogo
+    EngentusLoginHeader
+    EngentusLoginSubtitle
+    EngentusLoginEmailField
+    EngentusLoginPasswordField
+    EngentusLoginRememberField
+    EngentusLoginPrimaryAction
+    EngentusLoginHelpAction
+    EngentusLoginLegal
+  }
+}
+
+view EngentusLoginLegal {
+  kind legal-copy
+  class auth-form-footer
+  prop text = "By signing in you agree to Engentus's Terms of Service and Privacy Policy."
+}
+
+view EngentusLoginLeft {
+  kind region
+  class auth-left
+  children {
+    EngentusAuthBrand
+    EngentusValueHero
+    EngentusAuthFooter
+  }
+}
+
+view EngentusLoginRight {
+  kind region
+  class auth-right
+  children {
+    EngentusLoginForm
+  }
+}
+
+view EngentusLoginBook {
+  kind region
+  class auth-book
+  children {
+    EngentusLoginLeft
+    EngentusLoginRight
+  }
 }
 
 view EngentusLogin {
   kind auth-screen
-  class engentus-login
+  class engentus-login surface-auth-view
+  process EngentusShellNavigation
   prop domId = "view-login"
+  prop documentTitle = "Welcome back"
   prop routeKey = "login"
   prop routePath = "/engentus/login"
-  prop title = "Welcome back"
-  prop subtitle = "Sign in to your Engentus account"
-  prop heroTitle = "Structural Intelligence for SAG Mills"
-  prop heroAccent = "SAG Mills"
-  prop heroBody = "Real-time fatigue monitoring and predictive analysis for critical liner fasteners — from bolt load to remaining life."
-  prop feature1Title = "Real-time bolt load monitoring"
-  prop feature2Title = "Goodman fatigue diagram analysis"
-  prop feature3Title = "Monte Carlo life prediction"
-  prop feature4Title = "Multi-site fleet management"
-  prop secondaryActionHref = "/engentus/home"
-  prop primaryActionLabel = "Sign in"
-  prop primaryActionHref = "/engentus/home"
-  prop helpLabel = "Forgot password?"
-  prop helpHref = "#"
-  prop footnoteHtml = "By signing in you agree to Engentus's <a href=\"#\">Terms of Service</a> and <a href=\"#\">Privacy Policy</a>."
-  prop footnote = "By signing in you agree to Engentus's Terms of Service and Privacy Policy."
-  prop footerText = "© 2025 Engentus Pty Ltd. All rights reserved."
   children {
-    EngentusToolbar
+    EngentusLoginBook
+  }
+}
+
+view EngentusSignoutHeader {
+  kind screen-header
+  class auth-so-title
+  prop text = "You've been signed out"
+}
+
+view EngentusSignoutSubtitle {
+  kind text
+  class auth-so-sub
+  prop text = "Your session has ended securely. Thank you for using Mill-iQ."
+}
+
+view EngentusSignoutPrimaryAction {
+  kind action
+  class auth-submit
+  prop label = "Sign back in"
+  prop href = "/engentus/login"
+}
+
+view EngentusSignoutLegal {
+  kind legal-copy
+  class auth-form-footer
+  prop text = "Mill-iQ is a product of Engentus Pty Ltd."
+}
+
+view EngentusSignoutActions {
+  kind form-region
+  class auth-form-wrap
+  children {
+    EngentusLoginFormLogo
+    EngentusSignoutHeader
+    EngentusSignoutSubtitle
+    EngentusSignoutPrimaryAction
+    EngentusSignoutLegal
+  }
+}
+
+view EngentusSignoutLeft {
+  kind region
+  class auth-left
+  children {
+    EngentusAuthBrand
+    EngentusValueHero
+    EngentusAuthFooter
+  }
+}
+
+view EngentusSignoutRight {
+  kind region
+  class auth-right
+  children {
+    EngentusSignoutActions
+  }
+}
+
+view EngentusSignoutBook {
+  kind region
+  class auth-book
+  children {
+    EngentusSignoutLeft
+    EngentusSignoutRight
   }
 }
 
 view EngentusSignout {
   kind auth-screen
-  class engentus-signout
+  class engentus-signout surface-auth-view
+  process EngentusShellNavigation
   prop domId = "view-signout"
+  prop documentTitle = "You've been signed out"
   prop routeKey = "signout"
   prop routePath = "/engentus/signout"
-  prop title = "You've been signed out"
-  prop subtitle = "Your session has ended securely.\nThank you for using Mill-iQ™."
-  prop heroTitle = "Structural Intelligence for SAG Mills"
-  prop heroAccent = "SAG Mills"
-  prop heroBody = "Real-time fatigue monitoring and predictive analysis for critical liner fasteners — from bolt load to remaining life."
-  prop feature1Title = "Real-time bolt load monitoring"
-  prop feature2Title = "Goodman fatigue diagram analysis"
-  prop feature3Title = "Monte Carlo life prediction"
-  prop feature4Title = "Multi-site fleet management"
-  prop primaryActionLabel = "Sign back in"
-  prop primaryActionHref = "/engentus/login"
-  prop footnote = "Mill-iQ™ is a product of Engentus Pty Ltd"
-  prop footerText = "© 2025 Engentus Pty Ltd. All rights reserved."
   children {
-    EngentusToolbar
+    EngentusSignoutBook
   }
+}
+
+view NewsFeedHeader {
+  kind section-header
+  class news-feed-header
+  prop label = "Feed"
+  prop status = "Live"
+}
+
+view NewsFeedAlertReading {
+  kind feed-entry
+  class tone-alert
+  prop category = "Alert"
+  prop title = "Sensor B7 on M48 reporting anomalous load readings - review recommended before next measurement window."
+  prop time = "2h ago"
+}
+
+view NewsFeedMaintenanceWindow {
+  kind feed-entry
+  class tone-platform
+  prop category = "Platform"
+  prop title = "Scheduled maintenance window: API gateway Sunday 02:00-04:00 AWST."
+  prop time = "6h ago"
+}
+
+view NewsFeedGoodmanRelease {
+  kind feed-entry
+  class tone-product
+  prop category = "Product"
+  prop title = "Mill-iQ Fatigue Module v2.1.0 now supports multi-scenario ANOVA export."
+  prop time = "1d ago"
+}
+
+view NewsFeedRecalibration {
+  kind feed-entry
+  class tone-product
+  prop category = "Product"
+  prop title = "M48 maintenance window complete - 3 bolt sets recalibrated and re-zeroed."
+  prop time = "2d ago"
+}
+
+view NewsFeedStandardsUpdate {
+  kind feed-entry
+  class tone-industry
+  prop category = "Industry"
+  prop title = "AS 4024 annex revision published with updated fatigue factors for mining fasteners."
+  prop time = "3d ago"
+}
+
+view NewsFeedFirmwareUpdate {
+  kind feed-entry
+  class tone-platform
+  prop category = "Platform"
+  prop title = "Firmware v2.3.1 is available for LinerSense o310 sensors."
+  prop time = "4d ago"
+}
+
+view NewsFeedMonitoringGuidance {
+  kind feed-entry
+  class tone-industry
+  prop category = "Industry"
+  prop title = "MCA published updated guidance on real-time structural monitoring for SAG mills."
+  prop time = "1w ago"
 }
 
 view NewsPanel {
   kind sidebar
   class news-rail
-  prop role = "news"
   prop domId = "news-panel"
-  prop headerLabel = "Feed"
-  prop liveLabel = "Live"
-  prop item1Tone = "alert"
-  prop item1Category = "Alert"
-  prop item1Title = "Sensor B7 on M48 reporting anomalous load readings — review recommended before next measurement window"
-  prop item1Time = "2h ago"
-  prop item2Tone = "platform"
-  prop item2Category = "Platform"
-  prop item2Title = "Scheduled maintenance window: API gateway Sunday 02:00–04:00 AWST"
-  prop item2Time = "6h ago"
-  prop item3Tone = "product"
-  prop item3Category = "Product"
-  prop item3Title = "Mill-iQ™ Fatigue Module v2.1.0 — Goodman diagram now supports multi-scenario ANOVA export"
-  prop item3Time = "1d ago"
-  prop item4Tone = "product"
-  prop item4Category = "Product"
-  prop item4Title = "M48 maintenance window complete — 3 bolt sets recalibrated and re-zeroed"
-  prop item4Time = "2d ago"
-  prop item5Tone = "industry"
-  prop item5Category = "Industry"
-  prop item5Title = "AS 4024 annex revision published — updated fatigue factors for mining fasteners now available"
-  prop item5Time = "3d ago"
-  prop item6Tone = "platform"
-  prop item6Category = "Platform"
-  prop item6Title = "New firmware v2.3.1 available for LinerSense o310 sensors"
-  prop item6Time = "4d ago"
-  prop item7Tone = "industry"
-  prop item7Category = "Industry"
-  prop item7Title = "MCA publishes updated guidelines on real-time structural monitoring for SAG mills"
-  prop item7Time = "1w ago"
+  children {
+    NewsFeedHeader
+    NewsFeedAlertReading
+    NewsFeedMaintenanceWindow
+    NewsFeedGoodmanRelease
+    NewsFeedRecalibration
+    NewsFeedStandardsUpdate
+    NewsFeedFirmwareUpdate
+    NewsFeedMonitoringGuidance
+  }
 }
 
 view ModuleCardMillCharge {
   kind module-card
-  class active
+  class mod-card active
   prop routeKey = "mill-charge"
   prop href = "/engentus/mill-charge"
   prop assetSrc = "/app-static/app/assets/module-mill-charge.svg"
   prop title = "Mill Charge Motion"
-  prop description = "2D charge shape, regime & power proxy"
+  prop description = "2D charge shape, regime and power proxy"
   prop state = "available"
   prop statusLabel = "Available"
   prop assetRef = "CHARGE"
+  prop messageRef = "EngentusNavigateMillChargeRequested"
 }
 
 view ModuleCardGoodman {
   kind module-card
-  class active
+  class mod-card active
   prop routeKey = "goodman"
   prop href = "/engentus/goodman"
   prop assetSrc = "/app-static/app/assets/module-goodman.svg"
@@ -123,11 +615,12 @@ view ModuleCardGoodman {
   prop state = "available"
   prop statusLabel = "Available"
   prop assetRef = "GOODMAN"
+  prop messageRef = "EngentusNavigateGoodmanRequested"
 }
 
 view ModuleCardMillForce {
   kind module-card
-  class active
+  class mod-card active
   prop routeKey = "mill-force"
   prop href = "/engentus/mill-force"
   prop assetSrc = "/app-static/app/assets/module-mill-force.svg"
@@ -136,11 +629,12 @@ view ModuleCardMillForce {
   prop state = "available"
   prop statusLabel = "Available"
   prop assetRef = "FORCE"
+  prop messageRef = "EngentusNavigateMillForceRequested"
 }
 
 view ModuleCardTensionTimeSeries {
   kind module-card
-  class locked
+  class mod-card locked
   prop assetSrc = "/app-static/app/assets/module-locked-wave.svg"
   prop title = "Tension Time Series"
   prop description = "Bolt load over measurement windows"
@@ -150,7 +644,7 @@ view ModuleCardTensionTimeSeries {
 
 view ModuleCardBoltLoadDistribution {
   kind module-card
-  class locked
+  class mod-card locked
   prop assetSrc = "/app-static/app/assets/module-locked-bars.svg"
   prop title = "Bolt Load Distribution"
   prop description = "Spatial load mapping across positions"
@@ -160,7 +654,7 @@ view ModuleCardBoltLoadDistribution {
 
 view ModuleCardChannelHealthMonitor {
   kind module-card
-  class locked
+  class mod-card locked
   prop assetSrc = "/app-static/app/assets/module-locked-heatmap.svg"
   prop title = "Channel Health Monitor"
   prop description = "Sensor integrity and diagnostic status"
@@ -170,7 +664,7 @@ view ModuleCardChannelHealthMonitor {
 
 view ModuleCardCalibrationWorkspace {
   kind module-card
-  class locked
+  class mod-card locked
   prop assetSrc = "/app-static/app/assets/module-locked-scatter.svg"
   prop title = "Calibration Workspace"
   prop description = "Two-stage bolt calibration tooling"
@@ -180,7 +674,7 @@ view ModuleCardCalibrationWorkspace {
 
 view ModuleCardMaintenanceForecaster {
   kind module-card
-  class locked
+  class mod-card locked
   prop assetSrc = "/app-static/app/assets/module-locked-bars.svg"
   prop title = "Maintenance Forecaster"
   prop description = "Predictive maintenance scheduling"
@@ -190,7 +684,7 @@ view ModuleCardMaintenanceForecaster {
 
 view ModuleCardSensorFleetOverview {
   kind module-card
-  class locked
+  class mod-card locked
   prop assetSrc = "/app-static/app/assets/module-locked-heatmap.svg"
   prop title = "Sensor Fleet Overview"
   prop description = "Device status and connectivity"
@@ -200,7 +694,7 @@ view ModuleCardSensorFleetOverview {
 
 view ModuleCardReportBuilder {
   kind module-card
-  class locked
+  class mod-card locked
   prop assetSrc = "/app-static/app/assets/module-locked-wave.svg"
   prop title = "Report Builder"
   prop description = "PDF and data export for field reports"
@@ -210,7 +704,7 @@ view ModuleCardReportBuilder {
 
 view ModuleCardAlertTimeline {
   kind module-card
-  class locked
+  class mod-card locked
   prop assetSrc = "/app-static/app/assets/module-locked-scatter.svg"
   prop title = "Alert Timeline"
   prop description = "Event history and notification log"
@@ -220,7 +714,7 @@ view ModuleCardAlertTimeline {
 
 view ModuleCardMillComparison {
   kind module-card
-  class locked
+  class mod-card locked
   prop assetSrc = "/app-static/app/assets/module-locked-bars.svg"
   prop title = "Mill Comparison"
   prop description = "Cross-site benchmark analysis"
@@ -230,17 +724,17 @@ view ModuleCardMillComparison {
 
 view ModuleCardTorqueAnalysis {
   kind module-card
-  class locked
+  class mod-card locked
   prop assetSrc = "/app-static/app/assets/module-locked-wave.svg"
   prop title = "Torque Analysis"
-  prop description = "Torque–tension relationship modelling"
+  prop description = "Torque-tension relationship modelling"
   prop state = "locked"
   prop statusLabel = "Coming Soon"
 }
 
 view ModuleCardVibrationSpectrum {
   kind module-card
-  class locked
+  class mod-card locked
   prop assetSrc = "/app-static/app/assets/module-locked-wave.svg"
   prop title = "Vibration Spectrum"
   prop description = "FFT and frequency domain analysis"
@@ -250,7 +744,7 @@ view ModuleCardVibrationSpectrum {
 
 view ModuleCardLifeCycleEstimator {
   kind module-card
-  class locked
+  class mod-card locked
   prop assetSrc = "/app-static/app/assets/module-locked-scatter.svg"
   prop title = "Life Cycle Estimator"
   prop description = "Remaining useful life projections"
@@ -260,7 +754,7 @@ view ModuleCardLifeCycleEstimator {
 
 view ModuleCardApiDataExplorer {
   kind module-card
-  class locked
+  class mod-card locked
   prop assetSrc = "/app-static/app/assets/module-locked-heatmap.svg"
   prop title = "API Data Explorer"
   prop description = "Raw data query and inspection"
@@ -270,7 +764,7 @@ view ModuleCardApiDataExplorer {
 
 view ModuleCardHistoricalArchive {
   kind module-card
-  class locked
+  class mod-card locked
   prop assetSrc = "/app-static/app/assets/module-locked-bars.svg"
   prop title = "Historical Archive"
   prop description = "Long-term trend and archive analysis"
@@ -280,7 +774,7 @@ view ModuleCardHistoricalArchive {
 
 view ModuleCardComplianceDashboard {
   kind module-card
-  class locked
+  class mod-card locked
   prop assetSrc = "/app-static/app/assets/module-locked-heatmap.svg"
   prop title = "Compliance Dashboard"
   prop description = "Standards and certification tracking"
@@ -314,23 +808,361 @@ view ModuleGrid {
   }
 }
 
+view EngentusHomeHeaderTitle {
+  kind text
+  prop tag = "h2"
+  prop text = "Analysis Modules"
+}
+
+view EngentusHomeHeaderSubtitle {
+  kind text
+  prop tag = "p"
+  prop text = "Select a module to begin analysis"
+}
+
+view EngentusHomeContextPill {
+  kind context-pill
+  class mill-pill
+  prop text = "M48 - Goldfields"
+}
+
+view EngentusHomeHeaderMeta {
+  kind header-meta
+  class mod-area-meta
+  children {
+    EngentusHomeHeaderSubtitle
+    EngentusHomeContextPill
+  }
+}
+
+view EngentusHomeHeader {
+  kind screen-header
+  class mod-area-hdr
+  children {
+    EngentusHomeHeaderTitle
+    EngentusHomeHeaderMeta
+  }
+}
+
+view EngentusHomeSidebar {
+  kind sidebar
+  class engentus-home-sidebar
+  children {
+    NewsPanel
+  }
+}
+
+view EngentusHomeMain {
+  kind main-region
+  class engentus-home-main
+  prop domId = "module-area"
+  children {
+    EngentusHomeHeader
+    ModuleGrid
+  }
+}
+
+view EngentusHomeBody {
+  kind body
+  prop domId = "body"
+  children {
+    EngentusHomeSidebar
+    EngentusHomeMain
+  }
+}
+
 view EngentusHome {
   kind app-shell
   class engentus-home
+  process EngentusShellNavigation
   prop domId = "view-home"
-  prop shellTemplate = "sidebar-grid"
+  prop documentTitle = "Analysis Modules"
   prop routeKey = "home"
   prop routePath = "/engentus/home"
-  prop mainRegionDomId = "module-area"
-  prop title = "Analysis Modules"
-  prop subtitle = "Select a module to begin analysis"
-  prop pillClass = "mill-pill"
-  prop pillText = "⚙ M48 – Goldfields"
-  prop signoutHref = "/engentus/signout"
   children {
-    EngentusToolbar
-    NewsPanel
-    ModuleGrid
+    EngentusAppChrome
+    EngentusHomeBody
+  }
+}
+
+view EngentusGoodmanHeader {
+  kind screen-header
+  class engentus-goodman-header
+  prop title = "Goodman Fatigue Diagram"
+  prop subtitle = "SN curve analysis with Monte Carlo simulation"
+  prop backHref = "/engentus/home"
+}
+
+view GoodmanModeStatic {
+  kind toolbar-mode
+  class toolbar-mode-static
+  prop label = "Static"
+  prop modeKey = "static"
+}
+
+view GoodmanModeMonteCarlo {
+  kind toolbar-mode
+  class toolbar-mode-mc
+  prop label = "Monte Carlo"
+  prop modeKey = "mc"
+}
+
+view GoodmanModeEdit {
+  kind toolbar-mode
+  class toolbar-mode-edit
+  prop label = "Edit"
+  prop modeKey = "edit"
+}
+
+view GoodmanModesToolbar {
+  kind toolbar-modes
+  class goodman-modes
+  children {
+    GoodmanModeStatic
+    GoodmanModeMonteCarlo
+    GoodmanModeEdit
+  }
+}
+
+view GoodmanActionCdf {
+  kind toolbar-action
+  class goodman-action-cdf
+  prop label = "CDF"
+  prop actionKey = "cdf"
+}
+
+view GoodmanActionStats {
+  kind toolbar-action
+  class goodman-action-stats
+  prop label = "Stats"
+  prop actionKey = "stats"
+}
+
+view GoodmanActionAnova {
+  kind toolbar-action
+  class goodman-action-anova
+  prop label = "ANOVA"
+  prop actionKey = "anova"
+}
+
+view GoodmanWindowToolbar {
+  kind toolbar-actions
+  class goodman-window-toolbar
+  children {
+    GoodmanActionCdf
+    GoodmanActionStats
+    GoodmanActionAnova
+  }
+}
+
+view GoodmanScenarioHost {
+  kind host
+  class goodman-scenario-host
+  prop domId = "static-params-html"
+}
+
+view GoodmanScenarioSection {
+  kind section
+  class goodman-scenario-section
+  prop title = "Scenario View"
+  prop domId = "sec-static"
+  children {
+    GoodmanScenarioHost
+  }
+}
+
+view GoodmanSimulationNewAction {
+  kind section-action
+  class goodman-simulation-new
+  prop label = "+ New"
+  prop actionKey = "new-simulation"
+  prop domId = "new-sim-btn"
+}
+
+view GoodmanSimulationListHost {
+  kind host
+  class goodman-simulation-list-host
+  prop domId = "sim-list"
+}
+
+view GoodmanSimulationSection {
+  kind section
+  class goodman-simulation-section
+  prop title = "Simulations"
+  prop domId = "sec-mc"
+  children {
+    GoodmanSimulationNewAction
+    GoodmanSimulationListHost
+  }
+}
+
+view GoodmanRunConfigBoltsPerSetField {
+  kind form-field
+  class goodman-run-field
+  prop label = "Bolts per set"
+  prop inputType = "number"
+  prop inputId = "cfg-n"
+  prop value = 500
+  prop min = 50
+  prop max = 5000
+  prop step = 50
+}
+
+view GoodmanRunConfigDurationField {
+  kind form-field
+  class goodman-run-field
+  prop label = "Duration (months)"
+  prop inputType = "number"
+  prop inputId = "cfg-tmax"
+  prop value = 24
+  prop min = 3
+  prop max = 60
+  prop step = 1
+}
+
+view GoodmanRunConfigStepField {
+  kind form-field
+  class goodman-run-field
+  prop label = "Time step (months)"
+  prop inputType = "number"
+  prop inputId = "cfg-dt"
+  prop value = 0.5
+  prop min = 0.1
+  prop max = 2
+  prop step = 0.1
+}
+
+view GoodmanRunActionStart {
+  kind action
+  class rbtn go
+  prop label = "Run"
+  prop actionKey = "run"
+  prop domId = "btn-run"
+}
+
+view GoodmanRunActionPause {
+  kind action
+  class rbtn pause
+  prop label = "Pause"
+  prop actionKey = "pause"
+  prop domId = "btn-pause"
+  prop disabled = true
+}
+
+view GoodmanRunActionStop {
+  kind action
+  class rbtn stop
+  prop label = "Stop"
+  prop actionKey = "stop"
+  prop domId = "btn-stop"
+  prop disabled = true
+}
+
+view GoodmanRunActionGroup {
+  kind action-group
+  class goodman-run-actions
+  children {
+    GoodmanRunActionStart
+    GoodmanRunActionPause
+    GoodmanRunActionStop
+  }
+}
+
+view GoodmanRunProgressFill {
+  kind progress-fill
+  class prog-fill
+  prop domId = "prog-fill"
+}
+
+view GoodmanRunProgressLabel {
+  kind progress-label
+  class prog-lbl
+  prop domId = "prog-lbl"
+  prop text = "Ready"
+}
+
+view GoodmanRunProgress {
+  kind progress
+  class goodman-run-progress
+  children {
+    GoodmanRunProgressFill
+    GoodmanRunProgressLabel
+  }
+}
+
+view GoodmanRunConfigSection {
+  kind section
+  class goodman-run-config-section
+  prop title = "Run Config"
+  prop domId = "sec-run"
+  children {
+    GoodmanRunConfigBoltsPerSetField
+    GoodmanRunConfigDurationField
+    GoodmanRunConfigStepField
+    GoodmanRunActionGroup
+    GoodmanRunProgress
+  }
+}
+
+view GoodmanChartStyleHost {
+  kind host
+  class goodman-chart-style-host
+  prop domId = "edit-panel-html"
+}
+
+view GoodmanChartStyleSection {
+  kind section
+  class goodman-chart-style-section
+  prop title = "Chart Style"
+  prop domId = "sec-edit"
+  children {
+    GoodmanChartStyleHost
+  }
+}
+
+view GoodmanBoltSetsNewAction {
+  kind section-action
+  class goodman-boltset-new
+  prop label = "+ New"
+  prop actionKey = "new-bolt-set"
+  prop domId = "new-bs-btn"
+}
+
+view GoodmanBoltSetsHost {
+  kind host
+  class goodman-bolt-sets-host
+  prop domId = "bs-list"
+}
+
+view GoodmanBoltSetsSection {
+  kind section
+  class goodman-bolt-sets-section
+  prop title = "Bolt Sets"
+  children {
+    GoodmanBoltSetsNewAction
+    GoodmanBoltSetsHost
+  }
+}
+
+view GoodmanFatigueLegendHost {
+  kind host
+  class goodman-fatigue-legend-host
+  prop domId = "legend-html"
+}
+
+view GoodmanFatigueLegendNote {
+  kind note
+  class goodman-fatigue-legend-note
+  prop text = "Hannover M48 combined SN, 50% survival, m=4.6. Goodman line: alternating stress limit scales with mean stress to UTS."
+}
+
+view GoodmanFatigueLegendSection {
+  kind section
+  class goodman-fatigue-legend-section
+  prop title = "Fatigue Life Regions"
+  children {
+    GoodmanFatigueLegendHost
+    GoodmanFatigueLegendNote
   }
 }
 
@@ -339,71 +1171,166 @@ view GoodmanSidebar {
   class goodman-controls
   prop domId = "sb"
   prop scrollDomId = "sb-scroll"
-  prop section1Title = "Scenario View"
-  prop section1DomId = "sec-static"
-  prop section1ContentHtml = "<div id='static-params-html'></div>"
-  prop section2Title = "Simulations"
-  prop section2DomId = "sec-mc"
-  prop section2Style = "display:none"
-  prop section2TitleActionLabel = "+ New"
-  prop section2TitleActionDomId = "new-sim-btn"
-  prop section2ContentHtml = "<div id='sim-list'></div>"
-  prop section3Title = "Run Config"
-  prop section3DomId = "sec-run"
-  prop section3Style = "display:none"
-  prop section3ContentHtml = "<div class='mc-row'><label>Bolts per set</label><input type='number' id='cfg-n' value='500' min='50' max='5000' step='50'></div><div class='mc-row'><label>Duration (months)</label><input type='number' id='cfg-tmax' value='24' min='3' max='60' step='1'></div><div class='mc-row'><label>Time step (months)</label><input type='number' id='cfg-dt' value='0.5' min='0.1' max='2' step='0.1'></div><div class='run-row'><button class='rbtn go' id='btn-run'>▶ Run</button><button class='rbtn pause' id='btn-pause' disabled>⏸</button><button class='rbtn stop' id='btn-stop' disabled>■</button></div><div class='prog-wrap'><div class='prog-fill' id='prog-fill'></div></div><div class='prog-lbl' id='prog-lbl'>Ready</div>"
-  prop section4Title = "Chart Style"
-  prop section4DomId = "sec-edit"
-  prop section4Style = "display:none"
-  prop section4ContentHtml = "<div id='edit-panel-html'></div>"
-  prop section5Title = "Bolt Sets"
-  prop section5TitleActionLabel = "+ New"
-  prop section5TitleActionDomId = "new-bs-btn"
-  prop section5ContentHtml = "<div id='bs-list'></div>"
-  prop section6Title = "Fatigue Life Regions"
-  prop section6ContentHtml = "<div id='legend-html'></div>"
-  prop section6NoteHtml = "<p style='font-size:9.5px;color:var(--t2);margin-top:6px;line-height:1.5'>Hannover M48 combined SN, 50% survival, m=4.6. Goodman line: &sigma;<sub>a</sub> = &sigma;<sub>lim</sub>(1&minus;&sigma;<sub>m</sub>/UTS).</p>"
+  children {
+    GoodmanScenarioSection
+    GoodmanSimulationSection
+    GoodmanRunConfigSection
+    GoodmanChartStyleSection
+    GoodmanBoltSetsSection
+    GoodmanFatigueLegendSection
+  }
+}
+
+view GoodmanPlayAction {
+  kind action
+  class goodman-play-action
+  prop label = "Play"
+  prop actionKey = "play"
+  prop domId = "play-btn"
+}
+
+view GoodmanTimeSlider {
+  kind form-field
+  class goodman-time-slider
+  prop label = "Time"
+  prop inputType = "range"
+  prop inputId = "time-sl"
+  prop min = 0
+  prop max = 24
+  prop step = 0.05
+  prop value = 0
+}
+
+view GoodmanTimeLabel {
+  kind text
+  class goodman-time-label
+  prop domId = "t-lbl"
+  prop text = "t = 0.0 mo"
+}
+
+view GoodmanFailureBadge {
+  kind badge
+  class fail-badge
+  prop domId = "fail-badge"
+  prop text = ""
+}
+
+view GoodmanSpeedSlider {
+  kind form-field
+  class goodman-speed-slider
+  prop label = "Speed"
+  prop inputType = "range"
+  prop inputId = "spd-sl"
+  prop min = 0.1
+  prop max = 20
+  prop step = 0.1
+  prop value = 1
+}
+
+view GoodmanSpeedLabel {
+  kind text
+  class goodman-speed-label
+  prop domId = "spd-lbl"
+  prop text = "1.0x"
+}
+
+view GoodmanSpeedGroup {
+  kind field-group
+  class goodman-speed-group
+  children {
+    GoodmanSpeedSlider
+    GoodmanSpeedLabel
+  }
+}
+
+view GoodmanTrailToggle {
+  kind checkbox-field
+  class goodman-trail-toggle
+  prop label = "Trail"
+  prop inputId = "trail-cb"
+}
+
+view GoodmanScrubber {
+  kind scrubber
+  class goodman-scrubber
+  prop domId = "scr"
+  children {
+    GoodmanPlayAction
+    GoodmanTimeSlider
+    GoodmanTimeLabel
+    GoodmanFailureBadge
+    GoodmanSpeedGroup
+    GoodmanTrailToggle
+  }
+}
+
+view GoodmanChartRegion {
+  kind viewer
+  class goodman-chart-region
+  prop domId = "chart-wrap"
+  children {
+    GoodmanDiagram
+    GoodmanMCBands
+  }
+}
+
+view GoodmanWindowLayer {
+  kind host
+  class goodman-window-layer
+  prop domId = "wl"
+}
+
+view GoodmanViewerRegion {
+  kind viewer
+  class goodman-viewer-region
+  prop domId = "chart-area"
+  children {
+    GoodmanScrubber
+    GoodmanChartRegion
+    GoodmanWindowLayer
+  }
 }
 
 view EngentusApp {
   kind app-shell
   class engentus-app
+  process EngentusShellNavigation
+  capabilities {
+    chart.render
+  }
   prop domId = "view-goodman"
+  prop documentTitle = "Goodman Fatigue Diagram"
   prop routeKey = "goodman"
   prop routePath = "/engentus/goodman"
-  prop shellTemplate = "viewer-sidebar-main"
-  prop shellBodyDomId = "body"
-  prop mainRegionDomId = "chart-area"
-  prop mainBeforeFrameHtml = "<div id='scr' class='hidden'><button id='play-btn' type='button'>&#9654;</button><input type='range' id='time-sl' min='0' max='24' step='0.05' value='0'><span id='t-lbl'>t = 0.0 mo</span><span class='fail-badge' id='fail-badge'></span><div id='spd-wrap'><label style='font-size:10px;color:var(--t2);flex-shrink:0'>Speed</label><input type='range' id='spd-sl' min='0.1' max='20' step='0.1' value='1'><span id='spd-lbl'>1.0&times;</span></div><div id='trail-wrap'><input type='checkbox' id='trail-cb'><label for='trail-cb'>Trail</label></div></div>"
-  prop mainAfterFrameHtml = "<div id='wl' style='display:block'></div>"
-  prop frameWrapDomId = "chart-wrap"
-  prop frameDomId = "chart-svg"
-  prop toolsDomId = "tb-goodman-tools"
-  prop dependsOnCapabilities = "chart.render"
-  prop title = "Goodman Fatigue Diagram"
-  prop subtitle = "SN curve analysis with Monte Carlo simulation"
   prop mountMode = "mounted-panel"
-  prop brandClickable = "true"
-  prop backHref = "/engentus/home"
-  prop signoutHref = "/engentus/signout"
-  prop toolbarMode1Label = "Static"
-  prop toolbarMode1Key = "static"
-  prop toolbarMode2Label = "Monte Carlo"
-  prop toolbarMode2Key = "mc"
-  prop toolbarMode3Label = "✏ Edit"
-  prop toolbarMode3Key = "edit"
-  prop toolbarAction1Label = "📈 CDF"
-  prop toolbarAction1Key = "cdf"
-  prop toolbarAction2Label = "📊 Stats"
-  prop toolbarAction2Key = "stats"
-  prop toolbarAction3Label = "🔬 ANOVA"
-  prop toolbarAction3Key = "anova"
   children {
-    EngentusToolbar
+    EngentusAppChrome
+    EngentusGoodmanHeader
+    GoodmanModesToolbar
+    GoodmanWindowToolbar
     GoodmanSidebar
-    GoodmanDiagram
-    GoodmanMCBands
+    GoodmanViewerRegion
   }
+}
+
+view MillChargeHeader {
+  kind screen-header
+  class mill-charge-header
+  prop title = "Mill Charge Motion"
+  prop subtitle = "2D charge shape, regime and power proxy"
+  prop backHref = "/engentus/home"
+}
+
+view MillChargeParameterHost {
+  kind host
+  class mill-charge-parameter-host
+  prop domId = "mill-params"
+}
+
+view MillChargePresetHost {
+  kind host
+  class mill-charge-preset-host
+  prop domId = "mill-presets"
 }
 
 view MillChargeSidebar {
@@ -411,6 +1338,23 @@ view MillChargeSidebar {
   class mill-charge-controls
   prop domId = "mill-sb"
   prop scrollDomId = "mill-sb-scroll"
+  children {
+    MillChargeParameterHost
+    MillChargePresetHost
+  }
+}
+
+view MillChargeMetricsHeader {
+  kind section-header
+  class mill-charge-metrics-header
+  prop label = "Metrics"
+  prop domId = "mill-metrics-hdr"
+}
+
+view MillChargeMetricsPanel {
+  kind host
+  class mill-charge-metrics-panel
+  prop domId = "mill-metrics-panel"
 }
 
 view MillChargeMetrics {
@@ -418,35 +1362,60 @@ view MillChargeMetrics {
   class mill-charge-metrics
   prop role = "metrics"
   prop domId = "mill-metrics"
-  prop headerDomId = "mill-metrics-hdr"
-  prop panelDomId = "mill-metrics-panel"
-  prop headerLabel = "Metrics"
+  children {
+    MillChargeMetricsHeader
+    MillChargeMetricsPanel
+  }
+}
+
+view MillChargeViewer {
+  kind viewer
+  class mill-charge-viewer
+  prop domId = "mill-main"
+  children {
+    MillChargeCrossSection
+  }
 }
 
 view EngentusMillChargeApp {
   kind app-shell
   class engentus-mill-charge
+  process EngentusShellNavigation
+  capabilities {
+    chart.render
+  }
   prop domId = "view-mill"
+  prop documentTitle = "Mill Charge Motion"
   prop routeKey = "mill-charge"
   prop routePath = "/engentus/mill-charge"
-  prop shellTemplate = "viewer-sidebar-main-metrics"
-  prop shellBodyDomId = "mill-body"
-  prop mainRegionDomId = "mill-main"
-  prop frameWrapDomId = "mill-canvas-wrap"
-  prop frameDomId = "mill-canvas"
-  prop title = "Mill Charge Motion"
-  prop subtitle = "2D charge shape, regime and power proxy"
   prop mountMode = "mounted-panel"
-  prop dependsOnCapabilities = "chart.render"
-  prop brandClickable = "true"
-  prop backHref = "/engentus/home"
-  prop signoutHref = "/engentus/signout"
   children {
-    EngentusToolbar
+    EngentusAppChrome
+    MillChargeHeader
     MillChargeSidebar
+    MillChargeViewer
     MillChargeMetrics
-    MillChargeCrossSection
   }
+}
+
+view MillForceHeader {
+  kind screen-header
+  class mill-force-header
+  prop title = "Mill Force Analysis"
+  prop subtitle = "Liner force distribution with dual-model comparison"
+  prop backHref = "/engentus/home"
+}
+
+view MillForceControlHost {
+  kind host
+  class mill-force-control-host
+  prop domId = "mill-force-controls"
+}
+
+view MillForceModelHost {
+  kind host
+  class mill-force-model-host
+  prop domId = "mill-force-models"
 }
 
 view MillForceSidebar {
@@ -454,59 +1423,81 @@ view MillForceSidebar {
   class mill-force-controls
   prop domId = "mill-force-sb"
   prop scrollDomId = "mill-force-sb-scroll"
+  children {
+    MillForceControlHost
+    MillForceModelHost
+  }
 }
 
-view EngentusMillForceApp {
-  kind app-shell
-  class engentus-mill-force
-  prop domId = "view-mill-force"
-  prop routeKey = "mill-force"
-  prop routePath = "/engentus/mill-force"
-  prop shellTemplate = "viewer-sidebar-tabs"
-  prop shellBodyDomId = "mill-force-body"
-  prop mainRegionDomId = "mill-force-chart-area"
-  prop tabsDomId = "mill-force-chart-tabs"
-  prop frameWrapDomId = "mill-force-chart-wrap"
-  prop frameIdPrefix = "mill-force-svg-"
-  prop tabClass = "mill-force-cht-tab"
-  prop title = "Mill Force Analysis"
-  prop subtitle = "Liner force distribution with dual-model comparison"
-  prop mountMode = "mounted-panel"
-  prop dependsOnCapabilities = "chart.render"
-  prop brandClickable = "true"
-  prop backHref = "/engentus/home"
-  prop signoutHref = "/engentus/signout"
-  prop chartTab1Label = "Cross-section"
-  prop chartTab1Key = "cross"
-  prop chartTab2Label = "Force vs Angle"
-  prop chartTab2Key = "force"
-  prop chartTab3Label = "Force Rose"
-  prop chartTab3Key = "rose"
+view MillForceTabCrossSection {
+  kind tab
+  class mill-force-chart-tab
+  prop label = "Cross-section"
+  prop tabKey = "cross"
+}
+
+view MillForceTabForceVsAngle {
+  kind tab
+  class mill-force-chart-tab
+  prop label = "Force vs Angle"
+  prop tabKey = "force"
+}
+
+view MillForceTabForceRose {
+  kind tab
+  class mill-force-chart-tab
+  prop label = "Force Rose"
+  prop tabKey = "rose"
+}
+
+view MillForceTabs {
+  kind tab-strip
+  class mill-force-chart-tabs
+  prop domId = "mill-force-chart-tabs"
   children {
-    EngentusToolbar
-    MillForceSidebar
+    MillForceTabCrossSection
+    MillForceTabForceVsAngle
+    MillForceTabForceRose
+  }
+}
+
+view MillForceViewer {
+  kind viewer
+  class mill-force-viewer
+  prop domId = "mill-force-chart-area"
+  children {
     MillForceCross
     MillForceAngle
     MillForceRose
   }
 }
 
+view EngentusMillForceApp {
+  kind app-shell
+  class engentus-mill-force
+  process EngentusShellNavigation
+  capabilities {
+    chart.render
+  }
+  prop domId = "view-mill-force"
+  prop documentTitle = "Mill Force Analysis"
+  prop routeKey = "mill-force"
+  prop routePath = "/engentus/mill-force"
+  prop mountMode = "mounted-panel"
+  children {
+    EngentusAppChrome
+    MillForceHeader
+    MillForceSidebar
+    MillForceTabs
+    MillForceViewer
+  }
+}
+
 view EngentusRoot {
   kind app-root
   class engentus-spa
+  process EngentusShellNavigation
   prop stylesheetHref = "/app-static/app/engentus-shell.css"
-  prop brandName = "Engentus"
-  prop productName = "Mill-iQ™"
-  prop brandLogoSrc = "/app-static/img/engentus.png"
-  prop productLogoSrc = "/app-static/img/mill-iq.png"
-  prop heroProductLogoSrc = "/app-static/img/mill-iq.png"
-  prop profileInitials = "AA"
-  prop profileName = "Aaron A."
-  prop profileRole = "Lead Engineer"
-  prop siteLabel = "Mill: M48 – Goldfields"
-  prop homeHref = "/engentus/home"
-  prop signoutHref = "/engentus/signout"
-  prop footerText = "© 2025 Engentus Pty Ltd. All rights reserved."
   children {
     EngentusLogin
     EngentusHome

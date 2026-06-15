@@ -318,12 +318,12 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
   const alternateSurfaceHtml = await alternateSurfacePage.text();
   const staticSurfaceProjectionVisible = /Canonical authored surface/.test(surfaceHtml)
     && /This text was projected from a surface witness through page\.surface\./.test(surfaceHtml)
-    && /status<\/dt><dd>static_surface_projection<\/dd>/i.test(surfaceHtml);
+    && /status=composed_static_surface/i.test(surfaceHtml);
   const routeSelectedSurfaceVisible = staticSurfaceProjectionVisible
-    && /activeSurface\.id<\/dt><dd>.*_surface_static<\/dd>/i.test(surfaceHtml)
+    && new RegExp(`activeSurface=${surfaceStaticId}`).test(surfaceHtml)
     && /Canonical alternate surface/.test(alternateSurfaceHtml)
     && /This alternate text was projected from the same root through route-selected surface output\./.test(alternateSurfaceHtml)
-    && /activeSurface\.id<\/dt><dd>.*_surface_alternate<\/dd>/i.test(alternateSurfaceHtml);
+    && new RegExp(`activeSurface=${surfaceAlternateId}`).test(alternateSurfaceHtml);
   const blockedResetHostVisible = (
     /page\.surface reset host/i.test(surfaceHtml) && /blocked_reset_host/i.test(surfaceHtml)
   ) || (

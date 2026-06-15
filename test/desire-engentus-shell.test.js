@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { createWorld, projectors } from "../src/kernel.js";
@@ -8,14 +9,27 @@ import {
   normalizeDesirePlusToDesire
 } from "../src/desire/index.js";
 
+const shellFile = path.join(process.cwd(), "examples", "engentus", "app", "shell.rvm");
+
 async function shellDesire() {
-  const file = path.join(process.cwd(), "examples", "engentus", "app", "shell.rvm");
-  return normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(file));
+  return normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(shellFile));
 }
 
-test("the engentus shell normalizes into surface nodes for every route state", async () => {
+async function shellSource() {
+  return fs.readFile(shellFile, "utf8");
+}
+
+function nodeMap(desire, kind) {
+  return new Map(desire.nodes.filter(node => node.kind === kind).map(node => [node.name, node]));
+}
+
+test("the engentus shell normalizes major screens plus authored shell behavior nodes", async () => {
   const desire = await shellDesire();
-  const surfaces = new Map(desire.nodes.filter(node => node.kind === "surface").map(node => [node.name, node]));
+  const surfaces = nodeMap(desire, "surface");
+  const processes = nodeMap(desire, "process");
+  const messages = nodeMap(desire, "message");
+  const types = nodeMap(desire, "type");
+
   for (const screen of [
     "EngentusRoot",
     "EngentusLogin",
@@ -27,85 +41,115 @@ test("the engentus shell normalizes into surface nodes for every route state", a
   ]) {
     assert.ok(surfaces.has(screen), `missing surface ${screen}`);
   }
-  assert.deepEqual(surfaces.get("EngentusRoot").body.children, [
-    "EngentusLogin",
-    "EngentusHome",
-    "EngentusApp",
-    "EngentusMillChargeApp",
-    "EngentusMillForceApp",
-    "EngentusSignout"
+
+  assert.ok(processes.has("EngentusShellNavigation"));
+  assert.ok(messages.has("EngentusSignInRequested"));
+  assert.ok(messages.has("EngentusSignOutRequested"));
+  assert.ok(messages.has("EngentusNavigateHomeRequested"));
+  assert.ok(messages.has("EngentusNavigateGoodmanRequested"));
+  assert.ok(messages.has("EngentusNavigateMillChargeRequested"));
+  assert.ok(messages.has("EngentusNavigateMillForceRequested"));
+  assert.equal(types.get("EngentusShellRoute")?.body?.role, "enum");
+  assert.equal(types.get("EngentusShellActiveRoute")?.body?.role, "state");
+  assert.equal(surfaces.get("EngentusRoot")?.body?.processRef, "EngentusShellNavigation");
+});
+
+test("the shell is structured through explicit child regions instead of flattened screen props", async () => {
+  const desire = await shellDesire();
+  const surfaces = nodeMap(desire, "surface");
+
+  assert.deepEqual(surfaces.get("EngentusLogin")?.body?.children, [
+    "EngentusLoginBook"
+  ]);
+
+  assert.deepEqual(surfaces.get("EngentusLoginBook")?.body?.children, [
+    "EngentusLoginLeft",
+    "EngentusLoginRight"
+  ]);
+
+  assert.deepEqual(surfaces.get("NewsPanel")?.body?.children, [
+    "NewsFeedHeader",
+    "NewsFeedAlertReading",
+    "NewsFeedMaintenanceWindow",
+    "NewsFeedGoodmanRelease",
+    "NewsFeedRecalibration",
+    "NewsFeedStandardsUpdate",
+    "NewsFeedFirmwareUpdate",
+    "NewsFeedMonitoringGuidance"
+  ]);
+
+  assert.deepEqual(surfaces.get("GoodmanSidebar")?.body?.children, [
+    "GoodmanScenarioSection",
+    "GoodmanSimulationSection",
+    "GoodmanRunConfigSection",
+    "GoodmanChartStyleSection",
+    "GoodmanBoltSetsSection",
+    "GoodmanFatigueLegendSection"
+  ]);
+
+  assert.deepEqual(surfaces.get("EngentusApp")?.body?.children, [
+    "EngentusAppChrome",
+    "EngentusGoodmanHeader",
+    "GoodmanModesToolbar",
+    "GoodmanWindowToolbar",
+    "GoodmanSidebar",
+    "GoodmanViewerRegion"
+  ]);
+
+  assert.deepEqual(surfaces.get("MillForceTabs")?.body?.children, [
+    "MillForceTabCrossSection",
+    "MillForceTabForceVsAngle",
+    "MillForceTabForceRose"
+  ]);
+
+  assert.deepEqual(surfaces.get("EngentusHome")?.body?.children, [
+    "EngentusAppChrome",
+    "EngentusHomeBody"
   ]);
 });
 
-test("the home shell authors route and module metadata through surface props", async () => {
+test("the module shells declare process and capability dependencies semantically", async () => {
   const desire = await shellDesire();
-  const home = desire.nodes.find(node => node.kind === "surface" && node.name === "EngentusHome");
-  const grid = desire.nodes.find(node => node.kind === "surface" && node.name === "ModuleGrid");
-  const millCharge = desire.nodes.find(node => node.kind === "surface" && node.name === "ModuleCardMillCharge");
-  const goodman = desire.nodes.find(node => node.kind === "surface" && node.name === "ModuleCardGoodman");
-  const millForce = desire.nodes.find(node => node.kind === "surface" && node.name === "ModuleCardMillForce");
+  const surfaces = nodeMap(desire, "surface");
 
-  assert.equal(home.body.props.routePath, "/engentus/home");
-  assert.equal(home.body.props.title, "Analysis Modules");
-  assert.equal(home.body.props.pillClass, "mill-pill");
-  assert.deepEqual(grid.body.children, [
-    "ModuleCardMillCharge",
-    "ModuleCardGoodman",
-    "ModuleCardMillForce",
-    "ModuleCardTensionTimeSeries",
-    "ModuleCardBoltLoadDistribution",
-    "ModuleCardChannelHealthMonitor",
-    "ModuleCardCalibrationWorkspace",
-    "ModuleCardMaintenanceForecaster",
-    "ModuleCardSensorFleetOverview",
-    "ModuleCardReportBuilder",
-    "ModuleCardAlertTimeline",
-    "ModuleCardMillComparison",
-    "ModuleCardTorqueAnalysis",
-    "ModuleCardVibrationSpectrum",
-    "ModuleCardLifeCycleEstimator",
-    "ModuleCardApiDataExplorer",
-    "ModuleCardHistoricalArchive",
-    "ModuleCardComplianceDashboard"
-  ]);
-  assert.equal(millCharge.body.props.href, "/engentus/mill-charge");
-  assert.equal(goodman.body.props.href, "/engentus/goodman");
-  assert.equal(millForce.body.props.href, "/engentus/mill-force");
+  const goodman = surfaces.get("EngentusApp");
+  const millCharge = surfaces.get("EngentusMillChargeApp");
+  const millForce = surfaces.get("EngentusMillForceApp");
+
+  assert.equal(goodman?.body?.processRef, "EngentusShellNavigation");
+  assert.deepEqual(goodman?.body?.capabilityRefs, ["chart.render"]);
+  assert.equal("dependsOnCapabilities" in (goodman?.body?.props ?? {}), false);
+
+  assert.equal(millCharge?.body?.processRef, "EngentusShellNavigation");
+  assert.deepEqual(millCharge?.body?.capabilityRefs, ["chart.render"]);
+  assert.equal("dependsOnCapabilities" in (millCharge?.body?.props ?? {}), false);
+
+  assert.equal(millForce?.body?.processRef, "EngentusShellNavigation");
+  assert.deepEqual(millForce?.body?.capabilityRefs, ["chart.render"]);
+  assert.equal("dependsOnCapabilities" in (millForce?.body?.props ?? {}), false);
 });
 
-test("the module shells carry mount-mode and route props for the core renderer", async () => {
-  const desire = await shellDesire();
-  const goodman = desire.nodes.find(node => node.kind === "surface" && node.name === "EngentusApp");
-  const millCharge = desire.nodes.find(node => node.kind === "surface" && node.name === "EngentusMillChargeApp");
-  const millForce = desire.nodes.find(node => node.kind === "surface" && node.name === "EngentusMillForceApp");
-  const millChargeMetrics = desire.nodes.find(node => node.kind === "surface" && node.name === "MillChargeMetrics");
+test("the shell source forbids flattened prop families and raw html escape hatches", async () => {
+  const source = await shellSource();
 
-  assert.equal(goodman.body.props.routePath, "/engentus/goodman");
-  assert.equal(goodman.body.props.shellTemplate, "viewer-sidebar-main");
-  assert.equal(goodman.body.props.mountMode, "mounted-panel");
-  assert.ok(goodman.body.children.includes("GoodmanDiagram"));
-  assert.ok(goodman.body.children.includes("GoodmanMCBands"));
-
-  assert.equal(millCharge.body.props.routePath, "/engentus/mill-charge");
-  assert.equal(millCharge.body.props.shellTemplate, "viewer-sidebar-main-metrics");
-  assert.equal(millCharge.body.props.mountMode, "mounted-panel");
-  assert.ok(millCharge.body.children.includes("MillChargeCrossSection"));
-  assert.equal(millChargeMetrics.body.props.headerDomId, "mill-metrics-hdr");
-  assert.equal(millChargeMetrics.body.props.panelDomId, "mill-metrics-panel");
-
-  assert.equal(millForce.body.props.routePath, "/engentus/mill-force");
-  assert.equal(millForce.body.props.shellTemplate, "viewer-sidebar-tabs");
-  assert.equal(millForce.body.props.mountMode, "mounted-panel");
-  assert.deepEqual(
-    millForce.body.children.filter(child => child.startsWith("MillForce") && child !== "MillForceSidebar"),
-    ["MillForceCross", "MillForceAngle", "MillForceRose"]
-  );
-  assert.equal("layoutVariant" in goodman.body.props, false);
-  assert.equal("layoutVariant" in millCharge.body.props, false);
-  assert.equal("layoutVariant" in millForce.body.props, false);
+  for (const pattern of [
+    /\bfeature\d+[A-Za-z]*/i,
+    /\bitem\d+[A-Za-z]*/i,
+    /\btoolbarMode\d+[A-Za-z]*/i,
+    /\btoolbarAction\d+[A-Za-z]*/i,
+    /\bchartTab\d+[A-Za-z]*/i,
+    /\bsection\d+[A-Za-z]*/i,
+    /\b\w*ContentHtml\b/,
+    /\bmainBeforeFrameHtml\b/,
+    /\bmainAfterFrameHtml\b/,
+    /\bshellTemplate\b/,
+    /\bdependsOnCapabilities\b/
+  ]) {
+    assert.equal(pattern.test(source), false, `unexpected legacy shell prop pattern: ${pattern}`);
+  }
 });
 
-test("the shell applies into witnessed surfaces with route props intact", async () => {
+test("the shell applies into witnessed surfaces with route, process, and capability relations intact", async () => {
   const world = createWorld();
   applyDesire(world, await shellDesire());
   const rels = world.project(projectors.currentRelations);
@@ -114,6 +158,7 @@ test("the shell applies into witnessed surfaces with route props intact", async 
   )?.body;
 
   assert.ok(rels.some(row => row.from === "EngentusRoot" && row.rel === "hasChildSurface" && row.to === "EngentusHome"));
-  assert.ok(rels.some(row => row.from === "EngentusApp" && row.rel === "hasChildSurface" && row.to === "GoodmanDiagram"));
+  assert.ok(rels.some(row => row.from === "EngentusRoot" && row.rel === "surfaceProcess" && row.to === "EngentusShellNavigation"));
+  assert.ok(rels.some(row => row.from === "EngentusApp" && row.rel === "dependsOnCapability" && row.to === "chart.render"));
   assert.equal(loginSurface?.props?.routePath, "/engentus/login");
 });
