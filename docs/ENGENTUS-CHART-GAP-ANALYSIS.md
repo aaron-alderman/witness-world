@@ -135,6 +135,11 @@ grant runtime authority to copied JS or presenter code.
   collapsed/open body and chevron, opens automatically when MC mode or Run is
   selected, and remains implemented through authored state/visibility rather
   than page-local DOM toggling.
+- Mill Force Monte Carlo run status now follows an authored lifecycle instead
+  of jumping directly to computed output: `MillForceRunMonteCarloRequested`
+  sets MC mode/config open, shows a process-owned `calculating`/`Running...`
+  state through an authored delay, then transitions to the computed `running`
+  state where chart-derived sample/envelope outputs are displayed.
 - Mill Force chart model selection now flows through `chart.render` as an
   authored chart parameter: the force, rose, and cross-section chart layers
   slice `method` from `param.active_method`, which is bound to
@@ -219,8 +224,9 @@ grant runtime authority to copied JS or presenter code.
   cross-section overlay, p10 point glyph, and straight-sided radial force-bar
   geometry are now authored and live, and the MC panel reports computed sample
   count plus p10/p90 radial-force envelope summaries from chart capability
-  output after Run. The richer reference MC result lifecycle and final
-  compare/MC panel polish remain first-pass gaps. Tooltip readout for the three
+  output after Run, with an authored calculating-to-computed status transition.
+  The richer reference MC result datasets and final compare/MC panel polish
+  remain first-pass gaps. Tooltip readout for the three
   stock charts now exists through the generic chart tooltip seam. Compare
   deltas now exist as authored scalar outputs and inline percent readouts, and
   the cross-section chart now carries authored legend/force-scale annotations,

@@ -336,6 +336,16 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
         { kind: "setState", state: "EngentusShellActiveRoute", value: "login" },
         { kind: "setState", state: "EngentusShellAuthStatus", value: "idle" }
       ]
+    },
+    {
+      trigger: "MillForceRunMonteCarloRequested",
+      steps: [
+        { kind: "setState", state: "MillForceActiveAnalysisMode", value: "mc" },
+        { kind: "setState", state: "MillForceMcConfigOpen", value: true },
+        { kind: "setState", state: "MillForceMcStatusState", value: "calculating" },
+        { kind: "delay", ms: 120 },
+        { kind: "setState", state: "MillForceMcStatusState", value: "running" }
+      ]
     }
   ]);
 });
@@ -367,6 +377,30 @@ test("the authored Engentus sign-in story runs through generic process rules wit
     ["rule.delay", "EngentusSignInRequested:920ms"],
     ["rule.setState", "EngentusSignInRequested:EngentusShellActiveRoute"],
     ["rule.setState", "EngentusSignInRequested:EngentusShellAuthStatus"]
+  ]);
+});
+
+test("the authored Mill Force Monte Carlo run has a visible calculating delay before computed output", async () => {
+  const desire = await shellDesire();
+  const world = createWorld();
+  applyDesire(world, desire);
+  const delays = [];
+  const runtime = createProcessRuntime(world, {
+    delayScheduler: async ms => delays.push(ms)
+  });
+
+  await runtime.deliverAuthored("MillForceRunMonteCarloRequested");
+
+  assert.deepEqual(delays, [120]);
+  assert.equal(runtime.value("MillForceActiveAnalysisMode"), "mc");
+  assert.equal(runtime.value("MillForceMcConfigOpen"), true);
+  assert.equal(runtime.value("MillForceMcStatusState"), "running");
+  assert.deepEqual(runtime.trace.slice(-5).map(observation => [observation.kind, observation.label]), [
+    ["rule.setState", "MillForceRunMonteCarloRequested:MillForceActiveAnalysisMode"],
+    ["rule.setState", "MillForceRunMonteCarloRequested:MillForceMcConfigOpen"],
+    ["rule.setState", "MillForceRunMonteCarloRequested:MillForceMcStatusState"],
+    ["rule.delay", "MillForceRunMonteCarloRequested:120ms"],
+    ["rule.setState", "MillForceRunMonteCarloRequested:MillForceMcStatusState"]
   ]);
 });
 
@@ -618,6 +652,7 @@ test("the shell is structured through explicit child regions instead of flattene
   ]);
   assert.deepEqual(surfaces.get("MillForceMcStatusText")?.body?.children, [
     "MillForceMcStatusReadyText",
+    "MillForceMcStatusCalculatingText",
     "MillForceMcStatusComputedText",
     "MillForceMcStatusClearedText"
   ]);

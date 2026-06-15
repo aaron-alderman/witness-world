@@ -1241,6 +1241,11 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     );
     await page.click("#surface-millforcemcrunaction");
     await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcStatusState") === "calculating"
+    );
+    assert.equal(await page.textContent("#surface-millforcemcstatuscalculatingtext"), "Runningâ€¦");
+    assert.equal(await page.locator("#surface-millforcemcp90maxrow[hidden]").count(), 1);
+    await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcStatusState") === "running"
     );
     await page.waitForFunction(() =>

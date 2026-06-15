@@ -53,6 +53,7 @@ enum MillForceModelSelection {
 enum MillForceMcStatus {
   cases {
     ready
+    calculating
     running
     cleared
   }
@@ -963,6 +964,13 @@ process EngentusShellNavigation {
     on EngentusSignBackInRequested {
       set EngentusShellActiveRoute login
       set EngentusShellAuthStatus idle
+    }
+    on MillForceRunMonteCarloRequested {
+      set MillForceActiveAnalysisMode mc
+      set MillForceMcConfigOpen true
+      set MillForceMcStatusState calculating
+      delay 120ms
+      set MillForceMcStatusState running
     }
   }
 }
@@ -7561,6 +7569,16 @@ view MillForceMcStatusReadyText {
   }
 }
 
+view MillForceMcStatusCalculatingText {
+  kind text
+  class mill-force-rd
+  prop tag = "span"
+  prop text = "Runningâ€¦"
+  bindings {
+    visible from state MillForceMcStatusState map calculating true default false
+  }
+}
+
 view MillForceMcStatusComputedText {
   kind text
   class mill-force-rd
@@ -7588,6 +7606,7 @@ view MillForceMcStatusText {
   prop tag = "div"
   children {
     MillForceMcStatusReadyText
+    MillForceMcStatusCalculatingText
     MillForceMcStatusComputedText
     MillForceMcStatusClearedText
   }
