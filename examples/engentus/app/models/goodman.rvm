@@ -58,6 +58,7 @@ model BoltFatigue {
   derive F_friction = mu_joint * (sm * 1e6 * A_s_nom) * n_interfaces over sm
   derive F_shear    = max(gamma * F_per_bolt, F_per_bolt - F_friction) over sm
   derive curve      = bolt_bending_sigma_a(F_shear, L_grip, D_Shank, D_minor, head_direction, length_factor) over sm
+  derive damage_per_million = miner_dpc(curve, sm, sigma_lim, m_slope, uts) * 1000000 over sm
 
   // ── slip threshold: friction yields to bending (vertical rule, scalar) ──
   derive slip = F_per_bolt / (mu_joint * A_s_nom * n_interfaces)

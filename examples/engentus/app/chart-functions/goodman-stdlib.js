@@ -25,6 +25,18 @@ export const goodmanFunctions = {
     return sm <= xi ? Math.max(0, fl * (1 - sm / uts)) : Math.max(0, ys - sm);
   },
 
+  sigma_a_equiv: (sigmaA, sigmaM, uts) =>
+    uts > sigmaM + 1e-9 ? sigmaA * uts / (uts - sigmaM) : (sigmaA > 0 ? Infinity : 0),
+
+  sn_life_cycles: (sigmaEquiv, sigmaLim, slope) =>
+    sigmaEquiv > sigmaLim ? SN_ND / Math.pow(sigmaEquiv / sigmaLim, slope) : SN_ND,
+
+  miner_dpc: (sigmaA, sigmaM, sigmaLim, slope, uts) => {
+    const sigmaEquiv = goodmanFunctions.sigma_a_equiv(sigmaA, sigmaM, uts);
+    if (!Number.isFinite(sigmaEquiv) || sigmaEquiv <= sigmaLim) return 0;
+    return Math.pow(sigmaEquiv / sigmaLim, slope) / SN_ND;
+  },
+
   shore_a_to_E_pa: shoreA =>
     1e6 * (0.0981 * (56 + 7.62336 * shoreA)) /
           (0.137505 * (254 - 2.54 * shoreA)),

@@ -28,6 +28,11 @@ grant runtime authority to copied JS or presenter code.
   shear, mill speed, probe mean stress, endurance limit, and SN slope; their
   process state binds into `GoodmanDiagram` model params through
   `chart.render`.
+- Goodman deterministic chart readout now carries authored tooltip channels for
+  mean stress, alternating stress, shear force, and damage per cycle x10^6. The
+  values are derived in `BoltFatigue`, preserved by the generic cartesian
+  `chart.render` probe path, and displayed without a Goodman-local browser
+  controller.
 - Goodman CDF, Stats, and ANOVA windows now have authored structured empty
   states: CDF declares the no-run chart message, Stats declares the reference
   table header plus "No completed simulations", and ANOVA declares the
@@ -111,9 +116,10 @@ grant runtime authority to copied JS or presenter code.
 ## Known Gaps
 
 - Goodman numerical simulation lifecycle, animated scrubber playback,
-  CDF/Stats/ANOVA result datasets, dynamic annotation row creation, generated
-  bolt-set parameter rows, and clone/delete/new behavior remain to be authored.
-  The current Goodman run controls, MC band chart, chart edit panel,
+  CDF/Stats/ANOVA result datasets, multi-bolt-set response curves, dynamic
+  annotation row creation, generated bolt-set parameter rows, and
+  clone/delete/new behavior remain to be authored. The current Goodman run
+  controls, MC band chart, chart edit panel, deterministic chart readout,
   process-owned primary bolt-set expansion, bolt-set shell, and windows now
   expose authored stateful shell/chart behavior, but they do not yet execute or
   consume full reference Monte Carlo statistical datasets.

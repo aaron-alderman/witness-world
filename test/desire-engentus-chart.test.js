@@ -79,6 +79,13 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   assert.equal(curves.mark, "line");
   assert.equal(curves.primitives[0].points.length, sm.length);
   assert.equal(curves.primitives[0].points[120].y, evaluated.fields.curve.data[120]);
+  assert.equal(curves.primitives[0].points[120].tooltip.sigma_m_MPa, sm[120]);
+  assert.equal(curves.primitives[0].points[120].tooltip.sigma_a_MPa, evaluated.fields.curve.data[120]);
+  assert.equal(curves.primitives[0].points[120].tooltip.F_shear_N, evaluated.fields.F_shear.data[120]);
+  assert.equal(
+    curves.primitives[0].points[120].tooltip.damage_per_cycle_x10_6,
+    evaluated.fields.damage_per_million.data[120]
+  );
 
   // slip: a vertical rule at the scalar slip threshold
   const slip = layer("slip");

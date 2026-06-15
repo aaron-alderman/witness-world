@@ -277,6 +277,38 @@ test("Engentus Goodman modes switch authored chart views through process state",
       runConfigHidden: true,
       chartStyleHidden: true
     });
+
+    const goodmanProbeTarget = await page.evaluate(() => {
+      const node = document.querySelector("#chart-svg");
+      const curve = node?.__chartController?.plan?.layers
+        ?.find(layer => layer.name === "curves")
+        ?.primitives?.[0]?.points
+        ?.find(point => point?.tooltip?.F_shear_N);
+      if (!node || !curve) return null;
+      const projected = node.projectPoint(curve.x, curve.y);
+      const readout = node.probeAtPoint(projected.x, projected.y);
+      const reading = readout?.readings?.find(item => item?.tooltip?.F_shear_N);
+      return { x: projected.x, y: projected.y, reading };
+    });
+    assert.equal(typeof goodmanProbeTarget?.reading?.tooltip?.sigma_m_MPa, "number");
+    assert.equal(typeof goodmanProbeTarget?.reading?.tooltip?.sigma_a_MPa, "number");
+    assert.equal(typeof goodmanProbeTarget?.reading?.tooltip?.F_shear_N, "number");
+    assert.equal(typeof goodmanProbeTarget?.reading?.tooltip?.damage_per_cycle_x10_6, "number");
+    await page.evaluate(({ x, y }) => {
+      const node = document.querySelector("#chart-svg");
+      const rect = node.getBoundingClientRect();
+      node.parentElement.dispatchEvent(new MouseEvent("mousemove", {
+        bubbles: true,
+        clientX: rect.left + x,
+        clientY: rect.top + y
+      }));
+    }, { x: goodmanProbeTarget.x, y: goodmanProbeTarget.y });
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-tip")?.style?.display === "block"
+    );
+    assert.match(await page.textContent("#chart-tip"), /F Shear N/i);
+    assert.match(await page.textContent("#chart-tip"), /Damage Per Cycle X10 6/i);
+
     await page.click("#surface-goodmansavestaticsimulationaction");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "mc"
