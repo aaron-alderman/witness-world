@@ -7,6 +7,7 @@
  */
 
 const TWO_PI = 2 * Math.PI;
+const METHOD_ORDER = ["faithful", "grounded"];
 
 const _GL64_X = [
   0.0243502926634244325089, 0.0729931217877990394495, 0.1214628509941929108768, 0.1696444204239928180374,
@@ -177,6 +178,14 @@ const calcGammaGrounded = J => brentq(g => (g - Math.sin(g)) / TWO_PI - J, 1e-9,
 
 export const millForceKernels = {
   tangential_sign: method => (method === "faithful" ? 1 : -1),
+  pick_method: (values, method) => {
+    const index = METHOD_ORDER.indexOf(String(method || "grounded"));
+    return Array.isArray(values) ? values[index >= 0 ? index : 1] : values;
+  },
+  deg_text: value => `${Number(value * 180 / Math.PI).toFixed(1)}°`,
+  omega_text: value => `${Number(value).toFixed(3)} rad/s`,
+  rho_charge_text: value => `${Number(value).toFixed(3)} SG`,
+  force_kn_text: value => `${(Number(value) / 1000).toFixed(1)} kN`,
 
   fill_angle: (J, radius, height, method) =>
     method === "faithful" ? calcGammaFaithful(J, radius, height) : calcGammaGrounded(J),

@@ -5496,6 +5496,84 @@ view MillForceResultsTitle {
   prop text = "Results"
 }
 
+view MillForceFillAngleLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "γ (fill)"
+}
+
+view MillForceFillAngleValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "0.0°"
+  bindings {
+    text from capability MillForceCross.gammaText
+  }
+}
+
+view MillForceFillAngleRow {
+  kind metric-row
+  class mill-force-result-row
+  children {
+    MillForceFillAngleLabel
+    MillForceFillAngleValue
+  }
+}
+
+view MillForceShoulderAngleLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "φ (shoulder)"
+}
+
+view MillForceShoulderAngleValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "0.0°"
+  bindings {
+    text from capability MillForceCross.phiText
+  }
+}
+
+view MillForceShoulderAngleRow {
+  kind metric-row
+  class mill-force-result-row
+  children {
+    MillForceShoulderAngleLabel
+    MillForceShoulderAngleValue
+  }
+}
+
+view MillForceToeAngleLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "φ' (toe)"
+}
+
+view MillForceToeAngleValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "0.0°"
+  bindings {
+    text from capability MillForceCross.phiPrimeText
+  }
+}
+
+view MillForceToeAngleRow {
+  kind metric-row
+  class mill-force-result-row
+  children {
+    MillForceToeAngleLabel
+    MillForceToeAngleValue
+  }
+}
+
 view MillForceOmegaLabel {
   kind text
   class mill-force-rl
@@ -5509,7 +5587,7 @@ view MillForceOmegaValue {
   prop tag = "span"
   prop text = "0.00 rad/s"
   bindings {
-    text from capability MillForceCross.omega
+    text from capability MillForceCross.omegaText
   }
 }
 
@@ -5535,7 +5613,7 @@ view MillForceChargeDensityValue {
   prop tag = "span"
   prop text = "0.000 SG"
   bindings {
-    text from capability MillForceCross.rhoCharge
+    text from capability MillForceCross.rhoChargeText
   }
 }
 
@@ -5545,6 +5623,58 @@ view MillForceChargeDensityRow {
   children {
     MillForceChargeDensityLabel
     MillForceChargeDensityValue
+  }
+}
+
+view MillForceMaxRadialLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "Max F_r"
+}
+
+view MillForceMaxRadialValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "0.0 kN"
+  bindings {
+    text from capability MillForceCross.F_r_max_text
+  }
+}
+
+view MillForceMaxRadialRow {
+  kind metric-row
+  class mill-force-result-row
+  children {
+    MillForceMaxRadialLabel
+    MillForceMaxRadialValue
+  }
+}
+
+view MillForceMaxResultantLabel {
+  kind text
+  class mill-force-rl
+  prop tag = "span"
+  prop text = "Max |F|"
+}
+
+view MillForceMaxResultantValue {
+  kind text
+  class mill-force-rv
+  prop tag = "span"
+  prop text = "0.0 kN"
+  bindings {
+    text from capability MillForceCross.F_resultant_max_text
+  }
+}
+
+view MillForceMaxResultantRow {
+  kind metric-row
+  class mill-force-result-row
+  children {
+    MillForceMaxResultantLabel
+    MillForceMaxResultantValue
   }
 }
 
@@ -5605,8 +5735,13 @@ view MillForceResultsSection {
   class ssec
   children {
     MillForceResultsTitle
+    MillForceFillAngleRow
+    MillForceShoulderAngleRow
+    MillForceToeAngleRow
     MillForceOmegaRow
     MillForceChargeDensityRow
+    MillForceMaxRadialRow
+    MillForceMaxResultantRow
     MillForceModeStateRow
     MillForceModelStateRow
   }

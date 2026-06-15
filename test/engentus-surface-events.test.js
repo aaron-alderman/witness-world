@@ -695,6 +695,16 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       omegaBefore
     );
     assert.match(await speedRow.textContent(), /0\.80/);
+    const resultOutputs = await page.evaluate(() => ({
+      omegaText: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.omegaText,
+      gammaText: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.gammaText,
+      forceText: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.F_resultant_max_text,
+      resultRows: [...document.querySelectorAll(".mill-force-result-row")].map(row => row.textContent)
+    }));
+    assert.match(resultOutputs.omegaText, /rad\/s$/);
+    assert.match(resultOutputs.gammaText, /°$/);
+    assert.match(resultOutputs.forceText, /kN$/);
+    assert.equal(resultOutputs.resultRows.some(text => text.includes("Max |F|")), true);
 
     await page.getByRole("button", { name: "Compare" }).click();
     await page.waitForFunction(() =>

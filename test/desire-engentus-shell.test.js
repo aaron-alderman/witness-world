@@ -200,7 +200,13 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("MillForceTabForceRose")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("MillForceSpeedInput")?.body?.bindings[0]?.prop, "value");
   assert.equal(surfaces.get("MillForceSpeedInput")?.body?.interactions[0]?.action?.state, "MillForcePercentCrit");
-  assert.equal(surfaces.get("MillForceOmegaValue")?.body?.bindings[0]?.source?.kind, "capability");
+  assert.equal(surfaces.get("MillForceFillAngleValue")?.body?.bindings[0]?.source?.output, "gammaText");
+  assert.equal(surfaces.get("MillForceShoulderAngleValue")?.body?.bindings[0]?.source?.output, "phiText");
+  assert.equal(surfaces.get("MillForceToeAngleValue")?.body?.bindings[0]?.source?.output, "phiPrimeText");
+  assert.equal(surfaces.get("MillForceOmegaValue")?.body?.bindings[0]?.source?.output, "omegaText");
+  assert.equal(surfaces.get("MillForceChargeDensityValue")?.body?.bindings[0]?.source?.output, "rhoChargeText");
+  assert.equal(surfaces.get("MillForceMaxRadialValue")?.body?.bindings[0]?.source?.output, "F_r_max_text");
+  assert.equal(surfaces.get("MillForceMaxResultantValue")?.body?.bindings[0]?.source?.output, "F_resultant_max_text");
   assert.equal(surfaces.get("MillForceMcSamplesInput")?.body?.interactions[0]?.action?.state, "MillForceMcSamples");
   assert.equal(surfaces.get("MillForceMcJTotalToggle")?.body?.interactions[0]?.action?.value?.kind, "eventChecked");
   assert.deepEqual(processes.get("EngentusShellNavigation")?.body?.rules, [

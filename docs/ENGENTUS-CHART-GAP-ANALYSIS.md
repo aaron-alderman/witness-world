@@ -36,8 +36,12 @@ grant runtime authority to copied JS or presenter code.
   the three chart tabs through authored process state.
 - Mill Force now has an authored first-pass control/result loop: Single /
   Compare / Monte Carlo mode state, the main reference input sliders, live chart
-  parameter rebinding, and initial scalar result rows are driven through
-  `EngentusShellNavigation` state and `chart.render` outputs.
+  parameter rebinding, and reference-aligned scalar result rows are driven
+  through `EngentusShellNavigation` state and `chart.render` outputs.
+- Mill Force result readouts are authored in the dataflow model: method-indexed
+  fields are collapsed through the active authored model parameter, then exposed
+  as scalar chart capability outputs for fill angle, shoulder angle, toe angle,
+  omega, charge density, max radial force, and max resultant force.
 - Mill Force model/MC shell controls are now authored: grounded/faithful model
   selection, compare-mode explanatory rows, Monte Carlo sample count,
   free-parameter toggles, and run/clear status all live in `shell.rvm` and
@@ -66,8 +70,9 @@ grant runtime authority to copied JS or presenter code.
   still needs authored collection/repeated-action semantics or a justified
   platform primitive.
 - Mill Force still needs Monte Carlo execution/overlay behavior, tooltip
-  behavior, and full reference result projection. The current result rows and
-  MC controls are authored shell proofs, not final numerical/visual parity.
+  behavior, compare-difference readouts, and full reference result parity. The
+  current result rows and MC controls are authored shell proofs with live scalar
+  model outputs, not final numerical/visual parity.
 - No app-local browser runtime, presenter, or controller seam should be added to
   close these gaps. The next work should continue through authored surfaces,
   process state, projections, and explicit capability bindings.

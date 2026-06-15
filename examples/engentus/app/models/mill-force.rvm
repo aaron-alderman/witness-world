@@ -79,4 +79,21 @@ model MillForce {
   derive F_r = Fw_r + Fc_r over segment, method
   derive F_t = Fw_t over segment, method
   derive F_resultant = sqrt(F_r^2 + F_t^2) over segment, method
+
+  // ── scalar readouts for the authored results panel ──
+  // Method-indexed values are reduced through the active authored model param,
+  // keeping the selection in dataflow rather than a page-local controller.
+  derive phiText = deg_text(phi)
+  derive omegaText = omega_text(omega)
+  derive rhoChargeText = rho_charge_text(rhoCharge)
+  reduce gammaActive = pick_method(gamma, active_method) over method
+  reduce phiPrimeActive = pick_method(phiPrime, active_method) over method
+  derive gammaText = deg_text(gammaActive)
+  derive phiPrimeText = deg_text(phiPrimeActive)
+  reduce F_r_max_by_method = pmax(F_r) over segment
+  reduce F_r_max_active = pick_method(F_r_max_by_method, active_method) over method
+  derive F_r_max_text = force_kn_text(F_r_max_active)
+  reduce F_resultant_max_by_method = pmax(F_resultant) over segment
+  reduce F_resultant_max_active = pick_method(F_resultant_max_by_method, active_method) over method
+  derive F_resultant_max_text = force_kn_text(F_resultant_max_active)
 }

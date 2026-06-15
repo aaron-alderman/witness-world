@@ -79,6 +79,39 @@ test("MillForce charts can slice faithful data through an authored chart param",
   );
 });
 
+test("MillForce model authors sidebar result readouts as active-method scalar outputs", async () => {
+  const { model, g, f } = await setup();
+  const grounded = evaluateModel(model, {
+    functions: millForceKernels,
+    params: { active_method: "grounded" }
+  });
+  const faithful = evaluateModel(model, {
+    functions: millForceKernels,
+    params: { active_method: "faithful" }
+  });
+
+  assert.equal(grounded.fields.gammaText.axes.length, 0);
+  assert.equal(grounded.fields.phiPrimeText.axes.length, 0);
+  assert.equal(grounded.fields.F_r_max_text.axes.length, 0);
+  assert.equal(grounded.fields.F_resultant_max_text.axes.length, 0);
+  assert.equal(
+    grounded.fields.gammaActive.data,
+    grounded.fields.gamma.data[g]
+  );
+  assert.equal(
+    faithful.fields.gammaActive.data,
+    faithful.fields.gamma.data[f]
+  );
+  assert.equal(
+    grounded.fields.F_resultant_max_active.data,
+    Math.max(...grounded.fields.F_resultant.data.map(row => row[g]))
+  );
+  assert.match(grounded.fields.phiText.data, /°$/);
+  assert.match(grounded.fields.omegaText.data, / rad\/s$/);
+  assert.match(grounded.fields.rhoChargeText.data, / SG$/);
+  assert.match(grounded.fields.F_r_max_text.data, / kN$/);
+});
+
 test("MillForceAngle compare mode renders grounded and faithful layer pairs", async () => {
   const { model, g, f, N } = await setup();
   const evaluated = evaluateModel(model, {
