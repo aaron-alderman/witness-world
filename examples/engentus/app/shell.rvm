@@ -4739,12 +4739,16 @@ view GoodmanCdfWindowBody {
   class fw-body
   children {
     GoodmanCdfEmptyChart
+    GoodmanCdfSummaryTable
   }
 }
 
 view GoodmanCdfEmptyChart {
   kind empty-state
   class goodman-window-empty
+  bindings {
+    visible from state GoodmanRunStatusState map running false default true
+  }
   children {
     GoodmanCdfEmptyText
   }
@@ -4755,8 +4759,184 @@ view GoodmanCdfEmptyText {
   class goodman-window-empty-text
   prop tag = "p"
   prop text = "Run a Monte Carlo simulation to see results."
+}
+
+view GoodmanCdfSummaryTable {
+  kind table
+  class stbl
+  prop tag = "table"
   bindings {
-    text from state GoodmanRunStatusState map running "Monte Carlo band summary is available from the authored chart model." default "Run a Monte Carlo simulation to see results."
+    visible from state GoodmanRunStatusState map running true default false
+  }
+  children {
+    GoodmanCdfSummaryHead
+    GoodmanCdfSummaryBody
+  }
+}
+
+view GoodmanCdfSummaryHead {
+  kind table-head
+  prop tag = "thead"
+  children {
+    GoodmanCdfSummaryHeadRow
+  }
+}
+
+view GoodmanCdfSummaryHeadRow {
+  kind table-row
+  prop tag = "tr"
+  children {
+    GoodmanCdfSummaryHeadMetric
+    GoodmanCdfSummaryHeadValue
+  }
+}
+
+view GoodmanCdfSummaryHeadMetric {
+  kind text
+  prop tag = "th"
+  prop text = "Monte Carlo band summary"
+}
+
+view GoodmanCdfSummaryHeadValue {
+  kind text
+  prop tag = "th"
+  prop text = "Value"
+}
+
+view GoodmanCdfSummaryBody {
+  kind table-body
+  prop tag = "tbody"
+  children {
+    GoodmanCdfSummarySamplesRow
+    GoodmanCdfSummaryP10Row
+    GoodmanCdfSummaryP50Row
+    GoodmanCdfSummaryStdRow
+    GoodmanCdfSummaryP90Row
+  }
+}
+
+view GoodmanCdfSummarySamplesRow {
+  kind table-row
+  prop tag = "tr"
+  children {
+    GoodmanCdfSummarySamplesLabel
+    GoodmanCdfSummarySamplesValue
+  }
+}
+
+view GoodmanCdfSummarySamplesLabel {
+  kind text
+  prop tag = "td"
+  prop text = "Samples"
+}
+
+view GoodmanCdfSummarySamplesValue {
+  kind text
+  class num
+  prop tag = "td"
+  prop text = "-"
+  bindings {
+    text from capability GoodmanMCBands.mc_sample_count_text
+  }
+}
+
+view GoodmanCdfSummaryP10Row {
+  kind table-row
+  prop tag = "tr"
+  children {
+    GoodmanCdfSummaryP10Label
+    GoodmanCdfSummaryP10Value
+  }
+}
+
+view GoodmanCdfSummaryP10Label {
+  kind text
+  prop tag = "td"
+  prop text = "P10 stress"
+}
+
+view GoodmanCdfSummaryP10Value {
+  kind text
+  class num
+  prop tag = "td"
+  prop text = "-"
+  bindings {
+    text from capability GoodmanMCBands.mc_sa_p10_min_text
+  }
+}
+
+view GoodmanCdfSummaryP50Row {
+  kind table-row
+  prop tag = "tr"
+  children {
+    GoodmanCdfSummaryP50Label
+    GoodmanCdfSummaryP50Value
+  }
+}
+
+view GoodmanCdfSummaryP50Label {
+  kind text
+  prop tag = "td"
+  prop text = "P50 mean stress"
+}
+
+view GoodmanCdfSummaryP50Value {
+  kind text
+  class num
+  prop tag = "td"
+  prop text = "-"
+  bindings {
+    text from capability GoodmanMCBands.mc_sa_p50_mean_text
+  }
+}
+
+view GoodmanCdfSummaryStdRow {
+  kind table-row
+  prop tag = "tr"
+  children {
+    GoodmanCdfSummaryStdLabel
+    GoodmanCdfSummaryStdValue
+  }
+}
+
+view GoodmanCdfSummaryStdLabel {
+  kind text
+  prop tag = "td"
+  prop text = "P50 stress std"
+}
+
+view GoodmanCdfSummaryStdValue {
+  kind text
+  class num
+  prop tag = "td"
+  prop text = "-"
+  bindings {
+    text from capability GoodmanMCBands.mc_sa_p50_std_text
+  }
+}
+
+view GoodmanCdfSummaryP90Row {
+  kind table-row
+  prop tag = "tr"
+  children {
+    GoodmanCdfSummaryP90Label
+    GoodmanCdfSummaryP90Value
+  }
+}
+
+view GoodmanCdfSummaryP90Label {
+  kind text
+  prop tag = "td"
+  prop text = "P90 stress"
+}
+
+view GoodmanCdfSummaryP90Value {
+  kind text
+  class num
+  prop tag = "td"
+  prop text = "-"
+  bindings {
+    text from capability GoodmanMCBands.mc_sa_p90_max_text
   }
 }
 

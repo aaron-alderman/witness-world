@@ -64,8 +64,9 @@ grant runtime authority to copied JS or presenter code.
   windows: `BoltFatigueMC` reduces the mounted MC bands to sample count and
   p10/p50/p90 plus standard-deviation stress summary text outputs,
   `chart.render` publishes them as `GoodmanMCBands.*` capability outputs, and
-  the Stats/CDF windows consume those outputs through authored surface bindings
-  after the run state becomes active.
+  the Stats window and the CDF window's explicit stress-band summary table
+  consume those outputs through authored surface bindings after the run state
+  becomes active.
 - Goodman scrubber range now follows authored run duration:
   `GoodmanRunDurationMonths` binds to the time slider `max` attribute through
   the generic form-control binding path, matching the reference relationship
@@ -144,8 +145,8 @@ grant runtime authority to copied JS or presenter code.
   controls, MC band chart, chart edit panel, deterministic chart readout,
   process-owned primary bolt-set expansion, bolt-set shell, and windows now
   expose authored stateful shell/chart behavior and first-pass MC scalar
-  summaries, but they do not yet execute or consume full reference Monte Carlo
-  statistical datasets.
+  stress-band summaries, but they do not yet execute or consume full reference
+  Monte Carlo failure-time/CDF/statistical datasets.
 - Goodman dynamic repeated collections remain a gap. Current simulation and
   bolt-set rows are explicit authored first-pass rows; full reference parity
   still needs authored collection/repeated-action semantics or a justified

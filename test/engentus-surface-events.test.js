@@ -649,7 +649,18 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       !document.querySelector("#surface-goodmancdfwindow")?.hasAttribute("hidden")
       && /Monte Carlo band summary/.test(document.querySelector("#surface-goodmancdfwindow")?.textContent || "")
     );
-    assert.match(await page.textContent("#surface-goodmancdfwindow"), /Monte Carlo band summary is available/);
+    const cdfWindowText = await page.textContent("#surface-goodmancdfwindow");
+    assert.match(cdfWindowText, /Monte Carlo band summary/);
+    assert.match(cdfWindowText, /Samples/);
+    assert.match(cdfWindowText, /P50 stress std/);
+    assert.equal(await page.evaluate(() =>
+      document.querySelector("#chart-svg-mc")?.__surfaceCapabilityOutputs?.mc_sample_count_text
+        === document.querySelector("#surface-goodmancdfsummarysamplesvalue")?.textContent
+    ), true);
+    assert.equal(await page.evaluate(() =>
+      document.querySelector("#chart-svg-mc")?.__surfaceCapabilityOutputs?.mc_sa_p50_std_text
+        === document.querySelector("#surface-goodmancdfsummarystdvalue")?.textContent
+    ), true);
     assert.match(await page.textContent("#surface-goodmanrunprogresslabel"), /Running/);
     assert.deepEqual(await page.evaluate(() => ({
       runDisabled: document.querySelector("#surface-goodmanrunactionstart")?.disabled,

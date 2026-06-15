@@ -677,7 +677,18 @@ test("the Goodman shell authors sidebar and window content rather than empty hos
   assert.equal(surfaces.get("GoodmanCdfWindow")?.body?.surfaceKind, "floating-window");
   assert.equal(surfaces.get("GoodmanStatsWindow")?.body?.surfaceKind, "floating-window");
   assert.equal(surfaces.get("GoodmanAnovaWindow")?.body?.surfaceKind, "floating-window");
-  assert.deepEqual(surfaces.get("GoodmanCdfWindowBody")?.body?.children, ["GoodmanCdfEmptyChart"]);
+  assert.deepEqual(surfaces.get("GoodmanCdfWindowBody")?.body?.children, [
+    "GoodmanCdfEmptyChart",
+    "GoodmanCdfSummaryTable"
+  ]);
+  assert.equal(
+    surfaces.get("GoodmanCdfSummarySamplesValue")?.body?.bindings?.[0]?.source?.output,
+    "mc_sample_count_text"
+  );
+  assert.equal(
+    surfaces.get("GoodmanCdfSummaryStdValue")?.body?.bindings?.[0]?.source?.output,
+    "mc_sa_p50_std_text"
+  );
   assert.deepEqual(surfaces.get("GoodmanStatsWindowBody")?.body?.children, ["GoodmanStatsTable"]);
   assert.deepEqual(surfaces.get("GoodmanStatsHeaderRow")?.body?.children, [
     "GoodmanStatsHeadSimulation",
