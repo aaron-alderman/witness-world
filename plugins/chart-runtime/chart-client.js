@@ -103,10 +103,86 @@ function publishCapabilityOutputs(container, outputs = {}) {
   if (event) container.dispatchEvent(event);
 }
 
+function tooltipElementFor(container, view = {}) {
+  const tooltipId = view?.props?.tooltipId;
+  if (tooltipId && globalThis.document?.getElementById) {
+    const byId = globalThis.document.getElementById(tooltipId);
+    if (byId) return byId;
+  }
+  const sibling = container?.parentElement?.querySelector?.("[data-chart-page-overlay='tooltip']");
+  return sibling ?? null;
+}
+
+function formatTooltipKey(key) {
+  return String(key || "")
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function formatTooltipValue(value) {
+  const number = Number(value);
+  if (Number.isFinite(number) && value !== "" && value !== null) {
+    if (Math.abs(number) >= 1000) return `${(number / 1000).toFixed(2)} k`;
+    if (Math.abs(number) >= 10) return number.toFixed(1);
+    return number.toFixed(3).replace(/\.?0+$/, "");
+  }
+  return String(value ?? "");
+}
+
+function tooltipMarkup(readout = {}) {
+  const values = readout.tooltip && typeof readout.tooltip === "object" ? readout.tooltip : {};
+  const entries = Object.entries(values).filter(([, value]) => value != null && value !== "");
+  if (!entries.length) return "";
+  const [firstKey, firstValue] = entries[0];
+  const rows = entries.slice(1).map(([key, value]) =>
+    `<div><span>${formatTooltipKey(key)}</span>: ${formatTooltipValue(value)}</div>`
+  );
+  return [
+    `<div style="font-weight:600;margin-bottom:3px">${formatTooltipKey(firstKey)} ${formatTooltipValue(firstValue)}</div>`,
+    ...rows
+  ].join("");
+}
+
+function attachChartTooltip(container, renderedNode, view = {}) {
+  const tooltip = tooltipElementFor(container, view);
+  if (!tooltip || typeof renderedNode?.probeAtPoint !== "function") return () => {};
+  const eventTarget = renderedNode.parentElement ?? renderedNode;
+  const move = event => {
+    const rect = renderedNode.getBoundingClientRect?.();
+    if (!rect) return;
+    const readout = renderedNode.probeAtPoint(event.clientX - rect.left, event.clientY - rect.top);
+    const html = tooltipMarkup(readout);
+    if (!html) {
+      tooltip.style.display = "none";
+      tooltip.style.opacity = "0";
+      return;
+    }
+    tooltip.innerHTML = html;
+    tooltip.style.display = "block";
+    tooltip.style.opacity = "1";
+    tooltip.style.left = `${event.clientX - rect.left + 10}px`;
+    tooltip.style.top = `${event.clientY - rect.top - 10}px`;
+  };
+  const leave = () => {
+    tooltip.style.display = "none";
+    tooltip.style.opacity = "0";
+  };
+  eventTarget.addEventListener("mousemove", move, true);
+  eventTarget.addEventListener("mouseleave", leave, true);
+  return () => {
+    eventTarget.removeEventListener("mousemove", move, true);
+    eventTarget.removeEventListener("mouseleave", leave, true);
+    leave();
+  };
+}
+
 export function mountChart(container, initialSpec = {}) {
   let mountSpec = normalizeMountSpec(initialSpec);
   let renderedNode = null;
   let evaluatedModel = null;
+  let renderedPlan = null;
+  let cleanupTooltip = null;
   let resizeObserver = null;
   let resizeFrame = 0;
   let cancelResizeFrame = null;
@@ -123,8 +199,12 @@ export function mountChart(container, initialSpec = {}) {
       width: viewport.width,
       height: viewport.height
     });
+    renderedPlan = plan;
+    cleanupTooltip?.();
+    cleanupTooltip = null;
     if (renderedNode && typeof renderedNode.destroy === "function") renderedNode.destroy();
     renderedNode = drawChart(container, plan, globalThis.d3);
+    cleanupTooltip = attachChartTooltip(container, renderedNode, mountSpec.view);
     publishCapabilityOutputs(container, scalarModelOutputs(evaluated));
     return renderedNode;
   };
@@ -166,6 +246,9 @@ export function mountChart(container, initialSpec = {}) {
     get evaluated() {
       return evaluatedModel;
     },
+    get plan() {
+      return renderedPlan;
+    },
     get outputs() {
       return scalarModelOutputs(evaluatedModel);
     },
@@ -195,6 +278,8 @@ export function mountChart(container, initialSpec = {}) {
       if (!resizeObserver && typeof globalThis.removeEventListener === "function") {
         globalThis.removeEventListener("resize", scheduleRender);
       }
+      cleanupTooltip?.();
+      cleanupTooltip = null;
       if (typeof renderedNode?.destroy === "function") renderedNode.destroy();
       renderedNode = null;
     }

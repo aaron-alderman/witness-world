@@ -100,6 +100,12 @@ grant runtime authority to copied JS or presenter code.
   centre-filled pie slices: `circle` guide layers and `annular-wedge` liner
   bands render the shell, inner radius, single-model liner ring, and compare
   mode grounded/faithful split rings.
+- Mill Force cross-section tooltip data is now authored on the chart layers:
+  liner number, model method, charge mass, radial/tangential force, and
+  resultant force flow through generic `tooltip.*` chart channels. The
+  `chart.render` runtime preserves those primitive tooltip values, exposes a
+  polar probe hook, and displays the authored tooltip element without a
+  Mill-Force-local controller.
 
 ## Known Gaps
 
@@ -114,10 +120,12 @@ grant runtime authority to copied JS or presenter code.
   bolt-set rows are explicit authored first-pass rows; full reference parity
   still needs authored collection/repeated-action semantics or a justified
   platform primitive.
-- Mill Force still needs Monte Carlo execution/overlay behavior, tooltip
-  behavior, and full reference result parity. Compare deltas now exist as
-  authored scalar outputs and inline percent readouts, but the compare panel is
-  still a first-pass authored analysis view rather than final reference parity.
+- Mill Force still needs Monte Carlo execution/overlay behavior and full
+  reference result parity. Cross-section tooltip readout now exists through the
+  generic chart tooltip seam, but force-vs-angle and rose tooltip parity remain
+  future authored chart-channel work. Compare deltas now exist as authored
+  scalar outputs and inline percent readouts, but the compare panel is still a
+  first-pass authored analysis view rather than final reference parity.
 - No app-local browser runtime, presenter, or controller seam should be added to
   close these gaps. The next work should continue through authored surfaces,
   process state, projections, and explicit capability bindings.

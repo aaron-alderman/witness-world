@@ -816,6 +816,42 @@ test("Engentus Mill Force tabs switch authored chart views through process state
       crossClass: "mill-force-cht-tab active",
       forceClass: "mill-force-cht-tab"
     });
+    const probeTarget = await page.evaluate(() => {
+      const svg = document.querySelector("#mill-force-svg-cross");
+      const plan = svg?.__chartController?.plan;
+      const primitive = plan?.layers
+        ?.find(layer => layer.name === "liners")
+        ?.primitives
+        ?.find(item => item?.tooltip?.method);
+      if (!primitive) return null;
+      const theta = Math.atan2(
+        Math.sin(primitive.theta0) + Math.sin(primitive.theta1),
+        Math.cos(primitive.theta0) + Math.cos(primitive.theta1)
+      );
+      const radius = (Number(primitive.r0) + Number(primitive.r1)) / 2;
+      const [r0, r1] = plan.scales.r.domain;
+      const rPx = (radius - r0) / ((r1 - r0) || 1) * plan.maxRadius;
+      const x = plan.center.x + rPx * Math.sin(theta);
+      const y = plan.center.y - rPx * Math.cos(theta);
+      const readout = svg.__chartController.node.probeAtPoint(x, y);
+      return { x, y, tooltip: readout?.tooltip ?? null };
+    });
+    assert.equal(probeTarget?.tooltip?.method, "grounded");
+    assert.equal(typeof probeTarget?.tooltip?.F_resultant_N, "number");
+    await page.evaluate(({ x, y }) => {
+      const svg = document.querySelector("#mill-force-svg-cross");
+      const rect = svg.getBoundingClientRect();
+      const target = svg.parentElement ?? svg;
+      target.dispatchEvent(new MouseEvent("mousemove", {
+        bubbles: true,
+        clientX: rect.left + x,
+        clientY: rect.top + y
+      }));
+    }, { x: probeTarget.x, y: probeTarget.y });
+    await page.waitForFunction(() => {
+      const tip = document.querySelector("#mill-force-cross-tip");
+      return tip && getComputedStyle(tip).display !== "none" && /F Resultant N/i.test(tip.textContent || "");
+    });
 
     await page.click("#surface-millforcetabforcevsangle");
     await page.waitForFunction(() =>

@@ -213,7 +213,11 @@ function planPolarLayer(layer, evaluated) {
     const iterAxis = iterationAxis(layer, rField, axes);
     const points = (axes[iterAxis]?.values ?? []).map((_, i) => {
       const coord = { [iterAxis]: i, ...where };
-      return { theta: valueAt(thetaField, coord), r: valueAt(rField, coord) };
+      return {
+        theta: valueAt(thetaField, coord),
+        r: valueAt(rField, coord),
+        tooltip: tooltipValuesForEncoding(enc, evaluated, coord, axes)
+      };
     });
     return {
       ...base, stroke: colorToken(enc.stroke), fill: enc.fill ? colorToken(enc.fill) : null,
@@ -247,7 +251,8 @@ function planPolarLayer(layer, evaluated) {
         theta1: valueAt(t1Field, coord),
         r0: channelValue(enc.r0, evaluated, coord) ?? 0,
         r1: channelValue(enc.r1 ?? enc.r, evaluated, coord) ?? channelValue(enc.r, evaluated, coord) ?? 0,
-        value: vField ? valueAt(vField, coord) : channelValue(enc.value, evaluated, coord)
+        value: vField ? valueAt(vField, coord) : channelValue(enc.value, evaluated, coord),
+        tooltip: tooltipValuesForEncoding(enc, evaluated, coord, axes)
       };
     });
     return {
@@ -526,6 +531,29 @@ function channelValue(token, evaluated, coord = {}) {
   const field = evaluated.fields?.[token];
   if (field) return field.axes.length === 0 ? field.data : valueAt(field, coord);
   return scalarRef(token, evaluated);
+}
+
+function tooltipValuesForEncoding(enc, evaluated, coord = {}, axes = {}) {
+  const out = {};
+  for (const [key, token] of Object.entries(enc ?? {})) {
+    if (!key.startsWith("tooltip.")) continue;
+    const name = key.slice("tooltip.".length);
+    if (!name) continue;
+    out[name] = tooltipChannelValue(token, evaluated, coord, axes);
+  }
+  return out;
+}
+
+function tooltipChannelValue(token, evaluated, coord = {}, axes = {}) {
+  if (token == null) return null;
+  if (typeof token === "number" || typeof token === "boolean") return token;
+  const key = String(token);
+  if (key.startsWith("param.")) return evaluated.params?.[key.slice("param.".length)];
+  if (axes[key] && Object.prototype.hasOwnProperty.call(coord, key)) {
+    return axes[key]?.values?.[coord[key]];
+  }
+  const resolved = channelValue(token, evaluated, coord);
+  return resolved == null ? key : resolved;
 }
 
 function predicateValue(token, evaluated) {
@@ -886,7 +914,82 @@ function drawPolarChart(container, plan, d3) {
       }
     }
   }
-  return svg.node();
+  const node = svg.node();
+  node.probeAtPoint = (x, y) => polarProbeReadout(plan, x, y);
+  node.destroy = () => {
+    svg.selectAll("*").remove();
+  };
+  return node;
+}
+
+function normalizeAngle(theta) {
+  const twoPi = 2 * Math.PI;
+  return ((theta % twoPi) + twoPi) % twoPi;
+}
+
+function angularDistance(a, b) {
+  const twoPi = 2 * Math.PI;
+  const diff = Math.abs(normalizeAngle(a) - normalizeAngle(b));
+  return Math.min(diff, twoPi - diff);
+}
+
+function averageAngle(theta0, theta1) {
+  const x = Math.sin(theta0) + Math.sin(theta1);
+  const y = Math.cos(theta0) + Math.cos(theta1);
+  return normalizeAngle(Math.atan2(x, y));
+}
+
+function polarPointToData(plan, x, y) {
+  const dx = Number(x) - plan.center.x;
+  const dy = plan.center.y - Number(y);
+  const radiusPx = Math.hypot(dx, dy);
+  const [domainMin, domainMax] = plan.scales.r.domain;
+  const radius = domainMin + radiusPx / (plan.maxRadius || 1) * (domainMax - domainMin);
+  return {
+    theta: normalizeAngle(Math.atan2(dx, dy)),
+    r: radius,
+    radiusPx
+  };
+}
+
+function polarProbeReadout(plan, x, y) {
+  const pointer = polarPointToData(plan, x, y);
+  let best = null;
+  let bestScore = Infinity;
+  for (const layer of plan.layers ?? []) {
+    for (const primitive of layer.primitives ?? []) {
+      let score = Infinity;
+      let tooltip = primitive.tooltip ?? {};
+      if (Number.isFinite(primitive.theta0) && Number.isFinite(primitive.theta1)) {
+        const r0 = Number(primitive.r0) || 0;
+        const r1 = Number(primitive.r1) || 0;
+        const rMin = Math.min(r0, r1);
+        const rMax = Math.max(r0, r1);
+        if (pointer.r < rMin || pointer.r > rMax) continue;
+        const span = angularDistance(primitive.theta0, primitive.theta1);
+        const mid = averageAngle(primitive.theta0, primitive.theta1);
+        const angleDistance = angularDistance(pointer.theta, mid);
+        if (angleDistance > span / 2 + 0.02) continue;
+        score = angleDistance;
+      } else if (Array.isArray(primitive.points)) {
+        for (const point of primitive.points) {
+          if (!Number.isFinite(point.theta) || !Number.isFinite(point.r)) continue;
+          const rDistance = Math.abs(pointer.r - point.r) / ((plan.scales.r.domain[1] - plan.scales.r.domain[0]) || 1);
+          const aDistance = angularDistance(pointer.theta, point.theta);
+          const pointScore = aDistance + rDistance;
+          if (pointScore < score) {
+            score = pointScore;
+            tooltip = point.tooltip ?? primitive.tooltip ?? {};
+          }
+        }
+      }
+      if (score < bestScore) {
+        bestScore = score;
+        best = { layer: layer.name, mark: layer.mark, tooltip, primitive };
+      }
+    }
+  }
+  return best ? { ...pointer, ...best } : null;
 }
 
 function annularWedgePath(prim, { center, rScale }) {
