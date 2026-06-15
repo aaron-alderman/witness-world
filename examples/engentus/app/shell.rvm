@@ -159,6 +159,22 @@ state GoodmanRunStepMonths: number {
   initial 0.5
 }
 
+state GoodmanStaticAppliedShear: number {
+  initial 10000
+}
+
+state GoodmanStaticRpm: number {
+  initial 11
+}
+
+state GoodmanStaticEnduranceLimit: number {
+  initial 50
+}
+
+state GoodmanStaticSlope: number {
+  initial 4.6
+}
+
 state GoodmanScrubTimeMonths: number {
   initial 0
 }
@@ -441,6 +457,33 @@ derive GoodmanChartPointSizeText {
   prop suffix = " px"
 }
 
+derive GoodmanStaticAppliedShearText {
+  kind format
+  source GoodmanStaticAppliedShear
+  prop digits = 0
+  prop suffix = " N"
+}
+
+derive GoodmanStaticRpmText {
+  kind format
+  source GoodmanStaticRpm
+  prop digits = 1
+  prop suffix = " RPM"
+}
+
+derive GoodmanStaticEnduranceLimitText {
+  kind format
+  source GoodmanStaticEnduranceLimit
+  prop digits = 0
+  prop suffix = " MPa"
+}
+
+derive GoodmanStaticSlopeText {
+  kind format
+  source GoodmanStaticSlope
+  prop digits = 1
+}
+
 event EngentusSignInRequested {
 }
 
@@ -697,6 +740,10 @@ process EngentusShellNavigation {
     GoodmanRunBoltsPerSet
     GoodmanRunDurationMonths
     GoodmanRunStepMonths
+    GoodmanStaticAppliedShear
+    GoodmanStaticRpm
+    GoodmanStaticEnduranceLimit
+    GoodmanStaticSlope
     GoodmanScrubTimeMonths
     GoodmanPlaybackSpeed
     GoodmanTrailVisible
@@ -2597,10 +2644,134 @@ view GoodmanScenarioSection {
   class goodman-scenario-section
   prop title = "Scenario View"
   children {
-    GoodmanScenarioProbeRow
-    GoodmanScenarioMeanStressRow
-    GoodmanScenarioAltStressRow
-    GoodmanScenarioSlipRow
+    GoodmanStaticAppliedShearField
+    GoodmanStaticRpmField
+    GoodmanStaticEnduranceLimitField
+    GoodmanStaticSlopeField
+  }
+}
+
+view GoodmanStaticAppliedShearValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "10000 N"
+  bindings {
+    text from projection GoodmanStaticAppliedShearText
+  }
+}
+
+view GoodmanStaticAppliedShearField {
+  kind input
+  class prow goodman-static-control
+  prop tag = "input"
+  prop inputType = "range"
+  prop label = "Applied shear F"
+  prop min = 500
+  prop max = 100000
+  prop step = 500
+  prop value = 10000
+  bindings {
+    value from state GoodmanStaticAppliedShear
+  }
+  interactions {
+    on input self set GoodmanStaticAppliedShear eventValue
+  }
+  children {
+    GoodmanStaticAppliedShearValue
+  }
+}
+
+view GoodmanStaticRpmValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "11.0 RPM"
+  bindings {
+    text from projection GoodmanStaticRpmText
+  }
+}
+
+view GoodmanStaticRpmField {
+  kind input
+  class prow goodman-static-control
+  prop tag = "input"
+  prop inputType = "range"
+  prop label = "Mill speed"
+  prop min = 5
+  prop max = 20
+  prop step = 0.5
+  prop value = 11
+  bindings {
+    value from state GoodmanStaticRpm
+  }
+  interactions {
+    on input self set GoodmanStaticRpm eventValue
+  }
+  children {
+    GoodmanStaticRpmValue
+  }
+}
+
+view GoodmanStaticEnduranceLimitValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "50 MPa"
+  bindings {
+    text from projection GoodmanStaticEnduranceLimitText
+  }
+}
+
+view GoodmanStaticEnduranceLimitField {
+  kind input
+  class prow goodman-static-control
+  prop tag = "input"
+  prop inputType = "range"
+  prop label = "sigma_lim endurance"
+  prop min = 20
+  prop max = 120
+  prop step = 1
+  prop value = 50
+  bindings {
+    value from state GoodmanStaticEnduranceLimit
+  }
+  interactions {
+    on input self set GoodmanStaticEnduranceLimit eventValue
+  }
+  children {
+    GoodmanStaticEnduranceLimitValue
+  }
+}
+
+view GoodmanStaticSlopeValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop text = "4.6"
+  bindings {
+    text from projection GoodmanStaticSlopeText
+  }
+}
+
+view GoodmanStaticSlopeField {
+  kind input
+  class prow goodman-static-control
+  prop tag = "input"
+  prop inputType = "range"
+  prop label = "SN slope m"
+  prop min = 2
+  prop max = 8
+  prop step = 0.1
+  prop value = 4.6
+  bindings {
+    value from state GoodmanStaticSlope
+  }
+  interactions {
+    on input self set GoodmanStaticSlope eventValue
+  }
+  children {
+    GoodmanStaticSlopeValue
   }
 }
 

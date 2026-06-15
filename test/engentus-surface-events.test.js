@@ -344,6 +344,27 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     );
     assert.match(await page.textContent("#t-lbl"), /6\.5 mo/);
 
+    await page.locator("#surface-goodmanstaticappliedshearfield").evaluate(input => {
+      input.value = "25000";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanStaticAppliedShear") === 25000
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg")?.__chartController?.spec?.params?.F_alt_applied_N === 25000
+    );
+    await page.locator("#surface-goodmanstaticrpmfield").evaluate(input => {
+      input.value = "12.5";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanStaticRpm") === 12.5
+    );
+    await page.waitForFunction(() =>
+      document.querySelector("#chart-svg")?.__chartController?.spec?.params?.rpm === 12.5
+    );
+
     await page.locator("#trail-cb").check();
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanTrailVisible") === true

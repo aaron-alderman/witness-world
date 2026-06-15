@@ -29,6 +29,10 @@ chart GoodmanDiagram of BoltFatigue {
     presentation.showGrid from state GoodmanChartGridVisible
     presentation.showAnnotations from state GoodmanChartAnnotationsVisible
     presentation.pointSize from state GoodmanChartPointSize
+    param.F_alt_applied_N from state GoodmanStaticAppliedShear
+    param.rpm from state GoodmanStaticRpm
+    param.sigma_lim from state GoodmanStaticEnduranceLimit
+    param.m_slope from state GoodmanStaticSlope
   }
 
   x sm
@@ -76,6 +80,7 @@ chart GoodmanMCBands of BoltFatigueMC {
     presentation.showGrid from state GoodmanChartGridVisible
     presentation.showAnnotations from state GoodmanChartAnnotationsVisible
     presentation.pointSize from state GoodmanChartPointSize
+    param.F_alt_applied_N from state GoodmanStaticAppliedShear
   }
 
   x sm

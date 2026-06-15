@@ -20,6 +20,9 @@ grant runtime authority to copied JS or presenter code.
   through generic `presentation.*` capability props for grid visibility,
   annotation visibility, and point size. The chart runtime accepts these as
   view-presentation patches, not Goodman-specific logic.
+- Goodman static reference controls now exist as authored inputs for applied
+  shear, mill speed, endurance limit, and SN slope; their process state binds
+  into `GoodmanDiagram` model params through `chart.render`.
 - Mill Charge chart: `MillChargeCrossSection` mounts live in
   `/engentus/mill-charge`, accepts authored parameter bindings, updates derived
   RHS metrics, and keeps its transient animation phase during parameter changes.
