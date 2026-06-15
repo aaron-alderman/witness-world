@@ -103,3 +103,63 @@ test("runtime-surface-shell selects the authored route subtree by routePath befo
   assert.match(html, /activeSurface=HomeScreen/);
   assert.doesNotMatch(html, /Welcome back/);
 });
+
+test("runtime-surface-shell preserves authored inline style attributes generically", () => {
+  const surfaces = new Map([
+    ["SurfaceRoot", {
+      id: "SurfaceRoot",
+      surfaceKind: "app-root",
+      children: ["LogoImage"]
+    }],
+    ["LogoImage", {
+      id: "LogoImage",
+      surfaceKind: "image",
+      props: {
+        tag: "img",
+        src: "/img/logo.png",
+        alt: "Logo",
+        style: "height:42px;width:auto;margin-bottom:28px"
+      }
+    }]
+  ]);
+
+  const html = renderSurfaceShellFromMap({
+    surfaces,
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/"
+  });
+
+  assert.match(html, /style="height:42px;width:auto;margin-bottom:28px"/);
+});
+
+test("runtime-surface-shell preserves generic input attributes on authored form controls", () => {
+  const surfaces = new Map([
+    ["SurfaceRoot", {
+      id: "SurfaceRoot",
+      surfaceKind: "app-root",
+      children: ["EmailField"]
+    }],
+    ["EmailField", {
+      id: "EmailField",
+      surfaceKind: "form-field",
+      className: "auth-field",
+      props: {
+        label: "Email address",
+        inputType: "email",
+        inputId: "login-email",
+        inputClass: "auth-input",
+        placeholder: "you@company.com",
+        autocomplete: "email"
+      }
+    }]
+  ]);
+
+  const html = renderSurfaceShellFromMap({
+    surfaces,
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/"
+  });
+
+  assert.match(html, /<label for="login-email">Email address<\/label>/);
+  assert.match(html, /<input type="email" id="login-email" class="auth-input" placeholder="you@company\.com" autocomplete="email">/);
+});

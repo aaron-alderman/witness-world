@@ -43,8 +43,8 @@ a {
   text-decoration: none;
 }
 
-img.brand-img,
-img.product-img {
+#tb-brand img,
+.auth-brand img {
   width: auto;
   flex-shrink: 0;
 }
@@ -81,9 +81,6 @@ img.product-img {
   background: var(--brd);
   flex-shrink: 0
 }
-
-#tb-brand img.brand-img { height: 20px; }
-#tb-brand img.product-img { height: 22px; }
 
 #tb-goodman-tools {
   display: flex;
@@ -323,9 +320,6 @@ img.product-img {
   position: relative;
   z-index: 1;
 }
-
-.auth-brand img.brand-img { height: 17px; }
-.auth-brand img.product-img { height: 19px; }
 
 .auth-brand-div {
   width: 1px;

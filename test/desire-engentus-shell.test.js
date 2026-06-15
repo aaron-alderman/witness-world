@@ -103,7 +103,7 @@ test("the shell is structured through explicit child regions instead of flattene
   ]);
 
   assert.deepEqual(surfaces.get("EngentusHome")?.body?.children, [
-    "EngentusAppChrome",
+    "EngentusHomeChrome",
     "EngentusHomeBody"
   ]);
 });

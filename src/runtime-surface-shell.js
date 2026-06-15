@@ -225,13 +225,16 @@ function renderAttributes(surface, tagName) {
   if (domId) attrs.push(`id="${escapeAttr(domId)}"`);
   const classNames = readClassNames(surface);
   if (classNames.length) attrs.push(`class="${escapeAttr(classNames.join(" "))}"`);
+  const inlineStyle = staticTextValue(props, "style");
+  if (inlineStyle) attrs.push(`style="${escapeAttr(inlineStyle)}"`);
   if (props.hidden === true) attrs.push("hidden");
   if (tagName === "a") {
     const href = staticTextValue(props, "href") ?? "#";
     attrs.push(`href="${escapeAttr(href)}"`);
   }
   if (tagName === "button") {
-    attrs.push(`type="${escapeAttr(staticTextValue(props, "buttonType") ?? "button")}"`);
+    const buttonType = staticTextValue(props, "buttonType");
+    if (buttonType) attrs.push(`type="${escapeAttr(buttonType)}"`);
     if (props.disabled === true) attrs.push("disabled");
   }
   if (tagName === "img") {
@@ -263,11 +266,16 @@ function renderImage(src, className, alt = "") {
   return `<img${classAttr} src="${escapeAttr(asset)}" alt="${escapeAttr(alt)}">`;
 }
 
-function renderFieldControl(surface) {
+function renderFieldControl(surface, surfaces) {
   const props = readProps(surface);
   const inputType = staticTextValue(props, "inputType") ?? "text";
   const inputId = staticTextValue(props, "inputId");
   const label = staticTextValue(props, "label");
+  const inputClass = staticTextValue(props, "inputClass");
+  const inputStyle = staticTextValue(props, "inputStyle");
+  const inputWrapClass = staticTextValue(props, "inputWrapClass");
+  const autocomplete = staticTextValue(props, "autocomplete");
+  const name = staticTextValue(props, "name");
   const placeholder = staticTextValue(props, "placeholder");
   const value = props.value;
   const min = props.min;
@@ -276,40 +284,53 @@ function renderFieldControl(surface) {
   const checked = Boolean(props.checked);
   const disabled = Boolean(props.disabled);
   const controlAttrs = [
-    inputId ? `id="${escapeAttr(inputId)}"` : "",
     `type="${escapeAttr(inputType)}"`,
+    inputId ? `id="${escapeAttr(inputId)}"` : "",
+    inputClass ? `class="${escapeAttr(inputClass)}"` : "",
     placeholder ? `placeholder="${escapeAttr(placeholder)}"` : "",
+    autocomplete ? `autocomplete="${escapeAttr(autocomplete)}"` : "",
+    name ? `name="${escapeAttr(name)}"` : "",
     value != null && inputType !== "checkbox" ? `value="${escapeAttr(value)}"` : "",
     min != null ? `min="${escapeAttr(min)}"` : "",
     max != null ? `max="${escapeAttr(max)}"` : "",
     step != null ? `step="${escapeAttr(step)}"` : "",
+    inputStyle ? `style="${escapeAttr(inputStyle)}"` : "",
     checked && inputType === "checkbox" ? "checked" : "",
     disabled ? "disabled" : ""
   ].filter(Boolean).join(" ");
+  const inputMarkup = `<input ${controlAttrs}>`;
+  const adornmentMarkup = childSurfaceIds(surface)
+    .map(childId => renderSurfaceNode(surfaces, childId))
+    .filter(Boolean)
+    .join("");
+  const wrappedInput = inputWrapClass
+    ? `<div class="${escapeAttr(inputWrapClass)}">${inputMarkup}${adornmentMarkup}</div>`
+    : inputMarkup;
   if (inputType === "checkbox") {
     return [
-      `<label${renderAttributes(surface, "label")}>`,
-      `<input ${controlAttrs}>`,
+      "<label>",
+      inputMarkup,
       label ? `<span>${escapeHtml(label)}</span>` : "",
       "</label>"
     ].join("");
   }
   return [
-    `<label${renderAttributes(surface, "label")}>`,
-    label ? `<span>${escapeHtml(label)}</span>` : "",
-    `<input ${controlAttrs}>`,
-    "</label>"
+    label ? `<label${inputId ? ` for="${escapeAttr(inputId)}"` : ""}>${escapeHtml(label)}</label>` : "",
+    wrappedInput,
+    inputWrapClass ? "" : adornmentMarkup
   ].join("");
 }
 
-function renderSurfaceBody(surface, surfaces) {
+function renderSurfaceBody(surface, surfaces, tagName = "div") {
   const props = readProps(surface);
+  const rawHtml = staticTextValue(props, "rawHtml");
   const childHtml = childSurfaceIds(surface)
     .map(childId => renderSurfaceNode(surfaces, childId))
     .filter(Boolean)
     .join("");
+  if (rawHtml && !childHtml) return rawHtml;
   if (typeof props.inputType === "string" || typeof props.inputId === "string") {
-    return renderFieldControl(surface) + childHtml;
+    return renderFieldControl(surface, surfaces);
   }
 
   const fragments = [];
@@ -334,6 +355,100 @@ function renderSurfaceBody(surface, surfaces) {
   const brandLogoSrc = staticTextValue(props, "brandLogoSrc");
   const productLogoSrc = staticTextValue(props, "productLogoSrc");
   const assetSrc = staticTextValue(props, "assetSrc");
+  const iconActionContent =
+    childHtml
+    && (text || label)
+    && !title
+    && !subtitle
+    && !body
+    && !description
+    && !category
+    && !time
+    && !status
+    && !statusLabel
+    && !name
+    && !role
+    && !initials
+    && !accent
+    && !backHref
+    && !brandName
+    && !productName
+    && !brandLogoSrc
+    && !productLogoSrc
+    && !assetSrc
+    && (tagName === "button" || tagName === "a");
+  if (iconActionContent) return `${childHtml}${escapeHtml(text ?? label)}`;
+  const childTextSurface =
+    childHtml
+    && (text || label)
+    && !title
+    && !subtitle
+    && !body
+    && !description
+    && !category
+    && !time
+    && !status
+    && !statusLabel
+    && !name
+    && !role
+    && !initials
+    && !accent
+    && !href
+    && !backHref
+    && !brandName
+    && !productName
+    && !brandLogoSrc
+    && !productLogoSrc
+    && !assetSrc;
+  if (childTextSurface) return `${childHtml}${escapeHtml(text ?? label)}`;
+  const directActionLabel =
+    !childHtml
+    && label
+    && !title
+    && !subtitle
+    && !body
+    && !text
+    && !description
+    && !category
+    && !time
+    && !status
+    && !statusLabel
+    && !name
+    && !role
+    && !initials
+    && !accent
+    && !backHref
+    && !brandName
+    && !productName
+    && !brandLogoSrc
+    && !productLogoSrc
+    && !assetSrc
+    && (tagName === "button" || tagName === "a");
+  if (directActionLabel) return escapeHtml(label);
+  const textOnlySurface =
+    !childHtml
+    && text
+    && !label
+    && !title
+    && !subtitle
+    && !body
+    && !description
+    && !category
+    && !time
+    && !status
+    && !statusLabel
+    && !name
+    && !role
+    && !initials
+    && !accent
+    && !href
+    && !backHref
+    && !brandName
+    && !productName
+    && !brandLogoSrc
+    && !productLogoSrc
+    && !assetSrc;
+  if (textOnlySurface) return escapeHtml(text);
 
   if (backHref) {
     fragments.push(`<a class="surface-back-link" href="${escapeAttr(backHref)}">Back</a>`);
@@ -404,7 +519,18 @@ function renderSurfaceNode(surfaces, surfaceId) {
   const tagName = elementTagForSurface(surface);
   const attrs = renderAttributes(surface, tagName);
   if (tagName === "img") return `<img${attrs}>`;
-  const body = renderSurfaceBody(surface, surfaces);
+  const body = renderSurfaceBody(surface, surfaces, tagName);
+  const props = readProps(surface);
+  const rawHtml = staticTextValue(props, "rawHtml");
+  if (
+    tagName === "div"
+    && !attrs
+    && rawHtml
+    && !childSurfaceIds(surface).length
+    && body === rawHtml
+  ) {
+    return rawHtml;
+  }
   return `<${tagName}${attrs}>${body}</${tagName}>`;
 }
 
