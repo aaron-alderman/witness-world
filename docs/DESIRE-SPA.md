@@ -43,20 +43,56 @@ special exemption case.
 - Lowering is allowed to produce executable browser artifacts, but those
   artifacts must remain derivative of the authored DESIRE frontend rather than
   a parallel handwritten renderer.
-- `src/runtime-surface-browser-client.js` must be a host only:
-  - load the lowered app artifact
-  - provide universal platform services
-  - forward lifecycle and route changes
-  - tear down cleanly
-- `src/runtime-surface-browser-client.js` must not:
-  - assemble app DOM with bespoke render helpers
+- The core shell runtime in `src/runtime-surface-shell.js` must stay
+  mechanical only:
+  - route and path selection
+  - authored shell projection
+  - generic chrome behaviors such as navigation targets, password reveal, and
+    tab visibility
+- The core shell runtime in `src/runtime-surface-shell.js` must not:
+  - assemble app-specific DOM from hidden controller logic
   - own app state shape or reducers
-  - interpret app-specific selectors or templates
+  - interpret product-local selectors or templates
   - embed chart, window, Goodman, or other product-local behavior
-  - introduce HTML-side authority contracts as a second source language
+  - introduce a second source language or app-local bootstrap seam
 - App behavior may consume optional capabilities, but only through explicit
   seams. The existence of a capability must never move authority for the shell
   out of the authored DESIRE program.
+
+## Authoring pathway
+
+The Engentus pathway must be tested as an ordered ladder so the next blocker is
+always honest and local:
+
+1. Constitutional gate
+   - `DESIRE-SPA.md` and `LLM-AUTHORING-POLICY.md` agree on authored DESIRE
+     authority, `plugin.authoring` confinement, and blocked handoff behavior.
+2. Boundary gate
+   - no presenter seam
+   - no app-local browser runtime seam
+   - no bespoke app authority in core host/runtime code
+3. Generic projection gate
+   - authored widget pages project live through the default runtime path
+4. Surface authoring gate
+   - MCP authoring can declare and serve a minimal `page.surface`
+5. Generic authored interaction gate
+   - route/view/state/control behavior is authored and lowered, not rebuilt by
+     app JS
+6. Capability resolution gate
+   - optional capabilities are declared by the app and resolved explicitly by
+     runtime/plugin composition
+7. Engentus shell gate
+   - login/home/viewer/signout shell structure, copy, assets, and CSS are
+     authored in DESIRE and match the reference shell
+8. Goodman-first live gate
+   - Goodman supported flow runs on authored declarations plus explicit
+     capability seams
+9. Full parity gate
+   - Goodman, then mill-charge, then mill-force, with structure/CSS/live proof
+     kept separate
+
+Current next honest blocker after widget projection is the surface authoring
+gate: `surface.create`.
 
 ## Current honest state
 
@@ -93,6 +129,9 @@ special exemption case.
   document.
 - Browser-level parity was previously claimed as complete while the live served
   app still depended on the forbidden seam and had failing browser proofs.
+- The app-local browser runtime seam (`clientRendererHref`, runtime JSON
+  bootstraps, and similar escape hatches) is also forbidden and must stay out
+  of Engentus authored surfaces.
 
 ### Still-unfinished proof obligations
 
@@ -132,8 +171,8 @@ Until those proofs are green again, live module execution parity is not complete
 - `pageModuleHref` / `pageModuleExport` as Engentus shell bootstraps
 - `examples/engentus/app/presenters/*` as executable app authority
 - `examples/engentus/app/client/*` as executable shared frontend runtime
-- Bespoke app rendering and interaction machinery inside
-  `src/runtime-surface-browser-client.js`
+- Bespoke app rendering and interaction machinery inside core shell/runtime
+  code
 - Any handwritten browser facade that reconstructs the shell outside authored
   `RVM/WTOML`
 - Any doc or test language that treats those seams as acceptable architecture
@@ -162,7 +201,7 @@ The rescue keeps these proof commands as the honest baseline:
 ```powershell
 node --test test/desire-engentus-shell.test.js test/runtime-surface-shell.test.js test/runtime-core-surface-page.test.js
 node --test test/engentus-html-parity.test.js test/engentus-frontend-host.test.js
-node --test test/engentus-browser-parity.test.js test/engentus-no-cheat-boundary.test.js
+node --test test/engentus-browser-parity.test.js test/engentus-no-cheat-boundary.test.js test/engentus-authoring-pathway.test.js
 ```
 
 When the live module rebuild lands, browser integration and reference-vs-DESIRE

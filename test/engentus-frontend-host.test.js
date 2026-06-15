@@ -34,7 +34,7 @@ test("engentus frontend serves the login shell and loads no pipeline witnesses",
     assert.equal(goodman.status, 200);
     const goodmanHtml = await goodman.text();
     assert.match(goodmanHtml, /<svg id="chart-svg" class="chart-page__mount chart-page__mount--goodman" data-chart-spec=/);
-    assert.match(goodmanHtml, /\/app-static\/app\/runtime\/engentus-browser-runtime\.js/);
+    assert.doesNotMatch(goodmanHtml, /engentus-browser-runtime\.js/);
     assert.doesNotMatch(goodmanHtml, /<iframe[^>]+src="\/chart\?chart=GoodmanDiagram"/);
     assert.doesNotMatch(goodmanHtml, /pageModuleHref/);
     assert.doesNotMatch(goodmanHtml, /bootstrapSurfacePage/);
@@ -44,7 +44,7 @@ test("engentus frontend serves the login shell and loads no pipeline witnesses",
     assert.equal(millCharge.status, 200);
     const millChargePageHtml = await millCharge.text();
     assert.match(millChargePageHtml, /<canvas id="mill-canvas" class="chart-page__mount chart-page__mount--mill-charge" data-chart-spec=/);
-    assert.match(millChargePageHtml, /\/app-static\/app\/runtime\/engentus-browser-runtime\.js/);
+    assert.doesNotMatch(millChargePageHtml, /engentus-browser-runtime\.js/);
     assert.doesNotMatch(millChargePageHtml, /<iframe[^>]+src="\/chart\?chart=MillChargeCrossSection"/);
     assert.doesNotMatch(millChargePageHtml, /bootstrapSurfacePage/);
     assert.doesNotMatch(millChargePageHtml, /presenters\//);
@@ -52,7 +52,7 @@ test("engentus frontend serves the login shell and loads no pipeline witnesses",
     const millForce = await fetch(`${url}/engentus/mill-force`);
     assert.equal(millForce.status, 200);
     const millForcePageHtml = await millForce.text();
-    assert.match(millForcePageHtml, /\/app-static\/app\/runtime\/engentus-browser-runtime\.js/);
+    assert.doesNotMatch(millForcePageHtml, /engentus-browser-runtime\.js/);
     assert.match(millForcePageHtml, /id="mill-force-svg-cross"/);
     assert.match(millForcePageHtml, /id="mill-force-svg-force"[^>]*style="display:none"/);
     assert.match(millForcePageHtml, /id="mill-force-svg-rose"[^>]*style="display:none"/);

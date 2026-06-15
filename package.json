@@ -5,6 +5,8 @@
   "scripts": {
     "test": "node scripts/run-tests.mjs",
     "bootstrap": "node src/cli.js bootstrap",
+    "authoring:server": "node src/cli.js bootstrap --runtime-profile authoring --runtime-plugin plugin.mcp",
+    "authoring:probe": "node scripts/mcp-authoring-replay-probe.mjs",
     "desktop": "node src/cli.js desktop",
     "demo": "node src/cli.js serve examples/demo-todo-app --runtime-profile full",
     "eden": "node src/cli.js serve examples/eden --runtime-profile full",

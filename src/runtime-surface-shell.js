@@ -1,8 +1,3 @@
-import {
-  renderSurfaceBrowserRuntime,
-  surfaceBrowserClientConfig
-} from "./runtime-surface-browser.js";
-
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -834,13 +829,6 @@ function renderShellDocument({
   const activeProps = surfaceProps(activeSurface);
   const title = firstTruthy(activeProps.title, rootProps.productName, root.id, "DESIRE app");
   const presentationAssets = pagePresentationAssets(root, activeSurface);
-  const browserClientConfig = surfaceBrowserClientConfig({
-    root,
-    activeSurface,
-    runtime: {
-      availableCapabilities: browserRuntimeCapabilities
-    }
-  });
   const stylesheetHrefs = uniqueTruthy([
     firstTruthy(activeProps.stylesheetHref, rootProps.stylesheetHref, null),
     ...presentationAssets.stylesheetHrefs,
@@ -883,7 +871,7 @@ function renderShellDocument({
   <body>
     ${bodyMarkup}
     ${mountedChartRuntime?.scriptBody ? `<script type="module">${mountedChartRuntime.scriptBody}</script>` : ""}
-    <script type="module">${renderSurfaceBrowserRuntime(browserClientConfig)}</script>
+    <script type="module">${renderSurfaceShellRuntime()}</script>
   </body>
 </html>`;
 }

@@ -379,7 +379,6 @@ view EngentusApp {
   prop frameWrapDomId = "chart-wrap"
   prop frameDomId = "chart-svg"
   prop toolsDomId = "tb-goodman-tools"
-  prop clientConfigHref = "/app-static/app/runtime/goodman-shell.json"
   prop dependsOnCapabilities = "chart.render"
   prop title = "Goodman Fatigue Diagram"
   prop subtitle = "SN curve analysis with Monte Carlo simulation"
@@ -496,8 +495,6 @@ view EngentusRoot {
   kind app-root
   class engentus-spa
   prop stylesheetHref = "/app-static/app/engentus-shell.css"
-  prop clientRendererHref = "/app-static/app/runtime/engentus-browser-runtime.js"
-  prop clientRendererExport = "mountEngentusSurface"
   prop brandName = "Engentus"
   prop productName = "Mill-iQ™"
   prop brandLogoSrc = "/app-static/img/engentus.png"

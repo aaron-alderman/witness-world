@@ -5,6 +5,7 @@ import {
 import {
   CORE_RUNTIME_CAPABILITY_IDS
 } from "./runtime-builtins.js";
+import { renderWidgetPage } from "./runtime-widget-page.js";
 import { buildRuntimeShellDiagnostics } from "./runtime-shell-contract.js";
 import {
   cloneRuntimeAuthoringPolicy,
@@ -143,6 +144,7 @@ const INTERNAL_BUNDLE_MANIFESTS = [
         { kind: "defaultHostCapabilities", hostKind: "frontend", capabilities: ["dom.render", "http.fetch"] },
         { kind: "startupRequiredHostCapabilities", hostKind: "backend", capabilities: ["http.serve"] },
         { kind: "startupRequiredHostCapabilities", hostKind: "frontend", capabilities: ["dom.render", "http.fetch"] },
+        { kind: "coreHook", id: "renderWidgetPage", hook: renderWidgetPage },
         bundleHandlerCatalog("bundle-core-runtime"),
         genericHandlerFactory(createCoreRuntimeBundleHandlers)
       ],

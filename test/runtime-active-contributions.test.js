@@ -11,15 +11,19 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const pluginRoot = path.join(repoRoot, "plugins");
 
 async function contributionsFor(pluginIds = []) {
+  return contributionsForProfile("minimal", pluginIds);
+}
+
+async function contributionsForProfile(runtimeProfile = "minimal", pluginIds = []) {
   const pluginCatalog = await readRuntimePluginCatalog({
     pluginRoot,
-    runtimeProfile: "minimal",
+    runtimeProfile,
     configuredPluginIds: pluginIds
   });
   assert.equal(pluginCatalog.selection.hasBlockingErrors, false);
   const loadResult = await loadRuntimePluginModules({ pluginCatalog });
   assert.equal(loadResult.hasBlockingErrors, false);
-  const summary = runtimeBundleSummaryForProfile("minimal", {
+  const summary = runtimeBundleSummaryForProfile(runtimeProfile, {
     additionalBundleIds: [
       ...(pluginCatalog.addedBundleIds ?? []),
       ...Object.keys(loadResult.bundleOverrides ?? {})
@@ -38,18 +42,30 @@ test("minimal runtime has no optional active contribution maps", async () => {
   const { contributions } = await contributionsFor([]);
 
   assert.deepEqual(Object.keys(contributions.supportServices), []);
-  assert.deepEqual(Object.keys(contributions.coreHooks), []);
+  assert.deepEqual(Object.keys(contributions.coreHooks), ["renderWidgetPage"]);
   assert.deepEqual(Object.keys(contributions.providerRuntimeFactories), []);
   assert.deepEqual(Object.keys(contributions.jobHandlerFactories), []);
   assert.deepEqual([...contributions.staticAssetFiles.keys()], []);
 });
 
-test("minimal plus inspect contributes inspect routes and widget-page hook", async () => {
+test("default minimal, authoring, and full profiles all expose the generic widget-page hook", async () => {
+  const minimal = await contributionsForProfile("minimal", []);
+  const authoring = await contributionsForProfile("authoring", []);
+  const full = await contributionsForProfile("full", []);
+
+  assert.equal(typeof minimal.contributions.coreHooks.renderWidgetPage, "function");
+  assert.equal(typeof authoring.contributions.coreHooks.renderWidgetPage, "function");
+  assert.equal(typeof full.contributions.coreHooks.renderWidgetPage, "function");
+});
+
+test("minimal plus inspect contributes inspect routes without owning the widget-page hook", async () => {
+  const base = await contributionsFor([]);
   const { summary, contributions } = await contributionsFor(["plugin.inspect"]);
 
   assert.equal(summary.bundleIds.includes("bundle-inspect"), true);
   assert.equal(summary.routes.some(route => route.handler === "events.stream"), true);
   assert.equal(typeof contributions.coreHooks.renderWidgetPage, "function");
+  assert.deepEqual(Object.keys(contributions.coreHooks), Object.keys(base.contributions.coreHooks));
   assert.deepEqual(Object.keys(contributions.providerRuntimeFactories), []);
 });
 

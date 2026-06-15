@@ -61,7 +61,7 @@ test("the pure map projector respects route selection and mount mode", async () 
   });
   assert.match(goodman, /<svg id="chart-svg" class="chart-page__mount chart-page__mount--goodman" data-chart-spec=/);
   assert.match(goodman, /data-mount-mode="mounted-panel"/);
-  assert.match(goodman, /\/app-static\/app\/runtime\/engentus-browser-runtime\.js/);
+  assert.doesNotMatch(goodman, /engentus-browser-runtime\.js/);
   assert.doesNotMatch(goodman, /<iframe[^>]+src="\/chart\?chart=GoodmanDiagram"/);
   assert.match(goodman, /Scenario View/);
   assert.match(goodman, /Fatigue Life Regions/);
@@ -84,7 +84,7 @@ test("the pure map projector respects route selection and mount mode", async () 
     buildMountedChartRuntime
   });
   assert.match(millForce, /id="mill-force-svg-cross"/);
-  assert.match(millForce, /\/app-static\/app\/runtime\/engentus-browser-runtime\.js/);
+  assert.doesNotMatch(millForce, /engentus-browser-runtime\.js/);
   assert.match(millForce, /id="mill-force-svg-force"[^>]*style="display:none"/);
   assert.match(millForce, /id="mill-force-svg-rose"[^>]*style="display:none"/);
   assert.match(millForce, /id="mill-force-mc-canvas"/);

@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
+import { applyWitnessToml } from "../src/dsl.js";
 import { loadWitnessAppFile, applyWitnessDocs } from "../src/dsl.js";
 import { applyDesire } from "../src/desire/index.js";
 import { createCoreRuntimeBundleHandlers } from "../src/runtime-core-handlers.js";
+import { renderWidgetPage } from "../src/runtime-widget-page.js";
 import { buildMountedChartRuntime } from "../plugins/chart-runtime/runtime.js";
 
 async function loadEngentusWorld() {
@@ -15,7 +17,7 @@ async function loadEngentusWorld() {
   return world;
 }
 
-function createSurfacePageHarness(world) {
+function createSurfacePageHarness(world, { coreHooks = {} } = {}) {
   const calls = [];
   const handlers = createCoreRuntimeBundleHandlers({
     world,
@@ -46,7 +48,8 @@ function createSurfacePageHarness(world) {
     getRuntimePluginReviews: async () => ({}),
     invokeRouteHandler: async () => ({ status: 200, body: {} }),
     coreHooks: {
-      buildMountedChartRuntime
+      buildMountedChartRuntime,
+      ...coreHooks
     }
   });
   return {
@@ -55,6 +58,46 @@ function createSurfacePageHarness(world) {
       return calls.at(-1) ?? null;
     }
   };
+}
+
+function createSimpleWidgetWorld() {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[widget]]
+actor = "adam"
+id = "root"
+kind = "Page"
+props = { title = "Replay Landing" }
+
+[[heading]]
+actor = "adam"
+id = "hero"
+text = "Hello from MCP authoring"
+level = 1
+
+[[text]]
+actor = "adam"
+id = "body"
+text = "This page was authored through MCP replay only."
+
+[[attachWidget]]
+actor = "adam"
+parent = "root"
+child = "hero"
+order = 0
+
+[[attachWidget]]
+actor = "adam"
+parent = "root"
+child = "body"
+order = 1
+
+[[frontendProgram]]
+actor = "adam"
+id = "program"
+rootWidget = "root"
+`);
+  return world;
 }
 
 test("page.surface renders authored login and home shell states by path", async () => {
@@ -95,7 +138,7 @@ test("page.surface respects authored mounted-panel shell props", async () => {
   const goodman = harness.takeLast();
   assert.match(goodman.body, /<svg id="chart-svg" class="chart-page__mount chart-page__mount--goodman" data-chart-spec=/);
   assert.match(goodman.body, /data-mount-mode="mounted-panel"/);
-  assert.match(goodman.body, /\/app-static\/app\/runtime\/engentus-browser-runtime\.js/);
+  assert.doesNotMatch(goodman.body, /engentus-browser-runtime\.js/);
   assert.doesNotMatch(goodman.body, /<iframe[^>]+src="\/chart\?chart=GoodmanDiagram"/);
 
   await harness.handlers["page.surface"]({
@@ -105,7 +148,7 @@ test("page.surface respects authored mounted-panel shell props", async () => {
   });
   const millForce = harness.takeLast();
   assert.match(millForce.body, /id="mill-force-svg-cross"/);
-  assert.match(millForce.body, /\/app-static\/app\/runtime\/engentus-browser-runtime\.js/);
+  assert.doesNotMatch(millForce.body, /engentus-browser-runtime\.js/);
   assert.match(millForce.body, /id="mill-force-svg-force"[^>]*style="display:none"/);
   assert.match(millForce.body, /id="mill-force-svg-rose"[^>]*style="display:none"/);
   assert.match(millForce.body, /id="mill-force-mc-canvas"/);
@@ -129,4 +172,27 @@ test("page.home falls back to the shared inactive widget page when no widget ren
   assert.match(page.body, /<title>DemoWidget<\/title>/);
   assert.match(page.body, /<h1>DemoWidget<\/h1>/);
   assert.match(page.body, /Widget rendering is not active in this runtime composition\./);
+});
+
+test("page.home renders authored widget HTML when the generic widget renderer hook is installed", async () => {
+  const world = createSimpleWidgetWorld();
+  const harness = createSurfacePageHarness(world, {
+    coreHooks: {
+      renderWidgetPage
+    }
+  });
+
+  await harness.handlers["page.home"]({
+    res: {},
+    route: { id: "home", path: "/", params: { rootWidget: "root", frontendProgram: "program" } },
+    appContext: {},
+    requestSession: null
+  });
+
+  const page = harness.takeLast();
+  assert.equal(page.status, 200);
+  assert.match(page.body, /<title>Replay Landing<\/title>/);
+  assert.match(page.body, /Hello from MCP authoring/);
+  assert.match(page.body, /This page was authored through MCP replay only\./);
+  assert.doesNotMatch(page.body, /Widget rendering is not active in this runtime composition\./);
 });

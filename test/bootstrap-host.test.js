@@ -7,6 +7,7 @@ import { createWorld } from "../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer } from "../src/host.js";
 import { resolveRuntimeOperatorPaths } from "../src/runtime-operator-contract.js";
 import { defineWidgetVersion, defineWidgetVersionTransition, activateWidgetVersion } from "../src/widgets.js";
+import { runReplayProbe } from "../scripts/mcp-authoring-replay-probe.mjs";
 
 async function tempRuntimeRoot() {
   return fs.mkdtemp(path.join(os.tmpdir(), "witness-bootstrap-host-"));
@@ -37,14 +38,15 @@ function widgetInput(input) {
   };
 }
 
-async function startBlankServer() {
+async function startBlankServer({ runtimePluginIds = null } = {}) {
   const world = createWorld();
   declareBackendHost(world, { actor: "system", id: "backendHost", runtimeProfile: "authoring" });
   declareFrontendHost(world, { actor: "system", id: "frontendHost", runtimeProfile: "authoring" });
   const server = await startServer(world, {
     actor: "system",
     runtimeRoot: await tempRuntimeRoot(),
-    runtimeStartupMode: "bootstrap"
+    runtimeStartupMode: "bootstrap",
+    runtimePluginIds
   });
   assert.equal(server.ok, true);
   return { world, server };
@@ -516,7 +518,28 @@ test("a bootstrap-authored runner and home route take over without restarting th
 
     const html = await fetch(`${server.url}/`).then(response => response.text());
     assert.match(html, /(Bootstrap App|bootstrap_home)/);
+    assert.doesNotMatch(html, /Widget rendering is not active in this runtime composition\./);
     assert.doesNotMatch(html, /Recover And Author The App Boundary/);
+  } finally {
+    await server.close();
+  }
+});
+
+test("authoring replay probe renders live widget HTML and stops next at surface authoring", { timeout: 10000 }, async () => {
+  const { server } = await startBlankServer({ runtimePluginIds: ["plugin.mcp"] });
+  try {
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
+    assert.equal(diagnostics.authoringPolicy.mode, "mcp_only");
+    assert.equal(diagnostics.plugins.activePluginIds.includes("plugin.inspect"), false);
+    assert.equal(diagnostics.plugins.activePluginIds.includes("plugin.mcp"), true);
+
+    const result = await runReplayProbe(server.url);
+    assert.equal(result.ok, true);
+    assert.equal(result.replay.httpStatus, 200);
+    assert.equal(result.replay.fallbackActive, false);
+    assert.equal(result.replay.authoredContentVisible, true);
+    assert.equal(result.blockers.widgetProjection, null);
+    assert.match(result.blockers.surfaceAuthoring.missingPrimitive, /surface\.create/);
   } finally {
     await server.close();
   }
