@@ -1018,7 +1018,7 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     await page.waitForFunction(() => Boolean(document.querySelector("#mill-force-svg-cross")?.__chartController));
     assert.deepEqual(await page.evaluate(() => ({
       modelHidden: document.querySelector("#surface-millforcemodelsection")?.hasAttribute("hidden"),
-      compareHidden: document.querySelector("#surface-millforcecomparesection")?.hasAttribute("hidden"),
+      compareSectionPresent: Boolean(document.querySelector("#surface-millforcecomparesection")),
       mcSectionPresent: [...document.querySelectorAll(".ssec")]
         .some(section => section.textContent.includes("Monte Carlo Config")),
       mcBodyHidden: document.querySelector("#surface-millforcemcbody")?.hasAttribute("hidden"),
@@ -1026,7 +1026,7 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       model: window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveModel")
     })), {
       modelHidden: false,
-      compareHidden: true,
+      compareSectionPresent: false,
       mcSectionPresent: true,
       mcBodyHidden: true,
       mcChevron: "▼",
@@ -1118,12 +1118,11 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     assert.equal(chartAnnotationText.texts.includes(chartAnnotationText.min), true);
     const compareState = await page.evaluate(() => ({
       modelHidden: document.querySelector("#surface-millforcemodelsection")?.hasAttribute("hidden"),
-      compareHidden: document.querySelector("#surface-millforcecomparesection")?.hasAttribute("hidden"),
+      compareSectionPresent: Boolean(document.querySelector("#surface-millforcecomparesection")),
       mcSectionPresent: [...document.querySelectorAll(".ssec")]
         .some(section => section.textContent.includes("Monte Carlo Config")),
       mcBodyHidden: document.querySelector("#surface-millforcemcbody")?.hasAttribute("hidden"),
       mcChevron: document.querySelector("#surface-millforcemcchevron")?.textContent,
-      compareText: document.querySelector("#surface-millforcecomparesection")?.textContent,
       resultRows: [...document.querySelectorAll(".mill-force-result-row")].map(row => row.textContent),
       deltaOutputs: {
         fill: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.gammaDeltaText,
@@ -1135,15 +1134,10 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       }
     }));
     assert.equal(compareState.modelHidden, true);
-    assert.equal(compareState.compareHidden, false);
+    assert.equal(compareState.compareSectionPresent, false);
     assert.equal(compareState.mcSectionPresent, true);
     assert.equal(compareState.mcBodyHidden, true);
     assert.equal(compareState.mcChevron, "▼");
-    assert.match(compareState.compareText, /Compare Models/);
-    assert.match(compareState.compareText, /Δ fill/);
-    assert.match(compareState.compareText, /Δ toe/);
-    assert.match(compareState.compareText, /Δ max F_r/);
-    assert.match(compareState.compareText, /Δ max \|F\|/);
     assert.match(compareState.deltaOutputs.fill, /^[+-]?\d+\.\d(?:Â°|°)$/);
     assert.match(compareState.deltaOutputs.fillPct, /^[+-]?\d+\.\d\d%$/);
     assert.equal(compareState.resultRows.some(text => /γ|Î³/.test(text) && /%/.test(text)), true);
@@ -1158,7 +1152,7 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.analysis_mode === "static"
     );
     assert.deepEqual(await page.evaluate(() => ({
-      compareHidden: document.querySelector("#surface-millforcecomparesection")?.hasAttribute("hidden"),
+      compareSectionPresent: Boolean(document.querySelector("#surface-millforcecomparesection")),
       chartMode: document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.analysis_mode,
       chartState: window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceChartAnalysisMode"),
       mcSectionPresent: [...document.querySelectorAll(".ssec")]
@@ -1174,7 +1168,7 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       mcParamRows: [...document.querySelectorAll("#surface-millforcemcbody .mc-row")]
         .map(row => row.textContent.trim())
     })), {
-      compareHidden: true,
+      compareSectionPresent: false,
       chartMode: "static",
       chartState: "static",
       mcSectionPresent: true,

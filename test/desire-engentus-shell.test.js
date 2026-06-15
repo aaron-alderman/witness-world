@@ -272,10 +272,9 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   ]);
   assert.equal(surfaces.has("MillForceModeStateRow"), false);
   assert.equal(surfaces.has("MillForceModelStateRow"), false);
-  assert.equal(surfaces.get("MillForceCompareFillDeltaValue")?.body?.bindings[0]?.source?.output, "gammaDeltaText");
-  assert.equal(surfaces.get("MillForceCompareToeDeltaValue")?.body?.bindings[0]?.source?.output, "phiPrimeDeltaText");
-  assert.equal(surfaces.get("MillForceCompareRadialDeltaValue")?.body?.bindings[0]?.source?.output, "F_r_max_delta_text");
-  assert.equal(surfaces.get("MillForceCompareResultantDeltaValue")?.body?.bindings[0]?.source?.output, "F_resultant_max_delta_text");
+  assert.equal(surfaces.has("MillForceCompareSection"), false);
+  assert.equal(surfaces.has("MillForceCompareFillDeltaRow"), false);
+  assert.equal(surfaces.has("MillForceCompareResultantDeltaRow"), false);
   assert.equal(surfaces.get("MillForceModelGroundedInput")?.body?.props?.inputType, "radio");
   assert.equal(surfaces.get("MillForceModelGroundedInput")?.body?.props?.name, "mill-force-model-sel");
   assert.equal(surfaces.get("MillForceModelGroundedInput")?.body?.bindings[0]?.prop, "checked");
@@ -657,7 +656,6 @@ test("the shell is structured through explicit child regions instead of flattene
 
   assert.deepEqual(surfaces.get("MillForceModelHost")?.body?.children, [
     "MillForceModelSection",
-    "MillForceCompareSection",
     "MillForceMcSection"
   ]);
 
@@ -671,16 +669,6 @@ test("the shell is structured through explicit child regions instead of flattene
     "MillForceToeAngleLabel",
     "MillForceToeAngleValue",
     "MillForceToeAngleDiff"
-  ]);
-
-  assert.deepEqual(surfaces.get("MillForceCompareSection")?.body?.children, [
-    "MillForceCompareTitle",
-    "MillForceCompareGroundedRow",
-    "MillForceCompareFaithfulRow",
-    "MillForceCompareFillDeltaRow",
-    "MillForceCompareToeDeltaRow",
-    "MillForceCompareRadialDeltaRow",
-    "MillForceCompareResultantDeltaRow"
   ]);
 
   assert.deepEqual(surfaces.get("MillForceMcSection")?.body?.children, [
