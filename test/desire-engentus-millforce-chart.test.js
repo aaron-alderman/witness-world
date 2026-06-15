@@ -232,6 +232,9 @@ test("MillForceCross plans per-segment annular liner bands with angular bounds +
   const toeGuide = plan.layers.find(l => l.name === "toe_guide");
   assert.equal(fillChord.mark, "line");
   assert.equal(fillChord.stroke, "#5AAABF");
+  assert.equal(fillChord.width, 1);
+  assert.equal(fillChord.dash, true);
+  assert.equal(fillChord.opacity, 0.8);
   assert.deepEqual(fillChord.primitives[0].points.map(point => point.theta), [
     evaluated.fields.phi.data,
     evaluated.fields.phiPrime.data[g]
@@ -241,6 +244,9 @@ test("MillForceCross plans per-segment annular liner bands with angular bounds +
     evaluated.fields.rInner.data
   ]);
   assert.equal(shoulderGuide.stroke, "#f1f5f9");
+  assert.equal(shoulderGuide.width, 0.8);
+  assert.equal(shoulderGuide.dash, true);
+  assert.equal(shoulderGuide.opacity, 0.6);
   assert.deepEqual(shoulderGuide.primitives[0].points.map(point => point.theta), [
     evaluated.fields.phi.data,
     evaluated.fields.phi.data
@@ -250,6 +256,9 @@ test("MillForceCross plans per-segment annular liner bands with angular bounds +
     evaluated.params.radius
   ]);
   assert.equal(toeGuide.stroke, "#475569");
+  assert.equal(toeGuide.width, 0.8);
+  assert.equal(toeGuide.dash, true);
+  assert.equal(toeGuide.opacity, 0.6);
   assert.deepEqual(toeGuide.primitives[0].points.map(point => point.theta), [
     evaluated.fields.phiPrime.data[g],
     evaluated.fields.phiPrime.data[g]
@@ -313,6 +322,10 @@ test("MillForceCross compare mode renders grounded and faithful annular bands", 
   assert.equal(plan.layers.find(l => l.name === "toe_guide").hidden, true);
   const compareFillChord = plan.layers.find(l => l.name === "fill_chord_compare");
   const compareToeGuide = plan.layers.find(l => l.name === "toe_guide_compare");
+  assert.equal(compareFillChord.dash, true);
+  assert.equal(compareFillChord.opacity, 0.8);
+  assert.equal(compareToeGuide.dash, true);
+  assert.equal(compareToeGuide.opacity, 0.6);
   assert.deepEqual(compareFillChord.primitives[0].points.map(point => point.theta), [
     evaluated.fields.phi.data,
     evaluated.fields.phiPrime.data[g]

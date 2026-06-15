@@ -225,6 +225,9 @@ function planPolarLayer(layer, evaluated) {
     });
     return {
       ...base, stroke: colorToken(enc.stroke), fill: enc.fill ? colorToken(enc.fill) : null,
+      width: Number(enc.width) || 2,
+      dash: enc.dash === true,
+      opacity: enc.opacity == null ? 1 : Number(enc.opacity),
       closed: layer.mark === "polygon", primitives: [{ points }]
     };
   }
@@ -925,7 +928,11 @@ function drawPolarChart(container, plan, d3) {
         const pts = prim.points.filter(p => Number.isFinite(p.r)).map(p => toXY(p.theta, p.r).join(","));
         const el = layer.closed ? svg.append("polygon") : svg.append("polyline");
         el.attr("points", pts.join(" ")).attr("fill", layer.fill ?? "none")
-          .attr("fill-opacity", layer.fill ? 0.25 : 0).attr("stroke", layer.stroke).attr("stroke-width", 2);
+          .attr("fill-opacity", layer.fill ? 0.25 : 0)
+          .attr("stroke", layer.stroke)
+          .attr("stroke-width", layer.width ?? 2)
+          .attr("stroke-dasharray", layer.dash ? "4,3" : null)
+          .attr("opacity", layer.opacity ?? 1);
       }
     } else if (layer.mark === "wedge") {
       const vmax = Math.max(...layer.primitives.map(p => p.value || 0), 1);

@@ -148,7 +148,9 @@ grant runtime authority to copied JS or presenter code.
   shoulder/toe radial guide-line geometry through dataflow rather than shell
   SVG: two-point guide axes in `models/mill-force.rvm` derive the active
   `phi`/`phiPrime` line coordinates and `views/mill-force.rvm` lowers them as
-  polar `line` layers for static and compare modes.
+  polar `line` layers for static and compare modes. The generic polar line
+  planner now preserves authored `width`, `dash`, and `opacity`, so the guide
+  lines also carry the reference dashed/faded styling without app-local SVG.
 - Mill Force force bars now use a generic straight-sided polar rectangle mark:
   `polar-quad` is implemented in `plugin.chart-runtime` as a reusable polar
   primitive, while Mill Force declares the reference radial bar geometry in
@@ -199,10 +201,10 @@ grant runtime authority to copied JS or presenter code.
   stock charts now exists through the generic chart tooltip seam. Compare
   deltas now exist as authored scalar outputs and inline percent readouts, but
   the compare panel is still a first-pass authored analysis view rather than
-  final reference parity. The cross-section angle labels, legend/colour-scale
-  text, and dashed/opacity styling for polar guide lines remain blocked on
-  clean generic polar text/line-style annotation support; they should not be
-  faked with shell-local SVG or controller code.
+  final reference parity. The cross-section angle labels and
+  legend/colour-scale text remain blocked on clean generic polar text
+  annotation support; they should not be faked with shell-local SVG or
+  controller code.
 - No app-local browser runtime, presenter, or controller seam should be added to
   close these gaps. The next work should continue through authored surfaces,
   process state, projections, and explicit capability bindings.

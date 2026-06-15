@@ -12,6 +12,7 @@ import {
 } from "../../src/desire/index.js";
 import { buildMountedChartRuntime, createHandlers, resolveChartSpec } from "./runtime.js";
 import { renderChartHtml, chartRuntimeBundleSource } from "./chart-page.js";
+import { planChart } from "./gog-runtime.js";
 
 const appDir = path.join(process.cwd(), "examples", "engentus", "app");
 
@@ -212,6 +213,46 @@ test("polar chart plans preserve authored tooltip channels on primitives", async
   } finally {
     fs.rmSync(tmp, { force: true });
   }
+});
+
+test("polar line plans preserve generic authored style channels", () => {
+  const view = {
+    frame: "polar",
+    encoding: {
+      theta: { field: "theta" },
+      r: { field: "r", domain: [0, 1] }
+    },
+    layers: [{
+      name: "guide",
+      mark: "line",
+      over: ["point"],
+      encode: {
+        theta: "theta",
+        r: "r",
+        stroke: "#f1f5f9",
+        width: 0.8,
+        dash: true,
+        opacity: 0.6
+      }
+    }]
+  };
+  const evaluated = {
+    axes: { point: { kind: "sweep", values: [0, 1] } },
+    fields: {
+      theta: { axes: ["point"], data: [0.4, 0.4] },
+      r: { axes: ["point"], data: [0, 1] }
+    }
+  };
+
+  const plan = planChart(view, evaluated, { width: 200, height: 200 });
+  const guide = plan.layers.find(layer => layer.name === "guide");
+
+  assert.equal(guide.mark, "line");
+  assert.equal(guide.stroke, "#f1f5f9");
+  assert.equal(guide.width, 0.8);
+  assert.equal(guide.dash, true);
+  assert.equal(guide.opacity, 0.6);
+  assert.deepEqual(guide.primitives[0].points.map(point => point.r), [0, 1]);
 });
 
 test("cartesian chart plans preserve authored tooltip channels on line points", async () => {
