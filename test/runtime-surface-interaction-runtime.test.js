@@ -26,6 +26,19 @@ test("describeSurfaceRuntimeView stays generic by default", () => {
   });
 });
 
+test("describeSurfaceRuntimeView targets authored form-control attributes by input id", () => {
+  const view = describeSurfaceRuntimeView({
+    id: "Surface.Slider",
+    surfaceKind: "form-field",
+    props: { inputId: "time-sl" }
+  });
+
+  assert.deepEqual(view.propTargets.value, [{ id: "time-sl", mode: "value" }]);
+  assert.deepEqual(view.propTargets.min, [{ id: "time-sl", mode: "attribute", attr: "min" }]);
+  assert.deepEqual(view.propTargets.max, [{ id: "time-sl", mode: "attribute", attr: "max" }]);
+  assert.deepEqual(view.propTargets.step, [{ id: "time-sl", mode: "attribute", attr: "step" }]);
+});
+
 test("createSurfaceInteractionRuntime blocks honestly when interactive semantics lack generic target descriptors", () => {
   const logs = [];
   const runtime = createSurfaceInteractionRuntime({

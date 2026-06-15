@@ -101,7 +101,11 @@ function genericSurfaceRuntimeView(surface) {
   }
   if (inputId) {
     propTargets.inputType = [{ id: inputId, mode: "attribute", attr: "type" }];
+    propTargets.value = [{ id: inputId, mode: "value" }];
     propTargets.inputValue = [{ id: inputId, mode: "value" }];
+    propTargets.min = [{ id: inputId, mode: "attribute", attr: "min" }];
+    propTargets.max = [{ id: inputId, mode: "attribute", attr: "max" }];
+    propTargets.step = [{ id: inputId, mode: "attribute", attr: "step" }];
     propTargets.checked = [{ id: inputId, mode: "checked" }];
     propTargets.disabled = [...(propTargets.disabled ?? []), { id: inputId, mode: "disabled" }];
   }

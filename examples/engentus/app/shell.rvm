@@ -3570,6 +3570,7 @@ view GoodmanTimeSlider {
   prop value = 0
   bindings {
     value from state GoodmanScrubTimeMonths
+    max from state GoodmanRunDurationMonths
   }
   interactions {
     on input self set GoodmanScrubTimeMonths eventValue

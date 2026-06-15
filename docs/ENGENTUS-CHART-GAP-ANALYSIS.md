@@ -35,6 +35,10 @@ grant runtime authority to copied JS or presenter code.
 - Goodman Monte Carlo chart evaluation now consumes authored run sample count:
   `GoodmanRunBoltsPerSet` binds to `GoodmanMCBands.param.n_samples`, so the
   ensemble axis re-evaluates from process-owned run config.
+- Goodman scrubber range now follows authored run duration:
+  `GoodmanRunDurationMonths` binds to the time slider `max` attribute through
+  the generic form-control binding path, matching the reference relationship
+  between run config and timeline controls without app-local controller code.
 - Mill Charge chart: `MillChargeCrossSection` mounts live in
   `/engentus/mill-charge`, accepts authored parameter bindings, updates derived
   RHS metrics, and keeps its transient animation phase during parameter changes.
