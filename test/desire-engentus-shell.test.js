@@ -70,6 +70,7 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.ok(messages.has("GoodmanToggleAnovaWindowRequested"));
   assert.ok(messages.has("GoodmanRunRequested"));
   assert.ok(messages.has("GoodmanPauseRunRequested"));
+  assert.ok(messages.has("GoodmanResumeRunRequested"));
   assert.ok(messages.has("GoodmanStopRunRequested"));
   assert.equal(types.get("EngentusShellRoute")?.body?.role, "enum");
   assert.equal(types.get("EngentusShellActiveRoute")?.body?.role, "state");
@@ -192,6 +193,15 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(surfaces.get("GoodmanModeEdit")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("GoodmanCdfWindow")?.body?.bindings[0]?.prop, "visible");
   assert.equal(surfaces.get("GoodmanRunConfigBoltsPerSetField")?.body?.bindings[0]?.prop, "value");
+  assert.equal(surfaces.get("GoodmanRunConfigBoltsPerSetField")?.body?.bindings[1]?.prop, "disabled");
+  assert.equal(surfaces.get("GoodmanRunConfigDurationField")?.body?.bindings[1]?.prop, "disabled");
+  assert.equal(surfaces.get("GoodmanRunConfigStepField")?.body?.bindings[1]?.prop, "disabled");
+  assert.equal(surfaces.get("GoodmanRunActionStart")?.body?.bindings[0]?.prop, "disabled");
+  assert.equal(surfaces.get("GoodmanRunActionPause")?.body?.bindings[0]?.prop, "visible");
+  assert.equal(surfaces.get("GoodmanRunActionResume")?.body?.bindings[0]?.prop, "visible");
+  assert.equal(surfaces.get("GoodmanRunActionResume")?.body?.interactions[0]?.action?.message, "GoodmanResumeRunRequested");
+  assert.equal(surfaces.get("GoodmanRunLockNote")?.body?.bindings[0]?.prop, "visible");
+  assert.equal(surfaces.get("GoodmanRunProgressFill")?.body?.bindings[0]?.prop, "style");
   assert.equal(surfaces.get("GoodmanStaticAppliedShearField")?.body?.bindings[0]?.prop, "value");
   assert.equal(surfaces.get("GoodmanStaticAppliedShearField")?.body?.interactions[0]?.action?.state, "GoodmanStaticAppliedShear");
   assert.equal(surfaces.get("GoodmanTrailToggle")?.body?.interactions[0]?.action?.state, "GoodmanTrailVisible");

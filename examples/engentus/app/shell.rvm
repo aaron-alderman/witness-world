@@ -649,6 +649,12 @@ event GoodmanPauseRunRequested {
   }
 }
 
+event GoodmanResumeRunRequested {
+  writes {
+    GoodmanRunStatusState: running
+  }
+}
+
 event GoodmanStopRunRequested {
   writes {
     GoodmanRunStatusState: stopped
@@ -780,6 +786,7 @@ process EngentusShellNavigation {
     GoodmanCloseAnovaWindowRequested
     GoodmanRunRequested
     GoodmanPauseRunRequested
+    GoodmanResumeRunRequested
     GoodmanStopRunRequested
     MillChargePresetHardOreRequested
     MillChargePresetAverageOreRequested
@@ -2971,6 +2978,7 @@ view GoodmanRunConfigBoltsPerSetField {
   prop step = 50
   bindings {
     value from state GoodmanRunBoltsPerSet
+    disabled from state GoodmanRunStatusState map running true paused true default false
   }
   interactions {
     on input self set GoodmanRunBoltsPerSet eventValue
@@ -2989,6 +2997,7 @@ view GoodmanRunConfigDurationField {
   prop step = 1
   bindings {
     value from state GoodmanRunDurationMonths
+    disabled from state GoodmanRunStatusState map running true paused true default false
   }
   interactions {
     on input self set GoodmanRunDurationMonths eventValue
@@ -3007,6 +3016,7 @@ view GoodmanRunConfigStepField {
   prop step = 0.1
   bindings {
     value from state GoodmanRunStepMonths
+    disabled from state GoodmanRunStatusState map running true paused true default false
   }
   interactions {
     on input self set GoodmanRunStepMonths eventValue
@@ -3020,6 +3030,9 @@ view GoodmanRunActionStart {
   prop actionKey = "run"
   prop tag = "button"
   prop buttonType = "button"
+  bindings {
+    disabled from state GoodmanRunStatusState map running true paused true default false
+  }
   interactions {
     on click self deliver GoodmanRunRequested
   }
@@ -3028,16 +3041,34 @@ view GoodmanRunActionStart {
 view GoodmanRunActionPause {
   kind action
   class rbtn pause
-  prop label = "Pause"
+  prop label = "⏸"
   prop actionKey = "pause"
   prop disabled = true
   prop tag = "button"
   prop buttonType = "button"
   bindings {
+    visible from state GoodmanRunStatusState map running true default false
     disabled from state GoodmanRunStatusState map running false default true
   }
   interactions {
     on click self deliver GoodmanPauseRunRequested
+  }
+}
+
+view GoodmanRunActionResume {
+  kind action
+  class rbtn pause
+  prop label = "▶ Resume"
+  prop actionKey = "resume"
+  prop hidden = true
+  prop tag = "button"
+  prop buttonType = "button"
+  bindings {
+    visible from state GoodmanRunStatusState map paused true default false
+    disabled from state GoodmanRunStatusState map paused false default true
+  }
+  interactions {
+    on click self deliver GoodmanResumeRunRequested
   }
 }
 
@@ -3063,6 +3094,7 @@ view GoodmanRunActionGroup {
   children {
     GoodmanRunActionStart
     GoodmanRunActionPause
+    GoodmanRunActionResume
     GoodmanRunActionStop
   }
 }
@@ -3070,6 +3102,9 @@ view GoodmanRunActionGroup {
 view GoodmanRunProgressFill {
   kind progress-fill
   class prog-fill
+  bindings {
+    style from state GoodmanRunStatusState map running "width:0%;background:var(--blue);opacity:1" paused "width:0%;background:var(--blue);opacity:.4" stopped "width:0%;background:var(--ylw);opacity:1" default "width:0%;background:var(--blue);opacity:1"
+  }
 }
 
 view GoodmanRunProgressLabel {
@@ -3077,7 +3112,7 @@ view GoodmanRunProgressLabel {
   class prog-lbl
   prop text = "Ready"
   bindings {
-    text from state GoodmanRunStatusState map ready Ready running Running paused Paused stopped Stopped default Ready
+    text from state GoodmanRunStatusState map ready Ready running "Running…" paused "⏸ Paused" stopped "■ Stopped" default Ready
   }
 }
 
@@ -3090,6 +3125,17 @@ view GoodmanRunProgress {
   }
 }
 
+view GoodmanRunLockNote {
+  kind note
+  class goodman-run-lock-note
+  prop text = "Simulation running…"
+  prop hidden = true
+  bindings {
+    visible from state GoodmanRunStatusState map running true paused true default false
+    text from state GoodmanRunStatusState map running "⏳ Simulation running…" paused "⏸ Simulation paused — config locked" default ""
+  }
+}
+
 view GoodmanRunConfigSection {
   kind section
   class goodman-run-config-section
@@ -3098,6 +3144,7 @@ view GoodmanRunConfigSection {
     GoodmanRunConfigBoltsPerSetField
     GoodmanRunConfigDurationField
     GoodmanRunConfigStepField
+    GoodmanRunLockNote
     GoodmanRunActionGroup
     GoodmanRunProgress
   }

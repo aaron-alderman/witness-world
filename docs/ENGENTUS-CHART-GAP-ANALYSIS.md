@@ -27,6 +27,10 @@ grant runtime authority to copied JS or presenter code.
   states: CDF declares the no-run chart message, Stats declares the reference
   table header plus "No completed simulations", and ANOVA declares the
   reference statistic block/box-plot shell plus the insufficient-groups state.
+- Goodman run-state UI is authored through process state: Run switches to
+  Monte Carlo mode, config fields lock while running/paused, Pause/Resume/Stop
+  controls patch visibility/disabled state, and the progress label/fill/lock
+  note reflect `GoodmanRunStatusState` without app-local controller code.
 - Mill Charge chart: `MillChargeCrossSection` mounts live in
   `/engentus/mill-charge`, accepts authored parameter bindings, updates derived
   RHS metrics, and keeps its transient animation phase during parameter changes.
@@ -61,10 +65,11 @@ grant runtime authority to copied JS or presenter code.
 
 ## Known Gaps
 
-- Goodman simulation lifecycle, animated scrubber playback, CDF/Stats/ANOVA
-  result datasets, and bolt-set edit/clone/delete/new behavior remain to be
-  authored. The current Goodman windows now expose authored empty/result
-  structure, but they do not yet consume real Monte Carlo statistical datasets.
+- Goodman numerical simulation lifecycle, animated scrubber playback,
+  CDF/Stats/ANOVA result datasets, and bolt-set edit/clone/delete/new behavior
+  remain to be authored. The current Goodman run controls and windows now
+  expose authored stateful shell behavior, but they do not yet execute or
+  consume real Monte Carlo statistical datasets.
 - Goodman dynamic repeated collections remain a gap. Current simulation and
   bolt-set rows are explicit authored first-pass rows; full reference parity
   still needs authored collection/repeated-action semantics or a justified
