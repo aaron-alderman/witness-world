@@ -8,7 +8,8 @@ secondary.
 
 App ownership stays here:
 
-- shell surfaces and route states in `shell.rvm`
+- shell root/process in `shell.rvm`
+- auth/shared/module shell surfaces in `shell-*.rvm`
 - authored models/views under `models/` and `views/`
 - app-owned shell/chart CSS
 - app-owned assets and chart-function helpers

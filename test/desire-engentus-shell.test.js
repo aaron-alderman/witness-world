@@ -3,9 +3,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { createWorld, projectors } from "../src/kernel.js";
+import { loadWitnessAppFile } from "../src/dsl.js";
 import {
   applyDesire,
   compileRvmFileToDesirePlus,
+  compileWtomlDocsToDesirePlus,
   createProcessRuntime,
   normalizeDesirePlusToDesire
 } from "../src/desire/index.js";
@@ -15,11 +17,25 @@ import {
   PARAM_META as GOODMAN_PARAM_META
 } from "../example-ports/engentus/js/store.js";
 
-const shellFile = path.join(process.cwd(), "examples", "engentus", "app", "shell.rvm");
+const shellFiles = [
+  "shell.rvm",
+  "shell-shared.rvm",
+  "shell-auth.rvm",
+  "shell-goodman.rvm",
+  "shell-mill-charge.rvm",
+  "shell-mill-force.rvm"
+].map(file => path.join(process.cwd(), "examples", "engentus", "app", file));
+const appFile = path.join(process.cwd(), "examples", "engentus", "app.wtoml");
 const boltDefinitionFile = path.join(process.cwd(), "examples", "engentus", "app", "models", "goodman-bolt-sets.rvm");
 
 async function shellDesire() {
-  return normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(shellFile));
+  const loaded = await loadWitnessAppFile(appFile);
+  const witnessDesire = normalizeDesirePlusToDesire(compileWtomlDocsToDesirePlus(loaded.witnessDocs));
+  const authoredNodes = loaded.authoredDesireDocs.flatMap(doc => doc.nodes ?? []);
+  return {
+    ...witnessDesire,
+    nodes: [...witnessDesire.nodes, ...authoredNodes]
+  };
 }
 
 async function boltDefinitionDesire() {
@@ -27,7 +43,8 @@ async function boltDefinitionDesire() {
 }
 
 async function shellSource() {
-  return fs.readFile(shellFile, "utf8");
+  const sources = await Promise.all(shellFiles.map(file => fs.readFile(file, "utf8")));
+  return sources.join("\n\n");
 }
 
 function nodeMap(desire, kind) {

@@ -1,0 +1,642 @@
+import desire/v3-alpha
+
+view MillChargeParameterTitle {
+  kind text
+  class ssec-title
+  prop tag = "div"
+  prop text = "Mill Parameters"
+}
+
+view MillChargeSpeedLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Speed N/N_c"
+}
+
+view MillChargeSpeedValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop domId = "mill-pval-speedFrac"
+  prop text = "75%"
+  bindings {
+    text from projection MillChargeSpeedText
+  }
+}
+
+view MillChargeSpeedTop {
+  kind row
+  class prow-top
+  children {
+    MillChargeSpeedLabel
+    MillChargeSpeedValue
+  }
+}
+
+view MillChargeSpeedInput {
+  kind input
+  class mill-slider
+  prop tag = "input"
+  prop domId = "mill-param-speedFrac"
+  prop inputType = "range"
+  prop min = 0.40
+  prop max = 0.99
+  prop step = 0.01
+  prop value = 0.75
+  bindings {
+    value from state MillChargeSpeedFrac
+  }
+  interactions {
+    on input self set MillChargeSpeedFrac eventValue
+  }
+}
+
+view MillChargeSpeedRow {
+  kind control-row
+  class prow
+  children {
+    MillChargeSpeedTop
+    MillChargeSpeedInput
+  }
+}
+
+view MillChargeFillLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Fill fraction J"
+}
+
+view MillChargeFillValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop domId = "mill-pval-fillFrac"
+  prop text = "30%"
+  bindings {
+    text from projection MillChargeFillText
+  }
+}
+
+view MillChargeFillTop {
+  kind row
+  class prow-top
+  children {
+    MillChargeFillLabel
+    MillChargeFillValue
+  }
+}
+
+view MillChargeFillInput {
+  kind input
+  class mill-slider
+  prop tag = "input"
+  prop domId = "mill-param-fillFrac"
+  prop inputType = "range"
+  prop min = 0.10
+  prop max = 0.50
+  prop step = 0.01
+  prop value = 0.30
+  bindings {
+    value from state MillChargeFillFrac
+  }
+  interactions {
+    on input self set MillChargeFillFrac eventValue
+  }
+}
+
+view MillChargeFillRow {
+  kind control-row
+  class prow
+  children {
+    MillChargeFillTop
+    MillChargeFillInput
+  }
+}
+
+view MillChargeSlurryLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Slurry content S_w"
+}
+
+view MillChargeSlurryValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop domId = "mill-pval-slurryContent"
+  prop text = "0.20"
+  bindings {
+    text from projection MillChargeSlurryText
+  }
+}
+
+view MillChargeSlurryTop {
+  kind row
+  class prow-top
+  children {
+    MillChargeSlurryLabel
+    MillChargeSlurryValue
+  }
+}
+
+view MillChargeSlurryInput {
+  kind input
+  class mill-slider
+  prop tag = "input"
+  prop domId = "mill-param-slurryContent"
+  prop inputType = "range"
+  prop min = 0.00
+  prop max = 1.00
+  prop step = 0.01
+  prop value = 0.20
+  bindings {
+    value from state MillChargeSlurryContent
+  }
+  interactions {
+    on input self set MillChargeSlurryContent eventValue
+  }
+}
+
+view MillChargeSlurryRow {
+  kind control-row
+  class prow
+  children {
+    MillChargeSlurryTop
+    MillChargeSlurryInput
+  }
+}
+
+view MillChargeWallFrictionLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Wall friction μ"
+}
+
+view MillChargeWallFrictionValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop domId = "mill-pval-wallFriction"
+  prop text = "0.50"
+  bindings {
+    text from projection MillChargeWallFrictionText
+  }
+}
+
+view MillChargeWallFrictionTop {
+  kind row
+  class prow-top
+  children {
+    MillChargeWallFrictionLabel
+    MillChargeWallFrictionValue
+  }
+}
+
+view MillChargeWallFrictionInput {
+  kind input
+  class mill-slider
+  prop tag = "input"
+  prop domId = "mill-param-wallFriction"
+  prop inputType = "range"
+  prop min = 0.05
+  prop max = 1.00
+  prop step = 0.01
+  prop value = 0.50
+  bindings {
+    value from state MillChargeWallFriction
+  }
+  interactions {
+    on input self set MillChargeWallFriction eventValue
+  }
+}
+
+view MillChargeWallFrictionRow {
+  kind control-row
+  class prow
+  children {
+    MillChargeWallFrictionTop
+    MillChargeWallFrictionInput
+  }
+}
+
+view MillChargeInternalFrictionLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Internal friction φ"
+}
+
+view MillChargeInternalFrictionValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop domId = "mill-pval-internalFriction"
+  prop text = "35°"
+  bindings {
+    text from projection MillChargeInternalFrictionText
+  }
+}
+
+view MillChargeInternalFrictionTop {
+  kind row
+  class prow-top
+  children {
+    MillChargeInternalFrictionLabel
+    MillChargeInternalFrictionValue
+  }
+}
+
+view MillChargeInternalFrictionInput {
+  kind input
+  class mill-slider
+  prop tag = "input"
+  prop domId = "mill-param-internalFriction"
+  prop inputType = "range"
+  prop min = 20
+  prop max = 55
+  prop step = 0.5
+  prop value = 35
+  bindings {
+    value from state MillChargeInternalFriction
+  }
+  interactions {
+    on input self set MillChargeInternalFriction eventValue
+  }
+}
+
+view MillChargeInternalFrictionRow {
+  kind control-row
+  class prow
+  children {
+    MillChargeInternalFrictionTop
+    MillChargeInternalFrictionInput
+  }
+}
+
+view MillChargeBulkDensityLabel {
+  kind text
+  class plabel
+  prop tag = "span"
+  prop text = "Bulk density ρ"
+}
+
+view MillChargeBulkDensityValue {
+  kind text
+  class pval
+  prop tag = "span"
+  prop domId = "mill-pval-bulkDensity"
+  prop text = "1800"
+  bindings {
+    text from projection MillChargeBulkDensityText
+  }
+}
+
+view MillChargeBulkDensityTop {
+  kind row
+  class prow-top
+  children {
+    MillChargeBulkDensityLabel
+    MillChargeBulkDensityValue
+  }
+}
+
+view MillChargeBulkDensityInput {
+  kind input
+  class mill-slider
+  prop tag = "input"
+  prop domId = "mill-param-bulkDensity"
+  prop inputType = "range"
+  prop min = 1200
+  prop max = 2800
+  prop step = 50
+  prop value = 1800
+  bindings {
+    value from state MillChargeBulkDensity
+  }
+  interactions {
+    on input self set MillChargeBulkDensity eventValue
+  }
+}
+
+view MillChargeBulkDensityRow {
+  kind control-row
+  class prow
+  children {
+    MillChargeBulkDensityTop
+    MillChargeBulkDensityInput
+  }
+}
+
+view MillChargeParameterSection {
+  kind section
+  class ssec
+  children {
+    MillChargeParameterTitle
+    MillChargeSpeedRow
+    MillChargeFillRow
+    MillChargeSlurryRow
+    MillChargeWallFrictionRow
+    MillChargeInternalFrictionRow
+    MillChargeBulkDensityRow
+  }
+}
+
+view MillChargePresetTitle {
+  kind text
+  class ssec-title
+  prop tag = "div"
+  prop text = "Ore / Charge Type"
+}
+
+view MillChargePresetHardOre {
+  kind action
+  class mill-preset-btn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Hard/Blocky ore"
+  interactions {
+    on click self deliver MillChargePresetHardOreRequested
+  }
+}
+
+view MillChargePresetAverageOre {
+  kind action
+  class mill-preset-btn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Average ore"
+  interactions {
+    on click self deliver MillChargePresetAverageOreRequested
+  }
+}
+
+view MillChargePresetClayeyOre {
+  kind action
+  class mill-preset-btn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Clayey/Fine ore"
+  interactions {
+    on click self deliver MillChargePresetClayeyOreRequested
+  }
+}
+
+view MillChargePresetDenseSlurry {
+  kind action
+  class mill-preset-btn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Dense slurry"
+  interactions {
+    on click self deliver MillChargePresetDenseSlurryRequested
+  }
+}
+
+view MillChargePresetSection {
+  kind section
+  class ssec
+  children {
+    MillChargePresetTitle
+    MillChargePresetHardOre
+    MillChargePresetAverageOre
+    MillChargePresetClayeyOre
+    MillChargePresetDenseSlurry
+  }
+}
+
+view MillChargeSidebarScroll {
+  kind scroll-region
+  prop domId = "mill-sb-scroll"
+  children {
+    MillChargeParameterSection
+    MillChargePresetSection
+  }
+}
+
+view MillChargeSidebar {
+  kind sidebar
+  prop domId = "mill-sb"
+  children {
+    MillChargeSidebarScroll
+  }
+}
+
+view MillChargeMetricsHeader {
+  kind section-header
+  prop tag = "div"
+  prop text = "Metrics"
+  prop domId = "mill-metrics-hdr"
+}
+
+view MillChargeMetricShoulderLabel {
+  kind text
+  class mill-metric-lbl
+  prop tag = "span"
+  prop text = "Shoulder"
+}
+
+view MillChargeMetricShoulderValue {
+  kind text
+  class mill-metric-val
+  prop tag = "span"
+  prop text = "46.2°"
+  bindings {
+    text from capability MillChargeCrossSection.shoulderText
+  }
+}
+
+view MillChargeMetricShoulder {
+  kind metric-row
+  class mill-metric-row
+  children {
+    MillChargeMetricShoulderLabel
+    MillChargeMetricShoulderValue
+  }
+}
+
+view MillChargeMetricToeLabel {
+  kind text
+  class mill-metric-lbl
+  prop tag = "span"
+  prop text = "Toe"
+}
+
+view MillChargeMetricToeValue {
+  kind text
+  class mill-metric-val
+  prop tag = "span"
+  prop text = "263.5°"
+  bindings {
+    text from capability MillChargeCrossSection.toeText
+  }
+}
+
+view MillChargeMetricToe {
+  kind metric-row
+  class mill-metric-row
+  children {
+    MillChargeMetricToeLabel
+    MillChargeMetricToeValue
+  }
+}
+
+view MillChargeMetricComLabel {
+  kind text
+  class mill-metric-lbl
+  prop tag = "span"
+  prop text = "COM offset"
+}
+
+view MillChargeMetricComValue {
+  kind text
+  class mill-metric-val
+  prop tag = "span"
+  prop text = "0.602 R"
+  bindings {
+    text from capability MillChargeCrossSection.comOffsetText
+  }
+}
+
+view MillChargeMetricCom {
+  kind metric-row
+  class mill-metric-row
+  children {
+    MillChargeMetricComLabel
+    MillChargeMetricComValue
+  }
+}
+
+view MillChargeMetricPowerLabel {
+  kind text
+  class mill-metric-lbl
+  prop tag = "span"
+  prop text = "Power proxy"
+}
+
+view MillChargeMetricPowerValue {
+  kind text
+  class mill-metric-val
+  prop tag = "span"
+  prop text = "0.95 pu"
+  bindings {
+    text from capability MillChargeCrossSection.powerText
+  }
+}
+
+view MillChargeMetricPower {
+  kind metric-row
+  class mill-metric-row
+  children {
+    MillChargeMetricPowerLabel
+    MillChargeMetricPowerValue
+  }
+}
+
+view MillChargeMetricCataractingLabel {
+  kind text
+  class mill-metric-lbl
+  prop tag = "span"
+  prop text = "Cataracting"
+}
+
+view MillChargeMetricCataractingValue {
+  kind text
+  class mill-metric-val
+  prop tag = "span"
+  prop text = "32%"
+  bindings {
+    text from capability MillChargeCrossSection.cataractingText
+  }
+}
+
+view MillChargeMetricCataracting {
+  kind metric-row
+  class mill-metric-row
+  children {
+    MillChargeMetricCataractingLabel
+    MillChargeMetricCataractingValue
+  }
+}
+
+view MillChargeRegimeBadge {
+  kind status
+  class mill-regime-badge
+  prop tag = "div"
+  prop style = "background:#7f1d1d;color:#f87171"
+  prop text = "CATARACTING"
+  bindings {
+    text from capability MillChargeCrossSection.regime map rolling ROLLING cascading CASCADING cataracting CATARACTING centrifuging CENTRIFUGING pooling POOLING slipping SLIPPING default CASCADING
+    style from capability MillChargeCrossSection.regime map rolling "background:#14532d;color:#4ade80" cascading "background:#78350f;color:#fbbf24" cataracting "background:#7f1d1d;color:#f87171" centrifuging "background:#3b0764;color:#c084fc" pooling "background:#1e3a5f;color:#60a5fa" slipping "background:#3f3700;color:#fde047" default "background:#78350f;color:#fbbf24"
+  }
+}
+
+view MillChargeMetricsPanel {
+  kind metrics-panel
+  prop domId = "mill-metrics-panel"
+  children {
+    MillChargeMetricShoulder
+    MillChargeMetricToe
+    MillChargeMetricCom
+    MillChargeMetricPower
+    MillChargeMetricCataracting
+    MillChargeRegimeBadge
+  }
+}
+
+view MillChargeMetrics {
+  kind sidebar
+  prop domId = "mill-metrics"
+  children {
+    MillChargeMetricsHeader
+    MillChargeMetricsPanel
+  }
+}
+
+view MillChargeCanvasWrap {
+  kind chart-host
+  capabilities {
+    chart.render
+  }
+  prop domId = "mill-canvas-wrap"
+  children {
+    MillChargeCrossSection
+  }
+}
+
+view MillChargeViewer {
+  kind viewer
+  prop domId = "mill-main"
+  children {
+    MillChargeCanvasWrap
+  }
+}
+
+view MillChargeBody {
+  kind app-body
+  prop domId = "mill-body"
+  children {
+    MillChargeSidebar
+    MillChargeViewer
+    MillChargeMetrics
+  }
+}
+
+view EngentusMillChargeApp {
+  kind app-shell
+  class engentus-mill-charge
+  process EngentusShellNavigation
+  prop domId = "view-mill"
+  prop documentTitle = "Mill Charge Motion"
+  prop routeKey = "mill-charge"
+  prop routePath = "/engentus/mill-charge"
+  prop mountMode = "mounted-panel"
+  children {
+    EngentusModuleChrome
+    MillChargeBody
+  }
+}
+

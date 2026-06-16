@@ -14,7 +14,7 @@ async function makeTempEngentusApp() {
   return {
     root,
     dslPath: path.join(examplesRoot, "engentus", "app.wtoml"),
-    shellPath: path.join(examplesRoot, "engentus", "app", "shell.rvm")
+    shellPath: path.join(examplesRoot, "engentus", "app", "shell-shared.rvm")
   };
 }
 
@@ -134,7 +134,7 @@ test("POST source edits persist to disk and rebuild the active snapshot", async 
       body: JSON.stringify({
         edits: [
           {
-            path: "app/shell.rvm",
+            path: "app/shell-shared.rvm",
             content: updated
           }
         ]
@@ -180,7 +180,7 @@ test("dev-mode fs.watch updates publish revision SSE and inject dev reload clien
     const watchEvent = await events.nextEvent({
       predicate: payload => Number(payload.appRevision || 0) > Number(initialEvent.appRevision || 0) && payload.trigger === "watch"
     });
-    assert.match((watchEvent.changedSources ?? []).join("\n"), /app\/shell\.rvm/);
+    assert.match((watchEvent.changedSources ?? []).join("\n"), /app\/shell-shared\.rvm/);
 
     const refreshed = await fetch(`${server.url}/engentus/home`).then(result => result.text());
     assert.match(refreshed, /Watcher pushed subtitle/);

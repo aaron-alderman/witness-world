@@ -1,0 +1,1391 @@
+import desire/v3-alpha
+
+view EngentusAuthBrandLogo {
+  kind image
+  prop tag = "img"
+  prop src = "/app-static/img/engentus.png"
+  prop alt = "Engentus"
+  prop style = "height:17px;width:auto;flex-shrink:0"
+}
+
+view EngentusAuthBrandDivider {
+  kind divider
+  class auth-brand-div
+}
+
+view EngentusAuthProductLogo {
+  kind image
+  prop tag = "img"
+  prop src = "/app-static/img/mill-iq.png"
+  prop alt = "Mill-iQ™"
+  prop style = "height:19px;width:auto;flex-shrink:0"
+}
+
+view EngentusAuthBrand {
+  kind brand
+  class auth-brand
+  children {
+    EngentusAuthBrandLogo
+    EngentusAuthBrandDivider
+    EngentusAuthProductLogo
+  }
+}
+
+view EngentusToolbarBrandDivider {
+  kind divider
+  prop domId = "tb-divider"
+}
+
+view EngentusToolbarBrandLogo {
+  kind image
+  prop tag = "img"
+  prop src = "/app-static/img/engentus.png"
+  prop alt = "Engentus"
+  prop style = "height:20px;width:auto;flex-shrink:0"
+}
+
+view EngentusToolbarProductLogo {
+  kind image
+  prop tag = "img"
+  prop src = "/app-static/img/mill-iq.png"
+  prop alt = "Mill-iQ™"
+  prop style = "height:22px;width:auto;flex-shrink:0"
+}
+
+view EngentusAppBrand {
+  kind brand
+  prop domId = "tb-brand"
+  prop href = "/engentus/home"
+  interactions {
+    on click self deliver EngentusNavigateHomeRequested
+  }
+  children {
+    EngentusToolbarBrandLogo
+    EngentusToolbarBrandDivider
+    EngentusToolbarProductLogo
+  }
+}
+
+view EngentusSiteSummary {
+  kind site-summary
+  class tb-site-summary
+  prop text = "Mill: M48 – Goldfields"
+}
+
+view EngentusToolbarMiddle {
+  kind toolbar-region
+  prop domId = "tb-goodman-tools"
+  children {
+    GoodmanModesToolbar
+    GoodmanWindowToolbar
+  }
+}
+
+view EngentusProfileAvatar {
+  kind avatar
+  prop domId = "up-avatar"
+  prop text = "AA"
+}
+
+view EngentusProfileName {
+  kind text
+  prop domId = "up-name"
+  prop text = "Aaron A."
+}
+
+view EngentusProfileRole {
+  kind text
+  prop domId = "up-role"
+  prop text = "Lead Engineer"
+}
+
+view EngentusProfileInfo {
+  kind profile-info
+  prop domId = "up-info"
+  children {
+    EngentusProfileName
+    EngentusProfileRole
+  }
+}
+
+view EngentusProfileCaret {
+  kind text
+  prop domId = "up-caret"
+  prop tag = "span"
+  prop text = "▾"
+}
+
+view EngentusProfileMenuProfileIcon {
+  kind text
+  class up-mi-icon
+  prop tag = "span"
+  prop text = "👤"
+}
+
+view EngentusProfileMenuProfile {
+  kind menu-item
+  class up-mi
+  prop text = "Profile"
+  children {
+    EngentusProfileMenuProfileIcon
+  }
+}
+
+view EngentusProfileMenuSettingsIcon {
+  kind text
+  class up-mi-icon
+  prop tag = "span"
+  prop text = "⚙"
+}
+
+view EngentusProfileMenuSettings {
+  kind menu-item
+  class up-mi
+  prop text = "Settings"
+  children {
+    EngentusProfileMenuSettingsIcon
+  }
+}
+
+view EngentusProfileMenuExportIcon {
+  kind text
+  class up-mi-icon
+  prop tag = "span"
+  prop text = "📋"
+}
+
+view EngentusProfileMenuExport {
+  kind menu-item
+  class up-mi
+  prop text = "Report export"
+  children {
+    EngentusProfileMenuExportIcon
+  }
+}
+
+view EngentusProfileMenuSeparatorPrimary {
+  kind divider
+  class up-sep
+}
+
+view EngentusProfileMenuMillIcon {
+  kind text
+  class up-mi-icon
+  prop tag = "span"
+  prop text = "🏭"
+}
+
+view EngentusProfileMenuMill {
+  kind menu-item
+  class up-mi
+  prop text = "Mill: M48 – Goldfields"
+  children {
+    EngentusProfileMenuMillIcon
+  }
+}
+
+view EngentusProfileMenuSeparatorSecondary {
+  kind divider
+  class up-sep
+}
+
+view EngentusProfileMenuSignoutIcon {
+  kind text
+  class up-mi-icon
+  prop tag = "span"
+  prop text = "↩"
+}
+
+view EngentusProfileMenuSignout {
+  kind menu-item
+  class up-mi up-mi-signout
+  prop style = "color:#f87171;cursor:pointer"
+  prop text = "Sign out"
+  prop messageRef = "EngentusSignOutRequested"
+  interactions {
+    on click self deliver EngentusSignOutRequested
+  }
+  children {
+    EngentusProfileMenuSignoutIcon
+  }
+}
+
+view EngentusProfileMenu {
+  kind menu
+  prop domId = "up-menu"
+  bindings {
+    className from state EngentusProfileMenuVisible map true open default ""
+  }
+  children {
+    EngentusProfileMenuProfile
+    EngentusProfileMenuSettings
+    EngentusProfileMenuExport
+    EngentusProfileMenuSeparatorPrimary
+    EngentusProfileMenuMill
+    EngentusProfileMenuSeparatorSecondary
+    EngentusProfileMenuSignout
+  }
+}
+
+view EngentusProfileSummary {
+  kind profile-summary
+  prop domId = "user-prof"
+  interactions {
+    on click self set EngentusProfileMenuVisible toggle
+  }
+  children {
+    EngentusProfileAvatar
+    EngentusProfileInfo
+    EngentusProfileCaret
+    EngentusProfileMenu
+  }
+}
+
+view EngentusHomeBrand {
+  kind brand
+  prop domId = "tb-brand"
+  interactions {
+    on click self deliver EngentusNavigateHomeRequested
+  }
+  children {
+    EngentusToolbarBrandLogo
+    EngentusToolbarBrandDivider
+    EngentusToolbarProductLogo
+  }
+}
+
+view EngentusHomeToolbarModeStatic {
+  kind action
+  class mode-btn on
+  prop tag = "button"
+  prop label = "Static"
+}
+
+view EngentusHomeToolbarModeMonteCarlo {
+  kind action
+  class mode-btn
+  prop tag = "button"
+  prop label = "Monte Carlo"
+}
+
+view EngentusHomeToolbarModeEdit {
+  kind action
+  class mode-btn
+  prop tag = "button"
+  prop label = "✏ Edit"
+}
+
+view EngentusHomeToolbarModes {
+  kind toolbar-modes
+  class mode-pill
+  children {
+    EngentusHomeToolbarModeStatic
+    EngentusHomeToolbarModeMonteCarlo
+    EngentusHomeToolbarModeEdit
+  }
+}
+
+view EngentusHomeToolbarWinCdf {
+  kind action
+  class tbw
+  prop tag = "button"
+  prop label = "📈 CDF"
+}
+
+view EngentusHomeToolbarWinStats {
+  kind action
+  class tbw
+  prop tag = "button"
+  prop label = "📊 Stats"
+}
+
+view EngentusHomeToolbarWinAnova {
+  kind action
+  class tbw
+  prop tag = "button"
+  prop label = "🔬 ANOVA"
+}
+
+view EngentusHomeToolbarWins {
+  kind toolbar-actions
+  prop domId = "tb-wins"
+  children {
+    EngentusHomeToolbarWinCdf
+    EngentusHomeToolbarWinStats
+    EngentusHomeToolbarWinAnova
+  }
+}
+
+view EngentusHomeToolbarMiddle {
+  kind toolbar-region
+  prop domId = "tb-goodman-tools"
+  prop style = "display: none;"
+  children {
+    EngentusHomeToolbarModes
+    EngentusHomeToolbarWins
+  }
+}
+
+view EngentusHomeChrome {
+  kind chrome
+  prop domId = "tb"
+  children {
+    EngentusHomeBrand
+    EngentusProfileSummary
+  }
+}
+
+view EngentusAppChrome {
+  kind chrome
+  prop domId = "tb"
+  children {
+    EngentusAppBrand
+    EngentusToolbarMiddle
+    EngentusProfileSummary
+  }
+}
+
+view EngentusModuleChrome {
+  kind chrome
+  prop domId = "tb"
+  children {
+    EngentusAppBrand
+    EngentusProfileSummary
+  }
+}
+
+view EngentusAuthFooter {
+  kind footer
+  class auth-footer
+  prop text = "© 2025 Engentus Pty Ltd. All rights reserved."
+}
+
+view EngentusHeroLogo {
+  kind image
+  prop tag = "img"
+  prop src = "/app-static/img/mill-iq.png"
+  prop alt = "Mill-iQ™"
+  prop style = "height:42px;width:auto;margin-bottom:28px"
+}
+
+view EngentusFormLogoImage {
+  kind image
+  prop tag = "img"
+  prop src = "/app-static/img/mill-iq.png"
+  prop alt = "Mill-iQ™"
+  prop style = "height:30px;width:auto"
+}
+
+view EngentusHeroTagline {
+  kind text
+  class auth-tagline
+  prop rawHtml = "Structural Intelligence<br>for <em>SAG Mills</em>"
+}
+
+view EngentusHeroSubtitle {
+  kind text
+  class auth-sub
+  prop text = "Real-time fatigue monitoring and predictive analysis for critical liner fasteners — from bolt load to remaining life."
+}
+
+view EngentusFeatureRealtimeLoadDot {
+  kind bullet-dot
+  class auth-bullet-dot
+}
+
+view EngentusFeatureRealtimeLoadText {
+  kind text
+  prop text = "Real-time bolt load monitoring"
+}
+
+view EngentusFeatureRealtimeLoad {
+  kind feature-item
+  class auth-bullet
+  prop tag = "li"
+  children {
+    EngentusFeatureRealtimeLoadDot
+    EngentusFeatureRealtimeLoadText
+  }
+}
+
+view EngentusFeatureGoodmanAnalysisDot {
+  kind bullet-dot
+  class auth-bullet-dot
+}
+
+view EngentusFeatureGoodmanAnalysisText {
+  kind text
+  prop text = "Goodman fatigue diagram analysis"
+}
+
+view EngentusFeatureGoodmanAnalysis {
+  kind feature-item
+  class auth-bullet
+  prop tag = "li"
+  children {
+    EngentusFeatureGoodmanAnalysisDot
+    EngentusFeatureGoodmanAnalysisText
+  }
+}
+
+view EngentusFeatureMonteCarloDot {
+  kind bullet-dot
+  class auth-bullet-dot
+}
+
+view EngentusFeatureMonteCarloText {
+  kind text
+  prop text = "Monte Carlo life prediction"
+}
+
+view EngentusFeatureMonteCarlo {
+  kind feature-item
+  class auth-bullet
+  prop tag = "li"
+  children {
+    EngentusFeatureMonteCarloDot
+    EngentusFeatureMonteCarloText
+  }
+}
+
+view EngentusFeatureFleetManagementDot {
+  kind bullet-dot
+  class auth-bullet-dot
+}
+
+view EngentusFeatureFleetManagementText {
+  kind text
+  prop text = "Multi-site fleet management"
+}
+
+view EngentusFeatureFleetManagement {
+  kind feature-item
+  class auth-bullet
+  prop tag = "li"
+  children {
+    EngentusFeatureFleetManagementDot
+    EngentusFeatureFleetManagementText
+  }
+}
+
+view EngentusValueFeatures {
+  kind feature-list
+  class auth-bullets
+  prop tag = "ul"
+  children {
+    EngentusFeatureRealtimeLoad
+    EngentusFeatureGoodmanAnalysis
+    EngentusFeatureMonteCarlo
+    EngentusFeatureFleetManagement
+  }
+}
+
+view EngentusValueHero {
+  kind hero
+  class auth-hero
+  children {
+    EngentusHeroLogo
+    EngentusHeroTagline
+    EngentusHeroSubtitle
+    EngentusValueFeatures
+  }
+}
+
+
+view NewsFeedHeader {
+  kind section-header
+  class news-hdr
+  children {
+    NewsFeedHeaderLabel
+    NewsFeedLiveStatus
+  }
+}
+
+view NewsFeedHeaderLabel {
+  kind text
+  prop text = "Feed"
+}
+
+view NewsFeedLiveStatus {
+  kind group
+  class news-live
+  children {
+    NewsFeedLiveDot
+    NewsFeedLiveLabel
+  }
+}
+
+view NewsFeedLiveDot {
+  kind decoration
+  class news-live-dot
+}
+
+view NewsFeedLiveLabel {
+  kind text
+  prop text = "Live"
+}
+
+view NewsFeedAlertReading {
+  kind item
+  class news-item ni-alert
+  children {
+    NewsFeedAlertReadingCategory
+    NewsFeedAlertReadingTitle
+    NewsFeedAlertReadingTime
+  }
+}
+
+view NewsFeedAlertReadingCategory {
+  kind text
+  class ni-cat
+  prop text = "Alert"
+}
+
+view NewsFeedAlertReadingTitle {
+  kind text
+  class ni-title
+  prop text = "Sensor B7 on M48 reporting anomalous load readings — review recommended before next measurement window"
+}
+
+view NewsFeedAlertReadingTime {
+  kind text
+  class ni-time
+  prop text = "2h ago"
+}
+
+view NewsFeedMaintenanceWindow {
+  kind item
+  class news-item ni-platform
+  children {
+    NewsFeedMaintenanceWindowCategory
+    NewsFeedMaintenanceWindowTitle
+    NewsFeedMaintenanceWindowTime
+  }
+}
+
+view NewsFeedMaintenanceWindowCategory {
+  kind text
+  class ni-cat
+  prop text = "Platform"
+}
+
+view NewsFeedMaintenanceWindowTitle {
+  kind text
+  class ni-title
+  prop text = "Scheduled maintenance window: API gateway Sunday 02:00–04:00 AWST"
+}
+
+view NewsFeedMaintenanceWindowTime {
+  kind text
+  class ni-time
+  prop text = "6h ago"
+}
+
+view NewsFeedGoodmanRelease {
+  kind item
+  class news-item ni-product
+  children {
+    NewsFeedGoodmanReleaseCategory
+    NewsFeedGoodmanReleaseTitle
+    NewsFeedGoodmanReleaseTime
+  }
+}
+
+view NewsFeedGoodmanReleaseCategory {
+  kind text
+  class ni-cat
+  prop text = "Product"
+}
+
+view NewsFeedGoodmanReleaseTitle {
+  kind text
+  class ni-title
+  prop text = "Mill-iQ™ Fatigue Module v2.1.0 — Goodman diagram now supports multi-scenario ANOVA export"
+}
+
+view NewsFeedGoodmanReleaseTime {
+  kind text
+  class ni-time
+  prop text = "1d ago"
+}
+
+view NewsFeedRecalibration {
+  kind item
+  class news-item ni-product
+  children {
+    NewsFeedRecalibrationCategory
+    NewsFeedRecalibrationTitle
+    NewsFeedRecalibrationTime
+  }
+}
+
+view NewsFeedRecalibrationCategory {
+  kind text
+  class ni-cat
+  prop text = "Product"
+}
+
+view NewsFeedRecalibrationTitle {
+  kind text
+  class ni-title
+  prop text = "M48 maintenance window complete — 3 bolt sets recalibrated and re-zeroed"
+}
+
+view NewsFeedRecalibrationTime {
+  kind text
+  class ni-time
+  prop text = "2d ago"
+}
+
+view NewsFeedStandardsUpdate {
+  kind item
+  class news-item ni-industry
+  children {
+    NewsFeedStandardsUpdateCategory
+    NewsFeedStandardsUpdateTitle
+    NewsFeedStandardsUpdateTime
+  }
+}
+
+view NewsFeedStandardsUpdateCategory {
+  kind text
+  class ni-cat
+  prop text = "Industry"
+}
+
+view NewsFeedStandardsUpdateTitle {
+  kind text
+  class ni-title
+  prop text = "AS 4024 annex revision published — updated fatigue factors for mining fasteners now available"
+}
+
+view NewsFeedStandardsUpdateTime {
+  kind text
+  class ni-time
+  prop text = "3d ago"
+}
+
+view NewsFeedFirmwareUpdate {
+  kind item
+  class news-item ni-platform
+  children {
+    NewsFeedFirmwareUpdateCategory
+    NewsFeedFirmwareUpdateTitle
+    NewsFeedFirmwareUpdateTime
+  }
+}
+
+view NewsFeedFirmwareUpdateCategory {
+  kind text
+  class ni-cat
+  prop text = "Platform"
+}
+
+view NewsFeedFirmwareUpdateTitle {
+  kind text
+  class ni-title
+  prop text = "New firmware v2.3.1 available for LinerSense o310 sensors"
+}
+
+view NewsFeedFirmwareUpdateTime {
+  kind text
+  class ni-time
+  prop text = "4d ago"
+}
+
+view NewsFeedMonitoringGuidance {
+  kind item
+  class news-item ni-industry
+  children {
+    NewsFeedMonitoringGuidanceCategory
+    NewsFeedMonitoringGuidanceTitle
+    NewsFeedMonitoringGuidanceTime
+  }
+}
+
+view NewsFeedMonitoringGuidanceCategory {
+  kind text
+  class ni-cat
+  prop text = "Industry"
+}
+
+view NewsFeedMonitoringGuidanceTitle {
+  kind text
+  class ni-title
+  prop text = "MCA publishes updated guidelines on real-time structural monitoring for SAG mills"
+}
+
+view NewsFeedMonitoringGuidanceTime {
+  kind text
+  class ni-time
+  prop text = "1w ago"
+}
+
+view NewsFeedList {
+  kind list
+  class news-list
+  children {
+    NewsFeedAlertReading
+    NewsFeedMaintenanceWindow
+    NewsFeedGoodmanRelease
+    NewsFeedRecalibration
+    NewsFeedStandardsUpdate
+    NewsFeedFirmwareUpdate
+    NewsFeedMonitoringGuidance
+  }
+}
+
+view NewsPanel {
+  kind sidebar
+  prop domId = "news-panel"
+  children {
+    NewsFeedHeader
+    NewsFeedList
+  }
+}
+
+view ModuleIconCharge {
+  kind host
+  class mod-icon
+  prop rawHtml = "<svg viewBox='0 0 66 50' fill='none' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'><rect width='66' height='50' fill='#0d1a2e' rx='4'/><circle cx='33' cy='25' r='20' stroke='#475569' stroke-width='1.5' fill='none'/><path d='M 33 25 L 53 25 A 20 20 0 1 1 22 9 Z' fill='rgba(124,94,26,0.75)'/><line x1='22' y1='9' x2='53' y2='25' stroke='#c9913a' stroke-width='1.5'/><circle cx='22' cy='9' r='3' fill='#fbbf24'/><circle cx='53' cy='25' r='3' fill='#f87171'/><circle cx='33' cy='25' r='2' fill='#475569'/></svg>"
+}
+
+view ModuleIconGoodman {
+  kind host
+  class mod-icon
+  prop rawHtml = "<svg viewBox='0 0 66 50' fill='none' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'><rect width='66' height='50' fill='#0d1f35' rx='4'/><polygon points='9,42 9,7 57,42' fill='rgba(22,163,74,0.2)'/><polygon points='9,7 57,7 57,42' fill='rgba(220,38,38,0.1)'/><line x1='9' y1='7' x2='57' y2='42' stroke='#f87171' stroke-width='1.5' stroke-linecap='round'/><line x1='9' y1='46' x2='9' y2='4' stroke='#94a3b8' stroke-width='1'/><polygon points='9,3 7.2,6.5 10.8,6.5' fill='#94a3b8'/><line x1='6' y1='42' x2='61' y2='42' stroke='#94a3b8' stroke-width='1'/><polygon points='62,42 58.5,40.3 58.5,43.7' fill='#94a3b8'/><circle cx='17' cy='33' r='2.1' fill='#5AAABF'/><circle cx='24' cy='26' r='2.1' fill='#5AAABF'/><circle cx='13' cy='38' r='2.1' fill='#5AAABF'/><circle cx='32' cy='19' r='2.1' fill='#5AAABF'/><circle cx='40' cy='34' r='2.1' fill='#f59e0b'/><circle cx='36' cy='14' r='2.1' fill='#f87171'/><text x='58' y='49' font-size='5' fill='#64748b' font-family='sans-serif'>σm</text><text x='1' y='8' font-size='5' fill='#64748b' font-family='sans-serif'>σa</text></svg>"
+}
+
+view ModuleIconForce {
+  kind host
+  class mod-icon
+  prop rawHtml = "<svg viewBox='0 0 66 50' fill='none' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'><rect width='66' height='50' fill='#0d1f35' rx='4'/><circle cx='33' cy='25' r='18' fill='none' stroke='#94a3b8' stroke-width='1'/><circle cx='33' cy='25' r='13' fill='none' stroke='#475569' stroke-width='0.8' stroke-dasharray='2,2'/><path d='M 26.2 9.5 A 18 18 0 0 1 49.6 33.5 L 44.5 30 A 13 13 0 0 0 30 13 Z' fill='#5AAABF' fill-opacity='0.3' stroke='#5AAABF' stroke-width='0.6'/><rect x='29' y='7' width='3.5' height='6' rx='0.5' fill='#5AAABF' fill-opacity='0.85' transform='rotate(-28,33,25)'/><rect x='29' y='7' width='3.5' height='8.5' rx='0.5' fill='#5AAABF' fill-opacity='0.85' transform='rotate(-10,33,25)'/><rect x='29' y='7' width='3.5' height='9.5' rx='0.5' fill='#5AAABF' fill-opacity='0.85' transform='rotate( 10,33,25)'/><rect x='29' y='7' width='3.5' height='7' rx='0.5' fill='#5AAABF' fill-opacity='0.85' transform='rotate( 30,33,25)'/><line x1='33' y1='25' x2='20' y2='8' stroke='#f1f5f9' stroke-width='0.8' stroke-dasharray='2.5,2'/><line x1='33' y1='25' x2='51' y2='35' stroke='#94a3b8' stroke-width='0.8' stroke-dasharray='2.5,2'/><text x='16' y='14' font-size='4.5' fill='#94a3b8' font-family='sans-serif'>φ</text><text x='50' y='43' font-size='4.5' fill='#94a3b8' font-family='sans-serif'>φ'</text></svg>"
+}
+
+view ModuleIconWave {
+  kind host
+  class mod-icon
+  prop rawHtml = "<svg viewBox='0 0 66 50' fill='none' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'><rect width='66' height='50' fill='rgba(0,0,0,.25)' rx='4'/><polyline points='4,32 13,19 22,37 32,11 42,35 52,23 62,28' stroke='rgba(255,255,255,.22)' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/><line x1='4' y1='43' x2='62' y2='43' stroke='rgba(255,255,255,.1)' stroke-width='1'/><line x1='4' y1='43' x2='4' y2='7' stroke='rgba(255,255,255,.1)' stroke-width='1'/></svg>"
+}
+
+view ModuleIconBars {
+  kind host
+  class mod-icon
+  prop rawHtml = "<svg viewBox='0 0 66 50' fill='none' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'><rect width='66' height='50' fill='rgba(0,0,0,.25)' rx='4'/><rect x='8' y='27' width='9' height='16' fill='rgba(255,255,255,.18)' rx='1'/><rect x='20' y='19' width='9' height='24' fill='rgba(255,255,255,.18)' rx='1'/><rect x='32' y='13' width='9' height='30' fill='rgba(255,255,255,.18)' rx='1'/><rect x='44' y='21' width='9' height='22' fill='rgba(255,255,255,.18)' rx='1'/><line x1='4' y1='43' x2='62' y2='43' stroke='rgba(255,255,255,.1)' stroke-width='1'/><line x1='4' y1='43' x2='4' y2='7' stroke='rgba(255,255,255,.1)' stroke-width='1'/></svg>"
+}
+
+view ModuleIconScatter {
+  kind host
+  class mod-icon
+  prop rawHtml = "<svg viewBox='0 0 66 50' fill='none' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'><rect width='66' height='50' fill='rgba(0,0,0,.25)' rx='4'/><circle cx='14' cy='35' r='2.2' fill='rgba(255,255,255,.22)'/><circle cx='23' cy='27' r='2.2' fill='rgba(255,255,255,.22)'/><circle cx='33' cy='18' r='2.2' fill='rgba(255,255,255,.22)'/><circle cx='19' cy='39' r='2.2' fill='rgba(255,255,255,.22)'/><circle cx='43' cy='30' r='2.2' fill='rgba(255,255,255,.22)'/><circle cx='53' cy='22' r='2.2' fill='rgba(255,255,255,.22)'/><circle cx='47' cy='13' r='2.2' fill='rgba(255,255,255,.22)'/><circle cx='29' cy='38' r='2.2' fill='rgba(255,255,255,.22)'/><line x1='4' y1='43' x2='62' y2='43' stroke='rgba(255,255,255,.1)' stroke-width='1'/><line x1='4' y1='43' x2='4' y2='7' stroke='rgba(255,255,255,.1)' stroke-width='1'/></svg>"
+}
+
+view ModuleIconHeatmap {
+  kind host
+  class mod-icon
+  prop rawHtml = "<svg viewBox='0 0 66 50' fill='none' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'><rect width='66' height='50' fill='rgba(0,0,0,.25)' rx='4'/><rect x='6' y='6' width='12' height='10' fill='rgba(255,255,255,.25)' rx='1'/><rect x='20' y='6' width='12' height='10' fill='rgba(255,255,255,.1)' rx='1'/><rect x='34' y='6' width='12' height='10' fill='rgba(255,255,255,.2)' rx='1'/><rect x='48' y='6' width='12' height='10' fill='rgba(255,255,255,.08)' rx='1'/><rect x='6' y='19' width='12' height='10' fill='rgba(255,255,255,.08)' rx='1'/><rect x='20' y='19' width='12' height='10' fill='rgba(255,255,255,.28)' rx='1'/><rect x='34' y='19' width='12' height='10' fill='rgba(255,255,255,.12)' rx='1'/><rect x='48' y='19' width='12' height='10' fill='rgba(255,255,255,.22)' rx='1'/><rect x='6' y='32' width='12' height='10' fill='rgba(255,255,255,.15)' rx='1'/><rect x='20' y='32' width='12' height='10' fill='rgba(255,255,255,.06)' rx='1'/><rect x='34' y='32' width='12' height='10' fill='rgba(255,255,255,.3)' rx='1'/><rect x='48' y='32' width='12' height='10' fill='rgba(255,255,255,.14)' rx='1'/></svg>"
+}
+
+view ModuleCardLockedBadge {
+  kind text
+  class mod-lock
+  prop tag = "span"
+  prop text = "🔒"
+}
+
+view ModuleStatusAvailable {
+  kind text
+  class mod-status ms-open
+  prop tag = "div"
+  prop text = "Available"
+}
+
+view ModuleStatusComingSoon {
+  kind text
+  class mod-status ms-soon
+  prop tag = "div"
+  prop text = "Coming Soon"
+}
+
+view ModuleCardMillCharge {
+  kind module-card
+  class mod-card active
+  prop tag = "div"
+  prop routeKey = "mill-charge"
+  prop href = "/engentus/mill-charge"
+  prop assetRef = "CHARGE"
+  prop messageRef = "EngentusNavigateMillChargeRequested"
+  interactions {
+    on click self deliver EngentusNavigateMillChargeRequested
+  }
+  children {
+    ModuleIconCharge
+    ModuleCardMillChargeName
+    ModuleCardMillChargeDesc
+    ModuleStatusAvailable
+  }
+}
+
+view ModuleCardGoodman {
+  kind module-card
+  class mod-card active
+  prop tag = "div"
+  prop routeKey = "goodman"
+  prop href = "/engentus/goodman"
+  prop assetRef = "GOODMAN"
+  prop messageRef = "EngentusNavigateGoodmanRequested"
+  interactions {
+    on click self deliver EngentusNavigateGoodmanRequested
+  }
+  children {
+    ModuleIconGoodman
+    ModuleCardGoodmanName
+    ModuleCardGoodmanDesc
+    ModuleStatusAvailable
+  }
+}
+
+view ModuleCardMillForce {
+  kind module-card
+  class mod-card active
+  prop tag = "div"
+  prop routeKey = "mill-force"
+  prop href = "/engentus/mill-force"
+  prop assetRef = "FORCE"
+  prop messageRef = "EngentusNavigateMillForceRequested"
+  interactions {
+    on click self deliver EngentusNavigateMillForceRequested
+  }
+  children {
+    ModuleIconForce
+    ModuleCardMillForceName
+    ModuleCardMillForceDesc
+    ModuleStatusAvailable
+  }
+}
+
+view ModuleCardTensionTimeSeries {
+  kind module-card
+  class mod-card locked
+  children {
+    ModuleCardLockedBadge
+    ModuleIconWave
+    ModuleCardTensionTimeSeriesName
+    ModuleCardTensionTimeSeriesDesc
+    ModuleStatusComingSoon
+  }
+}
+
+view ModuleCardBoltLoadDistribution {
+  kind module-card
+  class mod-card locked
+  children {
+    ModuleCardLockedBadge
+    ModuleIconBars
+    ModuleCardBoltLoadDistributionName
+    ModuleCardBoltLoadDistributionDesc
+    ModuleStatusComingSoon
+  }
+}
+
+view ModuleCardChannelHealthMonitor {
+  kind module-card
+  class mod-card locked
+  children {
+    ModuleCardLockedBadge
+    ModuleIconHeatmap
+    ModuleCardChannelHealthMonitorName
+    ModuleCardChannelHealthMonitorDesc
+    ModuleStatusComingSoon
+  }
+}
+
+view ModuleCardCalibrationWorkspace {
+  kind module-card
+  class mod-card locked
+  children {
+    ModuleCardLockedBadge
+    ModuleIconScatter
+    ModuleCardCalibrationWorkspaceName
+    ModuleCardCalibrationWorkspaceDesc
+    ModuleStatusComingSoon
+  }
+}
+
+view ModuleCardMaintenanceForecaster {
+  kind module-card
+  class mod-card locked
+  children {
+    ModuleCardLockedBadge
+    ModuleIconBars
+    ModuleCardMaintenanceForecasterName
+    ModuleCardMaintenanceForecasterDesc
+    ModuleStatusComingSoon
+  }
+}
+
+view ModuleCardSensorFleetOverview {
+  kind module-card
+  class mod-card locked
+  children {
+    ModuleCardLockedBadge
+    ModuleIconHeatmap
+    ModuleCardSensorFleetOverviewName
+    ModuleCardSensorFleetOverviewDesc
+    ModuleStatusComingSoon
+  }
+}
+
+view ModuleCardReportBuilder {
+  kind module-card
+  class mod-card locked
+  children {
+    ModuleCardLockedBadge
+    ModuleIconWave
+    ModuleCardReportBuilderName
+    ModuleCardReportBuilderDesc
+    ModuleStatusComingSoon
+  }
+}
+
+view ModuleCardAlertTimeline {
+  kind module-card
+  class mod-card locked
+  children {
+    ModuleCardLockedBadge
+    ModuleIconScatter
+    ModuleCardAlertTimelineName
+    ModuleCardAlertTimelineDesc
+    ModuleStatusComingSoon
+  }
+}
+
+view ModuleCardMillComparison {
+  kind module-card
+  class mod-card locked
+  children {
+    ModuleCardLockedBadge
+    ModuleIconBars
+    ModuleCardMillComparisonName
+    ModuleCardMillComparisonDesc
+    ModuleStatusComingSoon
+  }
+}
+
+view ModuleCardTorqueAnalysis {
+  kind module-card
+  class mod-card locked
+  children {
+    ModuleCardLockedBadge
+    ModuleIconWave
+    ModuleCardTorqueAnalysisName
+    ModuleCardTorqueAnalysisDesc
+    ModuleStatusComingSoon
+  }
+}
+
+view ModuleCardVibrationSpectrum {
+  kind module-card
+  class mod-card locked
+  children {
+    ModuleCardLockedBadge
+    ModuleIconWave
+    ModuleCardVibrationSpectrumName
+    ModuleCardVibrationSpectrumDesc
+    ModuleStatusComingSoon
+  }
+}
+
+view ModuleCardLifeCycleEstimator {
+  kind module-card
+  class mod-card locked
+  children {
+    ModuleCardLockedBadge
+    ModuleIconScatter
+    ModuleCardLifeCycleEstimatorName
+    ModuleCardLifeCycleEstimatorDesc
+    ModuleStatusComingSoon
+  }
+}
+
+view ModuleCardApiDataExplorer {
+  kind module-card
+  class mod-card locked
+  children {
+    ModuleCardLockedBadge
+    ModuleIconHeatmap
+    ModuleCardApiDataExplorerName
+    ModuleCardApiDataExplorerDesc
+    ModuleStatusComingSoon
+  }
+}
+
+view ModuleCardHistoricalArchive {
+  kind module-card
+  class mod-card locked
+  children {
+    ModuleCardLockedBadge
+    ModuleIconBars
+    ModuleCardHistoricalArchiveName
+    ModuleCardHistoricalArchiveDesc
+    ModuleStatusComingSoon
+  }
+}
+
+view ModuleCardComplianceDashboard {
+  kind module-card
+  class mod-card locked
+  children {
+    ModuleCardLockedBadge
+    ModuleIconHeatmap
+    ModuleCardComplianceDashboardName
+    ModuleCardComplianceDashboardDesc
+    ModuleStatusComingSoon
+  }
+}
+
+view ModuleCardMillChargeName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Mill Charge Motion"
+}
+
+view ModuleCardMillChargeDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "2D charge shape, regime & power proxy"
+}
+
+view ModuleCardGoodmanName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Goodman Fatigue Diagram"
+}
+
+view ModuleCardGoodmanDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "SN curve analysis with Monte Carlo simulation"
+}
+
+view ModuleCardMillForceName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Mill Force Analysis"
+}
+
+view ModuleCardMillForceDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "Liner force distribution with dual-model comparison"
+}
+
+view ModuleCardTensionTimeSeriesName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Tension Time Series"
+}
+
+view ModuleCardTensionTimeSeriesDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "Bolt load over measurement windows"
+}
+
+view ModuleCardBoltLoadDistributionName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Bolt Load Distribution"
+}
+
+view ModuleCardBoltLoadDistributionDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "Spatial load mapping across positions"
+}
+
+view ModuleCardChannelHealthMonitorName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Channel Health Monitor"
+}
+
+view ModuleCardChannelHealthMonitorDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "Sensor integrity and diagnostic status"
+}
+
+view ModuleCardCalibrationWorkspaceName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Calibration Workspace"
+}
+
+view ModuleCardCalibrationWorkspaceDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "Two-stage bolt calibration tooling"
+}
+
+view ModuleCardMaintenanceForecasterName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Maintenance Forecaster"
+}
+
+view ModuleCardMaintenanceForecasterDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "Predictive maintenance scheduling"
+}
+
+view ModuleCardSensorFleetOverviewName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Sensor Fleet Overview"
+}
+
+view ModuleCardSensorFleetOverviewDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "Device status and connectivity"
+}
+
+view ModuleCardReportBuilderName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Report Builder"
+}
+
+view ModuleCardReportBuilderDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "PDF and data export for field reports"
+}
+
+view ModuleCardAlertTimelineName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Alert Timeline"
+}
+
+view ModuleCardAlertTimelineDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "Event history and notification log"
+}
+
+view ModuleCardMillComparisonName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Mill Comparison"
+}
+
+view ModuleCardMillComparisonDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "Cross-site benchmark analysis"
+}
+
+view ModuleCardTorqueAnalysisName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Torque Analysis"
+}
+
+view ModuleCardTorqueAnalysisDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "Torque–tension relationship modelling"
+}
+
+view ModuleCardVibrationSpectrumName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Vibration Spectrum"
+}
+
+view ModuleCardVibrationSpectrumDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "FFT and frequency domain analysis"
+}
+
+view ModuleCardLifeCycleEstimatorName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Life Cycle Estimator"
+}
+
+view ModuleCardLifeCycleEstimatorDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "Remaining useful life projections"
+}
+
+view ModuleCardApiDataExplorerName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "API Data Explorer"
+}
+
+view ModuleCardApiDataExplorerDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "Raw data query and inspection"
+}
+
+view ModuleCardHistoricalArchiveName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Historical Archive"
+}
+
+view ModuleCardHistoricalArchiveDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "Long-term trend and archive analysis"
+}
+
+view ModuleCardComplianceDashboardName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Compliance Dashboard"
+}
+
+view ModuleCardComplianceDashboardDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "Standards and certification tracking"
+}
+
+view ModuleGrid {
+  kind grid
+  prop domId = "module-grid"
+  children {
+    ModuleCardMillCharge
+    ModuleCardGoodman
+    ModuleCardMillForce
+    ModuleCardTensionTimeSeries
+    ModuleCardBoltLoadDistribution
+    ModuleCardChannelHealthMonitor
+    ModuleCardCalibrationWorkspace
+    ModuleCardMaintenanceForecaster
+    ModuleCardSensorFleetOverview
+    ModuleCardReportBuilder
+    ModuleCardAlertTimeline
+    ModuleCardMillComparison
+    ModuleCardTorqueAnalysis
+    ModuleCardVibrationSpectrum
+    ModuleCardLifeCycleEstimator
+    ModuleCardApiDataExplorer
+    ModuleCardHistoricalArchive
+    ModuleCardComplianceDashboard
+  }
+}
+
+view EngentusHomeHeaderTitle {
+  kind text
+  prop tag = "h2"
+  prop text = "Analysis Modules"
+}
+
+view EngentusHomeHeaderSubtitle {
+  kind text
+  prop tag = "p"
+  prop text = "Select a module to begin analysis"
+}
+
+view EngentusHomeContextPill {
+  kind context-pill
+  class mill-pill
+  prop text = "⚙ M48 – Goldfields"
+}
+
+view EngentusHomeHeaderMeta {
+  kind header-meta
+  class mod-area-meta
+  children {
+    EngentusHomeHeaderSubtitle
+    EngentusHomeContextPill
+  }
+}
+
+view EngentusHomeHeader {
+  kind screen-header
+  class mod-area-hdr
+  children {
+    EngentusHomeHeaderTitle
+    EngentusHomeHeaderMeta
+  }
+}
+
+view EngentusHomeMain {
+  kind main-region
+  prop domId = "module-area"
+  children {
+    EngentusHomeHeader
+    ModuleGrid
+  }
+}
+
+view EngentusHomeBody {
+  kind body
+  prop domId = "body"
+  children {
+    NewsPanel
+    EngentusHomeMain
+  }
+}
+
+view EngentusHome {
+  kind app-shell
+  class engentus-home
+  process EngentusShellNavigation
+  prop domId = "view-home"
+  prop documentTitle = "Analysis Modules"
+  prop routeKey = "home"
+  prop routePath = "/engentus/home"
+  children {
+    EngentusHomeChrome
+    EngentusHomeBody
+  }
+}
+

@@ -18,9 +18,18 @@ async function listJsFiles(dirPath) {
   return files;
 }
 
+async function readEngentusShellSources() {
+  const appDir = path.join(process.cwd(), "examples", "engentus", "app");
+  const shellFiles = (await readdir(appDir, { withFileTypes: true }))
+    .filter(entry => entry.isFile() && /^shell.*\.rvm$/i.test(entry.name))
+    .map(entry => path.join(appDir, entry.name));
+  const sources = await Promise.all(shellFiles.map(file => readFile(file, "utf8")));
+  return sources.join("\n\n");
+}
+
 test("engentus shell and core runtime do not expose the presenter bootstrap seam", async () => {
   const [shellSource, runtimeSource] = await Promise.all([
-    readFile(path.join(process.cwd(), "examples", "engentus", "app", "shell.rvm"), "utf8"),
+    readEngentusShellSources(),
     readFile(path.join(process.cwd(), "src", "runtime-surface-shell.js"), "utf8")
   ]);
 

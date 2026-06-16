@@ -1,0 +1,339 @@
+import desire/v3-alpha
+
+view EngentusLoginHeader {
+  kind screen-header
+  prop tag = "h2"
+  class auth-form-title
+  prop text = "Welcome back"
+}
+
+view EngentusLoginSubtitle {
+  kind text
+  prop tag = "p"
+  class auth-form-sub
+  prop text = "Sign in to your Engentus account"
+}
+
+view EngentusLoginEmailField {
+  kind form-field
+  class auth-field
+  prop label = "Email address"
+  prop inputType = "email"
+  prop inputId = "login-email"
+  prop inputClass = "auth-input"
+  prop placeholder = "you@company.com"
+  prop autocomplete = "email"
+}
+
+view EngentusLoginPasswordField {
+  kind form-field
+  class auth-field
+  prop label = "Password"
+  prop inputType = "password"
+  prop inputId = "login-pw"
+  prop inputClass = "auth-input"
+  prop placeholder = "••••••••"
+  prop autocomplete = "current-password"
+  prop inputStyle = "padding-right:36px"
+  prop inputWrapClass = "auth-pw-wrap"
+  bindings {
+    inputType from state EngentusPasswordRevealed map true text false password default password
+  }
+  children {
+    EngentusLoginPasswordToggle
+  }
+}
+
+view EngentusLoginRememberField {
+  kind checkbox-field
+  class login-remember-field
+  prop label = "Remember this device"
+  prop inputId = "login-remember"
+}
+
+view EngentusLoginPrimaryAction {
+  kind action
+  prop tag = "button"
+  class ms-btn
+  prop href = "/engentus/home"
+  prop messageRef = "EngentusSignInRequested"
+  bindings {
+    className from state EngentusShellAuthStatus map pending pending folding pending default ""
+    disabled from state EngentusShellAuthStatus map pending true folding true default false
+  }
+  interactions {
+    on click self deliver EngentusSignInRequested
+  }
+  children {
+    EngentusLoginMicrosoftIcon
+    EngentusLoginMicrosoftLabel
+  }
+}
+
+view EngentusLoginMicrosoftIcon {
+  kind leaf
+  prop rawHtml = "<svg width='18' height='18' viewBox='0 0 21 21' xmlns='http://www.w3.org/2000/svg'><rect x='0' y='0' width='10' height='10' fill='#f25022'/><rect x='11' y='0' width='10' height='10' fill='#7fba00'/><rect x='0' y='11' width='10' height='10' fill='#00a4ef'/><rect x='11' y='11' width='10' height='10' fill='#ffb900'/></svg>"
+}
+
+view EngentusLoginMicrosoftLabel {
+  kind text
+  prop tag = "span"
+  prop text = "Sign in with Microsoft"
+  bindings {
+    text from state EngentusShellAuthStatus map pending "Signing in…" folding "Signing in…" default "Sign in with Microsoft"
+  }
+}
+
+view EngentusLoginDividerLeft {
+  kind region
+  class auth-divider-line
+}
+
+view EngentusLoginDividerText {
+  kind text
+  prop tag = "span"
+  class auth-divider-text
+  prop text = "or continue with email"
+}
+
+view EngentusLoginDividerRight {
+  kind region
+  class auth-divider-line
+}
+
+view EngentusLoginDivider {
+  kind region
+  class auth-divider
+  children {
+    EngentusLoginDividerLeft
+    EngentusLoginDividerText
+    EngentusLoginDividerRight
+  }
+}
+
+view EngentusLoginPasswordToggle {
+  kind action
+  class auth-pw-toggle
+  prop tag = "button"
+  prop buttonType = "button"
+  interactions {
+    on click self set EngentusPasswordRevealed toggle
+  }
+  children {
+    EngentusLoginPasswordToggleGlyph
+  }
+}
+
+view EngentusLoginPasswordToggleGlyph {
+  kind text
+  prop tag = "span"
+  prop text = "◉"
+  bindings {
+    text from state EngentusPasswordRevealed map true "◎" false "◉" default "◉"
+  }
+}
+
+view EngentusLoginForgotAction {
+  kind action
+  prop label = "Forgot password?"
+  prop href = "#"
+}
+
+view EngentusLoginForgotRow {
+  kind region
+  class auth-forgot
+  children {
+    EngentusLoginForgotAction
+  }
+}
+
+view EngentusLoginSubmitAction {
+  kind action
+  prop tag = "button"
+  class auth-submit
+  prop href = "/engentus/home"
+  prop messageRef = "EngentusSignInRequested"
+  bindings {
+    disabled from state EngentusShellAuthStatus map pending true folding true default false
+  }
+  interactions {
+    on click self deliver EngentusSignInRequested
+  }
+  children {
+    EngentusLoginSubmitLabel
+  }
+}
+
+view EngentusLoginSubmitLabel {
+  kind text
+  prop tag = "span"
+  prop text = "Sign in"
+}
+
+view EngentusLoginFormLogo {
+  kind form-logo
+  class auth-form-logo
+  children {
+    EngentusFormLogoImage
+  }
+}
+
+view EngentusLoginForm {
+  kind form-region
+  class auth-form-wrap
+  children {
+    EngentusLoginFormLogo
+    EngentusLoginHeader
+    EngentusLoginSubtitle
+    EngentusLoginPrimaryAction
+    EngentusLoginDivider
+    EngentusLoginEmailField
+    EngentusLoginPasswordField
+    EngentusLoginForgotRow
+    EngentusLoginSubmitAction
+    EngentusLoginLegal
+  }
+}
+
+view EngentusLoginLegal {
+  kind legal-copy
+  class auth-form-footer
+  prop rawHtml = "By signing in you agree to Engentus's <a href='#'>Terms of Service</a> and <a href='#'>Privacy Policy</a>."
+}
+
+view EngentusLoginLeft {
+  kind region
+  class auth-left
+  children {
+    EngentusAuthBrand
+    EngentusValueHero
+    EngentusAuthFooter
+  }
+}
+
+view EngentusLoginRight {
+  kind region
+  class auth-right
+  children {
+    EngentusLoginForm
+  }
+}
+
+view EngentusLoginBook {
+  kind region
+  class auth-book
+  bindings {
+    className from state EngentusShellAuthStatus map folding folding default ""
+  }
+  children {
+    EngentusLoginLeft
+    EngentusLoginRight
+  }
+}
+
+view EngentusLogin {
+  kind auth-screen
+  class engentus-login surface-auth-view
+  process EngentusShellNavigation
+  prop domId = "view-login"
+  prop documentTitle = "Welcome back"
+  prop routeKey = "login"
+  prop routePath = "/engentus/login"
+  bindings {
+    routeUnderlay from state EngentusShellAuthStatus map folding home default ""
+  }
+  children {
+    EngentusLoginBook
+  }
+}
+
+view EngentusSignoutHeader {
+  kind screen-header
+  class auth-so-title
+  prop text = "You've been signed out"
+}
+
+view EngentusSignoutSubtitle {
+  kind text
+  class auth-so-sub
+  prop text = "Your session has ended securely. Thank you for using Mill-iQ."
+}
+
+view EngentusSignoutPrimaryAction {
+  kind action
+  class auth-submit
+  prop tag = "button"
+  prop label = "Sign back in"
+  prop href = "/engentus"
+  prop messageRef = "EngentusSignBackInRequested"
+  interactions {
+    on click self deliver EngentusSignBackInRequested
+  }
+}
+
+view EngentusSignoutLegal {
+  kind legal-copy
+  class auth-form-footer
+  prop text = "Mill-iQ is a product of Engentus Pty Ltd."
+  prop style = "margin-top:16px"
+}
+
+view EngentusSignoutActions {
+  kind form-region
+  class auth-form-wrap
+  prop style = "text-align:center"
+  children {
+    EngentusLoginFormLogo
+    EngentusSignoutHeader
+    EngentusSignoutSubtitle
+    EngentusSignoutPrimaryAction
+    EngentusSignoutLegal
+  }
+}
+
+view EngentusSignoutLeft {
+  kind region
+  class auth-left
+  children {
+    EngentusAuthBrand
+    EngentusValueHero
+    EngentusAuthFooter
+  }
+}
+
+view EngentusSignoutRight {
+  kind region
+  class auth-right
+  children {
+    EngentusSignoutActions
+  }
+}
+
+view EngentusSignoutBook {
+  kind region
+  class auth-book
+  bindings {
+    className from state EngentusShellAuthStatus map signingOut incoming default ""
+  }
+  children {
+    EngentusSignoutLeft
+    EngentusSignoutRight
+  }
+}
+
+view EngentusSignout {
+  kind auth-screen
+  class engentus-signout surface-auth-view
+  process EngentusShellNavigation
+  prop domId = "view-signout"
+  prop documentTitle = "You've been signed out"
+  prop routeKey = "signout"
+  prop routePath = "/engentus/signout"
+  bindings {
+    routeUnderlay from state EngentusShellAuthStatus map signingOut home default ""
+  }
+  children {
+    EngentusSignoutBook
+  }
+}
+

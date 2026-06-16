@@ -1,6 +1,6 @@
 [app]
 id = "engentus_frontend_app"
-imports = ["../_lib/common.wtoml", "./app/models/burst-fit.rvm", "./app/models/clip.rvm", "./app/models/goodman.rvm", "./app/models/goodman-bolt-sets.rvm", "./app/models/health.rvm", "./app/models/kalman.rvm", "./app/models/mill-charge.rvm", "./app/models/mill-force.rvm", "./app/views/goodman.rvm", "./app/views/mill-charge.rvm", "./app/views/mill-force.rvm", "./app/shell.rvm"]
+imports = ["../_lib/common.wtoml", "./app/models/burst-fit.rvm", "./app/models/clip.rvm", "./app/models/goodman.rvm", "./app/models/goodman-bolt-sets.rvm", "./app/models/health.rvm", "./app/models/kalman.rvm", "./app/models/mill-charge.rvm", "./app/models/mill-force.rvm", "./app/views/goodman.rvm", "./app/views/mill-charge.rvm", "./app/views/mill-force.rvm", "./app/shell-shared.rvm", "./app/shell-auth.rvm", "./app/shell-goodman.rvm", "./app/shell-mill-charge.rvm", "./app/shell-mill-force.rvm", "./app/shell.rvm"]
 spawn = ["backend", "frontend"]
 
 [[serverRunner]]
