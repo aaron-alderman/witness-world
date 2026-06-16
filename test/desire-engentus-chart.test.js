@@ -41,7 +41,6 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   assert.equal(plan.scales.x.label, "Mean stress σm (MPa)");
   assert.deepEqual(plan.scales.y.domain, [0, 120]);
   assert.deepEqual(viewBody.bindings.map(binding => binding.prop), [
-    "visible",
     "presentation.title",
     "presentation.xLabel",
     "presentation.yLabel",
@@ -52,6 +51,20 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
     "presentation.bandFills.1",
     "presentation.bandFills.2",
     "presentation.bandFills.3",
+    "presentation.layerStyles.cloud.fill",
+    "presentation.layerStyles.cloud.stroke",
+    "presentation.layerStyles.curves.stroke",
+    "presentation.layerStyles.curve_label.fill",
+    "presentation.layerStyles.probe_point.fill",
+    "presentation.layerStyles.slip.stroke",
+    "presentation.layerStyles.slip_label.fill",
+    "presentation.layerStyles.cloud_jemtec.fill",
+    "presentation.layerStyles.cloud_jemtec.stroke",
+    "presentation.layerStyles.curve_jemtec.stroke",
+    "presentation.layerStyles.curve_label_jemtec.fill",
+    "presentation.layerStyles.probe_point_jemtec.fill",
+    "presentation.layerStyles.slip_jemtec.stroke",
+    "presentation.layerStyles.slip_label_jemtec.fill",
     "param.F_alt_applied_N",
     "param.rpm",
     "param.sigma_lim",
@@ -60,6 +73,22 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
     "param.uts",
     "param.ys"
   ]);
+  assert.equal(
+    viewBody.bindings.find(binding => binding.prop === "presentation.layerStyles.curve_label.fill")?.source?.state,
+    "GoodmanBoltPrimaryColorState"
+  );
+  assert.equal(
+    viewBody.bindings.find(binding => binding.prop === "presentation.layerStyles.slip_label.fill")?.source?.state,
+    "GoodmanBoltPrimaryColorState"
+  );
+  assert.equal(
+    viewBody.bindings.find(binding => binding.prop === "presentation.layerStyles.curve_label_jemtec.fill")?.source?.state,
+    "GoodmanBoltMaintenanceColorState"
+  );
+  assert.equal(
+    viewBody.bindings.find(binding => binding.prop === "presentation.layerStyles.slip_label_jemtec.fill")?.source?.state,
+    "GoodmanBoltMaintenanceColorState"
+  );
   assert.equal(plan.presentation.showGrid, true);
 
   const layer = name => plan.layers.find(l => l.name === name);
@@ -144,6 +173,23 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
     x: evaluated.fields.slip_label_x.data,
     y: evaluated.fields.slip_label_y.data,
     label: "▲slip"
+  }]);
+
+  const slipJemtec = layer("slip_jemtec");
+  assert.equal(slipJemtec.mark, "rule");
+  assert.equal(slipJemtec.primitives[0].x, evaluated.fields.slip_jemtec.data);
+  const slipJemtecLabel = layer("slip_label_jemtec");
+  assert.equal(slipJemtecLabel.mark, "text");
+  assert.equal(slipJemtecLabel.fill, "#8CC4D4");
+  assert.equal(slipJemtecLabel.size, 9);
+  assert.equal(slipJemtecLabel.anchor, "start");
+  assert.equal(slipJemtecLabel.opacity, 0.7);
+  assert.deepEqual(slipJemtecLabel.primitives.map(primitive => ({
+    x: primitive.x,
+    y: primitive.y
+  })), [{
+    x: evaluated.fields.slip_label_jemtec_x.data,
+    y: evaluated.fields.slip_label_jemtec_y.data
   }]);
 
   // yield: a polyline (y = ys - sm) with the reference dashed purple style

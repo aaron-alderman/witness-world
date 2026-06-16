@@ -25,7 +25,6 @@ chart GoodmanDiagram of BoltFatigue {
   prop tooltipClass = "chart-page__tooltip chart-page__tooltip--goodman"
   prop pageBackground = "#ffffff"
   bindings {
-    visible from state GoodmanActiveMode map mc false default true
     presentation.title from state GoodmanChartTitle
     presentation.xLabel from state GoodmanChartXAxisLabel
     presentation.yLabel from state GoodmanChartYAxisLabel
@@ -36,6 +35,20 @@ chart GoodmanDiagram of BoltFatigue {
     presentation.bandFills.1 from state GoodmanChartBandFill2
     presentation.bandFills.2 from state GoodmanChartBandFill3
     presentation.bandFills.3 from state GoodmanChartBandFill4
+    presentation.layerStyles.cloud.fill from state GoodmanBoltPrimaryColorState
+    presentation.layerStyles.cloud.stroke from state GoodmanBoltPrimaryColorState
+    presentation.layerStyles.curves.stroke from state GoodmanBoltPrimaryColorState
+    presentation.layerStyles.curve_label.fill from state GoodmanBoltPrimaryColorState
+    presentation.layerStyles.probe_point.fill from state GoodmanBoltPrimaryColorState
+    presentation.layerStyles.slip.stroke from state GoodmanBoltPrimaryColorState
+    presentation.layerStyles.slip_label.fill from state GoodmanBoltPrimaryColorState
+    presentation.layerStyles.cloud_jemtec.fill from state GoodmanBoltMaintenanceColorState
+    presentation.layerStyles.cloud_jemtec.stroke from state GoodmanBoltMaintenanceColorState
+    presentation.layerStyles.curve_jemtec.stroke from state GoodmanBoltMaintenanceColorState
+    presentation.layerStyles.curve_label_jemtec.fill from state GoodmanBoltMaintenanceColorState
+    presentation.layerStyles.probe_point_jemtec.fill from state GoodmanBoltMaintenanceColorState
+    presentation.layerStyles.slip_jemtec.stroke from state GoodmanBoltMaintenanceColorState
+    presentation.layerStyles.slip_label_jemtec.fill from state GoodmanBoltMaintenanceColorState
     param.F_alt_applied_N from state GoodmanStaticAppliedShear
     param.rpm from state GoodmanStaticRpm
     param.sigma_lim from state GoodmanStaticEnduranceLimit
@@ -65,6 +78,8 @@ chart GoodmanDiagram of BoltFatigue {
   layer curve_jemtec = line over sm | y:curve_jemtec stroke:"#8CC4D4" width:2.2 tooltip.sigma_m_MPa:sm tooltip.sigma_a_MPa:curve_jemtec tooltip.F_shear_N:F_shear_jemtec tooltip.damage_per_cycle_x10_6:damage_per_million_jemtec
   layer slip   = rule | x:slip dash:true stroke:"#dc2626" width:1 opacity:0.4
   layer slip_label = text | x:slip_label_x y:slip_label_y label:"▲slip" fill:"#dc2626" size:9 opacity:0.7 anchor:start
+  layer slip_jemtec = rule | x:slip_jemtec dash:true stroke:"#8CC4D4" width:1 opacity:0.4
+  layer slip_label_jemtec = text | x:slip_label_jemtec_x y:slip_label_jemtec_y label:"▲slip" fill:"#8CC4D4" size:9 opacity:0.7 anchor:start
   layer yield  = line over sm | y:yield_line stroke:pur width:1.5 dash:true
   layer yield_label = text | x:yield_label_x y:yield_label_y label:"Yield boundary" fill:pur size:9.5 opacity:0.7
   layer curve_label = text | x:curve_label_x y:curve_label_y label:"No Jemtec" fill:"#dc2626" size:11 weight:600
@@ -86,14 +101,14 @@ chart GoodmanMCBands of BoltFatigueMC {
   prop bodyClass = "chart-page chart-page--goodman"
   prop viewportClass = "chart-page__viewport"
   prop hostClass = "chart-page__host chart-page__host--goodman"
-  prop mountId = "chart-svg-mc"
+  prop mountId = "chart-svg"
   prop mountClass = "chart-page__mount chart-page__mount--goodman"
   prop mountTag = "svg"
   prop functionsModules = "/app-static/app/chart-functions/goodman-stdlib.js,/app-static/app/chart-functions/sampling.js"
   prop functionsExports = "goodmanFunctions,samplingFunctions"
-  prop overlayCanvasId = "mc-canvas-mc"
+  prop overlayCanvasId = "mc-canvas"
   prop overlayCanvasClass = "chart-page__overlay-canvas"
-  prop tooltipId = "chart-tip-mc"
+  prop tooltipId = "chart-tip"
   prop tooltipClass = "chart-page__tooltip chart-page__tooltip--goodman"
   prop pageBackground = "#ffffff"
   bindings {

@@ -7,6 +7,7 @@
  */
 import { evaluateModel } from "./dataflow-eval.js";
 import { planChart, drawChart } from "./gog-runtime.js";
+import { assignChartPresentationPatchValue, applyChartPresentationPatch, readChartPresentationPatchValue } from "./chart-presentation-patch.js";
 
 function normalizeMountSpec(spec = {}) {
   return {
@@ -30,44 +31,7 @@ function mergedMountSpec(base, patch = {}) {
   };
 }
 
-function assignNestedPatchValue(target, path, value) {
-  const parts = String(path ?? "").split(".").filter(Boolean);
-  if (!parts.length) return false;
-  let cursor = target;
-  for (let index = 0; index < parts.length - 1; index += 1) {
-    const part = parts[index];
-    const nextPart = parts[index + 1];
-    if (Array.isArray(cursor)) {
-      const arrayIndex = Number(part);
-      if (!Number.isInteger(arrayIndex) || arrayIndex < 0) return false;
-      cursor[arrayIndex] ??= /^\d+$/.test(nextPart) ? [] : {};
-      cursor = cursor[arrayIndex];
-      continue;
-    }
-    if (cursor[part] == null || typeof cursor[part] !== "object") {
-      cursor[part] = /^\d+$/.test(nextPart) ? [] : {};
-    }
-    cursor = cursor[part];
-  }
-  const leaf = parts[parts.length - 1];
-  if (Array.isArray(cursor)) {
-    const arrayIndex = Number(leaf);
-    if (!Number.isInteger(arrayIndex) || arrayIndex < 0) return false;
-    cursor[arrayIndex] = value;
-    return true;
-  }
-  cursor[leaf] = value;
-  return true;
-}
-
-function readNestedValue(source, path) {
-  let cursor = source;
-  for (const part of String(path ?? "").split(".").filter(Boolean)) {
-    if (cursor == null) return undefined;
-    cursor = cursor[part];
-  }
-  return cursor;
-}
+export { applyChartPresentationPatch };
 
 function chartViewportSize(container, view = {}) {
   const rawWidth = Number(container?.clientWidth || 0) > 0 ? container.clientWidth : 800;
@@ -329,9 +293,9 @@ export function bootChartsFromDom(doc, functions = {}) {
         } else if (key.startsWith("presentation.")) {
           const viewKey = key.slice("presentation.".length);
           if (!viewKey) continue;
-          if (readNestedValue(el.__chartController.spec?.view, viewKey) === value) continue;
+          if (readChartPresentationPatchValue(el.__chartController.spec?.view, viewKey) === value) continue;
           view ??= structuredClone(el.__chartController.spec?.view ?? {});
-          assignNestedPatchValue(view, viewKey, value);
+          assignChartPresentationPatchValue(view, viewKey, value);
         }
       }
       const patch = {};

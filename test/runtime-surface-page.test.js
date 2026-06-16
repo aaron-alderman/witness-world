@@ -188,6 +188,288 @@ test("runtime-surface-page projects authored input tags with normal form attribu
   assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
 });
 
+test("runtime-surface-page projects authored select options with value and selected attributes", () => {
+  const html = renderSurfacePage(fakeWorld([
+    {
+      process: "desire.defineType",
+      body: { id: "DistributionKind", role: "state", valueType: "text", initial: "normal" }
+    },
+    {
+      process: "desire.defineProcess",
+      body: {
+        id: "DistributionEditor",
+        state: ["DistributionKind"],
+        handles: [],
+        emits: [],
+        rules: []
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SurfaceRoot",
+        surfaceKind: "app-root",
+        processRef: "DistributionEditor",
+        children: ["DistributionSelect"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "DistributionSelect",
+        surfaceKind: "select",
+        props: { tag: "select", domId: "dist-select" },
+        children: ["DistFixed", "DistNormal"],
+        bindings: [
+          { prop: "value", source: { kind: "state", state: "DistributionKind" } }
+        ],
+        interactions: [
+          {
+            target: "self",
+            event: "change",
+            action: { kind: "setState", state: "DistributionKind", value: { kind: "eventValue" } }
+          }
+        ]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "DistFixed",
+        surfaceKind: "option",
+        props: { tag: "option", value: "fixed", text: "fixed" }
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "DistNormal",
+        surfaceKind: "option",
+        props: { tag: "option", value: "normal", text: "normal" }
+      }
+    }
+  ]), {
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/editor"
+  });
+
+  assert.match(html, /<select id="dist-select">/);
+  assert.match(html, /<option value="fixed">fixed<\/option>/);
+  assert.match(html, /<option value="normal" selected>normal<\/option>/);
+  assert.match(html, /"value":\[\{"id":"dist-select","mode":"value"\}\]/);
+  assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
+});
+
+test("runtime-surface-page projects the standard authored form-control baseline", () => {
+  const html = renderSurfacePage(fakeWorld([
+    {
+      process: "desire.defineType",
+      body: { id: "NotesValue", role: "state", valueType: "text", initial: "initial notes" }
+    },
+    {
+      process: "desire.defineType",
+      body: { id: "AgreedValue", role: "state", valueType: "bool", initial: true }
+    },
+    {
+      process: "desire.defineType",
+      body: { id: "SubmitDisabled", role: "state", valueType: "bool", initial: true }
+    },
+    {
+      process: "desire.defineType",
+      body: { id: "StatusCopy", role: "state", valueType: "text", initial: "Ready" }
+    },
+    {
+      process: "desire.defineType",
+      body: { id: "StatusTone", role: "state", valueType: "text", initial: "ok" }
+    },
+    {
+      process: "desire.defineType",
+      body: { id: "SelectedMode", role: "state", valueType: "text", initial: "manual" }
+    },
+    {
+      process: "desire.defineType",
+      body: { id: "DetailOpen", role: "state", valueType: "bool", initial: true }
+    },
+    {
+      process: "desire.defineProcess",
+      body: {
+        id: "FormProcess",
+        state: ["NotesValue", "AgreedValue", "SubmitDisabled", "StatusCopy", "StatusTone", "SelectedMode", "DetailOpen"],
+        handles: [],
+        emits: [],
+        rules: []
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SurfaceRoot",
+        surfaceKind: "app-root",
+        processRef: "FormProcess",
+        children: ["NotesLabel", "NotesTextarea", "AgreeInput", "ModeManualRadio", "ModeAutoRadio", "SubmitButton", "DetailToggle", "StatusText"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "NotesLabel",
+        surfaceKind: "label",
+        props: { tag: "label", for: "notes-input", text: "Notes" }
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "NotesTextarea",
+        surfaceKind: "textarea",
+        props: {
+          tag: "textarea",
+          domId: "notes-input",
+          name: "notes",
+          placeholder: "Write notes",
+          value: "stale notes",
+          title: "Notes field"
+        },
+        bindings: [
+          { prop: "value", source: { kind: "state", state: "NotesValue" } }
+        ],
+        interactions: [
+          {
+            target: "self",
+            event: "input",
+            action: { kind: "setState", state: "NotesValue", value: { kind: "eventValue" } }
+          }
+        ]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "AgreeInput",
+        surfaceKind: "input",
+        props: {
+          tag: "input",
+          domId: "agree-input",
+          inputType: "checkbox",
+          name: "agreed",
+          checked: false
+        },
+        bindings: [
+          { prop: "checked", source: { kind: "state", state: "AgreedValue" } }
+        ],
+        interactions: [
+          {
+            target: "self",
+            event: "change",
+            action: { kind: "setState", state: "AgreedValue", value: { kind: "eventChecked" } }
+          }
+        ]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "ModeManualRadio",
+        surfaceKind: "input",
+        props: {
+          tag: "input",
+          domId: "mode-manual",
+          inputType: "radio",
+          name: "mode",
+          value: "manual",
+          checked: false
+        },
+        bindings: [
+          { prop: "checked", source: { kind: "state", state: "SelectedMode", map: { manual: true }, default: false } }
+        ]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "ModeAutoRadio",
+        surfaceKind: "input",
+        props: {
+          tag: "input",
+          domId: "mode-auto",
+          inputType: "radio",
+          name: "mode",
+          value: "auto"
+        },
+        bindings: [
+          { prop: "checked", source: { kind: "state", state: "SelectedMode", map: { auto: true }, default: false } }
+        ]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SubmitButton",
+        surfaceKind: "action",
+        props: {
+          tag: "button",
+          buttonType: "submit",
+          disabled: true,
+          title: "Cannot submit yet",
+          label: "Submit"
+        },
+        bindings: [
+          { prop: "disabled", source: { kind: "state", state: "SubmitDisabled" } }
+        ]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "DetailToggle",
+        surfaceKind: "action",
+        props: {
+          tag: "button",
+          domId: "detail-toggle",
+          buttonType: "button",
+          label: "Details",
+          htmlRole: "button",
+          ariaControls: "detail-panel",
+          ariaExpanded: false
+        },
+        bindings: [
+          { prop: "ariaExpanded", source: { kind: "state", state: "DetailOpen" } }
+        ]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "StatusText",
+        surfaceKind: "text",
+        className: "status",
+        props: { tag: "p", text: "Stale" },
+        bindings: [
+          { prop: "text", source: { kind: "state", state: "StatusCopy" } },
+          { prop: "className", source: { kind: "state", state: "StatusTone" } }
+        ]
+      }
+    }
+  ]), {
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/form"
+  });
+
+  assert.match(html, /<label for="notes-input">Notes<\/label>/);
+  assert.match(html, /<textarea id="notes-input" title="Notes field" placeholder="Write notes" name="notes">initial notes<\/textarea>/);
+  assert.match(html, /<input id="agree-input" type="checkbox" name="agreed" checked>/);
+  assert.match(html, /<input id="mode-manual" type="radio" name="mode" value="manual" checked>/);
+  assert.match(html, /<input id="mode-auto" type="radio" name="mode" value="auto">/);
+  assert.match(html, /<button(?: id="surface-submitbutton")? title="Cannot submit yet" type="submit" disabled>Submit<\/button>/);
+  assert.match(html, /<button id="detail-toggle" role="button" aria-controls="detail-panel" aria-expanded="true" type="button">Details<\/button>/);
+  assert.match(html, /<p(?: id="surface-statustext")? class="status ok">Ready<\/p>/);
+  assert.match(html, /"value":\[\{"id":"notes-input","mode":"value"\}\]/);
+  assert.match(html, /"checked":\[\{"id":"agree-input","mode":"checked"\}\]/);
+  assert.match(html, /"ariaExpanded":\[\{"id":"detail-toggle","mode":"attribute","attr":"aria-expanded","falseAsValue":true\}\]/);
+  assert.match(html, /"kind":"eventChecked"/);
+  assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
+});
+
 test("runtime-surface-page omits surfaces whose initial visible binding resolves false", () => {
   const rendered = [];
   const html = renderSurfacePage(fakeWorld([
@@ -245,4 +527,80 @@ test("runtime-surface-page omits surfaces whose initial visible binding resolves
   assert.deepEqual(rendered, ["StaticChart"]);
   assert.match(html, /<figure>StaticChart<\/figure>/);
   assert.doesNotMatch(html, /<figure>MonteCarloChart<\/figure>/);
+});
+
+test("runtime-surface-page renders route fragments with the same initial-state visibility context", () => {
+  const rendered = [];
+  const html = renderSurfacePage(fakeWorld([
+    {
+      process: "desire.defineType",
+      body: { id: "ActiveChartTab", role: "state", valueType: "text", initial: "cross" }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SurfaceRoot",
+        surfaceKind: "app-root",
+        children: ["HomeRoute", "ForceRoute"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "HomeRoute",
+        surfaceKind: "app-shell",
+        props: { routeKey: "home", routePath: "/home", text: "Home" }
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "ForceRoute",
+        surfaceKind: "app-shell",
+        props: { routeKey: "force", routePath: "/force" },
+        children: ["ForceCrossChart", "ForceAngleChart"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "ForceCrossChart",
+        surfaceKind: "chart",
+        bindings: [
+          { prop: "visible", source: { kind: "state", state: "ActiveChartTab", map: { cross: true }, default: false } }
+        ]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "ForceAngleChart",
+        surfaceKind: "chart",
+        bindings: [
+          { prop: "visible", source: { kind: "state", state: "ActiveChartTab", map: { force: true }, default: false } }
+        ]
+      }
+    }
+  ]), {
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/home",
+    surfaceCapabilityRenderers: [{
+      id: "test.chart",
+      capability: "chart.render",
+      factory() {
+        return {
+          capability: "chart.render",
+          renderSurface(surface) {
+            if (surface?.surfaceKind !== "chart") return null;
+            rendered.push(surface.id);
+            return `<figure>${surface.id}</figure>`;
+          }
+        };
+      }
+    }]
+  });
+
+  assert.deepEqual(rendered, ["ForceCrossChart"]);
+  assert.match(html, /"force":"<div><figure>ForceCrossChart<\/figure><\/div>"/);
+  assert.doesNotMatch(html, /<figure>ForceAngleChart<\/figure>/);
 });

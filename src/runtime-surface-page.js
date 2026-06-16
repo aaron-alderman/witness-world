@@ -1,4 +1,8 @@
-import { renderSurfaceStaticFragment, resolveSurfaceShellPage } from "./runtime-surface-shell.js";
+import {
+  readInitialStateFromWorld,
+  renderSurfaceStaticFragment,
+  resolveSurfaceShellPage
+} from "./runtime-surface-shell.js";
 import {
   buildSurfaceRuntimeManifest,
   renderSurfaceInteractionRuntimeModule
@@ -82,10 +86,12 @@ export function renderSurfacePage(world, {
   routeStateDescriptor = null,
   surfaceCapabilityRenderers = []
 } = {}) {
+  const initialState = readInitialStateFromWorld(world);
   const shellState = resolveSurfaceShellPage(world, {
     rootSurfaceId,
     requestPathname,
-    route
+    route,
+    initialState
   });
   if (!shellState?.html) return null;
   const surfaceRenderers = buildSurfaceRenderers(surfaceCapabilityRenderers, {
@@ -93,13 +99,15 @@ export function renderSurfacePage(world, {
     rootSurface: shellState.rootSurface,
     activeSurface: shellState.activeSurface,
     surfaces: shellState.surfaces,
-    browserRuntimeCapabilities
+    browserRuntimeCapabilities,
+    initialState
   });
   const shell = resolveSurfaceShellPage(world, {
     rootSurfaceId,
     requestPathname,
     route,
-    surfaceRenderers
+    surfaceRenderers,
+    initialState
   });
   if (!shell?.html) return null;
   const manifest = buildSurfaceRuntimeManifest({
@@ -117,7 +125,10 @@ export function renderSurfacePage(world, {
   });
   if (manifest) {
     manifest.routeSurfaceFragments = Object.fromEntries((manifest.routeTargets ?? [])
-      .map(target => [target.key, renderSurfaceStaticFragment(shell.surfaces, target.surfaceId, { surfaceRenderers })]));
+      .map(target => [target.key, renderSurfaceStaticFragment(shell.surfaces, target.surfaceId, {
+        surfaceRenderers,
+        initialState
+      })]));
   }
   return injectInteractionRuntime(injectCapabilityAssets(shell.html, surfaceRenderers), manifest);
 }

@@ -1,3 +1,7 @@
+/* Generated from examples/engentus/app/engentus-theme.wcss.js */
+/* Engentus chart page theme grammar */
+
+/* chart tokens */
 :root {
   --dk: #2C3C63;
   --mid: #344C6C;
@@ -8,8 +12,8 @@
   --blue: #8CC4D4;
 }
 
-html,
-body {
+/* chart foundation */
+html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
@@ -21,8 +25,7 @@ body.chart-page {
   color: var(--t3);
 }
 
-.chart-page__viewport,
-.chart-page__host {
+.chart-page__viewport, .chart-page__host {
   position: relative;
   width: 100%;
   height: 100%;
@@ -41,8 +44,8 @@ body.chart-page {
   opacity: 0;
 }
 
-#chart-svg,
-#mc-canvas {
+/* chart surfaces */
+#chart-svg, #mc-canvas {
   position: absolute;
   top: 0;
   left: 0;
@@ -77,9 +80,7 @@ body.chart-page {
   border-radius: 10px;
 }
 
-#mill-force-svg-cross,
-#mill-force-svg-force,
-#mill-force-svg-rose {
+#mill-force-svg-cross, #mill-force-svg-force, #mill-force-svg-rose {
   width: 100%;
   height: 100%;
 }
@@ -104,9 +105,7 @@ body.chart-page {
   box-shadow: 0 4px 12px rgba(0,0,0,.4);
 }
 
-.chart-page--mill-charge .chart-page__host,
-.chart-page--mill-force .chart-page__host,
-.chart-page--goodman .chart-page__host {
+.chart-page--mill-charge .chart-page__host, .chart-page--mill-force .chart-page__host, .chart-page--goodman .chart-page__host {
   background: #fff;
 }
 
@@ -114,9 +113,4 @@ svg.gog {
   width: 100%;
   height: 100%;
   display: block;
-}
-
-svg.gog text {
-  font-size: 11px;
-  fill: #475569;
 }

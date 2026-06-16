@@ -44,11 +44,11 @@ test("GoodmanMCBands plans a band between p10 and p90 over sm", async () => {
   assert.ok(plan.scales.y.domain[1] >= maxP90);
 });
 
-test("GoodmanMCBands uses shell-safe unique mount and overlay ids", async () => {
+test("GoodmanMCBands uses the oracle Goodman chart host ids when rendered directly", async () => {
   const view = await loadBody("views/goodman.rvm", "surface", "GoodmanMCBands");
-  assert.equal(view.props.mountId, "chart-svg-mc");
-  assert.equal(view.props.overlayCanvasId, "mc-canvas-mc");
-  assert.equal(view.props.tooltipId, "chart-tip-mc");
+  assert.equal(view.props.mountId, "chart-svg");
+  assert.equal(view.props.overlayCanvasId, "mc-canvas");
+  assert.equal(view.props.tooltipId, "chart-tip");
   assert.equal(view.bindings[0]?.prop, "visible");
 });
 

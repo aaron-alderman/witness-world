@@ -12,6 +12,7 @@ import {
 } from "../../src/desire/index.js";
 import { buildMountedChartRuntime, createHandlers, resolveChartSpec } from "./runtime.js";
 import { renderChartHtml, chartRuntimeBundleSource } from "./chart-page.js";
+import { applyChartPresentationPatch } from "./chart-presentation-patch.js";
 import { planChart } from "./gog-runtime.js";
 
 const appDir = path.join(process.cwd(), "examples", "engentus", "app");
@@ -172,6 +173,21 @@ test("cartesian guide marks support x-band and horizontal rule primitives generi
   assert.deepEqual(rule.primitives, [{ y: 0 }]);
 });
 
+test("chart presentation patches can target layers by authored layer name", () => {
+  const view = {
+    layers: [
+      { name: "primary_curve", stroke: "#dc2626" },
+      { name: "primary_label", fill: "#dc2626" }
+    ]
+  };
+
+  assert.equal(applyChartPresentationPatch(view, "layerStyles.primary_label.fill", "#0ea5e9"), true);
+  assert.equal(applyChartPresentationPatch(view, "layerStyles.primary_curve.stroke", "#0ea5e9"), true);
+  assert.equal(applyChartPresentationPatch(view, "layerStyles.missing.fill", "#fff"), false);
+  assert.equal(view.layers[0].stroke, "#0ea5e9");
+  assert.equal(view.layers[1].fill, "#0ea5e9");
+});
+
 test("shared chart runtime sources stay free of app-specific defaults", () => {
   const runtimeSource = fs.readFileSync(new URL("./runtime.js", import.meta.url), "utf8");
   const gogSource = fs.readFileSync(new URL("./gog-runtime.js", import.meta.url), "utf8");
@@ -189,6 +205,7 @@ test("plugin.chart-runtime keeps only generic runtime assets in its own director
   assert.deepEqual(files, [
     "chart-client.js",
     "chart-page.js",
+    "chart-presentation-patch.js",
     "dataflow-eval.js",
     "gog-runtime.js",
     "plugin.json",
@@ -213,6 +230,7 @@ test("renderChartHtml emits a self-contained page embedding the spec and authore
   assert.match(html, /<canvas id="mc-canvas" class="chart-page__overlay-canvas" data-chart-page-overlay="canvas"><\/canvas>/);
   assert.match(html, /<div id="chart-tip" class="chart-page__tooltip chart-page__tooltip--goodman" data-chart-page-overlay="tooltip"><\/div>/);
   assert.doesNotMatch(html, /#chart\{position:absolute;inset:16px/);
+  assert.doesNotMatch(html, /svg\.gog text\{[^}]*fill:/);
 });
 
 test("disc-frame chart pages can mount on an authored canvas host", async () => {
@@ -262,6 +280,29 @@ test("mounted chart runtime discovers chart surfaces outside the initial active 
 
   assert.match(markup, /<canvas id="mill-canvas"/);
   assert.match(markup, /data-chart-spec=/);
+});
+
+test("mounted chart runtime applies authored initial presentation bindings to chart specs", async () => {
+  const world = await worldWithFiles(["models/goodman.rvm", "views/goodman.rvm"]);
+  const chartSurface = world.allWitnesses()
+    .find(witness => witness.process === "desire.defineSurface" && witness.body?.id === "GoodmanDiagram")
+    ?.body;
+  assert.ok(chartSurface, "expected GoodmanDiagram surface");
+
+  const runtime = buildMountedChartRuntime({
+    world,
+    activeSurface: chartSurface,
+    initialState: new Map([
+      ["GoodmanBoltPrimaryColorState", "#22c55e"],
+      ["GoodmanBoltMaintenanceColorState", "#0ea5e9"]
+    ])
+  });
+  const markup = runtime.renderMountedChart(chartSurface);
+
+  assert.match(markup, /#22c55e/);
+  assert.match(markup, /#0ea5e9/);
+  assert.match(markup, /&quot;name&quot;:&quot;curve_label&quot;[^>]+&quot;fill&quot;:&quot;#22c55e&quot;/);
+  assert.match(markup, /&quot;name&quot;:&quot;slip_label_jemtec&quot;[^>]+&quot;fill&quot;:&quot;#0ea5e9&quot;/);
 });
 
 test("chart pages can compose multiple authored function libraries", async () => {

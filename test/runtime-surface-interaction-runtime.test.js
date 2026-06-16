@@ -367,6 +367,156 @@ test("createSurfaceInteractionRuntime dispatches authored event rules and patche
   ]);
 });
 
+test("createSurfaceInteractionRuntime boots capability hooks after route surface replacement", async () => {
+  const listeners = new Map();
+  const booted = [];
+  const makeNode = id => ({
+    id,
+    parentNode: null,
+    className: "",
+    style: {},
+    setAttribute(name, value) {
+      this[name] = value;
+    },
+    removeAttribute(name) {
+      delete this[name];
+    },
+    addEventListener(eventName, listener) {
+      listeners.set(eventName, listener);
+    },
+    removeEventListener() {},
+    matches(selector) {
+      return selector === "[data-chart-spec]" && this.hasChartSpec === true;
+    },
+    querySelectorAll(selector) {
+      return selector === "[data-chart-spec]" ? (this.chartNodes ?? []) : [];
+    },
+    replaceWith(next) {
+      nodes.delete(this.id);
+      nodes.set(next.id, next);
+      next.parentNode = this.parentNode;
+    }
+  });
+  const nodes = new Map();
+  const homeRoot = makeNode("surface-home");
+  const homeButton = makeNode("home-to-chart");
+  homeRoot.parentNode = { nodeType: 1 };
+  nodes.set(homeRoot.id, homeRoot);
+  nodes.set(homeButton.id, homeButton);
+  const runtimeWindow = {
+    location: { pathname: "/home" },
+    history: {
+      pushState(_state, _title, path) {
+        runtimeWindow.location.pathname = path;
+      }
+    },
+    __surfaceCapabilityBootHooks: [
+      root => booted.push({
+        rootId: root?.id ?? null,
+        chartCount: root?.querySelectorAll?.("[data-chart-spec]")?.length ?? 0
+      })
+    ],
+    console: { error() {} }
+  };
+
+  const runtime = createSurfaceInteractionRuntime({
+    document: {
+      getElementById(id) {
+        return nodes.get(id) ?? null;
+      },
+      createElement(tagName) {
+        assert.equal(tagName, "template");
+        return {
+          content: { firstElementChild: null },
+          set innerHTML(value) {
+            const id = String(value).match(/id="([^"]+)"/)?.[1] ?? "surface-chart";
+            const root = makeNode(id);
+            const chart = makeNode("chart-node");
+            chart.hasChartSpec = true;
+            root.chartNodes = [chart];
+            this.content.firstElementChild = root;
+          }
+        };
+      }
+    },
+    window: runtimeWindow,
+    manifest: {
+      activeSurfaceId: "Surface.Home",
+      routeState: {
+        process: "ShellNavigation",
+        state: "ActiveRoute"
+      },
+      routeTargets: [
+        { key: "home", path: "/home", surfaceId: "Surface.Home" },
+        { key: "chart", path: "/chart", surfaceId: "Surface.Chart" }
+      ],
+      routeSurfaceFragments: {
+        chart: '<main id="surface-chart"><svg data-chart-spec="{}"></svg></main>'
+      },
+      browserRuntimeCapabilities: ["chart.render"],
+      surfaces: [
+        {
+          id: "Surface.Home",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: [
+              {
+                target: "primary",
+                event: "click",
+                action: { kind: "deliver", message: "OpenChart" }
+              }
+            ]
+          },
+          view: {
+            rootId: "surface-home",
+            propTargets: {},
+            interactionTargets: { primary: [{ id: "home-to-chart" }] }
+          }
+        },
+        {
+          id: "Surface.Chart",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: ["chart.render"],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-chart",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        }
+      ],
+      processWitnesses: [
+        { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "home" } },
+        { process: "desire.defineMessage", body: { id: "OpenChart", role: "event", writes: { ActiveRoute: "chart" } } },
+        { process: "desire.defineProcess", body: {
+          id: "ShellNavigation",
+          state: ["ActiveRoute"],
+          handles: ["OpenChart"],
+          emits: [],
+          rules: []
+        } }
+      ]
+    },
+    createProcessRuntimeImpl({ witnesses }) {
+      return createProcessRuntime(witnesses);
+    }
+  });
+
+  assert.equal(typeof listeners.get("click"), "function");
+  await listeners.get("click")({ preventDefault() {}, target: homeButton });
+
+  assert.equal(runtime.processRuntime.value("ActiveRoute"), "chart");
+  assert.deepEqual(booted, [{ rootId: "surface-chart", chartCount: 1 }]);
+  assert.equal(nodes.has("surface-chart"), true);
+});
+
 test("createSurfaceInteractionRuntime synchronizes URL path into authored route state on boot", () => {
   const runtime = createSurfaceInteractionRuntime({
     document: {

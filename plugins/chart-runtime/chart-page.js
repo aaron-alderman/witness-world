@@ -26,6 +26,7 @@ export function chartRuntimeBundleSource() {
     "// inlined generic chart runtime",
     inlineModule("dataflow-eval.js"),
     inlineModule("gog-runtime.js"),
+    inlineModule("chart-presentation-patch.js"),
     inlineModule("chart-client.js")
   ].join("\n\n");
 }
@@ -204,8 +205,7 @@ export function renderChartOverlayMarkup({
 export function chartRuntimeInlineCss({ standalone = true } = {}) {
   return `${standalone ? "html,body{margin:0;height:100%;overflow:hidden}body{font-family:-apple-system,Segoe UI,sans-serif}" : ""}
 [data-chart-spec]{display:block;width:100%;height:100%}
-svg.gog{display:block;width:100%;height:100%}
-svg.gog text{font-size:11px;fill:#475569}`;
+svg.gog{display:block;width:100%;height:100%}`;
 }
 
 export function chartRuntimeAssets({

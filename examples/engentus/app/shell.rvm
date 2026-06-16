@@ -4271,6 +4271,27 @@ view GoodmanBoltSetMaterialTitle {
   prop text = "Material & Fatigue"
 }
 
+view GoodmanBoltSetLoadTitle {
+  kind text
+  class edit-group-title
+  prop tag = "div"
+  prop text = "Load"
+}
+
+view GoodmanBoltSetJointTitle {
+  kind text
+  class edit-group-title
+  prop tag = "div"
+  prop text = "Joint Properties"
+}
+
+view GoodmanBoltSetGeometryTitle {
+  kind text
+  class edit-group-title
+  prop tag = "div"
+  prop text = "Bolt Geometry"
+}
+
 view GoodmanBoltSetPreloadTitle {
   kind text
   class edit-group-title
@@ -4403,6 +4424,486 @@ view GoodmanBoltSetPreloadGroup {
     GoodmanBoltSetPreloadTauARow
     GoodmanBoltSetPreloadTauBRow
     GoodmanBoltSetPreloadTauCRow
+  }
+}
+
+view GoodmanBoltSetLoadAppliedShearRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetLoadAppliedShearLabel
+    GoodmanBoltSetLoadAppliedShearValue
+  }
+}
+
+view GoodmanBoltSetLoadAppliedShearLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Applied shear F"
+}
+
+view GoodmanBoltSetLoadAppliedShearValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "10000 N  Â· free normal"
+}
+
+view GoodmanBoltSetLoadAngularSpanRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetLoadAngularSpanLabel
+    GoodmanBoltSetLoadAngularSpanValue
+  }
+}
+
+view GoodmanBoltSetLoadAngularSpanLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Angular span factor"
+}
+
+view GoodmanBoltSetLoadAngularSpanValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "1.00  Â· free normal"
+}
+
+view GoodmanBoltSetLoadRpmRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetLoadRpmLabel
+    GoodmanBoltSetLoadRpmValue
+  }
+}
+
+view GoodmanBoltSetLoadRpmLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Mill speed"
+}
+
+view GoodmanBoltSetLoadRpmValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "11.0 RPM  Â· fixed"
+}
+
+view GoodmanBoltSetLoadGroup {
+  kind group
+  class edit-group
+  children {
+    GoodmanBoltSetLoadTitle
+    GoodmanBoltSetLoadAppliedShearRow
+    GoodmanBoltSetLoadAngularSpanRow
+    GoodmanBoltSetLoadRpmRow
+  }
+}
+
+view GoodmanBoltSetJointJemtecRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetJointJemtecLabel
+    GoodmanBoltSetJointJemtecValue
+  }
+}
+
+view GoodmanBoltSetJointJemtecLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Jemtec insert"
+}
+
+view GoodmanBoltSetJointJemtecValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "No  Â· fixed"
+}
+
+view GoodmanBoltSetJointFrictionRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetJointFrictionLabel
+    GoodmanBoltSetJointFrictionValue
+  }
+}
+
+view GoodmanBoltSetJointFrictionLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Friction coeff. Î¼"
+}
+
+view GoodmanBoltSetJointFrictionValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "0.30  Â· free normal"
+}
+
+view GoodmanBoltSetJointBoltCountRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetJointBoltCountLabel
+    GoodmanBoltSetJointBoltCountValue
+  }
+}
+
+view GoodmanBoltSetJointBoltCountLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Bolts in joint"
+}
+
+view GoodmanBoltSetJointBoltCountValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "4  Â· fixed"
+}
+
+view GoodmanBoltSetJointInterfacesRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetJointInterfacesLabel
+    GoodmanBoltSetJointInterfacesValue
+  }
+}
+
+view GoodmanBoltSetJointInterfacesLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Friction interfaces"
+}
+
+view GoodmanBoltSetJointInterfacesValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "2  Â· fixed"
+}
+
+view GoodmanBoltSetJointRubberShoreRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetJointRubberShoreLabel
+    GoodmanBoltSetJointRubberShoreValue
+  }
+}
+
+view GoodmanBoltSetJointRubberShoreLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Rubber Shore A"
+}
+
+view GoodmanBoltSetJointRubberShoreValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "70  Â· free normal"
+}
+
+view GoodmanBoltSetJointRubberThicknessRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetJointRubberThicknessLabel
+    GoodmanBoltSetJointRubberThicknessValue
+  }
+}
+
+view GoodmanBoltSetJointRubberThicknessLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Rubber thickness"
+}
+
+view GoodmanBoltSetJointRubberThicknessValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "10.0 mm  Â· free normal"
+}
+
+view GoodmanBoltSetJointRubberAreaRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetJointRubberAreaLabel
+    GoodmanBoltSetJointRubberAreaValue
+  }
+}
+
+view GoodmanBoltSetJointRubberAreaLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Rubber area"
+}
+
+view GoodmanBoltSetJointRubberAreaValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "200 cmÂ²  Â· fixed"
+}
+
+view GoodmanBoltSetJointRubberNuRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetJointRubberNuLabel
+    GoodmanBoltSetJointRubberNuValue
+  }
+}
+
+view GoodmanBoltSetJointRubberNuLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Rubber Poisson Î½"
+}
+
+view GoodmanBoltSetJointRubberNuValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "0.490  Â· fixed"
+}
+
+view GoodmanBoltSetJointRelaxARow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetJointRelaxALabel
+    GoodmanBoltSetJointRelaxAValue
+  }
+}
+
+view GoodmanBoltSetJointRelaxALabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Rubber relax Î±"
+}
+
+view GoodmanBoltSetJointRelaxAValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "0.00  Â· fixed"
+}
+
+view GoodmanBoltSetJointRelaxBRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetJointRelaxBLabel
+    GoodmanBoltSetJointRelaxBValue
+  }
+}
+
+view GoodmanBoltSetJointRelaxBLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Rubber relax Î²"
+}
+
+view GoodmanBoltSetJointRelaxBValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "0.00  Â· fixed"
+}
+
+view GoodmanBoltSetJointGroup {
+  kind group
+  class edit-group
+  children {
+    GoodmanBoltSetJointTitle
+    GoodmanBoltSetJointJemtecRow
+    GoodmanBoltSetJointFrictionRow
+    GoodmanBoltSetJointBoltCountRow
+    GoodmanBoltSetJointInterfacesRow
+    GoodmanBoltSetJointRubberShoreRow
+    GoodmanBoltSetJointRubberThicknessRow
+    GoodmanBoltSetJointRubberAreaRow
+    GoodmanBoltSetJointRubberNuRow
+    GoodmanBoltSetJointRelaxARow
+    GoodmanBoltSetJointRelaxBRow
+  }
+}
+
+view GoodmanBoltSetGeometryGripRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetGeometryGripLabel
+    GoodmanBoltSetGeometryGripValue
+  }
+}
+
+view GoodmanBoltSetGeometryGripLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Grip length"
+}
+
+view GoodmanBoltSetGeometryGripValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "105 mm  Â· free normal"
+}
+
+view GoodmanBoltSetGeometryHeadRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetGeometryHeadLabel
+    GoodmanBoltSetGeometryHeadValue
+  }
+}
+
+view GoodmanBoltSetGeometryHeadLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Head aligned to load"
+}
+
+view GoodmanBoltSetGeometryHeadValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "Aligned  Â· fixed"
+}
+
+view GoodmanBoltSetGeometryShankRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetGeometryShankLabel
+    GoodmanBoltSetGeometryShankValue
+  }
+}
+
+view GoodmanBoltSetGeometryShankLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Shank diameter"
+}
+
+view GoodmanBoltSetGeometryShankValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "48 mm  Â· fixed"
+}
+
+view GoodmanBoltSetGeometryMinorRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetGeometryMinorLabel
+    GoodmanBoltSetGeometryMinorValue
+  }
+}
+
+view GoodmanBoltSetGeometryMinorLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Minor (root) diameter"
+}
+
+view GoodmanBoltSetGeometryMinorValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "41 mm  Â· fixed"
+}
+
+view GoodmanBoltSetGeometryStressAreaRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetGeometryStressAreaLabel
+    GoodmanBoltSetGeometryStressAreaValue
+  }
+}
+
+view GoodmanBoltSetGeometryStressAreaLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Stress area A_s"
+}
+
+view GoodmanBoltSetGeometryStressAreaValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "1473 mmÂ²  Â· fixed"
+}
+
+view GoodmanBoltSetGeometryLengthFactorRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetGeometryLengthFactorLabel
+    GoodmanBoltSetGeometryLengthFactorValue
+  }
+}
+
+view GoodmanBoltSetGeometryLengthFactorLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Length factor k_L"
+}
+
+view GoodmanBoltSetGeometryLengthFactorValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "1.190  Â· fixed"
+}
+
+view GoodmanBoltSetGeometryGroup {
+  kind group
+  class edit-group
+  children {
+    GoodmanBoltSetGeometryTitle
+    GoodmanBoltSetGeometryGripRow
+    GoodmanBoltSetGeometryHeadRow
+    GoodmanBoltSetGeometryShankRow
+    GoodmanBoltSetGeometryMinorRow
+    GoodmanBoltSetGeometryStressAreaRow
+    GoodmanBoltSetGeometryLengthFactorRow
   }
 }
 
@@ -4764,6 +5265,29 @@ view GoodmanBoltSetYieldRow {
   }
 }
 
+view GoodmanBoltSetYoungsModulusRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetYoungsModulusLabel
+    GoodmanBoltSetYoungsModulusValue
+  }
+}
+
+view GoodmanBoltSetYoungsModulusLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Young's modulus E"
+}
+
+view GoodmanBoltSetYoungsModulusValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "200 GPa  Â· fixed"
+}
+
 view GoodmanBoltSetMaterialGroup {
   kind group
   class edit-group
@@ -4773,6 +5297,7 @@ view GoodmanBoltSetMaterialGroup {
     GoodmanBoltSetEnduranceRow
     GoodmanBoltSetSnSlopeRow
     GoodmanBoltSetYieldRow
+    GoodmanBoltSetYoungsModulusRow
   }
 }
 
@@ -4783,8 +5308,11 @@ view GoodmanBoltSetPrimaryParams {
     className from state GoodmanBoltPrimaryParamsOpen map true open default ""
   }
   children {
-    GoodmanBoltSetPreloadGroup
-    GoodmanBoltSetMaterialGroup
+    GoodmanBoltSetRubberCategoryPreload
+    GoodmanBoltSetRubberCategoryLoad
+    GoodmanBoltSetRubberCategoryJoint
+    GoodmanBoltSetRubberCategoryGeometry
+    GoodmanBoltSetRubberCategoryFatigue
   }
 }
 
@@ -4830,6 +5358,7 @@ view GoodmanBoltSetMaintenanceCard {
   class bs-item goodman-bolt-set-card
   children {
     GoodmanBoltSetMaintenanceHeader
+    GoodmanBoltSetJemtecParams
   }
 }
 
@@ -4845,6 +5374,7 @@ view GoodmanBoltSetsList {
 view GoodmanBoltSetsSection {
   kind section
   class ssec goodman-bolt-sets-section
+  prop definitionRef = "GoodmanBoltSetDefinitions"
   children {
     GoodmanBoltSetsTitle
     GoodmanBoltSetsList
@@ -5125,7 +5655,6 @@ view GoodmanChartRegion {
   prop domId = "chart-wrap"
   children {
     GoodmanDiagram
-    GoodmanMCBands
   }
 }
 

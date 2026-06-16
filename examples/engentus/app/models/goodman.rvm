@@ -132,6 +132,9 @@ model BoltFatigue {
   derive slip = F_per_bolt / (mu_joint * 1e6 * A_s_nom * n_interfaces)
   derive slip_label_x = slip + 3
   derive slip_label_y = 5
+  derive slip_jemtec = slip
+  derive slip_label_jemtec_x = slip_jemtec + 3
+  derive slip_label_jemtec_y = 14
   derive slip_threshold_text = slip_text(slip)
 }
 

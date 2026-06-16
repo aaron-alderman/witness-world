@@ -42,6 +42,32 @@ function readProps(surface) {
   return surface?.props && typeof surface.props === "object" ? surface.props : {};
 }
 
+const GENERIC_ATTRIBUTE_PROPS = [
+  ["htmlRole", "role"],
+  ["ariaLabel", "aria-label"],
+  ["ariaLabelledBy", "aria-labelledby"],
+  ["ariaDescribedBy", "aria-describedby"],
+  ["ariaControls", "aria-controls"],
+  ["ariaCurrent", "aria-current"],
+  ["ariaExpanded", "aria-expanded"],
+  ["ariaSelected", "aria-selected"],
+  ["ariaChecked", "aria-checked"],
+  ["ariaDisabled", "aria-disabled"],
+  ["ariaPressed", "aria-pressed"],
+  ["ariaHidden", "aria-hidden"],
+  ["tabIndex", "tabindex"]
+];
+
+const INITIAL_PROJECTED_BINDINGS = new Set([
+  "checked",
+  "disabled",
+  "style",
+  "text",
+  "title",
+  "value",
+  ...GENERIC_ATTRIBUTE_PROPS.map(([prop]) => prop)
+]);
+
 function childSurfaceIds(surface) {
   return Array.isArray(surface?.children)
     ? surface.children
@@ -209,6 +235,49 @@ function readClassNames(surface) {
   return [...new Set(tokens)];
 }
 
+function readProjectedProps(surface, options = {}) {
+  const props = { ...readProps(surface) };
+  for (const binding of surface?.bindings ?? []) {
+    const prop = binding?.prop;
+    if (!INITIAL_PROJECTED_BINDINGS.has(prop)) continue;
+    const value = evaluateStateBinding(binding, options.initialState);
+    if (value !== undefined) props[prop] = value;
+  }
+  return props;
+}
+
+function readProjectedClassNames(surface, options = {}) {
+  const classNames = readClassNames(surface);
+  const classBinding = Array.isArray(surface?.bindings)
+    ? surface.bindings.find(binding => binding?.prop === "className")
+    : null;
+  if (!classBinding) return classNames;
+  const resolved = evaluateStateBinding(classBinding, options.initialState);
+  if (typeof resolved !== "string" || !resolved.trim()) return classNames;
+  const tokens = [
+    ...classNames,
+    ...resolved.split(/\s+/).map(token => token.trim()).filter(Boolean)
+  ];
+  return [...new Set(tokens)];
+}
+
+function coerceBooleanAttr(value) {
+  if (value === true || value === 1) return true;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "true" || normalized === "1" || normalized === "yes";
+  }
+  return false;
+}
+
+function appendGenericAttributes(attrs, props) {
+  for (const [propName, attrName] of GENERIC_ATTRIBUTE_PROPS) {
+    const value = props[propName];
+    if (value == null || value === "") continue;
+    attrs.push(`${attrName}="${escapeAttr(value)}"`);
+  }
+}
+
 function isVoidTag(tagName) {
   return ["img", "input", "br", "hr", "meta", "link"].includes(tagName);
 }
@@ -230,27 +299,58 @@ function elementTagForSurface(surface) {
   return "div";
 }
 
-function renderAttributes(surface, tagName) {
-  const props = readProps(surface);
+function renderAttributes(surface, tagName, options = {}) {
+  const props = readProjectedProps(surface, options);
   const attrs = [];
   const domId = surfaceDomId(surface, { requireRuntimeAttachment: true });
   if (domId) attrs.push(`id="${escapeAttr(domId)}"`);
-  const classNames = readClassNames(surface);
+  const classNames = readProjectedClassNames(surface, options);
   if (classNames.length) attrs.push(`class="${escapeAttr(classNames.join(" "))}"`);
   const inlineStyle = staticTextValue(props, "style");
   if (inlineStyle) attrs.push(`style="${escapeAttr(inlineStyle)}"`);
   if (props.hidden === true) attrs.push("hidden");
+  const title = staticTextValue(props, "title");
+  if (title) attrs.push(`title="${escapeAttr(title)}"`);
+  appendGenericAttributes(attrs, props);
   if (tagName === "a") {
     const href = staticTextValue(props, "href") ?? "#";
     attrs.push(`href="${escapeAttr(href)}"`);
   }
-  if ((tagName === "a" || tagName === "button") && staticTextValue(props, "title")) {
-    attrs.push(`title="${escapeAttr(staticTextValue(props, "title"))}"`);
+  if (tagName === "label") {
+    const htmlFor = staticTextValue(props, "for") ?? staticTextValue(props, "htmlFor");
+    if (htmlFor) attrs.push(`for="${escapeAttr(htmlFor)}"`);
   }
   if (tagName === "button") {
     const buttonType = staticTextValue(props, "buttonType");
     if (buttonType) attrs.push(`type="${escapeAttr(buttonType)}"`);
-    if (props.disabled === true) attrs.push("disabled");
+    if (coerceBooleanAttr(props.disabled)) attrs.push("disabled");
+  }
+  if (tagName === "option") {
+    const value = props.value;
+    if (value != null) attrs.push(`value="${escapeAttr(value)}"`);
+    const optionLabel = staticTextValue(props, "label");
+    if (optionLabel) attrs.push(`label="${escapeAttr(optionLabel)}"`);
+    const parentSelectValue = options.parentSelectValue;
+    const selectedByParent = parentSelectValue != null
+      && value != null
+      && String(parentSelectValue) === String(value);
+    if (coerceBooleanAttr(props.selected) || selectedByParent) attrs.push("selected");
+    if (coerceBooleanAttr(props.disabled)) attrs.push("disabled");
+  }
+  if (tagName === "select") {
+    const name = staticTextValue(props, "name");
+    if (name) attrs.push(`name="${escapeAttr(name)}"`);
+    if (coerceBooleanAttr(props.disabled)) attrs.push("disabled");
+  }
+  if (tagName === "textarea") {
+    for (const [propName, attrName] of [
+      ["placeholder", "placeholder"],
+      ["name", "name"]
+    ]) {
+      const value = props[propName];
+      if (value != null && value !== "") attrs.push(`${attrName}="${escapeAttr(value)}"`);
+    }
+    if (coerceBooleanAttr(props.disabled)) attrs.push("disabled");
   }
   if (tagName === "input") {
     const inputType = staticTextValue(props, "inputType") ?? staticTextValue(props, "type") ?? "text";
@@ -267,8 +367,8 @@ function renderAttributes(surface, tagName) {
       const value = props[propName];
       if (value != null && value !== "") attrs.push(`${attrName}="${escapeAttr(value)}"`);
     }
-    if (props.checked === true) attrs.push("checked");
-    if (props.disabled === true) attrs.push("disabled");
+    if (coerceBooleanAttr(props.checked)) attrs.push("checked");
+    if (coerceBooleanAttr(props.disabled)) attrs.push("disabled");
   }
   if (tagName === "img") {
     const src = staticTextValue(props, "src")
@@ -299,8 +399,8 @@ function renderImage(src, className, alt = "") {
   return `<img${classAttr} src="${escapeAttr(asset)}" alt="${escapeAttr(alt)}">`;
 }
 
-function renderFieldControl(surface, surfaces) {
-  const props = readProps(surface);
+function renderFieldControl(surface, surfaces, options = {}) {
+  const props = readProjectedProps(surface, options);
   const inputType = staticTextValue(props, "inputType") ?? "text";
   const inputId = staticTextValue(props, "inputId");
   const label = staticTextValue(props, "label");
@@ -314,8 +414,8 @@ function renderFieldControl(surface, surfaces) {
   const min = props.min;
   const max = props.max;
   const step = props.step;
-  const checked = Boolean(props.checked);
-  const disabled = Boolean(props.disabled);
+  const checked = coerceBooleanAttr(props.checked);
+  const disabled = coerceBooleanAttr(props.disabled);
   const controlAttrs = [
     `type="${escapeAttr(inputType)}"`,
     inputId ? `id="${escapeAttr(inputId)}"` : "",
@@ -333,7 +433,7 @@ function renderFieldControl(surface, surfaces) {
   ].filter(Boolean).join(" ");
   const inputMarkup = `<input ${controlAttrs}>`;
   const adornmentMarkup = childSurfaceIds(surface)
-    .map(childId => renderSurfaceNode(surfaces, childId))
+    .map(childId => renderSurfaceNode(surfaces, childId, options))
     .filter(Boolean)
     .join("");
   const wrappedInput = inputWrapClass
@@ -355,15 +455,22 @@ function renderFieldControl(surface, surfaces) {
 }
 
 function renderSurfaceBody(surface, surfaces, tagName = "div", options = {}) {
-  const props = readProps(surface);
+  const props = readProjectedProps(surface, options);
   const rawHtml = staticTextValue(props, "rawHtml");
+  const childOptions = tagName === "select"
+    ? { ...options, parentSelectValue: props.value }
+    : options;
   const childHtml = childSurfaceIds(surface)
-    .map(childId => renderSurfaceNode(surfaces, childId, options))
+    .map(childId => renderSurfaceNode(surfaces, childId, childOptions))
     .filter(Boolean)
     .join("");
   if (rawHtml && !childHtml) return rawHtml;
+  if (tagName === "textarea" && !childHtml) {
+    const value = props.value ?? staticTextValue(props, "text") ?? "";
+    return escapeHtml(value);
+  }
   if (typeof props.inputType === "string" || typeof props.inputId === "string") {
-    return renderFieldControl(surface, surfaces);
+    return renderFieldControl(surface, surfaces, options);
   }
 
   const fragments = [];
@@ -456,6 +563,13 @@ function renderSurfaceBody(surface, surfaces, tagName = "div", options = {}) {
     && !assetSrc
     && (tagName === "button" || tagName === "a");
   if (directActionLabel) return escapeHtml(label);
+  const optionLabelSurface =
+    !childHtml
+    && label
+    && !text
+    && !title
+    && tagName === "option";
+  if (optionLabelSurface) return escapeHtml(label);
   const textOnlySurface =
     !childHtml
     && text
@@ -592,7 +706,7 @@ function renderSurfaceNode(surfaces, surfaceId, options = {}) {
     if (typeof rendered === "string") return rendered;
   }
   const tagName = elementTagForSurface(surface);
-  const attrs = renderAttributes(surface, tagName);
+  const attrs = renderAttributes(surface, tagName, options);
   if (isVoidTag(tagName)) return `<${tagName}${attrs}>`;
   const body = renderSurfaceBody(surface, surfaces, tagName, options);
   const props = readProps(surface);
@@ -788,7 +902,8 @@ export function renderSurfaceShellPage(world, {
   rootSurfaceId,
   requestPathname = "/",
   route = null,
-  surfaceRenderers = []
+  surfaceRenderers = [],
+  initialState = readInitialStateFromWorld(world)
 } = {}) {
   return renderSurfaceShellFromMap({
     surfaces: readSurfaceMapFromWorld(world),
@@ -796,7 +911,7 @@ export function renderSurfaceShellPage(world, {
     requestPathname,
     route,
     surfaceRenderers,
-    initialState: readInitialStateFromWorld(world)
+    initialState
   });
 }
 
@@ -804,7 +919,8 @@ export function resolveSurfaceShellPage(world, {
   rootSurfaceId,
   requestPathname = "/",
   route = null,
-  surfaceRenderers = []
+  surfaceRenderers = [],
+  initialState = readInitialStateFromWorld(world)
 } = {}) {
   return resolveSurfaceShellFromMap({
     surfaces: readSurfaceMapFromWorld(world),
@@ -812,6 +928,6 @@ export function resolveSurfaceShellPage(world, {
     requestPathname,
     route,
     surfaceRenderers,
-    initialState: readInitialStateFromWorld(world)
+    initialState
   });
 }

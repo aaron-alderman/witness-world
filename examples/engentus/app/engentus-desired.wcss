@@ -1,0 +1,887 @@
+theme engentus
+
+tokens
+  color.chrome.bg              = #2C3C63
+  color.chrome.bg.raised       = #344C6C
+  color.chrome.edge            = #3D5880
+  color.surface.light          = #f8fafc
+  color.surface.white          = #ffffff
+  color.ink.primary            = #f1f5f9
+  color.ink.secondary          = #94a3b8
+  color.ink.dark               = #0f172a
+  color.ink.body               = #475569
+  color.accent.cool            = #8CC4D4
+  color.accent.cool.strong     = #5AAABF
+  color.accent.warm            = #EC7424
+  color.success                = #16a34a
+  color.danger                 = #dc2626
+  color.notice                 = #f87171
+  color.platform               = #8CC4D4
+  color.product                = #4ade80
+  color.industry               = #a78bfa
+
+  size.toolbar.height          = 44px
+  size.sidebar.width           = 284px
+  size.scrubber.height         = 50px
+  size.metrics.width           = 190px
+  size.auth.card.width         = 372px
+  size.auth.hero.split         = 55%
+
+  radius.sm                    = 4px
+  radius.md                    = 6px
+  radius.lg                    = 8px
+  radius.xl                    = 10px
+  radius.pill                  = 999px
+
+  font.body                    = -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif
+  font.size.app                = 12.5px
+  font.size.small              = 11px
+  font.size.tiny               = 9.5px
+  font.size.title              = 15px
+  font.size.auth.title         = 22px
+  font.size.auth.hero          = 28px
+
+  motion.fast                  = 150ms
+  motion.medium                = 900ms
+  motion.auth.delay            = 1250ms
+
+views
+  view desktop
+    app engentus
+      paint
+        background = color.chrome.bg
+        ink = color.ink.primary
+      text
+        family = font.body
+        size = font.size.app
+
+      region auth.login
+        layout
+          mode = split
+          axis = x
+          size.min.height = 100vh
+          perspective = 2200px
+          perspective.origin = center
+
+        scene auth.book
+          layout
+            mode = split
+            axis = x
+            transform.origin = right-center
+          motion
+            transition.transform = motion.medium cubic-bezier(0.77, 0, 0.175, 1)
+            transition.overlay = motion.medium cubic-bezier(0.77, 0, 0.175, 1)
+
+          part hero_panel
+            layout
+              basis = size.auth.hero.split
+              mode = stack
+              padding = 32px 40px
+            paint
+              background =
+                linear-gradient(160deg, rgba(12,20,42,0.91) 0%, rgba(36,54,90,0.86) 55%, rgba(18,28,55,0.93) 100%),
+                image("../img/main.png", cover, center)
+              overlay.grid = rgba(140,196,212,.035) @ 44px 44px
+
+            part brand
+              layout
+                mode = row
+                align.y = center
+                gap = 10px
+              part divider
+                frame = 1px 20px
+                paint.fill = rgba(140,196,212,.35)
+
+            part hero_body
+              layout
+                grow = 1
+                mode = stack
+                align.y = center
+                padding.x = 8px
+              text
+                hero.size = font.size.auth.hero
+                hero.weight = 700
+                hero.line = 1.22
+                body.size = 13px
+                body.line = 1.65
+                body.ink = rgba(148,163,184,.85)
+              family auth_bullet_list
+                layout.mode = stack
+                layout.gap = 12px
+                part item
+                  layout.mode = row
+                  layout.align.y = center
+                  layout.gap = 11px
+                  text.size = 12.5px
+                  text.ink = rgba(241,245,249,.78)
+                part dot
+                  frame = 6px 6px
+                  paint.fill = color.accent.cool
+                  paint.radius = radius.pill
+                  paint.halo = 0 0 0 3px rgba(140,196,212,.18)
+
+            part footer
+              text
+                size = 10px
+                ink = rgba(148,163,184,.45)
+
+          part form_panel
+            layout
+              grow = 1
+              mode = center
+              padding = 40px 36px
+            paint
+              background = color.surface.light
+
+            card auth_form
+              layout
+                width.max = size.auth.card.width
+                width = 100%
+                mode = stack
+              text
+                title.size = font.size.auth.title
+                title.weight = 700
+                title.ink = color.ink.dark
+                body.size = 12px
+                body.ink = #64748b
+
+              part microsoft_button
+                layout
+                  mode = row
+                  align = center center
+                  gap = 11px
+                  padding = 12px 18px
+                paint
+                  background = #2f2f2f
+                  radius = radius.md
+                  ink = color.surface.white
+                text
+                  size = 13.5px
+                  weight = 500
+                variant hover
+                  paint.background = #1a1a1a
+                variant pending
+                  affordance.pointer = disabled
+                  opacity = .92
+                  icon = hidden
+                  ornament.spinner = true
+
+              part divider
+                layout.mode = row
+                layout.align.y = center
+                layout.gap = 12px
+                part line
+                  grow = 1
+                  frame.height = 1px
+                  paint.fill = #e2e8f0
+                part label
+                  text.size = 11px
+                  text.ink = #94a3b8
+
+              family auth_field
+                layout.mode = stack
+                layout.gap = 5px
+                layout.margin.bottom = 14px
+                text.label.size = 11.5px
+                text.label.weight = 600
+                text.label.ink = #374151
+                part input
+                  layout.padding = 10px 12px
+                  paint
+                    background = color.surface.white
+                    border = 1px solid #d1d5db
+                    radius = radius.md
+                    ink = color.ink.dark
+                  text.size = 13px
+                  variant focus
+                    paint.border = 1px solid color.accent.cool
+                    paint.halo = 0 0 0 3px rgba(140,196,212,.2)
+
+              part password_field
+                layout.positioning = relative
+                part toggle
+                  place.anchor = right-center
+                  place.offset = 10px 0
+                  text.size = 14px
+                  text.ink = #94a3b8
+                  variant hover
+                    text.ink = #475569
+
+              part forgot_password
+                layout.align.x = right
+                layout.margin.top = -8px
+                layout.margin.bottom = 20px
+                text.size = 11px
+                text.ink = color.accent.cool.strong
+
+              part submit
+                layout.padding = 11.5px
+                paint
+                  background = color.chrome.bg
+                  radius = radius.md
+                  ink = color.surface.white
+                text
+                  size = 13.5px
+                  weight = 600
+                variant hover
+                  paint.background = #1e2f52
+                variant pending
+                  affordance.pointer = disabled
+                  opacity = .92
+
+              part footer
+                layout.margin.top = 22px
+                text
+                  size = 10.5px
+                  ink = #94a3b8
+                  align = center
+
+        variant folding
+          scene auth.book
+            motion.transform = rotateY(-90deg)
+            paint.shadow_overlay = linear-gradient(to left, rgba(0,0,0,.6) 0%, rgba(0,0,0,.15) 18%, transparent 45%)
+
+        variant incoming
+          scene auth.book
+            motion.transform.start = rotateY(90deg)
+            motion.transform.end = rotateY(0deg)
+
+      region auth.signout
+        extend auth.login
+        scene auth.book
+          layout.transform.origin = left-center
+          paint.shadow_overlay = linear-gradient(to right, rgba(0,0,0,.6) 0%, rgba(0,0,0,.15) 18%, transparent 45%)
+        card auth_form
+          part signout_icon
+            frame = 54px 54px
+            paint
+              background = color.success
+              radius = radius.pill
+              ink = color.surface.white
+          break centered_copy
+            text.title.align = center
+            text.body.align = center
+
+      region chrome.toolbar
+        layout
+          mode = row
+          height = size.toolbar.height
+          align.y = center
+        paint
+          background = color.chrome.bg
+          border.bottom = 1px solid color.chrome.edge
+          ink = color.ink.primary
+
+        part brand
+          layout
+            width.min = size.sidebar.width
+            height = fill
+            mode = row
+            align.y = center
+            gap = 8px
+            padding.x = 14px
+          paint.border.right = 1px solid color.chrome.edge
+          text.tracking = -.02em
+          variant clickable:hover
+            paint.background = rgba(255,255,255,.05)
+
+        part divider
+          frame = 1px 24px
+          paint.fill = color.chrome.edge
+
+        part route_tools
+          layout.grow = 1
+
+        family mode_pill
+          layout
+            mode = row
+            gap = 2px
+            padding = 2px
+          paint
+            background = color.chrome.bg.raised
+            radius = radius.md
+          part button
+            layout.padding = 4px 14px
+            paint.radius = radius.sm
+            text
+              size = 12px
+              weight = 500
+              ink = color.ink.secondary
+            variant active
+              paint.background = color.accent.cool
+              text.ink = color.chrome.bg
+
+        family toolbar_window_button
+          layout
+            mode = row
+            align.y = center
+            gap = 5px
+            padding = 5px 10px
+          paint
+            border = 1px solid transparent
+            radius = radius.md
+          text
+            size = 12px
+            weight = 500
+            ink = color.ink.secondary
+          variant hover
+            paint.border = 1px solid color.chrome.edge
+            text.ink = color.ink.primary
+
+        part user_profile
+          layout
+            height = fill
+            mode = row
+            align.y = center
+            gap = 8px
+            padding.x = 14px
+          paint.border.left = 1px solid color.chrome.edge
+          variant hover
+            paint.background = rgba(255,255,255,.04)
+
+          part avatar
+            frame = 28px 28px
+            paint
+              background = color.accent.cool
+              radius = radius.pill
+              ink = color.chrome.bg
+            text
+              size = 10px
+              weight = 700
+
+          part info
+            layout.mode = stack
+            layout.gap = 1px
+            text.name.size = 11.5px
+            text.name.weight = 600
+            text.name.ink = color.ink.primary
+            text.role.size = 9.5px
+            text.role.ink = color.ink.secondary
+
+          part menu
+            layout
+              mode = stack
+              width.min = 170px
+              padding = 4px
+            place.anchor = below-right
+            place.offset = 0 2px
+            paint
+              background = color.chrome.bg.raised
+              border = 1px solid color.chrome.edge
+              radius = 8px
+              shadow = 0 8px 24px rgba(0,0,0,.3)
+            variant closed
+              visibility = hidden
+            variant open
+              visibility = visible
+
+      region home.root
+        layout
+          mode = row
+          grow = 1
+
+        part news_panel
+          layout
+            width = size.sidebar.width
+            mode = stack
+          paint
+            background = color.chrome.bg.raised
+            border.right = 1px solid color.chrome.edge
+
+          part header
+            layout
+              mode = row
+              align = space-between center
+              padding = 11px 13px
+            paint.border.bottom = 1px solid color.chrome.edge
+            text
+              size = 9.5px
+              weight = 700
+              transform = uppercase
+              tracking = .08em
+              ink = color.ink.secondary
+
+          part live_badge
+            layout
+              mode = row
+              align.y = center
+              gap = 5px
+            text
+              size = 9px
+              weight = 600
+              ink = color.product
+            part dot
+              frame = 5px 5px
+              paint.fill = color.product
+              paint.radius = radius.pill
+
+          family news_item
+            layout
+              mode = stack
+              gap = 3px
+              padding = 9px 10px
+            paint
+              background = rgba(0,0,0,.18)
+              radius = radius.md
+              edge.left = 3px solid transparent
+            variant hover
+              paint.background = rgba(0,0,0,.3)
+            variant alert
+              paint.edge.left = 3px solid color.accent.warm
+              text.category.ink = color.accent.warm
+            variant product
+              paint.edge.left = 3px solid color.product
+              text.category.ink = color.product
+            variant industry
+              paint.edge.left = 3px solid color.industry
+              text.category.ink = color.industry
+            variant platform
+              paint.edge.left = 3px solid color.platform
+              text.category.ink = color.platform
+            text
+              category.size = 8.5px
+              category.weight = 700
+              category.transform = uppercase
+              category.tracking = .05em
+              title.size = 11.5px
+              title.ink = color.ink.primary
+              title.line = 1.38
+              time.size = 9.5px
+              time.ink = color.ink.secondary
+
+        part module_area
+          layout
+            grow = 1
+            mode = stack
+            gap = 18px
+            padding = 22px 24px
+
+          part header
+            layout.mode = stack
+            layout.gap = 5px
+            text.title.size = font.size.title
+            text.title.weight = 700
+            text.title.ink = color.ink.primary
+            text.meta.size = 11px
+            text.meta.ink = color.ink.secondary
+
+          part mill_pill
+            layout
+              mode = row
+              align.y = center
+              gap = 5px
+              padding = 2px 9px
+            paint
+              background = rgba(140,196,212,.1)
+              border = 1px solid rgba(140,196,212,.22)
+              radius = radius.sm
+            text
+              size = 10px
+              weight = 600
+              ink = color.accent.cool
+
+          part module_grid
+            layout
+              mode = columns
+              count = 4
+              gap = 12px
+
+          family module_card
+            layout
+              mode = stack
+              align.x = center
+              gap = 7px
+              padding = 16px 14px 13px
+              size.min.height = 148px
+            paint
+              background = color.chrome.bg.raised
+              border = 1px solid color.chrome.edge
+              radius = 10px
+            text
+              title.size = 11.5px
+              title.weight = 600
+              title.ink = color.ink.primary
+              title.line = 1.3
+              body.size = 9.5px
+              body.ink = color.ink.secondary
+              body.line = 1.4
+              status.size = 8.5px
+              status.weight = 600
+
+            part icon
+              frame = 64px 50px
+              paint.radius = radius.md
+              content.fit = cover
+
+            part lock
+              place.anchor = top-right
+              place.offset = 9px 9px
+              text.size = 10px
+              text.ink = color.ink.secondary
+              opacity = .55
+
+            variant active
+              paint
+                border = 1px solid rgba(140,196,212,.45)
+                background = rgba(140,196,212,.06)
+              affordance.pointer = enabled
+            variant active:hover
+              paint
+                background = rgba(140,196,212,.13)
+                border = 1px solid color.accent.cool
+                shadow = 0 6px 20px rgba(0,0,0,.25)
+              motion.transform = translateY(-2px)
+            variant locked
+              opacity = .35
+            variant open_status
+              badge.background = rgba(140,196,212,.18)
+              badge.ink = color.accent.cool
+            variant soon_status
+              badge.background = rgba(255,255,255,.05)
+              badge.ink = color.ink.secondary
+
+      region goodman.root
+        layout
+          mode = column
+          grow = 1
+
+        part body
+          layout
+            mode = row
+            grow = 1
+
+        part sidebar
+          layout
+            width = size.sidebar.width
+            mode = stack
+          paint
+            background = color.chrome.bg.raised
+            border.right = 1px solid color.chrome.edge
+
+          family sidebar_section
+            layout
+              mode = stack
+              gap = 8px
+              padding = 10px 12px
+            paint.border.bottom = 1px solid color.chrome.edge
+            text
+              title.size = 9.5px
+              title.weight = 700
+              title.transform = uppercase
+              title.tracking = .08em
+              title.ink = color.ink.secondary
+
+          family simulation_row
+            layout
+              mode = row
+              align.y = center
+              gap = 7px
+              padding = 5px 7px
+            paint.radius = radius.sm
+            variant hover
+              paint.background = rgba(255,255,255,.05)
+            variant active
+              paint.background = rgba(140,196,212,.15)
+
+          family status_badge
+            layout.padding = 1px 5px
+            paint.radius = 3px
+            text.size = 9px
+            text.weight = 600
+            variant idle
+              paint.background = rgba(255,255,255,.1)
+              text.ink = color.ink.secondary
+            variant running
+              paint.background = rgba(140,196,212,.3)
+              text.ink = #6CBDCF
+            variant done
+              paint.background = rgba(22,163,74,.2)
+              text.ink = #86efac
+            variant stale
+              paint.background = rgba(236,116,36,.2)
+              text.ink = #FDBA74
+            variant stopped
+              paint.background = rgba(220,38,38,.15)
+              text.ink = #fca5a5
+
+          family bolt_set_card
+            layout.mode = stack
+            paint
+              background = rgba(0,0,0,.12)
+              border = 1px solid color.chrome.edge
+              radius = radius.md
+            part header
+              layout
+                mode = row
+                align.y = center
+                gap = 8px
+                padding = 7px 9px
+              variant hover
+                paint.background = rgba(255,255,255,.07)
+
+          family edit_group
+            layout
+              mode = stack
+              gap = 6px
+              padding = 8px 9px
+            paint
+              background = rgba(0,0,0,.2)
+              radius = 5px
+            text
+              title.size = 9px
+              title.weight = 700
+              title.transform = uppercase
+              title.tracking = .07em
+              title.ink = color.ink.secondary
+
+        part chart_area
+          layout
+            mode = column
+            grow = 1
+
+          part scrubber
+            layout
+              mode = row
+              align.y = center
+              gap = 9px
+              height = size.scrubber.height
+              margin = 7px 8px 0
+              padding.x = 12px
+            paint
+              background = color.chrome.bg.raised
+              border.bottom = 1px solid color.chrome.edge
+              radius = 8px 8px 0 0
+            variant hidden
+              visibility = hidden
+
+          part chart_surface
+            layout
+              grow = 1
+              mode = overlay
+              margin = 0 8px 8px
+            paint
+              background = color.surface.white
+              radius = 0 0 8px 8px
+              shadow = 0 1px 4px rgba(0,0,0,.15)
+
+          part tooltip
+            place.mode = floating
+            paint
+              background = rgba(15,23,42,.9)
+              radius = radius.md
+              ink = color.ink.primary
+            text
+              size = 11px
+              line = 1.7
+            variant hidden
+              opacity = 0
+
+      region goodman.windows
+        layout.mode = freeform
+        place.layer = overlay
+
+        family floating_window
+          frame.min = 300px 140px
+          paint
+            background = color.surface.white
+            radius = 10px
+            shadow = 0 8px 32px rgba(0,0,0,.22), 0 0 0 1px rgba(0,0,0,.07)
+          part titlebar
+            layout
+              mode = row
+              align.y = center
+              gap = 7px
+              padding = 7px 9px
+            paint
+              background = color.chrome.bg
+              radius = 10px 10px 0 0
+            text
+              title.size = 12px
+              title.weight = 600
+              title.ink = color.ink.primary
+          part body
+            layout.grow = 1
+          part resize_handle
+            place.anchor = bottom-right
+            frame = 16px 16px
+            paint.fill = linear-gradient(135deg, transparent 50%, #e2e8f0 50%)
+
+      region mill_charge.root
+        layout
+          mode = row
+          grow = 1
+
+        part sidebar
+          layout
+            width = size.sidebar.width
+            mode = stack
+          paint
+            background = color.chrome.bg.raised
+            border.right = 1px solid color.chrome.edge
+
+        part canvas_stage
+          layout
+            grow = 1
+            mode = center
+            padding = 16px
+          paint.background = color.chrome.bg
+          content.primary = canvas
+
+        part metrics_rail
+          layout
+            width = size.metrics.width
+            mode = stack
+          paint
+            background = color.chrome.bg.raised
+            border.left = 1px solid color.chrome.edge
+
+          part header
+            layout.padding = 10px 12px
+            paint.border.bottom = 1px solid color.chrome.edge
+            text
+              size = 9.5px
+              weight = 700
+              transform = uppercase
+              tracking = .08em
+              ink = color.ink.secondary
+
+          family metric_group
+            layout
+              mode = stack
+              gap = 8px
+              padding = 8px 10px
+            paint
+              background = rgba(0,0,0,.2)
+              radius = 5px
+
+      region mill_force.root
+        layout
+          mode = row
+          grow = 1
+
+        part sidebar
+          layout
+            width = size.sidebar.width
+            mode = stack
+          paint
+            background = color.chrome.bg.raised
+            border.right = 1px solid color.chrome.edge
+
+        part chart_stack
+          layout
+            grow = 1
+            mode = column
+          paint.background = color.chrome.bg
+
+          part tabs
+            layout
+              mode = row
+              padding = 8px 12px
+            paint
+              background = color.chrome.bg.raised
+              border.bottom = 1px solid color.chrome.edge
+
+            family chart_tab
+              layout.padding = 5px 12px
+              paint
+                border = 1px solid transparent
+                radius = 3px
+              text
+                size = 11px
+                ink = color.ink.secondary
+              variant hover
+                text.ink = color.ink.primary
+              variant active
+                paint
+                  background = rgba(140,196,212,.12)
+                  border = 1px solid rgba(140,196,212,.35)
+                text.ink = color.accent.cool
+
+          part mode_pills
+            family pill
+              layout.padding = 4px 12px
+              paint
+                background = color.chrome.bg
+                border = 1px solid color.chrome.edge
+                radius = 3px
+              text
+                size = 11px
+                ink = color.ink.secondary
+              variant hover
+                paint.background = rgba(140,196,212,.08)
+              variant active
+                paint
+                  background = rgba(140,196,212,.12)
+                  border = 1px solid rgba(140,196,212,.35)
+                text.ink = color.accent.cool
+
+          part model_selector
+            family model_option
+              layout.mode = row
+              layout.align.y = center
+              layout.gap = 5px
+              text.size = 11px
+            variant grounded
+              text.ink = color.accent.cool
+            variant faithful
+              text.ink = color.accent.warm
+
+          part chart_host
+            layout
+              grow = 1
+              mode = overlay
+            paint.background = color.chrome.bg
+            content.layers = cross_section, force_angle, force_rose, overlay_canvas, tooltip
+
+          family result_row
+            layout
+              mode = row
+              align = space-between center
+              gap = 8px
+              padding.y = 5px
+            text
+              label.size = 11px
+              label.ink = color.ink.secondary
+              value.size = 11px
+              value.weight = 600
+              value.ink = color.ink.primary
+              delta.size = 10px
+              delta.ink = color.accent.warm
+
+  view narrow
+    region auth.login
+      scene auth.book
+        layout.axis = y
+        part hero_panel
+          layout.basis = auto
+        part form_panel
+          layout.basis = auto
+
+    region auth.signout
+      extend auth.login
+
+    region home.root
+      layout.axis = y
+      part news_panel
+        layout.width = auto
+      part module_area
+        part module_grid
+          layout.count = 1
+
+    region goodman.root
+      part body
+        layout.axis = y
+      part sidebar
+        layout.width = auto
+
+    region mill_charge.root
+      layout.axis = y
+      part sidebar
+        layout.width = auto
+      part metrics_rail
+        layout.width = auto
+
+    region mill_force.root
+      layout.axis = y
+      part sidebar
+        layout.width = auto

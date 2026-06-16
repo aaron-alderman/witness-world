@@ -81,11 +81,28 @@ function classTokensForSurface(surface) {
   return [...new Set(tokens)];
 }
 
+const GENERIC_ATTRIBUTE_PROPS = [
+  ["htmlRole", "role"],
+  ["ariaLabel", "aria-label"],
+  ["ariaLabelledBy", "aria-labelledby"],
+  ["ariaDescribedBy", "aria-describedby"],
+  ["ariaControls", "aria-controls"],
+  ["ariaCurrent", "aria-current"],
+  ["ariaExpanded", "aria-expanded"],
+  ["ariaSelected", "aria-selected"],
+  ["ariaChecked", "aria-checked"],
+  ["ariaDisabled", "aria-disabled"],
+  ["ariaPressed", "aria-pressed"],
+  ["ariaHidden", "aria-hidden"],
+  ["tabIndex", "tabindex"]
+];
+
 function genericSurfaceRuntimeView(surface) {
   const domId = resolvedSurfaceDomId(surface);
   const props = surface?.props && typeof surface.props === "object" ? surface.props : {};
   const inputId = trimString(props.inputId);
-  const isDirectInput = (trimString(props.tag) ?? "").toLowerCase() === "input";
+  const directTag = (trimString(props.tag) ?? "").toLowerCase();
+  const isDirectValueControl = ["input", "select", "textarea"].includes(directTag);
   const propTargets = {};
   if (domId) {
     propTargets.className = [{ id: domId, mode: "className", baseClass: classTokensForSurface(surface).join(" ") }];
@@ -93,10 +110,15 @@ function genericSurfaceRuntimeView(surface) {
     propTargets.style = [{ id: domId, mode: "attribute", attr: "style" }];
     propTargets.visible = [{ id: domId, mode: "visibility" }];
     propTargets.disabled = [{ id: domId, mode: "disabled" }];
-    if (isDirectInput) {
+    for (const [prop, attr] of GENERIC_ATTRIBUTE_PROPS) {
+      const isAuthored = props[prop] != null
+        || (surface?.bindings ?? []).some(binding => trimString(binding?.prop) === prop);
+      if (isAuthored) propTargets[prop] = [{ id: domId, mode: "attribute", attr, falseAsValue: true }];
+    }
+    if (isDirectValueControl) {
       propTargets.inputType = [{ id: domId, mode: "attribute", attr: "type" }];
       propTargets.value = [{ id: domId, mode: "value" }];
-      propTargets.checked = [{ id: domId, mode: "checked" }];
+      if (directTag === "input") propTargets.checked = [{ id: domId, mode: "checked" }];
     }
   }
   if (inputId) {
@@ -322,7 +344,7 @@ export function patchSurfaceDom(document, surface, nextProps) {
         case "attribute": {
           const attr = trimString(target.attr);
           if (!attr) break;
-          if (value == null || value === false) node.removeAttribute(attr);
+          if (value == null || (value === false && !target.falseAsValue)) node.removeAttribute(attr);
           else node.setAttribute(attr, String(value));
           break;
         }

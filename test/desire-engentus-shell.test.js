@@ -9,11 +9,21 @@ import {
   createProcessRuntime,
   normalizeDesirePlusToDesire
 } from "../src/desire/index.js";
+import {
+  DEFAULT_STATE as GOODMAN_DEFAULT_STATE,
+  PARAM_CATS as GOODMAN_PARAM_CATS,
+  PARAM_META as GOODMAN_PARAM_META
+} from "../example-ports/engentus/js/store.js";
 
 const shellFile = path.join(process.cwd(), "examples", "engentus", "app", "shell.rvm");
+const boltDefinitionFile = path.join(process.cwd(), "examples", "engentus", "app", "models", "goodman-bolt-sets.rvm");
 
 async function shellDesire() {
   return normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(shellFile));
+}
+
+async function boltDefinitionDesire() {
+  return normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(boltDefinitionFile));
 }
 
 async function shellSource() {
@@ -22,6 +32,36 @@ async function shellSource() {
 
 function nodeMap(desire, kind) {
   return new Map(desire.nodes.filter(node => node.kind === kind).map(node => [node.name, node]));
+}
+
+function safeSurfaceName(value) {
+  return String(value)
+    .replace(/^[^A-Za-z_]+/, "")
+    .replace(/[^A-Za-z0-9]+(.)/g, (_, ch) => ch.toUpperCase())
+    .replace(/[^A-Za-z0-9]/g, "")
+    .replace(/^./, ch => ch.toUpperCase());
+}
+
+function boltParamSurfaceName(paramKey) {
+  return `GoodmanBoltParam${safeSurfaceName(paramKey)}`;
+}
+
+function prefixedDistProp(prefix, key) {
+  return `${prefix}${key[0].toUpperCase()}${key.slice(1)}`;
+}
+
+function boltEditorSetInfo() {
+  return [
+    { prefix: "Rubber", paramPrefix: "GoodmanBoltRubberParam", paramsSurface: "GoodmanBoltSetRubberParams" },
+    { prefix: "Jemtec", paramPrefix: "GoodmanBoltJemtecParam", paramsSurface: "GoodmanBoltSetJemtecParams" }
+  ];
+}
+
+function setParamsForEditor(setInfo, paramKey) {
+  const set = setInfo.prefix === "Rubber"
+    ? GOODMAN_DEFAULT_STATE.boltSets.bs_rubber
+    : GOODMAN_DEFAULT_STATE.boltSets.bs_jemtec;
+  return set.params[paramKey];
 }
 
 test("the engentus shell normalizes major screens plus authored shell behavior nodes", async () => {
@@ -462,6 +502,148 @@ test("the authored Goodman Monte Carlo run completes through a process-owned don
   ]);
 });
 
+test("the Goodman bolt-set definitions mirror the oracle PARAM_META and DEFAULT_STATE", async () => {
+  const desire = await boltDefinitionDesire();
+  const surfaces = nodeMap(desire, "surface");
+  const categoryKeys = Object.keys(GOODMAN_PARAM_CATS);
+  const paramKeys = Object.keys(GOODMAN_PARAM_META);
+  const distKeys = ["value", "free", "dist", "mean", "std", "umin", "umax", "lm", "ls", "tri_a", "tri_c", "tri_b", "prob"];
+
+  assert.deepEqual(surfaces.get("GoodmanBoltSetDefinitions")?.body?.children, [
+    "GoodmanBoltSetRubberDefinition",
+    "GoodmanBoltSetJemtecDefinition",
+    "GoodmanBoltParamCatalog"
+  ]);
+
+  for (const [surfaceId, set] of [
+    ["GoodmanBoltSetRubberDefinition", GOODMAN_DEFAULT_STATE.boltSets.bs_rubber],
+    ["GoodmanBoltSetJemtecDefinition", GOODMAN_DEFAULT_STATE.boltSets.bs_jemtec]
+  ]) {
+    assert.deepEqual(surfaces.get(surfaceId)?.body?.props, {
+      boltSetId: set.id,
+      name: set.name,
+      color: set.color,
+      visible: set.visible,
+      paramCatalog: "GoodmanBoltParamCatalog"
+    });
+  }
+
+  assert.deepEqual(
+    surfaces.get("GoodmanBoltParamCatalog")?.body?.children,
+    categoryKeys.map(categoryKey => `GoodmanBoltParamCategory${safeSurfaceName(categoryKey)}`)
+  );
+
+  for (const categoryKey of categoryKeys) {
+    const categorySurface = surfaces.get(`GoodmanBoltParamCategory${safeSurfaceName(categoryKey)}`);
+    const expectedChildren = paramKeys
+      .filter(paramKey => GOODMAN_PARAM_META[paramKey].cat === categoryKey)
+      .map(boltParamSurfaceName);
+    assert.deepEqual(categorySurface?.body?.props, {
+      categoryKey,
+      label: GOODMAN_PARAM_CATS[categoryKey]
+    });
+    assert.deepEqual(categorySurface?.body?.children, expectedChildren);
+  }
+
+  for (const paramKey of paramKeys) {
+    const meta = GOODMAN_PARAM_META[paramKey];
+    const expected = {
+      paramKey,
+      category: meta.cat,
+      label: meta.label,
+      unit: meta.unit,
+      min: meta.min,
+      max: meta.max,
+      step: meta.step,
+      valueType: meta.type
+    };
+
+    for (const [prefix, set] of [
+      ["rubber", GOODMAN_DEFAULT_STATE.boltSets.bs_rubber],
+      ["jemtec", GOODMAN_DEFAULT_STATE.boltSets.bs_jemtec]
+    ]) {
+      const spec = set.params[paramKey];
+      for (const distKey of distKeys) {
+        if (Object.hasOwn(spec, distKey)) expected[prefixedDistProp(prefix, distKey)] = spec[distKey];
+      }
+    }
+
+    assert.deepEqual(surfaces.get(boltParamSurfaceName(paramKey))?.body?.props, expected, paramKey);
+  }
+});
+
+test("the Goodman bolt-set editor authors full distribution controls for every oracle parameter", async () => {
+  const desire = await boltDefinitionDesire();
+  const surfaces = nodeMap(desire, "surface");
+  const processes = nodeMap(desire, "process");
+  const types = nodeMap(desire, "type");
+  const categoryKeys = Object.keys(GOODMAN_PARAM_CATS);
+  const paramKeys = Object.keys(GOODMAN_PARAM_META);
+  const distributionOptions = ["fixed", "normal", "uniform", "lognormal", "triangular"];
+  const distributionGroups = ["Normal", "Uniform", "Lognormal", "Triangular"];
+
+  assert.ok(processes.has("GoodmanBoltSetEditor"));
+
+  for (const setInfo of boltEditorSetInfo()) {
+    assert.deepEqual(
+      surfaces.get(setInfo.paramsSurface)?.body?.children,
+      categoryKeys.map(categoryKey => `GoodmanBoltSet${setInfo.prefix}Category${safeSurfaceName(categoryKey)}`)
+    );
+
+    for (const categoryKey of categoryKeys) {
+      const expectedRows = paramKeys
+        .filter(paramKey => GOODMAN_PARAM_META[paramKey].cat === categoryKey)
+        .map(paramKey => `${setInfo.paramPrefix}${safeSurfaceName(paramKey)}Row`);
+      assert.deepEqual(
+        surfaces.get(`GoodmanBoltSet${setInfo.prefix}Category${safeSurfaceName(categoryKey)}`)?.body?.children,
+        [`GoodmanBoltSet${setInfo.prefix}Category${safeSurfaceName(categoryKey)}Title`, ...expectedRows]
+      );
+    }
+
+    for (const paramKey of paramKeys) {
+      const meta = GOODMAN_PARAM_META[paramKey];
+      const base = `${setInfo.paramPrefix}${safeSurfaceName(paramKey)}`;
+      assert.equal(surfaces.get(`${base}Row`)?.body?.processRef, "GoodmanBoltSetEditor");
+      assert.equal(types.get(`GoodmanBolt${setInfo.prefix}${safeSurfaceName(paramKey)}Value`)?.body?.role, "state");
+
+      if (meta.type === "toggle") {
+        assert.deepEqual(surfaces.get(`${base}Row`)?.body?.children, [`${base}Top`]);
+        assert.equal(surfaces.get(`${base}Checkbox`)?.body?.props?.inputType, "checkbox");
+        assert.equal(
+          surfaces.get(`${base}Checkbox`)?.body?.interactions?.[0]?.action?.state,
+          `GoodmanBolt${setInfo.prefix}${safeSurfaceName(paramKey)}Value`
+        );
+        continue;
+      }
+
+      assert.deepEqual(surfaces.get(`${base}Row`)?.body?.children, [
+        `${base}Top`,
+        `${base}Slider`,
+        `${base}DistBox`
+      ]);
+      assert.equal(types.get(`GoodmanBolt${setInfo.prefix}${safeSurfaceName(paramKey)}Free`)?.body?.role, "state");
+      assert.equal(types.get(`GoodmanBolt${setInfo.prefix}${safeSurfaceName(paramKey)}Dist`)?.body?.role, "state");
+      assert.equal(surfaces.get(`${base}Slider`)?.body?.props?.min, meta.min);
+      assert.equal(surfaces.get(`${base}Slider`)?.body?.props?.max, meta.max);
+      assert.equal(surfaces.get(`${base}Slider`)?.body?.props?.step, meta.step);
+      assert.equal(surfaces.get(`${base}FreeToggle`)?.body?.interactions?.[0]?.action?.state, `GoodmanBolt${setInfo.prefix}${safeSurfaceName(paramKey)}Free`);
+      assert.equal(surfaces.get(`${base}DistSelect`)?.body?.props?.tag, "select");
+      assert.equal(surfaces.get(`${base}DistSelect`)?.body?.interactions?.[0]?.action?.state, `GoodmanBolt${setInfo.prefix}${safeSurfaceName(paramKey)}Dist`);
+      assert.deepEqual(
+        surfaces.get(`${base}DistSelect`)?.body?.children,
+        distributionOptions.map(option => `${base}Dist${safeSurfaceName(option)}`)
+      );
+      for (const option of distributionOptions) {
+        assert.equal(surfaces.get(`${base}Dist${safeSurfaceName(option)}`)?.body?.props?.value, option);
+      }
+      assert.equal(surfaces.get(`${base}Dist${safeSurfaceName(setParamsForEditor(setInfo, paramKey).dist)}`)?.body?.props?.selected, true);
+      for (const group of distributionGroups) {
+        assert.ok(surfaces.has(`${base}Dist${group}Inputs`), `${base}Dist${group}Inputs`);
+      }
+    }
+  }
+});
+
 test("the shell is structured through explicit child regions instead of flattened screen props", async () => {
   const desire = await shellDesire();
   const surfaces = nodeMap(desire, "surface");
@@ -504,8 +686,7 @@ test("the shell is structured through explicit child regions instead of flattene
   ]);
 
   assert.deepEqual(surfaces.get("GoodmanChartRegion")?.body?.children, [
-    "GoodmanDiagram",
-    "GoodmanMCBands"
+    "GoodmanDiagram"
   ]);
   assert.deepEqual(surfaces.get("GoodmanChartArea")?.body?.children, [
     "GoodmanScrubber",
@@ -619,6 +800,7 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanBoltSetPrimaryCard",
     "GoodmanBoltSetMaintenanceCard"
   ]);
+  assert.equal(surfaces.get("GoodmanBoltSetsSection")?.body?.props?.definitionRef, "GoodmanBoltSetDefinitions");
   assert.deepEqual(surfaces.get("GoodmanBoltSetPrimaryCard")?.body?.children, [
     "GoodmanBoltSetPrimaryHeader",
     "GoodmanBoltSetPrimaryEditForm",
@@ -638,7 +820,8 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanBoltSetPrimaryDeleteAction"
   ]);
   assert.deepEqual(surfaces.get("GoodmanBoltSetMaintenanceCard")?.body?.children, [
-    "GoodmanBoltSetMaintenanceHeader"
+    "GoodmanBoltSetMaintenanceHeader",
+    "GoodmanBoltSetJemtecParams"
   ]);
   assert.deepEqual(surfaces.get("GoodmanBoltSetMaintenanceHeader")?.body?.children, [
     "GoodmanBoltSetMaintenanceSwatch",
@@ -656,33 +839,17 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanBoltSetPrimaryEditSaveAction"
   ]);
   assert.deepEqual(surfaces.get("GoodmanBoltSetPrimaryParams")?.body?.children, [
-    "GoodmanBoltSetPreloadGroup",
-    "GoodmanBoltSetMaterialGroup"
+    "GoodmanBoltSetRubberCategoryPreload",
+    "GoodmanBoltSetRubberCategoryLoad",
+    "GoodmanBoltSetRubberCategoryJoint",
+    "GoodmanBoltSetRubberCategoryGeometry",
+    "GoodmanBoltSetRubberCategoryFatigue"
   ]);
   assert.equal(surfaces.get("GoodmanBoltSetPrimaryParams")?.body?.className, "bs-params");
   assert.equal(surfaces.get("GoodmanBoltSetPrimaryParams")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("GoodmanBoltSetPrimaryParams")?.body?.bindings[0]?.source?.state, "GoodmanBoltPrimaryParamsOpen");
-  assert.deepEqual(surfaces.get("GoodmanBoltSetMaterialGroup")?.body?.children, [
-    "GoodmanBoltSetMaterialTitle",
-    "GoodmanBoltSetUtsRow",
-    "GoodmanBoltSetEnduranceRow",
-    "GoodmanBoltSetSnSlopeRow",
-    "GoodmanBoltSetYieldRow"
-  ]);
-  assert.deepEqual(surfaces.get("GoodmanBoltSetPreloadGroup")?.body?.children, [
-    "GoodmanBoltSetPreloadTitle",
-    "GoodmanBoltSetPreloadInitialRow",
-    "GoodmanBoltSetPreloadUtilRow",
-    "GoodmanBoltSetPreloadTauARow",
-    "GoodmanBoltSetPreloadTauBRow",
-    "GoodmanBoltSetPreloadTauCRow"
-  ]);
-  assert.equal(surfaces.get("GoodmanBoltSetPreloadTitle")?.body?.props?.text, "Preload & Relaxation");
   assert.equal(surfaces.get("GoodmanBoltSetPrimaryEditNameInput")?.body?.interactions[0]?.action?.state, "GoodmanBoltPrimaryNameState");
   assert.equal(surfaces.get("GoodmanBoltSetPrimaryEditColourInput")?.body?.props?.inputType, "color");
-  assert.equal(surfaces.get("GoodmanBoltSetUtsSlider")?.body?.interactions[0]?.action?.state, "GoodmanBoltPrimaryUts");
-  assert.equal(surfaces.get("GoodmanBoltSetUtsFreeToggle")?.body?.interactions[0]?.action?.state, "GoodmanBoltPrimaryUtsFree");
-  assert.equal(surfaces.get("GoodmanBoltSetUtsDistSelect")?.body?.interactions[0]?.action?.state, "GoodmanBoltPrimaryUtsDist");
 
   assert.deepEqual(surfaces.get("GoodmanFatigueLegend")?.body?.children, [
     "GoodmanLegendInfiniteRow",

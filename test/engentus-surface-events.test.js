@@ -250,7 +250,6 @@ test("Engentus Goodman modes switch authored chart views through process state",
     await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
     await page.waitForFunction(() =>
       Boolean(document.querySelector("#chart-svg")?.__chartController)
-      && Boolean(document.querySelector("#chart-svg-mc")?.__chartController)
     );
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "static"
@@ -259,23 +258,21 @@ test("Engentus Goodman modes switch authored chart views through process state",
       staticClass: document.querySelector("#surface-goodmanmodestatic")?.className,
       mcClass: document.querySelector("#surface-goodmanmodemontecarlo")?.className,
       deterministicHidden: document.querySelector("#chart-svg")?.hasAttribute("hidden"),
-      monteCarloHidden: document.querySelector("#chart-svg-mc")?.hasAttribute("hidden"),
+      monteCarloHostCount: document.querySelectorAll("#chart-svg-mc").length,
       deterministicModel: document.querySelector("#chart-svg")?.__chartController?.spec?.view?.modelRef,
-      monteCarloModel: document.querySelector("#chart-svg-mc")?.__chartController?.spec?.view?.modelRef,
       scenarioHidden: document.querySelector("#surface-goodmanscenariosection")?.hasAttribute("hidden"),
       simulationHidden: document.querySelector("#surface-goodmansimulationsection")?.hasAttribute("hidden"),
-      runConfigHidden: document.querySelector("#surface-goodmanrunconfigsection")?.hasAttribute("hidden"),
+      runConfigPresent: Boolean(document.querySelector("#surface-goodmanrunconfigsection")),
       chartStyleHidden: document.querySelector("#surface-goodmanchartstylesection")?.hasAttribute("hidden")
     })), {
       staticClass: "mode-btn on",
       mcClass: "mode-btn",
       deterministicHidden: false,
-      monteCarloHidden: true,
+      monteCarloHostCount: 0,
       deterministicModel: "BoltFatigue",
-      monteCarloModel: "BoltFatigueMC",
       scenarioHidden: false,
       simulationHidden: true,
-      runConfigHidden: true,
+      runConfigPresent: false,
       chartStyleHidden: true
     });
 
@@ -327,7 +324,7 @@ test("Engentus Goodman modes switch authored chart views through process state",
       staticClass: document.querySelector("#surface-goodmanmodestatic")?.className,
       mcClass: document.querySelector("#surface-goodmanmodemontecarlo")?.className,
       deterministicHidden: document.querySelector("#chart-svg")?.hasAttribute("hidden"),
-      monteCarloHidden: document.querySelector("#chart-svg-mc")?.hasAttribute("hidden"),
+      monteCarloHostCount: document.querySelectorAll("#chart-svg-mc").length,
       scenarioHidden: document.querySelector("#surface-goodmanscenariosection")?.hasAttribute("hidden"),
       simulationHidden: document.querySelector("#surface-goodmansimulationsection")?.hasAttribute("hidden"),
       runConfigHidden: document.querySelector("#surface-goodmanrunconfigsection")?.hasAttribute("hidden"),
@@ -335,8 +332,8 @@ test("Engentus Goodman modes switch authored chart views through process state",
     })), {
       staticClass: "mode-btn",
       mcClass: "mode-btn on",
-      deterministicHidden: true,
-      monteCarloHidden: false,
+      deterministicHidden: false,
+      monteCarloHostCount: 0,
       scenarioHidden: true,
       simulationHidden: false,
       runConfigHidden: false,
@@ -350,7 +347,7 @@ test("Engentus Goodman modes switch authored chart views through process state",
     assert.deepEqual(await page.evaluate(() => ({
       editClass: document.querySelector("#surface-goodmanmodeedit")?.className,
       deterministicHidden: document.querySelector("#chart-svg")?.hasAttribute("hidden"),
-      monteCarloHidden: document.querySelector("#chart-svg-mc")?.hasAttribute("hidden"),
+      monteCarloHostCount: document.querySelectorAll("#chart-svg-mc").length,
       scenarioHidden: document.querySelector("#surface-goodmanscenariosection")?.hasAttribute("hidden"),
       simulationHidden: document.querySelector("#surface-goodmansimulationsection")?.hasAttribute("hidden"),
       runConfigHidden: document.querySelector("#surface-goodmanrunconfigsection")?.hasAttribute("hidden"),
@@ -358,7 +355,7 @@ test("Engentus Goodman modes switch authored chart views through process state",
     })), {
       editClass: "mode-btn on",
       deterministicHidden: false,
-      monteCarloHidden: true,
+      monteCarloHostCount: 0,
       scenarioHidden: true,
       simulationHidden: true,
       runConfigHidden: true,
@@ -385,7 +382,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.goto(`${server.url}/engentus/goodman`, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
 
-    assert.equal(await page.locator("#surface-goodmancdfwindow[hidden]").count(), 1);
+    assert.equal(await page.locator("#surface-goodmancdfwindow").count(), 0);
     await page.click("#surface-goodmanactioncdf");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanCdfWindowVisible") === true
@@ -400,7 +397,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanCdfWindowVisible") === false
     );
-    assert.equal(await page.locator("#surface-goodmancdfwindow[hidden]").count(), 1);
+    assert.equal(await page.locator("#surface-goodmancdfwindow").count(), 0);
 
     await page.click("#surface-goodmanactionstats");
     await page.waitForFunction(() =>
@@ -631,12 +628,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "mc"
     );
-    await page.waitForFunction(() =>
-      document.querySelector("#chart-svg-mc")?.__chartController?.spec?.params?.n_samples === 750
-    );
-    await page.waitForFunction(() =>
-      document.querySelector("#chart-svg-mc")?.__surfaceCapabilityOutputs?.mc_sample_count_text === "750"
-    );
+    assert.equal(await page.locator("#chart-svg-mc").count(), 0);
     assert.match(await page.textContent("#prog-lbl"), /Running/);
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") === "done"
@@ -651,10 +643,6 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     assert.match(statsWindowText, /Primary Bolt Set/);
     assert.match(statsWindowText, /750/);
     assert.match(statsWindowText, /\d+\.\d MPa/);
-    assert.equal(await page.evaluate(() =>
-      document.querySelector("#chart-svg-mc")?.__surfaceCapabilityOutputs?.mc_sa_p50_std_text
-        === document.querySelector("#surface-goodmanstatsdatastd")?.textContent
-    ), true);
     assert.equal(await page.locator("#surface-goodmanstatsemptymessage[hidden]").count(), 1);
     assert.equal(await page.locator("#surface-goodmanstatstable:not([hidden])").count(), 1);
     await page.click("#surface-goodmanactioncdf");
@@ -666,14 +654,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     assert.match(cdfWindowText, /Monte Carlo band summary/);
     assert.match(cdfWindowText, /Samples/);
     assert.match(cdfWindowText, /P50 stress std/);
-    assert.equal(await page.evaluate(() =>
-      document.querySelector("#chart-svg-mc")?.__surfaceCapabilityOutputs?.mc_sample_count_text
-        === document.querySelector("#surface-goodmancdfsummarysamplesvalue")?.textContent
-    ), true);
-    assert.equal(await page.evaluate(() =>
-      document.querySelector("#chart-svg-mc")?.__surfaceCapabilityOutputs?.mc_sa_p50_std_text
-        === document.querySelector("#surface-goodmancdfsummarystdvalue")?.textContent
-    ), true);
+    assert.equal(await page.locator("#chart-svg-mc").count(), 0);
     assert.match(await page.textContent("#prog-lbl"), /Complete/);
     assert.deepEqual(await page.evaluate(() => ({
       runDisabled: document.querySelector("#surface-goodmanrunactionstart")?.disabled,
@@ -1014,14 +995,14 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       compareSectionPresent: Boolean(document.querySelector("#surface-millforcecomparesection")),
       mcSectionPresent: [...document.querySelectorAll(".ssec")]
         .some(section => section.textContent.includes("Monte Carlo Config")),
-      mcBodyHidden: document.querySelector("#surface-millforcemcbody")?.hasAttribute("hidden"),
+      mcBodyPresent: Boolean(document.querySelector("#surface-millforcemcbody")),
       mcChevron: document.querySelector("#surface-millforcemcchevron")?.textContent,
       model: window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveModel")
     })), {
       modelHidden: false,
       compareSectionPresent: false,
       mcSectionPresent: true,
-      mcBodyHidden: true,
+      mcBodyPresent: false,
       mcChevron: "▼",
       model: "grounded"
     });

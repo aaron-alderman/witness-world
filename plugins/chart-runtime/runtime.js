@@ -19,6 +19,7 @@ import {
   renderChartMountMarkup,
   renderChartOverlayMarkup
 } from "./chart-page.js";
+import { applyChartPresentationPatch } from "./chart-presentation-patch.js";
 
 export const bundleId = "bundle-chart-runtime";
 
@@ -39,6 +40,48 @@ export const capabilities = Object.freeze(["chart.render"]);
 
 function runtimeFile(name) {
   return fileURLToPath(new URL(`./${name}`, import.meta.url));
+}
+
+function cloneSpec(spec) {
+  return JSON.parse(JSON.stringify(spec ?? {}));
+}
+
+function stateValue(initialState, stateId) {
+  const key = String(stateId ?? "").trim();
+  if (!key) return undefined;
+  if (initialState instanceof Map) return initialState.get(key);
+  if (initialState && typeof initialState === "object") return initialState[key];
+  return undefined;
+}
+
+function bindingValue(binding, initialState) {
+  const stateId = binding?.source?.state;
+  if (!stateId) return undefined;
+  return stateValue(initialState, stateId);
+}
+
+function applyInitialChartBindings(spec, chartSurface, initialState) {
+  if (!Array.isArray(chartSurface?.bindings) || !chartSurface.bindings.length) return spec;
+  const next = cloneSpec(spec);
+  for (const binding of chartSurface.bindings) {
+    const prop = String(binding?.prop ?? "").trim();
+    if (!prop) continue;
+    const value = bindingValue(binding, initialState);
+    if (value === undefined) continue;
+    if (prop.startsWith("param.")) {
+      const paramKey = prop.slice("param.".length).trim();
+      if (paramKey) {
+        next.params ??= {};
+        next.params[paramKey] = value;
+      }
+      continue;
+    }
+    if (prop.startsWith("presentation.")) {
+      const viewKey = prop.slice("presentation.".length).trim();
+      if (viewKey) applyChartPresentationPatch(next.view, viewKey, value);
+    }
+  }
+  return next;
 }
 
 function injectDevClient(html, { appRevision = 0, eventsPath = APP_REVISION_EVENTS_PATH } = {}) {
@@ -109,7 +152,7 @@ export function createHandlers(deps = {}) {
   };
 }
 
-export function buildMountedChartRuntime({ world, activeSurface, rootSurface } = {}) {
+export function buildMountedChartRuntime({ world, activeSurface, rootSurface, initialState } = {}) {
   const witnesses = typeof world?.allWitnesses === "function" ? world.allWitnesses() : [];
   const surfaces = new Map(
     witnesses
@@ -151,7 +194,7 @@ export function buildMountedChartRuntime({ world, activeSurface, rootSurface } =
       const spec = resolveChartSpec(witnesses, chartSurface.id);
       if (!spec) return null;
       return {
-        spec,
+        spec: applyInitialChartBindings(spec, chartSurface, initialState),
         pageProps: spec.pageProps ?? {}
       };
     },
@@ -219,6 +262,7 @@ export const providers = Object.freeze([
     id: "chart-runtime.static",
     mount: "/canvas-lib/",
     files: Object.freeze({
+      "chart-presentation-patch.js": runtimeFile("chart-presentation-patch.js"),
       "chart-client.js": runtimeFile("chart-client.js"),
       "dataflow-eval.js": runtimeFile("dataflow-eval.js"),
       "gog-runtime.js": runtimeFile("gog-runtime.js")

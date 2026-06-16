@@ -46,6 +46,12 @@ It is evidence, not app semantics by itself.
 - transition and animation timing properties observed in a browser
 - source provenance
 
+When uplift starts collapsing faithful flat CSS into a more reusable authored
+shape, `WCSS` may also carry an internal nested theme grammar that preserves
+family ownership, selector-local variants, responsive overrides, and motion
+rules before emission back to flat CSS. See
+`docs/ENGENTUS-WCSS-THEME-GRAMMAR.md`.
+
 Inline styles belong to `WCSS`. They are style evidence attached to observed
 nodes, not a separate authoring escape hatch.
 
