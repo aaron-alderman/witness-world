@@ -187,3 +187,62 @@ test("runtime-surface-page projects authored input tags with normal form attribu
   assert.match(html, /"kind":"eventValue"/);
   assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
 });
+
+test("runtime-surface-page omits surfaces whose initial visible binding resolves false", () => {
+  const rendered = [];
+  const html = renderSurfacePage(fakeWorld([
+    {
+      process: "desire.defineType",
+      body: { id: "ActiveMode", role: "state", valueType: "text", initial: "static" }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SurfaceRoot",
+        surfaceKind: "app-root",
+        children: ["StaticChart", "MonteCarloChart"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "StaticChart",
+        surfaceKind: "chart",
+        bindings: [
+          { prop: "visible", source: { kind: "state", state: "ActiveMode", map: { mc: false }, default: true } }
+        ]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "MonteCarloChart",
+        surfaceKind: "chart",
+        bindings: [
+          { prop: "visible", source: { kind: "state", state: "ActiveMode", map: { mc: true }, default: false } }
+        ]
+      }
+    }
+  ]), {
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/charts",
+    surfaceCapabilityRenderers: [{
+      id: "test.chart",
+      capability: "chart.render",
+      factory() {
+        return {
+          capability: "chart.render",
+          renderSurface(surface) {
+            if (surface?.surfaceKind !== "chart") return null;
+            rendered.push(surface.id);
+            return `<figure>${surface.id}</figure>`;
+          }
+        };
+      }
+    }]
+  });
+
+  assert.deepEqual(rendered, ["StaticChart"]);
+  assert.match(html, /<figure>StaticChart<\/figure>/);
+  assert.doesNotMatch(html, /<figure>MonteCarloChart<\/figure>/);
+});

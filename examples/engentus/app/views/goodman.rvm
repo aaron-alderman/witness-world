@@ -50,7 +50,7 @@ chart GoodmanDiagram of BoltFatigue {
   x.label "Mean stress σm (MPa)"
 
   y sigma_a
-  y.domain 0 auto
+  y.domain 0 120
   y.label "Alternating bending stress σa (MPa)"
 
   // first-class, witnessed representation choices (edit mode in the SPA)
@@ -63,14 +63,15 @@ chart GoodmanDiagram of BoltFatigue {
   layer glines = line over lifetime | y:band stroke:ylw width:1.2 dash:true opacity:0.9
   layer curves = line over sm | y:curve stroke:"#dc2626" width:2.2 tooltip.sigma_m_MPa:sm tooltip.sigma_a_MPa:curve tooltip.F_shear_N:F_shear tooltip.damage_per_cycle_x10_6:damage_per_million
   layer curve_jemtec = line over sm | y:curve_jemtec stroke:"#8CC4D4" width:2.2 tooltip.sigma_m_MPa:sm tooltip.sigma_a_MPa:curve_jemtec tooltip.F_shear_N:F_shear_jemtec tooltip.damage_per_cycle_x10_6:damage_per_million_jemtec
-  layer slip   = rule | x:slip dash:true stroke:slate
-  layer slip_label = text | x:slip_label_x y:slip_label_y label:"▲slip" fill:slate size:9 opacity:0.7
+  layer slip   = rule | x:slip dash:true stroke:"#dc2626" width:1 opacity:0.4
+  layer slip_label = text | x:slip_label_x y:slip_label_y label:"▲slip" fill:"#dc2626" size:9 opacity:0.7 anchor:start
   layer yield  = line over sm | y:yield_line stroke:pur width:1.5 dash:true
   layer yield_label = text | x:yield_label_x y:yield_label_y label:"Yield boundary" fill:pur size:9.5 opacity:0.7
   layer curve_label = text | x:curve_label_x y:curve_label_y label:"No Jemtec" fill:"#dc2626" size:11 weight:600
   layer curve_label_jemtec = text | x:curve_label_jemtec_x y:curve_label_jemtec_y label:"Jemtec" fill:"#8CC4D4" size:11 weight:600
   layer probe  = rule | x:probe_sm stroke:slate width:1 dash:true opacity:0.5
   layer probe_point = point | x:probe_sm y:curve_probe fill:"#dc2626" stroke:"#ffffff" width:2 size:5.5
+  layer probe_point_jemtec = point | x:probe_sm y:curve_probe_jemtec fill:"#8CC4D4" stroke:"#ffffff" width:2 size:5.5
 }
 
 // ── Goodman Monte-Carlo bands (over BoltFatigueMC) ─────────────────────────────
@@ -117,7 +118,7 @@ chart GoodmanMCBands of BoltFatigueMC {
   x.domain 0 650
   x.label "Mean stress σm (MPa)"
   y sigma_a
-  y.domain 0 auto
+  y.domain 0 120
   y.label "Alternating bending stress σa (MPa)"
 
   layer band  = band over sm | x:sm y0:sa_p10 y1:sa_p90 fill:blue opacity:0.25

@@ -427,9 +427,12 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanAnovaWindowVisible") === false
     );
 
-    await page.click("#surface-goodmanmodemontecarlo");
+    await page.click("#surface-goodmansavestaticsimulationaction");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "mc"
+    );
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunConfigVisible") === true
     );
     await page.locator("#cfg-n").fill("750");
     await page.waitForFunction(() =>
@@ -617,6 +620,10 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "mc"
     );
+    await page.click("#surface-goodmansimulationnewaction");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunConfigVisible") === true
+    );
     await page.click("#surface-goodmanrunactionstart");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") === "running"
@@ -630,7 +637,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       document.querySelector("#chart-svg-mc")?.__surfaceCapabilityOutputs?.mc_sample_count_text === "750"
     );
-    assert.match(await page.textContent("#surface-goodmanrunprogresslabel"), /Running/);
+    assert.match(await page.textContent("#prog-lbl"), /Running/);
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") === "done"
     );
@@ -667,7 +674,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       document.querySelector("#chart-svg-mc")?.__surfaceCapabilityOutputs?.mc_sa_p50_std_text
         === document.querySelector("#surface-goodmancdfsummarystdvalue")?.textContent
     ), true);
-    assert.match(await page.textContent("#surface-goodmanrunprogresslabel"), /Complete/);
+    assert.match(await page.textContent("#prog-lbl"), /Complete/);
     assert.deepEqual(await page.evaluate(() => ({
       runDisabled: document.querySelector("#surface-goodmanrunactionstart")?.disabled,
       pauseDisabled: document.querySelector("#surface-goodmanrunactionpause")?.disabled,
@@ -676,7 +683,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       stopDisabled: document.querySelector("#surface-goodmanrunactionstop")?.disabled,
       cfgDisabled: document.querySelector("#cfg-n")?.disabled,
       lockText: document.querySelector("#surface-goodmanrunlocknote")?.textContent,
-      fillStyle: document.querySelector("#surface-goodmanrunprogressfill")?.getAttribute("style") || ""
+      fillStyle: document.querySelector("#prog-fill")?.getAttribute("style") || ""
     })), {
       runDisabled: false,
       pauseDisabled: true,

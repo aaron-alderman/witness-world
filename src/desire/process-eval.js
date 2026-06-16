@@ -55,10 +55,11 @@ function formatProjectionValue(value, props = {}) {
   const suffix = props.suffix != null
     ? String(props.suffix)
     : (props.style === "percent" ? "%" : "");
+  const prefix = props.prefix != null ? String(props.prefix) : "";
   const body = hasNumeric
     ? (Number.isFinite(digits) ? numeric.toFixed(Math.max(0, digits)) : String(numeric))
     : String(value);
-  return `${body}${suffix}`;
+  return `${prefix}${body}${suffix}`;
 }
 
 function truthy(v) {

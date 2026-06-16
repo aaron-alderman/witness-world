@@ -944,7 +944,8 @@ a {
   flex-shrink: 0
 }
 
-#scr.hidden { display: none }
+#scr.hidden,
+#scr[hidden] { display: none }
 
 #play-btn {
   width: 26px;
@@ -970,9 +971,18 @@ a {
   font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  min-width: 90px;
-  text-align: right;
+  min-width: 54px;
+  text-align: left;
   color: var(--t1)
+}
+
+.goodman-time-prefix {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--t1);
+  margin-left: 2px;
+  margin-right: -7px;
+  white-space: nowrap;
 }
 
 .fail-badge {
@@ -986,8 +996,8 @@ a {
 #spd-wrap {
   display: flex;
   align-items: center;
-  gap: 6px;
-  min-width: 180px
+  gap: 4px;
+  flex-shrink: 0
 }
 
 #spd-wrap label,
@@ -997,10 +1007,10 @@ a {
   cursor: pointer
 }
 
-#spd-sl { width: 80px }
+#spd-sl { width: 72px; accent-color: var(--blue); cursor: pointer }
 
 #spd-lbl {
-  min-width: 42px;
+  min-width: 34px;
   text-align: right;
   color: var(--t1);
   font-size: 10.5px;
@@ -1013,6 +1023,11 @@ a {
   gap: 3px;
   flex-shrink: 0;
   cursor: pointer
+}
+
+#trail-cb {
+  accent-color: var(--blue);
+  cursor: pointer;
 }
 
 /* FLOATING WINDOWS */
@@ -1082,11 +1097,76 @@ a {
 .leg-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px }
 .leg-sw { width: 13px; height: 13px; border-radius: 3px; flex-shrink: 0; opacity: .85 }
 .leg-row span { font-size: 10.5px; color: var(--t2) }
+.goodman-fatigue-legend-note {
+  font-size: 9.5px;
+  color: var(--t2);
+  margin-top: 6px;
+  line-height: 1.5;
+}
 
 .info-box { background: rgba(0,0,0,.2); border-radius: 5px; padding: 8px 10px; margin-top: 4px }
 .info-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--t2); margin-bottom: 3px }
 .info-row:last-child { margin-bottom: 0 }
 .info-value { font-weight: 600; font-variant-numeric: tabular-nums }
+.goodman-param-summary {
+  gap: 8px;
+  align-items: baseline;
+}
+.goodman-param-summary .info-value {
+  color: var(--t1);
+  font-size: 10.5px;
+  text-align: right;
+}
+.goodman-probe-intro {
+  display: flex;
+  gap: 2px;
+  font-size: 10.5px;
+  color: var(--t2);
+  margin-bottom: 6px;
+}
+.goodman-probe-comparison-rows {
+  display: grid;
+  gap: 6px;
+}
+.goodman-probe-bolt {
+  border: 1px solid var(--brd);
+  border-radius: 5px;
+  padding: 6px 7px;
+  background: rgba(0,0,0,.12);
+}
+.goodman-probe-bolt-name {
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+.goodman-probe-bolt-name--primary { color: #dc2626 }
+.goodman-probe-bolt-name--maintenance { color: #8CC4D4 }
+
+.mc-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; font-size: 11px }
+.mc-row label { color: var(--t2) }
+.mc-row input[type=number] {
+  width: 70px;
+  background: var(--dk);
+  color: var(--t1);
+  border: 1px solid var(--brd);
+  border-radius: 3px;
+  padding: 3px 5px;
+  font-size: 11px;
+  text-align: right;
+}
+
+.run-row { display: flex; gap: 5px; margin-top: 8px }
+.rbtn { flex: 1; padding: 7px; border-radius: 5px; border: none; cursor: pointer; font-size: 11.5px; font-weight: 600; transition: all .15s }
+.rbtn.go { background: var(--grn); color: #fff }
+.rbtn.go:hover { background: #15803d }
+.rbtn.go:disabled { opacity: .4; cursor: not-allowed }
+.rbtn.pause { background: var(--ylw); color: #fff }
+.rbtn.stop { background: #dc2626; color: #fff }
+.rbtn:disabled { opacity: .4; cursor: not-allowed }
+
+.prog-wrap { height: 4px; margin: 7px 0 16px; position: relative; background: var(--brd); border-radius: 2px; overflow: visible }
+.prog-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--blue); transition: width .2s, opacity .15s }
+.prog-lbl { display: block; margin-top: 3px; font-size: 10px; color: var(--t2); font-variant-numeric: tabular-nums; text-align: right }
 
 .save-sim-btn {
   width: 100%;
@@ -1104,6 +1184,14 @@ a {
 }
 
 .save-sim-btn:hover { opacity: 1; }
+
+.bs-item {
+  border: 1px solid var(--brd);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  background: rgba(0,0,0,.12);
+  overflow: hidden;
+}
 
 .bs-head {
   display: flex;
@@ -1465,9 +1553,14 @@ input[type=range],
 #mill-force-svg-cross,
 #mill-force-svg-force,
 #mill-force-svg-rose {
-  flex: 1;
-  min-height: 0;
+  width: 100%;
+  height: 100%;
 }
+
+.mill-force-result-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 11px; gap: 8px }
+.mill-force-rl { color: var(--t2) }
+.mill-force-rv { color: var(--t1); font-weight: 600; margin-left: auto }
+.mill-force-rd { color: var(--ylw); font-size: 10px }
 
 @media (max-width: 980px) {
   .auth-book,

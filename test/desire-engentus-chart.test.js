@@ -39,8 +39,7 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   assert.equal(plan.frame, "cartesian");
   assert.deepEqual(plan.scales.x.domain, [0, 650]);
   assert.equal(plan.scales.x.label, "Mean stress σm (MPa)");
-  assert.equal(plan.scales.y.domain[0], 0);
-  assert.ok(plan.scales.y.domain[1] > 0);
+  assert.deepEqual(plan.scales.y.domain, [0, 120]);
   assert.deepEqual(viewBody.bindings.map(binding => binding.prop), [
     "visible",
     "presentation.title",
@@ -137,8 +136,9 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   assert.ok(evaluated.fields.slip.data > 0 && evaluated.fields.slip.data < 650);
   const slipLabel = layer("slip_label");
   assert.equal(slipLabel.mark, "text");
-  assert.equal(slipLabel.fill, "#475569");
+  assert.equal(slipLabel.fill, "#dc2626");
   assert.equal(slipLabel.size, 9);
+  assert.equal(slipLabel.anchor, "start");
   assert.equal(slipLabel.opacity, 0.7);
   assert.deepEqual(slipLabel.primitives, [{
     x: evaluated.fields.slip_label_x.data,
@@ -178,6 +178,15 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
     x: evaluated.params.probe_sm,
     y: evaluated.fields.curve_probe.data
   }]);
+  const probePointJemtec = layer("probe_point_jemtec");
+  assert.equal(probePointJemtec.mark, "point");
+  assert.equal(probePointJemtec.size, 5.5);
+  assert.equal(probePointJemtec.fill, "#8CC4D4");
+  assert.equal(probePointJemtec.stroke, "#ffffff");
+  assert.deepEqual(probePointJemtec.primitives, [{
+    x: evaluated.params.probe_sm,
+    y: evaluated.fields.curve_probe_jemtec.data
+  }]);
   const curveLabel = layer("curve_label");
   assert.equal(curveLabel.mark, "text");
   assert.equal(curveLabel.fill, "#dc2626");
@@ -196,27 +205,39 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   }]);
 });
 
-test("Goodman shell binds static readout rows to deterministic chart capability outputs", async () => {
-  const shell = await loadBody("shell.rvm", "surface", "GoodmanScenarioProbeValue");
-  assert.deepEqual(shell.bindings, [{
+test("Goodman shell binds static comparison rows to deterministic chart capability outputs", async () => {
+  const primaryShear = await loadBody("shell.rvm", "surface", "GoodmanProbePrimaryShearValue");
+  assert.deepEqual(primaryShear.bindings, [{
     prop: "text",
     source: { kind: "capability", surface: "GoodmanDiagram", output: "probe_shear_text" }
   }]);
 
-  const mean = await loadBody("shell.rvm", "surface", "GoodmanScenarioMeanStressValue");
-  assert.deepEqual(mean.bindings, [{
+  const primaryDamage = await loadBody("shell.rvm", "surface", "GoodmanProbePrimaryDamageValue");
+  assert.deepEqual(primaryDamage.bindings, [{
     prop: "text",
-    source: { kind: "capability", surface: "GoodmanDiagram", output: "probe_mean_stress_text" }
+    source: { kind: "capability", surface: "GoodmanDiagram", output: "probe_damage_text" }
   }]);
 
-  const alt = await loadBody("shell.rvm", "surface", "GoodmanScenarioAltStressValue");
-  assert.deepEqual(alt.bindings, [{
+  const maintenanceShear = await loadBody("shell.rvm", "surface", "GoodmanProbeMaintenanceShearValue");
+  assert.deepEqual(maintenanceShear.bindings, [{
     prop: "text",
-    source: { kind: "capability", surface: "GoodmanDiagram", output: "probe_alt_stress_text" }
+    source: { kind: "capability", surface: "GoodmanDiagram", output: "probe_shear_jemtec_text" }
   }]);
 
-  const slip = await loadBody("shell.rvm", "surface", "GoodmanScenarioSlipValue");
-  assert.deepEqual(slip.bindings, [{
+  const maintenanceDamage = await loadBody("shell.rvm", "surface", "GoodmanProbeMaintenanceDamageValue");
+  assert.deepEqual(maintenanceDamage.bindings, [{
+    prop: "text",
+    source: { kind: "capability", surface: "GoodmanDiagram", output: "probe_damage_jemtec_text" }
+  }]);
+
+  const primarySlip = await loadBody("shell.rvm", "surface", "GoodmanProbePrimarySlipValue");
+  assert.deepEqual(primarySlip.bindings, [{
+    prop: "text",
+    source: { kind: "capability", surface: "GoodmanDiagram", output: "slip_threshold_text" }
+  }]);
+
+  const maintenanceSlip = await loadBody("shell.rvm", "surface", "GoodmanProbeMaintenanceSlipValue");
+  assert.deepEqual(maintenanceSlip.bindings, [{
     prop: "text",
     source: { kind: "capability", surface: "GoodmanDiagram", output: "slip_threshold_text" }
   }]);

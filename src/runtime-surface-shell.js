@@ -28,6 +28,16 @@ export function readSurfaceMapFromWorld(world) {
   return surfaces;
 }
 
+export function readInitialStateFromWorld(world) {
+  const state = new Map();
+  for (const witness of world?.allWitnesses?.() ?? []) {
+    const body = witness?.body;
+    if (witness?.process !== "desire.defineType" || body?.role !== "state" || !body?.id) continue;
+    state.set(body.id, body.initial);
+  }
+  return state;
+}
+
 function readProps(surface) {
   return surface?.props && typeof surface.props === "object" ? surface.props : {};
 }
@@ -534,9 +544,45 @@ function renderSurfaceBody(surface, surfaces, tagName = "div", options = {}) {
   return fragments.join("");
 }
 
+function stateValue(initialState, stateId) {
+  if (!stateId) return undefined;
+  if (initialState instanceof Map) return initialState.get(stateId);
+  if (initialState && typeof initialState === "object") return initialState[stateId];
+  return undefined;
+}
+
+function evaluateStateBinding(binding, initialState) {
+  const source = binding?.source;
+  const stateId = source?.state;
+  if (!stateId) return undefined;
+  const value = stateValue(initialState, stateId);
+  const map = source?.map && typeof source.map === "object" ? source.map : null;
+  if (map && Object.prototype.hasOwnProperty.call(map, String(value))) return map[String(value)];
+  if (Object.prototype.hasOwnProperty.call(source ?? {}, "default")) return source.default;
+  return value;
+}
+
+function coerceVisibleFlag(value) {
+  if (value === false || value === 0 || value == null) return false;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized || normalized === "false" || normalized === "0" || normalized === "no") return false;
+  }
+  return true;
+}
+
+function surfaceVisibleInInitialProjection(surface, options = {}) {
+  const visibleBinding = Array.isArray(surface?.bindings)
+    ? surface.bindings.find(binding => binding?.prop === "visible")
+    : null;
+  if (!visibleBinding) return true;
+  return coerceVisibleFlag(evaluateStateBinding(visibleBinding, options.initialState));
+}
+
 function renderSurfaceNode(surfaces, surfaceId, options = {}) {
   const surface = surfaces.get(surfaceId);
   if (!surface) return "";
+  if (!surfaceVisibleInInitialProjection(surface, options)) return "";
   for (const renderer of options.surfaceRenderers ?? []) {
     if (!renderer || typeof renderer.renderSurface !== "function") continue;
     const rendered = renderer.renderSurface(surface, {
@@ -589,7 +635,8 @@ function renderSurfaceDocument({
   rootSurface,
   activeSurface,
   surfaces,
-  surfaceRenderers = []
+  surfaceRenderers = [],
+  initialState = new Map()
 }) {
   const rootProps = readProps(rootSurface);
   const stylesheetHref = staticTextValue(rootProps, "stylesheetHref");
@@ -597,7 +644,7 @@ function renderSurfaceDocument({
   const activeInfo = describeSurface(activeSurface);
   const bodyClass = readClassNames(rootSurface).join(" ");
   const bodyClassAttr = bodyClass ? ` class="${escapeAttr(bodyClass)}"` : "";
-  const html = renderSurfaceNode(surfaces, activeSurface.id, { surfaceRenderers });
+  const html = renderSurfaceNode(surfaces, activeSurface.id, { surfaceRenderers, initialState });
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -672,14 +719,16 @@ export function renderSurfaceShellFromMap({
   rootSurfaceId,
   requestPathname = "/",
   route = null,
-  surfaceRenderers = []
+  surfaceRenderers = [],
+  initialState = new Map()
 } = {}) {
   const state = resolveSurfaceShellFromMap({
     surfaces,
     rootSurfaceId,
     requestPathname,
     route,
-    surfaceRenderers
+    surfaceRenderers,
+    initialState
   });
   return state?.html ?? null;
 }
@@ -689,7 +738,8 @@ export function resolveSurfaceShellFromMap({
   rootSurfaceId,
   requestPathname = "/",
   route = null,
-  surfaceRenderers = []
+  surfaceRenderers = [],
+  initialState = new Map()
 } = {}) {
   if (!(surfaces instanceof Map) || !rootSurfaceId) return null;
   const rootSurface = surfaces.get(rootSurfaceId);
@@ -707,7 +757,8 @@ export function resolveSurfaceShellFromMap({
       rootSurface,
       activeSurface,
       surfaces,
-      surfaceRenderers
+      surfaceRenderers,
+      initialState
     });
     return {
       html,
@@ -744,7 +795,8 @@ export function renderSurfaceShellPage(world, {
     rootSurfaceId,
     requestPathname,
     route,
-    surfaceRenderers
+    surfaceRenderers,
+    initialState: readInitialStateFromWorld(world)
   });
 }
 
@@ -759,6 +811,7 @@ export function resolveSurfaceShellPage(world, {
     rootSurfaceId,
     requestPathname,
     route,
-    surfaceRenderers
+    surfaceRenderers,
+    initialState: readInitialStateFromWorld(world)
   });
 }

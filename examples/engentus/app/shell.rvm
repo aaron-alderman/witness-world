@@ -157,6 +157,14 @@ state GoodmanRunStatusState: GoodmanRunStatus {
   initial ready
 }
 
+state GoodmanSimulationSelected: bool {
+  initial false
+}
+
+state GoodmanRunConfigVisible: bool {
+  initial false
+}
+
 state GoodmanRunBoltsPerSet: number {
   initial 500
 }
@@ -247,6 +255,14 @@ state GoodmanBoltPrimaryNameState: string {
 
 state GoodmanBoltPrimaryColorState: string {
   initial "#dc2626"
+}
+
+state GoodmanBoltMaintenanceNameState: string {
+  initial "Jemtec"
+}
+
+state GoodmanBoltMaintenanceColorState: string {
+  initial "#8CC4D4"
 }
 
 state GoodmanBoltPrimaryParamsOpen: bool {
@@ -689,6 +705,7 @@ event MillForceClearMonteCarloRequested {
 event GoodmanShowStaticRequested {
   writes {
     GoodmanActiveMode: static
+    GoodmanRunConfigVisible: false
   }
 }
 
@@ -701,12 +718,24 @@ event GoodmanShowMonteCarloRequested {
 event GoodmanShowEditRequested {
   writes {
     GoodmanActiveMode: edit
+    GoodmanRunConfigVisible: false
   }
 }
 
 event GoodmanSaveStaticSimulationRequested {
   writes {
     GoodmanActiveMode: mc
+    GoodmanSimulationSelected: true
+    GoodmanRunConfigVisible: true
+    GoodmanRunStatusState: ready
+  }
+}
+
+event GoodmanCreateSimulationRequested {
+  writes {
+    GoodmanActiveMode: mc
+    GoodmanSimulationSelected: true
+    GoodmanRunConfigVisible: true
     GoodmanRunStatusState: ready
   }
 }
@@ -751,6 +780,8 @@ event GoodmanRunRequested {
   writes {
     GoodmanRunStatusState: running
     GoodmanActiveMode: mc
+    GoodmanSimulationSelected: true
+    GoodmanRunConfigVisible: true
   }
 }
 
@@ -856,6 +887,8 @@ process EngentusShellNavigation {
     GoodmanStatsWindowVisible
     GoodmanAnovaWindowVisible
     GoodmanRunStatusState
+    GoodmanSimulationSelected
+    GoodmanRunConfigVisible
     GoodmanRunBoltsPerSet
     GoodmanRunDurationMonths
     GoodmanRunStepMonths
@@ -879,6 +912,8 @@ process EngentusShellNavigation {
     GoodmanChartBandFill4
     GoodmanBoltPrimaryNameState
     GoodmanBoltPrimaryColorState
+    GoodmanBoltMaintenanceNameState
+    GoodmanBoltMaintenanceColorState
     GoodmanBoltPrimaryUts
     GoodmanBoltPrimaryUtsFree
     GoodmanBoltPrimaryUtsDist
@@ -914,6 +949,7 @@ process EngentusShellNavigation {
     GoodmanShowMonteCarloRequested
     GoodmanShowEditRequested
     GoodmanSaveStaticSimulationRequested
+    GoodmanCreateSimulationRequested
     GoodmanToggleCdfWindowRequested
     GoodmanToggleStatsWindowRequested
     GoodmanToggleAnovaWindowRequested
@@ -969,6 +1005,8 @@ process EngentusShellNavigation {
     }
     on GoodmanRunRequested {
       set GoodmanActiveMode mc
+      set GoodmanSimulationSelected true
+      set GoodmanRunConfigVisible true
       set GoodmanRunStatusState running
       delay 220ms
       set GoodmanRunStatusState done
@@ -1051,8 +1089,12 @@ view EngentusSiteSummary {
 view EngentusToolbarMiddle {
   kind toolbar-region
   prop domId = "tb-goodman-tools"
+  bindings {
+    visible from state EngentusShellActiveRoute map goodman true default false
+  }
   children {
-    EngentusSiteSummary
+    GoodmanModesToolbar
+    GoodmanWindowToolbar
   }
 }
 
@@ -2692,14 +2734,6 @@ view EngentusHome {
   }
 }
 
-view EngentusGoodmanHeader {
-  kind screen-header
-  class engentus-goodman-header
-  prop title = "Goodman Fatigue Diagram"
-  prop subtitle = "SN curve analysis with Monte Carlo simulation"
-  prop backHref = "/engentus/home"
-}
-
 view GoodmanModeStatic {
   kind toolbar-mode
   class mode-btn
@@ -2741,7 +2775,7 @@ view GoodmanModeEdit {
 
 view GoodmanModesToolbar {
   kind toolbar-modes
-  class goodman-modes
+  class mode-pill goodman-modes
   children {
     GoodmanModeStatic
     GoodmanModeMonteCarlo
@@ -2751,8 +2785,8 @@ view GoodmanModesToolbar {
 
 view GoodmanActionCdf {
   kind toolbar-action
-  class goodman-action-cdf
-  prop label = "CDF"
+  class tbw goodman-action-cdf
+  prop label = "📈 CDF"
   prop actionKey = "cdf"
   prop tag = "button"
   prop buttonType = "button"
@@ -2763,8 +2797,8 @@ view GoodmanActionCdf {
 
 view GoodmanActionStats {
   kind toolbar-action
-  class goodman-action-stats
-  prop label = "Stats"
+  class tbw goodman-action-stats
+  prop label = "📊 Stats"
   prop actionKey = "stats"
   prop tag = "button"
   prop buttonType = "button"
@@ -2775,8 +2809,8 @@ view GoodmanActionStats {
 
 view GoodmanActionAnova {
   kind toolbar-action
-  class goodman-action-anova
-  prop label = "ANOVA"
+  class tbw goodman-action-anova
+  prop label = "🔬 ANOVA"
   prop actionKey = "anova"
   prop tag = "button"
   prop buttonType = "button"
@@ -2788,6 +2822,7 @@ view GoodmanActionAnova {
 view GoodmanWindowToolbar {
   kind toolbar-actions
   class goodman-window-toolbar
+  prop domId = "tb-wins"
   children {
     GoodmanActionCdf
     GoodmanActionStats
@@ -2815,10 +2850,7 @@ view GoodmanScenarioSection {
     GoodmanStaticEnduranceLimitField
     GoodmanStaticSlopeField
     GoodmanStaticProbeMeanStressField
-    GoodmanScenarioProbeRow
-    GoodmanScenarioMeanStressRow
-    GoodmanScenarioAltStressRow
-    GoodmanScenarioSlipRow
+    GoodmanProbeComparisonBox
     GoodmanSaveStaticSimulationAction
   }
 }
@@ -3083,107 +3115,253 @@ view GoodmanStaticSlopeInput {
   }
 }
 
-view GoodmanScenarioProbeLabel {
+view GoodmanProbeIntroPrefix {
+  kind text
+  class goodman-probe-intro-prefix
+  prop tag = "span"
+  prop text = "Probe at "
+}
+
+view GoodmanProbeIntroValue {
+  kind text
+  class goodman-probe-intro-value
+  prop tag = "span"
+  prop text = "300 MPa"
+  bindings {
+    text from projection GoodmanStaticProbeMeanStressText
+  }
+}
+
+view GoodmanProbeIntroSuffix {
+  kind text
+  class goodman-probe-intro-suffix
+  prop tag = "span"
+  prop text = " preload:"
+}
+
+view GoodmanProbeIntro {
+  kind row
+  class goodman-probe-intro
+  children {
+    GoodmanProbeIntroPrefix
+    GoodmanProbeIntroValue
+    GoodmanProbeIntroSuffix
+  }
+}
+
+view GoodmanProbePrimaryName {
+  kind text
+  class goodman-probe-bolt-name goodman-probe-bolt-name--primary
+  prop tag = "div"
+  prop text = "No Jemtec"
+  bindings {
+    text from state GoodmanBoltPrimaryNameState
+  }
+}
+
+view GoodmanProbeMaintenanceName {
+  kind text
+  class goodman-probe-bolt-name goodman-probe-bolt-name--maintenance
+  prop tag = "div"
+  prop text = "Jemtec"
+  bindings {
+    text from state GoodmanBoltMaintenanceNameState
+  }
+}
+
+view GoodmanProbePrimaryShearLabel {
   kind text
   class info-label
   prop tag = "span"
-  prop text = "Probe"
+  prop text = "F_shear"
 }
 
-view GoodmanScenarioProbeValue {
+view GoodmanProbePrimaryShearValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "Static response"
+  prop text = "0 N"
   bindings {
     text from capability GoodmanDiagram.probe_shear_text
   }
 }
 
-view GoodmanScenarioProbeRow {
+view GoodmanProbePrimaryShearRow {
   kind metric-row
   class info-row
   children {
-    GoodmanScenarioProbeLabel
-    GoodmanScenarioProbeValue
+    GoodmanProbePrimaryShearLabel
+    GoodmanProbePrimaryShearValue
   }
 }
 
-view GoodmanScenarioMeanStressLabel {
+view GoodmanProbePrimaryDamageLabel {
   kind text
   class info-label
   prop tag = "span"
-  prop text = "Mean stress"
+  prop text = "damage/cyc ×10⁶"
 }
 
-view GoodmanScenarioMeanStressValue {
+view GoodmanProbePrimaryDamageValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "0-650 MPa"
+  prop text = "≈0"
   bindings {
-    text from capability GoodmanDiagram.probe_mean_stress_text
+    text from capability GoodmanDiagram.probe_damage_text
   }
 }
 
-view GoodmanScenarioMeanStressRow {
+view GoodmanProbePrimaryDamageRow {
   kind metric-row
   class info-row
   children {
-    GoodmanScenarioMeanStressLabel
-    GoodmanScenarioMeanStressValue
+    GoodmanProbePrimaryDamageLabel
+    GoodmanProbePrimaryDamageValue
   }
 }
 
-view GoodmanScenarioAltStressLabel {
+view GoodmanProbePrimarySlipLabel {
   kind text
   class info-label
   prop tag = "span"
-  prop text = "Alternating stress"
+  prop text = "slip threshold"
 }
 
-view GoodmanScenarioAltStressValue {
+view GoodmanProbePrimarySlipValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "Bolt bending curve"
-  bindings {
-    text from capability GoodmanDiagram.probe_alt_stress_text
-  }
-}
-
-view GoodmanScenarioAltStressRow {
-  kind metric-row
-  class info-row
-  children {
-    GoodmanScenarioAltStressLabel
-    GoodmanScenarioAltStressValue
-  }
-}
-
-view GoodmanScenarioSlipLabel {
-  kind text
-  class info-label
-  prop tag = "span"
-  prop text = "Slip threshold"
-}
-
-view GoodmanScenarioSlipValue {
-  kind text
-  class info-value
-  prop tag = "span"
-  prop text = "Rendered as vertical rule"
+  prop text = "> 660"
   bindings {
     text from capability GoodmanDiagram.slip_threshold_text
   }
 }
 
-view GoodmanScenarioSlipRow {
+view GoodmanProbePrimarySlipRow {
   kind metric-row
   class info-row
   children {
-    GoodmanScenarioSlipLabel
-    GoodmanScenarioSlipValue
+    GoodmanProbePrimarySlipLabel
+    GoodmanProbePrimarySlipValue
+  }
+}
+
+view GoodmanProbePrimaryCard {
+  kind card
+  class goodman-probe-bolt goodman-probe-bolt--primary
+  children {
+    GoodmanProbePrimaryName
+    GoodmanProbePrimaryShearRow
+    GoodmanProbePrimaryDamageRow
+    GoodmanProbePrimarySlipRow
+  }
+}
+
+view GoodmanProbeMaintenanceShearLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "F_shear"
+}
+
+view GoodmanProbeMaintenanceShearValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "0 N"
+  bindings {
+    text from capability GoodmanDiagram.probe_shear_jemtec_text
+  }
+}
+
+view GoodmanProbeMaintenanceShearRow {
+  kind metric-row
+  class info-row
+  children {
+    GoodmanProbeMaintenanceShearLabel
+    GoodmanProbeMaintenanceShearValue
+  }
+}
+
+view GoodmanProbeMaintenanceDamageLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "damage/cyc ×10⁶"
+}
+
+view GoodmanProbeMaintenanceDamageValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "≈0"
+  bindings {
+    text from capability GoodmanDiagram.probe_damage_jemtec_text
+  }
+}
+
+view GoodmanProbeMaintenanceDamageRow {
+  kind metric-row
+  class info-row
+  children {
+    GoodmanProbeMaintenanceDamageLabel
+    GoodmanProbeMaintenanceDamageValue
+  }
+}
+
+view GoodmanProbeMaintenanceSlipLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "slip threshold"
+}
+
+view GoodmanProbeMaintenanceSlipValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "> 660"
+  bindings {
+    text from capability GoodmanDiagram.slip_threshold_text
+  }
+}
+
+view GoodmanProbeMaintenanceSlipRow {
+  kind metric-row
+  class info-row
+  children {
+    GoodmanProbeMaintenanceSlipLabel
+    GoodmanProbeMaintenanceSlipValue
+  }
+}
+
+view GoodmanProbeMaintenanceCard {
+  kind card
+  class goodman-probe-bolt goodman-probe-bolt--maintenance
+  children {
+    GoodmanProbeMaintenanceName
+    GoodmanProbeMaintenanceShearRow
+    GoodmanProbeMaintenanceDamageRow
+    GoodmanProbeMaintenanceSlipRow
+  }
+}
+
+view GoodmanProbeComparisonRows {
+  kind group
+  class goodman-probe-comparison-rows
+  children {
+    GoodmanProbePrimaryCard
+    GoodmanProbeMaintenanceCard
+  }
+}
+
+view GoodmanProbeComparisonBox {
+  kind group
+  class info-box goodman-probe-comparison
+  children {
+    GoodmanProbeIntro
+    GoodmanProbeComparisonRows
   }
 }
 
@@ -3204,6 +3382,9 @@ view GoodmanSimulationNewAction {
   prop label = "+ New simulation"
   prop tag = "button"
   prop buttonType = "button"
+  interactions {
+    on click self deliver GoodmanCreateSimulationRequested
+  }
 }
 
 view GoodmanSimulationTitleLabel {
@@ -3217,6 +3398,9 @@ view GoodmanSimulationTitleNewAction {
   prop label = "+ New"
   prop tag = "button"
   prop buttonType = "button"
+  interactions {
+    on click self deliver GoodmanCreateSimulationRequested
+  }
 }
 
 view GoodmanSimulationTitle {
@@ -3259,7 +3443,7 @@ view GoodmanSimulationSection {
 
 view GoodmanRunConfigBoltsPerSetField {
   kind form-field
-  class goodman-run-field
+  class mc-row goodman-run-field
   prop label = "Bolts per set"
   prop inputType = "number"
   prop inputId = "cfg-n"
@@ -3278,7 +3462,7 @@ view GoodmanRunConfigBoltsPerSetField {
 
 view GoodmanRunConfigDurationField {
   kind form-field
-  class goodman-run-field
+  class mc-row goodman-run-field
   prop label = "Duration (months)"
   prop inputType = "number"
   prop inputId = "cfg-tmax"
@@ -3297,7 +3481,7 @@ view GoodmanRunConfigDurationField {
 
 view GoodmanRunConfigStepField {
   kind form-field
-  class goodman-run-field
+  class mc-row goodman-run-field
   prop label = "Time step (months)"
   prop inputType = "number"
   prop inputId = "cfg-dt"
@@ -3381,7 +3565,7 @@ view GoodmanRunActionStop {
 
 view GoodmanRunActionGroup {
   kind action-group
-  class goodman-run-actions
+  class run-row goodman-run-actions
   children {
     GoodmanRunActionStart
     GoodmanRunActionPause
@@ -3393,6 +3577,7 @@ view GoodmanRunActionGroup {
 view GoodmanRunProgressFill {
   kind progress-fill
   class prog-fill
+  prop domId = "prog-fill"
   bindings {
     style from state GoodmanRunStatusState map running "width:0%;background:var(--blue);opacity:1" paused "width:0%;background:var(--blue);opacity:.4" done "width:100%;background:var(--grn);opacity:1" stopped "width:0%;background:var(--ylw);opacity:1" default "width:0%;background:var(--blue);opacity:1"
   }
@@ -3401,6 +3586,7 @@ view GoodmanRunProgressFill {
 view GoodmanRunProgressLabel {
   kind progress-label
   class prog-lbl
+  prop domId = "prog-lbl"
   prop text = "Ready"
   bindings {
     text from state GoodmanRunStatusState map ready Ready running "Running…" paused "⏸ Paused" done "Complete ✓" stopped "■ Stopped" default Ready
@@ -3409,7 +3595,7 @@ view GoodmanRunProgressLabel {
 
 view GoodmanRunProgress {
   kind progress
-  class goodman-run-progress
+  class prog-wrap goodman-run-progress
   children {
     GoodmanRunProgressFill
     GoodmanRunProgressLabel
@@ -3439,7 +3625,7 @@ view GoodmanRunConfigSection {
   class ssec goodman-run-config-section
   prop hidden = true
   bindings {
-    visible from state GoodmanActiveMode map mc true default false
+    visible from state GoodmanRunConfigVisible map true true default false
   }
   children {
     GoodmanRunConfigTitle
@@ -3891,7 +4077,7 @@ view GoodmanBoltSetPrimarySwatch {
 
 view GoodmanBoltSetPrimaryName {
   kind text
-  class sim-name
+  class bs-name
   prop tag = "span"
   prop text = "No Jemtec"
   bindings {
@@ -4083,6 +4269,141 @@ view GoodmanBoltSetMaterialTitle {
   class edit-group-title
   prop tag = "div"
   prop text = "Material & Fatigue"
+}
+
+view GoodmanBoltSetPreloadTitle {
+  kind text
+  class edit-group-title
+  prop tag = "div"
+  prop text = "Preload & Relaxation"
+}
+
+view GoodmanBoltSetPreloadInitialRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetPreloadInitialLabel
+    GoodmanBoltSetPreloadInitialValue
+  }
+}
+
+view GoodmanBoltSetPreloadInitialLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Initial preload"
+}
+
+view GoodmanBoltSetPreloadInitialValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "600 MPa  · free normal"
+}
+
+view GoodmanBoltSetPreloadUtilRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetPreloadUtilLabel
+    GoodmanBoltSetPreloadUtilValue
+  }
+}
+
+view GoodmanBoltSetPreloadUtilLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Utilisation factor"
+}
+
+view GoodmanBoltSetPreloadUtilValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "0.65  · free uniform"
+}
+
+view GoodmanBoltSetPreloadTauARow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetPreloadTauALabel
+    GoodmanBoltSetPreloadTauAValue
+  }
+}
+
+view GoodmanBoltSetPreloadTauALabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Relaxation τ_a"
+}
+
+view GoodmanBoltSetPreloadTauAValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "28.6  · free normal"
+}
+
+view GoodmanBoltSetPreloadTauBRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetPreloadTauBLabel
+    GoodmanBoltSetPreloadTauBValue
+  }
+}
+
+view GoodmanBoltSetPreloadTauBLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Relaxation τ_b"
+}
+
+view GoodmanBoltSetPreloadTauBValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "0.587  · free normal"
+}
+
+view GoodmanBoltSetPreloadTauCRow {
+  kind metric-row
+  class info-row goodman-param-summary
+  children {
+    GoodmanBoltSetPreloadTauCLabel
+    GoodmanBoltSetPreloadTauCValue
+  }
+}
+
+view GoodmanBoltSetPreloadTauCLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "Relaxation τ_c"
+}
+
+view GoodmanBoltSetPreloadTauCValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "30.14  · free normal"
+}
+
+view GoodmanBoltSetPreloadGroup {
+  kind group
+  class edit-group
+  children {
+    GoodmanBoltSetPreloadTitle
+    GoodmanBoltSetPreloadInitialRow
+    GoodmanBoltSetPreloadUtilRow
+    GoodmanBoltSetPreloadTauARow
+    GoodmanBoltSetPreloadTauBRow
+    GoodmanBoltSetPreloadTauCRow
+  }
 }
 
 view GoodmanBoltSetUtsLabel {
@@ -4462,6 +4783,7 @@ view GoodmanBoltSetPrimaryParams {
     className from state GoodmanBoltPrimaryParamsOpen map true open default ""
   }
   children {
+    GoodmanBoltSetPreloadGroup
     GoodmanBoltSetMaterialGroup
   }
 }
@@ -4480,20 +4802,23 @@ view GoodmanBoltSetPrimaryCard {
 
 view GoodmanBoltSetMaintenanceSwatch {
   kind marker
-  class leg-sw
+  class bs-dot
   prop style = "background:#8CC4D4"
 }
 
 view GoodmanBoltSetMaintenanceName {
   kind text
-  class sim-name
+  class bs-name
   prop tag = "span"
   prop text = "Jemtec"
+  bindings {
+    text from state GoodmanBoltMaintenanceNameState
+  }
 }
 
 view GoodmanBoltSetMaintenanceHeader {
   kind row
-  class sim-row
+  class bs-head
   children {
     GoodmanBoltSetMaintenanceSwatch
     GoodmanBoltSetMaintenanceName
@@ -4502,7 +4827,7 @@ view GoodmanBoltSetMaintenanceHeader {
 
 view GoodmanBoltSetMaintenanceCard {
   kind card
-  class goodman-bolt-set-card
+  class bs-item goodman-bolt-set-card
   children {
     GoodmanBoltSetMaintenanceHeader
   }
@@ -4529,14 +4854,14 @@ view GoodmanBoltSetsSection {
 view GoodmanLegendInfiniteSwatch {
   kind marker
   class leg-sw
-  prop style = "background:#38bdf8"
+  prop style = "background:#bbf7d0;border:1px solid #86efac"
 }
 
 view GoodmanLegendInfiniteText {
   kind text
   class leg-label
   prop tag = "span"
-  prop text = "Infinite life region"
+  prop text = "> 6 months ✓ safe"
 }
 
 view GoodmanLegendInfiniteRow {
@@ -4551,14 +4876,14 @@ view GoodmanLegendInfiniteRow {
 view GoodmanLegendFiniteSwatch {
   kind marker
   class leg-sw
-  prop style = "background:#f59e0b"
+  prop style = "background:#d9f99d;border:1px solid #bef264"
 }
 
 view GoodmanLegendFiniteText {
   kind text
   class leg-label
   prop tag = "span"
-  prop text = "Finite life region"
+  prop text = "2–6 months"
 }
 
 view GoodmanLegendFiniteRow {
@@ -4570,25 +4895,47 @@ view GoodmanLegendFiniteRow {
   }
 }
 
-view GoodmanLegendUnsafeSwatch {
+view GoodmanLegendShortSwatch {
   kind marker
   class leg-sw
-  prop style = "background:#ef4444"
+  prop style = "background:#fef08a;border:1px solid #fde047"
 }
 
-view GoodmanLegendUnsafeText {
+view GoodmanLegendShortText {
   kind text
   class leg-label
   prop tag = "span"
-  prop text = "Yield / unsafe boundary"
+  prop text = "0.5–2 months"
 }
 
-view GoodmanLegendUnsafeRow {
+view GoodmanLegendShortRow {
   kind legend-row
   class leg-row
   children {
-    GoodmanLegendUnsafeSwatch
-    GoodmanLegendUnsafeText
+    GoodmanLegendShortSwatch
+    GoodmanLegendShortText
+  }
+}
+
+view GoodmanLegendImminentSwatch {
+  kind marker
+  class leg-sw
+  prop style = "background:#fde68a;border:1px solid #fbbf24"
+}
+
+view GoodmanLegendImminentText {
+  kind text
+  class leg-label
+  prop tag = "span"
+  prop text = "< 0.5 months ⚠ imminent"
+}
+
+view GoodmanLegendImminentRow {
+  kind legend-row
+  class leg-row
+  children {
+    GoodmanLegendImminentSwatch
+    GoodmanLegendImminentText
   }
 }
 
@@ -4598,14 +4945,15 @@ view GoodmanFatigueLegend {
   children {
     GoodmanLegendInfiniteRow
     GoodmanLegendFiniteRow
-    GoodmanLegendUnsafeRow
+    GoodmanLegendShortRow
+    GoodmanLegendImminentRow
   }
 }
 
 view GoodmanFatigueLegendNote {
   kind note
   class goodman-fatigue-legend-note
-  prop text = "Hannover M48 combined SN, 50% survival, m=4.6. Goodman line: alternating stress limit scales with mean stress to UTS."
+  prop text = "Hannover M48 combined SN, 50% survival, m=4.6. Goodman line: σa = σlim(1−σm/UTS)."
 }
 
 view GoodmanFatigueLegendTitle {
@@ -4661,7 +5009,6 @@ view GoodmanPlayAction {
 view GoodmanTimeSlider {
   kind form-field
   class goodman-time-slider
-  prop label = "Time"
   prop inputType = "range"
   prop inputId = "time-sl"
   prop min = 0
@@ -4685,6 +5032,13 @@ view GoodmanTimeLabel {
   bindings {
     text from projection GoodmanScrubTimeText
   }
+}
+
+view GoodmanTimePrefix {
+  kind text
+  class goodman-time-prefix
+  prop tag = "span"
+  prop text = "t ="
 }
 
 view GoodmanFailureBadge {
@@ -4725,6 +5079,7 @@ view GoodmanSpeedLabel {
 view GoodmanSpeedGroup {
   kind field-group
   class goodman-speed-group
+  prop domId = "spd-wrap"
   children {
     GoodmanSpeedSlider
     GoodmanSpeedLabel
@@ -4749,9 +5104,14 @@ view GoodmanScrubber {
   kind scrubber
   class goodman-scrubber
   prop domId = "scr"
+  prop hidden = true
+  bindings {
+    visible from state GoodmanActiveMode map mc true default false
+  }
   children {
     GoodmanPlayAction
     GoodmanTimeSlider
+    GoodmanTimePrefix
     GoodmanTimeLabel
     GoodmanFailureBadge
     GoodmanSpeedGroup
@@ -5363,9 +5723,6 @@ view EngentusApp {
   prop mountMode = "mounted-panel"
   children {
     EngentusAppChrome
-    EngentusGoodmanHeader
-    GoodmanModesToolbar
-    GoodmanWindowToolbar
     GoodmanBody
   }
 }
@@ -6008,14 +6365,6 @@ view EngentusMillChargeApp {
     EngentusAppChrome
     MillChargeBody
   }
-}
-
-view MillForceHeader {
-  kind screen-header
-  class mill-force-header
-  prop title = "Mill Force Analysis"
-  prop subtitle = "Liner force distribution with dual-model comparison"
-  prop backHref = "/engentus/home"
 }
 
 view MillForceModeTitle {
@@ -7657,14 +8006,34 @@ view MillForceTabs {
   }
 }
 
-view MillForceViewer {
+view MillForceChartWrap {
   kind viewer
-  class mill-force-viewer
-  prop domId = "mill-force-chart-area"
+  class mill-force-chart-wrap
+  prop domId = "mill-force-chart-wrap"
   children {
     MillForceCross
     MillForceAngle
     MillForceRose
+  }
+}
+
+view MillForceChartArea {
+  kind viewer
+  class mill-force-viewer
+  prop domId = "mill-force-chart-area"
+  children {
+    MillForceTabs
+    MillForceChartWrap
+  }
+}
+
+view MillForceBody {
+  kind body
+  class mill-force-body
+  prop domId = "mill-force-body"
+  children {
+    MillForceSidebar
+    MillForceChartArea
   }
 }
 
@@ -7682,10 +8051,7 @@ view EngentusMillForceApp {
   prop mountMode = "mounted-panel"
   children {
     EngentusAppChrome
-    MillForceHeader
-    MillForceSidebar
-    MillForceTabs
-    MillForceViewer
+    MillForceBody
   }
 }
 

@@ -106,19 +106,25 @@ model BoltFatigue {
   // ── reference chart labels / probe markers as authored scalar geometry ──
   derive probe_F_friction = mu_joint * (probe_sm * 1e6 * A_s_nom) * n_interfaces
   derive probe_F_shear = max(gamma * F_per_bolt, F_per_bolt - probe_F_friction)
+  derive probe_F_shear_jemtec = max(gamma_jemtec * F_per_bolt, F_per_bolt - probe_F_friction)
   derive curve_probe = bolt_bending_sigma_a(probe_F_shear, L_grip, D_Shank, D_minor, head_direction, length_factor)
+  derive curve_probe_jemtec = bolt_bending_sigma_a(probe_F_shear_jemtec, L_grip, D_Shank, D_minor, head_direction, length_factor)
   derive probe_damage_per_million = miner_dpc(curve_probe, probe_sm, sigma_lim, m_slope, uts) * 1000000
+  derive probe_damage_per_million_jemtec = miner_dpc(curve_probe_jemtec, probe_sm, sigma_lim, m_slope, uts) * 1000000
   derive probe_mean_stress_text = mpa_text(probe_sm)
   derive probe_alt_stress_text = mpa_text(curve_probe)
+  derive probe_alt_stress_jemtec_text = mpa_text(curve_probe_jemtec)
   derive probe_shear_text = newton_text(probe_F_shear)
+  derive probe_shear_jemtec_text = newton_text(probe_F_shear_jemtec)
   derive probe_damage_text = damage_per_million_text(probe_damage_per_million)
+  derive probe_damage_jemtec_text = damage_per_million_text(probe_damage_per_million_jemtec)
   derive curve_label_x = 533
   derive curve_label_F_friction = mu_joint * (curve_label_x * 1e6 * A_s_nom) * n_interfaces
   derive curve_label_F_shear = max(gamma * F_per_bolt, F_per_bolt - curve_label_F_friction)
   derive curve_label_F_shear_jemtec = max(gamma_jemtec * F_per_bolt, F_per_bolt - curve_label_F_friction)
-  derive curve_label_y = bolt_bending_sigma_a(curve_label_F_shear, L_grip, D_Shank, D_minor, head_direction, length_factor)
+  derive curve_label_y = bolt_bending_sigma_a(curve_label_F_shear, L_grip, D_Shank, D_minor, head_direction, length_factor) + 2
   derive curve_label_jemtec_x = 533
-  derive curve_label_jemtec_y = bolt_bending_sigma_a(curve_label_F_shear_jemtec, L_grip, D_Shank, D_minor, head_direction, length_factor)
+  derive curve_label_jemtec_y = bolt_bending_sigma_a(curve_label_F_shear_jemtec, L_grip, D_Shank, D_minor, head_direction, length_factor) + 2
   derive yield_label_x = ys * 0.38
   derive yield_label_y = ys * 0.62
 

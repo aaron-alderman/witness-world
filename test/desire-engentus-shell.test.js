@@ -369,6 +369,8 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
       trigger: "GoodmanRunRequested",
       steps: [
         { kind: "setState", state: "GoodmanActiveMode", value: "mc" },
+        { kind: "setState", state: "GoodmanSimulationSelected", value: true },
+        { kind: "setState", state: "GoodmanRunConfigVisible", value: true },
         { kind: "setState", state: "GoodmanRunStatusState", value: "running" },
         { kind: "delay", ms: 220 },
         { kind: "setState", state: "GoodmanRunStatusState", value: "done" }
@@ -446,10 +448,14 @@ test("the authored Goodman Monte Carlo run completes through a process-owned don
 
   assert.deepEqual(delays, [220]);
   assert.equal(runtime.value("GoodmanActiveMode"), "mc");
+  assert.equal(runtime.value("GoodmanSimulationSelected"), true);
+  assert.equal(runtime.value("GoodmanRunConfigVisible"), true);
   assert.equal(runtime.value("GoodmanRunStatusState"), "done");
   assert.deepEqual(runtime.history("GoodmanRunStatusState"), ["running", "done"]);
-  assert.deepEqual(runtime.trace.slice(-4).map(observation => [observation.kind, observation.label]), [
+  assert.deepEqual(runtime.trace.slice(-6).map(observation => [observation.kind, observation.label]), [
     ["rule.setState", "GoodmanRunRequested:GoodmanActiveMode"],
+    ["rule.setState", "GoodmanRunRequested:GoodmanSimulationSelected"],
+    ["rule.setState", "GoodmanRunRequested:GoodmanRunConfigVisible"],
     ["rule.setState", "GoodmanRunRequested:GoodmanRunStatusState"],
     ["rule.delay", "GoodmanRunRequested:220ms"],
     ["rule.setState", "GoodmanRunRequested:GoodmanRunStatusState"]
@@ -519,19 +525,41 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanStaticEnduranceLimitField",
     "GoodmanStaticSlopeField",
     "GoodmanStaticProbeMeanStressField",
-    "GoodmanScenarioProbeRow",
-    "GoodmanScenarioMeanStressRow",
-    "GoodmanScenarioAltStressRow",
-    "GoodmanScenarioSlipRow",
+    "GoodmanProbeComparisonBox",
     "GoodmanSaveStaticSimulationAction"
   ]);
+  assert.deepEqual(surfaces.get("GoodmanProbeComparisonBox")?.body?.children, [
+    "GoodmanProbeIntro",
+    "GoodmanProbeComparisonRows"
+  ]);
+  assert.deepEqual(surfaces.get("GoodmanProbeComparisonRows")?.body?.children, [
+    "GoodmanProbePrimaryCard",
+    "GoodmanProbeMaintenanceCard"
+  ]);
+  assert.equal(
+    surfaces.get("GoodmanProbePrimaryShearValue")?.body?.bindings?.[0]?.source?.output,
+    "probe_shear_text"
+  );
+  assert.equal(
+    surfaces.get("GoodmanProbePrimaryDamageValue")?.body?.bindings?.[0]?.source?.output,
+    "probe_damage_text"
+  );
+  assert.equal(
+    surfaces.get("GoodmanProbeMaintenanceShearValue")?.body?.bindings?.[0]?.source?.output,
+    "probe_shear_jemtec_text"
+  );
+  assert.equal(
+    surfaces.get("GoodmanProbeMaintenanceDamageValue")?.body?.bindings?.[0]?.source?.output,
+    "probe_damage_jemtec_text"
+  );
   assert.equal(surfaces.get("GoodmanScenarioSection")?.body?.bindings[0]?.prop, "visible");
   assert.equal(surfaces.get("GoodmanStaticEnduranceLimitLabel")?.body?.props?.text, "σ_lim endurance");
   assert.equal(surfaces.get("GoodmanScenarioSection")?.body?.bindings[0]?.source?.state, "GoodmanActiveMode");
   assert.equal(surfaces.get("GoodmanSimulationSection")?.body?.props?.hidden, true);
   assert.equal(surfaces.get("GoodmanSimulationSection")?.body?.bindings[0]?.source?.map?.mc, true);
   assert.equal(surfaces.get("GoodmanRunConfigSection")?.body?.props?.hidden, true);
-  assert.equal(surfaces.get("GoodmanRunConfigSection")?.body?.bindings[0]?.source?.map?.mc, true);
+  assert.equal(surfaces.get("GoodmanRunConfigSection")?.body?.bindings[0]?.source?.state, "GoodmanRunConfigVisible");
+  assert.equal(surfaces.get("GoodmanRunConfigSection")?.body?.bindings[0]?.source?.map?.true, true);
   assert.equal(surfaces.get("GoodmanChartStyleSection")?.body?.props?.hidden, true);
   assert.equal(surfaces.get("GoodmanChartStyleSection")?.body?.bindings[0]?.source?.map?.edit, true);
 
@@ -617,6 +645,7 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanBoltSetMaintenanceName"
   ]);
   assert.equal(surfaces.get("GoodmanBoltSetMaintenanceName")?.body?.props?.text, "Jemtec");
+  assert.equal(surfaces.get("GoodmanBoltSetMaintenanceName")?.body?.bindings?.[0]?.source?.state, "GoodmanBoltMaintenanceNameState");
   assert.equal(surfaces.get("GoodmanBoltSetMaintenanceSwatch")?.body?.props?.style, "background:#8CC4D4");
   assert.equal(surfaces.has("GoodmanBoltSetMaintenanceNote"), false);
   assert.equal(surfaces.get("GoodmanBoltSetPrimaryChevron")?.body?.surfaceKind, "action");
@@ -627,6 +656,7 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanBoltSetPrimaryEditSaveAction"
   ]);
   assert.deepEqual(surfaces.get("GoodmanBoltSetPrimaryParams")?.body?.children, [
+    "GoodmanBoltSetPreloadGroup",
     "GoodmanBoltSetMaterialGroup"
   ]);
   assert.equal(surfaces.get("GoodmanBoltSetPrimaryParams")?.body?.className, "bs-params");
@@ -639,6 +669,15 @@ test("the shell is structured through explicit child regions instead of flattene
     "GoodmanBoltSetSnSlopeRow",
     "GoodmanBoltSetYieldRow"
   ]);
+  assert.deepEqual(surfaces.get("GoodmanBoltSetPreloadGroup")?.body?.children, [
+    "GoodmanBoltSetPreloadTitle",
+    "GoodmanBoltSetPreloadInitialRow",
+    "GoodmanBoltSetPreloadUtilRow",
+    "GoodmanBoltSetPreloadTauARow",
+    "GoodmanBoltSetPreloadTauBRow",
+    "GoodmanBoltSetPreloadTauCRow"
+  ]);
+  assert.equal(surfaces.get("GoodmanBoltSetPreloadTitle")?.body?.props?.text, "Preload & Relaxation");
   assert.equal(surfaces.get("GoodmanBoltSetPrimaryEditNameInput")?.body?.interactions[0]?.action?.state, "GoodmanBoltPrimaryNameState");
   assert.equal(surfaces.get("GoodmanBoltSetPrimaryEditColourInput")?.body?.props?.inputType, "color");
   assert.equal(surfaces.get("GoodmanBoltSetUtsSlider")?.body?.interactions[0]?.action?.state, "GoodmanBoltPrimaryUts");
@@ -648,8 +687,13 @@ test("the shell is structured through explicit child regions instead of flattene
   assert.deepEqual(surfaces.get("GoodmanFatigueLegend")?.body?.children, [
     "GoodmanLegendInfiniteRow",
     "GoodmanLegendFiniteRow",
-    "GoodmanLegendUnsafeRow"
+    "GoodmanLegendShortRow",
+    "GoodmanLegendImminentRow"
   ]);
+  assert.equal(surfaces.get("GoodmanLegendInfiniteText")?.body?.props?.text, "> 6 months ✓ safe");
+  assert.equal(surfaces.get("GoodmanLegendFiniteText")?.body?.props?.text, "2–6 months");
+  assert.equal(surfaces.get("GoodmanLegendShortText")?.body?.props?.text, "0.5–2 months");
+  assert.equal(surfaces.get("GoodmanLegendImminentText")?.body?.props?.text, "< 0.5 months ⚠ imminent");
 
   assert.deepEqual(surfaces.get("GoodmanWindowLayer")?.body?.children, [
     "GoodmanCdfWindow",
@@ -659,11 +703,15 @@ test("the shell is structured through explicit child regions instead of flattene
 
   assert.deepEqual(surfaces.get("EngentusApp")?.body?.children, [
     "EngentusAppChrome",
-    "EngentusGoodmanHeader",
-    "GoodmanModesToolbar",
-    "GoodmanWindowToolbar",
     "GoodmanBody"
   ]);
+  assert.equal(surfaces.has("EngentusGoodmanHeader"), false);
+  assert.deepEqual(surfaces.get("EngentusToolbarMiddle")?.body?.children, [
+    "GoodmanModesToolbar",
+    "GoodmanWindowToolbar"
+  ]);
+  assert.equal(surfaces.get("EngentusToolbarMiddle")?.body?.props?.domId, "tb-goodman-tools");
+  assert.equal(surfaces.get("GoodmanWindowToolbar")?.body?.props?.domId, "tb-wins");
 
   assert.deepEqual(surfaces.get("MillForceTabs")?.body?.children, [
     "MillForceTabCrossSection",

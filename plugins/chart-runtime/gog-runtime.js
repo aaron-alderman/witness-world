@@ -967,6 +967,36 @@ function linearScale(domain, range) {
 
 // ── drawing (browser/D3) ─────────────────────────────────────────────────────────
 
+function niceTickStep(span, targetCount) {
+  const raw = Math.abs(span) / Math.max(1, targetCount);
+  if (!Number.isFinite(raw) || raw <= 0) return 1;
+  const power = Math.pow(10, Math.floor(Math.log10(raw)));
+  const scaled = raw / power;
+  const nice = scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10;
+  return nice * power;
+}
+
+function linearTicks(domain = [0, 1], targetCount = 7) {
+  const start = Number(domain[0]);
+  const end = Number(domain[1]);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start === end) return [];
+  const lo = Math.min(start, end);
+  const hi = Math.max(start, end);
+  const step = niceTickStep(hi - lo, targetCount);
+  const first = Math.ceil(lo / step) * step;
+  const ticks = [];
+  for (let value = first; value <= hi + step * 1e-6; value += step) {
+    ticks.push(Math.abs(value) < step * 1e-9 ? 0 : Number(value.toFixed(10)));
+  }
+  return start <= end ? ticks : ticks.reverse();
+}
+
+function formatTick(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  return Math.abs(n - Math.round(n)) < 1e-9 ? String(Math.round(n)) : String(Number(n.toFixed(2)));
+}
+
 export function drawChart(container, plan, d3) {
   if (!d3) throw new Error("drawChart requires d3");
   if (plan.frame === "polar") return drawPolarChart(container, plan, d3);
@@ -978,14 +1008,46 @@ export function drawChart(container, plan, d3) {
 
   const x = v => (v - scales.x.domain[0]) / ((scales.x.domain[1] - scales.x.domain[0]) || 1) * plan.innerW;
   const y = v => plan.innerH - (v - scales.y.domain[0]) / ((scales.y.domain[1] - scales.y.domain[0]) || 1) * plan.innerH;
+  const clampY = v => {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return n;
+    const min = Math.min(scales.y.domain[0], scales.y.domain[1]);
+    const max = Math.max(scales.y.domain[0], scales.y.domain[1]);
+    return Math.max(min, Math.min(max, n));
+  };
+  const yFill = v => y(clampY(v));
+  const xTickValues = linearTicks(scales.x.domain, 8);
+  const yTickValues = linearTicks(scales.y.domain, 7);
+
+  if (presentation.showGrid !== false) {
+    const gridStroke = "#f1f5f9";
+    for (const tick of xTickValues) {
+      const px = x(tick);
+      if (px <= 0 || px >= plan.innerW) continue;
+      g.append("line")
+        .attr("x1", px).attr("x2", px)
+        .attr("y1", 0).attr("y2", plan.innerH)
+        .attr("stroke", gridStroke)
+        .attr("stroke-width", 1);
+    }
+    for (const tick of yTickValues) {
+      const py = y(tick);
+      if (py <= 0 || py >= plan.innerH) continue;
+      g.append("line")
+        .attr("x1", 0).attr("x2", plan.innerW)
+        .attr("y1", py).attr("y2", py)
+        .attr("stroke", gridStroke)
+        .attr("stroke-width", 1);
+    }
+  }
 
   for (const layer of plan.layers) {
     if (layer.mark === "screen-rect" || layer.mark === "screen-text") {
       drawScreenLayer(svg, layer);
     } else if (layer.mark === "area") {
       for (const prim of layer.primitives) {
-        const top = prim.points.map(p => `${x(p.x)},${y(p.y1)}`);
-        const bottom = prim.points.slice().reverse().map(p => `${x(p.x)},${y(p.y0)}`);
+        const top = prim.points.map(p => `${x(p.x)},${yFill(p.y1)}`);
+        const bottom = prim.points.slice().reverse().map(p => `${x(p.x)},${yFill(p.y0)}`);
         g.append("polygon")
           .attr("points", [...top, ...bottom].join(" "))
           .attr("fill", prim.fill).attr("opacity", layer.encode?.opacity ?? 0.9);
@@ -995,13 +1057,13 @@ export function drawChart(container, plan, d3) {
         g.append("polyline")
           .attr("points", prim.points.filter(p => Number.isFinite(p.y)).map(p => `${x(p.x)},${y(p.y)}`).join(" "))
           .attr("fill", "none").attr("stroke", layer.stroke).attr("stroke-width", layer.width)
-          .attr("stroke-dasharray", layer.dash ? "5,4" : null)
+          .attr("stroke-dasharray", layer.dash ? "5 3" : null)
           .attr("opacity", layer.opacity ?? 1);
       }
     } else if (layer.mark === "band") {
       for (const prim of layer.primitives) {
-        const top = prim.points.filter(p => Number.isFinite(p.y1)).map(p => `${x(p.x)},${y(p.y1)}`);
-        const bottom = prim.points.filter(p => Number.isFinite(p.y0)).slice().reverse().map(p => `${x(p.x)},${y(p.y0)}`);
+        const top = prim.points.filter(p => Number.isFinite(p.y1)).map(p => `${x(p.x)},${yFill(p.y1)}`);
+        const bottom = prim.points.filter(p => Number.isFinite(p.y0)).slice().reverse().map(p => `${x(p.x)},${yFill(p.y0)}`);
         g.append("polygon").attr("points", [...top, ...bottom].join(" "))
           .attr("fill", prim.fill ?? layer.fill).attr("opacity", layer.opacity);
       }
@@ -1031,7 +1093,7 @@ export function drawChart(container, plan, d3) {
           .attr("x1", x(prim.x)).attr("x2", x(prim.x)).attr("y1", 0).attr("y2", plan.innerH)
           .attr("stroke", layer.stroke)
           .attr("stroke-width", layer.width ?? 1)
-          .attr("stroke-dasharray", layer.dash ? "4,4" : null)
+          .attr("stroke-dasharray", layer.dash ? "4 3" : null)
           .attr("opacity", layer.opacity ?? 1);
       }
     } else if (layer.mark === "h-rule") {
@@ -1040,7 +1102,7 @@ export function drawChart(container, plan, d3) {
           .attr("x1", 0).attr("x2", plan.innerW).attr("y1", y(prim.y)).attr("y2", y(prim.y))
           .attr("stroke", layer.stroke)
           .attr("stroke-width", layer.width ?? 1)
-          .attr("stroke-dasharray", layer.dash ? "4,4" : null)
+          .attr("stroke-dasharray", layer.dash ? "4 3" : null)
           .attr("opacity", layer.opacity ?? 1);
       }
     } else if (layer.mark === "point") {
@@ -1072,23 +1134,40 @@ export function drawChart(container, plan, d3) {
     }
   }
 
-  if (presentation.showGrid !== false) {
-    const gridStroke = "#e2e8f0";
-    const xTicks = 8;
-    const yTicks = 7;
-    for (let tick = 1; tick < xTicks; tick += 1) {
-      const px = plan.innerW * tick / xTicks;
-      g.append("line").attr("x1", px).attr("x2", px).attr("y1", 0).attr("y2", plan.innerH).attr("stroke", gridStroke);
-    }
-    for (let tick = 1; tick < yTicks; tick += 1) {
-      const py = plan.innerH * tick / yTicks;
-      g.append("line").attr("x1", 0).attr("x2", plan.innerW).attr("y1", py).attr("y2", py).attr("stroke", gridStroke);
-    }
-  }
-
   // axes
-  g.append("line").attr("x1", 0).attr("y1", plan.innerH).attr("x2", plan.innerW).attr("y2", plan.innerH).attr("stroke", "#94a3b8");
-  g.append("line").attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", plan.innerH).attr("stroke", "#94a3b8");
+  const axisStroke = "#cbd5e1";
+  const tickStroke = "#e2e8f0";
+  const tickText = "#64748b";
+  g.append("line").attr("x1", 0).attr("y1", plan.innerH).attr("x2", plan.innerW).attr("y2", plan.innerH).attr("stroke", axisStroke);
+  g.append("line").attr("x1", 0).attr("y1", 0).attr("x2", 0).attr("y2", plan.innerH).attr("stroke", axisStroke);
+  for (const tick of xTickValues) {
+    const px = x(tick);
+    g.append("line")
+      .attr("x1", px).attr("x2", px)
+      .attr("y1", plan.innerH).attr("y2", plan.innerH + 6)
+      .attr("stroke", tickStroke);
+    g.append("text")
+      .attr("x", px)
+      .attr("y", plan.innerH + 18)
+      .attr("text-anchor", "middle")
+      .attr("font-size", "11px")
+      .attr("fill", tickText)
+      .text(formatTick(tick));
+  }
+  for (const tick of yTickValues) {
+    const py = y(tick);
+    g.append("line")
+      .attr("x1", -6).attr("x2", 0)
+      .attr("y1", py).attr("y2", py)
+      .attr("stroke", tickStroke);
+    g.append("text")
+      .attr("x", -8)
+      .attr("y", py + 4)
+      .attr("text-anchor", "end")
+      .attr("font-size", "11px")
+      .attr("fill", tickText)
+      .text(formatTick(tick));
+  }
   g.append("text")
     .attr("x", plan.innerW / 2)
     .attr("y", plan.innerH + 42)
@@ -1125,31 +1204,11 @@ export function drawChart(container, plan, d3) {
       .text(annotation.text);
   }
 
-  // probe: a readout bound to the x-axis. Hover/drag re-renders ONLY this overlay via
-  // probeReadout(plan, x) — a local rebind, no model re-evaluation.
-  const probeG = g.append("g").attr("class", "gog-probe").style("pointer-events", "none");
-  const renderProbe = xVal => {
-    probeG.selectAll("*").remove();
-    if (!Number.isFinite(xVal)) return null;
-    const readout = probeReadout(plan, xVal);
-    const px = x(xVal);
-    probeG.append("line").attr("x1", px).attr("x2", px).attr("y1", 0).attr("y2", plan.innerH)
-      .attr("stroke", "#EC7424").attr("stroke-width", 1);
-    for (const reading of readout.readings) {
-      const ys = reading.mark === "band" ? [reading.y0, reading.y1] : [reading.y];
-      for (const yv of ys) {
-        if (Number.isFinite(yv)) probeG.append("circle").attr("cx", px).attr("cy", y(yv)).attr("r", 3).attr("fill", "#EC7424");
-      }
-    }
-    return readout;
-  };
+  // Probe readout is data-only. Visual probe marks must be authored chart layers.
+  const renderProbe = xVal => Number.isFinite(xVal) ? probeReadout(plan, xVal) : null;
   const invertX = px => scales.x.domain[0] + (px / (plan.innerW || 1)) * (scales.x.domain[1] - scales.x.domain[0]);
-  const onMove = event => renderProbe(invertX(d3.pointer ? d3.pointer(event)[0] : 0));
   g.append("rect").attr("width", plan.innerW).attr("height", plan.innerH)
-    .attr("fill", "transparent").style("cursor", "ew-resize")
-    .on("mousemove", onMove).on("touchmove", onMove);
-  const probeLayer = plan.layers.find(l => l.mark === "rule" && l.name === "probe");
-  if (probeLayer && Number.isFinite(probeLayer.primitives?.[0]?.x)) renderProbe(probeLayer.primitives[0].x);
+    .attr("fill", "transparent").style("cursor", "default");
 
   const node = svg.node();
   node.probeAt = renderProbe; // host hook: programmatic local rebind -> returns the readout
