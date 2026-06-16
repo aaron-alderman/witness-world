@@ -1004,6 +1004,16 @@ export function drawChart(container, plan, d3) {
   const { width, height, margin, scales } = plan;
   const svg = selectChartSvg(container, d3, width, height);
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+  const clipId = `${container?.id || "chart"}-plot-clip`;
+  svg.append("defs")
+    .append("clipPath")
+    .attr("id", clipId)
+    .append("rect")
+    .attr("x", 0)
+    .attr("y", 0)
+    .attr("width", plan.innerW)
+    .attr("height", plan.innerH);
+  const plotG = g.append("g").attr("clip-path", `url(#${clipId})`);
   const presentation = plan.presentation ?? {};
 
   const x = v => (v - scales.x.domain[0]) / ((scales.x.domain[1] - scales.x.domain[0]) || 1) * plan.innerW;
@@ -1024,7 +1034,7 @@ export function drawChart(container, plan, d3) {
     for (const tick of xTickValues) {
       const px = x(tick);
       if (px <= 0 || px >= plan.innerW) continue;
-      g.append("line")
+      plotG.append("line")
         .attr("x1", px).attr("x2", px)
         .attr("y1", 0).attr("y2", plan.innerH)
         .attr("stroke", gridStroke)
@@ -1033,7 +1043,7 @@ export function drawChart(container, plan, d3) {
     for (const tick of yTickValues) {
       const py = y(tick);
       if (py <= 0 || py >= plan.innerH) continue;
-      g.append("line")
+      plotG.append("line")
         .attr("x1", 0).attr("x2", plan.innerW)
         .attr("y1", py).attr("y2", py)
         .attr("stroke", gridStroke)
@@ -1048,13 +1058,13 @@ export function drawChart(container, plan, d3) {
       for (const prim of layer.primitives) {
         const top = prim.points.map(p => `${x(p.x)},${yFill(p.y1)}`);
         const bottom = prim.points.slice().reverse().map(p => `${x(p.x)},${yFill(p.y0)}`);
-        g.append("polygon")
+        plotG.append("polygon")
           .attr("points", [...top, ...bottom].join(" "))
           .attr("fill", prim.fill).attr("opacity", layer.encode?.opacity ?? 0.9);
       }
     } else if (layer.mark === "line") {
       for (const prim of layer.primitives) {
-        g.append("polyline")
+        plotG.append("polyline")
           .attr("points", prim.points.filter(p => Number.isFinite(p.y)).map(p => `${x(p.x)},${y(p.y)}`).join(" "))
           .attr("fill", "none").attr("stroke", layer.stroke).attr("stroke-width", layer.width)
           .attr("stroke-dasharray", layer.dash ? "5 3" : null)
@@ -1064,14 +1074,14 @@ export function drawChart(container, plan, d3) {
       for (const prim of layer.primitives) {
         const top = prim.points.filter(p => Number.isFinite(p.y1)).map(p => `${x(p.x)},${yFill(p.y1)}`);
         const bottom = prim.points.filter(p => Number.isFinite(p.y0)).slice().reverse().map(p => `${x(p.x)},${yFill(p.y0)}`);
-        g.append("polygon").attr("points", [...top, ...bottom].join(" "))
+        plotG.append("polygon").attr("points", [...top, ...bottom].join(" "))
           .attr("fill", prim.fill ?? layer.fill).attr("opacity", layer.opacity);
       }
     } else if (layer.mark === "x-band") {
       for (const prim of layer.primitives) {
         const x0 = x(prim.x0);
         const x1 = x(prim.x1);
-        g.append("rect")
+        plotG.append("rect")
           .attr("x", Math.min(x0, x1))
           .attr("y", 0)
           .attr("width", Math.abs(x1 - x0))
@@ -1083,13 +1093,13 @@ export function drawChart(container, plan, d3) {
       }
     } else if (layer.mark === "cloud") {
       for (const prim of layer.primitives) {
-        g.append("polyline")
+        plotG.append("polyline")
           .attr("points", prim.points.filter(p => Number.isFinite(p.y)).map(p => `${x(p.x)},${y(p.y)}`).join(" "))
           .attr("fill", "none").attr("stroke", layer.stroke).attr("stroke-width", 0.6).attr("opacity", layer.opacity);
       }
     } else if (layer.mark === "rule") {
       for (const prim of layer.primitives) {
-        g.append("line")
+        plotG.append("line")
           .attr("x1", x(prim.x)).attr("x2", x(prim.x)).attr("y1", 0).attr("y2", plan.innerH)
           .attr("stroke", layer.stroke)
           .attr("stroke-width", layer.width ?? 1)
@@ -1098,7 +1108,7 @@ export function drawChart(container, plan, d3) {
       }
     } else if (layer.mark === "h-rule") {
       for (const prim of layer.primitives) {
-        g.append("line")
+        plotG.append("line")
           .attr("x1", 0).attr("x2", plan.innerW).attr("y1", y(prim.y)).attr("y2", y(prim.y))
           .attr("stroke", layer.stroke)
           .attr("stroke-width", layer.width ?? 1)
@@ -1108,7 +1118,7 @@ export function drawChart(container, plan, d3) {
     } else if (layer.mark === "point") {
       for (const prim of layer.primitives) {
         if (!Number.isFinite(prim.y)) continue;
-        g.append("circle")
+        plotG.append("circle")
           .attr("cx", x(prim.x))
           .attr("cy", y(prim.y))
           .attr("r", layer.size ?? presentation.pointSize ?? 4)
@@ -1120,7 +1130,7 @@ export function drawChart(container, plan, d3) {
     } else if (layer.mark === "text") {
       for (const prim of layer.primitives) {
         if (!Number.isFinite(prim.x) || !Number.isFinite(prim.y)) continue;
-        g.append("text")
+        plotG.append("text")
           .attr("x", x(prim.x))
           .attr("y", y(prim.y))
           .attr("text-anchor", layer.anchor ?? "middle")

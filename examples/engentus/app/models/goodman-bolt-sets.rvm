@@ -29797,7 +29797,7 @@ view GoodmanBoltSetJemtecCategoryFatigue {
 
 view GoodmanBoltSetJemtecParams {
   kind group
-  class bs-params open
+  class goodman-bolt-set-maintenance-param-groups
   children {
     GoodmanBoltSetJemtecCategoryPreload
     GoodmanBoltSetJemtecCategoryLoad

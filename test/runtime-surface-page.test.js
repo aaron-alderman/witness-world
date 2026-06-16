@@ -260,6 +260,59 @@ test("runtime-surface-page projects authored select options with value and selec
   assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
 });
 
+test("runtime-surface-page respects visible binding map defaults during initial projection", () => {
+  const html = renderSurfacePage(fakeWorld([
+    {
+      process: "desire.defineType",
+      body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "mill-force" }
+    },
+    {
+      process: "desire.defineProcess",
+      body: {
+        id: "ShellNavigation",
+        state: ["ActiveRoute"],
+        handles: [],
+        emits: [],
+        rules: []
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SurfaceRoot",
+        surfaceKind: "app-root",
+        processRef: "ShellNavigation",
+        children: ["GoodmanToolbar", "MillForceBody"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "GoodmanToolbar",
+        surfaceKind: "toolbar-region",
+        props: { domId: "tb-goodman-tools", text: "Goodman Toolbar" },
+        bindings: [
+          { prop: "visible", source: { kind: "state", state: "ActiveRoute", map: { goodman: true, default: false } } }
+        ]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "MillForceBody",
+        surfaceKind: "body",
+        props: { domId: "mill-force-body", text: "Mill Force" }
+      }
+    }
+  ]), {
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/engentus/mill-force"
+  });
+
+  assert.doesNotMatch(html, /<div id="tb-goodman-tools"/);
+  assert.match(html, /mill-force-body/);
+});
+
 test("runtime-surface-page projects the standard authored form-control baseline", () => {
   const html = renderSurfacePage(fakeWorld([
     {
@@ -468,6 +521,50 @@ test("runtime-surface-page projects the standard authored form-control baseline"
   assert.match(html, /"ariaExpanded":\[\{"id":"detail-toggle","mode":"attribute","attr":"aria-expanded","falseAsValue":true\}\]/);
   assert.match(html, /"kind":"eventChecked"/);
   assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
+});
+
+test("runtime-surface-page keeps title-only action props out of visible button body", () => {
+  const html = renderSurfacePage(fakeWorld([
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SurfaceRoot",
+        surfaceKind: "app-root",
+        children: ["ActionWithTooltip"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "ActionWithTooltip",
+        surfaceKind: "action",
+        props: { tag: "button", title: "Sample from distribution", buttonType: "button" },
+        children: ["ToggleTrack", "ToggleText"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "ToggleTrack",
+        surfaceKind: "generic",
+        props: { tag: "span", text: "track" }
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "ToggleText",
+        surfaceKind: "generic",
+        props: { tag: "span", text: "free" }
+      }
+    }
+  ]), {
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/tooltip"
+  });
+
+  assert.match(html, /<button(?: id="surface-actionwithtooltip")? title="Sample from distribution" type="button"><span>track<\/span><span>free<\/span><\/button>/);
+  assert.doesNotMatch(html, /<h1>Sample from distribution<\/h1>/);
 });
 
 test("runtime-surface-page omits surfaces whose initial visible binding resolves false", () => {

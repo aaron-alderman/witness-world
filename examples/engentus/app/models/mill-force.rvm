@@ -101,13 +101,13 @@ model MillForce {
   // ── scalar readouts for the authored results panel ──
   // Method-indexed values are reduced through the active authored model param,
   // keeping the selection in dataflow rather than a page-local controller.
-  derive phiText = deg_text(phi)
+  derive phiText = display_deg_text(phi)
   derive omegaText = omega_text(omega)
   derive rhoChargeText = rho_charge_text(rhoCharge)
   reduce gammaActive = pick_method(gamma, active_method) over method
   reduce phiPrimeActive = pick_method(phiPrime, active_method) over method
   derive gammaText = deg_text(gammaActive)
-  derive phiPrimeText = deg_text(phiPrimeActive)
+  derive phiPrimeText = display_deg_text(phiPrimeActive)
   reduce gammaDeltaText = deg_delta_text(gamma) over method
   reduce phiPrimeDeltaText = deg_delta_text(phiPrime) over method
   reduce gammaDeltaPercentText = pct_delta_text(gamma) over method

@@ -94,7 +94,15 @@ function formatTooltipValue(value) {
   return String(value ?? "");
 }
 
-function tooltipMarkup(readout = {}) {
+function tooltipMarkup(readout = {}, { view = {}, functions = {}, plan = null, spec = null } = {}) {
+  const formatterKey = view?.props?.tooltipFormatter;
+  const formatter = typeof formatterKey === "string" && formatterKey.trim()
+    ? functions?.[formatterKey.trim()]
+    : null;
+  if (typeof formatter === "function") {
+    const rendered = formatter({ readout, view, plan, spec });
+    if (typeof rendered === "string") return rendered;
+  }
   const readingTooltip = Array.isArray(readout.readings)
     ? readout.readings.find(reading => reading?.tooltip && Object.keys(reading.tooltip).length)?.tooltip
     : null;
@@ -113,7 +121,7 @@ function tooltipMarkup(readout = {}) {
   ].join("");
 }
 
-function attachChartTooltip(container, renderedNode, view = {}) {
+function attachChartTooltip(container, renderedNode, { view = {}, functions = {}, plan = null, spec = null } = {}) {
   const tooltip = tooltipElementFor(container, view);
   if (!tooltip || typeof renderedNode?.probeAtPoint !== "function") return () => {};
   const eventTarget = renderedNode.parentElement ?? renderedNode;
@@ -121,7 +129,7 @@ function attachChartTooltip(container, renderedNode, view = {}) {
     const rect = renderedNode.getBoundingClientRect?.();
     if (!rect) return;
     const readout = renderedNode.probeAtPoint(event.clientX - rect.left, event.clientY - rect.top);
-    const html = tooltipMarkup(readout);
+    const html = tooltipMarkup(readout, { view, functions, plan, spec });
     if (!html) {
       tooltip.style.display = "none";
       tooltip.style.opacity = "0";
@@ -173,7 +181,12 @@ export function mountChart(container, initialSpec = {}) {
     cleanupTooltip = null;
     if (renderedNode && typeof renderedNode.destroy === "function") renderedNode.destroy();
     renderedNode = drawChart(container, plan, globalThis.d3);
-    cleanupTooltip = attachChartTooltip(container, renderedNode, mountSpec.view);
+    cleanupTooltip = attachChartTooltip(container, renderedNode, {
+      view: mountSpec.view,
+      functions: mountSpec.functions,
+      plan,
+      spec: mountSpec
+    });
     publishCapabilityOutputs(container, scalarModelOutputs(evaluated));
     return renderedNode;
   };

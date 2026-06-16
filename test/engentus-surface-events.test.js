@@ -249,6 +249,9 @@ test("Engentus Goodman modes switch authored chart views through process state",
     await page.goto(`${server.url}/engentus/goodman`, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
     await page.waitForFunction(() =>
+      document.querySelector("#chart-svg defs clipPath rect")?.getAttribute("width") !== null
+    );
+    await page.waitForFunction(() =>
       Boolean(document.querySelector("#chart-svg")?.__chartController)
     );
     await page.waitForFunction(() =>
@@ -527,6 +530,17 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       await page.locator(".bs-params").first().evaluate(node => getComputedStyle(node).display),
       "none"
     );
+    assert.equal(await page.locator(".bs-edit-form").first().evaluate(node => getComputedStyle(node).display), "none");
+    await page.click("#surface-goodmanboltsetprimaryeditaction");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryEditVisible") === true
+    );
+    assert.equal(await page.locator(".bs-edit-form.open").count(), 1);
+    await page.click("#surface-goodmanboltsetprimaryeditsaveaction");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryEditVisible") === false
+    );
+    assert.equal(await page.locator(".bs-edit-form").first().evaluate(node => getComputedStyle(node).display), "none");
     await page.click("#surface-goodmanboltsetprimarychevron");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryParamsOpen") === true

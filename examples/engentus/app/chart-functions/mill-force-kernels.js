@@ -223,6 +223,11 @@ function forceChartDisplayDeg(theta) {
   return (deg + 180) % 360;
 }
 
+function displayDegText(theta) {
+  const displayDeg = ((((Number(theta) - Math.PI / 2) * 180 / Math.PI) % 360) + 360) % 360;
+  return `${displayDeg.toFixed(1)}°`;
+}
+
 export const millForceKernels = {
   tangential_sign: method => (method === "faithful" ? 1 : -1),
   pick_method: (values, method) => {
@@ -231,6 +236,7 @@ export const millForceKernels = {
   },
   pick_grounded: values => Array.isArray(values) ? values[METHOD_ORDER.indexOf("grounded")] : values,
   deg_text: value => `${Number(value * 180 / Math.PI).toFixed(1)}°`,
+  display_deg_text: displayDegText,
   omega_text: value => `${Number(value).toFixed(3)} rad/s`,
   rho_charge_text: value => `${Number(value).toFixed(3)} SG`,
   force_kn_text: value => `${(Number(value) / 1000).toFixed(1)} kN`,

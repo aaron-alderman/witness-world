@@ -1,0 +1,915 @@
+theme engentus
+
+tokens
+  color.chrome.bg              = #2C3C63
+  color.chrome.panel           = #344C6C
+  color.chrome.edge            = #3D5880
+  color.surface.base           = #ffffff
+  color.surface.soft           = #f8fafc
+  color.ink.primary            = #f1f5f9
+  color.ink.secondary          = #94a3b8
+  color.ink.body               = #475569
+  color.ink.dark               = #0f172a
+  color.accent.cool            = #8CC4D4
+  color.accent.cool.strong     = #5AAABF
+  color.accent.warm            = #EC7424
+  color.success                = #16a34a
+  color.notice                 = #f87171
+  color.product                = #4ade80
+  color.industry               = #a78bfa
+
+  size.toolbar.height          = 44px
+  size.sidebar.width           = 284px
+  size.metrics.width           = 190px
+  size.scrubber.height         = 50px
+  size.auth.card.width         = 372px
+  size.auth.hero.width         = 55%
+
+  radius.sm                    = 4px
+  radius.md                    = 6px
+  radius.lg                    = 8px
+  radius.xl                    = 10px
+  radius.pill                  = 999px
+
+  font.body                    = -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif
+  font.size.app                = 12.5px
+  font.size.small              = 11px
+  font.size.tiny               = 9.5px
+  font.size.title              = 15px
+  font.size.auth.title         = 22px
+  font.size.auth.hero          = 28px
+
+  shadow.card                  = 0 1px 4px rgba(0,0,0,.15)
+  shadow.overlay               = 0 8px 24px rgba(0,0,0,.3)
+  shadow.window                = 0 8px 32px rgba(0,0,0,.22), 0 0 0 1px rgba(0,0,0,.07)
+
+laws
+  law chrome.toolbar
+    layout
+      mode = row
+      height = size.toolbar.height
+      align.y = center
+    paint
+      background = color.chrome.bg
+      border.bottom = 1px solid color.chrome.edge
+      ink = color.ink.primary
+
+  law chrome.sidebar
+    layout
+      width = size.sidebar.width
+      mode = stack
+    paint
+      background = color.chrome.panel
+      border.right = 1px solid color.chrome.edge
+
+  law chrome.section
+    layout
+      mode = stack
+      gap = 8px
+      padding = 10px 12px
+    paint
+      border.bottom = 1px solid color.chrome.edge
+    text
+      title.size = 9.5px
+      title.weight = 700
+      title.transform = uppercase
+      title.tracking = .08em
+      title.ink = color.ink.secondary
+
+  law interactive.pill
+    layout
+      mode = row
+      align.y = center
+      gap = 5px
+      padding = 4px 12px
+    paint
+      background = color.chrome.bg
+      border = 1px solid color.chrome.edge
+      radius = 3px
+    text
+      size = 11px
+      ink = color.ink.secondary
+    when pointer.hover
+      paint.background = rgba(140,196,212,.08)
+    when selected
+      paint.background = rgba(140,196,212,.12)
+      paint.border = 1px solid rgba(140,196,212,.35)
+      text.ink = color.accent.cool
+
+  law interactive.toolbar_button
+    layout
+      mode = row
+      align.y = center
+      gap = 5px
+      padding = 5px 10px
+    paint
+      border = 1px solid transparent
+      radius = radius.md
+    text
+      size = 12px
+      weight = 500
+      ink = color.ink.secondary
+    when pointer.hover
+      paint.border = 1px solid color.chrome.edge
+      text.ink = color.ink.primary
+
+  law surface.module_card
+    layout
+      mode = stack
+      align.x = center
+      gap = 7px
+      padding = 16px 14px 13px
+      size.min.height = 148px
+    paint
+      background = color.chrome.panel
+      border = 1px solid color.chrome.edge
+      radius = radius.xl
+    text
+      title.size = 11.5px
+      title.weight = 600
+      title.ink = color.ink.primary
+      title.line = 1.3
+      body.size = 9.5px
+      body.ink = color.ink.secondary
+      body.line = 1.4
+      badge.size = 8.5px
+      badge.weight = 600
+    when available
+      paint.border = 1px solid rgba(140,196,212,.45)
+      paint.background = rgba(140,196,212,.06)
+    when available + pointer.hover
+      paint.background = rgba(140,196,212,.13)
+      paint.border = 1px solid color.accent.cool
+      paint.shadow = 0 6px 20px rgba(0,0,0,.25)
+      layout.offset.y = -2px
+    when locked
+      opacity = .35
+
+  law surface.news_item
+    layout
+      mode = stack
+      gap = 3px
+      padding = 9px 10px
+    paint
+      background = rgba(0,0,0,.18)
+      radius = radius.md
+      edge.left = 3px solid transparent
+    text
+      category.size = 8.5px
+      category.weight = 700
+      category.transform = uppercase
+      category.tracking = .05em
+      title.size = 11.5px
+      title.ink = color.ink.primary
+      title.line = 1.38
+      time.size = 9.5px
+      time.ink = color.ink.secondary
+    when pointer.hover
+      paint.background = rgba(0,0,0,.3)
+    when type.alert
+      paint.edge.left = 3px solid color.accent.warm
+      text.category.ink = color.accent.warm
+    when type.product
+      paint.edge.left = 3px solid color.product
+      text.category.ink = color.product
+    when type.industry
+      paint.edge.left = 3px solid color.industry
+      text.category.ink = color.industry
+    when type.platform
+      paint.edge.left = 3px solid color.accent.cool
+      text.category.ink = color.accent.cool
+
+  law auth.button.primary
+    layout
+      mode = row
+      align = center center
+      gap = 11px
+      padding = 11.5px
+    paint
+      background = color.chrome.bg
+      radius = radius.md
+      ink = color.surface.base
+    text
+      size = 13.5px
+      weight = 600
+    when pointer.hover
+      paint.background = #1e2f52
+    when pending
+      opacity = .92
+      affordance.pointer = disabled
+
+  law auth.button.microsoft
+    layout
+      mode = row
+      align = center center
+      gap = 11px
+      padding = 12px 18px
+    paint
+      background = #2f2f2f
+      radius = radius.md
+      ink = color.surface.base
+    text
+      size = 13.5px
+      weight = 500
+    when pointer.hover
+      paint.background = #1a1a1a
+    when pending
+      opacity = .92
+      affordance.pointer = disabled
+      ornament.spinner = true
+      ornament.icon = hidden
+
+  law auth.field
+    layout
+      mode = stack
+      gap = 5px
+      margin.bottom = 14px
+    text
+      label.size = 11.5px
+      label.weight = 600
+      label.ink = #374151
+    part input
+      layout.padding = 10px 12px
+      paint
+        background = color.surface.base
+        border = 1px solid #d1d5db
+        radius = radius.md
+        ink = color.ink.dark
+      text.size = 13px
+      when focus
+        paint.border = 1px solid color.accent.cool
+        paint.halo = 0 0 0 3px rgba(140,196,212,.2)
+
+  law goodman.simulation_row
+    layout
+      mode = row
+      align.y = center
+      gap = 7px
+      padding = 5px 7px
+    paint.radius = radius.sm
+    when pointer.hover
+      paint.background = rgba(255,255,255,.05)
+    when selected
+      paint.background = rgba(140,196,212,.15)
+
+  law goodman.status_badge
+    layout.padding = 1px 5px
+    paint.radius = 3px
+    text.size = 9px
+    text.weight = 600
+    when status.idle
+      paint.background = rgba(255,255,255,.1)
+      text.ink = color.ink.secondary
+    when status.running
+      paint.background = rgba(140,196,212,.3)
+      text.ink = #6CBDCF
+    when status.done
+      paint.background = rgba(22,163,74,.2)
+      text.ink = #86efac
+    when status.stale
+      paint.background = rgba(236,116,36,.2)
+      text.ink = #FDBA74
+    when status.stopped
+      paint.background = rgba(220,38,38,.15)
+      text.ink = #fca5a5
+
+  law surface.chart_stage
+    layout
+      grow = 1
+      mode = overlay
+      margin = 0 8px 8px
+    paint
+      background = color.surface.base
+      radius = 0 0 8px 8px
+      shadow = shadow.card
+
+  law surface.window
+    frame.min = 300px 140px
+    paint
+      background = color.surface.base
+      radius = radius.xl
+      shadow = shadow.window
+    part titlebar
+      layout
+        mode = row
+        align.y = center
+        gap = 7px
+        padding = 7px 9px
+      paint
+        background = color.chrome.bg
+        radius = 10px 10px 0 0
+      text
+        title.size = 12px
+        title.weight = 600
+        title.ink = color.ink.primary
+
+views
+  view desktop
+    root engentus
+      paint
+        background = color.chrome.bg
+        ink = color.ink.primary
+      text
+        family = font.body
+        size = font.size.app
+
+      region auth.login
+        layout
+          mode = split
+          axis = x
+          size.min.height = 100vh
+          perspective = 2200px
+
+        part book
+          layout
+            mode = split
+            axis = x
+            transform.origin = right-center
+          motion
+            transition.transform = 900ms cubic-bezier(0.77, 0, 0.175, 1)
+            transition.overlay = 900ms cubic-bezier(0.77, 0, 0.175, 1)
+
+          part hero
+            layout
+              basis = size.auth.hero.width
+              mode = stack
+              padding = 32px 40px
+            paint
+              background =
+                linear-gradient(160deg, rgba(12,20,42,0.91) 0%, rgba(36,54,90,0.86) 55%, rgba(18,28,55,0.93) 100%),
+                image("../img/main.png", cover, center)
+              overlay.grid = rgba(140,196,212,.035) @ 44px 44px
+
+            part brand
+              layout
+                mode = row
+                align.y = center
+                gap = 10px
+              part divider
+                frame = 1px 20px
+                paint.fill = rgba(140,196,212,.35)
+
+            part body
+              layout
+                grow = 1
+                mode = stack
+                align.y = center
+                padding.x = 8px
+              text
+                hero.size = font.size.auth.hero
+                hero.weight = 700
+                hero.line = 1.22
+                copy.size = 13px
+                copy.line = 1.65
+                copy.ink = rgba(148,163,184,.85)
+              part bullets
+                layout
+                  mode = stack
+                  gap = 12px
+                part item
+                  layout
+                    mode = row
+                    align.y = center
+                    gap = 11px
+                  text
+                    size = 12.5px
+                    ink = rgba(241,245,249,.78)
+                part dot
+                  frame = 6px 6px
+                  paint
+                    fill = color.accent.cool
+                    radius = radius.pill
+                    halo = 0 0 0 3px rgba(140,196,212,.18)
+
+            part footer
+              text
+                size = 10px
+                ink = rgba(148,163,184,.45)
+
+          part form_panel
+            layout
+              grow = 1
+              mode = center
+              padding = 40px 36px
+            paint.background = color.surface.soft
+
+            part form
+              layout
+                width = 100%
+                width.max = size.auth.card.width
+                mode = stack
+              text
+                title.size = font.size.auth.title
+                title.weight = 700
+                title.ink = color.ink.dark
+                copy.size = 12px
+                copy.ink = #64748b
+
+              part microsoft_signin
+                uses auth.button.microsoft
+
+              part divider
+                layout
+                  mode = row
+                  align.y = center
+                  gap = 12px
+                part line
+                  grow = 1
+                  frame.height = 1px
+                  paint.fill = #e2e8f0
+                part label
+                  text
+                    size = 11px
+                    ink = #94a3b8
+
+              part email
+                uses auth.field
+              part password
+                uses auth.field
+                layout.positioning = relative
+                part toggle
+                  placement.anchor = right-center
+                  placement.offset = 10px 0
+                  text
+                    size = 14px
+                    ink = #94a3b8
+                  when pointer.hover
+                    text.ink = #475569
+
+              part forgot_password
+                layout
+                  align.x = right
+                  margin.top = -8px
+                  margin.bottom = 20px
+                text
+                  size = 11px
+                  ink = color.accent.cool.strong
+
+              part submit
+                uses auth.button.primary
+
+              part legal
+                layout.margin.top = 22px
+                text
+                  size = 10.5px
+                  ink = #94a3b8
+                  align = center
+
+        when transition.folding
+          part book
+            motion.transform = rotateY(-90deg)
+            paint.shadow.overlay = linear-gradient(to left, rgba(0,0,0,.6) 0%, rgba(0,0,0,.15) 18%, transparent 45%)
+
+        when transition.incoming
+          part book
+            motion.transform.start = rotateY(90deg)
+            motion.transform.end = rotateY(0deg)
+
+      region auth.signout
+        uses auth.login
+        part book
+          layout.transform.origin = left-center
+          paint.shadow.overlay = linear-gradient(to right, rgba(0,0,0,.6) 0%, rgba(0,0,0,.15) 18%, transparent 45%)
+        part form
+          part signout_icon
+            frame = 54px 54px
+            paint
+              background = color.success
+              radius = radius.pill
+              ink = color.surface.base
+          break centered_copy
+            text.title.align = center
+            text.copy.align = center
+
+      region chrome.toolbar
+        uses chrome.toolbar
+
+        part brand
+          layout
+            width.min = size.sidebar.width
+            height = fill
+            mode = row
+            align.y = center
+            gap = 8px
+            padding.x = 14px
+          paint.border.right = 1px solid color.chrome.edge
+          text.tracking = -.02em
+          when pointer.hover + clickable
+            paint.background = rgba(255,255,255,.05)
+
+        part divider
+          frame = 1px 24px
+          paint.fill = color.chrome.edge
+
+        part tools
+          layout.grow = 1
+
+        part mode_switch
+          layout
+            mode = row
+            gap = 2px
+            padding = 2px
+          paint
+            background = color.chrome.panel
+            radius = radius.md
+          part option
+            layout.padding = 4px 14px
+            paint.radius = radius.sm
+            text
+              size = 12px
+              weight = 500
+              ink = color.ink.secondary
+            when selected
+              paint.background = color.accent.cool
+              text.ink = color.chrome.bg
+
+        part window_button
+          uses interactive.toolbar_button
+
+        part user_profile
+          layout
+            height = fill
+            mode = row
+            align.y = center
+            gap = 8px
+            padding.x = 14px
+          paint.border.left = 1px solid color.chrome.edge
+          when pointer.hover
+            paint.background = rgba(255,255,255,.04)
+
+          part avatar
+            frame = 28px 28px
+            paint
+              background = color.accent.cool
+              radius = radius.pill
+              ink = color.chrome.bg
+            text
+              size = 10px
+              weight = 700
+
+          part info
+            layout
+              mode = stack
+              gap = 1px
+            text
+              name.size = 11.5px
+              name.weight = 600
+              name.ink = color.ink.primary
+              role.size = 9.5px
+              role.ink = color.ink.secondary
+
+          part menu
+            layout
+              mode = stack
+              width.min = 170px
+              padding = 4px
+            placement.anchor = below-right
+            placement.offset = 0 2px
+            paint
+              background = color.chrome.panel
+              border = 1px solid color.chrome.edge
+              radius = radius.lg
+              shadow = shadow.overlay
+            when closed
+              visibility = hidden
+            when open
+              visibility = visible
+
+      region home.root
+        layout
+          mode = row
+          grow = 1
+
+        part news_panel
+          uses chrome.sidebar
+
+          part header
+            layout
+              mode = row
+              align = space-between center
+              padding = 11px 13px
+            paint.border.bottom = 1px solid color.chrome.edge
+            text
+              size = 9.5px
+              weight = 700
+              transform = uppercase
+              tracking = .08em
+              ink = color.ink.secondary
+
+          part live_badge
+            layout
+              mode = row
+              align.y = center
+              gap = 5px
+            text
+              size = 9px
+              weight = 600
+              ink = color.product
+            part dot
+              frame = 5px 5px
+              paint
+                fill = color.product
+                radius = radius.pill
+
+          part news_item
+            uses surface.news_item
+
+        part module_area
+          layout
+            grow = 1
+            mode = stack
+            gap = 18px
+            padding = 22px 24px
+
+          part header
+            layout
+              mode = stack
+              gap = 5px
+            text
+              title.size = font.size.title
+              title.weight = 700
+              title.ink = color.ink.primary
+              meta.size = 11px
+              meta.ink = color.ink.secondary
+
+          part mill_pill
+            layout
+              mode = row
+              align.y = center
+              gap = 5px
+              padding = 2px 9px
+            paint
+              background = rgba(140,196,212,.1)
+              border = 1px solid rgba(140,196,212,.22)
+              radius = radius.sm
+            text
+              size = 10px
+              weight = 600
+              ink = color.accent.cool
+
+          part module_grid
+            layout
+              mode = columns
+              count = 4
+              gap = 12px
+
+          part module_card
+            uses surface.module_card
+            part icon
+              frame = 64px 50px
+              paint.radius = radius.md
+              content.fit = cover
+            part lock
+              placement.anchor = top-right
+              placement.offset = 9px 9px
+              text
+                size = 10px
+                ink = color.ink.secondary
+              opacity = .55
+            when status.open
+              text.badge.ink = color.accent.cool
+              paint.badge.background = rgba(140,196,212,.18)
+            when status.soon
+              text.badge.ink = color.ink.secondary
+              paint.badge.background = rgba(255,255,255,.05)
+
+      region goodman.root
+        layout
+          mode = column
+          grow = 1
+
+        part body
+          layout
+            mode = row
+            grow = 1
+
+        part sidebar
+          uses chrome.sidebar
+
+          part section
+            uses chrome.section
+
+          part simulation_row
+            uses goodman.simulation_row
+
+          part status_badge
+            uses goodman.status_badge
+
+          part bolt_set_card
+            layout.mode = stack
+            paint
+              background = rgba(0,0,0,.12)
+              border = 1px solid color.chrome.edge
+              radius = radius.md
+            part header
+              layout
+                mode = row
+                align.y = center
+                gap = 8px
+                padding = 7px 9px
+              when pointer.hover
+                paint.background = rgba(255,255,255,.07)
+
+          part edit_group
+            layout
+              mode = stack
+              gap = 6px
+              padding = 8px 9px
+            paint
+              background = rgba(0,0,0,.2)
+              radius = 5px
+            text
+              title.size = 9px
+              title.weight = 700
+              title.transform = uppercase
+              title.tracking = .07em
+              title.ink = color.ink.secondary
+
+        part chart_area
+          layout
+            mode = column
+            grow = 1
+
+          part scrubber
+            layout
+              mode = row
+              align.y = center
+              gap = 9px
+              height = size.scrubber.height
+              margin = 7px 8px 0
+              padding.x = 12px
+            paint
+              background = color.chrome.panel
+              border.bottom = 1px solid color.chrome.edge
+              radius = 8px 8px 0 0
+            when hidden
+              visibility = hidden
+
+          part chart_surface
+            uses surface.chart_stage
+
+          part tooltip
+            placement.mode = floating
+            paint
+              background = rgba(15,23,42,.9)
+              radius = radius.md
+              ink = color.ink.primary
+            text
+              size = 11px
+              line = 1.7
+            when hidden
+              opacity = 0
+
+      region goodman.windows
+        layout.mode = freeform
+        placement.layer = overlay
+
+        part window
+          uses surface.window
+          part body
+            layout.grow = 1
+          part resize_handle
+            placement.anchor = bottom-right
+            frame = 16px 16px
+            paint.fill = linear-gradient(135deg, transparent 50%, #e2e8f0 50%)
+
+      region mill_charge.root
+        layout
+          mode = row
+          grow = 1
+
+        part sidebar
+          uses chrome.sidebar
+
+        part canvas_stage
+          layout
+            grow = 1
+            mode = center
+            padding = 16px
+          paint.background = color.chrome.bg
+          content.primary = canvas
+
+        part metrics_rail
+          layout
+            width = size.metrics.width
+            mode = stack
+          paint
+            background = color.chrome.panel
+            border.left = 1px solid color.chrome.edge
+
+          part header
+            layout.padding = 10px 12px
+            paint.border.bottom = 1px solid color.chrome.edge
+            text
+              size = 9.5px
+              weight = 700
+              transform = uppercase
+              tracking = .08em
+              ink = color.ink.secondary
+
+          part metric_group
+            layout
+              mode = stack
+              gap = 8px
+              padding = 8px 10px
+            paint
+              background = rgba(0,0,0,.2)
+              radius = 5px
+
+      region mill_force.root
+        layout
+          mode = row
+          grow = 1
+
+        part sidebar
+          uses chrome.sidebar
+
+        part chart_stack
+          layout
+            grow = 1
+            mode = column
+          paint.background = color.chrome.bg
+
+          part tabs
+            layout
+              mode = row
+              padding = 8px 12px
+            paint
+              background = color.chrome.panel
+              border.bottom = 1px solid color.chrome.edge
+            part tab
+              uses interactive.pill
+
+          part mode_pill
+            uses interactive.pill
+
+          part model_option
+            layout
+              mode = row
+              align.y = center
+              gap = 5px
+            text.size = 11px
+            when model.grounded
+              text.ink = color.accent.cool
+            when model.faithful
+              text.ink = color.accent.warm
+
+          part chart_host
+            layout
+              grow = 1
+              mode = overlay
+            paint.background = color.chrome.bg
+            content.layers = cross_section, force_angle, force_rose, overlay_canvas, tooltip
+
+          part result_row
+            layout
+              mode = row
+              align = space-between center
+              gap = 8px
+              padding.y = 5px
+            text
+              label.size = 11px
+              label.ink = color.ink.secondary
+              value.size = 11px
+              value.weight = 600
+              value.ink = color.ink.primary
+              delta.size = 10px
+              delta.ink = color.accent.warm
+
+  view narrow
+    region auth.login
+      part book
+        layout.axis = y
+        part hero
+          layout.basis = auto
+        part form_panel
+          layout.basis = auto
+
+    region auth.signout
+      uses auth.login
+
+    region home.root
+      layout.axis = y
+      part news_panel
+        layout.width = auto
+      part module_area
+        part module_grid
+          layout.count = 1
+
+    region goodman.root
+      part body
+        layout.axis = y
+      part sidebar
+        layout.width = auto
+
+    region mill_charge.root
+      layout.axis = y
+      part sidebar
+        layout.width = auto
+      part metrics_rail
+        layout.width = auto
+
+    region mill_force.root
+      layout.axis = y
+      part sidebar
+        layout.width = auto

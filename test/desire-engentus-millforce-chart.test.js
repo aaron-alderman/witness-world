@@ -142,6 +142,8 @@ test("MillForce model authors sidebar result readouts as active-method scalar ou
     grounded.fields.F_resultant_max_active.data,
     Math.max(...grounded.fields.F_resultant.data.map(row => row[g]))
   );
+  assert.equal(grounded.fields.phiText.data, "9.3°");
+  assert.equal(grounded.fields.phiPrimeText.data, "226.6°");
   assert.match(grounded.fields.phiText.data, /°$/);
   assert.match(grounded.fields.omegaText.data, / rad\/s$/);
   assert.match(grounded.fields.rhoChargeText.data, / SG$/);
@@ -152,6 +154,26 @@ test("MillForce model authors sidebar result readouts as active-method scalar ou
   assert.match(grounded.fields.gammaDeltaText.data, /^[+-]?\d+\.\d(?:Â°|°)$/);
   assert.match(grounded.fields.gammaDeltaPercentText.data, /^[+-]?\d+\.\d\d%$/);
   assert.match(grounded.fields.F_resultant_max_delta_text.data, /^[+-]?\d+\.\d kN$/);
+});
+
+test("MillForceCross compare mode keeps the oracle grounded shell and overlays dual model force bars", async () => {
+  const { model } = await setup();
+  const evaluated = evaluateModel(model, {
+    functions: millForceKernels,
+    params: {
+      active_method: "grounded",
+      analysis_mode: "compare"
+    }
+  });
+  const view = await loadBody("views/mill-force.rvm", "surface", "MillForceCross");
+  const plan = planChart(view, evaluated, { width: 600, height: 600 });
+
+  assert.equal(plan.layers.find(l => l.name === "liners").hidden, true);
+  assert.equal(plan.layers.find(l => l.name === "grounded_liners").hidden, undefined);
+  assert.equal(plan.layers.find(l => l.name === "faithful_force_bars").hidden, undefined);
+  assert.equal(plan.layers.find(l => l.name === "grounded_force_bars").hidden, undefined);
+  assert.equal(plan.layers.find(l => l.name === "grounded_liners").primitives[0].r0, evaluated.fields.rInner.data);
+  assert.equal(plan.layers.find(l => l.name === "grounded_liners").primitives[0].r1, evaluated.params.radius);
 });
 
 test("MillForceAngle compare mode renders grounded and faithful layer pairs", async () => {
@@ -392,7 +414,7 @@ test("MillForceCross plans per-segment annular liner bands with angular bounds +
   }
 });
 
-test("MillForceCross compare mode renders grounded and faithful annular bands", async () => {
+test("MillForceCross compare mode keeps grounded shell geometry and overlays both model bar series", async () => {
   const { model, g, f, N } = await setup();
   const evaluated = evaluateModel(model, {
     functions: millForceKernels,
@@ -406,7 +428,6 @@ test("MillForceCross compare mode renders grounded and faithful annular bands", 
 
   assert.equal(plan.layers.find(l => l.name === "liners").hidden, true);
   const grounded = plan.layers.find(l => l.name === "grounded_liners");
-  const faithful = plan.layers.find(l => l.name === "faithful_liners");
   const chargeRegion = plan.layers.find(l => l.name === "charge_region");
   const compareChargeRegion = plan.layers.find(l => l.name === "charge_region_compare");
   assert.equal(chargeRegion.hidden, true);
@@ -454,15 +475,10 @@ test("MillForceCross compare mode renders grounded and faithful annular bands", 
   assert.deepEqual(faithfulSwatch.primitives, [{ x: 490, y: 538, width: 12, height: 8, rx: 0 }]);
   assert.deepEqual(faithfulLabel.primitives, [{ x: 506, y: 545, label: "Faithful" }]);
   assert.equal(grounded.mark, "annular-wedge");
-  assert.equal(faithful.mark, "annular-wedge");
   assert.equal(grounded.primitives.length, N);
-  assert.equal(faithful.primitives.length, N);
-  assert.equal(grounded.primitives[10].r0, evaluated.fields.rCompareMid.data);
+  assert.equal(grounded.primitives[10].r0, evaluated.fields.rInner.data);
   assert.equal(grounded.primitives[10].r1, evaluated.params.radius);
   assert.equal(grounded.primitives[10].value, evaluated.fields.F_resultant.data[10][g]);
-  assert.equal(faithful.primitives[10].r0, evaluated.fields.rInner.data);
-  assert.equal(faithful.primitives[10].r1, evaluated.fields.rCompareMid.data);
-  assert.equal(faithful.primitives[10].value, evaluated.fields.F_resultant.data[10][f]);
   const groundedBars = plan.layers.find(l => l.name === "grounded_force_bars");
   const faithfulBars = plan.layers.find(l => l.name === "faithful_force_bars");
   assert.equal(groundedBars.mark, "polar-quad");
@@ -516,7 +532,7 @@ test("MillForceCross Monte Carlo mode renders authored p10/p90 radial force band
     assert.equal(typeof p10.primitives[s].tooltip.F_r_p10_N, "number");
   }
   assert.equal(plan.layers.find(l => l.name === "grounded_liners").hidden, true);
-  assert.equal(plan.layers.find(l => l.name === "faithful_liners").hidden, true);
+  assert.equal(plan.layers.find(l => l.name === "faithful_force_bars").hidden, true);
 });
 
 test("MillForceCross hides Monte Carlo overlay outside Monte Carlo mode", async () => {

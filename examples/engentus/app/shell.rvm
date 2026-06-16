@@ -269,6 +269,18 @@ state GoodmanBoltPrimaryParamsOpen: bool {
   initial false
 }
 
+state GoodmanBoltMaintenanceParamsOpen: bool {
+  initial false
+}
+
+state GoodmanBoltPrimaryEditVisible: bool {
+  initial false
+}
+
+state GoodmanBoltMaintenanceEditVisible: bool {
+  initial false
+}
+
 state GoodmanBoltPrimaryUts: number {
   initial 1040
 }
@@ -1089,9 +1101,6 @@ view EngentusSiteSummary {
 view EngentusToolbarMiddle {
   kind toolbar-region
   prop domId = "tb-goodman-tools"
-  bindings {
-    visible from state EngentusShellActiveRoute map goodman true default false
-  }
   children {
     GoodmanModesToolbar
     GoodmanWindowToolbar
@@ -1359,6 +1368,15 @@ view EngentusAppChrome {
   children {
     EngentusAppBrand
     EngentusToolbarMiddle
+    EngentusProfileSummary
+  }
+}
+
+view EngentusModuleChrome {
+  kind chrome
+  prop domId = "tb"
+  children {
+    EngentusAppBrand
     EngentusProfileSummary
   }
 }
@@ -2737,6 +2755,8 @@ view EngentusHome {
 view GoodmanModeStatic {
   kind toolbar-mode
   class mode-btn
+  prop tag = "button"
+  prop buttonType = "button"
   prop label = "Static"
   prop modeKey = "static"
   bindings {
@@ -2750,6 +2770,8 @@ view GoodmanModeStatic {
 view GoodmanModeMonteCarlo {
   kind toolbar-mode
   class mode-btn
+  prop tag = "button"
+  prop buttonType = "button"
   prop label = "Monte Carlo"
   prop modeKey = "mc"
   bindings {
@@ -2763,6 +2785,8 @@ view GoodmanModeMonteCarlo {
 view GoodmanModeEdit {
   kind toolbar-mode
   class mode-btn
+  prop tag = "button"
+  prop buttonType = "button"
   prop label = "Edit"
   prop modeKey = "edit"
   bindings {
@@ -4091,6 +4115,9 @@ view GoodmanBoltSetPrimaryEditAction {
   prop tag = "button"
   prop buttonType = "button"
   prop label = "✎"
+  interactions {
+    on click self set GoodmanBoltPrimaryEditVisible toggle
+  }
 }
 
 view GoodmanBoltSetPrimaryCloneAction {
@@ -4124,9 +4151,9 @@ view GoodmanBoltSetPrimaryChevron {
   class bs-chev
   prop tag = "button"
   prop buttonType = "button"
-  prop label = ">"
+  prop text = ">"
   bindings {
-    text from state GoodmanBoltPrimaryParamsOpen map true "v" default ">"
+    className from state GoodmanBoltPrimaryParamsOpen map true open default ""
   }
   interactions {
     on click self set GoodmanBoltPrimaryParamsOpen toggle
@@ -4206,11 +4233,18 @@ view GoodmanBoltSetPrimaryEditSaveAction {
   prop tag = "button"
   prop buttonType = "button"
   prop label = "Save"
+  interactions {
+    on click self set GoodmanBoltPrimaryEditVisible false
+  }
 }
 
 view GoodmanBoltSetPrimaryEditForm {
   kind form
-  class bs-edit-form open
+  class bs-edit-form
+  bindings {
+    className from state GoodmanBoltPrimaryEditVisible map true open default ""
+    visible from state GoodmanBoltPrimaryEditVisible
+  }
   children {
     GoodmanBoltSetPrimaryEditNameRow
     GoodmanBoltSetPrimaryEditColourRow
@@ -5322,8 +5356,6 @@ view GoodmanBoltSetPrimaryCard {
   children {
     GoodmanBoltSetPrimaryHeader
     GoodmanBoltSetPrimaryEditForm
-    GoodmanBoltSetPrimaryClampRow
-    GoodmanBoltSetDiameterRow
     GoodmanBoltSetPrimaryParams
   }
 }
@@ -5344,12 +5376,158 @@ view GoodmanBoltSetMaintenanceName {
   }
 }
 
+view GoodmanBoltSetMaintenanceEditAction {
+  kind action
+  class bs-act
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "✎"
+  interactions {
+    on click self set GoodmanBoltMaintenanceEditVisible toggle
+  }
+}
+
+view GoodmanBoltSetMaintenanceCloneAction {
+  kind action
+  class bs-act
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "⎘"
+}
+
+view GoodmanBoltSetMaintenanceDeleteAction {
+  kind action
+  class bs-act
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "✕"
+}
+
+view GoodmanBoltSetMaintenanceActions {
+  kind action-row
+  class bs-actions
+  children {
+    GoodmanBoltSetMaintenanceEditAction
+    GoodmanBoltSetMaintenanceCloneAction
+    GoodmanBoltSetMaintenanceDeleteAction
+  }
+}
+
+view GoodmanBoltSetMaintenanceChevron {
+  kind action
+  class bs-chev
+  prop tag = "button"
+  prop buttonType = "button"
+  prop text = ">"
+  bindings {
+    className from state GoodmanBoltMaintenanceParamsOpen map true open default ""
+  }
+  interactions {
+    on click self set GoodmanBoltMaintenanceParamsOpen toggle
+  }
+}
+
 view GoodmanBoltSetMaintenanceHeader {
   kind row
   class bs-head
   children {
     GoodmanBoltSetMaintenanceSwatch
     GoodmanBoltSetMaintenanceName
+    GoodmanBoltSetMaintenanceActions
+    GoodmanBoltSetMaintenanceChevron
+  }
+}
+
+view GoodmanBoltSetMaintenanceEditNameLabel {
+  kind text
+  prop tag = "label"
+  prop text = "Name"
+}
+
+view GoodmanBoltSetMaintenanceEditNameInput {
+  kind input
+  prop tag = "input"
+  prop inputType = "text"
+  prop value = "Jemtec"
+  bindings {
+    value from state GoodmanBoltMaintenanceNameState
+  }
+  interactions {
+    on input self set GoodmanBoltMaintenanceNameState eventValue
+  }
+}
+
+view GoodmanBoltSetMaintenanceEditNameRow {
+  kind row
+  class bs-ef-row
+  children {
+    GoodmanBoltSetMaintenanceEditNameLabel
+    GoodmanBoltSetMaintenanceEditNameInput
+  }
+}
+
+view GoodmanBoltSetMaintenanceEditColourLabel {
+  kind text
+  prop tag = "label"
+  prop text = "Colour"
+}
+
+view GoodmanBoltSetMaintenanceEditColourInput {
+  kind input
+  prop tag = "input"
+  prop inputType = "color"
+  prop value = "#8CC4D4"
+  bindings {
+    value from state GoodmanBoltMaintenanceColorState
+  }
+  interactions {
+    on input self set GoodmanBoltMaintenanceColorState eventValue
+  }
+}
+
+view GoodmanBoltSetMaintenanceEditColourRow {
+  kind row
+  class bs-ef-row
+  children {
+    GoodmanBoltSetMaintenanceEditColourLabel
+    GoodmanBoltSetMaintenanceEditColourInput
+  }
+}
+
+view GoodmanBoltSetMaintenanceEditSaveAction {
+  kind action
+  class bs-ef-save
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Save"
+  interactions {
+    on click self set GoodmanBoltMaintenanceEditVisible false
+  }
+}
+
+view GoodmanBoltSetMaintenanceEditForm {
+  kind form
+  class bs-edit-form
+  bindings {
+    className from state GoodmanBoltMaintenanceEditVisible map true open default ""
+    visible from state GoodmanBoltMaintenanceEditVisible
+  }
+  children {
+    GoodmanBoltSetMaintenanceEditNameRow
+    GoodmanBoltSetMaintenanceEditColourRow
+    GoodmanBoltSetMaintenanceEditSaveAction
+  }
+}
+
+view GoodmanBoltSetMaintenanceParams {
+  kind group
+  class bs-params
+  bindings {
+    className from state GoodmanBoltMaintenanceParamsOpen map true open default ""
+    visible from state GoodmanBoltMaintenanceParamsOpen
+  }
+  children {
+    GoodmanBoltSetJemtecParams
   }
 }
 
@@ -5358,7 +5536,8 @@ view GoodmanBoltSetMaintenanceCard {
   class bs-item goodman-bolt-set-card
   children {
     GoodmanBoltSetMaintenanceHeader
-    GoodmanBoltSetJemtecParams
+    GoodmanBoltSetMaintenanceEditForm
+    GoodmanBoltSetMaintenanceParams
   }
 }
 
@@ -5641,7 +5820,6 @@ view GoodmanScrubber {
   children {
     GoodmanPlayAction
     GoodmanTimeSlider
-    GoodmanTimePrefix
     GoodmanTimeLabel
     GoodmanFailureBadge
     GoodmanSpeedGroup
@@ -6891,7 +7069,7 @@ view EngentusMillChargeApp {
   prop routePath = "/engentus/mill-charge"
   prop mountMode = "mounted-panel"
   children {
-    EngentusAppChrome
+    EngentusModuleChrome
     MillChargeBody
   }
 }
@@ -8579,7 +8757,7 @@ view EngentusMillForceApp {
   prop routePath = "/engentus/mill-force"
   prop mountMode = "mounted-panel"
   children {
-    EngentusAppChrome
+    EngentusModuleChrome
     MillForceBody
   }
 }

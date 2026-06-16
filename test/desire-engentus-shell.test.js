@@ -154,6 +154,7 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(types.get("GoodmanChartAxisSize")?.body?.valueType, "number");
   assert.equal(types.get("GoodmanChartBandFill1")?.body?.valueType, "string");
   assert.equal(types.get("GoodmanBoltPrimaryParamsOpen")?.body?.valueType, "bool");
+  assert.equal(types.get("GoodmanBoltPrimaryEditVisible")?.body?.valueType, "bool");
   assert.equal(types.get("GoodmanBoltPrimaryNameState")?.body?.valueType, "string");
   assert.equal(types.get("GoodmanBoltPrimaryColorState")?.body?.valueType, "string");
   assert.equal(types.get("GoodmanBoltPrimaryUts")?.body?.valueType, "number");
@@ -236,6 +237,9 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
       action: { kind: "deliver", message: "GoodmanShowMonteCarloRequested" }
     }
   ]);
+  assert.equal(surfaces.get("GoodmanModeStatic")?.body?.props?.tag, "button");
+  assert.equal(surfaces.get("GoodmanModeMonteCarlo")?.body?.props?.tag, "button");
+  assert.equal(surfaces.get("GoodmanModeEdit")?.body?.props?.tag, "button");
   assert.deepEqual(surfaces.get("GoodmanActionCdf")?.body?.interactions, [
     {
       target: "self",
@@ -804,8 +808,6 @@ test("the shell is structured through explicit child regions instead of flattene
   assert.deepEqual(surfaces.get("GoodmanBoltSetPrimaryCard")?.body?.children, [
     "GoodmanBoltSetPrimaryHeader",
     "GoodmanBoltSetPrimaryEditForm",
-    "GoodmanBoltSetPrimaryClampRow",
-    "GoodmanBoltSetDiameterRow",
     "GoodmanBoltSetPrimaryParams"
   ]);
   assert.deepEqual(surfaces.get("GoodmanBoltSetPrimaryHeader")?.body?.children, [
@@ -821,23 +823,43 @@ test("the shell is structured through explicit child regions instead of flattene
   ]);
   assert.deepEqual(surfaces.get("GoodmanBoltSetMaintenanceCard")?.body?.children, [
     "GoodmanBoltSetMaintenanceHeader",
-    "GoodmanBoltSetJemtecParams"
+    "GoodmanBoltSetMaintenanceEditForm",
+    "GoodmanBoltSetMaintenanceParams"
   ]);
   assert.deepEqual(surfaces.get("GoodmanBoltSetMaintenanceHeader")?.body?.children, [
     "GoodmanBoltSetMaintenanceSwatch",
-    "GoodmanBoltSetMaintenanceName"
+    "GoodmanBoltSetMaintenanceName",
+    "GoodmanBoltSetMaintenanceActions",
+    "GoodmanBoltSetMaintenanceChevron"
   ]);
   assert.equal(surfaces.get("GoodmanBoltSetMaintenanceName")?.body?.props?.text, "Jemtec");
   assert.equal(surfaces.get("GoodmanBoltSetMaintenanceName")?.body?.bindings?.[0]?.source?.state, "GoodmanBoltMaintenanceNameState");
   assert.equal(surfaces.get("GoodmanBoltSetMaintenanceSwatch")?.body?.props?.style, "background:#8CC4D4");
+  assert.equal(surfaces.get("GoodmanBoltSetMaintenanceChevron")?.body?.interactions[0]?.action?.state, "GoodmanBoltMaintenanceParamsOpen");
+  assert.equal(surfaces.get("GoodmanBoltSetMaintenanceChevron")?.body?.bindings[0]?.prop, "className");
+  assert.equal(surfaces.get("GoodmanBoltSetMaintenanceChevron")?.body?.props?.text, ">");
+  assert.equal(surfaces.get("GoodmanBoltSetMaintenanceEditAction")?.body?.interactions[0]?.action?.state, "GoodmanBoltMaintenanceEditVisible");
+  assert.deepEqual(surfaces.get("GoodmanBoltSetMaintenanceEditForm")?.body?.children, [
+    "GoodmanBoltSetMaintenanceEditNameRow",
+    "GoodmanBoltSetMaintenanceEditColourRow",
+    "GoodmanBoltSetMaintenanceEditSaveAction"
+  ]);
+  assert.equal(surfaces.get("GoodmanBoltSetMaintenanceParams")?.body?.bindings[0]?.source?.state, "GoodmanBoltMaintenanceParamsOpen");
   assert.equal(surfaces.has("GoodmanBoltSetMaintenanceNote"), false);
   assert.equal(surfaces.get("GoodmanBoltSetPrimaryChevron")?.body?.surfaceKind, "action");
   assert.equal(surfaces.get("GoodmanBoltSetPrimaryChevron")?.body?.interactions[0]?.action?.state, "GoodmanBoltPrimaryParamsOpen");
+  assert.equal(surfaces.get("GoodmanBoltSetPrimaryChevron")?.body?.bindings[0]?.prop, "className");
+  assert.equal(surfaces.get("GoodmanBoltSetPrimaryChevron")?.body?.props?.text, ">");
+  assert.equal(surfaces.get("GoodmanBoltSetPrimaryEditAction")?.body?.interactions[0]?.action?.state, "GoodmanBoltPrimaryEditVisible");
   assert.deepEqual(surfaces.get("GoodmanBoltSetPrimaryEditForm")?.body?.children, [
     "GoodmanBoltSetPrimaryEditNameRow",
     "GoodmanBoltSetPrimaryEditColourRow",
     "GoodmanBoltSetPrimaryEditSaveAction"
   ]);
+  assert.equal(surfaces.get("GoodmanBoltSetPrimaryEditForm")?.body?.bindings[0]?.prop, "className");
+  assert.equal(surfaces.get("GoodmanBoltSetPrimaryEditForm")?.body?.bindings[0]?.source?.state, "GoodmanBoltPrimaryEditVisible");
+  assert.equal(surfaces.get("GoodmanBoltSetPrimaryEditForm")?.body?.bindings[1]?.prop, "visible");
+  assert.equal(surfaces.get("GoodmanBoltSetPrimaryEditForm")?.body?.bindings[1]?.source?.state, "GoodmanBoltPrimaryEditVisible");
   assert.deepEqual(surfaces.get("GoodmanBoltSetPrimaryParams")?.body?.children, [
     "GoodmanBoltSetRubberCategoryPreload",
     "GoodmanBoltSetRubberCategoryLoad",
@@ -940,8 +962,13 @@ test("the shell is structured through explicit child regions instead of flattene
   );
 
   assert.deepEqual(surfaces.get("EngentusMillChargeApp")?.body?.children, [
-    "EngentusAppChrome",
+    "EngentusModuleChrome",
     "MillChargeBody"
+  ]);
+
+  assert.deepEqual(surfaces.get("EngentusMillForceApp")?.body?.children, [
+    "EngentusModuleChrome",
+    "MillForceBody"
   ]);
 
   assert.deepEqual(surfaces.get("MillChargeBody")?.body?.children, [

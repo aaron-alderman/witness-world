@@ -23,6 +23,7 @@ chart GoodmanDiagram of BoltFatigue {
   prop overlayCanvasClass = "chart-page__overlay-canvas"
   prop tooltipId = "chart-tip"
   prop tooltipClass = "chart-page__tooltip chart-page__tooltip--goodman"
+  prop tooltipFormatter = "goodman_tooltip_markup"
   prop pageBackground = "#ffffff"
   bindings {
     presentation.title from state GoodmanChartTitle
@@ -110,6 +111,7 @@ chart GoodmanMCBands of BoltFatigueMC {
   prop overlayCanvasClass = "chart-page__overlay-canvas"
   prop tooltipId = "chart-tip"
   prop tooltipClass = "chart-page__tooltip chart-page__tooltip--goodman"
+  prop tooltipFormatter = "goodman_tooltip_markup"
   prop pageBackground = "#ffffff"
   bindings {
     visible from state GoodmanActiveMode map mc true default false

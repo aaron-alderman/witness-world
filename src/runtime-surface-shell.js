@@ -517,6 +517,31 @@ function renderSurfaceBody(surface, surfaces, tagName = "div", options = {}) {
     && !assetSrc
     && (tagName === "button" || tagName === "a");
   if (iconActionContent) return `${childHtml}${escapeHtml(text ?? label)}`;
+  const childTitleOnlyAction =
+    childHtml
+    && title
+    && !label
+    && !text
+    && !subtitle
+    && !body
+    && !description
+    && !category
+    && !time
+    && !status
+    && !statusLabel
+    && !name
+    && !role
+    && !initials
+    && !accent
+    && !href
+    && !backHref
+    && !brandName
+    && !productName
+    && !brandLogoSrc
+    && !productLogoSrc
+    && !assetSrc
+    && (tagName === "button" || tagName === "a");
+  if (childTitleOnlyAction) return childHtml;
   const childTextSurface =
     childHtml
     && (text || label)
@@ -672,6 +697,7 @@ function evaluateStateBinding(binding, initialState) {
   const value = stateValue(initialState, stateId);
   const map = source?.map && typeof source.map === "object" ? source.map : null;
   if (map && Object.prototype.hasOwnProperty.call(map, String(value))) return map[String(value)];
+  if (map && Object.prototype.hasOwnProperty.call(map, "default")) return map.default;
   if (Object.prototype.hasOwnProperty.call(source ?? {}, "default")) return source.default;
   return value;
 }
