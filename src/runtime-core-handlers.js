@@ -5,6 +5,7 @@ import {
 } from "./widgets.js";
 import {
   APP_REVISION_EVENTS_PATH,
+  BACKEND_REVISION_EVENTS_PATH,
   APP_SOURCE_WRITE_PATH
 } from "./app-snapshot-manager.js";
 import { runProcessGraph } from "./process-graph.js";
@@ -258,6 +259,14 @@ export function createCoreRuntimeBundleHandlers({
     return snapshotManager.injectDevClient(html, snapshotManager.getActiveSnapshot());
   };
   const revisionEventFrame = payload => `data: ${JSON.stringify(payload)}\n\n`;
+  const backendRevisionEventPayload = event => ({
+    revision: Number(event?.revision ?? event?.appRevision ?? 0),
+    branch: event?.branchId ? String(event.branchId) : null,
+    changeSet: event?.changeSetId ? String(event.changeSetId) : null,
+    trigger: String(event?.trigger || "initial"),
+    changedSources: Array.isArray(event?.changedSources) ? event.changedSources.map(String) : [],
+    status: String(event?.status || "active")
+  });
   const currentAuthoringPolicy = appContext => cloneRuntimeAuthoringPolicy(
     appContext?.runtimeAuthoringPolicy
     ?? createRuntimeAuthoringPolicy({
@@ -859,6 +868,27 @@ export function createCoreRuntimeBundleHandlers({
       res.write(revisionEventFrame(snapshotManager.getLastRevisionEvent()));
       const unsubscribe = snapshotManager.subscribe(event => {
         res.write(revisionEventFrame(event));
+      });
+      req.on("close", () => {
+        unsubscribe();
+        try { res.end(); } catch {}
+      });
+    },
+
+    "backend.revision.events": async ({ req, res, appContext }) => {
+      const snapshotManager = appContext?.appSnapshotManager ?? appSnapshotManager;
+      if (!snapshotManager) {
+        sendJson(res, 404, { error: "backend revision events unavailable" });
+        return;
+      }
+      res.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive"
+      });
+      res.write(revisionEventFrame(backendRevisionEventPayload(snapshotManager.getLastRevisionEvent())));
+      const unsubscribe = snapshotManager.subscribe(event => {
+        res.write(revisionEventFrame(backendRevisionEventPayload(event)));
       });
       req.on("close", () => {
         unsubscribe();

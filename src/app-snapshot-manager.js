@@ -17,6 +17,7 @@ import {
 const MANIFEST_ONLY_DOC_KINDS = new Set(["desktopTarget"]);
 
 export const APP_REVISION_EVENTS_PATH = "/api/runtime/app-revisions/events";
+export const BACKEND_REVISION_EVENTS_PATH = "/api/runtime/backend-revisions/events";
 export const APP_SOURCE_WRITE_PATH = "/api/runtime/app-sources";
 
 function hashContent(text) {
@@ -208,6 +209,25 @@ function debounce(fn, delayMs) {
   return wrapped;
 }
 
+function normalizeRevisionEvent({
+  revision = 0,
+  changedSources = [],
+  trigger = "initial",
+  status = "active",
+  branchId = null,
+  changeSetId = null
+} = {}) {
+  return {
+    revision: Number(revision || 0),
+    appRevision: Number(revision || 0),
+    changedSources: Array.isArray(changedSources) ? changedSources.map(String) : [],
+    trigger: String(trigger || "initial"),
+    status: String(status || "active"),
+    branchId: branchId ? String(branchId) : null,
+    changeSetId: changeSetId ? String(changeSetId) : null
+  };
+}
+
 function injectAppRevisionClient(html, { appRevision, eventsPath = APP_REVISION_EVENTS_PATH } = {}) {
   const runtime = `<script>
 (() => {
@@ -260,7 +280,12 @@ export class AppSnapshotManager {
     this.listeners = new Set();
     this.serial = Promise.resolve();
     this.watchers = [];
-    this.lastRevisionEvent = { appRevision: 0, changedSources: [], trigger: "initial" };
+    this.lastRevisionEvent = normalizeRevisionEvent({
+      revision: 0,
+      changedSources: [],
+      trigger: "initial",
+      status: "pending"
+    });
     this.watcherRoots = [];
     this.scheduleWatchRefresh = debounce(() => {
       void this.ensureFresh({ trigger: "watch" }).catch(error => {
@@ -322,28 +347,29 @@ export class AppSnapshotManager {
       buildErrors: [...this.buildErrors],
       pendingDirtySources: [...this.pendingDirtySources].map(filePath => sourceIdForPath(this.appRoot, filePath)),
       sourceCount: this.activeSnapshot?.appProject?.sourceFiles?.length ?? 0,
-      devMode: this.devMode
+      devMode: this.devMode,
+      lastRevisionEvent: this.getLastRevisionEvent()
     };
   }
 
-  async ensureFresh({ trigger = "request" } = {}) {
+  async ensureFresh({ trigger = "request", branchId = null, changeSetId = null, status = null } = {}) {
     return this.runExclusive(async () => {
       const changed = await this.detectChangedPaths();
       for (const changedPath of changed) this.pendingDirtySources.add(changedPath);
       if (!this.pendingDirtySources.size) return this.activeSnapshot;
-      return this.consumeDirtyAndRebuild(trigger);
+      return this.consumeDirtyAndRebuild(trigger, { branchId, changeSetId, status });
     });
   }
 
-  async markDirtyPaths(paths = [], { trigger = "manual" } = {}) {
+  async markDirtyPaths(paths = [], { trigger = "manual", branchId = null, changeSetId = null, status = null } = {}) {
     return this.runExclusive(async () => {
       for (const filePath of uniquePaths(paths)) this.pendingDirtySources.add(filePath);
       if (!this.pendingDirtySources.size) return this.activeSnapshot;
-      return this.consumeDirtyAndRebuild(trigger);
+      return this.consumeDirtyAndRebuild(trigger, { branchId, changeSetId, status });
     });
   }
 
-  async applySourceEdits(edits = [], { persist = true, trigger = "post" } = {}) {
+  async applySourceEdits(edits = [], { persist = true, trigger = "post", branchId = null, changeSetId = null, status = null } = {}) {
     return this.runExclusive(async () => {
       if (!Array.isArray(edits) || !edits.length) {
         return { ok: false, appRevision: this.appRevision, buildErrors: [{ message: "edits are required", stack: "", code: "APP_SOURCE_EDITS_REQUIRED" }] };
@@ -369,7 +395,7 @@ export class AppSnapshotManager {
         }
       }
       for (const edit of resolvedEdits) this.pendingDirtySources.add(edit.path);
-      const snapshot = await this.consumeDirtyAndRebuild(trigger);
+      const snapshot = await this.consumeDirtyAndRebuild(trigger, { branchId, changeSetId, status });
       return {
         ok: this.buildErrors.length === 0,
         appRevision: snapshot?.appRevision ?? this.appRevision,
@@ -419,7 +445,7 @@ export class AppSnapshotManager {
     return new Set(checks.filter(Boolean));
   }
 
-  async consumeDirtyAndRebuild(trigger) {
+  async consumeDirtyAndRebuild(trigger, eventMeta = {}) {
     const dirtyPaths = [...this.pendingDirtySources];
     if (!dirtyPaths.length) return this.activeSnapshot;
     this.pendingDirtySources.clear();
@@ -427,7 +453,8 @@ export class AppSnapshotManager {
       return await this.rebuildFromProject({
         appProject: await loadAppProject(this.manifestPath),
         dirtyPaths,
-        trigger
+        trigger,
+        eventMeta
       });
     } catch (error) {
       this.buildErrors = [normalizeBuildError(error)];
@@ -437,7 +464,7 @@ export class AppSnapshotManager {
     }
   }
 
-  async rebuildFromProject({ appProject, dirtyPaths = [], trigger = "rebuild" } = {}) {
+  async rebuildFromProject({ appProject, dirtyPaths = [], trigger = "rebuild", eventMeta = {} } = {}) {
     const dependencyGraph = createDependencyGraph(appProject);
     const currentDescriptors = new Map();
     for (const source of appProject.sourceFiles ?? []) {
@@ -497,11 +524,14 @@ export class AppSnapshotManager {
     };
     this.buildErrors = [];
     const changedSources = [...dirtyClosure].map(filePath => sourceIdForPath(this.appRoot, filePath)).sort();
-    this.lastRevisionEvent = {
-      appRevision: this.appRevision,
+    this.lastRevisionEvent = normalizeRevisionEvent({
+      revision: this.appRevision,
       changedSources,
-      trigger
-    };
+      trigger,
+      status: eventMeta?.status ?? "active",
+      branchId: eventMeta?.branchId ?? null,
+      changeSetId: eventMeta?.changeSetId ?? null
+    });
     for (const listener of this.listeners) listener(this.getLastRevisionEvent());
     this.refreshWatchRoots();
     return this.activeSnapshot;

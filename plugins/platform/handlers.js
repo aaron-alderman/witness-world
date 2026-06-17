@@ -55,9 +55,13 @@ function diagnosticsFromAppContext(appContext) {
             : [],
           lastRevisionEvent: lastRevisionEvent
             ? {
+                revision: Number(lastRevisionEvent.revision || lastRevisionEvent.appRevision || 0),
                 appRevision: Number(lastRevisionEvent.appRevision || 0),
                 changedSources: Array.isArray(lastRevisionEvent.changedSources) ? lastRevisionEvent.changedSources.map(String) : [],
-                trigger: String(lastRevisionEvent.trigger || "initial")
+                trigger: String(lastRevisionEvent.trigger || "initial"),
+                status: String(lastRevisionEvent.status || "active"),
+                branchId: lastRevisionEvent.branchId ? String(lastRevisionEvent.branchId) : null,
+                changeSetId: lastRevisionEvent.changeSetId ? String(lastRevisionEvent.changeSetId) : null
               }
             : null
         }
@@ -81,7 +85,7 @@ function appSnapshotRoots(snapshotManager) {
   ];
 }
 
-async function refreshSnapshotAfterPlatformApply(snapshotManager, appliedFiles = []) {
+async function refreshSnapshotAfterPlatformApply(snapshotManager, appliedFiles = [], eventMeta = {}) {
   if (!snapshotManager || !Array.isArray(appliedFiles) || !appliedFiles.length) {
     return { touchedRuntime: false, changedPaths: [], diagnostics: null, revisionEvent: null, refreshError: null };
   }
@@ -94,7 +98,12 @@ async function refreshSnapshotAfterPlatformApply(snapshotManager, appliedFiles =
     return { touchedRuntime: false, changedPaths: [], diagnostics: null, revisionEvent: null, refreshError: null };
   }
   try {
-    await snapshotManager.markDirtyPaths(changedPaths, { trigger: "platform-change-set-apply" });
+    await snapshotManager.markDirtyPaths(changedPaths, {
+      trigger: "platform-change-set-apply",
+      branchId: eventMeta?.branchId ?? null,
+      changeSetId: eventMeta?.changeSetId ?? null,
+      status: "active"
+    });
     return {
       touchedRuntime: true,
       changedPaths,
@@ -338,7 +347,11 @@ export function createPlatformHandlers({
       }
       const snapshotRefresh = await refreshSnapshotAfterPlatformApply(
         appContext?.appSnapshotManager ?? null,
-        result.appliedFiles ?? []
+        result.appliedFiles ?? [],
+        {
+          branchId: result.changeSet?.branchId ?? null,
+          changeSetId: result.changeSet?.id ?? null
+        }
       );
       sendJson(res, result.status, {
         changeSet: result.changeSet,

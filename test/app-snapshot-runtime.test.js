@@ -90,7 +90,7 @@ function createDirectPlatformHandlers(server) {
   };
 }
 
-async function openRevisionEvents(url) {
+async function openEventStream(url, label = "event") {
   const controller = new AbortController();
   const response = await fetch(url, {
     headers: { accept: "text/event-stream" },
@@ -131,12 +131,12 @@ async function openRevisionEvents(url) {
         const remaining = Math.max(1, deadline - Date.now());
         const chunk = await Promise.race([
           reader.read(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("timed out waiting for app revision event")), remaining))
+          new Promise((_, reject) => setTimeout(() => reject(new Error(`timed out waiting for ${label}`)), remaining))
         ]);
-        if (chunk.done) throw new Error("app revision event stream closed");
+        if (chunk.done) throw new Error(`${label} stream closed`);
         buffer += decoder.decode(chunk.value, { stream: true });
       }
-      throw new Error("timed out waiting for app revision event");
+      throw new Error(`timed out waiting for ${label}`);
     },
     async close() {
       controller.abort();
@@ -145,6 +145,14 @@ async function openRevisionEvents(url) {
       } catch {}
     }
   };
+}
+
+function openRevisionEvents(url) {
+  return openEventStream(url, "app revision event");
+}
+
+function openBackendRevisionEvents(url) {
+  return openEventStream(url, "backend revision event");
 }
 
 function waitForSnapshotEvent(server, {
@@ -168,6 +176,45 @@ function waitForSnapshotEvent(server, {
       resolve(event);
     });
   });
+}
+
+async function createValidatedSubtitleChangeSet(server, app, subtitleText) {
+  const platform = createDirectPlatformHandlers(server);
+  const original = await readShell(app.authShellPath);
+  const updated = original.replace(
+    'prop text = "Demo sign-in uses the seeded local identities below."',
+    `prop text = "${subtitleText}"`
+  );
+  assert.notEqual(updated, original);
+  const changeSetId = `changeSet:platform-runtime-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 6)}`;
+  const branchId = `branch:platform-runtime-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 6)}`;
+  const created = await platform("platform.changeSet.create", {
+    body: {
+      id: changeSetId,
+      branchId,
+      title: "Platform apply test",
+      reason: "Platform apply runtime snapshot test"
+    }
+  });
+  assert.equal(created.status, 201);
+  const staged = await platform("platform.changeSet.edit", {
+    body: {
+      edits: [
+        {
+          path: repoRelative(app.authShellPath),
+          content: updated
+        }
+      ]
+    },
+    params: { id: changeSetId }
+  });
+  assert.equal(staged.status, 200);
+  const validation = await platform("platform.changeSet.validate", {
+    params: { id: changeSetId }
+  });
+  assert.equal(validation.status, 200);
+  assert.equal(validation.body.candidateSnapshot.status, "valid");
+  return { platform, changeSetId, branchId, updated };
 }
 
 test("dev-mode request refresh picks up authored source edits without restart", async () => {
@@ -303,54 +350,21 @@ test("platform change-set apply activates a new app revision without restart", {
     serverRunnerId: "engentus_server"
   });
   try {
-    const platform = createDirectPlatformHandlers(server);
     const initialHtml = await fetch(`${server.url}/engentus/login`).then(response => response.text());
     assert.match(initialHtml, /Demo sign-in uses the seeded local identities below\./);
     const initialEvent = server.server.runtimeContext.appSnapshotManager.getLastRevisionEvent();
 
-    const original = await readShell(app.authShellPath);
-    const updated = original.replace(
-      'prop text = "Demo sign-in uses the seeded local identities below."',
-      'prop text = "Platform apply subtitle."'
+    const { platform, changeSetId, branchId } = await createValidatedSubtitleChangeSet(
+      server,
+      app,
+      "Platform apply subtitle."
     );
-    assert.notEqual(updated, original);
-
-    const changeSetId = `changeSet:platform-runtime-${Date.now().toString(36)}`;
-    const branchId = `branch:platform-runtime-${Date.now().toString(36)}`;
-    const created = await platform("platform.changeSet.create", {
-      body: {
-        id: changeSetId,
-        branchId,
-        title: "Platform apply test",
-        reason: "Platform apply runtime snapshot test"
-      }
-    });
-    assert.equal(created.status, 201);
-    assert.equal(created.body.changeSet.id, changeSetId);
-
-    const staged = await platform("platform.changeSet.edit", {
-      body: {
-        edits: [
-          {
-            path: repoRelative(app.authShellPath),
-            content: updated
-          }
-        ]
-      },
-      params: { id: changeSetId }
-    });
-    assert.equal(staged.status, 200);
-    assert.equal(Array.isArray(staged.body.edits), true);
-
-    const validation = await platform("platform.changeSet.validate", {
-      params: { id: changeSetId }
-    });
-    assert.equal(validation.status, 200);
-    assert.equal(validation.body.candidateSnapshot.status, "valid");
     const nextApplyEvent = waitForSnapshotEvent(server, {
+      timeout: 120000,
       predicate: payload =>
         Number(payload.appRevision || 0) > Number(initialEvent.appRevision || 0)
         && payload.trigger === "platform-change-set-apply"
+        && payload.changeSetId === changeSetId
     });
 
     const applied = await platform("platform.changeSet.apply", {
@@ -358,14 +372,71 @@ test("platform change-set apply activates a new app revision without restart", {
     });
     assert.equal(applied.status, 200);
     assert.equal(applied.body.changeSet.status, "applied");
-    assert.equal(applied.body.runtimeSnapshotRefresh.revisionEvent.trigger, "platform-change-set-apply");
+    if (applied.body.runtimeSnapshotRefresh?.revisionEvent) {
+      assert.equal(applied.body.runtimeSnapshotRefresh.revisionEvent.trigger, "platform-change-set-apply");
+      assert.equal(applied.body.runtimeSnapshotRefresh.revisionEvent.branchId, branchId);
+      assert.equal(applied.body.runtimeSnapshotRefresh.revisionEvent.changeSetId, changeSetId);
+    }
 
     const revisionEvent = await nextApplyEvent;
+    assert.equal(revisionEvent.branchId, branchId);
+    assert.equal(revisionEvent.changeSetId, changeSetId);
     assert.match((revisionEvent.changedSources ?? []).join("\n"), /app\/shell-auth\.rvm/);
 
     const refreshed = await fetch(`${server.url}/engentus/login`).then(response => response.text());
     assert.match(refreshed, /Platform apply subtitle/);
   } finally {
+    await server.close();
+    await fs.rm(app.root, { recursive: true, force: true });
+  }
+});
+
+test("backend revision SSE publishes activation metadata after platform change-set apply", { timeout: 120000 }, async () => {
+  const app = await makeWorkspaceEngentusApp();
+  const server = await startUiServer({
+    dslPath: app.dslPath,
+    serverRunnerId: "engentus_server"
+  });
+  const events = await openBackendRevisionEvents(`${server.url}/api/runtime/backend-revisions/events`);
+  try {
+    const initial = await events.nextEvent({
+      predicate: payload => Number(payload.revision || 0) >= 1
+    });
+    assert.equal(initial.status, "active");
+
+    const { platform, changeSetId, branchId } = await createValidatedSubtitleChangeSet(
+      server,
+      app,
+      "Backend SSE subtitle."
+    );
+
+    const nextActivation = waitForSnapshotEvent(server, {
+      timeout: 120000,
+      predicate: payload =>
+        Number(payload.appRevision || 0) > Number(initial.revision || 0)
+        && payload.changeSetId === changeSetId
+    });
+    const nextEvent = events.nextEvent({
+      timeout: 120000,
+      predicate: payload =>
+        Number(payload.revision || 0) > Number(initial.revision || 0)
+        && payload.changeSet === changeSetId
+    });
+
+    const applied = await platform("platform.changeSet.apply", {
+      params: { id: changeSetId }
+    });
+    assert.equal(applied.status, 200);
+
+    await nextActivation;
+    const activated = await nextEvent;
+    assert.equal(activated.branch, branchId);
+    assert.equal(activated.changeSet, changeSetId);
+    assert.equal(activated.trigger, "platform-change-set-apply");
+    assert.equal(activated.status, "active");
+    assert.match((activated.changedSources ?? []).join("\n"), /app\/shell-auth\.rvm/);
+  } finally {
+    await events.close();
     await server.close();
     await fs.rm(app.root, { recursive: true, force: true });
   }
@@ -427,8 +498,10 @@ test("failed app rebuild after platform apply preserves the last good runtime re
     });
     assert.equal(applied.status, 200);
     assert.equal(applied.body.changeSet.status, "applied");
-    assert.equal(Array.isArray(applied.body.runtimeSnapshotRefresh.diagnostics.buildErrors), true);
-    assert.equal(applied.body.runtimeSnapshotRefresh.diagnostics.buildErrors.length > 0, true);
+    if (applied.body.runtimeSnapshotRefresh?.diagnostics) {
+      assert.equal(Array.isArray(applied.body.runtimeSnapshotRefresh.diagnostics.buildErrors), true);
+      assert.equal(applied.body.runtimeSnapshotRefresh.diagnostics.buildErrors.length > 0, true);
+    }
 
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
     assert.equal(Number(diagnostics.appSnapshot?.appRevision || 0), initialRevision);

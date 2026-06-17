@@ -58,8 +58,13 @@ test("core runtime bundle exposes authority grant routes and metadata", () => {
     handler: "authority.grants.revoke",
     params: { grantId: "identity.aaron=>callan" }
   });
+  assert.deepEqual(matchRuntimeBundleRoute("minimal", "GET", "/api/runtime/backend-revisions/events"), {
+    handler: "backend.revision.events",
+    params: {}
+  });
   assert.equal(summary.handlerMetadata["authority.grants.read"].routeKind, "json");
   assert.deepEqual(summary.handlerMetadata["authority.grants.revoke"].methods, ["DELETE"]);
+  assert.deepEqual(summary.handlerMetadata["backend.revision.events"].methods, ["GET"]);
 });
 
 test("active bundle handler composition filters inactive implementations and reports drift", async () => {

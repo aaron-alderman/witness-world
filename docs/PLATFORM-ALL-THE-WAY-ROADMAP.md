@@ -419,7 +419,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add projector `candidateSnapshotsByBranch`.
 - [X] Expose snapshot diagnostics in `/api/platform-model`.
 - [X] Show active, candidate, last-good, and failed snapshots in `/platform`.
-- [L] Current runtime-revision modeling is diagnostics-backed: `/api/platform-model`, `/platform`, and MCP now expose the active `AppSnapshotManager` backend revision plus snapshot-build summaries, but request-time activation/swap semantics are still not implemented.
+- [L] Current runtime-revision modeling is diagnostics-backed: `/api/platform-model`, `/platform`, and MCP expose the active `AppSnapshotManager` backend revision plus snapshot-build summaries, and authored-source activation now reuses the live snapshot manager for new requests. In-flight revision pinning and the dedicated Platform Console backend-revision stream remain separate follow-on work.
 
 ### 2.2 RVM/WTOML Backend Reload
 
@@ -429,15 +429,16 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Ensure in-flight requests hold a reference to their starting runtime context.
 - [X] Ensure new requests see latest active valid runtime revision.
 - [X] Ensure failed rebuild leaves active runtime unchanged.
-- [ ] Add backend revision SSE:
-  - [ ] `GET /api/runtime/backend-revisions/events`
-  - [ ] event fields: revision, branch, changeSet, trigger, changedSources, status
+- [X] Add backend revision SSE:
+  - [X] `GET /api/runtime/backend-revisions/events`
+  - [X] event fields: revision, branch, changeSet, trigger, changedSources, status
 - [ ] Add Platform Console backend revision stream.
 - [X] Add MCP read view `platform.read { view: "runtimeRevisions" }`.
 - [X] Add tests for RVM route/process changes changing backend behavior without process restart.
 - [ ] Add tests for invalid RVM preserving last good backend behavior.
-- [ ] Add tests for SSE event after backend candidate activation.
-- [L] Current activation path is `platform.changeSet.apply` -> `AppSnapshotManager.markDirtyPaths(...)` for applied files inside the active app roots, so new requests pick up a rebuilt authored runtime revision without restarting the server while failed rebuilds retain the last good snapshot. The dedicated backend-revision SSE surface remains later work.
+- [X] Add tests for SSE event after backend candidate activation.
+- [L] Current activation path is `platform.changeSet.apply` -> `AppSnapshotManager.markDirtyPaths(...)` for applied files inside the active app roots, so new requests pick up a rebuilt authored runtime revision without restarting the server while failed rebuilds retain the last good snapshot. The runtime now emits backend revision SSE, but the dedicated Platform Console revision stream/view remains later work.
+- [L] Unexpected current behavior: broad malformed RVM text often compiles into tolerated residual forms instead of failing the snapshot build, so the open invalid-RVM regression still needs a narrow authored specimen that deterministically trips rebuild failure rather than silently lowering through the compiler.
 
 ### 2.3 JS Plugin Reload Strategy
 
@@ -1223,7 +1224,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Build candidate snapshots from change-set overlays.
 - [X] Route new requests to active valid runtime revision.
 - [ ] Preserve in-flight revision references.
-- [ ] Add backend revision events.
+- [X] Add backend revision events.
 - [ ] Add runtime revision view.
 - [X] Add tests for backend behavior changing from RVM without process restart.
 - [X] Add tests for failed candidate preserving old behavior.
