@@ -423,21 +423,33 @@ test("runtime plugin reviews show executable composition deltas and metadata-onl
       displayName: "Practical Backend Meta",
       description: "Backend meta package",
       kind: "plugin",
-      dependsOnPlugins: ["plugin.sqlite", "plugin.jobs", "plugin.search", "plugin.notifications", "plugin.webhooks", "plugin.http-outbound", "plugin.oauth", "plugin.runtime-config", "plugin.backend-seams", "plugin.fs-json", "plugin.fs-blob", "plugin.fs-stream", "plugin.assets"],
+      dependsOnPlugins: ["plugin.secret", "plugin.sql", "plugin.jobs", "plugin.search", "plugin.notifications", "plugin.webhooks", "plugin.http-outbound", "plugin.oauth", "plugin.runtime-config", "plugin.backend-seams", "plugin.fs-json", "plugin.fs-blob", "plugin.fs-stream", "plugin.assets"],
       contributes: {
-        capabilities: [{ id: "db.sql" }],
+        capabilities: [{ id: "secret.store" }, { id: "db.sql" }],
         routes: [{ path: "/declared-backend", handler: "backendProgram.run" }],
         surfaces: [{ id: "surface:declared-backend", title: "Declared Backend" }],
         providers: [{ id: "provider.backend", kind: "meta-package" }]
       }
     });
-    await writePlugin(root, "sqlite", {
-      id: "plugin.sqlite",
+    await writePlugin(root, "secret", {
+      id: "plugin.secret",
       version: "0.2.0",
-      displayName: "SQLite",
-      description: "SQLite DB SQL",
+      displayName: "Secrets",
+      description: "Runner secrets",
       kind: "plugin",
-      activatesBundles: ["bundle-sqlite"],
+      activatesBundles: ["bundle-secret"],
+      contributes: {
+        capabilities: [{ id: "secret.store" }]
+      }
+    });
+    await writePlugin(root, "sql", {
+      id: "plugin.sql",
+      version: "0.2.0",
+      displayName: "SQL",
+      description: "Generic DB SQL",
+      kind: "plugin",
+      dependsOnPlugins: ["plugin.secret"],
+      activatesBundles: ["bundle-sql"],
       contributes: {
         capabilities: [{ id: "db.sql" }]
       }
@@ -623,7 +635,8 @@ test("runtime plugin reviews show executable composition deltas and metadata-onl
     assert.ok(notes);
     assert.equal(backend.installPreview?.available, true);
     assert.equal(backend.execution.mode, "meta-package");
-    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-sqlite"), true);
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-secret"), true);
+    assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-sql"), true);
     assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-jobs"), true);
     assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-search"), true);
     assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-notifications"), true);
@@ -637,6 +650,7 @@ test("runtime plugin reviews show executable composition deltas and metadata-onl
     assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-fs-stream"), true);
     assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-assets"), true);
     assert.equal(backend.installPreview?.delta.addedBundleIds.includes("bundle-practical-backend"), false);
+    assert.equal(backend.declaredManifestContributions.capabilities.some(row => row.id === "secret.store"), true);
     assert.equal(backend.declaredManifestContributions.capabilities.some(row => row.id === "db.sql"), true);
     assert.deepEqual(backend.installPreview?.delta.addedCapabilityIds, []);
     assert.deepEqual(backend.installPreview?.delta.addedRoutes, []);

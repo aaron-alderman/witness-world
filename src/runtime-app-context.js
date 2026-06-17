@@ -124,6 +124,7 @@ export async function createRuntimeAppContext({
   );
   const providerRuntimeFactories = runtimeContributions?.providerRuntimeFactories ?? {};
   const jobsFactory = providerRuntimeFactories["jobs.queue"];
+  const secretStoreFactory = providerRuntimeFactories["secret.store"];
   const dbSqlFactory = providerRuntimeFactories["db.sql"];
   const searchIndexFactory = providerRuntimeFactories["search.index"];
   const jobHandlers = { ...pluginJobHandlers, ...(appContext.jobHandlers ?? {}) };
@@ -140,11 +141,26 @@ export async function createRuntimeAppContext({
         jobHandlers,
         close() {}
       };
-  appContext.dbSql = typeof dbSqlFactory === "function"
-    ? dbSqlFactory({
+  appContext.secretStore = typeof secretStoreFactory === "function"
+    ? secretStoreFactory({
+        world,
+        project,
         runtimeConfig: appContext.runtimeConfig,
         runtimeRoot,
-        serverRunnerId: serverRunner.id
+        storage,
+        serverRunnerId: serverRunner.id,
+        getAppContext: () => contextRef
+      })
+    : null;
+  appContext.dbSql = typeof dbSqlFactory === "function"
+    ? dbSqlFactory({
+        world,
+        project,
+        runtimeConfig: appContext.runtimeConfig,
+        runtimeRoot,
+        storage,
+        serverRunnerId: serverRunner.id,
+        getAppContext: () => contextRef
       })
     : null;
   appContext.searchIndex = typeof searchIndexFactory === "function"
@@ -164,6 +180,7 @@ export async function createRuntimeAppContext({
   appContext.httpOutboundStubState = new Map();
   appContext.close = () => {
     appContext.jobs?.close?.();
+    appContext.secretStore?.close?.();
     appContext.dbSql?.close?.();
     appContext.searchIndex?.close?.();
   };

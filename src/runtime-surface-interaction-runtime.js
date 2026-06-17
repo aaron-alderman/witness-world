@@ -1,5 +1,6 @@
 import { renderProcessRuntimeModuleSource } from "./desire/process-eval.js";
 import { surfaceDomId } from "./runtime-surface-dom-identity.js";
+import { renderSurfaceStaticFragment } from "./runtime-surface-shell.js";
 
 const processWitnessCatalogCache = new WeakMap();
 
@@ -500,7 +501,9 @@ export function buildSurfaceRuntimeManifest({
   rootSurfaceId = null,
   requestPathname = "/",
   describeSurfaceRuntimeViewImpl = null,
-  routeStateDescriptor = null
+  routeStateDescriptor = null,
+  surfaceRenderers = [],
+  initialState = null
 }) {
   const rootId = rootSurfaceId ?? root?.id ?? activeSurface.id;
   const parentById = new Map();
@@ -565,7 +568,14 @@ export function buildSurfaceRuntimeManifest({
       surfaceKind: surface.surfaceKind ?? null,
       props: normalizeRuntimeObject(surface.props),
       runtime,
-      view
+      view,
+      fragmentHtml: runtime.bindings.some(binding => trimString(binding?.prop) === "visible")
+        ? renderSurfaceStaticFragment(surfaces, surface.id, {
+            surfaceRenderers,
+            initialState,
+            forceVisibleSurfaceIds: [surface.id]
+          })
+        : null
     });
   }
   const interactive = surfaceEntries.some(entry => entry.runtime.processRef || entry.runtime.bindings.length || entry.runtime.interactions.length);
@@ -669,6 +679,19 @@ function readCapabilityOutput(source, capabilityOutputs = {}) {
   const output = trimString(source?.output);
   if (!surfaceId || !output) return undefined;
   return capabilityOutputs[surfaceId]?.[output];
+}
+
+function collectCapabilityOutputsFromDom(document) {
+  const outputs = {};
+  const nodes = typeof document?.querySelectorAll === "function"
+    ? document.querySelectorAll("[data-surface-id]")
+    : [];
+  for (const node of nodes ?? []) {
+    const surfaceId = trimString(node.getAttribute?.("data-surface-id"));
+    if (!surfaceId || !node.__surfaceCapabilityOutputs) continue;
+    outputs[surfaceId] = node.__surfaceCapabilityOutputs;
+  }
+  return outputs;
 }
 
 function readBindingSource(source, processRuntime, capabilityOutputs = {}) {
@@ -872,6 +895,51 @@ function parseFirstElement(document, html) {
   if (!template?.content) return null;
   template.innerHTML = html.trim();
   return template.content.firstElementChild;
+}
+
+function nextPresentSiblingRoot(document, surfaceById, parentSurface, surfaceId) {
+  const children = Array.isArray(parentSurface?.children) ? parentSurface.children : [];
+  const currentIndex = children.findIndex(childId => trimString(childId) === surfaceId);
+  if (currentIndex < 0) return null;
+  for (let index = currentIndex + 1; index < children.length; index += 1) {
+    const sibling = surfaceById.get(trimString(children[index]));
+    const siblingRootId = trimString(sibling?.view?.rootId);
+    const siblingNode = siblingRootId ? document?.getElementById?.(siblingRootId) : null;
+    if (siblingNode) return siblingNode;
+  }
+  return null;
+}
+
+function materializeMissingVisibleSurface(document, surfaceById, surface) {
+  const fragmentHtml = trimString(surface?.fragmentHtml);
+  if (!fragmentHtml) return null;
+  let parentSurface = null;
+  let parentId = trimString(surface?.parentId);
+  while (parentId) {
+    const candidate = surfaceById.get(parentId) || null;
+    if (candidate && surfaceIsPresentInDom(document, candidate)) {
+      parentSurface = candidate;
+      break;
+    }
+    parentId = trimString(candidate?.parentId);
+  }
+  const parentRootId = trimString(parentSurface?.view?.rootId);
+  const parentRoot = parentRootId ? document?.getElementById?.(parentRootId) : null;
+  if (!parentRoot) return null;
+  const nextRoot = parseFirstElement(document, fragmentHtml);
+  if (!nextRoot) return null;
+  const beforeNode = nextPresentSiblingRoot(document, surfaceById, parentSurface, surface.id);
+  if (beforeNode && beforeNode.parentNode === parentRoot) parentRoot.insertBefore(nextRoot, beforeNode);
+  else parentRoot.appendChild(nextRoot);
+  return nextRoot;
+}
+
+function dematerializeHiddenSurface(document, surface) {
+  const rootId = trimString(surface?.view?.rootId);
+  const node = rootId ? document?.getElementById?.(rootId) : null;
+  if (!node?.parentNode || typeof node.parentNode.removeChild !== "function") return false;
+  node.parentNode.removeChild(node);
+  return true;
 }
 
 function supportsSameDocumentRouteReplacement(document, window) {
@@ -1744,6 +1812,23 @@ function surfaceIsPresentInDom(document, surface) {
   return surfaceViewNodeIds(surface).some(id => Boolean(document?.getElementById?.(id)));
 }
 
+function surfaceParentId(surface) {
+  return trimString(surface?.parentId);
+}
+
+function surfaceHasVisibleBinding(surface) {
+  return Array.isArray(surface?.runtime?.bindings)
+    ? surface.runtime.bindings.some(binding => trimString(binding?.prop) === "visible")
+    : false;
+}
+
+function surfaceExpectedVisible(surface, processRuntime, capabilityOutputs = {}) {
+  if (!surfaceHasVisibleBinding(surface)) return false;
+  const nextProps = overlaySurfaceProps(surface, processRuntime, capabilityOutputs);
+  if (!Object.prototype.hasOwnProperty.call(nextProps, "visible")) return false;
+  return Boolean(nextProps.visible);
+}
+
 function capabilityAssetPresence(expected, loaded) {
   const missing = {
     stylesheetHrefs: [],
@@ -1795,15 +1880,25 @@ function createSurfaceRuntimeProbe({
   const missingInteractionTargets = [];
   const missingBindingTargets = [];
   const missingProcessBindings = [];
+  const missingVisibleSurfaces = [];
   const missingCapabilities = [];
   const missingCapabilityControllers = [];
   const missingCapabilityOutputs = [];
+  const capabilityOutputs = collectCapabilityOutputsFromDom(document);
   const capabilityMarkers = new Map(
     activeSurfaces.map(surface => [surface.id, mountedCapabilityMarkersForSurface(document, surface)])
   );
   for (const surface of activeSurfaces) {
     const present = surfaceIsPresentInDom(document, surface);
     const binding = resolveSurfaceRuntimeBinding(manifest, surface.id);
+    const expectedVisible = surfaceExpectedVisible(surface, processRuntime, capabilityOutputs);
+    if (!present && expectedVisible) {
+      missingVisibleSurfaces.push({
+        surfaceId: surface.id,
+        rootId: trimString(surface?.view?.rootId) || null,
+        parentId: surfaceParentId(surface)
+      });
+    }
     const hasInteractiveMeaning = (surface?.runtime?.interactions?.length ?? 0) > 0 || (surface?.runtime?.bindings?.length ?? 0) > 0;
     if (present && hasInteractiveMeaning && !binding.processRef) {
       missingProcessBindings.push({ surfaceId: surface.id });
@@ -1866,6 +1961,15 @@ function createSurfaceRuntimeProbe({
       }
     }
   }
+  const missingVisibleSurfaceIds = new Set(missingVisibleSurfaces.map(entry => entry.surfaceId));
+  const filteredMissingVisibleSurfaces = missingVisibleSurfaces.filter(entry => {
+    let parentId = trimString(entry.parentId);
+    while (parentId) {
+      if (missingVisibleSurfaceIds.has(parentId)) return false;
+      parentId = surfaceParentId(surfaceById.get(parentId));
+    }
+    return true;
+  });
   const activeRouteTarget = activeRouteTargetForPath(manifest, window?.location?.pathname);
   const routeStateTarget = routeTargetForManifestState(manifest, processRuntime);
   const loadedCapabilityAssets = surfaceAssetRegistrySnapshot(window);
@@ -1890,6 +1994,7 @@ function createSurfaceRuntimeProbe({
     missingInteractionTargets,
     missingBindingTargets,
     missingProcessBindings,
+    missingVisibleSurfaces: filteredMissingVisibleSurfaces,
     missingCapabilities,
     missingCapabilityControllers,
     missingCapabilityOutputs,
@@ -2147,6 +2252,17 @@ export function createSurfaceInteractionRuntime({
         surfaceId: entry.surfaceId
       });
     }
+    for (const entry of snapshot.missingVisibleSurfaces ?? []) {
+      manage({
+        id: `surface-runtime:missing-visible-surface:${entry.surfaceId}`,
+        severity: "error",
+        kind: "missing-visible-surface",
+        message: "Surface state resolved visible but no DOM root exists for that surface",
+        surfaceId: entry.surfaceId,
+        targetId: entry.rootId,
+        details: { parentId: entry.parentId ?? null }
+      });
+    }
     for (const entry of snapshot.missingInteractionTargets ?? []) {
       manage({
         id: `surface-runtime:missing-interaction-target:${entry.surfaceId}:${entry.targetKey || "self"}:${entry.targetId || "unresolved"}`,
@@ -2273,9 +2389,12 @@ export function createSurfaceInteractionRuntime({
       capabilityOutputs[surfaceId] = node.__surfaceCapabilityOutputs;
     }
   };
-  const refresh = async () => {
+  const refreshSurfaceBindings = async (correlationId = issueLedger.nextCorrelationId("refresh")) => {
     readExistingCapabilityOutputs(document);
     const activeIds = activeRuntimeSurfaceIds(surfaceById, activeSurfaceId);
+    const currentActiveSurface = surfaceById.get(activeSurfaceId) || null;
+    let activeSurfaceUnderlayUpdated = false;
+    let structureChanged = false;
     for (const surface of manifest.surfaces ?? []) {
       if (!activeIds.has(surface.id)) continue;
       if (!(surface?.runtime?.bindings?.length)) continue;
@@ -2284,10 +2403,51 @@ export function createSurfaceInteractionRuntime({
       const capabilities = resolveSurfaceCapabilities(binding, manifest.browserRuntimeCapabilities);
       if (capabilities.missing.length) continue;
       const nextProps = overlaySurfaceProps(surface, processRuntime, capabilityOutputs);
+      const expectedVisible = surfaceExpectedVisible(surface, processRuntime, capabilityOutputs);
+      const presentInDom = surfaceIsPresentInDom(document, surface);
+      if (surfaceHasVisibleBinding(surface) && !expectedVisible && presentInDom && surface.id !== activeSurfaceId) {
+        if (dematerializeHiddenSurface(document, surface)) {
+          structureChanged = true;
+          continue;
+        }
+      }
+      if (expectedVisible && !presentInDom) {
+        const insertedRoot = materializeMissingVisibleSurface(document, surfaceById, surface);
+        if (insertedRoot) {
+          structureChanged = true;
+          bootSurfaceCapabilities(window, insertedRoot, {
+            reportIssue,
+            resolveIssue,
+            phase: "capability-mount",
+            correlationId
+          });
+          readExistingCapabilityOutputs(insertedRoot);
+        }
+      }
       if (surface.id === activeSurfaceId) {
         await updateRouteUnderlay(document, window, manifest, surfaceById, surface, nextProps);
+        activeSurfaceUnderlayUpdated = true;
       }
       patchSurfaceDom(document, surface, nextProps);
+    }
+    if (currentActiveSurface && !activeSurfaceUnderlayUpdated) {
+      await updateRouteUnderlay(
+        document,
+        window,
+        manifest,
+        surfaceById,
+        currentActiveSurface,
+        overlaySurfaceProps(currentActiveSurface, processRuntime, capabilityOutputs)
+      );
+    }
+    return structureChanged;
+  };
+  const refresh = async (correlationId = issueLedger.nextCorrelationId("refresh")) => {
+    for (let pass = 0; pass < 4; pass += 1) {
+      const structureChanged = await refreshSurfaceBindings(correlationId);
+      if (!structureChanged) break;
+      disposeInteractions();
+      bindInteractions();
     }
   };
   const disposeInteractions = () => {
@@ -2507,17 +2667,17 @@ export function createSurfaceInteractionRuntime({
     return replaced;
   };
   const syncRouteAndRefresh = async (correlationId = issueLedger.nextCorrelationId("refresh")) => {
-    await refresh();
+    await refresh(correlationId);
     for (const processRef of currentProcessRefs()) {
       const routeTarget = syncRouteStateToUrl({ manifest, processRuntime, processRef, window });
       if (routeTarget?.surfaceId && await replaceActiveRouteSurface(routeTarget)) {
         bindInteractions();
-        await refresh();
+        await refresh(correlationId);
       }
     }
     if (await reconcileActiveRouteFromManifestState()) {
       bindInteractions();
-      await refresh();
+      await refresh(correlationId);
     }
     await runSettleProbe("settle-probe", correlationId);
   };
@@ -2726,6 +2886,7 @@ function browserHelpersSource() {
     stateIdsFromWitnesses.toString(),
     eventValueFromSpec.toString(),
     readCapabilityOutput.toString(),
+    collectCapabilityOutputsFromDom.toString(),
     readBindingSource.toString(),
     overlaySurfaceProps.toString(),
     resolveSurfaceRuntimeBinding.toString(),
@@ -2740,6 +2901,9 @@ function browserHelpersSource() {
     syncRouteStateToUrl.toString(),
     forceDocumentNavigation.toString(),
     parseFirstElement.toString(),
+    nextPresentSiblingRoot.toString(),
+    materializeMissingVisibleSurface.toString(),
+    dematerializeHiddenSurface.toString(),
     supportsSameDocumentRouteReplacement.toString(),
     fallbackActiveRootNode.toString(),
     domParserForWindow.toString(),
@@ -2770,6 +2934,9 @@ function browserHelpersSource() {
     capabilityAssetPresence.toString(),
     surfaceViewNodeIds.toString(),
     surfaceIsPresentInDom.toString(),
+    surfaceParentId.toString(),
+    surfaceHasVisibleBinding.toString(),
+    surfaceExpectedVisible.toString(),
     createSurfaceRuntimeProbe.toString(),
     summarizeSurfaceRuntimeExpectationIssues.toString(),
     updateRouteUnderlay.toString(),

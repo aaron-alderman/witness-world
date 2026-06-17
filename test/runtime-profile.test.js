@@ -383,7 +383,8 @@ test("minimal runtime plus plugin.practical-backend exposes backend routes and c
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-fs-json"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-assets"), true);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-sqlite"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-secret"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-sql"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-jobs"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-search"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-notifications"), true);
@@ -394,6 +395,7 @@ test("minimal runtime plus plugin.practical-backend exposes backend routes and c
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-backend-seams"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-fs-blob"), true);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-fs-stream"), true);
+    assert.equal(diagnostics.providedCapabilities.includes("secret.store"), true);
     assert.equal(diagnostics.providedCapabilities.includes("db.sql"), true);
     assert.equal(diagnostics.providedCapabilities.includes("jobs.queue"), true);
     assert.equal(diagnostics.providedCapabilities.includes("search.index"), true);
@@ -405,9 +407,9 @@ test("minimal runtime plus plugin.practical-backend exposes backend routes and c
     assert.equal(diagnostics.providedCapabilities.includes("fs.json.write"), true);
     assert.equal(diagnostics.providedCapabilities.includes("fs.blob"), true);
     assert.equal(diagnostics.providedCapabilities.includes("fs.stream"), true);
-    assert.deepEqual(new Set(diagnostics.plugins.activePluginIds), new Set(["plugin.practical-backend", "plugin.assets", "plugin.backend-seams", "plugin.fs-blob", "plugin.fs-json", "plugin.fs-stream", "plugin.http-outbound", "plugin.jobs", "plugin.notifications", "plugin.oauth", "plugin.runtime-config", "plugin.search", "plugin.sqlite", "plugin.webhooks"]));
-    assert.deepEqual(new Set(diagnostics.plugins.addedBundleIds), new Set(["bundle-assets", "bundle-backend-seams", "bundle-fs-blob", "bundle-fs-json", "bundle-fs-stream", "bundle-http-outbound", "bundle-jobs", "bundle-notifications", "bundle-oauth", "bundle-runtime-config", "bundle-search", "bundle-sqlite", "bundle-webhooks"]));
-    assert.equal(diagnostics.plugins.loadedRuntimeCount, 13);
+    assert.deepEqual(new Set(diagnostics.plugins.activePluginIds), new Set(["plugin.practical-backend", "plugin.assets", "plugin.backend-seams", "plugin.fs-blob", "plugin.fs-json", "plugin.fs-stream", "plugin.http-outbound", "plugin.jobs", "plugin.notifications", "plugin.oauth", "plugin.runtime-config", "plugin.search", "plugin.secret", "plugin.sql", "plugin.webhooks"]));
+    assert.deepEqual(new Set(diagnostics.plugins.addedBundleIds), new Set(["bundle-assets", "bundle-backend-seams", "bundle-fs-blob", "bundle-fs-json", "bundle-fs-stream", "bundle-http-outbound", "bundle-jobs", "bundle-notifications", "bundle-oauth", "bundle-runtime-config", "bundle-search", "bundle-secret", "bundle-sql", "bundle-webhooks"]));
+    assert.equal(diagnostics.plugins.loadedRuntimeCount, 14);
     assert.equal(backendPlugin.execution.mode, "meta-package");
     assert.equal(backendPlugin.runtimeModule.loadStatus, "not-applicable");
     assert.equal(diagnostics.routes.some(route => route.matcher === "/backend-seams" && route.handler === "page.backendSeams"), true);
@@ -499,7 +501,7 @@ test("minimal runtime plus plugin.fs-stream exposes stream storage through fs-bl
   }
 });
 
-test("minimal runtime plus plugin.sqlite exposes DB SQL without unrelated practical-backend routes", async () => {
+test("minimal runtime plus plugin.sql exposes DB SQL without unrelated practical-backend routes", async () => {
   const world = createWorld();
   applyMinimalPageDsl(world);
   declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
@@ -510,7 +512,7 @@ test("minimal runtime plus plugin.sqlite exposes DB SQL without unrelated practi
     serverRunnerId: "server_runner",
     runtimeRoot: await tempRuntimeRoot(),
     runtimeProfile: "minimal",
-    runtimePluginIds: ["plugin.sqlite"]
+    runtimePluginIds: ["plugin.sql"]
   });
 
   assert.equal(server.ok, true);
@@ -525,10 +527,11 @@ test("minimal runtime plus plugin.sqlite exposes DB SQL without unrelated practi
 
     assert.equal(sqlResponse.status, 401);
     assert.equal(jobsResponse.status, 404);
-    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.sqlite"]);
-    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-sqlite"]);
+    assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.secret", "plugin.sql"]);
+    assert.deepEqual(diagnostics.plugins.addedBundleIds, ["bundle-secret", "bundle-sql"]);
     assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-practical-backend"), false);
-    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-sqlite"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-secret"), true);
+    assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-sql"), true);
   } finally {
     await server.close();
   }

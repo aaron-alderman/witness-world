@@ -11,7 +11,8 @@ import { readRuntimePluginCatalog } from "../../src/runtime-plugin-utils.js";
 
 const practicalBackendDependencies = [
   "plugin.fs-json",
-  "plugin.sqlite",
+  "plugin.secret",
+  "plugin.sql",
   "plugin.jobs",
   "plugin.search",
   "plugin.notifications",
@@ -38,7 +39,8 @@ test("practical-backend is a pure meta package over concrete backend child plugi
   const practical = catalog.packages.find(row => row.id === "plugin.practical-backend");
   assert.equal(practical.execution.mode, "meta-package");
   assert.equal(practical.activation.active, true);
-  assert.equal(catalog.activePluginIds.includes("plugin.sqlite"), true);
+  assert.equal(catalog.activePluginIds.includes("plugin.secret"), true);
+  assert.equal(catalog.activePluginIds.includes("plugin.sql"), true);
   assert.equal(catalog.activePluginIds.includes("plugin.jobs"), true);
   assert.equal(catalog.activePluginIds.includes("plugin.search"), true);
   assert.equal(catalog.activePluginIds.includes("plugin.notifications"), true);
@@ -52,7 +54,8 @@ test("practical-backend is a pure meta package over concrete backend child plugi
   assert.equal(catalog.activePluginIds.includes("plugin.fs-stream"), true);
   assert.equal(catalog.activePluginIds.includes("plugin.assets"), true);
   assert.equal(catalog.activePluginIds.includes("plugin.practical-backend-core"), false);
-  assert.equal(catalog.addedBundleIds.includes("bundle-sqlite"), true);
+  assert.equal(catalog.addedBundleIds.includes("bundle-secret"), true);
+  assert.equal(catalog.addedBundleIds.includes("bundle-sql"), true);
   assert.equal(catalog.addedBundleIds.includes("bundle-jobs"), true);
   assert.equal(catalog.addedBundleIds.includes("bundle-search"), true);
   assert.equal(catalog.addedBundleIds.includes("bundle-notifications"), true);
@@ -122,12 +125,14 @@ test("installing practical-backend authors concrete child dependencies first", a
     "plugin.practical-backend",
     "plugin.runtime-config",
     "plugin.search",
-    "plugin.sqlite",
+    "plugin.secret",
+    "plugin.sql",
     "plugin.webhooks"
   ]);
   assert.deepEqual(result.runtimePluginInstalls.map(row => row.plugin), [
     "plugin.fs-json",
-    "plugin.sqlite",
+    "plugin.secret",
+    "plugin.sql",
     "plugin.jobs",
     "plugin.search",
     "plugin.notifications",
@@ -163,7 +168,8 @@ test("installing practical-backend authors concrete child dependencies first", a
     "plugin.practical-backend",
     "plugin.runtime-config",
     "plugin.search",
-    "plugin.sqlite",
+    "plugin.secret",
+    "plugin.sql",
     "plugin.webhooks"
   ]);
 });
@@ -197,7 +203,8 @@ test("practical-backend remove modes keep or cascade dependency rows explicitly"
     "plugin.oauth",
     "plugin.runtime-config",
     "plugin.search",
-    "plugin.sqlite",
+    "plugin.secret",
+    "plugin.sql",
     "plugin.webhooks"
   ]);
 
@@ -220,19 +227,19 @@ test("practical-backend remove modes keep or cascade dependency rows explicitly"
 
 test("dependency integrity blocks unsafe removes and cyclic installs", () => {
   const world = setupRunnerWorld();
-  installRuntimePlugin(world, { actor: "aaron", serverRunner: "runner-1", plugin: "plugin.sqlite" });
+  installRuntimePlugin(world, { actor: "aaron", serverRunner: "runner-1", plugin: "plugin.sql" });
   installRuntimePlugin(world, { actor: "aaron", serverRunner: "runner-1", plugin: "plugin.other" });
   const pluginCatalog = {
     packages: [
-      packageRow("plugin.sqlite"),
-      packageRow("plugin.other", { dependsOnPlugins: ["plugin.sqlite"] })
+      packageRow("plugin.sql"),
+      packageRow("plugin.other", { dependsOnPlugins: ["plugin.sql"] })
     ]
   };
 
   const blockedRemove = requestBootstrapRuntimePluginRemove(world, {
     actor: "aaron",
     backendHost: "backendHost",
-    body: { serverRunner: "runner-1", plugin: "plugin.sqlite", removeMode: "cascadeAll" },
+    body: { serverRunner: "runner-1", plugin: "plugin.sql", removeMode: "cascadeAll" },
     pluginCatalog
   });
   assert.equal(blockedRemove.ok, false);

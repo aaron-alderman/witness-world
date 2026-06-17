@@ -73,10 +73,13 @@ test("minimal plus inspect contributes inspect routes without owning the widget-
 test("minimal plus practical-backend expands child plugins into backend providers and jobs", async () => {
   const { pluginCatalog, summary, contributions } = await contributionsFor(["plugin.practical-backend"]);
 
-  assert.equal(pluginCatalog.effectivePluginIds.includes("plugin.sqlite"), true);
+  assert.equal(pluginCatalog.effectivePluginIds.includes("plugin.secret"), true);
+  assert.equal(pluginCatalog.effectivePluginIds.includes("plugin.sql"), true);
   assert.equal(pluginCatalog.effectivePluginIds.includes("plugin.jobs"), true);
-  assert.equal(summary.bundleIds.includes("bundle-sqlite"), true);
+  assert.equal(summary.bundleIds.includes("bundle-secret"), true);
+  assert.equal(summary.bundleIds.includes("bundle-sql"), true);
   assert.equal(summary.bundleIds.includes("bundle-practical-backend"), false);
+  assert.equal(typeof contributions.providerRuntimeFactories["secret.store"], "function");
   assert.equal(typeof contributions.providerRuntimeFactories["db.sql"], "function");
   assert.equal(typeof contributions.providerRuntimeFactories["jobs.queue"], "function");
   assert.equal(typeof contributions.providerRuntimeFactories["search.index"], "function");

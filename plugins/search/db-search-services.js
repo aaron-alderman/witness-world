@@ -7,10 +7,18 @@ export function createPracticalBackendDbSearchServices({ world, backendHost }) {
     serverRunner: row.serverRunner,
     provider: row.provider,
     datasourceName: row.datasourceName,
+    host: row.host,
+    port: row.port,
+    database: row.database,
+    user: row.user,
+    passwordSecretId: row.passwordSecretId,
+    ssl: row.ssl,
     migrationTable: row.migrationTable,
     status: row.status,
     path: row.path,
     adapterStatus: row.adapterStatus,
+    lastTestAt: row.lastTestAt,
+    lastTestResult: row.lastTestResult,
     lastError: row.lastError,
     operationCount: row.operationCount
   });

@@ -1,0 +1,87 @@
+{
+  "id": "plugin.sql",
+  "version": "0.1.0",
+  "displayName": "Runner SQL Plugin Runtime",
+  "description": "Owns runner-scoped SQL datasource metadata, connection testing, and explicit datasource-backed SQL operations.",
+  "kind": "plugin",
+  "dependsOnPlugins": [
+    "plugin.secret"
+  ],
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-sql"
+  ],
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "db.sql"
+      }
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/api/db/sql",
+        "handler": "db.sql.inspect"
+      },
+      {
+        "method": "GET",
+        "path": "/api/db/sql/datasources",
+        "handler": "db.sql.datasources.list"
+      },
+      {
+        "method": "GET",
+        "pattern": "^/api/db/sql/datasources/([^/]+)$",
+        "handler": "db.sql.datasource.read"
+      },
+      {
+        "method": "POST",
+        "path": "/api/db/sql/datasources",
+        "handler": "db.sql.datasource.create"
+      },
+      {
+        "method": "PATCH",
+        "pattern": "^/api/db/sql/datasources/([^/]+)$",
+        "handler": "db.sql.datasource.update"
+      },
+      {
+        "method": "DELETE",
+        "pattern": "^/api/db/sql/datasources/([^/]+)$",
+        "handler": "db.sql.datasource.delete"
+      },
+      {
+        "method": "POST",
+        "pattern": "^/api/db/sql/datasources/([^/]+)/test$",
+        "handler": "db.sql.datasource.test"
+      },
+      {
+        "method": "POST",
+        "path": "/api/db/sql/query",
+        "handler": "db.sql.query"
+      },
+      {
+        "method": "POST",
+        "path": "/api/db/sql/command",
+        "handler": "db.sql.command"
+      },
+      {
+        "method": "POST",
+        "path": "/api/db/sql/migrate",
+        "handler": "db.sql.migrate"
+      },
+      {
+        "method": "POST",
+        "path": "/api/db/sql/transaction",
+        "handler": "db.sql.transaction"
+      }
+    ],
+    "surfaces": [],
+    "providers": [
+      {
+        "id": "sql.db-sql.handlers",
+        "kind": "runtime-handler-catalog"
+      }
+    ]
+  }
+}

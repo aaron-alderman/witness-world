@@ -6,7 +6,8 @@
   "kind": "plugin",
   "dependsOnPlugins": [
     "plugin.fs-json",
-    "plugin.sqlite",
+    "plugin.secret",
+    "plugin.sql",
     "plugin.jobs",
     "plugin.search",
     "plugin.notifications",
@@ -21,6 +22,9 @@
   ],
   "contributes": {
     "capabilities": [
+      {
+        "id": "secret.store"
+      },
       {
         "id": "db.sql"
       },

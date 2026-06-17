@@ -95,6 +95,7 @@ const OPTIONAL_HANDLER_PREFIXES = [
   "asset.",
   "auth.oauth",
   "backendSeams.",
+  "secret.store",
   "db.sql",
   "fs.blob",
   "fs.stream",
@@ -119,7 +120,8 @@ const PRACTICAL_BACKEND_CHILD_OWNERSHIP = Object.freeze({
   "bundle-oauth": { dir: "oauth", handlers: ["auth.oauth.start", "auth.oauth.callback", "auth.oauth.links.list"] },
   "bundle-runtime-config": { dir: "runtime-config", handlers: ["runtimeConfig.read"] },
   "bundle-search": { dir: "search", handlers: ["search.index.inspect", "search.index.build", "search.index.query"] },
-  "bundle-sqlite": { dir: "sqlite", handlers: ["db.sql.inspect", "db.sql.query", "db.sql.command"] },
+  "bundle-secret": { dir: "secret", handlers: ["secret.store.list", "secret.store.read", "secret.store.create"] },
+  "bundle-sql": { dir: "sql", handlers: ["db.sql.inspect", "db.sql.query", "db.sql.command"] },
   "bundle-webhooks": { dir: "webhooks", handlers: ["webhook.inbound.receive", "webhook.inbound.list", "webhook.inbound.read"] }
 });
 
@@ -308,6 +310,7 @@ test("plugin-owned optional routes and capabilities stay out of minimal core", (
   assert.deepEqual(minimalCapabilities.filter(capability => [
     "auth.oauth",
     "db.sql",
+    "secret.store",
     "fs.blob",
     "fs.json.read",
     "fs.json.write",

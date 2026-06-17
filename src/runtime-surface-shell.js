@@ -92,6 +92,12 @@ function childSurfaceIds(surface) {
     : [];
 }
 
+function forceVisibleSurfaceIdsSet(options = {}) {
+  if (options.forceVisibleSurfaceIds instanceof Set) return options.forceVisibleSurfaceIds;
+  const values = Array.isArray(options.forceVisibleSurfaceIds) ? options.forceVisibleSurfaceIds : [];
+  return new Set(values.map(value => String(value ?? "").trim()).filter(Boolean));
+}
+
 function collectSurfaceTree(surfaces, rootSurfaceId) {
   const visited = new Set();
   const ordered = [];
@@ -738,7 +744,7 @@ function surfaceVisibleInInitialProjection(surface, options = {}) {
 function renderSurfaceNode(surfaces, surfaceId, options = {}) {
   const surface = surfaces.get(surfaceId);
   if (!surface) return "";
-  if (!surfaceVisibleInInitialProjection(surface, options)) return "";
+  if (!surfaceVisibleInInitialProjection(surface, options) && !forceVisibleSurfaceIdsSet(options).has(surfaceId)) return "";
   for (const renderer of options.surfaceRenderers ?? []) {
     if (!renderer || typeof renderer.renderSurface !== "function") continue;
     const rendered = renderer.renderSurface(surface, {

@@ -6,8 +6,9 @@ import test from "node:test";
 import { moduleProjectors } from "../src/modules.js";
 import {
   createDbSqlRuntime,
-} from "../plugins/sqlite/provider-runtime.js";
+} from "../plugins/sql/provider-runtime.js";
 import { createInProcessJobQueue } from "../plugins/jobs/provider-runtime.js";
+import { jobs, jobIndex } from "../plugins/jobs/projections.js";
 import { createSearchIndexRuntime } from "../plugins/search/provider-runtime.js";
 
 function sleep(ms) {
@@ -26,29 +27,45 @@ async function waitFor(check, { timeoutMs = 1500, intervalMs = 10 } = {}) {
 
 test("runtime provider runtimes keep sqlite migration, query, command, and rollback behavior outside host.js", async () => {
   const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "runtime-provider-db-"));
+  const datasources = [{
+    id: "sqlite.main",
+    serverRunner: "runner-1",
+    provider: "sqlite",
+    datasourceName: "main",
+    path: "db/main.sqlite",
+    migrationTable: "witness_sql_migrations"
+  }];
+  const datasourceIndex = {
+    rows: datasources,
+    byId: { "sqlite.main": datasources[0] }
+  };
   const runtime = createDbSqlRuntime({
-    runtimeConfig: {
-      "db.sql.provider": "sqlite",
-      "db.sql.sqlite.path": "db/main.sqlite"
+    project(projector) {
+      if (projector === moduleProjectors.sqlDatasources) return datasources;
+      if (projector === moduleProjectors.sqlDatasourceIndex) return datasourceIndex;
+      return [];
     },
     runtimeRoot,
-    serverRunnerId: "runner-1"
+    serverRunnerId: "runner-1",
+    getAppContext: () => ({ secretStore: null })
   });
 
   try {
-    const inspected = runtime.inspect();
-    assert.equal(inspected.ok, true);
-    assert.equal(inspected.datasource.provider, "sqlite");
-    assert.equal(inspected.datasource.path, path.join(runtimeRoot, "db", "main.sqlite"));
+    const listed = runtime.listDatasources();
+    assert.equal(listed.length, 1);
+    assert.equal(listed[0].provider, "sqlite");
 
     const migrated = await runtime.migrate({
+      datasourceId: "sqlite.main",
       migrations: [
         { id: "001_create_items", sql: "create table items (id integer primary key, title text not null)" }
       ]
     });
+    assert.equal(migrated.ok, true);
     assert.deepEqual(migrated.applied, ["001_create_items"]);
 
     const inserted = await runtime.command({
+      datasourceId: "sqlite.main",
       sql: "insert into items(title) values (?)",
       params: ["first"]
     });
@@ -56,6 +73,7 @@ test("runtime provider runtimes keep sqlite migration, query, command, and rollb
     assert.equal(inserted.changes, 1);
 
     const rolledBack = await runtime.transaction({
+      datasourceId: "sqlite.main",
       steps: [
         { kind: "command", sql: "insert into items(title) values (?)", params: ["rolled-back"] },
         { kind: "command", sql: "insert into missing_table(title) values (?)", params: ["boom"] }
@@ -64,12 +82,102 @@ test("runtime provider runtimes keep sqlite migration, query, command, and rollb
     assert.equal(rolledBack.ok, false);
     assert.match(rolledBack.reason, /missing_table/i);
 
-    const queried = await runtime.query({ sql: "select title from items order by id" });
+    const queried = await runtime.query({ datasourceId: "sqlite.main", sql: "select title from items order by id" });
     assert.equal(queried.ok, true);
     assert.deepEqual(queried.rows.map(row => row.title), ["first"]);
   } finally {
     runtime.close();
     await fs.rm(runtimeRoot, { recursive: true, force: true }).catch(() => {});
+  }
+});
+
+test("runtime provider runtimes resolve postgres credentials through secret.store and keep datasource selection explicit", async () => {
+  const seenConfigs = [];
+  const runtime = createDbSqlRuntime({
+    project(projector) {
+      if (projector === moduleProjectors.sqlDatasources) {
+        return [{
+          id: "pg.main",
+          serverRunner: "runner-1",
+          provider: "postgres",
+          datasourceName: "main",
+          host: "127.0.0.1",
+          port: 5432,
+          database: "engentus",
+          user: "pipeline_user",
+          passwordSecretId: "secret.pg",
+          ssl: true
+        }];
+      }
+      if (projector === moduleProjectors.sqlDatasourceIndex) {
+        return {
+          rows: [{
+            id: "pg.main",
+            serverRunner: "runner-1",
+            provider: "postgres",
+            datasourceName: "main",
+            host: "127.0.0.1",
+            port: 5432,
+            database: "engentus",
+            user: "pipeline_user",
+            passwordSecretId: "secret.pg",
+            ssl: true
+          }],
+          byId: {
+            "pg.main": {
+              id: "pg.main",
+              serverRunner: "runner-1",
+              provider: "postgres",
+              datasourceName: "main",
+              host: "127.0.0.1",
+              port: 5432,
+              database: "engentus",
+              user: "pipeline_user",
+              passwordSecretId: "secret.pg",
+              ssl: true
+            }
+          }
+        };
+      }
+      return [];
+    },
+    runtimeRoot: process.cwd(),
+    serverRunnerId: "runner-1",
+    getAppContext: () => ({
+      secretStore: {
+        resolveSecretValue(secretId) {
+          return Promise.resolve(secretId === "secret.pg"
+            ? { ok: true, value: "super-secret" }
+            : { ok: false, status: 404, reason: "secret not found" });
+        }
+      }
+    }),
+    postgresAdapter: {
+      Client: class {
+        constructor(config) {
+          seenConfigs.push(config);
+        }
+        async connect() {}
+        async query(sql) {
+          assert.equal(sql, "select 1 as ok");
+        }
+        async end() {}
+      }
+    }
+  });
+
+  try {
+    const tested = await runtime.testConnection({ datasourceId: "pg.main" });
+    assert.equal(tested.ok, true);
+    assert.equal(seenConfigs.length, 1);
+    assert.equal(seenConfigs[0].password, "super-secret");
+    assert.deepEqual(seenConfigs[0].ssl, { rejectUnauthorized: false });
+
+    const missing = await runtime.testConnection({ datasourceId: "missing" });
+    assert.equal(missing.ok, false);
+    assert.equal(missing.status, 404);
+  } finally {
+    runtime.close();
   }
 });
 
@@ -159,6 +267,11 @@ test("runtime provider runtimes keep in-process queue retry and idempotency beha
   let attempts = 0;
   const queue = createInProcessJobQueue({
     world,
+    project(projector) {
+      if (projector === moduleProjectors.jobs) return jobs(emitted);
+      if (projector === moduleProjectors.jobIndex) return jobIndex(emitted);
+      return [];
+    },
     serverRunnerId: "runner-1",
     runtimeConfig: {
       "jobs.queue.pollMs": 5,

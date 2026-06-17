@@ -10,9 +10,9 @@ export function withRegisteredPluginProjectors(providerSets, callback) {
     Object.assign(projectors, provider.projectors ?? {});
   }
   const unregister = registerModuleProjectors("plugin.test", projectors);
-  try {
-    return callback();
-  } finally {
-    unregister();
-  }
+  return Promise.resolve()
+    .then(() => callback())
+    .finally(() => {
+      unregister();
+    });
 }

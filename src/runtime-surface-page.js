@@ -209,7 +209,9 @@ export function renderSurfacePage(world, {
     capabilityAssets,
     rootSurfaceId,
     requestPathname: shell.requestPathname,
-    routeStateDescriptor
+    routeStateDescriptor,
+    surfaceRenderers,
+    initialState
   });
   return injectInteractionRuntime(injectCapabilityAssets(shell.html, [
     ...surfaceRenderers,

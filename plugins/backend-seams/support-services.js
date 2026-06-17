@@ -99,6 +99,10 @@ export function createPracticalBackendSupportServices({
     .filter(row => row.serverRunner === serverRunnerId);
   const currentWebhookForRunner = (serverRunnerId, webhookIdValue, appContext = null) => webhookDeliveriesForRunner(serverRunnerId, appContext)
     .find(row => row.id === webhookIdValue) ?? null;
+  const secretsForRunner = (serverRunnerId, appContext = null) => projectFor(appContext)(moduleProjectors.secrets)
+    .filter(row => row.serverRunner === serverRunnerId);
+  const currentSecretForRunner = (serverRunnerId, secretId, appContext = null) => secretsForRunner(serverRunnerId, appContext)
+    .find(row => row.id === secretId) ?? null;
   const sqlDatasourcesForRunner = (serverRunnerId, appContext = null) => projectFor(appContext)(moduleProjectors.sqlDatasources)
     .filter(row => row.serverRunner === serverRunnerId);
   const currentSqlDatasourceForRunner = (serverRunnerId, datasourceId, appContext = null) => sqlDatasourcesForRunner(serverRunnerId, appContext)
@@ -136,6 +140,8 @@ export function createPracticalBackendSupportServices({
     const outboundRequests = project(moduleProjectors.outboundRequests)
       .filter(row => row.serverRunner === (appContext?.serverRunnerId || ""));
     const webhookDeliveries = project(moduleProjectors.webhookDeliveries)
+      .filter(row => row.serverRunner === (appContext?.serverRunnerId || ""));
+    const secrets = project(moduleProjectors.secrets)
       .filter(row => row.serverRunner === (appContext?.serverRunnerId || ""));
     const sqlDatasources = project(moduleProjectors.sqlDatasources)
       .filter(row => row.serverRunner === (appContext?.serverRunnerId || ""));
@@ -236,6 +242,13 @@ export function createPracticalBackendSupportServices({
         failedCount: webhookDeliveries.filter(row => row.status === "failed").length,
         deliveryRefCount: webhookDeliveries.filter(row => typeof row.deliveryId === "string" && row.deliveryId).length,
         targets: [...new Set(webhookDeliveries.map(row => row.target).filter(Boolean))].sort()
+      },
+      secrets: {
+        count: secrets.length,
+        readyCount: secrets.filter(row => row.status === "ready").length,
+        hasValueCount: secrets.filter(row => row.hasValue === true).length,
+        failedCount: secrets.filter(row => row.status === "failed").length,
+        providers: [...new Set(secrets.map(row => row.provider).filter(Boolean))].sort()
       },
       dbSql: {
         datasourceCount: sqlDatasources.length,
@@ -452,6 +465,8 @@ export function createPracticalBackendSupportServices({
     currentOutboundForRunner,
     webhookDeliveriesForRunner,
     currentWebhookForRunner,
+    secretsForRunner,
+    currentSecretForRunner,
     currentSqlDatasourceForRunner,
     sqlOperationsForRunner,
     currentSqlOperationForRunner,

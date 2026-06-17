@@ -7,12 +7,51 @@ function sliderRow(page, label) {
   return page.locator(".prow").filter({ hasText: label });
 }
 
-test("Engentus dev shell diagnostics expectation pack stays clean across the shell auth flow", { timeout: 70000 }, async () => {
-  const server = await startUiServer({
+function startEngentusUiServer({ devMode = false } = {}) {
+  return startUiServer({
     dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
     serverRunnerId: "engentus_server",
-    devMode: true
+    runtimeProfile: "authoring",
+    devMode
   });
+}
+
+async function readSurfaceRuntimeDebugSnapshot(page) {
+  return await page.evaluate(async () => {
+    await window.world?.rerunProbe?.();
+    return {
+      route: location.pathname,
+      issues: (window.world?.issues || []).filter(issue => issue.status === "active"),
+      latestProbe: window.world?.latestProbe,
+      processState: typeof window.__surfaceInteractionRuntime?.processRuntime?.snapshot === "function"
+        ? window.__surfaceInteractionRuntime.processRuntime.snapshot()
+        : null
+    };
+  });
+}
+
+async function waitForSurfaceCondition(page, predicate, message, options = {}) {
+  const timeout = Number(options.timeout ?? 5000);
+  const arg = options.arg;
+  try {
+    if (typeof arg === "undefined") await page.waitForFunction(predicate, { timeout });
+    else await page.waitForFunction(predicate, arg, { timeout });
+  } catch (error) {
+    const snapshot = await readSurfaceRuntimeDebugSnapshot(page);
+    assert.fail(`${message}\n${String(error?.message || error)}\n${JSON.stringify(snapshot, null, 2)}`);
+  }
+}
+
+async function waitForNoRouteUnderlay(page, message = "Surface route underlay did not clear after settle") {
+  await waitForSurfaceCondition(
+    page,
+    () => document.querySelectorAll("#surface-route-underlay").length === 0,
+    message
+  );
+}
+
+test("Engentus dev shell diagnostics expectation pack stays clean across the shell auth flow", { timeout: 70000 }, async () => {
+  const server = await startEngentusUiServer({ devMode: true });
   const browser = await launchBrowser({
     headless: true,
     viewport: { width: 1280, height: 900 }
@@ -24,6 +63,7 @@ test("Engentus dev shell diagnostics expectation pack stays clean across the she
     await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
 
     const assertNoActiveIssues = async label => {
+      await waitForNoRouteUnderlay(page, `${label}: route underlay never cleared before diagnostics check`);
       const snapshot = await page.evaluate(async () => {
         await window.world.rerunProbe();
         return {
@@ -84,11 +124,7 @@ test("Engentus dev shell diagnostics expectation pack stays clean across the she
 });
 
 test("Engentus dev shell diagnostics expectation pack surfaces induced mismatches without crashing", { timeout: 45000 }, async () => {
-  const server = await startUiServer({
-    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
-    serverRunnerId: "engentus_server",
-    devMode: true
-  });
+  const server = await startEngentusUiServer({ devMode: true });
   const browser = await launchBrowser({
     headless: true,
     viewport: { width: 1280, height: 900 }
@@ -140,11 +176,7 @@ test("Engentus dev shell diagnostics expectation pack surfaces induced mismatche
 });
 
 test("Engentus login click dispatches the authored process rule through the generic surface runtime", { timeout: 70000 }, async () => {
-  const server = await startUiServer({
-    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
-    serverRunnerId: "engentus_server",
-    devMode: false
-  });
+  const server = await startEngentusUiServer({ devMode: false });
   const browser = await launchBrowser({
     headless: true,
     viewport: { width: 1280, height: 900 }
@@ -186,6 +218,7 @@ test("Engentus login click dispatches the authored process rule through the gene
     ), "home");
     assert.equal(new URL(page.url()).pathname, "/engentus/home");
     await page.waitForSelector("#module-area");
+    await waitForNoRouteUnderlay(page, "Login flow never cleared the route underlay after reaching home");
     assert.match(await page.textContent("#module-area"), /Analysis Modules/);
     assert.equal(await page.locator("#view-login").count(), 0);
     assert.equal(await page.locator("#surface-route-underlay").count(), 0);
@@ -203,14 +236,15 @@ test("Engentus login click dispatches the authored process rule through the gene
     await page.waitForSelector("#view-login");
     assert.equal(await page.locator("#module-area").count(), 0);
     await page.click(".ms-btn");
-    await page.waitForFunction(() =>
+    await waitForSurfaceCondition(page, () =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "home"
-    );
-    await page.waitForFunction(() =>
+    , "Second login flow did not switch the active shell route back to home");
+    await waitForSurfaceCondition(page, () =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedIn"
-    );
+    , "Second login flow did not settle into signedIn auth status");
     await page.waitForSelector("#module-area");
     await page.waitForSelector("#user-prof");
+    await waitForNoRouteUnderlay(page, "Login flow never cleared the route underlay after reaching home");
     assert.equal(await page.locator("#surface-route-underlay").count(), 0);
     if (!await page.locator(".up-mi-signout").isVisible()) {
       await page.click("#user-prof");
@@ -234,6 +268,7 @@ test("Engentus login click dispatches the authored process rule through the gene
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedOut"
     );
     await page.waitForSelector("#view-signout");
+    await waitForNoRouteUnderlay(page, "Signout flow never cleared the route underlay after settle");
     assert.equal(await page.locator("#surface-route-underlay").count(), 0);
     assert.deepEqual(await page.evaluate(() =>
       window.__surfaceInteractionRuntime.processRuntime.trace.map(row => row.kind).slice(0, 6)
@@ -265,11 +300,7 @@ test("Engentus login click dispatches the authored process rule through the gene
 });
 
 test("Engentus Mill Charge route mounts the authored disc chart through chart.render", { timeout: 30000 }, async () => {
-  const server = await startUiServer({
-    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
-    serverRunnerId: "engentus_server",
-    devMode: false
-  });
+  const server = await startEngentusUiServer({ devMode: false });
   try {
     const response = await fetch(`${server.url}/engentus/mill-charge`);
     const html = await response.text();
@@ -299,11 +330,7 @@ test("Engentus Mill Charge route mounts the authored disc chart through chart.re
 });
 
 async function assertEngentusHomeModuleCardNavigation(item) {
-  const server = await startUiServer({
-    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
-    serverRunnerId: "engentus_server",
-    devMode: true
-  });
+  const server = await startEngentusUiServer({ devMode: true });
   const browser = await launchBrowser({
     headless: true,
     viewport: { width: 1280, height: 900 }
@@ -393,11 +420,7 @@ test("Engentus home mill-force card navigates through authored surface interacti
 });
 
 test("Engentus Goodman modes switch authored chart views through process state", { timeout: 45000 }, async () => {
-  const server = await startUiServer({
-    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
-    serverRunnerId: "engentus_server",
-    devMode: false
-  });
+  const server = await startEngentusUiServer({ devMode: false });
   const browser = await launchBrowser({
     headless: true,
     viewport: { width: 1280, height: 900 }
@@ -405,16 +428,16 @@ test("Engentus Goodman modes switch authored chart views through process state",
   try {
     const page = await browser.context.newPage();
     await page.goto(`${server.url}/engentus/goodman`, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
-    await page.waitForFunction(() =>
+    await waitForSurfaceCondition(page, () => Boolean(window.__surfaceInteractionRuntime?.processRuntime), "Goodman runtime did not boot");
+    await waitForSurfaceCondition(page, () =>
       document.querySelector("#chart-svg defs clipPath rect")?.getAttribute("width") !== null
-    );
-    await page.waitForFunction(() =>
+    , "Goodman chart clip path did not initialize");
+    await waitForSurfaceCondition(page, () =>
       Boolean(document.querySelector("#chart-svg")?.__chartController)
-    );
-    await page.waitForFunction(() =>
+    , "Goodman chart controller did not mount");
+    await waitForSurfaceCondition(page, () =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "static"
-    );
+    , "Goodman did not settle into static mode");
     assert.deepEqual(await page.evaluate(() => ({
       staticClass: document.querySelector("#surface-goodmanmodestatic")?.className,
       mcClass: document.querySelector("#surface-goodmanmodemontecarlo")?.className,
@@ -422,9 +445,9 @@ test("Engentus Goodman modes switch authored chart views through process state",
       monteCarloHostCount: document.querySelectorAll("#chart-svg-mc").length,
       deterministicModel: document.querySelector("#chart-svg")?.__chartController?.spec?.view?.modelRef,
       scenarioHidden: document.querySelector("#surface-goodmanscenariosection")?.hasAttribute("hidden"),
-      simulationHidden: document.querySelector("#surface-goodmansimulationsection")?.hasAttribute("hidden"),
+      simulationPresent: Boolean(document.querySelector("#surface-goodmansimulationsection")),
       runConfigPresent: Boolean(document.querySelector("#surface-goodmanrunconfigsection")),
-      chartStyleHidden: document.querySelector("#surface-goodmanchartstylesection")?.hasAttribute("hidden")
+      chartStylePresent: Boolean(document.querySelector("#surface-goodmanchartstylesection"))
     })), {
       staticClass: "mode-btn on",
       mcClass: "mode-btn",
@@ -432,9 +455,9 @@ test("Engentus Goodman modes switch authored chart views through process state",
       monteCarloHostCount: 0,
       deterministicModel: "BoltFatigue",
       scenarioHidden: false,
-      simulationHidden: true,
+      simulationPresent: false,
       runConfigPresent: false,
-      chartStyleHidden: true
+      chartStylePresent: false
     });
 
     const goodmanProbeTarget = await page.evaluate(() => {
@@ -465,13 +488,13 @@ test("Engentus Goodman modes switch authored chart views through process state",
     await page.waitForFunction(() =>
       document.querySelector("#chart-tip")?.style?.display === "block"
     );
-    assert.match(await page.textContent("#chart-tip"), /F Shear N/i);
-    assert.match(await page.textContent("#chart-tip"), /Damage Per Cycle X10 6/i);
+    assert.match(await page.textContent("#chart-tip"), /F_shear=/i);
+    assert.match(await page.textContent("#chart-tip"), /Δ\/cyc=/i);
 
     await page.click("#surface-goodmansavestaticsimulationaction");
-    await page.waitForFunction(() =>
+    await waitForSurfaceCondition(page, () =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "mc"
-    );
+    , "Saving the static Goodman simulation did not switch mode to Monte Carlo");
     assert.equal(
       await page.locator("#surface-goodmansimulationsection").evaluate(node => node.hasAttribute("hidden")),
       false
@@ -484,21 +507,21 @@ test("Engentus Goodman modes switch authored chart views through process state",
     assert.deepEqual(await page.evaluate(() => ({
       staticClass: document.querySelector("#surface-goodmanmodestatic")?.className,
       mcClass: document.querySelector("#surface-goodmanmodemontecarlo")?.className,
-      deterministicHidden: document.querySelector("#chart-svg")?.hasAttribute("hidden"),
+      deterministicPresent: Boolean(document.querySelector("#chart-svg")),
       monteCarloHostCount: document.querySelectorAll("#chart-svg-mc").length,
-      scenarioHidden: document.querySelector("#surface-goodmanscenariosection")?.hasAttribute("hidden"),
-      simulationHidden: document.querySelector("#surface-goodmansimulationsection")?.hasAttribute("hidden"),
-      runConfigHidden: document.querySelector("#surface-goodmanrunconfigsection")?.hasAttribute("hidden"),
-      chartStyleHidden: document.querySelector("#surface-goodmanchartstylesection")?.hasAttribute("hidden")
+      scenarioPresent: Boolean(document.querySelector("#surface-goodmanscenariosection")),
+      simulationPresent: Boolean(document.querySelector("#surface-goodmansimulationsection")),
+      runConfigPresent: Boolean(document.querySelector("#surface-goodmanrunconfigsection")),
+      chartStylePresent: Boolean(document.querySelector("#surface-goodmanchartstylesection"))
     })), {
       staticClass: "mode-btn",
       mcClass: "mode-btn on",
-      deterministicHidden: false,
+      deterministicPresent: true,
       monteCarloHostCount: 0,
-      scenarioHidden: true,
-      simulationHidden: false,
-      runConfigHidden: false,
-      chartStyleHidden: true
+      scenarioPresent: false,
+      simulationPresent: true,
+      runConfigPresent: true,
+      chartStylePresent: false
     });
 
     await page.click("#surface-goodmanmodeedit");
@@ -507,20 +530,20 @@ test("Engentus Goodman modes switch authored chart views through process state",
     );
     assert.deepEqual(await page.evaluate(() => ({
       editClass: document.querySelector("#surface-goodmanmodeedit")?.className,
-      deterministicHidden: document.querySelector("#chart-svg")?.hasAttribute("hidden"),
+      deterministicPresent: Boolean(document.querySelector("#chart-svg")),
       monteCarloHostCount: document.querySelectorAll("#chart-svg-mc").length,
-      scenarioHidden: document.querySelector("#surface-goodmanscenariosection")?.hasAttribute("hidden"),
-      simulationHidden: document.querySelector("#surface-goodmansimulationsection")?.hasAttribute("hidden"),
-      runConfigHidden: document.querySelector("#surface-goodmanrunconfigsection")?.hasAttribute("hidden"),
-      chartStyleHidden: document.querySelector("#surface-goodmanchartstylesection")?.hasAttribute("hidden")
+      scenarioPresent: Boolean(document.querySelector("#surface-goodmanscenariosection")),
+      simulationPresent: Boolean(document.querySelector("#surface-goodmansimulationsection")),
+      runConfigPresent: Boolean(document.querySelector("#surface-goodmanrunconfigsection")),
+      chartStylePresent: Boolean(document.querySelector("#surface-goodmanchartstylesection"))
     })), {
       editClass: "mode-btn on",
-      deterministicHidden: false,
+      deterministicPresent: true,
       monteCarloHostCount: 0,
-      scenarioHidden: true,
-      simulationHidden: true,
-      runConfigHidden: true,
-      chartStyleHidden: false
+      scenarioPresent: false,
+      simulationPresent: false,
+      runConfigPresent: false,
+      chartStylePresent: true
     });
   } finally {
     await browser.close();
@@ -529,11 +552,7 @@ test("Engentus Goodman modes switch authored chart views through process state",
 });
 
 test("Engentus Goodman authored sidebar controls and windows update process state", { timeout: 45000 }, async () => {
-  const server = await startUiServer({
-    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
-    serverRunnerId: "engentus_server",
-    devMode: false
-  });
+  const server = await startEngentusUiServer({ devMode: false });
   const browser = await launchBrowser({
     headless: true,
     viewport: { width: 1280, height: 900 }
@@ -545,12 +564,13 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
 
     assert.equal(await page.locator("#surface-goodmancdfwindow").count(), 0);
     await page.click("#surface-goodmanactioncdf");
-    await page.waitForFunction(() =>
+    await waitForSurfaceCondition(page, () =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanCdfWindowVisible") === true
-    );
-    await page.waitForFunction(() =>
-      !document.querySelector("#surface-goodmancdfwindow")?.hasAttribute("hidden")
-    );
+    , "Goodman CDF action did not update process state");
+    await waitForSurfaceCondition(page, () => {
+      const node = document.querySelector("#surface-goodmancdfwindow");
+      return Boolean(node && !node.hasAttribute("hidden"));
+    }, "Goodman CDF window never materialized after its visible state turned on");
     assert.match(await page.textContent("#surface-goodmancdfwindow"), /Failure CDF/);
     assert.match(await page.textContent("#surface-goodmancdfwindow"), /Bolt Survival Over Time/);
     assert.match(await page.textContent("#surface-goodmancdfwindow"), /Run a Monte Carlo simulation to see results\./);
@@ -561,9 +581,9 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     assert.equal(await page.locator("#surface-goodmancdfwindow").count(), 0);
 
     await page.click("#surface-goodmanactionstats");
-    await page.waitForFunction(() =>
+    await waitForSurfaceCondition(page, () =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanStatsWindowVisible") === true
-    );
+    , "Goodman Stats action did not update process state");
     assert.match(await page.textContent("#surface-goodmanstatswindow"), /Summary Statistics/);
     assert.match(await page.textContent("#surface-goodmanstatswindow"), /No completed simulations\./);
     await page.click("#surface-goodmanstatswindowclose");
@@ -572,9 +592,9 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     );
 
     await page.click("#surface-goodmanactionanova");
-    await page.waitForFunction(() =>
+    await waitForSurfaceCondition(page, () =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanAnovaWindowVisible") === true
-    );
+    , "Goodman ANOVA action did not update process state");
     const anovaEmptyText = await page.textContent("#surface-goodmananovawindow");
     assert.match(anovaEmptyText, /ANOVA/);
     assert.match(anovaEmptyText, /Between-Group Comparison/);
@@ -586,12 +606,12 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     );
 
     await page.click("#surface-goodmansavestaticsimulationaction");
-    await page.waitForFunction(() =>
+    await waitForSurfaceCondition(page, () =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "mc"
-    );
-    await page.waitForFunction(() =>
+    , "Goodman save-static action did not switch to Monte Carlo mode");
+    await waitForSurfaceCondition(page, () =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunConfigVisible") === true
-    );
+    , "Goodman save-static action did not turn on run config visibility");
     await page.locator("#cfg-n").fill("750");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunBoltsPerSet") === 750
@@ -602,7 +622,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       stopLabel: document.querySelector("#surface-goodmanrunactionstop")?.textContent
     })), {
       runLabel: "▶ Run",
-      pauseLabel: "⏸",
+      pauseLabel: undefined,
       stopLabel: "■"
     });
     await page.locator("#cfg-tmax").fill("36");
@@ -854,11 +874,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
 });
 
 test("Engentus Mill Charge controls mutate authored process state through generic bindings", { timeout: 45000 }, async () => {
-  const server = await startUiServer({
-    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
-    serverRunnerId: "engentus_server",
-    devMode: false
-  });
+  const server = await startEngentusUiServer({ devMode: false });
   const browser = await launchBrowser({
     headless: true,
     viewport: { width: 1280, height: 900 }
@@ -965,11 +981,7 @@ test("Engentus Mill Charge controls mutate authored process state through generi
 });
 
 test("Engentus Mill Force tabs switch authored chart views through process state", { timeout: 45000 }, async () => {
-  const server = await startUiServer({
-    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
-    serverRunnerId: "engentus_server",
-    devMode: false
-  });
+  const server = await startEngentusUiServer({ devMode: false });
   const browser = await launchBrowser({
     headless: true,
     viewport: { width: 1280, height: 900 }
@@ -977,25 +989,23 @@ test("Engentus Mill Force tabs switch authored chart views through process state
   try {
     const page = await browser.context.newPage();
     await page.goto(`${server.url}/engentus/mill-force`, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
-    await page.waitForFunction(() =>
+    await waitForSurfaceCondition(page, () => Boolean(window.__surfaceInteractionRuntime?.processRuntime), "Mill Force runtime did not boot");
+    await waitForSurfaceCondition(page, () =>
       Boolean(document.querySelector("#mill-force-svg-cross")?.__chartController)
-      && Boolean(document.querySelector("#mill-force-svg-force")?.__chartController)
-      && Boolean(document.querySelector("#mill-force-svg-rose")?.__chartController)
-    );
-    await page.waitForFunction(() =>
+    , "Mill Force cross-section chart did not mount");
+    await waitForSurfaceCondition(page, () =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveChartTab") === "cross"
-    );
+    , "Mill Force did not settle into the cross-section tab");
     assert.deepEqual(await page.evaluate(() => ({
-      cross: document.querySelector("#mill-force-svg-cross")?.hasAttribute("hidden"),
-      force: document.querySelector("#mill-force-svg-force")?.hasAttribute("hidden"),
-      rose: document.querySelector("#mill-force-svg-rose")?.hasAttribute("hidden"),
+      crossHidden: document.querySelector("#mill-force-svg-cross")?.hasAttribute("hidden"),
+      forcePresent: Boolean(document.querySelector("#mill-force-svg-force")),
+      rosePresent: Boolean(document.querySelector("#mill-force-svg-rose")),
       crossClass: document.querySelector("#surface-millforcetabcrosssection")?.className,
       forceClass: document.querySelector("#surface-millforcetabforcevsangle")?.className
     })), {
-      cross: false,
-      force: true,
-      rose: true,
+      crossHidden: false,
+      forcePresent: false,
+      rosePresent: false,
       crossClass: "mill-force-cht-tab active",
       forceClass: "mill-force-cht-tab"
     });
@@ -1040,24 +1050,27 @@ test("Engentus Mill Force tabs switch authored chart views through process state
         clientY: rect.top + y
       }));
     }, { x: probeTarget.x, y: probeTarget.y });
-    await page.waitForFunction(() => {
+    await waitForSurfaceCondition(page, () => {
       const tip = document.querySelector("#mill-force-cross-tip");
-      return tip && getComputedStyle(tip).display !== "none" && /F Resultant N/i.test(tip.textContent || "");
-    });
+      return Boolean(tip && getComputedStyle(tip).display !== "none" && /F Resultant N/i.test(tip.textContent || ""));
+    }, "Mill Force cross-section hover tip never appeared");
 
     await page.click("#surface-millforcetabforcevsangle");
-    await page.waitForFunction(() =>
+    await waitForSurfaceCondition(page, () =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveChartTab") === "force"
-    );
+    , "Mill Force did not switch process state to the force-vs-angle tab");
+    await waitForSurfaceCondition(page, () =>
+      Boolean(document.querySelector("#mill-force-svg-force")?.__chartController)
+    , "Mill Force force-vs-angle chart never materialized after the tab became active");
     assert.deepEqual(await page.evaluate(() => ({
-      cross: document.querySelector("#mill-force-svg-cross")?.hasAttribute("hidden"),
-      force: document.querySelector("#mill-force-svg-force")?.hasAttribute("hidden"),
-      rose: document.querySelector("#mill-force-svg-rose")?.hasAttribute("hidden"),
+      crossPresent: Boolean(document.querySelector("#mill-force-svg-cross")),
+      forcePresent: Boolean(document.querySelector("#mill-force-svg-force")),
+      rosePresent: Boolean(document.querySelector("#mill-force-svg-rose")),
       forceClass: document.querySelector("#surface-millforcetabforcevsangle")?.className
     })), {
-      cross: true,
-      force: false,
-      rose: true,
+      crossPresent: false,
+      forcePresent: true,
+      rosePresent: false,
       forceClass: "mill-force-cht-tab active"
     });
     const forceProbeTarget = await page.evaluate(() => {
@@ -1088,24 +1101,27 @@ test("Engentus Mill Force tabs switch authored chart views through process state
         clientY: rect.top + y
       }));
     }, { x: forceProbeTarget.x, y: forceProbeTarget.y });
-    await page.waitForFunction(() => {
+    await waitForSurfaceCondition(page, () => {
       const tip = document.querySelector("#mill-force-force-tip");
-      return tip && getComputedStyle(tip).display !== "none" && /F Resultant N/i.test(tip.textContent || "");
-    });
+      return Boolean(tip && getComputedStyle(tip).display !== "none" && /F Resultant N/i.test(tip.textContent || ""));
+    }, "Mill Force force-vs-angle hover tip never appeared");
 
     await page.click("#surface-millforcetabforcerose");
-    await page.waitForFunction(() =>
+    await waitForSurfaceCondition(page, () =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveChartTab") === "rose"
-    );
+    , "Mill Force did not switch process state to the force-rose tab");
+    await waitForSurfaceCondition(page, () =>
+      Boolean(document.querySelector("#mill-force-svg-rose")?.__chartController)
+    , "Mill Force force-rose chart never materialized after the tab became active");
     assert.deepEqual(await page.evaluate(() => ({
-      cross: document.querySelector("#mill-force-svg-cross")?.hasAttribute("hidden"),
-      force: document.querySelector("#mill-force-svg-force")?.hasAttribute("hidden"),
-      rose: document.querySelector("#mill-force-svg-rose")?.hasAttribute("hidden"),
+      crossPresent: Boolean(document.querySelector("#mill-force-svg-cross")),
+      forcePresent: Boolean(document.querySelector("#mill-force-svg-force")),
+      rosePresent: Boolean(document.querySelector("#mill-force-svg-rose")),
       roseClass: document.querySelector("#surface-millforcetabforcerose")?.className
     })), {
-      cross: true,
-      force: true,
-      rose: false,
+      crossPresent: false,
+      forcePresent: false,
+      rosePresent: true,
       roseClass: "mill-force-cht-tab active"
     });
     const roseProbeTarget = await page.evaluate(() => {
@@ -1137,10 +1153,10 @@ test("Engentus Mill Force tabs switch authored chart views through process state
         clientY: rect.top + y
       }));
     }, { x: roseProbeTarget.x, y: roseProbeTarget.y });
-    await page.waitForFunction(() => {
+    await waitForSurfaceCondition(page, () => {
       const tip = document.querySelector("#mill-force-rose-tip");
-      return tip && getComputedStyle(tip).display !== "none" && /F Resultant N/i.test(tip.textContent || "");
-    });
+      return Boolean(tip && getComputedStyle(tip).display !== "none" && /F Resultant N/i.test(tip.textContent || ""));
+    }, "Mill Force force-rose hover tip never appeared");
   } finally {
     await browser.close();
     await server.close();
@@ -1148,11 +1164,7 @@ test("Engentus Mill Force tabs switch authored chart views through process state
 });
 
 test("Engentus Mill Force controls update authored state, chart params, and results", { timeout: 45000 }, async () => {
-  const server = await startUiServer({
-    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
-    serverRunnerId: "engentus_server",
-    devMode: false
-  });
+  const server = await startEngentusUiServer({ devMode: false });
   const browser = await launchBrowser({
     headless: true,
     viewport: { width: 1280, height: 900 }

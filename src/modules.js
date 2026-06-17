@@ -1570,6 +1570,10 @@ export const moduleProjectors = {
 
   notificationIndex: delegatedModuleProjector("notificationIndex", emptyIndex),
 
+  secrets: delegatedModuleProjector("secrets", emptyRows),
+
+  secretIndex: delegatedModuleProjector("secretIndex", emptyIndex),
+
   outboundRequests: delegatedModuleProjector("outboundRequests", emptyRows),
 
   outboundRequestIndex: delegatedModuleProjector("outboundRequestIndex", emptyIndex),

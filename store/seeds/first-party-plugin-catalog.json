@@ -17,21 +17,24 @@
     { "id": "plugin.mcp", "directory": "mcp", "order": 50 },
     { "id": "plugin.practical-backend", "directory": "practical-backend", "order": 60 },
     { "id": "plugin.fs-json", "directory": "fs-json", "order": 61 },
-    { "id": "plugin.sqlite", "directory": "sqlite", "order": 62 },
-    { "id": "plugin.jobs", "directory": "jobs", "order": 63 },
-    { "id": "plugin.search", "directory": "search", "order": 64 },
-    { "id": "plugin.notifications", "directory": "notifications", "order": 65 },
-    { "id": "plugin.webhooks", "directory": "webhooks", "order": 66 },
-    { "id": "plugin.http-outbound", "directory": "http-outbound", "order": 67 },
-    { "id": "plugin.oauth", "directory": "oauth", "order": 68 },
-    { "id": "plugin.runtime-config", "directory": "runtime-config", "order": 69 },
-    { "id": "plugin.backend-seams", "directory": "backend-seams", "order": 70 },
-    { "id": "plugin.fs-blob", "directory": "fs-blob", "order": 71 },
-    { "id": "plugin.fs-stream", "directory": "fs-stream", "order": 72 },
-    { "id": "plugin.assets", "directory": "assets", "order": 73 },
+    { "id": "plugin.secret", "directory": "secret", "order": 62 },
+    { "id": "plugin.sql", "directory": "sql", "order": 63 },
+    { "id": "plugin.sqlite", "directory": "sqlite", "order": 64 },
+    { "id": "plugin.jobs", "directory": "jobs", "order": 65 },
+    { "id": "plugin.search", "directory": "search", "order": 66 },
+    { "id": "plugin.notifications", "directory": "notifications", "order": 67 },
+    { "id": "plugin.webhooks", "directory": "webhooks", "order": 68 },
+    { "id": "plugin.http-outbound", "directory": "http-outbound", "order": 69 },
+    { "id": "plugin.oauth", "directory": "oauth", "order": 70 },
+    { "id": "plugin.runtime-config", "directory": "runtime-config", "order": 71 },
+    { "id": "plugin.backend-seams", "directory": "backend-seams", "order": 72 },
+    { "id": "plugin.fs-blob", "directory": "fs-blob", "order": 73 },
+    { "id": "plugin.fs-stream", "directory": "fs-stream", "order": 74 },
+    { "id": "plugin.assets", "directory": "assets", "order": 75 },
     { "id": "plugin.demo", "directory": "demo", "order": 90 },
     { "id": "plugin.eden", "directory": "eden", "order": 91 },
     { "id": "plugin.chart-runtime", "directory": "chart-runtime", "order": 92 },
+    { "id": "plugin.pipeline-runtime", "directory": "pipeline-runtime", "order": 93 },
     { "id": "plugin.notes-sidebar", "directory": "notes-sidebar", "order": 100 }
   ],
   "bundles": [
@@ -112,6 +115,18 @@
       "plugin": "plugin.sqlite",
       "displayName": "SQLite DB SQL",
       "description": "SQLite-backed DB SQL capability, handlers, and routes."
+    },
+    {
+      "id": "bundle-secret",
+      "plugin": "plugin.secret",
+      "displayName": "Secret Store",
+      "description": "Runner-scoped secret metadata, write-only value storage, and secret management routes."
+    },
+    {
+      "id": "bundle-sql",
+      "plugin": "plugin.sql",
+      "displayName": "SQL Datasources",
+      "description": "Runner-scoped SQL datasource resources, connection testing, and explicit datasource-backed operations."
     },
     {
       "id": "bundle-jobs",
@@ -202,6 +217,12 @@
       "plugin": "plugin.chart-runtime",
       "displayName": "Chart Runtime",
       "description": "Generic chart rendering capability, chart page handler, and grammar-of-graphics runtime."
+    },
+    {
+      "id": "bundle-pipeline-runtime",
+      "plugin": "plugin.pipeline-runtime",
+      "displayName": "Pipeline Runtime",
+      "description": "Demo operator UI for runner-scoped secrets, SQL datasources, and stubbed pipeline script execution."
     }
   ]
 }

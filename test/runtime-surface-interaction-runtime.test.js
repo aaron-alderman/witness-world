@@ -2114,6 +2114,217 @@ test("createSurfaceInteractionRuntime recognizes descendant capability controlle
   runtime.destroy();
 });
 
+test("createSurfaceInteractionRuntime surfaces expected-visible surfaces that never materialize in the DOM", async () => {
+  const document = createOverlayTestDocument();
+  const root = document.createElement("main");
+  root.id = "surface-root";
+  document.body.appendChild(root);
+  const runtimeWindow = {
+    location: { pathname: "/shell" },
+    history: { pushState() {} },
+    console: { error() {} }
+  };
+
+  const runtime = createSurfaceInteractionRuntime({
+    document,
+    window: runtimeWindow,
+    manifest: {
+      activeSurfaceId: "Surface.Root",
+      browserRuntimeCapabilities: [],
+      capabilityAssets: null,
+      surfaces: [
+        {
+          id: "Surface.Root",
+          children: ["Surface.Window"],
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-root",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        },
+        {
+          id: "Surface.Window",
+          parentId: "Surface.Root",
+          runtime: {
+            processRef: null,
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [
+              {
+                prop: "visible",
+                source: { kind: "state", state: "WindowVisible" }
+              }
+            ],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-window",
+            propTargets: {
+              visible: [{ id: "surface-window", mode: "visibility" }]
+            },
+            interactionTargets: {}
+          }
+        }
+      ],
+      processWitnesses: [
+        { process: "desire.defineType", body: { id: "WindowVisible", role: "state", valueType: "bool", initial: false } },
+        { process: "desire.defineProcess", body: {
+          id: "ShellNavigation",
+          state: ["WindowVisible"],
+          handles: [],
+          emits: [],
+          rules: []
+        } }
+      ]
+    },
+    createProcessRuntimeImpl({ witnesses }) {
+      return createProcessRuntime(witnesses);
+    }
+  });
+
+  await Promise.resolve();
+  await runtime.processRuntime.set("WindowVisible", true);
+  await runtime.refresh();
+  const probe = await runtime.rerunProbe();
+  assert.deepEqual(probe.missingVisibleSurfaces, [{
+    surfaceId: "Surface.Window",
+    rootId: "surface-window",
+    parentId: "Surface.Root"
+  }]);
+  assert.equal(runtimeWindow.world.issues.some(issue =>
+    issue.id === "surface-runtime:missing-visible-surface:Surface.Window"
+    && issue.status === "active"
+  ), true);
+  runtime.destroy();
+});
+
+test("createSurfaceInteractionRuntime materializes visibility-bound surfaces from manifest fragments and rebinds their interactions", async () => {
+  const document = createOverlayTestDocument();
+  const baseCreateElement = document.createElement.bind(document);
+  document.createElement = tagName => {
+    if (tagName === "template") {
+      return {
+        content: { firstElementChild: null },
+        set innerHTML(value) {
+          const rootId = String(value).match(/id="([^"]+)"/)?.[1] ?? "surface-window";
+          const root = baseCreateElement("section");
+          root.setAttribute("id", rootId);
+          root.textContent = "Window";
+          this.content.firstElementChild = root;
+        }
+      };
+    }
+    return baseCreateElement(tagName);
+  };
+  const root = document.createElement("main");
+  root.id = "surface-root";
+  document.body.appendChild(root);
+  const runtimeWindow = {
+    location: { pathname: "/shell" },
+    history: { pushState() {} },
+    console: { error() {} }
+  };
+
+  const runtime = createSurfaceInteractionRuntime({
+    document,
+    window: runtimeWindow,
+    manifest: {
+      activeSurfaceId: "Surface.Root",
+      browserRuntimeCapabilities: [],
+      capabilityAssets: null,
+      surfaces: [
+        {
+          id: "Surface.Root",
+          children: ["Surface.Window"],
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-root",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        },
+        {
+          id: "Surface.Window",
+          parentId: "Surface.Root",
+          fragmentHtml: '<section id="surface-window">Window</section>',
+          runtime: {
+            processRef: null,
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [
+              {
+                prop: "visible",
+                source: { kind: "state", state: "WindowVisible" }
+              }
+            ],
+            interactions: [
+              {
+                target: "self",
+                event: "click",
+                action: { kind: "deliver", message: "HideWindow" }
+              }
+            ]
+          },
+          view: {
+            rootId: "surface-window",
+            propTargets: {
+              visible: [{ id: "surface-window", mode: "visibility" }]
+            },
+            interactionTargets: {
+              self: [{ id: "surface-window" }]
+            }
+          }
+        }
+      ],
+      processWitnesses: [
+        { process: "desire.defineType", body: { id: "WindowVisible", role: "state", valueType: "bool", initial: false } },
+        { process: "desire.defineMessage", body: { id: "HideWindow", role: "event", writes: { WindowVisible: false } } },
+        { process: "desire.defineProcess", body: {
+          id: "ShellNavigation",
+          state: ["WindowVisible"],
+          handles: ["HideWindow"],
+          emits: [],
+          rules: []
+        } }
+      ]
+    },
+    createProcessRuntimeImpl({ witnesses }) {
+      return createProcessRuntime(witnesses);
+    }
+  });
+
+  await Promise.resolve();
+  await runtime.processRuntime.set("WindowVisible", true);
+  await runtime.refresh();
+  const windowNode = document.getElementById("surface-window");
+  assert.ok(windowNode);
+  assert.equal(windowNode.hidden, false);
+  assert.equal(windowNode.getAttribute("hidden"), null);
+  assert.equal(runtimeWindow.world.issues.some(issue =>
+    issue.id === "surface-runtime:missing-visible-surface:Surface.Window"
+    && issue.status === "active"
+  ), false);
+
+  await windowNode.eventListeners.get("click")({ preventDefault() {}, target: windowNode });
+  await runtime.refresh();
+  assert.equal(runtime.processRuntime.value("WindowVisible"), false);
+  assert.equal(document.getElementById("surface-window"), null);
+  runtime.destroy();
+});
+
 test("createSurfaceInteractionRuntime ignores non-rendered active descendants when probing and binding", async () => {
   const document = createOverlayTestDocument();
   const root = document.createElement("main");
