@@ -424,19 +424,20 @@ This section is the execution contract for a fresh agent. Read it before startin
 ### 2.2 RVM/WTOML Backend Reload
 
 - [ ] Reuse `AppSnapshotManager` dependency tracking for branch overlays.
-- [ ] Add candidate snapshot build from change-set overlay.
-- [ ] Add backend request routing by active runtime revision.
+- [X] Add candidate snapshot build from change-set overlay.
+- [X] Add backend request routing by active runtime revision.
 - [ ] Ensure in-flight requests hold a reference to their starting runtime context.
-- [ ] Ensure new requests see latest active valid runtime revision.
-- [ ] Ensure failed rebuild leaves active runtime unchanged.
+- [X] Ensure new requests see latest active valid runtime revision.
+- [X] Ensure failed rebuild leaves active runtime unchanged.
 - [ ] Add backend revision SSE:
   - [ ] `GET /api/runtime/backend-revisions/events`
   - [ ] event fields: revision, branch, changeSet, trigger, changedSources, status
 - [ ] Add Platform Console backend revision stream.
 - [X] Add MCP read view `platform.read { view: "runtimeRevisions" }`.
-- [ ] Add tests for RVM route/process changes changing backend behavior without process restart.
+- [X] Add tests for RVM route/process changes changing backend behavior without process restart.
 - [ ] Add tests for invalid RVM preserving last good backend behavior.
 - [ ] Add tests for SSE event after backend candidate activation.
+- [L] Current activation path is `platform.changeSet.apply` -> `AppSnapshotManager.markDirtyPaths(...)` for applied files inside the active app roots, so new requests pick up a rebuilt authored runtime revision without restarting the server while failed rebuilds retain the last good snapshot. The dedicated backend-revision SSE surface remains later work.
 
 ### 2.3 JS Plugin Reload Strategy
 
@@ -1219,13 +1220,13 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### Milestone B: Backend Candidate Snapshot V1
 
-- [ ] Build candidate snapshots from change-set overlays.
-- [ ] Route new requests to active valid runtime revision.
+- [X] Build candidate snapshots from change-set overlays.
+- [X] Route new requests to active valid runtime revision.
 - [ ] Preserve in-flight revision references.
 - [ ] Add backend revision events.
 - [ ] Add runtime revision view.
-- [ ] Add tests for backend behavior changing from RVM without process restart.
-- [ ] Add tests for failed candidate preserving old behavior.
+- [X] Add tests for backend behavior changing from RVM without process restart.
+- [X] Add tests for failed candidate preserving old behavior.
 
 ### Milestone C: Docs Live Model V1
 

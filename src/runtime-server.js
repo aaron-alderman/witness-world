@@ -829,6 +829,7 @@ export async function startRuntimeServer(world, {
     url,
     runtimeBundleSummary: resolvedRuntime,
     runtimePluginCatalog: effectiveRuntimePluginCatalog,
+    runtimeContext: appContext,
     close: () => {
       clearInterval(sseWatcher);
       for (const client of sseClients) client.end();

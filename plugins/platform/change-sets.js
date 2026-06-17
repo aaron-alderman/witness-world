@@ -892,6 +892,13 @@ export async function applyPlatformChangeSet(world, {
     status: 200,
     witness,
     candidateSnapshotId,
+    appliedFiles: prepared.map(file => ({
+      path: file.path,
+      absolutePath: file.absolutePath,
+      sourceLanguage: file.sourceLanguage,
+      previousHash: file.previousHash,
+      nextContentHash: file.nextContentHash
+    })),
     changeSet: world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? changeSet
   };
 }

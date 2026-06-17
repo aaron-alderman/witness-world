@@ -1,3 +1,4 @@
+import path from "node:path";
 import { relation } from "../../src/kernel.js";
 import {
   requestBootstrapProposalApprove,
@@ -62,6 +63,54 @@ function diagnosticsFromAppContext(appContext) {
         }
       : null
   };
+}
+
+function isWithinRoot(filePath, rootPath) {
+  const relative = path.relative(rootPath, filePath);
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+}
+
+function appSnapshotRoots(snapshotManager) {
+  const appRoot = typeof snapshotManager?.appRoot === "string" && snapshotManager.appRoot.trim()
+    ? path.resolve(snapshotManager.appRoot)
+    : null;
+  if (!appRoot) return [];
+  return [
+    appRoot,
+    path.join(path.dirname(appRoot), "_lib")
+  ];
+}
+
+async function refreshSnapshotAfterPlatformApply(snapshotManager, appliedFiles = []) {
+  if (!snapshotManager || !Array.isArray(appliedFiles) || !appliedFiles.length) {
+    return { touchedRuntime: false, changedPaths: [], diagnostics: null, revisionEvent: null, refreshError: null };
+  }
+  const roots = appSnapshotRoots(snapshotManager);
+  const changedPaths = appliedFiles
+    .map(file => typeof file?.absolutePath === "string" ? path.resolve(file.absolutePath) : null)
+    .filter(Boolean)
+    .filter(filePath => roots.some(root => isWithinRoot(filePath, root)));
+  if (!changedPaths.length) {
+    return { touchedRuntime: false, changedPaths: [], diagnostics: null, revisionEvent: null, refreshError: null };
+  }
+  try {
+    await snapshotManager.markDirtyPaths(changedPaths, { trigger: "platform-change-set-apply" });
+    return {
+      touchedRuntime: true,
+      changedPaths,
+      diagnostics: snapshotManager.diagnostics?.() ?? null,
+      revisionEvent: snapshotManager.getLastRevisionEvent?.() ?? null,
+      refreshError: null
+    };
+  } catch (error) {
+    return {
+      touchedRuntime: true,
+      changedPaths,
+      diagnostics: snapshotManager.diagnostics?.() ?? null,
+      revisionEvent: snapshotManager.getLastRevisionEvent?.() ?? null,
+      refreshError: error instanceof Error ? error.message : "app snapshot refresh failed"
+    };
+  }
 }
 
 async function platformModelFor(appContext) {
@@ -272,7 +321,7 @@ export function createPlatformHandlers({
       });
     },
 
-    "platform.changeSet.apply": async ({ res, params, requestActor, requestSession }) => {
+    "platform.changeSet.apply": async ({ res, params, requestActor, requestSession, appContext }) => {
       const actor = requirePlatformMutationActor(res, requestActor);
       if (!actor) return;
       const result = await applyPlatformChangeSet(world, {
@@ -287,10 +336,22 @@ export function createPlatformHandlers({
         });
         return;
       }
+      const snapshotRefresh = await refreshSnapshotAfterPlatformApply(
+        appContext?.appSnapshotManager ?? null,
+        result.appliedFiles ?? []
+      );
       sendJson(res, result.status, {
         changeSet: result.changeSet,
         candidateSnapshotId: result.candidateSnapshotId,
-        witness: result.witness
+        witness: result.witness,
+        runtimeSnapshotRefresh: snapshotRefresh.touchedRuntime
+          ? {
+              changedPaths: snapshotRefresh.changedPaths,
+              diagnostics: snapshotRefresh.diagnostics,
+              revisionEvent: snapshotRefresh.revisionEvent,
+              ...(snapshotRefresh.refreshError ? { error: snapshotRefresh.refreshError } : {})
+            }
+          : null
       });
     },
 
