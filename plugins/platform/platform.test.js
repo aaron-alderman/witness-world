@@ -459,7 +459,7 @@ test("platform proposal handlers approve change-set proposals through the shared
   });
   assert.equal(sent.at(-1).status, 200);
   assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.platform.console.proposed"].id, "changeset.platform.console.proposed");
-  assert.equal(world.project(moduleProjectors.branchIndex).byId["branch-changeset-platform-console-proposed"].id, "branch-changeset-platform-console-proposed");
+  assert.equal(world.project(moduleProjectors.branchIndex).byId["branch:platform-console-proposed"].id, "branch:platform-console-proposed");
 
   const rvm = await readFile(new URL("./platform-console.rvm", import.meta.url), "utf8");
   await handlers["platform.proposal.create"]({
@@ -892,6 +892,45 @@ test("platform branch creation validates parent branch dependencies and preserve
   });
   assert.equal(sent.at(-1).status, 404);
   assert.match(sent.at(-1).body.error, /parent branch not found/);
+}));
+
+test("platform branch and change-set creation use canonical generated ids when omitted", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    sendGateFailure: () => {},
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.branch.create"]({
+    req: { body: { title: "Generated Branch" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  assert.equal(sent.at(-1).status, 201);
+  assert.match(sent.at(-1).body.branch.id, /^branch:/);
+
+  await handlers["platform.changeSet.create"]({
+    req: { body: { title: "Generated Change Set" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  assert.equal(sent.at(-1).status, 201);
+  assert.match(sent.at(-1).body.changeSet.id, /^changeSet:/);
+  assert.match(sent.at(-1).body.branch.id, /^branch:/);
+  assert.equal(sent.at(-1).body.changeSet.branchId, sent.at(-1).body.branch.id);
 }));
 
 test("platform branch detail includes multiple change sets and validation history", async () => withRegisteredPluginProjectors(providers, async () => {
@@ -1494,6 +1533,8 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /platform-review-form/);
   assert.match(html, /platform-branch-create-form/);
   assert.match(html, /platform-change-set-create-form/);
+  assert.match(html, /branch:/);
+  assert.match(html, /changeSet:/);
   assert.match(html, /platform-change-set-edit-form/);
   assert.match(html, /platform-change-set-validate-form/);
   assert.match(html, /platform-change-set-apply-form/);

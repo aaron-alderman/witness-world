@@ -271,9 +271,9 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] `pushRecords`
   - [ ] `shipRecords`
 - [~] Define stable IDs:
-  - [ ] `changeSet:<slug>`
+  - [X] `changeSet:<slug>`
   - [X] `changeSetEdit:<changeSetId>:<pathHash>`
-  - [ ] `branch:<name>`
+  - [X] `branch:<name>`
   - [X] `candidateSnapshot:<changeSetId>:<revision>`
   - [ ] `conflict:<changeSetId>:<pathHash>`
 - [~] Add canonical status values for change sets:
@@ -376,6 +376,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [L] Automatic branch creation currently happens when approving `changeSet.create` without a supplied branch, preserving proposal non-mutation at creation time.
   - [ ] observe
 - [L] Branch docs freshness and telemetry/system summaries are currently derived from affected edit paths plus governed-doc ownership heuristics; deeper dependency-backed freshness remains later work.
+- [L] Platform-generated branch and change-set IDs now follow the canonical `branch:` / `changeSet:` shapes; explicit operator-supplied IDs remain accepted for compatibility.
 
 ### 1.5 Proposal Integration
 

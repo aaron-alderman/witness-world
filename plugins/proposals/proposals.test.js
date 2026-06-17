@@ -126,7 +126,7 @@ test("proposals plugin executor dispatches platform change-set targets", async (
   });
   assert.equal(created.ok, true);
   assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.platform.executor"].id, "changeset.platform.executor");
-  assert.equal(world.project(moduleProjectors.branchIndex).byId["branch-changeset-platform-executor"].id, "branch-changeset-platform-executor");
+  assert.equal(world.project(moduleProjectors.branchIndex).byId["branch:platform-executor"].id, "branch:platform-executor");
 }));
 
 test("proposals plugin owns proposal process helpers", async () => {

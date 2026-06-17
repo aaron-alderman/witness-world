@@ -147,7 +147,7 @@ export function renderPlatformPage(model) {
 
         <h2>Change Set Panel</h2>
         <form id="platform-branch-create-form">
-          <label>Branch id <input name="id" value="branch-${Date.now().toString(36)}"></label>
+          <label>Branch id <input name="id" value="branch:${Date.now().toString(36)}"></label>
           <label>Title <input name="title" value="Platform branch"></label>
           <label>Parent branch <input name="parentBranchId" placeholder="Optional parent branch id"></label>
           <label>Epic <input name="epic" placeholder="Optional epic tag"></label>
@@ -158,8 +158,8 @@ export function renderPlatformPage(model) {
         </form>
 
         <form id="platform-change-set-create-form">
-          <label>Change set id <input name="id" value="changeset-${Date.now().toString(36)}"></label>
-          <label>Branch id <input name="branchId" value="branch-platform-console"></label>
+          <label>Change set id <input name="id" value="changeSet:${Date.now().toString(36)}"></label>
+          <label>Branch id <input name="branchId" value="branch:platform-console"></label>
           <label>Title <input name="title" value="Platform console change"></label>
           <label>Reason <input name="reason" value="Stage platform console edits"></label>
           <button type="submit">Create Change Set</button>

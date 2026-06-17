@@ -47,11 +47,15 @@ function slugify(value) {
 }
 
 function defaultChangeSetId() {
-  return `changeset-${Date.now().toString(36)}`;
+  return `changeSet:${Date.now().toString(36)}`;
 }
 
-function defaultBranchId(changeSetId) {
-  return `branch-${slugify(changeSetId)}`;
+function defaultBranchId(seed = null) {
+  if (!seed) return `branch:${Date.now().toString(36)}`;
+  const value = String(seed)
+    .replace(/^changeSet:/, "")
+    .replace(/^changeset[-.:]?/i, "");
+  return `branch:${slugify(value)}`;
 }
 
 function optionalText(value) {
@@ -279,8 +283,7 @@ export function createPlatformBranch(world, {
   session = null,
   runtimeProfile = "full"
 }) {
-  const branchId = String(id || "").trim();
-  if (!branchId) return { ok: false, status: 400, error: "branch id is required" };
+  const branchId = String(id || defaultBranchId(title || null)).trim();
   const existing = world.project(moduleProjectors.branchIndex).byId?.[branchId] ?? null;
   if (existing) return { ok: false, status: 409, error: "branch id already exists" };
   const normalizedParentBranchId = optionalText(parentBranchId);
