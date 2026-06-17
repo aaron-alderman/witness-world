@@ -701,12 +701,13 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Capture candidate snapshot ID.
 - [X] Add `POST /api/platform-test-runs`.
 - [X] Add `GET /api/platform-test-runs/:id`.
-- [ ] Add test run SSE events.
+- [X] Add test run SSE events.
 - [X] Add Platform Console test run panel.
 - [X] Add MCP tool `platform.test` or extend `platform.proposal` gate execution.
 - [L] Current V1 test execution runs modeled gate commands through the same `plugin.platform` handler lane used by the human HTTP path, with branch/changeSet/candidateSnapshot/runtimeProfile context carried into witness-backed rows. It does not yet isolate runs behind a modeled `testRunner` boundary actor or candidate-snapshot workspace.
 - [L] Current V1 captures exit code, duration, stdout, stderr, timeout state, branch id, change-set id, candidate snapshot id, runtime profile, source dependencies, and protected objects. Memory, CPU, structured reports, source revision hashes, artifact storage, and SSE streaming remain later work.
 - [L] Current `platform.test` supports list/read/run over the shared platform handlers. It does not yet expose richer operations such as cancellation, streaming progress, or proposal-mediated execution policy.
+- [L] Current test-run SSE is implemented as a streamed view over newly appended `platform.test.run.start` / `platform.test.run.finish` witnesses. It does not yet provide a dedicated push subscription substrate, replay cursors, or durable event retention beyond witness history.
 
 ### 5.3 Efficient Red/Green
 

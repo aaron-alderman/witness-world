@@ -396,6 +396,7 @@ test("minimal runtime profile does not expose platform self-model routes", async
       headers: { "content-type": "application/json" },
       body: JSON.stringify({})
     })).status, 404);
+    assert.equal((await fetch(`${server.url}/api/platform-test-runs/events`)).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-test-runs/demo`)).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-proposals`, {
       method: "POST",
@@ -475,6 +476,7 @@ test("full runtime exposes platform console and platform self-model API", async 
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ gateId: "gate:plugins/platform/platform.test.js" })
     });
+    const testRunEventsRoute = await fetch(`${server.url}/api/platform-test-runs/events`);
     const testRunBody = await testRunRoute.json();
     const testRunReadRoute = await fetch(`${server.url}/api/platform-test-runs/${encodeURIComponent(testRunBody.testRun?.id || "missing")}`);
     const proposalRoute = await fetch(`${server.url}/api/platform-proposals`, {
@@ -510,6 +512,8 @@ test("full runtime exposes platform console and platform self-model API", async 
     assert.notEqual(rejectRoute.status, 404);
     assert.notEqual(abandonRoute.status, 404);
     assert.notEqual(testRunRoute.status, 404);
+    assert.notEqual(testRunEventsRoute.status, 404);
+    await testRunEventsRoute.body?.cancel();
     assert.notEqual(testRunReadRoute.status, 404);
     assert.notEqual(proposalRoute.status, 404);
     assert.equal(diagnostics.plugins.activePluginIds.includes("plugin.platform"), true);
@@ -527,6 +531,7 @@ test("full runtime exposes platform console and platform self-model API", async 
     assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-change-sets") && route.handler === "platform.changeSet.reject"), true);
     assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-change-sets") && route.handler === "platform.changeSet.abandon"), true);
     assert.equal(diagnostics.routes.some(route => route.matcher === "/api/platform-test-runs" && route.handler === "platform.testRun.create"), true);
+    assert.equal(diagnostics.routes.some(route => route.matcher === "/api/platform-test-runs/events" && route.handler === "platform.testRun.events"), true);
     assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-test-runs") && route.handler === "platform.testRun.read"), true);
     assert.equal(diagnostics.routes.some(route => route.matcher === "/api/platform-proposals" && route.handler === "platform.proposal.create"), true);
   } finally {

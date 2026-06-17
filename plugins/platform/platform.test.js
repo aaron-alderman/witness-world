@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createWorld } from "../../src/kernel.js";
@@ -104,6 +105,7 @@ test("platform runtime declares every change-set route with owned handler metada
     { method: "POST", handler: "platform.changeSet.reject", pattern: /^\/api\/platform-change-sets\/([^/]+)\/reject$/, paramNames: ["id"] },
     { method: "POST", handler: "platform.changeSet.abandon", pattern: /^\/api\/platform-change-sets\/([^/]+)\/abandon$/, paramNames: ["id"] },
     { method: "POST", path: "/api/platform-test-runs", handler: "platform.testRun.create" },
+    { method: "GET", path: "/api/platform-test-runs/events", handler: "platform.testRun.events" },
     { method: "GET", handler: "platform.testRun.read", pattern: /^\/api\/platform-test-runs\/([^/]+)$/, paramNames: ["id"] }
   ];
 
@@ -1424,6 +1426,70 @@ test("platform test run handlers execute modeled gates and expose read model sta
   assert.equal(sent.at(-1).body.testResults.length, 1);
 }));
 
+test("platform test run event stream publishes start and finish witnesses", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    platformTestRunner: async () => ({
+      startedAt: "2026-06-18T00:00:00.000Z",
+      finishedAt: "2026-06-18T00:00:01.000Z",
+      durationMs: 1000,
+      exitCode: 0,
+      signal: null,
+      status: "passed",
+      stdout: "ok",
+      stderr: "",
+      timedOut: false,
+      error: null
+    }),
+    sendGateFailure: () => {},
+    send: () => {},
+    sendJson: () => {}
+  });
+
+  const req = new EventEmitter();
+  const chunks = [];
+  const res = {
+    writeHead: () => {},
+    write: chunk => chunks.push(String(chunk)),
+    end: () => {}
+  };
+
+  await handlers["platform.testRun.events"]({
+    req,
+    res,
+    appContext: { runtimeProfile: "full" }
+  });
+
+  await handlers["platform.testRun.create"]({
+    req: { body: { id: "testRun.platform.events", gateId: "gate:plugins/platform/platform.test.js", branchId: "branch.platform.events" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: {
+      runtimeProfile: "full",
+      project: projector => world.project(projector)
+    }
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 250));
+  req.emit("close");
+
+  const output = chunks.join("");
+  assert.match(output, /event: ready/);
+  assert.match(output, /event: testRun/);
+  assert.match(output, /"phase":"start"/);
+  assert.match(output, /"phase":"finish"/);
+  assert.match(output, /"runId":"testRun.platform.events"/);
+  assert.match(output, /"status":"passed"/);
+}));
+
 test("platform change-set validation exposes a transient validating status before final result", async () => withRegisteredPluginProjectors(providers, async () => {
   const world = createWorld();
   const sent = [];
@@ -2311,6 +2377,7 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Selected Branches/);
   assert.match(html, /Test Runs/);
   assert.match(html, /Latest Test Results/);
+  assert.match(html, /Live Test Run Events/);
   assert.match(html, /Run Test Gate/);
   assert.match(html, /Candidate Snapshots/);
   assert.match(html, /Runtime Revisions/);
@@ -2338,6 +2405,8 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /platform-change-set-apply-form/);
   assert.match(html, /platform-change-set-lifecycle-form/);
   assert.match(html, /platform-test-run-form/);
+  assert.match(html, /test-run-stream-status/);
+  assert.match(html, /test-run-stream-log/);
   assert.match(html, /platform-branch-detail-select/);
   assert.match(html, /platform-branch-test-gates-summary/);
   assert.match(html, /data-branch-lane="draft"/);
@@ -2358,6 +2427,7 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /\/api\/platform-proposals/);
   assert.match(html, /\/api\/platform-change-sets/);
   assert.match(html, /\/api\/platform-test-runs/);
+  assert.match(html, /\/api\/platform-test-runs\/events/);
   assert.match(html, /\/api\/runtime\/backend-revisions\/events/);
   assert.match(html, /\/apply/);
   assert.match(html, /\/reject/);

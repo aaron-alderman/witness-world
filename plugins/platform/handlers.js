@@ -24,6 +24,36 @@ import { renderPlatformPage } from "./platform-page.js";
 import { buildPlatformProposalCreateBody } from "./platform-proposals.js";
 import { readPlatformTestRun, runPlatformTestCommand, runPlatformTestGate } from "./test-runs.js";
 
+const PLATFORM_TEST_RUN_EVENT_PROCESSES = new Set(["platform.test.run.start", "platform.test.run.finish"]);
+
+function platformTestRunEventFrame(event, payload) {
+  return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
+}
+
+function platformTestRunEventPayload(witness) {
+  const body = witness?.body ?? {};
+  const results = Array.isArray(body.results) ? body.results : [];
+  return {
+    witnessId: witness?.id ?? null,
+    process: witness?.process ?? null,
+    phase: witness?.process === "platform.test.run.start" ? "start" : "finish",
+    runId: body.id ? String(body.id) : null,
+    gateId: body.gateId ? String(body.gateId) : null,
+    title: body.title ? String(body.title) : null,
+    status: body.status ? String(body.status) : null,
+    branchId: body.branchId ? String(body.branchId) : null,
+    changeSetId: body.changeSetId ? String(body.changeSetId) : null,
+    candidateSnapshotId: body.candidateSnapshotId ? String(body.candidateSnapshotId) : null,
+    startedAt: body.startedAt ?? null,
+    finishedAt: body.finishedAt ?? null,
+    durationMs: typeof body.durationMs === "number" ? body.durationMs : null,
+    exitCode: typeof body.exitCode === "number" ? body.exitCode : null,
+    timedOut: body.timedOut === true,
+    error: body.error ?? null,
+    resultIds: results.map(result => String(result?.id || "")).filter(Boolean)
+  };
+}
+
 function diagnosticsFromAppContext(appContext) {
   const summary = appContext?.runtimeBundleSummary ?? {};
   const snapshotManager = appContext?.appSnapshotManager ?? null;
@@ -442,6 +472,32 @@ export function createPlatformHandlers({
         latestResult: result.latestResult,
         startWitness: result.startWitness,
         finishWitness: result.finishWitness
+      });
+    },
+
+    "platform.testRun.events": async ({ req, res, appContext }) => {
+      res.writeHead(200, {
+        "content-type": "text/event-stream",
+        "cache-control": "no-cache",
+        connection: "keep-alive"
+      });
+      let cursor = world.witnessCount();
+      res.write(platformTestRunEventFrame("ready", {
+        cursor,
+        runtimeProfile: appContext?.runtimeProfile ?? null
+      }));
+      const interval = setInterval(() => {
+        const next = world.witnessesSince(cursor);
+        cursor += next.length;
+        for (const witness of next) {
+          if (!PLATFORM_TEST_RUN_EVENT_PROCESSES.has(String(witness?.process || ""))) continue;
+          res.write(platformTestRunEventFrame("testRun", platformTestRunEventPayload(witness)));
+        }
+      }, 100);
+      interval.unref?.();
+      req.on("close", () => {
+        clearInterval(interval);
+        try { res.end(); } catch {}
       });
     },
 

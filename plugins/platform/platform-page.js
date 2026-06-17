@@ -370,6 +370,12 @@ export function renderPlatformPage(model) {
     </section>
 
     <section>
+      <h2>Live Test Run Events</h2>
+      <div id="test-run-stream-status" class="muted">Connecting to /api/platform-test-runs/events…</div>
+      <pre id="test-run-stream-log"></pre>
+    </section>
+
+    <section>
       <h2>Candidate Snapshots</h2>
       <table>
         <thead><tr><th>Status</th><th>Snapshot</th><th>Branch</th><th>Change Set</th><th>Revision</th></tr></thead>
@@ -840,6 +846,41 @@ export function renderPlatformPage(model) {
         ? ("Test run finished: " + String(json.latestResult?.status || json.testRun?.status || "unknown"))
         : (json.error || "Test run failed.");
     });
+    if (window.EventSource) {
+      const status = document.getElementById("test-run-stream-status");
+      const log = document.getElementById("test-run-stream-log");
+      const source = new EventSource("/api/platform-test-runs/events");
+      source.addEventListener("ready", event => {
+        try {
+          const payload = JSON.parse(event.data || "{}");
+          status.textContent = "Listening for test run events at cursor " + String(payload.cursor ?? 0) + ".";
+        } catch {
+          status.textContent = "Test run event stream ready.";
+        }
+      });
+      source.addEventListener("testRun", event => {
+        try {
+          const payload = JSON.parse(event.data || "{}");
+          const line = [
+            payload.phase || "event",
+            payload.runId || "run",
+            payload.status || "unknown",
+            payload.gateId || ""
+          ].filter(Boolean).join(" ");
+          status.textContent = "Latest test event: " + line;
+          const existing = log.textContent ? (log.textContent + "\n") : "";
+          log.textContent = (existing + JSON.stringify(payload)).trim();
+        } catch {
+          status.textContent = "Test run event decode failed.";
+        }
+      });
+      source.onerror = () => {
+        status.textContent = "Test run event stream reconnecting…";
+      };
+    } else {
+      const status = document.getElementById("test-run-stream-status");
+      status.textContent = "Test run event stream unavailable in this browser.";
+    }
     const branchDetailSelect = document.getElementById("platform-branch-detail-select");
     if (branchDetailSelect) {
       branchDetailSelect.addEventListener("change", event => {
