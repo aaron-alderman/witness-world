@@ -105,7 +105,8 @@ async function readSourceRecord(filePath, sourceLanguage, fsModule = fs) {
     sourceLanguage,
     content: text,
     contentHash: hashContent(text),
-    mtimeMs: Number(stat.mtimeMs || 0)
+    mtimeMs: Number(stat.mtimeMs || 0),
+    size: Number(stat.size || 0)
   };
 }
 
@@ -403,17 +404,19 @@ export class AppSnapshotManager {
   async detectChangedPaths() {
     const snapshot = this.activeSnapshot;
     if (!snapshot) return new Set();
-    const changed = new Set();
-    const currentKnown = new Map(snapshot.sourceIndex.map(row => [row.filePath, row]));
-    for (const row of currentKnown.values()) {
+    const checks = await Promise.all((snapshot.sourceIndex ?? []).map(async row => {
       try {
-        const current = await readSourceRecord(row.filePath, row.sourceLanguage, this.fs);
-        if (current.contentHash !== row.contentHash || current.mtimeMs !== row.mtimeMs) changed.add(row.filePath);
+        const stat = await this.fs.stat(row.filePath);
+        const currentMtimeMs = Number(stat.mtimeMs || 0);
+        const currentSize = Number(stat.size || 0);
+        return currentMtimeMs !== row.mtimeMs || currentSize !== Number(row.size || 0)
+          ? row.filePath
+          : null;
       } catch {
-        changed.add(row.filePath);
+        return row.filePath;
       }
-    }
-    return changed;
+    }));
+    return new Set(checks.filter(Boolean));
   }
 
   async consumeDirtyAndRebuild(trigger) {
@@ -478,7 +481,8 @@ export class AppSnapshotManager {
       sourceId: unit.sourceId,
       sourceLanguage: unit.sourceLanguage,
       contentHash: unit.contentHash,
-      mtimeMs: unit.mtimeMs
+      mtimeMs: unit.mtimeMs,
+      size: Number(unit.size || 0)
     }));
     this.lastGoodSnapshot = this.activeSnapshot ?? null;
     this.appRevision += 1;

@@ -22,6 +22,9 @@ Reference behavior evidence read from the oracle JavaScript lives in
 - App structure, routes, views, copy, assets, and CSS belong to the app layer.
 - The app must be authored in DESIRE terms. Handwritten browser facades must
   not regain authority over shell structure or app flow.
+- Lazy transport is a runtime responsibility by default. Authors should not
+  have to manually split route payloads just to avoid over-shipping off-route
+  state.
 - The constrained public frontend model is
   `surface + process + projection + capability`.
 - `plugin.authoring` is the only constrained write path.
@@ -99,6 +102,7 @@ clean floor proved by the canonical authoring pathway probe.
 - canonical authoring pathway probe truth
 - no-cheat boundary truth
 - authored Engentus source structure under `examples/engentus`
+- route-local `page.surface` transport slicing for served authored surfaces
 
 ### Removed false authority
 
@@ -122,6 +126,8 @@ clean floor proved by the canonical authoring pathway probe.
   tree through the canonical authoring pathway probe
 - route-selected alternate authored `page.surface` output through the canonical
   authoring pathway probe
+- route-local runtime transport for served `page.surface` output, so an active
+  route no longer serializes the entire broad owning process closure by default
 
 ## Routing cluster
 
@@ -157,3 +163,8 @@ The restart lane is:
 
 Engentus remains the downstream oracle. `example-ports/engentus/` remains the
 reference for expected HTML/CSS outcomes, not executable frontend authority.
+
+Load-order or cache hints are deferred until runtime-default route-local
+transport has been measured and proven insufficient. The first corrective move
+is to make `page.surface` ship only the reachable runtime fragment for the
+active authored route subtree.

@@ -130,7 +130,34 @@ export function createProcessRuntime(world, options = {}) {
   const state = new Map();
   const trace = [];
   const observers = new Set();
+  const idleWaiters = new Set();
   let stepNo = 0;
+  let inFlightCount = 0;
+
+  function beginAsyncWork() {
+    inFlightCount += 1;
+  }
+
+  function endAsyncWork() {
+    inFlightCount = Math.max(0, inFlightCount - 1);
+    if (inFlightCount !== 0) return;
+    for (const resolve of idleWaiters) resolve();
+    idleWaiters.clear();
+  }
+
+  async function trackAsync(work) {
+    beginAsyncWork();
+    try {
+      return await work();
+    } finally {
+      endAsyncWork();
+    }
+  }
+
+  function whenIdle() {
+    if (inFlightCount === 0) return Promise.resolve();
+    return new Promise(resolve => idleWaiters.add(resolve));
+  }
 
   function seed() {
     for (const d of all) {
@@ -293,7 +320,7 @@ export function createProcessRuntime(world, options = {}) {
     if (!proc) throw new Error(`deliverAuthored: event '${eventId}' is handled by no process`);
     const rule = ruleFor(eventId);
     if (!rule) return deliver(eventId, payload);
-    return runRuleSteps(rule.steps ?? [], eventId, proc);
+    return trackAsync(() => runRuleSteps(rule.steps ?? [], eventId, proc));
   }
 
   function resolve(commandId, outcome = "success", payload = null) {
@@ -333,14 +360,16 @@ export function createProcessRuntime(world, options = {}) {
     if (!hostOp) throw new Error(`stepViaHostOp: adapter for '${commandId}' carries no host_operation`);
     dispatch(commandId);
     const request = requestFor(commandId);
-    const response = await runtime.invoke({ host_operation: hostOp, request });
-    const outcome = response?.status === "failure" ? "failure" : "success";
-    const obs = resolve(commandId, outcome, response?.payload ?? null);
-    obs.hostOperation = hostOp;
-    obs.outcome = outcome;
-    obs.request = request;
-    obs.response = response;
-    return obs;
+    return trackAsync(async () => {
+      const response = await runtime.invoke({ host_operation: hostOp, request });
+      const outcome = response?.status === "failure" ? "failure" : "success";
+      const obs = resolve(commandId, outcome, response?.payload ?? null);
+      obs.hostOperation = hostOp;
+      obs.outcome = outcome;
+      obs.request = request;
+      obs.response = response;
+      return obs;
+    });
   }
 
   function policyOutcome(policyId) {
@@ -381,6 +410,8 @@ export function createProcessRuntime(world, options = {}) {
       observers.add(observer);
       return () => observers.delete(observer);
     },
+    whenIdle,
+    get inFlightCount() { return inFlightCount; },
     // the lifecycle history of one state value across the recorded trace
     history(stateId) {
       const seq = [];

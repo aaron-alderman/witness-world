@@ -45,7 +45,7 @@ function makeWorldFromLog({ genesis, log, obsLog, projectionContext = null }) {
   const currentProjectionContext = () => projectionContextStack.at(-1)?.projectionContext ?? null;
 
   function emit({ process, actor, claims = [], body = {}, cause = undefined }) {
-    const prior = log.all().at(-1)?.id ?? null;
+    const prior = log.last()?.id ?? null;
     const actualCause = cause === undefined ? prior : cause;
     const w = makeWitness({ cause: actualCause, process, actor, claims, body });
     log.append(w);
@@ -53,7 +53,7 @@ function makeWorldFromLog({ genesis, log, obsLog, projectionContext = null }) {
   }
 
   function observe({ process, actor, claims = [], body = {}, cause = undefined }) {
-    const prior = obsLog.all().at(-1)?.id ?? null;
+    const prior = obsLog.last()?.id ?? null;
     const actualCause = cause === undefined ? prior : cause;
     const w = makeWitness({ cause: actualCause, process, actor, claims, body });
     obsLog.append(w);
@@ -85,6 +85,30 @@ function makeWorldFromLog({ genesis, log, obsLog, projectionContext = null }) {
     return obsLog.all();
   }
 
+  function witnessCount() {
+    return log.count();
+  }
+
+  function observationCount() {
+    return obsLog.count();
+  }
+
+  function lastWitness() {
+    return log.last();
+  }
+
+  function lastObservation() {
+    return obsLog.last();
+  }
+
+  function witnessesSince(index = 0) {
+    return log.slice(index);
+  }
+
+  function observationsSince(index = 0) {
+    return obsLog.slice(index);
+  }
+
   function _replaceWitnesses(next) {
     log.replace(next);
   }
@@ -106,7 +130,23 @@ function makeWorldFromLog({ genesis, log, obsLog, projectionContext = null }) {
     };
   }
 
-  return { emit, observe, project, allWitnesses, allObservations, fork, _replaceWitnesses, _replaceObservations, _pushProjectionContext };
+  return {
+    emit,
+    observe,
+    project,
+    allWitnesses,
+    allObservations,
+    witnessCount,
+    observationCount,
+    lastWitness,
+    lastObservation,
+    witnessesSince,
+    observationsSince,
+    fork,
+    _replaceWitnesses,
+    _replaceObservations,
+    _pushProjectionContext
+  };
 }
 
 function makeWitness({ cause, process, actor, claims, body }) {

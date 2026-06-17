@@ -329,12 +329,21 @@ export async function startRuntimeServer(world, {
   appContext.operatorRuntimePluginIds = effectiveRuntimePluginCatalog.operatorPluginIds;
   appContext.effectiveRuntimePluginIds = effectiveRuntimePluginCatalog.effectivePluginIds;
   appContext.activeRuntimePluginIds = effectiveRuntimePluginCatalog.activePluginIds;
+  const currentWitnessCount = () => typeof world?.witnessCount === "function"
+    ? Number(world.witnessCount() || 0)
+    : Number(world?.allWitnesses?.().length || 0);
+  const currentLastWitness = () => typeof world?.lastWitness === "function"
+    ? world.lastWitness()
+    : world?.allWitnesses?.().at(-1) ?? null;
+  const witnessesSince = index => typeof world?.witnessesSince === "function"
+    ? world.witnessesSince(index)
+    : world?.allWitnesses?.().slice(index) ?? [];
   const attachEventsStream = context => {
     if (!context) return context;
     context.eventsStream = {
       open(res, req) {
         res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-cache", connection: "keep-alive" });
-        res.write(sseFrame(world.allWitnesses().length, world.allWitnesses().at(-1) ?? null));
+        res.write(sseFrame(currentWitnessCount(), currentLastWitness()));
         sseClients.add(res);
         req.on("close", () => sseClients.delete(res));
         return { clients: sseClients.size, serverRunner: context.serverRunnerId ?? serverRunner.id };
@@ -397,9 +406,24 @@ export async function startRuntimeServer(world, {
     appSnapshotManager: appContext.appSnapshotManager ?? null,
     currentAppRenderWorld: () => appContext.appSnapshotManager?.getActiveSnapshot()?.world ?? world
   });
-  const mountedRoutesFor = (runnerId, runtimeContext = null) => (runtimeContext?.appSnapshotManager?.getActiveSnapshot()?.world ?? world).project(moduleProjectors.servedRoutes)
-    .filter(route => route.serverRunner === runnerId)
-    .map(route => ({ ...route, matcher: compileRouteMatcher(route.path) }));
+  const mountedRoutesCache = new WeakMap();
+  const mountedRoutesFor = (runnerId, runtimeContext = null) => {
+    const routeWorld = runtimeContext?.appSnapshotManager?.getActiveSnapshot()?.world ?? world;
+    const witnessCount = Number(routeWorld?.allWitnesses?.().length || 0);
+    const cached = mountedRoutesCache.get(routeWorld);
+    if (cached && cached.witnessCount === witnessCount && cached.byRunner.has(runnerId)) {
+      return cached.byRunner.get(runnerId);
+    }
+    const byRunner = cached && cached.witnessCount === witnessCount
+      ? cached.byRunner
+      : new Map();
+    const table = routeWorld.project(moduleProjectors.servedRoutes)
+      .filter(route => route.serverRunner === runnerId)
+      .map(route => ({ ...route, matcher: compileRouteMatcher(route.path) }));
+    byRunner.set(runnerId, table);
+    mountedRoutesCache.set(routeWorld, { witnessCount, byRunner });
+    return table;
+  };
   const runtimeResolver = createRuntimeResolverForServerImpl({
     world,
     bootstrapRunner: serverRunner,
@@ -452,14 +476,14 @@ export async function startRuntimeServer(world, {
         return "application/octet-stream";
     }
   }
-  let sseLastCount = world.allWitnesses().length;
+  let sseLastCount = currentWitnessCount();
   const sseWatcher = setInterval(() => {
-    const count = world.allWitnesses().length;
+    const count = currentWitnessCount();
     if (count <= sseLastCount) return;
-    const witnesses = world.allWitnesses();
-    for (let index = sseLastCount; index < count; index += 1) {
-      const witness = witnesses[index] ?? null;
-      const frame = sseFrame(index + 1, witness);
+    const nextWitnesses = witnessesSince(sseLastCount);
+    for (let index = 0; index < nextWitnesses.length; index += 1) {
+      const witness = nextWitnesses[index] ?? null;
+      const frame = sseFrame(sseLastCount + index + 1, witness);
       for (const client of sseClients) client.write(frame);
     }
     sseLastCount = count;
@@ -478,7 +502,7 @@ export async function startRuntimeServer(world, {
     const requestContext = resolveRequestContext(req, sessionStore, { allowActorHeader: runtime.runner.allowActorHeader === true });
     const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
     let matchedRoute = null;
-    const witnessCountBefore = world.allWitnesses().length;
+    const witnessCountBefore = currentWitnessCount();
     logInfo("http.request.start", { requestId, method: req.method, url: req.url, actor: requestContext.actor });
     res.on("finish", () => {
       logInfo("http.request.finish", { requestId, method: req.method, url: req.url, statusCode: res.statusCode, durationMs: Date.now() - startedAt });
@@ -629,7 +653,7 @@ export async function startRuntimeServer(world, {
       });
       sendJson(res, 500, { error: "internal error", requestId });
     } finally {
-      const emittedWitnesses = world.allWitnesses().slice(witnessCountBefore);
+      const emittedWitnesses = witnessesSince(witnessCountBefore);
       const failedWitnesses = emittedWitnesses.filter(witness => witness.process.endsWith(".failed") || witness.process.endsWith(".blocked"));
       world.observe({
         process: "backend.request.finish",

@@ -31,4 +31,16 @@ export class WitnessLog {
   all() {
     return [...this.entries];
   }
+
+  count() {
+    return this.entries.length;
+  }
+
+  last() {
+    return this.entries.at(-1) ?? null;
+  }
+
+  slice(start = 0, end = undefined) {
+    return this.entries.slice(start, end);
+  }
 }

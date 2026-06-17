@@ -1,7 +1,8 @@
 import {
   readInitialStateFromWorld,
+  readSurfaceMapFromWorld,
   renderSurfaceStaticFragment,
-  resolveSurfaceShellPage
+  resolveSurfaceShellFromMap
 } from "./runtime-surface-shell.js";
 import {
   buildSurfaceRuntimeManifest,
@@ -14,10 +15,11 @@ function escapeScriptBody(source) {
 
 function injectInteractionRuntime(html, manifest) {
   if (!manifest) return html;
-  const script = `<script type="module">\n${escapeScriptBody(renderSurfaceInteractionRuntimeModule(manifest))}\n</script>`;
+  const manifestScript = `<script type="application/json" id="surface-runtime-manifest">${escapeScriptBody(JSON.stringify(manifest))}</script>`;
+  const script = `<script>\n${escapeScriptBody(renderSurfaceInteractionRuntimeModule())}\n</script>`;
   return String(html).includes("</body>")
-    ? String(html).replace("</body>", `    ${script}\n  </body>`)
-    : `${html}\n${script}`;
+    ? String(html).replace("</body>", `    ${manifestScript}\n    ${script}\n  </body>`)
+    : `${html}\n${manifestScript}\n${script}`;
 }
 
 function uniqueStrings(values = []) {
@@ -48,6 +50,28 @@ function buildSurfaceRenderers(rendererProviders = [], context = {}) {
       };
     })
     .filter(renderer => renderer && typeof renderer.renderSurface === "function");
+}
+
+function activeSurfaceCapabilityRefs(surfaces, activeSurfaceId) {
+  const required = new Set();
+  const queue = [String(activeSurfaceId || "").trim()];
+  const seen = new Set();
+  while (queue.length) {
+    const surfaceId = queue.shift();
+    if (!surfaceId || seen.has(surfaceId)) continue;
+    seen.add(surfaceId);
+    const surface = surfaces.get(surfaceId);
+    if (!surface) continue;
+    for (const capability of Array.isArray(surface.capabilityRefs) ? surface.capabilityRefs : []) {
+      const value = String(capability || "").trim();
+      if (value) required.add(value);
+    }
+    for (const childId of Array.isArray(surface.children) ? surface.children : []) {
+      const value = String(childId || "").trim();
+      if (value) queue.push(value);
+    }
+  }
+  return required;
 }
 
 function injectCapabilityAssets(html, renderers = []) {
@@ -87,14 +111,18 @@ export function renderSurfacePage(world, {
   surfaceCapabilityRenderers = []
 } = {}) {
   const initialState = readInitialStateFromWorld(world);
-  const shellState = resolveSurfaceShellPage(world, {
+  const surfaces = readSurfaceMapFromWorld(world);
+  const shellState = resolveSurfaceShellFromMap({
+    surfaces,
     rootSurfaceId,
     requestPathname,
     route,
     initialState
   });
   if (!shellState?.html) return null;
-  const surfaceRenderers = buildSurfaceRenderers(surfaceCapabilityRenderers, {
+  const requiredCapabilities = activeSurfaceCapabilityRefs(shellState.surfaces, shellState.activeSurface?.id);
+  const activeRendererProviders = surfaceCapabilityRenderers.filter(provider => requiredCapabilities.has(provider?.capability));
+  const surfaceRenderers = buildSurfaceRenderers(activeRendererProviders, {
     world,
     rootSurface: shellState.rootSurface,
     activeSurface: shellState.activeSurface,
@@ -102,13 +130,16 @@ export function renderSurfacePage(world, {
     browserRuntimeCapabilities,
     initialState
   });
-  const shell = resolveSurfaceShellPage(world, {
-    rootSurfaceId,
-    requestPathname,
-    route,
-    surfaceRenderers,
-    initialState
-  });
+  const shell = surfaceRenderers.length
+    ? resolveSurfaceShellFromMap({
+        surfaces,
+        rootSurfaceId,
+        requestPathname,
+        route,
+        surfaceRenderers,
+        initialState
+      })
+    : shellState;
   if (!shell?.html) return null;
   const manifest = buildSurfaceRuntimeManifest({
     world,
@@ -123,12 +154,5 @@ export function renderSurfacePage(world, {
     requestPathname: shell.requestPathname,
     routeStateDescriptor
   });
-  if (manifest) {
-    manifest.routeSurfaceFragments = Object.fromEntries((manifest.routeTargets ?? [])
-      .map(target => [target.key, renderSurfaceStaticFragment(shell.surfaces, target.surfaceId, {
-        surfaceRenderers,
-        initialState
-      })]));
-  }
   return injectInteractionRuntime(injectCapabilityAssets(shell.html, surfaceRenderers), manifest);
 }

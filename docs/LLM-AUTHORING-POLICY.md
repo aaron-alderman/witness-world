@@ -21,6 +21,10 @@ The canonical public frontend model in constrained mode is:
 `DESIRE+` remains an internal lowering/debug layer, not a public MCP write
 surface.
 
+Lazy route-local transport is a runtime concern by default. Constrained
+authoring should stay natural and high-level unless the capability matrix proves
+that additional authored load hints are genuinely required.
+
 ## Hard boundaries
 
 In `mcp_only` mode the LLM must not:
@@ -68,6 +72,9 @@ Current constrained truth is:
 - `page.surface` exists as a route host
 - it supports minimal static authored projection
 - it supports route-selected alternate authored output
+- it now slices served runtime transport to the reachable fragment used by the
+  active authored route subtree instead of serializing the whole broad process
+  closure by default
 - route/state equivalence and canonical interactive execution through
   `page.surface` remain blocked
 

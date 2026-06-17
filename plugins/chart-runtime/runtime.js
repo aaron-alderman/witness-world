@@ -160,7 +160,7 @@ export function buildMountedChartRuntime({ world, activeSurface, rootSurface, in
       .map(witness => [witness.body.id, witness.body])
   );
   const chartIds = [];
-  const traversalRoot = rootSurface ?? activeSurface;
+  const traversalRoot = activeSurface ?? rootSurface;
   const queue = traversalRoot?.id
     ? [traversalRoot.id]
     : (Array.isArray(activeSurface?.children) ? [...activeSurface.children] : []);

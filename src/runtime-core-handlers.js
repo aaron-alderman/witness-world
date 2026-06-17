@@ -81,6 +81,12 @@ export function createCoreRuntimeBundleHandlers({
   appSnapshotManager = null,
   currentAppRenderWorld = null
 }) {
+  const witnessCount = () => typeof world?.witnessCount === "function"
+    ? Number(world.witnessCount() || 0)
+    : Number(world?.allWitnesses?.().length || 0);
+  const witnessesSince = index => typeof world?.witnessesSince === "function"
+    ? world.witnessesSince(index)
+    : world?.allWitnesses?.().slice(index) ?? [];
   const renderWidgetPageHook = coreHooks.renderWidgetPage ?? ((_world, { rootWidget }) => renderInactiveRuntimeWidgetPage({ rootWidget }));
   const projectPagePresentationThemeHook = coreHooks.projectPagePresentationTheme
     ?? coreHooks.projectEdenPageTheme
@@ -237,7 +243,7 @@ export function createCoreRuntimeBundleHandlers({
         const requestBody = Object.prototype.hasOwnProperty.call(params, "body")
           ? params.body
           : (typeof params.from === "string" && params.from.trim() ? readPath(stateRef, params.from.trim()) : null);
-        const witnessCountBefore = world.allWitnesses().length;
+        const witnessCountBefore = witnessCount();
         const result = await invokeRouteHandler({
           handler,
           method: typeof params.method === "string" && params.method.trim() ? params.method.trim().toUpperCase() : "POST",
@@ -256,7 +262,7 @@ export function createCoreRuntimeBundleHandlers({
             params: params.params && typeof params.params === "object" ? params.params : {}
           }
         });
-        const emittedWitnesses = world.allWitnesses().slice(witnessCountBefore);
+        const emittedWitnesses = witnessesSince(witnessCountBefore);
         const failedWitnesses = emittedWitnesses.filter(witness => witness.process.endsWith(".failed") || witness.process.endsWith(".blocked"));
         world.observe({
           process: "backend.request.finish",

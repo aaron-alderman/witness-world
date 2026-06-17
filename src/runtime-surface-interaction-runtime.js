@@ -1,13 +1,22 @@
 import { renderProcessRuntimeModuleSource } from "./desire/process-eval.js";
 import { surfaceDomId } from "./runtime-surface-dom-identity.js";
 
+const processWitnessCatalogCache = new WeakMap();
+
+function currentWitnessCount(world) {
+  if (typeof world?.witnessCount === "function") return Number(world.witnessCount() || 0);
+  return typeof world?.allWitnesses === "function" ? Number(world.allWitnesses().length || 0) : 0;
+}
+
 function trimString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function resolvedSurfaceDomId(surface) {
   const props = surface?.props && typeof surface.props === "object" ? surface.props : {};
-  return trimString(props.mountId) ?? surfaceDomId(surface, { requireRuntimeAttachment: true });
+  return trimString(props.domId)
+    ?? trimString(props.mountId)
+    ?? surfaceDomId(surface, { requireRuntimeAttachment: true });
 }
 
 function normalizeRuntimeArray(value) {
@@ -26,6 +35,302 @@ function runtimeSpecForSurface(surface) {
     bindings: normalizeRuntimeArray(surface?.bindings),
     interactions: normalizeRuntimeArray(surface?.interactions)
   };
+}
+
+function surfaceHasRuntimeMeaning(surface) {
+  const runtime = runtimeSpecForSurface(surface);
+  return Boolean(
+    runtime.processRef
+    || runtime.projectionRefs.length
+    || runtime.capabilityRefs.length
+    || runtime.bindings.length
+    || runtime.interactions.length
+  );
+}
+
+const PROCESS_WITNESS_KINDS = new Set([
+  "desire.defineProcess",
+  "desire.defineMessage",
+  "desire.defineType",
+  "desire.defineBoundary",
+  "desire.defineProjection",
+  "desire.definePolicy"
+]);
+
+function trimmedIdSet(values = []) {
+  return new Set(values.map(value => trimString(value)).filter(Boolean));
+}
+
+function addToGroupedSet(grouped, group, id) {
+  const trimmed = trimString(id);
+  if (!trimmed) return false;
+  const bucket = grouped[group];
+  if (!(bucket instanceof Set) || bucket.has(trimmed)) return false;
+  bucket.add(trimmed);
+  return true;
+}
+
+function addToIndexedSet(map, key, value) {
+  const nextKey = trimString(key);
+  const nextValue = trimString(value);
+  if (!nextKey || !nextValue) return;
+  if (!map.has(nextKey)) map.set(nextKey, new Set());
+  map.get(nextKey).add(nextValue);
+}
+
+function collectRuleStepReferences(steps = [], refs = { states: [], commands: [] }) {
+  for (const step of steps ?? []) {
+    if (!step || typeof step !== "object") continue;
+    if (trimString(step.state)) refs.states.push(trimString(step.state));
+    if (trimString(step.command)) refs.commands.push(trimString(step.command));
+    if (step.kind === "option") {
+      collectRuleStepReferences(step.real ?? [], refs);
+      collectRuleStepReferences(step.else ?? [], refs);
+    }
+  }
+  return refs;
+}
+
+function buildProcessWitnessCatalog(world) {
+  const witnessCount = currentWitnessCount(world);
+  const cached = world ? processWitnessCatalogCache.get(world) : null;
+  if (cached && cached.witnessCount === witnessCount) return cached.value;
+  const ordered = world.allWitnesses()
+    .filter(witness => PROCESS_WITNESS_KINDS.has(witness.process) && trimString(witness.body?.id));
+  const definitions = new Map(ordered.map(witness => [trimString(witness.body.id), witness]));
+  const stateOwners = new Map();
+  const handleOwners = new Map();
+  const emitOwners = new Map();
+  const policyByState = new Map();
+  const boundaryOperations = new Map();
+  for (const witness of ordered) {
+    const id = trimString(witness.body?.id);
+    const body = witness.body ?? {};
+    if (witness.process === "desire.defineProcess") {
+      for (const stateId of body.state ?? []) addToIndexedSet(stateOwners, stateId, id);
+      for (const messageId of body.handles ?? []) addToIndexedSet(handleOwners, messageId, id);
+      for (const messageId of body.emits ?? []) addToIndexedSet(emitOwners, messageId, id);
+      continue;
+    }
+    if (witness.process === "desire.definePolicy") {
+      addToIndexedSet(policyByState, body.stateField, id);
+      continue;
+    }
+    if (witness.process === "desire.defineBoundary") {
+      for (const operation of body.operations ?? []) {
+        addToIndexedSet(boundaryOperations, operation?.command, id);
+        addToIndexedSet(boundaryOperations, operation?.successEvent, id);
+        addToIndexedSet(boundaryOperations, operation?.failureEvent, id);
+        addToIndexedSet(boundaryOperations, operation?.loadingState, id);
+      }
+    }
+  }
+  const catalog = {
+    ordered,
+    definitions,
+    stateOwners,
+    handleOwners,
+    emitOwners,
+    policyByState,
+    boundaryOperations
+  };
+  if (world) processWitnessCatalogCache.set(world, { witnessCount, value: catalog });
+  return catalog;
+}
+
+function collectRelevantProcessWitnesses(world, surfaceEntries = [], routeStateDescriptor = null) {
+  const catalog = buildProcessWitnessCatalog(world);
+  const relevant = {
+    processes: new Set(),
+    messages: new Set(),
+    states: new Set(),
+    projections: new Set(),
+    boundaries: new Set(),
+    policies: new Set(),
+    types: new Set()
+  };
+  const markDefinition = id => {
+    const trimmed = trimString(id);
+    if (!trimmed) return false;
+    const witness = catalog.definitions.get(trimmed);
+    if (!witness) return false;
+    if (witness.process === "desire.defineProcess") return addToGroupedSet(relevant, "processes", trimmed);
+    if (witness.process === "desire.defineMessage") return addToGroupedSet(relevant, "messages", trimmed);
+    if (witness.process === "desire.defineProjection") return addToGroupedSet(relevant, "projections", trimmed);
+    if (witness.process === "desire.defineBoundary") return addToGroupedSet(relevant, "boundaries", trimmed);
+    if (witness.process === "desire.definePolicy") return addToGroupedSet(relevant, "policies", trimmed);
+    if (witness.process === "desire.defineType") {
+      if (witness.body?.role === "state") return addToGroupedSet(relevant, "states", trimmed);
+      return addToGroupedSet(relevant, "types", trimmed);
+    }
+    return false;
+  };
+  for (const entry of surfaceEntries) {
+    markDefinition(entry.runtime?.processRef);
+    for (const projectionRef of entry.runtime?.projectionRefs ?? []) markDefinition(projectionRef);
+    for (const binding of entry.runtime?.bindings ?? []) {
+      const source = binding?.source ?? {};
+      if (source.kind === "state") markDefinition(source.state);
+      if (source.kind === "projection") markDefinition(source.projection);
+    }
+    for (const interaction of entry.runtime?.interactions ?? []) {
+      const action = interaction?.action ?? {};
+      if (action.kind === "deliver") markDefinition(action.message);
+      if (action.kind === "setState") {
+        markDefinition(action.state);
+        if (action.value?.kind === "toggleState") markDefinition(action.value.state);
+      }
+    }
+  }
+  markDefinition(routeStateDescriptor?.process ?? routeStateDescriptor?.processRef);
+  markDefinition(routeStateDescriptor?.state ?? routeStateDescriptor?.stateRef);
+
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const stateId of [...relevant.states]) {
+      const stateDef = catalog.definitions.get(stateId);
+      if (!stateDef) continue;
+      changed = markDefinition(stateDef.body?.valueType) || changed;
+      for (const owner of catalog.stateOwners.get(stateId) ?? []) {
+        changed = markDefinition(owner) || changed;
+      }
+      for (const policyId of catalog.policyByState.get(stateId) ?? []) {
+        changed = markDefinition(policyId) || changed;
+      }
+      for (const boundaryId of catalog.boundaryOperations.get(stateId) ?? []) {
+        changed = markDefinition(boundaryId) || changed;
+      }
+    }
+    for (const messageId of [...relevant.messages]) {
+      const messageDef = catalog.definitions.get(messageId);
+      if (!messageDef) continue;
+      for (const stateId of Object.keys(messageDef.body?.writes ?? {})) {
+        changed = markDefinition(stateId) || changed;
+      }
+      for (const field of messageDef.body?.fields ?? []) {
+        changed = markDefinition(field?.type) || changed;
+      }
+      for (const owner of catalog.handleOwners.get(messageId) ?? []) {
+        changed = markDefinition(owner) || changed;
+      }
+      for (const owner of catalog.emitOwners.get(messageId) ?? []) {
+        changed = markDefinition(owner) || changed;
+      }
+      for (const boundaryId of catalog.boundaryOperations.get(messageId) ?? []) {
+        changed = markDefinition(boundaryId) || changed;
+      }
+    }
+    for (const projectionId of [...relevant.projections]) {
+      const projectionDef = catalog.definitions.get(projectionId);
+      if (!projectionDef) continue;
+      changed = markDefinition(projectionDef.body?.source) || changed;
+    }
+    for (const policyId of [...relevant.policies]) {
+      const policyDef = catalog.definitions.get(policyId);
+      if (!policyDef) continue;
+      changed = markDefinition(policyDef.body?.stateField) || changed;
+    }
+    for (const boundaryId of [...relevant.boundaries]) {
+      const boundaryDef = catalog.definitions.get(boundaryId);
+      if (!boundaryDef) continue;
+      for (const operation of boundaryDef.body?.operations ?? []) {
+        changed = markDefinition(operation?.command) || changed;
+        changed = markDefinition(operation?.successEvent) || changed;
+        changed = markDefinition(operation?.failureEvent) || changed;
+        changed = markDefinition(operation?.loadingState) || changed;
+      }
+    }
+    for (const processId of [...relevant.processes]) {
+      const processDef = catalog.definitions.get(processId);
+      if (!processDef) continue;
+      for (const stateId of processDef.body?.state ?? []) {
+        if (relevant.states.has(trimString(stateId))) changed = markDefinition(stateId) || changed;
+      }
+      for (const messageId of processDef.body?.handles ?? []) {
+        if (relevant.messages.has(trimString(messageId))) changed = markDefinition(messageId) || changed;
+      }
+      for (const messageId of processDef.body?.emits ?? []) {
+        if (relevant.messages.has(trimString(messageId))) changed = markDefinition(messageId) || changed;
+      }
+      for (const rule of processDef.body?.rules ?? []) {
+        const trigger = trimString(rule?.trigger);
+        if (!trigger || !relevant.messages.has(trigger)) continue;
+        changed = markDefinition(trigger) || changed;
+        const refs = collectRuleStepReferences(rule.steps ?? []);
+        for (const stateId of refs.states) changed = markDefinition(stateId) || changed;
+        for (const commandId of refs.commands) changed = markDefinition(commandId) || changed;
+      }
+    }
+  }
+
+  const slicedWitnesses = [];
+  const relevantIds = new Set([
+    ...relevant.processes,
+    ...relevant.messages,
+    ...relevant.states,
+    ...relevant.projections,
+    ...relevant.boundaries,
+    ...relevant.policies,
+    ...relevant.types
+  ]);
+  for (const witness of catalog.ordered) {
+    const id = trimString(witness.body?.id);
+    if (!relevantIds.has(id)) continue;
+    if (witness.process === "desire.defineProcess") {
+      const next = structuredClone(witness);
+      next.body.state = (next.body.state ?? []).filter(stateId => relevant.states.has(trimString(stateId)));
+      next.body.handles = (next.body.handles ?? []).filter(messageId => relevant.messages.has(trimString(messageId)));
+      next.body.emits = (next.body.emits ?? []).filter(messageId => relevant.messages.has(trimString(messageId)));
+      next.body.rules = (next.body.rules ?? []).filter(rule => relevant.messages.has(trimString(rule?.trigger)));
+      slicedWitnesses.push(next);
+      continue;
+    }
+    if (witness.process === "desire.defineBoundary") {
+      const next = structuredClone(witness);
+      next.body.operations = (next.body.operations ?? []).filter(operation => (
+        relevant.messages.has(trimString(operation?.command))
+        || relevant.messages.has(trimString(operation?.successEvent))
+        || relevant.messages.has(trimString(operation?.failureEvent))
+        || relevant.states.has(trimString(operation?.loadingState))
+      ));
+      slicedWitnesses.push(next);
+      continue;
+    }
+    slicedWitnesses.push(witness);
+  }
+  return {
+    processWitnesses: slicedWitnesses,
+    runtimeIds: [...relevantIds]
+  };
+}
+
+function buildRuntimeManifestDiagnostics({
+  requestPathname = "/",
+  activeSurfaceId = null,
+  surfaceEntries = [],
+  processWitnesses = [],
+  runtimeIds = []
+} = {}) {
+  const countsByWitnessKind = {};
+  for (const witness of processWitnesses) {
+    countsByWitnessKind[witness.process] = (countsByWitnessKind[witness.process] ?? 0) + 1;
+  }
+  return {
+    requestPathname,
+    activeSurfaceId: trimString(activeSurfaceId),
+    includedSurfaceIds: surfaceEntries.map(entry => entry.id),
+    includedRuntimeIds: [...runtimeIds].sort(),
+    countsByWitnessKind,
+    serializedBytes: 0
+  };
+}
+
+function stateIdsFromWitnesses(witnesses = []) {
+  return (witnesses ?? [])
+    .filter(witness => witness?.process === "desire.defineType" && witness?.body?.role === "state")
+    .map(witness => trimString(witness?.body?.id))
+    .filter(Boolean);
 }
 
 function childSurfaceIds(surface) {
@@ -174,49 +479,86 @@ export function buildSurfaceRuntimeManifest({
   describeSurfaceRuntimeViewImpl = null,
   routeStateDescriptor = null
 }) {
-  const surfaceEntries = [];
-  const queue = [{ id: rootSurfaceId ?? root?.id ?? activeSurface.id, parentId: null }];
-  const seen = new Set();
-  while (queue.length) {
-    const next = queue.shift();
-    if (!next?.id || seen.has(next.id)) continue;
-    seen.add(next.id);
+  const rootId = rootSurfaceId ?? root?.id ?? activeSurface.id;
+  const parentById = new Map();
+  const fullQueue = [{ id: rootId, parentId: null }];
+  const fullSeen = new Set();
+  while (fullQueue.length) {
+    const next = fullQueue.shift();
+    if (!next?.id || fullSeen.has(next.id)) continue;
+    fullSeen.add(next.id);
     const surface = surfaces.get(next.id);
     if (!surface) continue;
+    parentById.set(surface.id, next.parentId ?? null);
+    for (const childId of Array.isArray(surface.children) ? surface.children : []) {
+      fullQueue.push({ id: childId, parentId: surface.id });
+    }
+  }
+  const routeTargets = collectRouteTargets(surfaces, rootId);
+  const includedIds = new Set();
+  const markActiveClosure = surfaceId => {
+    const queue = [trimString(surfaceId)];
+    const seen = new Set();
+    while (queue.length) {
+      const currentId = queue.shift();
+      if (!currentId || seen.has(currentId)) continue;
+      seen.add(currentId);
+      includedIds.add(currentId);
+      const surface = surfaces.get(currentId);
+      for (const childId of Array.isArray(surface?.children) ? surface.children : []) {
+        const child = trimString(childId);
+        if (child) queue.push(child);
+      }
+    }
+  };
+  const markAncestors = surfaceId => {
+    let currentId = trimString(surfaceId);
+    while (currentId && !includedIds.has(currentId)) {
+      includedIds.add(currentId);
+      currentId = trimString(parentById.get(currentId));
+    }
+  };
+  markActiveClosure(activeSurface.id);
+  markAncestors(activeSurface.id);
+  const surfaceEntries = [];
+  for (const surfaceId of includedIds) {
+    const surface = surfaces.get(surfaceId);
+    if (!surface) continue;
+    if (!includedIds.has(surfaceId)) continue;
     const runtime = runtimeSpecForSurface(surface);
     const view = describeSurfaceRuntimeView(surface, { describeSurfaceRuntimeViewImpl });
     surfaceEntries.push({
       id: surface.id,
-      parentId: next.parentId,
+      parentId: parentById.get(surface.id) ?? null,
       surfaceKind: surface.surfaceKind ?? null,
       props: normalizeRuntimeObject(surface.props),
       runtime,
       view
     });
-    for (const childId of Array.isArray(surface.children) ? surface.children : []) {
-      queue.push({ id: childId, parentId: surface.id });
-    }
   }
   const interactive = surfaceEntries.some(entry => entry.runtime.processRef || entry.runtime.bindings.length || entry.runtime.interactions.length);
   if (!interactive) return null;
-  const processWitnesses = world.allWitnesses().filter(witness => [
-    "desire.defineProcess",
-    "desire.defineMessage",
-    "desire.defineType",
-    "desire.defineBoundary",
-    "desire.defineProjection",
-    "desire.definePolicy"
-  ].includes(witness.process));
-  return {
+  const runtimeFragment = collectRelevantProcessWitnesses(world, surfaceEntries, routeStateDescriptor);
+  const diagnostics = buildRuntimeManifestDiagnostics({
+    requestPathname,
+    activeSurfaceId: activeSurface.id,
+    surfaceEntries,
+    processWitnesses: runtimeFragment.processWitnesses,
+    runtimeIds: runtimeFragment.runtimeIds
+  });
+  const manifest = {
     rootSurfaceId,
     activeSurfaceId: activeSurface.id,
     requestPathname,
-    routeTargets: collectRouteTargets(surfaces, rootSurfaceId ?? root?.id ?? activeSurface.id),
+    routeTargets,
     browserRuntimeCapabilities: [...new Set((browserRuntimeCapabilities ?? []).map(value => String(value || "")).filter(Boolean))],
     surfaces: surfaceEntries,
-    processWitnesses,
-    routeState: normalizeRouteStateDescriptor(routeStateDescriptor)
+    processWitnesses: runtimeFragment.processWitnesses,
+    routeState: normalizeRouteStateDescriptor(routeStateDescriptor),
+    diagnostics
   };
+  manifest.diagnostics.serializedBytes = Buffer.byteLength(JSON.stringify(manifest), "utf8");
+  return manifest;
 }
 
 export function resolveSurfaceRuntimeBinding(manifest, surfaceId) {
@@ -457,6 +799,13 @@ function routeTargetForProcessState(manifest, processRuntime, processRef) {
   return null;
 }
 
+function routeTargetForManifestState(manifest, processRuntime) {
+  const descriptor = normalizeRouteStateDescriptor(manifest?.routeState);
+  const processRef = trimString(descriptor?.process) || trimString(descriptor?.processRef);
+  if (!processRef) return null;
+  return routeTargetForProcessState(manifest, processRuntime, processRef);
+}
+
 function syncUrlToRouteState({ manifest, processRuntime, processRef, window }) {
   const active = activeRouteTargetForPath(manifest, window?.location?.pathname);
   if (!active || !processRef) return false;
@@ -485,11 +834,118 @@ function syncRouteStateToUrl({ manifest, processRuntime, processRef, window }) {
   return target;
 }
 
+function forceDocumentNavigation(window, targetPath) {
+  const nextPath = trimString(targetPath);
+  if (!nextPath || !window?.location) return false;
+  if (typeof window.location.assign === "function") {
+    window.location.assign(nextPath);
+    return true;
+  }
+  try {
+    window.location.href = nextPath;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function parseFirstElement(document, html) {
   if (!document || typeof html !== "string" || !html.trim()) return null;
   const template = document.createElement("template");
+  if (!template?.content) return null;
   template.innerHTML = html.trim();
   return template.content.firstElementChild;
+}
+
+function supportsSameDocumentRouteReplacement(document, window) {
+  const hasFetch = typeof window?.fetch === "function";
+  const hasTemplateParser = Boolean(document?.createElement?.("template")?.content);
+  const hasDomParser = Boolean(domParserForWindow(window));
+  return hasFetch && (hasDomParser || hasTemplateParser);
+}
+
+function fallbackActiveRootNode(document) {
+  const body = document?.body;
+  if (!body) return null;
+  for (const child of body.children ?? []) {
+    if (!(child instanceof Element)) continue;
+    if (trimString(child.id) === "surface-route-underlay") continue;
+    if (child.tagName?.toLowerCase?.() === "script") continue;
+    return child;
+  }
+  return null;
+}
+
+function domParserForWindow(window) {
+  if (typeof window?.DOMParser === "function") return new window.DOMParser();
+  if (typeof DOMParser === "function") return new DOMParser();
+  return null;
+}
+
+function readSurfaceRuntimeManifest(document) {
+  const node = document?.getElementById?.("surface-runtime-manifest");
+  if (!node) return null;
+  try {
+    return JSON.parse(node.textContent || "null");
+  } catch {
+    return null;
+  }
+}
+
+function parseRouteSurfacePage({ document, window, html, rootId = null } = {}) {
+  if (!html || typeof html !== "string") return { fragment: null, manifest: null };
+  const parser = domParserForWindow(window);
+  if (parser) {
+    const parsed = parser.parseFromString(html, "text/html");
+    const manifestNode = parsed?.getElementById?.("surface-runtime-manifest");
+    let manifest = null;
+    if (manifestNode?.textContent) {
+      try {
+        manifest = JSON.parse(manifestNode.textContent);
+      } catch {}
+    }
+    if (rootId) {
+      const root = parsed?.getElementById?.(rootId);
+      if (root?.outerHTML) return { fragment: root.outerHTML, manifest };
+    }
+    return { fragment: parsed?.body?.firstElementChild?.outerHTML ?? null, manifest };
+  }
+  const first = parseFirstElement(document, html);
+  if (!first) return { fragment: null, manifest: null };
+  if (rootId && trimString(first?.id) && trimString(first.id) !== rootId) return { fragment: null, manifest: null };
+  return { fragment: first.outerHTML ?? html.trim(), manifest: null };
+}
+
+async function loadRouteSurfacePage({ document, window, manifest, surfaceById, target, requireManifest = false } = {}) {
+  if (!target?.surfaceId || !target?.path) return null;
+  const cacheKey = trimString(target.key) || trimString(target.surfaceId);
+  if (!manifest.__routeSurfacePageCache) manifest.__routeSurfacePageCache = {};
+  if (cacheKey && manifest.__routeSurfacePageCache[cacheKey]) {
+    const cached = manifest.__routeSurfacePageCache[cacheKey];
+    if (!requireManifest || cached?.manifest?.surfaces) return cached;
+  }
+  const fetchImpl = typeof window?.fetch === "function"
+    ? window.fetch.bind(window)
+    : null;
+  if (!fetchImpl) return null;
+  const rootId = trimString(surfaceById?.get(target.surfaceId)?.view?.rootId);
+  const loadAttempt = async headers => {
+    const response = await fetchImpl(target.path, headers ? { headers } : {});
+    if (!response?.ok) return null;
+    const html = await response.text();
+    return parseRouteSurfacePage({
+      document,
+      window,
+      html,
+      rootId
+    });
+  };
+  let page = await loadAttempt({ "x-surface-fragment-request": "1" });
+  if (requireManifest && !page?.manifest?.surfaces) {
+    page = await loadAttempt();
+  }
+  if (cacheKey && page?.fragment) manifest.__routeSurfacePageCache[cacheKey] = page;
+  return page;
 }
 
 function bootSurfaceCapabilities(window, root) {
@@ -506,14 +962,17 @@ function clearRouteUnderlay(document) {
   if (layer?.parentNode) layer.parentNode.removeChild(layer);
 }
 
-function updateRouteUnderlay(document, manifest, activeSurface, nextProps) {
+async function updateRouteUnderlay(document, window, manifest, surfaceById, activeSurface, nextProps) {
   const routeKey = trimString(nextProps?.routeUnderlay);
   if (!routeKey) {
     clearRouteUnderlay(document);
     return;
   }
   const target = (manifest?.routeTargets ?? []).find(candidate => String(candidate.key) === routeKey);
-  const html = target ? manifest?.routeSurfaceFragments?.[target.key] ?? manifest?.routeSurfaceFragments?.[target.surfaceId] : null;
+  const page = target
+    ? await loadRouteSurfacePage({ document, window, manifest, surfaceById, target })
+    : null;
+  const html = page?.fragment ?? null;
   const currentRootId = trimString(activeSurface?.view?.rootId);
   const currentRoot = currentRootId ? document?.getElementById?.(currentRootId) : null;
   if (!html || !currentRoot?.parentNode) {
@@ -550,7 +1009,7 @@ export function createSurfaceInteractionRuntime({
     : (() => {
         throw new Error("createProcessRuntime implementation required");
       });
-  const surfaceById = new Map((manifest.surfaces ?? []).map(surface => [surface.id, surface]));
+  let surfaceById = new Map((manifest.surfaces ?? []).map(surface => [surface.id, surface]));
   let activeSurfaceId = trimString(manifest.activeSurfaceId);
   const activeIds = activeRuntimeSurfaceIds(surfaceById, activeSurfaceId);
   const missingInteractionTargets = (manifest?.surfaces ?? []).some(surface =>
@@ -567,9 +1026,60 @@ export function createSurfaceInteractionRuntime({
       reason: "interactive surface execution cannot proceed until the host emits generic interaction target descriptors instead of surface-kind-specific conventions"
     });
   }
-  const processRuntime = processRuntimeFactory({ witnesses: manifest.processWitnesses || [] });
   const disposers = [];
   const runtimeDisposers = [];
+  let processRuntime = null;
+  let unsubscribeProcessRuntime = null;
+  const inFlightRuntimeBridges = new Set();
+  let lastRouteSwap = null;
+  let fallbackNavigationPath = null;
+  const routeDebugLog = [];
+  const pushRouteDebug = entry => {
+    routeDebugLog.push({
+      at: Date.now(),
+      ...entry
+    });
+    if (routeDebugLog.length > 40) routeDebugLog.shift();
+  };
+  const replaceProcessRuntime = nextWitnesses => {
+    const witnesses = Array.isArray(nextWitnesses) ? nextWitnesses : [];
+    const previousRuntime = processRuntime;
+    const nextRuntime = processRuntimeFactory({ witnesses });
+    if (previousRuntime) {
+      for (const stateId of stateIdsFromWitnesses(witnesses)) {
+        const previousValue = previousRuntime.value(stateId);
+        if (previousValue === undefined) continue;
+        nextRuntime.set(stateId, previousValue);
+      }
+      if (typeof previousRuntime.subscribe === "function") {
+        const bridge = previousRuntime.subscribe(observation => {
+          let mirrored = false;
+          for (const change of observation?.changes ?? []) {
+            const stateId = trimString(change?.field);
+            if (!stateId) continue;
+            if (nextRuntime.value(stateId) === undefined) continue;
+            nextRuntime.set(stateId, change.to);
+            mirrored = true;
+          }
+          if (mirrored) void requestSyncRouteAndRefresh();
+        });
+        inFlightRuntimeBridges.add(bridge);
+        Promise.resolve(typeof previousRuntime.whenIdle === "function" ? previousRuntime.whenIdle() : null)
+          .finally(() => {
+            bridge();
+            inFlightRuntimeBridges.delete(bridge);
+          });
+      }
+    }
+    unsubscribeProcessRuntime?.();
+    processRuntime = nextRuntime;
+    unsubscribeProcessRuntime = typeof processRuntime.subscribe === "function"
+      ? processRuntime.subscribe(() => {
+          void requestSyncRouteAndRefresh();
+        })
+      : null;
+  };
+  replaceProcessRuntime(manifest.processWitnesses || []);
   const capabilityOutputs = {};
   const readExistingCapabilityOutputs = root => {
     const queryRoot = root ?? document;
@@ -582,7 +1092,7 @@ export function createSurfaceInteractionRuntime({
       capabilityOutputs[surfaceId] = node.__surfaceCapabilityOutputs;
     }
   };
-  const refresh = () => {
+  const refresh = async () => {
     readExistingCapabilityOutputs(document);
     const activeIds = activeRuntimeSurfaceIds(surfaceById, activeSurfaceId);
     for (const surface of manifest.surfaces ?? []) {
@@ -593,55 +1103,186 @@ export function createSurfaceInteractionRuntime({
       const capabilities = resolveSurfaceCapabilities(binding, manifest.browserRuntimeCapabilities);
       if (capabilities.missing.length) continue;
       const nextProps = overlaySurfaceProps(surface, processRuntime, capabilityOutputs);
-      if (surface.id === activeSurfaceId) updateRouteUnderlay(document, manifest, surface, nextProps);
+      if (surface.id === activeSurfaceId) {
+        await updateRouteUnderlay(document, window, manifest, surfaceById, surface, nextProps);
+      }
       patchSurfaceDom(document, surface, nextProps);
     }
   };
   const disposeInteractions = () => {
     for (const dispose of disposers.splice(0)) dispose();
   };
-  const replaceActiveRouteSurface = target => {
-    if (!target?.surfaceId || target.surfaceId === activeSurfaceId) return false;
+  const replaceActiveRouteSurface = async target => {
+    pushRouteDebug({
+      kind: "replace:start",
+      activeSurfaceId,
+      targetSurfaceId: target?.surfaceId ?? null,
+      targetPath: target?.path ?? null
+    });
+    if (!target?.surfaceId) {
+      lastRouteSwap = { ok: false, reason: "missing-target" };
+      pushRouteDebug({ kind: "replace:missing-target" });
+      return false;
+    }
+    if (target.surfaceId === activeSurfaceId) {
+      lastRouteSwap = { ok: false, reason: "already-active", targetSurfaceId: target.surfaceId };
+      pushRouteDebug({ kind: "replace:already-active", targetSurfaceId: target.surfaceId });
+      return false;
+    }
     const currentSurface = surfaceById.get(activeSurfaceId);
     const currentRootId = trimString(currentSurface?.view?.rootId);
-    const currentRoot = currentRootId ? document.getElementById(currentRootId) : null;
-    const html = manifest?.routeSurfaceFragments?.[target.key] ?? manifest?.routeSurfaceFragments?.[target.surfaceId];
-    const nextRoot = parseFirstElement(document, html);
-    if (!currentRoot || !nextRoot) return false;
+    const currentRoot = (currentRootId ? document.getElementById(currentRootId) : null)
+      ?? fallbackActiveRootNode(document);
+    const page = await loadRouteSurfacePage({
+      document,
+      window,
+      manifest,
+      surfaceById,
+      target,
+      requireManifest: true
+    });
+    const nextRoot = parseFirstElement(document, page?.fragment ?? null);
+    if (!currentRoot || !nextRoot) {
+      lastRouteSwap = {
+        ok: false,
+        reason: !currentRoot ? "missing-current-root" : "missing-next-root",
+        currentRootId,
+        nextRootId: trimString(nextRoot?.id),
+        targetSurfaceId: target.surfaceId,
+        hasManifest: Boolean(page?.manifest?.surfaces)
+      };
+      pushRouteDebug({
+        kind: "replace:missing-root",
+        currentRootId,
+        nextRootId: trimString(nextRoot?.id),
+        targetSurfaceId: target.surfaceId,
+        hasManifest: Boolean(page?.manifest?.surfaces),
+        manifestActiveSurfaceId: trimString(page?.manifest?.activeSurfaceId)
+      });
+      return false;
+    }
     disposeInteractions();
     currentRoot.replaceWith(nextRoot);
-    activeSurfaceId = target.surfaceId;
-    manifest.activeSurfaceId = target.surfaceId;
+    if (page?.manifest?.surfaces) {
+      pushRouteDebug({
+        kind: "replace:manifest",
+        targetSurfaceId: target.surfaceId,
+        manifestActiveSurfaceId: trimString(page.manifest.activeSurfaceId),
+        manifestRequestPathname: trimString(page.manifest.requestPathname),
+        manifestSurfaceCount: Array.isArray(page.manifest.surfaces) ? page.manifest.surfaces.length : 0
+      });
+      manifest.surfaces = page.manifest.surfaces;
+      manifest.routeTargets = page.manifest.routeTargets ?? manifest.routeTargets;
+      manifest.routeState = page.manifest.routeState ?? manifest.routeState;
+      manifest.browserRuntimeCapabilities = page.manifest.browserRuntimeCapabilities ?? manifest.browserRuntimeCapabilities;
+      manifest.processWitnesses = page.manifest.processWitnesses ?? manifest.processWitnesses;
+      replaceProcessRuntime(manifest.processWitnesses || []);
+      surfaceById = new Map((manifest.surfaces ?? []).map(surface => [surface.id, surface]));
+      activeSurfaceId = trimString(page.manifest.activeSurfaceId) || target.surfaceId;
+    } else {
+      activeSurfaceId = target.surfaceId;
+    }
+    manifest.activeSurfaceId = activeSurfaceId;
+    fallbackNavigationPath = null;
     bootSurfaceCapabilities(window, nextRoot);
     clearRouteUnderlay(document);
+    lastRouteSwap = {
+      ok: true,
+      targetSurfaceId: target.surfaceId,
+      activeSurfaceId,
+      nextRootId: trimString(nextRoot?.id),
+      hasManifest: Boolean(page?.manifest?.surfaces)
+    };
+    pushRouteDebug({
+      kind: "replace:done",
+      targetSurfaceId: target.surfaceId,
+      activeSurfaceId,
+      hasManifest: Boolean(page?.manifest?.surfaces)
+    });
     return true;
   };
-  const processRefs = [...new Set((manifest.surfaces ?? [])
+  const currentProcessRefs = () => [...new Set((manifest.surfaces ?? [])
     .map(surface => resolveSurfaceRuntimeBinding(manifest, surface.id).processRef)
     .filter(Boolean))];
-  const syncRouteAndRefresh = () => {
-    refresh();
-    for (const processRef of processRefs) {
+  const reconcileActiveRouteFromManifestState = async () => {
+    const target = routeTargetForManifestState(manifest, processRuntime);
+    pushRouteDebug({
+      kind: "reconcile",
+      activeSurfaceId,
+      targetSurfaceId: target?.surfaceId ?? null,
+      targetKey: target?.key ?? null,
+      targetPath: target?.path ?? null
+    });
+    if (!target?.path || !window?.history || !window?.location) return false;
+    if (target.surfaceId !== activeSurfaceId && !supportsSameDocumentRouteReplacement(document, window)) {
+      const forced = fallbackNavigationPath === target.path
+        ? false
+        : forceDocumentNavigation(window, target.path);
+      if (forced) fallbackNavigationPath = target.path;
+      pushRouteDebug({
+        kind: forced ? "replace:direct-navigation" : "replace:direct-navigation-missed",
+        targetSurfaceId: target.surfaceId,
+        targetPath: target.path
+      });
+      return false;
+    }
+    const currentPath = String(window.location.pathname || "/").replace(/\/+$/, "") || "/";
+    const nextPath = String(target.path || "/").replace(/\/+$/, "") || "/";
+    if (currentPath !== nextPath) window.history.pushState({ surfaceRouteKey: target.key }, "", target.path);
+    if (target.surfaceId === activeSurfaceId) return false;
+    const replaced = await replaceActiveRouteSurface(target);
+    if (!replaced) {
+      const forced = fallbackNavigationPath === nextPath
+        ? false
+        : forceDocumentNavigation(window, target.path);
+      if (forced) fallbackNavigationPath = nextPath;
+      pushRouteDebug({
+        kind: forced ? "replace:fallback-navigation" : "replace:fallback-missed",
+        targetSurfaceId: target.surfaceId,
+        targetPath: target.path
+      });
+    }
+    return replaced;
+  };
+  const syncRouteAndRefresh = async () => {
+    await refresh();
+    for (const processRef of currentProcessRefs()) {
       const routeTarget = syncRouteStateToUrl({ manifest, processRuntime, processRef, window });
-      if (replaceActiveRouteSurface(routeTarget)) {
+      if (await replaceActiveRouteSurface(routeTarget)) {
         bindInteractions();
-        refresh();
+        await refresh();
       }
     }
+    if (await reconcileActiveRouteFromManifestState()) {
+      bindInteractions();
+      await refresh();
+    }
   };
-  if (typeof processRuntime.subscribe === "function") {
-    const unsubscribe = processRuntime.subscribe(() => syncRouteAndRefresh());
-    runtimeDisposers.push(unsubscribe);
-  }
-  for (const processRef of processRefs) {
+  let syncInFlight = null;
+  let syncQueued = false;
+  const requestSyncRouteAndRefresh = async () => {
+    if (syncInFlight) {
+      syncQueued = true;
+      await syncInFlight;
+      return syncInFlight;
+    }
+    do {
+      syncQueued = false;
+      syncInFlight = Promise.resolve(syncRouteAndRefresh());
+      await syncInFlight;
+      syncInFlight = null;
+    } while (syncQueued);
+    return null;
+  };
+  for (const processRef of currentProcessRefs()) {
     syncUrlToRouteState({ manifest, processRuntime, processRef, window });
   }
   if (window && typeof window.addEventListener === "function") {
-    const onPopState = () => {
-      for (const processRef of processRefs) {
+    const onPopState = async () => {
+      for (const processRef of currentProcessRefs()) {
         syncUrlToRouteState({ manifest, processRuntime, processRef, window });
       }
-      syncRouteAndRefresh();
+      await requestSyncRouteAndRefresh();
     };
     window.addEventListener("popstate", onPopState);
     runtimeDisposers.push(() => window.removeEventListener?.("popstate", onPopState));
@@ -675,11 +1316,11 @@ export function createSurfaceInteractionRuntime({
         for (const target of targets) {
           const node = trimString(target?.id) ? document.getElementById(target.id) : null;
           if (!node || !action) continue;
-          const listener = async event => {
-            if (action.kind === "navigate") {
-              const href = trimString(action.href);
-              if (href) {
-                event.preventDefault();
+      const listener = async event => {
+        if (action.kind === "navigate") {
+          const href = trimString(action.href);
+          if (href) {
+            event.preventDefault();
                 window.location.assign(href);
               }
               return;
@@ -691,13 +1332,19 @@ export function createSurfaceInteractionRuntime({
               } else {
                 processRuntime.deliver(action.message);
               }
-              syncRouteAndRefresh();
+              if (await reconcileActiveRouteFromManifestState()) {
+                bindInteractions();
+              }
+              await requestSyncRouteAndRefresh();
               return;
             }
             if (action.kind === "setState" && trimString(action.state)) {
               event.preventDefault();
               processRuntime.set(action.state, eventValueFromSpec(action.value ?? {}, event, processRuntime));
-              syncRouteAndRefresh();
+              if (await reconcileActiveRouteFromManifestState()) {
+                bindInteractions();
+              }
+              await requestSyncRouteAndRefresh();
             }
           };
           node.addEventListener(eventName, listener);
@@ -708,12 +1355,37 @@ export function createSurfaceInteractionRuntime({
   };
   bindInteractions();
 
-  refresh();
+  void refresh();
   return {
-    refresh,
-    processRuntime,
+    refresh() {
+      return requestSyncRouteAndRefresh();
+    },
+    get activeSurfaceId() {
+      return activeSurfaceId;
+    },
+    get manifestDiagnostics() {
+      return manifest?.diagnostics ?? null;
+    },
+    get routeTargets() {
+      return manifest?.routeTargets ?? [];
+    },
+    get surfaceIds() {
+      return [...surfaceById.keys()];
+    },
+    get lastRouteSwap() {
+      return lastRouteSwap;
+    },
+    get routeDebugLog() {
+      return [...routeDebugLog];
+    },
+    get processRuntime() {
+      return processRuntime;
+    },
     destroy() {
       disposeInteractions();
+      unsubscribeProcessRuntime?.();
+      for (const bridge of inFlightRuntimeBridges) bridge();
+      inFlightRuntimeBridges.clear();
       for (const dispose of runtimeDisposers.splice(0)) dispose();
     }
   };
@@ -739,6 +1411,7 @@ function browserHelpersSource() {
     `function toSurfaceMap(manifest) {
   return new Map((manifest?.surfaces ?? []).map(surface => [surface.id, surface]));
 }`,
+    stateIdsFromWitnesses.toString(),
     eventValueFromSpec.toString(),
     readCapabilityOutput.toString(),
     readBindingSource.toString(),
@@ -750,9 +1423,17 @@ function browserHelpersSource() {
     activeRouteTargetForPath.toString(),
     routeStateBindingForProcess.toString(),
     routeTargetForProcessState.toString(),
+    routeTargetForManifestState.toString(),
     syncUrlToRouteState.toString(),
     syncRouteStateToUrl.toString(),
+    forceDocumentNavigation.toString(),
     parseFirstElement.toString(),
+    supportsSameDocumentRouteReplacement.toString(),
+    fallbackActiveRootNode.toString(),
+    domParserForWindow.toString(),
+    readSurfaceRuntimeManifest.toString(),
+    parseRouteSurfacePage.toString(),
+    loadRouteSurfacePage.toString(),
     bootSurfaceCapabilities.toString(),
     clearRouteUnderlay.toString(),
     updateRouteUnderlay.toString(),
@@ -778,12 +1459,17 @@ function browserHelpersSource() {
   ].join("\n\n");
 }
 
+let cachedSurfaceInteractionRuntimeModuleSource = null;
+
 export function renderSurfaceInteractionRuntimeModule(manifest) {
-  return `${renderProcessRuntimeModuleSource()}
+  if (!cachedSurfaceInteractionRuntimeModuleSource) {
+    cachedSurfaceInteractionRuntimeModuleSource = `${renderProcessRuntimeModuleSource()}
 
 ${browserHelpersSource()}
 
-const surfaceRuntimeManifest = ${JSON.stringify(manifest)};
+const surfaceRuntimeManifest = readSurfaceRuntimeManifest(document);
 bootSurfaceInteractionRuntime(surfaceRuntimeManifest);
 `;
+  }
+  return cachedSurfaceInteractionRuntimeModuleSource;
 }

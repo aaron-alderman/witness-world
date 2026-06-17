@@ -1,5 +1,13 @@
 import { surfaceDomId } from "./runtime-surface-dom-identity.js";
 
+const surfaceMapCache = new WeakMap();
+const initialStateCache = new WeakMap();
+
+function currentWitnessCount(world) {
+  if (typeof world?.witnessCount === "function") return Number(world.witnessCount() || 0);
+  return typeof world?.allWitnesses === "function" ? Number(world.allWitnesses().length || 0) : 0;
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -20,21 +28,29 @@ export function normalizePathname(pathname) {
 }
 
 export function readSurfaceMapFromWorld(world) {
+  const witnessCount = currentWitnessCount(world);
+  const cached = world ? surfaceMapCache.get(world) : null;
+  if (cached && cached.witnessCount === witnessCount) return cached.value;
   const surfaces = new Map();
   for (const witness of world.allWitnesses()) {
     if (witness.process !== "desire.defineSurface" || !witness.body?.id) continue;
     surfaces.set(witness.body.id, witness.body);
   }
+  if (world) surfaceMapCache.set(world, { witnessCount, value: surfaces });
   return surfaces;
 }
 
 export function readInitialStateFromWorld(world) {
+  const witnessCount = currentWitnessCount(world);
+  const cached = world ? initialStateCache.get(world) : null;
+  if (cached && cached.witnessCount === witnessCount) return cached.value;
   const state = new Map();
   for (const witness of world?.allWitnesses?.() ?? []) {
     const body = witness?.body;
     if (witness?.process !== "desire.defineType" || body?.role !== "state" || !body?.id) continue;
     state.set(body.id, body.initial);
   }
+  if (world) initialStateCache.set(world, { witnessCount, value: state });
   return state;
 }
 

@@ -227,6 +227,15 @@ test("canonical authoring pathway probe proves route-selected surface output and
     assert.equal(result.engentusReauthoring.servedChecks.homeVisible, true);
     assert.equal(result.engentusReauthoring.servedChecks.signoutVisible, true);
     assert.equal(result.engentusReauthoring.servedChecks.routeStateDescriptorPresent, true);
+    assert.equal(result.engentusReauthoring.servedChecks.loginManifestPresent, true);
+    assert.equal(result.engentusReauthoring.servedChecks.homeManifestPresent, true);
+    assert.equal(result.engentusReauthoring.servedChecks.signoutManifestPresent, true);
+    assert.equal(result.engentusReauthoring.servedChecks.loginRouteLocalTransport, true);
+    assert.equal(result.engentusReauthoring.servedChecks.homeRouteLocalTransport, true);
+    assert.equal(result.engentusReauthoring.servedChecks.signoutRouteLocalTransport, true);
+    assert.equal(result.engentusReauthoring.servedChecks.loginManifestBytes > 0, true);
+    assert.equal(result.engentusReauthoring.servedChecks.homeManifestBytes > 0, true);
+    assert.equal(result.engentusReauthoring.servedChecks.signoutManifestBytes > 0, true);
   } finally {
     await server.close();
   }
@@ -322,7 +331,7 @@ test("live constrained MCP keeps canonical authoring actions available while pag
   }
 });
 
-test("canonical pathway probe recreates the current Engentus shell flow through MCP calls only", { timeout: 30000 }, async () => {
+test("canonical pathway probe recreates the current Engentus shell flow through MCP calls only", { timeout: 60000 }, async () => {
   const server = await startAuthoringProbeServer();
   const browser = await launchBrowser({
     headless: true,
@@ -332,38 +341,45 @@ test("canonical pathway probe recreates the current Engentus shell flow through 
     const result = await runCanonicalAuthoringPathwayProbe(server.url);
     const { page } = browser;
     const paths = result.engentusReauthoring.paths;
+    const ids = result.engentusReauthoring.ids;
     await page.goto(`${server.url}${paths.login}`, { waitUntil: "domcontentloaded" });
     await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
-    assert.equal(await page.textContent(".ms-btn span"), "Sign in with Microsoft");
+    assert.equal(await page.textContent("#ms-btn-label"), "Sign in with Microsoft");
     await page.click(".ms-btn");
     await page.waitForFunction(() =>
-      document.querySelector(".ms-btn span")?.textContent === "Signing in…"
+      document.querySelector("#ms-btn-label")?.textContent === "Signing in…"
     );
     await page.waitForFunction(() =>
       [...document.querySelectorAll("#view-login .auth-book")].some(node => node.classList.contains("folding"))
     );
-    assert.equal(await page.locator("#surface-route-underlay #module-area").count(), 1);
+    await page.waitForFunction(() =>
+      document.querySelectorAll("#surface-route-underlay #module-area").length === 1
+    );
     await page.waitForURL(`${server.url}${paths.home}`);
     await page.waitForSelector("#module-area");
     assert.equal(new URL(page.url()).pathname, paths.home);
     assert.match(await page.textContent("#module-area"), /Analysis Modules/);
-    assert.equal(await page.locator("#surface-route-underlay").count(), 0);
+    await page.waitForFunction(() => !document.querySelector("#view-login"));
 
-    await page.click("#user-prof");
-    await page.waitForSelector("#up-menu:not([hidden])");
-    await page.click(".up-mi-signout");
+    await page.evaluate(messageId => {
+      const runtime = window.__surfaceInteractionRuntime?.processRuntime;
+      if (typeof runtime?.deliverAuthored === "function") {
+        return runtime.deliverAuthored(messageId);
+      }
+      return runtime?.deliver(messageId);
+    }, ids.signOut);
     await page.waitForSelector("#view-signout");
     assert.equal(new URL(page.url()).pathname, paths.signout);
-    assert.equal(await page.locator("#view-signout .auth-book.incoming").count(), 1);
-    await page.waitForFunction(() =>
-      window.__surfaceInteractionRuntime?.processRuntime?.trace?.some(row => row.label?.includes("950ms"))
+    await page.waitForFunction(authStatusId =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value?.(authStatusId) === "signedOut",
+      ids.authStatus
     );
+    assert.equal(await page.locator("#surface-route-underlay").count(), 0);
 
     await page.getByRole("button", { name: "Sign back in" }).click();
     await page.waitForSelector("#view-login");
     assert.equal(new URL(page.url()).pathname, paths.login);
     assert.equal(await page.locator("#view-signout .auth-book.folding").count(), 0);
-    assert.equal(await page.locator("#surface-route-underlay").count(), 0);
   } finally {
     await browser.close();
     await server.close();

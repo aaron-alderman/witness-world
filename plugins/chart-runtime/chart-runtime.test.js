@@ -30,6 +30,18 @@ async function worldWithGoodman() {
   return worldWithFiles(["models/goodman.rvm", "views/goodman.rvm"]);
 }
 
+async function worldWithShell(files = []) {
+  return worldWithFiles([
+    "shell.rvm",
+    "shell-shared.rvm",
+    "shell-auth.rvm",
+    "shell-goodman.rvm",
+    "shell-mill-charge.rvm",
+    "shell-mill-force.rvm",
+    ...files
+  ]);
+}
+
 test("resolveChartSpec assembles {model, view} from the witnessed world", async () => {
   const world = await worldWithGoodman();
   const spec = resolveChartSpec(world.allWitnesses(), "GoodmanDiagram");
@@ -243,7 +255,7 @@ test("disc-frame chart pages can mount on an authored canvas host", async () => 
 });
 
 test("mounted chart runtime resolves nested chart surfaces under the active app surface", async () => {
-  const world = await worldWithFiles(["models/mill-charge.rvm", "views/mill-charge.rvm", "shell.rvm"]);
+  const world = await worldWithShell(["models/mill-charge.rvm", "views/mill-charge.rvm"]);
   const millCharge = world.allWitnesses()
     .find(witness => witness.process === "desire.defineSurface" && witness.body?.id === "EngentusMillChargeApp")
     ?.body;
@@ -261,25 +273,15 @@ test("mounted chart runtime resolves nested chart surfaces under the active app 
   assert.match(markup, /chart-page__mount--mill-charge/);
 });
 
-test("mounted chart runtime discovers chart surfaces outside the initial active route", async () => {
-  const world = await worldWithFiles(["models/mill-charge.rvm", "views/mill-charge.rvm", "shell.rvm"]);
+test("mounted chart runtime does not activate for charts outside the active route subtree", async () => {
+  const world = await worldWithShell(["models/mill-charge.rvm", "views/mill-charge.rvm"]);
   const witnesses = world.allWitnesses();
-  const rootSurface = witnesses
-    .find(witness => witness.process === "desire.defineSurface" && witness.body?.id === "EngentusRoot")
-    ?.body;
   const homeSurface = witnesses
     .find(witness => witness.process === "desire.defineSurface" && witness.body?.id === "EngentusHome")
     ?.body;
-  const chartSurface = witnesses
-    .find(witness => witness.process === "desire.defineSurface" && witness.body?.id === "MillChargeCrossSection")
-    ?.body;
 
-  const runtime = buildMountedChartRuntime({ world, activeSurface: homeSurface, rootSurface });
-  assert.ok(runtime, "expected chart runtime assets even when the initial route is Home");
-  const markup = runtime.renderMountedChart(chartSurface);
-
-  assert.match(markup, /<canvas id="mill-canvas"/);
-  assert.match(markup, /data-chart-spec=/);
+  const runtime = buildMountedChartRuntime({ world, activeSurface: homeSurface });
+  assert.equal(runtime, null);
 });
 
 test("mounted chart runtime applies authored initial presentation bindings to chart specs", async () => {

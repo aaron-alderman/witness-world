@@ -67,6 +67,7 @@ test("runtime-surface-page composes static surface HTML with the generic interac
   assert.match(html, /surfaceRuntimeManifest/);
   assert.match(html, /SignInRequested/);
   assert.match(html, /createSurfaceInteractionRuntime/);
+  assert.doesNotMatch(html, /routeSurfaceFragments/);
   assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
 });
 
@@ -587,6 +588,7 @@ test("runtime-surface-page omits surfaces whose initial visible binding resolves
       body: {
         id: "StaticChart",
         surfaceKind: "chart",
+        capabilityRefs: ["chart.render"],
         bindings: [
           { prop: "visible", source: { kind: "state", state: "ActiveMode", map: { mc: false }, default: true } }
         ]
@@ -597,6 +599,7 @@ test("runtime-surface-page omits surfaces whose initial visible binding resolves
       body: {
         id: "MonteCarloChart",
         surfaceKind: "chart",
+        capabilityRefs: ["chart.render"],
         bindings: [
           { prop: "visible", source: { kind: "state", state: "ActiveMode", map: { mc: true }, default: false } }
         ]
@@ -626,7 +629,7 @@ test("runtime-surface-page omits surfaces whose initial visible binding resolves
   assert.doesNotMatch(html, /<figure>MonteCarloChart<\/figure>/);
 });
 
-test("runtime-surface-page renders route fragments with the same initial-state visibility context", () => {
+test("runtime-surface-page does not pre-render inactive route fragments into the initial payload", () => {
   const rendered = [];
   const html = renderSurfacePage(fakeWorld([
     {
@@ -697,7 +700,166 @@ test("runtime-surface-page renders route fragments with the same initial-state v
     }]
   });
 
-  assert.deepEqual(rendered, ["ForceCrossChart"]);
-  assert.match(html, /"force":"<div><figure>ForceCrossChart<\/figure><\/div>"/);
+  assert.deepEqual(rendered, []);
+  assert.doesNotMatch(html, /routeSurfaceFragments/);
+  assert.doesNotMatch(html, /<figure>ForceCrossChart<\/figure>/);
   assert.doesNotMatch(html, /<figure>ForceAngleChart<\/figure>/);
+});
+
+test("runtime-surface-page skips capability renderer factories when the active route does not require them", () => {
+  let rendererFactoryCalls = 0;
+  const html = renderSurfacePage(fakeWorld([
+    {
+      process: "desire.defineMessage",
+      body: { id: "SignInRequested", role: "event", writes: {} }
+    },
+    {
+      process: "desire.defineProcess",
+      body: {
+        id: "ShellNavigation",
+        state: [],
+        handles: ["SignInRequested"],
+        emits: [],
+        rules: []
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SurfaceRoot",
+        surfaceKind: "app-root",
+        processRef: "ShellNavigation",
+        children: ["LoginRoute", "GoodmanRoute"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "LoginRoute",
+        surfaceKind: "auth-screen",
+        props: { routeKey: "login", routePath: "/login" },
+        children: ["PrimaryAction"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "PrimaryAction",
+        surfaceKind: "action",
+        props: {
+          tag: "button",
+          domId: "primary-action",
+          label: "Sign in"
+        },
+        interactions: [
+          {
+            target: "self",
+            event: "click",
+            action: { kind: "deliver", message: "SignInRequested" }
+          }
+        ]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "GoodmanRoute",
+        surfaceKind: "app-shell",
+        props: { routeKey: "goodman", routePath: "/goodman" },
+        capabilityRefs: ["chart.render"]
+      }
+    }
+  ]), {
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/login",
+    surfaceCapabilityRenderers: [{
+      id: "test.chart",
+      capability: "chart.render",
+      factory() {
+        rendererFactoryCalls += 1;
+        return {
+          capability: "chart.render",
+          renderSurface() {
+            return null;
+          }
+        };
+      }
+    }]
+  });
+
+  assert.match(html, /<button id="primary-action">Sign in<\/button>/);
+  assert.equal(rendererFactoryCalls, 0);
+});
+
+test("runtime-surface-page reuses cached world-derived surface data across repeated renders", () => {
+  let witnessReads = 0;
+  const witnesses = [
+    {
+      process: "desire.defineType",
+      body: { id: "StatusText", role: "state", valueType: "text", initial: "idle" }
+    },
+    {
+      process: "desire.defineMessage",
+      body: { id: "SignInRequested", role: "event", writes: { StatusText: "signedIn" } }
+    },
+    {
+      process: "desire.defineProcess",
+      body: {
+        id: "ShellNavigation",
+        state: ["StatusText"],
+        handles: ["SignInRequested"],
+        emits: [],
+        rules: []
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SurfaceRoot",
+        surfaceKind: "app-root",
+        processRef: "ShellNavigation",
+        children: ["PrimaryAction"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "PrimaryAction",
+        surfaceKind: "action",
+        props: {
+          tag: "button",
+          domId: "primary-action",
+          label: "Sign in"
+        },
+        interactions: [
+          {
+            target: "self",
+            event: "click",
+            action: { kind: "deliver", message: "SignInRequested" }
+          }
+        ]
+      }
+    }
+  ];
+  const world = {
+    allWitnesses() {
+      witnessReads += 1;
+      return witnesses;
+    }
+  };
+
+  const firstHtml = renderSurfacePage(world, {
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/login"
+  });
+  const readsAfterFirstRender = witnessReads;
+  const secondHtml = renderSurfacePage(world, {
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/login"
+  });
+
+  assert.match(firstHtml, /<button id="primary-action">Sign in<\/button>/);
+  assert.equal(secondHtml, firstHtml);
+  assert.equal(readsAfterFirstRender > 0, true);
+  assert.equal(witnessReads <= readsAfterFirstRender + 3, true);
 });

@@ -119,6 +119,16 @@ function assertMcpWriteOk(result, label) {
   return result;
 }
 
+function readSurfaceRuntimeManifest(html) {
+  const match = String(html ?? "").match(/<script type="application\/json" id="surface-runtime-manifest">([\s\S]*?)<\/script>/i);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
 async function authorEngentusShellFlowThroughMcp(write, {
   runnerId,
   stamp
@@ -747,6 +757,13 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
   const engentusHomeHtml = await engentusHomePage.text();
   const engentusSignoutPage = await fetch(`${baseUrl}${engentusReauthoring.paths.signout}`);
   const engentusSignoutHtml = await engentusSignoutPage.text();
+  const engentusIds = engentusReauthoring.ids;
+  const loginManifest = readSurfaceRuntimeManifest(engentusLoginHtml);
+  const homeManifest = readSurfaceRuntimeManifest(engentusHomeHtml);
+  const signoutManifest = readSurfaceRuntimeManifest(engentusSignoutHtml);
+  const loginRuntimeIds = new Set(loginManifest?.diagnostics?.includedRuntimeIds ?? []);
+  const homeRuntimeIds = new Set(homeManifest?.diagnostics?.includedRuntimeIds ?? []);
+  const signoutRuntimeIds = new Set(signoutManifest?.diagnostics?.includedRuntimeIds ?? []);
   engentusReauthoring.servedChecks = {
     loginHttpStatus: engentusLoginPage.status,
     homeHttpStatus: engentusHomePage.status,
@@ -754,7 +771,28 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     loginVisible: /Welcome back/.test(engentusLoginHtml) && /ms-btn/.test(engentusLoginHtml),
     homeVisible: /Analysis Modules/.test(engentusHomeHtml) && /module-area/.test(engentusHomeHtml),
     signoutVisible: /You've been signed out/.test(engentusSignoutHtml) && /sign-back-in/.test(engentusSignoutHtml),
-    routeStateDescriptorPresent: /routeState/.test(engentusLoginHtml)
+    routeStateDescriptorPresent: /routeState/.test(engentusLoginHtml),
+    loginManifestPresent: Boolean(loginManifest),
+    homeManifestPresent: Boolean(homeManifest),
+    signoutManifestPresent: Boolean(signoutManifest),
+    loginRouteLocalTransport: loginRuntimeIds.has(engentusIds.routeState)
+      && loginRuntimeIds.has(engentusIds.authStatus)
+      && loginRuntimeIds.has(engentusIds.signIn)
+      && !loginRuntimeIds.has(engentusIds.profileMenuVisible)
+      && !loginRuntimeIds.has(engentusIds.signOut)
+      && !loginRuntimeIds.has(engentusIds.signBackIn),
+    homeRouteLocalTransport: homeRuntimeIds.has(engentusIds.routeState)
+      && homeRuntimeIds.has(engentusIds.profileMenuVisible)
+      && homeRuntimeIds.has(engentusIds.signOut)
+      && !homeRuntimeIds.has(engentusIds.signIn)
+      && !homeRuntimeIds.has(engentusIds.signBackIn),
+    signoutRouteLocalTransport: signoutRuntimeIds.has(engentusIds.routeState)
+      && signoutRuntimeIds.has(engentusIds.signBackIn)
+      && !signoutRuntimeIds.has(engentusIds.profileMenuVisible)
+      && !signoutRuntimeIds.has(engentusIds.signIn),
+    loginManifestBytes: loginManifest?.diagnostics?.serializedBytes ?? 0,
+    homeManifestBytes: homeManifest?.diagnostics?.serializedBytes ?? 0,
+    signoutManifestBytes: signoutManifest?.diagnostics?.serializedBytes ?? 0
   };
 
   const finalState = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {

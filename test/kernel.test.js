@@ -8,6 +8,22 @@ test("genesis creates Adam as main", () => {
   assert.equal(world.project(projectors.owners).get("adam"), "adam");
 });
 
+test("world exposes cheap witness accessors without changing witness order", () => {
+  const world = createWorld();
+  const genesisCount = world.witnessCount();
+  const genesisLast = world.lastWitness();
+  createThing(world, { actor: "adam", id: "cheap_access_probe" });
+
+  assert.equal(genesisCount, 1);
+  assert.equal(genesisLast?.process, "genesis");
+  assert.equal(world.witnessCount(), 2);
+  assert.equal(world.lastWitness()?.process, "createThing");
+  assert.deepEqual(
+    world.witnessesSince(genesisCount).map(witness => witness.body?.id),
+    ["cheap_access_probe"]
+  );
+});
+
 test("Aaron, Sourcery, Widget transfer via witnessed ownership", () => {
   const world = createWorld();
   createThing(world, { actor: "adam", id: "aaron" });

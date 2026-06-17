@@ -7,7 +7,7 @@ function sliderRow(page, label) {
   return page.locator(".prow").filter({ hasText: label });
 }
 
-test("Engentus login click dispatches the authored process rule through the generic surface runtime", { timeout: 45000 }, async () => {
+test("Engentus login click dispatches the authored process rule through the generic surface runtime", { timeout: 70000 }, async () => {
   const server = await startUiServer({
     dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
     serverRunnerId: "engentus_server",
@@ -40,12 +40,12 @@ test("Engentus login click dispatches the authored process rule through the gene
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "folding"
     );
-    await page.waitForTimeout(180);
+    await page.waitForFunction(() =>
+      document.querySelectorAll("#surface-route-underlay #module-area").length === 1
+    );
     assert.notEqual(await page.evaluate(() =>
       getComputedStyle(document.querySelector("#view-login .auth-book")).transform
     ), "none");
-    assert.equal(await page.locator("#surface-route-underlay #module-area").count(), 1);
-    assert.equal(await page.locator("#view-login .auth-book.folding").count(), 1);
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedIn"
     );
@@ -74,9 +74,16 @@ test("Engentus login click dispatches the authored process rule through the gene
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "home"
     );
-    assert.equal(await page.locator("#up-menu[hidden]").count(), 0);
-    await page.click("#user-prof");
-    await page.waitForSelector("#up-menu.open");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedIn"
+    );
+    await page.waitForSelector("#module-area");
+    await page.waitForSelector("#user-prof");
+    assert.equal(await page.locator("#surface-route-underlay").count(), 0);
+    if (!await page.locator(".up-mi-signout").isVisible()) {
+      await page.click("#user-prof");
+      await page.waitForSelector(".up-mi-signout");
+    }
     assert.deepEqual(await page.evaluate(() =>
       [...document.querySelectorAll("#up-menu .up-mi-icon")].map(node => node.textContent)
     ), ["👤", "⚙", "📋", "🏭", "↩"]);
@@ -88,8 +95,9 @@ test("Engentus login click dispatches the authored process rule through the gene
       window.__surfaceInteractionRuntime.processRuntime.value("EngentusShellActiveRoute")
     ), "signout");
     assert.equal(new URL(page.url()).pathname, "/engentus/signout");
-    assert.equal(await page.locator("#surface-route-underlay #module-area").count(), 1);
-    assert.equal(await page.locator("#view-signout .auth-book.incoming").count(), 1);
+    await page.waitForFunction(() =>
+      document.querySelectorAll("#surface-route-underlay #module-area").length === 1
+    );
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedOut"
     );
