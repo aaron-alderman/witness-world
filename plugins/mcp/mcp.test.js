@@ -38,9 +38,10 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("proposals"), true);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("runtimePlugin.install"), true);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("changeSet.create"), true);
+  assert.equal(platformProposal.inputSchema.properties.action.enum.includes("changeSet.apply"), true);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("branch.create"), true);
   assert.equal(platformProposal.inputSchema.properties.operation.enum.includes("approve"), true);
-  assert.deepEqual(platformChangeSet.inputSchema.properties.operation.enum, ["create", "edit", "validate"]);
+  assert.deepEqual(platformChangeSet.inputSchema.properties.operation.enum, ["create", "edit", "validate", "apply"]);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("process.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("type.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("projection.create"), true);
@@ -186,6 +187,17 @@ test("platform MCP change-set tool routes through platform change-set handlers",
   });
   assert.equal(validated.isError, false);
   assert.equal(calls.at(-1).handler, "platform.changeSet.validate");
+  assert.equal(calls.at(-1).params.id, "changeset.platform.console");
+
+  const applied = await executeMcpTool("platform.changeSet", {
+    args: {
+      operation: "apply",
+      changeSetId: "changeset.platform.console"
+    },
+    callHandler
+  });
+  assert.equal(applied.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.changeSet.apply");
   assert.equal(calls.at(-1).params.id, "changeset.platform.console");
 });
 

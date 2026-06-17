@@ -181,6 +181,43 @@ function currentActiveCandidateForBranch(world, branchId) {
   return world.project(moduleProjectors.candidateSnapshotIndex).activeByBranch?.[branchId] ?? null;
 }
 
+async function pathExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function removeIfPresent(filePath) {
+  try {
+    await fs.rm(filePath, { force: true });
+  } catch {}
+}
+
+async function syncFileIfPossible(filePath) {
+  let handle = null;
+  try {
+    handle = await fs.open(filePath, "r");
+    await handle.sync();
+  } catch {
+    // Best-effort sync only.
+  } finally {
+    await handle?.close().catch(() => {});
+  }
+}
+
+async function writeTempFile(tempPath, content) {
+  await fs.mkdir(path.dirname(tempPath), { recursive: true });
+  await fs.writeFile(tempPath, content, "utf8");
+  await syncFileIfPossible(tempPath);
+}
+
+function applyNonce() {
+  return `${Date.now().toString(36)}-${crypto.randomBytes(4).toString("hex")}`;
+}
+
 function emitPlatformBranchCreate(world, {
   actor,
   id,
@@ -253,6 +290,84 @@ function ensurePlatformBranch(world, {
     ...created,
     created: true
   };
+}
+
+async function inspectPlatformChangeSet(world, changeSetId) {
+  const changeSet = world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? null;
+  if (!changeSet) return { ok: false, status: 404, error: "change set not found" };
+  const editRows = world.project(moduleProjectors.changeSetEditIndex).byChangeSet?.[changeSetId] ?? [];
+  if (!editRows.length) return { ok: false, status: 400, error: "change set has no staged edits" };
+
+  const currentSnapshotIndex = world.project(moduleProjectors.candidateSnapshotIndex);
+  const previousActive = currentActiveCandidateForBranch(world, changeSet.branchId);
+  const revision = (currentSnapshotIndex.byChangeSet?.[changeSetId]?.length ?? 0) + 1;
+  const candidateSnapshotId = `candidateSnapshot:${changeSetId}:${revision}`;
+  const files = [];
+  const materializedFiles = [];
+  const errors = [];
+
+  for (const edit of editRows) {
+    const pathResult = resolveEditPath(edit.path);
+    if (!pathResult.ok) return pathResult;
+    const currentContent = await readUtf8OrNull(pathResult.value.absolute);
+    const currentHash = currentContent == null ? null : hashText(currentContent);
+    if (currentHash !== (edit.previousHash ?? null)) {
+      errors.push({
+        path: edit.path,
+        sourceLanguage: edit.sourceLanguage,
+        message: "base file hash changed since the edit was staged"
+      });
+    } else {
+      try {
+        validateOverlaySource(edit.path, edit.nextContent);
+      } catch (error) {
+        errors.push({
+          path: edit.path,
+          sourceLanguage: edit.sourceLanguage,
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+    files.push({
+      path: edit.path,
+      sourceLanguage: edit.sourceLanguage,
+      previousHash: edit.previousHash ?? null,
+      nextContentHash: edit.nextContentHash
+    });
+    materializedFiles.push({
+      ...edit,
+      absolutePath: pathResult.value.absolute,
+      relativePath: pathResult.value.relative,
+      currentHash
+    });
+  }
+
+  return {
+    ok: true,
+    changeSet,
+    editRows,
+    currentSnapshotIndex,
+    previousActive,
+    revision,
+    candidateSnapshotId,
+    files,
+    materializedFiles,
+    errors
+  };
+}
+
+function snapshotMatchesEdits(snapshot, files) {
+  if (!snapshot || snapshot.status !== "valid") return false;
+  const left = Array.isArray(snapshot.files) ? snapshot.files : [];
+  if (left.length !== files.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    const snapshotFile = left[index];
+    const file = files[index];
+    if (snapshotFile.path !== file.path) return false;
+    if (snapshotFile.nextContentHash !== file.nextContentHash) return false;
+    if ((snapshotFile.previousHash ?? null) !== (file.previousHash ?? null)) return false;
+  }
+  return true;
 }
 
 export function createPlatformChangeSet(world, {
@@ -375,48 +490,9 @@ export async function validatePlatformChangeSet(world, {
   changeSetId,
   session = null
 }) {
-  const changeSet = world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? null;
-  if (!changeSet) return { ok: false, status: 404, error: "change set not found" };
-  const editRows = world.project(moduleProjectors.changeSetEditIndex).byChangeSet?.[changeSetId] ?? [];
-  if (!editRows.length) return { ok: false, status: 400, error: "change set has no staged edits" };
-
-  const currentSnapshotIndex = world.project(moduleProjectors.candidateSnapshotIndex);
-  const previousActive = currentActiveCandidateForBranch(world, changeSet.branchId);
-  const revision = (currentSnapshotIndex.byChangeSet?.[changeSetId]?.length ?? 0) + 1;
-  const candidateSnapshotId = `candidateSnapshot:${changeSetId}:${revision}`;
-  const files = [];
-  const errors = [];
-
-  for (const edit of editRows) {
-    const pathResult = resolveEditPath(edit.path);
-    if (!pathResult.ok) return pathResult;
-    const currentContent = await readUtf8OrNull(pathResult.value.absolute);
-    const currentHash = currentContent == null ? null : hashText(currentContent);
-    if (currentHash !== (edit.previousHash ?? null)) {
-      errors.push({
-        path: edit.path,
-        sourceLanguage: edit.sourceLanguage,
-        message: "base file hash changed since the edit was staged"
-      });
-      continue;
-    }
-    try {
-      validateOverlaySource(edit.path, edit.nextContent);
-    } catch (error) {
-      errors.push({
-        path: edit.path,
-        sourceLanguage: edit.sourceLanguage,
-        message: error instanceof Error ? error.message : String(error)
-      });
-    }
-    files.push({
-      path: edit.path,
-      sourceLanguage: edit.sourceLanguage,
-      previousHash: edit.previousHash ?? null,
-      nextContentHash: edit.nextContentHash
-    });
-  }
-
+  const inspected = await inspectPlatformChangeSet(world, changeSetId);
+  if (!inspected.ok) return inspected;
+  const { changeSet, previousActive, revision, candidateSnapshotId, files, errors } = inspected;
   const status = errors.length ? "invalid" : "valid";
   ensureThing(world, actor, candidateSnapshotId);
   const candidateSnapshot = {
@@ -469,5 +545,138 @@ export async function validatePlatformChangeSet(world, {
     changeSet: world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? changeSet,
     candidateSnapshot,
     activeCandidateSnapshotId: errors.length ? (previousActive?.id ?? null) : candidateSnapshotId
+  };
+}
+
+export async function applyPlatformChangeSet(world, {
+  actor,
+  changeSetId,
+  session = null,
+  hooks = null
+}) {
+  const inspected = await inspectPlatformChangeSet(world, changeSetId);
+  if (!inspected.ok) return inspected;
+  const { changeSet, materializedFiles, files, errors } = inspected;
+  if (errors.length) {
+    return {
+      ok: false,
+      status: 409,
+      error: "change set is not valid for apply",
+      details: errors
+    };
+  }
+
+  const snapshotIndex = world.project(moduleProjectors.candidateSnapshotIndex);
+  let candidateSnapshotId = changeSet.latestCandidateSnapshotId ?? null;
+  const latestSnapshot = candidateSnapshotId ? (snapshotIndex.byId?.[candidateSnapshotId] ?? null) : null;
+  if (!snapshotMatchesEdits(latestSnapshot, files)) {
+    const validation = await validatePlatformChangeSet(world, {
+      actor,
+      changeSetId,
+      session
+    });
+    if (!validation.ok || validation.candidateSnapshot?.status !== "valid") {
+      return validation.ok
+        ? { ok: false, status: 409, error: "change set is not valid for apply" }
+        : validation;
+    }
+    candidateSnapshotId = validation.candidateSnapshot.id;
+  }
+
+  const nonce = applyNonce();
+  const prepared = materializedFiles.map((file, index) => ({
+    index,
+    path: file.path,
+    sourceLanguage: file.sourceLanguage,
+    previousHash: file.previousHash ?? null,
+    nextContentHash: file.nextContentHash,
+    nextContent: file.nextContent,
+    absolutePath: file.absolutePath,
+    tempPath: `${file.absolutePath}.platform-apply-${nonce}.tmp`,
+    backupPath: `${file.absolutePath}.platform-backup-${nonce}`
+  }));
+  const promoted = [];
+
+  try {
+    for (const file of prepared) {
+      await writeTempFile(file.tempPath, file.nextContent);
+    }
+    for (const file of prepared) {
+      await hooks?.beforePromote?.(file);
+      if (await pathExists(file.absolutePath)) {
+        await removeIfPresent(file.backupPath);
+        await fs.rename(file.absolutePath, file.backupPath);
+        file.hadBackup = true;
+      } else {
+        file.hadBackup = false;
+      }
+      await fs.rename(file.tempPath, file.absolutePath);
+      promoted.push(file);
+      await hooks?.afterPromote?.(file);
+    }
+    for (const file of prepared) {
+      const writtenContent = await readUtf8OrNull(file.absolutePath);
+      const writtenHash = writtenContent == null ? null : hashText(writtenContent);
+      if (writtenHash !== file.nextContentHash) {
+        throw new Error(`applied content hash mismatch for ${file.path}`);
+      }
+    }
+  } catch (error) {
+    for (const file of [...promoted].reverse()) {
+      if (file.hadBackup) {
+        await removeIfPresent(file.absolutePath);
+        await fs.rename(file.backupPath, file.absolutePath).catch(() => {});
+      } else {
+        await removeIfPresent(file.absolutePath);
+      }
+    }
+    for (const file of prepared) {
+      if (file.hadBackup && await pathExists(file.backupPath)) {
+        const destinationExists = await pathExists(file.absolutePath);
+        if (!destinationExists) await fs.rename(file.backupPath, file.absolutePath).catch(() => {});
+      }
+      await removeIfPresent(file.tempPath);
+      await removeIfPresent(file.backupPath);
+    }
+    return {
+      ok: false,
+      status: 500,
+      error: error instanceof Error ? error.message : "change set apply failed"
+    };
+  }
+
+  for (const file of prepared) {
+    await removeIfPresent(file.backupPath);
+  }
+
+  const witness = world.emit({
+    process: "platform.changeSet.apply",
+    actor,
+    claims: [
+      relation(changeSetId, "appliedCandidateSnapshot", candidateSnapshotId),
+      relation(changeSet.branchId, "appliedChangeSet", changeSetId)
+    ],
+    body: {
+      id: changeSetId,
+      branchId: changeSet.branchId,
+      candidateSnapshotId,
+      status: "applied",
+      session: session?.id ?? null,
+      appliedAt: nowIso(),
+      files: prepared.map(file => ({
+        path: file.path,
+        sourceLanguage: file.sourceLanguage,
+        previousHash: file.previousHash,
+        nextContentHash: file.nextContentHash
+      }))
+    }
+  });
+
+  return {
+    ok: true,
+    status: 200,
+    witness,
+    candidateSnapshotId,
+    changeSet: world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? changeSet
   };
 }

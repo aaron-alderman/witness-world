@@ -6,6 +6,7 @@ import {
 } from "../proposals/proposal-processes.js";
 import {
   createPlatformChangeSet,
+  applyPlatformChangeSet,
   stagePlatformChangeSetEdits,
   validatePlatformChangeSet
 } from "./change-sets.js";
@@ -154,6 +155,28 @@ export function createPlatformHandlers({
         activeCandidateSnapshotId: result.activeCandidateSnapshotId,
         witness: result.witness,
         revisionEvent: result.revisionEvent
+      });
+    },
+
+    "platform.changeSet.apply": async ({ res, params, requestActor, requestSession }) => {
+      const actor = requirePlatformMutationActor(res, requestActor);
+      if (!actor) return;
+      const result = await applyPlatformChangeSet(world, {
+        actor,
+        changeSetId: params.id || "",
+        session: requestSession ?? null
+      });
+      if (!result.ok) {
+        sendJson(res, result.status || 400, {
+          error: result.error,
+          ...(Array.isArray(result.details) ? { details: result.details } : {})
+        });
+        return;
+      }
+      sendJson(res, result.status, {
+        changeSet: result.changeSet,
+        candidateSnapshotId: result.candidateSnapshotId,
+        witness: result.witness
       });
     },
 

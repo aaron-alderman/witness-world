@@ -470,9 +470,9 @@ const TOOL_DEFINITIONS = [
   {
     name: "platform.changeSet",
     title: "Platform Change Set",
-    description: "Create platform change sets, stage overlay edits, and validate candidate snapshots through the shared platform handlers.",
+    description: "Create platform change sets, stage overlay edits, validate candidate snapshots, and apply validated overlays through the shared platform handlers.",
     inputSchema: jsonSchemaObject({
-      operation: { type: "string", enum: ["create", "edit", "validate"] },
+      operation: { type: "string", enum: ["create", "edit", "validate", "apply"] },
       id: { type: "string" },
       changeSetId: { type: "string" },
       branchId: { type: "string" },
@@ -523,6 +523,14 @@ const TOOL_DEFINITIONS = [
           handler: "platform.changeSet.validate",
           method: "POST",
           path: `/api/platform-change-sets/${encodeURIComponent(changeSetId)}/validate`,
+          params: { id: changeSetId }
+        });
+      }
+      if (operation === "apply") {
+        return runJsonHandler(callHandler, {
+          handler: "platform.changeSet.apply",
+          method: "POST",
+          path: `/api/platform-change-sets/${encodeURIComponent(changeSetId)}/apply`,
           params: { id: changeSetId }
         });
       }

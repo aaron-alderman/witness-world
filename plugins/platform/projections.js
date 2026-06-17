@@ -125,6 +125,11 @@ export const platformModuleProjectors = {
         row.status = witness.body.status === "valid" ? "valid" : "blocked";
         row.latestCandidateSnapshotId = witness.body.candidateSnapshot?.id ?? row.latestCandidateSnapshotId;
       }
+      if (witness.process === "platform.changeSet.apply" && witness.body?.branchId) {
+        const row = rows.get(String(witness.body.branchId));
+        if (!row) continue;
+        row.latestCandidateSnapshotId = witness.body.candidateSnapshotId ?? row.latestCandidateSnapshotId;
+      }
     }
     return sortRows([...rows.values()].map(row => ({
       ...row,
@@ -156,7 +161,8 @@ export const platformModuleProjectors = {
         createdAt: body.createdAt ?? null,
         latestCandidateSnapshotId: null,
         activeCandidateSnapshotId: null,
-        validationCount: 0
+        validationCount: 0,
+        appliedAt: null
       });
     }
     for (const witness of witnesses) {
@@ -167,6 +173,14 @@ export const platformModuleProjectors = {
       row.latestCandidateSnapshotId = witness.body.candidateSnapshot?.id ?? row.latestCandidateSnapshotId;
       row.activeCandidateSnapshotId = witness.body.activeCandidateSnapshotId ?? row.activeCandidateSnapshotId;
       row.validationCount += 1;
+    }
+    for (const witness of witnesses) {
+      if (witness.process !== "platform.changeSet.apply" || !witness.body?.id) continue;
+      const row = rows.get(String(witness.body.id));
+      if (!row) continue;
+      row.status = "applied";
+      row.latestCandidateSnapshotId = witness.body.candidateSnapshotId ?? row.latestCandidateSnapshotId;
+      row.appliedAt = witness.body.appliedAt ?? null;
     }
     return sortRows([...rows.values()].map(row => ({
       ...row,

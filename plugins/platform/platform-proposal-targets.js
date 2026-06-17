@@ -1,6 +1,7 @@
 import {
   createPlatformBranch,
   createPlatformChangeSet,
+  applyPlatformChangeSet,
   stagePlatformChangeSetEdits,
   validatePlatformChangeSet
 } from "./change-sets.js";
@@ -59,6 +60,14 @@ export async function executePlatformProposalTarget({
       });
       if (!result.ok) return failure(result, "platform change set validation failed");
       return { ok: true, witnessIds: [result.witness?.id, result.revisionEvent?.id].filter(Boolean) };
+    }
+    case "changeSet.apply": {
+      const result = await applyPlatformChangeSet(world, {
+        actor,
+        changeSetId: body.changeSetId || proposal.targetId || ""
+      });
+      if (!result.ok) return failure(result, "platform change set apply failed");
+      return { ok: true, witnessIds: [result.witness?.id].filter(Boolean) };
     }
     default:
       return null;

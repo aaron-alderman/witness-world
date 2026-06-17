@@ -3,6 +3,7 @@ export const PLATFORM_PROPOSAL_ACTIONS = Object.freeze([
   "changeSet.create",
   "changeSet.edit",
   "changeSet.validate",
+  "changeSet.apply",
   "runtimePlugin.install",
   "runtimePlugin.remove",
   "mcpServer.define",
@@ -42,6 +43,13 @@ export const PLATFORM_PROPOSAL_TEMPLATES = Object.freeze({
   "changeSet.validate": Object.freeze({
     action: "changeSet.validate",
     title: "Validate change set",
+    targetKind: "changeSet",
+    requiredBodyFields: Object.freeze(["changeSetId"]),
+    sampleBody: Object.freeze({ changeSetId: "changeset.platform.console" })
+  }),
+  "changeSet.apply": Object.freeze({
+    action: "changeSet.apply",
+    title: "Apply change set",
     targetKind: "changeSet",
     requiredBodyFields: Object.freeze(["changeSetId"]),
     sampleBody: Object.freeze({ changeSetId: "changeset.platform.console" })
@@ -187,6 +195,7 @@ export function platformProposalTarget(action, body, explicit = {}) {
       return { targetKind: "changeSet", targetId: String(body.id || "") };
     case "changeSet.edit":
     case "changeSet.validate":
+    case "changeSet.apply":
       return { targetKind: "changeSet", targetId: String(body.changeSetId || "") };
     case "runtimePlugin.install":
     case "runtimePlugin.remove":

@@ -302,7 +302,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add `POST /api/platform-change-sets/:id/edits`.
 - [ ] Add `DELETE /api/platform-change-sets/:id/edits/:pathHash`.
 - [ ] Add `POST /api/platform-change-sets/:id/validate`.
-- [ ] Add `POST /api/platform-change-sets/:id/apply`.
+- [X] Add `POST /api/platform-change-sets/:id/apply`.
 - [ ] Add `POST /api/platform-change-sets/:id/reject`.
 - [ ] Add `POST /api/platform-change-sets/:id/abandon`.
 - [ ] Add `POST /api/platform-change-sets/:id/rebase`.
@@ -329,17 +329,18 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] base filesystem
   - [ ] branch overlay
   - [ ] change-set overlay
-- [ ] Validate all edits together before applying any to disk.
-- [ ] Persist successful apply atomically:
-  - [ ] write temp files
-  - [ ] fsync where practical
-  - [ ] rename into place
-  - [ ] record applied edit witnesses
-- [ ] Preserve previous active snapshot on failed validation.
-- [ ] Add tests for two-file RVM edits applying atomically.
-- [ ] Add tests for one invalid file causing the whole change set to remain unapplied.
+- [X] Validate all edits together before applying any to disk.
+- [~] Persist successful apply atomically:
+  - [X] write temp files
+  - [X] fsync where practical
+  - [X] rename into place
+  - [X] record applied edit witnesses
+- [X] Preserve previous active snapshot on failed validation.
+- [~] Add tests for two-file RVM edits applying atomically.
+- [X] Add tests for one invalid file causing the whole change set to remain unapplied.
 - [ ] Add tests for conflict detection when base hash changed.
-- [ ] Add tests for rollback of partial disk write failure.
+- [X] Add tests for rollback of partial disk write failure.
+- [L] Current apply semantics are temp-write plus promote plus rollback; this is best-effort atomicity across multiple files, not a stronger cross-file filesystem transaction.
 
 ### 1.4 Branch Semantics
 
@@ -377,7 +378,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add proposal target process `changeSet.create`.
 - [X] Add proposal target process `changeSet.edit`.
 - [X] Add proposal target process `changeSet.validate`.
-- [ ] Add proposal target process `changeSet.apply`.
+- [X] Add proposal target process `changeSet.apply`.
 - [X] Add proposal target process `branch.create`.
 - [ ] Add proposal target process `branch.rebase`.
 - [ ] Add proposal target process `branch.merge`.
@@ -390,8 +391,8 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] approve
   - [ ] apply
 - [~] Add test that proposal creation automatically creates a branch when requested.
-- [ ] Add test that approved change-set proposal atomically applies all edits.
-- [ ] Add test that rejected proposal leaves branch/change-set intact but unapplied.
+- [X] Add test that approved change-set proposal atomically applies all edits.
+- [X] Add test that rejected proposal leaves branch/change-set intact but unapplied.
 - [L] Implementation note: proposal creation remains non-mutating by design; the current proof is that approving `changeSet.create` can auto-create the branch before staging work.
 
 ## Phase 2: Candidate Snapshot And Backend Hot Reload
@@ -1202,7 +1203,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add proposal integration.
 - [X] Add Platform Console branch/change-set panels.
 - [X] Add MCP branch/change-set operations.
-- [ ] Add tests for atomic multi-file apply.
+- [X] Add tests for atomic multi-file apply.
 - [X] Add tests for failed validation preserving active snapshot.
 - [X] Ship behind `plugin.platform`.
 

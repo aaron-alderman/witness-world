@@ -147,6 +147,16 @@ export function renderPlatformPage(model) {
           <button type="submit">Validate Change Set</button>
           <div id="change-set-validate-status"></div>
         </form>
+
+        <form id="platform-change-set-apply-form">
+          <label>Change set
+            <select name="changeSetId">
+              ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
+            </select>
+          </label>
+          <button type="submit">Apply Change Set</button>
+          <div id="change-set-apply-status"></div>
+        </form>
       </aside>
     </section>
 
@@ -357,6 +367,22 @@ export function renderPlatformPage(model) {
       status.textContent = response.ok
         ? (json.candidateSnapshot?.status === "valid" ? "Change set valid." : "Change set invalid.")
         : (json.error || "Validation failed.");
+    });
+    document.getElementById("platform-change-set-apply-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const status = document.getElementById("change-set-apply-status");
+      const changeSetId = form.elements.changeSetId.value;
+      if (!changeSetId) {
+        status.textContent = "Select a change set first.";
+        return;
+      }
+      const response = await fetch("/api/platform-change-sets/" + encodeURIComponent(changeSetId) + "/apply", {
+        method: "POST",
+        headers: { "content-type": "application/json" }
+      });
+      const json = await response.json().catch(() => ({}));
+      status.textContent = response.ok ? "Change set applied." : (json.error || "Apply failed.");
     });
   </script>
 </body>

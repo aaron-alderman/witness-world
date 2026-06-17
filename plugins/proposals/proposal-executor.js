@@ -71,6 +71,7 @@ export function createAuthoringProposalExecutor({
       case "changeSet.create":
       case "changeSet.edit":
       case "changeSet.validate":
+      case "changeSet.apply":
         return executePlatformProposalTarget({
           world,
           actor,

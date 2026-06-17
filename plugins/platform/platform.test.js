@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { createWorld } from "../../src/kernel.js";
 import { moduleProjectors } from "../../src/modules.js";
 import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
@@ -10,7 +11,26 @@ import { buildPlatformModel, filterPlatformModel, parseRoadmapTasks, PLATFORM_LI
 import { renderPlatformPage } from "./platform-page.js";
 import { buildPlatformProposalCreateBody, platformProposalTemplates } from "./platform-proposals.js";
 import { executePlatformProposalTarget } from "./platform-proposal-targets.js";
+import { applyPlatformChangeSet } from "./change-sets.js";
 import { renderPlatformConsoleCss } from "./platform-style.js";
+
+async function createTempPlatformApplyFixture() {
+  const root = path.join(process.cwd(), "test", `.platform-apply-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`);
+  await mkdir(root, { recursive: true });
+  const first = path.join(root, "first.json");
+  const second = path.join(root, "second.json");
+  await writeFile(first, JSON.stringify({ value: 1 }, null, 2), "utf8");
+  await writeFile(second, JSON.stringify({ value: 2 }, null, 2), "utf8");
+  return {
+    root,
+    first: path.relative(process.cwd(), first).replaceAll("\\", "/"),
+    second: path.relative(process.cwd(), second).replaceAll("\\", "/")
+  };
+}
+
+async function removeTempPlatformApplyFixture(root) {
+  await rm(root, { recursive: true, force: true });
+}
 
 test("platform plugin exposes platform bundle ownership", async () => {
   const manifest = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
@@ -23,6 +43,7 @@ test("platform plugin exposes platform bundle ownership", async () => {
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.create"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.edit"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.validate"), true);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.apply"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.proposal.create"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.proposal.approve"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.proposal.reject"), true);
@@ -32,6 +53,7 @@ test("platform plugin exposes platform bundle ownership", async () => {
   assert.equal(routes.some(route => route.path === "/api/platform-change-sets" && route.handler === "platform.changeSet.create"), true);
   assert.equal(routes.some(route => route.handler === "platform.changeSet.edit"), true);
   assert.equal(routes.some(route => route.handler === "platform.changeSet.validate"), true);
+  assert.equal(routes.some(route => route.handler === "platform.changeSet.apply"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-proposals" && route.handler === "platform.proposal.create"), true);
   assert.equal(routes.some(route => route.handler === "platform.proposal.approve"), true);
   assert.equal(surfaces.some(surface => surface.id === "surface:platform" && surface.href === "/platform"), true);
@@ -187,6 +209,7 @@ test("platform proposal builder normalizes supported proposal bodies", () => {
   assert.equal(branch.value.targetProcess, "branch.create");
   assert.equal(branch.value.targetKind, "branch");
   assert.equal(branch.value.targetId, "branch.platform.console");
+  assert.equal(platformProposalTemplates().some(template => template.action === "changeSet.apply"), true);
   assert.equal(built.ok, true);
   assert.equal(built.value.targetProcess, "mcpTool.install");
   assert.equal(built.value.targetKind, "mcpServer");
@@ -339,6 +362,163 @@ test("platform proposal handlers approve change-set proposals through the shared
   assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.platform.console.proposed"].status, "valid");
 }));
 
+test("platform proposal approval atomically applies all staged files", async () => withRegisteredPluginProjectors(providers, async () => {
+  const fixture = await createTempPlatformApplyFixture();
+  try {
+    const world = createWorld();
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" },
+        executeBootstrapProposal: actor => async proposal => executePlatformProposalTarget({
+          world,
+          actor,
+          proposal,
+          body: proposal.body ?? {}
+        })
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: () => {}
+    });
+
+    await handlers["platform.changeSet.create"]({
+      req: { body: { id: "changeset.apply.proposal", branchId: "branch.apply.proposal" } },
+      res: {},
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext: { runtimeProfile: "full" }
+    });
+    await handlers["platform.changeSet.edit"]({
+      req: {
+        body: {
+          edits: [
+            { path: fixture.first, content: JSON.stringify({ value: 10 }, null, 2) },
+            { path: fixture.second, content: JSON.stringify({ value: 20 }, null, 2) }
+          ]
+        }
+      },
+      res: {},
+      params: { id: "changeset.apply.proposal" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await handlers["platform.changeSet.validate"]({
+      res: {},
+      params: { id: "changeset.apply.proposal" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await handlers["platform.proposal.create"]({
+      req: {
+        body: {
+          id: "proposal.platform.changeSet.apply",
+          action: "changeSet.apply",
+          body: {
+            changeSetId: "changeset.apply.proposal"
+          }
+        }
+      },
+      res: {},
+      requestActor: "aaron"
+    });
+    await handlers["platform.proposal.approve"]({
+      res: {},
+      params: { id: "proposal.platform.changeSet.apply" },
+      requestActor: "aaron"
+    });
+
+    assert.deepEqual(JSON.parse(await readFile(path.join(fixture.root, "first.json"), "utf8")), { value: 10 });
+    assert.deepEqual(JSON.parse(await readFile(path.join(fixture.root, "second.json"), "utf8")), { value: 20 });
+    assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.apply.proposal"].status, "applied");
+  } finally {
+    await removeTempPlatformApplyFixture(fixture.root);
+  }
+}));
+
+test("rejecting an apply proposal leaves the change set intact and unapplied", async () => withRegisteredPluginProjectors(providers, async () => {
+  const fixture = await createTempPlatformApplyFixture();
+  try {
+    const world = createWorld();
+    const sent = [];
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" },
+        executeBootstrapProposal: actor => async proposal => executePlatformProposalTarget({
+          world,
+          actor,
+          proposal,
+          body: proposal.body ?? {}
+        })
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: (res, status, body) => sent.push({ status, body })
+    });
+
+    await handlers["platform.changeSet.create"]({
+      req: { body: { id: "changeset.reject.apply", branchId: "branch.reject.apply" } },
+      res: {},
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext: { runtimeProfile: "full" }
+    });
+    await handlers["platform.changeSet.edit"]({
+      req: {
+        body: {
+          edits: [
+            { path: fixture.first, content: JSON.stringify({ value: 100 }, null, 2) },
+            { path: fixture.second, content: JSON.stringify({ value: 200 }, null, 2) }
+          ]
+        }
+      },
+      res: {},
+      params: { id: "changeset.reject.apply" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await handlers["platform.changeSet.validate"]({
+      res: {},
+      params: { id: "changeset.reject.apply" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await handlers["platform.proposal.create"]({
+      req: {
+        body: {
+          id: "proposal.platform.changeSet.reject-apply",
+          action: "changeSet.apply",
+          body: {
+            changeSetId: "changeset.reject.apply"
+          }
+        }
+      },
+      res: {},
+      requestActor: "aaron"
+    });
+    await handlers["platform.proposal.reject"]({
+      req: { body: { reason: "Do not apply yet" } },
+      res: {},
+      params: { id: "proposal.platform.changeSet.reject-apply" },
+      requestActor: "aaron"
+    });
+
+    assert.equal(sent.at(-1).status, 200);
+    assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.reject.apply"].status, "valid");
+    assert.deepEqual(JSON.parse(await readFile(path.join(fixture.root, "first.json"), "utf8")), { value: 1 });
+    assert.deepEqual(JSON.parse(await readFile(path.join(fixture.root, "second.json"), "utf8")), { value: 2 });
+  } finally {
+    await removeTempPlatformApplyFixture(fixture.root);
+  }
+}));
+
 test("platform change-set handlers stage overlays and validate candidate snapshots", async () => withRegisteredPluginProjectors(providers, async () => {
   const world = createWorld();
   const sent = [];
@@ -397,6 +577,67 @@ test("platform change-set handlers stage overlays and validate candidate snapsho
   assert.equal(world.project(moduleProjectors.candidateSnapshotIndex).rows.length, 1);
 }));
 
+test("platform change-set apply persists multi-file edits atomically", async () => withRegisteredPluginProjectors(providers, async () => {
+  const fixture = await createTempPlatformApplyFixture();
+  try {
+    const world = createWorld();
+    const sent = [];
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: (res, status, body) => sent.push({ status, body })
+    });
+
+    await handlers["platform.changeSet.create"]({
+      req: { body: { id: "changeset.apply.direct", branchId: "branch.apply.direct" } },
+      res: {},
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext: { runtimeProfile: "full" }
+    });
+    await handlers["platform.changeSet.edit"]({
+      req: {
+        body: {
+          edits: [
+            { path: fixture.first, content: JSON.stringify({ value: 11 }, null, 2) },
+            { path: fixture.second, content: JSON.stringify({ value: 22 }, null, 2) }
+          ]
+        }
+      },
+      res: {},
+      params: { id: "changeset.apply.direct" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await handlers["platform.changeSet.validate"]({
+      res: {},
+      params: { id: "changeset.apply.direct" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await handlers["platform.changeSet.apply"]({
+      res: {},
+      params: { id: "changeset.apply.direct" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+
+    assert.equal(sent.at(-1).status, 200);
+    assert.equal(sent.at(-1).body.changeSet.status, "applied");
+    assert.deepEqual(JSON.parse(await readFile(path.join(fixture.root, "first.json"), "utf8")), { value: 11 });
+    assert.deepEqual(JSON.parse(await readFile(path.join(fixture.root, "second.json"), "utf8")), { value: 22 });
+  } finally {
+    await removeTempPlatformApplyFixture(fixture.root);
+  }
+}));
+
 test("invalid WCSS keeps the last active candidate snapshot unchanged", async () => withRegisteredPluginProjectors(providers, async () => {
   const world = createWorld();
   const sent = [];
@@ -453,6 +694,130 @@ test("invalid WCSS keeps the last active candidate snapshot unchanged", async ()
   assert.equal(sent.at(-1).body.activeCandidateSnapshotId, validSnapshotId);
 }));
 
+test("an invalid file prevents the whole change set from being applied", async () => withRegisteredPluginProjectors(providers, async () => {
+  const fixture = await createTempPlatformApplyFixture();
+  try {
+    const world = createWorld();
+    const sent = [];
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: (res, status, body) => sent.push({ status, body })
+    });
+
+    await handlers["platform.changeSet.create"]({
+      req: { body: { id: "changeset.invalid.apply", branchId: "branch.invalid.apply" } },
+      res: {},
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext: { runtimeProfile: "full" }
+    });
+    await handlers["platform.changeSet.edit"]({
+      req: {
+        body: {
+          edits: [
+            { path: fixture.first, content: JSON.stringify({ value: 111 }, null, 2) },
+            { path: fixture.second, content: "{ broken json" }
+          ]
+        }
+      },
+      res: {},
+      params: { id: "changeset.invalid.apply" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await handlers["platform.changeSet.validate"]({
+      res: {},
+      params: { id: "changeset.invalid.apply" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await handlers["platform.changeSet.apply"]({
+      res: {},
+      params: { id: "changeset.invalid.apply" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+
+    assert.equal(sent.at(-1).status, 409);
+    assert.deepEqual(JSON.parse(await readFile(path.join(fixture.root, "first.json"), "utf8")), { value: 1 });
+    assert.deepEqual(JSON.parse(await readFile(path.join(fixture.root, "second.json"), "utf8")), { value: 2 });
+  } finally {
+    await removeTempPlatformApplyFixture(fixture.root);
+  }
+}));
+
+test("platform change-set apply rolls back previously promoted files on mid-apply failure", async () => withRegisteredPluginProjectors(providers, async () => {
+  const fixture = await createTempPlatformApplyFixture();
+  try {
+    const world = createWorld();
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: () => {}
+    });
+
+    await handlers["platform.changeSet.create"]({
+      req: { body: { id: "changeset.rollback.apply", branchId: "branch.rollback.apply" } },
+      res: {},
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext: { runtimeProfile: "full" }
+    });
+    await handlers["platform.changeSet.edit"]({
+      req: {
+        body: {
+          edits: [
+            { path: fixture.first, content: JSON.stringify({ value: 7 }, null, 2) },
+            { path: fixture.second, content: JSON.stringify({ value: 8 }, null, 2) }
+          ]
+        }
+      },
+      res: {},
+      params: { id: "changeset.rollback.apply" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await handlers["platform.changeSet.validate"]({
+      res: {},
+      params: { id: "changeset.rollback.apply" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+
+    const result = await applyPlatformChangeSet(world, {
+      actor: "aaron",
+      changeSetId: "changeset.rollback.apply",
+      session: { id: "session.platform" },
+      hooks: {
+        afterPromote: async file => {
+          if (file.index === 1) throw new Error("simulated apply failure");
+        }
+      }
+    });
+
+    assert.equal(result.ok, false);
+    assert.deepEqual(JSON.parse(await readFile(path.join(fixture.root, "first.json"), "utf8")), { value: 1 });
+    assert.deepEqual(JSON.parse(await readFile(path.join(fixture.root, "second.json"), "utf8")), { value: 2 });
+  } finally {
+    await removeTempPlatformApplyFixture(fixture.root);
+  }
+}));
+
 test("platform page renders required operating views", async () => {
   const model = await buildPlatformModel({
     diagnostics: {
@@ -481,6 +846,8 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /platform-proposal-form/);
   assert.match(html, /platform-review-form/);
   assert.match(html, /platform-change-set-create-form/);
+  assert.match(html, /platform-change-set-apply-form/);
   assert.match(html, /\/api\/platform-proposals/);
   assert.match(html, /\/api\/platform-change-sets/);
+  assert.match(html, /\/apply/);
 });
