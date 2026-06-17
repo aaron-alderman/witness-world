@@ -150,9 +150,13 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   assert.equal(model.nodes.some(node => node.id === "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" && node.kind === "doc"), true);
   assert.equal(model.nodes.some(node => node.kind === "docSection" && node.id.includes("docs/PLATFORM-ALL-THE-WAY-ROADMAP.md")), true);
   assert.equal(model.nodes.some(node => node.kind === "task" && node.id.includes("docs/PLATFORM-ALL-THE-WAY-ROADMAP.md")), true);
+  assert.equal(model.nodes.some(node => node.id === "boundary:testRunner.platform" && node.kind === "boundary"), true);
+  assert.equal(model.nodes.some(node => node.id === "testEnvironment:local-node" && node.kind === "testEnvironment"), true);
+  assert.equal(model.nodes.some(node => node.id === "testEnvironment:local-browser" && node.kind === "testEnvironment"), true);
   assert.equal(model.edges.some(edge => edge.from === "surface:platform" && edge.rel === "authoredBy" && edge.to === "rvm:plugins/platform/platform-console.rvm"), true);
   assert.equal(model.edges.some(edge => edge.from === "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" && edge.rel === "references" && edge.to === "plugin.platform"), true);
   assert.equal(model.nodes.some(node => node.kind === "gate" && node.id.includes("plugins/platform/platform.test.js")), true);
+  assert.equal(model.edges.some(edge => edge.from === "gate:plugins/platform/platform.test.js" && edge.rel === "usesBoundary" && edge.to === "boundary:testRunner.platform"), true);
   assert.equal(model.edges.some(edge => edge.from === "plugin.platform" && edge.rel === "owns" && edge.to === "bundle-platform"), true);
   assert.equal(Array.isArray(model.gaps), true);
   assert.equal(model.summaries.byKind.plugin > 0, true);
@@ -1458,7 +1462,14 @@ test("platform test run handlers execute modeled gates and expose read model sta
   });
 
   await handlers["platform.testRun.create"]({
-    req: { body: { id: "testRun.platform.demo", gateId: "gate:plugins/platform/platform.test.js", branchId: "branch.platform.demo" } },
+    req: {
+      body: {
+        id: "testRun.platform.demo",
+        gateId: "gate:plugins/platform/platform.test.js",
+        branchId: "branch.platform.demo",
+        candidateSnapshotId: "candidateSnapshot:platform-demo:1"
+      }
+    },
     res: {},
     requestActor: "aaron",
     requestSession: { id: "session.platform" },
@@ -1471,10 +1482,27 @@ test("platform test run handlers execute modeled gates and expose read model sta
   assert.equal(sent.at(-1).status, 201);
   assert.equal(sent.at(-1).body.testRun.id, "testRun.platform.demo");
   assert.equal(sent.at(-1).body.testRun.status, "passed");
+  assert.equal(sent.at(-1).body.testRun.environment, "platform-candidate-snapshot");
   assert.equal(sent.at(-1).body.latestResult.status, "passed");
   assert.equal(world.project(moduleProjectors.testRuns).length, 1);
   assert.equal(world.project(moduleProjectors.testResults).length, 1);
   assert.equal(world.project(moduleProjectors.latestTestResultsByGate).byGate["gate:plugins/platform/platform.test.js"].status, "passed");
+  const runtimeModel = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: ["platform.self"],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => world.project(projector)
+  });
+  assert.equal(runtimeModel.nodes.some(node => node.id === "testRun.platform.demo" && node.kind === "testRun"), true);
+  assert.equal(runtimeModel.nodes.some(node => node.id === "testResult:testRun.platform.demo:1" && node.kind === "testResult"), true);
+  assert.equal(runtimeModel.nodes.some(node => node.id === "testEnvironment:platform-candidate-snapshot" && node.kind === "testEnvironment" && node.status === "active"), true);
+  assert.equal(runtimeModel.edges.some(edge => edge.from === "testRun.platform.demo" && edge.rel === "usesBoundary" && edge.to === "boundary:testRunner.platform"), true);
+  assert.equal(runtimeModel.edges.some(edge => edge.from === "testRun.platform.demo" && edge.rel === "executesOn" && edge.to === "testEnvironment:platform-candidate-snapshot"), true);
 
   await handlers["platform.testRun.read"]({
     res: {},

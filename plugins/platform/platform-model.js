@@ -57,6 +57,16 @@ const PLATFORM_AUTHORED_SOURCES = Object.freeze([
   }
 ]);
 
+const TEST_RUNNER_BOUNDARY_ID = "boundary:testRunner.platform";
+
+const TEST_ENVIRONMENT_CATALOG = Object.freeze([
+  { id: "local-node", title: "local node" },
+  { id: "local-browser", title: "local browser" },
+  { id: "local-rust-cargo", title: "local Rust/cargo" },
+  { id: "isolated-temp-workspace", title: "isolated temp workspace" },
+  { id: "platform-candidate-snapshot", title: "platform candidate snapshot" }
+]);
+
 function slash(value) {
   return String(value || "").replace(/\\/g, "/");
 }
@@ -302,6 +312,69 @@ function buildSnapshotBuildErrorRows(candidateSnapshots = []) {
   return rows;
 }
 
+function addTestExecutionNodes(nodes, edges, testGates = [], testRuns = [], testResults = []) {
+  addNode(nodes, {
+    id: TEST_RUNNER_BOUNDARY_ID,
+    kind: "boundary",
+    title: "Platform Test Runner",
+    lifecycle: ["execute", "verify", "steward"],
+    owner: "plugin.platform",
+    status: "active",
+    source: "plugins/platform/test-runs.js"
+  });
+  const usedEnvironments = new Set([
+    ...testGates.map(row => String(row?.environment || "")),
+    ...testRuns.map(row => String(row?.environment || ""))
+  ].filter(Boolean));
+  for (const environment of TEST_ENVIRONMENT_CATALOG) {
+    addNode(nodes, {
+      id: `testEnvironment:${environment.id}`,
+      kind: "testEnvironment",
+      title: environment.title,
+      lifecycle: ["execute", "verify"],
+      owner: "plugin.platform",
+      status: usedEnvironments.has(environment.id) ? "active" : "known",
+      source: "plugins/platform/test-runs.js"
+    });
+    addEdge(edges, TEST_RUNNER_BOUNDARY_ID, "supports", `testEnvironment:${environment.id}`, "tests");
+  }
+  for (const gate of testGates) {
+    addEdge(edges, gate.id, "usesBoundary", TEST_RUNNER_BOUNDARY_ID, "tests");
+    if (gate.environment) addEdge(edges, gate.id, "executesOn", `testEnvironment:${gate.environment}`, "tests");
+  }
+  for (const run of testRuns) {
+    addNode(nodes, {
+      id: run.id,
+      kind: "testRun",
+      title: run.title || run.id,
+      lifecycle: ["execute", "verify"],
+      owner: run.actor ?? "plugin.platform",
+      status: run.status || "known",
+      source: "witnesses"
+    });
+    if (run.gateId) addEdge(edges, run.gateId, "executedAs", run.id, "witnesses");
+    addEdge(edges, run.id, "usesBoundary", TEST_RUNNER_BOUNDARY_ID, "witnesses");
+    if (run.environment) addEdge(edges, run.id, "executesOn", `testEnvironment:${run.environment}`, "witnesses");
+    if (run.branchId) addEdge(edges, run.id, "targets", `branch:${run.branchId}`, "witnesses");
+    if (run.changeSetId) addEdge(edges, run.id, "targets", `changeSet:${run.changeSetId}`, "witnesses");
+    if (run.candidateSnapshotId) addEdge(edges, run.id, "targets", run.candidateSnapshotId, "witnesses");
+  }
+  for (const result of testResults) {
+    addNode(nodes, {
+      id: result.id,
+      kind: "testResult",
+      title: result.title || result.id,
+      lifecycle: ["verify", "observe"],
+      owner: "plugin.platform",
+      status: result.status || "known",
+      source: "witnesses"
+    });
+    if (result.runId) addEdge(edges, result.runId, "produces", result.id, "witnesses");
+    if (result.gateId) addEdge(edges, result.id, "targets", result.gateId, "witnesses");
+    if (result.candidateSnapshotId) addEdge(edges, result.id, "targets", result.candidateSnapshotId, "witnesses");
+  }
+}
+
 function buildGaps(nodes, edges) {
   const incoming = new Map();
   const outgoing = new Map();
@@ -513,6 +586,7 @@ function gateRunnerForPath(relativePath) {
 
 function gateEnvironmentForPath(relativePath) {
   const value = String(relativePath || "");
+  if (value.includes(".rs") || value.includes("cargo")) return "local-rust-cargo";
   if (value.includes("ui.") || value.includes("browser")) return "local-browser";
   return "local-node";
 }
@@ -1372,6 +1446,7 @@ export async function buildPlatformModel({
   }
 
   const testGateProjection = buildTestGateRows(nodes, edges, branches, latestTestResultsProjection.byGate ?? Object.create(null));
+  addTestExecutionNodes(nodes, edges, testGateProjection.rows, testRuns, testResults);
   const gaps = buildGaps(nodes, edges);
   const docs = parsedDocs.map(doc => ({
     id: doc.id,

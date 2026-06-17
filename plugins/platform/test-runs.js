@@ -50,6 +50,14 @@ function defaultShellCommand(command) {
   };
 }
 
+function resolvePlatformTestEnvironment(gate, candidateSnapshotId = null) {
+  if (optionalText(candidateSnapshotId)) return "platform-candidate-snapshot";
+  const environment = optionalText(gate?.environment);
+  if (environment) return environment;
+  if (String(gate?.runner || "") === "cargo-test") return "local-rust-cargo";
+  return "local-node";
+}
+
 export async function runPlatformTestCommand({
   command,
   cwd = repoRoot,
@@ -136,6 +144,7 @@ function emitPlatformTestRunStart(world, {
   runtimeProfile = null
 }) {
   ensureThing(world, actor, id);
+  const environment = resolvePlatformTestEnvironment(gate, candidateSnapshotId);
   return world.emit({
     process: "platform.test.run.start",
     actor,
@@ -146,7 +155,7 @@ function emitPlatformTestRunStart(world, {
       title: String(gate.title || gate.id),
       command: String(gate.command || ""),
       runner: String(gate.runner || "node-test"),
-      environment: String(gate.environment || "local-node"),
+      environment,
       timeoutMs: Number(gate.timeoutMs || 0),
       branchId,
       changeSetId,
@@ -267,6 +276,7 @@ export async function runPlatformTestGate(world, {
   const normalizedBranchId = optionalText(branchId);
   const normalizedChangeSetId = optionalText(changeSetId);
   const normalizedCandidateSnapshotId = optionalText(candidateSnapshotId);
+  const environment = resolvePlatformTestEnvironment(gate, normalizedCandidateSnapshotId);
   const startWitness = emitPlatformTestRunStart(world, {
     actor,
     id: runId,
@@ -290,7 +300,7 @@ export async function runPlatformTestGate(world, {
       title: String(gate.title || gate.id),
       command: String(gate.command || ""),
       runner: String(gate.runner || "node-test"),
-      environment: String(gate.environment || "local-node"),
+      environment,
       timeoutMs: Number(gate.timeoutMs || 0),
       sourceDependencies: Array.isArray(gate.sourceDependencies) ? gate.sourceDependencies.map(String) : [],
       protectedObjects: Array.isArray(gate.protectedObjects) ? gate.protectedObjects.map(String) : []
