@@ -916,15 +916,42 @@ export function filterPlatformModel(model, view, id = null) {
     const runtimeRevisions = id
       ? model.runtimeRevisions.filter(row => row.id === id || row.backendRevisionId === id)
       : model.runtimeRevisions;
+    const runtimeRevisionNumbers = new Set(runtimeRevisions.map(row => Number(row.revision || 0)).filter(revision => revision > 0));
+    const runtimeBranchIds = new Set(runtimeRevisions.map(row => row.branchId).filter(Boolean));
+    const runtimeChangeSetIds = new Set(runtimeRevisions.map(row => row.changeSetId).filter(Boolean));
+    const candidateSnapshots = id
+      ? model.candidateSnapshots.filter(row =>
+        runtimeRevisionNumbers.has(Number(row.revision || 0))
+        || runtimeBranchIds.has(row.branchId)
+        || runtimeChangeSetIds.has(row.changeSetId)
+      )
+      : model.candidateSnapshots;
+    const candidateSnapshotIds = new Set(candidateSnapshots.map(row => row.id));
     return {
       runtimeRevisions,
       activeRuntimeRevision: model.activeRuntimeRevision,
       snapshotBuilds: id
-        ? model.snapshotBuilds.filter(row => row.id === id || row.branchId === id || row.changeSetId === id || row.candidateSnapshotId === id)
+        ? model.snapshotBuilds.filter(row =>
+          row.id === id
+          || row.candidateSnapshotId === id
+          || candidateSnapshotIds.has(row.candidateSnapshotId)
+          || runtimeRevisionNumbers.has(Number(row.revision || 0))
+          || runtimeBranchIds.has(row.branchId)
+          || runtimeChangeSetIds.has(row.changeSetId)
+        )
         : model.snapshotBuilds,
       snapshotBuildErrors: id
-        ? model.snapshotBuildErrors.filter(row => row.id === id || row.branchId === id || row.changeSetId === id || row.candidateSnapshotId === id)
+        ? model.snapshotBuildErrors.filter(row =>
+          row.id === id
+          || row.snapshotBuildId === id
+          || row.candidateSnapshotId === id
+          || candidateSnapshotIds.has(row.candidateSnapshotId)
+          || runtimeRevisionNumbers.has(Number(row.revision || 0))
+          || runtimeBranchIds.has(row.branchId)
+          || runtimeChangeSetIds.has(row.changeSetId)
+        )
         : model.snapshotBuildErrors,
+      candidateSnapshots,
       candidateSnapshotsByBranch: model.candidateSnapshotsByBranch,
       snapshotDiagnostics: model.snapshotDiagnostics,
       summaries: model.summaries

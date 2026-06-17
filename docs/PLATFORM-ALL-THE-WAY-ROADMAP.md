@@ -437,7 +437,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add tests for RVM route/process changes changing backend behavior without process restart.
 - [ ] Add tests for invalid RVM preserving last good backend behavior.
 - [X] Add tests for SSE event after backend candidate activation.
-- [L] Current activation path is `platform.changeSet.apply` -> `AppSnapshotManager.markDirtyPaths(...)` for applied files inside the active app roots, so new requests pick up a rebuilt authored runtime revision without restarting the server while failed rebuilds retain the last good snapshot. The runtime now emits backend revision SSE, but the dedicated Platform Console revision stream/view remains later work.
+- [L] Current activation path is `platform.changeSet.apply` -> `AppSnapshotManager.markDirtyPaths(...)` for applied files inside the active app roots, so new requests pick up a rebuilt authored runtime revision without restarting the server while failed rebuilds retain the last good snapshot. `/platform` now consumes `/api/platform-model?view=runtimeRevisions&id=...` for runtime revision detail, snapshot builds, and build errors, while the live backend revision stream remains SSE-backed.
 - [L] Current request pinning is HTTP-request scoped: the runtime snapshots `appSnapshotManager.getActiveSnapshot()` after `ensureFresh()` and proxies that fixed revision through route matching, authz, rendering, and nested handler invocation for the lifetime of the request. Long-lived out-of-band work such as jobs or separate event streams remains distinct follow-on policy.
 - [L] Unexpected current behavior: broad malformed RVM text often compiles into tolerated residual forms instead of failing the snapshot build, so the open invalid-RVM regression still needs a narrow authored specimen that deterministically trips rebuild failure rather than silently lowering through the compiler.
 
@@ -1226,10 +1226,10 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Route new requests to active valid runtime revision.
 - [X] Preserve in-flight revision references.
 - [X] Add backend revision events.
-- [ ] Add runtime revision view.
+- [X] Add runtime revision view.
 - [X] Add tests for backend behavior changing from RVM without process restart.
 - [X] Add tests for failed candidate preserving old behavior.
-- [L] The current runtime revision view is the live Runtime Revisions section inside `/platform`, including the backend revision stream panel. A separate dedicated revision page or drill-down remains optional follow-on UX, not missing core runtime behavior.
+- [L] The runtime revision view now lives inside `/platform` as a filterable revision-detail panel backed by `/api/platform-model?view=runtimeRevisions&id=...`, alongside the live backend revision stream. A separate dedicated revision route remains optional follow-on UX.
 
 ### Milestone C: Docs Live Model V1
 

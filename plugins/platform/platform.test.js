@@ -260,13 +260,42 @@ test("platform model filters support MCP views", async () => {
   }, "branches");
   const runtimeRevisions = filterPlatformModel({
     ...model,
-    runtimeRevisions: [{ id: "runtimeRevision:backend:3", backendRevisionId: "backendRevision:3", revision: 3, status: "active", trigger: "watch", changedSources: [], candidateBranchCount: 1, buildErrorCount: 0 }],
+    runtimeRevisions: [{ id: "runtimeRevision:backend:3", backendRevisionId: "backendRevision:3", revision: 3, status: "active", trigger: "watch", changedSources: [], branchId: "branch.demo", changeSetId: "changeset.demo", candidateBranchCount: 1, buildErrorCount: 1 }],
     activeRuntimeRevision: { id: "runtimeRevision:backend:3", revision: 3 },
-    snapshotBuilds: [{ id: "snapshotBuild:candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo", candidateSnapshotId: "candidateSnapshot:demo:1" }],
-    snapshotBuildErrors: [],
+    snapshotBuilds: [
+      { id: "snapshotBuild:candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo", candidateSnapshotId: "candidateSnapshot:demo:1", revision: 3 },
+      { id: "snapshotBuild:candidateSnapshot:other:1", branchId: "branch.other", changeSetId: "changeset.other", candidateSnapshotId: "candidateSnapshot:other:1", revision: 9 }
+    ],
+    snapshotBuildErrors: [
+      { id: "snapshotBuildError:candidateSnapshot:demo:1:1", snapshotBuildId: "snapshotBuild:candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo", candidateSnapshotId: "candidateSnapshot:demo:1", revision: 3 },
+      { id: "snapshotBuildError:candidateSnapshot:other:1:1", snapshotBuildId: "snapshotBuild:candidateSnapshot:other:1", branchId: "branch.other", changeSetId: "changeset.other", candidateSnapshotId: "candidateSnapshot:other:1", revision: 9 }
+    ],
+    candidateSnapshots: [
+      { id: "candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo", revision: 3 },
+      { id: "candidateSnapshot:other:1", branchId: "branch.other", changeSetId: "changeset.other", revision: 9 }
+    ],
     candidateSnapshotsByBranch: { "branch.demo": [{ id: "candidateSnapshot:demo:1", branchId: "branch.demo" }] },
     snapshotDiagnostics: { appRevision: 3, lastGoodAppRevision: 3, pendingDirtySources: [] }
   }, "runtimeRevisions");
+  const runtimeRevisionDetail = filterPlatformModel({
+    ...model,
+    runtimeRevisions: [{ id: "runtimeRevision:backend:3", backendRevisionId: "backendRevision:3", revision: 3, status: "active", trigger: "watch", changedSources: [], branchId: "branch.demo", changeSetId: "changeset.demo", candidateBranchCount: 1, buildErrorCount: 1 }],
+    activeRuntimeRevision: { id: "runtimeRevision:backend:3", revision: 3 },
+    snapshotBuilds: [
+      { id: "snapshotBuild:candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo", candidateSnapshotId: "candidateSnapshot:demo:1", revision: 3 },
+      { id: "snapshotBuild:candidateSnapshot:other:1", branchId: "branch.other", changeSetId: "changeset.other", candidateSnapshotId: "candidateSnapshot:other:1", revision: 9 }
+    ],
+    snapshotBuildErrors: [
+      { id: "snapshotBuildError:candidateSnapshot:demo:1:1", snapshotBuildId: "snapshotBuild:candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo", candidateSnapshotId: "candidateSnapshot:demo:1", revision: 3 },
+      { id: "snapshotBuildError:candidateSnapshot:other:1:1", snapshotBuildId: "snapshotBuild:candidateSnapshot:other:1", branchId: "branch.other", changeSetId: "changeset.other", candidateSnapshotId: "candidateSnapshot:other:1", revision: 9 }
+    ],
+    candidateSnapshots: [
+      { id: "candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo", revision: 3 },
+      { id: "candidateSnapshot:other:1", branchId: "branch.other", changeSetId: "changeset.other", revision: 9 }
+    ],
+    candidateSnapshotsByBranch: { "branch.demo": [{ id: "candidateSnapshot:demo:1", branchId: "branch.demo" }] },
+    snapshotDiagnostics: { appRevision: 3, lastGoodAppRevision: 3, pendingDirtySources: [] }
+  }, "runtimeRevisions", "runtimeRevision:backend:3");
 
   assert.equal(mcp.nodes.some(node => node.id === "mcp:mcp.platform"), true);
   assert.equal(mcp.nodes.some(node => node.id === "mcpTool:platform.read"), true);
@@ -274,6 +303,10 @@ test("platform model filters support MCP views", async () => {
   assert.equal(branches.branches[0].id, "branch.demo");
   assert.equal(runtimeRevisions.runtimeRevisions[0].id, "runtimeRevision:backend:3");
   assert.equal(runtimeRevisions.activeRuntimeRevision.revision, 3);
+  assert.equal(runtimeRevisionDetail.snapshotBuilds.length, 1);
+  assert.equal(runtimeRevisionDetail.snapshotBuildErrors.length, 1);
+  assert.equal(runtimeRevisionDetail.candidateSnapshots.length, 1);
+  assert.equal(runtimeRevisionDetail.candidateSnapshots[0].id, "candidateSnapshot:demo:1");
 });
 
 test("platform roadmap task parser preserves extended status markers", () => {
@@ -2043,6 +2076,11 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Telemetry impacts/);
   assert.match(html, /Candidate Snapshots/);
   assert.match(html, /Runtime Revisions/);
+  assert.match(html, /Revision detail/);
+  assert.match(html, /platform-runtime-revision-select/);
+  assert.match(html, /Revision Snapshot Builds/);
+  assert.match(html, /Revision Build Errors/);
+  assert.match(html, /\/api\/platform-model\?view=runtimeRevisions/);
   assert.match(html, /Backend Revision Stream/);
   assert.match(html, /Snapshot Builds/);
   assert.match(html, /Last Good/);

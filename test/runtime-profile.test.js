@@ -475,6 +475,8 @@ test("full runtime exposes platform console and platform self-model API", async 
     const pageHtml = await page.text();
     assert.match(pageHtml, /Platform Console/);
     assert.match(pageHtml, /Backend Revision Stream/);
+    assert.match(pageHtml, /platform-runtime-revision-select/);
+    assert.match(pageHtml, /\/api\/platform-model\?view=runtimeRevisions/);
     assert.match(pageHtml, /\/api\/runtime\/backend-revisions\/events/);
     assert.equal(model.nodes.some(node => node.id === "plugin.platform"), true);
     assert.equal(model.nodes.some(node => node.id === "surface:platform"), true);

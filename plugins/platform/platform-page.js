@@ -69,6 +69,16 @@ export function renderPlatformPage(model) {
   const branchBoard = model.branchBoard ?? [];
   const openProposals = proposals.filter(row => row.status === "open");
   const initialBranch = branches[0] ?? null;
+  const initialRuntimeRevision = runtimeRevisions[0] ?? null;
+  const initialRuntimeSnapshotBuilds = initialRuntimeRevision
+    ? snapshotBuilds.filter(row => Number(row.revision || 0) === Number(initialRuntimeRevision.revision || 0))
+    : [];
+  const initialRuntimeBuildErrors = initialRuntimeRevision
+    ? snapshotBuildErrors.filter(row => Number(row.revision || 0) === Number(initialRuntimeRevision.revision || 0))
+    : [];
+  const initialRuntimeCandidateSnapshots = initialRuntimeRevision
+    ? candidateSnapshots.filter(row => Number(row.revision || 0) === Number(initialRuntimeRevision.revision || 0))
+    : [];
   const initialState = JSON.stringify(model).replaceAll("<", "\\u003c");
   return `<!doctype html>
 <html lang="en">
@@ -338,6 +348,33 @@ export function renderPlatformPage(model) {
             row => row.buildErrorCount
           ])}</tbody>
         </table>
+        <label>Revision detail
+          <select id="platform-runtime-revision-select">
+            ${runtimeRevisions.length
+              ? runtimeRevisions.map(row => `<option value="${esc(row.id)}">${esc(`${row.revision} ${row.trigger || "initial"}`)}</option>`).join("")
+              : `<option value="">No runtime revisions</option>`}
+          </select>
+        </label>
+        <div id="platform-runtime-revision-status" class="muted">${esc(initialRuntimeRevision ? `Loaded from /api/platform-model?view=runtimeRevisions&id=${initialRuntimeRevision.id}` : "No runtime revisions projected yet.")}</div>
+        <pre id="platform-runtime-revision-detail-output">${esc(JSON.stringify(initialRuntimeRevision, null, 2))}</pre>
+        <div class="platform-branch-summary">
+          <div class="card">
+            <h3>Revision candidate snapshots</h3>
+            <div id="platform-runtime-revision-snapshot-count">${esc(initialRuntimeCandidateSnapshots.length)}</div>
+          </div>
+          <div class="card">
+            <h3>Revision builds</h3>
+            <div id="platform-runtime-revision-build-count">${esc(initialRuntimeSnapshotBuilds.length)}</div>
+          </div>
+          <div class="card">
+            <h3>Revision build errors</h3>
+            <div id="platform-runtime-revision-error-count">${esc(initialRuntimeBuildErrors.length)}</div>
+          </div>
+        </div>
+        <h3>Revision Snapshot Builds</h3>
+        <pre id="platform-runtime-revision-builds-output">${esc(JSON.stringify(initialRuntimeSnapshotBuilds, null, 2))}</pre>
+        <h3>Revision Build Errors</h3>
+        <pre id="platform-runtime-revision-errors-output">${esc(JSON.stringify(initialRuntimeBuildErrors, null, 2))}</pre>
         <div class="card">
           <h3>Backend Revision Stream</h3>
           <div id="backend-revision-stream-status" class="muted">Connecting to /api/runtime/backend-revisions/events…</div>
@@ -421,7 +458,53 @@ export function renderPlatformPage(model) {
     const platformActionTemplates = new Map((platformState.proposalActions || []).map(action => [action.action, action]));
     const platformBranches = platformState.branches || [];
     const platformCandidateSnapshots = platformState.candidateSnapshots || [];
+    const platformRuntimeRevisions = platformState.runtimeRevisions || [];
+    const platformSnapshotBuilds = platformState.snapshotBuilds || [];
+    const platformSnapshotBuildErrors = platformState.snapshotBuildErrors || [];
     const backendRevisionEvents = [];
+    function deriveRuntimeRevisionDetail(revisionId) {
+      const runtimeRevision = platformRuntimeRevisions.find(entry => entry.id === revisionId || entry.backendRevisionId === revisionId) || null;
+      const revision = Number(runtimeRevision?.revision || 0);
+      return {
+        runtimeRevisions: runtimeRevision ? [runtimeRevision] : [],
+        candidateSnapshots: platformCandidateSnapshots.filter(row => Number(row.revision || 0) === revision),
+        snapshotBuilds: platformSnapshotBuilds.filter(row => Number(row.revision || 0) === revision),
+        snapshotBuildErrors: platformSnapshotBuildErrors.filter(row => Number(row.revision || 0) === revision)
+      };
+    }
+    function syncRuntimeRevisionDetail(view, revisionId, sourceLabel) {
+      const runtimeRevision = (view.runtimeRevisions || [])[0] || null;
+      const detail = document.getElementById("platform-runtime-revision-detail-output");
+      const builds = document.getElementById("platform-runtime-revision-builds-output");
+      const errors = document.getElementById("platform-runtime-revision-errors-output");
+      const snapshotCount = document.getElementById("platform-runtime-revision-snapshot-count");
+      const buildCount = document.getElementById("platform-runtime-revision-build-count");
+      const errorCount = document.getElementById("platform-runtime-revision-error-count");
+      const status = document.getElementById("platform-runtime-revision-status");
+      if (detail) detail.textContent = JSON.stringify(runtimeRevision, null, 2);
+      if (builds) builds.textContent = JSON.stringify(view.snapshotBuilds || [], null, 2);
+      if (errors) errors.textContent = JSON.stringify(view.snapshotBuildErrors || [], null, 2);
+      if (snapshotCount) snapshotCount.textContent = String((view.candidateSnapshots || []).length);
+      if (buildCount) buildCount.textContent = String((view.snapshotBuilds || []).length);
+      if (errorCount) errorCount.textContent = String((view.snapshotBuildErrors || []).length);
+      if (status) status.textContent = runtimeRevision
+        ? "Loaded " + String(sourceLabel || "revision detail") + " for " + String(revisionId || runtimeRevision.id)
+        : "Runtime revision detail unavailable.";
+    }
+    async function loadRuntimeRevisionDetail(revisionId) {
+      if (!revisionId) {
+        syncRuntimeRevisionDetail({ runtimeRevisions: [], candidateSnapshots: [], snapshotBuilds: [], snapshotBuildErrors: [] }, "", "empty state");
+        return;
+      }
+      try {
+        const response = await fetch("/api/platform-model?view=runtimeRevisions&id=" + encodeURIComponent(revisionId));
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(json.error || "runtime revision detail request failed");
+        syncRuntimeRevisionDetail(json, revisionId, "/api/platform-model?view=runtimeRevisions&id=...");
+      } catch {
+        syncRuntimeRevisionDetail(deriveRuntimeRevisionDetail(revisionId), revisionId, "cached platform state");
+      }
+    }
     function syncBackendRevisionStream() {
       const output = document.getElementById("backend-revision-stream-output");
       if (output) output.textContent = JSON.stringify(backendRevisionEvents.slice(-12), null, 2);
@@ -479,6 +562,13 @@ export function renderPlatformPage(model) {
       const template = platformActionTemplates.get(proposalForm.elements.action.value);
       if (template) proposalForm.elements.bodyJson.value = JSON.stringify(template.sampleBody || {}, null, 2);
     });
+    const runtimeRevisionSelect = document.getElementById("platform-runtime-revision-select");
+    if (runtimeRevisionSelect) {
+      runtimeRevisionSelect.addEventListener("change", event => {
+        loadRuntimeRevisionDetail(event.currentTarget.value);
+      });
+      if (runtimeRevisionSelect.value) loadRuntimeRevisionDetail(runtimeRevisionSelect.value);
+    }
     document.getElementById("platform-branch-create-form").addEventListener("submit", async event => {
       event.preventDefault();
       const form = event.currentTarget;
