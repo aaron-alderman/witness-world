@@ -487,10 +487,12 @@ test("createSurfaceInteractionRuntime dispatches authored event rules and patche
     }
   });
 
+  await runtime.whenSettled();
   assert.equal(nodes.get("status-label").textContent, "idle");
   assert.equal(nodes.get("sign-in-button").className, "ms-btn");
   assert.equal(Object.prototype.hasOwnProperty.call(nodes.get("sign-in-button"), "hidden"), false);
   await listeners.get("click")({ preventDefault() {}, target: nodes.get("sign-in-button") });
+  await runtime.whenSettled();
 
   assert.equal(runtime.processRuntime.value("AuthStatus"), "signedIn");
   assert.equal(runtime.processRuntime.value("ActiveRoute"), "home");
@@ -505,6 +507,103 @@ test("createSurfaceInteractionRuntime dispatches authored event rules and patche
     "rule.setState",
     "rule.setState"
   ]);
+});
+
+test("createSurfaceInteractionRuntime inspection exposes settle and reconcile summaries", async () => {
+  const listeners = new Map();
+  const nodes = new Map([
+    ["route-button", {
+      className: "",
+      disabled: false,
+      addEventListener(eventName, listener) {
+        listeners.set(eventName, listener);
+      },
+      removeEventListener() {},
+      setAttribute(name, value) {
+        this[name] = value;
+      },
+      removeAttribute(name) {
+        delete this[name];
+      }
+    }],
+    ["route-label", { textContent: "" }]
+  ]);
+  const runtimeWindow = {
+    location: { pathname: "/login" },
+    history: {
+      pushState(_state, _title, path) {
+        runtimeWindow.location.pathname = path;
+      }
+    },
+    console: { error() {} }
+  };
+  createSurfaceInteractionRuntime({
+    document: {
+      getElementById(id) {
+        return nodes.get(id) ?? null;
+      }
+    },
+    window: runtimeWindow,
+    manifest: {
+      routeState: { process: "ShellNavigation", state: "ActiveRoute" },
+      routeTargets: [
+        { key: "login", path: "/login", surfaceId: "Surface.Login" },
+        { key: "home", path: "/home", surfaceId: "Surface.Login" }
+      ],
+      activeSurfaceId: "Surface.Login",
+      surfaces: [
+        {
+          id: "Surface.Login",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [
+              { prop: "text", source: { kind: "state", state: "AuthStatus" } }
+            ],
+            interactions: [
+              { target: "primary", event: "click", action: { kind: "deliver", message: "SignInRequested" } }
+            ]
+          },
+          props: {},
+          view: {
+            rootId: "surface-login",
+            propTargets: {
+              text: [{ id: "route-label", mode: "text" }]
+            },
+            interactionTargets: {
+              primary: [{ id: "route-button" }]
+            }
+          }
+        }
+      ],
+      processWitnesses: [
+        { process: "desire.defineType", body: { id: "AuthStatus", role: "state", valueType: "text", initial: "idle" } },
+        { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "login" } },
+        { process: "desire.defineMessage", body: { id: "SignInRequested", role: "event", writes: { AuthStatus: "signedIn", ActiveRoute: "home" } } },
+        { process: "desire.defineProcess", body: {
+          id: "ShellNavigation",
+          state: ["AuthStatus", "ActiveRoute"],
+          handles: ["SignInRequested"],
+          emits: [],
+          rules: []
+        } }
+      ]
+    },
+    createProcessRuntimeImpl({ witnesses, executionRunner }) {
+      return createProcessRuntime(witnesses, { executionRunner });
+    }
+  });
+
+  await runtimeWindow.world.whenSettled();
+  await listeners.get("click")({ preventDefault() {}, target: nodes.get("route-button") });
+  await runtimeWindow.world.whenSettled();
+
+  const inspection = runtimeWindow.world.inspect();
+  assert.equal(inspection.executionSummary.settled, true);
+  assert.equal(inspection.executionSummary.activeTaskCount, 0);
+  assert.equal(typeof inspection.lastReconcileSummary?.opCount, "number");
+  assert.equal(inspection.lastReconcileSummary?.activeSurfaceId, "Surface.Login");
 });
 
 test("createSurfaceInteractionRuntime boots capability hooks after route surface replacement", async () => {

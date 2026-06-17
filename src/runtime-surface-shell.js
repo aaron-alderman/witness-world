@@ -58,6 +58,10 @@ function readProps(surface) {
   return surface?.props && typeof surface.props === "object" ? surface.props : {};
 }
 
+function isTemplateSurface(surface) {
+  return readProps(surface).template === true;
+}
+
 const GENERIC_ATTRIBUTE_PROPS = [
   ["htmlRole", "role"],
   ["ariaLabel", "aria-label"],
@@ -744,6 +748,7 @@ function surfaceVisibleInInitialProjection(surface, options = {}) {
 function renderSurfaceNode(surfaces, surfaceId, options = {}) {
   const surface = surfaces.get(surfaceId);
   if (!surface) return "";
+  if (isTemplateSurface(surface) && options.templateContent !== true) return "";
   if (!surfaceVisibleInInitialProjection(surface, options) && !forceVisibleSurfaceIdsSet(options).has(surfaceId)) return "";
   for (const renderer of options.surfaceRenderers ?? []) {
     if (!renderer || typeof renderer.renderSurface !== "function") continue;
@@ -774,6 +779,38 @@ function renderSurfaceNode(surfaces, surfaceId, options = {}) {
 export function renderSurfaceStaticFragment(surfaces, surfaceId, options = {}) {
   if (!(surfaces instanceof Map) || !surfaceId) return "";
   return renderSurfaceNode(surfaces, surfaceId, options);
+}
+
+function renderSurfaceTemplate(surface, surfaces, options = {}) {
+  if (!surface?.id || !isTemplateSurface(surface)) return "";
+  const content = renderSurfaceNode(surfaces, surface.id, { ...options, templateContent: true });
+  if (!content) return "";
+  const tag = normalizeTagName(readProps(surface).tag, "div");
+  if (tag === "option") {
+    return `<template data-surface-template="${escapeAttr(surface.id)}"><select data-template-wrapper="option">${content}</select></template>`;
+  }
+  return `<template data-surface-template="${escapeAttr(surface.id)}">${content}</template>`;
+}
+
+function renderSurfaceTemplates(surfaces, rootSurfaceId, options = {}) {
+  if (!(surfaces instanceof Map) || !rootSurfaceId) return "";
+  const referencedTemplateIds = new Set();
+  const queue = [rootSurfaceId];
+  const seen = new Set();
+  while (queue.length) {
+    const surfaceId = queue.shift();
+    if (!surfaceId || seen.has(surfaceId)) continue;
+    seen.add(surfaceId);
+    const surface = surfaces.get(surfaceId);
+    if (!surface) continue;
+    const repeat = surface?.repeat && typeof surface.repeat === "object" ? surface.repeat : null;
+    if (typeof repeat?.template === "string" && repeat.template.trim()) referencedTemplateIds.add(repeat.template.trim());
+    for (const childId of childSurfaceIds(surface)) queue.push(childId);
+  }
+  return [...referencedTemplateIds]
+    .map(templateId => renderSurfaceTemplate(surfaces.get(templateId), surfaces, options))
+    .filter(Boolean)
+    .join("\n");
 }
 
 function inferredDocumentTitle(activeSurface, surfaces) {
@@ -807,6 +844,7 @@ function renderSurfaceDocument({
   const bodyClass = readClassNames(rootSurface).join(" ");
   const bodyClassAttr = bodyClass ? ` class="${escapeAttr(bodyClass)}"` : "";
   const html = renderSurfaceNode(surfaces, activeSurface.id, { surfaceRenderers, initialState });
+  const templates = renderSurfaceTemplates(surfaces, activeSurface.id, { surfaceRenderers, initialState });
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -818,6 +856,7 @@ function renderSurfaceDocument({
   <body${bodyClassAttr}>
     <!-- witness-surface status=composed_static_surface requestPathname=${escapeAttr(requestPathname)} rootSurface=${escapeAttr(rootInfo?.id ?? "")} activeSurface=${escapeAttr(activeInfo?.id ?? "")} -->
     ${html}
+    ${templates}
   </body>
 </html>`;
 }

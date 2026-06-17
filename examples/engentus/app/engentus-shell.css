@@ -977,14 +977,14 @@ a {
 }
 
 /* shared views */
-#view-goodman, #view-mill, #view-mill-force {
+#view-goodman, #view-mill, #view-mill-force, #view-platform-config {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-#body, #mill-body, #mill-force-body {
+#body, #mill-body, #mill-force-body, #platform-config-body {
   flex: 1;
   display: flex;
   overflow: hidden;
@@ -2371,6 +2371,147 @@ input[type=range], .mill-slider {
   background: var(--dk);
 }
 
+#platform-config-body {
+  background: linear-gradient(180deg, #f7fafc 0%, #edf3f8 100%);
+  padding: 18px;
+  overflow: auto;
+  gap: 14px;
+  flex-direction: column;
+}
+
+#platform-config-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.platform-config-title {
+  font-size: 24px;
+  color: #102338;
+  letter-spacing: -.03em;
+}
+
+.platform-config-intro {
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #4c5f78;
+  max-width: 920px;
+}
+
+.platform-config-notice {
+  border-radius: 10px;
+  padding: 11px 13px;
+  border: 1px solid rgba(61,88,128,.16);
+  background: rgba(255,255,255,.9);
+  color: #22364d;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.platform-config-notice.success {
+  border-color: rgba(22,163,74,.25);
+  background: rgba(22,163,74,.08);
+  color: #166534;
+}
+
+.platform-config-notice.error {
+  border-color: rgba(220,38,38,.25);
+  background: rgba(220,38,38,.08);
+  color: #991b1b;
+}
+
+.platform-config-notice.warn {
+  border-color: rgba(236,116,36,.25);
+  background: rgba(236,116,36,.08);
+  color: #9a3412;
+}
+
+#platform-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.platform-config-card {
+  background: rgba(255,255,255,.95);
+  border: 1px solid rgba(61,88,128,.16);
+  border-radius: 12px;
+  box-shadow: 0 16px 42px rgba(12,20,42,.09);
+}
+
+.platform-config-card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #102338;
+  margin-bottom: 8px;
+  letter-spacing: -.02em;
+}
+
+.platform-config-field {
+  margin-bottom: 10px;
+}
+
+.platform-config-field label,
+.platform-config-checkbox label {
+  color: #334155;
+}
+
+.platform-config-input {
+  background: #fff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.platform-config-input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(140,196,212,.2);
+}
+
+.platform-config-hint {
+  font-size: 11px;
+  line-height: 1.55;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.platform-config-actions {
+  flex-wrap: wrap;
+}
+
+.platform-config-actions .rbtn {
+  min-width: 108px;
+}
+
+.platform-config-checkbox {
+  margin: 10px 0;
+}
+
+.platform-config-output {
+  margin-top: 10px;
+  padding: 12px;
+  min-height: 148px;
+  background: #0f172a;
+  color: #d8e5f2;
+  border-radius: 8px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.platform-config-output::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.platform-config-output::-webkit-scrollbar-thumb {
+  background: rgba(140,196,212,.35);
+  border-radius: 999px;
+}
+
 #mill-force-svg-cross, #mill-force-svg-force, #mill-force-svg-rose {
   width: 100%;
   height: 100%;
@@ -2400,7 +2541,7 @@ input[type=range], .mill-slider {
 }
 
 @media (max-width: 980px) {
-  .auth-book, #view-home, #body, #mill-body, #mill-force-body {
+  .auth-book, #view-home, #body, #mill-body, #mill-force-body, #platform-config-body {
     flex-direction: column;
   }
 
@@ -2414,6 +2555,10 @@ input[type=range], .mill-slider {
   }
 
   #module-grid {
+    grid-template-columns: 1fr;
+  }
+
+  #platform-config-grid {
     grid-template-columns: 1fr;
   }
 }

@@ -1,0 +1,944 @@
+import desire/v3-alpha
+
+collection PlatformConfigSecrets
+collection PlatformConfigDatasources
+
+view PlatformConfigSecretOptionTemplate {
+  kind option
+  prop tag = "option"
+  prop value = "${item.id}"
+  prop text = "${item.title}"
+  prop template = true
+}
+
+view PlatformConfigDatasourceOptionTemplate {
+  kind option
+  prop tag = "option"
+  prop value = "${item.id}"
+  prop text = "${item.title}"
+  prop template = true
+}
+
+view PlatformConfigSecretResultTemplate {
+  kind action
+  prop tag = "button"
+  prop buttonType = "button"
+  prop value = "${item.id}"
+  prop text = "${item.title}"
+  prop template = true
+  class platform-config-result
+}
+
+view PlatformConfigDatasourceResultTemplate {
+  kind action
+  prop tag = "button"
+  prop buttonType = "button"
+  prop value = "${item.id}"
+  prop text = "${item.title}"
+  prop template = true
+  class platform-config-result
+}
+
+view PlatformConfigTitle {
+  kind screen-header
+  prop tag = "h2"
+  class platform-config-title
+  prop text = "Platform Config"
+}
+
+view PlatformConfigIntro {
+  kind text
+  prop tag = "p"
+  class platform-config-intro
+  prop text = "Runner-scoped secrets and named SQL datasources live here. This screen is authored as a normal Engentus app surface and drives backend capabilities through explicit process commands."
+}
+
+view PlatformConfigHero {
+  kind region
+  class platform-config-hero
+  prop domId = "platform-config-hero"
+  children {
+    PlatformConfigTitle
+    PlatformConfigIntro
+  }
+}
+
+view PlatformConfigNotice {
+  kind text
+  prop tag = "div"
+  class platform-config-notice
+  prop domId = "platform-config-notice"
+  bindings {
+    text from state PlatformConfigNoticeText
+    className from state PlatformConfigNoticeTone map success "platform-config-notice success" error "platform-config-notice error" warn "platform-config-notice warn" default "platform-config-notice"
+  }
+}
+
+view PlatformConfigActorSectionTitle {
+  kind text
+  prop tag = "h3"
+  class platform-config-card-title
+  prop text = "Operator Session"
+}
+
+view PlatformConfigActorField {
+  kind form-field
+  class platform-config-field
+  prop label = "Actor header"
+  prop inputId = "platform-config-actor"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "aaron"
+  bindings {
+    value from state PlatformConfigActorHeader
+  }
+  interactions {
+    on input self set PlatformConfigActorHeader eventValue
+  }
+}
+
+view PlatformConfigActorHint {
+  kind text
+  prop tag = "p"
+  class platform-config-hint
+  prop text = "The sign-in flow is still fake, so requests use the actor header state above. Secret values remain write-only."
+}
+
+view PlatformConfigActorSection {
+  kind section
+  class ssec platform-config-card
+  prop domId = "platform-config-session"
+  children {
+    PlatformConfigActorSectionTitle
+    PlatformConfigActorField
+    PlatformConfigActorHint
+  }
+}
+
+view PlatformConfigSecretsSectionTitle {
+  kind text
+  prop tag = "h3"
+  class platform-config-card-title
+  prop text = "Secrets"
+}
+
+view PlatformConfigSecretsSectionIntro {
+  kind text
+  prop tag = "p"
+  class platform-config-hint
+  prop text = "Secret ids are generated quietly. Operators work with labels and never read stored secret values back out."
+}
+
+view PlatformConfigSecretSelectorLabel {
+  kind text
+  prop tag = "label"
+  class platform-config-field-label
+  prop text = "Existing secret"
+  prop for = "platform-config-secret-select"
+}
+
+view PlatformConfigSecretSelect {
+  kind select
+  prop tag = "select"
+  prop domId = "platform-config-secret-select"
+  class platform-config-input
+  bindings {
+    value from state PlatformConfigSecretSelectedId
+    disabled from state PlatformConfigSecretBusy
+  }
+  interactions {
+    on change self set PlatformConfigSecretSelectedId eventValue
+    on change self deliver PlatformConfigLoadSecretRequested
+  }
+  repeat {
+    collection PlatformConfigSecrets
+    template PlatformConfigSecretOptionTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigSecretSelectField {
+  kind region
+  class platform-config-field
+  bindings {
+    visible from state PlatformConfigSecretSearchVisible map true false default true
+  }
+  children {
+    PlatformConfigSecretSelectorLabel
+    PlatformConfigSecretSelect
+  }
+}
+
+view PlatformConfigSecretSearchField {
+  kind form-field
+  class platform-config-field
+  prop label = "Search secrets"
+  prop inputId = "platform-config-secret-search"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "Search by label"
+  bindings {
+    value from state PlatformConfigSecretSearchText
+    visible from state PlatformConfigSecretSearchVisible
+    disabled from state PlatformConfigSecretBusy
+  }
+  interactions {
+    on input self set PlatformConfigSecretSearchText eventValue
+  }
+}
+
+view PlatformConfigSecretSearchAction {
+  kind action
+  class rbtn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Search"
+  bindings {
+    visible from state PlatformConfigSecretSearchVisible
+    disabled from state PlatformConfigSecretBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigSearchSecretsRequested
+  }
+}
+
+view PlatformConfigSecretResults {
+  kind region
+  class platform-config-results
+  prop domId = "platform-config-secret-results"
+  bindings {
+    visible from state PlatformConfigSecretSearchVisible
+  }
+  interactions {
+    on click self set PlatformConfigSecretSelectedId eventValue
+    on click self deliver PlatformConfigLoadSecretRequested
+  }
+  repeat {
+    collection PlatformConfigSecrets
+    template PlatformConfigSecretResultTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigSecretLabelField {
+  kind form-field
+  class platform-config-field
+  prop label = "Secret label"
+  prop inputId = "platform-config-secret-label"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "Primary Postgres password"
+  bindings {
+    value from state PlatformConfigSecretLabel
+    disabled from state PlatformConfigSecretBusy
+  }
+  interactions {
+    on input self set PlatformConfigSecretLabel eventValue
+  }
+}
+
+view PlatformConfigSecretValueField {
+  kind form-field
+  class platform-config-field
+  prop label = "Secret value"
+  prop inputType = "password"
+  prop inputId = "platform-config-secret-value"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "password"
+  bindings {
+    value from state PlatformConfigSecretValue
+    disabled from state PlatformConfigSecretBusy
+  }
+  interactions {
+    on input self set PlatformConfigSecretValue eventValue
+  }
+}
+
+view PlatformConfigSecretActions {
+  kind region
+  class run-row platform-config-actions
+  children {
+    PlatformConfigSecretNewAction
+    PlatformConfigSecretCreateAction
+    PlatformConfigSecretOverwriteAction
+    PlatformConfigSecretDeleteAction
+    PlatformConfigSecretRefreshAction
+  }
+}
+
+view PlatformConfigSecretNewAction {
+  kind action
+  class rbtn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "New"
+  interactions {
+    on click self deliver PlatformConfigNewSecretRequested
+  }
+}
+
+view PlatformConfigSecretCreateAction {
+  kind action
+  class rbtn go
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Create"
+  bindings {
+    disabled from state PlatformConfigSecretBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigCreateSecretRequested
+  }
+}
+
+view PlatformConfigSecretOverwriteAction {
+  kind action
+  class rbtn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Overwrite Selected"
+  bindings {
+    disabled from state PlatformConfigSecretBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigOverwriteSecretRequested
+  }
+}
+
+view PlatformConfigSecretDeleteAction {
+  kind action
+  class rbtn stop
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Delete Selected"
+  bindings {
+    disabled from state PlatformConfigSecretBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigDeleteSecretRequested
+  }
+}
+
+view PlatformConfigSecretRefreshAction {
+  kind action
+  class rbtn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Refresh"
+  bindings {
+    disabled from state PlatformConfigSecretBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigRefreshSecretsRequested
+  }
+}
+
+view PlatformConfigSecretSummary {
+  kind text
+  prop tag = "pre"
+  class platform-config-output
+  prop domId = "platform-config-secret-summary"
+  bindings {
+    text from state PlatformConfigSecretSummary
+  }
+}
+
+view PlatformConfigSecretsSection {
+  kind section
+  class ssec platform-config-card
+  prop domId = "platform-config-secrets"
+  children {
+    PlatformConfigSecretsSectionTitle
+    PlatformConfigSecretsSectionIntro
+    PlatformConfigSecretSelectField
+    PlatformConfigSecretSearchField
+    PlatformConfigSecretSearchAction
+    PlatformConfigSecretResults
+    PlatformConfigSecretLabelField
+    PlatformConfigSecretValueField
+    PlatformConfigSecretActions
+    PlatformConfigSecretSummary
+  }
+}
+
+view PlatformConfigDatasourcesSectionTitle {
+  kind text
+  prop tag = "h3"
+  class platform-config-card-title
+  prop text = "Datasources"
+}
+
+view PlatformConfigDatasourcesSectionIntro {
+  kind text
+  prop tag = "p"
+  class platform-config-hint
+  prop text = "Datasource ids are generated quietly. Operators configure labels, providers, connection details, and referenced secrets."
+}
+
+view PlatformConfigDatasourceSelectorLabel {
+  kind text
+  prop tag = "label"
+  class platform-config-field-label
+  prop text = "Existing datasource"
+  prop for = "platform-config-datasource-select"
+}
+
+view PlatformConfigDatasourceSelect {
+  kind select
+  prop tag = "select"
+  prop domId = "platform-config-datasource-select"
+  class platform-config-input
+  bindings {
+    value from state PlatformConfigDatasourceSelectedId
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on change self set PlatformConfigDatasourceSelectedId eventValue
+    on change self deliver PlatformConfigLoadDatasourceRequested
+  }
+  repeat {
+    collection PlatformConfigDatasources
+    template PlatformConfigDatasourceOptionTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigDatasourceSelectField {
+  kind region
+  class platform-config-field
+  bindings {
+    visible from state PlatformConfigDatasourceSearchVisible map true false default true
+  }
+  children {
+    PlatformConfigDatasourceSelectorLabel
+    PlatformConfigDatasourceSelect
+  }
+}
+
+view PlatformConfigDatasourceSearchField {
+  kind form-field
+  class platform-config-field
+  prop label = "Search datasources"
+  prop inputId = "platform-config-datasource-search"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "Search by label"
+  bindings {
+    value from state PlatformConfigDatasourceSearchText
+    visible from state PlatformConfigDatasourceSearchVisible
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on input self set PlatformConfigDatasourceSearchText eventValue
+  }
+}
+
+view PlatformConfigDatasourceSearchAction {
+  kind action
+  class rbtn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Search"
+  bindings {
+    visible from state PlatformConfigDatasourceSearchVisible
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigSearchDatasourcesRequested
+  }
+}
+
+view PlatformConfigDatasourceResults {
+  kind region
+  class platform-config-results
+  prop domId = "platform-config-datasource-results"
+  bindings {
+    visible from state PlatformConfigDatasourceSearchVisible
+  }
+  interactions {
+    on click self set PlatformConfigDatasourceSelectedId eventValue
+    on click self deliver PlatformConfigLoadDatasourceRequested
+  }
+  repeat {
+    collection PlatformConfigDatasources
+    template PlatformConfigDatasourceResultTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigDatasourceLabelField {
+  kind form-field
+  class platform-config-field
+  prop label = "Datasource label"
+  prop inputId = "platform-config-datasource-label"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "Primary Postgres"
+  bindings {
+    value from state PlatformConfigDatasourceLabel
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on input self set PlatformConfigDatasourceLabel eventValue
+  }
+}
+
+view PlatformConfigDatasourceProviderLabel {
+  kind text
+  prop tag = "label"
+  class platform-config-field-label
+  prop text = "Provider"
+  prop for = "platform-config-datasource-provider"
+}
+
+view PlatformConfigDatasourceProviderPostgres {
+  kind option
+  prop tag = "option"
+  prop value = "postgres"
+  prop text = "postgres"
+}
+
+view PlatformConfigDatasourceProviderMysql {
+  kind option
+  prop tag = "option"
+  prop value = "mysql"
+  prop text = "mysql"
+}
+
+view PlatformConfigDatasourceProviderSqlite {
+  kind option
+  prop tag = "option"
+  prop value = "sqlite"
+  prop text = "sqlite"
+}
+
+view PlatformConfigDatasourceProviderSelect {
+  kind select
+  prop tag = "select"
+  prop domId = "platform-config-datasource-provider"
+  class platform-config-input
+  bindings {
+    value from state PlatformConfigDatasourceProvider
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on change self set PlatformConfigDatasourceProvider eventValue
+  }
+  children {
+    PlatformConfigDatasourceProviderPostgres
+    PlatformConfigDatasourceProviderMysql
+    PlatformConfigDatasourceProviderSqlite
+  }
+}
+
+view PlatformConfigDatasourceProviderField {
+  kind region
+  class platform-config-field
+  children {
+    PlatformConfigDatasourceProviderLabel
+    PlatformConfigDatasourceProviderSelect
+  }
+}
+
+view PlatformConfigDatasourceHostField {
+  kind form-field
+  class platform-config-field
+  prop label = "Host"
+  prop inputId = "platform-config-datasource-host"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "127.0.0.1"
+  bindings {
+    value from state PlatformConfigDatasourceHost
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on input self set PlatformConfigDatasourceHost eventValue
+  }
+}
+
+view PlatformConfigDatasourcePortField {
+  kind form-field
+  class platform-config-field
+  prop label = "Port"
+  prop inputId = "platform-config-datasource-port"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "5432"
+  bindings {
+    value from state PlatformConfigDatasourcePort
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on input self set PlatformConfigDatasourcePort eventValue
+  }
+}
+
+view PlatformConfigDatasourceDatabaseField {
+  kind form-field
+  class platform-config-field
+  prop label = "Database"
+  prop inputId = "platform-config-datasource-database"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "engentus"
+  bindings {
+    value from state PlatformConfigDatasourceDatabase
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on input self set PlatformConfigDatasourceDatabase eventValue
+  }
+}
+
+view PlatformConfigDatasourceUserField {
+  kind form-field
+  class platform-config-field
+  prop label = "User"
+  prop inputId = "platform-config-datasource-user"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "pipeline_user"
+  bindings {
+    value from state PlatformConfigDatasourceUser
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on input self set PlatformConfigDatasourceUser eventValue
+  }
+}
+
+view PlatformConfigDatasourcePasswordSecretLabel {
+  kind text
+  prop tag = "label"
+  class platform-config-field-label
+  prop text = "Password secret"
+  prop for = "platform-config-datasource-password-secret"
+}
+
+view PlatformConfigDatasourcePasswordSecretSelect {
+  kind select
+  prop tag = "select"
+  prop domId = "platform-config-datasource-password-secret"
+  class platform-config-input
+  bindings {
+    value from state PlatformConfigDatasourcePasswordSecretId
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on change self set PlatformConfigDatasourcePasswordSecretId eventValue
+  }
+  repeat {
+    collection PlatformConfigSecrets
+    template PlatformConfigSecretOptionTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigDatasourcePasswordSecretField {
+  kind region
+  class platform-config-field
+  children {
+    PlatformConfigDatasourcePasswordSecretLabel
+    PlatformConfigDatasourcePasswordSecretSelect
+  }
+}
+
+view PlatformConfigDatasourcePathField {
+  kind form-field
+  class platform-config-field
+  prop label = "SQLite path"
+  prop inputId = "platform-config-datasource-path"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "db/main.sqlite"
+  bindings {
+    value from state PlatformConfigDatasourcePath
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on input self set PlatformConfigDatasourcePath eventValue
+  }
+}
+
+view PlatformConfigDatasourceSslField {
+  kind checkbox-field
+  class platform-config-checkbox
+  prop label = "Require SSL"
+  prop inputId = "platform-config-datasource-ssl"
+  prop inputType = "checkbox"
+  bindings {
+    checked from state PlatformConfigDatasourceSsl
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on change self set PlatformConfigDatasourceSsl eventChecked
+  }
+}
+
+view PlatformConfigDatasourceActions {
+  kind region
+  class run-row platform-config-actions
+  children {
+    PlatformConfigDatasourceNewAction
+    PlatformConfigDatasourceCreateAction
+    PlatformConfigDatasourceUpdateAction
+    PlatformConfigDatasourceDeleteAction
+    PlatformConfigDatasourceTestAction
+    PlatformConfigDatasourceRefreshAction
+  }
+}
+
+view PlatformConfigDatasourceNewAction {
+  kind action
+  class rbtn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "New"
+  interactions {
+    on click self deliver PlatformConfigNewDatasourceRequested
+  }
+}
+
+view PlatformConfigDatasourceCreateAction {
+  kind action
+  class rbtn go
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Create"
+  bindings {
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigCreateDatasourceRequested
+  }
+}
+
+view PlatformConfigDatasourceUpdateAction {
+  kind action
+  class rbtn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Update Selected"
+  bindings {
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigUpdateDatasourceRequested
+  }
+}
+
+view PlatformConfigDatasourceDeleteAction {
+  kind action
+  class rbtn stop
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Delete Selected"
+  bindings {
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigDeleteDatasourceRequested
+  }
+}
+
+view PlatformConfigDatasourceTestAction {
+  kind action
+  class rbtn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Test Selected"
+  bindings {
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigTestDatasourceRequested
+  }
+}
+
+view PlatformConfigDatasourceRefreshAction {
+  kind action
+  class rbtn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Refresh"
+  bindings {
+    disabled from state PlatformConfigDatasourceBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigRefreshDatasourcesRequested
+  }
+}
+
+view PlatformConfigDatasourceSummary {
+  kind text
+  prop tag = "pre"
+  class platform-config-output
+  prop domId = "platform-config-datasource-summary"
+  bindings {
+    text from state PlatformConfigDatasourceSummary
+  }
+}
+
+view PlatformConfigDatasourcesSection {
+  kind section
+  class ssec platform-config-card
+  prop domId = "platform-config-datasources"
+  children {
+    PlatformConfigDatasourcesSectionTitle
+    PlatformConfigDatasourcesSectionIntro
+    PlatformConfigDatasourceSelectField
+    PlatformConfigDatasourceSearchField
+    PlatformConfigDatasourceSearchAction
+    PlatformConfigDatasourceResults
+    PlatformConfigDatasourceLabelField
+    PlatformConfigDatasourceProviderField
+    PlatformConfigDatasourceHostField
+    PlatformConfigDatasourcePortField
+    PlatformConfigDatasourceDatabaseField
+    PlatformConfigDatasourceUserField
+    PlatformConfigDatasourcePasswordSecretField
+    PlatformConfigDatasourcePathField
+    PlatformConfigDatasourceSslField
+    PlatformConfigDatasourceActions
+    PlatformConfigDatasourceSummary
+  }
+}
+
+view PlatformConfigScriptSectionTitle {
+  kind text
+  prop tag = "h3"
+  class platform-config-card-title
+  prop text = "Script Stub"
+}
+
+view PlatformConfigScriptSectionIntro {
+  kind text
+  prop tag = "p"
+  class platform-config-hint
+  prop text = "This remains demo-app behavior only. It does not introduce a new platform capability."
+}
+
+view PlatformConfigScriptNameField {
+  kind form-field
+  class platform-config-field
+  prop label = "Script name"
+  prop inputId = "platform-config-script-name"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "engentus-pipeline-demo"
+  bindings {
+    value from state PlatformConfigScriptName
+    disabled from state PlatformConfigScriptBusy
+  }
+  interactions {
+    on input self set PlatformConfigScriptName eventValue
+  }
+}
+
+view PlatformConfigScriptDatasourceLabel {
+  kind text
+  prop tag = "label"
+  class platform-config-field-label
+  prop text = "Datasource"
+  prop for = "platform-config-script-datasource-id"
+}
+
+view PlatformConfigScriptDatasourceSelect {
+  kind select
+  prop tag = "select"
+  prop domId = "platform-config-script-datasource-id"
+  class platform-config-input
+  bindings {
+    value from state PlatformConfigScriptDatasourceId
+    disabled from state PlatformConfigScriptBusy
+  }
+  interactions {
+    on change self set PlatformConfigScriptDatasourceId eventValue
+  }
+  repeat {
+    collection PlatformConfigDatasources
+    template PlatformConfigDatasourceOptionTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigScriptDatasourceField {
+  kind region
+  class platform-config-field
+  children {
+    PlatformConfigScriptDatasourceLabel
+    PlatformConfigScriptDatasourceSelect
+  }
+}
+
+view PlatformConfigScriptRunAction {
+  kind action
+  class rbtn go
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Run Stub"
+  bindings {
+    disabled from state PlatformConfigScriptBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigRunScriptRequested
+  }
+}
+
+view PlatformConfigScriptResult {
+  kind text
+  prop tag = "pre"
+  class platform-config-output
+  prop domId = "platform-config-script-result"
+  bindings {
+    text from state PlatformConfigScriptResult
+  }
+}
+
+view PlatformConfigScriptSection {
+  kind section
+  class ssec platform-config-card
+  prop domId = "platform-config-script"
+  children {
+    PlatformConfigScriptSectionTitle
+    PlatformConfigScriptSectionIntro
+    PlatformConfigScriptNameField
+    PlatformConfigScriptDatasourceField
+    PlatformConfigScriptRunAction
+    PlatformConfigScriptResult
+  }
+}
+
+view PlatformConfigCards {
+  kind region
+  class platform-config-grid
+  prop domId = "platform-config-grid"
+  children {
+    PlatformConfigActorSection
+    PlatformConfigSecretsSection
+    PlatformConfigDatasourcesSection
+    PlatformConfigScriptSection
+  }
+}
+
+view EngentusPlatformConfigBody {
+  kind body
+  class engentus-platform-body
+  prop domId = "platform-config-body"
+  children {
+    PlatformConfigHero
+    PlatformConfigNotice
+    PlatformConfigCards
+  }
+}
+
+view EngentusPlatformConfigApp {
+  kind app-shell
+  class engentus-platform-app
+  process EngentusShellNavigation
+  prop domId = "view-platform-config"
+  prop documentTitle = "Platform Config"
+  prop routeKey = "platform-config"
+  prop routePath = "/engentus/platform-config"
+  prop mountMode = "mounted-panel"
+  children {
+    EngentusModuleChrome
+    EngentusPlatformConfigBody
+  }
+}

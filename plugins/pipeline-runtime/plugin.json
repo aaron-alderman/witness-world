@@ -1,0 +1,21 @@
+{
+  "id": "plugin.pipeline-runtime",
+  "version": "0.1.0",
+  "displayName": "Pipeline Runtime Demo Surface",
+  "description": "Owns the demo operator handlers that stitch runner-scoped secrets and SQL datasources into an app-facing platform configuration surface.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-pipeline-runtime"
+  ],
+  "contributes": {
+    "providers": [
+      {
+        "id": "pipeline-runtime.handlers",
+        "kind": "runtime-handler-catalog"
+      }
+    ]
+  }
+}

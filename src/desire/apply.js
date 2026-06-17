@@ -374,11 +374,12 @@ function applyNativeSemanticNode(world, node, runtimeNodesBySourceNodeId, handle
     case "entity":
       return applyNativeWtomlIdentity(world, node, runtimeNodesBySourceNodeId, handledRuntimeNodeIds)
         || applyGenericSemanticDefinition(world, node);
-    case "process":
-    case "boundary":
-    case "store":
-    case "graph":
-    case "projection":
+      case "process":
+      case "boundary":
+      case "collection":
+      case "store":
+      case "graph":
+      case "projection":
     case "policy":
     case "surface":
     case "dataflow":
@@ -738,6 +739,8 @@ function applyGenericSemanticDefinition(world, node) {
     for (const capability of node.body?.capabilityRefs ?? []) {
       if (capability) claims.push(relation(name, "dependsOnCapability", capability));
     }
+    if (node.body?.repeat?.collection) claims.push(relation(name, "repeatsCollection", node.body.repeat.collection));
+    if (node.body?.repeat?.template) claims.push(relation(name, "usesSurfaceTemplate", node.body.repeat.template));
     if (node.body?.modelRef) claims.push(relation(name, "visualizesDataflow", node.body.modelRef));
     for (const child of node.body?.children ?? []) {
       if (child) claims.push(relation(name, "hasChildSurface", child));
@@ -876,6 +879,7 @@ function genericSemanticProcessForNode(node) {
     case "graph": return "desire.defineGraph";
     case "process": return "desire.defineProcess";
     case "boundary": return "desire.defineBoundary";
+    case "collection": return "desire.defineCollection";
     case "store": return "desire.defineStore";
     case "projection": return "desire.defineProjection";
     case "policy": return "desire.definePolicy";

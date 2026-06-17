@@ -23,7 +23,8 @@ const shellFiles = [
   "shell-auth.rvm",
   "shell-goodman.rvm",
   "shell-mill-charge.rvm",
-  "shell-mill-force.rvm"
+  "shell-mill-force.rvm",
+  "shell-platform-config.rvm"
 ].map(file => path.join(process.cwd(), "examples", "engentus", "app", file));
 const appFile = path.join(process.cwd(), "examples", "engentus", "app.wtoml");
 const boltDefinitionFile = path.join(process.cwd(), "examples", "engentus", "app", "models", "goodman-bolt-sets.rvm");
@@ -95,6 +96,7 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
     "EngentusApp",
     "EngentusMillChargeApp",
     "EngentusMillForceApp",
+    "EngentusPlatformConfigApp",
     "EngentusSignout"
   ]) {
     assert.ok(surfaces.has(screen), `missing surface ${screen}`);
@@ -109,6 +111,7 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.ok(messages.has("EngentusNavigateGoodmanRequested"));
   assert.ok(messages.has("EngentusNavigateMillChargeRequested"));
   assert.ok(messages.has("EngentusNavigateMillForceRequested"));
+  assert.ok(messages.has("EngentusNavigatePlatformConfigRequested"));
   assert.ok(messages.has("MillForceShowCrossSectionRequested"));
   assert.ok(messages.has("MillForceShowForceVsAngleRequested"));
   assert.ok(messages.has("MillForceShowForceRoseRequested"));
@@ -413,6 +416,132 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
       steps: [
         { kind: "setState", state: "EngentusShellActiveRoute", value: "login" },
         { kind: "setState", state: "EngentusShellAuthStatus", value: "idle" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigRefreshSecretsRequested",
+      steps: [
+        { kind: "setState", state: "PlatformConfigSecretBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Loading secret metadata..." },
+        { kind: "command", command: "PlatformConfigLoadSnapshot" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigSearchSecretsRequested",
+      steps: [
+        { kind: "setState", state: "PlatformConfigSecretBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Searching secrets..." },
+        { kind: "command", command: "PlatformConfigLoadSnapshot" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigLoadSecretRequested",
+      steps: [
+        { kind: "setState", state: "PlatformConfigSecretBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Loading secret..." },
+        { kind: "command", command: "PlatformConfigLoadSecret" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigCreateSecretRequested",
+      steps: [
+        { kind: "setState", state: "PlatformConfigSecretBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Creating secret..." },
+        { kind: "command", command: "PlatformConfigCreateSecret" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigOverwriteSecretRequested",
+      steps: [
+        { kind: "setState", state: "PlatformConfigSecretBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Overwriting secret value..." },
+        { kind: "command", command: "PlatformConfigOverwriteSecret" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigDeleteSecretRequested",
+      steps: [
+        { kind: "setState", state: "PlatformConfigSecretBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Deleting secret..." },
+        { kind: "command", command: "PlatformConfigDeleteSecret" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigRefreshDatasourcesRequested",
+      steps: [
+        { kind: "setState", state: "PlatformConfigDatasourceBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Loading datasources..." },
+        { kind: "command", command: "PlatformConfigLoadSnapshot" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigSearchDatasourcesRequested",
+      steps: [
+        { kind: "setState", state: "PlatformConfigDatasourceBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Searching datasources..." },
+        { kind: "command", command: "PlatformConfigLoadSnapshot" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigLoadDatasourceRequested",
+      steps: [
+        { kind: "setState", state: "PlatformConfigDatasourceBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Loading datasource..." },
+        { kind: "command", command: "PlatformConfigLoadDatasource" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigCreateDatasourceRequested",
+      steps: [
+        { kind: "setState", state: "PlatformConfigDatasourceBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Creating datasource..." },
+        { kind: "command", command: "PlatformConfigCreateDatasource" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigUpdateDatasourceRequested",
+      steps: [
+        { kind: "setState", state: "PlatformConfigDatasourceBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Updating datasource..." },
+        { kind: "command", command: "PlatformConfigUpdateDatasource" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigDeleteDatasourceRequested",
+      steps: [
+        { kind: "setState", state: "PlatformConfigDatasourceBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Deleting datasource..." },
+        { kind: "command", command: "PlatformConfigDeleteDatasource" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigTestDatasourceRequested",
+      steps: [
+        { kind: "setState", state: "PlatformConfigDatasourceBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Testing datasource connection..." },
+        { kind: "command", command: "PlatformConfigTestDatasource" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigRunScriptRequested",
+      steps: [
+        { kind: "setState", state: "PlatformConfigScriptBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Running script stub..." },
+        { kind: "command", command: "PlatformConfigRunScript" }
       ]
     },
     {
@@ -988,6 +1117,24 @@ test("the shell is structured through explicit child regions instead of flattene
     "MillForceBody"
   ]);
 
+  assert.deepEqual(surfaces.get("EngentusPlatformConfigApp")?.body?.children, [
+    "EngentusModuleChrome",
+    "EngentusPlatformConfigBody"
+  ]);
+
+  assert.deepEqual(surfaces.get("EngentusPlatformConfigBody")?.body?.children, [
+    "PlatformConfigHero",
+    "PlatformConfigNotice",
+    "PlatformConfigCards"
+  ]);
+
+  assert.deepEqual(surfaces.get("PlatformConfigCards")?.body?.children, [
+    "PlatformConfigActorSection",
+    "PlatformConfigSecretsSection",
+    "PlatformConfigDatasourcesSection",
+    "PlatformConfigScriptSection"
+  ]);
+
   assert.deepEqual(surfaces.get("MillChargeBody")?.body?.children, [
     "MillChargeSidebar",
     "MillChargeViewer",
@@ -1153,6 +1300,7 @@ test("the module shells declare process and capability dependencies semantically
   const millCharge = surfaces.get("EngentusMillChargeApp");
   const millChargeCanvas = surfaces.get("MillChargeCanvasWrap");
   const millForce = surfaces.get("EngentusMillForceApp");
+  const platformConfig = surfaces.get("EngentusPlatformConfigApp");
 
   assert.equal(goodman?.body?.processRef, "EngentusShellNavigation");
   assert.deepEqual(goodman?.body?.capabilityRefs, ["chart.render"]);
@@ -1166,6 +1314,10 @@ test("the module shells declare process and capability dependencies semantically
   assert.equal(millForce?.body?.processRef, "EngentusShellNavigation");
   assert.deepEqual(millForce?.body?.capabilityRefs, ["chart.render"]);
   assert.equal("dependsOnCapabilities" in (millForce?.body?.props ?? {}), false);
+
+  assert.equal(platformConfig?.body?.processRef, "EngentusShellNavigation");
+  assert.deepEqual(platformConfig?.body?.capabilityRefs, []);
+  assert.equal("dependsOnCapabilities" in (platformConfig?.body?.props ?? {}), false);
 });
 
 test("the shell source forbids flattened prop families and raw html escape hatches", async () => {

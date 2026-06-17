@@ -16,6 +16,19 @@ function normalizeOptionalString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function normalizeDatasourceTitle(value, fallback = null) {
+  return normalizeOptionalString(value) ?? fallback;
+}
+
+async function createGeneratedDatasourceId(appContext, provider = "sql") {
+  const prefix = `${provider || "sql"}_ds`;
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    const id = `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
+    if (!appContext?.dbSql?.getDatasource?.(id)) return id;
+  }
+  return `${prefix}_${Date.now().toString(36)}`;
+}
+
 function hasOwn(body, key) {
   return Boolean(body && typeof body === "object" && Object.prototype.hasOwnProperty.call(body, key));
 }
@@ -36,10 +49,15 @@ function normalizeDatasourcePayload(body, existing = null) {
   const id = normalizeDatasourceId(body?.id ?? existing?.id);
   if (!id) return { ok: false, status: 400, reason: "valid datasource id required" };
   const sameProvider = existing?.provider === provider;
-  const datasourceName = normalizeOptionalString(body?.datasourceName ?? id) ?? id;
+  const title = normalizeDatasourceTitle(
+    body?.title ?? body?.label ?? body?.name,
+    existing?.title ?? normalizeOptionalString(body?.datasourceName) ?? id
+  ) ?? id;
+  const datasourceName = normalizeOptionalString(body?.datasourceName ?? existing?.datasourceName ?? id) ?? id;
   const migrationTable = normalizeOptionalString(body?.migrationTable ?? existing?.migrationTable) ?? "witness_sql_migrations";
   const payload = {
     id,
+    title,
     provider,
     datasourceName,
     migrationTable,
@@ -79,11 +97,12 @@ function emitDatasourceMutation(world, {
   world.emit({
     process,
     actor,
-    claims: datasourceClaims({ id: payload.id, actor, title: payload.datasourceName || payload.id }),
+    claims: datasourceClaims({ id: payload.id, actor, title: payload.title || existing?.title || payload.datasourceName || payload.id }),
     body: {
       id: payload.id,
       serverRunner: serverRunnerId,
       provider: payload.provider,
+      title: payload.title || existing?.title || payload.datasourceName || payload.id,
       datasourceName: payload.datasourceName,
       host: payload.host,
       port: payload.port,
@@ -194,7 +213,9 @@ export function createSqlDbHandlers({
       const gate = await withSqlGate({ world, backendHost, requestActor, appContext, requireBackendCapabilities, canMutateTarget, sendGateFailure, res, sendJson });
       if (!gate.ok) return;
       const body = await readJson(req);
-      const normalized = normalizeDatasourcePayload(body);
+      const generatedId = normalizeDatasourceId(body?.id)
+        ?? await createGeneratedDatasourceId(appContext, normalizeProvider(body?.provider) || "sql");
+      const normalized = normalizeDatasourcePayload({ ...body, id: generatedId });
       if (!normalized.ok) {
         sendJson(res, normalized.status || 400, { error: normalized.reason });
         return;
@@ -257,11 +278,12 @@ export function createSqlDbHandlers({
       world.emit({
         process: "db.sql.datasource.delete",
         actor: requestActor,
-        claims: datasourceClaims({ id: datasourceId, actor: requestActor, title: existing.title || datasourceId }),
+        claims: datasourceClaims({ id: datasourceId, actor: requestActor, title: existing.title || existing.datasourceName || datasourceId }),
         body: {
           id: datasourceId,
           serverRunner: gate.serverRunnerId,
           provider: existing.provider,
+          title: existing.title || existing.datasourceName || datasourceId,
           datasourceName: existing.datasourceName,
           updatedAt: isoAt(Date.now()),
           status: "deleted"

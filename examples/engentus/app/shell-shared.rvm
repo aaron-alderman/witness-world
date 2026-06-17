@@ -768,6 +768,12 @@ view ModuleIconWave {
   prop rawHtml = "<svg viewBox='0 0 66 50' fill='none' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'><rect width='66' height='50' fill='rgba(0,0,0,.25)' rx='4'/><polyline points='4,32 13,19 22,37 32,11 42,35 52,23 62,28' stroke='rgba(255,255,255,.22)' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/><line x1='4' y1='43' x2='62' y2='43' stroke='rgba(255,255,255,.1)' stroke-width='1'/><line x1='4' y1='43' x2='4' y2='7' stroke='rgba(255,255,255,.1)' stroke-width='1'/></svg>"
 }
 
+view ModuleIconPlatform {
+  kind host
+  class mod-icon
+  prop rawHtml = "<svg viewBox='0 0 66 50' fill='none' xmlns='http://www.w3.org/2000/svg' style='width:100%;height:100%'><rect width='66' height='50' rx='4' fill='#102338'/><rect x='10' y='9' width='46' height='32' rx='3' fill='rgba(90,170,191,.12)' stroke='rgba(140,196,212,.45)'/><circle cx='19' cy='18' r='3' fill='#8CC4D4'/><path d='M28 18h19' stroke='#8CC4D4' stroke-width='1.5' stroke-linecap='round'/><path d='M18 30c0-4 3-7 7-7h16c4 0 7 3 7 7v5H18z' fill='rgba(46,103,143,.32)' stroke='rgba(140,196,212,.32)'/><path d='M24 28l3 3 6-7' stroke='#DCF0F5' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/><circle cx='46' cy='31' r='5' fill='#ec7424'/><path d='M46 28.4v5.2M43.4 31h5.2' stroke='#fff7ed' stroke-width='1.6' stroke-linecap='round'/></svg>"
+}
+
 view ModuleIconBars {
   kind host
   class mod-icon
@@ -860,6 +866,25 @@ view ModuleCardMillForce {
     ModuleIconForce
     ModuleCardMillForceName
     ModuleCardMillForceDesc
+    ModuleStatusAvailable
+  }
+}
+
+view ModuleCardPlatformConfig {
+  kind module-card
+  class mod-card active
+  prop tag = "div"
+  prop routeKey = "platform-config"
+  prop href = "/engentus/platform-config"
+  prop assetRef = "PLATFORM"
+  prop messageRef = "EngentusNavigatePlatformConfigRequested"
+  interactions {
+    on click self deliver EngentusNavigatePlatformConfigRequested
+  }
+  children {
+    ModuleIconPlatform
+    ModuleCardPlatformConfigName
+    ModuleCardPlatformConfigDesc
     ModuleStatusAvailable
   }
 }
@@ -1086,6 +1111,20 @@ view ModuleCardMillForceDesc {
   prop text = "Liner force distribution with dual-model comparison"
 }
 
+view ModuleCardPlatformConfigName {
+  kind text
+  class mod-name
+  prop tag = "div"
+  prop text = "Platform Config"
+}
+
+view ModuleCardPlatformConfigDesc {
+  kind text
+  class mod-desc
+  prop tag = "div"
+  prop text = "Runner secrets, datasources, and connection tests"
+}
+
 view ModuleCardTensionTimeSeriesName {
   kind text
   class mod-name
@@ -1303,6 +1342,7 @@ view ModuleGrid {
     ModuleCardMillCharge
     ModuleCardGoodman
     ModuleCardMillForce
+    ModuleCardPlatformConfig
     ModuleCardTensionTimeSeries
     ModuleCardBoltLoadDistribution
     ModuleCardChannelHealthMonitor

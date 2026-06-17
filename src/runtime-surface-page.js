@@ -6,8 +6,8 @@ import {
 } from "./runtime-surface-shell.js";
 import {
   buildSurfaceRuntimeManifest,
-  renderSurfaceInteractionRuntimeModule
 } from "./runtime-surface-interaction-runtime.js";
+import { renderSurfaceInteractionRuntimeModule } from "./runtime-surface-browser-runtime-module.js";
 
 function escapeScriptBody(source) {
   return String(source ?? "").replaceAll("</script", "<\\/script");

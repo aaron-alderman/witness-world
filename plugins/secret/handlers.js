@@ -6,12 +6,26 @@ function normalizeSecretId(value) {
   return /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(id) ? id : null;
 }
 
-function secretClaims({ id, actor }) {
+function normalizeSecretTitle(value, fallback = null) {
+  const title = typeof value === "string" ? value.trim() : "";
+  return title || fallback;
+}
+
+async function createGeneratedSecretId(secretStore) {
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    const id = `secret_${Math.random().toString(36).slice(2, 10)}`;
+    const existing = await secretStore?.metadata?.(id);
+    if (!existing) return id;
+  }
+  return `secret_${Date.now().toString(36)}`;
+}
+
+function secretClaims({ id, actor, title }) {
   return [
     thing(id),
     relation(id, "hasModuleKind", "secret"),
     relation(actor, "owns", id),
-    relation(id, "hasTitle", id)
+    relation(id, "hasTitle", title || id)
   ];
 }
 
@@ -115,11 +129,8 @@ export function createSecretStoreHandlers({
         return;
       }
       const body = await readJson(req);
-      const id = normalizeSecretId(body?.id);
-      if (!id) {
-        sendJson(res, 400, { error: "valid secret id required" });
-        return;
-      }
+      const explicitId = normalizeSecretId(body?.id);
+      const id = explicitId || await createGeneratedSecretId(appContext?.secretStore);
       if (await appContext?.secretStore?.metadata?.(id)) {
         sendJson(res, 409, { error: "secret already exists" });
         return;
@@ -128,14 +139,16 @@ export function createSecretStoreHandlers({
         sendJson(res, 400, { error: "secret value required" });
         return;
       }
+      const title = normalizeSecretTitle(body?.title ?? body?.label ?? body?.name, id);
       await appContext.secretStore.writeSecretValue(id, body.value);
       const now = isoAt(Date.now());
       world.emit({
         process: "secret.store.create",
         actor: requestActor,
-        claims: secretClaims({ id, actor: requestActor }),
+        claims: secretClaims({ id, actor: requestActor, title }),
         body: {
           id,
+          title,
           serverRunner: serverRunnerId,
           provider: "local-json",
           status: "ready",
@@ -182,14 +195,16 @@ export function createSecretStoreHandlers({
         sendJson(res, 400, { error: "secret value required" });
         return;
       }
+      const title = normalizeSecretTitle(body?.title ?? body?.label ?? body?.name, existing.title || secretId);
       await appContext.secretStore.writeSecretValue(secretId, body.value);
       const now = isoAt(Date.now());
       world.emit({
         process: "secret.store.write",
         actor: requestActor,
-        claims: secretClaims({ id: secretId, actor: requestActor }),
+        claims: secretClaims({ id: secretId, actor: requestActor, title }),
         body: {
           id: secretId,
+          title,
           serverRunner: serverRunnerId,
           provider: existing.provider || "local-json",
           status: "ready",
@@ -235,7 +250,7 @@ export function createSecretStoreHandlers({
       world.emit({
         process: "secret.store.delete",
         actor: requestActor,
-        claims: secretClaims({ id: secretId, actor: requestActor }),
+        claims: secretClaims({ id: secretId, actor: requestActor, title: existing.title || secretId }),
         body: {
           id: secretId,
           serverRunner: serverRunnerId,

@@ -11,6 +11,7 @@ enum EngentusShellRoute {
     goodman
     mill-charge
     mill-force
+    platform-config
     signout
   }
 }
@@ -91,6 +92,118 @@ state EngentusShellActiveRoute: EngentusShellRoute {
 
 state EngentusShellAuthStatus: EngentusShellAuthState {
   initial idle
+}
+
+state PlatformConfigActorHeader: string {
+  initial "aaron"
+}
+
+state PlatformConfigNoticeText: string {
+  initial "Platform config is authored here. Refresh to load secrets and datasources."
+}
+
+state PlatformConfigNoticeTone: string {
+  initial "neutral"
+}
+
+state PlatformConfigSecretSelectedId: string {
+  initial ""
+}
+
+state PlatformConfigSecretLabel: string {
+  initial ""
+}
+
+state PlatformConfigSecretSearchText: string {
+  initial ""
+}
+
+state PlatformConfigSecretSearchVisible: bool {
+  initial false
+}
+
+state PlatformConfigSecretValue: string {
+  initial ""
+}
+
+state PlatformConfigSecretSummary: string {
+  initial "Refresh to load runner secret metadata."
+}
+
+state PlatformConfigSecretBusy: bool {
+  initial false
+}
+
+state PlatformConfigDatasourceSelectedId: string {
+  initial ""
+}
+
+state PlatformConfigDatasourceLabel: string {
+  initial ""
+}
+
+state PlatformConfigDatasourceSearchText: string {
+  initial ""
+}
+
+state PlatformConfigDatasourceSearchVisible: bool {
+  initial false
+}
+
+state PlatformConfigDatasourceProvider: string {
+  initial "postgres"
+}
+
+state PlatformConfigDatasourceHost: string {
+  initial ""
+}
+
+state PlatformConfigDatasourcePort: string {
+  initial ""
+}
+
+state PlatformConfigDatasourceDatabase: string {
+  initial ""
+}
+
+state PlatformConfigDatasourceUser: string {
+  initial ""
+}
+
+state PlatformConfigDatasourcePasswordSecretId: string {
+  initial ""
+}
+
+state PlatformConfigDatasourcePath: string {
+  initial ""
+}
+
+state PlatformConfigDatasourceSsl: bool {
+  initial false
+}
+
+state PlatformConfigDatasourceSummary: string {
+  initial "Refresh to load datasource metadata and latest test results."
+}
+
+state PlatformConfigDatasourceBusy: bool {
+  initial false
+}
+
+state PlatformConfigScriptName: string {
+  initial "engentus-pipeline-demo"
+}
+
+state PlatformConfigScriptDatasourceId: string {
+  initial ""
+}
+
+state PlatformConfigScriptResult: string {
+  initial "Run script stub to capture the latest response."
+}
+
+state PlatformConfigScriptBusy: bool {
+  initial false
 }
 
 state MillForceActiveChartTab: MillForceChartTab {
@@ -644,6 +757,425 @@ event EngentusNavigateMillForceRequested {
   }
 }
 
+event EngentusNavigatePlatformConfigRequested {
+  writes {
+    EngentusShellActiveRoute: platform-config
+  }
+}
+
+event PlatformConfigRefreshSecretsRequested {
+}
+
+event PlatformConfigSearchSecretsRequested {
+}
+
+event PlatformConfigLoadSecretRequested {
+}
+
+event PlatformConfigNewSecretRequested {
+  writes {
+    PlatformConfigSecretSelectedId: ""
+    PlatformConfigSecretLabel: ""
+    PlatformConfigSecretValue: ""
+    PlatformConfigSecretSummary: "Creating a new secret. Enter a label and value, then click Create."
+  }
+}
+
+event PlatformConfigCreateSecretRequested {
+}
+
+event PlatformConfigOverwriteSecretRequested {
+}
+
+event PlatformConfigDeleteSecretRequested {
+}
+
+event PlatformConfigRefreshDatasourcesRequested {
+}
+
+event PlatformConfigSearchDatasourcesRequested {
+}
+
+event PlatformConfigLoadDatasourceRequested {
+}
+
+event PlatformConfigNewDatasourceRequested {
+  writes {
+    PlatformConfigDatasourceSelectedId: ""
+    PlatformConfigDatasourceLabel: ""
+    PlatformConfigDatasourceProvider: postgres
+    PlatformConfigDatasourceHost: ""
+    PlatformConfigDatasourcePort: ""
+    PlatformConfigDatasourceDatabase: ""
+    PlatformConfigDatasourceUser: ""
+    PlatformConfigDatasourcePasswordSecretId: ""
+    PlatformConfigDatasourcePath: ""
+    PlatformConfigDatasourceSsl: false
+    PlatformConfigScriptDatasourceId: ""
+    PlatformConfigDatasourceSummary: "Creating a new datasource. Enter a label, choose a provider, and save it."
+  }
+}
+
+event PlatformConfigCreateDatasourceRequested {
+}
+
+event PlatformConfigUpdateDatasourceRequested {
+}
+
+event PlatformConfigDeleteDatasourceRequested {
+}
+
+event PlatformConfigTestDatasourceRequested {
+}
+
+event PlatformConfigStateLoaded {
+  payload {
+    PlatformConfigSecretSelectedId: PlatformConfigSecretSelectedId
+    PlatformConfigSecretLabel: PlatformConfigSecretLabel
+    PlatformConfigSecretValue: PlatformConfigSecretValue
+    PlatformConfigSecretSearchVisible: PlatformConfigSecretSearchVisible
+    PlatformConfigSecretSummary: PlatformConfigSecretSummary
+    PlatformConfigDatasourceSelectedId: PlatformConfigDatasourceSelectedId
+    PlatformConfigDatasourceLabel: PlatformConfigDatasourceLabel
+    PlatformConfigDatasourceProvider: PlatformConfigDatasourceProvider
+    PlatformConfigDatasourceHost: PlatformConfigDatasourceHost
+    PlatformConfigDatasourcePort: PlatformConfigDatasourcePort
+    PlatformConfigDatasourceDatabase: PlatformConfigDatasourceDatabase
+    PlatformConfigDatasourceUser: PlatformConfigDatasourceUser
+    PlatformConfigDatasourcePasswordSecretId: PlatformConfigDatasourcePasswordSecretId
+    PlatformConfigDatasourcePath: PlatformConfigDatasourcePath
+    PlatformConfigDatasourceSsl: PlatformConfigDatasourceSsl
+    PlatformConfigDatasourceSearchVisible: PlatformConfigDatasourceSearchVisible
+    PlatformConfigDatasourceSummary: PlatformConfigDatasourceSummary
+    PlatformConfigScriptDatasourceId: PlatformConfigScriptDatasourceId
+    message: PlatformConfigNoticeText
+  }
+  writes {
+    PlatformConfigSecretBusy: false
+    PlatformConfigDatasourceBusy: false
+    PlatformConfigNoticeTone: success
+  }
+}
+
+event PlatformConfigStateLoadFailed {
+  payload {
+    summary: PlatformConfigNoticeText
+    message: PlatformConfigNoticeText
+  }
+  writes {
+    PlatformConfigSecretBusy: false
+    PlatformConfigDatasourceBusy: false
+    PlatformConfigNoticeTone: error
+  }
+}
+
+event PlatformConfigSecretMutationFailed {
+  payload {
+    summary: PlatformConfigSecretSummary
+    message: PlatformConfigNoticeText
+  }
+  writes {
+    PlatformConfigSecretBusy: false
+    PlatformConfigNoticeTone: error
+  }
+}
+
+event PlatformConfigDatasourceMutationFailed {
+  payload {
+    summary: PlatformConfigDatasourceSummary
+    message: PlatformConfigNoticeText
+  }
+  writes {
+    PlatformConfigDatasourceBusy: false
+    PlatformConfigNoticeTone: error
+  }
+}
+
+event PlatformConfigRunScriptRequested {
+}
+
+event PlatformConfigScriptSucceeded {
+  payload {
+    summary: PlatformConfigScriptResult
+    message: PlatformConfigNoticeText
+  }
+  writes {
+    PlatformConfigScriptBusy: false
+    PlatformConfigNoticeTone: warn
+  }
+}
+
+event PlatformConfigScriptFailed {
+  payload {
+    summary: PlatformConfigScriptResult
+    message: PlatformConfigNoticeText
+  }
+  writes {
+    PlatformConfigScriptBusy: false
+    PlatformConfigNoticeTone: error
+  }
+}
+
+command PlatformConfigLoadSnapshot {
+  fields {
+    secretQuery: PlatformConfigSecretSearchText
+    datasourceQuery: PlatformConfigDatasourceSearchText
+  }
+}
+
+command PlatformConfigLoadSecret {
+  fields {
+    id: PlatformConfigSecretSelectedId
+  }
+}
+
+command PlatformConfigCreateSecret {
+  fields {
+    title: PlatformConfigSecretLabel
+    value: PlatformConfigSecretValue
+  }
+}
+
+command PlatformConfigOverwriteSecret {
+  fields {
+    id: PlatformConfigSecretSelectedId
+    title: PlatformConfigSecretLabel
+    value: PlatformConfigSecretValue
+  }
+}
+
+command PlatformConfigDeleteSecret {
+  fields {
+    id: PlatformConfigSecretSelectedId
+  }
+}
+
+command PlatformConfigLoadDatasource {
+  fields {
+    id: PlatformConfigDatasourceSelectedId
+  }
+}
+
+command PlatformConfigCreateDatasource {
+  fields {
+    title: PlatformConfigDatasourceLabel
+    provider: PlatformConfigDatasourceProvider
+    host: PlatformConfigDatasourceHost
+    port: PlatformConfigDatasourcePort
+    database: PlatformConfigDatasourceDatabase
+    user: PlatformConfigDatasourceUser
+    passwordSecretId: PlatformConfigDatasourcePasswordSecretId
+    path: PlatformConfigDatasourcePath
+    ssl: PlatformConfigDatasourceSsl
+  }
+}
+
+command PlatformConfigUpdateDatasource {
+  fields {
+    id: PlatformConfigDatasourceSelectedId
+    title: PlatformConfigDatasourceLabel
+    provider: PlatformConfigDatasourceProvider
+    host: PlatformConfigDatasourceHost
+    port: PlatformConfigDatasourcePort
+    database: PlatformConfigDatasourceDatabase
+    user: PlatformConfigDatasourceUser
+    passwordSecretId: PlatformConfigDatasourcePasswordSecretId
+    path: PlatformConfigDatasourcePath
+    ssl: PlatformConfigDatasourceSsl
+  }
+}
+
+command PlatformConfigDeleteDatasource {
+  fields {
+    id: PlatformConfigDatasourceSelectedId
+  }
+}
+
+command PlatformConfigTestDatasource {
+  fields {
+    id: PlatformConfigDatasourceSelectedId
+  }
+}
+
+command PlatformConfigRunScript {
+  fields {
+    scriptName: PlatformConfigScriptName
+    datasourceId: PlatformConfigScriptDatasourceId
+  }
+}
+
+adapter PlatformConfigSnapshotHttp using HTTP {
+  command PlatformConfigLoadSnapshot
+  kind command
+  method POST
+  route /api/pipeline/platform-config/snapshot
+  actor_state PlatformConfigActorHeader
+  host_operation engentus.platform.snapshot
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigStateLoadFailed
+  loading_state PlatformConfigSecretBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+  }
+}
+
+adapter PlatformConfigSecretReadHttp using HTTP {
+  command PlatformConfigLoadSecret
+  kind command
+  method GET
+  route /api/pipeline/platform-config/secrets/${id}
+  actor_state PlatformConfigActorHeader
+  host_operation engentus.platform.secret.read
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigSecretMutationFailed
+  loading_state PlatformConfigSecretBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+  }
+}
+
+adapter PlatformConfigSecretCreateHttp using HTTP {
+  command PlatformConfigCreateSecret
+  kind command
+  method POST
+  route /api/pipeline/platform-config/secrets
+  actor_state PlatformConfigActorHeader
+  host_operation engentus.platform.secret.create
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigSecretMutationFailed
+  loading_state PlatformConfigSecretBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+  }
+}
+
+adapter PlatformConfigSecretOverwriteHttp using HTTP {
+  command PlatformConfigOverwriteSecret
+  kind command
+  method PUT
+  route /api/pipeline/platform-config/secrets/${id}/value
+  actor_state PlatformConfigActorHeader
+  host_operation engentus.platform.secret.write
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigSecretMutationFailed
+  loading_state PlatformConfigSecretBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+  }
+}
+
+adapter PlatformConfigSecretDeleteHttp using HTTP {
+  command PlatformConfigDeleteSecret
+  kind command
+  method DELETE
+  route /api/pipeline/platform-config/secrets/${id}
+  actor_state PlatformConfigActorHeader
+  host_operation engentus.platform.secret.delete
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigSecretMutationFailed
+  loading_state PlatformConfigSecretBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+  }
+}
+
+adapter PlatformConfigDatasourceReadHttp using HTTP {
+  command PlatformConfigLoadDatasource
+  kind command
+  method GET
+  route /api/pipeline/platform-config/datasources/${id}
+  actor_state PlatformConfigActorHeader
+  host_operation engentus.platform.datasource.read
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigDatasourceMutationFailed
+  loading_state PlatformConfigDatasourceBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+  }
+}
+
+adapter PlatformConfigDatasourceCreateHttp using HTTP {
+  command PlatformConfigCreateDatasource
+  kind command
+  method POST
+  route /api/pipeline/platform-config/datasources
+  actor_state PlatformConfigActorHeader
+  host_operation engentus.platform.datasource.create
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigDatasourceMutationFailed
+  loading_state PlatformConfigDatasourceBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+  }
+}
+
+adapter PlatformConfigDatasourceUpdateHttp using HTTP {
+  command PlatformConfigUpdateDatasource
+  kind command
+  method PATCH
+  route /api/pipeline/platform-config/datasources/${id}
+  actor_state PlatformConfigActorHeader
+  host_operation engentus.platform.datasource.update
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigDatasourceMutationFailed
+  loading_state PlatformConfigDatasourceBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+  }
+}
+
+adapter PlatformConfigDatasourceDeleteHttp using HTTP {
+  command PlatformConfigDeleteDatasource
+  kind command
+  method DELETE
+  route /api/pipeline/platform-config/datasources/${id}
+  actor_state PlatformConfigActorHeader
+  host_operation engentus.platform.datasource.delete
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigDatasourceMutationFailed
+  loading_state PlatformConfigDatasourceBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+  }
+}
+
+adapter PlatformConfigDatasourceTestHttp using HTTP {
+  command PlatformConfigTestDatasource
+  kind command
+  method POST
+  route /api/pipeline/platform-config/datasources/${id}/test
+  actor_state PlatformConfigActorHeader
+  host_operation engentus.platform.datasource.test
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigDatasourceMutationFailed
+  loading_state PlatformConfigDatasourceBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+  }
+}
+
+adapter PlatformConfigScriptStubHttp using HTTP {
+  command PlatformConfigRunScript
+  kind command
+  method POST
+  route /api/pipeline/scripts/run
+  actor_state PlatformConfigActorHeader
+  host_operation engentus.platform.script.stub
+  success_event PlatformConfigScriptSucceeded
+  failure_event PlatformConfigScriptFailed
+  loading_state PlatformConfigScriptBusy
+}
+
 event MillForceShowCrossSectionRequested {
   writes {
     MillForceActiveChartTab: cross
@@ -863,6 +1395,34 @@ process EngentusShellNavigation {
     EngentusShellAuthStatus
     EngentusProfileMenuVisible
     EngentusPasswordRevealed
+    PlatformConfigActorHeader
+    PlatformConfigNoticeText
+    PlatformConfigNoticeTone
+    PlatformConfigSecretSelectedId
+    PlatformConfigSecretLabel
+    PlatformConfigSecretSearchText
+    PlatformConfigSecretSearchVisible
+    PlatformConfigSecretValue
+    PlatformConfigSecretSummary
+    PlatformConfigSecretBusy
+    PlatformConfigDatasourceSelectedId
+    PlatformConfigDatasourceLabel
+    PlatformConfigDatasourceSearchText
+    PlatformConfigDatasourceSearchVisible
+    PlatformConfigDatasourceProvider
+    PlatformConfigDatasourceHost
+    PlatformConfigDatasourcePort
+    PlatformConfigDatasourceDatabase
+    PlatformConfigDatasourceUser
+    PlatformConfigDatasourcePasswordSecretId
+    PlatformConfigDatasourcePath
+    PlatformConfigDatasourceSsl
+    PlatformConfigDatasourceSummary
+    PlatformConfigDatasourceBusy
+    PlatformConfigScriptName
+    PlatformConfigScriptDatasourceId
+    PlatformConfigScriptResult
+    PlatformConfigScriptBusy
     MillChargeSpeedFrac
     MillChargeFillFrac
     MillChargeSlurryContent
@@ -947,6 +1507,29 @@ process EngentusShellNavigation {
     EngentusNavigateGoodmanRequested
     EngentusNavigateMillChargeRequested
     EngentusNavigateMillForceRequested
+    EngentusNavigatePlatformConfigRequested
+    PlatformConfigRefreshSecretsRequested
+    PlatformConfigSearchSecretsRequested
+    PlatformConfigLoadSecretRequested
+    PlatformConfigNewSecretRequested
+    PlatformConfigCreateSecretRequested
+    PlatformConfigOverwriteSecretRequested
+    PlatformConfigDeleteSecretRequested
+    PlatformConfigStateLoaded
+    PlatformConfigStateLoadFailed
+    PlatformConfigSecretMutationFailed
+    PlatformConfigRefreshDatasourcesRequested
+    PlatformConfigSearchDatasourcesRequested
+    PlatformConfigLoadDatasourceRequested
+    PlatformConfigNewDatasourceRequested
+    PlatformConfigCreateDatasourceRequested
+    PlatformConfigUpdateDatasourceRequested
+    PlatformConfigDeleteDatasourceRequested
+    PlatformConfigTestDatasourceRequested
+    PlatformConfigDatasourceMutationFailed
+    PlatformConfigRunScriptRequested
+    PlatformConfigScriptSucceeded
+    PlatformConfigScriptFailed
     MillForceShowCrossSectionRequested
     MillForceShowForceVsAngleRequested
     MillForceShowForceRoseRequested
@@ -979,6 +1562,17 @@ process EngentusShellNavigation {
   }
   emits {
     EngentusSaveGuidedTourSession
+    PlatformConfigLoadSnapshot
+    PlatformConfigLoadSecret
+    PlatformConfigCreateSecret
+    PlatformConfigOverwriteSecret
+    PlatformConfigDeleteSecret
+    PlatformConfigLoadDatasource
+    PlatformConfigCreateDatasource
+    PlatformConfigUpdateDatasource
+    PlatformConfigDeleteDatasource
+    PlatformConfigTestDatasource
+    PlatformConfigRunScript
   }
   rules {
     on EngentusSignInRequested {
@@ -1006,6 +1600,90 @@ process EngentusShellNavigation {
     on EngentusSignBackInRequested {
       set EngentusShellActiveRoute login
       set EngentusShellAuthStatus idle
+    }
+    on PlatformConfigRefreshSecretsRequested {
+      set PlatformConfigSecretBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Loading secret metadata..."
+      command PlatformConfigLoadSnapshot
+    }
+    on PlatformConfigSearchSecretsRequested {
+      set PlatformConfigSecretBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Searching secrets..."
+      command PlatformConfigLoadSnapshot
+    }
+    on PlatformConfigLoadSecretRequested {
+      set PlatformConfigSecretBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Loading secret..."
+      command PlatformConfigLoadSecret
+    }
+    on PlatformConfigCreateSecretRequested {
+      set PlatformConfigSecretBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Creating secret..."
+      command PlatformConfigCreateSecret
+    }
+    on PlatformConfigOverwriteSecretRequested {
+      set PlatformConfigSecretBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Overwriting secret value..."
+      command PlatformConfigOverwriteSecret
+    }
+    on PlatformConfigDeleteSecretRequested {
+      set PlatformConfigSecretBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Deleting secret..."
+      command PlatformConfigDeleteSecret
+    }
+    on PlatformConfigRefreshDatasourcesRequested {
+      set PlatformConfigDatasourceBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Loading datasources..."
+      command PlatformConfigLoadSnapshot
+    }
+    on PlatformConfigSearchDatasourcesRequested {
+      set PlatformConfigDatasourceBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Searching datasources..."
+      command PlatformConfigLoadSnapshot
+    }
+    on PlatformConfigLoadDatasourceRequested {
+      set PlatformConfigDatasourceBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Loading datasource..."
+      command PlatformConfigLoadDatasource
+    }
+    on PlatformConfigCreateDatasourceRequested {
+      set PlatformConfigDatasourceBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Creating datasource..."
+      command PlatformConfigCreateDatasource
+    }
+    on PlatformConfigUpdateDatasourceRequested {
+      set PlatformConfigDatasourceBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Updating datasource..."
+      command PlatformConfigUpdateDatasource
+    }
+    on PlatformConfigDeleteDatasourceRequested {
+      set PlatformConfigDatasourceBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Deleting datasource..."
+      command PlatformConfigDeleteDatasource
+    }
+    on PlatformConfigTestDatasourceRequested {
+      set PlatformConfigDatasourceBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Testing datasource connection..."
+      command PlatformConfigTestDatasource
+    }
+    on PlatformConfigRunScriptRequested {
+      set PlatformConfigScriptBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Running script stub..."
+      command PlatformConfigRunScript
     }
     on MillForceRunMonteCarloRequested {
       set MillForceActiveAnalysisMode mc
@@ -1038,6 +1716,7 @@ view EngentusRoot {
     EngentusApp
     EngentusMillChargeApp
     EngentusMillForceApp
+    EngentusPlatformConfigApp
     EngentusSignout
   }
 }

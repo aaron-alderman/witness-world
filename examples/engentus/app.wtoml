@@ -1,6 +1,6 @@
 [app]
 id = "engentus_frontend_app"
-imports = ["../_lib/common.wtoml", "./app/models/burst-fit.rvm", "./app/models/clip.rvm", "./app/models/goodman.rvm", "./app/models/goodman-bolt-sets.rvm", "./app/models/health.rvm", "./app/models/kalman.rvm", "./app/models/mill-charge.rvm", "./app/models/mill-force.rvm", "./app/views/goodman.rvm", "./app/views/mill-charge.rvm", "./app/views/mill-force.rvm", "./app/shell-shared.rvm", "./app/shell-auth.rvm", "./app/shell-goodman.rvm", "./app/shell-mill-charge.rvm", "./app/shell-mill-force.rvm", "./app/shell.rvm"]
+imports = ["../_lib/common.wtoml", "./app/models/burst-fit.rvm", "./app/models/clip.rvm", "./app/models/goodman.rvm", "./app/models/goodman-bolt-sets.rvm", "./app/models/health.rvm", "./app/models/kalman.rvm", "./app/models/mill-charge.rvm", "./app/models/mill-force.rvm", "./app/views/goodman.rvm", "./app/views/mill-charge.rvm", "./app/views/mill-force.rvm", "./app/shell-shared.rvm", "./app/shell-auth.rvm", "./app/shell-goodman.rvm", "./app/shell-mill-charge.rvm", "./app/shell-mill-force.rvm", "./app/shell-platform-config.rvm", "./app/shell.rvm"]
 spawn = ["backend", "frontend"]
 
 [[serverRunner]]
@@ -9,11 +9,27 @@ id = "engentus_server"
 backendHost = "backendHost"
 frontendHost = "frontendHost"
 default = true
+allowActorHeader = true
 
 [[runtimePluginInstall]]
 actor = "aaron"
 serverRunner = "engentus_server"
 plugin = "plugin.chart-runtime"
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "engentus_server"
+plugin = "plugin.secret"
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "engentus_server"
+plugin = "plugin.sql"
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "engentus_server"
+plugin = "plugin.pipeline-runtime"
 
 [[runtimePluginInstall]]
 actor = "aaron"
@@ -61,6 +77,149 @@ params = { rootSurface = "EngentusRoot", defaultScreen = "login", routeState = {
 actor = "aaron"
 serverRunner = "engentus_server"
 route = "engentus_screen_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_snapshot_route"
+method = "POST"
+path = "/api/pipeline/platform-config/snapshot"
+serves = "platformConfigSnapshot"
+handler = "pipeline.platform-config.snapshot"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_snapshot_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_secret_read_route"
+method = "GET"
+path = "/api/pipeline/platform-config/secrets/:id"
+serves = "platformConfigSecretRead"
+handler = "pipeline.platform-config.secret.read"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_secret_read_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_secret_create_route"
+method = "POST"
+path = "/api/pipeline/platform-config/secrets"
+serves = "platformConfigSecretCreate"
+handler = "pipeline.platform-config.secret.create"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_secret_create_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_secret_write_route"
+method = "PUT"
+path = "/api/pipeline/platform-config/secrets/:id/value"
+serves = "platformConfigSecretWrite"
+handler = "pipeline.platform-config.secret.write"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_secret_write_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_secret_delete_route"
+method = "DELETE"
+path = "/api/pipeline/platform-config/secrets/:id"
+serves = "platformConfigSecretDelete"
+handler = "pipeline.platform-config.secret.delete"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_secret_delete_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_datasource_read_route"
+method = "GET"
+path = "/api/pipeline/platform-config/datasources/:id"
+serves = "platformConfigDatasourceRead"
+handler = "pipeline.platform-config.datasource.read"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_datasource_read_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_datasource_create_route"
+method = "POST"
+path = "/api/pipeline/platform-config/datasources"
+serves = "platformConfigDatasourceCreate"
+handler = "pipeline.platform-config.datasource.create"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_datasource_create_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_datasource_update_route"
+method = "PATCH"
+path = "/api/pipeline/platform-config/datasources/:id"
+serves = "platformConfigDatasourceUpdate"
+handler = "pipeline.platform-config.datasource.update"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_datasource_update_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_datasource_delete_route"
+method = "DELETE"
+path = "/api/pipeline/platform-config/datasources/:id"
+serves = "platformConfigDatasourceDelete"
+handler = "pipeline.platform-config.datasource.delete"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_datasource_delete_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_datasource_test_route"
+method = "POST"
+path = "/api/pipeline/platform-config/datasources/:id/test"
+serves = "platformConfigDatasourceTest"
+handler = "pipeline.platform-config.datasource.test"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_datasource_test_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_pipeline_script_run_route"
+method = "POST"
+path = "/api/pipeline/scripts/run"
+serves = "pipelineScriptRun"
+handler = "pipeline.script.run"
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_pipeline_script_run_route"
 
 [[desktopTarget]]
 id = "engentus_desktop"

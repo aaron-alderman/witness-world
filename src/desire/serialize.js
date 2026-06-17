@@ -369,6 +369,7 @@ function serializeSemanticRvmNode(node) {
     ]);
   }
   if (semantic.kind === "boundary") return serializeRvmBoundary(node, semantic);
+  if (semantic.kind === "collection") return `collection ${semantic.name}`;
   if (semantic.kind === "policy") {
     return block("policy", semantic.name, [
       simpleLine("subject", semantic.subject),
@@ -387,18 +388,21 @@ function serializeSemanticRvmNode(node) {
       ...propLines(semantic.props)
     ]);
   }
-  if (semantic.kind === "surface") {
-    if (semantic.surfaceKind === "chart") return serializeRvmChart(semantic);
-    return block("view", semantic.name, [
-      simpleLine("kind", semantic.surfaceKind),
-      simpleLine("class", semantic.className),
-      simpleLine("process", semantic.processRef),
-      repeatedBlock("projections", semantic.projectionRefs ?? []),
-      repeatedBlock("capabilities", semantic.capabilityRefs ?? []),
-      repeatedBlock("children", semantic.children ?? []),
-      ...propLines(semantic.props)
-    ]);
-  }
+    if (semantic.kind === "surface") {
+      if (semantic.surfaceKind === "chart") return serializeRvmChart(semantic);
+      return block("view", semantic.name, [
+        simpleLine("kind", semantic.surfaceKind),
+        simpleLine("class", semantic.className),
+        simpleLine("process", semantic.processRef),
+        repeatedBlock("projections", semantic.projectionRefs ?? []),
+        repeatedBlock("capabilities", semantic.capabilityRefs ?? []),
+        repeatBlock(semantic.repeat),
+        repeatedBlock("children", semantic.children ?? []),
+        bindingLines(semantic.bindings ?? []),
+        interactionLines(semantic.interactions ?? []),
+        ...propLines(semantic.props)
+      ]);
+    }
   if (semantic.kind === "dataflow") return serializeRvmDataflow(semantic);
   if (semantic.kind === "actor") {
     return block("actor", semantic.name, [
@@ -490,15 +494,18 @@ function serializeRvmBoundary(node, semantic) {
     return block("adapter", semantic.name, [
       simpleLine("command", operation.command),
       simpleLine("kind", operation.operationKind),
+      simpleLine("method", operation.method),
       simpleLine("route", operation.route),
       simpleLine("host_operation", operation.hostOperation),
       simpleLine("request_schema", operation.requestSchema),
       simpleLine("response_schema", operation.responseSchema),
       simpleLine("request_state", operation.requestState),
+      simpleLine("actor_state", operation.actorState),
       simpleLine("loading_state", operation.loadingState),
       simpleLine("success_event", operation.successEvent),
       simpleLine("failure_event", operation.failureEvent),
-      simpleLine("refresh_runtime", operation.refreshRuntime)
+      simpleLine("refresh_runtime", operation.refreshRuntime),
+      objectAssignmentBlock("collection_outputs", operation.collectionOutputs)
     ], operation.transport ? ` using ${operation.transport}` : "");
   }
   if ((operation?.kind === "read" || operation?.kind === "write") && operation.capability) {
@@ -557,6 +564,12 @@ function repeatedBlock(name, values) {
   return [`${name} {`, ...clean.map(value => `  ${serializeRvmScalar(value)}`), "}"];
 }
 
+function objectAssignmentBlock(name, values) {
+  const entries = Object.entries(values ?? {}).filter(([, value]) => value !== null && value !== undefined && value !== "");
+  if (entries.length === 0) return null;
+  return [`${name} = {`, ...entries.map(([key, value]) => `  ${key} = ${serializeRvmScalar(value)}`), "}"];
+}
+
 function nestedFieldBlock(name, fields) {
   const clean = (fields ?? []).filter(field => field?.name);
   if (clean.length === 0) return null;
@@ -573,6 +586,81 @@ function propLines(props) {
   return Object.entries(props ?? {})
     .filter(([, value]) => value !== null && value !== undefined && value !== "")
     .map(([key, value]) => `prop ${key} = ${serializeRvmScalar(value)}`);
+}
+
+function repeatBlock(repeat) {
+  if (!repeat?.collection || !repeat?.template) return null;
+  return [
+    "repeat {",
+    `  collection ${serializeRvmScalar(repeat.collection)}`,
+    `  template ${serializeRvmScalar(repeat.template)}`,
+    `  itemAs ${serializeRvmScalar(repeat.itemAs ?? "item")}`,
+    `  indexAs ${serializeRvmScalar(repeat.indexAs ?? "index")}`,
+    "}"
+  ];
+}
+
+function bindingLines(bindings) {
+  const clean = (bindings ?? []).filter(binding => binding?.prop && binding?.source);
+  if (!clean.length) return null;
+  return [
+    "bindings {",
+    ...clean.map(binding => `  ${serializeBinding(binding)}`),
+    "}"
+  ];
+}
+
+function interactionLines(interactions) {
+  const clean = (interactions ?? []).filter(interaction => interaction?.target && interaction?.event && interaction?.action);
+  if (!clean.length) return null;
+  return [
+    "interactions {",
+    ...clean.map(interaction => `  ${serializeInteraction(interaction)}`),
+    "}"
+  ];
+}
+
+function serializeBinding(binding) {
+  const source = binding?.source ?? {};
+  if (source.kind === "state") {
+    return `${binding.prop} from state ${serializeRvmScalar(source.state)}${serializeBindingMap(source.map)}`;
+  }
+  if (source.kind === "projection") {
+    return `${binding.prop} from projection ${serializeRvmScalar(source.projection)}${serializeBindingMap(source.map)}`;
+  }
+  if (source.kind === "capability") {
+    const target = source.output ? `${source.surface}.${source.output}` : source.surface;
+    return `${binding.prop} from capability ${serializeRvmScalar(target)}${serializeBindingMap(source.map)}`;
+  }
+  return `${binding.prop} from ${serializeRvmScalar(source.kind ?? "literal")} ${serializeRvmScalar(source.value ?? "")}`;
+}
+
+function serializeBindingMap(map) {
+  const entries = Object.entries(map ?? {});
+  if (!entries.length) return "";
+  return ` map ${entries.map(([key, value]) => `${serializeRvmScalar(key)} ${serializeRvmScalar(value)}`).join(" ")}`;
+}
+
+function serializeInteraction(interaction) {
+  const action = interaction?.action ?? {};
+  if (action.kind === "deliver") {
+    return `on ${interaction.event} ${interaction.target} deliver ${serializeRvmScalar(action.message)}`;
+  }
+  if (action.kind === "navigate") {
+    return `on ${interaction.event} ${interaction.target} navigate ${serializeRvmScalar(action.href)}`;
+  }
+  if (action.kind === "setState") {
+    return `on ${interaction.event} ${interaction.target} set ${serializeRvmScalar(action.state)} ${serializeInteractionValue(action.value)}`;
+  }
+  return `on ${interaction.event} ${interaction.target}`;
+}
+
+function serializeInteractionValue(value) {
+  if (value?.kind === "toggleState") return "toggle";
+  if (value?.kind === "eventValue") return "eventValue";
+  if (value?.kind === "eventChecked") return "eventChecked";
+  if (value && Object.prototype.hasOwnProperty.call(value, "literal")) return serializeRvmScalar(value.literal);
+  return serializeRvmScalar("");
 }
 
 function serializeAxis(axis) {

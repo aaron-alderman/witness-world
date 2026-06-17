@@ -436,6 +436,7 @@ const INLINE_SEMANTIC_KINDS = new Set([
   "context",
   "graph_context",
   "capability",
+  "collection",
   "entity",
   "boundary",
   "policy",
@@ -471,6 +472,11 @@ function semanticRvmShape(kind, name, type, bodyLines, header = {}) {
         source: readSimpleValue(bodyLines, "source"),
         state: readSimpleValue(bodyLines, "state"),
         driver: readSimpleValue(bodyLines, "driver")
+      };
+    case "collection":
+      return {
+        kind: "collection",
+        name
       };
     case "enum":
       return {
@@ -624,15 +630,18 @@ function semanticRvmShape(kind, name, type, bodyLines, header = {}) {
           transport: header.using ?? null,
           command: readSimpleValue(bodyLines, "command"),
           operationKind: readSimpleValue(bodyLines, "kind"),
+          method: readSimpleValue(bodyLines, "method"),
           route: readSimpleValue(bodyLines, "route"),
           hostOperation: readSimpleValue(bodyLines, "host_operation"),
           requestSchema: readSimpleValue(bodyLines, "request_schema"),
           responseSchema: readSimpleValue(bodyLines, "response_schema"),
           requestState: readSimpleValue(bodyLines, "request_state"),
+          actorState: readSimpleValue(bodyLines, "actor_state"),
           loadingState: readSimpleValue(bodyLines, "loading_state"),
           successEvent: readSimpleValue(bodyLines, "success_event") ?? readSimpleValue(bodyLines, "success"),
           failureEvent: readSimpleValue(bodyLines, "failure_event") ?? readSimpleValue(bodyLines, "failure"),
-          refreshRuntime: readSimpleValue(bodyLines, "refresh_runtime")
+          refreshRuntime: readSimpleValue(bodyLines, "refresh_runtime"),
+          collectionOutputs: parseObjectAssignmentBlock(bodyLines, "collection_outputs")
         }]
       };
     case "derive":
@@ -654,6 +663,7 @@ function semanticRvmShape(kind, name, type, bodyLines, header = {}) {
         capabilityRefs: parseSimpleEntries(bodyLines, "capabilities"),
         bindings: parseSurfaceBindingsBlock(bodyLines),
         interactions: parseSurfaceInteractionsBlock(bodyLines),
+        repeat: parseSurfaceRepeatBlock(bodyLines),
         children: parseSimpleEntries(bodyLines, "children"),
         props: parsePropAssignments(bodyLines)
       };
@@ -815,6 +825,12 @@ function semanticInlineRvmShape(kind, name, type, { using = null, attrs = {}, ta
         driver: attrs.driver ?? null,
         target
       };
+    case "collection":
+      return {
+        kind: "collection",
+        name,
+        target
+      };
     case "entity":
       return {
         kind: "entity",
@@ -896,15 +912,18 @@ function semanticInlineRvmShape(kind, name, type, { using = null, attrs = {}, ta
           transport: using,
           command: attrs.command ?? null,
           operationKind: attrs.kind ?? null,
+          method: attrs.method ?? null,
           route: attrs.route ?? null,
           hostOperation: attrs.host_operation ?? null,
           requestSchema: attrs.request_schema ?? null,
           responseSchema: attrs.response_schema ?? null,
           requestState: attrs.request_state ?? null,
+          actorState: attrs.actor_state ?? null,
           loadingState: attrs.loading_state ?? null,
           successEvent: attrs.success_event ?? attrs.success ?? null,
           failureEvent: attrs.failure_event ?? attrs.failure ?? null,
           refreshRuntime: attrs.refresh_runtime ?? null,
+          collectionOutputs: parseInlineObjectEntries(attrs.collection_outputs),
           target
         }]
       };
@@ -927,6 +946,7 @@ function semanticInlineRvmShape(kind, name, type, { using = null, attrs = {}, ta
         projectionRefs: parseInlineList(attrs.projections),
         capabilityRefs: parseInlineList(attrs.capabilities),
         bindings: [],
+        repeat: null,
         children: parseInlineList(attrs.children),
         target,
         props: inlineProps(attrs, new Set(["kind", "class", "process", "projections", "capabilities", "children"]))
@@ -1144,6 +1164,27 @@ function parseSurfaceInteractionsBlock(bodyLines) {
     .filter(Boolean);
 }
 
+function parseSurfaceRepeatBlock(bodyLines) {
+  const lines = extractNamedBlock(bodyLines, "repeat");
+  if (!lines.length) return null;
+  const read = key => {
+    for (const line of lines) {
+      const match = line.trim().match(new RegExp(`^${escapeRegExp(key)}\\s+(.+)$`));
+      if (match) return cleanRvmValue(match[1]);
+    }
+    return null;
+  };
+  const collection = read("collection");
+  const template = read("template");
+  if (!collection || !template) return null;
+  return {
+    collection,
+    template,
+    itemAs: read("itemAs") ?? "item",
+    indexAs: read("indexAs") ?? "index"
+  };
+}
+
 function parseBindingMapTail(tail) {
   const text = String(tail ?? "").trim();
   if (!text) return null;
@@ -1159,6 +1200,48 @@ function parseBindingMapTail(tail) {
     map[String(parseScalarValue(tokens[i]))] = parseScalarValue(tokens[i + 1]);
   }
   return map;
+}
+
+function parseObjectAssignmentBlock(bodyLines, key) {
+  const prefix = `${key} =`;
+  let active = false;
+  let inline = null;
+  let depth = 0;
+  const captured = [];
+  for (const line of bodyLines) {
+    const trimmed = line.trim();
+    if (!active) {
+      if (trimmed.startsWith(prefix)) {
+        const remainder = trimmed.slice(prefix.length).trim();
+        if (/^\{.*\}$/.test(remainder)) {
+          inline = remainder.slice(1, -1);
+          break;
+        }
+        if (remainder === "{") {
+          active = true;
+          depth = 1;
+        }
+      }
+      continue;
+    }
+    for (const ch of line) {
+      if (ch === "{") depth += 1;
+      if (ch === "}") depth -= 1;
+    }
+    if (trimmed === "}" && depth === 0) break;
+    if (depth <= 0) break;
+    captured.push(line);
+  }
+  const entries = inline == null
+    ? captured
+    : inline.split(",").map(value => value.trim()).filter(Boolean);
+  const out = {};
+  for (const entry of entries) {
+    const match = String(entry).trim().match(/^([A-Za-z_][A-Za-z0-9_.-]*)\s*=\s*(.+)$/);
+    if (!match) continue;
+    out[match[1]] = parseScalarValue(match[2]);
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 function parseSurfaceBindingsBlock(bodyLines) {

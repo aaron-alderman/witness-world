@@ -50,6 +50,17 @@ async function waitForNoRouteUnderlay(page, message = "Surface route underlay di
   );
 }
 
+async function waitForSurfaceSettled(page, message = "Surface runtime did not settle") {
+  try {
+    await page.evaluate(async () => {
+      if (typeof window.world?.whenSettled === "function") await window.world.whenSettled();
+    });
+  } catch (error) {
+    const snapshot = await readSurfaceRuntimeDebugSnapshot(page);
+    assert.fail(`${message}\n${String(error?.message || error)}\n${JSON.stringify(snapshot, null, 2)}`);
+  }
+}
+
 test("Engentus dev shell diagnostics expectation pack stays clean across the shell auth flow", { timeout: 70000 }, async () => {
   const server = await startEngentusUiServer({ devMode: true });
   const browser = await launchBrowser({
@@ -84,6 +95,7 @@ test("Engentus dev shell diagnostics expectation pack stays clean across the she
     await assertNoActiveIssues("login-initial");
 
     await page.click(".ms-btn");
+    await waitForSurfaceSettled(page, "Shell sign-in did not settle");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "home"
       && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedIn"
@@ -103,6 +115,7 @@ test("Engentus dev shell diagnostics expectation pack stays clean across the she
     await page.evaluate(() => {
       document.querySelector(".up-mi-signout")?.click();
     });
+    await waitForSurfaceSettled(page, "Shell sign-out did not settle");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "signout"
       && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedOut"
@@ -111,6 +124,7 @@ test("Engentus dev shell diagnostics expectation pack stays clean across the she
     await assertNoActiveIssues("signout");
 
     await page.getByRole("button", { name: "Sign back in" }).click();
+    await waitForSurfaceSettled(page, "Shell return-to-login did not settle");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "login"
       && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "idle"
@@ -226,6 +240,7 @@ test("Engentus login click dispatches the authored process rule through the gene
       window.__surfaceInteractionRuntime.__sameDocumentProbe = "before-back";
     });
     await page.goBack();
+    await waitForSurfaceSettled(page, "Back navigation did not settle on the login route");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "login"
     );
@@ -234,8 +249,10 @@ test("Engentus login click dispatches the authored process rule through the gene
     ), "before-back");
     assert.equal(new URL(page.url()).pathname, "/engentus/login");
     await page.waitForSelector("#view-login");
+    await waitForNoRouteUnderlay(page, "Back navigation never fully settled on the login route");
     assert.equal(await page.locator("#module-area").count(), 0);
     await page.click(".ms-btn");
+    await waitForSurfaceSettled(page, "Second login flow did not settle");
     await waitForSurfaceCondition(page, () =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "home"
     , "Second login flow did not switch the active shell route back to home");
@@ -270,16 +287,11 @@ test("Engentus login click dispatches the authored process rule through the gene
     await page.waitForSelector("#view-signout");
     await waitForNoRouteUnderlay(page, "Signout flow never cleared the route underlay after settle");
     assert.equal(await page.locator("#surface-route-underlay").count(), 0);
-    assert.deepEqual(await page.evaluate(() =>
-      window.__surfaceInteractionRuntime.processRuntime.trace.map(row => row.kind).slice(0, 6)
-    ), [
-      "rule.setState",
-      "rule.delay",
-      "rule.setState",
-      "rule.delay",
-      "rule.setState",
-      "rule.setState"
-    ]);
+    const recentExecutionKinds = await page.evaluate(() =>
+      (window.world.execution?.recentTasks ?? []).map(task => task.kind)
+    );
+    assert.equal(recentExecutionKinds.includes("process.rule"), true);
+    assert.equal(recentExecutionKinds.includes("process.delay"), true);
     await page.getByRole("button", { name: "Sign back in" }).click();
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "login"

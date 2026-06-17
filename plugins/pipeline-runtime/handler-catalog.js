@@ -3,11 +3,44 @@ function freezeStrings(values = []) {
 }
 
 export const handlerCatalog = Object.freeze({
-  authorableHandlers: freezeStrings(["page.pipelineAdmin", "pipeline.script.run"]),
-  pageHandlers: freezeStrings(["page.pipelineAdmin"]),
-  dispatchHandlers: freezeStrings(["page.pipelineAdmin", "pipeline.script.run"]),
+  authorableHandlers: freezeStrings([
+    "pipeline.platform-config.snapshot",
+    "pipeline.platform-config.secret.read",
+    "pipeline.platform-config.secret.create",
+    "pipeline.platform-config.secret.write",
+    "pipeline.platform-config.secret.delete",
+    "pipeline.platform-config.datasource.read",
+    "pipeline.platform-config.datasource.create",
+    "pipeline.platform-config.datasource.update",
+    "pipeline.platform-config.datasource.delete",
+    "pipeline.platform-config.datasource.test",
+    "pipeline.script.run"
+  ]),
+  pageHandlers: freezeStrings([]),
+  dispatchHandlers: freezeStrings([
+    "pipeline.platform-config.snapshot",
+    "pipeline.platform-config.secret.read",
+    "pipeline.platform-config.secret.create",
+    "pipeline.platform-config.secret.write",
+    "pipeline.platform-config.secret.delete",
+    "pipeline.platform-config.datasource.read",
+    "pipeline.platform-config.datasource.create",
+    "pipeline.platform-config.datasource.update",
+    "pipeline.platform-config.datasource.delete",
+    "pipeline.platform-config.datasource.test",
+    "pipeline.script.run"
+  ]),
   handlerMetadata: Object.freeze({
-    "page.pipelineAdmin": Object.freeze({ routeKind: "page", responseKind: "page", methods: ["GET"] }),
+    "pipeline.platform-config.snapshot": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "pipeline.platform-config.secret.read": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["GET"] }),
+    "pipeline.platform-config.secret.create": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "pipeline.platform-config.secret.write": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["PUT"] }),
+    "pipeline.platform-config.secret.delete": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["DELETE"] }),
+    "pipeline.platform-config.datasource.read": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["GET"] }),
+    "pipeline.platform-config.datasource.create": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "pipeline.platform-config.datasource.update": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["PATCH"] }),
+    "pipeline.platform-config.datasource.delete": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["DELETE"] }),
+    "pipeline.platform-config.datasource.test": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
     "pipeline.script.run": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] })
   })
 });

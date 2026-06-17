@@ -218,6 +218,16 @@ function normalizeSemanticNode(node, versionFieldsByName) {
         sourceNodeIds: [node.id],
         meta: semanticMeta(node)
       })];
+    case "collection":
+      return [createDesireNode({
+        kind: "collection",
+        name: semantic.name,
+        body: {
+          id: semantic.name
+        },
+        sourceNodeIds: [node.id],
+        meta: semanticMeta(node)
+      })];
     case "store":
       return [createDesireNode({
         kind: "store",
@@ -276,6 +286,7 @@ function normalizeSemanticNode(node, versionFieldsByName) {
           capabilityRefs: semantic.capabilityRefs ?? [],
           bindings: semantic.bindings ?? [],
           interactions: semantic.interactions ?? [],
+          repeat: semantic.repeat ?? null,
           ...(semantic.surfaceKind === "chart"
             ? {
                 modelRef: semantic.modelRef ?? null,

@@ -1,6 +1,47 @@
-import { renderProcessRuntimeModuleSource } from "./desire/process-eval.js";
 import { surfaceDomId } from "./runtime-surface-dom-identity.js";
 import { renderSurfaceStaticFragment } from "./runtime-surface-shell.js";
+import { createExecutionRunner } from "./runtime-execution-runner.js";
+import {
+  buildRenderedHostTree,
+  collectReconcileSurfaceStates,
+  createReconcilePlan
+} from "./runtime-reconcile-service.js";
+import {
+  applySurfaceDomHostPlan,
+  clearRouteUnderlay,
+  fallbackActiveRootNode,
+  patchSurfaceDom,
+  readSurfaceDomHostTree,
+  surfaceIsPresentInDom,
+  updateSurfaceRouteUnderlay
+} from "./runtime-surface-dom-host.js";
+import {
+  activeRouteTargetForPath,
+  createBrowserRouteInvoker,
+  forceDocumentNavigation,
+  loadRouteSurfacePage,
+  parseFirstElement,
+  routeStateBindingForProcess,
+  routeTargetForManifestState,
+  routeTargetForProcessState,
+  supportsSameDocumentRouteReplacement,
+  syncRouteStateToUrl,
+  syncUrlToRouteState
+} from "./runtime-surface-route-runtime.js";
+import {
+  bootSurfaceCapabilities,
+  ensureSurfaceCapabilityAssets
+} from "./runtime-surface-capability-runtime.js";
+import {
+  createSurfaceDiagnosticsOverlay,
+  createSurfaceRuntimeIssueLedger,
+  createSurfaceRuntimeProbe,
+  installSurfaceInspectionPoint,
+  installSurfaceRuntimeBootFailure,
+  surfaceDiagnosticsOverlayEnabled,
+  surfaceExpectedVisible,
+  surfaceHasVisibleBinding
+} from "./runtime-surface-diagnostics.js";
 
 const processWitnessCatalogCache = new WeakMap();
 
@@ -56,7 +97,8 @@ function runtimeSpecForSurface(surface) {
     projectionRefs: normalizeRuntimeArray(surface?.projectionRefs),
     capabilityRefs: normalizeRuntimeArray(surface?.capabilityRefs),
     bindings: normalizeRuntimeArray(surface?.bindings),
-    interactions: normalizeRuntimeArray(surface?.interactions)
+    interactions: normalizeRuntimeArray(surface?.interactions),
+    repeat: normalizeRuntimeObject(surface?.repeat)
   };
 }
 
@@ -68,6 +110,7 @@ function surfaceHasRuntimeMeaning(surface) {
     || runtime.capabilityRefs.length
     || runtime.bindings.length
     || runtime.interactions.length
+    || Boolean(runtime.repeat?.collection && runtime.repeat?.template)
   );
 }
 
@@ -448,6 +491,11 @@ function genericSurfaceRuntimeView(surface) {
       propTargets.value = [{ id: domId, mode: "value" }];
       if (directTag === "input") propTargets.checked = [{ id: domId, mode: "checked" }];
     }
+    if (directTag === "option") {
+      propTargets.value = [{ id: domId, mode: "attribute", attr: "value" }];
+      propTargets.label = [{ id: domId, mode: "attribute", attr: "label" }];
+      propTargets.disabled = [{ id: domId, mode: "disabled" }];
+    }
   }
   if (inputId) {
     propTargets.inputType = [{ id: inputId, mode: "attribute", attr: "type" }];
@@ -555,32 +603,71 @@ export function buildSurfaceRuntimeManifest({
   markActiveClosure(activeSurface.id);
   markAncestors(activeSurface.id);
   const surfaceEntries = [];
+  const referencedTemplateIds = new Set();
+  const referencedCollectionIds = new Set();
   for (const surfaceId of includedIds) {
     const surface = surfaces.get(surfaceId);
     if (!surface) continue;
     if (!includedIds.has(surfaceId)) continue;
     const runtime = runtimeSpecForSurface(surface);
+    if (runtime.repeat?.template) referencedTemplateIds.add(trimString(runtime.repeat.template));
+    if (runtime.repeat?.collection) referencedCollectionIds.add(trimString(runtime.repeat.collection));
     const view = describeSurfaceRuntimeView(surface, { describeSurfaceRuntimeViewImpl });
     surfaceEntries.push({
       id: surface.id,
       parentId: includedParentById.get(surface.id) ?? null,
       children: childSurfaceIds(surface).filter(childId => includedIds.has(childId)),
       surfaceKind: surface.surfaceKind ?? null,
-      props: normalizeRuntimeObject(surface.props),
-      runtime,
-      view,
-      fragmentHtml: runtime.bindings.some(binding => trimString(binding?.prop) === "visible")
-        ? renderSurfaceStaticFragment(surfaces, surface.id, {
-            surfaceRenderers,
+        props: normalizeRuntimeObject(surface.props),
+        runtime,
+        view,
+        fragmentHtml: runtime.bindings.some(binding => trimString(binding?.prop) === "visible")
+          ? renderSurfaceStaticFragment(surfaces, surface.id, {
+            surfaceRenderers: [],
             initialState,
             forceVisibleSurfaceIds: [surface.id]
-          })
-        : null
-    });
-  }
-  const interactive = surfaceEntries.some(entry => entry.runtime.processRef || entry.runtime.bindings.length || entry.runtime.interactions.length);
-  if (!interactive) return null;
-  const runtimeFragment = collectRelevantProcessWitnesses(world, surfaceEntries, routeStateDescriptor);
+            })
+          : null
+      });
+    }
+    const interactive = surfaceEntries.some(entry => (
+      entry.runtime.processRef
+      || entry.runtime.bindings.length
+      || entry.runtime.interactions.length
+      || Boolean(entry.runtime.repeat?.collection && entry.runtime.repeat?.template)
+    ));
+    if (!interactive) return null;
+    const templates = [...referencedTemplateIds]
+      .map(templateId => {
+        const templateSurface = templateId ? surfaces.get(templateId) : null;
+        if (!templateSurface) return null;
+        const html = renderSurfaceStaticFragment(surfaces, templateId, {
+          surfaceRenderers,
+          initialState,
+          forceVisibleSurfaceIds: [templateId],
+          templateContent: true
+        });
+        if (!html) return null;
+        return {
+          id: templateId,
+          html,
+          tag: trimString(templateSurface?.props?.tag) ?? null
+        };
+      })
+      .filter(Boolean);
+    const declaredCollections = referencedCollectionIds.size
+      ? new Set(
+          (world?.allWitnesses?.() ?? [])
+            .filter(witness => witness?.process === "desire.defineCollection")
+            .map(witness => trimString(witness?.body?.id))
+            .filter(Boolean)
+        )
+      : new Set();
+    const collections = [...new Set([
+      ...declaredCollections,
+      ...referencedCollectionIds
+    ])].map(id => ({ id }));
+    const runtimeFragment = collectRelevantProcessWitnesses(world, surfaceEntries, routeStateDescriptor);
   const diagnostics = buildRuntimeManifestDiagnostics({
     requestPathname,
     activeSurfaceId: activeSurface.id,
@@ -593,12 +680,14 @@ export function buildSurfaceRuntimeManifest({
     activeSurfaceId: activeSurface.id,
     requestPathname,
     routeTargets,
-    browserRuntimeCapabilities: [...new Set((browserRuntimeCapabilities ?? []).map(value => String(value || "")).filter(Boolean))],
-    capabilityAssets: normalizeCapabilityAssets(capabilityAssets),
-    surfaces: surfaceEntries,
-    processWitnesses: runtimeFragment.processWitnesses,
-    routeState: normalizeRouteStateDescriptor(routeStateDescriptor),
-    diagnostics
+      browserRuntimeCapabilities: [...new Set((browserRuntimeCapabilities ?? []).map(value => String(value || "")).filter(Boolean))],
+      capabilityAssets: normalizeCapabilityAssets(capabilityAssets),
+      surfaces: surfaceEntries,
+      collections,
+      templates,
+      processWitnesses: runtimeFragment.processWitnesses,
+      routeState: normalizeRouteStateDescriptor(routeStateDescriptor),
+      diagnostics
   };
   manifest.diagnostics.serializedBytes = Buffer.byteLength(JSON.stringify(manifest), "utf8");
   return manifest;
@@ -721,81 +810,6 @@ function overlaySurfaceProps(surface, processRuntime, capabilityOutputs = {}) {
   return nextProps;
 }
 
-function formatInlineText(value) {
-  return String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replace(/\n/g, "<br>");
-}
-
-export function patchSurfaceDom(document, surface, nextProps) {
-  const propTargets = surface?.view?.propTargets ?? {};
-  for (const [prop, targets] of Object.entries(propTargets)) {
-    if (!Object.prototype.hasOwnProperty.call(nextProps, prop)) continue;
-    const value = nextProps[prop];
-    for (const target of targets ?? []) {
-      const node = trimString(target?.id) ? document.getElementById(target.id) : null;
-      if (!node) continue;
-      switch (target.mode) {
-        case "attribute": {
-          const attr = trimString(target.attr);
-          if (!attr) break;
-          if (value == null || (value === false && !target.falseAsValue)) node.removeAttribute(attr);
-          else node.setAttribute(attr, String(value));
-          break;
-        }
-        case "capabilityProp": {
-          if (typeof node.__surfaceCapabilityController?.updateProps === "function") {
-            node.__surfaceCapabilityController.updateProps({ [target.prop || prop]: value });
-          }
-          break;
-        }
-        case "checked":
-          node.checked = Boolean(value);
-          if (value) node.setAttribute("checked", "");
-          else node.removeAttribute("checked");
-          break;
-        case "className": {
-          const baseClass = trimString(target.baseClass);
-          const dynamicClass = typeof value === "string" ? value.trim() : "";
-          node.className = [baseClass, dynamicClass].filter(Boolean).join(" ");
-          break;
-        }
-        case "disabled":
-          node.disabled = Boolean(value);
-          if (value) node.setAttribute("disabled", "");
-          else node.removeAttribute("disabled");
-          break;
-        case "navHref": {
-          const href = trimString(value);
-          if (href) node.setAttribute("href", href);
-          else node.removeAttribute("href");
-          break;
-        }
-        case "value":
-          node.value = value == null ? "" : String(value);
-          if (value == null) node.removeAttribute("value");
-          else node.setAttribute("value", String(value));
-          break;
-        case "visibility": {
-          if (value) node.removeAttribute("hidden");
-          else node.setAttribute("hidden", "");
-          break;
-        }
-        case "formattedText":
-          node.innerHTML = formatInlineText(value);
-          break;
-        case "text":
-        default:
-          node.textContent = value == null ? "" : String(value);
-          break;
-      }
-    }
-  }
-}
-
 function eventValueFromSpec(spec, event, processRuntime) {
   if (!spec || typeof spec !== "object") return null;
   if (Object.prototype.hasOwnProperty.call(spec, "literal")) return spec.literal;
@@ -822,1251 +836,6 @@ function createBlockedInteractionRuntime({
   };
 }
 
-function activeRouteTargetForPath(manifest, pathname) {
-  const normalized = String(pathname || "/").replace(/\/+$/, "") || "/";
-  return (manifest?.routeTargets ?? []).find(target =>
-    (String(target.path || "/").replace(/\/+$/, "") || "/") === normalized
-  ) ?? null;
-}
-
-function routeStateBindingForProcess(manifest, processRef) {
-  const descriptor = resolveRouteStateDescriptor(manifest);
-  if (!descriptor) return null;
-  const state = trimString(descriptor.state) || trimString(descriptor.stateRef);
-  const descriptorProcess = trimString(descriptor.process) || trimString(descriptor.processRef);
-  if (!state) return null;
-  if (descriptorProcess && processRef && descriptorProcess !== processRef) return null;
-  return { processRef: descriptorProcess || processRef, state };
-}
-
-function routeTargetForProcessState(manifest, processRuntime, processRef) {
-  const targets = manifest?.routeTargets ?? [];
-  if (!targets.length || !processRef) return null;
-  const routeState = routeStateBindingForProcess(manifest, processRef);
-  if (!routeState) return null;
-  const value = processRuntime.value(routeState.state);
-  return targets.find(target => String(target.key) === String(value)) ?? null;
-}
-
-function routeTargetForManifestState(manifest, processRuntime) {
-  const descriptor = normalizeRouteStateDescriptor(manifest?.routeState);
-  const processRef = trimString(descriptor?.process) || trimString(descriptor?.processRef);
-  if (!processRef) return null;
-  return routeTargetForProcessState(manifest, processRuntime, processRef);
-}
-
-function syncUrlToRouteState({ manifest, processRuntime, processRef, window }) {
-  const active = activeRouteTargetForPath(manifest, window?.location?.pathname);
-  if (!active || !processRef) return false;
-  const routeState = routeStateBindingForProcess(manifest, processRef);
-  if (!routeState) return false;
-  if (String(processRuntime.value(routeState.state)) === String(active.key)) return false;
-  processRuntime.set(routeState.state, active.key);
-  return true;
-}
-
-function syncRouteStateToUrl({ manifest, processRuntime, processRef, window }) {
-  const target = routeTargetForProcessState(manifest, processRuntime, processRef);
-  if (!target?.path || !window?.history || !window?.location) return null;
-  const currentPath = String(window.location.pathname || "/").replace(/\/+$/, "") || "/";
-  const nextPath = String(target.path || "/").replace(/\/+$/, "") || "/";
-  if (currentPath !== nextPath) window.history.pushState({ surfaceRouteKey: target.key }, "", target.path);
-  return target;
-}
-
-function forceDocumentNavigation(window, targetPath) {
-  const nextPath = trimString(targetPath);
-  if (!nextPath || !window?.location) return false;
-  if (typeof window.location.assign === "function") {
-    window.location.assign(nextPath);
-    return true;
-  }
-  try {
-    window.location.href = nextPath;
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function parseFirstElement(document, html) {
-  if (!document || typeof html !== "string" || !html.trim()) return null;
-  const template = document.createElement("template");
-  if (!template?.content) return null;
-  template.innerHTML = html.trim();
-  return template.content.firstElementChild;
-}
-
-function nextPresentSiblingRoot(document, surfaceById, parentSurface, surfaceId) {
-  const children = Array.isArray(parentSurface?.children) ? parentSurface.children : [];
-  const currentIndex = children.findIndex(childId => trimString(childId) === surfaceId);
-  if (currentIndex < 0) return null;
-  for (let index = currentIndex + 1; index < children.length; index += 1) {
-    const sibling = surfaceById.get(trimString(children[index]));
-    const siblingRootId = trimString(sibling?.view?.rootId);
-    const siblingNode = siblingRootId ? document?.getElementById?.(siblingRootId) : null;
-    if (siblingNode) return siblingNode;
-  }
-  return null;
-}
-
-function materializeMissingVisibleSurface(document, surfaceById, surface) {
-  const fragmentHtml = trimString(surface?.fragmentHtml);
-  if (!fragmentHtml) return null;
-  let parentSurface = null;
-  let parentId = trimString(surface?.parentId);
-  while (parentId) {
-    const candidate = surfaceById.get(parentId) || null;
-    if (candidate && surfaceIsPresentInDom(document, candidate)) {
-      parentSurface = candidate;
-      break;
-    }
-    parentId = trimString(candidate?.parentId);
-  }
-  const parentRootId = trimString(parentSurface?.view?.rootId);
-  const parentRoot = parentRootId ? document?.getElementById?.(parentRootId) : null;
-  if (!parentRoot) return null;
-  const nextRoot = parseFirstElement(document, fragmentHtml);
-  if (!nextRoot) return null;
-  const beforeNode = nextPresentSiblingRoot(document, surfaceById, parentSurface, surface.id);
-  if (beforeNode && beforeNode.parentNode === parentRoot) parentRoot.insertBefore(nextRoot, beforeNode);
-  else parentRoot.appendChild(nextRoot);
-  return nextRoot;
-}
-
-function dematerializeHiddenSurface(document, surface) {
-  const rootId = trimString(surface?.view?.rootId);
-  const node = rootId ? document?.getElementById?.(rootId) : null;
-  if (!node?.parentNode || typeof node.parentNode.removeChild !== "function") return false;
-  node.parentNode.removeChild(node);
-  return true;
-}
-
-function supportsSameDocumentRouteReplacement(document, window) {
-  const hasFetch = typeof window?.fetch === "function";
-  const hasTemplateParser = Boolean(document?.createElement?.("template")?.content);
-  const hasDomParser = Boolean(domParserForWindow(window));
-  return hasFetch && (hasDomParser || hasTemplateParser);
-}
-
-function fallbackActiveRootNode(document) {
-  const body = document?.body;
-  if (!body) return null;
-  for (const child of body.children ?? []) {
-    if (!(child instanceof Element)) continue;
-    if (trimString(child.id) === "surface-route-underlay") continue;
-    if (child.tagName?.toLowerCase?.() === "script") continue;
-    return child;
-  }
-  return null;
-}
-
-function domParserForWindow(window) {
-  if (typeof window?.DOMParser === "function") return new window.DOMParser();
-  if (typeof DOMParser === "function") return new DOMParser();
-  return null;
-}
-
-function readSurfaceRuntimeManifest(document) {
-  const node = document?.getElementById?.("surface-runtime-manifest");
-  if (!node) return null;
-  try {
-    return JSON.parse(node.textContent || "null");
-  } catch {
-    return null;
-  }
-}
-
-function parseRouteSurfacePage({ document, window, html, rootId = null } = {}) {
-  if (!html || typeof html !== "string") return { fragment: null, manifest: null };
-  const parser = domParserForWindow(window);
-  if (parser) {
-    const parsed = parser.parseFromString(html, "text/html");
-    const manifestNode = parsed?.getElementById?.("surface-runtime-manifest");
-    let manifest = null;
-    if (manifestNode?.textContent) {
-      try {
-        manifest = JSON.parse(manifestNode.textContent);
-      } catch {}
-    }
-    if (rootId) {
-      const root = parsed?.getElementById?.(rootId);
-      if (root?.outerHTML) return { fragment: root.outerHTML, manifest };
-    }
-    return { fragment: parsed?.body?.firstElementChild?.outerHTML ?? null, manifest };
-  }
-  const first = parseFirstElement(document, html);
-  if (!first) return { fragment: null, manifest: null };
-  if (rootId && trimString(first?.id) && trimString(first.id) !== rootId) return { fragment: null, manifest: null };
-  return { fragment: first.outerHTML ?? html.trim(), manifest: null };
-}
-
-async function loadRouteSurfacePage({ document, window, manifest, surfaceById, target, requireManifest = false } = {}) {
-  if (!target?.surfaceId || !target?.path) return null;
-  const cacheKey = trimString(target.key) || trimString(target.surfaceId);
-  if (!manifest.__routeSurfacePageCache) manifest.__routeSurfacePageCache = {};
-  if (cacheKey && manifest.__routeSurfacePageCache[cacheKey]) {
-    const cached = manifest.__routeSurfacePageCache[cacheKey];
-    if (!requireManifest || cached?.manifest?.surfaces) return cached;
-  }
-  const fetchImpl = typeof window?.fetch === "function"
-    ? window.fetch.bind(window)
-    : null;
-  if (!fetchImpl) return null;
-  const rootId = trimString(surfaceById?.get(target.surfaceId)?.view?.rootId);
-  const loadAttempt = async headers => {
-    const response = await fetchImpl(target.path, headers ? { headers } : {});
-    if (!response?.ok) return null;
-    const html = await response.text();
-    return parseRouteSurfacePage({
-      document,
-      window,
-      html,
-      rootId
-    });
-  };
-  let page = await loadAttempt({ "x-surface-fragment-request": "1" });
-  if (requireManifest && !page?.manifest?.surfaces) {
-    page = await loadAttempt();
-  }
-  if (cacheKey && page?.fragment) manifest.__routeSurfacePageCache[cacheKey] = page;
-  return page;
-}
-
-function capabilityBootIssueId(hook, index, root) {
-  const hookName = trimString(hook?.name) || `hook-${Number(index) + 1}`;
-  const rootId = trimString(root?.id) || "active-root";
-  return `surface-runtime:capability-boot-failed:${rootId}:${hookName}`;
-}
-
-function bootSurfaceCapabilities(window, root, {
-  reportIssue = null,
-  resolveIssue = null,
-  phase = "capability-mount",
-  correlationId = null
-} = {}) {
-  const hooks = Array.isArray(window?.__surfaceCapabilityBootHooks)
-    ? window.__surfaceCapabilityBootHooks
-    : [];
-  for (const [index, hook] of hooks.entries()) {
-    if (typeof hook !== "function") continue;
-    const issueId = capabilityBootIssueId(hook, index, root);
-    try {
-      hook(root);
-      if (typeof resolveIssue === "function") resolveIssue(issueId, { phase, correlationId });
-    } catch (error) {
-      window?.console?.error?.("surface capability boot failed", error);
-      if (typeof reportIssue === "function") {
-        reportIssue({
-          id: issueId,
-          severity: "error",
-          phase,
-          kind: "capability-boot-failed",
-          message: "Surface capability boot hook failed",
-          capability: trimString(hook?.capability) || null,
-          targetId: trimString(root?.id),
-          details: {
-            hookName: trimString(hook?.name) || null,
-            rootId: trimString(root?.id) || null,
-            name: error?.name || "Error",
-            message: String(error?.message || error),
-            stack: String(error?.stack || "")
-          },
-          correlationId
-        });
-      }
-    }
-  }
-}
-
-function capabilityAssetHash(value) {
-  const text = String(value ?? "");
-  let hash = 2166136261;
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0).toString(36);
-}
-
-function waitForNodeLoad(node) {
-  return new Promise((resolve, reject) => {
-    if (!node || typeof node.addEventListener !== "function") {
-      resolve();
-      return;
-    }
-    const cleanup = () => {
-      node.removeEventListener?.("load", onLoad);
-      node.removeEventListener?.("error", onError);
-    };
-    const onLoad = () => {
-      cleanup();
-      resolve();
-    };
-    const onError = error => {
-      cleanup();
-      reject(error instanceof Error ? error : new Error("surface capability asset failed to load"));
-    };
-    node.addEventListener("load", onLoad, { once: true });
-    node.addEventListener("error", onError, { once: true });
-  });
-}
-
-async function waitForSurfaceCapabilityModuleSettle(window, {
-  readyStart = 0,
-  hookStart = 0,
-  maxPasses = 8
-} = {}) {
-  const tick = async () => {
-    if (typeof window?.requestAnimationFrame === "function") {
-      await new Promise(resolve => window.requestAnimationFrame(() => resolve()));
-      return;
-    }
-    await new Promise(resolve => {
-      if (typeof setTimeout === "function") {
-        setTimeout(resolve, 0);
-        return;
-      }
-      resolve();
-    });
-  };
-
-  let lastReady = readyStart;
-  let lastHooks = hookStart;
-  let stablePasses = 0;
-  for (let pass = 0; pass < maxPasses; pass += 1) {
-    await tick();
-    const nextReady = Array.isArray(window?.__surfaceCapabilityReadyPromises)
-      ? window.__surfaceCapabilityReadyPromises.length
-      : 0;
-    const nextHooks = Array.isArray(window?.__surfaceCapabilityBootHooks)
-      ? window.__surfaceCapabilityBootHooks.length
-      : 0;
-    if (nextReady === lastReady && nextHooks === lastHooks) {
-      stablePasses += 1;
-      if (stablePasses >= 2) break;
-      continue;
-    }
-    lastReady = nextReady;
-    lastHooks = nextHooks;
-    stablePasses = 0;
-  }
-}
-
-async function waitForSurfaceCapabilityModuleRegistration(window, {
-  readyStart = 0,
-  hookStart = 0,
-  maxPasses = 40
-} = {}) {
-  for (let pass = 0; pass < maxPasses; pass += 1) {
-    await waitForSurfaceCapabilityModuleSettle(window, {
-      readyStart,
-      hookStart,
-      maxPasses: 1
-    });
-    const nextReady = Array.isArray(window?.__surfaceCapabilityReadyPromises)
-      ? window.__surfaceCapabilityReadyPromises.length
-      : 0;
-    const nextHooks = Array.isArray(window?.__surfaceCapabilityBootHooks)
-      ? window.__surfaceCapabilityBootHooks.length
-      : 0;
-    if (nextReady > readyStart || nextHooks > hookStart) return;
-  }
-}
-
-async function ensureSurfaceCapabilityAssets(document, window, capabilityAssets) {
-  const assets = normalizeCapabilityAssets(capabilityAssets);
-  const readyStart = Array.isArray(window?.__surfaceCapabilityReadyPromises)
-    ? window.__surfaceCapabilityReadyPromises.length
-    : 0;
-  const hookStart = Array.isArray(window?.__surfaceCapabilityBootHooks)
-    ? window.__surfaceCapabilityBootHooks.length
-    : 0;
-  const registry = window?.__surfaceCapabilityAssetRegistry && typeof window.__surfaceCapabilityAssetRegistry === "object"
-    ? window.__surfaceCapabilityAssetRegistry
-    : (window.__surfaceCapabilityAssetRegistry = {
-        stylesheets: new Set(),
-        scripts: new Set(),
-        inlineStyles: new Set(),
-        inlineModules: new Set()
-      });
-  const head = document?.head ?? document?.documentElement ?? document?.body ?? null;
-  if (!head) return;
-
-  for (const href of assets.stylesheetHrefs) {
-    if (registry.stylesheets.has(href)) continue;
-    if (typeof document?.querySelector === "function" && document.querySelector(`link[rel="stylesheet"][href="${href}"]`)) {
-      registry.stylesheets.add(href);
-      continue;
-    }
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = href;
-    head.appendChild(link);
-    registry.stylesheets.add(href);
-  }
-
-  for (const cssText of assets.inlineCss) {
-    const key = capabilityAssetHash(cssText);
-    if (registry.inlineStyles.has(key)) continue;
-    if (typeof document?.querySelector === "function" && document.querySelector(`style[data-surface-capability-style="${key}"]`)) {
-      registry.inlineStyles.add(key);
-      continue;
-    }
-    const style = document.createElement("style");
-    style.setAttribute("data-surface-capability-style", key);
-    style.textContent = cssText;
-    head.appendChild(style);
-    registry.inlineStyles.add(key);
-  }
-
-  for (const src of assets.scriptSrcs) {
-    if (registry.scripts.has(src)) continue;
-    if (typeof document?.querySelector === "function" && document.querySelector(`script[src="${src}"]`)) {
-      registry.scripts.add(src);
-      continue;
-    }
-    const script = document.createElement("script");
-    script.src = src;
-    head.appendChild(script);
-    await waitForNodeLoad(script);
-    registry.scripts.add(src);
-  }
-
-  for (const moduleSource of assets.scriptBodies) {
-    const key = capabilityAssetHash(moduleSource);
-    if (registry.inlineModules.has(key)) continue;
-    if (typeof document?.querySelector === "function" && document.querySelector(`script[data-surface-capability-module="${key}"]`)) {
-      registry.inlineModules.add(key);
-      continue;
-    }
-    const script = document.createElement("script");
-    script.type = "module";
-    script.setAttribute("data-surface-capability-module", key);
-    script.textContent = moduleSource;
-    head.appendChild(script);
-    registry.inlineModules.add(key);
-  }
-  if (assets.scriptBodies.length) {
-    await waitForSurfaceCapabilityModuleRegistration(window, { readyStart, hookStart });
-  }
-  await waitForSurfaceCapabilityModuleSettle(window, { readyStart, hookStart });
-  const readyQueue = Array.isArray(window?.__surfaceCapabilityReadyPromises)
-    ? window.__surfaceCapabilityReadyPromises.slice(readyStart)
-    : [];
-  if (readyQueue.length) {
-    await Promise.all(readyQueue.map(promise => Promise.resolve(promise)));
-  }
-  await waitForSurfaceCapabilityModuleSettle(window, { readyStart, hookStart });
-}
-
-function surfaceAssetRegistrySnapshot(window) {
-  const registry = window?.__surfaceCapabilityAssetRegistry && typeof window.__surfaceCapabilityAssetRegistry === "object"
-    ? window.__surfaceCapabilityAssetRegistry
-    : null;
-  const list = value => value instanceof Set ? [...value] : [];
-  return {
-    stylesheets: list(registry?.stylesheets),
-    scripts: list(registry?.scripts),
-    inlineStyles: list(registry?.inlineStyles),
-    inlineModules: list(registry?.inlineModules)
-  };
-}
-
-function createSurfaceInspectionPoint({ window, manifest, runtime }) {
-  const fetchServerDiagnostics = async () => {
-    const fetchImpl = typeof window?.fetch === "function" ? window.fetch.bind(window) : null;
-    if (!fetchImpl) return null;
-    const response = await fetchImpl("/api/runtime/diagnostics", {
-      headers: { accept: "application/json" }
-    });
-    if (!response?.ok) {
-      throw new Error(`runtime diagnostics fetch failed (${response?.status ?? "unknown"})`);
-    }
-    return await response.json();
-  };
-  const inspection = {
-    kind: "surface-runtime-inspection",
-    diagnosticsUrl: "/api/runtime/diagnostics",
-    get manifest() {
-      return cloneInspectionValue(manifest);
-    },
-    get activeSurfaceId() {
-      return runtime?.activeSurfaceId ?? manifest?.activeSurfaceId ?? null;
-    },
-    get surfaceIds() {
-      return typeof runtime?.surfaceIds !== "undefined"
-        ? cloneInspectionValue(runtime.surfaceIds)
-        : (manifest?.surfaces ?? []).map(surface => surface.id);
-    },
-    get routeTargets() {
-      return typeof runtime?.routeTargets !== "undefined"
-        ? cloneInspectionValue(runtime.routeTargets)
-        : cloneInspectionValue(manifest?.routeTargets ?? []);
-    },
-    get runtimeIds() {
-      return cloneInspectionValue(manifest?.diagnostics?.includedRuntimeIds ?? []);
-    },
-    get browserRuntimeCapabilities() {
-      return cloneInspectionValue(manifest?.browserRuntimeCapabilities ?? []);
-    },
-    get capabilityAssets() {
-      return cloneInspectionValue(manifest?.capabilityAssets ?? null);
-    },
-    get loadedCapabilityAssets() {
-      return surfaceAssetRegistrySnapshot(window);
-    },
-    get capabilityBootHookCount() {
-      return Array.isArray(window?.__surfaceCapabilityBootHooks)
-        ? window.__surfaceCapabilityBootHooks.length
-        : 0;
-    },
-    get routeDebugLog() {
-      return typeof runtime?.routeDebugLog !== "undefined"
-        ? cloneInspectionValue(runtime.routeDebugLog)
-        : [];
-    },
-    get lastRouteSwap() {
-      return cloneInspectionValue(runtime?.lastRouteSwap ?? null);
-    },
-    get issues() {
-      return cloneInspectionValue(typeof runtime?.issues !== "undefined" ? runtime.issues : []);
-    },
-    get latestProbe() {
-      return cloneInspectionValue(runtime?.latestProbe ?? null);
-    },
-    get expectationProviderCount() {
-      return Number(runtime?.expectationProviderCount ?? 0);
-    },
-    get process() {
-      const processRuntime = runtime?.processRuntime ?? null;
-      if (!processRuntime) return null;
-      return {
-        counts: cloneInspectionValue(processRuntime.counts ?? null),
-        inFlightCount: Number(processRuntime.inFlightCount ?? 0),
-        state: cloneInspectionValue(typeof processRuntime.snapshot === "function" ? processRuntime.snapshot() : null),
-        derives: cloneInspectionValue(typeof processRuntime.derives === "function" ? processRuntime.derives() : null),
-        traceLength: Array.isArray(processRuntime.trace) ? processRuntime.trace.length : 0
-      };
-    },
-    inspect() {
-      return {
-        kind: this.kind,
-        activeSurfaceId: this.activeSurfaceId,
-        surfaceIds: this.surfaceIds,
-        routeTargets: this.routeTargets,
-        runtimeIds: this.runtimeIds,
-        browserRuntimeCapabilities: this.browserRuntimeCapabilities,
-        capabilityAssets: this.capabilityAssets,
-        loadedCapabilityAssets: this.loadedCapabilityAssets,
-        capabilityBootHookCount: this.capabilityBootHookCount,
-        lastRouteSwap: this.lastRouteSwap,
-        routeDebugLog: this.routeDebugLog,
-        issues: this.issues,
-        latestProbe: this.latestProbe,
-        expectationProviderCount: this.expectationProviderCount,
-        process: this.process,
-        manifestDiagnostics: cloneInspectionValue(manifest?.diagnostics ?? null)
-      };
-    },
-    async rerunProbe() {
-      return runtime?.rerunProbe ? await runtime.rerunProbe() : null;
-    },
-    clearIssues() {
-      return runtime?.clearIssues ? runtime.clearIssues() : null;
-    },
-    async refreshServerDiagnostics() {
-      const diagnostics = await fetchServerDiagnostics();
-      this.serverDiagnostics = diagnostics;
-      return diagnostics;
-    },
-    serverDiagnostics: null
-  };
-  return inspection;
-}
-
-function installSurfaceInspectionPoint(window, manifest, runtime) {
-  if (!window || typeof window !== "object") return null;
-  const inspection = createSurfaceInspectionPoint({ window, manifest, runtime });
-  window.world = inspection;
-  window.witnessWorld = inspection;
-  window.__surfaceRuntimeInspection = inspection;
-  if (typeof window.fetch === "function") {
-    Promise.resolve(inspection.refreshServerDiagnostics()).catch(error => {
-      inspection.serverDiagnosticsError = {
-        name: error?.name || "Error",
-        message: String(error?.message || error)
-      };
-    });
-  }
-  return inspection;
-}
-
-function surfaceDiagnosticsOverlayEnabled(window) {
-  const explicit = window?.__surfaceRuntimeDiagnosticsOverlay;
-  if (explicit === true) return true;
-  if (explicit === false) return false;
-  const href = trimString(window?.location?.href);
-  if (href) {
-    try {
-      const url = new URL(href, "http://localhost");
-      const mode = trimString(url.searchParams.get("surfaceDiagnostics"));
-      if (mode === "1" || mode === "true") return true;
-      if (mode === "0" || mode === "false") return false;
-    } catch {}
-  }
-  const hostname = trimString(window?.location?.hostname);
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-}
-
-function createSurfaceRuntimeIssueLedger() {
-  const issues = [];
-  const listeners = new Set();
-  let sequence = 0;
-  const notify = () => {
-    const snapshot = issues.map(issue => cloneInspectionValue(issue));
-    for (const listener of listeners) listener(snapshot);
-  };
-  const byId = id => issues.findIndex(issue => issue.id === id);
-  return {
-    nextCorrelationId(prefix = "issue") {
-      sequence += 1;
-      return `${String(prefix || "issue").trim() || "issue"}:${sequence}`;
-    },
-    upsert(input = {}) {
-      const id = trimString(input.id) || `runtime-issue:${this.nextCorrelationId("auto")}`;
-      const now = Date.now();
-      const next = {
-        id,
-        severity: trimString(input.severity) || "error",
-        phase: trimString(input.phase) || "runtime",
-        kind: trimString(input.kind) || "runtime",
-        message: String(input.message ?? ""),
-        details: input.details ?? null,
-        surfaceId: trimString(input.surfaceId),
-        processRef: trimString(input.processRef),
-        route: trimString(input.route),
-        capability: trimString(input.capability),
-        targetId: trimString(input.targetId),
-        correlationId: trimString(input.correlationId),
-        status: trimString(input.status) || "active"
-      };
-      const index = byId(id);
-      if (index >= 0) {
-        const previous = issues[index];
-        issues[index] = {
-          ...previous,
-          ...next,
-          at: previous.at ?? now,
-          updatedAt: now,
-          resolvedAt: next.status === "resolved"
-            ? (previous.resolvedAt ?? now)
-            : null
-        };
-      } else {
-        issues.push({
-          ...next,
-          at: now,
-          updatedAt: now,
-          resolvedAt: next.status === "resolved" ? now : null
-        });
-      }
-      notify();
-      return cloneInspectionValue(issues[byId(id)]);
-    },
-    resolve(id, updates = {}) {
-      const trimmed = trimString(id);
-      if (!trimmed) return null;
-      const index = byId(trimmed);
-      if (index < 0) return null;
-      const now = Date.now();
-      issues[index] = {
-        ...issues[index],
-        ...updates,
-        id: trimmed,
-        status: "resolved",
-        updatedAt: now,
-        resolvedAt: issues[index].resolvedAt ?? now
-      };
-      notify();
-      return cloneInspectionValue(issues[index]);
-    },
-    clear() {
-      issues.splice(0, issues.length);
-      notify();
-    },
-    list() {
-      return issues.map(issue => cloneInspectionValue(issue));
-    },
-    active() {
-      return issues.filter(issue => issue.status !== "resolved").map(issue => cloneInspectionValue(issue));
-    },
-    subscribe(listener) {
-      if (typeof listener !== "function") return () => {};
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    }
-  };
-}
-
-function surfaceRuntimeIssueSeverityRank(severity) {
-  if (severity === "error") return 3;
-  if (severity === "warning") return 2;
-  return 1;
-}
-
-function summarizeSurfaceRuntimeIssues(issues = []) {
-  const summary = {
-    total: 0,
-    active: 0,
-    resolved: 0,
-    bySeverity: { error: 0, warning: 0, info: 0 },
-    worstSeverity: null
-  };
-  for (const issue of issues ?? []) {
-    summary.total += 1;
-    if (issue?.status === "resolved") summary.resolved += 1;
-    else summary.active += 1;
-    const severity = trimString(issue?.severity) || "info";
-    if (!Object.prototype.hasOwnProperty.call(summary.bySeverity, severity)) summary.bySeverity[severity] = 0;
-    summary.bySeverity[severity] += 1;
-    if (!summary.worstSeverity || surfaceRuntimeIssueSeverityRank(severity) > surfaceRuntimeIssueSeverityRank(summary.worstSeverity)) {
-      summary.worstSeverity = severity;
-    }
-  }
-  return summary;
-}
-
-function summarizeSurfaceRuntimeExpectationIssues(issues = []) {
-  const summary = {
-    total: 0,
-    bySeverity: { error: 0, warning: 0, info: 0 }
-  };
-  for (const issue of issues ?? []) {
-    summary.total += 1;
-    const severity = trimString(issue?.severity) || "info";
-    if (!Object.prototype.hasOwnProperty.call(summary.bySeverity, severity)) summary.bySeverity[severity] = 0;
-    summary.bySeverity[severity] += 1;
-  }
-  return summary;
-}
-
-function ensureSurfaceDiagnosticsOverlayStyles(document) {
-  if (!document?.createElement || !document?.head?.appendChild) return null;
-  const existing = document.getElementById?.("surface-runtime-diagnostics-style");
-  if (existing) return existing;
-  const style = document.createElement("style");
-  style.id = "surface-runtime-diagnostics-style";
-  style.textContent = `
-#surface-runtime-diagnostics-root { position: fixed; right: 16px; bottom: 16px; z-index: 2147483000; font: 12px/1.4 system-ui, sans-serif; }
-#surface-runtime-diagnostics-root[hidden] { display: none; }
-#surface-runtime-diagnostics-fab { min-width: 56px; min-height: 56px; border-radius: 999px; border: 1px solid rgba(255,255,255,.12); color: #fff; background: #334155; box-shadow: 0 10px 30px rgba(0,0,0,.35); cursor: pointer; padding: 0 14px; font-weight: 700; }
-#surface-runtime-diagnostics-fab.surface-runtime-diagnostics-severity-error { background: #991b1b; }
-#surface-runtime-diagnostics-fab.surface-runtime-diagnostics-severity-warning { background: #92400e; }
-#surface-runtime-diagnostics-fab.surface-runtime-diagnostics-severity-info { background: #1d4ed8; }
-#surface-runtime-diagnostics-panel { position: absolute; right: 0; bottom: 72px; width: min(520px, calc(100vw - 32px)); max-height: min(70vh, 720px); overflow: auto; border-radius: 14px; background: rgba(15,23,42,.98); color: #e2e8f0; border: 1px solid rgba(148,163,184,.28); box-shadow: 0 18px 48px rgba(0,0,0,.42); padding: 14px; }
-#surface-runtime-diagnostics-panel[hidden] { display: none; }
-.surface-runtime-diagnostics-summary { font-weight: 700; margin-bottom: 8px; }
-.surface-runtime-diagnostics-meta { color: #94a3b8; margin-bottom: 8px; white-space: pre-wrap; }
-.surface-runtime-diagnostics-actions { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
-.surface-runtime-diagnostics-actions button { border-radius: 10px; border: 1px solid rgba(148,163,184,.28); background: #1e293b; color: #e2e8f0; padding: 6px 10px; cursor: pointer; }
-.surface-runtime-diagnostics-list { display: grid; gap: 8px; }
-.surface-runtime-diagnostics-item { border: 1px solid rgba(148,163,184,.18); border-radius: 10px; padding: 10px; background: rgba(30,41,59,.75); }
-.surface-runtime-diagnostics-item.surface-runtime-diagnostics-status-resolved { opacity: .72; }
-.surface-runtime-diagnostics-item.surface-runtime-diagnostics-severity-error { border-color: rgba(248,113,113,.55); }
-.surface-runtime-diagnostics-item.surface-runtime-diagnostics-severity-warning { border-color: rgba(251,191,36,.45); }
-.surface-runtime-diagnostics-item.surface-runtime-diagnostics-severity-info { border-color: rgba(96,165,250,.35); }
-.surface-runtime-diagnostics-item-head { display: flex; justify-content: space-between; gap: 8px; font-weight: 700; }
-.surface-runtime-diagnostics-item-meta { color: #94a3b8; margin-top: 4px; white-space: pre-wrap; }
-`;
-  document.head.appendChild(style);
-  return style;
-}
-
-function createSurfaceDiagnosticsOverlay({ document, window, inspection, issueLedger, enabled = false } = {}) {
-  if (!enabled || !document?.createElement || !document?.body?.appendChild) {
-    return { render() {}, destroy() {} };
-  }
-  const escapeHtml = value => String(value ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-  ensureSurfaceDiagnosticsOverlayStyles(document);
-  const root = document.createElement("div");
-  root.id = "surface-runtime-diagnostics-root";
-  root.hidden = true;
-  const fab = document.createElement("button");
-  fab.id = "surface-runtime-diagnostics-fab";
-  fab.type = "button";
-  const panel = document.createElement("div");
-  panel.id = "surface-runtime-diagnostics-panel";
-  panel.hidden = true;
-  const summary = document.createElement("div");
-  summary.className = "surface-runtime-diagnostics-summary";
-  const meta = document.createElement("div");
-  meta.className = "surface-runtime-diagnostics-meta";
-  const actions = document.createElement("div");
-  actions.className = "surface-runtime-diagnostics-actions";
-  const copyButton = document.createElement("button");
-  copyButton.type = "button";
-  copyButton.textContent = "Copy JSON";
-  const clearButton = document.createElement("button");
-  clearButton.type = "button";
-  clearButton.textContent = "Clear";
-  const rerunButton = document.createElement("button");
-  rerunButton.type = "button";
-  rerunButton.textContent = "Rerun Probe";
-  const list = document.createElement("div");
-  list.className = "surface-runtime-diagnostics-list";
-  actions.appendChild(copyButton);
-  actions.appendChild(clearButton);
-  actions.appendChild(rerunButton);
-  panel.appendChild(summary);
-  panel.appendChild(meta);
-  panel.appendChild(actions);
-  panel.appendChild(list);
-  root.appendChild(fab);
-  root.appendChild(panel);
-  document.body.appendChild(root);
-  let open = false;
-  const toggle = () => {
-    open = !open;
-    panel.hidden = !open;
-  };
-  fab.addEventListener?.("click", toggle);
-  copyButton.addEventListener?.("click", async () => {
-    const payload = typeof inspection?.inspect === "function" ? inspection.inspect() : null;
-    const json = JSON.stringify(payload, null, 2);
-    if (window?.navigator?.clipboard?.writeText) {
-      try {
-        await window.navigator.clipboard.writeText(json);
-      } catch {}
-    }
-  });
-  clearButton.addEventListener?.("click", () => inspection?.clearIssues?.());
-  rerunButton.addEventListener?.("click", () => inspection?.rerunProbe?.());
-  const render = () => {
-    const issues = typeof issueLedger?.list === "function" ? issueLedger.list() : [];
-    const summaryState = summarizeSurfaceRuntimeIssues(issues);
-    root.hidden = issues.length === 0;
-    fab.className = `surface-runtime-diagnostics-severity-${summaryState.worstSeverity || "info"}`;
-    fab.textContent = summaryState.active > 0
-      ? `Issues ${summaryState.active}`
-      : `Issues ${summaryState.total}`;
-    summary.textContent = `Runtime issues: ${summaryState.active} active / ${summaryState.resolved} resolved`;
-    meta.textContent = [
-      `route: ${trimString(window?.location?.pathname) || "/"}`,
-      `active surface: ${trimString(inspection?.activeSurfaceId) || "-"}`,
-      `process refs: ${((inspection?.latestProbe?.currentProcessRefs ?? []).join(", ")) || "-"}`
-    ].join("\n");
-    list.innerHTML = issues.map(issue => {
-      const details = issue?.details == null
-        ? ""
-        : (typeof issue.details === "string" ? issue.details : JSON.stringify(issue.details));
-      return `<div class="surface-runtime-diagnostics-item surface-runtime-diagnostics-severity-${escapeHtml(issue.severity || "info")} surface-runtime-diagnostics-status-${escapeHtml(issue.status || "active")}">
-  <div class="surface-runtime-diagnostics-item-head"><span>${escapeHtml(issue.message || issue.kind || issue.id)}</span><span>${escapeHtml(issue.severity || "info")} / ${escapeHtml(issue.status || "active")}</span></div>
-  <div class="surface-runtime-diagnostics-item-meta">${escapeHtml([
-    issue.phase ? `phase=${issue.phase}` : "",
-    issue.surfaceId ? `surface=${issue.surfaceId}` : "",
-    issue.processRef ? `process=${issue.processRef}` : "",
-    issue.targetId ? `target=${issue.targetId}` : "",
-    issue.route ? `route=${issue.route}` : "",
-    issue.correlationId ? `corr=${issue.correlationId}` : ""
-  ].filter(Boolean).join(" | "))}</div>
-  ${details ? `<div class="surface-runtime-diagnostics-item-meta">${escapeHtml(details)}</div>` : ""}
-</div>`;
-    }).join("");
-  };
-  const unsubscribe = issueLedger?.subscribe?.(() => render()) ?? (() => {});
-  render();
-  return {
-    render,
-    destroy() {
-      unsubscribe();
-      root.parentNode?.removeChild?.(root);
-    }
-  };
-}
-
-function installSurfaceRuntimeBootFailure({ document, window, manifest, error }) {
-  const issueLedger = createSurfaceRuntimeIssueLedger();
-  const runtime = {
-    blocked: {
-      limitationType: "runtime",
-      missingPrimitive: "surface runtime boot",
-      reason: String(error?.message || error)
-    },
-    latestProbe: null,
-    issues: [],
-    expectationProviderCount: 0,
-    rerunProbe: async () => null,
-    clearIssues() {
-      issueLedger.clear();
-      return [];
-    },
-    refresh() {
-      return Promise.resolve(null);
-    },
-    get activeSurfaceId() {
-      return trimString(manifest?.activeSurfaceId);
-    },
-    get manifestDiagnostics() {
-      return manifest?.diagnostics ?? null;
-    },
-    get routeTargets() {
-      return manifest?.routeTargets ?? [];
-    },
-    get surfaceIds() {
-      return (manifest?.surfaces ?? []).map(surface => surface.id);
-    },
-    get lastRouteSwap() {
-      return null;
-    },
-    get routeDebugLog() {
-      return [];
-    },
-    get processRuntime() {
-      return null;
-    },
-    destroy() {}
-  };
-  issueLedger.subscribe(issues => {
-    runtime.issues = issues;
-  });
-  const inspection = installSurfaceInspectionPoint(window, manifest ?? {}, runtime);
-  const overlay = createSurfaceDiagnosticsOverlay({
-    document,
-    window,
-    inspection,
-    issueLedger,
-    enabled: surfaceDiagnosticsOverlayEnabled(window)
-  });
-  issueLedger.upsert({
-    id: "surface-runtime:boot-exception",
-    severity: "error",
-    phase: "boot",
-    kind: "runtime-boot-failure",
-    message: "Surface interaction runtime boot failed",
-    details: {
-      name: error?.name || "Error",
-      message: String(error?.message || error),
-      stack: String(error?.stack || "")
-    },
-    correlationId: issueLedger.nextCorrelationId("boot")
-  });
-  runtime.destroy = () => overlay.destroy();
-  return runtime;
-}
-
-function clearRouteUnderlay(document) {
-  const layer = document?.getElementById?.("surface-route-underlay");
-  if (layer?.parentNode) layer.parentNode.removeChild(layer);
-}
-
-function mountedCapabilityMarkersForSurface(document, surface) {
-  const rootId = trimString(surface?.view?.rootId);
-  const nodes = [];
-  const seen = new Set();
-  const addNode = node => {
-    if (!node || seen.has(node)) return;
-    seen.add(node);
-    nodes.push(node);
-  };
-  const root = rootId ? document?.getElementById?.(rootId) : null;
-  addNode(root);
-  if (root && typeof root.querySelectorAll === "function") {
-    for (const node of root.querySelectorAll("[data-surface-id]")) addNode(node);
-  }
-  const surfaceId = trimString(surface?.id);
-  if (surfaceId && typeof document?.querySelectorAll === "function") {
-    for (const node of document.querySelectorAll(`[data-surface-id="${surfaceId}"]`)) addNode(node);
-  }
-  const controller = nodes.some(node => Boolean(node?.__surfaceCapabilityController));
-  const outputs = nodes.some(node => Boolean(node?.__surfaceCapabilityOutputs));
-  return {
-    rootId,
-    mounted: controller || outputs,
-    outputs,
-    controller
-  };
-}
-
-function surfaceViewNodeIds(surface) {
-  const ids = new Set();
-  const add = value => {
-    const id = trimString(value);
-    if (id) ids.add(id);
-  };
-  add(surface?.view?.rootId);
-  for (const targets of Object.values(surface?.view?.propTargets ?? {})) {
-    for (const target of targets ?? []) add(target?.id);
-  }
-  for (const targets of Object.values(surface?.view?.interactionTargets ?? {})) {
-    for (const target of targets ?? []) add(target?.id);
-  }
-  return [...ids];
-}
-
-function surfaceIsPresentInDom(document, surface) {
-  return surfaceViewNodeIds(surface).some(id => Boolean(document?.getElementById?.(id)));
-}
-
-function surfaceParentId(surface) {
-  return trimString(surface?.parentId);
-}
-
-function surfaceHasVisibleBinding(surface) {
-  return Array.isArray(surface?.runtime?.bindings)
-    ? surface.runtime.bindings.some(binding => trimString(binding?.prop) === "visible")
-    : false;
-}
-
-function surfaceExpectedVisible(surface, processRuntime, capabilityOutputs = {}) {
-  if (!surfaceHasVisibleBinding(surface)) return false;
-  const nextProps = overlaySurfaceProps(surface, processRuntime, capabilityOutputs);
-  if (!Object.prototype.hasOwnProperty.call(nextProps, "visible")) return false;
-  return Boolean(nextProps.visible);
-}
-
-function capabilityAssetPresence(expected, loaded) {
-  const missing = {
-    stylesheetHrefs: [],
-    scriptSrcs: [],
-    inlineCss: [],
-    scriptBodies: []
-  };
-  const loadedStylesheets = new Set(loaded?.stylesheets ?? []);
-  const loadedScripts = new Set(loaded?.scripts ?? []);
-  const loadedInlineStyles = new Set(loaded?.inlineStyles ?? []);
-  const loadedInlineModules = new Set(loaded?.inlineModules ?? []);
-  for (const href of expected?.stylesheetHrefs ?? []) {
-    if (!loadedStylesheets.has(href)) missing.stylesheetHrefs.push(href);
-  }
-  for (const src of expected?.scriptSrcs ?? []) {
-    if (!loadedScripts.has(src)) missing.scriptSrcs.push(src);
-  }
-  for (const cssText of expected?.inlineCss ?? []) {
-    const key = capabilityAssetHash(cssText);
-    if (!loadedInlineStyles.has(key)) missing.inlineCss.push(key);
-  }
-  for (const source of expected?.scriptBodies ?? []) {
-    const key = capabilityAssetHash(source);
-    if (!loadedInlineModules.has(key)) missing.scriptBodies.push(key);
-  }
-  return missing;
-}
-
-function createSurfaceRuntimeProbe({
-  document,
-  window,
-  manifest,
-  surfaceById,
-  activeSurfaceId,
-  processRuntime,
-  issueLedger,
-  boundInteractionCount = 0,
-  expectationProviders = []
-} = {}) {
-  const activeIds = activeRuntimeSurfaceIds(surfaceById, activeSurfaceId);
-  const activeSurfaces = [...activeIds].map(id => surfaceById.get(id)).filter(Boolean);
-  const currentSurface = surfaceById.get(activeSurfaceId) || null;
-  const currentRootId = trimString(currentSurface?.view?.rootId);
-  const currentRoot = (currentRootId ? document?.getElementById?.(currentRootId) : null)
-    ?? fallbackActiveRootNode(document);
-  const currentProcessRefs = [...new Set(activeSurfaces
-    .map(surface => resolveSurfaceRuntimeBinding(manifest, surface.id).processRef)
-    .filter(Boolean))];
-  const missingInteractionTargets = [];
-  const missingBindingTargets = [];
-  const missingProcessBindings = [];
-  const missingVisibleSurfaces = [];
-  const missingCapabilities = [];
-  const missingCapabilityControllers = [];
-  const missingCapabilityOutputs = [];
-  const capabilityOutputs = collectCapabilityOutputsFromDom(document);
-  const capabilityMarkers = new Map(
-    activeSurfaces.map(surface => [surface.id, mountedCapabilityMarkersForSurface(document, surface)])
-  );
-  for (const surface of activeSurfaces) {
-    const present = surfaceIsPresentInDom(document, surface);
-    const binding = resolveSurfaceRuntimeBinding(manifest, surface.id);
-    const expectedVisible = surfaceExpectedVisible(surface, processRuntime, capabilityOutputs);
-    if (!present && expectedVisible) {
-      missingVisibleSurfaces.push({
-        surfaceId: surface.id,
-        rootId: trimString(surface?.view?.rootId) || null,
-        parentId: surfaceParentId(surface)
-      });
-    }
-    const hasInteractiveMeaning = (surface?.runtime?.interactions?.length ?? 0) > 0 || (surface?.runtime?.bindings?.length ?? 0) > 0;
-    if (present && hasInteractiveMeaning && !binding.processRef) {
-      missingProcessBindings.push({ surfaceId: surface.id });
-    }
-    const capabilities = resolveSurfaceCapabilities(binding, manifest?.browserRuntimeCapabilities);
-    if (present && capabilities.missing.length) {
-      missingCapabilities.push({ surfaceId: surface.id, capabilities: capabilities.missing });
-    }
-    const marker = capabilityMarkers.get(surface.id) ?? mountedCapabilityMarkersForSurface(document, surface);
-    if (present && (surface?.runtime?.capabilityRefs?.length ?? 0) > 0 && !marker.controller) {
-      missingCapabilityControllers.push({ surfaceId: surface.id, rootId: marker.rootId ?? null });
-    }
-    if (!present) continue;
-    for (const interaction of surface?.runtime?.interactions ?? []) {
-      const targetKey = trimString(interaction?.target);
-      const targets = targetKey ? (surface?.view?.interactionTargets?.[targetKey] ?? []) : [];
-      if (!targets.length) {
-        missingInteractionTargets.push({ surfaceId: surface.id, targetKey, targetId: null });
-        continue;
-      }
-      for (const target of targets) {
-        const targetId = trimString(target?.id);
-        if (!targetId || !document?.getElementById?.(targetId)) {
-          missingInteractionTargets.push({ surfaceId: surface.id, targetKey, targetId });
-        }
-      }
-    }
-    for (const bindingSpec of surface?.runtime?.bindings ?? []) {
-      const prop = trimString(bindingSpec?.prop);
-      const targets = prop ? (surface?.view?.propTargets?.[prop] ?? []) : [];
-      if (!targets.length) {
-        missingBindingTargets.push({ surfaceId: surface.id, prop, targetId: null });
-        continue;
-      }
-      for (const target of targets) {
-        const targetId = trimString(target?.id);
-        if (!targetId || !document?.getElementById?.(targetId)) {
-          missingBindingTargets.push({ surfaceId: surface.id, prop, targetId });
-        }
-      }
-    }
-    const capabilitySources = (surface?.runtime?.bindings ?? [])
-      .filter(bindingSpec => bindingSpec?.source?.kind === "capability")
-      .map(bindingSpec => ({
-        dependentSurfaceId: surface.id,
-        sourceSurfaceId: trimString(bindingSpec?.source?.surface),
-        output: trimString(bindingSpec?.source?.output)
-      }))
-      .filter(entry => entry.sourceSurfaceId && entry.output);
-    for (const source of capabilitySources) {
-      const sourceMarker = capabilityMarkers.get(source.sourceSurfaceId)
-        ?? mountedCapabilityMarkersForSurface(document, surfaceById.get(source.sourceSurfaceId) ?? { id: source.sourceSurfaceId });
-      if (!sourceMarker.outputs) {
-        missingCapabilityOutputs.push({
-          surfaceId: surface.id,
-          rootId: sourceMarker.rootId,
-          sourceSurfaceId: source.sourceSurfaceId,
-          output: source.output
-        });
-      }
-    }
-  }
-  const missingVisibleSurfaceIds = new Set(missingVisibleSurfaces.map(entry => entry.surfaceId));
-  const filteredMissingVisibleSurfaces = missingVisibleSurfaces.filter(entry => {
-    let parentId = trimString(entry.parentId);
-    while (parentId) {
-      if (missingVisibleSurfaceIds.has(parentId)) return false;
-      parentId = surfaceParentId(surfaceById.get(parentId));
-    }
-    return true;
-  });
-  const activeRouteTarget = activeRouteTargetForPath(manifest, window?.location?.pathname);
-  const routeStateTarget = routeTargetForManifestState(manifest, processRuntime);
-  const loadedCapabilityAssets = surfaceAssetRegistrySnapshot(window);
-  const missingCapabilityAssets = capabilityAssetPresence(normalizeCapabilityAssets(manifest?.capabilityAssets), loadedCapabilityAssets);
-  const mountedCapabilitiesBySurface = activeSurfaces
-    .filter(surface => (surface?.runtime?.capabilityRefs?.length ?? 0) > 0 && surfaceIsPresentInDom(document, surface))
-    .map(surface => ({
-      surfaceId: surface.id,
-      capabilities: [...surface.runtime.capabilityRefs],
-      ...(capabilityMarkers.get(surface.id) ?? mountedCapabilityMarkersForSurface(document, surface))
-    }));
-  const snapshot = {
-    at: Date.now(),
-    routePathname: trimString(window?.location?.pathname) || "/",
-    activeSurfaceId: trimString(activeSurfaceId),
-    rootNodeId: trimString(currentRoot?.id) || null,
-    currentProcessRefs,
-    processState: cloneInspectionValue(typeof processRuntime?.snapshot === "function" ? processRuntime.snapshot() : null),
-    processDerives: cloneInspectionValue(typeof processRuntime?.derives === "function" ? processRuntime.derives() : null),
-    routeState: cloneInspectionValue(resolveRouteStateDescriptor(manifest)),
-    boundInteractionCount: Number(boundInteractionCount || 0),
-    missingInteractionTargets,
-    missingBindingTargets,
-    missingProcessBindings,
-    missingVisibleSurfaces: filteredMissingVisibleSurfaces,
-    missingCapabilities,
-    missingCapabilityControllers,
-    missingCapabilityOutputs,
-    activeRouteTarget: cloneInspectionValue(activeRouteTarget),
-    routeStateTarget: cloneInspectionValue(routeStateTarget),
-    loadedCapabilityAssets,
-    missingCapabilityAssets,
-    mountedCapabilitiesBySurface,
-    issues: typeof issueLedger?.list === "function" ? issueLedger.list() : []
-  };
-  const expectationIssues = [];
-  for (const provider of expectationProviders ?? []) {
-    if (typeof provider !== "function") continue;
-    try {
-      const issues = provider(snapshot, {
-        manifest,
-        activeSurfaceId,
-        routePathname: snapshot.routePathname
-      });
-      if (Array.isArray(issues)) expectationIssues.push(...issues);
-    } catch (error) {
-      expectationIssues.push({
-        id: `expectation-provider-failure:${expectationIssues.length}`,
-        severity: "warning",
-        phase: "settle-probe",
-        kind: "expectation-provider-failure",
-        message: "Surface expectation provider failed",
-        details: String(error?.message || error)
-      });
-    }
-  }
-  snapshot.expectationIssues = expectationIssues;
-  snapshot.expectationSummary = summarizeSurfaceRuntimeExpectationIssues(expectationIssues);
-  return snapshot;
-}
-
-async function updateRouteUnderlay(document, window, manifest, surfaceById, activeSurface, nextProps) {
-  const routeKey = trimString(nextProps?.routeUnderlay);
-  if (!routeKey) {
-    clearRouteUnderlay(document);
-    return;
-  }
-  const target = (manifest?.routeTargets ?? []).find(candidate => String(candidate.key) === routeKey);
-  const page = target
-    ? await loadRouteSurfacePage({ document, window, manifest, surfaceById, target })
-    : null;
-  const html = page?.fragment ?? null;
-  const currentRootId = trimString(activeSurface?.view?.rootId);
-  const currentRoot = currentRootId ? document?.getElementById?.(currentRootId) : null;
-  if (!html || !currentRoot?.parentNode) {
-    clearRouteUnderlay(document);
-    return;
-  }
-  let layer = document.getElementById("surface-route-underlay");
-  if (!layer) {
-    layer = document.createElement("div");
-    layer.id = "surface-route-underlay";
-    layer.style.position = "fixed";
-    layer.style.inset = "0";
-    layer.style.zIndex = "0";
-    layer.style.pointerEvents = "none";
-    layer.style.overflow = "hidden";
-    currentRoot.parentNode.insertBefore(layer, currentRoot);
-  }
-  if (layer.__surfaceRouteKey !== routeKey) {
-    layer.innerHTML = html;
-    layer.__surfaceRouteKey = routeKey;
-  }
-  if (!currentRoot.style.position) currentRoot.style.position = "relative";
-  currentRoot.style.zIndex = "1";
-}
-
 export function createSurfaceInteractionRuntime({
   document,
   window,
@@ -2079,9 +848,54 @@ export function createSurfaceInteractionRuntime({
     : (() => {
         throw new Error("createProcessRuntime implementation required");
       });
+  const executionRunner = createExecutionRunner();
   const issueLedger = createSurfaceRuntimeIssueLedger();
   const diagnosticsOverlayEnabled = surfaceDiagnosticsOverlayEnabled(window);
   const runtimeDisposers = [];
+  const declaredCollectionIds = new Set((manifest?.collections ?? []).map(entry => trimString(entry?.id)).filter(Boolean));
+  const collectionValues = new Map([...declaredCollectionIds].map(id => [id, []]));
+  const ensureDeclaredCollection = id => {
+    const nextId = trimString(id);
+    if (!nextId) return null;
+    declaredCollectionIds.add(nextId);
+    if (!collectionValues.has(nextId)) collectionValues.set(nextId, []);
+    return nextId;
+  };
+  let requestSyncRouteAndRefresh = async () => null;
+  const collectionStore = {
+    getCollection(id) {
+      const nextId = ensureDeclaredCollection(id);
+      return nextId ? cloneInspectionValue(collectionValues.get(nextId) ?? []) : [];
+    },
+    setCollection(id, items) {
+      const nextId = ensureDeclaredCollection(id);
+      if (!nextId) return;
+      collectionValues.set(nextId, Array.isArray(items) ? cloneInspectionValue(items) : []);
+      void requestSyncRouteAndRefresh("collection");
+    },
+    clearCollection(id) {
+      const nextId = ensureDeclaredCollection(id);
+      if (!nextId) return;
+      collectionValues.set(nextId, []);
+      void requestSyncRouteAndRefresh("collection");
+    },
+    replaceMany(entries = {}) {
+      for (const [id, items] of Object.entries(entries ?? {})) {
+        const nextId = ensureDeclaredCollection(id);
+        if (!nextId) continue;
+        collectionValues.set(nextId, Array.isArray(items) ? cloneInspectionValue(items) : []);
+      }
+    },
+    syncDeclarations(entries = []) {
+      const nextIds = new Set((entries ?? []).map(entry => trimString(entry?.id)).filter(Boolean));
+      for (const id of nextIds) ensureDeclaredCollection(id);
+      for (const existingId of [...declaredCollectionIds]) {
+        if (nextIds.has(existingId)) continue;
+        declaredCollectionIds.delete(existingId);
+        collectionValues.delete(existingId);
+      }
+    }
+  };
   const runtime = {
     blocked: undefined,
     latestProbe: null,
@@ -2089,16 +903,31 @@ export function createSurfaceInteractionRuntime({
     issueLedger,
     expectationProviderCount: Array.isArray(expectationProviders) ? expectationProviders.filter(provider => typeof provider === "function").length : 0,
     rerunProbe: async () => runtime.latestProbe,
+    whenSettled() {
+      return executionRunner.whenSettled();
+    },
+    settleSnapshot() {
+      return executionRunner.settledSnapshot();
+    },
     clearIssues() {
       issueLedger.clear();
       return [];
     },
-    refresh() {
-      return Promise.resolve(null);
-    },
-    get activeSurfaceId() {
-      return trimString(manifest?.activeSurfaceId);
-    },
+      refresh() {
+        return Promise.resolve(null);
+      },
+      getCollection(id) {
+        return collectionStore.getCollection(id);
+      },
+      setCollection(id, items) {
+        collectionStore.setCollection(id, items);
+      },
+      clearCollection(id) {
+        collectionStore.clearCollection(id);
+      },
+      get activeSurfaceId() {
+        return trimString(manifest?.activeSurfaceId);
+      },
     get manifestDiagnostics() {
       return manifest?.diagnostics ?? null;
     },
@@ -2116,6 +945,9 @@ export function createSurfaceInteractionRuntime({
     },
     get processRuntime() {
       return null;
+    },
+    get executionRunner() {
+      return executionRunner;
     },
     destroy() {
       for (const dispose of runtimeDisposers.splice(0)) dispose();
@@ -2166,6 +998,7 @@ export function createSurfaceInteractionRuntime({
   let unsubscribeProcessRuntime = null;
   const inFlightRuntimeBridges = new Set();
   let lastRouteSwap = null;
+  let lastReconcileSummary = null;
   let fallbackNavigationPath = null;
   const routeDebugLog = [];
   const pushRouteDebug = entry => {
@@ -2338,10 +1171,18 @@ export function createSurfaceInteractionRuntime({
     }
     for (const issueId of nextManaged) probeManagedIssueIds.add(issueId);
   };
+  const instantiateProcessRuntime = witnesses => {
+    const nextWitnesses = Array.isArray(witnesses) ? witnesses : [];
+    return processRuntimeFactory({
+      witnesses: nextWitnesses,
+      executionRunner,
+      routeInvoker: createBrowserRouteInvoker(window, { collectionStore })
+    });
+  };
   const replaceProcessRuntime = nextWitnesses => {
     const witnesses = Array.isArray(nextWitnesses) ? nextWitnesses : [];
     const previousRuntime = processRuntime;
-    const nextRuntime = processRuntimeFactory({ witnesses });
+    const nextRuntime = instantiateProcessRuntime(witnesses);
     if (previousRuntime) {
       for (const stateId of stateIdsFromWitnesses(witnesses)) {
         const previousValue = previousRuntime.value(stateId);
@@ -2361,7 +1202,15 @@ export function createSurfaceInteractionRuntime({
           if (mirrored) void requestSyncRouteAndRefresh();
         });
         inFlightRuntimeBridges.add(bridge);
-        Promise.resolve(typeof previousRuntime.whenIdle === "function" ? previousRuntime.whenIdle() : null)
+        void executionRunner.track("runtime-bridge", () =>
+          Promise.resolve(typeof previousRuntime.whenIdle === "function" ? previousRuntime.whenIdle() : null)
+        , {
+          phase: "manifest-replacement",
+          correlationId: issueLedger.nextCorrelationId("runtime-bridge"),
+          details: {
+            previousRuntimeStateCount: stateIdsFromWitnesses(witnesses).length
+          }
+        })
           .finally(() => {
             bridge();
             inFlightRuntimeBridges.delete(bridge);
@@ -2390,57 +1239,122 @@ export function createSurfaceInteractionRuntime({
     }
   };
   const refreshSurfaceBindings = async (correlationId = issueLedger.nextCorrelationId("refresh")) => {
-    readExistingCapabilityOutputs(document);
-    const activeIds = activeRuntimeSurfaceIds(surfaceById, activeSurfaceId);
-    const currentActiveSurface = surfaceById.get(activeSurfaceId) || null;
-    let activeSurfaceUnderlayUpdated = false;
-    let structureChanged = false;
-    for (const surface of manifest.surfaces ?? []) {
-      if (!activeIds.has(surface.id)) continue;
-      if (!(surface?.runtime?.bindings?.length)) continue;
-      const binding = resolveSurfaceRuntimeBinding(manifest, surface.id);
-      if (!binding.processRef) continue;
-      const capabilities = resolveSurfaceCapabilities(binding, manifest.browserRuntimeCapabilities);
-      if (capabilities.missing.length) continue;
-      const nextProps = overlaySurfaceProps(surface, processRuntime, capabilityOutputs);
-      const expectedVisible = surfaceExpectedVisible(surface, processRuntime, capabilityOutputs);
-      const presentInDom = surfaceIsPresentInDom(document, surface);
-      if (surfaceHasVisibleBinding(surface) && !expectedVisible && presentInDom && surface.id !== activeSurfaceId) {
-        if (dematerializeHiddenSurface(document, surface)) {
-          structureChanged = true;
-          continue;
+    return executionRunner.track("reconcile", async () => {
+      readExistingCapabilityOutputs(document);
+      const activeIds = activeRuntimeSurfaceIds(surfaceById, activeSurfaceId);
+      const currentActiveSurface = surfaceById.get(activeSurfaceId) || null;
+      const renderedHostTree = buildRenderedHostTree(readSurfaceDomHostTree({
+        document,
+        surfaceById,
+        activeSurfaceId
+      }));
+      const surfaceStates = collectReconcileSurfaceStates({
+        surfaces: manifest.surfaces ?? [],
+        activeSurfaceIds: activeIds,
+        renderedHostTree,
+        resolveSurfaceState(surface) {
+          const repeat = surface?.runtime?.repeat ?? null;
+          const template = trimString(repeat?.template)
+            ? (manifest?.templates ?? []).find(entry => trimString(entry?.id) === trimString(repeat.template)) ?? null
+            : null;
+          const collectionId = trimString(repeat?.collection);
+          const nextRepeat = collectionId && template?.html
+            ? {
+                collectionId,
+                templateId: trimString(template.id),
+                templateHtml: String(template.html),
+                templateTag: trimString(template.tag),
+                itemAs: trimString(repeat?.itemAs) || "item",
+                indexAs: trimString(repeat?.indexAs) || "index",
+                items: collectionStore.getCollection(collectionId)
+              }
+            : null;
+          if (!(surface?.runtime?.bindings?.length) && !nextRepeat) return null;
+          const binding = resolveSurfaceRuntimeBinding(manifest, surface.id);
+          if (!binding.processRef) return null;
+          const capabilities = resolveSurfaceCapabilities(binding, manifest.browserRuntimeCapabilities);
+          if (capabilities.missing.length) return null;
+          const nextProps = overlaySurfaceProps(surface, processRuntime, capabilityOutputs);
+          return {
+            hasBindings: Boolean(surface?.runtime?.bindings?.length),
+            hasRepeat: Boolean(nextRepeat),
+            hasVisibleBinding: surfaceHasVisibleBinding(surface),
+            expectedVisible: surfaceExpectedVisible(surface, processRuntime, capabilityOutputs),
+            nextProps,
+            nextRepeat
+          };
         }
-      }
-      if (expectedVisible && !presentInDom) {
-        const insertedRoot = materializeMissingVisibleSurface(document, surfaceById, surface);
-        if (insertedRoot) {
-          structureChanged = true;
-          bootSurfaceCapabilities(window, insertedRoot, {
-            reportIssue,
-            resolveIssue,
-            phase: "capability-mount",
-            correlationId
-          });
-          readExistingCapabilityOutputs(insertedRoot);
-        }
-      }
-      if (surface.id === activeSurfaceId) {
-        await updateRouteUnderlay(document, window, manifest, surfaceById, surface, nextProps);
-        activeSurfaceUnderlayUpdated = true;
-      }
-      patchSurfaceDom(document, surface, nextProps);
-    }
-    if (currentActiveSurface && !activeSurfaceUnderlayUpdated) {
-      await updateRouteUnderlay(
+      });
+      const plan = createReconcilePlan({
+        surfaceStates,
+        activeSurfaceId
+      });
+      lastReconcileSummary = {
+        at: Date.now(),
+        activeSurfaceId,
+        surfaceStateCount: surfaceStates.length,
+        opCount: Array.isArray(plan?.ops) ? plan.ops.length : 0,
+        opKinds: Array.isArray(plan?.ops)
+          ? plan.ops.reduce((counts, op) => {
+              const kind = trimString(op?.kind) || "unknown";
+              counts[kind] = Number(counts[kind] || 0) + 1;
+              return counts;
+            }, {})
+          : {},
+        structureChanged: Boolean(plan?.structureChanged),
+        activeSurfaceUnderlayUpdated: Boolean(plan?.activeSurfaceUnderlayUpdated)
+      };
+      const applied = await applySurfaceDomHostPlan({
         document,
         window,
-        manifest,
         surfaceById,
-        currentActiveSurface,
-        overlaySurfaceProps(currentActiveSurface, processRuntime, capabilityOutputs)
-      );
-    }
-    return structureChanged;
+        activeSurfaceId,
+        plan,
+        correlationId,
+        bootSurfaceCapabilities(insertedRoot, taskMeta) {
+          return Promise.resolve(bootSurfaceCapabilities(window, insertedRoot, {
+            reportIssue,
+            resolveIssue,
+            phase: taskMeta?.phase ?? "capability-mount",
+            correlationId: taskMeta?.correlationId ?? correlationId
+          }));
+        },
+        async resolveRouteUnderlaySpec(_surface, routeKey) {
+          const nextRouteKey = trimString(routeKey);
+          if (!nextRouteKey) return { routeKey: null, html: null };
+          const target = (manifest?.routeTargets ?? []).find(candidate => String(candidate.key) === nextRouteKey);
+          const page = target
+            ? await loadRouteSurfacePage({ document, window, manifest, surfaceById, target })
+            : null;
+          return {
+            routeKey: nextRouteKey,
+            html: page?.fragment ?? null
+          };
+        },
+        readExistingCapabilityOutputs
+      });
+      if (currentActiveSurface && !applied.activeSurfaceUnderlayUpdated) {
+        const nextProps = overlaySurfaceProps(currentActiveSurface, processRuntime, capabilityOutputs);
+        const nextRouteKey = trimString(nextProps?.routeUnderlay);
+        if (!nextRouteKey) clearRouteUnderlay(document);
+        else {
+          const target = (manifest?.routeTargets ?? []).find(candidate => String(candidate.key) === nextRouteKey);
+          const page = target
+            ? await loadRouteSurfacePage({ document, window, manifest, surfaceById, target })
+            : null;
+          updateSurfaceRouteUnderlay(document, currentActiveSurface, {
+            routeKey: nextRouteKey,
+            html: page?.fragment ?? null
+          });
+        }
+      }
+      return Boolean(applied.structureChanged);
+    }, {
+      phase: "refresh",
+      correlationId,
+      route: trimString(window?.location?.pathname),
+      surfaceId: activeSurfaceId
+    });
   };
   const refresh = async (correlationId = issueLedger.nextCorrelationId("refresh")) => {
     for (let pass = 0; pass < 4; pass += 1) {
@@ -2454,141 +1368,178 @@ export function createSurfaceInteractionRuntime({
     for (const dispose of disposers.splice(0)) dispose();
   };
   const replaceActiveRouteSurface = async target => {
-    pushRouteDebug({
-      kind: "replace:start",
-      activeSurfaceId,
-      targetSurfaceId: target?.surfaceId ?? null,
-      targetPath: target?.path ?? null
-    });
-    if (!target?.surfaceId) {
-      lastRouteSwap = { ok: false, reason: "missing-target" };
-      pushRouteDebug({ kind: "replace:missing-target" });
-      reportIssue({
-        id: "surface-runtime:route-swap-missing-target",
-        severity: "error",
-        phase: "route-swap",
-        kind: "route-swap",
-        message: "Route swap was requested without a target surface",
-        correlationId: issueLedger.nextCorrelationId("route-swap")
+    const correlationId = issueLedger.nextCorrelationId("route-swap");
+    return executionRunner.track("route-swap", async () => {
+      pushRouteDebug({
+        kind: "replace:start",
+        activeSurfaceId,
+        targetSurfaceId: target?.surfaceId ?? null,
+        targetPath: target?.path ?? null
       });
-      return false;
-    }
-    if (target.surfaceId === activeSurfaceId) {
-      lastRouteSwap = { ok: false, reason: "already-active", targetSurfaceId: target.surfaceId };
-      pushRouteDebug({ kind: "replace:already-active", targetSurfaceId: target.surfaceId });
-      return false;
-    }
-    const currentSurface = surfaceById.get(activeSurfaceId);
-    const currentRootId = trimString(currentSurface?.view?.rootId);
-    const currentRoot = (currentRootId ? document.getElementById(currentRootId) : null)
-      ?? fallbackActiveRootNode(document);
-    const page = await loadRouteSurfacePage({
-      document,
-      window,
-      manifest,
-      surfaceById,
-      target,
-      requireManifest: true
-    });
-    const nextRoot = parseFirstElement(document, page?.fragment ?? null);
-    if (!currentRoot || !nextRoot) {
+      if (!target?.surfaceId) {
+        lastRouteSwap = { ok: false, reason: "missing-target" };
+        pushRouteDebug({ kind: "replace:missing-target" });
+        reportIssue({
+          id: "surface-runtime:route-swap-missing-target",
+          severity: "error",
+          phase: "route-swap",
+          kind: "route-swap",
+          message: "Route swap was requested without a target surface",
+          correlationId
+        });
+        return false;
+      }
+      if (target.surfaceId === activeSurfaceId) {
+        lastRouteSwap = { ok: false, reason: "already-active", targetSurfaceId: target.surfaceId };
+        pushRouteDebug({ kind: "replace:already-active", targetSurfaceId: target.surfaceId });
+        return false;
+      }
+      const currentSurface = surfaceById.get(activeSurfaceId);
+      const currentRootId = trimString(currentSurface?.view?.rootId);
+      const currentRoot = (currentRootId ? document.getElementById(currentRootId) : null)
+        ?? fallbackActiveRootNode(document);
+      const page = await executionRunner.track("manifest-replacement", () => loadRouteSurfacePage({
+        document,
+        window,
+        manifest,
+        surfaceById,
+        target,
+        requireManifest: true
+      }), {
+        phase: "route-swap",
+        correlationId,
+        route: trimString(target?.path),
+        surfaceId: trimString(target?.surfaceId)
+      });
+      const nextRoot = parseFirstElement(document, page?.fragment ?? null);
+      if (!currentRoot || !nextRoot) {
+        lastRouteSwap = {
+          ok: false,
+          reason: !currentRoot ? "missing-current-root" : "missing-next-root",
+          currentRootId,
+          nextRootId: trimString(nextRoot?.id),
+          targetSurfaceId: target.surfaceId,
+          hasManifest: Boolean(page?.manifest?.surfaces)
+        };
+        pushRouteDebug({
+          kind: "replace:missing-root",
+          currentRootId,
+          nextRootId: trimString(nextRoot?.id),
+          targetSurfaceId: target.surfaceId,
+          hasManifest: Boolean(page?.manifest?.surfaces),
+          manifestActiveSurfaceId: trimString(page?.manifest?.activeSurfaceId)
+        });
+        reportIssue({
+          id: `surface-runtime:route-swap-missing-root:${target.surfaceId}`,
+          severity: "error",
+          phase: "route-swap",
+          kind: "route-swap",
+          message: "Route swap could not resolve both current and next root nodes",
+          surfaceId: target.surfaceId,
+          details: {
+            currentRootId,
+            nextRootId: trimString(nextRoot?.id),
+            hasManifest: Boolean(page?.manifest?.surfaces)
+          },
+          correlationId
+        });
+        return false;
+      }
+      disposeInteractions();
+      currentRoot.replaceWith(nextRoot);
+        if (page?.manifest?.surfaces) {
+        pushRouteDebug({
+          kind: "replace:manifest",
+          targetSurfaceId: target.surfaceId,
+          manifestActiveSurfaceId: trimString(page.manifest.activeSurfaceId),
+          manifestRequestPathname: trimString(page.manifest.requestPathname),
+          manifestSurfaceCount: Array.isArray(page.manifest.surfaces) ? page.manifest.surfaces.length : 0
+        });
+        manifest.surfaces = page.manifest.surfaces;
+        manifest.routeTargets = page.manifest.routeTargets ?? manifest.routeTargets;
+          manifest.routeState = page.manifest.routeState ?? manifest.routeState;
+          manifest.browserRuntimeCapabilities = page.manifest.browserRuntimeCapabilities ?? manifest.browserRuntimeCapabilities;
+          manifest.capabilityAssets = normalizeCapabilityAssets(page.manifest.capabilityAssets ?? manifest.capabilityAssets);
+          manifest.collections = page.manifest.collections ?? manifest.collections;
+          manifest.templates = page.manifest.templates ?? manifest.templates;
+          manifest.processWitnesses = page.manifest.processWitnesses ?? manifest.processWitnesses;
+          collectionStore.syncDeclarations(manifest.collections ?? []);
+          replaceProcessRuntime(manifest.processWitnesses || []);
+        surfaceById = new Map((manifest.surfaces ?? []).map(surface => [surface.id, surface]));
+        activeSurfaceId = trimString(page.manifest.activeSurfaceId) || target.surfaceId;
+      } else {
+        activeSurfaceId = target.surfaceId;
+      }
+      manifest.activeSurfaceId = activeSurfaceId;
+      fallbackNavigationPath = null;
+      try {
+        await executionRunner.track("capability-assets", () =>
+          ensureSurfaceCapabilityAssets(document, window, manifest.capabilityAssets)
+        , {
+          phase: "route-swap",
+          correlationId,
+          surfaceId: activeSurfaceId
+        });
+        resolveIssue("surface-runtime:capability-assets-load-failed", { phase: "route-swap" });
+      } catch (error) {
+        reportIssue({
+          id: "surface-runtime:capability-assets-load-failed",
+          severity: "error",
+          phase: "route-swap",
+          kind: "capability-assets",
+          message: "Capability assets failed to load during route swap",
+          details: String(error?.message || error),
+          correlationId
+        });
+      }
+      await executionRunner.track("capability-mount", () => Promise.resolve(bootSurfaceCapabilities(window, nextRoot, {
+        reportIssue,
+        resolveIssue,
+        phase: "capability-mount",
+        correlationId
+      })), {
+        phase: "route-swap",
+        correlationId,
+        surfaceId: activeSurfaceId
+      });
+      clearRouteUnderlay(document);
       lastRouteSwap = {
-        ok: false,
-        reason: !currentRoot ? "missing-current-root" : "missing-next-root",
-        currentRootId,
-        nextRootId: trimString(nextRoot?.id),
+        ok: true,
         targetSurfaceId: target.surfaceId,
+        activeSurfaceId,
+        nextRootId: trimString(nextRoot?.id),
         hasManifest: Boolean(page?.manifest?.surfaces)
       };
       pushRouteDebug({
-        kind: "replace:missing-root",
-        currentRootId,
-        nextRootId: trimString(nextRoot?.id),
+        kind: "replace:done",
         targetSurfaceId: target.surfaceId,
-        hasManifest: Boolean(page?.manifest?.surfaces),
-        manifestActiveSurfaceId: trimString(page?.manifest?.activeSurfaceId)
+        activeSurfaceId,
+        hasManifest: Boolean(page?.manifest?.surfaces)
       });
-      reportIssue({
-        id: `surface-runtime:route-swap-missing-root:${target.surfaceId}`,
-        severity: "error",
-        phase: "route-swap",
-        kind: "route-swap",
-        message: "Route swap could not resolve both current and next root nodes",
-        surfaceId: target.surfaceId,
-        details: {
-          currentRootId,
-          nextRootId: trimString(nextRoot?.id),
-          hasManifest: Boolean(page?.manifest?.surfaces)
-        },
-        correlationId: issueLedger.nextCorrelationId("route-swap")
-      });
-      return false;
-    }
-    disposeInteractions();
-    currentRoot.replaceWith(nextRoot);
-    if (page?.manifest?.surfaces) {
-      pushRouteDebug({
-        kind: "replace:manifest",
-        targetSurfaceId: target.surfaceId,
-        manifestActiveSurfaceId: trimString(page.manifest.activeSurfaceId),
-        manifestRequestPathname: trimString(page.manifest.requestPathname),
-        manifestSurfaceCount: Array.isArray(page.manifest.surfaces) ? page.manifest.surfaces.length : 0
-      });
-      manifest.surfaces = page.manifest.surfaces;
-      manifest.routeTargets = page.manifest.routeTargets ?? manifest.routeTargets;
-      manifest.routeState = page.manifest.routeState ?? manifest.routeState;
-      manifest.browserRuntimeCapabilities = page.manifest.browserRuntimeCapabilities ?? manifest.browserRuntimeCapabilities;
-      manifest.capabilityAssets = normalizeCapabilityAssets(page.manifest.capabilityAssets ?? manifest.capabilityAssets);
-      manifest.processWitnesses = page.manifest.processWitnesses ?? manifest.processWitnesses;
-      replaceProcessRuntime(manifest.processWitnesses || []);
-      surfaceById = new Map((manifest.surfaces ?? []).map(surface => [surface.id, surface]));
-      activeSurfaceId = trimString(page.manifest.activeSurfaceId) || target.surfaceId;
-    } else {
-      activeSurfaceId = target.surfaceId;
-    }
-    manifest.activeSurfaceId = activeSurfaceId;
-    fallbackNavigationPath = null;
-    try {
-      await ensureSurfaceCapabilityAssets(document, window, manifest.capabilityAssets);
-      resolveIssue("surface-runtime:capability-assets-load-failed", { phase: "route-swap" });
-    } catch (error) {
-      reportIssue({
-        id: "surface-runtime:capability-assets-load-failed",
-        severity: "error",
-        phase: "route-swap",
-        kind: "capability-assets",
-        message: "Capability assets failed to load during route swap",
-        details: String(error?.message || error),
-        correlationId: issueLedger.nextCorrelationId("route-swap")
-      });
-    }
-    bootSurfaceCapabilities(window, nextRoot, {
-      reportIssue,
-      resolveIssue,
-      phase: "capability-mount",
-      correlationId: issueLedger.nextCorrelationId("route-swap")
+      resolveIssue(`surface-runtime:route-swap-missing-root:${target.surfaceId}`, { phase: "route-swap" });
+      return true;
+    }, {
+      phase: "route-swap",
+      correlationId,
+      route: trimString(target?.path),
+      surfaceId: trimString(target?.surfaceId)
     });
-    clearRouteUnderlay(document);
-    lastRouteSwap = {
-      ok: true,
-      targetSurfaceId: target.surfaceId,
-      activeSurfaceId,
-      nextRootId: trimString(nextRoot?.id),
-      hasManifest: Boolean(page?.manifest?.surfaces)
-    };
-    pushRouteDebug({
-      kind: "replace:done",
-      targetSurfaceId: target.surfaceId,
-      activeSurfaceId,
-      hasManifest: Boolean(page?.manifest?.surfaces)
-    });
-    resolveIssue(`surface-runtime:route-swap-missing-root:${target.surfaceId}`, { phase: "route-swap" });
-    return true;
   };
-  Promise.resolve(ensureSurfaceCapabilityAssets(document, window, manifest.capabilityAssets))
+  Promise.resolve(executionRunner.track("capability-assets", () =>
+    ensureSurfaceCapabilityAssets(document, window, manifest.capabilityAssets)
+  , {
+    phase: "boot",
+    correlationId: issueLedger.nextCorrelationId("boot")
+  }))
     .then(() => {
       resolveIssue("surface-runtime:capability-assets-load-failed", { phase: "boot" });
-      bootActiveSurfaceCapabilities("capability-mount", issueLedger.nextCorrelationId("boot"));
+      void executionRunner.track("capability-mount", () => Promise.resolve(
+        bootActiveSurfaceCapabilities("capability-mount", issueLedger.nextCorrelationId("boot"))
+      ), {
+        phase: "boot",
+        correlationId: issueLedger.nextCorrelationId("boot"),
+        surfaceId: activeSurfaceId
+      });
     })
     .catch(error => {
       reportIssue({
@@ -2612,9 +1563,11 @@ export function createSurfaceInteractionRuntime({
       surfaceById,
       activeSurfaceId,
       processRuntime,
+      executionRunner,
       issueLedger,
       boundInteractionCount: disposers.length,
-      expectationProviders
+      expectationProviders,
+      runtimeBridgeCount: inFlightRuntimeBridges.size
     });
     syncProbeIssues(snapshot, phase, correlationId);
     const nextSnapshot = {
@@ -2683,7 +1636,7 @@ export function createSurfaceInteractionRuntime({
   };
   let syncInFlight = null;
   let syncQueued = false;
-  const requestSyncRouteAndRefresh = async (reason = "refresh") => {
+  requestSyncRouteAndRefresh = async (reason = "refresh") => {
     if (syncInFlight) {
       syncQueued = true;
       await syncInFlight;
@@ -2691,7 +1644,14 @@ export function createSurfaceInteractionRuntime({
     }
     do {
       syncQueued = false;
-      syncInFlight = Promise.resolve(syncRouteAndRefresh(issueLedger.nextCorrelationId(reason)));
+      const correlationId = issueLedger.nextCorrelationId(reason);
+      syncInFlight = executionRunner.track("surface-sync", () => syncRouteAndRefresh(correlationId), {
+        phase: "refresh",
+        correlationId,
+        route: trimString(window?.location?.pathname),
+        surfaceId: activeSurfaceId,
+        details: { reason }
+      });
       await syncInFlight;
       syncInFlight = null;
     } while (syncQueued);
@@ -2849,8 +1809,11 @@ export function createSurfaceInteractionRuntime({
     routeTargets: { get() { return manifest?.routeTargets ?? []; } },
     surfaceIds: { get() { return [...surfaceById.keys()]; } },
     lastRouteSwap: { get() { return lastRouteSwap; } },
+    lastReconcileSummary: { get() { return lastReconcileSummary; } },
     routeDebugLog: { get() { return [...routeDebugLog]; } },
-    processRuntime: { get() { return processRuntime; } }
+    processRuntime: { get() { return processRuntime; } },
+    runtimeBridgeCount: { get() { return inFlightRuntimeBridges.size; } },
+    settleSnapshot: { get() { return executionRunner.settledSnapshot(); } }
   });
   runtime.destroy = () => {
     disposeInteractions();
@@ -2861,155 +1824,4 @@ export function createSurfaceInteractionRuntime({
   };
   void requestSyncRouteAndRefresh("boot");
   return runtime;
-}
-
-function browserHelpersSource() {
-  return [
-    `const SURFACE_INTERACTION_FORMATTERS = {
-  escapeHtml(value) {
-    return String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;");
-  },
-  formattedText(value) {
-    return this.escapeHtml(String(value ?? "")).replace(/\\n/g, "<br>");
-  }
-};`,
-    trimString.toString(),
-    normalizeRouteStateDescriptor.toString(),
-    resolveRouteStateDescriptor.toString(),
-    `function toSurfaceMap(manifest) {
-  return new Map((manifest?.surfaces ?? []).map(surface => [surface.id, surface]));
-}`,
-    stateIdsFromWitnesses.toString(),
-    eventValueFromSpec.toString(),
-    readCapabilityOutput.toString(),
-    collectCapabilityOutputsFromDom.toString(),
-    readBindingSource.toString(),
-    overlaySurfaceProps.toString(),
-    resolveSurfaceRuntimeBinding.toString(),
-    resolveSurfaceCapabilities.toString(),
-    collectSurfaceDescendants.toString(),
-    activeRuntimeSurfaceIds.toString(),
-    activeRouteTargetForPath.toString(),
-    routeStateBindingForProcess.toString(),
-    routeTargetForProcessState.toString(),
-    routeTargetForManifestState.toString(),
-    syncUrlToRouteState.toString(),
-    syncRouteStateToUrl.toString(),
-    forceDocumentNavigation.toString(),
-    parseFirstElement.toString(),
-    nextPresentSiblingRoot.toString(),
-    materializeMissingVisibleSurface.toString(),
-    dematerializeHiddenSurface.toString(),
-    supportsSameDocumentRouteReplacement.toString(),
-    fallbackActiveRootNode.toString(),
-    domParserForWindow.toString(),
-    readSurfaceRuntimeManifest.toString(),
-    parseRouteSurfacePage.toString(),
-    loadRouteSurfacePage.toString(),
-    capabilityBootIssueId.toString(),
-    bootSurfaceCapabilities.toString(),
-    capabilityAssetHash.toString(),
-    waitForNodeLoad.toString(),
-    waitForSurfaceCapabilityModuleSettle.toString(),
-    waitForSurfaceCapabilityModuleRegistration.toString(),
-    normalizeCapabilityAssets.toString(),
-    ensureSurfaceCapabilityAssets.toString(),
-    cloneInspectionValue.toString(),
-    surfaceAssetRegistrySnapshot.toString(),
-    createSurfaceInspectionPoint.toString(),
-    installSurfaceInspectionPoint.toString(),
-    surfaceDiagnosticsOverlayEnabled.toString(),
-    createSurfaceRuntimeIssueLedger.toString(),
-    surfaceRuntimeIssueSeverityRank.toString(),
-    summarizeSurfaceRuntimeIssues.toString(),
-    ensureSurfaceDiagnosticsOverlayStyles.toString(),
-    createSurfaceDiagnosticsOverlay.toString(),
-    installSurfaceRuntimeBootFailure.toString(),
-    clearRouteUnderlay.toString(),
-    mountedCapabilityMarkersForSurface.toString(),
-    capabilityAssetPresence.toString(),
-    surfaceViewNodeIds.toString(),
-    surfaceIsPresentInDom.toString(),
-    surfaceParentId.toString(),
-    surfaceHasVisibleBinding.toString(),
-    surfaceExpectedVisible.toString(),
-    createSurfaceRuntimeProbe.toString(),
-    summarizeSurfaceRuntimeExpectationIssues.toString(),
-    updateRouteUnderlay.toString(),
-    `function formatInlineText(value) { return SURFACE_INTERACTION_FORMATTERS.formattedText(value); }`,
-    patchSurfaceDom.toString(),
-    createSurfaceInteractionRuntime.toString(),
-    `function bootSurfaceInteractionRuntime(manifest) {
-  if (!manifest || !Array.isArray(manifest.surfaces) || !manifest.surfaces.length) return;
-  let started = false;
-  const start = () => {
-    if (started) return;
-    started = true;
-    window.__surfaceRuntimeBootStarted = true;
-    try {
-      window.__surfaceInteractionRuntime = createSurfaceInteractionRuntime({
-        document,
-        window,
-        manifest,
-        createProcessRuntimeImpl: createProcessRuntime,
-        expectationProviders: Array.isArray(window.__surfaceRuntimeExpectationProviders)
-          ? window.__surfaceRuntimeExpectationProviders
-          : []
-      });
-      window.__surfaceRuntimeBootError = null;
-    } catch (error) {
-      window.__surfaceRuntimeBootError = {
-        name: error?.name || "Error",
-        message: String(error?.message || error),
-        stack: String(error?.stack || "")
-      };
-      window.__surfaceInteractionRuntime = installSurfaceRuntimeBootFailure({
-        document,
-        window,
-        manifest,
-        error
-      });
-      window.console?.error?.("surface interaction runtime boot failed", error);
-    }
-  };
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", start, { once: true });
-  } else {
-    start();
-  }
-}`
-  ].join("\n\n");
-}
-
-let cachedSurfaceInteractionRuntimeModuleSource = null;
-
-export function renderSurfaceInteractionRuntimeModule(manifest) {
-  if (!cachedSurfaceInteractionRuntimeModuleSource) {
-    cachedSurfaceInteractionRuntimeModuleSource = `const __surfaceRuntimeGlobal = typeof window === "object" && window
-  ? window
-  : (typeof self === "object" && self ? self : {});
-__surfaceRuntimeGlobal.__surfaceRuntimeModuleLoaded = true;
-
-${renderProcessRuntimeModuleSource()}
-
-${browserHelpersSource()}
-
-try {
-  const surfaceRuntimeManifest = readSurfaceRuntimeManifest(document);
-  bootSurfaceInteractionRuntime(surfaceRuntimeManifest);
-} catch (error) {
-  __surfaceRuntimeGlobal.__surfaceRuntimeBootError = {
-    name: error?.name || "Error",
-    message: String(error?.message || error),
-    stack: String(error?.stack || "")
-  };
-  __surfaceRuntimeGlobal.console?.error?.("surface interaction runtime module failed", error);
-}
-`;
-  }
-  return cachedSurfaceInteractionRuntimeModuleSource;
 }

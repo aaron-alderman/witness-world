@@ -139,23 +139,35 @@ Unacceptable concerns:
 Primary file:
 
 - `src/runtime-surface-interaction-runtime.js`
+- `src/runtime-execution-runner.js`
+- `src/runtime-reconcile-service.js`
+- `src/runtime-surface-dom-host.js`
 
 This is the nearest existing seam for interactive `surface` execution. It is
-not yet canonical in its current form, but it contains genuinely reusable
-pieces.
+now being rebased around an explicit split:
+
+- execution/control-flow lives in `runtime-execution-runner.js`
+- rendered-tree / patch planning lives in `runtime-reconcile-service.js`
+- browser DOM application lives in `runtime-surface-dom-host.js`
+- `runtime-surface-interaction-runtime.js` is the orchestration layer over
+  those seams
+
+This is the intended canonical direction for interactive `page.surface`
+execution.
 
 Potentially salvageable generic helpers:
 
 - `resolveSurfaceRuntimeBinding(...)`
 - `resolveSurfaceCapabilities(...)`
 - `eventValueFromSpec(...)`
-- `patchSurfaceDom(...)`
+- `whenSettled(...)`
 
 What is not blessed:
 
 - emitted browser module as authority
 - any hidden contract not directly justified by semantic `surface` data
 - any surface-kind-specific branching
+- DOM timing guesses as a substitute for a first-class runtime barrier
 
 ### 8. Semantic substrate
 
@@ -170,6 +182,9 @@ This is the canonical semantic foundation. Relevant existing surface semantics
 already present here:
 
 - `processRef`
+- `delay` / authored async steps now register through the shared execution
+  runner, but `process-eval` remains the semantic process executor rather than
+  becoming the full UI/runtime settle owner
 - `projectionRefs`
 - `capabilityRefs`
 - `bindings`

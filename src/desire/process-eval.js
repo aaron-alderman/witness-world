@@ -29,6 +29,8 @@
 //                   policy's `policy_outcomes` (e.g. complete→ready, failed→
 //                   repair_required).
 
+import { createExecutionRunner } from "../runtime-execution-runner.js";
+
 const KIND_BY_PROCESS = {
   "desire.defineProcess": "process",
   "desire.defineMessage": "message",
@@ -88,6 +90,10 @@ export function createProcessRuntime(world, options = {}) {
   const delayScheduler = options.delayScheduler
     ?? (ms => new Promise(resolve => setTimeout(resolve, ms)));
   const commandHandlers = options.commandHandlers ?? {};
+  const routeInvoker = typeof options.routeInvoker === "function"
+    ? options.routeInvoker
+    : null;
+  const executionRunner = options.executionRunner ?? createExecutionRunner();
   const witnesses = witnessesOf(world);
 
   // ── Index the spec from witnesses ──
@@ -130,34 +136,9 @@ export function createProcessRuntime(world, options = {}) {
   const state = new Map();
   const trace = [];
   const observers = new Set();
-  const idleWaiters = new Set();
   let stepNo = 0;
-  let inFlightCount = 0;
-
-  function beginAsyncWork() {
-    inFlightCount += 1;
-  }
-
-  function endAsyncWork() {
-    inFlightCount = Math.max(0, inFlightCount - 1);
-    if (inFlightCount !== 0) return;
-    for (const resolve of idleWaiters) resolve();
-    idleWaiters.clear();
-  }
-
-  async function trackAsync(work) {
-    beginAsyncWork();
-    try {
-      return await work();
-    } finally {
-      endAsyncWork();
-    }
-  }
-
-  function whenIdle() {
-    if (inFlightCount === 0) return Promise.resolve();
-    return new Promise(resolve => idleWaiters.add(resolve));
-  }
+  const trackAsync = (kind, work, meta = {}) => executionRunner.track(kind, work, meta);
+  const whenIdle = () => executionRunner.whenSettled(task => String(task?.kind || "").startsWith("process."));
 
   function seed() {
     for (const d of all) {
@@ -292,18 +273,39 @@ export function createProcessRuntime(world, options = {}) {
       }
       if (step?.kind === "delay") {
         const ms = Number(step.ms ?? 0);
-        await delayScheduler(ms, { eventId, process: proc, step });
+        await trackAsync("process.delay", () => delayScheduler(ms, { eventId, process: proc, step }), {
+          label: `${eventId}:${ms}ms`,
+          processRef: proc,
+          correlationId: eventId,
+          phase: "process-rule",
+          details: { ms, stepKind: "delay" }
+        });
         lastObservation = record("rule.delay", `${eventId}:${ms}ms`, proc, []);
         continue;
       }
       if (step?.kind === "command") {
         const handler = commandHandlers[step.command];
-        if (typeof handler !== "function") {
-          throw new Error(`rule command '${step.command}' has no runtime handler`);
+        if (typeof handler === "function") {
+          await trackAsync("process.command", () => handler({
+            command: step.command,
+            eventId,
+            process: proc,
+            state: snapshot(proc)
+          }), {
+            label: step.command,
+            processRef: proc,
+            correlationId: eventId,
+            phase: "process-rule",
+            details: { command: step.command, stepKind: "command" }
+          });
+          lastObservation = record("rule.command", step.command, proc, []);
+          continue;
         }
-        await handler({ command: step.command, eventId, process: proc, state: snapshot(proc) });
-        lastObservation = record("rule.command", step.command, proc, []);
-        continue;
+        if (routeInvoker && adapterByCommand.has(step.command)) {
+          lastObservation = await stepViaRoute(step.command);
+          continue;
+        }
+        throw new Error(`rule command '${step.command}' has no runtime handler`);
       }
       if (step?.kind === "option") {
         const branch = truthy(configValue(step.config)) ? (step.real ?? []) : (step.else ?? []);
@@ -320,7 +322,12 @@ export function createProcessRuntime(world, options = {}) {
     if (!proc) throw new Error(`deliverAuthored: event '${eventId}' is handled by no process`);
     const rule = ruleFor(eventId);
     if (!rule) return deliver(eventId, payload);
-    return trackAsync(() => runRuleSteps(rule.steps ?? [], eventId, proc));
+    return trackAsync("process.rule", () => runRuleSteps(rule.steps ?? [], eventId, proc), {
+      label: eventId,
+      processRef: proc,
+      correlationId: eventId,
+      phase: "process-rule"
+    });
   }
 
   function resolve(commandId, outcome = "success", payload = null) {
@@ -360,7 +367,7 @@ export function createProcessRuntime(world, options = {}) {
     if (!hostOp) throw new Error(`stepViaHostOp: adapter for '${commandId}' carries no host_operation`);
     dispatch(commandId);
     const request = requestFor(commandId);
-    return trackAsync(async () => {
+    return trackAsync("process.host-operation", async () => {
       const response = await runtime.invoke({ host_operation: hostOp, request });
       const outcome = response?.status === "failure" ? "failure" : "success";
       const obs = resolve(commandId, outcome, response?.payload ?? null);
@@ -369,6 +376,48 @@ export function createProcessRuntime(world, options = {}) {
       obs.request = request;
       obs.response = response;
       return obs;
+    }, {
+      label: commandId,
+      correlationId: commandId,
+      phase: "boundary",
+      details: { hostOperation: hostOp }
+    });
+  }
+
+  async function stepViaRoute(commandId) {
+    const binding = adapterByCommand.get(commandId);
+    if (!binding) throw new Error(`stepViaRoute: command '${commandId}' has no bound adapter`);
+    if (typeof routeInvoker !== "function") throw new Error(`stepViaRoute: command '${commandId}' has no route invoker`);
+    const route = typeof binding.op.route === "string" ? binding.op.route : "";
+    if (!route) throw new Error(`stepViaRoute: adapter for '${commandId}' carries no route`);
+    dispatch(commandId);
+    const request = requestFor(commandId);
+    return trackAsync("process.route-operation", async () => {
+      const response = await routeInvoker({
+        command: commandId,
+        route,
+        method: binding.op.method ?? "POST",
+        actorState: binding.op.actorState ?? null,
+        request,
+        binding,
+        runtime: {
+          value: id => state.get(id),
+          snapshot
+        }
+      });
+      const outcome = response?.status === "failure" ? "failure" : "success";
+      const obs = resolve(commandId, outcome, response?.payload ?? null);
+      obs.route = route;
+      obs.method = binding.op.method ?? "POST";
+      obs.outcome = outcome;
+      obs.request = request;
+      obs.response = response;
+      return obs;
+    }, {
+      label: commandId,
+      correlationId: commandId,
+      phase: "boundary",
+      details: { route, method: binding.op.method ?? "POST" }
     });
   }
 
@@ -398,6 +447,7 @@ export function createProcessRuntime(world, options = {}) {
     step,
     requestFor,
     stepViaHostOp,
+    stepViaRoute,
     set,
     policyOutcome,
     value: id => state.get(id),
@@ -410,8 +460,9 @@ export function createProcessRuntime(world, options = {}) {
       observers.add(observer);
       return () => observers.delete(observer);
     },
+    executionRunner,
     whenIdle,
-    get inFlightCount() { return inFlightCount; },
+    get inFlightCount() { return executionRunner.inFlightCount; },
     // the lifecycle history of one state value across the recorded trace
     history(stateId) {
       const seq = [];
@@ -452,6 +503,8 @@ ${formatProjectionValue.toString()}
 ${witnessesOf.toString()}
 
 ${coerce.toString()}
+
+${createExecutionRunner.toString()}
 
 ${createProcessRuntimeSource}
 `;

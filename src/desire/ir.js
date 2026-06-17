@@ -8,6 +8,7 @@ export const DESIRE_KERNEL_KINDS = new Set([
   "entity",
   "graph",
   "projection",
+  "collection",
   "capability",
   "boundary",
   "policy",
@@ -44,6 +45,7 @@ export const DESIRE_PLUS_SEMANTIC_KINDS = new Set([
   "policy",
   "process",
   "projection",
+  "collection",
   "state",
   "stdlib",
   "store",
@@ -326,6 +328,9 @@ function validateDesireNodeBody(kind, body, path) {
       assertNullableString(body.projectionKind, `${path}.projectionKind`);
       assertNullableString(body.source, `${path}.source`);
       assertPlainObject(body.props ?? {}, `${path}.props`);
+      return;
+    case "collection":
+      assertNullableString(body.id, `${path}.id`);
       return;
     case "policy":
       assertNullableString(body.subject, `${path}.subject`);
