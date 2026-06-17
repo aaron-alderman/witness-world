@@ -1723,6 +1723,28 @@ export const moduleProjectors = {
 
   mcpToolInstallIndex: delegatedModuleProjector("mcpToolInstallIndex", () => ({ rows: [], byServer: Object.create(null) })),
 
+  changeSets: delegatedModuleProjector("changeSets", emptyRows),
+
+  changeSetIndex: delegatedModuleProjector("changeSetIndex", emptyIndex),
+
+  changeSetEdits: delegatedModuleProjector("changeSetEdits", emptyRows),
+
+  changeSetEditIndex: delegatedModuleProjector("changeSetEditIndex", () => ({ rows: [], byId: Object.create(null), byChangeSet: Object.create(null) })),
+
+  branches: delegatedModuleProjector("branches", emptyRows),
+
+  branchIndex: delegatedModuleProjector("branchIndex", emptyIndex),
+
+  candidateSnapshots: delegatedModuleProjector("candidateSnapshots", emptyRows),
+
+  candidateSnapshotIndex: delegatedModuleProjector("candidateSnapshotIndex", () => ({
+    rows: [],
+    byId: Object.create(null),
+    byChangeSet: Object.create(null),
+    byBranch: Object.create(null),
+    activeByBranch: Object.create(null)
+  })),
+
   assets: delegatedModuleProjector("assets", emptyRows),
 
   assetIndex: delegatedModuleProjector("assetIndex", emptyIndex),

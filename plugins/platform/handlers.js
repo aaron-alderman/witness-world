@@ -4,6 +4,11 @@ import {
   requestBootstrapProposalCreate,
   requestBootstrapProposalReject
 } from "../proposals/proposal-processes.js";
+import {
+  createPlatformChangeSet,
+  stagePlatformChangeSetEdits,
+  validatePlatformChangeSet
+} from "./change-sets.js";
 import { buildPlatformModel, filterPlatformModel } from "./platform-model.js";
 import { renderPlatformPage } from "./platform-page.js";
 import { buildPlatformProposalCreateBody } from "./platform-proposals.js";
@@ -81,6 +86,75 @@ export function createPlatformHandlers({
         body: { gaps: model.gaps.length }
       });
       sendJson(res, 200, { gaps: model.gaps, summaries: model.summaries });
+    },
+
+    "platform.changeSet.create": async ({ req, res, requestActor, requestSession, appContext }) => {
+      const actor = requirePlatformMutationActor(res, requestActor);
+      if (!actor) return;
+      const body = await readJson(req);
+      const result = createPlatformChangeSet(world, {
+        actor,
+        id: body?.id ?? null,
+        branchId: body?.branchId ?? null,
+        title: body?.title ?? null,
+        reason: body?.reason ?? null,
+        session: requestSession ?? null,
+        runtimeProfile: appContext?.runtimeProfile ?? null
+      });
+      if (!result.ok) {
+        sendJson(res, result.status || 400, { error: result.error });
+        return;
+      }
+      sendJson(res, result.status, {
+        branch: result.branch,
+        changeSet: result.changeSet,
+        witness: result.witness
+      });
+    },
+
+    "platform.changeSet.edit": async ({ req, res, params, requestActor, requestSession }) => {
+      const actor = requirePlatformMutationActor(res, requestActor);
+      if (!actor) return;
+      const body = await readJson(req);
+      const edits = Array.isArray(body?.edits)
+        ? body.edits
+        : (body?.path || body?.content ? [{ path: body.path, content: body.content, previousHash: body.previousHash ?? null }] : []);
+      const result = await stagePlatformChangeSetEdits(world, {
+        actor,
+        changeSetId: params.id || "",
+        edits,
+        session: requestSession ?? null
+      });
+      if (!result.ok) {
+        sendJson(res, result.status || 400, { error: result.error });
+        return;
+      }
+      sendJson(res, result.status, {
+        changeSet: result.changeSet,
+        edits: result.edits,
+        staged: result.staged
+      });
+    },
+
+    "platform.changeSet.validate": async ({ res, params, requestActor, requestSession }) => {
+      const actor = requirePlatformMutationActor(res, requestActor);
+      if (!actor) return;
+      const result = await validatePlatformChangeSet(world, {
+        actor,
+        changeSetId: params.id || "",
+        session: requestSession ?? null
+      });
+      if (!result.ok) {
+        sendJson(res, result.status || 400, { error: result.error });
+        return;
+      }
+      sendJson(res, result.status, {
+        changeSet: result.changeSet,
+        candidateSnapshot: result.candidateSnapshot,
+        activeCandidateSnapshotId: result.activeCandidateSnapshotId,
+        witness: result.witness,
+        revisionEvent: result.revisionEvent
+      });
     },
 
     "platform.proposal.create": async ({ req, res, requestActor }) => {

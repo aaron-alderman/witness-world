@@ -1,4 +1,5 @@
 import { handlerCatalog } from "./handler-catalog.js";
+import { platformModuleProjectors } from "./projections.js";
 import { createPlatformHandlers } from "./handlers.js";
 
 export const bundleId = "bundle-platform";
@@ -40,6 +41,9 @@ export const routes = Object.freeze([
   exactRoute("GET", "/platform", "page.platform"),
   exactRoute("GET", "/api/platform-model", "platform.model.read"),
   exactRoute("GET", "/api/platform-gaps", "platform.gaps.read"),
+  exactRoute("POST", "/api/platform-change-sets", "platform.changeSet.create"),
+  patternRoute("POST", /^\/api\/platform-change-sets\/([^/]+)\/edits$/, "platform.changeSet.edit", Object.freeze(["id"])),
+  patternRoute("POST", /^\/api\/platform-change-sets\/([^/]+)\/validate$/, "platform.changeSet.validate", Object.freeze(["id"])),
   exactRoute("POST", "/api/platform-proposals", "platform.proposal.create"),
   patternRoute("POST", /^\/api\/platform-proposals\/([^/]+)\/approve$/, "platform.proposal.approve", Object.freeze(["id"])),
   patternRoute("POST", /^\/api\/platform-proposals\/([^/]+)\/reject$/, "platform.proposal.reject", Object.freeze(["id"]))
@@ -57,6 +61,14 @@ export const surfaces = Object.freeze([
 
 export const capabilities = Object.freeze(["platform.self"]);
 
+export const providers = Object.freeze([
+  {
+    kind: "moduleProjectors",
+    id: "platform.projections",
+    projectors: platformModuleProjectors
+  }
+]);
+
 export function createHandlers(deps) {
   return createPlatformHandlers(deps);
 }
@@ -65,6 +77,7 @@ export default {
   bundleId,
   capabilities,
   handlerCatalog,
+  providers,
   routes,
   surfaces,
   createHandlers
