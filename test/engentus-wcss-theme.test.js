@@ -17,7 +17,7 @@ test("engentus canonical browser declaration grammar emits the checked-in shell 
     readFile(path.join(process.cwd(), "examples", "engentus", "app", "engentus-chart-pages.css"), "utf8")
   ]);
 
-  const stylesheets = composeEngentusStylesheets({
+  const stylesheets = await composeEngentusStylesheets({
     authoredPlan,
     switchManifest: {
       theme: "engentus",
@@ -66,6 +66,16 @@ test("engentus canonical browser lowering keeps declaration groups partitioned b
     "chart foundation",
     "chart surfaces"
   ]);
+  assert.equal(
+    browserLowering.slices.find(slice => slice.name === "auth")?.mode,
+    "native-browser"
+  );
+  assert.equal(
+    browserLowering.slices.find(slice => slice.name === "platform-config")?.mode,
+    "native-browser"
+  );
+  assert.ok(browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.auth);
+  assert.ok(browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.["platform-config"]);
 
   const rootTokens = declarationGroups.shell[0].blocks[1];
   assert.equal(rootTokens.selector, ":root");

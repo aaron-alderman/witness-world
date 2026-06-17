@@ -29,7 +29,8 @@
         "plugin.mcp",
         "plugin.practical-backend",
         "plugin.demo",
-        "plugin.eden"
+        "plugin.eden",
+        "plugin.platform"
       ]
     }
   }

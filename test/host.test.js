@@ -1882,6 +1882,91 @@ test("session open rejects ungranted actor assumptions without creating a sessio
   }
 });
 
+test("authority grant APIs create, list, reject duplicates, revoke, and block new assumed sessions", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  applyMinimalTodoDsl(world);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+  try {
+    const login = await openSession(server.url, { username: "aaron", password: "aaron" });
+    assert.equal(login.response.status, 200);
+
+    const created = await fetch(`${server.url}/api/authority/grants`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: login.cookie
+      },
+      body: JSON.stringify({
+        identityId: "identity.aaron",
+        targetActor: "callan"
+      })
+    });
+    assert.equal(created.status, 201);
+    const createdBody = await created.json();
+    assert.equal(createdBody.grant.id, "identity.aaron=>callan");
+    assert.equal(createdBody.grant.active, true);
+    assert.equal(createdBody.grant.status, "active");
+    assert.equal(createdBody.grant.identity.id, "identity.aaron");
+    assert.equal(createdBody.grant.targetIdentity.id, "identity.callan");
+
+    const listed = await fetch(`${server.url}/api/authority/grants?identity=identity.aaron&actor=callan`, {
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(listed.status, 200);
+    const listedBody = await listed.json();
+    assert.equal(listedBody.grants.length, 1);
+    assert.equal(listedBody.grants[0].id, "identity.aaron=>callan");
+    assert.equal(listedBody.grants[0].active, true);
+
+    const duplicate = await fetch(`${server.url}/api/authority/grants`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        cookie: login.cookie
+      },
+      body: JSON.stringify({
+        identityId: "identity.aaron",
+        targetActor: "callan"
+      })
+    });
+    assert.equal(duplicate.status, 409);
+    assert.equal((await duplicate.json()).grant.id, "identity.aaron=>callan");
+
+    const revoked = await fetch(`${server.url}/api/authority/grants/${encodeURIComponent("identity.aaron=>callan")}`, {
+      method: "DELETE",
+      headers: { cookie: login.cookie }
+    });
+    assert.equal(revoked.status, 200);
+    const revokedBody = await revoked.json();
+    assert.equal(revokedBody.changed, true);
+    assert.equal(revokedBody.grant.active, false);
+    assert.equal(revokedBody.grant.status, "revoked");
+
+    const relisted = await fetch(`${server.url}/api/authority/grants?identity=identity.aaron&actor=callan`, {
+      headers: { cookie: login.cookie }
+    }).then(response => response.json());
+    assert.equal(relisted.grants[0].active, false);
+    assert.equal(relisted.grants[0].revokedBy, "aaron");
+
+    const assumedLogin = await openSession(server.url, {
+      username: "aaron",
+      password: "aaron",
+      assumeActor: "callan"
+    });
+    assert.equal(assumedLogin.response.status, 403);
+    assert.deepEqual(assumedLogin.body, { error: "assumption denied" });
+  } finally {
+    await server.close();
+  }
+});
+
 test("private notes routes run through authored backend programs and switch versions live", async () => {
   const world = createWorld();
   declareBackendHost(world, { actor: "adam", id: "backendHost" });

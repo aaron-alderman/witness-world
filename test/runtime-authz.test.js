@@ -12,6 +12,7 @@ import {
 } from "../src/modules.js";
 import {
   authSummaryForAuthority,
+  identityActorAssumptionGrantHistory,
   evaluateRouteAccess,
   resolveSessionAuthorityForIdentity
 } from "../src/runtime-authz.js";
@@ -90,6 +91,30 @@ test("identity-actor assumption grants project and index by identity and target 
   index = world.project(moduleProjectors.identityActorAssumptionGrantIndex);
   assert.equal(index.byPair["identity.aaron=>ops-bot"], undefined);
   assert.deepEqual(index.byIdentity["identity.aaron"].map(row => row.targetActor), ["callan"]);
+});
+
+test("identity-actor assumption grant history preserves active and revoked provenance", () => {
+  const world = seedAuthorityWorld();
+  grantIdentityActorAssumption(world, {
+    actor: "system",
+    identityId: "identity.aaron",
+    targetActor: "callan"
+  });
+  revokeIdentityActorAssumption(world, {
+    actor: "system",
+    identityId: "identity.aaron",
+    targetActor: "callan"
+  });
+  const history = identityActorAssumptionGrantHistory(world, {
+    grantId: "identity.aaron=>callan"
+  });
+  assert.equal(history.length, 1);
+  assert.equal(history[0].active, false);
+  assert.equal(history[0].status, "revoked");
+  assert.equal(history[0].grantedBy, "system");
+  assert.equal(history[0].revokedBy, "system");
+  assert.equal(typeof history[0].grantedWitnessId, "string");
+  assert.equal(typeof history[0].revokedWitnessId, "string");
 });
 
 test("resolveSessionAuthorityForIdentity allows only explicit identity to actor assumptions", () => {

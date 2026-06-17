@@ -8,7 +8,11 @@ import {
   APP_SOURCE_WRITE_PATH
 } from "./app-snapshot-manager.js";
 import { runProcessGraph } from "./process-graph.js";
-import { moduleProjectors } from "./modules.js";
+import {
+  grantIdentityActorAssumption,
+  moduleProjectors,
+  revokeIdentityActorAssumption
+} from "./modules.js";
 import {
   SUPPORTED_BACKEND_OPS,
   activeBackendProgramDefinition
@@ -26,6 +30,8 @@ import {
 } from "./runtime-authoring-policy.js";
 import {
   authSummaryForAuthority,
+  identityActorAssumptionGrantHistory,
+  normalizeAuthorityTuple,
   resolveSessionAuthorityForIdentity
 } from "./runtime-authz.js";
 
@@ -79,6 +85,7 @@ export function createCoreRuntimeBundleHandlers({
   buildRuntimeDiagnosticsForProfile,
   getRuntimePluginCatalog,
   getRuntimePluginReviews,
+  authorityServices = {},
   invokeRouteHandler,
   supportedBackendOps = SUPPORTED_BACKEND_OPS,
   coreHooks = {},
@@ -89,6 +96,10 @@ export function createCoreRuntimeBundleHandlers({
   const witnessCount = () => typeof world?.witnessCount === "function"
     ? Number(world.witnessCount() || 0)
     : Number(world?.allWitnesses?.().length || 0);
+  const {
+    requireBootstrapActor = actor => actor ? { ok: true, actor, bootstrapException: false } : { ok: false, status: 401, reason: "sign in first" },
+    ensureIdentityAuthority = () => ({ ok: false, status: 403, reason: "identity authority unavailable" })
+  } = authorityServices ?? {};
   const witnessesSince = index => typeof world?.witnessesSince === "function"
     ? world.witnessesSince(index)
     : world?.allWitnesses?.().slice(index) ?? [];
@@ -139,21 +150,79 @@ export function createCoreRuntimeBundleHandlers({
     if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, interpolateValue(item, scope)]));
     return value;
   };
-  const backendSessionShape = requestSession => requestSession
-    ? {
-        authenticated: true,
-        actor: requestSession.effectiveActor ?? requestSession.actor ?? null,
-        identity: requestSession.effectiveIdentity ?? requestSession.identity ?? null,
-        label: requestSession.label ?? null,
-        perspective: requestSession.perspective ?? null
-      }
-    : {
+  const normalizedRequestAuthority = ({
+    requestActor = null,
+    requestIdentity = null,
+    requestSession = null
+  } = {}) => requestSession
+    ? normalizeAuthorityTuple(requestSession, { allowAliases: true })
+    : normalizeAuthorityTuple({
+        authenticatedIdentity: requestIdentity?.id ?? requestIdentity ?? null,
+        authenticatedActor: requestActor,
+        effectiveIdentity: requestIdentity?.id ?? requestIdentity ?? null,
+        effectiveActor: requestActor,
+        authorityMode: "direct"
+      });
+  const authorityGrantReadShape = grantRow => {
+    if (!grantRow) return null;
+    const identityIndex = currentIdentityIndex();
+    const identity = grantRow.identityId ? (identityIndex.byId[grantRow.identityId] ?? null) : null;
+    const targetIdentity = grantRow.targetActor ? (identityIndex.byActor[grantRow.targetActor]?.[0] ?? null) : null;
+    return {
+      id: grantRow.id,
+      identityId: grantRow.identityId,
+      targetActor: grantRow.targetActor,
+      active: grantRow.active === true,
+      status: grantRow.active === true ? "active" : "revoked",
+      identity: identity ? {
+        id: identity.id,
+        actor: identity.actor,
+        label: identity.label ?? null,
+        username: identity.username ?? null
+      } : null,
+      targetIdentity: targetIdentity ? {
+        id: targetIdentity.id,
+        actor: targetIdentity.actor,
+        label: targetIdentity.label ?? null,
+        username: targetIdentity.username ?? null
+      } : null,
+      grantedWitnessId: grantRow.grantedWitnessId ?? null,
+      grantedBy: grantRow.grantedBy ?? null,
+      revokedWitnessId: grantRow.revokedWitnessId ?? null,
+      revokedBy: grantRow.revokedBy ?? null
+    };
+  };
+  const backendSessionShape = requestSession => {
+    if (!requestSession) {
+      return {
         authenticated: false,
         actor: null,
         identity: null,
+        authenticatedIdentity: null,
+        authenticatedActor: null,
+        effectiveIdentity: null,
+        effectiveActor: null,
+        authorityMode: "direct",
+        assumptionGrantId: null,
         label: null,
         perspective: null
       };
+    }
+    const authority = normalizeAuthorityTuple(requestSession, { allowAliases: true });
+    return {
+      authenticated: true,
+      actor: authority.effectiveActor ?? null,
+      identity: authority.effectiveIdentity ?? null,
+      authenticatedIdentity: authority.authenticatedIdentity ?? null,
+      authenticatedActor: authority.authenticatedActor ?? null,
+      effectiveIdentity: authority.effectiveIdentity ?? null,
+      effectiveActor: authority.effectiveActor ?? null,
+      authorityMode: authority.authorityMode ?? "direct",
+      assumptionGrantId: authority.assumptionGrantId ?? null,
+      label: requestSession.label ?? null,
+      perspective: requestSession.perspective ?? null
+    };
+  };
   const devHtmlHeaders = appContext => appContext?.devMode ? { "cache-control": "no-cache" } : {};
   const resolveSessionOpenRouteKey = (body, summary) => {
     const defaultRouteKey = typeof body?.defaultRouteKey === "string" && body.defaultRouteKey.trim()
@@ -525,24 +594,157 @@ export function createCoreRuntimeBundleHandlers({
     },
 
     "session.logout": async ({ res, requestSession, requestActor }) => {
+      const authority = normalizedRequestAuthority({ requestActor, requestSession });
       if (requestSession?.id) sessionStore.delete(requestSession.id);
       world.emit({
         process: "session.logout",
         actor: requestActor || backendHost,
         claims: [],
         body: {
-          identity: requestSession?.effectiveIdentity ?? requestSession?.identity ?? null,
-          actor: requestSession?.effectiveActor ?? requestActor ?? null,
-          authenticatedIdentity: requestSession?.authenticatedIdentity ?? null,
-          authenticatedActor: requestSession?.authenticatedActor ?? null,
-          effectiveIdentity: requestSession?.effectiveIdentity ?? null,
-          effectiveActor: requestSession?.effectiveActor ?? null,
-          authorityMode: requestSession?.authorityMode ?? "direct",
-          assumptionGrantId: requestSession?.assumptionGrantId ?? null,
+          identity: authority.effectiveIdentity ?? null,
+          actor: authority.effectiveActor ?? requestActor ?? null,
+          authenticatedIdentity: authority.authenticatedIdentity ?? null,
+          authenticatedActor: authority.authenticatedActor ?? null,
+          effectiveIdentity: authority.effectiveIdentity ?? null,
+          effectiveActor: authority.effectiveActor ?? null,
+          authorityMode: authority.authorityMode ?? "direct",
+          assumptionGrantId: authority.assumptionGrantId ?? null,
           perspective: requestSession?.perspective ?? null
         }
       });
       sendJson(res, 200, { ok: true }, { "set-cookie": clearSessionCookieHeader() });
+    },
+
+    "authority.grants.read": async ({ res, requestActor, requestUrl }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendJson(res, gate.status || 401, { error: gate.reason || "sign in first" });
+        return;
+      }
+      const identityId = requestUrl?.searchParams?.get("identity")?.trim() || "";
+      const targetActor = requestUrl?.searchParams?.get("actor")?.trim() || "";
+      const grants = identityActorAssumptionGrantHistory(world, {
+        identityId: identityId || null,
+        targetActor: targetActor || null
+      }).map(authorityGrantReadShape);
+      world.observe({
+        process: "authority.grants.read",
+        actor: gate.actor,
+        claims: [],
+        body: {
+          identityId: identityId || null,
+          targetActor: targetActor || null,
+          count: grants.length
+        }
+      });
+      sendJson(res, 200, {
+        grants,
+        filters: {
+          identity: identityId || null,
+          actor: targetActor || null
+        }
+      });
+    },
+
+    "authority.grants.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendJson(res, gate.status || 401, { error: gate.reason || "sign in first" });
+        return;
+      }
+      const body = await readJson(req);
+      const identityId = typeof body?.identityId === "string" && body.identityId.trim()
+        ? body.identityId.trim()
+        : "";
+      const targetActor = typeof body?.targetActor === "string" && body.targetActor.trim()
+        ? body.targetActor.trim()
+        : "";
+      if (!identityId || !targetActor) {
+        sendJson(res, 400, { error: "identityId and targetActor are required" });
+        return;
+      }
+      const identityGate = ensureIdentityAuthority(gate.actor, identityId);
+      if (!identityGate.ok) {
+        sendJson(res, identityGate.status || 403, { error: identityGate.reason || "forbidden" });
+        return;
+      }
+      const existingGrant = identityActorAssumptionGrantHistory(world, {
+        identityId,
+        targetActor
+      }).at(-1) ?? null;
+      if (existingGrant?.active === true) {
+        sendJson(res, 409, {
+          error: "assumption grant already active",
+          grant: authorityGrantReadShape(existingGrant)
+        });
+        return;
+      }
+      const witness = grantIdentityActorAssumption(world, {
+        actor: gate.actor,
+        identityId,
+        targetActor
+      });
+      const grant = authorityGrantReadShape(identityActorAssumptionGrantHistory(world, {
+        identityId,
+        targetActor
+      }).at(-1) ?? null);
+      world.observe({
+        process: "authority.grants.create",
+        actor: gate.actor,
+        claims: [],
+        body: {
+          id: grant?.id ?? `${identityId}=>${targetActor}`,
+          identityId,
+          targetActor
+        }
+      });
+      sendJson(res, 201, { grant, witness });
+    },
+
+    "authority.grants.revoke": async ({ res, params, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendJson(res, gate.status || 401, { error: gate.reason || "sign in first" });
+        return;
+      }
+      const grantId = typeof params?.grantId === "string" && params.grantId.trim()
+        ? params.grantId.trim()
+        : "";
+      const existingGrant = identityActorAssumptionGrantHistory(world, { grantId }).at(-1) ?? null;
+      if (!existingGrant) {
+        sendJson(res, 404, { error: "authority grant not found", id: grantId || null });
+        return;
+      }
+      const identityGate = ensureIdentityAuthority(gate.actor, existingGrant.identityId);
+      if (!identityGate.ok) {
+        sendJson(res, identityGate.status || 403, { error: identityGate.reason || "forbidden" });
+        return;
+      }
+      let witness = null;
+      if (existingGrant.active === true) {
+        witness = revokeIdentityActorAssumption(world, {
+          actor: gate.actor,
+          identityId: existingGrant.identityId,
+          targetActor: existingGrant.targetActor
+        });
+      }
+      const grant = authorityGrantReadShape(identityActorAssumptionGrantHistory(world, { grantId }).at(-1) ?? existingGrant);
+      world.observe({
+        process: "authority.grants.revoke",
+        actor: gate.actor,
+        claims: [],
+        body: {
+          id: grant?.id ?? existingGrant.id,
+          identityId: existingGrant.identityId,
+          targetActor: existingGrant.targetActor,
+          changed: existingGrant.active === true
+        }
+      });
+      sendJson(res, 200, {
+        grant,
+        changed: existingGrant.active === true,
+        witness
+      });
     },
 
     "backendProgram.run": async args => {
@@ -564,8 +766,9 @@ export function createCoreRuntimeBundleHandlers({
         claims: [relation(frontendHost, "rendered", route.serves || rootWidget)],
         body: { route: route.path }
       });
-      const pageTheme = projectPagePresentationThemeHook(requestVisibleWitnesses(requestSession?.effectiveActor || requestSession?.actor || null, appContext), {
-        actor: requestSession?.effectiveActor || requestSession?.actor || null,
+      const authority = normalizedRequestAuthority({ requestSession });
+      const pageTheme = projectPagePresentationThemeHook(requestVisibleWitnesses(authority.effectiveActor ?? null, appContext), {
+        actor: authority.effectiveActor ?? null,
         pageId: rootWidget
       });
         const guidanceSurface = widgetPageGuidanceSurface(world, {

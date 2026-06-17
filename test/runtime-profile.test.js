@@ -319,12 +319,84 @@ test("runtime surface contributions vary by active runtime profile", async () =>
     assert.equal(minimalHtml.includes('"surface:bootstrap"'), false);
     assert.equal(minimalHtml.includes('"surface:process-view"'), false);
     assert.equal(minimalHtml.includes('"surface:world"'), false);
+    assert.equal(minimalHtml.includes('"surface:platform"'), false);
     assert.equal(fullHtml.includes('"surface:bootstrap"'), true);
     assert.equal(fullHtml.includes('"surface:process-view"'), true);
     assert.equal(fullHtml.includes('"surface:world"'), true);
+    assert.equal(fullHtml.includes('"surface:platform"'), true);
   } finally {
     await minimalServer.close();
     await fullServer.close();
+  }
+});
+
+test("minimal runtime profile does not expose platform self-model routes", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "minimal" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "minimal" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "minimal"
+  });
+
+  assert.equal(server.ok, true);
+
+  try {
+    assert.equal((await fetch(`${server.url}/platform`)).status, 404);
+    assert.equal((await fetch(`${server.url}/api/platform-model`)).status, 404);
+    assert.equal((await fetch(`${server.url}/api/platform-gaps`)).status, 404);
+    assert.equal((await fetch(`${server.url}/api/platform-proposals`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({})
+    })).status, 404);
+  } finally {
+    await server.close();
+  }
+});
+
+test("full runtime exposes platform console and platform self-model API", async () => {
+  const world = createWorld();
+  applyMinimalPageDsl(world);
+  declareBackendHost(world, { actor: "adam", id: "backendHost", runtimeProfile: "full" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost", runtimeProfile: "full" });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: await tempRuntimeRoot(),
+    runtimeProfile: "full"
+  });
+
+  assert.equal(server.ok, true);
+
+  try {
+    const page = await fetch(`${server.url}/platform`);
+    const model = await fetch(`${server.url}/api/platform-model`).then(response => response.json());
+    const gaps = await fetch(`${server.url}/api/platform-gaps`).then(response => response.json());
+    const proposalRoute = await fetch(`${server.url}/api/platform-proposals`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({})
+    });
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
+
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /Platform Console/);
+    assert.equal(model.nodes.some(node => node.id === "plugin.platform"), true);
+    assert.equal(model.nodes.some(node => node.id === "surface:platform"), true);
+    assert.equal(model.proposalActions.some(action => action.action === "runtimePlugin.install"), true);
+    assert.equal(Array.isArray(gaps.gaps), true);
+    assert.notEqual(proposalRoute.status, 404);
+    assert.equal(diagnostics.plugins.activePluginIds.includes("plugin.platform"), true);
+    assert.equal(diagnostics.routes.some(route => route.matcher === "/platform" && route.handler === "page.platform"), true);
+    assert.equal(diagnostics.routes.some(route => route.matcher === "/api/platform-proposals" && route.handler === "platform.proposal.create"), true);
+  } finally {
+    await server.close();
   }
 });
 

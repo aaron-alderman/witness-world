@@ -6,7 +6,7 @@ import { moduleProjectors } from "../../src/modules.js";
 import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
 import { bundleId, handlerCatalog, providers, routes } from "./runtime.js";
 import { createMcpBundleSupportServices } from "./mcp-support-services.js";
-import { MCP_PROTOCOL_VERSION, listSupportedMcpTools, mcpToolNames, resolveMcpToolScope } from "./mcp-tools.js";
+import { MCP_PROTOCOL_VERSION, executeMcpTool, listSupportedMcpTools, mcpToolNames, resolveMcpToolScope } from "./mcp-tools.js";
 
 test("mcp plugin exposes MCP HTTP route ownership", () => {
   assert.equal(bundleId, "bundle-mcp");
@@ -19,6 +19,8 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   const toolNames = mcpToolNames();
   assert.equal(toolNames.includes("world.read"), true);
   assert.equal(toolNames.includes("authoring.write"), true);
+  assert.equal(toolNames.includes("platform.read"), true);
+  assert.equal(toolNames.includes("platform.proposal"), true);
   assert.equal(toolNames.includes("db.sql"), true);
   assert.equal(listSupportedMcpTools().every(tool => toolNames.includes(tool.name)), true);
   assert.deepEqual(resolveMcpToolScope("world.read", { view: "processRun", runId: "run-1" }), {
@@ -27,7 +29,13 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   });
   const worldRead = listSupportedMcpTools().find(tool => tool.name === "world.read");
   const authoringWrite = listSupportedMcpTools().find(tool => tool.name === "authoring.write");
+  const platformRead = listSupportedMcpTools().find(tool => tool.name === "platform.read");
+  const platformProposal = listSupportedMcpTools().find(tool => tool.name === "platform.proposal");
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("authoringMatrix"), true);
+  assert.equal(platformRead.inputSchema.properties.view.enum.includes("gaps"), true);
+  assert.equal(platformRead.inputSchema.properties.view.enum.includes("proposals"), true);
+  assert.equal(platformProposal.inputSchema.properties.action.enum.includes("runtimePlugin.install"), true);
+  assert.equal(platformProposal.inputSchema.properties.operation.enum.includes("approve"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("process.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("type.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("projection.create"), true);
@@ -67,6 +75,9 @@ test("mcp plugin owns origin, principal, and scope support services", () => {
   assert.deepEqual(services.currentMcpToolInstalls(), projected.mcpToolInstalls);
   assert.equal(services.mcpToolAvailable("db.sql"), true);
   assert.equal(services.mcpToolAvailable("storage.blob"), false);
+  assert.equal(services.mcpToolAvailable("platform.read"), false);
+  projected.backendCapabilities.add("platform.self");
+  assert.equal(services.mcpToolAvailable("platform.read"), true);
   assert.deepEqual(
     services.validateMcpOrigin({ headers: { origin: "http://localhost:3000", host: "127.0.0.1:8787" } }),
     { ok: true }
@@ -95,6 +106,36 @@ test("mcp plugin owns origin, principal, and scope support services", () => {
     }
   );
   assert.equal(services.mcpScopeAllows(projected.mcpToolInstalls[0], {}, {}).ok, true);
+});
+
+test("platform MCP proposal tool routes through platform proposal handlers", async () => {
+  const calls = [];
+  const callHandler = async request => {
+    calls.push(request);
+    return { status: request.handler === "platform.proposal.create" ? 201 : 200, body: { ok: true, handler: request.handler } };
+  };
+
+  const created = await executeMcpTool("platform.proposal", {
+    args: {
+      action: "runtimePlugin.install",
+      id: "proposal.platform.install",
+      body: { serverRunner: "runner.platform", plugin: "plugin.platform" },
+      reason: "Install platform"
+    },
+    callHandler
+  });
+  assert.equal(created.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.proposal.create");
+  assert.equal(calls.at(-1).path, "/api/platform-proposals");
+  assert.equal(calls.at(-1).body.action, "runtimePlugin.install");
+
+  const approved = await executeMcpTool("platform.proposal", {
+    args: { operation: "approve", proposalId: "proposal.platform.install" },
+    callHandler
+  });
+  assert.equal(approved.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.proposal.approve");
+  assert.equal(calls.at(-1).params.id, "proposal.platform.install");
 });
 
 test("mcp runtime ownership is not implemented in core compatibility files", async () => {

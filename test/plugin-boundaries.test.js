@@ -103,6 +103,7 @@ const OPTIONAL_HANDLER_PREFIXES = [
   "notify.",
   "notifications.",
   "http.outbound",
+  "platform.",
   "runtimeConfig.",
   "search.index",
   "webhook."
@@ -357,7 +358,8 @@ test("runtime profiles are seed-backed and global first-party plugin registries 
     "plugin.mcp",
     "plugin.practical-backend",
     "plugin.demo",
-    "plugin.eden"
+    "plugin.eden",
+    "plugin.platform"
   ]);
   assert.deepEqual(runtimeProfilePluginIds("full"), profileSeed.profiles.full.plugins);
   assert.equal(catalogSeed.bundles.some(bundle => bundle.id === "bundle-inspect" && bundle.plugin === "plugin.inspect"), true);

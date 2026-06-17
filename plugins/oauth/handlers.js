@@ -138,8 +138,8 @@ export function createOauthHandlers({
           sendJson(res, 401, { error: "sign in first to link an oauth account" });
           return;
         }
-        const authenticatedIdentityId = requestSession.authenticatedIdentity ?? requestSession.identity ?? null;
-        const authenticatedActor = requestSession.authenticatedActor ?? requestSession.effectiveActor ?? requestSession.actor ?? backendHost;
+        const authenticatedIdentityId = requestSession.authenticatedIdentity ?? null;
+        const authenticatedActor = requestSession.authenticatedActor ?? backendHost;
         if (existingLink && existingLink.identity && existingLink.identity !== authenticatedIdentityId) {
           emitAuthOauthLink({
             actor: authenticatedActor,

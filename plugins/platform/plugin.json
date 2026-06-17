@@ -1,0 +1,21 @@
+{
+  "id": "plugin.platform",
+  "version": "0.1.0",
+  "displayName": "Platform Self Model",
+  "description": "Owns the platform self-model, Platform Console, and platform-facing MCP read/proposal tools.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-platform"
+  ],
+  "contributes": {
+    "capabilities": [
+      {
+        "id": "platform.self",
+        "label": "Platform Self Model"
+      }
+    ]
+  }
+}

@@ -41,6 +41,37 @@ test("engentus canonical V1 WCSS source declares the expected slice coverage and
   assert.ok(authored.styles.includes("chart.page_tooltip"));
   assert.ok(!authored.styles.includes("controls and editor"));
   assert.ok(authored.lowering?.byBackend?.browser);
+  assert.equal(authored.slices.find(slice => slice.name === "auth")?.lowering?.browser?.mode, "native-browser");
+  assert.equal(authored.slices.find(slice => slice.name === "platform-config")?.lowering?.browser?.mode, "native-browser");
+  assert.deepEqual(
+    authored.slices.find(slice => slice.name === "auth")?.seams,
+    [
+      {
+        kind: "variant",
+        name: "auth.book_state",
+        prop: "className",
+        token: null,
+        identities: [],
+        traits: ["auth-book"],
+        values: ["folding", "incoming"],
+        min: null,
+        max: null,
+        notes: []
+      },
+      {
+        kind: "variant",
+        name: "auth.microsoft_state",
+        prop: "className",
+        token: null,
+        identities: [],
+        traits: ["ms-btn"],
+        values: ["pending"],
+        min: null,
+        max: null,
+        notes: []
+      }
+    ]
+  );
   assert.deepEqual(
     authored.slices.find(slice => slice.name === "goodman")?.oracleGroups,
     ["goodman chart scaffold", "goodman toolbar", "goodman view", "goodman windows"]
@@ -96,6 +127,18 @@ test("engentus canonical V1 parser rejects incomplete style grammar sections wit
     /without a declaration group/i
   );
   assert.throws(
+    () => parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\n    seam scalar runtime.size\n      prop style\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      group foundation\n        rule body\n          color = red\n`),
+    /Scalar seam runtime\.size must declare both min and max bounds/i
+  );
+  assert.throws(
+    () => parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\n    seam unknown runtime.mode\n      prop className\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      group foundation\n        rule body\n          color = red\n`),
+    /unsupported kind unknown/i
+  );
+  assert.throws(
+    () => parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\n    seam toggle runtime.mode\n      prop className\n      trait foo\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      group foundation\n        rule body\n          color = red\n`),
+    /Toggle seam runtime\.mode must declare a token/i
+  );
+  assert.throws(
     () => parseEngentusCanonicalWcss(`theme engentus\ntokens\n  color.foo = #fff\nstyles\n  style foo\nviews\n  view desktop\napplication\n  slice shell-base\n    asset shell\n    source shell.rvm\n    family foo\nlowering\n  backend browser\n    asset shell\n      slice shell-base\n        group foundation\n        family foo -> foundation\n      group foundation\n        rule body\n          color = red\n      group foundation\n        rule body\n          color = blue\n`),
     /declares browser group foundation more than once/i
   );
@@ -125,6 +168,13 @@ test("engentus browser lowering map is parsed separately from application slices
     browserLowering.slices.find(slice => slice.name === "goodman")?.familyGroups.find(entry => entry.family === "surface.window"),
     { family: "surface.window", group: "goodman windows" }
   );
+  assert.equal(browserLowering.slices.find(slice => slice.name === "auth")?.mode, "native-browser");
+  assert.equal(browserLowering.slices.find(slice => slice.name === "platform-config")?.mode, "native-browser");
+  assert.equal(
+    browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.auth?.refs.hasRawSelectors,
+    true
+  );
+  assert.ok(browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.["platform-config"]);
   assert.deepEqual(
     declarationGroups.chart.map(group => group.name),
     ["chart tokens", "chart foundation", "chart surfaces"]
@@ -137,11 +187,17 @@ test("engentus presentation inventory extracts structured identities, traits, an
   const auth = inventory.slices.find(slice => slice.name === "auth");
   const goodman = inventory.slices.find(slice => slice.name === "goodman");
   const shellBase = inventory.slices.find(slice => slice.name === "shell-base");
+  const platformConfig = inventory.slices.find(slice => slice.name === "platform-config");
 
   assert.ok(auth?.identities.includes("EngentusLogin"));
   assert.ok(auth?.identities.includes("EngentusSignout"));
+  assert.ok(auth?.identities.includes("EngentusAccessDenied"));
+  assert.ok(auth?.traits.includes("auth-brand"));
+  assert.ok(auth?.traits.includes("auth-input"));
+  assert.ok(auth?.traits.includes("auth-pw-wrap"));
   assert.ok(auth?.traits.includes("engentus-login"));
   assert.ok(auth?.overrideProps.includes("className"));
+  assert.ok(auth?.surfaces.find(surface => surface.identity === "EngentusLogin")?.presentationAnchor);
 
   assert.ok(shellBase?.identities.includes("EngentusRoot"));
   assert.ok(shellBase?.traits.includes("engentus-spa"));
@@ -149,6 +205,9 @@ test("engentus presentation inventory extracts structured identities, traits, an
   assert.ok(goodman?.identities.includes("GoodmanBody"));
   assert.ok(goodman?.overrideProps.includes("style"));
   assert.ok(goodman?.overrideProps.includes("className"));
+  assert.ok(platformConfig?.identities.includes("PlatformConfigNotice"));
+  assert.ok(platformConfig?.traits.includes("platform-config-side-link"));
+  assert.ok(platformConfig?.surfaces.find(surface => surface.identity === "EngentusPlatformConfigApp")?.presentationAnchor);
 });
 
 test("engentus style artifacts keep current asset outputs stable while defaulting slices to legacy", async () => {
@@ -161,6 +220,10 @@ test("engentus style artifacts keep current asset outputs stable while defaultin
   assert.equal(artifacts.files["engentus-shell.css"], shellCss);
   assert.equal(artifacts.files["engentus-chart-pages.css"], chartCss);
   assert.equal(artifacts.ownership.ok, true);
+  assert.equal(
+    artifacts.parity.slices.find(slice => slice.name === "auth")?.loweringMode,
+    "declaration-groups"
+  );
   assert.deepEqual(
     artifacts.parity.slices.find(slice => slice.name === "goodman")?.legacyGroups,
     ["goodman chart scaffold", "goodman toolbar", "goodman view", "goodman windows"]
@@ -196,12 +259,24 @@ test("engentus can switch isolated slices onto the authored WCSS lane without ch
   });
   assert.equal(ownership.ok, true);
 
-  const stylesheets = composeEngentusStylesheets({
+  const stylesheets = await composeEngentusStylesheets({
     authoredPlan,
     switchManifest
   });
   assert.equal(renderOracleStylesheet(stylesheets.shell), expectedShellCss);
   assert.equal(renderOracleStylesheet(stylesheets.chart), expectedChartCss);
+  assert.equal(
+    ownership.slices.find(slice => slice.name === "auth")?.loweringMode,
+    "native-browser"
+  );
+  assert.equal(
+    ownership.slices.find(slice => slice.name === "platform-config")?.loweringMode,
+    "native-browser"
+  );
+  assert.deepEqual(
+    ownership.slices.find(slice => slice.name === "platform-config")?.anchorCoverage?.missing,
+    []
+  );
 });
 
 test("engentus build script writes proof artifacts under tmp without changing live asset paths", async () => {
@@ -241,4 +316,59 @@ test("engentus ownership checks reject unknown structured identities when a slic
 
   assert.equal(ownership.ok, false);
   assert.match(ownership.errors.join("\n"), /MissingSurfaceIdentity/);
+});
+
+test("engentus ownership checks reject native auth variant refs that are not declared by node-scoped typed seams", async () => {
+  const [authoredPlan, inventory] = await Promise.all([
+    loadEngentusAppliedWcss(),
+    buildEngentusPresentationInventory()
+  ]);
+  const brokenPlan = {
+    ...authoredPlan,
+    slices: authoredPlan.slices.map(slice => slice.name === "auth"
+      ? { ...slice, seams: [] }
+      : slice)
+  };
+
+  const ownership = verifyEngentusStyleOwnership({
+    inventory,
+    authoredPlan: brokenPlan,
+    switchManifest: {
+      theme: "engentus",
+      slices: { auth: "wcss" }
+    }
+  });
+
+  assert.equal(ownership.ok, false);
+  assert.match(ownership.errors.join("\n"), /matching typed seam target/i);
+  assert.match(ownership.errors.join("\n"), /undeclared variant value pending/i);
+});
+
+test("engentus ownership checks reject native platform-config seams that do not target the sidebar or notice surfaces", async () => {
+  const [authoredPlan, inventory] = await Promise.all([
+    loadEngentusAppliedWcss(),
+    buildEngentusPresentationInventory()
+  ]);
+  const brokenPlan = {
+    ...authoredPlan,
+    slices: authoredPlan.slices.map(slice => slice.name === "platform-config"
+      ? {
+        ...slice,
+        seams: slice.seams.filter(seam => seam.name !== "platform.sidebar_active")
+      }
+      : slice)
+  };
+
+  const ownership = verifyEngentusStyleOwnership({
+    inventory,
+    authoredPlan: brokenPlan,
+    switchManifest: {
+      theme: "engentus",
+      slices: { "platform-config": "wcss" }
+    }
+  });
+
+  assert.equal(ownership.ok, false);
+  assert.match(ownership.errors.join("\n"), /PlatformConfigSidebarOperatorAction/);
+  assert.match(ownership.errors.join("\n"), /undeclared variant value active/i);
 });

@@ -1,0 +1,133 @@
+import desire/v3-alpha
+
+module plugin.platform.console {
+  in plugin.platform
+}
+
+enum PlatformLifecycle {
+  cases {
+    author
+    transform
+    execute
+    observe
+    verify
+    ship
+    steward
+  }
+}
+
+collection PlatformNodes
+collection PlatformEdges
+collection PlatformGaps
+collection PlatformProfiles
+collection PlatformProposals
+collection PlatformProposalActions
+
+query PlatformModelRead {
+  kind http
+  route /api/platform-model
+  response_schema PlatformModel
+}
+
+query PlatformGapsRead {
+  kind http
+  route /api/platform-gaps
+  response_schema PlatformGaps
+}
+
+command PlatformProposalCreate {
+  kind http
+  route /api/platform-proposals
+  request_schema PlatformProposalDraft
+  response_schema PlatformProposalResult
+}
+
+command PlatformProposalApprove {
+  kind http
+  route /api/platform-proposals/:id/approve
+  request_schema PlatformProposalReview
+  response_schema PlatformProposalResult
+}
+
+command PlatformProposalReject {
+  kind http
+  route /api/platform-proposals/:id/reject
+  request_schema PlatformProposalReview
+  response_schema PlatformProposalResult
+}
+
+view PlatformConsolePage {
+  identity surface:platform
+  kind page
+  class platform-console
+  capabilities {
+    platform.self
+  }
+  children {
+    PlatformConsoleSummary
+    PlatformLifecycleBoard
+    PlatformMap
+    PlatformProposalPanel
+    PlatformGapList
+    PlatformProfileComparison
+    PlatformProposalReviewList
+  }
+}
+
+view PlatformConsoleSummary {
+  kind region
+  class platform-summary
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformLifecycleBoard {
+  kind region
+  class platform-board
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformMap {
+  kind table
+  class platform-map
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformProposalPanel {
+  kind form
+  class platform-proposal-panel
+  process PlatformProposalCreate
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformProposalReviewList {
+  kind form
+  class platform-review-panel
+  process PlatformProposalApprove
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformGapList {
+  kind table
+  class platform-gaps
+  projections {
+    PlatformGapsRead
+  }
+}
+
+view PlatformProfileComparison {
+  kind table
+  class platform-profiles
+  projections {
+    PlatformModelRead
+  }
+}

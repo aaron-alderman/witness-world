@@ -1179,20 +1179,33 @@ application
     trait engentus-spa
     family chrome.toolbar
     family interactive.toolbar_button
-    override className
-    override style
+    seam escape className
+      prop className
+    seam escape style
+      prop style
 
   slice auth
     asset shell
     source shell-auth.rvm
+    source shell-shared.rvm
+    identity EngentusAccessDenied
     identity EngentusLogin
+    identity EngentusNotFound
     identity EngentusSignout
+    trait engentus-signout
     trait engentus-login
     trait surface-auth-view
     family auth.button.primary
     family auth.button.microsoft
     family auth.field
-    override className
+    seam variant auth.book_state
+      prop className
+      trait auth-book
+      values folding incoming
+    seam variant auth.microsoft_state
+      prop className
+      trait ms-btn
+      values pending
 
   slice home
     asset shell
@@ -1203,7 +1216,8 @@ application
     family chrome.sidebar
     family surface.module_card
     family surface.news_item
-    override className
+    seam escape className
+      prop className
 
   slice goodman
     asset shell
@@ -1221,8 +1235,10 @@ application
     family surface.chart_stage
     family surface.window
     family chart.page_tooltip
-    override className
-    override style
+    seam escape className
+      prop className
+    seam escape style
+      prop style
 
   slice mill-charge
     asset shell
@@ -1232,7 +1248,8 @@ application
     trait engentus-mill-charge
     family chrome.sidebar
     family surface.metric_group
-    override style
+    seam escape style
+      prop style
 
   slice mill-force
     asset shell
@@ -1243,7 +1260,8 @@ application
     family chrome.sidebar
     family interactive.pill
     family surface.result_row
-    override className
+    seam escape className
+      prop className
 
   slice platform-config
     asset shell
@@ -1268,7 +1286,14 @@ application
     family platform.field
     family platform.output_panel
     family platform.data_table
-    override className
+    seam variant platform.notice_tone
+      prop className
+      identity PlatformConfigNotice
+      values success warn error
+    seam toggle platform.sidebar_active
+      prop className
+      trait platform-config-side-link
+      token active
 
   slice chart-pages
     asset chart
@@ -1302,11 +1327,315 @@ lowering
         family interactive.toolbar_button -> "controls and editor"
 
       slice auth
+        mode native-browser
         group auth
         seam auth
         family auth.button.primary -> auth
         family auth.button.microsoft -> auth
         family auth.field -> auth
+
+      native auth
+        rule trait surface-auth-view
+          flex = 1
+          min-height = 100vh
+        rule identity EngentusLogin
+          perspective = 2200px
+          perspective-origin = 50% 50%
+        rule identity EngentusSignout
+          perspective = 2200px
+          perspective-origin = 50% 50%
+        rule trait auth-book
+          width = 100%
+          height = 100%
+          display = flex
+          flex-shrink = 0
+          position = relative
+          transform-origin = right center
+          transition = transform 0.9s cubic-bezier(0.77, 0, 0.175, 1)
+          backface-visibility = hidden
+          will-change = transform
+        rule trait auth-book pseudo after
+          content = ""
+          position = absolute
+          inset = 0
+          background = linear-gradient(to left, rgba(0,0,0,.6) 0%, rgba(0,0,0,.15) 18%, transparent 45%)
+          pointer-events = none
+          opacity = 0
+          transition = opacity 0.9s cubic-bezier(0.77, 0, 0.175, 1)
+        rule trait auth-book variant folding pseudo after
+          opacity = 1
+        rule trait auth-book variant folding
+          transform = rotateY(-90deg)
+        rule trait auth-book variant incoming
+          transform = rotateY(90deg)
+          animation = authBookIncoming 0.9s cubic-bezier(0.77, 0, 0.175, 1) forwards
+        keyframes authBookIncoming
+          step to
+            transform = rotateY(0deg)
+        keyframes authSpin
+          step to
+            transform = rotate(360deg)
+        rule identity EngentusSignout trait auth-book
+          transform-origin = left center
+        rule identity EngentusSignout trait auth-book pseudo after
+          background = linear-gradient(to right, rgba(0,0,0,.6) 0%, rgba(0,0,0,.15) 18%, transparent 45%)
+        rule trait auth-left
+          flex = 0 0 55%
+          background = linear-gradient(160deg, rgba(12,20,42,0.91) 0%, rgba(36,54,90,0.86) 55%, rgba(18,28,55,0.93) 100%), url(../img/main.png) center / cover no-repeat
+          display = flex
+          flex-direction = column
+          padding = 32px 40px
+          position = relative
+          overflow = hidden
+        rule trait auth-left pseudo before
+          content = ""
+          position = absolute
+          inset = 0
+          background-image = linear-gradient(rgba(140,196,212,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(140,196,212,.035) 1px, transparent 1px)
+          background-size = 44px 44px
+          pointer-events = none
+        rule trait auth-right
+          flex = 1
+          background = #f8fafc
+          display = flex
+          align-items = center
+          justify-content = center
+          padding = 40px 36px
+        rule trait auth-brand
+          display = flex
+          align-items = center
+          gap = 10px
+          position = relative
+          z-index = 1
+        rule trait auth-brand-div
+          width = 1px
+          height = 20px
+          background = rgba(140,196,212,.35)
+        rule trait auth-hero
+          flex = 1
+          display = flex
+          flex-direction = column
+          justify-content = center
+          position = relative
+          z-index = 1
+          padding = 0 8px
+        rule traits auth-hero auth-form-logo tag img
+          align-self = flex-start
+        rule trait auth-tagline
+          font-size = 28px
+          font-weight = 700
+          color = var(--t1)
+          line-height = 1.22
+          margin-bottom = 14px
+          letter-spacing = -.025em
+        rule trait auth-tagline tag em
+          color = var(--blue)
+          font-style = normal
+        rule trait auth-sub
+          font-size = 13px
+          color = rgba(148,163,184,.85)
+          line-height = 1.65
+          margin-bottom = 34px
+          max-width = 380px
+        rule trait auth-bullets
+          list-style = none
+          display = flex
+          flex-direction = column
+          gap = 12px
+        rule trait auth-bullet
+          display = flex
+          align-items = center
+          gap = 11px
+          font-size = 12.5px
+          color = rgba(241,245,249,.78)
+        rule trait auth-bullet-dot
+          width = 6px
+          height = 6px
+          border-radius = 50%
+          background = var(--blue)
+          flex-shrink = 0
+          box-shadow = 0 0 0 3px rgba(140,196,212,.18)
+        rule trait auth-footer
+          font-size = 10px
+          color = rgba(148,163,184,.45)
+          position = relative
+          z-index = 1
+        rule trait auth-form-wrap
+          width = 100%
+          max-width = 372px
+        rule trait auth-form-logo
+          margin-bottom = 26px
+        rule traits auth-form-title auth-so-title
+          font-size = 22px
+          font-weight = 700
+          color = #0f172a
+          margin-bottom = 5px
+          letter-spacing = -.025em
+        rule traits auth-form-sub auth-so-sub
+          font-size = 12px
+          color = #64748b
+          margin-bottom = 26px
+        rule trait ms-btn
+          width = 100%
+          display = flex
+          align-items = center
+          justify-content = center
+          gap = 11px
+          padding = 12px 18px
+          background = #2f2f2f
+          color = #fff
+          border = none
+          border-radius = 6px
+          font-size = 13.5px
+          font-weight = 500
+          cursor = pointer
+          transition = background .15s
+          letter-spacing = .01em
+          margin-bottom = 20px
+          font-family = inherit
+        rule trait ms-btn pseudo hover
+          background = #1a1a1a
+        rule trait ms-btn variant pending
+          pointer-events = none
+          opacity = 0.92
+        rule selector ".ms-btn.pending svg, .ms-btn.folding svg"
+          display = none
+        rule trait ms-btn variant pending pseudo before
+          content = ""
+          display = inline-block
+          width = 13px
+          height = 13px
+          border = 2px solid rgba(255,255,255,.28)
+          border-top-color = rgba(255,255,255,.9)
+          border-radius = 50%
+          animation = authSpin 0.65s linear infinite
+          vertical-align = -2px
+          margin-right = 5px
+          flex-shrink = 0
+        rule selector ".auth-submit.pending"
+          pointer-events = none
+          opacity = 0.92
+        rule trait auth-divider
+          display = flex
+          align-items = center
+          gap = 12px
+          margin-bottom = 20px
+        rule trait auth-divider-line
+          flex = 1
+          height = 1px
+          background = #e2e8f0
+        rule trait auth-divider-text
+          font-size = 11px
+          color = #94a3b8
+          white-space = nowrap
+        rule trait auth-field
+          margin-bottom = 14px
+        rule trait auth-field tag label
+          display = block
+          font-size = 11.5px
+          font-weight = 600
+          color = #374151
+          margin-bottom = 5px
+        rule trait auth-input
+          width = 100%
+          padding = 10px 12px
+          border = 1px solid #d1d5db
+          border-radius = 6px
+          font-size = 13px
+          color = #0f172a
+          background = #fff
+          transition = border-color .15s, box-shadow .15s
+          outline = none
+          font-family = inherit
+        rule trait auth-input pseudo focus
+          border-color = var(--blue)
+          box-shadow = 0 0 0 3px rgba(140,196,212,.2)
+        rule trait auth-pw-wrap
+          position = relative
+        rule trait auth-pw-toggle
+          position = absolute
+          right = 10px
+          top = 50%
+          transform = translateY(-50%)
+          background = none
+          border = none
+          cursor = pointer
+          color = #94a3b8
+          font-size = 14px
+          padding = 2px
+          line-height = 1
+        rule trait auth-pw-toggle pseudo hover
+          color = #475569
+        rule trait auth-forgot
+          text-align = right
+          margin-top = -8px
+          margin-bottom = 20px
+        rule trait auth-forgot tag a
+          font-size = 11px
+          color = var(--blu2)
+          text-decoration = none
+        rule trait auth-forgot tag a pseudo hover
+          text-decoration = underline
+        rule trait auth-submit
+          width = 100%
+          display = inline-block
+          align-items = center
+          justify-content = center
+          gap = 11px
+          padding = 11.5px
+          background = var(--dk)
+          color = #fff
+          border = none
+          border-radius = 6px
+          font-size = 13.5px
+          font-weight = 600
+          cursor = pointer
+          transition = background .15s
+          letter-spacing = .015em
+          font-family = inherit
+        rule trait auth-submit pseudo hover
+          background = #1e2f52
+        rule trait auth-form-footer
+          margin-top = 22px
+          font-size = 10.5px
+          color = #94a3b8
+          text-align = center
+          line-height = 1.65
+        rule trait auth-form-footer tag a
+          color = var(--blu2)
+          text-decoration = none
+        rule trait auth-form-footer tag a pseudo hover
+          text-decoration = underline
+        rule selector .auth-signout-icon
+          width = 54px
+          height = 54px
+          border-radius = 50%
+          background = var(--grn)
+          border = none
+          display = flex
+          align-items = center
+          justify-content = center
+          margin = 0 auto 20px
+          font-size = 24px
+          color = #fff
+        rule trait auth-so-title
+          font-size = 21px
+          font-weight = 700
+          color = #0f172a
+          margin-bottom = 9px
+          letter-spacing = -.025em
+          text-align = center
+        rule trait auth-so-sub
+          font-size = 12.5px
+          color = #64748b
+          text-align = center
+          margin-bottom = 28px
+          line-height = 1.55
+        media "(max-width: 980px)"
+          rule trait auth-book
+            flex-direction = column
+          rule traits auth-left auth-right
+            flex = none
 
       slice home
         group home
@@ -1345,6 +1674,7 @@ lowering
         family surface.result_row -> "mill force"
 
       slice platform-config
+        mode native-browser
         group "platform config"
         seam "platform config"
         family platform.page_shell -> "platform config"
@@ -1355,6 +1685,170 @@ lowering
         family platform.field -> "platform config"
         family platform.output_panel -> "platform config"
         family platform.data_table -> "platform config"
+
+      native platform-config
+        rule identities EngentusPlatformConfigBody PlatformConfigSecretsBody PlatformConfigDatasourcesBody PlatformConfigScriptsBody PlatformConfigAccessBody
+          background = linear-gradient(180deg, #f7fafc 0%, #edf3f8 100%)
+          padding = 18px
+          gap = 14px
+          align-items = stretch
+        rule trait platform-config-main
+          min-width = 0
+          flex = 1
+          display = flex
+          flex-direction = column
+          gap = 14px
+          overflow = auto
+          padding-right = 4px
+        rule selector "#platform-config-hero"
+          display = flex
+          flex-direction = column
+          gap = 6px
+        rule trait platform-config-title
+          font-size = 24px
+          color = #102338
+          letter-spacing = -.03em
+        rule trait platform-config-intro
+          font-size = 12.5px
+          line-height = 1.6
+          color = #4c5f78
+          max-width = 920px
+        rule trait platform-config-notice
+          border-radius = 10px
+          padding = 11px 13px
+          border = 1px solid rgba(61,88,128,.16)
+          background = rgba(255,255,255,.9)
+          color = #22364d
+          font-size = 12px
+          line-height = 1.5
+        rule trait platform-config-notice variant success
+          border-color = rgba(22,163,74,.25)
+          background = rgba(22,163,74,.08)
+          color = #166534
+        rule trait platform-config-notice variant error
+          border-color = rgba(220,38,38,.25)
+          background = rgba(220,38,38,.08)
+          color = #991b1b
+        rule trait platform-config-notice variant warn
+          border-color = rgba(236,116,36,.25)
+          background = rgba(236,116,36,.08)
+          color = #9a3412
+        rule trait platform-config-content-card
+          background = rgba(255,255,255,.95)
+          border = 1px solid rgba(61,88,128,.16)
+          border-radius = 12px
+          box-shadow = 0 16px 42px rgba(12,20,42,.09)
+          padding = 16px
+        rule trait platform-config-sidebar
+          width = 220px
+          flex = 0 0 220px
+          background = rgba(255,255,255,.9)
+          border = 1px solid rgba(61,88,128,.16)
+          border-radius = 12px
+          box-shadow = 0 16px 42px rgba(12,20,42,.09)
+          padding = 14px
+          display = flex
+          flex-direction = column
+          gap = 10px
+        rule traits platform-config-sidebar-title platform-config-section-title
+          font-size = 15px
+          font-weight = 700
+          color = #102338
+          margin-bottom = 8px
+          letter-spacing = -.02em
+        rule trait platform-config-sidebar-hint
+          font-size = 11px
+          line-height = 1.55
+          color = #64748b
+        rule trait platform-config-sidebar-nav
+          display = flex
+          flex-direction = column
+          gap = 8px
+        rule trait platform-config-side-link
+          width = 100%
+          justify-content = flex-start
+          border = 1px solid rgba(61,88,128,.16)
+          background = rgba(247,250,252,.85)
+          color = #334155
+        rule trait platform-config-side-link variant active
+          background = rgba(140,196,212,.16)
+          border-color = rgba(140,196,212,.35)
+          color = #0f4f6a
+        rule trait platform-config-field
+          margin-bottom = 10px
+        rule traits platform-config-field platform-config-checkbox tag label
+          color = #334155
+        rule trait platform-config-input
+          background = #fff
+          color = #0f172a
+          border = 1px solid #cbd5e1
+          border-radius = 6px
+        rule trait platform-config-input pseudo focus
+          border-color = var(--blue)
+          box-shadow = 0 0 0 3px rgba(140,196,212,.2)
+        rule trait platform-config-hint
+          font-size = 11px
+          line-height = 1.55
+          color = #64748b
+          margin-top = 4px
+        rule trait platform-config-field-stack
+          display = flex
+          flex-direction = column
+        rule trait platform-config-actions
+          flex-wrap = wrap
+        rule trait platform-config-actions trait rbtn
+          min-width = 108px
+        rule trait platform-config-checkbox
+          margin = 10px 0
+        rule trait platform-config-output
+          margin-top = 10px
+          padding = 12px
+          min-height = 148px
+          background = #0f172a
+          color = #d8e5f2
+          border-radius = 8px
+          overflow = auto
+          white-space = pre-wrap
+          word-break = break-word
+          font-size = 11px
+          line-height = 1.5
+        rule trait platform-config-output pseudo -webkit-scrollbar
+          width = 6px
+          height = 6px
+        rule trait platform-config-output pseudo -webkit-scrollbar-thumb
+          background = rgba(140,196,212,.35)
+          border-radius = 999px
+        rule trait platform-config-table
+          width = 100%
+          border-collapse = collapse
+          margin = 8px 0 14px
+          font-size = 12px
+          background = #fff
+          border = 1px solid rgba(61,88,128,.12)
+          border-radius = 10px
+          overflow = hidden
+        rule trait platform-config-table tags th td
+          padding = 10px 12px
+          border-bottom = 1px solid rgba(61,88,128,.1)
+          text-align = left
+          vertical-align = middle
+          color = #22364d
+        rule trait platform-config-table tag th
+          font-size = 11px
+          text-transform = uppercase
+          letter-spacing = .04em
+          color = #64748b
+          background = rgba(241,245,249,.9)
+        rule trait platform-config-table tag tr pseudo last-child tag td
+          border-bottom = none
+        rule selector ".platform-config-row-action"
+          min-width = 72px
+        media "(max-width: 980px)"
+          rule identities EngentusPlatformConfigBody PlatformConfigSecretsBody PlatformConfigDatasourcesBody PlatformConfigScriptsBody PlatformConfigAccessBody
+            flex-direction = column
+          rule trait platform-config-sidebar
+            width = auto
+            flex-basis = auto
 
       group foundation
         rule "*, *::before, *::after"
@@ -1863,6 +2357,11 @@ lowering
           text-align = center
           margin-bottom = 28px
           line-height = 1.55
+        media "(max-width: 980px)"
+          rule ".auth-book"
+            flex-direction = column
+          rule ".auth-left, .auth-right"
+            flex = none
       group home
         rule "#view-home"
           flex = 1
@@ -2062,13 +2561,21 @@ lowering
         rule ".ms-soon"
           background = rgba(255,255,255,.05)
           color = var(--t2)
+        media "(max-width: 980px)"
+          rule "#view-home, #body"
+            flex-direction = column
+          rule "#news-panel"
+            width = auto
+            min-width = 0
+          rule "#module-grid"
+            grid-template-columns = 1fr
       group "shared views"
-        rule "#view-mill, #view-mill-force, #view-platform-config, #view-platform-config-secrets, #view-platform-config-datasources, #view-platform-config-scripts"
+        rule "#view-mill, #view-mill-force, #view-platform-config, #view-platform-config-secrets, #view-platform-config-datasources, #view-platform-config-scripts, #view-platform-config-access"
           flex = 1
           display = flex
           flex-direction = column
           overflow = hidden
-        rule "#body, #mill-body, #mill-force-body, #platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body"
+        rule "#body, #mill-body, #mill-force-body, #platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body, #platform-config-access-body"
           flex = 1
           display = flex
           overflow = hidden
@@ -3013,6 +3520,12 @@ lowering
           border-radius = 5px
           padding = 8px 10px
           margin-bottom = 8px
+        media "(max-width: 980px)"
+          rule "#mill-body"
+            flex-direction = column
+          rule "#mill-sb, #mill-metrics"
+            width = auto
+            min-width = 0
       group "mill force"
         rule "#mill-force-chart-tabs"
           display = flex
@@ -3122,8 +3635,14 @@ lowering
         rule ".mill-force-rd"
           color = var(--ylw)
           font-size = 10px
+        media "(max-width: 980px)"
+          rule "#mill-force-body"
+            flex-direction = column
+          rule "#mill-force-sb"
+            width = auto
+            min-width = 0
       group "platform config"
-        rule "#platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body"
+        rule "#platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body, #platform-config-access-body"
           background = linear-gradient(180deg, #f7fafc 0%, #edf3f8 100%)
           padding = 18px
           gap = 14px
@@ -3280,15 +3799,8 @@ lowering
         rule ".platform-config-row-action"
           min-width = 72px
         media "(max-width: 980px)"
-          rule ".auth-book, #view-home, #body, #mill-body, #mill-force-body, #platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body"
+          rule "#platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body, #platform-config-access-body"
             flex-direction = column
-          rule ".auth-left, .auth-right"
-            flex = none
-          rule "#news-panel, #sb, #mill-sb, #mill-force-sb, #mill-metrics"
-            width = auto
-            min-width = 0
-          rule "#module-grid"
-            grid-template-columns = 1fr
           rule ".platform-config-sidebar"
             width = auto
             flex-basis = auto

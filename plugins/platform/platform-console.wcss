@@ -1,0 +1,114 @@
+theme platform-console
+
+tokens
+  color.ink.primary       = #172026
+  color.ink.muted         = #5b6670
+  color.line              = #d8dee4
+  color.surface.base      = #ffffff
+  color.surface.soft      = #f6f8fa
+  color.accent.primary    = #1f6feb
+  color.success           = #1a7f37
+  color.warning           = #9a6700
+
+  radius.panel            = 8px
+  radius.control          = 6px
+  size.header.padding     = 20px 24px 14px
+  size.main.padding       = 20px 24px 40px
+  font.body               = system-ui, -apple-system, Segoe UI, sans-serif
+
+styles
+  style console.body
+    selector = body.platform-console
+    layout
+      margin = 0
+    paint
+      background = color.surface.base
+      ink = color.ink.primary
+    text
+      font = 14px/1.45 font.body
+
+  style console.header
+    selector = body.platform-console header
+    layout
+      padding = size.header.padding
+      position = sticky
+      top = 0
+      z-index = 2
+    paint
+      background = color.surface.base
+      border.bottom = 1px solid color.line
+
+  style console.main
+    selector = body.platform-console main
+    layout
+      display = grid
+      gap = 22px
+      padding = size.main.padding
+
+  style console.summary
+    selector = .summary
+    layout
+      display = grid
+      grid-template-columns = repeat(auto-fit, minmax(130px, 1fr))
+      gap = 10px
+
+  style console.card
+    selector = .card
+    layout
+      padding = 12px
+    paint
+      background = color.surface.base
+      border = 1px solid color.line
+      radius = radius.panel
+
+  style console.board
+    selector = .board
+    layout
+      display = grid
+      grid-template-columns = repeat(auto-fit, minmax(160px, 1fr))
+      gap = 10px
+
+  style console.column
+    selector = .platform-column
+    layout
+      min-height = 120px
+      padding = 10px
+    paint
+      background = color.surface.soft
+      border = 1px solid color.line
+      radius = radius.panel
+
+  style console.table
+    selector = table
+    layout
+      width = 100%
+      border-collapse = collapse
+      overflow = hidden
+    paint
+      background = color.surface.base
+      border = 1px solid color.line
+      radius = radius.panel
+
+  style console.forms
+    selector = form
+    layout
+      display = grid
+      gap = 10px
+
+  style console.controls
+    selector = input, select, textarea
+    layout
+      padding = 8px
+    paint
+      border = 1px solid color.line
+      radius = radius.control
+
+  style console.button
+    selector = button
+    layout
+      padding = 8px 10px
+    paint
+      background = color.accent.primary
+      border = 1px solid color.accent.primary
+      ink = #ffffff
+      radius = radius.control

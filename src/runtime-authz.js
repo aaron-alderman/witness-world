@@ -72,6 +72,73 @@ export function identityActorAssumptionGrantFor(identityActorAssumptionGrantInde
   return identityActorAssumptionGrantIndex?.byPair?.[`${String(identityId)}=>${String(targetActor)}`] ?? null;
 }
 
+export function identityActorAssumptionGrantHistory(world, {
+  identityId = null,
+  targetActor = null,
+  grantId = null
+} = {}) {
+  const normalizedIdentityId = trimString(identityId);
+  const normalizedTargetActor = trimString(targetActor);
+  const normalizedGrantId = trimString(grantId);
+  const rowsById = new Map();
+  const witnesses = typeof world?.allWitnesses === "function" ? world.allWitnesses() : [];
+  for (let index = 0; index < witnesses.length; index += 1) {
+    const witness = witnesses[index];
+    const process = trimString(witness?.process);
+    if (process !== "grantIdentityActorAssumption" && process !== "revokeIdentityActorAssumption") continue;
+    const bodyIdentityId = trimString(witness?.body?.identityId);
+    const bodyTargetActor = trimString(witness?.body?.targetActor);
+    if (!bodyIdentityId || !bodyTargetActor) continue;
+    const id = trimString(witness?.body?.id) || `${bodyIdentityId}=>${bodyTargetActor}`;
+    if (normalizedGrantId && id !== normalizedGrantId) continue;
+    if (normalizedIdentityId && bodyIdentityId !== normalizedIdentityId) continue;
+    if (normalizedTargetActor && bodyTargetActor !== normalizedTargetActor) continue;
+    const prior = rowsById.get(id) ?? {
+      id,
+      identityId: bodyIdentityId,
+      targetActor: bodyTargetActor,
+      active: false,
+      status: "revoked",
+      grantedWitnessId: null,
+      grantedBy: null,
+      grantedOrder: null,
+      revokedWitnessId: null,
+      revokedBy: null,
+      revokedOrder: null,
+      lastWitnessId: null,
+      lastActor: null,
+      lastOrder: null
+    };
+    const next = {
+      ...prior,
+      id,
+      identityId: bodyIdentityId,
+      targetActor: bodyTargetActor,
+      lastWitnessId: witness.id,
+      lastActor: witness.actor ?? null,
+      lastOrder: index
+    };
+    if (process === "grantIdentityActorAssumption") {
+      next.active = true;
+      next.status = "active";
+      next.grantedWitnessId = witness.id;
+      next.grantedBy = witness.actor ?? null;
+      next.grantedOrder = index;
+    } else {
+      next.active = false;
+      next.status = "revoked";
+      next.revokedWitnessId = witness.id;
+      next.revokedBy = witness.actor ?? null;
+      next.revokedOrder = index;
+    }
+    rowsById.set(id, next);
+  }
+  return [...rowsById.values()].sort((left, right) =>
+    String(left.identityId).localeCompare(String(right.identityId))
+    || String(left.targetActor).localeCompare(String(right.targetActor))
+  );
+}
+
 export function evaluateFeaturePolicy(policy, { authenticated = false, roles = [] } = {}) {
   if (!policy) {
     return {

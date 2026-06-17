@@ -40,7 +40,7 @@ The canonical `.wcss` file now declares:
 - asset targets (`shell` or `chart`)
 - presentable identities and traits
 - normalized style families
-- explicit runtime override seams
+- explicit node-scoped runtime override seams
 - a separate inline `lowering` section for browser backend mapping
 - browser declaration groups for the current backend assets
 
@@ -49,6 +49,10 @@ The three internal layers are now:
 - canonical style/application grammar in `engentus-desired-v2.wcss`
 - inline backend lowering map in the same file
 - inline browser declaration source in the same file
+
+Native-lowered slices also rely on compiled presentation anchors for the
+specific presentable nodes they address. Those anchors are backend metadata, not
+authored WCSS nouns.
 
 ## Outputs
 
@@ -75,6 +79,8 @@ and writes offline proof artifacts outside the app source tree:
   application layer
 - the switch manifest still controls rollout, but its slice names are validated
   against canonical V1 plus the browser lowering map
+- `auth` and `platform-config` are the current `native-browser` slices; the
+  remaining Engentus slices still lower through declaration groups
 - layout ownership remains with RVM; V1 WCSS does not invent a second runtime
   structure tree
 

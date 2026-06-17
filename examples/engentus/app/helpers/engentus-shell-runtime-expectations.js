@@ -6,10 +6,32 @@ const ROUTE_VIEW_BY_KEY = Object.freeze({
   goodman: { pathnames: ["/engentus/goodman"], rootId: "view-goodman" },
   "mill-charge": { pathnames: ["/engentus/mill-charge"], rootId: "view-mill" },
   "mill-force": { pathnames: ["/engentus/mill-force"], rootId: "view-mill-force" },
+  "platform-config-operator": { pathnames: ["/engentus/platform-config"], rootId: "view-platform-config" },
+  "platform-config-secrets": { pathnames: ["/engentus/platform-config/secrets"], rootId: "view-platform-config-secrets" },
+  "platform-config-datasources": { pathnames: ["/engentus/platform-config/datasources"], rootId: "view-platform-config-datasources" },
+  "platform-config-scripts": { pathnames: ["/engentus/platform-config/scripts"], rootId: "view-platform-config-scripts" },
+  "platform-config-access": { pathnames: ["/engentus/platform-config/access"], rootId: "view-platform-config-access" },
   signout: { pathnames: ["/engentus/signout"], rootId: "view-signout" }
 });
 
-const APP_SHELL_ROUTES = new Set(["home", "goodman", "mill-charge", "mill-force"]);
+const APP_SHELL_ROUTES = new Set([
+  "home",
+  "goodman",
+  "mill-charge",
+  "mill-force",
+  "platform-config-operator",
+  "platform-config-secrets",
+  "platform-config-datasources",
+  "platform-config-scripts",
+  "platform-config-access"
+]);
+const PLATFORM_CONFIG_ROUTES = new Map([
+  ["platform-config-operator", "Operator"],
+  ["platform-config-secrets", "Secrets"],
+  ["platform-config-datasources", "Data Sources"],
+  ["platform-config-scripts", "Scripts"],
+  ["platform-config-access", "Access"]
+]);
 const VISIBLE_ROUTE_IDS = Object.freeze(Object.values(ROUTE_VIEW_BY_KEY).map(entry => entry.rootId));
 const SIGN_OUT_VISIBLE_STATES = new Set(["signingOut", "signedOut"]);
 const LOGIN_VISIBLE_INVALID_STATES = new Set(["signedIn", "signingOut", "signedOut"]);
@@ -55,6 +77,11 @@ function classOpen(element) {
 
 function authBookVisible(root, win) {
   return visible(root?.querySelector?.(".auth-book"), win);
+}
+
+function activePlatformSidebarLinks(document, win) {
+  return [...(document?.querySelectorAll?.(".platform-config-side-link.active") ?? [])]
+    .filter(node => visible(node, win));
 }
 
 export function engentusShellExpectationProvider(snapshot, context = {}) {
@@ -208,6 +235,48 @@ export function engentusShellExpectationProvider(snapshot, context = {}) {
     }
   }
 
+  if (PLATFORM_CONFIG_ROUTES.has(activeRoute)) {
+    const sidebar = document.getElementById("platform-config-sidebar");
+    if (!visible(sidebar, target)) {
+      push(issue(
+        `engentus-shell:platform-sidebar:${activeRoute}`,
+        "Platform-config route should render the sidebar",
+        { activeRoute }
+      ));
+    }
+    const activeLinks = activePlatformSidebarLinks(document, target);
+    if (activeLinks.length !== 1) {
+      push(issue(
+        `engentus-shell:platform-sidebar-active-count:${activeRoute}`,
+        "Platform-config route should have exactly one active sidebar action",
+        { activeRoute, activeCount: activeLinks.length }
+      ));
+    } else if (!normalizeText(activeLinks[0].textContent).includes(PLATFORM_CONFIG_ROUTES.get(activeRoute))) {
+      push(issue(
+        `engentus-shell:platform-sidebar-active-route:${activeRoute}`,
+        "Platform-config sidebar active action should match the authored route",
+        { activeRoute, activeText: normalizeText(activeLinks[0].textContent) }
+      ));
+    }
+    const notice = document.getElementById("platform-config-notice");
+    if (!visible(notice, target)) {
+      push(issue(
+        `engentus-shell:platform-notice:${activeRoute}`,
+        "Platform-config route should render the notice panel",
+        { activeRoute }
+      ));
+    } else {
+      const tone = normalizeText(processStateValue(snapshot, "PlatformConfigNoticeTone"));
+      if (tone && !notice.classList.contains(tone)) {
+        push(issue(
+          `engentus-shell:platform-notice-tone:${activeRoute}`,
+          "Platform-config notice tone should match the rendered class state",
+          { activeRoute, tone, className: notice.className }
+        ));
+      }
+    }
+  }
+
   if (activeRoute === "signout") {
     if (!visible(currentRoot, target)) {
       push(issue("engentus-shell:signout-hidden", "Signout shell route should be visible"));
@@ -244,4 +313,3 @@ export function registerEngentusShellExpectationProvider(target = globalThis) {
   registry.push(engentusShellExpectationProvider);
   target[SHELL_PROVIDER_KEY] = true;
 }
-

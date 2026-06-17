@@ -90,3 +90,29 @@ Allowed migration edges:
 - tests that intentionally verify compatibility output
 
 Internal runtime code should normalize through the tuple instead of reading those aliases directly.
+
+## Runtime Inspection and Grant Management
+
+The runtime now exposes first-class assumption-grant APIs before any impersonation UI exists:
+
+- `GET /api/authority/grants`
+- `POST /api/authority/grants`
+- `DELETE /api/authority/grants/:grantId`
+
+Grant semantics:
+
+- grants are explicit `identity -> actor`
+- duplicate active grants are rejected
+- revocation preserves history/provenance and blocks new assumed sessions
+- revocation does not retroactively invalidate existing sessions in this tranche
+
+Inspection surfaces should expose the canonical tuple directly:
+
+- `authenticatedIdentity`
+- `authenticatedActor`
+- `effectiveIdentity`
+- `effectiveActor`
+- `authorityMode`
+- `assumptionGrantId`
+
+If a response still includes `identity` or `actor`, those fields are compatibility aliases for the effective side only.

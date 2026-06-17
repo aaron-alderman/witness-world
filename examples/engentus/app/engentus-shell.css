@@ -692,6 +692,16 @@ a {
   line-height: 1.55;
 }
 
+@media (max-width: 980px) {
+  .auth-book {
+    flex-direction: column;
+  }
+
+  .auth-left, .auth-right {
+    flex: none;
+  }
+}
+
 /* home */
 #view-home {
   flex: 1;
@@ -983,15 +993,30 @@ a {
   color: var(--t2);
 }
 
+@media (max-width: 980px) {
+  #view-home, #body {
+    flex-direction: column;
+  }
+
+  #news-panel {
+    width: auto;
+    min-width: 0;
+  }
+
+  #module-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* shared views */
-#view-mill, #view-mill-force, #view-platform-config, #view-platform-config-secrets, #view-platform-config-datasources, #view-platform-config-scripts {
+#view-mill, #view-mill-force, #view-platform-config, #view-platform-config-secrets, #view-platform-config-datasources, #view-platform-config-scripts, #view-platform-config-access {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-#body, #mill-body, #mill-force-body, #platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body {
+#body, #mill-body, #mill-force-body, #platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body, #platform-config-access-body {
   flex: 1;
   display: flex;
   overflow: hidden;
@@ -2298,6 +2323,17 @@ input[type=range], .mill-slider {
   margin-bottom: 8px;
 }
 
+@media (max-width: 980px) {
+  #mill-body {
+    flex-direction: column;
+  }
+
+  #mill-sb, #mill-metrics {
+    width: auto;
+    min-width: 0;
+  }
+}
+
 /* mill force */
 #mill-force-chart-tabs {
   display: flex;
@@ -2453,8 +2489,19 @@ input[type=range], .mill-slider {
   font-size: 10px;
 }
 
+@media (max-width: 980px) {
+  #mill-force-body {
+    flex-direction: column;
+  }
+
+  #mill-force-sb {
+    width: auto;
+    min-width: 0;
+  }
+}
+
 /* platform config */
-#platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body {
+#platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body, #platform-config-access-body {
   background: linear-gradient(180deg, #f7fafc 0%, #edf3f8 100%);
   padding: 18px;
   gap: 14px;
@@ -2677,21 +2724,8 @@ input[type=range], .mill-slider {
 }
 
 @media (max-width: 980px) {
-  .auth-book, #view-home, #body, #mill-body, #mill-force-body, #platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body {
+  #platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body, #platform-config-access-body {
     flex-direction: column;
-  }
-
-  .auth-left, .auth-right {
-    flex: none;
-  }
-
-  #news-panel, #sb, #mill-sb, #mill-force-sb, #mill-metrics {
-    width: auto;
-    min-width: 0;
-  }
-
-  #module-grid {
-    grid-template-columns: 1fr;
   }
 
   .platform-config-sidebar {

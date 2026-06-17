@@ -2,6 +2,7 @@ import {
   buildBlockedAuthoringHandoff,
   buildRuntimeAuthoringCapabilityMatrix
 } from "../../src/runtime-authoring-policy.js";
+import { PLATFORM_PROPOSAL_ACTIONS } from "../platform/platform-proposals.js";
 
 export const MCP_PROTOCOL_VERSION = "2025-06-18";
 
@@ -386,6 +387,84 @@ const TOOL_DEFINITIONS = [
         });
       }
       return errorToolResult("unknown proposal review action", { action: args.action });
+    }
+  },
+  {
+    name: "platform.read",
+    title: "Platform Read",
+    description: "Read the platform self-model, gaps, profiles, plugin, bundle, capability, MCP, or verification gate views.",
+    inputSchema: jsonSchemaObject({
+      view: { type: "string", enum: ["model", "gaps", "profiles", "plugin", "bundle", "capability", "mcp", "gates", "proposals"] },
+      id: { type: "string" }
+    }, ["view"]),
+    scope(args) {
+      return scopeResult({ targets: args?.id ? [args.id] : [] });
+    },
+    async run({ args, callHandler }) {
+      const query = {
+        view: args.view || "model",
+        ...(args.id ? { id: args.id } : {})
+      };
+      if (args.view === "gaps") {
+        return runJsonHandler(callHandler, { handler: "platform.gaps.read", method: "GET", path: "/api/platform-gaps" });
+      }
+      return runJsonHandler(callHandler, {
+        handler: "platform.model.read",
+        method: "GET",
+        path: "/api/platform-model",
+        query
+      });
+    }
+  },
+  {
+    name: "platform.proposal",
+    title: "Platform Proposal",
+    description: "Create, approve, or reject supported platform stewardship proposals without bypassing review.",
+    inputSchema: jsonSchemaObject({
+      operation: { type: "string", enum: ["create", "approve", "reject"] },
+      action: {
+        type: "string",
+        enum: PLATFORM_PROPOSAL_ACTIONS
+      },
+      id: { type: "string" },
+      proposalId: { type: "string" },
+      targetKind: { type: "string" },
+      targetId: { type: "string" },
+      body: { type: "object" },
+      reason: { type: "string" }
+    }),
+    scope(args) {
+      return scopeResult({ targets: [args?.proposalId, args?.id, args?.targetId, args?.body?.serverRunner, args?.body?.server, args?.body?.plugin].filter(Boolean) });
+    },
+    async run({ args, callHandler }) {
+      const operation = args.operation || "create";
+      if (operation === "approve" || operation === "reject") {
+        const proposalId = args.proposalId || args.id || "";
+        if (!proposalId) return errorToolResult("proposal id is required", { operation });
+        return runJsonHandler(callHandler, {
+          handler: operation === "approve" ? "platform.proposal.approve" : "platform.proposal.reject",
+          method: "POST",
+          path: `/api/platform-proposals/${encodeURIComponent(proposalId)}/${operation}`,
+          params: { id: proposalId },
+          body: operation === "reject" ? { reason: args.reason ?? null } : {}
+        });
+      }
+      if (!args.action || !args.id || !args.body || typeof args.body !== "object") {
+        return errorToolResult("platform proposal create requires action, id, and body", { operation });
+      }
+      return runJsonHandler(callHandler, {
+        handler: "platform.proposal.create",
+        method: "POST",
+        path: "/api/platform-proposals",
+        body: {
+          id: args.id,
+          action: args.action,
+          targetKind: args.targetKind ?? null,
+          targetId: args.targetId ?? null,
+          body: args.body ?? {},
+          reason: args.reason ?? null
+        }
+      });
     }
   },
   {

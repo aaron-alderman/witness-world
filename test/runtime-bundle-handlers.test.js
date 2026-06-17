@@ -34,6 +34,7 @@ test("static bundle catalogs are core-only and optional catalogs arrive through 
   const inspectStatic = runtimeBundleHandlerCatalog("bundle-inspect");
 
   assert.equal(core.dispatchHandlers.includes("session.read"), true);
+  assert.equal(core.dispatchHandlers.includes("authority.grants.read"), true);
   assert.deepEqual(inspectStatic.dispatchHandlers, []);
 
   const options = await loadedOptions("minimal", ["plugin.inspect"]);
@@ -41,6 +42,24 @@ test("static bundle catalogs are core-only and optional catalogs arrive through 
   assert.equal(summary.dispatchHandlers.includes("events.stream"), true);
   assert.equal(summary.pageHandlers.includes("page.world"), true);
   assert.equal(summary.handlerMetadata["events.stream"].routeKind, "stream");
+});
+
+test("core runtime bundle exposes authority grant routes and metadata", () => {
+  const summary = runtimeBundleSummaryForProfile("minimal");
+  assert.deepEqual(matchRuntimeBundleRoute("minimal", "GET", "/api/authority/grants"), {
+    handler: "authority.grants.read",
+    params: {}
+  });
+  assert.deepEqual(matchRuntimeBundleRoute("minimal", "POST", "/api/authority/grants"), {
+    handler: "authority.grants.create",
+    params: {}
+  });
+  assert.deepEqual(matchRuntimeBundleRoute("minimal", "DELETE", "/api/authority/grants/identity.aaron%3D%3Ecallan"), {
+    handler: "authority.grants.revoke",
+    params: { grantId: "identity.aaron=>callan" }
+  });
+  assert.equal(summary.handlerMetadata["authority.grants.read"].routeKind, "json");
+  assert.deepEqual(summary.handlerMetadata["authority.grants.revoke"].methods, ["DELETE"]);
 });
 
 test("active bundle handler composition filters inactive implementations and reports drift", async () => {
@@ -97,7 +116,8 @@ test("runtime profiles are seed plugin presets with core-only static composition
     "plugin.mcp",
     "plugin.practical-backend",
     "plugin.demo",
-    "plugin.eden"
+    "plugin.eden",
+    "plugin.platform"
   ]);
 
   const full = runtimeBundleSummaryForProfile("full");

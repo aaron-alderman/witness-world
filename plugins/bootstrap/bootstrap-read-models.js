@@ -157,6 +157,7 @@ export function createBootstrapReadModels({
     const mcpServers = project(moduleProjectors.mcpServers);
     const mcpToolInstalls = project(moduleProjectors.mcpToolInstalls);
     const identities = project(moduleProjectors.identities);
+    const identityActorAssumptionGrants = project(moduleProjectors.identityActorAssumptionGrants);
     const widgets = widgetDefinitions(world.allWitnesses());
     const widgetVersionRows = widgetVersions(world.allWitnesses());
     const widgetTransitions = widgetVersionTransitions(world.allWitnesses());
@@ -217,6 +218,7 @@ export function createBootstrapReadModels({
       mcpServers,
       mcpToolInstalls,
       identities,
+      identityActorAssumptionGrants,
       widgets,
       widgetVersions: widgetVersionRows,
       widgetVersionTransitions: widgetTransitions,

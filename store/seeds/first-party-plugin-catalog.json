@@ -35,6 +35,7 @@
     { "id": "plugin.eden", "directory": "eden", "order": 91 },
     { "id": "plugin.chart-runtime", "directory": "chart-runtime", "order": 92 },
     { "id": "plugin.pipeline-runtime", "directory": "pipeline-runtime", "order": 93 },
+    { "id": "plugin.platform", "directory": "platform", "order": 94 },
     { "id": "plugin.notes-sidebar", "directory": "notes-sidebar", "order": 100 }
   ],
   "bundles": [
@@ -223,6 +224,12 @@
       "plugin": "plugin.pipeline-runtime",
       "displayName": "Pipeline Runtime",
       "description": "Demo operator UI for runner-scoped secrets, SQL datasources, and stubbed pipeline script execution."
+    },
+    {
+      "id": "bundle-platform",
+      "plugin": "plugin.platform",
+      "displayName": "Platform Self Model",
+      "description": "Platform self-model, Platform Console, and platform-facing MCP read/proposal tools."
     }
   ]
 }

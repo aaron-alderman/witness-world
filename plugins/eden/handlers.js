@@ -37,6 +37,7 @@ import {
   requestEdenVersionPublish,
   requestEdenVersionRollback
 } from "./eden-versions.js";
+import { normalizeAuthorityTuple } from "../../src/runtime-authz.js";
 export function createEdenBundleHandlers({
   world,
   backendHost,
@@ -788,19 +789,34 @@ export function createEdenBundleHandlers({
         sendJson(res, 404, { error: "eden neighborhood not configured", neighborhood: neighborhoodId });
         return;
       }
-      model.session = requestSession
-        ? {
-            authenticated: true,
-            actor: requestSession.actor,
-            identity: requestSession.identity,
-            label: requestSession.label
-          }
-        : {
-            authenticated: false,
-            actor: null,
-            identity: null,
-            label: null
-          };
+      if (requestSession) {
+        const authority = normalizeAuthorityTuple(requestSession);
+        model.session = {
+          authenticated: true,
+          actor: authority.effectiveActor ?? null,
+          identity: authority.effectiveIdentity ?? null,
+          label: requestSession.label,
+          authenticatedIdentity: authority.authenticatedIdentity ?? null,
+          authenticatedActor: authority.authenticatedActor ?? null,
+          effectiveIdentity: authority.effectiveIdentity ?? null,
+          effectiveActor: authority.effectiveActor ?? null,
+          authorityMode: authority.authorityMode ?? "direct",
+          assumptionGrantId: authority.assumptionGrantId ?? null
+        };
+      } else {
+        model.session = {
+          authenticated: false,
+          actor: null,
+          identity: null,
+          label: null,
+          authenticatedIdentity: null,
+          authenticatedActor: null,
+          effectiveIdentity: null,
+          effectiveActor: null,
+          authorityMode: "direct",
+          assumptionGrantId: null
+        };
+      }
       world.observe({
         process: "frontend.renderEdenPage",
         actor: frontendHost,

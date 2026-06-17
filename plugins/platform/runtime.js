@@ -1,0 +1,71 @@
+import { handlerCatalog } from "./handler-catalog.js";
+import { createPlatformHandlers } from "./handlers.js";
+
+export const bundleId = "bundle-platform";
+export { handlerCatalog };
+
+function exactRoute(method, path, handler, params = {}) {
+  return Object.freeze({ kind: "exact", method, path, handler, params });
+}
+
+function patternRoute(method, pattern, handler, paramNames = []) {
+  return Object.freeze({ kind: "pattern", method, pattern, handler, paramNames });
+}
+
+function surfaceEntry({
+  id,
+  title,
+  href,
+  action = null,
+  search,
+  subtitle = "",
+  type = "surface",
+  tier = "internal",
+  contexts = ["app-command", "world-command"]
+}) {
+  return Object.freeze({
+    id,
+    title,
+    subtitle,
+    href,
+    action,
+    type,
+    tier,
+    contexts: Object.freeze([...contexts]),
+    search: search || `${title} ${subtitle} ${href || ""}`
+  });
+}
+
+export const routes = Object.freeze([
+  exactRoute("GET", "/platform", "page.platform"),
+  exactRoute("GET", "/api/platform-model", "platform.model.read"),
+  exactRoute("GET", "/api/platform-gaps", "platform.gaps.read"),
+  exactRoute("POST", "/api/platform-proposals", "platform.proposal.create"),
+  patternRoute("POST", /^\/api\/platform-proposals\/([^/]+)\/approve$/, "platform.proposal.approve", Object.freeze(["id"])),
+  patternRoute("POST", /^\/api\/platform-proposals\/([^/]+)\/reject$/, "platform.proposal.reject", Object.freeze(["id"]))
+]);
+
+export const surfaces = Object.freeze([
+  surfaceEntry({
+    id: "surface:platform",
+    title: "Open Platform",
+    subtitle: "Platform self-model and stewardship console",
+    href: "/platform",
+    search: "platform self model console lifecycle stewardship plugins bundles routes handlers capabilities gates /platform"
+  })
+]);
+
+export const capabilities = Object.freeze(["platform.self"]);
+
+export function createHandlers(deps) {
+  return createPlatformHandlers(deps);
+}
+
+export default {
+  bundleId,
+  capabilities,
+  handlerCatalog,
+  routes,
+  surfaces,
+  createHandlers
+};

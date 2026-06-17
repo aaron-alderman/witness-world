@@ -27,7 +27,7 @@ The current backend slice is real but narrow:
 
 - generic HTTP host startup through `serverRunner`
 - explicit route mounting through `route` + `serve`
-- session read/open/logout on the generic host
+- session read/open/logout plus authority-grant inspection/mutation on the generic host
 - the maintained demo serve path now runs on `minimal` plus authored runtime-plugin installs rather than only relying on the implicit `full` profile
 - shipped backend capability envelopes currently provided through runtime bundle/profile composition:
   - `runtime.config`

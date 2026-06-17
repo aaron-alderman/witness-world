@@ -59,6 +59,9 @@ export function createMcpBundleSupportServices({
         return capabilities.has("webhook.inbound");
       case "notifications":
         return capabilities.has("jobs.queue") && (capabilities.has("notify.email") || capabilities.has("notify.sms"));
+      case "platform.read":
+      case "platform.proposal":
+        return capabilities.has("platform.self");
       default:
         return true;
     }

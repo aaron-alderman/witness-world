@@ -12,6 +12,10 @@ The canonical file carries three internal layers:
 
 That separation is intentional.
 
+For `native-browser` slices such as `auth` and `platform-config`, the browser
+lowering map now also resolves authored identity references through explicit
+presentation anchors in the compiled surface metadata.
+
 ## Roles
 
 - `engentus-desired-v2.wcss` is the designer-facing and tooling-facing V1 style
@@ -50,6 +54,15 @@ Children inside a `rule <selector>` behave like nested CSS:
 
 - `&.active` expands against the parent selector
 - `img` becomes a descendant selector
+
+The semantic application layer now declares node-scoped seams. A seam may target
+specific identities or traits and may describe:
+
+- enum-like `variant` values
+- boolean `toggle` tokens
+- numeric `scalar` bounds
+- theme `token` substitutions
+- explicit `escape` seams where fidelity still requires them
 
 ## Ownership Rule
 
