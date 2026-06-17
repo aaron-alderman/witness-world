@@ -488,69 +488,70 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### 3.1 Document Model
 
-- [ ] Add `docNode` module kind.
-- [ ] Add `docSection` module kind.
+- [~] Add `docNode` module kind.
+- [X] Add `docSection` module kind.
 - [ ] Add `docDecision` module kind.
 - [ ] Add `docRunbook` module kind.
 - [ ] Add `docFreshnessGate` module kind.
 - [ ] Add `docReference` module kind.
-- [ ] Add projectors:
-  - [ ] `docs`
+- [~] Add projectors:
+  - [X] `docs`
   - [ ] `docIndex`
-  - [ ] `docSections`
+  - [X] `docSections`
   - [ ] `docDependencies`
-  - [ ] `docFreshness`
+  - [X] `docFreshness`
   - [ ] `docsByPlatformObject`
-- [ ] Classify docs by role:
+- [~] Classify docs by role:
   - [ ] architecture
   - [ ] design
   - [ ] API
   - [ ] operations
   - [ ] test strategy
-  - [ ] migration
-  - [ ] roadmap
-  - [ ] runbook
+  - [X] migration
+  - [X] roadmap
+  - [X] runbook
   - [ ] product
   - [ ] rationale
 - [ ] Add stable doc IDs independent of file paths.
-- [ ] Add doc ownership metadata.
-- [ ] Add doc freshness timestamps.
-- [ ] Add doc source path metadata.
-- [ ] Add doc governed object edges.
+- [X] Add doc ownership metadata.
+- [X] Add doc freshness timestamps.
+- [X] Add doc source path metadata.
+- [X] Add doc governed object edges.
 
 ### 3.2 Markdown Ingestion
 
-- [ ] Parse Markdown heading structure into `docSection` nodes.
-- [ ] Parse checkbox tasks into `docTask` nodes.
-- [ ] Parse code references into edges.
-- [ ] Parse route references into edges.
-- [ ] Parse plugin IDs into edges.
-- [ ] Parse capability IDs into edges.
-- [ ] Parse file paths into source edges.
+- [X] Parse Markdown heading structure into `docSection` nodes.
+- [~] Parse checkbox tasks into `docTask` nodes.
+- [X] Parse code references into edges.
+- [X] Parse route references into edges.
+- [X] Parse plugin IDs into edges.
+- [X] Parse capability IDs into edges.
+- [~] Parse file paths into source edges.
 - [ ] Parse proposal IDs into proposal edges.
 - [ ] Parse branch IDs into branch edges.
 - [ ] Parse test command blocks into `testGate` suggestions.
-- [ ] Add tests for Markdown ingestion.
-- [ ] Add tests for this roadmap document becoming doc/task nodes.
+- [X] Add tests for Markdown ingestion.
+- [X] Add tests for this roadmap document becoming doc/task nodes.
 
 ### 3.3 Docs Freshness
 
-- [ ] Build dependency graph from docs to governed objects.
-- [ ] Mark docs stale when governed code/source/test objects change.
+- [~] Build dependency graph from docs to governed objects.
+- [~] Mark docs stale when governed code/source/test objects change.
 - [ ] Mark docs stale when route/capability/plugin public surface changes.
 - [ ] Mark docs stale when tests covering the doc fail.
-- [ ] Mark docs stale when branch changes related objects but leaves doc unchanged.
-- [ ] Add freshness states:
-  - [ ] fresh
-  - [ ] stale
+- [X] Mark docs stale when branch changes related objects but leaves doc unchanged.
+- [~] Add freshness states:
+  - [X] fresh
+  - [X] stale
   - [ ] unknown
   - [ ] missing
   - [ ] disputed
-- [ ] Add Platform Console docs view.
-- [ ] Add doc freshness gaps in `/api/platform-gaps`.
-- [ ] Add MCP view `platform.read { view: "docs" }`.
-- [ ] Add tests that code changes mark governing docs stale.
-- [ ] Add tests that doc edits restore freshness after validation.
+- [X] Add Platform Console docs view.
+- [X] Add doc freshness gaps in `/api/platform-gaps`.
+- [X] Add MCP view `platform.read { view: "docs" }`.
+- [X] Add tests that code changes mark governing docs stale.
+- [X] Add tests that doc edits restore freshness after validation.
+- [L] Current doc freshness is branch-heuristic and dependency-edge backed for governed docs, plugin IDs, capability IDs, route mentions, and modeled file references inside Markdown. Proposal IDs, branch IDs, generic source-file nodes, and test-failure freshness invalidation remain open follow-on work.
 
 ### 3.4 LLM Documentation As It Goes
 
@@ -1233,13 +1234,13 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### Milestone C: Docs Live Model V1
 
-- [ ] Ingest Markdown docs.
-- [ ] Build doc/object dependency edges.
-- [ ] Mark docs stale on related changes.
-- [ ] Add doc freshness gaps.
-- [ ] Add docs view.
+- [X] Ingest Markdown docs.
+- [X] Build doc/object dependency edges.
+- [~] Mark docs stale on related changes.
+- [X] Add doc freshness gaps.
+- [X] Add docs view.
 - [ ] Add LLM documentation obligations.
-- [ ] Add tests for stale/fresh docs.
+- [X] Add tests for stale/fresh docs.
 
 ### Milestone D: Test Gate V1
 

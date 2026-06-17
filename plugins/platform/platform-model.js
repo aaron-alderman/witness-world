@@ -29,6 +29,17 @@ const CONTROL_DOCS = new Map([
   ["docs/PLATFORM-ALL-THE-WAY-ROADMAP.md", ["author", "steward"]]
 ]);
 
+const GOVERNED_DOC_TARGETS = Object.freeze({
+  "docs/CAPABILITIES.md": Object.freeze(["plugin.platform", "plugin.mcp", "capability:platform.self"]),
+  "docs/RUNTIME-STACK-MAP.md": Object.freeze(["bundle-core-runtime", "profile:full", "profile:minimal"]),
+  "docs/RUNTIME-AUDIT-INVENTORY.md": Object.freeze(["runtime.core"]),
+  "docs/PLUGIN-MIGRATION-CONTROL.md": Object.freeze(["plugin.authoring"]),
+  "docs/SHELLS-PERSISTENCE-ECOSYSTEM.md": Object.freeze(["runtime.core"]),
+  "docs/PIPELINE-FIDELITY-AUDIT.md": Object.freeze(["plugin.pipeline-runtime"]),
+  "docs/AUTHORING-REPLAY-PLAYBOOK.md": Object.freeze(["plugin.authoring"]),
+  "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md": Object.freeze(["plugin.platform"])
+});
+
 const PLATFORM_AUTHORED_SOURCES = Object.freeze([
   {
     id: "rvm:plugins/platform/platform-console.rvm",
@@ -344,6 +355,16 @@ function buildGaps(nodes, edges) {
         }
       });
     }
+    if (node.kind === "doc" && node.status === "stale") {
+      gaps.push({
+        id: `gap.doc-freshness.${node.id}`,
+        severity: "medium",
+        kind: "stale-doc",
+        target: node.id,
+        reason: "governed document is stale relative to active branch changes",
+        recommendedProposal: null
+      });
+    }
   }
   return gaps.sort((a, b) => a.severity.localeCompare(b.severity) || a.id.localeCompare(b.id));
 }
@@ -380,6 +401,97 @@ function roadmapTaskStatus(marker) {
     default:
       return { checked: false, status: "open" };
   }
+}
+
+function docRoleForPath(docPath) {
+  const value = String(docPath || "").toLowerCase();
+  if (value.includes("roadmap")) return "roadmap";
+  if (value.includes("runbook") || value.includes("playbook")) return "runbook";
+  if (value.includes("audit")) return "audit";
+  if (value.includes("inventory") || value.includes("map") || value.includes("capabilities")) return "reference";
+  return "document";
+}
+
+function docLifecycleForPath(docPath) {
+  const lifecycle = CONTROL_DOCS.get(docPath);
+  if (lifecycle) return [...lifecycle];
+  switch (docRoleForPath(docPath)) {
+    case "roadmap":
+      return ["author", "steward"];
+    case "runbook":
+      return ["author", "verify", "steward"];
+    case "audit":
+      return ["verify", "steward"];
+    default:
+      return ["steward"];
+  }
+}
+
+function docOwnerForPath(docPath) {
+  const targets = GOVERNED_DOC_TARGETS[docPath] ?? [];
+  return targets.find(target => String(target).startsWith("plugin.") || String(target).startsWith("runtime."))
+    ?? targets.find(target => String(target).startsWith("profile:") || String(target).startsWith("bundle-"))
+    ?? "stewardship";
+}
+
+function extractMarkdownCodeTokens(source) {
+  const tokens = [];
+  const pattern = /`([^`\r\n]+)`/g;
+  for (const match of String(source || "").matchAll(pattern)) tokens.push(match[1].trim());
+  return unique(tokens);
+}
+
+function extractMarkdownRouteRefs(source) {
+  const routes = [];
+  const pattern = /(?:^|[\s(])((?:\/platform)|(?:\/api\/[A-Za-z0-9_./:-]+))/g;
+  for (const match of String(source || "").matchAll(pattern)) routes.push(match[1].trim());
+  return unique(routes);
+}
+
+function extractMarkdownReferences(source) {
+  const codeTokens = extractMarkdownCodeTokens(source);
+  return {
+    codeTokens,
+    filePaths: unique(codeTokens.filter(token => /^(?:docs|plugins|src|test|store|examples)\//.test(token))),
+    pluginIds: unique(codeTokens.filter(token => /^plugin\.[A-Za-z0-9_.-]+$/.test(token))),
+    capabilityIds: unique(codeTokens.filter(token => /^[A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+$/.test(token))),
+    routes: extractMarkdownRouteRefs(source)
+  };
+}
+
+function parseMarkdownSections(docPath, source) {
+  const lines = String(source || "").replace(/\r\n/g, "\n").split("\n");
+  const stack = [];
+  const sections = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(/^(#{1,6})\s+(.+)$/);
+    if (!match) continue;
+    const level = match[1].length;
+    const title = match[2].trim();
+    stack[level - 1] = {
+      id: `docSection:${docPath}:${index + 1}:${slugify(title)}`,
+      level,
+      title
+    };
+    stack.length = level;
+    sections.push({
+      id: stack[level - 1].id,
+      doc: docPath,
+      line: index + 1,
+      level,
+      title,
+      parentSectionId: stack[level - 2]?.id ?? null
+    });
+  }
+  return sections;
+}
+
+async function listMarkdownDocs() {
+  const docsRoot = path.join(repoRoot, "docs");
+  const files = await listFiles(docsRoot, file => file.endsWith(".md"));
+  return files
+    .map(file => slash(path.relative(repoRoot, file)))
+    .sort((left, right) => left.localeCompare(right));
 }
 
 export function parseRoadmapTasks(docPath, source) {
@@ -468,6 +580,8 @@ export async function buildPlatformModel({
   const activeRuntimeRevision = runtimeRevisions[0] ?? null;
   const snapshotBuilds = buildSnapshotBuildRows(candidateSnapshots);
   const snapshotBuildErrors = buildSnapshotBuildErrorRows(candidateSnapshots);
+  const markdownDocPaths = await listMarkdownDocs();
+  const parsedDocs = [];
 
   for (const row of pluginPackages) {
     const manifest = await readJson(`plugins/${row.directory}/plugin.json`, {});
@@ -648,32 +762,94 @@ export async function buildPlatformModel({
     addEdge(edges, `mcp:${install.server}`, "exposes", `mcpTool:${install.tool}`, "witnesses");
   }
 
-  for (const [doc, lifecycle] of CONTROL_DOCS.entries()) {
-    addNode(nodes, {
-      id: `doc:${doc}`,
-      kind: "doc",
-      title: doc,
-      lifecycle,
-      owner: "stewardship",
-      status: "known",
-      source: doc
+  for (const docPath of markdownDocPaths) {
+    const fullPath = path.join(repoRoot, docPath);
+    const source = await readText(docPath, "");
+    let updatedAt = null;
+    try {
+      updatedAt = (await fs.stat(fullPath)).mtime.toISOString();
+    } catch {}
+    const sections = parseMarkdownSections(docPath, source);
+    const tasks = parseRoadmapTasks(docPath, source);
+    const references = extractMarkdownReferences(source);
+    const staleBranches = branches
+      .filter(branch => (branch.docsFreshness?.missingDocs ?? []).includes(docPath))
+      .map(branch => String(branch.id));
+    const touchedBranches = branches
+      .filter(branch => (branch.docsFreshness?.touchedDocs ?? []).includes(docPath))
+      .map(branch => String(branch.id));
+    const requiredBranches = branches
+      .filter(branch => (branch.docsFreshness?.requiredDocs ?? []).includes(docPath))
+      .map(branch => String(branch.id));
+    const status = staleBranches.length ? "stale" : (requiredBranches.length ? "fresh" : "reference");
+    const freshness = {
+      status,
+      staleBranches: unique(staleBranches),
+      touchedBranches: unique(touchedBranches),
+      requiredBranches: unique(requiredBranches),
+      summary: staleBranches.length
+        ? `Stale for branches ${unique(staleBranches).join(", ")}.`
+        : (requiredBranches.length
+          ? `Fresh for branches ${unique(requiredBranches).join(", ")}.`
+          : "Reference doc with no active freshness pressure.")
+    };
+    const docRow = {
+      id: `doc:${docPath}`,
+      path: docPath,
+      role: docRoleForPath(docPath),
+      owner: docOwnerForPath(docPath),
+      lifecycle: docLifecycleForPath(docPath),
+      status,
+      updatedAt,
+      freshness,
+      sectionCount: sections.length,
+      taskCount: tasks.length,
+      references
+    };
+    parsedDocs.push({
+      ...docRow,
+      source,
+      sections,
+      tasks
     });
+    addNode(nodes, {
+      id: docRow.id,
+      kind: "doc",
+      title: docPath,
+      lifecycle: docRow.lifecycle,
+      owner: docRow.owner,
+      status: docRow.status,
+      source: docPath
+    });
+    for (const section of sections) {
+      addNode(nodes, {
+        id: section.id,
+        kind: "docSection",
+        title: section.title,
+        lifecycle: ["author", "steward"],
+        owner: docRow.owner,
+        status: "known",
+        source: `${docPath}:${section.line}`
+      });
+      addEdge(edges, docRow.id, "hasSection", section.id, "docs");
+      if (section.parentSectionId) addEdge(edges, section.parentSectionId, "contains", section.id, "docs");
+    }
+    for (const task of tasks) {
+      addNode(nodes, {
+        id: task.id,
+        kind: "task",
+        title: task.title,
+        lifecycle: ["author", "steward"],
+        owner: docRow.owner,
+        status: task.status,
+        source: `${task.doc}:${task.line}`
+      });
+      addEdge(edges, docRow.id, "describes", task.id, "roadmap");
+    }
   }
 
   const roadmapDocPath = "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md";
-  const roadmapTasks = parseRoadmapTasks(roadmapDocPath, await readText(roadmapDocPath, ""));
-  for (const task of roadmapTasks) {
-    addNode(nodes, {
-      id: task.id,
-      kind: "task",
-      title: task.title,
-      lifecycle: ["author", "steward"],
-      owner: "plugin.platform",
-      status: task.status,
-      source: `${task.doc}:${task.line}`
-    });
-    addEdge(edges, `doc:${task.doc}`, "describes", task.id, "roadmap");
-  }
+  const roadmapTasks = parsedDocs.find(doc => doc.path === roadmapDocPath)?.tasks ?? [];
 
   for (const authoredSource of PLATFORM_AUTHORED_SOURCES) {
     addNode(nodes, {
@@ -835,12 +1011,31 @@ export async function buildPlatformModel({
     if (mergeIntent.intoBranchId) addEdge(edges, mergeIntent.id, "targets", `branch:${mergeIntent.intoBranchId}`, "witnesses");
     if (mergeIntent.ontoBranchId) addEdge(edges, mergeIntent.id, "targets", `branch:${mergeIntent.ontoBranchId}`, "witnesses");
   }
-  addEdge(edges, "doc:docs/PLUGIN-MIGRATION-CONTROL.md", "governs", "plugin.authoring", "docs");
-  addEdge(edges, "doc:docs/RUNTIME-STACK-MAP.md", "governs", "bundle-core-runtime", "docs");
-  addEdge(edges, "doc:docs/CAPABILITIES.md", "governs", "plugin.platform", "docs");
-  addEdge(edges, "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md", "governs", "plugin.platform", "docs");
-  addEdge(edges, "plugin.platform", "documentedBy", "doc:docs/CAPABILITIES.md", "docs");
-  addEdge(edges, "plugin.platform", "documentedBy", "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md", "docs");
+  const routeIdsByMatcher = Object.fromEntries((diagnostics?.routes ?? []).map(route => [
+    String(route.matcher || ""),
+    `route:${route.method || "GET"} ${route.matcher}`
+  ]));
+  for (const doc of parsedDocs) {
+    for (const target of GOVERNED_DOC_TARGETS[doc.path] ?? []) {
+      addEdge(edges, doc.id, "governs", target, "docs");
+      if (nodes.has(target)) addEdge(edges, target, "documentedBy", doc.id, "docs");
+    }
+    for (const routeRef of doc.references.routes) {
+      const routeId = routeIdsByMatcher[routeRef];
+      if (routeId) addEdge(edges, doc.id, "references", routeId, "docs");
+    }
+    for (const pluginId of doc.references.pluginIds) {
+      if (nodes.has(pluginId)) addEdge(edges, doc.id, "references", pluginId, "docs");
+    }
+    for (const capabilityId of doc.references.capabilityIds) {
+      if (nodes.has(`capability:${capabilityId}`)) addEdge(edges, doc.id, "references", `capability:${capabilityId}`, "docs");
+    }
+    for (const filePath of doc.references.filePaths) {
+      if (nodes.has(`doc:${filePath}`)) addEdge(edges, doc.id, "references", `doc:${filePath}`, "docs");
+      if (nodes.has(`rvm:${filePath}`)) addEdge(edges, doc.id, "references", `rvm:${filePath}`, "docs");
+      if (nodes.has(`wcss:${filePath}`)) addEdge(edges, doc.id, "references", `wcss:${filePath}`, "docs");
+    }
+  }
 
   const testFiles = await listFiles(path.join(repoRoot, "test"), file => file.endsWith(".test.js"));
   const pluginTestFiles = await listFiles(path.join(repoRoot, "plugins"), file => file.endsWith(".test.js"));
@@ -868,6 +1063,26 @@ export async function buildPlatformModel({
   }
 
   const gaps = buildGaps(nodes, edges);
+  const docs = parsedDocs.map(doc => ({
+    id: doc.id,
+    path: doc.path,
+    role: doc.role,
+    owner: doc.owner,
+    updatedAt: doc.updatedAt,
+    status: doc.status,
+    freshness: { ...doc.freshness },
+    sectionCount: doc.sectionCount,
+    taskCount: doc.taskCount,
+    references: {
+      codeTokens: [...doc.references.codeTokens],
+      filePaths: [...doc.references.filePaths],
+      pluginIds: [...doc.references.pluginIds],
+      capabilityIds: [...doc.references.capabilityIds],
+      routes: [...doc.references.routes]
+    }
+  }));
+  const docSections = parsedDocs.flatMap(doc => doc.sections.map(section => ({ ...section })));
+  const docTasks = parsedDocs.flatMap(doc => doc.tasks.map(task => ({ ...task })));
   return {
     lifecycleVocabulary: [...PLATFORM_LIFECYCLES],
     branchLifecycleVocabulary: [...PLATFORM_BRANCH_LIFECYCLE_LANES],
@@ -876,6 +1091,9 @@ export async function buildPlatformModel({
     summaries: summarize(nodes, edges, profiles),
     gaps,
     profiles,
+    docs,
+    docSections,
+    docTasks,
     proposals: proposals.map(row => ({ ...row })),
     proposalActions: platformProposalTemplates(),
     branches: branches.map(row => ({ ...row })),
@@ -898,6 +1116,17 @@ export async function buildPlatformModel({
 export function filterPlatformModel(model, view, id = null) {
   if (!view || view === "model") return model;
   if (view === "gaps") return { gaps: model.gaps, summaries: model.summaries };
+  if (view === "docs") {
+    const matchDoc = doc => !id || doc.id === id || doc.path === id;
+    const docs = model.docs.filter(matchDoc);
+    const docIds = new Set(docs.map(doc => doc.path));
+    return {
+      docs,
+      docSections: model.docSections.filter(section => !id || docIds.has(section.doc) || section.id === id),
+      docTasks: model.docTasks.filter(task => !id || docIds.has(task.doc) || task.id === id),
+      summaries: model.summaries
+    };
+  }
   if (view === "profiles") return { profiles: model.profiles, summaries: model.summaries };
   if (view === "proposals") return { proposals: model.proposals, proposalActions: model.proposalActions, summaries: model.summaries };
   if (view === "branches") {

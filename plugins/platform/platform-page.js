@@ -63,6 +63,9 @@ export function renderPlatformPage(model) {
   const snapshotBuilds = model.snapshotBuilds ?? [];
   const snapshotBuildErrors = model.snapshotBuildErrors ?? [];
   const snapshotDiagnostics = model.snapshotDiagnostics ?? null;
+  const docs = model.docs ?? [];
+  const docSections = model.docSections ?? [];
+  const docTasks = model.docTasks ?? [];
   const roadmapTasks = model.roadmapTasks ?? [];
   const proposalActions = model.proposalActions ?? [];
   const proposals = model.proposals ?? [];
@@ -437,6 +440,34 @@ export function renderPlatformPage(model) {
           row => row.plugins.join(", ")
         ])}</tbody>
       </table>
+    </section>
+
+    <section class="grid2">
+      <div>
+        <h2>Governed Docs</h2>
+        <table>
+          <thead><tr><th>Status</th><th>Role</th><th>Doc</th><th>Owner</th><th>Updated</th><th>Freshness</th></tr></thead>
+          <tbody>${tableRows(docs.slice(0, 80), [
+            row => row.status,
+            row => row.role,
+            row => row.path,
+            row => row.owner,
+            row => row.updatedAt || "",
+            row => row.freshness?.summary || ""
+          ])}</tbody>
+        </table>
+      </div>
+      <div>
+        <h2>Doc Structure</h2>
+        <div class="card">
+          <h3>Sections</h3>
+          <pre>${esc(JSON.stringify(docSections.slice(0, 40), null, 2))}</pre>
+        </div>
+        <div class="card">
+          <h3>Doc Tasks</h3>
+          <pre>${esc(JSON.stringify(docTasks.slice(0, 40), null, 2))}</pre>
+        </div>
+      </div>
     </section>
 
     <section>

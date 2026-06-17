@@ -143,12 +143,18 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   assert.equal(model.nodes.some(node => node.id === "route:GET /platform" && node.kind === "route"), true);
   assert.equal(model.nodes.some(node => node.id === "rvm:plugins/platform/platform-console.rvm" && node.kind === "rvmSource"), true);
   assert.equal(model.nodes.some(node => node.id === "wcss:plugins/platform/platform-console.wcss" && node.kind === "wcssSource"), true);
+  assert.equal(model.nodes.some(node => node.id === "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" && node.kind === "doc"), true);
+  assert.equal(model.nodes.some(node => node.kind === "docSection" && node.id.includes("docs/PLATFORM-ALL-THE-WAY-ROADMAP.md")), true);
   assert.equal(model.nodes.some(node => node.kind === "task" && node.id.includes("docs/PLATFORM-ALL-THE-WAY-ROADMAP.md")), true);
   assert.equal(model.edges.some(edge => edge.from === "surface:platform" && edge.rel === "authoredBy" && edge.to === "rvm:plugins/platform/platform-console.rvm"), true);
+  assert.equal(model.edges.some(edge => edge.from === "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" && edge.rel === "references" && edge.to === "plugin.platform"), true);
   assert.equal(model.nodes.some(node => node.kind === "gate" && node.id.includes("plugins/platform/platform.test.js")), true);
   assert.equal(model.edges.some(edge => edge.from === "plugin.platform" && edge.rel === "owns" && edge.to === "bundle-platform"), true);
   assert.equal(Array.isArray(model.gaps), true);
   assert.equal(model.summaries.byKind.plugin > 0, true);
+  assert.equal(Array.isArray(model.docs), true);
+  assert.equal(Array.isArray(model.docSections), true);
+  assert.equal(Array.isArray(model.docTasks), true);
   assert.equal(Array.isArray(model.roadmapTasks), true);
   assert.equal(model.roadmapTasks.some(task => task.doc === "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"), true);
 });
@@ -251,6 +257,7 @@ test("platform model filters support MCP views", async () => {
     }
   });
   const mcp = filterPlatformModel(model, "mcp");
+  const docs = filterPlatformModel(model, "docs", "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md");
   const gates = filterPlatformModel(model, "gates");
   const branches = filterPlatformModel({
     ...model,
@@ -299,6 +306,10 @@ test("platform model filters support MCP views", async () => {
 
   assert.equal(mcp.nodes.some(node => node.id === "mcp:mcp.platform"), true);
   assert.equal(mcp.nodes.some(node => node.id === "mcpTool:platform.read"), true);
+  assert.equal(docs.docs.length, 1);
+  assert.equal(docs.docs[0].path, "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md");
+  assert.equal(docs.docSections.length > 0, true);
+  assert.equal(docs.docTasks.length > 0, true);
   assert.equal(gates.gates.every(node => node.kind === "gate"), true);
   assert.equal(branches.branches[0].id, "branch.demo");
   assert.equal(runtimeRevisions.runtimeRevisions[0].id, "runtimeRevision:backend:3");
@@ -409,6 +420,67 @@ test("platform model carries branch docs freshness and impact summaries", async 
   assert.equal(branch?.docsFreshness?.status, "fresh");
   assert.equal(branch?.affectedSystemSummaries?.some(row => row.system === "plugin.platform"), true);
   assert.equal(branch?.telemetryImpactSummaries?.some(row => row.id === "platform.self"), true);
+});
+
+test("platform docs view surfaces stale and fresh governed docs from branch changes", async () => {
+  const staleModel = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: [], effectivePluginIds: [], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [{ id: "branch.docs.stale", title: "Stale Docs", status: "open", changeSetIds: ["changeset.docs.stale"] }];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [{ id: "changeset.docs.stale", branchId: "branch.docs.stale", status: "draft" }];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [{ id: "changeSetEdit:changeset.docs.stale:platform", changeSetId: "changeset.docs.stale", path: "plugins/platform/platform-console.rvm" }];
+      }
+      return [];
+    }
+  });
+  const staleDocs = filterPlatformModel(staleModel, "docs", "docs/CAPABILITIES.md");
+
+  assert.equal(staleDocs.docs[0].freshness.status, "stale");
+  assert.equal(staleDocs.docs[0].freshness.staleBranches.includes("branch.docs.stale"), true);
+  assert.equal(staleModel.gaps.some(gap => gap.kind === "stale-doc" && gap.target === "doc:docs/CAPABILITIES.md"), true);
+
+  const freshModel = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: [], effectivePluginIds: [], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [{ id: "branch.docs.fresh.model", title: "Fresh Docs", status: "open", changeSetIds: ["changeset.docs.fresh.model"] }];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [{ id: "changeset.docs.fresh.model", branchId: "branch.docs.fresh.model", status: "draft" }];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [
+          { id: "changeSetEdit:changeset.docs.fresh.model:platform", changeSetId: "changeset.docs.fresh.model", path: "plugins/platform/platform-console.rvm" },
+          { id: "changeSetEdit:changeset.docs.fresh.model:docs", changeSetId: "changeset.docs.fresh.model", path: "docs/CAPABILITIES.md" }
+        ];
+      }
+      return [];
+    }
+  });
+  const freshDocs = filterPlatformModel(freshModel, "docs", "docs/CAPABILITIES.md");
+
+  assert.equal(freshDocs.docs[0].freshness.status, "fresh");
+  assert.equal(freshDocs.docs[0].freshness.touchedBranches.includes("branch.docs.fresh.model"), true);
+  assert.equal(freshModel.gaps.some(gap => gap.kind === "stale-doc" && gap.target === "doc:docs/CAPABILITIES.md"), false);
 });
 
 test("platform model includes projected conflict nodes from validation errors", async () => {
@@ -2085,6 +2157,9 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Snapshot Builds/);
   assert.match(html, /Last Good/);
   assert.match(html, /Failed Snapshot Builds/);
+  assert.match(html, /Governed Docs/);
+  assert.match(html, /Doc Structure/);
+  assert.match(html, /Doc Tasks/);
   assert.match(html, /Roadmap Tasks/);
   assert.match(html, /platform-proposal-form/);
   assert.match(html, /platform-review-form/);
