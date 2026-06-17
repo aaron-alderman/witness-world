@@ -770,6 +770,144 @@ test("runtime server dispatches mounted routes and owns lifecycle outside host.j
   assert.equal(closedServer, true);
 });
 
+test("runtime server pins an in-flight request to its starting app snapshot revision", async () => {
+  const routes = [{
+    id: "pin_route",
+    serverRunner: "runner-1",
+    method: "GET",
+    path: "/pin",
+    handler: "demo.pin"
+  }];
+  const world = createWitnessWorld({ routes });
+  const runner = {
+    id: "runner-1",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: false,
+    handlerSet: "demo"
+  };
+  let requestHandler = null;
+  let activeSnapshot = { appRevision: 1, world };
+  let releaseRequest = () => {};
+  let markStarted = () => {};
+  const requestStarted = new Promise(resolve => {
+    markStarted = resolve;
+  });
+  const requestGate = new Promise(resolve => {
+    releaseRequest = resolve;
+  });
+  const runtimeContext = {
+    handlers: {
+      "demo.pin": async ({ res, appContext }) => {
+        const beforeRevision = Number(appContext?.appSnapshotManager?.getActiveSnapshot?.()?.appRevision || 0);
+        markStarted();
+        await requestGate;
+        const afterRevision = Number(appContext?.appSnapshotManager?.getActiveSnapshot?.()?.appRevision || 0);
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({
+          beforeRevision,
+          afterRevision,
+          requestAppRevision: Number(appContext?.requestAppRevision || 0)
+        }));
+      }
+    },
+    appSnapshotManager: {
+      async ensureFresh() {},
+      getActiveSnapshot() {
+        return activeSnapshot;
+      },
+      injectDevClient(html) {
+        return html;
+      },
+      diagnostics() {
+        return null;
+      }
+    },
+    close() {}
+  };
+
+  const server = await startRuntimeServer(world, {
+    actor: "adam",
+    serverRunnerId: "runner-1",
+    runtimeRoot: "C:/runtime",
+    logger: { info() {}, error() {} },
+    runtimeProfile: "full"
+  }, {
+    createGenericRouteHandlers: () => ({}),
+    hostCapabilities: () => new Set(["http.serve", "dom.render"]),
+    readJson: async () => ({}),
+    resolveRuntimeConfig: () => ({ ok: true, values: {}, fields: [], failures: [] }),
+    resolveServerRunner: () => ({ ok: true, runner }),
+    resolveStartupRunner: () => ({ ok: true, runner }),
+    resolveStorageConfig: () => ({}),
+    sendJson: (res, status, body) => {
+      res.writeHead(status, { "content-type": "application/json" });
+      res.end(JSON.stringify(body));
+    },
+    defaultHostCapabilitiesForProfile: () => [],
+    ensureRuntimeBuiltins: () => {},
+    runtimeBundleSummaryForProfile: profile => ({ profile, bundles: [], dispatchHandlers: ["demo.pin"] }),
+    runtimeSurfaceEntriesForProfile: () => [],
+    dispatchHandlerIdsForProfile: () => ["demo.pin"],
+    handlerSetFactoriesForProfile: () => ({}),
+    handlerSetDefinitionsForProfile: () => ({}),
+    providedCapabilityIdsForProfile: () => [],
+    startupRequiredHostCapabilitiesForProfile: (_profile, hostKind) => hostKind === "backend" ? ["http.serve"] : ["dom.render"],
+    createRuntimeAppContextForRunner: async () => ({
+      ok: true,
+      actors: [{ id: "adam", label: "Adam" }],
+      storage: {},
+      visibleWitnesses: () => world.allWitnesses()
+    }),
+    createRuntimeResolverForServer: () => ({
+      runtimeContexts: new Map([["runner-1", runtimeContext]]),
+      resolveActiveRuntime: async () => ({ runner, context: runtimeContext })
+    }),
+    httpModule: {
+      createServer(handler) {
+        requestHandler = handler;
+        return {
+          listen(_port, _host, callback) {
+            callback();
+          },
+          address() {
+            return { port: 4321 };
+          },
+          closeAllConnections() {},
+          close(callback) {
+            callback();
+          }
+        };
+      }
+    }
+  });
+
+  assert.equal(server.ok, true);
+  assert.equal(typeof requestHandler, "function");
+
+  const req = {
+    method: "GET",
+    url: "/pin",
+    headers: {},
+    on() {}
+  };
+  const res = createResponse();
+  const requestPromise = requestHandler(req, res);
+  await requestStarted;
+  activeSnapshot = { appRevision: 2, world };
+  releaseRequest();
+  await requestPromise;
+
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(JSON.parse(res.body), {
+    beforeRevision: 1,
+    afterRevision: 1,
+    requestAppRevision: 1
+  });
+
+  await server.close();
+});
+
 test("runtime server tolerates null logger during request handling", async () => {
   const routes = [{
     id: "hello_route",

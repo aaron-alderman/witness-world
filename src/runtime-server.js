@@ -112,6 +112,27 @@ export async function startRuntimeServer(world, {
   const logError = typeof logger?.error === "function"
     ? (event, fields) => logger.error(event, fields)
     : () => {};
+  const pinnedSnapshotManager = (snapshotManager, snapshot) => {
+    if (!snapshotManager || !snapshot) return snapshotManager;
+    return new Proxy(snapshotManager, {
+      get(target, property, receiver) {
+        if (property === "getActiveSnapshot") return () => snapshot;
+        if (property === "getPinnedSnapshot") return () => snapshot;
+        const value = Reflect.get(target, property, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+    });
+  };
+  const requestScopedAppContext = appContext => {
+    const liveSnapshotManager = appContext?.appSnapshotManager ?? null;
+    const snapshot = liveSnapshotManager?.getActiveSnapshot?.() ?? null;
+    if (!appContext || !liveSnapshotManager || !snapshot) return appContext;
+    const scoped = Object.create(appContext);
+    scoped.appSnapshotManager = pinnedSnapshotManager(liveSnapshotManager, snapshot);
+    scoped.requestSnapshot = snapshot;
+    scoped.requestAppRevision = Number(snapshot.appRevision || 0);
+    return scoped;
+  };
   const activeDevMode = devMode ?? (runtimeStartupMode === "serve" && appProject != null);
 
   const runtimePluginRoot = resolveRuntimePluginRootImpl({ env });
@@ -594,8 +615,9 @@ export async function startRuntimeServer(world, {
       if (runtime.context?.devMode && runtime.context?.appSnapshotManager) {
         await runtime.context.appSnapshotManager.ensureFresh({ trigger: "request" });
       }
+      const activeAppContext = requestScopedAppContext(runtime.context);
 
-      const mountedRouteTable = mountedRoutesFor(runtime.runner.id, runtime.context);
+      const mountedRouteTable = mountedRoutesFor(runtime.runner.id, activeAppContext);
       const matched = matchDeclaredRoute(mountedRouteTable, req.method || "GET", requestUrl.pathname);
 
       if (shouldServeBootstrapFallback({
@@ -642,7 +664,7 @@ export async function startRuntimeServer(world, {
             requestActor: requestContext.actor,
             requestIdentity: requestContext.identity,
             requestSession: requestContext.session,
-            appContext: runtime.context
+            appContext: activeAppContext
           });
           return;
         }
@@ -678,7 +700,7 @@ export async function startRuntimeServer(world, {
         sendJson(res, 500, { error: "route handler not configured", route: matched.route.id });
         return;
       }
-      const routeWorld = runtime.context?.appSnapshotManager?.getActiveSnapshot()?.world ?? world;
+      const routeWorld = activeAppContext?.appSnapshotManager?.getActiveSnapshot()?.world ?? world;
       const accessDecision = evaluateRouteAccess(routeWorld, matched.route, requestContext);
       if (!accessDecision.ok) {
         if (matched.route.handler === "page.surface") {
@@ -720,7 +742,7 @@ export async function startRuntimeServer(world, {
               requestActor: requestContext.actor,
               requestIdentity: requestContext.identity,
               requestSession: requestContext.session,
-              appContext: runtime.context
+              appContext: activeAppContext
             });
             return;
           }
@@ -763,7 +785,7 @@ export async function startRuntimeServer(world, {
         requestActor: requestContext.actor,
         requestIdentity: requestContext.identity,
         requestSession: requestContext.session,
-        appContext: runtime.context
+        appContext: activeAppContext
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

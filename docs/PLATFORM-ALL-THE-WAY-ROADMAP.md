@@ -426,7 +426,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Reuse `AppSnapshotManager` dependency tracking for branch overlays.
 - [X] Add candidate snapshot build from change-set overlay.
 - [X] Add backend request routing by active runtime revision.
-- [ ] Ensure in-flight requests hold a reference to their starting runtime context.
+- [X] Ensure in-flight requests hold a reference to their starting runtime context.
 - [X] Ensure new requests see latest active valid runtime revision.
 - [X] Ensure failed rebuild leaves active runtime unchanged.
 - [X] Add backend revision SSE:
@@ -438,6 +438,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add tests for invalid RVM preserving last good backend behavior.
 - [X] Add tests for SSE event after backend candidate activation.
 - [L] Current activation path is `platform.changeSet.apply` -> `AppSnapshotManager.markDirtyPaths(...)` for applied files inside the active app roots, so new requests pick up a rebuilt authored runtime revision without restarting the server while failed rebuilds retain the last good snapshot. The runtime now emits backend revision SSE, but the dedicated Platform Console revision stream/view remains later work.
+- [L] Current request pinning is HTTP-request scoped: the runtime snapshots `appSnapshotManager.getActiveSnapshot()` after `ensureFresh()` and proxies that fixed revision through route matching, authz, rendering, and nested handler invocation for the lifetime of the request. Long-lived out-of-band work such as jobs or separate event streams remains distinct follow-on policy.
 - [L] Unexpected current behavior: broad malformed RVM text often compiles into tolerated residual forms instead of failing the snapshot build, so the open invalid-RVM regression still needs a narrow authored specimen that deterministically trips rebuild failure rather than silently lowering through the compiler.
 
 ### 2.3 JS Plugin Reload Strategy
@@ -1223,7 +1224,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 - [X] Build candidate snapshots from change-set overlays.
 - [X] Route new requests to active valid runtime revision.
-- [ ] Preserve in-flight revision references.
+- [X] Preserve in-flight revision references.
 - [X] Add backend revision events.
 - [ ] Add runtime revision view.
 - [X] Add tests for backend behavior changing from RVM without process restart.
