@@ -634,6 +634,56 @@ test("platform proposal handlers approve change-set proposals through the shared
   assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.platform.console.proposed"].status, "valid");
 }));
 
+test("platform proposal approval auto-creates a canonical branch when change-set proposals omit branchId", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" },
+      executeBootstrapProposal: actor => async proposal => executePlatformProposalTarget({
+        world,
+        actor,
+        proposal,
+        body: proposal.body ?? {}
+      })
+    },
+    sendGateFailure: (res, gate) => sent.push({ status: gate.status, body: { error: gate.reason } }),
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.proposal.create"]({
+    req: {
+      body: {
+        id: "proposal.platform.changeSet.autobranch",
+        action: "changeSet.create",
+        reason: "Stage work without pre-creating a branch",
+        body: {
+          id: "changeset.platform.auto.branch",
+          title: "Auto branch proposal"
+        }
+      }
+    },
+    res: {},
+    requestActor: "aaron"
+  });
+  assert.equal(sent.at(-1).status, 201);
+  assert.equal(sent.at(-1).body.proposal.targetProcess, "changeSet.create");
+
+  await handlers["platform.proposal.approve"]({
+    res: {},
+    params: { id: "proposal.platform.changeSet.autobranch" },
+    requestActor: "aaron"
+  });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.platform.auto.branch"].branchId, "branch:platform-auto-branch");
+  assert.equal(world.project(moduleProjectors.branchIndex).byId["branch:platform-auto-branch"].id, "branch:platform-auto-branch");
+}));
+
 test("platform proposal execution can attach a change set to an existing branch", async () => withRegisteredPluginProjectors(providers, async () => {
   const world = createWorld();
   const sent = [];

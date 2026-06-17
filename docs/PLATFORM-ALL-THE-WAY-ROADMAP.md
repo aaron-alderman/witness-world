@@ -398,7 +398,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] create proposal
   - [X] approve
   - [X] apply
-- [~] Add test that proposal creation automatically creates a branch when requested.
+- [X] Add test that proposal creation automatically creates a branch when requested.
 - [X] Add test that approved change-set proposal atomically applies all edits.
 - [X] Add test that rejected proposal leaves branch/change-set intact but unapplied.
 - [L] Implementation note: proposal creation remains non-mutating by design; the current proof is that approving `changeSet.create` can auto-create the branch before staging work.
