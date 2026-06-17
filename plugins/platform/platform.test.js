@@ -9,6 +9,7 @@ import { bundleId, capabilities, createHandlers, handlerCatalog, providers, rout
 import { buildPlatformModel, filterPlatformModel, parseRoadmapTasks, PLATFORM_LIFECYCLES } from "./platform-model.js";
 import { renderPlatformPage } from "./platform-page.js";
 import { buildPlatformProposalCreateBody, platformProposalTemplates } from "./platform-proposals.js";
+import { executePlatformProposalTarget } from "./platform-proposal-targets.js";
 import { renderPlatformConsoleCss } from "./platform-style.js";
 
 test("platform plugin exposes platform bundle ownership", async () => {
@@ -160,6 +161,15 @@ test("platform model includes witnessed operating objects and proposal state", a
 });
 
 test("platform proposal builder normalizes supported proposal bodies", () => {
+  const branch = buildPlatformProposalCreateBody({
+    id: "proposal.platform.branch",
+    action: "branch.create",
+    body: {
+      id: "branch.platform.console",
+      title: "Platform console branch"
+    },
+    reason: "Create a platform branch"
+  });
   const built = buildPlatformProposalCreateBody({
     id: "proposal.platform.mcp",
     action: "mcpTool.install",
@@ -173,6 +183,10 @@ test("platform proposal builder normalizes supported proposal bodies", () => {
     reason: "Expose platform read"
   });
 
+  assert.equal(branch.ok, true);
+  assert.equal(branch.value.targetProcess, "branch.create");
+  assert.equal(branch.value.targetKind, "branch");
+  assert.equal(branch.value.targetId, "branch.platform.console");
   assert.equal(built.ok, true);
   assert.equal(built.value.targetProcess, "mcpTool.install");
   assert.equal(built.value.targetKind, "mcpServer");
@@ -184,6 +198,7 @@ test("platform proposal builder normalizes supported proposal bodies", () => {
     scopeContextsJson: JSON.stringify(["ctx.platform"]),
     scopeTargetsJson: JSON.stringify([])
   });
+  assert.equal(platformProposalTemplates().some(template => template.action === "changeSet.create"), true);
   assert.equal(platformProposalTemplates().some(template => template.action === "stewardship.grant"), true);
   assert.equal(buildPlatformProposalCreateBody({ action: "unsupported", body: {} }).ok, false);
 });
@@ -230,6 +245,99 @@ test("platform proposal handlers create and review through proposal machinery", 
   assert.equal(sent.at(-1).status, 200);
   assert.equal(sent.at(-1).body.proposal.status, "approved");
 });
+
+test("platform proposal handlers approve change-set proposals through the shared executor", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" },
+      executeBootstrapProposal: actor => async proposal => executePlatformProposalTarget({
+        world,
+        actor,
+        proposal,
+        body: proposal.body ?? {}
+      })
+    },
+    sendGateFailure: (res, gate) => sent.push({ status: gate.status, body: { error: gate.reason } }),
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.proposal.create"]({
+    req: {
+      body: {
+        id: "proposal.platform.changeSet.create",
+        action: "changeSet.create",
+        reason: "Stage platform console work",
+        body: {
+          id: "changeset.platform.console.proposed",
+          title: "Platform console proposal"
+        }
+      }
+    },
+    res: {},
+    requestActor: "aaron"
+  });
+  assert.equal(sent.at(-1).status, 201);
+  assert.equal(sent.at(-1).body.proposal.targetProcess, "changeSet.create");
+
+  await handlers["platform.proposal.approve"]({
+    res: {},
+    params: { id: "proposal.platform.changeSet.create" },
+    requestActor: "aaron"
+  });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.platform.console.proposed"].id, "changeset.platform.console.proposed");
+  assert.equal(world.project(moduleProjectors.branchIndex).byId["branch-changeset-platform-console-proposed"].id, "branch-changeset-platform-console-proposed");
+
+  const rvm = await readFile(new URL("./platform-console.rvm", import.meta.url), "utf8");
+  await handlers["platform.proposal.create"]({
+    req: {
+      body: {
+        id: "proposal.platform.changeSet.edit",
+        action: "changeSet.edit",
+        body: {
+          changeSetId: "changeset.platform.console.proposed",
+          edits: [{ path: "plugins/platform/platform-console.rvm", content: `${rvm}\n` }]
+        }
+      }
+    },
+    res: {},
+    requestActor: "aaron"
+  });
+  await handlers["platform.proposal.approve"]({
+    res: {},
+    params: { id: "proposal.platform.changeSet.edit" },
+    requestActor: "aaron"
+  });
+  assert.equal(world.project(moduleProjectors.changeSetEditIndex).byChangeSet["changeset.platform.console.proposed"].length, 1);
+
+  await handlers["platform.proposal.create"]({
+    req: {
+      body: {
+        id: "proposal.platform.changeSet.validate",
+        action: "changeSet.validate",
+        body: {
+          changeSetId: "changeset.platform.console.proposed"
+        }
+      }
+    },
+    res: {},
+    requestActor: "aaron"
+  });
+  await handlers["platform.proposal.approve"]({
+    res: {},
+    params: { id: "proposal.platform.changeSet.validate" },
+    requestActor: "aaron"
+  });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.platform.console.proposed"].status, "valid");
+}));
 
 test("platform change-set handlers stage overlays and validate candidate snapshots", async () => withRegisteredPluginProjectors(providers, async () => {
   const world = createWorld();

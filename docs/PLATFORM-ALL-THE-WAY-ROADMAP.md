@@ -374,14 +374,14 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### 1.5 Proposal Integration
 
-- [ ] Add proposal target process `changeSet.create`.
-- [ ] Add proposal target process `changeSet.edit`.
-- [ ] Add proposal target process `changeSet.validate`.
+- [X] Add proposal target process `changeSet.create`.
+- [X] Add proposal target process `changeSet.edit`.
+- [X] Add proposal target process `changeSet.validate`.
 - [ ] Add proposal target process `changeSet.apply`.
-- [ ] Add proposal target process `branch.create`.
+- [X] Add proposal target process `branch.create`.
 - [ ] Add proposal target process `branch.rebase`.
 - [ ] Add proposal target process `branch.merge`.
-- [ ] Extend `platform.proposal` MCP tool to create change-set proposals.
+- [X] Extend `platform.proposal` MCP tool to create change-set proposals.
 - [ ] Add Platform Console flow:
   - [ ] create branch
   - [ ] stage edits
@@ -389,9 +389,10 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] create proposal
   - [ ] approve
   - [ ] apply
-- [ ] Add test that proposal creation automatically creates a branch when requested.
+- [~] Add test that proposal creation automatically creates a branch when requested.
 - [ ] Add test that approved change-set proposal atomically applies all edits.
 - [ ] Add test that rejected proposal leaves branch/change-set intact but unapplied.
+- [L] Implementation note: proposal creation remains non-mutating by design; the current proof is that approving `changeSet.create` can auto-create the branch before staging work.
 
 ## Phase 2: Candidate Snapshot And Backend Hot Reload
 
@@ -1198,7 +1199,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add branch module model.
 - [X] Add multi-file overlay validation for RVM/WTOML/WCSS/JSON.
 - [X] Add platform-change-set API.
-- [~] Add proposal integration.
+- [X] Add proposal integration.
 - [X] Add Platform Console branch/change-set panels.
 - [X] Add MCP branch/change-set operations.
 - [ ] Add tests for atomic multi-file apply.
@@ -1296,4 +1297,4 @@ This is the recommended next slice because it provides immediate leverage withou
 - [X] Add test that invalid WCSS keeps active snapshot unchanged.
 - [X] Add test that valid change set updates the candidate snapshot and emits a revision event.
 - [X] Add doc ingestion for this file and expose its checkbox tasks in `/api/platform-model`.
-- [L] Audit note: the change-set kernel is present in `plugin.platform`, but proposal-driven branch/change-set creation is still a follow-on slice.
+- [X] Add approval-time proposal execution for `branch.create`, `changeSet.create`, `changeSet.edit`, and `changeSet.validate` through the shared bootstrap proposal executor.

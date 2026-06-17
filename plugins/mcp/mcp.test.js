@@ -37,6 +37,8 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("gaps"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("proposals"), true);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("runtimePlugin.install"), true);
+  assert.equal(platformProposal.inputSchema.properties.action.enum.includes("changeSet.create"), true);
+  assert.equal(platformProposal.inputSchema.properties.action.enum.includes("branch.create"), true);
   assert.equal(platformProposal.inputSchema.properties.operation.enum.includes("approve"), true);
   assert.deepEqual(platformChangeSet.inputSchema.properties.operation.enum, ["create", "edit", "validate"]);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("process.create"), true);

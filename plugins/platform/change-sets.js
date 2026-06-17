@@ -181,6 +181,80 @@ function currentActiveCandidateForBranch(world, branchId) {
   return world.project(moduleProjectors.candidateSnapshotIndex).activeByBranch?.[branchId] ?? null;
 }
 
+function emitPlatformBranchCreate(world, {
+  actor,
+  id,
+  title = null,
+  session = null,
+  runtimeProfile = "full"
+}) {
+  ensureThing(world, actor, id);
+  return world.emit({
+    process: "platform.branch.create",
+    actor,
+    claims: [relation(id, "hasModuleKind", "branch")],
+    body: {
+      id,
+      title: title ? String(title) : id,
+      owner: actor,
+      runtimeProfile,
+      session: session?.id ?? null,
+      status: "open",
+      createdAt: nowIso()
+    }
+  });
+}
+
+export function createPlatformBranch(world, {
+  actor,
+  id = null,
+  title = null,
+  session = null,
+  runtimeProfile = "full"
+}) {
+  const branchId = String(id || "").trim();
+  if (!branchId) return { ok: false, status: 400, error: "branch id is required" };
+  const existing = world.project(moduleProjectors.branchIndex).byId?.[branchId] ?? null;
+  if (existing) return { ok: false, status: 409, error: "branch id already exists" };
+  const witness = emitPlatformBranchCreate(world, {
+    actor,
+    id: branchId,
+    title,
+    session,
+    runtimeProfile
+  });
+  return {
+    ok: true,
+    status: 201,
+    witness,
+    branch: world.project(moduleProjectors.branchIndex).byId?.[branchId] ?? null
+  };
+}
+
+function ensurePlatformBranch(world, {
+  actor,
+  id,
+  title = null,
+  session = null,
+  runtimeProfile = "full"
+}) {
+  const existing = world.project(moduleProjectors.branchIndex).byId?.[id] ?? null;
+  if (existing) {
+    return { ok: true, created: false, witness: null, branch: existing };
+  }
+  const created = createPlatformBranch(world, {
+    actor,
+    id,
+    title,
+    session,
+    runtimeProfile
+  });
+  return {
+    ...created,
+    created: true
+  };
+}
+
 export function createPlatformChangeSet(world, {
   actor,
   id = null,
@@ -195,23 +269,15 @@ export function createPlatformChangeSet(world, {
   const existing = world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? null;
   if (existing) return { ok: false, status: 409, error: "change set id already exists" };
   const resolvedBranchId = String(branchId || defaultBranchId(changeSetId)).trim();
-  const branchIndex = world.project(moduleProjectors.branchIndex).byId ?? {};
-  if (!branchIndex[resolvedBranchId]) {
-    ensureThing(world, actor, resolvedBranchId);
-    world.emit({
-      process: "platform.branch.create",
-      actor,
-      claims: [relation(resolvedBranchId, "hasModuleKind", "branch")],
-      body: {
-        id: resolvedBranchId,
-        title: title ? String(title) : resolvedBranchId,
-        owner: actor,
-        runtimeProfile,
-        session: session?.id ?? null,
-        status: "open",
-        createdAt: nowIso()
-      }
-    });
+  const branchResult = ensurePlatformBranch(world, {
+    actor,
+    id: resolvedBranchId,
+    title: title ? String(title) : resolvedBranchId,
+    session,
+    runtimeProfile
+  });
+  if (!branchResult.ok) {
+    return branchResult;
   }
   ensureThing(world, actor, changeSetId);
   const witness = world.emit({
@@ -237,6 +303,7 @@ export function createPlatformChangeSet(world, {
     ok: true,
     status: 201,
     witness,
+    branchWitness: branchResult.witness,
     branch: world.project(moduleProjectors.branchIndex).byId?.[resolvedBranchId] ?? null,
     changeSet: world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? null
   };

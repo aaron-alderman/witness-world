@@ -1,4 +1,8 @@
 export const PLATFORM_PROPOSAL_ACTIONS = Object.freeze([
+  "branch.create",
+  "changeSet.create",
+  "changeSet.edit",
+  "changeSet.validate",
   "runtimePlugin.install",
   "runtimePlugin.remove",
   "mcpServer.define",
@@ -11,6 +15,37 @@ export const PLATFORM_PROPOSAL_ACTIONS = Object.freeze([
 ]);
 
 export const PLATFORM_PROPOSAL_TEMPLATES = Object.freeze({
+  "branch.create": Object.freeze({
+    action: "branch.create",
+    title: "Create branch",
+    targetKind: "branch",
+    requiredBodyFields: Object.freeze(["id"]),
+    sampleBody: Object.freeze({ id: "branch.platform.console", title: "Platform Console Branch" })
+  }),
+  "changeSet.create": Object.freeze({
+    action: "changeSet.create",
+    title: "Create change set",
+    targetKind: "changeSet",
+    requiredBodyFields: Object.freeze(["id"]),
+    sampleBody: Object.freeze({ id: "changeset.platform.console", branchId: "branch.platform.console", title: "Platform console change" })
+  }),
+  "changeSet.edit": Object.freeze({
+    action: "changeSet.edit",
+    title: "Stage change set edit",
+    targetKind: "changeSet",
+    requiredBodyFields: Object.freeze(["changeSetId", "edits"]),
+    sampleBody: Object.freeze({
+      changeSetId: "changeset.platform.console",
+      edits: [{ path: "plugins/platform/platform-console.rvm", content: "module plugin.platform.console {}" }]
+    })
+  }),
+  "changeSet.validate": Object.freeze({
+    action: "changeSet.validate",
+    title: "Validate change set",
+    targetKind: "changeSet",
+    requiredBodyFields: Object.freeze(["changeSetId"]),
+    sampleBody: Object.freeze({ changeSetId: "changeset.platform.console" })
+  }),
   "runtimePlugin.install": Object.freeze({
     action: "runtimePlugin.install",
     title: "Install runtime plugin",
@@ -107,6 +142,11 @@ export function parsePlatformProposalInput(raw = {}) {
   if (missing.length) {
     return { ok: false, status: 400, error: `missing required body fields: ${missing.join(", ")}` };
   }
+  if (action === "changeSet.edit") {
+    if (!Array.isArray(normalized.value.edits) || normalized.value.edits.length === 0) {
+      return { ok: false, status: 400, error: "changeSet.edit requires a non-empty edits array" };
+    }
+  }
   return {
     ok: true,
     value: {
@@ -141,6 +181,13 @@ export function platformProposalTarget(action, body, explicit = {}) {
     return { targetKind: String(explicit.targetKind), targetId: String(explicit.targetId) };
   }
   switch (action) {
+    case "branch.create":
+      return { targetKind: "branch", targetId: String(body.id || "") };
+    case "changeSet.create":
+      return { targetKind: "changeSet", targetId: String(body.id || "") };
+    case "changeSet.edit":
+    case "changeSet.validate":
+      return { targetKind: "changeSet", targetId: String(body.changeSetId || "") };
     case "runtimePlugin.install":
     case "runtimePlugin.remove":
     case "mcpServer.define":

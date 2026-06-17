@@ -5,6 +5,7 @@ import { executeProgramAuthoringProposalTarget } from "../program-authoring/prog
 import { executeServerRunnerAuthoringProposalTarget } from "../server-runner-authoring/server-runner-proposal-targets.js";
 import { executeMcpAuthoringProposalTarget } from "../mcp-authoring/mcp-proposal-targets.js";
 import { executeDemoProposalTarget } from "../demo/demo-proposal-targets.js";
+import { executePlatformProposalTarget } from "../platform/platform-proposal-targets.js";
 import { requestWidgetVersionActivation, rollbackWidgetVersion } from "../inspect/widget-versions.js";
 import { requestEdenVersionPublish } from "../eden/eden-versions.js";
 
@@ -66,6 +67,16 @@ export function createAuthoringProposalExecutor({
   return actor => async proposal => {
     const body = proposal.body ?? {};
     switch (proposal.targetProcess) {
+      case "branch.create":
+      case "changeSet.create":
+      case "changeSet.edit":
+      case "changeSet.validate":
+        return executePlatformProposalTarget({
+          world,
+          actor,
+          proposal,
+          body
+        });
       case "identity.update": {
         return executeAuthoringCoreProposalTarget({
           world,

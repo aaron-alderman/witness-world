@@ -2,8 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createWorld } from "../../src/kernel.js";
+import { moduleProjectors } from "../../src/modules.js";
+import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
 import { bundleId, createHandlers, handlerCatalog, routes } from "./runtime.js";
 import { createAuthoringProposalExecutor } from "./proposal-executor.js";
+import { providers as platformProviders } from "../platform/runtime.js";
 
 test("proposals plugin owns proposal bundle routes and handlers", async () => {
   const manifest = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
@@ -45,6 +48,7 @@ test("proposals plugin owns the proposal executor dispatch", async () => {
   assert.equal(executorSource.includes("../server-runner-authoring/server-runner-proposal-targets.js"), true);
   assert.equal(executorSource.includes("../mcp-authoring/mcp-proposal-targets.js"), true);
   assert.equal(executorSource.includes("../demo/demo-proposal-targets.js"), true);
+  assert.equal(executorSource.includes("../platform/platform-proposal-targets.js"), true);
   assert.equal(executorSource.includes("../../src/todo-runtime.js"), false);
   assert.equal(executorSource.includes("requestTodoCreate"), false);
   assert.equal(executorSource.includes("requestTodoUpdate"), false);
@@ -95,6 +99,35 @@ test("proposals plugin owns the proposal executor dispatch", async () => {
     error: "proposal target process not supported"
   });
 });
+
+test("proposals plugin executor dispatches platform change-set targets", async () => withRegisteredPluginProjectors(platformProviders, async () => {
+  const world = createWorld();
+  const execute = createAuthoringProposalExecutor({
+    world,
+    backendHost: "backendHost",
+    supportedHandlerSets: [],
+    supportedHandlers: [],
+    supportedFrontendOps: [],
+    supportedBackendOps: [],
+    ensureIdentityAuthority: () => ({ ok: true }),
+    ensureTargetAuthority: () => ({ ok: true }),
+    ensureContextAuthority: () => ({ ok: true }),
+    mcpToolNames: () => [],
+    getRuntimePluginCatalog: async () => ({ packages: [] })
+  });
+
+  const created = await execute("aaron")({
+    targetProcess: "changeSet.create",
+    targetId: "changeset.platform.executor",
+    body: {
+      id: "changeset.platform.executor",
+      title: "Executor change set"
+    }
+  });
+  assert.equal(created.ok, true);
+  assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.platform.executor"].id, "changeset.platform.executor");
+  assert.equal(world.project(moduleProjectors.branchIndex).byId["branch-changeset-platform-executor"].id, "branch-changeset-platform-executor");
+}));
 
 test("proposals plugin owns proposal process helpers", async () => {
   const processesSource = await readFile(new URL("./proposal-processes.js", import.meta.url), "utf8");
