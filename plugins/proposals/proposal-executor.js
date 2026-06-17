@@ -68,6 +68,8 @@ export function createAuthoringProposalExecutor({
     const body = proposal.body ?? {};
     switch (proposal.targetProcess) {
       case "branch.create":
+      case "branch.merge":
+      case "branch.rebase":
       case "changeSet.create":
       case "changeSet.edit":
       case "changeSet.validate":

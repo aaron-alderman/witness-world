@@ -388,8 +388,8 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add proposal target process `changeSet.validate`.
 - [X] Add proposal target process `changeSet.apply`.
 - [X] Add proposal target process `branch.create`.
-- [ ] Add proposal target process `branch.rebase`.
-- [ ] Add proposal target process `branch.merge`.
+- [X] Add proposal target process `branch.rebase`.
+- [X] Add proposal target process `branch.merge`.
 - [X] Extend `platform.proposal` MCP tool to create change-set proposals.
 - [X] Add Platform Console flow:
   - [X] create branch
@@ -402,7 +402,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add test that approved change-set proposal atomically applies all edits.
 - [X] Add test that rejected proposal leaves branch/change-set intact but unapplied.
 - [L] Implementation note: proposal creation remains non-mutating by design; the current proof is that approving `changeSet.create` can auto-create the branch before staging work.
-- [L] V1 can now model `branch.merge` / `branch.rebase` proposals as `mergeIntent` objects before approval support exists; executing those proposal target processes remains blocked on explicit branch-overlay semantics.
+- [L] V1 proposal approval now validates branch existence and records reviewed `branch.merge` / `branch.rebase` intent witnesses through the shared executor without mutating branch overlays; actual overlay merge/rebase semantics remain deferred.
 
 ## Phase 2: Candidate Snapshot And Backend Hot Reload
 

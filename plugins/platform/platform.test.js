@@ -634,6 +634,92 @@ test("platform proposal handlers approve change-set proposals through the shared
   assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.platform.console.proposed"].status, "valid");
 }));
 
+test("platform proposal handlers approve branch merge and rebase intents through the shared executor", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" },
+      executeBootstrapProposal: actor => async proposal => executePlatformProposalTarget({
+        world,
+        actor,
+        proposal,
+        body: proposal.body ?? {}
+      })
+    },
+    sendGateFailure: (res, gate) => sent.push({ status: gate.status, body: { error: gate.reason } }),
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.branch.create"]({
+    req: { body: { id: "branch.intent.source", title: "Intent Source" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  await handlers["platform.branch.create"]({
+    req: { body: { id: "branch.intent.target", title: "Intent Target" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+
+  await handlers["platform.proposal.create"]({
+    req: {
+      body: {
+        id: "proposal.platform.branch.merge",
+        action: "branch.merge",
+        reason: "Review merge intent",
+        body: {
+          branchId: "branch.intent.source",
+          intoBranchId: "branch.intent.target"
+        }
+      }
+    },
+    res: {},
+    requestActor: "aaron"
+  });
+  await handlers["platform.proposal.approve"]({
+    res: {},
+    params: { id: "proposal.platform.branch.merge" },
+    requestActor: "aaron"
+  });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(sent.at(-1).body.proposal.status, "approved");
+  assert.equal(world.allWitnesses().some(witness => witness.process === "platform.branch.merge.reviewed" && witness.body?.branchId === "branch.intent.source"), true);
+
+  await handlers["platform.proposal.create"]({
+    req: {
+      body: {
+        id: "proposal.platform.branch.rebase",
+        action: "branch.rebase",
+        reason: "Review rebase intent",
+        body: {
+          branchId: "branch.intent.source",
+          ontoBranchId: "branch.intent.target"
+        }
+      }
+    },
+    res: {},
+    requestActor: "aaron"
+  });
+  await handlers["platform.proposal.approve"]({
+    res: {},
+    params: { id: "proposal.platform.branch.rebase" },
+    requestActor: "aaron"
+  });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(sent.at(-1).body.proposal.status, "approved");
+  assert.equal(world.allWitnesses().some(witness => witness.process === "platform.branch.rebase.reviewed" && witness.body?.branchId === "branch.intent.source"), true);
+}));
+
 test("platform proposal approval auto-creates a canonical branch when change-set proposals omit branchId", async () => withRegisteredPluginProjectors(providers, async () => {
   const world = createWorld();
   const sent = [];

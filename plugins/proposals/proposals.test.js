@@ -49,6 +49,8 @@ test("proposals plugin owns the proposal executor dispatch", async () => {
   assert.equal(executorSource.includes("../mcp-authoring/mcp-proposal-targets.js"), true);
   assert.equal(executorSource.includes("../demo/demo-proposal-targets.js"), true);
   assert.equal(executorSource.includes("../platform/platform-proposal-targets.js"), true);
+  assert.equal(executorSource.includes('case "branch.merge"'), true);
+  assert.equal(executorSource.includes('case "branch.rebase"'), true);
   assert.equal(executorSource.includes("../../src/todo-runtime.js"), false);
   assert.equal(executorSource.includes("requestTodoCreate"), false);
   assert.equal(executorSource.includes("requestTodoUpdate"), false);
@@ -100,7 +102,7 @@ test("proposals plugin owns the proposal executor dispatch", async () => {
   });
 });
 
-test("proposals plugin executor dispatches platform change-set targets", async () => withRegisteredPluginProjectors(platformProviders, async () => {
+test("proposals plugin executor dispatches platform change-set and branch intent targets", async () => withRegisteredPluginProjectors(platformProviders, async () => {
   const world = createWorld();
   const execute = createAuthoringProposalExecutor({
     world,
@@ -127,6 +129,48 @@ test("proposals plugin executor dispatches platform change-set targets", async (
   assert.equal(created.ok, true);
   assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.platform.executor"].id, "changeset.platform.executor");
   assert.equal(world.project(moduleProjectors.branchIndex).byId["branch:platform-executor"].id, "branch:platform-executor");
+
+  const sourceBranch = await execute("aaron")({
+    targetProcess: "branch.create",
+    targetId: "branch.merge.source",
+    body: {
+      id: "branch.merge.source",
+      title: "Merge Source"
+    }
+  });
+  assert.equal(sourceBranch.ok, true);
+
+  const targetBranch = await execute("aaron")({
+    targetProcess: "branch.create",
+    targetId: "branch.merge.target",
+    body: {
+      id: "branch.merge.target",
+      title: "Merge Target"
+    }
+  });
+  assert.equal(targetBranch.ok, true);
+
+  const mergeIntent = await execute("aaron")({
+    targetProcess: "branch.merge",
+    targetId: "branch.merge.source",
+    body: {
+      branchId: "branch.merge.source",
+      intoBranchId: "branch.merge.target"
+    }
+  });
+  assert.equal(mergeIntent.ok, true);
+  assert.equal(mergeIntent.witnessIds.length, 1);
+
+  const rebaseIntent = await execute("aaron")({
+    targetProcess: "branch.rebase",
+    targetId: "branch.merge.source",
+    body: {
+      branchId: "branch.merge.source",
+      ontoBranchId: "branch.merge.target"
+    }
+  });
+  assert.equal(rebaseIntent.ok, true);
+  assert.equal(rebaseIntent.witnessIds.length, 1);
 }));
 
 test("proposals plugin owns proposal process helpers", async () => {

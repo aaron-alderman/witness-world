@@ -5,6 +5,7 @@ import {
   stagePlatformChangeSetEdits,
   validatePlatformChangeSet
 } from "./change-sets.js";
+import { moduleProjectors } from "../../src/modules.js";
 
 function failure(result, fallback) {
   return {
@@ -13,6 +14,25 @@ function failure(result, fallback) {
     error: result.error || fallback,
     ...(result.witness ? { witness: result.witness } : {})
   };
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function resolveBranchIntent(world, proposal, body, mode) {
+  const branchIndex = world.project(moduleProjectors.branchIndex);
+  const branchId = String(body.branchId || proposal.targetId || "").trim();
+  const targetField = mode === "merge" ? "intoBranchId" : "ontoBranchId";
+  const targetBranchId = String(body[targetField] || "").trim();
+  if (!branchId) return { ok: false, status: 400, error: "branchId is required" };
+  if (!targetBranchId) return { ok: false, status: 400, error: `${targetField} is required` };
+  if (!branchIndex.byId?.[branchId]) return { ok: false, status: 404, error: `branch not found: ${branchId}` };
+  if (!branchIndex.byId?.[targetBranchId]) return { ok: false, status: 404, error: `branch not found: ${targetBranchId}` };
+  if (branchId === targetBranchId) {
+    return { ok: false, status: 409, error: `${mode} intent must target a different branch` };
+  }
+  return { ok: true, branchId, targetBranchId, targetField };
 }
 
 export async function executePlatformProposalTarget({
@@ -35,6 +55,25 @@ export async function executePlatformProposalTarget({
       });
       if (!result.ok) return failure(result, "platform branch creation failed");
       return { ok: true, witnessIds: [result.witness?.id].filter(Boolean) };
+    }
+    case "branch.merge":
+    case "branch.rebase": {
+      const mode = proposal.targetProcess === "branch.merge" ? "merge" : "rebase";
+      const resolved = resolveBranchIntent(world, proposal, body, mode);
+      if (!resolved.ok) return failure(resolved, `platform branch ${mode} review failed`);
+      const witness = world.emit({
+        process: mode === "merge" ? "platform.branch.merge.reviewed" : "platform.branch.rebase.reviewed",
+        actor,
+        claims: [],
+        body: {
+          proposalId: proposal.id ?? null,
+          branchId: resolved.branchId,
+          [resolved.targetField]: resolved.targetBranchId,
+          mode,
+          reviewedAt: nowIso()
+        }
+      });
+      return { ok: true, witnessIds: [witness?.id].filter(Boolean) };
     }
     case "changeSet.create": {
       const result = createPlatformChangeSet(world, {
