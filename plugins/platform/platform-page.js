@@ -40,6 +40,7 @@ export function renderPlatformPage(model) {
   const proposalActions = model.proposalActions ?? [];
   const proposals = model.proposals ?? [];
   const openProposals = proposals.filter(row => row.status === "open");
+  const initialBranch = branches[0] ?? null;
   const initialState = JSON.stringify(model).replaceAll("<", "\\u003c");
   return `<!doctype html>
 <html lang="en">
@@ -117,6 +118,13 @@ export function renderPlatformPage(model) {
         </form>
 
         <h2>Change Set Panel</h2>
+        <form id="platform-branch-create-form">
+          <label>Branch id <input name="id" value="branch-${Date.now().toString(36)}"></label>
+          <label>Title <input name="title" value="Platform branch"></label>
+          <button type="submit">Create Branch</button>
+          <div id="branch-create-status"></div>
+        </form>
+
         <form id="platform-change-set-create-form">
           <label>Change set id <input name="id" value="changeset-${Date.now().toString(36)}"></label>
           <label>Branch id <input name="branchId" value="branch-platform-console"></label>
@@ -206,6 +214,28 @@ export function renderPlatformPage(model) {
       </div>
     </section>
 
+    <section class="grid2">
+      <div>
+        <h2>Branch Detail</h2>
+        <label>Branch
+          <select id="platform-branch-detail-select">
+            ${branches.map(branch => `<option value="${esc(branch.id)}">${esc(branch.id)}</option>`).join("")}
+          </select>
+        </label>
+        <pre id="platform-branch-detail-output">${esc(JSON.stringify(initialBranch, null, 2))}</pre>
+      </div>
+      <div>
+        <h2>Branch Validation History</h2>
+        <pre id="platform-branch-history-output">${esc(JSON.stringify(candidateSnapshots.filter(snapshot => snapshot.branchId === initialBranch?.id).map(snapshot => ({
+          candidateSnapshotId: snapshot.id,
+          changeSetId: snapshot.changeSetId,
+          status: snapshot.status,
+          revision: snapshot.revision,
+          errorCount: Array.isArray(snapshot.errors) ? snapshot.errors.length : 0
+        })), null, 2))}</pre>
+      </div>
+    </section>
+
     <section>
       <h2>Candidate Snapshots</h2>
       <table>
@@ -277,10 +307,44 @@ export function renderPlatformPage(model) {
   <script>
     const platformState = JSON.parse(document.getElementById("platform-initial-state").textContent);
     const platformActionTemplates = new Map((platformState.proposalActions || []).map(action => [action.action, action]));
+    const platformBranches = platformState.branches || [];
+    const platformCandidateSnapshots = platformState.candidateSnapshots || [];
+    function renderBranchDetail(branchId) {
+      const branch = platformBranches.find(entry => entry.id === branchId) || null;
+      const detail = document.getElementById("platform-branch-detail-output");
+      const history = document.getElementById("platform-branch-history-output");
+      if (detail) detail.textContent = JSON.stringify(branch, null, 2);
+      if (history) {
+        history.textContent = JSON.stringify(platformCandidateSnapshots
+          .filter(snapshot => snapshot.branchId === branchId)
+          .map(snapshot => ({
+            candidateSnapshotId: snapshot.id,
+            changeSetId: snapshot.changeSetId,
+            status: snapshot.status,
+            revision: snapshot.revision,
+            errorCount: Array.isArray(snapshot.errors) ? snapshot.errors.length : 0
+          })), null, 2);
+      }
+    }
     const proposalForm = document.getElementById("platform-proposal-form");
     proposalForm.elements.action.addEventListener("change", () => {
       const template = platformActionTemplates.get(proposalForm.elements.action.value);
       if (template) proposalForm.elements.bodyJson.value = JSON.stringify(template.sampleBody || {}, null, 2);
+    });
+    document.getElementById("platform-branch-create-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const status = document.getElementById("branch-create-status");
+      const response = await fetch("/api/platform-branches", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: form.elements.id.value,
+          title: form.elements.title.value || null
+        })
+      });
+      const json = await response.json().catch(() => ({}));
+      status.textContent = response.ok ? "Branch created." : (json.error || "Branch creation failed.");
     });
     document.getElementById("platform-proposal-form").addEventListener("submit", async event => {
       event.preventDefault();
@@ -415,6 +479,13 @@ export function renderPlatformPage(model) {
       const json = await response.json().catch(() => ({}));
       status.textContent = response.ok ? ("Change set " + action + "ed.") : (json.error || "Lifecycle update failed.");
     });
+    const branchDetailSelect = document.getElementById("platform-branch-detail-select");
+    if (branchDetailSelect) {
+      branchDetailSelect.addEventListener("change", event => {
+        renderBranchDetail(event.currentTarget.value);
+      });
+      if (branchDetailSelect.value) renderBranchDetail(branchDetailSelect.value);
+    }
   </script>
 </body>
 </html>`;

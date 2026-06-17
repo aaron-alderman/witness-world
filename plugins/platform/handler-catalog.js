@@ -6,6 +6,9 @@ export const handlerCatalog = Object.freeze({
   authorableHandlers: freezeStrings([
     "platform.model.read",
     "platform.gaps.read",
+    "platform.branch.list",
+    "platform.branch.read",
+    "platform.branch.create",
     "platform.changeSet.list",
     "platform.changeSet.read",
     "platform.changeSet.create",
@@ -24,6 +27,9 @@ export const handlerCatalog = Object.freeze({
   dispatchHandlers: freezeStrings([
     "platform.model.read",
     "platform.gaps.read",
+    "platform.branch.list",
+    "platform.branch.read",
+    "platform.branch.create",
     "platform.changeSet.list",
     "platform.changeSet.read",
     "platform.changeSet.create",
@@ -41,6 +47,9 @@ export const handlerCatalog = Object.freeze({
   handlerMetadata: Object.freeze({
     "platform.model.read": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["GET"]) }),
     "platform.gaps.read": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["GET"]) }),
+    "platform.branch.list": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["GET"]) }),
+    "platform.branch.read": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["GET"]) }),
+    "platform.branch.create": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["POST"]) }),
     "platform.changeSet.list": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["GET"]) }),
     "platform.changeSet.read": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["GET"]) }),
     "platform.changeSet.create": Object.freeze({ routeKind: "json", responseKind: "json", methods: Object.freeze(["POST"]) }),

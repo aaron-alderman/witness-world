@@ -414,6 +414,51 @@ export function listPlatformChangeSets(world) {
   return world.project(moduleProjectors.changeSets).map(row => ({ ...row }));
 }
 
+function branchDetail(world, branchId) {
+  const branchIndex = world.project(moduleProjectors.branchIndex);
+  const changeSetIndex = world.project(moduleProjectors.changeSetIndex);
+  const snapshotIndex = world.project(moduleProjectors.candidateSnapshotIndex);
+  const branch = branchIndex.byId?.[branchId] ?? null;
+  if (!branch) return null;
+  const changeSets = (branch.changeSetIds ?? [])
+    .map(id => changeSetIndex.byId?.[id] ?? null)
+    .filter(Boolean)
+    .map(row => ({ ...row }));
+  const candidateSnapshots = (snapshotIndex.byBranch?.[branchId] ?? []).map(row => ({ ...row }));
+  const latestCandidateSnapshot = branch.latestCandidateSnapshotId
+    ? (snapshotIndex.byId?.[branch.latestCandidateSnapshotId] ? { ...snapshotIndex.byId[branch.latestCandidateSnapshotId] } : null)
+    : null;
+  const validationHistory = candidateSnapshots.map(snapshot => ({
+    candidateSnapshotId: snapshot.id,
+    status: snapshot.status,
+    revision: snapshot.revision,
+    createdAt: snapshot.createdAt,
+    changeSetId: snapshot.changeSetId,
+    errorCount: Array.isArray(snapshot.errors) ? snapshot.errors.length : 0
+  }));
+  return {
+    branch: { ...branch },
+    changeSets,
+    candidateSnapshots,
+    latestCandidateSnapshot,
+    validationHistory
+  };
+}
+
+export function listPlatformBranches(world) {
+  return world.project(moduleProjectors.branches).map(row => ({ ...row }));
+}
+
+export function readPlatformBranch(world, branchId) {
+  const detail = branchDetail(world, branchId);
+  if (!detail) return { ok: false, status: 404, error: "branch not found" };
+  return {
+    ok: true,
+    status: 200,
+    ...detail
+  };
+}
+
 export function readPlatformChangeSet(world, changeSetId) {
   const detail = changeSetDetail(world, changeSetId);
   if (!detail) return { ok: false, status: 404, error: "change set not found" };

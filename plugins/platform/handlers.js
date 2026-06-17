@@ -6,7 +6,10 @@ import {
 } from "../proposals/proposal-processes.js";
 import {
   abandonPlatformChangeSet,
+  createPlatformBranch,
+  listPlatformBranches,
   listPlatformChangeSets,
+  readPlatformBranch,
   readPlatformChangeSet,
   rejectPlatformChangeSet,
   removePlatformChangeSetEdit,
@@ -92,6 +95,46 @@ export function createPlatformHandlers({
         body: { gaps: model.gaps.length }
       });
       sendJson(res, 200, { gaps: model.gaps, summaries: model.summaries });
+    },
+
+    "platform.branch.list": async ({ res }) => {
+      sendJson(res, 200, { branches: listPlatformBranches(world) });
+    },
+
+    "platform.branch.read": async ({ res, params }) => {
+      const result = readPlatformBranch(world, params.id || "");
+      if (!result.ok) {
+        sendJson(res, result.status || 404, { error: result.error });
+        return;
+      }
+      sendJson(res, result.status, {
+        branch: result.branch,
+        changeSets: result.changeSets,
+        candidateSnapshots: result.candidateSnapshots,
+        latestCandidateSnapshot: result.latestCandidateSnapshot,
+        validationHistory: result.validationHistory
+      });
+    },
+
+    "platform.branch.create": async ({ req, res, requestActor, requestSession, appContext }) => {
+      const actor = requirePlatformMutationActor(res, requestActor);
+      if (!actor) return;
+      const body = await readJson(req);
+      const result = createPlatformBranch(world, {
+        actor,
+        id: body?.id ?? null,
+        title: body?.title ?? null,
+        session: requestSession ?? null,
+        runtimeProfile: appContext?.runtimeProfile ?? null
+      });
+      if (!result.ok) {
+        sendJson(res, result.status || 400, { error: result.error });
+        return;
+      }
+      sendJson(res, result.status, {
+        branch: result.branch,
+        witness: result.witness
+      });
     },
 
     "platform.changeSet.list": async ({ res }) => {

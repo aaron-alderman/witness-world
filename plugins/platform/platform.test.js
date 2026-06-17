@@ -40,6 +40,9 @@ test("platform plugin exposes platform bundle ownership", async () => {
   assert.deepEqual(capabilities, ["platform.self"]);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.model.read"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.gaps.read"), true);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.branch.list"), true);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.branch.read"), true);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.branch.create"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.list"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.read"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.create"), true);
@@ -55,6 +58,9 @@ test("platform plugin exposes platform bundle ownership", async () => {
   assert.equal(handlerCatalog.pageHandlers.includes("page.platform"), true);
   assert.equal(routes.some(route => route.path === "/platform" && route.handler === "page.platform"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-model" && route.handler === "platform.model.read"), true);
+  assert.equal(routes.some(route => route.path === "/api/platform-branches" && route.handler === "platform.branch.list"), true);
+  assert.equal(routes.some(route => route.path === "/api/platform-branches" && route.handler === "platform.branch.create"), true);
+  assert.equal(routes.some(route => route.handler === "platform.branch.read"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-change-sets" && route.handler === "platform.changeSet.list"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-change-sets" && route.handler === "platform.changeSet.create"), true);
   assert.equal(routes.some(route => route.handler === "platform.changeSet.read"), true);
@@ -139,10 +145,17 @@ test("platform model filters support MCP views", async () => {
   });
   const mcp = filterPlatformModel(model, "mcp");
   const gates = filterPlatformModel(model, "gates");
+  const branches = filterPlatformModel({
+    ...model,
+    branches: [{ id: "branch.demo", status: "open" }],
+    changeSets: [{ id: "changeset.demo", status: "draft" }],
+    candidateSnapshots: [{ id: "candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo" }]
+  }, "branches");
 
   assert.equal(mcp.nodes.some(node => node.id === "mcp:mcp.platform"), true);
   assert.equal(mcp.nodes.some(node => node.id === "mcpTool:platform.read"), true);
   assert.equal(gates.gates.every(node => node.kind === "gate"), true);
+  assert.equal(branches.branches[0].id, "branch.demo");
 });
 
 test("platform roadmap task parser preserves extended status markers", () => {
@@ -372,6 +385,63 @@ test("platform proposal handlers approve change-set proposals through the shared
   assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.platform.console.proposed"].status, "valid");
 }));
 
+test("platform proposal execution can attach a change set to an existing branch", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" },
+      executeBootstrapProposal: actor => async proposal => executePlatformProposalTarget({
+        world,
+        actor,
+        proposal,
+        body: proposal.body ?? {}
+      })
+    },
+    sendGateFailure: (res, gate) => sent.push({ status: gate.status, body: { error: gate.reason } }),
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.branch.create"]({
+    req: { body: { id: "branch.proposal.attach", title: "Attach Here" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+
+  await handlers["platform.proposal.create"]({
+    req: {
+      body: {
+        id: "proposal.platform.changeSet.attach",
+        action: "changeSet.create",
+        reason: "Attach staged work",
+        body: {
+          id: "changeset.proposal.attach",
+          branchId: "branch.proposal.attach",
+          title: "Attached change set"
+        }
+      }
+    },
+    res: {},
+    requestActor: "aaron"
+  });
+  await handlers["platform.proposal.approve"]({
+    res: {},
+    params: { id: "proposal.platform.changeSet.attach" },
+    requestActor: "aaron"
+  });
+
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(world.project(moduleProjectors.branchIndex).rows.filter(row => row.id === "branch.proposal.attach").length, 1);
+  assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.proposal.attach"].branchId, "branch.proposal.attach");
+}));
+
 test("platform proposal approval atomically applies all staged files", async () => withRegisteredPluginProjectors(providers, async () => {
   const fixture = await createTempPlatformApplyFixture();
   try {
@@ -585,6 +655,118 @@ test("platform change-set handlers stage overlays and validate candidate snapsho
   assert.equal(sent.at(-1).body.candidateSnapshot.status, "valid");
   assert.equal(Boolean(sent.at(-1).body.revisionEvent?.id), true);
   assert.equal(world.project(moduleProjectors.candidateSnapshotIndex).rows.length, 1);
+}));
+
+test("platform branch handlers create, list, and read branch detail", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    sendGateFailure: () => {},
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.branch.create"]({
+    req: { body: { id: "branch.direct.platform", title: "Direct Branch" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  assert.equal(sent.at(-1).status, 201);
+  assert.equal(sent.at(-1).body.branch.id, "branch.direct.platform");
+
+  await handlers["platform.changeSet.create"]({
+    req: { body: { id: "changeset.branch.detail", branchId: "branch.direct.platform" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  await handlers["platform.branch.list"]({ res: {} });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(sent.at(-1).body.branches.some(row => row.id === "branch.direct.platform"), true);
+
+  await handlers["platform.branch.read"]({
+    res: {},
+    params: { id: "branch.direct.platform" }
+  });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(sent.at(-1).body.branch.id, "branch.direct.platform");
+  assert.equal(sent.at(-1).body.changeSets.some(row => row.id === "changeset.branch.detail"), true);
+  assert.deepEqual(sent.at(-1).body.validationHistory, []);
+}));
+
+test("platform branch detail includes multiple change sets and validation history", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    sendGateFailure: () => {},
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.branch.create"]({
+    req: { body: { id: "branch.validation.history", title: "Validation History" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+
+  const rvm = await readFile(new URL("./platform-console.rvm", import.meta.url), "utf8");
+  await handlers["platform.changeSet.create"]({
+    req: { body: { id: "changeset.branch.a", branchId: "branch.validation.history" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  await handlers["platform.changeSet.edit"]({
+    req: { body: { edits: [{ path: "plugins/platform/platform-console.rvm", content: `${rvm}\n` }] } },
+    res: {},
+    params: { id: "changeset.branch.a" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  await handlers["platform.changeSet.validate"]({
+    res: {},
+    params: { id: "changeset.branch.a" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  await handlers["platform.changeSet.create"]({
+    req: { body: { id: "changeset.branch.b", branchId: "branch.validation.history" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+
+  await handlers["platform.branch.read"]({
+    res: {},
+    params: { id: "branch.validation.history" }
+  });
+
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(sent.at(-1).body.changeSets.length, 2);
+  assert.equal(sent.at(-1).body.candidateSnapshots.length, 1);
+  assert.equal(sent.at(-1).body.validationHistory.length, 1);
+  assert.equal(sent.at(-1).body.validationHistory[0].changeSetId, "changeset.branch.a");
 }));
 
 test("platform change-set handlers list, read, remove edits, and close change sets", async () => withRegisteredPluginProjectors(providers, async () => {
@@ -1047,13 +1229,18 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Proposal Panel/);
   assert.match(html, /Review Proposals/);
   assert.match(html, /Change Sets/);
+  assert.match(html, /Branches/);
+  assert.match(html, /Branch Detail/);
   assert.match(html, /Candidate Snapshots/);
   assert.match(html, /Roadmap Tasks/);
   assert.match(html, /platform-proposal-form/);
   assert.match(html, /platform-review-form/);
+  assert.match(html, /platform-branch-create-form/);
   assert.match(html, /platform-change-set-create-form/);
   assert.match(html, /platform-change-set-apply-form/);
   assert.match(html, /platform-change-set-lifecycle-form/);
+  assert.match(html, /platform-branch-detail-select/);
+  assert.match(html, /\/api\/platform-branches/);
   assert.match(html, /\/api\/platform-proposals/);
   assert.match(html, /\/api\/platform-change-sets/);
   assert.match(html, /\/apply/);

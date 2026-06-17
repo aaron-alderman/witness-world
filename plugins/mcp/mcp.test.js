@@ -20,6 +20,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(toolNames.includes("world.read"), true);
   assert.equal(toolNames.includes("authoring.write"), true);
   assert.equal(toolNames.includes("platform.read"), true);
+  assert.equal(toolNames.includes("platform.branch"), true);
   assert.equal(toolNames.includes("platform.proposal"), true);
   assert.equal(toolNames.includes("platform.changeSet"), true);
   assert.equal(toolNames.includes("db.sql"), true);
@@ -31,11 +32,15 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   const worldRead = listSupportedMcpTools().find(tool => tool.name === "world.read");
   const authoringWrite = listSupportedMcpTools().find(tool => tool.name === "authoring.write");
   const platformRead = listSupportedMcpTools().find(tool => tool.name === "platform.read");
+  const platformBranch = listSupportedMcpTools().find(tool => tool.name === "platform.branch");
   const platformProposal = listSupportedMcpTools().find(tool => tool.name === "platform.proposal");
   const platformChangeSet = listSupportedMcpTools().find(tool => tool.name === "platform.changeSet");
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("authoringMatrix"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("gaps"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("proposals"), true);
+  assert.equal(platformRead.inputSchema.properties.view.enum.includes("branches"), true);
+  assert.equal(platformRead.inputSchema.properties.view.enum.includes("candidateSnapshots"), true);
+  assert.deepEqual(platformBranch.inputSchema.properties.operation.enum, ["list", "read", "create"]);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("runtimePlugin.install"), true);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("changeSet.create"), true);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("changeSet.apply"), true);
@@ -144,6 +149,38 @@ test("platform MCP proposal tool routes through platform proposal handlers", asy
   assert.equal(approved.isError, false);
   assert.equal(calls.at(-1).handler, "platform.proposal.approve");
   assert.equal(calls.at(-1).params.id, "proposal.platform.install");
+});
+
+test("platform MCP branch tool routes through platform branch handlers", async () => {
+  const calls = [];
+  const callHandler = async request => {
+    calls.push(request);
+    return { status: request.handler === "platform.branch.create" ? 201 : 200, body: { ok: true, handler: request.handler, id: request.params?.id ?? null } };
+  };
+
+  const listed = await executeMcpTool("platform.branch", {
+    args: { operation: "list" },
+    callHandler
+  });
+  assert.equal(listed.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.branch.list");
+  assert.equal(calls.at(-1).path, "/api/platform-branches");
+
+  const created = await executeMcpTool("platform.branch", {
+    args: { operation: "create", id: "branch.platform.console", title: "Platform Console" },
+    callHandler
+  });
+  assert.equal(created.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.branch.create");
+  assert.equal(calls.at(-1).path, "/api/platform-branches");
+
+  const read = await executeMcpTool("platform.branch", {
+    args: { operation: "read", id: "branch.platform.console" },
+    callHandler
+  });
+  assert.equal(read.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.branch.read");
+  assert.equal(calls.at(-1).params.id, "branch.platform.console");
 });
 
 test("platform MCP change-set tool routes through platform change-set handlers", async () => {

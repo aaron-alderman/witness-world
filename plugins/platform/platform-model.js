@@ -672,6 +672,18 @@ export function filterPlatformModel(model, view, id = null) {
   if (view === "gaps") return { gaps: model.gaps, summaries: model.summaries };
   if (view === "profiles") return { profiles: model.profiles, summaries: model.summaries };
   if (view === "proposals") return { proposals: model.proposals, proposalActions: model.proposalActions, summaries: model.summaries };
+  if (view === "branches") {
+    const branches = id ? model.branches.filter(row => row.id === id) : model.branches;
+    return { branches, summaries: model.summaries };
+  }
+  if (view === "changeSets") {
+    const changeSets = id ? model.changeSets.filter(row => row.id === id) : model.changeSets;
+    return { changeSets, summaries: model.summaries };
+  }
+  if (view === "candidateSnapshots") {
+    const candidateSnapshots = id ? model.candidateSnapshots.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.candidateSnapshots;
+    return { candidateSnapshots, summaries: model.summaries };
+  }
   if (view === "gates") return { gates: model.nodes.filter(node => node.kind === "gate"), summaries: model.summaries };
   if (view === "mcp") return {
     nodes: model.nodes.filter(node => node.kind === "mcpServer" || node.kind === "mcpTool"),

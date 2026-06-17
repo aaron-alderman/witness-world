@@ -392,9 +392,9 @@ const TOOL_DEFINITIONS = [
   {
     name: "platform.read",
     title: "Platform Read",
-    description: "Read the platform self-model, gaps, profiles, plugin, bundle, capability, MCP, or verification gate views.",
+    description: "Read the platform self-model, gaps, profiles, branches, change sets, candidate snapshots, plugin, bundle, capability, MCP, or verification gate views.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["model", "gaps", "profiles", "plugin", "bundle", "capability", "mcp", "gates", "proposals"] },
+      view: { type: "string", enum: ["model", "gaps", "profiles", "plugin", "bundle", "capability", "mcp", "gates", "proposals", "branches", "changeSets", "candidateSnapshots"] },
       id: { type: "string" }
     }, ["view"]),
     scope(args) {
@@ -414,6 +414,53 @@ const TOOL_DEFINITIONS = [
         path: "/api/platform-model",
         query
       });
+    }
+  },
+  {
+    name: "platform.branch",
+    title: "Platform Branch",
+    description: "Inspect platform branches or create a new branch through the shared platform handlers.",
+    inputSchema: jsonSchemaObject({
+      operation: { type: "string", enum: ["list", "read", "create"] },
+      id: { type: "string" },
+      title: { type: "string" }
+    }),
+    scope(args) {
+      return scopeResult({
+        targets: [args?.id].filter(Boolean)
+      });
+    },
+    async run({ args, callHandler }) {
+      const operation = args.operation || "list";
+      if (operation === "list") {
+        return runJsonHandler(callHandler, {
+          handler: "platform.branch.list",
+          method: "GET",
+          path: "/api/platform-branches"
+        });
+      }
+      const branchId = args.id || "";
+      if (!branchId) return errorToolResult("branch id is required", { operation });
+      if (operation === "read") {
+        return runJsonHandler(callHandler, {
+          handler: "platform.branch.read",
+          method: "GET",
+          path: `/api/platform-branches/${encodeURIComponent(branchId)}`,
+          params: { id: branchId }
+        });
+      }
+      if (operation === "create") {
+        return runJsonHandler(callHandler, {
+          handler: "platform.branch.create",
+          method: "POST",
+          path: "/api/platform-branches",
+          body: {
+            id: branchId,
+            title: args.title ?? null
+          }
+        });
+      }
+      return errorToolResult("unknown platform branch operation", { operation });
     }
   },
   {

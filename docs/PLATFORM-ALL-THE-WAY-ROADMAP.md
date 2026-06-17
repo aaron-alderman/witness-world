@@ -346,26 +346,26 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### 1.4 Branch Semantics
 
-- [ ] Creating a proposal can create a branch automatically.
-- [ ] A proposal can attach to an existing branch.
-- [ ] Branches can contain multiple change sets.
+- [~] Creating a proposal can create a branch automatically.
+- [X] A proposal can attach to an existing branch.
+- [X] Branches can contain multiple change sets.
 - [ ] Branches can depend on parent branches.
-- [ ] Branches can be tagged with:
+- [~] Branches can be tagged with:
   - [ ] epic
   - [ ] feature
   - [ ] defect
-  - [ ] session
-  - [ ] owner
-  - [ ] runtime profile
-- [ ] Branches can be opened from MCP.
-- [ ] Branches can be opened from `/platform`.
-- [ ] Branches have candidate snapshots.
-- [ ] Branches have validation history.
+  - [X] session
+  - [X] owner
+  - [X] runtime profile
+- [X] Branches can be opened from MCP.
+- [X] Branches can be opened from `/platform`.
+- [X] Branches have candidate snapshots.
+- [X] Branches have validation history.
 - [ ] Branches have docs freshness status.
 - [ ] Branches have telemetry impact summaries.
 - [ ] Branches have affected system summaries.
-- [ ] Add Platform Console branch list view.
-- [ ] Add branch detail page or panel.
+- [X] Add Platform Console branch list view.
+- [X] Add branch detail page or panel.
 - [ ] Add branch lifecycle board lane:
   - [ ] draft
   - [ ] validate
@@ -373,6 +373,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] apply
   - [ ] push
   - [ ] ship
+- [L] Automatic branch creation currently happens when approving `changeSet.create` without a supplied branch, preserving proposal non-mutation at creation time.
   - [ ] observe
 
 ### 1.5 Proposal Integration
@@ -1139,12 +1140,12 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### 12.3 MCP Parity
 
-- [ ] Add MCP views for each Platform Console view.
+- [~] Add MCP views for each Platform Console view.
 - [ ] Ensure every human mutation has an MCP proposal equivalent.
 - [ ] Ensure MCP cannot bypass proposal/change-set authority.
 - [ ] Add MCP tool:
-  - [ ] `platform.branch`
-  - [ ] `platform.changeSet`
+  - [X] `platform.branch`
+  - [X] `platform.changeSet`
   - [ ] `platform.test`
   - [ ] `platform.docs`
   - [ ] `platform.telemetry`
