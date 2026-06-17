@@ -249,11 +249,13 @@ export function readPlatformTestRun(world, testRunId) {
   const run = world.project(moduleProjectors.testRunIndex).byId?.[runId] ?? null;
   if (!run) return { ok: false, status: 404, error: "test run not found" };
   const results = world.project(moduleProjectors.testResults).filter(row => row.runId === runId);
+  const artifacts = world.project(moduleProjectors.testArtifacts).filter(row => row.runId === runId);
   return {
     ok: true,
     status: 200,
     testRun: run,
     testResults: results,
+    testArtifacts: artifacts,
     latestResult: results.at(-1) ?? null
   };
 }
@@ -320,6 +322,7 @@ export async function runPlatformTestGate(world, {
     finishWitness,
     testRun: readback.testRun,
     testResults: readback.testResults,
+    testArtifacts: readback.testArtifacts,
     latestResult: readback.latestResult
   };
 }

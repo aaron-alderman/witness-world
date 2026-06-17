@@ -1755,6 +1755,8 @@ export const moduleProjectors = {
 
   testResults: delegatedModuleProjector("testResults", emptyRows),
 
+  testArtifacts: delegatedModuleProjector("testArtifacts", emptyRows),
+
   latestTestResultsByGate: delegatedModuleProjector("latestTestResultsByGate", () => ({
     rows: [],
     byGate: Object.create(null)

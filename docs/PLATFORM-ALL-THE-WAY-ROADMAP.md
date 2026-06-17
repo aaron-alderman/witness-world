@@ -650,7 +650,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add `testCase` module kind.
 - [X] Add `testRun` module kind.
 - [X] Add `testResult` module kind.
-- [ ] Add `testArtifact` module kind.
+- [X] Add `testArtifact` module kind.
 - [ ] Add `coverageEdge` module kind.
 - [ ] Add projectors:
   - [~] `testGates`
@@ -693,7 +693,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] isolated temp workspace
   - [X] platform candidate snapshot
 - [~] Run tests inside platform execution commands.
-- [ ] Capture stdout/stderr as artifacts.
+- [X] Capture stdout/stderr as artifacts.
 - [ ] Capture structured TAP/JUnit where available.
 - [~] Capture duration, memory, CPU, exit code.
 - [~] Capture environment inputs.
@@ -706,6 +706,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add MCP tool `platform.test` or extend `platform.proposal` gate execution.
 - [L] Current V1 test execution now models a `testRunner` boundary actor plus named local-node, local-browser, and candidate-snapshot execution environments in the platform graph. The actual command execution still runs through the same `plugin.platform` handler lane used by the human HTTP path; it is not yet isolated behind a separate runner process or candidate-snapshot workspace.
 - [L] `local Rust/cargo` is named in the execution environment catalog and chosen for cargo-shaped gate commands, but the current repo does not yet expose a discovered cargo gate that exercises that path end to end.
+- [L] Current stdout/stderr artifacts are projected as inline witness-backed `testArtifact` rows attached to each run/result. They are first-class platform objects now, but they are not yet external blob-backed artifacts or structured report files.
 - [L] Current V1 captures exit code, duration, stdout, stderr, timeout state, branch id, change-set id, candidate snapshot id, runtime profile, source dependencies, and protected objects. Memory, CPU, structured reports, source revision hashes, artifact storage, and SSE streaming remain later work.
 - [L] Current `platform.test` supports list/read/run over the shared platform handlers. It does not yet expose richer operations such as cancellation, streaming progress, or proposal-mediated execution policy.
 - [L] Current test-run SSE is implemented as a streamed view over newly appended `platform.test.run.start` / `platform.test.run.finish` witnesses. It does not yet provide a dedicated push subscription substrate, replay cursors, or durable event retention beyond witness history.

@@ -230,6 +230,50 @@ function testResultRows(witnesses) {
   return sortRows(rows, ["gateId", "id"]);
 }
 
+function testArtifactRows(witnesses) {
+  const rows = [];
+  for (const witness of witnesses) {
+    if (witness.process !== "platform.test.run.finish" || !witness.body?.id) continue;
+    const runId = String(witness.body.id);
+    const gateId = String(witness.body.gateId || "");
+    const title = String(witness.body.title || gateId || runId);
+    const resultId = `testResult:${runId}:1`;
+    const artifacts = [
+      {
+        id: `testArtifact:${runId}:stdout`,
+        name: "stdout.txt",
+        kind: "stdout",
+        content: String(witness.body.stdout || "")
+      },
+      {
+        id: `testArtifact:${runId}:stderr`,
+        name: "stderr.txt",
+        kind: "stderr",
+        content: String(witness.body.stderr || "")
+      }
+    ].filter(row => row.content.length > 0);
+    for (const artifact of artifacts) {
+      rows.push({
+        id: artifact.id,
+        runId,
+        resultId,
+        gateId,
+        title: `${title} ${artifact.kind}`,
+        artifactKind: artifact.kind,
+        fileName: artifact.name,
+        contentType: "text/plain",
+        sizeBytes: Buffer.byteLength(artifact.content, "utf8"),
+        content: artifact.content,
+        branchId: witness.body.branchId ? String(witness.body.branchId) : null,
+        changeSetId: witness.body.changeSetId ? String(witness.body.changeSetId) : null,
+        candidateSnapshotId: witness.body.candidateSnapshotId ? String(witness.body.candidateSnapshotId) : null,
+        producedAt: witness.body.finishedAt ?? null
+      });
+    }
+  }
+  return sortRows(rows, ["runId", "artifactKind", "id"]);
+}
+
 export const platformModuleProjectors = {
   changeSetEdits(witnesses) {
     return changeSetEditRows(witnesses);
@@ -282,6 +326,10 @@ export const platformModuleProjectors = {
 
   testResults(witnesses) {
     return testResultRows(witnesses);
+  },
+
+  testArtifacts(witnesses) {
+    return testArtifactRows(witnesses);
   },
 
   latestTestResultsByGate(witnesses) {

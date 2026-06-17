@@ -469,6 +469,7 @@ export function createPlatformHandlers({
       sendJson(res, result.status, {
         testRun: result.testRun,
         testResults: result.testResults,
+        testArtifacts: result.testArtifacts,
         latestResult: result.latestResult,
         startWitness: result.startWitness,
         finishWitness: result.finishWitness
@@ -510,6 +511,7 @@ export function createPlatformHandlers({
       sendJson(res, result.status, {
         testRun: result.testRun,
         testResults: result.testResults,
+        testArtifacts: result.testArtifacts,
         latestResult: result.latestResult
       });
     },

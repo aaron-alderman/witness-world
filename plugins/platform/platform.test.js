@@ -329,6 +329,9 @@ test("platform model filters support MCP views", async () => {
     testResults: [
       { id: "testResult:demo:1", runId: "testRun:demo", gateId: "gate:test/runtime-profile.test.js", status: "passed" }
     ],
+    testArtifacts: [
+      { id: "testArtifact:demo:stdout", runId: "testRun:demo", resultId: "testResult:demo:1", gateId: "gate:test/runtime-profile.test.js", artifactKind: "stdout" }
+    ],
     latestTestResultsByGate: {
       "gate:test/runtime-profile.test.js": { id: "testResult:demo:1", runId: "testRun:demo", gateId: "gate:test/runtime-profile.test.js", status: "passed" }
     }
@@ -395,6 +398,7 @@ test("platform model filters support MCP views", async () => {
   assert.equal(testRuns.testRuns.length, 1);
   assert.equal(testRuns.testRuns[0].id, "testRun:demo");
   assert.equal(testRuns.testResults[0].id, "testResult:demo:1");
+  assert.equal(testRuns.testArtifacts[0].id, "testArtifact:demo:stdout");
   assert.equal(testRuns.latestTestResultsByGate["gate:test/runtime-profile.test.js"].status, "passed");
   assert.equal(branches.branches[0].id, "branch.demo");
   assert.equal(runtimeRevisions.runtimeRevisions[0].id, "runtimeRevision:backend:3");
@@ -1484,8 +1488,11 @@ test("platform test run handlers execute modeled gates and expose read model sta
   assert.equal(sent.at(-1).body.testRun.status, "passed");
   assert.equal(sent.at(-1).body.testRun.environment, "platform-candidate-snapshot");
   assert.equal(sent.at(-1).body.latestResult.status, "passed");
+  assert.equal(sent.at(-1).body.testArtifacts.length, 1);
+  assert.equal(sent.at(-1).body.testArtifacts[0].artifactKind, "stdout");
   assert.equal(world.project(moduleProjectors.testRuns).length, 1);
   assert.equal(world.project(moduleProjectors.testResults).length, 1);
+  assert.equal(world.project(moduleProjectors.testArtifacts).length, 1);
   assert.equal(world.project(moduleProjectors.latestTestResultsByGate).byGate["gate:plugins/platform/platform.test.js"].status, "passed");
   const runtimeModel = await buildPlatformModel({
     diagnostics: {
@@ -1500,6 +1507,7 @@ test("platform test run handlers execute modeled gates and expose read model sta
   });
   assert.equal(runtimeModel.nodes.some(node => node.id === "testRun.platform.demo" && node.kind === "testRun"), true);
   assert.equal(runtimeModel.nodes.some(node => node.id === "testResult:testRun.platform.demo:1" && node.kind === "testResult"), true);
+  assert.equal(runtimeModel.nodes.some(node => node.id === "testArtifact:testRun.platform.demo:stdout" && node.kind === "testArtifact"), true);
   assert.equal(runtimeModel.nodes.some(node => node.id === "testEnvironment:platform-candidate-snapshot" && node.kind === "testEnvironment" && node.status === "active"), true);
   assert.equal(runtimeModel.edges.some(edge => edge.from === "testRun.platform.demo" && edge.rel === "usesBoundary" && edge.to === "boundary:testRunner.platform"), true);
   assert.equal(runtimeModel.edges.some(edge => edge.from === "testRun.platform.demo" && edge.rel === "executesOn" && edge.to === "testEnvironment:platform-candidate-snapshot"), true);
@@ -1512,6 +1520,7 @@ test("platform test run handlers execute modeled gates and expose read model sta
   assert.equal(sent.at(-1).status, 200);
   assert.equal(sent.at(-1).body.testRun.id, "testRun.platform.demo");
   assert.equal(sent.at(-1).body.testResults.length, 1);
+  assert.equal(sent.at(-1).body.testArtifacts.length, 1);
 }));
 
 test("platform test run event stream publishes start and finish witnesses", async () => withRegisteredPluginProjectors(providers, async () => {

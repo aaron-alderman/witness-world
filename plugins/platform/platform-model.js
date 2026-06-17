@@ -312,7 +312,7 @@ function buildSnapshotBuildErrorRows(candidateSnapshots = []) {
   return rows;
 }
 
-function addTestExecutionNodes(nodes, edges, testGates = [], testRuns = [], testResults = []) {
+function addTestExecutionNodes(nodes, edges, testGates = [], testRuns = [], testResults = [], testArtifacts = []) {
   addNode(nodes, {
     id: TEST_RUNNER_BOUNDARY_ID,
     kind: "boundary",
@@ -372,6 +372,21 @@ function addTestExecutionNodes(nodes, edges, testGates = [], testRuns = [], test
     if (result.runId) addEdge(edges, result.runId, "produces", result.id, "witnesses");
     if (result.gateId) addEdge(edges, result.id, "targets", result.gateId, "witnesses");
     if (result.candidateSnapshotId) addEdge(edges, result.id, "targets", result.candidateSnapshotId, "witnesses");
+  }
+  for (const artifact of testArtifacts) {
+    addNode(nodes, {
+      id: artifact.id,
+      kind: "testArtifact",
+      title: artifact.title || artifact.id,
+      lifecycle: ["observe", "verify"],
+      owner: "plugin.platform",
+      status: "captured",
+      source: "witnesses"
+    });
+    if (artifact.runId) addEdge(edges, artifact.runId, "produces", artifact.id, "witnesses");
+    if (artifact.resultId) addEdge(edges, artifact.resultId, "produces", artifact.id, "witnesses");
+    if (artifact.gateId) addEdge(edges, artifact.id, "targets", artifact.gateId, "witnesses");
+    if (artifact.candidateSnapshotId) addEdge(edges, artifact.id, "targets", artifact.candidateSnapshotId, "witnesses");
   }
 }
 
@@ -900,6 +915,7 @@ export async function buildPlatformModel({
   const candidateSnapshots = projectRows(project, moduleProjectors.candidateSnapshots);
   const testRuns = projectRows(project, moduleProjectors.testRuns);
   const testResults = projectRows(project, moduleProjectors.testResults);
+  const testArtifacts = projectRows(project, moduleProjectors.testArtifacts);
   const latestTestResultsProjection = projectValue(project, moduleProjectors.latestTestResultsByGate, { rows: [], byGate: Object.create(null) });
   const candidateSnapshotsByBranch = candidateSnapshotsByBranchIndex(candidateSnapshots);
   const snapshotDiagnostics = normalizeSnapshotDiagnostics(diagnostics?.appSnapshot ?? null);
@@ -1446,7 +1462,7 @@ export async function buildPlatformModel({
   }
 
   const testGateProjection = buildTestGateRows(nodes, edges, branches, latestTestResultsProjection.byGate ?? Object.create(null));
-  addTestExecutionNodes(nodes, edges, testGateProjection.rows, testRuns, testResults);
+  addTestExecutionNodes(nodes, edges, testGateProjection.rows, testRuns, testResults, testArtifacts);
   const gaps = buildGaps(nodes, edges);
   const docs = parsedDocs.map(doc => ({
     id: doc.id,
@@ -1485,6 +1501,7 @@ export async function buildPlatformModel({
     affectedTestGatesByBranch: testGateProjection.byBranch,
     testRuns: testRuns.map(row => ({ ...row })),
     testResults: testResults.map(row => ({ ...row })),
+    testArtifacts: testArtifacts.map(row => ({ ...row })),
     latestTestResultsByGate: latestTestResultsProjection.byGate ?? Object.create(null),
     proposals: proposals.map(row => ({ ...row })),
     proposalActions: platformProposalTemplates(),
@@ -1576,12 +1593,24 @@ export function filterPlatformModel(model, view, id = null) {
         || row.gateId === id
       )
       : model.testResults;
+    const resultIds = new Set(testResults.map(row => row.id));
+    const testArtifacts = id
+      ? (model.testArtifacts ?? []).filter(row =>
+        runIds.has(row.runId)
+        || resultIds.has(row.resultId)
+        || gateIds.has(row.gateId)
+        || row.id === id
+        || row.runId === id
+        || row.resultId === id
+        || row.gateId === id
+      )
+      : (model.testArtifacts ?? []);
     const latestTestResultsByGate = Object.fromEntries(
       Object.entries(model.latestTestResultsByGate ?? {})
         .filter(([gateId, row]) => !id || gateIds.has(gateId) || runIds.has(row.runId) || gateId === id || row.runId === id)
         .map(([gateId, row]) => [gateId, { ...row }])
     );
-    return { testRuns, testResults, latestTestResultsByGate, summaries: model.summaries };
+    return { testRuns, testResults, testArtifacts, latestTestResultsByGate, summaries: model.summaries };
   }
   if (view === "candidateSnapshots") {
     const candidateSnapshots = id ? model.candidateSnapshots.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.candidateSnapshots;
