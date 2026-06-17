@@ -349,11 +349,11 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [~] Creating a proposal can create a branch automatically.
 - [X] A proposal can attach to an existing branch.
 - [X] Branches can contain multiple change sets.
-- [ ] Branches can depend on parent branches.
-- [~] Branches can be tagged with:
-  - [ ] epic
-  - [ ] feature
-  - [ ] defect
+- [X] Branches can depend on parent branches.
+- [X] Branches can be tagged with:
+  - [X] epic
+  - [X] feature
+  - [X] defect
   - [X] session
   - [X] owner
   - [X] runtime profile
@@ -386,13 +386,13 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add proposal target process `branch.rebase`.
 - [ ] Add proposal target process `branch.merge`.
 - [X] Extend `platform.proposal` MCP tool to create change-set proposals.
-- [ ] Add Platform Console flow:
-  - [ ] create branch
-  - [ ] stage edits
-  - [ ] validate
-  - [ ] create proposal
-  - [ ] approve
-  - [ ] apply
+- [X] Add Platform Console flow:
+  - [X] create branch
+  - [X] stage edits
+  - [X] validate
+  - [X] create proposal
+  - [X] approve
+  - [X] apply
 - [~] Add test that proposal creation automatically creates a branch when requested.
 - [X] Add test that approved change-set proposal atomically applies all edits.
 - [X] Add test that rejected proposal leaves branch/change-set intact but unapplied.

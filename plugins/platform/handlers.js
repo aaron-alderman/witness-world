@@ -124,6 +124,10 @@ export function createPlatformHandlers({
         actor,
         id: body?.id ?? null,
         title: body?.title ?? null,
+        parentBranchId: body?.parentBranchId ?? null,
+        epic: body?.epic ?? null,
+        feature: body?.feature ?? null,
+        defect: body?.defect ?? null,
         session: requestSession ?? null,
         runtimeProfile: appContext?.runtimeProfile ?? null
       });

@@ -44,6 +44,12 @@ function defaultBranchId(changeSetId) {
   return `branch-${slugify(changeSetId)}`;
 }
 
+function optionalText(value) {
+  if (value === undefined || value === null) return null;
+  const trimmed = String(value).trim();
+  return trimmed || null;
+}
+
 function sourceLanguageForPath(relativePath) {
   const ext = path.extname(String(relativePath || "")).toLowerCase();
   if (ext === ".rvm") return "rvm";
@@ -222,17 +228,27 @@ function emitPlatformBranchCreate(world, {
   actor,
   id,
   title = null,
+  parentBranchId = null,
+  epic = null,
+  feature = null,
+  defect = null,
   session = null,
   runtimeProfile = "full"
 }) {
   ensureThing(world, actor, id);
+  const claims = [relation(id, "hasModuleKind", "branch")];
+  if (parentBranchId) claims.push(relation(id, "dependsOnBranch", parentBranchId));
   return world.emit({
     process: "platform.branch.create",
     actor,
-    claims: [relation(id, "hasModuleKind", "branch")],
+    claims,
     body: {
       id,
       title: title ? String(title) : id,
+      parentBranchId,
+      epic,
+      feature,
+      defect,
       owner: actor,
       runtimeProfile,
       session: session?.id ?? null,
@@ -246,6 +262,10 @@ export function createPlatformBranch(world, {
   actor,
   id = null,
   title = null,
+  parentBranchId = null,
+  epic = null,
+  feature = null,
+  defect = null,
   session = null,
   runtimeProfile = "full"
 }) {
@@ -253,10 +273,21 @@ export function createPlatformBranch(world, {
   if (!branchId) return { ok: false, status: 400, error: "branch id is required" };
   const existing = world.project(moduleProjectors.branchIndex).byId?.[branchId] ?? null;
   if (existing) return { ok: false, status: 409, error: "branch id already exists" };
+  const normalizedParentBranchId = optionalText(parentBranchId);
+  if (normalizedParentBranchId === branchId) {
+    return { ok: false, status: 400, error: "branch cannot depend on itself" };
+  }
+  if (normalizedParentBranchId && !world.project(moduleProjectors.branchIndex).byId?.[normalizedParentBranchId]) {
+    return { ok: false, status: 404, error: "parent branch not found" };
+  }
   const witness = emitPlatformBranchCreate(world, {
     actor,
     id: branchId,
     title,
+    parentBranchId: normalizedParentBranchId,
+    epic: optionalText(epic),
+    feature: optionalText(feature),
+    defect: optionalText(defect),
     session,
     runtimeProfile
   });
@@ -272,6 +303,10 @@ function ensurePlatformBranch(world, {
   actor,
   id,
   title = null,
+  parentBranchId = null,
+  epic = null,
+  feature = null,
+  defect = null,
   session = null,
   runtimeProfile = "full"
 }) {
@@ -283,6 +318,10 @@ function ensurePlatformBranch(world, {
     actor,
     id,
     title,
+    parentBranchId,
+    epic,
+    feature,
+    defect,
     session,
     runtimeProfile
   });

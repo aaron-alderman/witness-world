@@ -423,7 +423,11 @@ const TOOL_DEFINITIONS = [
     inputSchema: jsonSchemaObject({
       operation: { type: "string", enum: ["list", "read", "create"] },
       id: { type: "string" },
-      title: { type: "string" }
+      title: { type: "string" },
+      parentBranchId: { type: "string" },
+      epic: { type: "string" },
+      feature: { type: "string" },
+      defect: { type: "string" }
     }),
     scope(args) {
       return scopeResult({
@@ -456,7 +460,11 @@ const TOOL_DEFINITIONS = [
           path: "/api/platform-branches",
           body: {
             id: branchId,
-            title: args.title ?? null
+            title: args.title ?? null,
+            parentBranchId: args.parentBranchId ?? null,
+            epic: args.epic ?? null,
+            feature: args.feature ?? null,
+            defect: args.defect ?? null
           }
         });
       }

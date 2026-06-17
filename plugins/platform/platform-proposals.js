@@ -21,7 +21,14 @@ export const PLATFORM_PROPOSAL_TEMPLATES = Object.freeze({
     title: "Create branch",
     targetKind: "branch",
     requiredBodyFields: Object.freeze(["id"]),
-    sampleBody: Object.freeze({ id: "branch.platform.console", title: "Platform Console Branch" })
+    sampleBody: Object.freeze({
+      id: "branch.platform.console",
+      title: "Platform Console Branch",
+      parentBranchId: "branch.platform.root",
+      epic: "platform-self-model",
+      feature: "branch-api",
+      defect: "none"
+    })
   }),
   "changeSet.create": Object.freeze({
     action: "changeSet.create",

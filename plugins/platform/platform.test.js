@@ -211,7 +211,11 @@ test("platform proposal builder normalizes supported proposal bodies", () => {
     action: "branch.create",
     body: {
       id: "branch.platform.console",
-      title: "Platform console branch"
+      title: "Platform console branch",
+      parentBranchId: "branch.platform.root",
+      epic: "platform",
+      feature: "console",
+      defect: "n/a"
     },
     reason: "Create a platform branch"
   });
@@ -232,6 +236,14 @@ test("platform proposal builder normalizes supported proposal bodies", () => {
   assert.equal(branch.value.targetProcess, "branch.create");
   assert.equal(branch.value.targetKind, "branch");
   assert.equal(branch.value.targetId, "branch.platform.console");
+  assert.deepEqual(JSON.parse(branch.value.bodyJson), {
+    id: "branch.platform.console",
+    title: "Platform console branch",
+    parentBranchId: "branch.platform.root",
+    epic: "platform",
+    feature: "console",
+    defect: "n/a"
+  });
   assert.equal(platformProposalTemplates().some(template => template.action === "changeSet.apply"), true);
   assert.equal(built.ok, true);
   assert.equal(built.value.targetProcess, "mcpTool.install");
@@ -674,7 +686,15 @@ test("platform branch handlers create, list, and read branch detail", async () =
   });
 
   await handlers["platform.branch.create"]({
-    req: { body: { id: "branch.direct.platform", title: "Direct Branch" } },
+    req: {
+      body: {
+        id: "branch.direct.platform",
+        title: "Direct Branch",
+        epic: "platform",
+        feature: "branch-detail",
+        defect: "none"
+      }
+    },
     res: {},
     requestActor: "aaron",
     requestSession: { id: "session.platform" },
@@ -682,6 +702,9 @@ test("platform branch handlers create, list, and read branch detail", async () =
   });
   assert.equal(sent.at(-1).status, 201);
   assert.equal(sent.at(-1).body.branch.id, "branch.direct.platform");
+  assert.equal(sent.at(-1).body.branch.epic, "platform");
+  assert.equal(sent.at(-1).body.branch.feature, "branch-detail");
+  assert.equal(sent.at(-1).body.branch.defect, "none");
 
   await handlers["platform.changeSet.create"]({
     req: { body: { id: "changeset.branch.detail", branchId: "branch.direct.platform" } },
@@ -702,6 +725,63 @@ test("platform branch handlers create, list, and read branch detail", async () =
   assert.equal(sent.at(-1).body.branch.id, "branch.direct.platform");
   assert.equal(sent.at(-1).body.changeSets.some(row => row.id === "changeset.branch.detail"), true);
   assert.deepEqual(sent.at(-1).body.validationHistory, []);
+}));
+
+test("platform branch creation validates parent branch dependencies and preserves metadata", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    sendGateFailure: () => {},
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.branch.create"]({
+    req: { body: { id: "branch.parent.root", title: "Root Branch" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+
+  await handlers["platform.branch.create"]({
+    req: {
+      body: {
+        id: "branch.child.feature",
+        title: "Child Branch",
+        parentBranchId: "branch.parent.root",
+        epic: "platform",
+        feature: "branch-metadata",
+        defect: "none"
+      }
+    },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  assert.equal(sent.at(-1).status, 201);
+  assert.equal(sent.at(-1).body.branch.parentBranchId, "branch.parent.root");
+  assert.equal(sent.at(-1).body.branch.epic, "platform");
+  assert.equal(sent.at(-1).body.branch.feature, "branch-metadata");
+  assert.equal(sent.at(-1).body.branch.defect, "none");
+
+  await handlers["platform.branch.create"]({
+    req: { body: { id: "branch.orphan", parentBranchId: "branch.missing.parent" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  assert.equal(sent.at(-1).status, 404);
+  assert.match(sent.at(-1).body.error, /parent branch not found/);
 }));
 
 test("platform branch detail includes multiple change sets and validation history", async () => withRegisteredPluginProjectors(providers, async () => {
@@ -1237,9 +1317,15 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /platform-review-form/);
   assert.match(html, /platform-branch-create-form/);
   assert.match(html, /platform-change-set-create-form/);
+  assert.match(html, /platform-change-set-edit-form/);
+  assert.match(html, /platform-change-set-validate-form/);
   assert.match(html, /platform-change-set-apply-form/);
   assert.match(html, /platform-change-set-lifecycle-form/);
   assert.match(html, /platform-branch-detail-select/);
+  assert.match(html, /Parent branch/);
+  assert.match(html, /Epic/);
+  assert.match(html, /Feature/);
+  assert.match(html, /Defect/);
   assert.match(html, /\/api\/platform-branches/);
   assert.match(html, /\/api\/platform-proposals/);
   assert.match(html, /\/api\/platform-change-sets/);

@@ -573,6 +573,9 @@ export async function buildPlatformModel({
     for (const changeSetId of branch.changeSetIds ?? []) {
       addEdge(edges, `branch:${branch.id}`, "contains", `changeSet:${changeSetId}`, "witnesses");
     }
+    if (branch.parentBranchId) {
+      addEdge(edges, `branch:${branch.id}`, "dependsOn", `branch:${branch.parentBranchId}`, "witnesses");
+    }
     if (branch.latestCandidateSnapshotId) {
       addEdge(edges, `branch:${branch.id}`, "tracks", branch.latestCandidateSnapshotId, "witnesses");
     }

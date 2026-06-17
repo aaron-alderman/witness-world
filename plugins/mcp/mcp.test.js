@@ -41,6 +41,10 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("branches"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("candidateSnapshots"), true);
   assert.deepEqual(platformBranch.inputSchema.properties.operation.enum, ["list", "read", "create"]);
+  assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "parentBranchId"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "epic"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "feature"), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "defect"), true);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("runtimePlugin.install"), true);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("changeSet.create"), true);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("changeSet.apply"), true);
@@ -167,12 +171,24 @@ test("platform MCP branch tool routes through platform branch handlers", async (
   assert.equal(calls.at(-1).path, "/api/platform-branches");
 
   const created = await executeMcpTool("platform.branch", {
-    args: { operation: "create", id: "branch.platform.console", title: "Platform Console" },
+    args: {
+      operation: "create",
+      id: "branch.platform.console",
+      title: "Platform Console",
+      parentBranchId: "branch.platform.root",
+      epic: "platform",
+      feature: "console",
+      defect: "none"
+    },
     callHandler
   });
   assert.equal(created.isError, false);
   assert.equal(calls.at(-1).handler, "platform.branch.create");
   assert.equal(calls.at(-1).path, "/api/platform-branches");
+  assert.equal(calls.at(-1).body.parentBranchId, "branch.platform.root");
+  assert.equal(calls.at(-1).body.epic, "platform");
+  assert.equal(calls.at(-1).body.feature, "console");
+  assert.equal(calls.at(-1).body.defect, "none");
 
   const read = await executeMcpTool("platform.branch", {
     args: { operation: "read", id: "branch.platform.console" },

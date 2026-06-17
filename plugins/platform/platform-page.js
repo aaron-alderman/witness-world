@@ -121,6 +121,10 @@ export function renderPlatformPage(model) {
         <form id="platform-branch-create-form">
           <label>Branch id <input name="id" value="branch-${Date.now().toString(36)}"></label>
           <label>Title <input name="title" value="Platform branch"></label>
+          <label>Parent branch <input name="parentBranchId" placeholder="Optional parent branch id"></label>
+          <label>Epic <input name="epic" placeholder="Optional epic tag"></label>
+          <label>Feature <input name="feature" placeholder="Optional feature tag"></label>
+          <label>Defect <input name="defect" placeholder="Optional defect tag"></label>
           <button type="submit">Create Branch</button>
           <div id="branch-create-status"></div>
         </form>
@@ -189,10 +193,11 @@ export function renderPlatformPage(model) {
       <div>
         <h2>Branches</h2>
         <table>
-          <thead><tr><th>Status</th><th>Branch</th><th>Owner</th><th>Change Sets</th><th>Latest Candidate</th></tr></thead>
+          <thead><tr><th>Status</th><th>Branch</th><th>Parent</th><th>Owner</th><th>Change Sets</th><th>Latest Candidate</th></tr></thead>
           <tbody>${tableRows(branches.slice(0, 80), [
             row => row.status,
             row => row.id,
+            row => row.parentBranchId || "",
             row => row.owner || "",
             row => (row.changeSetIds || []).join(", "),
             row => row.latestCandidateSnapshotId || ""
@@ -340,7 +345,11 @@ export function renderPlatformPage(model) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           id: form.elements.id.value,
-          title: form.elements.title.value || null
+          title: form.elements.title.value || null,
+          parentBranchId: form.elements.parentBranchId.value || null,
+          epic: form.elements.epic.value || null,
+          feature: form.elements.feature.value || null,
+          defect: form.elements.defect.value || null
         })
       });
       const json = await response.json().catch(() => ({}));

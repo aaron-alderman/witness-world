@@ -27,6 +27,10 @@ export async function executePlatformProposalTarget({
         actor,
         id: body.id || proposal.targetId || "",
         title: body.title ?? null,
+        parentBranchId: body.parentBranchId ?? null,
+        epic: body.epic ?? null,
+        feature: body.feature ?? null,
+        defect: body.defect ?? null,
         runtimeProfile: body.runtimeProfile ?? "full"
       });
       if (!result.ok) return failure(result, "platform branch creation failed");

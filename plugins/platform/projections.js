@@ -112,6 +112,10 @@ export const platformModuleProjectors = {
       rows.set(String(body.id), {
         id: String(body.id),
         title: String(body.title || body.id),
+        parentBranchId: body.parentBranchId ? String(body.parentBranchId) : null,
+        epic: body.epic ? String(body.epic) : null,
+        feature: body.feature ? String(body.feature) : null,
+        defect: body.defect ? String(body.defect) : null,
         owner: body.owner ? String(body.owner) : null,
         runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
         session: body.session ? String(body.session) : null,
