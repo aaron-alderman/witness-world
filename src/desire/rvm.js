@@ -29,7 +29,7 @@ export async function compileRvmFileToDesirePlus(file) {
 }
 
 export function compileRvmToDesirePlus(source, { file = null } = {}) {
-  const forms = parseRvmForms(source);
+  const forms = parseRvmForms(source, { file });
   const effectiveForms = forms.length === 0
     ? [{
         kind: "source",
@@ -170,7 +170,7 @@ function isGitConflictMarker(line) {
   return /^(<<<<<<<|=======|>>>>>>>)(?:\s|$)/.test(line);
 }
 
-function parseRvmForms(source) {
+function parseRvmForms(source, { file = null } = {}) {
   const lines = source.split(/\r?\n/);
   const forms = [];
   let index = 0;
@@ -198,7 +198,7 @@ function parseRvmForms(source) {
     }
     const moduleBlockHeader = trimmed.match(/^module\s+([A-Za-z_][A-Za-z0-9_.:/-]*)\s*\{$/);
     if (moduleBlockHeader) {
-      const { rawText, endLine, bodyLines } = readBraceBlock(lines, index);
+      const { rawText, endLine, bodyLines } = readBraceBlock(lines, index, { file });
       forms.push(makeModuleBlockForm({
         name: moduleBlockHeader[1],
         header: trimmed,
@@ -217,7 +217,7 @@ function parseRvmForms(source) {
     }
     const actorBlockHeader = trimmed.match(/^actor\s+([A-Za-z_][A-Za-z0-9_.:/-]*)(?:\s+owns\s+([A-Za-z_][A-Za-z0-9_.:/-]*))?\s*\{$/);
     if (actorBlockHeader) {
-      const { rawText, endLine, bodyLines } = readBraceBlock(lines, index);
+      const { rawText, endLine, bodyLines } = readBraceBlock(lines, index, { file });
       forms.push(makeBlockForm({
         kind: "actor",
         name: actorBlockHeader[1],
@@ -233,7 +233,7 @@ function parseRvmForms(source) {
     }
     const blockHeader = trimmed.match(/^([A-Za-z_][A-Za-z0-9_./-]*)\s+([A-Za-z_][A-Za-z0-9_.:/-]*)(?:\s+(?:using|of)\s+([A-Za-z_][A-Za-z0-9_.:/-]*))?(?:\s*:\s*([A-Za-z_][A-Za-z0-9_.:/-]*))?\s*\{$/);
     if (blockHeader) {
-      const { rawText, endLine, bodyLines } = readBraceBlock(lines, index);
+      const { rawText, endLine, bodyLines } = readBraceBlock(lines, index, { file });
       forms.push(makeBlockForm({
         kind: blockHeader[1],
         name: blockHeader[2],
@@ -260,7 +260,7 @@ function parseRvmForms(source) {
   return forms;
 }
 
-function readBraceBlock(lines, startIndex) {
+function readBraceBlock(lines, startIndex, { file = null } = {}) {
   let depth = 0;
   const captured = [];
   const bodyLines = [];
@@ -280,11 +280,8 @@ function readBraceBlock(lines, startIndex) {
       };
     }
   }
-  return {
-    rawText: captured.join("\n"),
-    endLine: lines.length,
-    bodyLines
-  };
+  const location = `${file ? `${file}: ` : ""}line ${startIndex + 1}`;
+  throw new Error(`unterminated RVM block at ${location}`);
 }
 
 function makeImportForm(line, index) {

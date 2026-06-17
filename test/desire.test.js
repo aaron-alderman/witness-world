@@ -2137,6 +2137,16 @@ atom draft_name_state {
   assert.equal(desire.nodes.length, 0);
 });
 
+test("RVM unterminated brace blocks fail compilation", () => {
+  assert.throws(
+    () => compileRvmToDesirePlus(`
+view BrokenLoginPanel {
+  kind text
+`.trim(), { file: "C:/demo/broken-login.rvm" }),
+    /unterminated RVM block at C:\/demo\/broken-login\.rvm: line 1/
+  );
+});
+
 test("RVM actor durable state normalizes into native store and projection semantics", () => {
   const desire = normalizeDesirePlusToDesire(compileRvmToDesirePlus(`
 context todo_items {

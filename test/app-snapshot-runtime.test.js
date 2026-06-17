@@ -515,3 +515,33 @@ test("failed app rebuild after platform apply preserves the last good runtime re
     await fs.rm(app.root, { recursive: true, force: true });
   }
 });
+
+test("invalid RVM source preserves the last good runtime revision on request refresh", async () => {
+  const app = await makeWorkspaceEngentusApp();
+  const server = await startUiServer({
+    dslPath: app.dslPath,
+    serverRunnerId: "engentus_server"
+  });
+  try {
+    const initialDiagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
+    const initialRevision = Number(initialDiagnostics.appSnapshot?.appRevision || 0);
+    const initialHtml = await fetch(`${server.url}/engentus/login`).then(response => response.text());
+    assert.match(initialHtml, /Demo sign-in uses the seeded local identities below\./);
+
+    const originalSource = await fs.readFile(app.authShellPath, "utf8");
+    const brokenSource = `${originalSource}\nview EngentusBrokenLoginPanel {\n  kind text\n`;
+    await fs.writeFile(app.authShellPath, brokenSource, "utf8");
+
+    const refreshedHtml = await fetch(`${server.url}/engentus/login`).then(response => response.text());
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
+
+    assert.equal(Number(diagnostics.appSnapshot?.appRevision || 0), initialRevision);
+    assert.equal(Array.isArray(diagnostics.appSnapshot?.buildErrors), true);
+    assert.equal(diagnostics.appSnapshot.buildErrors.length > 0, true);
+    assert.match(diagnostics.appSnapshot.buildErrors[0].message, /unterminated RVM block/i);
+    assert.match(refreshedHtml, /Demo sign-in uses the seeded local identities below\./);
+  } finally {
+    await server.close();
+    await fs.rm(app.root, { recursive: true, force: true });
+  }
+});

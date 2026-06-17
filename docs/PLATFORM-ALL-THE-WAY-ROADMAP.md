@@ -435,11 +435,11 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add Platform Console backend revision stream.
 - [X] Add MCP read view `platform.read { view: "runtimeRevisions" }`.
 - [X] Add tests for RVM route/process changes changing backend behavior without process restart.
-- [ ] Add tests for invalid RVM preserving last good backend behavior.
+- [X] Add tests for invalid RVM preserving last good backend behavior.
 - [X] Add tests for SSE event after backend candidate activation.
 - [L] Current activation path is `platform.changeSet.apply` -> `AppSnapshotManager.markDirtyPaths(...)` for applied files inside the active app roots, so new requests pick up a rebuilt authored runtime revision without restarting the server while failed rebuilds retain the last good snapshot. `/platform` now consumes `/api/platform-model?view=runtimeRevisions&id=...` for runtime revision detail, snapshot builds, and build errors, while the live backend revision stream remains SSE-backed.
 - [L] Current request pinning is HTTP-request scoped: the runtime snapshots `appSnapshotManager.getActiveSnapshot()` after `ensureFresh()` and proxies that fixed revision through route matching, authz, rendering, and nested handler invocation for the lifetime of the request. Long-lived out-of-band work such as jobs or separate event streams remains distinct follow-on policy.
-- [L] Unexpected current behavior: broad malformed RVM text often compiles into tolerated residual forms instead of failing the snapshot build, so the open invalid-RVM regression still needs a narrow authored specimen that deterministically trips rebuild failure rather than silently lowering through the compiler.
+- [L] Broad malformed RVM text still often compiles into tolerated residual forms, but unterminated brace blocks now fail compilation deterministically and are covered by the invalid-RVM last-good runtime regression.
 
 ### 2.3 JS Plugin Reload Strategy
 
