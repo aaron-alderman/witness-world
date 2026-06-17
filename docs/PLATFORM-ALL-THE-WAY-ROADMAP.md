@@ -306,9 +306,9 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add `POST /api/platform-change-sets/:id/reject`.
 - [X] Add `POST /api/platform-change-sets/:id/abandon`.
 - [B] Add `POST /api/platform-change-sets/:id/rebase`.
-- [~] Add route ownership tests for all change-set routes.
-- [~] Add `minimal` profile isolation tests for change-set routes.
-- [~] Add `full` profile exposure tests for change-set routes.
+- [X] Add route ownership tests for all change-set routes.
+- [X] Add `minimal` profile isolation tests for change-set routes.
+- [X] Add `full` profile exposure tests for change-set routes.
 - [L] Rebase remains blocked on explicit merge/re-anchor semantics for branch overlays; V1 currently has conflict detection and closure, but not a defensible rebase story yet.
 
 ### 1.3 Multi-File Atomic Edits

@@ -363,8 +363,18 @@ test("minimal runtime profile does not expose platform self-model routes", async
       headers: { "content-type": "application/json" },
       body: JSON.stringify({})
     })).status, 404);
+    assert.equal((await fetch(`${server.url}/api/platform-change-sets/demo/edits`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ edits: [] })
+    })).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-change-sets/demo/edits/demo`, {
       method: "DELETE"
+    })).status, 404);
+    assert.equal((await fetch(`${server.url}/api/platform-change-sets/demo/validate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({})
     })).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-change-sets/demo/apply`, {
       method: "POST",
@@ -407,6 +417,7 @@ test("full runtime exposes platform console and platform self-model API", async 
   assert.equal(server.ok, true);
 
   try {
+    const rvm = await fs.readFile(new URL("../plugins/platform/platform-console.rvm", import.meta.url), "utf8");
     const page = await fetch(`${server.url}/platform`);
     const model = await fetch(`${server.url}/api/platform-model`).then(response => response.json());
     const gaps = await fetch(`${server.url}/api/platform-gaps`).then(response => response.json());
@@ -421,9 +432,23 @@ test("full runtime exposes platform console and platform self-model API", async 
     const changeSetRoute = await fetch(`${server.url}/api/platform-change-sets`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: "changeset.runtime.profile" })
+      body: JSON.stringify({ id: "changeset.runtime.profile", branchId: "branch.runtime.profile" })
     });
     const changeSetReadRoute = await fetch(`${server.url}/api/platform-change-sets/changeset.runtime.profile`);
+    const editRoute = await fetch(`${server.url}/api/platform-change-sets/changeset.runtime.profile/edits`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ edits: [{ path: "plugins/platform/platform-console.rvm", content: `${rvm}\n` }] })
+    });
+    const editBody = await editRoute.json();
+    const removeEditRoute = await fetch(`${server.url}/api/platform-change-sets/changeset.runtime.profile/edits/${encodeURIComponent(editBody.edits?.[0]?.pathHash || "missing")}`, {
+      method: "DELETE"
+    });
+    const validateRoute = await fetch(`${server.url}/api/platform-change-sets/changeset.runtime.profile/validate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({})
+    });
     const applyRoute = await fetch(`${server.url}/api/platform-change-sets/changeset.runtime.profile/apply`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -459,6 +484,9 @@ test("full runtime exposes platform console and platform self-model API", async 
     assert.notEqual(changeSetListRoute.status, 404);
     assert.notEqual(changeSetRoute.status, 404);
     assert.notEqual(changeSetReadRoute.status, 404);
+    assert.notEqual(editRoute.status, 404);
+    assert.notEqual(removeEditRoute.status, 404);
+    assert.notEqual(validateRoute.status, 404);
     assert.notEqual(applyRoute.status, 404);
     assert.notEqual(rejectRoute.status, 404);
     assert.notEqual(abandonRoute.status, 404);
@@ -471,6 +499,9 @@ test("full runtime exposes platform console and platform self-model API", async 
     assert.equal(diagnostics.routes.some(route => route.matcher === "/api/platform-change-sets" && route.handler === "platform.changeSet.list"), true);
     assert.equal(diagnostics.routes.some(route => route.matcher === "/api/platform-change-sets" && route.handler === "platform.changeSet.create"), true);
     assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-change-sets") && route.handler === "platform.changeSet.read"), true);
+    assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-change-sets") && route.handler === "platform.changeSet.edit"), true);
+    assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-change-sets") && route.handler === "platform.changeSet.removeEdit"), true);
+    assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-change-sets") && route.handler === "platform.changeSet.validate"), true);
     assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-change-sets") && route.handler === "platform.changeSet.apply"), true);
     assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-change-sets") && route.handler === "platform.changeSet.reject"), true);
     assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-change-sets") && route.handler === "platform.changeSet.abandon"), true);

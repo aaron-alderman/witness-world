@@ -76,6 +76,32 @@ test("platform plugin exposes platform bundle ownership", async () => {
   assert.equal(providers.some(provider => provider.kind === "moduleProjectors" && provider.id === "platform.projections"), true);
 });
 
+test("platform runtime declares every change-set route with owned handler metadata", () => {
+  const expectedRoutes = [
+    { method: "GET", path: "/api/platform-change-sets", handler: "platform.changeSet.list" },
+    { method: "GET", handler: "platform.changeSet.read", pattern: /^\/api\/platform-change-sets\/([^/]+)$/, paramNames: ["id"] },
+    { method: "POST", path: "/api/platform-change-sets", handler: "platform.changeSet.create" },
+    { method: "POST", handler: "platform.changeSet.edit", pattern: /^\/api\/platform-change-sets\/([^/]+)\/edits$/, paramNames: ["id"] },
+    { method: "DELETE", handler: "platform.changeSet.removeEdit", pattern: /^\/api\/platform-change-sets\/([^/]+)\/edits\/([^/]+)$/, paramNames: ["id", "pathHash"] },
+    { method: "POST", handler: "platform.changeSet.validate", pattern: /^\/api\/platform-change-sets\/([^/]+)\/validate$/, paramNames: ["id"] },
+    { method: "POST", handler: "platform.changeSet.apply", pattern: /^\/api\/platform-change-sets\/([^/]+)\/apply$/, paramNames: ["id"] },
+    { method: "POST", handler: "platform.changeSet.reject", pattern: /^\/api\/platform-change-sets\/([^/]+)\/reject$/, paramNames: ["id"] },
+    { method: "POST", handler: "platform.changeSet.abandon", pattern: /^\/api\/platform-change-sets\/([^/]+)\/abandon$/, paramNames: ["id"] }
+  ];
+
+  for (const expected of expectedRoutes) {
+    const route = routes.find(entry => entry.handler === expected.handler);
+    assert.ok(route, `missing route for ${expected.handler}`);
+    assert.equal(route.method, expected.method);
+    if (expected.path) assert.equal(route.path, expected.path);
+    if (expected.pattern) {
+      assert.equal(String(route.pattern), String(expected.pattern));
+      assert.deepEqual(route.paramNames, expected.paramNames);
+    }
+    assert.deepEqual(handlerCatalog.handlerMetadata[expected.handler]?.methods, [expected.method]);
+  }
+});
+
 test("platform model merges runtime diagnostics with repo inventory", async () => {
   const model = await buildPlatformModel({
     diagnostics: {
