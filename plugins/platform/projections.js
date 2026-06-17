@@ -270,8 +270,107 @@ function testArtifactRows(witnesses) {
         producedAt: witness.body.finishedAt ?? null
       });
     }
+    for (const artifact of artifacts) {
+      rows.push(...structuredArtifactsForStream({
+        runId,
+        resultId,
+        gateId,
+        title,
+        streamKind: artifact.kind,
+        content: artifact.content,
+        branchId: witness.body.branchId ? String(witness.body.branchId) : null,
+        changeSetId: witness.body.changeSetId ? String(witness.body.changeSetId) : null,
+        candidateSnapshotId: witness.body.candidateSnapshotId ? String(witness.body.candidateSnapshotId) : null,
+        producedAt: witness.body.finishedAt ?? null
+      }));
+    }
   }
   return sortRows(rows, ["runId", "artifactKind", "id"]);
+}
+
+function parseTapSummary(content) {
+  const text = String(content || "");
+  if (!/^\s*TAP version \d+/m.test(text)) return null;
+  const planMatch = text.match(/^\s*1\.\.(\d+)\s*$/m);
+  const passed = (text.match(/^\s*ok\b/gm) ?? []).length;
+  const failed = (text.match(/^\s*not ok\b/gm) ?? []).length;
+  const skipped = (text.match(/#\s*SKIP\b/gi) ?? []).length;
+  const todo = (text.match(/#\s*TODO\b/gi) ?? []).length;
+  return {
+    format: "tap",
+    total: planMatch ? Number(planMatch[1]) : (passed + failed),
+    passed,
+    failed,
+    skipped,
+    todo
+  };
+}
+
+function parseJUnitSummary(content) {
+  const text = String(content || "");
+  if (!/<testsuite\b/i.test(text) && !/<testsuites\b/i.test(text)) return null;
+  const suites = [...text.matchAll(/<testsuite\b([^>]*)>/gi)];
+  const attrs = ["tests", "failures", "errors", "skipped"];
+  const totals = Object.fromEntries(attrs.map(attr => [attr, 0]));
+  const parseAttr = (source, attr) => {
+    const match = String(source || "").match(new RegExp(`\\b${attr}="(\\d+)"`, "i"));
+    return match ? Number(match[1]) : 0;
+  };
+  if (suites.length) {
+    for (const suite of suites) {
+      for (const attr of attrs) totals[attr] += parseAttr(suite[1], attr);
+    }
+  } else {
+    const rootMatch = text.match(/<testsuites\b([^>]*)>/i);
+    for (const attr of attrs) totals[attr] += parseAttr(rootMatch?.[1] || "", attr);
+  }
+  return {
+    format: "junit",
+    total: totals.tests,
+    passed: Math.max(0, totals.tests - totals.failures - totals.errors - totals.skipped),
+    failed: totals.failures,
+    errors: totals.errors,
+    skipped: totals.skipped
+  };
+}
+
+function structuredArtifactsForStream({
+  runId,
+  resultId,
+  gateId,
+  title,
+  streamKind,
+  content,
+  branchId = null,
+  changeSetId = null,
+  candidateSnapshotId = null,
+  producedAt = null
+}) {
+  const rows = [];
+  const pushStructured = (kind, fileName, contentType, summary) => {
+    if (!summary) return;
+    rows.push({
+      id: `testArtifact:${runId}:${kind}:${streamKind}`,
+      runId,
+      resultId,
+      gateId,
+      title: `${title} ${kind}`,
+      artifactKind: kind,
+      fileName,
+      contentType,
+      sizeBytes: Buffer.byteLength(content, "utf8"),
+      content,
+      structuredFormat: kind,
+      summary,
+      branchId,
+      changeSetId,
+      candidateSnapshotId,
+      producedAt
+    });
+  };
+  pushStructured("tap", `${streamKind}.tap`, "application/tap", parseTapSummary(content));
+  pushStructured("junit", `${streamKind}.junit.xml`, "application/xml", parseJUnitSummary(content));
+  return rows;
 }
 
 export const platformModuleProjectors = {
