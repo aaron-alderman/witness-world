@@ -76,7 +76,9 @@ function addNode(nodes, node) {
     lifecycle: unique([...(existing?.lifecycle ?? []), ...(node.lifecycle ?? [])]),
     owner: node.owner ?? existing?.owner ?? null,
     status: node.status ?? existing?.status ?? "known",
-    source: node.source ?? existing?.source ?? "platform"
+    source: node.source ?? existing?.source ?? "platform",
+    command: node.command ?? existing?.command ?? null,
+    sourceDependencies: unique([...(existing?.sourceDependencies ?? []), ...(node.sourceDependencies ?? [])])
   };
   nodes.set(id, next);
 }
@@ -519,6 +521,40 @@ function gateCostEstimateForPath(relativePath) {
   return "low";
 }
 
+function normalizeGateCommand(command) {
+  return String(command || "").replace(/\s+/g, " ").trim();
+}
+
+function looksLikeExplicitTestGateCommand(command) {
+  const value = normalizeGateCommand(command);
+  return /^(?:cmd \/c )?node --test\b/i.test(value)
+    || /^cargo test\b/i.test(value)
+    || /^npm run test(?:[:\w-]+)?\b/i.test(value)
+    || /^pnpm (?:test|vitest)\b/i.test(value)
+    || /^(?:npx )?vitest\b/i.test(value);
+}
+
+function extractDocTestGateCommands(source) {
+  return unique(
+    extractMarkdownCodeTokens(source)
+      .map(token => normalizeGateCommand(token))
+      .filter(looksLikeExplicitTestGateCommand)
+  );
+}
+
+function packageScriptProtectedObjects(scriptName, command, nodes) {
+  const targets = [];
+  const script = String(scriptName || "");
+  const normalizedCommand = normalizeGateCommand(command);
+  const pluginMatch = script.match(/^test:plugin:([a-z0-9-]+)$/i) || normalizedCommand.match(/\brun-plugin-tests\.mjs\s+([a-z0-9-]+)/i);
+  if (pluginMatch) {
+    const pluginId = `plugin.${pluginMatch[1]}`;
+    if (nodes.has(pluginId)) targets.push(pluginId);
+  }
+  if (script === "test:ui") targets.push("runtime.core");
+  return unique(targets);
+}
+
 function buildTestGateRows(nodes, edges, branches = []) {
   const outgoing = new Map();
   for (const edge of edges.values()) {
@@ -531,19 +567,25 @@ function buildTestGateRows(nodes, edges, branches = []) {
       const gateEdges = outgoing.get(node.id) ?? [];
       const protectedObjects = unique(gateEdges.filter(edge => edge.rel === "verifies").map(edge => edge.to));
       const protectedObjectLabels = protectedObjects.map(target => nodes.get(target)?.title || target);
+      const command = normalizeGateCommand(node.command || `node --test ${node.title}`);
+      const sourceDependencies = unique(
+        Array.isArray(node.sourceDependencies) && node.sourceDependencies.length
+          ? node.sourceDependencies
+          : [node.source]
+      );
       return {
         id: node.id,
         title: node.title,
-        command: `node --test ${node.title}`,
-        runner: gateRunnerForPath(node.title),
-        environment: gateEnvironmentForPath(node.title),
-        timeoutMs: gateTimeoutForPath(node.title),
+        command,
+        runner: gateRunnerForPath(command || node.title),
+        environment: gateEnvironmentForPath(command || node.title),
+        timeoutMs: gateTimeoutForPath(command || node.title),
         protectedObjects,
         protectedObjectLabels,
-        sourceDependencies: [node.source],
+        sourceDependencies,
         lastResult: null,
         flakeScore: null,
-        costEstimate: gateCostEstimateForPath(node.title),
+        costEstimate: gateCostEstimateForPath(command || node.title),
         selectedByBranches: []
       };
     })
@@ -1112,6 +1154,51 @@ export async function buildPlatformModel({
       if (nodes.has(`doc:${filePath}`)) addEdge(edges, doc.id, "references", `doc:${filePath}`, "docs");
       if (nodes.has(`rvm:${filePath}`)) addEdge(edges, doc.id, "references", `rvm:${filePath}`, "docs");
       if (nodes.has(`wcss:${filePath}`)) addEdge(edges, doc.id, "references", `wcss:${filePath}`, "docs");
+    }
+  }
+
+  const packageJson = await readJson("package.json", {});
+  for (const [scriptName, scriptCommand] of Object.entries(packageJson.scripts ?? {})) {
+    if (!String(scriptName).startsWith("test")) continue;
+    const gateId = `gate:script:${slugify(scriptName)}`;
+    const command = `npm run ${scriptName}`;
+    addNode(nodes, {
+      id: gateId,
+      kind: "gate",
+      title: command,
+      lifecycle: ["verify", "steward"],
+      owner: "tests",
+      status: "modeled",
+      source: "package.json",
+      command,
+      sourceDependencies: ["package.json"]
+    });
+    for (const target of packageScriptProtectedObjects(scriptName, scriptCommand, nodes)) {
+      addEdge(edges, gateId, "verifies", target, "package-scripts");
+      if (nodes.has(target)) addEdge(edges, target, "verifiedBy", gateId, "package-scripts");
+    }
+  }
+
+  for (const doc of parsedDocs) {
+    for (const command of extractDocTestGateCommands(doc.source)) {
+      const gateId = `gate:doc:${doc.path}:${slugify(command)}`;
+      addNode(nodes, {
+        id: gateId,
+        kind: "gate",
+        title: command,
+        lifecycle: ["verify", "steward"],
+        owner: doc.owner,
+        status: "modeled",
+        source: doc.path,
+        command,
+        sourceDependencies: [doc.path]
+      });
+      addEdge(edges, gateId, "verifies", doc.id, "docs");
+      addEdge(edges, doc.id, "suggests", gateId, "docs");
+      for (const target of GOVERNED_DOC_TARGETS[doc.path] ?? []) {
+        addEdge(edges, gateId, "verifies", target, "docs");
+        if (nodes.has(target)) addEdge(edges, target, "verifiedBy", gateId, "docs");
+      }
     }
   }
 

@@ -529,7 +529,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [~] Parse file paths into source edges.
 - [ ] Parse proposal IDs into proposal edges.
 - [ ] Parse branch IDs into branch edges.
-- [ ] Parse test command blocks into `testGate` suggestions.
+- [~] Parse test command blocks into `testGate` suggestions.
 - [X] Add tests for Markdown ingestion.
 - [X] Add tests for this roadmap document becoming doc/task nodes.
 
@@ -675,12 +675,12 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [~] Add test gate discovery from:
   - [X] `test/*.test.js`
   - [X] `plugins/**/*.test.js`
-  - [ ] package scripts
-  - [ ] explicit docs
+  - [X] package scripts
+  - [X] explicit docs
   - [ ] platform model hints
 - [X] Add Platform Console gates view.
 - [X] Add MCP view `platform.read { view: "testGates" }`.
-- [L] Current V1 gate modeling is a platform self-model projection with branch-aware affected gate selection and placeholder result fields, not yet standalone witness-backed `testRun`/`testResult` history.
+- [L] Current V1 gate modeling is a platform self-model projection with branch-aware affected gate selection plus discovery from test files, package scripts, and explicit doc commands. It is not yet standalone witness-backed `testRun`/`testResult` history, and doc command parsing still treats inline code tokens as hints rather than full fenced-block semantics.
 
 ### 5.2 Test Execution Environment
 

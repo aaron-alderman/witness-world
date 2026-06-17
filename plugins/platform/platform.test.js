@@ -371,6 +371,11 @@ test("platform model projects structured test gates and affected branch selectio
 
   const runtimeProfileGate = model.testGates.find(row => row.id === "gate:test/runtime-profile.test.js");
   const platformGate = model.testGates.find(row => row.id === "gate:plugins/platform/platform.test.js");
+  const packageScriptGate = model.testGates.find(row => row.command === "npm run test:plugin:mcp");
+  const docGate = model.testGates.find(row =>
+    row.command === "node --test test/runtime-profile.test.js"
+    && row.sourceDependencies.includes("docs/RUNTIME-BUNDLE-MIGRATION-PLAN.md")
+  );
   const branchView = filterPlatformModel(model, "testGates", "branch.platform.gates");
 
   assert.ok(runtimeProfileGate);
@@ -384,6 +389,13 @@ test("platform model projects structured test gates and affected branch selectio
   assert.equal(runtimeProfileGate.selectedByBranches.includes("branch.platform.gates"), true);
   assert.ok(platformGate);
   assert.equal(platformGate.selectedByBranches.includes("branch.platform.gates"), true);
+  assert.ok(packageScriptGate);
+  assert.equal(packageScriptGate.protectedObjects.includes("plugin.mcp"), true);
+  assert.deepEqual(packageScriptGate.sourceDependencies, ["package.json"]);
+  assert.ok(docGate);
+  assert.equal(docGate.protectedObjects.includes("doc:docs/RUNTIME-BUNDLE-MIGRATION-PLAN.md"), true);
+  assert.equal(docGate.runner, "node-test");
+  assert.deepEqual(docGate.sourceDependencies, ["docs/RUNTIME-BUNDLE-MIGRATION-PLAN.md"]);
   assert.equal(model.affectedTestGatesByBranch["branch.platform.gates"].includes("gate:test/runtime-profile.test.js"), true);
   assert.equal(model.affectedTestGatesByBranch["branch.platform.gates"].includes("gate:plugins/platform/platform.test.js"), true);
   assert.equal(branchView.testGates.some(row => row.id === "gate:test/runtime-profile.test.js"), true);
