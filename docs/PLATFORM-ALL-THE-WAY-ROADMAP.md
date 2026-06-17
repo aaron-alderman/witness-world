@@ -292,7 +292,8 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] `merged`
   - [ ] `pushed`
   - [ ] `shipped`
-  - [ ] `closed`
+  - [X] `closed`
+- [L] V1 derives `closed` for branches whose change sets are all terminal `rejected`/`abandoned`; merge/push/ship closure remains later lifecycle work.
 
 ### 1.2 Change Set API
 

@@ -1226,6 +1226,7 @@ test("platform change-set handlers list, read, remove edits, and close change se
   });
   assert.equal(sent.at(-1).status, 200);
   assert.equal(sent.at(-1).body.changeSet.status, "rejected");
+  assert.equal(world.project(moduleProjectors.branchIndex).byId["branch.inspect.lifecycle"].status, "closed");
 
   await handlers["platform.changeSet.edit"]({
     req: { body: { edits: [{ path: "plugins/platform/platform-console.rvm", content: rvm }] } },
@@ -1252,6 +1253,15 @@ test("platform change-set handlers list, read, remove edits, and close change se
   });
   assert.equal(sent.at(-1).status, 200);
   assert.equal(sent.at(-1).body.changeSet.status, "abandoned");
+  assert.equal(world.project(moduleProjectors.branchIndex).byId["branch.inspect.abandon"].status, "closed");
+
+  await handlers["platform.branch.read"]({
+    res: {},
+    params: { id: "branch.inspect.abandon" }
+  });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(sent.at(-1).body.branch.status, "closed");
+  assert.equal(sent.at(-1).body.branch.lifecycleLane, "ship");
 }));
 
 test("platform change-set apply persists multi-file edits atomically", async () => withRegisteredPluginProjectors(providers, async () => {

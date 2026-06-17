@@ -176,9 +176,22 @@ export const platformModuleProjectors = {
         row.latestCandidateSnapshotId = witness.body.candidateSnapshotId ?? row.latestCandidateSnapshotId;
       }
     }
+    const changeSetIndex = platformModuleProjectors.changeSetIndex(witnesses);
     return sortRows([...rows.values()].map(row => ({
       ...row,
-      changeSetIds: [...row.changeSetIds].sort()
+      changeSetIds: [...row.changeSetIds].sort(),
+      status: (() => {
+        const branchChangeSets = row.changeSetIds
+          .map(id => changeSetIndex.byId?.[id] ?? null)
+          .filter(Boolean);
+        if (branchChangeSets.length && branchChangeSets.every(changeSet => ["rejected", "abandoned"].includes(String(changeSet.status || "")))) {
+          return "closed";
+        }
+        if (branchChangeSets.some(changeSet => String(changeSet.status || "") === "valid")) return "valid";
+        if (branchChangeSets.some(changeSet => String(changeSet.status || "") === "invalid")) return "blocked";
+        if (branchChangeSets.some(changeSet => ["draft", "validating"].includes(String(changeSet.status || "")))) return "open";
+        return row.status;
+      })()
     })), ["id"]);
   },
 
