@@ -677,10 +677,10 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] `plugins/**/*.test.js`
   - [X] package scripts
   - [X] explicit docs
-  - [ ] platform model hints
+  - [X] platform model hints
 - [X] Add Platform Console gates view.
 - [X] Add MCP view `platform.read { view: "testGates" }`.
-- [L] Current V1 gate modeling is a platform self-model projection with branch-aware affected gate selection plus discovery from test files, package scripts, and explicit doc commands. It now includes witness-backed `testRun`/`testResult` history plus `lastResult` projection, but doc command parsing still treats inline code tokens as hints rather than full fenced-block semantics.
+- [L] Current V1 gate modeling is a platform self-model projection with branch-aware affected gate selection plus discovery from test files, package scripts, explicit doc commands, and test-source platform hints. Test-source hints currently come from repo-relative imports, quoted repo paths, route literals, and known plugin/capability/handler identifiers; they are not yet a full AST/import dependency graph.
 - [L] Current V1 test execution records one synthesized `testResult` per run with stdout/stderr captured in witness-backed rows. Artifact storage, structured report ingestion, and richer per-test-case modeling remain later work.
 
 ### 5.2 Test Execution Environment

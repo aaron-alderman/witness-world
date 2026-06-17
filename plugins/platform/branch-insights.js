@@ -48,7 +48,7 @@ function rootSegment(path) {
   return String(path || "").split("/")[0] || "workspace";
 }
 
-function summarizeSystem(path) {
+export function summarizePlatformPathSystem(path) {
   const value = String(path || "");
   if (value.startsWith("plugins/platform/")) {
     return { id: "plugin.platform", label: "Platform plugin", kind: "plugin" };
@@ -128,7 +128,7 @@ export function platformBranchInsights(branch, {
   const systems = new Map();
   const touchedDocs = paths.filter(path => path.startsWith("docs/"));
   for (const path of paths) {
-    const system = summarizeSystem(path);
+    const system = summarizePlatformPathSystem(path);
     const current = systems.get(system.id) ?? { ...system, pathCount: 0, paths: [] };
     current.pathCount += 1;
     current.paths.push(path);
@@ -171,6 +171,7 @@ export function platformBranchInsights(branch, {
 
   return {
     ...lifecycle,
+    changedPaths: paths,
     affectedSystemSummaries,
     telemetryImpactSummaries: telemetryImpacts,
     docsFreshness

@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { moduleProjectors } from "../../src/modules.js";
-import { platformBranchInsights, PLATFORM_BRANCH_LIFECYCLE_LANES } from "./branch-insights.js";
+import { platformBranchInsights, PLATFORM_BRANCH_LIFECYCLE_LANES, summarizePlatformPathSystem } from "./branch-insights.js";
 import { platformProposalTemplates } from "./platform-proposals.js";
 
 export const PLATFORM_LIFECYCLES = Object.freeze([
@@ -551,6 +551,83 @@ function extractDocTestGateCommands(source) {
   );
 }
 
+function repoRelativeHintPath(fromRelativePath, specifier) {
+  const value = String(specifier || "").trim();
+  if (!value.startsWith(".")) return null;
+  const baseDir = path.dirname(path.join(repoRoot, fromRelativePath));
+  const resolved = path.resolve(baseDir, value);
+  const relative = slash(path.relative(repoRoot, resolved));
+  if (!relative || relative.startsWith("..")) return null;
+  return relative;
+}
+
+function extractRepoRelativeSpecifiers(fromRelativePath, source) {
+  const specifiers = [];
+  const patterns = [
+    /(?:import|export)\s+(?:[^"'`]+?\s+from\s+)?["'`]([^"'`]+)["'`]/g,
+    /require\(\s*["'`]([^"'`]+)["'`]\s*\)/g,
+    /import\(\s*["'`]([^"'`]+)["'`]\s*\)/g,
+    /new URL\(\s*["'`]([^"'`]+)["'`]/g
+  ];
+  for (const pattern of patterns) {
+    for (const match of String(source || "").matchAll(pattern)) {
+      const resolved = repoRelativeHintPath(fromRelativePath, match[1]);
+      if (resolved) specifiers.push(resolved);
+    }
+  }
+  return unique(specifiers);
+}
+
+function extractRepoRootPathHints(source) {
+  const paths = [];
+  const pattern = /\b(?:docs|plugins|src|test|store|examples)\/[A-Za-z0-9_./-]+\.[A-Za-z0-9]+\b/g;
+  for (const match of String(source || "").matchAll(pattern)) paths.push(match[0]);
+  return unique(paths);
+}
+
+function extractPlatformModelHintTargets(source, nodes, routeIdsByMatcher) {
+  const targets = [];
+  const pluginPattern = /\bplugin\.[A-Za-z0-9_.-]+\b/g;
+  const handlerOrCapabilityPattern = /\b[a-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+){1,5}\b/g;
+  const directNodePattern = /\b(?:profile|surface):[A-Za-z0-9_./-]+\b/g;
+  for (const match of String(source || "").matchAll(pluginPattern)) {
+    if (nodes.has(match[0])) targets.push(match[0]);
+  }
+  for (const match of String(source || "").matchAll(handlerOrCapabilityPattern)) {
+    const token = match[0];
+    if (nodes.has(`handler:${token}`)) targets.push(`handler:${token}`);
+    if (nodes.has(`capability:${token}`)) targets.push(`capability:${token}`);
+  }
+  for (const match of String(source || "").matchAll(directNodePattern)) {
+    if (nodes.has(match[0])) targets.push(match[0]);
+  }
+  for (const routeRef of extractMarkdownRouteRefs(source)) {
+    const routeId = routeIdsByMatcher[routeRef];
+    if (routeId) targets.push(routeId);
+  }
+  return unique(targets);
+}
+
+function buildTestGateSourceHints(relativePath, source, nodes, routeIdsByMatcher) {
+  const sourceDependencies = unique([
+    relativePath,
+    ...extractRepoRelativeSpecifiers(relativePath, source),
+    ...extractRepoRootPathHints(source)
+  ]);
+  const protectedObjects = new Set(extractPlatformModelHintTargets(source, nodes, routeIdsByMatcher));
+  for (const dependency of sourceDependencies) {
+    const system = summarizePlatformPathSystem(dependency);
+    if (nodes.has(system.id)) protectedObjects.add(system.id);
+    if (nodes.has(`doc:${dependency}`)) protectedObjects.add(`doc:${dependency}`);
+    if (nodes.has(`rvm:${dependency}`)) protectedObjects.add(`rvm:${dependency}`);
+    if (nodes.has(`wcss:${dependency}`)) protectedObjects.add(`wcss:${dependency}`);
+  }
+  return {
+    sourceDependencies,
+    protectedObjects: [...protectedObjects]
+  };
+}
+
 function packageScriptProtectedObjects(scriptName, command, nodes) {
   const targets = [];
   const script = String(scriptName || "");
@@ -625,6 +702,7 @@ function buildTestGateRows(nodes, edges, branches = [], latestResultsByGate = Ob
   const affectedRows = [];
   for (const branch of branches) {
     const affectedSystems = new Set((branch.affectedSystemSummaries ?? []).map(row => String(row.system || "")));
+    const changedPaths = new Set((branch.changedPaths ?? []).map(String));
     const docTargets = new Set([
       ...(branch.docsFreshness?.requiredDocs ?? []).map(doc => `doc:${doc}`),
       ...(branch.docsFreshness?.touchedDocs ?? []).map(doc => `doc:${doc}`),
@@ -637,7 +715,8 @@ function buildTestGateRows(nodes, edges, branches = [], latestResultsByGate = Ob
         || affectedSystems.has(target.replace(/^capability:/, ""))
         || docTargets.has(target)
       ));
-      if (!matchedTargets.length) continue;
+      const matchedSourceDependencies = unique(gate.sourceDependencies.filter(dependency => changedPaths.has(dependency)));
+      if (!matchedTargets.length && !matchedSourceDependencies.length) continue;
       const branchId = String(branch.id);
       gate.selectedByBranches.push(branchId);
       affectedRows.push({
@@ -649,6 +728,7 @@ function buildTestGateRows(nodes, edges, branches = [], latestResultsByGate = Ob
         protectedObjectLabels: [...gate.protectedObjectLabels],
         matchedTargets,
         matchedTargetLabels: matchedTargets.map(target => nodes.get(target)?.title || target),
+        matchedSourceDependencies,
         sourceDependencies: [...gate.sourceDependencies]
       });
     }
@@ -1260,6 +1340,8 @@ export async function buildPlatformModel({
   for (const file of [...testFiles, ...pluginTestFiles]) {
     const relative = slash(path.relative(repoRoot, file));
     const id = `gate:${relative}`;
+    const source = await readText(relative, "");
+    const hints = buildTestGateSourceHints(relative, source, nodes, routeIdsByMatcher);
     addNode(nodes, {
       id,
       kind: "gate",
@@ -1267,7 +1349,8 @@ export async function buildPlatformModel({
       lifecycle: lifecycleForTest(relative),
       owner: "tests",
       status: "modeled",
-      source: relative
+      source: relative,
+      sourceDependencies: hints.sourceDependencies
     });
     const base = path.basename(relative, ".test.js");
     for (const plugin of pluginPackages) {
@@ -1275,6 +1358,10 @@ export async function buildPlatformModel({
         addEdge(edges, id, "verifies", plugin.id, "tests");
         addEdge(edges, plugin.id, "verifiedBy", id, "tests");
       }
+    }
+    for (const target of hints.protectedObjects) {
+      addEdge(edges, id, "verifies", target, "test-hints");
+      if (nodes.has(target)) addEdge(edges, target, "verifiedBy", id, "test-hints");
     }
     if (relative.includes("plugin-boundaries")) addEdge(edges, id, "verifies", "doc:docs/PLUGIN-MIGRATION-CONTROL.md", "tests");
     if (relative.includes("runtime-profile")) {

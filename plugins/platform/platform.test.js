@@ -419,7 +419,10 @@ test("platform model projects structured test gates and affected branch selectio
         return [{ id: "changeSet:platform-gates", branchId: "branch.platform.gates", status: "draft" }];
       }
       if (projector === moduleProjectors.changeSetEdits) {
-        return [{ id: "changeSetEdit:platform-gates:model", changeSetId: "changeSet:platform-gates", path: "plugins/platform/platform-model.js" }];
+        return [
+          { id: "changeSetEdit:platform-gates:model", changeSetId: "changeSet:platform-gates", path: "plugins/platform/platform-model.js" },
+          { id: "changeSetEdit:platform-gates:package", changeSetId: "changeSet:platform-gates", path: "package.json" }
+        ];
       }
       return [];
     }
@@ -440,14 +443,20 @@ test("platform model projects structured test gates and affected branch selectio
   assert.equal(runtimeProfileGate.timeoutMs, 180000);
   assert.equal(runtimeProfileGate.protectedObjects.includes("profile:minimal"), true);
   assert.equal(runtimeProfileGate.protectedObjects.includes("plugin.platform"), true);
-  assert.deepEqual(runtimeProfileGate.sourceDependencies, ["test/runtime-profile.test.js"]);
+  assert.equal(runtimeProfileGate.sourceDependencies.includes("test/runtime-profile.test.js"), true);
   assert.equal(runtimeProfileGate.costEstimate, "high");
   assert.equal(runtimeProfileGate.selectedByBranches.includes("branch.platform.gates"), true);
   assert.ok(platformGate);
+  assert.equal(platformGate.protectedObjects.includes("route:GET /platform"), true);
+  assert.equal(platformGate.protectedObjects.includes("handler:page.platform"), true);
+  assert.equal(platformGate.protectedObjects.includes("plugin.mcp"), true);
+  assert.equal(platformGate.sourceDependencies.includes("plugins/platform/platform-model.js"), true);
+  assert.equal(platformGate.sourceDependencies.includes("plugins/platform/platform-console.rvm"), true);
   assert.equal(platformGate.selectedByBranches.includes("branch.platform.gates"), true);
   assert.ok(packageScriptGate);
   assert.equal(packageScriptGate.protectedObjects.includes("plugin.mcp"), true);
   assert.deepEqual(packageScriptGate.sourceDependencies, ["package.json"]);
+  assert.equal(packageScriptGate.selectedByBranches.includes("branch.platform.gates"), true);
   assert.ok(docGate);
   assert.equal(docGate.protectedObjects.includes("doc:docs/RUNTIME-BUNDLE-MIGRATION-PLAN.md"), true);
   assert.equal(docGate.runner, "node-test");
@@ -458,9 +467,16 @@ test("platform model projects structured test gates and affected branch selectio
     row.branchId === "branch.platform.gates"
     && row.gateId === "gate:test/runtime-profile.test.js"
   ), true);
+  assert.equal(model.affectedTestGates.some(row =>
+    row.branchId === "branch.platform.gates"
+    && row.gateId === packageScriptGate.id
+    && row.matchedSourceDependencies.includes("package.json")
+  ), true);
   assert.equal(model.affectedTestGatesByBranch["branch.platform.gates"].includes("gate:test/runtime-profile.test.js"), true);
   assert.equal(model.affectedTestGatesByBranch["branch.platform.gates"].includes("gate:plugins/platform/platform.test.js"), true);
+  assert.equal(model.affectedTestGatesByBranch["branch.platform.gates"].includes(packageScriptGate.id), true);
   assert.equal(branchView.testGates.some(row => row.id === "gate:test/runtime-profile.test.js"), true);
+  assert.equal(branchView.testGates.some(row => row.id === packageScriptGate.id), true);
   assert.equal(branchView.affectedTestGates.some(row => row.branchId === "branch.platform.gates"), true);
   assert.deepEqual(branchView.testGateIndex.byBranch["branch.platform.gates"], model.testGateIndex.byBranch["branch.platform.gates"]);
   assert.deepEqual(branchView.affectedTestGatesByBranch["branch.platform.gates"], model.affectedTestGatesByBranch["branch.platform.gates"]);
