@@ -525,6 +525,242 @@ test("createSurfaceInteractionRuntime boots capability hooks after route surface
   assert.equal(nodes.has("surface-chart"), true);
 });
 
+test("createSurfaceInteractionRuntime loads route-local capability assets before booting swapped surfaces", async () => {
+  const listeners = new Map();
+  const nodes = new Map();
+  const appended = [];
+  const makeNode = id => ({
+    id,
+    parentNode: null,
+    className: "",
+    style: {},
+    setAttribute(name, value) {
+      this[name] = value;
+    },
+    removeAttribute(name) {
+      delete this[name];
+    },
+    addEventListener(eventName, listener) {
+      listeners.set(eventName, listener);
+    },
+    removeEventListener() {},
+    matches(selector) {
+      return selector === "[data-chart-spec]" && this.hasChartSpec === true;
+    },
+    querySelectorAll(selector) {
+      return selector === "[data-chart-spec]" ? (this.chartNodes ?? []) : [];
+    },
+    replaceWith(next) {
+      nodes.delete(this.id);
+      nodes.set(next.id, next);
+      next.parentNode = this.parentNode;
+    }
+  });
+  const homeRoot = makeNode("surface-home");
+  const homeButton = makeNode("home-to-chart");
+  homeRoot.parentNode = { nodeType: 1 };
+  nodes.set(homeRoot.id, homeRoot);
+  nodes.set(homeButton.id, homeButton);
+
+  class FakeDomParser {
+    parseFromString(html) {
+      const manifestMatch = String(html).match(
+        /<script type="application\/json" id="surface-runtime-manifest">([\s\S]*?)<\/script>/i
+      );
+      const rootId = String(html).match(/<main id="([^"]+)"/i)?.[1] ?? null;
+      const manifest = manifestMatch ? JSON.parse(manifestMatch[1]) : null;
+      return {
+        getElementById(id) {
+          if (id === "surface-runtime-manifest" && manifest) return { textContent: JSON.stringify(manifest) };
+          if (id === rootId && rootId) return { outerHTML: `<main id="${rootId}"></main>` };
+          return null;
+        },
+        body: {
+          firstElementChild: rootId ? { outerHTML: `<main id="${rootId}"></main>` } : null
+        }
+      };
+    }
+  }
+
+  const runtimeWindow = {
+    location: { pathname: "/home" },
+    history: {
+      pushState(_state, _title, path) {
+        runtimeWindow.location.pathname = path;
+      }
+    },
+    DOMParser: FakeDomParser,
+    async fetch(path) {
+      assert.equal(path, "/chart");
+      return {
+        ok: true,
+        async text() {
+          return `<html><body><main id="surface-chart"></main><script type="application/json" id="surface-runtime-manifest">${JSON.stringify({
+            activeSurfaceId: "Surface.Chart",
+            routeTargets: [
+              { key: "home", path: "/home", surfaceId: "Surface.Home" },
+              { key: "chart", path: "/chart", surfaceId: "Surface.Chart" }
+            ],
+            browserRuntimeCapabilities: ["chart.render"],
+            capabilityAssets: {
+              stylesheetHrefs: ["/chart.css"],
+              scriptSrcs: ["/chart-lib.js"],
+              inlineCss: [".chart{display:block}"],
+              scriptBodies: ["window.__surfaceCapabilityBootHooks = [root => window.__bootedRootIds.push(root.id)];"]
+            },
+            surfaces: [
+              {
+                id: "Surface.Chart",
+                runtime: {
+                  processRef: "ShellNavigation",
+                  projectionRefs: [],
+                  capabilityRefs: ["chart.render"],
+                  bindings: [],
+                  interactions: []
+                },
+                view: {
+                  rootId: "surface-chart",
+                  propTargets: {},
+                  interactionTargets: {}
+                }
+              }
+            ],
+            processWitnesses: [
+              { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "chart" } },
+              { process: "desire.defineProcess", body: {
+                id: "ShellNavigation",
+                state: ["ActiveRoute"],
+                handles: [],
+                emits: [],
+                rules: []
+              } }
+            ]
+          })}</script></body></html>`;
+        }
+      };
+    },
+    __bootedRootIds: [],
+    console: { error() {} }
+  };
+
+  const head = {
+    appendChild(node) {
+      appended.push({
+        tag: node.tagName,
+        rel: node.rel ?? null,
+        href: node.href ?? null,
+        src: node.src ?? null,
+        type: node.type ?? null,
+        textContent: node.textContent ?? null
+      });
+      if (node.tagName === "SCRIPT" && node.textContent) {
+        const fn = new Function("window", node.textContent);
+        fn(runtimeWindow);
+      }
+      queueMicrotask(() => node.dispatchEvent?.({ type: "load" }));
+      return node;
+    }
+  };
+
+  const runtime = createSurfaceInteractionRuntime({
+    document: {
+      head,
+      getElementById(id) {
+        return nodes.get(id) ?? null;
+      },
+      querySelector() {
+        return null;
+      },
+      createElement(tagName) {
+        if (tagName === "template") {
+          return {
+            content: { firstElementChild: null },
+            set innerHTML(value) {
+              const id = String(value).match(/id="([^"]+)"/)?.[1] ?? "surface-chart";
+              const root = makeNode(id);
+              const chart = makeNode("chart-node");
+              chart.hasChartSpec = true;
+              root.chartNodes = [chart];
+              this.content.firstElementChild = root;
+            }
+          };
+        }
+        return {
+          tagName: String(tagName).toUpperCase(),
+          addEventListener(eventName, listener) {
+            this[`on${eventName}`] = listener;
+          },
+          removeEventListener() {},
+          dispatchEvent(event) {
+            this[`on${event.type}`]?.(event);
+          },
+          setAttribute(name, value) {
+            this[name] = value;
+          }
+        };
+      }
+    },
+    window: runtimeWindow,
+    manifest: {
+      activeSurfaceId: "Surface.Home",
+      routeState: {
+        process: "ShellNavigation",
+        state: "ActiveRoute"
+      },
+      routeTargets: [
+        { key: "home", path: "/home", surfaceId: "Surface.Home" },
+        { key: "chart", path: "/chart", surfaceId: "Surface.Chart" }
+      ],
+      surfaces: [
+        {
+          id: "Surface.Home",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: [
+              {
+                target: "primary",
+                event: "click",
+                action: { kind: "deliver", message: "OpenChart" }
+              }
+            ]
+          },
+          view: {
+            rootId: "surface-home",
+            propTargets: {},
+            interactionTargets: { primary: [{ id: "home-to-chart" }] }
+          }
+        }
+      ],
+      processWitnesses: [
+        { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "home" } },
+        { process: "desire.defineMessage", body: { id: "OpenChart", role: "event", writes: { ActiveRoute: "chart" } } },
+        { process: "desire.defineProcess", body: {
+          id: "ShellNavigation",
+          state: ["ActiveRoute"],
+          handles: ["OpenChart"],
+          emits: [],
+          rules: []
+        } }
+      ]
+    },
+    createProcessRuntimeImpl({ witnesses }) {
+      return createProcessRuntime(witnesses);
+    }
+  });
+
+  await listeners.get("click")({ preventDefault() {}, target: homeButton });
+
+  assert.equal(runtimeWindow.location.pathname, "/chart");
+  assert.equal(runtimeWindow.__bootedRootIds.at(-1), "surface-chart");
+  assert.equal(appended.some(entry => entry.href === "/chart.css"), true);
+  assert.equal(appended.some(entry => entry.src === "/chart-lib.js"), true);
+  assert.equal(appended.some(entry => entry.type === "module"), true);
+  runtime.destroy();
+});
+
 test("createSurfaceInteractionRuntime swaps to the fetched route-local process fragment", async () => {
   const listeners = new Map();
   const nodes = new Map();
@@ -1216,7 +1452,7 @@ test("createSurfaceInteractionRuntime refetches an active route when the cached 
   });
 
   await listeners.get("login-button:click")({ preventDefault() {}, target: loginButton });
-  assert.deepEqual(fetches, ["/home", "/home"]);
+  assert.deepEqual(fetches.filter(path => path !== "/api/runtime/diagnostics"), ["/home", "/home"]);
   assert.equal(runtime.processRuntime.value("ProfileMenuVisible"), false);
   assert.doesNotThrow(() => runtime.processRuntime.deliver("SignOut"));
   runtime.destroy();
@@ -1364,6 +1600,101 @@ test("createSurfaceInteractionRuntime maps browser back through explicit authore
 
   runtime.destroy();
   assert.equal(listeners.has("popstate"), false);
+});
+
+test("createSurfaceInteractionRuntime installs a browser inspection point on window", async () => {
+  const nodes = new Map([
+    ["surface-home", {
+      id: "surface-home",
+      addEventListener() {},
+      removeEventListener() {}
+    }]
+  ]);
+  const runtimeWindow = {
+    location: { pathname: "/home" },
+    history: { pushState() {} },
+    console: { error() {} },
+    fetch: async path => ({
+      ok: path === "/api/runtime/diagnostics",
+      async json() {
+        return {
+          activeBundles: [{ id: "bundle-core-runtime" }],
+          plugins: { activePluginIds: ["plugin.chart-runtime"] }
+        };
+      }
+    })
+  };
+
+  const runtime = createSurfaceInteractionRuntime({
+    document: {
+      getElementById(id) {
+        return nodes.get(id) ?? null;
+      }
+    },
+    window: runtimeWindow,
+    manifest: {
+      activeSurfaceId: "Surface.Home",
+      browserRuntimeCapabilities: ["chart.render"],
+      capabilityAssets: {
+        stylesheetHrefs: ["/chart.css"],
+        scriptSrcs: ["/chart.js"],
+        inlineCss: [".chart{display:block}"],
+        scriptBodies: ["window.__chartBoot = true;"]
+      },
+      diagnostics: {
+        activeSurfaceId: "Surface.Home",
+        includedSurfaceIds: ["Surface.Home"],
+        includedRuntimeIds: ["ShellNavigation", "ActiveRoute"]
+      },
+      routeTargets: [
+        { key: "home", path: "/home", surfaceId: "Surface.Home" }
+      ],
+      surfaces: [
+        {
+          id: "Surface.Home",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-home",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        }
+      ],
+      processWitnesses: [
+        { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "home" } },
+        { process: "desire.defineProcess", body: {
+          id: "ShellNavigation",
+          state: ["ActiveRoute"],
+          handles: [],
+          emits: [],
+          rules: []
+        } }
+      ]
+    },
+    createProcessRuntimeImpl({ witnesses }) {
+      return createProcessRuntime(witnesses);
+    }
+  });
+
+  await Promise.resolve();
+  const inspection = runtimeWindow.world;
+  assert.equal(runtimeWindow.witnessWorld, inspection);
+  assert.equal(runtimeWindow.__surfaceRuntimeInspection, inspection);
+  assert.equal(inspection.activeSurfaceId, "Surface.Home");
+  assert.deepEqual(inspection.surfaceIds, ["Surface.Home"]);
+  assert.deepEqual(inspection.runtimeIds, ["ShellNavigation", "ActiveRoute"]);
+  assert.deepEqual(inspection.browserRuntimeCapabilities, ["chart.render"]);
+  assert.deepEqual(inspection.capabilityAssets.stylesheetHrefs, ["/chart.css"]);
+  assert.deepEqual(inspection.process.state, { ActiveRoute: "home" });
+  const diagnostics = await inspection.refreshServerDiagnostics();
+  assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.chart-runtime"]);
+  runtime.destroy();
 });
 
 test("createSurfaceInteractionRuntime falls back to full document navigation when same-document route replacement is unavailable", async () => {
@@ -1558,7 +1889,80 @@ test("buildSurfaceRuntimeManifest only carries process witnesses reachable from 
   assert.deepEqual(shellProcess.body.handles, ["OpenHome"]);
   assert.deepEqual(shellProcess.body.rules, []);
   assert.equal(manifest.diagnostics.activeSurfaceId, "Surface.Home");
-  assert.deepEqual(manifest.diagnostics.includedSurfaceIds.sort(), ["Surface.Home"]);
+  assert.deepEqual(manifest.diagnostics.includedSurfaceIds.sort(), ["Surface.Home", "Surface.Root"]);
   assert.deepEqual(manifest.diagnostics.includedRuntimeIds.sort(), ["ActiveRoute", "OpenHome", "ShellNavigation"]);
   assert.equal(manifest.diagnostics.serializedBytes > 0, true);
+});
+
+test("buildSurfaceRuntimeManifest preserves the active parent chain for reused shared surfaces", () => {
+  const world = {
+    allWitnesses() {
+      return [
+        { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "home" } },
+        { process: "desire.defineType", body: { id: "ProfileMenuVisible", role: "state", valueType: "bool", initial: false } },
+        { process: "desire.defineMessage", body: { id: "SignOutRequested", role: "event", writes: {} } },
+        {
+          process: "desire.defineProcess",
+          body: {
+            id: "ShellNavigation",
+            state: ["ActiveRoute", "ProfileMenuVisible"],
+            handles: ["SignOutRequested"],
+            emits: [],
+            rules: []
+          }
+        }
+      ];
+    }
+  };
+  const surfaces = new Map([
+    ["Surface.Root", {
+      id: "Surface.Root",
+      children: ["Surface.Home", "Surface.Module"],
+      processRef: "ShellNavigation"
+    }],
+    ["Surface.Home", {
+      id: "Surface.Home",
+      children: ["Surface.HomeChrome"]
+    }],
+    ["Surface.Module", {
+      id: "Surface.Module",
+      children: ["Surface.ModuleChrome"]
+    }],
+    ["Surface.HomeChrome", {
+      id: "Surface.HomeChrome",
+      children: ["Surface.ProfileSummary"]
+    }],
+    ["Surface.ModuleChrome", {
+      id: "Surface.ModuleChrome",
+      children: ["Surface.ProfileSummary"]
+    }],
+    ["Surface.ProfileSummary", {
+      id: "Surface.ProfileSummary",
+      interactions: [
+        {
+          target: "self",
+          event: "click",
+          action: {
+            kind: "setState",
+            state: "ProfileMenuVisible",
+            value: { kind: "toggleState", state: "ProfileMenuVisible" }
+          }
+        }
+      ],
+      props: { domId: "user-prof" }
+    }]
+  ]);
+
+  const manifest = buildSurfaceRuntimeManifest({
+    world,
+    root: surfaces.get("Surface.Root"),
+    activeSurface: surfaces.get("Surface.Module"),
+    surfaces,
+    rootSurfaceId: "Surface.Root",
+    requestPathname: "/module",
+    routeStateDescriptor: { process: "ShellNavigation", state: "ActiveRoute" }
+  });
+
+  const profile = manifest.surfaces.find(surface => surface.id === "Surface.ProfileSummary");
+  assert.equal(profile?.parentId, "Surface.ModuleChrome");
 });

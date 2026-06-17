@@ -67,6 +67,8 @@ test("runtime-surface-page composes static surface HTML with the generic interac
   assert.match(html, /surfaceRuntimeManifest/);
   assert.match(html, /SignInRequested/);
   assert.match(html, /createSurfaceInteractionRuntime/);
+  assert.match(html, /function normalizeCapabilityAssets/);
+  assert.doesNotMatch(html, /export function createProcessRuntime/);
   assert.doesNotMatch(html, /routeSurfaceFragments/);
   assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
 });
@@ -789,6 +791,63 @@ test("runtime-surface-page skips capability renderer factories when the active r
 
   assert.match(html, /<button id="primary-action">Sign in<\/button>/);
   assert.equal(rendererFactoryCalls, 0);
+});
+
+test("runtime-surface-page serializes active capability assets into the runtime manifest", () => {
+  const html = renderSurfacePage(fakeWorld([
+    {
+      process: "desire.defineProcess",
+      body: {
+        id: "ShellNavigation",
+        state: [],
+        handles: [],
+        emits: [],
+        rules: []
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SurfaceRoot",
+        surfaceKind: "app-root",
+        processRef: "ShellNavigation",
+        children: ["ChartRoute"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "ChartRoute",
+        surfaceKind: "chart",
+        capabilityRefs: ["chart.render"]
+      }
+    }
+  ]), {
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/chart",
+    surfaceCapabilityRenderers: [{
+      id: "test.chart",
+      capability: "chart.render",
+      factory() {
+        return {
+          capability: "chart.render",
+          stylesheetHrefs: ["/chart.css"],
+          scriptSrcs: ["/chart.js"],
+          inlineCss: ".chart{display:block}",
+          scriptBody: "window.__chartBoot = true;",
+          renderSurface() {
+            return "<figure>chart</figure>";
+          }
+        };
+      }
+    }]
+  });
+
+  assert.match(html, /"capabilityAssets":\{/);
+  assert.match(html, /"stylesheetHrefs":\["\/chart\.css"\]/);
+  assert.match(html, /"scriptSrcs":\["\/chart\.js"\]/);
+  assert.match(html, /"inlineCss":\["\.chart\{display:block\}"\]/);
+  assert.match(html, /"scriptBodies":\["window\.__chartBoot = true;"\]/);
 });
 
 test("runtime-surface-page reuses cached world-derived surface data across repeated renders", () => {

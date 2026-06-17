@@ -426,6 +426,9 @@ export function createProcessRuntime(world, options = {}) {
 }
 
 export function renderProcessRuntimeModuleSource() {
+  const createProcessRuntimeSource = createProcessRuntime
+    .toString()
+    .replace(/^export\s+/, "");
   return String.raw`
 const KIND_BY_PROCESS = {
   "desire.defineProcess": "process",
@@ -450,6 +453,6 @@ ${witnessesOf.toString()}
 
 ${coerce.toString()}
 
-${createProcessRuntime.toString()}
+${createProcessRuntimeSource}
 `;
 }

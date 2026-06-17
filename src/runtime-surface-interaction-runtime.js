@@ -27,6 +27,28 @@ function normalizeRuntimeObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? structuredClone(value) : {};
 }
 
+function cloneInspectionValue(value) {
+  if (value == null) return value;
+  try {
+    return structuredClone(value);
+  } catch {
+    return JSON.parse(JSON.stringify(value));
+  }
+}
+
+function normalizeCapabilityAssets(value) {
+  const assets = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const readList = key => [...new Set((Array.isArray(assets[key]) ? assets[key] : [])
+    .map(entry => String(entry ?? "").trim())
+    .filter(Boolean))];
+  return {
+    stylesheetHrefs: readList("stylesheetHrefs"),
+    scriptSrcs: readList("scriptSrcs"),
+    inlineCss: readList("inlineCss"),
+    scriptBodies: readList("scriptBodies")
+  };
+}
+
 function runtimeSpecForSurface(surface) {
   return {
     processRef: trimString(surface?.processRef),
@@ -474,6 +496,7 @@ export function buildSurfaceRuntimeManifest({
   activeSurface,
   surfaces,
   browserRuntimeCapabilities = [],
+  capabilityAssets = null,
   rootSurfaceId = null,
   requestPathname = "/",
   describeSurfaceRuntimeViewImpl = null,
@@ -496,26 +519,34 @@ export function buildSurfaceRuntimeManifest({
   }
   const routeTargets = collectRouteTargets(surfaces, rootId);
   const includedIds = new Set();
+  const includedParentById = new Map();
   const markActiveClosure = surfaceId => {
-    const queue = [trimString(surfaceId)];
+    const queue = [{
+      id: trimString(surfaceId),
+      parentId: trimString(parentById.get(surfaceId)) || null
+    }];
     const seen = new Set();
     while (queue.length) {
-      const currentId = queue.shift();
+      const next = queue.shift();
+      const currentId = trimString(next?.id);
       if (!currentId || seen.has(currentId)) continue;
       seen.add(currentId);
       includedIds.add(currentId);
+      includedParentById.set(currentId, trimString(next?.parentId) || null);
       const surface = surfaces.get(currentId);
       for (const childId of Array.isArray(surface?.children) ? surface.children : []) {
         const child = trimString(childId);
-        if (child) queue.push(child);
+        if (child) queue.push({ id: child, parentId: currentId });
       }
     }
   };
   const markAncestors = surfaceId => {
     let currentId = trimString(surfaceId);
-    while (currentId && !includedIds.has(currentId)) {
+    while (currentId) {
       includedIds.add(currentId);
-      currentId = trimString(parentById.get(currentId));
+      const nextParentId = trimString(parentById.get(currentId)) || null;
+      if (!includedParentById.has(currentId)) includedParentById.set(currentId, nextParentId);
+      currentId = nextParentId;
     }
   };
   markActiveClosure(activeSurface.id);
@@ -529,7 +560,7 @@ export function buildSurfaceRuntimeManifest({
     const view = describeSurfaceRuntimeView(surface, { describeSurfaceRuntimeViewImpl });
     surfaceEntries.push({
       id: surface.id,
-      parentId: parentById.get(surface.id) ?? null,
+      parentId: includedParentById.get(surface.id) ?? null,
       surfaceKind: surface.surfaceKind ?? null,
       props: normalizeRuntimeObject(surface.props),
       runtime,
@@ -552,6 +583,7 @@ export function buildSurfaceRuntimeManifest({
     requestPathname,
     routeTargets,
     browserRuntimeCapabilities: [...new Set((browserRuntimeCapabilities ?? []).map(value => String(value || "")).filter(Boolean))],
+    capabilityAssets: normalizeCapabilityAssets(capabilityAssets),
     surfaces: surfaceEntries,
     processWitnesses: runtimeFragment.processWitnesses,
     routeState: normalizeRouteStateDescriptor(routeStateDescriptor),
@@ -957,6 +989,233 @@ function bootSurfaceCapabilities(window, root) {
   }
 }
 
+function capabilityAssetHash(value) {
+  const text = String(value ?? "");
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function waitForNodeLoad(node) {
+  return new Promise((resolve, reject) => {
+    if (!node || typeof node.addEventListener !== "function") {
+      resolve();
+      return;
+    }
+    const cleanup = () => {
+      node.removeEventListener?.("load", onLoad);
+      node.removeEventListener?.("error", onError);
+    };
+    const onLoad = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = error => {
+      cleanup();
+      reject(error instanceof Error ? error : new Error("surface capability asset failed to load"));
+    };
+    node.addEventListener("load", onLoad, { once: true });
+    node.addEventListener("error", onError, { once: true });
+  });
+}
+
+async function ensureSurfaceCapabilityAssets(document, window, capabilityAssets) {
+  const assets = normalizeCapabilityAssets(capabilityAssets);
+  const registry = window?.__surfaceCapabilityAssetRegistry && typeof window.__surfaceCapabilityAssetRegistry === "object"
+    ? window.__surfaceCapabilityAssetRegistry
+    : (window.__surfaceCapabilityAssetRegistry = {
+        stylesheets: new Set(),
+        scripts: new Set(),
+        inlineStyles: new Set(),
+        inlineModules: new Set()
+      });
+  const head = document?.head ?? document?.documentElement ?? document?.body ?? null;
+  if (!head) return;
+
+  for (const href of assets.stylesheetHrefs) {
+    if (registry.stylesheets.has(href)) continue;
+    if (typeof document?.querySelector === "function" && document.querySelector(`link[rel="stylesheet"][href="${href}"]`)) {
+      registry.stylesheets.add(href);
+      continue;
+    }
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = href;
+    head.appendChild(link);
+    registry.stylesheets.add(href);
+  }
+
+  for (const cssText of assets.inlineCss) {
+    const key = capabilityAssetHash(cssText);
+    if (registry.inlineStyles.has(key)) continue;
+    if (typeof document?.querySelector === "function" && document.querySelector(`style[data-surface-capability-style="${key}"]`)) {
+      registry.inlineStyles.add(key);
+      continue;
+    }
+    const style = document.createElement("style");
+    style.setAttribute("data-surface-capability-style", key);
+    style.textContent = cssText;
+    head.appendChild(style);
+    registry.inlineStyles.add(key);
+  }
+
+  for (const src of assets.scriptSrcs) {
+    if (registry.scripts.has(src)) continue;
+    if (typeof document?.querySelector === "function" && document.querySelector(`script[src="${src}"]`)) {
+      registry.scripts.add(src);
+      continue;
+    }
+    const script = document.createElement("script");
+    script.src = src;
+    head.appendChild(script);
+    await waitForNodeLoad(script);
+    registry.scripts.add(src);
+  }
+
+  for (const moduleSource of assets.scriptBodies) {
+    const key = capabilityAssetHash(moduleSource);
+    if (registry.inlineModules.has(key)) continue;
+    if (typeof document?.querySelector === "function" && document.querySelector(`script[data-surface-capability-module="${key}"]`)) {
+      registry.inlineModules.add(key);
+      continue;
+    }
+    const script = document.createElement("script");
+    script.type = "module";
+    script.setAttribute("data-surface-capability-module", key);
+    script.textContent = moduleSource;
+    head.appendChild(script);
+    await waitForNodeLoad(script);
+    registry.inlineModules.add(key);
+  }
+}
+
+function surfaceAssetRegistrySnapshot(window) {
+  const registry = window?.__surfaceCapabilityAssetRegistry && typeof window.__surfaceCapabilityAssetRegistry === "object"
+    ? window.__surfaceCapabilityAssetRegistry
+    : null;
+  const list = value => value instanceof Set ? [...value] : [];
+  return {
+    stylesheets: list(registry?.stylesheets),
+    scripts: list(registry?.scripts),
+    inlineStyles: list(registry?.inlineStyles),
+    inlineModules: list(registry?.inlineModules)
+  };
+}
+
+function createSurfaceInspectionPoint({ window, manifest, runtime }) {
+  const fetchServerDiagnostics = async () => {
+    const fetchImpl = typeof window?.fetch === "function" ? window.fetch.bind(window) : null;
+    if (!fetchImpl) return null;
+    const response = await fetchImpl("/api/runtime/diagnostics", {
+      headers: { accept: "application/json" }
+    });
+    if (!response?.ok) {
+      throw new Error(`runtime diagnostics fetch failed (${response?.status ?? "unknown"})`);
+    }
+    return await response.json();
+  };
+  const inspection = {
+    kind: "surface-runtime-inspection",
+    diagnosticsUrl: "/api/runtime/diagnostics",
+    get manifest() {
+      return cloneInspectionValue(manifest);
+    },
+    get activeSurfaceId() {
+      return runtime?.activeSurfaceId ?? manifest?.activeSurfaceId ?? null;
+    },
+    get surfaceIds() {
+      return typeof runtime?.surfaceIds !== "undefined"
+        ? cloneInspectionValue(runtime.surfaceIds)
+        : (manifest?.surfaces ?? []).map(surface => surface.id);
+    },
+    get routeTargets() {
+      return typeof runtime?.routeTargets !== "undefined"
+        ? cloneInspectionValue(runtime.routeTargets)
+        : cloneInspectionValue(manifest?.routeTargets ?? []);
+    },
+    get runtimeIds() {
+      return cloneInspectionValue(manifest?.diagnostics?.includedRuntimeIds ?? []);
+    },
+    get browserRuntimeCapabilities() {
+      return cloneInspectionValue(manifest?.browserRuntimeCapabilities ?? []);
+    },
+    get capabilityAssets() {
+      return cloneInspectionValue(manifest?.capabilityAssets ?? null);
+    },
+    get loadedCapabilityAssets() {
+      return surfaceAssetRegistrySnapshot(window);
+    },
+    get capabilityBootHookCount() {
+      return Array.isArray(window?.__surfaceCapabilityBootHooks)
+        ? window.__surfaceCapabilityBootHooks.length
+        : 0;
+    },
+    get routeDebugLog() {
+      return typeof runtime?.routeDebugLog !== "undefined"
+        ? cloneInspectionValue(runtime.routeDebugLog)
+        : [];
+    },
+    get lastRouteSwap() {
+      return cloneInspectionValue(runtime?.lastRouteSwap ?? null);
+    },
+    get process() {
+      const processRuntime = runtime?.processRuntime ?? null;
+      if (!processRuntime) return null;
+      return {
+        counts: cloneInspectionValue(processRuntime.counts ?? null),
+        inFlightCount: Number(processRuntime.inFlightCount ?? 0),
+        state: cloneInspectionValue(typeof processRuntime.snapshot === "function" ? processRuntime.snapshot() : null),
+        derives: cloneInspectionValue(typeof processRuntime.derives === "function" ? processRuntime.derives() : null),
+        traceLength: Array.isArray(processRuntime.trace) ? processRuntime.trace.length : 0
+      };
+    },
+    inspect() {
+      return {
+        kind: this.kind,
+        activeSurfaceId: this.activeSurfaceId,
+        surfaceIds: this.surfaceIds,
+        routeTargets: this.routeTargets,
+        runtimeIds: this.runtimeIds,
+        browserRuntimeCapabilities: this.browserRuntimeCapabilities,
+        capabilityAssets: this.capabilityAssets,
+        loadedCapabilityAssets: this.loadedCapabilityAssets,
+        capabilityBootHookCount: this.capabilityBootHookCount,
+        lastRouteSwap: this.lastRouteSwap,
+        routeDebugLog: this.routeDebugLog,
+        process: this.process,
+        manifestDiagnostics: cloneInspectionValue(manifest?.diagnostics ?? null)
+      };
+    },
+    async refreshServerDiagnostics() {
+      const diagnostics = await fetchServerDiagnostics();
+      this.serverDiagnostics = diagnostics;
+      return diagnostics;
+    },
+    serverDiagnostics: null
+  };
+  return inspection;
+}
+
+function installSurfaceInspectionPoint(window, manifest, runtime) {
+  if (!window || typeof window !== "object") return null;
+  const inspection = createSurfaceInspectionPoint({ window, manifest, runtime });
+  window.world = inspection;
+  window.witnessWorld = inspection;
+  window.__surfaceRuntimeInspection = inspection;
+  if (typeof window.fetch === "function") {
+    Promise.resolve(inspection.refreshServerDiagnostics()).catch(error => {
+      inspection.serverDiagnosticsError = {
+        name: error?.name || "Error",
+        message: String(error?.message || error)
+      };
+    });
+  }
+  return inspection;
+}
+
 function clearRouteUnderlay(document) {
   const layer = document?.getElementById?.("surface-route-underlay");
   if (layer?.parentNode) layer.parentNode.removeChild(layer);
@@ -1175,6 +1434,7 @@ export function createSurfaceInteractionRuntime({
       manifest.routeTargets = page.manifest.routeTargets ?? manifest.routeTargets;
       manifest.routeState = page.manifest.routeState ?? manifest.routeState;
       manifest.browserRuntimeCapabilities = page.manifest.browserRuntimeCapabilities ?? manifest.browserRuntimeCapabilities;
+      manifest.capabilityAssets = normalizeCapabilityAssets(page.manifest.capabilityAssets ?? manifest.capabilityAssets);
       manifest.processWitnesses = page.manifest.processWitnesses ?? manifest.processWitnesses;
       replaceProcessRuntime(manifest.processWitnesses || []);
       surfaceById = new Map((manifest.surfaces ?? []).map(surface => [surface.id, surface]));
@@ -1184,6 +1444,7 @@ export function createSurfaceInteractionRuntime({
     }
     manifest.activeSurfaceId = activeSurfaceId;
     fallbackNavigationPath = null;
+    await ensureSurfaceCapabilityAssets(document, window, manifest.capabilityAssets);
     bootSurfaceCapabilities(window, nextRoot);
     clearRouteUnderlay(document);
     lastRouteSwap = {
@@ -1201,6 +1462,7 @@ export function createSurfaceInteractionRuntime({
     });
     return true;
   };
+  void ensureSurfaceCapabilityAssets(document, window, manifest.capabilityAssets);
   const currentProcessRefs = () => [...new Set((manifest.surfaces ?? [])
     .map(surface => resolveSurfaceRuntimeBinding(manifest, surface.id).processRef)
     .filter(Boolean))];
@@ -1356,7 +1618,7 @@ export function createSurfaceInteractionRuntime({
   bindInteractions();
 
   void refresh();
-  return {
+  const runtime = {
     refresh() {
       return requestSyncRouteAndRefresh();
     },
@@ -1389,6 +1651,8 @@ export function createSurfaceInteractionRuntime({
       for (const dispose of runtimeDisposers.splice(0)) dispose();
     }
   };
+  installSurfaceInspectionPoint(window, manifest, runtime);
+  return runtime;
 }
 
 function browserHelpersSource() {
@@ -1435,6 +1699,14 @@ function browserHelpersSource() {
     parseRouteSurfacePage.toString(),
     loadRouteSurfacePage.toString(),
     bootSurfaceCapabilities.toString(),
+    capabilityAssetHash.toString(),
+    waitForNodeLoad.toString(),
+    normalizeCapabilityAssets.toString(),
+    ensureSurfaceCapabilityAssets.toString(),
+    cloneInspectionValue.toString(),
+    surfaceAssetRegistrySnapshot.toString(),
+    createSurfaceInspectionPoint.toString(),
+    installSurfaceInspectionPoint.toString(),
     clearRouteUnderlay.toString(),
     updateRouteUnderlay.toString(),
     `function formatInlineText(value) { return SURFACE_INTERACTION_FORMATTERS.formattedText(value); }`,
@@ -1442,13 +1714,27 @@ function browserHelpersSource() {
     createSurfaceInteractionRuntime.toString(),
     `function bootSurfaceInteractionRuntime(manifest) {
   if (!manifest || !Array.isArray(manifest.surfaces) || !manifest.surfaces.length) return;
+  let started = false;
   const start = () => {
-    window.__surfaceInteractionRuntime = createSurfaceInteractionRuntime({
-      document,
-      window,
-      manifest,
-      createProcessRuntimeImpl: createProcessRuntime
-    });
+    if (started) return;
+    started = true;
+    window.__surfaceRuntimeBootStarted = true;
+    try {
+      window.__surfaceInteractionRuntime = createSurfaceInteractionRuntime({
+        document,
+        window,
+        manifest,
+        createProcessRuntimeImpl: createProcessRuntime
+      });
+      window.__surfaceRuntimeBootError = null;
+    } catch (error) {
+      window.__surfaceRuntimeBootError = {
+        name: error?.name || "Error",
+        message: String(error?.message || error),
+        stack: String(error?.stack || "")
+      };
+      throw error;
+    }
   };
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", start, { once: true });
@@ -1463,12 +1749,26 @@ let cachedSurfaceInteractionRuntimeModuleSource = null;
 
 export function renderSurfaceInteractionRuntimeModule(manifest) {
   if (!cachedSurfaceInteractionRuntimeModuleSource) {
-    cachedSurfaceInteractionRuntimeModuleSource = `${renderProcessRuntimeModuleSource()}
+    cachedSurfaceInteractionRuntimeModuleSource = `const __surfaceRuntimeGlobal = typeof window === "object" && window
+  ? window
+  : (typeof self === "object" && self ? self : {});
+__surfaceRuntimeGlobal.__surfaceRuntimeModuleLoaded = true;
+
+${renderProcessRuntimeModuleSource()}
 
 ${browserHelpersSource()}
 
-const surfaceRuntimeManifest = readSurfaceRuntimeManifest(document);
-bootSurfaceInteractionRuntime(surfaceRuntimeManifest);
+try {
+  const surfaceRuntimeManifest = readSurfaceRuntimeManifest(document);
+  bootSurfaceInteractionRuntime(surfaceRuntimeManifest);
+} catch (error) {
+  __surfaceRuntimeGlobal.__surfaceRuntimeBootError = {
+    name: error?.name || "Error",
+    message: String(error?.message || error),
+    stack: String(error?.stack || "")
+  };
+  throw error;
+}
 `;
   }
   return cachedSurfaceInteractionRuntimeModuleSource;

@@ -16,7 +16,7 @@ function escapeScriptBody(source) {
 function injectInteractionRuntime(html, manifest) {
   if (!manifest) return html;
   const manifestScript = `<script type="application/json" id="surface-runtime-manifest">${escapeScriptBody(JSON.stringify(manifest))}</script>`;
-  const script = `<script>\n${escapeScriptBody(renderSurfaceInteractionRuntimeModule())}\n</script>`;
+  const script = `<script type="module">\n${escapeScriptBody(renderSurfaceInteractionRuntimeModule())}\n</script>`;
   return String(html).includes("</body>")
     ? String(html).replace("</body>", `    ${manifestScript}\n    ${script}\n  </body>`)
     : `${html}\n${manifestScript}\n${script}`;
@@ -52,6 +52,20 @@ function buildSurfaceRenderers(rendererProviders = [], context = {}) {
     .filter(renderer => renderer && typeof renderer.renderSurface === "function");
 }
 
+function capabilityAssetsForRenderers(renderers = []) {
+  const stylesheetHrefs = uniqueStrings(renderers.flatMap(renderer => renderer.stylesheetHrefs ?? []));
+  const scriptSrcs = uniqueStrings(renderers.flatMap(renderer => renderer.scriptSrcs ?? []));
+  const inlineCss = uniqueStrings(renderers.map(renderer => renderer.inlineCss ?? ""));
+  const scriptBodies = uniqueStrings(renderers.map(renderer => String(renderer.scriptBody ?? "").trim()).filter(Boolean));
+  if (!stylesheetHrefs.length && !scriptSrcs.length && !inlineCss.length && !scriptBodies.length) return null;
+  return {
+    stylesheetHrefs,
+    scriptSrcs,
+    inlineCss,
+    scriptBodies
+  };
+}
+
 function activeSurfaceCapabilityRefs(surfaces, activeSurfaceId) {
   const required = new Set();
   const queue = [String(activeSurfaceId || "").trim()];
@@ -75,11 +89,9 @@ function activeSurfaceCapabilityRefs(surfaces, activeSurfaceId) {
 }
 
 function injectCapabilityAssets(html, renderers = []) {
-  if (!renderers.length) return html;
-  const stylesheetHrefs = uniqueStrings(renderers.flatMap(renderer => renderer.stylesheetHrefs ?? []));
-  const scriptSrcs = uniqueStrings(renderers.flatMap(renderer => renderer.scriptSrcs ?? []));
-  const inlineCss = uniqueStrings(renderers.map(renderer => renderer.inlineCss ?? ""));
-  const scriptBodies = renderers.map(renderer => String(renderer.scriptBody ?? "").trim()).filter(Boolean);
+  const assets = capabilityAssetsForRenderers(renderers);
+  if (!assets) return html;
+  const { stylesheetHrefs, scriptSrcs, inlineCss, scriptBodies } = assets;
   const headAssets = [
     ...stylesheetHrefs.map(href => `<link rel="stylesheet" href="${escapeAttr(href)}">`),
     ...scriptSrcs.map(src => `<script src="${escapeAttr(src)}"></script>`),
@@ -141,6 +153,7 @@ export function renderSurfacePage(world, {
       })
     : shellState;
   if (!shell?.html) return null;
+  const capabilityAssets = capabilityAssetsForRenderers(surfaceRenderers);
   const manifest = buildSurfaceRuntimeManifest({
     world,
     root: shell.rootSurface,
@@ -150,6 +163,7 @@ export function renderSurfacePage(world, {
       ...(browserRuntimeCapabilities ?? []),
       ...surfaceRenderers.map(renderer => renderer.capability)
     ]),
+    capabilityAssets,
     rootSurfaceId,
     requestPathname: shell.requestPathname,
     routeStateDescriptor
