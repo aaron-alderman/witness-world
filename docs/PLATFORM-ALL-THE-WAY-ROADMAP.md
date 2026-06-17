@@ -278,12 +278,13 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] `conflict:<changeSetId>:<pathHash>`
 - [~] Add canonical status values for change sets:
   - [X] `draft`
-  - [ ] `validating`
+  - [X] `validating`
   - [X] `valid`
   - [X] `invalid`
   - [X] `applied`
   - [X] `rejected`
   - [X] `abandoned`
+- [L] V1 now witnesses `validating` as a transient in-progress change-set status during synchronous overlay validation; long-running async validation remains later work.
 - [~] Add canonical status values for branches:
   - [X] `open`
   - [X] `valid`

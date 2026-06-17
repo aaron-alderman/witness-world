@@ -219,6 +219,10 @@ export const platformModuleProjectors = {
         row.status = "draft";
         continue;
       }
+      if (witness.process === "platform.changeSet.validate.start") {
+        row.status = "validating";
+        continue;
+      }
       if (witness.process === "platform.changeSet.validate") {
         row.status = String(witness.body.status || row.status);
         row.latestCandidateSnapshotId = witness.body.candidateSnapshot?.id ?? row.latestCandidateSnapshotId;

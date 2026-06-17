@@ -666,12 +666,31 @@ export async function stagePlatformChangeSetEdits(world, {
 export async function validatePlatformChangeSet(world, {
   actor,
   changeSetId,
-  session = null
+  session = null,
+  hooks = null
 }) {
   const current = world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? null;
   if (!current) return { ok: false, status: 404, error: "change set not found" };
   const immutable = immutableChangeSetStatusError(current, "validate");
   if (immutable) return immutable;
+  const startWitness = world.emit({
+    process: "platform.changeSet.validate.start",
+    actor,
+    claims: [],
+    body: {
+      id: changeSetId,
+      branchId: current.branchId,
+      session: session?.id ?? null,
+      status: "validating",
+      startedAt: nowIso()
+    }
+  });
+  if (typeof hooks?.beforeInspect === "function") {
+    await hooks.beforeInspect({
+      startWitness,
+      changeSet: world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? current
+    });
+  }
   const inspected = await inspectPlatformChangeSet(world, changeSetId);
   if (!inspected.ok) return inspected;
   const { changeSet, previousActive, revision, candidateSnapshotId, files, errors } = inspected;
@@ -731,6 +750,7 @@ export async function validatePlatformChangeSet(world, {
   return {
     ok: true,
     status: 200,
+    startWitness,
     witness,
     revisionEvent,
     changeSet: world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? changeSet,

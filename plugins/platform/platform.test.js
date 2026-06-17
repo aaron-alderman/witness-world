@@ -11,7 +11,7 @@ import { buildPlatformModel, filterPlatformModel, parseRoadmapTasks, PLATFORM_LI
 import { renderPlatformPage } from "./platform-page.js";
 import { buildPlatformProposalCreateBody, platformProposalTemplates } from "./platform-proposals.js";
 import { executePlatformProposalTarget } from "./platform-proposal-targets.js";
-import { applyPlatformChangeSet } from "./change-sets.js";
+import { applyPlatformChangeSet, readPlatformBranch, validatePlatformChangeSet } from "./change-sets.js";
 import { renderPlatformConsoleCss } from "./platform-style.js";
 
 async function createTempPlatformApplyFixture() {
@@ -822,6 +822,59 @@ test("platform change-set handlers stage overlays and validate candidate snapsho
   assert.equal(sent.at(-1).body.candidateSnapshot.status, "valid");
   assert.equal(Boolean(sent.at(-1).body.revisionEvent?.id), true);
   assert.equal(world.project(moduleProjectors.candidateSnapshotIndex).rows.length, 1);
+}));
+
+test("platform change-set validation exposes a transient validating status before final result", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    sendGateFailure: () => {},
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.changeSet.create"]({
+    req: { body: { id: "changeset.validating", branchId: "branch.validating" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+
+  const rvm = await readFile(new URL("./platform-console.rvm", import.meta.url), "utf8");
+  await handlers["platform.changeSet.edit"]({
+    req: { body: { edits: [{ path: "plugins/platform/platform-console.rvm", content: `${rvm}\n` }] } },
+    res: {},
+    params: { id: "changeset.validating" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+
+  const result = await validatePlatformChangeSet(world, {
+    actor: "aaron",
+    changeSetId: "changeset.validating",
+    session: { id: "session.platform" },
+    hooks: {
+      beforeInspect() {
+        assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.validating"].status, "validating");
+        const branch = readPlatformBranch(world, "branch.validating");
+        assert.equal(branch.ok, true);
+        assert.equal(branch.branch.lifecycleLane, "validate");
+      }
+    }
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.startWitness?.body?.status, "validating");
+  assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.validating"].status, "valid");
+  assert.equal(result.candidateSnapshot.status, "valid");
 }));
 
 test("platform branch handlers create, list, and read branch detail", async () => withRegisteredPluginProjectors(providers, async () => {

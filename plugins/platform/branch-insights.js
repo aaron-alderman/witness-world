@@ -111,7 +111,7 @@ export function platformBranchLifecycle(branch, {
     lifecycleLane = "apply";
   } else if (
     status === "blocked"
-    || branchChangeSets.some(row => ["draft", "invalid"].includes(String(row?.status || "")))
+    || branchChangeSets.some(row => ["draft", "validating", "invalid"].includes(String(row?.status || "")))
   ) {
     lifecycleLane = "validate";
   }
