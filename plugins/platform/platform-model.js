@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { moduleProjectors } from "../../src/modules.js";
+import { platformBranchLifecycle, PLATFORM_BRANCH_LIFECYCLE_LANES } from "./change-sets.js";
 import { platformProposalTemplates } from "./platform-proposals.js";
 
 export const PLATFORM_LIFECYCLES = Object.freeze([
@@ -170,6 +171,27 @@ function summarize(nodes, edges, profiles = []) {
   };
 }
 
+function buildBranchBoard(branches = []) {
+  const lanes = PLATFORM_BRANCH_LIFECYCLE_LANES.map(id => ({ id, title: id, branches: [] }));
+  const byId = Object.fromEntries(lanes.map(lane => [lane.id, lane]));
+  for (const branch of branches) {
+    const lane = byId[String(branch.lifecycleLane || "draft")] ?? byId.draft;
+    lane.branches.push({
+      id: branch.id,
+      title: branch.title || branch.id,
+      status: branch.status || "open",
+      changeSetCount: Array.isArray(branch.changeSetIds) ? branch.changeSetIds.length : 0,
+      reviewProposalCount: Array.isArray(branch.reviewProposalIds) ? branch.reviewProposalIds.length : 0,
+      latestCandidateSnapshotId: branch.latestCandidateSnapshotId ?? null
+    });
+  }
+  for (const lane of lanes) {
+    lane.branches.sort((left, right) => String(left.id).localeCompare(String(right.id)));
+    lane.count = lane.branches.length;
+  }
+  return lanes;
+}
+
 function buildGaps(nodes, edges) {
   const incoming = new Map();
   const outgoing = new Map();
@@ -328,7 +350,13 @@ export async function buildPlatformModel({
   const proposals = projectRows(project, moduleProjectors.proposals);
   const changeSets = projectRows(project, moduleProjectors.changeSets);
   const changeSetEdits = projectRows(project, moduleProjectors.changeSetEdits);
-  const branches = projectRows(project, moduleProjectors.branches);
+  const branches = projectRows(project, moduleProjectors.branches).map(branch => ({
+    ...branch,
+    ...platformBranchLifecycle(branch, {
+      changeSets: changeSets.filter(changeSet => changeSet.branchId === branch.id),
+      proposals
+    })
+  }));
   const candidateSnapshots = projectRows(project, moduleProjectors.candidateSnapshots);
 
   for (const row of pluginPackages) {
@@ -655,6 +683,7 @@ export async function buildPlatformModel({
   const gaps = buildGaps(nodes, edges);
   return {
     lifecycleVocabulary: [...PLATFORM_LIFECYCLES],
+    branchLifecycleVocabulary: [...PLATFORM_BRANCH_LIFECYCLE_LANES],
     nodes: [...nodes.values()].sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id)),
     edges: [...edges.values()].sort((a, b) => a.from.localeCompare(b.from) || a.rel.localeCompare(b.rel) || a.to.localeCompare(b.to)),
     summaries: summarize(nodes, edges, profiles),
@@ -663,6 +692,7 @@ export async function buildPlatformModel({
     proposals: proposals.map(row => ({ ...row })),
     proposalActions: platformProposalTemplates(),
     branches: branches.map(row => ({ ...row })),
+    branchBoard: buildBranchBoard(branches),
     changeSets: changeSets.map(row => ({ ...row })),
     changeSetEdits: changeSetEdits.map(row => ({ ...row })),
     candidateSnapshots: candidateSnapshots.map(row => ({ ...row })),
@@ -677,7 +707,7 @@ export function filterPlatformModel(model, view, id = null) {
   if (view === "proposals") return { proposals: model.proposals, proposalActions: model.proposalActions, summaries: model.summaries };
   if (view === "branches") {
     const branches = id ? model.branches.filter(row => row.id === id) : model.branches;
-    return { branches, summaries: model.summaries };
+    return { branches, branchBoard: model.branchBoard, branchLifecycleVocabulary: model.branchLifecycleVocabulary, summaries: model.summaries };
   }
   if (view === "changeSets") {
     const changeSets = id ? model.changeSets.filter(row => row.id === id) : model.changeSets;

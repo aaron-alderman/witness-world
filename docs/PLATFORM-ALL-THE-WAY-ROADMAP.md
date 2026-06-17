@@ -366,13 +366,13 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Branches have affected system summaries.
 - [X] Add Platform Console branch list view.
 - [X] Add branch detail page or panel.
-- [ ] Add branch lifecycle board lane:
-  - [ ] draft
-  - [ ] validate
-  - [ ] review
-  - [ ] apply
-  - [ ] push
-  - [ ] ship
+- [X] Add branch lifecycle board lane:
+  - [X] draft
+  - [X] validate
+  - [X] review
+  - [X] apply
+  - [X] push
+  - [X] ship
 - [L] Automatic branch creation currently happens when approving `changeSet.create` without a supplied branch, preserving proposal non-mutation at creation time.
   - [ ] observe
 

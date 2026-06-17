@@ -24,6 +24,22 @@ function lifecycleColumn(model, lifecycle) {
   `;
 }
 
+function branchBoardColumn(lane) {
+  return `
+    <section class="platform-column" data-branch-lane="${esc(lane.id)}">
+      <h3>${esc(lane.title)}</h3>
+      <div class="muted">${esc(lane.count)} branch${lane.count === 1 ? "" : "es"}</div>
+      ${lane.branches.map(branch => `
+        <div class="platform-chip">
+          ${esc(branch.title)}
+          <span>${esc(branch.status)}</span>
+          <div class="muted">change sets ${esc(branch.changeSetCount)}${branch.reviewProposalCount ? `, review ${esc(branch.reviewProposalCount)}` : ""}</div>
+        </div>
+      `).join("")}
+    </section>
+  `;
+}
+
 function tableRows(rows, cells) {
   return rows.map(row => `<tr>${cells.map(cell => `<td>${esc(cell(row))}</td>`).join("")}</tr>`).join("");
 }
@@ -39,6 +55,7 @@ export function renderPlatformPage(model) {
   const roadmapTasks = model.roadmapTasks ?? [];
   const proposalActions = model.proposalActions ?? [];
   const proposals = model.proposals ?? [];
+  const branchBoard = model.branchBoard ?? [];
   const openProposals = proposals.filter(row => row.status === "open");
   const initialBranch = branches[0] ?? null;
   const initialState = JSON.stringify(model).replaceAll("<", "\\u003c");
@@ -69,6 +86,11 @@ export function renderPlatformPage(model) {
     <section>
       <h2>Lifecycle Board</h2>
       <div class="board">${lifecycle.map(item => lifecycleColumn(model, item)).join("")}</div>
+    </section>
+
+    <section>
+      <h2>Branch Board</h2>
+      <div class="board">${branchBoard.map(lane => branchBoardColumn(lane)).join("")}</div>
     </section>
 
     <section class="grid2">
@@ -193,9 +215,10 @@ export function renderPlatformPage(model) {
       <div>
         <h2>Branches</h2>
         <table>
-          <thead><tr><th>Status</th><th>Branch</th><th>Parent</th><th>Owner</th><th>Change Sets</th><th>Latest Candidate</th></tr></thead>
+          <thead><tr><th>Status</th><th>Lane</th><th>Branch</th><th>Parent</th><th>Owner</th><th>Change Sets</th><th>Latest Candidate</th></tr></thead>
           <tbody>${tableRows(branches.slice(0, 80), [
             row => row.status,
+            row => row.lifecycleLane || "",
             row => row.id,
             row => row.parentBranchId || "",
             row => row.owner || "",

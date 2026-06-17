@@ -10,6 +10,7 @@ import { moduleProjectors } from "../../src/modules.js";
 const pluginDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(pluginDir, "..", "..");
 const ALLOWED_ROOTS = Object.freeze(["docs", "plugins", "src", "store", "test"]);
+export const PLATFORM_BRANCH_LIFECYCLE_LANES = Object.freeze(["draft", "validate", "review", "apply", "push", "ship"]);
 
 function nowIso() {
   return new Date().toISOString();
@@ -17,6 +18,15 @@ function nowIso() {
 
 function normalizeSlashes(value) {
   return String(value || "").replaceAll("\\", "/");
+}
+
+function safeProjectRows(world, projector) {
+  try {
+    const rows = world.project(projector);
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
 }
 
 function hashText(text) {
@@ -457,12 +467,14 @@ function branchDetail(world, branchId) {
   const branchIndex = world.project(moduleProjectors.branchIndex);
   const changeSetIndex = world.project(moduleProjectors.changeSetIndex);
   const snapshotIndex = world.project(moduleProjectors.candidateSnapshotIndex);
+  const proposals = safeProjectRows(world, moduleProjectors.proposals);
   const branch = branchIndex.byId?.[branchId] ?? null;
   if (!branch) return null;
   const changeSets = (branch.changeSetIds ?? [])
     .map(id => changeSetIndex.byId?.[id] ?? null)
     .filter(Boolean)
     .map(row => ({ ...row }));
+  const lifecycle = platformBranchLifecycle(branch, { changeSets, proposals });
   const candidateSnapshots = (snapshotIndex.byBranch?.[branchId] ?? []).map(row => ({ ...row }));
   const latestCandidateSnapshot = branch.latestCandidateSnapshotId
     ? (snapshotIndex.byId?.[branch.latestCandidateSnapshotId] ? { ...snapshotIndex.byId[branch.latestCandidateSnapshotId] } : null)
@@ -476,7 +488,7 @@ function branchDetail(world, branchId) {
     errorCount: Array.isArray(snapshot.errors) ? snapshot.errors.length : 0
   }));
   return {
-    branch: { ...branch },
+    branch: { ...branch, ...lifecycle },
     changeSets,
     candidateSnapshots,
     latestCandidateSnapshot,
@@ -484,8 +496,57 @@ function branchDetail(world, branchId) {
   };
 }
 
+export function platformBranchLifecycle(branch, {
+  changeSets = [],
+  proposals = []
+} = {}) {
+  const branchId = String(branch?.id || "");
+  const branchChangeSets = Array.isArray(changeSets) ? changeSets : [];
+  const changeSetIds = new Set(branchChangeSets.map(row => String(row?.id || "")).filter(Boolean));
+  const reviewProposalIds = Array.isArray(proposals)
+    ? proposals
+      .filter(proposal => {
+        if (String(proposal?.status || "") !== "open") return false;
+        const targetKind = String(proposal?.targetKind || "");
+        const targetId = String(proposal?.targetId || "");
+        if (targetKind === "branch") return targetId === branchId;
+        if (targetKind === "changeSet") return changeSetIds.has(targetId);
+        return false;
+      })
+      .map(proposal => String(proposal.id))
+      .sort()
+    : [];
+  const status = String(branch?.status || "open");
+  let lifecycleLane = "draft";
+  if (status === "shipped" || status === "closed") {
+    lifecycleLane = "ship";
+  } else if (status === "pushed" || status === "merged" || branchChangeSets.some(row => String(row?.status || "") === "applied")) {
+    lifecycleLane = "push";
+  } else if (reviewProposalIds.length) {
+    lifecycleLane = "review";
+  } else if (status === "valid" || branchChangeSets.some(row => String(row?.status || "") === "valid")) {
+    lifecycleLane = "apply";
+  } else if (
+    status === "blocked"
+    || branchChangeSets.some(row => ["draft", "invalid"].includes(String(row?.status || "")))
+  ) {
+    lifecycleLane = "validate";
+  }
+  return { lifecycleLane, reviewProposalIds };
+}
+
 export function listPlatformBranches(world) {
-  return world.project(moduleProjectors.branches).map(row => ({ ...row }));
+  const changeSetIndex = world.project(moduleProjectors.changeSetIndex);
+  const proposals = safeProjectRows(world, moduleProjectors.proposals);
+  return world.project(moduleProjectors.branches).map(row => {
+    const changeSets = (row.changeSetIds ?? [])
+      .map(id => changeSetIndex.byId?.[id] ?? null)
+      .filter(Boolean);
+    return {
+      ...row,
+      ...platformBranchLifecycle(row, { changeSets, proposals })
+    };
+  });
 }
 
 export function readPlatformBranch(world, branchId) {

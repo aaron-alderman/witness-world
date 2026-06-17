@@ -178,6 +178,55 @@ test("platform roadmap task parser preserves extended status markers", () => {
   ]);
 });
 
+test("platform model groups branches into lifecycle board lanes", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [],
+      surfaces: [],
+      plugins: { activePluginIds: [], effectivePluginIds: [], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.proposals) {
+        return [{ id: "proposal.review", status: "open", targetKind: "changeSet", targetId: "changeset.review" }];
+      }
+      if (projector === moduleProjectors.branches) {
+        return [
+          { id: "branch.draft", title: "Draft Branch", status: "open", changeSetIds: [] },
+          { id: "branch.validate", title: "Validate Branch", status: "open", changeSetIds: ["changeset.validate"] },
+          { id: "branch.review", title: "Review Branch", status: "open", changeSetIds: ["changeset.review"] },
+          { id: "branch.apply", title: "Apply Branch", status: "valid", changeSetIds: ["changeset.apply"] },
+          { id: "branch.push", title: "Push Branch", status: "valid", changeSetIds: ["changeset.push"] },
+          { id: "branch.ship", title: "Ship Branch", status: "shipped", changeSetIds: [] }
+        ];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [
+          { id: "changeset.validate", branchId: "branch.validate", status: "draft" },
+          { id: "changeset.review", branchId: "branch.review", status: "draft" },
+          { id: "changeset.apply", branchId: "branch.apply", status: "valid" },
+          { id: "changeset.push", branchId: "branch.push", status: "applied" }
+        ];
+      }
+      return [];
+    }
+  });
+
+  const branches = filterPlatformModel(model, "branches");
+  assert.deepEqual(branches.branchLifecycleVocabulary, ["draft", "validate", "review", "apply", "push", "ship"]);
+  assert.equal(branches.branches.find(row => row.id === "branch.draft")?.lifecycleLane, "draft");
+  assert.equal(branches.branches.find(row => row.id === "branch.validate")?.lifecycleLane, "validate");
+  assert.equal(branches.branches.find(row => row.id === "branch.review")?.lifecycleLane, "review");
+  assert.equal(branches.branches.find(row => row.id === "branch.apply")?.lifecycleLane, "apply");
+  assert.equal(branches.branches.find(row => row.id === "branch.push")?.lifecycleLane, "push");
+  assert.equal(branches.branches.find(row => row.id === "branch.ship")?.lifecycleLane, "ship");
+  assert.equal(branches.branches.find(row => row.id === "branch.review")?.reviewProposalIds?.includes("proposal.review"), true);
+  assert.equal(branches.branchBoard.find(lane => lane.id === "review")?.branches[0]?.id, "branch.review");
+  assert.equal(branches.branchBoard.find(lane => lane.id === "ship")?.branches[0]?.id, "branch.ship");
+});
+
 test("platform model includes witnessed operating objects and proposal state", async () => {
   const model = await buildPlatformModel({
     diagnostics: {
@@ -716,6 +765,7 @@ test("platform branch handlers create, list, and read branch detail", async () =
   await handlers["platform.branch.list"]({ res: {} });
   assert.equal(sent.at(-1).status, 200);
   assert.equal(sent.at(-1).body.branches.some(row => row.id === "branch.direct.platform"), true);
+  assert.equal(sent.at(-1).body.branches.find(row => row.id === "branch.direct.platform")?.lifecycleLane, "validate");
 
   await handlers["platform.branch.read"]({
     res: {},
@@ -723,6 +773,7 @@ test("platform branch handlers create, list, and read branch detail", async () =
   });
   assert.equal(sent.at(-1).status, 200);
   assert.equal(sent.at(-1).body.branch.id, "branch.direct.platform");
+  assert.equal(sent.at(-1).body.branch.lifecycleLane, "validate");
   assert.equal(sent.at(-1).body.changeSets.some(row => row.id === "changeset.branch.detail"), true);
   assert.deepEqual(sent.at(-1).body.validationHistory, []);
 }));
@@ -1304,6 +1355,7 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Generated from plugins\/platform\/platform-console\.wcss/);
   assert.match(html, /body class="platform-console"/);
   assert.match(html, /Lifecycle Board/);
+  assert.match(html, /Branch Board/);
   assert.match(html, /Platform Map/);
   assert.match(html, /Runtime Profiles/);
   assert.match(html, /Proposal Panel/);
@@ -1322,6 +1374,13 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /platform-change-set-apply-form/);
   assert.match(html, /platform-change-set-lifecycle-form/);
   assert.match(html, /platform-branch-detail-select/);
+  assert.match(html, /data-branch-lane="draft"/);
+  assert.match(html, /data-branch-lane="validate"/);
+  assert.match(html, /data-branch-lane="review"/);
+  assert.match(html, /data-branch-lane="apply"/);
+  assert.match(html, /data-branch-lane="push"/);
+  assert.match(html, /data-branch-lane="ship"/);
+  assert.match(html, />Lane</);
   assert.match(html, /Parent branch/);
   assert.match(html, /Epic/);
   assert.match(html, /Feature/);
