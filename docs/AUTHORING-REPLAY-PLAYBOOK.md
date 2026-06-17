@@ -67,6 +67,12 @@ What remains blocked:
 - no later rung may run after the first blocked rung
 - WHTML/WCSS evidence can inform candidate authored input, but cannot mark a
   pathway rung supported by itself
+- runtime honesty support such as issue ledgers, diagnostics overlays, and
+  settle probes may gather evidence for the pathway, but do not themselves
+  advance a rung
+- app-specific dev expectation packs may add diagnostics evidence through the
+  same runtime honesty seam, but do not themselves
+  advance a rung
 
 ## Anti-patterns
 

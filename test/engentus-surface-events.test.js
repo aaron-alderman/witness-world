@@ -7,6 +7,138 @@ function sliderRow(page, label) {
   return page.locator(".prow").filter({ hasText: label });
 }
 
+test("Engentus dev shell diagnostics expectation pack stays clean across the shell auth flow", { timeout: 70000 }, async () => {
+  const server = await startUiServer({
+    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
+    serverRunnerId: "engentus_server",
+    devMode: true
+  });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    await page.goto(`${server.url}/engentus/login`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => window.world?.expectationProviderCount > 0);
+    await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
+
+    const assertNoActiveIssues = async label => {
+      const snapshot = await page.evaluate(async () => {
+        await window.world.rerunProbe();
+        return {
+          activeIssues: window.world.issues.filter(issue => issue.status === "active"),
+          expectationProviderCount: window.world.expectationProviderCount,
+          latestProbe: window.world.latestProbe
+        };
+      });
+      assert.equal(snapshot.expectationProviderCount > 0, true, `${label}: expectation pack not registered`);
+      assert.deepEqual(
+        snapshot.activeIssues,
+        [],
+        `${label}: expected no active shell diagnostics issues, saw ${JSON.stringify(snapshot.activeIssues, null, 2)}`
+      );
+      assert.equal(Array.isArray(snapshot.latestProbe?.expectationIssues), true, `${label}: latest probe missing expectation issues`);
+    };
+
+    await assertNoActiveIssues("login-initial");
+
+    await page.click(".ms-btn");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "home"
+      && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedIn"
+    );
+    await page.waitForSelector("#module-area");
+    await assertNoActiveIssues("home-after-sign-in");
+
+    await page.evaluate(() => {
+      document.getElementById("user-prof")?.click();
+    });
+    await page.waitForFunction(() =>
+      document.getElementById("up-menu")?.classList.contains("open") === true
+      && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusProfileMenuVisible") === true
+    );
+    await assertNoActiveIssues("home-menu-open");
+
+    await page.evaluate(() => {
+      document.querySelector(".up-mi-signout")?.click();
+    });
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "signout"
+      && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedOut"
+    );
+    await page.waitForSelector("#view-signout");
+    await assertNoActiveIssues("signout");
+
+    await page.getByRole("button", { name: "Sign back in" }).click();
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "login"
+      && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "idle"
+    );
+    await page.waitForSelector("#view-login");
+    await assertNoActiveIssues("login-after-return");
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
+test("Engentus dev shell diagnostics expectation pack surfaces induced mismatches without crashing", { timeout: 45000 }, async () => {
+  const server = await startUiServer({
+    dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
+    serverRunnerId: "engentus_server",
+    devMode: true
+  });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    await page.goto(`${server.url}/engentus/home`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => window.world?.expectationProviderCount > 0);
+    await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
+    await page.evaluate(async () => { await window.world.rerunProbe(); });
+    assert.deepEqual(await page.evaluate(() =>
+      window.world.issues.filter(issue => issue.status === "active")
+    ), []);
+
+    await page.evaluate(() => {
+      const underlay = document.createElement("div");
+      underlay.id = "surface-route-underlay";
+      document.body.appendChild(underlay);
+    });
+    const broken = await page.evaluate(async () => {
+      await window.world.rerunProbe();
+      return {
+        activeIssues: window.world.issues.filter(issue => issue.status === "active"),
+        overlayHidden: document.getElementById("surface-runtime-diagnostics-root")?.hidden,
+        fabText: document.getElementById("surface-runtime-diagnostics-fab")?.textContent
+      };
+    });
+    assert.equal(broken.activeIssues.some(issue => issue.id === "engentus-shell:stale-underlay:home"), true);
+    assert.equal(broken.overlayHidden, false);
+    assert.match(broken.fabText || "", /Issues\s+1/);
+
+    await page.evaluate(() => {
+      document.getElementById("surface-route-underlay")?.remove();
+    });
+    const repaired = await page.evaluate(async () => {
+      await window.world.rerunProbe();
+      return {
+        activeIssues: window.world.issues.filter(issue => issue.status === "active"),
+        resolvedIssues: window.world.issues.filter(issue => issue.status === "resolved").map(issue => issue.id)
+      };
+    });
+    assert.deepEqual(repaired.activeIssues, []);
+    assert.equal(repaired.resolvedIssues.includes("engentus-shell:stale-underlay:home"), true);
+    assert.equal(await page.evaluate(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime)), true);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
 test("Engentus login click dispatches the authored process rule through the generic surface runtime", { timeout: 70000 }, async () => {
   const server = await startUiServer({
     dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
@@ -159,18 +291,18 @@ test("Engentus Mill Charge route mounts the authored disc chart through chart.re
     assert.match(html, /<canvas id="mill-canvas" class="chart-page__mount chart-page__mount--mill-charge" data-chart-spec=/);
     assert.match(html, /\/app-static\/app\/chart-functions\/mill-charge-kernels\.js/);
     assert.match(html, /registerChartSurfaceCapabilityBoot\(__chartRuntimeFunctions\)/);
-    assert.match(html, /bootChartsFromDom\(document, __chartRuntimeFunctions\)/);
+    assert.doesNotMatch(html, /bootChartsFromDom\(document, __chartRuntimeFunctions\)/);
     assert.doesNotMatch(html, /\/chart\?chart=MillChargeCrossSection/);
   } finally {
     await server.close();
   }
 });
 
-test("Engentus home module cards navigate through authored surface interactions", { timeout: 45000 }, async () => {
+async function assertEngentusHomeModuleCardNavigation(item) {
   const server = await startUiServer({
     dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
     serverRunnerId: "engentus_server",
-    devMode: false
+    devMode: true
   });
   const browser = await launchBrowser({
     headless: true,
@@ -178,68 +310,86 @@ test("Engentus home module cards navigate through authored surface interactions"
   });
   try {
     const page = await browser.context.newPage();
-    const cases = [
-      {
-        cardId: "surface-modulecardmillcharge",
-        routeKey: "mill-charge",
-        path: "/engentus/mill-charge",
-        viewId: "view-mill",
-        chartIds: ["mill-canvas"]
-      },
-      {
-        cardId: "surface-modulecardgoodman",
-        routeKey: "goodman",
-        path: "/engentus/goodman",
-        viewId: "view-goodman",
-        chartIds: ["chart-svg"]
-      },
-      {
-        cardId: "surface-modulecardmillforce",
-        routeKey: "mill-force",
-        path: "/engentus/mill-force",
-        viewId: "view-mill-force",
-        chartIds: ["mill-force-svg-cross", "mill-force-svg-force", "mill-force-svg-rose"]
-      }
-    ];
-
-    for (const item of cases) {
-      await page.goto(`${server.url}/engentus/home`, { waitUntil: "domcontentloaded" });
-      await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
-      await page.waitForSelector("#view-home");
-      await page.click(`#${item.cardId}`);
-      await page.waitForFunction(routeKey =>
-        window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === routeKey,
-        item.routeKey
-      );
-      assert.equal(new URL(page.url()).pathname, item.path);
-      await page.waitForSelector(`#${item.viewId}`);
-      for (const chartId of item.chartIds ?? []) {
-        await page.waitForFunction(id => Boolean(document.getElementById(id)?.__chartController), chartId);
-      }
-      if (item.routeKey === "mill-charge") {
-        const canvasSize = await page.evaluate(() => {
-          const canvas = document.querySelector("#mill-canvas");
-          return { width: canvas.width, height: canvas.height };
-        });
-        assert.equal(canvasSize.width, canvasSize.height);
-        assert.ok(canvasSize.width > 0);
-      }
-      if (item.routeKey === "goodman") {
-        assert.equal(await page.evaluate(() =>
-          document.querySelector("#chart-svg")?.__chartController?.spec?.view?.modelRef
-        ), "BoltFatigue");
-      }
-      if (item.routeKey === "mill-force") {
-        assert.deepEqual(await page.evaluate(() =>
-          ["mill-force-svg-cross", "mill-force-svg-force", "mill-force-svg-rose"]
-            .map(id => document.getElementById(id)?.__chartController?.spec?.view?.modelRef)
-        ), ["MillForce", "MillForce", "MillForce"]);
-      }
+    await page.goto(`${server.url}/engentus/home`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
+    await page.waitForSelector("#view-home");
+    await page.click(`#${item.cardId}`);
+    await page.waitForFunction(routeKey =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === routeKey,
+      item.routeKey
+    );
+    assert.equal(new URL(page.url()).pathname, item.path);
+    await page.waitForSelector(`#${item.viewId}`);
+    for (const chartId of item.chartIds ?? []) {
+      await page.waitForFunction(id => Boolean(document.getElementById(id)?.__chartController), chartId);
+    }
+    const activeIssues = await page.evaluate(async () => {
+      await window.world?.rerunProbe?.();
+      return (window.world?.issues ?? []).filter(issue => issue.status === "active");
+    });
+    assert.deepEqual(
+      activeIssues,
+      [],
+      `${item.routeKey}: expected no active runtime issues after module navigation, saw ${JSON.stringify(activeIssues, null, 2)}`
+    );
+    if (item.routeKey === "mill-charge") {
+      const canvasSize = await page.evaluate(() => {
+        const canvas = document.querySelector("#mill-canvas");
+        return { width: canvas.width, height: canvas.height };
+      });
+      assert.equal(canvasSize.width, canvasSize.height);
+      assert.ok(canvasSize.width > 0);
+    }
+    if (item.routeKey === "goodman") {
+      assert.equal(await page.evaluate(() =>
+        document.querySelector("#chart-svg")?.__chartController?.spec?.view?.modelRef
+      ), "BoltFatigue");
+    }
+    if (item.routeKey === "mill-force") {
+      assert.deepEqual(await page.evaluate(() => ({
+        cross: document.getElementById("mill-force-svg-cross")?.__chartController?.spec?.view?.modelRef,
+        force: document.getElementById("mill-force-svg-force")?.__chartController?.spec?.view?.modelRef ?? null,
+        rose: document.getElementById("mill-force-svg-rose")?.__chartController?.spec?.view?.modelRef ?? null
+      })), {
+        cross: "MillForce",
+        force: null,
+        rose: null
+      });
     }
   } finally {
     await browser.close();
     await server.close();
   }
+}
+
+test("Engentus home Goodman card navigates through authored surface interactions", { timeout: 45000 }, async () => {
+  await assertEngentusHomeModuleCardNavigation({
+    cardId: "surface-modulecardgoodman",
+    routeKey: "goodman",
+    path: "/engentus/goodman",
+    viewId: "view-goodman",
+    chartIds: ["chart-svg"]
+  });
+});
+
+test("Engentus home mill-charge card navigates through authored surface interactions", { timeout: 45000 }, async () => {
+  await assertEngentusHomeModuleCardNavigation({
+    cardId: "surface-modulecardmillcharge",
+    routeKey: "mill-charge",
+    path: "/engentus/mill-charge",
+    viewId: "view-mill",
+    chartIds: ["mill-canvas"]
+  });
+});
+
+test("Engentus home mill-force card navigates through authored surface interactions", { timeout: 45000 }, async () => {
+  await assertEngentusHomeModuleCardNavigation({
+    cardId: "surface-modulecardmillforce",
+    routeKey: "mill-force",
+    path: "/engentus/mill-force",
+    viewId: "view-mill-force",
+    chartIds: ["mill-force-svg-cross"]
+  });
 });
 
 test("Engentus Goodman modes switch authored chart views through process state", { timeout: 45000 }, async () => {

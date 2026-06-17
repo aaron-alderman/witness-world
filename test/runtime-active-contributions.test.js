@@ -46,6 +46,7 @@ test("minimal runtime has no optional active contribution maps", async () => {
   assert.deepEqual(Object.keys(contributions.providerRuntimeFactories), []);
   assert.deepEqual(Object.keys(contributions.jobHandlerFactories), []);
   assert.deepEqual([...contributions.staticAssetFiles.keys()], []);
+  assert.deepEqual(contributions.surfaceRuntimeSupportAssets, []);
 });
 
 test("default minimal, authoring, and full profiles all expose the generic widget-page hook", async () => {
@@ -150,5 +151,20 @@ test("active contribution collection rejects malformed provider entries", () => 
       }]
     }),
     /module projector provider bundle-projectors:bad\.projectors must expose function projector broken/
+  );
+
+  assert.throws(
+    () => collectActiveRuntimeContributions({
+      bundles: [{
+        id: "bundle-support-assets",
+        contributes: {
+          providers: [{
+            kind: "surfaceRuntimeSupportAssets",
+            id: "engentus.shell.expectations"
+          }]
+        }
+      }]
+    }),
+    /surface runtime support assets provider bundle-support-assets:engentus\.shell\.expectations must expose id and factory/
   );
 });

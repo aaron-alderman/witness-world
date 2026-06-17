@@ -46,6 +46,21 @@ capability-matrix truth.
 There is no second lane for temporary generic frontend work outside that pathway
 gate.
 
+## Runtime honesty support
+
+Development/runtime-debug builds may surface a generic runtime honesty layer for
+`page.surface`:
+
+- non-fatal issue ledger accumulation
+- in-app diagnostics overlay
+- browser inspection via `window.world`
+- post-settle probe snapshots
+- app-specific dev expectation packs registered on the generic diagnostics seam
+
+This support is allowed because it makes hidden degradation visible inside the
+same canonical pathway. It does not create a second authoring lane, a second
+runtime, or permission to bypass constrained authoring with handwritten JS.
+
 ## Internal uplift is not authoring permission
 
 `WHTML/WCSS` may be used as an internal import/uplift workspace for reference

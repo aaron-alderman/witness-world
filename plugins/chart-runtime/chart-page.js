@@ -210,14 +210,15 @@ svg.gog{display:block;width:100%;height:100%}`;
 
 export function chartRuntimeAssets({
   pagePropsList = [],
-  standalone = true
+  standalone = true,
+  autoBoot = standalone
 } = {}) {
   const deps = chartRuntimeDeps(pagePropsList);
   return {
     scriptSrcs: ["https://d3js.org/d3.v7.min.js"],
     stylesheetHrefs: deps.stylesheetHrefs,
     inlineCss: chartRuntimeInlineCss({ standalone }),
-    scriptBody: `${chartRuntimeBundleSource()}\n\n${chartRuntimeFunctionsLoaderSource(deps.functionDeps)}\nregisterChartSurfaceCapabilityBoot(__chartRuntimeFunctions);\nbootChartsFromDom(document, __chartRuntimeFunctions);`
+    scriptBody: `${chartRuntimeBundleSource()}\n\n${chartRuntimeFunctionsLoaderSource(deps.functionDeps)}\nconst __surfaceCapabilityReadyPromises = Array.isArray(globalThis.__surfaceCapabilityReadyPromises) ? globalThis.__surfaceCapabilityReadyPromises : (globalThis.__surfaceCapabilityReadyPromises = []);\nconst __chartRuntimeReady = (async () => {\n  registerChartSurfaceCapabilityBoot(__chartRuntimeFunctions);\n})();\n__surfaceCapabilityReadyPromises.push(__chartRuntimeReady);\nawait __chartRuntimeReady;${autoBoot ? "\nbootChartsFromDom(document, __chartRuntimeFunctions);" : ""}`
   };
 }
 

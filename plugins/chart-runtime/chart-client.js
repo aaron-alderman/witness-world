@@ -67,6 +67,37 @@ function publishCapabilityOutputs(container, outputs = {}) {
   if (event) container.dispatchEvent(event);
 }
 
+function publishCapabilityError(container, {
+  phase = "capability-mount",
+  message = "Chart capability failed",
+  error = null
+} = {}) {
+  const surfaceId = container?.getAttribute?.("data-surface-id") ?? "";
+  const targetId = container?.id ?? "";
+  const details = error
+    ? {
+        name: error?.name || "Error",
+        message: String(error?.message || error),
+        stack: String(error?.stack || "")
+      }
+    : null;
+  globalThis.console?.error?.("chart capability error", error ?? message);
+  const event = typeof CustomEvent === "function"
+    ? new CustomEvent("surface-capability-error", {
+        bubbles: true,
+        detail: {
+          capability: "chart.render",
+          surfaceId,
+          targetId,
+          phase,
+          message,
+          details
+        }
+      })
+    : null;
+  if (event && typeof container?.dispatchEvent === "function") container.dispatchEvent(event);
+}
+
 function tooltipElementFor(container, view = {}) {
   const tooltipId = view?.props?.tooltipId;
   if (tooltipId && globalThis.document?.getElementById) {
@@ -283,13 +314,22 @@ function chartElementsIn(root) {
 export function bootChartsFromDom(doc, functions = {}) {
   for (const el of chartElementsIn(doc)) {
     if (el.__chartController) continue;
-    const spec = JSON.parse(el.getAttribute("data-chart-spec"));
-    el.__chartController = mountChart(el, {
-      model: spec.model,
-      view: spec.view,
-      params: spec.params ?? {},
-      functions
-    });
+    try {
+      const spec = JSON.parse(el.getAttribute("data-chart-spec"));
+      el.__chartController = mountChart(el, {
+        model: spec.model,
+        view: spec.view,
+        params: spec.params ?? {},
+        functions
+      });
+    } catch (error) {
+      publishCapabilityError(el, {
+        phase: "capability-mount",
+        message: "Chart capability failed during mount",
+        error
+      });
+      continue;
+    }
     let pendingProps = {};
     let pendingFrame = 0;
     const flushPendingProps = () => {
@@ -314,7 +354,17 @@ export function bootChartsFromDom(doc, functions = {}) {
       const patch = {};
       if (Object.keys(params).length) patch.params = params;
       if (view) patch.view = view;
-      if (Object.keys(patch).length) el.__chartController.update(patch);
+      if (Object.keys(patch).length) {
+        try {
+          el.__chartController.update(patch);
+        } catch (error) {
+          publishCapabilityError(el, {
+            phase: "refresh",
+            message: "Chart capability failed during update",
+            error
+          });
+        }
+      }
     };
     const schedulePropsFlush = () => {
       if (pendingFrame) return;

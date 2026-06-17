@@ -37,6 +37,16 @@ function escapeAttr(value) {
   return escapeHtml(value).replaceAll('"', "&quot;");
 }
 
+function capabilityAssetHash(value) {
+  const text = String(value ?? "");
+  let hash = 2166136261;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 function buildSurfaceRenderers(rendererProviders = [], context = {}) {
   return rendererProviders
     .map(provider => {
@@ -50,6 +60,20 @@ function buildSurfaceRenderers(rendererProviders = [], context = {}) {
       };
     })
     .filter(renderer => renderer && typeof renderer.renderSurface === "function");
+}
+
+function buildSurfaceRuntimeSupportAssets(assetProviders = [], context = {}) {
+  return assetProviders
+    .map(provider => {
+      if (typeof provider?.factory !== "function") return null;
+      const assets = provider.factory(context);
+      if (!assets || typeof assets !== "object") return null;
+      return {
+        providerId: provider.id ?? null,
+        ...assets
+      };
+    })
+    .filter(Boolean);
 }
 
 function capabilityAssetsForRenderers(renderers = []) {
@@ -95,11 +119,11 @@ function injectCapabilityAssets(html, renderers = []) {
   const headAssets = [
     ...stylesheetHrefs.map(href => `<link rel="stylesheet" href="${escapeAttr(href)}">`),
     ...scriptSrcs.map(src => `<script src="${escapeAttr(src)}"></script>`),
-    inlineCss.length ? `<style>\n${inlineCss.join("\n")}\n</style>` : ""
+    ...inlineCss.map(cssText => `<style data-surface-capability-style="${escapeAttr(capabilityAssetHash(cssText))}">\n${cssText}\n</style>`)
   ].filter(Boolean).join("\n");
-  const bodyAssets = scriptBodies.length
-    ? `<script type="module">\n${scriptBodies.join("\n\n")}\n</script>`
-    : "";
+  const bodyAssets = scriptBodies
+    .map(source => `<script type="module" data-surface-capability-module="${escapeAttr(capabilityAssetHash(source))}">\n${source}\n</script>`)
+    .join("\n");
   let next = String(html ?? "");
   if (headAssets) {
     next = next.includes("</head>")
@@ -120,7 +144,9 @@ export function renderSurfacePage(world, {
   route = null,
   browserRuntimeCapabilities = [],
   routeStateDescriptor = null,
-  surfaceCapabilityRenderers = []
+  surfaceCapabilityRenderers = [],
+  surfaceRuntimeSupportAssets = [],
+  devMode = false
 } = {}) {
   const initialState = readInitialStateFromWorld(world);
   const surfaces = readSurfaceMapFromWorld(world);
@@ -140,7 +166,21 @@ export function renderSurfacePage(world, {
     activeSurface: shellState.activeSurface,
     surfaces: shellState.surfaces,
     browserRuntimeCapabilities,
-    initialState
+    initialState,
+    requestPathname,
+    route,
+    devMode
+  });
+  const runtimeSupportAssets = buildSurfaceRuntimeSupportAssets(surfaceRuntimeSupportAssets, {
+    world,
+    rootSurface: shellState.rootSurface,
+    activeSurface: shellState.activeSurface,
+    surfaces: shellState.surfaces,
+    browserRuntimeCapabilities,
+    initialState,
+    requestPathname,
+    route,
+    devMode
   });
   const shell = surfaceRenderers.length
     ? resolveSurfaceShellFromMap({
@@ -153,7 +193,10 @@ export function renderSurfacePage(world, {
       })
     : shellState;
   if (!shell?.html) return null;
-  const capabilityAssets = capabilityAssetsForRenderers(surfaceRenderers);
+  const capabilityAssets = capabilityAssetsForRenderers([
+    ...surfaceRenderers,
+    ...runtimeSupportAssets
+  ]);
   const manifest = buildSurfaceRuntimeManifest({
     world,
     root: shell.rootSurface,
@@ -168,5 +211,8 @@ export function renderSurfacePage(world, {
     requestPathname: shell.requestPathname,
     routeStateDescriptor
   });
-  return injectInteractionRuntime(injectCapabilityAssets(shell.html, surfaceRenderers), manifest);
+  return injectInteractionRuntime(injectCapabilityAssets(shell.html, [
+    ...surfaceRenderers,
+    ...runtimeSupportAssets
+  ]), manifest);
 }

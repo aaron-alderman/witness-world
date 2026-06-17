@@ -178,6 +178,17 @@ const INTERNAL_BUNDLE_MANIFESTS = [
       ]
     }
   }),
+  internalBundle({
+    id: "bundle-engentus-dev-diagnostics",
+    displayName: "Engentus Dev Diagnostics",
+    description: "Dev-only diagnostics support bundle for Engentus shell expectation providers.",
+    contributes: {
+      capabilities: [],
+      providers: [],
+      routes: [],
+      surfaces: []
+    }
+  }),
   ...firstPartyBundleRows().map(seedBundle)
 ];
 

@@ -1,0 +1,14 @@
+{
+  "id": "plugin.engentus-dev-diagnostics",
+  "version": "0.1.0",
+  "displayName": "Engentus Dev Diagnostics",
+  "description": "Registers dev-only Engentus shell expectation providers on the generic surface runtime diagnostics seam.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-engentus-dev-diagnostics"
+  ],
+  "contributes": {}
+}

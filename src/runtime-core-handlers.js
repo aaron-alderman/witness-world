@@ -510,7 +510,9 @@ export function createCoreRuntimeBundleHandlers({
           .map(definition => typeof definition?.id === "string" ? definition.id : "")
           .filter(Boolean),
         routeStateDescriptor: route?.params?.routeState ?? null,
-        surfaceCapabilityRenderers: appContext?.runtimeContributions?.surfaceCapabilityRenderers ?? []
+        surfaceCapabilityRenderers: appContext?.runtimeContributions?.surfaceCapabilityRenderers ?? [],
+        surfaceRuntimeSupportAssets: appContext?.runtimeContributions?.surfaceRuntimeSupportAssets ?? [],
+        devMode: appContext?.devMode === true
       });
       if (!html) {
         sendJson(res, 404, { error: "surface page not found", rootSurface: rootSurfaceId });

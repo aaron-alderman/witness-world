@@ -15,6 +15,11 @@ actor = "aaron"
 serverRunner = "engentus_server"
 plugin = "plugin.chart-runtime"
 
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "engentus_server"
+plugin = "plugin.engentus-dev-diagnostics"
+
 [[route]]
 actor = "aaron"
 id = "engentus_home_route"

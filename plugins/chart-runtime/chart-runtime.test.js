@@ -11,7 +11,7 @@ import {
   normalizeDesirePlusToDesire
 } from "../../src/desire/index.js";
 import { buildMountedChartRuntime, createHandlers, resolveChartSpec } from "./runtime.js";
-import { renderChartHtml, chartRuntimeBundleSource } from "./chart-page.js";
+import { renderChartHtml, chartRuntimeAssets, chartRuntimeBundleSource } from "./chart-page.js";
 import { applyChartPresentationPatch } from "./chart-presentation-patch.js";
 import { planChart } from "./gog-runtime.js";
 
@@ -89,12 +89,22 @@ test("chart page stays a code-first runtime assembly seam instead of depending o
   assert.equal(source.includes("export function chartRuntimeBundleSource"), true);
   assert.equal(source.includes("export function chartRuntimeAssets"), true);
   assert.equal(source.includes("export function renderChartHtml"), true);
-  assert.equal(source.includes("bootChartsFromDom(document"), true);
+  assert.equal(source.includes("registerChartSurfaceCapabilityBoot(__chartRuntimeFunctions)"), true);
   assert.equal(source.includes("applyWitnessToml"), false);
   assert.equal(source.includes("renderWidgetPage"), false);
   assert.equal(source.includes("frontendProgram"), false);
   assert.equal(source.includes('"goodman-stdlib.js"'), false);
   assert.equal(source.includes('"goodmanFunctions"'), false);
+});
+
+test("mounted chart runtime assets register boot hooks without auto-booting before the surface runtime", () => {
+  const mounted = chartRuntimeAssets({ pagePropsList: [], standalone: false });
+  const standalone = chartRuntimeAssets({ pagePropsList: [], standalone: true });
+
+  assert.match(mounted.scriptBody, /registerChartSurfaceCapabilityBoot\(__chartRuntimeFunctions\)/);
+  assert.match(mounted.scriptBody, /__surfaceCapabilityReadyPromises/);
+  assert.doesNotMatch(mounted.scriptBody, /bootChartsFromDom\(document, __chartRuntimeFunctions\)/);
+  assert.match(standalone.scriptBody, /bootChartsFromDom\(document, __chartRuntimeFunctions\)/);
 });
 
 test("cartesian band mark supports category-split primitives generically", () => {

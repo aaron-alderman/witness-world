@@ -850,6 +850,58 @@ test("runtime-surface-page serializes active capability assets into the runtime 
   assert.match(html, /"scriptBodies":\["window\.__chartBoot = true;"\]/);
 });
 
+test("runtime-surface-page injects dev-only surface runtime support assets ahead of runtime boot", () => {
+  const html = renderSurfacePage(fakeWorld([
+    {
+      process: "desire.defineProcess",
+      body: {
+        id: "ShellNavigation",
+        state: [],
+        handles: [],
+        emits: [],
+        rules: []
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "EngentusRoot",
+        surfaceKind: "app-root",
+        processRef: "ShellNavigation",
+        children: ["LoginRoute"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "LoginRoute",
+        surfaceKind: "auth-screen",
+        props: { routeKey: "login", routePath: "/engentus/login", text: "Login" }
+      }
+    }
+  ]), {
+    rootSurfaceId: "EngentusRoot",
+    requestPathname: "/engentus/login",
+    devMode: true,
+    surfaceRuntimeSupportAssets: [{
+      id: "engentus.shell.expectations",
+      factory(context) {
+        assert.equal(context.devMode, true);
+        assert.equal(context.rootSurface?.id, "EngentusRoot");
+        return {
+          scriptBody: 'window.__engentusExpectationSupportLoaded = true;'
+        };
+      }
+    }]
+  });
+
+  const supportIndex = html.indexOf("window.__engentusExpectationSupportLoaded = true;");
+  const runtimeIndex = html.indexOf("bootSurfaceInteractionRuntime(surfaceRuntimeManifest);");
+  assert.equal(supportIndex >= 0, true);
+  assert.equal(runtimeIndex > supportIndex, true);
+  assert.match(html, /"scriptBodies":\["window\.__engentusExpectationSupportLoaded = true;"\]/);
+});
+
 test("runtime-surface-page reuses cached world-derived surface data across repeated renders", () => {
   let witnessReads = 0;
   const witnesses = [

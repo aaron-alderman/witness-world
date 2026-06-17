@@ -7,6 +7,82 @@ import {
 } from "../src/runtime-surface-interaction-runtime.js";
 import { createProcessRuntime } from "../src/desire/process-eval.js";
 
+function createOverlayTestDocument() {
+  class FakeNode {
+    constructor(tagName, ownerDocument) {
+      this.tagName = String(tagName || "div").toUpperCase();
+      this.ownerDocument = ownerDocument;
+      this.children = [];
+      this.parentNode = null;
+      this.attributes = new Map();
+      this.style = {};
+      this.hidden = false;
+      this.textContent = "";
+      this.innerHTML = "";
+      this.className = "";
+      this.eventListeners = new Map();
+      this.id = "";
+      this.type = "";
+    }
+
+    appendChild(child) {
+      child.parentNode = this;
+      this.children.push(child);
+      return child;
+    }
+
+    removeChild(child) {
+      const index = this.children.indexOf(child);
+      if (index >= 0) this.children.splice(index, 1);
+      child.parentNode = null;
+      return child;
+    }
+
+    setAttribute(name, value) {
+      const key = String(name);
+      const text = String(value);
+      this.attributes.set(key, text);
+      if (key === "id") this.id = text;
+      if (key === "class") this.className = text;
+    }
+
+    getAttribute(name) {
+      return this.attributes.get(String(name)) ?? null;
+    }
+
+    removeAttribute(name) {
+      const key = String(name);
+      this.attributes.delete(key);
+      if (key === "id") this.id = "";
+      if (key === "class") this.className = "";
+    }
+
+    addEventListener(eventName, listener) {
+      this.eventListeners.set(eventName, listener);
+    }
+
+    removeEventListener(eventName) {
+      this.eventListeners.delete(eventName);
+    }
+  }
+
+  const walk = node => [node, ...node.children.flatMap(child => walk(child))];
+  const document = {
+    head: null,
+    body: null,
+    createElement(tagName) {
+      return new FakeNode(tagName, document);
+    },
+    getElementById(id) {
+      const target = String(id);
+      return [...walk(document.head), ...walk(document.body)].find(node => node.id === target) ?? null;
+    }
+  };
+  document.head = new FakeNode("head", document);
+  document.body = new FakeNode("body", document);
+  return document;
+}
+
 test("describeSurfaceRuntimeView stays generic by default", () => {
   const view = describeSurfaceRuntimeView({
     id: "Surface.Login",
@@ -88,6 +164,69 @@ test("createSurfaceInteractionRuntime blocks honestly when interactive semantics
   assert.equal(runtime.blocked?.limitationType, "platform");
   assert.match(runtime.blocked?.missingPrimitive ?? "", /interaction target descriptors/i);
   assert.equal(logs.some(entry => /missing generic interaction target descriptors/i.test(entry)), true);
+});
+
+test("createSurfaceInteractionRuntime records blocked boot issues in the inspection ledger and shows the diagnostics overlay in dev", () => {
+  const document = createOverlayTestDocument();
+  const runtimeWindow = {
+    location: {
+      href: "http://127.0.0.1:3000/home",
+      hostname: "127.0.0.1",
+      pathname: "/home"
+    },
+    console: {
+      error() {}
+    }
+  };
+
+  createSurfaceInteractionRuntime({
+    document,
+    window: runtimeWindow,
+    manifest: {
+      activeSurfaceId: "Surface.Login",
+      surfaces: [
+        {
+          id: "Surface.Login",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: [
+              {
+                target: "primary",
+                event: "click",
+                action: { kind: "navigate", href: "/next" }
+              }
+            ]
+          },
+          view: {
+            rootId: "surface-login",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        }
+      ],
+      processWitnesses: []
+    },
+    createProcessRuntimeImpl() {
+      throw new Error("process runtime must not be created when descriptors are missing");
+    }
+  });
+
+  assert.equal(Array.isArray(runtimeWindow.world.issues), true);
+  assert.equal(runtimeWindow.world.issues.length, 1);
+  assert.equal(runtimeWindow.world.issues[0].id, "surface-runtime:missing-interaction-target-descriptors");
+  assert.equal(runtimeWindow.world.issues[0].phase, "boot");
+  const overlayRoot = document.getElementById("surface-runtime-diagnostics-root");
+  const fab = document.getElementById("surface-runtime-diagnostics-fab");
+  assert.ok(overlayRoot);
+  assert.ok(fab);
+  assert.equal(overlayRoot.hidden, false);
+  assert.equal(fab.textContent, "Issues 1");
+  runtimeWindow.world.clearIssues();
+  assert.equal(runtimeWindow.world.issues.length, 0);
+  assert.equal(overlayRoot.hidden, true);
 });
 
 test("createSurfaceInteractionRuntime ignores inactive route subtree capability requirements", () => {
@@ -1452,7 +1591,7 @@ test("createSurfaceInteractionRuntime refetches an active route when the cached 
   });
 
   await listeners.get("login-button:click")({ preventDefault() {}, target: loginButton });
-  assert.deepEqual(fetches.filter(path => path !== "/api/runtime/diagnostics"), ["/home", "/home"]);
+  assert.deepEqual(fetches.filter(path => path !== "/api/runtime/diagnostics"), ["/home"]);
   assert.equal(runtime.processRuntime.value("ProfileMenuVisible"), false);
   assert.doesNotThrow(() => runtime.processRuntime.deliver("SignOut"));
   runtime.destroy();
@@ -1477,6 +1616,10 @@ test("createSurfaceInteractionRuntime synchronizes URL path into authored route 
       }
     },
     manifest: {
+      routeState: {
+        process: "ShellNavigation",
+        state: "ActiveRoute"
+      },
       routeTargets: [
         { key: "login", path: "/login", surfaceId: "Surface.Login" },
         { key: "home", path: "/home", surfaceId: "Surface.Home" }
@@ -1602,14 +1745,114 @@ test("createSurfaceInteractionRuntime maps browser back through explicit authore
   assert.equal(listeners.has("popstate"), false);
 });
 
+test("createSurfaceInteractionRuntime ignores non-route processes during browser route-state sync", () => {
+  const listeners = new Map();
+  const runtimeWindow = {
+    location: {
+      pathname: "/login"
+    },
+    history: {
+      pushState() {}
+    },
+    addEventListener(eventName, listener) {
+      listeners.set(eventName, listener);
+    },
+    removeEventListener(eventName) {
+      listeners.delete(eventName);
+    },
+    console: {
+      error() {}
+    }
+  };
+  const runtime = createSurfaceInteractionRuntime({
+    document: {
+      getElementById() {
+        return null;
+      }
+    },
+    window: runtimeWindow,
+    manifest: {
+      activeSurfaceId: "Surface.Goodman",
+      routeState: {
+        process: "ShellNavigation",
+        state: "ActiveRoute"
+      },
+      routeTargets: [
+        { key: "login", path: "/login", surfaceId: "Surface.Login" },
+        { key: "goodman", path: "/goodman", surfaceId: "Surface.Goodman" }
+      ],
+      surfaces: [
+        {
+          id: "Surface.Goodman",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-goodman",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        },
+        {
+          id: "Surface.Editor",
+          parentId: "Surface.Goodman",
+          runtime: {
+            processRef: "GoodmanBoltSetEditor",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-editor",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        }
+      ],
+      processWitnesses: [
+        { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "goodman" } },
+        { process: "desire.defineType", body: { id: "EditorMode", role: "state", valueType: "text", initial: "goodman" } },
+        { process: "desire.defineProcess", body: {
+          id: "ShellNavigation",
+          state: ["ActiveRoute"],
+          handles: [],
+          emits: [],
+          rules: []
+        } },
+        { process: "desire.defineProcess", body: {
+          id: "GoodmanBoltSetEditor",
+          state: ["EditorMode"],
+          handles: [],
+          emits: [],
+          rules: []
+        } }
+      ]
+    },
+    createProcessRuntimeImpl({ witnesses }) {
+      return createProcessRuntime(witnesses);
+    }
+  });
+
+  assert.equal(runtime.processRuntime.value("ActiveRoute"), "login");
+  assert.equal(runtime.processRuntime.value("EditorMode"), "goodman");
+
+  runtimeWindow.location.pathname = "/goodman";
+  listeners.get("popstate")();
+
+  assert.equal(runtime.processRuntime.value("ActiveRoute"), "goodman");
+  assert.equal(runtime.processRuntime.value("EditorMode"), "goodman");
+});
+
 test("createSurfaceInteractionRuntime installs a browser inspection point on window", async () => {
-  const nodes = new Map([
-    ["surface-home", {
-      id: "surface-home",
-      addEventListener() {},
-      removeEventListener() {}
-    }]
-  ]);
+  const document = createOverlayTestDocument();
+  const surfaceHome = document.createElement("main");
+  surfaceHome.id = "surface-home";
+  document.body.appendChild(surfaceHome);
   const runtimeWindow = {
     location: { pathname: "/home" },
     history: { pushState() {} },
@@ -1626,21 +1869,12 @@ test("createSurfaceInteractionRuntime installs a browser inspection point on win
   };
 
   const runtime = createSurfaceInteractionRuntime({
-    document: {
-      getElementById(id) {
-        return nodes.get(id) ?? null;
-      }
-    },
+    document,
     window: runtimeWindow,
     manifest: {
       activeSurfaceId: "Surface.Home",
       browserRuntimeCapabilities: ["chart.render"],
-      capabilityAssets: {
-        stylesheetHrefs: ["/chart.css"],
-        scriptSrcs: ["/chart.js"],
-        inlineCss: [".chart{display:block}"],
-        scriptBodies: ["window.__chartBoot = true;"]
-      },
+      capabilityAssets: null,
       diagnostics: {
         activeSurfaceId: "Surface.Home",
         includedSurfaceIds: ["Surface.Home"],
@@ -1690,10 +1924,432 @@ test("createSurfaceInteractionRuntime installs a browser inspection point on win
   assert.deepEqual(inspection.surfaceIds, ["Surface.Home"]);
   assert.deepEqual(inspection.runtimeIds, ["ShellNavigation", "ActiveRoute"]);
   assert.deepEqual(inspection.browserRuntimeCapabilities, ["chart.render"]);
-  assert.deepEqual(inspection.capabilityAssets.stylesheetHrefs, ["/chart.css"]);
+  assert.equal(inspection.capabilityAssets, null);
   assert.deepEqual(inspection.process.state, { ActiveRoute: "home" });
+  const probe = await inspection.rerunProbe();
+  assert.equal(probe.activeSurfaceId, "Surface.Home");
+  assert.deepEqual(probe.currentProcessRefs, ["ShellNavigation"]);
+  assert.deepEqual(inspection.latestProbe.currentProcessRefs, ["ShellNavigation"]);
+  assert.deepEqual(inspection.issues, []);
   const diagnostics = await inspection.refreshServerDiagnostics();
   assert.deepEqual(diagnostics.plugins.activePluginIds, ["plugin.chart-runtime"]);
+  runtime.destroy();
+});
+
+test("createSurfaceInteractionRuntime surfaces missing capability controllers as non-fatal runtime issues", async () => {
+  const document = createOverlayTestDocument();
+  const root = document.createElement("main");
+  root.id = "surface-chart";
+  document.body.appendChild(root);
+  const listeners = new Map();
+  const runtimeWindow = {
+    location: { pathname: "/chart" },
+    history: { pushState() {} },
+    console: { error() {} },
+    addEventListener(eventName, listener) {
+      listeners.set(eventName, listener);
+    },
+    removeEventListener(eventName) {
+      listeners.delete(eventName);
+    }
+  };
+
+  const runtime = createSurfaceInteractionRuntime({
+    document,
+    window: runtimeWindow,
+    manifest: {
+      activeSurfaceId: "Surface.Chart",
+      browserRuntimeCapabilities: ["chart.render"],
+      capabilityAssets: null,
+      surfaces: [
+        {
+          id: "Surface.Chart",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: ["chart.render"],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-chart",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        }
+      ],
+      processWitnesses: [
+        { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "chart" } },
+        { process: "desire.defineProcess", body: {
+          id: "ShellNavigation",
+          state: ["ActiveRoute"],
+          handles: [],
+          emits: [],
+          rules: []
+        } }
+      ]
+    },
+    createProcessRuntimeImpl({ witnesses }) {
+      return createProcessRuntime(witnesses);
+    }
+  });
+
+  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(Boolean(runtimeWindow.world), true);
+  const probe = await runtime.rerunProbe();
+  assert.equal(probe.missingCapabilityControllers.some(entry => entry.surfaceId === "Surface.Chart"), true);
+  assert.equal(runtimeWindow.world.issues.some(issue =>
+    issue.id === "surface-runtime:missing-capability-controller:Surface.Chart"
+    && issue.status === "active"
+  ), true);
+  runtime.destroy();
+});
+
+test("createSurfaceInteractionRuntime recognizes descendant capability controllers and outputs for dependent capability bindings", async () => {
+  const document = createOverlayTestDocument();
+  const wrapper = document.createElement("section");
+  wrapper.id = "surface-chart-wrap";
+  const mount = document.createElement("div");
+  mount.id = "surface-chart";
+  mount.setAttribute("data-surface-id", "Surface.Chart");
+  mount.__surfaceCapabilityController = {
+    updateProps() {}
+  };
+  mount.__surfaceCapabilityOutputs = { valueText: "ready" };
+  const readout = document.createElement("div");
+  readout.id = "surface-readout";
+  wrapper.appendChild(mount);
+  wrapper.appendChild(readout);
+  document.body.appendChild(wrapper);
+  const runtimeWindow = {
+    location: { pathname: "/chart" },
+    history: { pushState() {} },
+    console: { error() {} }
+  };
+
+  const runtime = createSurfaceInteractionRuntime({
+    document,
+    window: runtimeWindow,
+    manifest: {
+      activeSurfaceId: "Surface.Wrap",
+      browserRuntimeCapabilities: ["chart.render"],
+      capabilityAssets: null,
+      surfaces: [
+        {
+          id: "Surface.Wrap",
+          children: ["Surface.Chart", "Surface.Readout"],
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: ["chart.render"],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-chart-wrap",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        },
+        {
+          id: "Surface.Chart",
+          parentId: "Surface.Wrap",
+          runtime: {
+            processRef: null,
+            projectionRefs: [],
+            capabilityRefs: ["chart.render"],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-chart",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        },
+        {
+          id: "Surface.Readout",
+          parentId: "Surface.Wrap",
+          runtime: {
+            processRef: null,
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [
+              {
+                prop: "text",
+                source: { kind: "capability", surface: "Surface.Chart", output: "valueText" }
+              }
+            ],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-readout",
+            propTargets: { text: [{ id: "surface-readout", mode: "text" }] },
+            interactionTargets: {}
+          }
+        }
+      ],
+      processWitnesses: [
+        { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "chart" } },
+        { process: "desire.defineProcess", body: {
+          id: "ShellNavigation",
+          state: ["ActiveRoute"],
+          handles: [],
+          emits: [],
+          rules: []
+        } }
+      ]
+    },
+    createProcessRuntimeImpl({ witnesses }) {
+      return createProcessRuntime(witnesses);
+    }
+  });
+
+  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const probe = await runtime.rerunProbe();
+  assert.equal(probe.missingCapabilityControllers.some(entry => entry.surfaceId === "Surface.Chart"), false);
+  assert.equal(probe.missingCapabilityOutputs.some(entry => entry.surfaceId === "Surface.Readout"), false);
+  runtime.destroy();
+});
+
+test("createSurfaceInteractionRuntime ignores non-rendered active descendants when probing and binding", async () => {
+  const document = createOverlayTestDocument();
+  const root = document.createElement("main");
+  root.id = "surface-home";
+  document.body.appendChild(root);
+  const runtimeWindow = {
+    location: { pathname: "/home" },
+    history: { pushState() {} },
+    console: { error() {} }
+  };
+
+  const runtime = createSurfaceInteractionRuntime({
+    document,
+    window: runtimeWindow,
+    manifest: {
+      activeSurfaceId: "Surface.Home",
+      browserRuntimeCapabilities: [],
+      capabilityAssets: null,
+      surfaces: [
+        {
+          id: "Surface.Home",
+          children: ["Surface.HiddenPanel"],
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-home",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        },
+        {
+          id: "Surface.HiddenPanel",
+          parentId: "Surface.Home",
+          runtime: {
+            processRef: null,
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [
+              { prop: "text", source: { kind: "state", state: "ActiveRoute" } }
+            ],
+            interactions: [
+              { target: "self", event: "click", action: { kind: "deliver", message: "NavigateHome" } }
+            ]
+          },
+          view: {
+            rootId: "surface-hidden-panel",
+            propTargets: { text: [{ id: "surface-hidden-panel", mode: "text" }] },
+            interactionTargets: { self: [{ id: "surface-hidden-panel" }] }
+          }
+        }
+      ],
+      processWitnesses: [
+        { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "home" } },
+        { process: "desire.defineMessage", body: { id: "NavigateHome", writes: { ActiveRoute: "home" }, fields: [] } },
+        { process: "desire.defineProcess", body: {
+          id: "ShellNavigation",
+          state: ["ActiveRoute"],
+          handles: ["NavigateHome"],
+          emits: [],
+          rules: []
+        } }
+      ]
+    },
+    createProcessRuntimeImpl({ witnesses }) {
+      return createProcessRuntime(witnesses);
+    }
+  });
+
+  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const probe = await runtime.rerunProbe();
+  assert.equal(probe.missingInteractionTargets.some(entry => entry.surfaceId === "Surface.HiddenPanel"), false);
+  assert.equal(probe.missingBindingTargets.some(entry => entry.surfaceId === "Surface.HiddenPanel"), false);
+  runtime.destroy();
+});
+
+test("createSurfaceInteractionRuntime records capability error events in the shared issue ledger", async () => {
+  const document = createOverlayTestDocument();
+  const root = document.createElement("main");
+  root.id = "surface-chart";
+  document.body.appendChild(root);
+  const listeners = new Map();
+  const runtimeWindow = {
+    location: { pathname: "/chart" },
+    history: { pushState() {} },
+    console: { error() {} },
+    addEventListener(eventName, listener) {
+      listeners.set(eventName, listener);
+    },
+    removeEventListener(eventName) {
+      listeners.delete(eventName);
+    }
+  };
+
+  const runtime = createSurfaceInteractionRuntime({
+    document,
+    window: runtimeWindow,
+    manifest: {
+      activeSurfaceId: "Surface.Chart",
+      browserRuntimeCapabilities: ["chart.render"],
+      capabilityAssets: null,
+      surfaces: [
+        {
+          id: "Surface.Chart",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: ["chart.render"],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-chart",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        }
+      ],
+      processWitnesses: [
+        { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "chart" } },
+        { process: "desire.defineProcess", body: {
+          id: "ShellNavigation",
+          state: ["ActiveRoute"],
+          handles: [],
+          emits: [],
+          rules: []
+        } }
+      ]
+    },
+    createProcessRuntimeImpl({ witnesses }) {
+      return createProcessRuntime(witnesses);
+    }
+  });
+
+  listeners.get("surface-capability-error")?.({
+    detail: {
+      capability: "chart.render",
+      surfaceId: "Surface.Chart",
+      targetId: "surface-chart",
+      phase: "capability-mount",
+      message: "Chart capability failed during mount",
+      details: { message: "mount exploded" }
+    }
+  });
+
+  assert.equal(runtimeWindow.world.issues.some(issue =>
+    issue.id === "surface-runtime:capability-error:chart.render:Surface.Chart:capability-mount"
+    && issue.status === "active"
+  ), true);
+  runtime.destroy();
+});
+
+test("createSurfaceInteractionRuntime merges expectation-provider issues into the shared ledger and probe summary", async () => {
+  const document = createOverlayTestDocument();
+  const root = document.createElement("main");
+  root.id = "surface-home";
+  document.body.appendChild(root);
+  const runtimeWindow = {
+    location: { pathname: "/home" },
+    history: { pushState() {} },
+    console: { error() {} }
+  };
+  let mismatch = true;
+
+  const runtime = createSurfaceInteractionRuntime({
+    document,
+    window: runtimeWindow,
+    manifest: {
+      activeSurfaceId: "Surface.Home",
+      routeTargets: [
+        { key: "home", path: "/home", surfaceId: "Surface.Home" }
+      ],
+      surfaces: [
+        {
+          id: "Surface.Home",
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-home",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        }
+      ],
+      processWitnesses: [
+        { process: "desire.defineType", body: { id: "ActiveRoute", role: "state", valueType: "text", initial: "home" } },
+        { process: "desire.defineProcess", body: {
+          id: "ShellNavigation",
+          state: ["ActiveRoute"],
+          handles: [],
+          emits: [],
+          rules: []
+        } }
+      ]
+    },
+    expectationProviders: [
+      snapshot => mismatch
+        ? [{
+            id: "engentus-shell:test-mismatch",
+            severity: "error",
+            kind: "engentus-shell",
+            message: "Injected shell mismatch",
+            details: { route: snapshot.routePathname }
+          }]
+        : []
+    ],
+    createProcessRuntimeImpl({ witnesses }) {
+      return createProcessRuntime(witnesses);
+    }
+  });
+
+  const initialProbe = await runtime.rerunProbe();
+  assert.equal(runtime.expectationProviderCount, 1);
+  assert.deepEqual(initialProbe.expectationSummary, {
+    total: 1,
+    bySeverity: { error: 1, warning: 0, info: 0 }
+  });
+  assert.equal(runtimeWindow.world.issues.some(issue => issue.id === "engentus-shell:test-mismatch" && issue.status === "active"), true);
+
+  mismatch = false;
+  const settledProbe = await runtime.rerunProbe();
+  assert.deepEqual(settledProbe.expectationSummary, {
+    total: 0,
+    bySeverity: { error: 0, warning: 0, info: 0 }
+  });
+  assert.equal(runtimeWindow.world.issues.some(issue => issue.id === "engentus-shell:test-mismatch" && issue.status === "resolved"), true);
   runtime.destroy();
 });
 

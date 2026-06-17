@@ -74,6 +74,21 @@ The three Engentus tracks therefore stay connected:
 Uplift output is candidate authored evidence. It is not executable frontend
 authority until it passes through the existing serving and pathway gates.
 
+## Runtime honesty layer
+
+`page.surface` development runs may now expose a generic runtime honesty layer:
+
+- a session-wide runtime issue ledger
+- a dev-only diagnostics FAB and drawer when issues exist
+- non-fatal invariant capture during boot, route swap, refresh, capability
+  mount, and settle probe
+- a stable browser inspection point on `window.world`
+- dev-only app expectation packs layered on the same generic issue ledger
+
+This is support machinery for the same single-track pathway, not a second
+frontend lane. Hidden runtime degradation should become visible and
+machine-readable without crashing the app before evidence can be gathered.
+
 ## Current reset truth
 
 The previous `page.surface` renderer in `src/runtime-surface-shell.js` was
@@ -101,6 +116,7 @@ clean floor proved by the canonical authoring pathway probe.
 - machine-readable capability-matrix truth
 - canonical authoring pathway probe truth
 - no-cheat boundary truth
+- generic runtime honesty-layer truth
 - authored Engentus source structure under `examples/engentus`
 - route-local `page.surface` transport slicing for served authored surfaces
 
