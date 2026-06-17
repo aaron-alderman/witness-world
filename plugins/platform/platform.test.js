@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createWorld } from "../../src/kernel.js";
 import { moduleProjectors } from "../../src/modules.js";
+import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
 import { compileRvmToDesirePlus } from "../../src/desire/index.js";
-import { bundleId, capabilities, createHandlers, handlerCatalog, routes, surfaces } from "./runtime.js";
-import { buildPlatformModel, filterPlatformModel, PLATFORM_LIFECYCLES } from "./platform-model.js";
+import { bundleId, capabilities, createHandlers, handlerCatalog, providers, routes, surfaces } from "./runtime.js";
+import { buildPlatformModel, filterPlatformModel, parseRoadmapTasks, PLATFORM_LIFECYCLES } from "./platform-model.js";
 import { renderPlatformPage } from "./platform-page.js";
 import { buildPlatformProposalCreateBody, platformProposalTemplates } from "./platform-proposals.js";
 import { renderPlatformConsoleCss } from "./platform-style.js";
@@ -18,15 +19,22 @@ test("platform plugin exposes platform bundle ownership", async () => {
   assert.deepEqual(capabilities, ["platform.self"]);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.model.read"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.gaps.read"), true);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.create"), true);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.edit"), true);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.validate"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.proposal.create"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.proposal.approve"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.proposal.reject"), true);
   assert.equal(handlerCatalog.pageHandlers.includes("page.platform"), true);
   assert.equal(routes.some(route => route.path === "/platform" && route.handler === "page.platform"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-model" && route.handler === "platform.model.read"), true);
+  assert.equal(routes.some(route => route.path === "/api/platform-change-sets" && route.handler === "platform.changeSet.create"), true);
+  assert.equal(routes.some(route => route.handler === "platform.changeSet.edit"), true);
+  assert.equal(routes.some(route => route.handler === "platform.changeSet.validate"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-proposals" && route.handler === "platform.proposal.create"), true);
   assert.equal(routes.some(route => route.handler === "platform.proposal.approve"), true);
   assert.equal(surfaces.some(surface => surface.id === "surface:platform" && surface.href === "/platform"), true);
+  assert.equal(providers.some(provider => provider.kind === "moduleProjectors" && provider.id === "platform.projections"), true);
 });
 
 test("platform model merges runtime diagnostics with repo inventory", async () => {
@@ -54,11 +62,14 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   assert.equal(model.nodes.some(node => node.id === "route:GET /platform" && node.kind === "route"), true);
   assert.equal(model.nodes.some(node => node.id === "rvm:plugins/platform/platform-console.rvm" && node.kind === "rvmSource"), true);
   assert.equal(model.nodes.some(node => node.id === "wcss:plugins/platform/platform-console.wcss" && node.kind === "wcssSource"), true);
+  assert.equal(model.nodes.some(node => node.kind === "task" && node.id.includes("docs/PLATFORM-ALL-THE-WAY-ROADMAP.md")), true);
   assert.equal(model.edges.some(edge => edge.from === "surface:platform" && edge.rel === "authoredBy" && edge.to === "rvm:plugins/platform/platform-console.rvm"), true);
   assert.equal(model.nodes.some(node => node.kind === "gate" && node.id.includes("plugins/platform/platform.test.js")), true);
   assert.equal(model.edges.some(edge => edge.from === "plugin.platform" && edge.rel === "owns" && edge.to === "bundle-platform"), true);
   assert.equal(Array.isArray(model.gaps), true);
   assert.equal(model.summaries.byKind.plugin > 0, true);
+  assert.equal(Array.isArray(model.roadmapTasks), true);
+  assert.equal(model.roadmapTasks.some(task => task.doc === "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"), true);
 });
 
 test("platform console is declared through RVM and styled through WCSS", async () => {
@@ -99,6 +110,26 @@ test("platform model filters support MCP views", async () => {
   assert.equal(mcp.nodes.some(node => node.id === "mcp:mcp.platform"), true);
   assert.equal(mcp.nodes.some(node => node.id === "mcpTool:platform.read"), true);
   assert.equal(gates.gates.every(node => node.kind === "gate"), true);
+});
+
+test("platform roadmap task parser preserves extended status markers", () => {
+  const tasks = parseRoadmapTasks("docs/demo.md", `
+# Demo
+
+- [X] Done task
+- [~] In progress task
+- [B] Blocked task
+- [L] Logged task
+- [ ] Open task
+`);
+
+  assert.deepEqual(tasks.map(task => ({ title: task.title, marker: task.marker, status: task.status, checked: task.checked })), [
+    { title: "Done task", marker: "X", status: "done", checked: true },
+    { title: "In progress task", marker: "~", status: "in-progress", checked: false },
+    { title: "Blocked task", marker: "B", status: "blocked", checked: false },
+    { title: "Logged task", marker: "L", status: "logged", checked: false },
+    { title: "Open task", marker: " ", status: "open", checked: false }
+  ]);
 });
 
 test("platform model includes witnessed operating objects and proposal state", async () => {
@@ -200,6 +231,120 @@ test("platform proposal handlers create and review through proposal machinery", 
   assert.equal(sent.at(-1).body.proposal.status, "approved");
 });
 
+test("platform change-set handlers stage overlays and validate candidate snapshots", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    sendGateFailure: (res, gate) => sent.push({ status: gate.status, body: { error: gate.reason } }),
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.changeSet.create"]({
+    req: { body: { id: "changeset.platform.console", branchId: "branch.platform.console", title: "Platform console slice" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  assert.equal(sent.at(-1).status, 201);
+  assert.equal(sent.at(-1).body.changeSet.id, "changeset.platform.console");
+  assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.platform.console"].branchId, "branch.platform.console");
+
+  const rvm = await readFile(new URL("./platform-console.rvm", import.meta.url), "utf8");
+  const wcss = await readFile(new URL("./platform-console.wcss", import.meta.url), "utf8");
+  await handlers["platform.changeSet.edit"]({
+    req: {
+      body: {
+        edits: [
+          { path: "plugins/platform/platform-console.rvm", content: `${rvm}\n` },
+          { path: "plugins/platform/platform-console.wcss", content: `${wcss}\n` }
+        ]
+      }
+    },
+    res: {},
+    params: { id: "changeset.platform.console" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(sent.at(-1).body.edits.length, 2);
+
+  await handlers["platform.changeSet.validate"]({
+    res: {},
+    params: { id: "changeset.platform.console" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(sent.at(-1).body.candidateSnapshot.status, "valid");
+  assert.equal(Boolean(sent.at(-1).body.revisionEvent?.id), true);
+  assert.equal(world.project(moduleProjectors.candidateSnapshotIndex).rows.length, 1);
+}));
+
+test("invalid WCSS keeps the last active candidate snapshot unchanged", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    sendGateFailure: () => {},
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  const wcss = await readFile(new URL("./platform-console.wcss", import.meta.url), "utf8");
+  await handlers["platform.changeSet.create"]({
+    req: { body: { id: "changeset.invalid.wcss", branchId: "branch.invalid.wcss" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  await handlers["platform.changeSet.edit"]({
+    req: { body: { edits: [{ path: "plugins/platform/platform-console.wcss", content: wcss }] } },
+    res: {},
+    params: { id: "changeset.invalid.wcss" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  await handlers["platform.changeSet.validate"]({
+    res: {},
+    params: { id: "changeset.invalid.wcss" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  const validSnapshotId = sent.at(-1).body.candidateSnapshot.id;
+
+  await handlers["platform.changeSet.edit"]({
+    req: { body: { edits: [{ path: "plugins/platform/platform-console.wcss", content: "theme platform-console\nstyles\n  style broken\n    selector ???" }] } },
+    res: {},
+    params: { id: "changeset.invalid.wcss" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  await handlers["platform.changeSet.validate"]({
+    res: {},
+    params: { id: "changeset.invalid.wcss" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  assert.equal(sent.at(-1).body.candidateSnapshot.status, "invalid");
+  assert.equal(sent.at(-1).body.activeCandidateSnapshotId, validSnapshotId);
+}));
+
 test("platform page renders required operating views", async () => {
   const model = await buildPlatformModel({
     diagnostics: {
@@ -222,7 +367,12 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Runtime Profiles/);
   assert.match(html, /Proposal Panel/);
   assert.match(html, /Review Proposals/);
+  assert.match(html, /Change Sets/);
+  assert.match(html, /Candidate Snapshots/);
+  assert.match(html, /Roadmap Tasks/);
   assert.match(html, /platform-proposal-form/);
   assert.match(html, /platform-review-form/);
+  assert.match(html, /platform-change-set-create-form/);
   assert.match(html, /\/api\/platform-proposals/);
+  assert.match(html, /\/api\/platform-change-sets/);
 });

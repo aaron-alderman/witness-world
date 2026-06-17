@@ -21,6 +21,14 @@ intent
 
 The platform must dogfood itself. RVM, WCSS, proposals, MCP, docs, runtime diagnostics, tests, telemetry, and branches should not be peripheral tooling. They should be modeled objects with provenance, ownership, dependencies, and executable gates.
 
+## Status Key
+
+- [X] Complete.
+- [~] Partially implemented or in progress.
+- [B] Blocked on another tranche or prerequisite.
+- [L] Logged note or implementation finding.
+- [ ] Not started.
+
 ## New Agent Handoff
 
 This section is the execution contract for a fresh agent. Read it before starting implementation. The rest of the file is the long roadmap; this section keeps work pointed at the existing platform rather than a parallel system.
@@ -1186,16 +1194,16 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### Milestone A: Internal Branch And Change Set V1
 
-- [ ] Add change-set module model.
-- [ ] Add branch module model.
-- [ ] Add multi-file overlay validation for RVM/WTOML/WCSS/JSON.
-- [ ] Add platform-change-set API.
-- [ ] Add proposal integration.
-- [ ] Add Platform Console branch/change-set panels.
-- [ ] Add MCP branch/change-set operations.
+- [X] Add change-set module model.
+- [X] Add branch module model.
+- [X] Add multi-file overlay validation for RVM/WTOML/WCSS/JSON.
+- [X] Add platform-change-set API.
+- [~] Add proposal integration.
+- [X] Add Platform Console branch/change-set panels.
+- [X] Add MCP branch/change-set operations.
 - [ ] Add tests for atomic multi-file apply.
-- [ ] Add tests for failed validation preserving active snapshot.
-- [ ] Ship behind `plugin.platform`.
+- [X] Add tests for failed validation preserving active snapshot.
+- [X] Ship behind `plugin.platform`.
 
 ### Milestone B: Backend Candidate Snapshot V1
 
@@ -1276,15 +1284,16 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 This is the recommended next slice because it provides immediate leverage without requiring JS hot-swap or full Git integration.
 
-- [ ] Add `changeSet`, `changeSetEdit`, `branch`, and `candidateSnapshot` projectors.
-- [ ] Add `POST /api/platform-change-sets`.
-- [ ] Add `POST /api/platform-change-sets/:id/edits`.
-- [ ] Add `POST /api/platform-change-sets/:id/validate`.
-- [ ] Validate overlay edits against RVM/WCSS/WTOML/JSON parsing.
-- [ ] Build candidate snapshot from overlay.
-- [ ] Add `platform.changeSet` MCP tool.
-- [ ] Add Platform Console branch/change-set panels.
-- [ ] Add test for editing `plugins/platform/platform-console.rvm` and `plugins/platform/platform-console.wcss` together.
-- [ ] Add test that invalid WCSS keeps active snapshot unchanged.
-- [ ] Add test that valid change set updates the candidate snapshot and emits a revision event.
-- [ ] Add doc ingestion for this file and expose its checkbox tasks in `/api/platform-model`.
+- [X] Add `changeSet`, `changeSetEdit`, `branch`, and `candidateSnapshot` projectors.
+- [X] Add `POST /api/platform-change-sets`.
+- [X] Add `POST /api/platform-change-sets/:id/edits`.
+- [X] Add `POST /api/platform-change-sets/:id/validate`.
+- [X] Validate overlay edits against RVM/WCSS/WTOML/JSON parsing.
+- [X] Build candidate snapshot from overlay.
+- [X] Add `platform.changeSet` MCP tool.
+- [X] Add Platform Console branch/change-set panels.
+- [X] Add test for editing `plugins/platform/platform-console.rvm` and `plugins/platform/platform-console.wcss` together.
+- [X] Add test that invalid WCSS keeps active snapshot unchanged.
+- [X] Add test that valid change set updates the candidate snapshot and emits a revision event.
+- [X] Add doc ingestion for this file and expose its checkbox tasks in `/api/platform-model`.
+- [L] Audit note: the change-set kernel is present in `plugin.platform`, but proposal-driven branch/change-set creation is still a follow-on slice.

@@ -349,6 +349,11 @@ test("minimal runtime profile does not expose platform self-model routes", async
     assert.equal((await fetch(`${server.url}/platform`)).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-model`)).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-gaps`)).status, 404);
+    assert.equal((await fetch(`${server.url}/api/platform-change-sets`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({})
+    })).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-proposals`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -378,6 +383,11 @@ test("full runtime exposes platform console and platform self-model API", async 
     const page = await fetch(`${server.url}/platform`);
     const model = await fetch(`${server.url}/api/platform-model`).then(response => response.json());
     const gaps = await fetch(`${server.url}/api/platform-gaps`).then(response => response.json());
+    const changeSetRoute = await fetch(`${server.url}/api/platform-change-sets`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({})
+    });
     const proposalRoute = await fetch(`${server.url}/api/platform-proposals`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -389,11 +399,14 @@ test("full runtime exposes platform console and platform self-model API", async 
     assert.match(await page.text(), /Platform Console/);
     assert.equal(model.nodes.some(node => node.id === "plugin.platform"), true);
     assert.equal(model.nodes.some(node => node.id === "surface:platform"), true);
+    assert.equal(model.nodes.some(node => node.kind === "task" && node.id.includes("docs/PLATFORM-ALL-THE-WAY-ROADMAP.md")), true);
     assert.equal(model.proposalActions.some(action => action.action === "runtimePlugin.install"), true);
     assert.equal(Array.isArray(gaps.gaps), true);
+    assert.notEqual(changeSetRoute.status, 404);
     assert.notEqual(proposalRoute.status, 404);
     assert.equal(diagnostics.plugins.activePluginIds.includes("plugin.platform"), true);
     assert.equal(diagnostics.routes.some(route => route.matcher === "/platform" && route.handler === "page.platform"), true);
+    assert.equal(diagnostics.routes.some(route => route.matcher === "/api/platform-change-sets" && route.handler === "platform.changeSet.create"), true);
     assert.equal(diagnostics.routes.some(route => route.matcher === "/api/platform-proposals" && route.handler === "platform.proposal.create"), true);
   } finally {
     await server.close();

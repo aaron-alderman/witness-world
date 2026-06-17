@@ -468,6 +468,68 @@ const TOOL_DEFINITIONS = [
     }
   },
   {
+    name: "platform.changeSet",
+    title: "Platform Change Set",
+    description: "Create platform change sets, stage overlay edits, and validate candidate snapshots through the shared platform handlers.",
+    inputSchema: jsonSchemaObject({
+      operation: { type: "string", enum: ["create", "edit", "validate"] },
+      id: { type: "string" },
+      changeSetId: { type: "string" },
+      branchId: { type: "string" },
+      title: { type: "string" },
+      reason: { type: "string" },
+      edits: {
+        type: "array",
+        items: jsonSchemaObject({
+          path: { type: "string" },
+          content: { type: "string" },
+          previousHash: { type: ["string", "null"] }
+        }, ["path", "content"])
+      }
+    }),
+    scope(args) {
+      return scopeResult({
+        targets: [args?.id, args?.changeSetId, args?.branchId, ...(Array.isArray(args?.edits) ? args.edits.map(edit => edit?.path).filter(Boolean) : [])].filter(Boolean)
+      });
+    },
+    async run({ args, callHandler }) {
+      const operation = args.operation || "create";
+      if (operation === "create") {
+        return runJsonHandler(callHandler, {
+          handler: "platform.changeSet.create",
+          method: "POST",
+          path: "/api/platform-change-sets",
+          body: {
+            id: args.id ?? null,
+            branchId: args.branchId ?? null,
+            title: args.title ?? null,
+            reason: args.reason ?? null
+          }
+        });
+      }
+      const changeSetId = args.changeSetId || args.id || "";
+      if (!changeSetId) return errorToolResult("change set id is required", { operation });
+      if (operation === "edit") {
+        return runJsonHandler(callHandler, {
+          handler: "platform.changeSet.edit",
+          method: "POST",
+          path: `/api/platform-change-sets/${encodeURIComponent(changeSetId)}/edits`,
+          params: { id: changeSetId },
+          body: { edits: Array.isArray(args.edits) ? args.edits : [] }
+        });
+      }
+      if (operation === "validate") {
+        return runJsonHandler(callHandler, {
+          handler: "platform.changeSet.validate",
+          method: "POST",
+          path: `/api/platform-change-sets/${encodeURIComponent(changeSetId)}/validate`,
+          params: { id: changeSetId }
+        });
+      }
+      return errorToolResult("unknown platform change set operation", { operation });
+    }
+  },
+  {
     name: "canvas.read",
     title: "Canvas Read",
     description: "Read perspective lists or a canvas projection.",

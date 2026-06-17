@@ -33,6 +33,10 @@ export function renderPlatformPage(model) {
   const topNodes = model.nodes.slice(0, 80);
   const gaps = model.gaps.slice(0, 80);
   const profiles = model.profiles ?? [];
+  const branches = model.branches ?? [];
+  const changeSets = model.changeSets ?? [];
+  const candidateSnapshots = model.candidateSnapshots ?? [];
+  const roadmapTasks = model.roadmapTasks ?? [];
   const proposalActions = model.proposalActions ?? [];
   const proposals = model.proposals ?? [];
   const openProposals = proposals.filter(row => row.status === "open");
@@ -57,6 +61,7 @@ export function renderPlatformPage(model) {
       <div class="card"><div class="metric">${countByKind(model, "route")}</div><div class="muted">Routes</div></div>
       <div class="card"><div class="metric">${countByKind(model, "handler")}</div><div class="muted">Handlers</div></div>
       <div class="card"><div class="metric">${countByKind(model, "gate")}</div><div class="muted">Verification Gates</div></div>
+      <div class="card"><div class="metric">${changeSets.length}</div><div class="muted">Change Sets</div></div>
       <div class="card"><div class="metric">${model.gaps.length}</div><div class="muted">Gaps</div></div>
     </section>
 
@@ -110,7 +115,82 @@ export function renderPlatformPage(model) {
           </div>
           <div id="review-status"></div>
         </form>
+
+        <h2>Change Set Panel</h2>
+        <form id="platform-change-set-create-form">
+          <label>Change set id <input name="id" value="changeset-${Date.now().toString(36)}"></label>
+          <label>Branch id <input name="branchId" value="branch-platform-console"></label>
+          <label>Title <input name="title" value="Platform console change"></label>
+          <label>Reason <input name="reason" value="Stage platform console edits"></label>
+          <button type="submit">Create Change Set</button>
+          <div id="change-set-create-status"></div>
+        </form>
+
+        <form id="platform-change-set-edit-form">
+          <label>Change set
+            <select name="changeSetId">
+              ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
+            </select>
+          </label>
+          <label>Path <input name="path" value="plugins/platform/platform-console.rvm"></label>
+          <label>Content <textarea name="content"></textarea></label>
+          <button type="submit">Stage Edit</button>
+          <div id="change-set-edit-status"></div>
+        </form>
+
+        <form id="platform-change-set-validate-form">
+          <label>Change set
+            <select name="changeSetId">
+              ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
+            </select>
+          </label>
+          <button type="submit">Validate Change Set</button>
+          <div id="change-set-validate-status"></div>
+        </form>
       </aside>
+    </section>
+
+    <section class="grid2">
+      <div>
+        <h2>Branches</h2>
+        <table>
+          <thead><tr><th>Status</th><th>Branch</th><th>Owner</th><th>Change Sets</th><th>Latest Candidate</th></tr></thead>
+          <tbody>${tableRows(branches.slice(0, 80), [
+            row => row.status,
+            row => row.id,
+            row => row.owner || "",
+            row => (row.changeSetIds || []).join(", "),
+            row => row.latestCandidateSnapshotId || ""
+          ])}</tbody>
+        </table>
+      </div>
+      <div>
+        <h2>Change Sets</h2>
+        <table>
+          <thead><tr><th>Status</th><th>Change Set</th><th>Branch</th><th>Edits</th><th>Candidate</th></tr></thead>
+          <tbody>${tableRows(changeSets.slice(0, 80), [
+            row => row.status,
+            row => row.id,
+            row => row.branchId,
+            row => row.editCount ?? 0,
+            row => row.latestCandidateSnapshotId || ""
+          ])}</tbody>
+        </table>
+      </div>
+    </section>
+
+    <section>
+      <h2>Candidate Snapshots</h2>
+      <table>
+        <thead><tr><th>Status</th><th>Snapshot</th><th>Branch</th><th>Change Set</th><th>Revision</th></tr></thead>
+        <tbody>${tableRows(candidateSnapshots.slice(0, 80), [
+          row => row.status,
+          row => row.id,
+          row => row.branchId,
+          row => row.changeSetId,
+          row => row.revision
+        ])}</tbody>
+      </table>
     </section>
 
     <section>
@@ -149,6 +229,19 @@ export function renderPlatformPage(model) {
           row => row.id,
           row => row.coreBundles.join(", "),
           row => row.plugins.join(", ")
+        ])}</tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Roadmap Tasks</h2>
+      <table>
+        <thead><tr><th>Status</th><th>Task</th><th>Section</th><th>Source</th></tr></thead>
+        <tbody>${tableRows(roadmapTasks.slice(0, 80), [
+          row => row.status,
+          row => row.title,
+          row => row.section,
+          row => `${row.doc}:${row.line}`
         ])}</tbody>
       </table>
     </section>
@@ -207,6 +300,63 @@ export function renderPlatformPage(model) {
       });
       const json = await response.json().catch(() => ({}));
       status.textContent = response.ok ? (action === "approve" ? "Proposal approved." : "Proposal rejected.") : (json.error || "Review failed.");
+    });
+    document.getElementById("platform-change-set-create-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const status = document.getElementById("change-set-create-status");
+      const response = await fetch("/api/platform-change-sets", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          id: form.elements.id.value || null,
+          branchId: form.elements.branchId.value || null,
+          title: form.elements.title.value || null,
+          reason: form.elements.reason.value || null
+        })
+      });
+      const json = await response.json().catch(() => ({}));
+      status.textContent = response.ok ? "Change set created." : (json.error || "Change set creation failed.");
+    });
+    document.getElementById("platform-change-set-edit-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const status = document.getElementById("change-set-edit-status");
+      const changeSetId = form.elements.changeSetId.value;
+      if (!changeSetId) {
+        status.textContent = "Select a change set first.";
+        return;
+      }
+      const response = await fetch("/api/platform-change-sets/" + encodeURIComponent(changeSetId) + "/edits", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          edits: [{
+            path: form.elements.path.value,
+            content: form.elements.content.value
+          }]
+        })
+      });
+      const json = await response.json().catch(() => ({}));
+      status.textContent = response.ok ? "Edit staged." : (json.error || "Edit staging failed.");
+    });
+    document.getElementById("platform-change-set-validate-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const status = document.getElementById("change-set-validate-status");
+      const changeSetId = form.elements.changeSetId.value;
+      if (!changeSetId) {
+        status.textContent = "Select a change set first.";
+        return;
+      }
+      const response = await fetch("/api/platform-change-sets/" + encodeURIComponent(changeSetId) + "/validate", {
+        method: "POST",
+        headers: { "content-type": "application/json" }
+      });
+      const json = await response.json().catch(() => ({}));
+      status.textContent = response.ok
+        ? (json.candidateSnapshot?.status === "valid" ? "Change set valid." : "Change set invalid.")
+        : (json.error || "Validation failed.");
     });
   </script>
 </body>

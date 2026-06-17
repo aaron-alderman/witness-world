@@ -24,7 +24,8 @@ const CONTROL_DOCS = new Map([
   ["docs/PLUGIN-MIGRATION-CONTROL.md", ["verify", "steward"]],
   ["docs/SHELLS-PERSISTENCE-ECOSYSTEM.md", ["ship", "steward"]],
   ["docs/PIPELINE-FIDELITY-AUDIT.md", ["transform", "verify"]],
-  ["docs/AUTHORING-REPLAY-PLAYBOOK.md", ["author", "verify"]]
+  ["docs/AUTHORING-REPLAY-PLAYBOOK.md", ["author", "verify"]],
+  ["docs/PLATFORM-ALL-THE-WAY-ROADMAP.md", ["author", "steward"]]
 ]);
 
 const PLATFORM_AUTHORED_SOURCES = Object.freeze([
@@ -78,6 +79,14 @@ function addEdge(edges, from, rel, to, source = "platform") {
 async function readJson(relativePath, fallback) {
   try {
     return JSON.parse(await fs.readFile(path.join(repoRoot, relativePath), "utf8"));
+  } catch {
+    return fallback;
+  }
+}
+
+async function readText(relativePath, fallback = "") {
+  try {
+    return await fs.readFile(path.join(repoRoot, relativePath), "utf8");
   } catch {
     return fallback;
   }
@@ -230,6 +239,63 @@ function projectRows(project, projector) {
   }
 }
 
+function slugify(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    || "task";
+}
+
+function roadmapTaskStatus(marker) {
+  switch (String(marker || "").toLowerCase()) {
+    case "x":
+      return { checked: true, status: "done" };
+    case "~":
+      return { checked: false, status: "in-progress" };
+    case "b":
+      return { checked: false, status: "blocked" };
+    case "l":
+      return { checked: false, status: "logged" };
+    default:
+      return { checked: false, status: "open" };
+  }
+}
+
+export function parseRoadmapTasks(docPath, source) {
+  const lines = String(source || "").replace(/\r\n/g, "\n").split("\n");
+  const headings = [];
+  const tasks = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      headings[level - 1] = headingMatch[2].trim();
+      headings.length = level;
+      continue;
+    }
+    const taskMatch = line.match(/^- \[([^\]])\] (.+)$/);
+    if (!taskMatch) continue;
+    const section = headings.filter(Boolean).join(" / ");
+    const title = taskMatch[2].trim();
+    const marker = taskMatch[1];
+    const parsedStatus = roadmapTaskStatus(marker);
+    tasks.push({
+      id: `task:${docPath}:${index + 1}:${slugify(`${section} ${title}`)}`,
+      doc: docPath,
+      line: index + 1,
+      title,
+      section,
+      marker,
+      checked: parsedStatus.checked,
+      status: parsedStatus.status
+    });
+  }
+  return tasks;
+}
+
 function platformTargetNodeId(kind, id) {
   if (!id) return null;
   if (String(id).includes(":")) return String(id);
@@ -260,6 +326,10 @@ export async function buildPlatformModel({
   ];
   const capabilityInstalls = projectRows(project, moduleProjectors.capabilityInstalls);
   const proposals = projectRows(project, moduleProjectors.proposals);
+  const changeSets = projectRows(project, moduleProjectors.changeSets);
+  const changeSetEdits = projectRows(project, moduleProjectors.changeSetEdits);
+  const branches = projectRows(project, moduleProjectors.branches);
+  const candidateSnapshots = projectRows(project, moduleProjectors.candidateSnapshots);
 
   for (const row of pluginPackages) {
     const manifest = await readJson(`plugins/${row.directory}/plugin.json`, {});
@@ -452,6 +522,21 @@ export async function buildPlatformModel({
     });
   }
 
+  const roadmapDocPath = "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md";
+  const roadmapTasks = parseRoadmapTasks(roadmapDocPath, await readText(roadmapDocPath, ""));
+  for (const task of roadmapTasks) {
+    addNode(nodes, {
+      id: task.id,
+      kind: "task",
+      title: task.title,
+      lifecycle: ["author", "steward"],
+      owner: "plugin.platform",
+      status: task.status,
+      source: `${task.doc}:${task.line}`
+    });
+    addEdge(edges, `doc:${task.doc}`, "describes", task.id, "roadmap");
+  }
+
   for (const authoredSource of PLATFORM_AUTHORED_SOURCES) {
     addNode(nodes, {
       ...authoredSource,
@@ -475,10 +560,69 @@ export async function buildPlatformModel({
     if (proposal.targetProcess) addEdge(edges, `proposal:${proposal.id}`, "proposes", `handler:${proposal.targetProcess}`, "witnesses");
     if (proposal.targetId) addEdge(edges, `proposal:${proposal.id}`, "targets", platformTargetNodeId(proposal.targetKind, proposal.targetId), "witnesses");
   }
+  for (const branch of branches) {
+    addNode(nodes, {
+      id: `branch:${branch.id}`,
+      kind: "branch",
+      title: branch.title || branch.id,
+      lifecycle: ["author", "verify", "steward"],
+      owner: branch.owner ?? "plugin.platform",
+      status: branch.status ?? "open",
+      source: "witnesses"
+    });
+    for (const changeSetId of branch.changeSetIds ?? []) {
+      addEdge(edges, `branch:${branch.id}`, "contains", `changeSet:${changeSetId}`, "witnesses");
+    }
+    if (branch.latestCandidateSnapshotId) {
+      addEdge(edges, `branch:${branch.id}`, "tracks", branch.latestCandidateSnapshotId, "witnesses");
+    }
+  }
+  for (const changeSet of changeSets) {
+    addNode(nodes, {
+      id: `changeSet:${changeSet.id}`,
+      kind: "changeSet",
+      title: changeSet.title || changeSet.id,
+      lifecycle: ["author", "transform", "verify"],
+      owner: changeSet.owner ?? "plugin.platform",
+      status: changeSet.status ?? "draft",
+      source: "witnesses"
+    });
+    addEdge(edges, `branch:${changeSet.branchId}`, "contains", `changeSet:${changeSet.id}`, "witnesses");
+    if (changeSet.latestCandidateSnapshotId) {
+      addEdge(edges, `changeSet:${changeSet.id}`, "validatesTo", changeSet.latestCandidateSnapshotId, "witnesses");
+    }
+  }
+  for (const edit of changeSetEdits) {
+    addNode(nodes, {
+      id: edit.id,
+      kind: "changeSetEdit",
+      title: edit.path,
+      lifecycle: ["author", "transform"],
+      owner: edit.actor ?? "plugin.platform",
+      status: "staged",
+      source: edit.path
+    });
+    addEdge(edges, `changeSet:${edit.changeSetId}`, "stages", edit.id, "witnesses");
+  }
+  for (const snapshot of candidateSnapshots) {
+    addNode(nodes, {
+      id: snapshot.id,
+      kind: "candidateSnapshot",
+      title: snapshot.id,
+      lifecycle: ["transform", "verify"],
+      owner: "plugin.platform",
+      status: snapshot.status ?? "invalid",
+      source: "witnesses"
+    });
+    addEdge(edges, `changeSet:${snapshot.changeSetId}`, "produces", snapshot.id, "witnesses");
+    addEdge(edges, `branch:${snapshot.branchId}`, "tracks", snapshot.id, "witnesses");
+  }
   addEdge(edges, "doc:docs/PLUGIN-MIGRATION-CONTROL.md", "governs", "plugin.authoring", "docs");
   addEdge(edges, "doc:docs/RUNTIME-STACK-MAP.md", "governs", "bundle-core-runtime", "docs");
   addEdge(edges, "doc:docs/CAPABILITIES.md", "governs", "plugin.platform", "docs");
+  addEdge(edges, "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md", "governs", "plugin.platform", "docs");
   addEdge(edges, "plugin.platform", "documentedBy", "doc:docs/CAPABILITIES.md", "docs");
+  addEdge(edges, "plugin.platform", "documentedBy", "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md", "docs");
 
   const testFiles = await listFiles(path.join(repoRoot, "test"), file => file.endsWith(".test.js"));
   const pluginTestFiles = await listFiles(path.join(repoRoot, "plugins"), file => file.endsWith(".test.js"));
@@ -514,7 +658,12 @@ export async function buildPlatformModel({
     gaps,
     profiles,
     proposals: proposals.map(row => ({ ...row })),
-    proposalActions: platformProposalTemplates()
+    proposalActions: platformProposalTemplates(),
+    branches: branches.map(row => ({ ...row })),
+    changeSets: changeSets.map(row => ({ ...row })),
+    changeSetEdits: changeSetEdits.map(row => ({ ...row })),
+    candidateSnapshots: candidateSnapshots.map(row => ({ ...row })),
+    roadmapTasks
   };
 }
 
