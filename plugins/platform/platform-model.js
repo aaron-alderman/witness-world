@@ -564,6 +564,20 @@ function packageScriptProtectedObjects(scriptName, command, nodes) {
   return unique(targets);
 }
 
+function buildTestGateIndex(rows, affectedRows = []) {
+  const byId = Object.create(null);
+  const byProtectedObject = Object.create(null);
+  const byBranch = Object.create(null);
+  for (const row of rows) {
+    byId[row.id] = { ...row };
+    for (const target of row.protectedObjects ?? []) pushByKey(byProtectedObject, target, row.id);
+  }
+  for (const row of affectedRows) pushByKey(byBranch, row.branchId, row.gateId);
+  for (const target of Object.keys(byProtectedObject)) byProtectedObject[target] = unique(byProtectedObject[target]).sort();
+  for (const branchId of Object.keys(byBranch)) byBranch[branchId] = unique(byBranch[branchId]).sort();
+  return { byId, byProtectedObject, byBranch };
+}
+
 function buildTestGateRows(nodes, edges, branches = [], latestResultsByGate = Object.create(null)) {
   const outgoing = new Map();
   for (const edge of edges.values()) {
@@ -608,7 +622,7 @@ function buildTestGateRows(nodes, edges, branches = [], latestResultsByGate = Ob
     })
     .sort((left, right) => left.id.localeCompare(right.id));
 
-  const byBranch = Object.create(null);
+  const affectedRows = [];
   for (const branch of branches) {
     const affectedSystems = new Set((branch.affectedSystemSummaries ?? []).map(row => String(row.system || "")));
     const docTargets = new Set([
@@ -616,19 +630,38 @@ function buildTestGateRows(nodes, edges, branches = [], latestResultsByGate = Ob
       ...(branch.docsFreshness?.touchedDocs ?? []).map(doc => `doc:${doc}`),
       ...(branch.docsFreshness?.missingDocs ?? []).map(doc => `doc:${doc}`)
     ]);
-    const selected = rows.filter(gate =>
-      gate.protectedObjects.some(target =>
+    for (const gate of rows) {
+      const matchedTargets = unique(gate.protectedObjects.filter(target =>
         affectedSystems.has(target)
         || affectedSystems.has(target.replace(/^profile:/, ""))
         || affectedSystems.has(target.replace(/^capability:/, ""))
         || docTargets.has(target)
-      )
-    );
-    byBranch[String(branch.id)] = selected.map(gate => gate.id);
-    for (const gate of selected) gate.selectedByBranches.push(String(branch.id));
+      ));
+      if (!matchedTargets.length) continue;
+      const branchId = String(branch.id);
+      gate.selectedByBranches.push(branchId);
+      affectedRows.push({
+        id: `affectedTestGate:${branchId}:${gate.id}`,
+        branchId,
+        gateId: gate.id,
+        gateTitle: gate.title,
+        protectedObjects: [...gate.protectedObjects],
+        protectedObjectLabels: [...gate.protectedObjectLabels],
+        matchedTargets,
+        matchedTargetLabels: matchedTargets.map(target => nodes.get(target)?.title || target),
+        sourceDependencies: [...gate.sourceDependencies]
+      });
+    }
   }
   for (const row of rows) row.selectedByBranches = unique(row.selectedByBranches);
-  return { rows, byBranch };
+  affectedRows.sort((left, right) => left.branchId.localeCompare(right.branchId) || left.gateId.localeCompare(right.gateId));
+  const index = buildTestGateIndex(rows, affectedRows);
+  return {
+    rows,
+    affectedRows,
+    index,
+    byBranch: index.byBranch
+  };
 }
 
 export function parseRoadmapTasks(docPath, source) {
@@ -1285,6 +1318,8 @@ export async function buildPlatformModel({
     docSections,
     docTasks,
     testGates: testGateProjection.rows,
+    testGateIndex: testGateProjection.index,
+    affectedTestGates: testGateProjection.affectedRows,
     affectedTestGatesByBranch: testGateProjection.byBranch,
     testRuns: testRuns.map(row => ({ ...row })),
     testResults: testResults.map(row => ({ ...row })),
@@ -1345,12 +1380,19 @@ export function filterPlatformModel(model, view, id = null) {
     for (const gate of testGates) {
       for (const branchId of gate.selectedByBranches ?? []) relevantBranchIds.add(branchId);
     }
+    const affectedTestGates = (model.affectedTestGates ?? []).filter(row =>
+      !id
+      || row.id === id
+      || row.gateId === id
+      || relevantBranchIds.has(row.branchId)
+    );
     const affectedTestGatesByBranch = Object.fromEntries(
       Object.entries(model.affectedTestGatesByBranch ?? {})
         .filter(([branchId, gateIds]) => !id || relevantBranchIds.has(branchId) || gateIds.includes(id))
         .map(([branchId, gateIds]) => [branchId, [...gateIds]])
     );
-    return { testGates, affectedTestGatesByBranch, summaries: model.summaries };
+    const testGateIndex = buildTestGateIndex(testGates, affectedTestGates);
+    return { testGates, testGateIndex, affectedTestGates, affectedTestGatesByBranch, summaries: model.summaries };
   }
   if (view === "testRuns") {
     const testRuns = id

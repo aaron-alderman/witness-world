@@ -281,6 +281,38 @@ test("platform model filters support MCP views", async () => {
         selectedByBranches: []
       }
     ],
+    testGateIndex: {
+      byId: {
+        "gate:test/runtime-profile.test.js": {
+          id: "gate:test/runtime-profile.test.js",
+          title: "test/runtime-profile.test.js"
+        },
+        "gate:plugins/platform/platform.test.js": {
+          id: "gate:plugins/platform/platform.test.js",
+          title: "plugins/platform/platform.test.js"
+        }
+      },
+      byProtectedObject: {
+        "profile:minimal": ["gate:test/runtime-profile.test.js"],
+        "plugin.platform": ["gate:plugins/platform/platform.test.js", "gate:test/runtime-profile.test.js"]
+      },
+      byBranch: {
+        "branch.demo": ["gate:test/runtime-profile.test.js"]
+      }
+    },
+    affectedTestGates: [
+      {
+        id: "affectedTestGate:branch.demo:gate:test/runtime-profile.test.js",
+        branchId: "branch.demo",
+        gateId: "gate:test/runtime-profile.test.js",
+        gateTitle: "test/runtime-profile.test.js",
+        protectedObjects: ["profile:minimal", "plugin.platform"],
+        protectedObjectLabels: ["Minimal runtime", "Platform plugin"],
+        matchedTargets: ["profile:minimal"],
+        matchedTargetLabels: ["Minimal runtime"],
+        sourceDependencies: ["test/runtime-profile.test.js"]
+      }
+    ],
     affectedTestGatesByBranch: {
       "branch.demo": ["gate:test/runtime-profile.test.js"]
     }
@@ -351,6 +383,10 @@ test("platform model filters support MCP views", async () => {
   assert.equal(gates.gates.every(node => node.kind === "gate"), true);
   assert.equal(testGates.testGates.length, 1);
   assert.equal(testGates.testGates[0].id, "gate:test/runtime-profile.test.js");
+  assert.equal(testGates.testGateIndex.byId["gate:test/runtime-profile.test.js"].title, "test/runtime-profile.test.js");
+  assert.deepEqual(testGates.testGateIndex.byBranch["branch.demo"], ["gate:test/runtime-profile.test.js"]);
+  assert.equal(testGates.affectedTestGates[0].branchId, "branch.demo");
+  assert.equal(testGates.affectedTestGates[0].gateId, "gate:test/runtime-profile.test.js");
   assert.deepEqual(testGates.affectedTestGatesByBranch["branch.demo"], ["gate:test/runtime-profile.test.js"]);
   assert.equal(testRuns.testRuns.length, 1);
   assert.equal(testRuns.testRuns[0].id, "testRun:demo");
@@ -416,9 +452,17 @@ test("platform model projects structured test gates and affected branch selectio
   assert.equal(docGate.protectedObjects.includes("doc:docs/RUNTIME-BUNDLE-MIGRATION-PLAN.md"), true);
   assert.equal(docGate.runner, "node-test");
   assert.deepEqual(docGate.sourceDependencies, ["docs/RUNTIME-BUNDLE-MIGRATION-PLAN.md"]);
+  assert.equal(model.testGateIndex.byId["gate:test/runtime-profile.test.js"].title, "test/runtime-profile.test.js");
+  assert.equal(model.testGateIndex.byProtectedObject["plugin.platform"].includes("gate:plugins/platform/platform.test.js"), true);
+  assert.equal(model.affectedTestGates.some(row =>
+    row.branchId === "branch.platform.gates"
+    && row.gateId === "gate:test/runtime-profile.test.js"
+  ), true);
   assert.equal(model.affectedTestGatesByBranch["branch.platform.gates"].includes("gate:test/runtime-profile.test.js"), true);
   assert.equal(model.affectedTestGatesByBranch["branch.platform.gates"].includes("gate:plugins/platform/platform.test.js"), true);
   assert.equal(branchView.testGates.some(row => row.id === "gate:test/runtime-profile.test.js"), true);
+  assert.equal(branchView.affectedTestGates.some(row => row.branchId === "branch.platform.gates"), true);
+  assert.deepEqual(branchView.testGateIndex.byBranch["branch.platform.gates"], model.testGateIndex.byBranch["branch.platform.gates"]);
   assert.deepEqual(branchView.affectedTestGatesByBranch["branch.platform.gates"], model.affectedTestGatesByBranch["branch.platform.gates"]);
 });
 
@@ -2373,6 +2417,8 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Selected test gates/);
   assert.match(html, /Test Gates/);
   assert.match(html, /Affected Test Gates By Branch/);
+  assert.match(html, /Affected Test Gate Selections/);
+  assert.match(html, /Test Gate Index/);
   assert.match(html, /Protected Objects/);
   assert.match(html, /Selected Branches/);
   assert.match(html, /Test Runs/);

@@ -654,12 +654,12 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add `coverageEdge` module kind.
 - [ ] Add projectors:
   - [~] `testGates`
-  - [ ] `testGateIndex`
+  - [X] `testGateIndex`
   - [X] `testRuns`
   - [X] `testResults`
   - [X] `latestTestResultsByGate`
   - [ ] coverageEdges
-  - [~] `affectedTestGates`
+  - [X] `affectedTestGates`
 - [~] Model gate fields:
   - [X] id
   - [X] title
