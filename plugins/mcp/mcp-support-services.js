@@ -62,6 +62,7 @@ export function createMcpBundleSupportServices({
       case "platform.read":
       case "platform.proposal":
       case "platform.changeSet":
+      case "platform.test":
         return capabilities.has("platform.self");
       default:
         return true;

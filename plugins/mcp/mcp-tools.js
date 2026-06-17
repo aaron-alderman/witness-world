@@ -629,6 +629,64 @@ const TOOL_DEFINITIONS = [
     }
   },
   {
+    name: "platform.test",
+    title: "Platform Test",
+    description: "Inspect platform test runs or execute a modeled test gate through the shared platform handlers.",
+    inputSchema: jsonSchemaObject({
+      operation: { type: "string", enum: ["list", "read", "run"] },
+      id: { type: "string" },
+      gateId: { type: "string" },
+      branchId: { type: "string" },
+      changeSetId: { type: "string" },
+      candidateSnapshotId: { type: "string" }
+    }),
+    scope(args) {
+      return scopeResult({
+        targets: [args?.id, args?.gateId, args?.branchId, args?.changeSetId, args?.candidateSnapshotId].filter(Boolean)
+      });
+    },
+    async run({ args, callHandler }) {
+      const operation = args.operation || "list";
+      if (operation === "list") {
+        return runJsonHandler(callHandler, {
+          handler: "platform.model.read",
+          method: "GET",
+          path: "/api/platform-model",
+          query: {
+            view: "testRuns",
+            ...(args.id ? { id: args.id } : {})
+          }
+        });
+      }
+      const testRunId = args.id || "";
+      if (operation === "read") {
+        if (!testRunId) return errorToolResult("test run id is required", { operation });
+        return runJsonHandler(callHandler, {
+          handler: "platform.testRun.read",
+          method: "GET",
+          path: `/api/platform-test-runs/${encodeURIComponent(testRunId)}`,
+          params: { id: testRunId }
+        });
+      }
+      if (operation === "run") {
+        if (!args.gateId) return errorToolResult("gate id is required", { operation });
+        return runJsonHandler(callHandler, {
+          handler: "platform.testRun.create",
+          method: "POST",
+          path: "/api/platform-test-runs",
+          body: {
+            id: testRunId || null,
+            gateId: args.gateId,
+            branchId: args.branchId ?? null,
+            changeSetId: args.changeSetId ?? null,
+            candidateSnapshotId: args.candidateSnapshotId ?? null
+          }
+        });
+      }
+      return errorToolResult("unknown platform test operation", { operation });
+    }
+  },
+  {
     name: "canvas.read",
     title: "Canvas Read",
     description: "Read perspective lists or a canvas projection.",

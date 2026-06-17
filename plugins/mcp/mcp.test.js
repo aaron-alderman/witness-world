@@ -23,6 +23,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(toolNames.includes("platform.branch"), true);
   assert.equal(toolNames.includes("platform.proposal"), true);
   assert.equal(toolNames.includes("platform.changeSet"), true);
+  assert.equal(toolNames.includes("platform.test"), true);
   assert.equal(toolNames.includes("db.sql"), true);
   assert.equal(listSupportedMcpTools().every(tool => toolNames.includes(tool.name)), true);
   assert.deepEqual(resolveMcpToolScope("world.read", { view: "processRun", runId: "run-1" }), {
@@ -35,6 +36,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   const platformBranch = listSupportedMcpTools().find(tool => tool.name === "platform.branch");
   const platformProposal = listSupportedMcpTools().find(tool => tool.name === "platform.proposal");
   const platformChangeSet = listSupportedMcpTools().find(tool => tool.name === "platform.changeSet");
+  const platformTest = listSupportedMcpTools().find(tool => tool.name === "platform.test");
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("authoringMatrix"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("gaps"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("proposals"), true);
@@ -54,6 +56,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("branch.create"), true);
   assert.equal(platformProposal.inputSchema.properties.operation.enum.includes("approve"), true);
   assert.deepEqual(platformChangeSet.inputSchema.properties.operation.enum, ["list", "read", "create", "edit", "removeEdit", "validate", "apply", "reject", "abandon"]);
+  assert.deepEqual(platformTest.inputSchema.properties.operation.enum, ["list", "read", "run"]);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("process.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("type.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("projection.create"), true);
@@ -95,9 +98,11 @@ test("mcp plugin owns origin, principal, and scope support services", () => {
   assert.equal(services.mcpToolAvailable("storage.blob"), false);
   assert.equal(services.mcpToolAvailable("platform.read"), false);
   assert.equal(services.mcpToolAvailable("platform.changeSet"), false);
+  assert.equal(services.mcpToolAvailable("platform.test"), false);
   projected.backendCapabilities.add("platform.self");
   assert.equal(services.mcpToolAvailable("platform.read"), true);
   assert.equal(services.mcpToolAvailable("platform.changeSet"), true);
+  assert.equal(services.mcpToolAvailable("platform.test"), true);
   assert.deepEqual(
     services.validateMcpOrigin({ headers: { origin: "http://localhost:3000", host: "127.0.0.1:8787" } }),
     { ok: true }
@@ -348,6 +353,50 @@ test("platform MCP change-set tool routes through platform change-set handlers",
   });
   assert.equal(abandoned.isError, false);
   assert.equal(calls.at(-1).handler, "platform.changeSet.abandon");
+});
+
+test("platform MCP test tool routes through platform test-run handlers", async () => {
+  const calls = [];
+  const callHandler = async request => {
+    calls.push(request);
+    return { status: request.handler === "platform.testRun.create" ? 201 : 200, body: { ok: true, handler: request.handler, id: request.params?.id ?? null } };
+  };
+
+  const listed = await executeMcpTool("platform.test", {
+    args: { operation: "list", id: "branch.demo" },
+    callHandler
+  });
+  assert.equal(listed.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.model.read");
+  assert.equal(calls.at(-1).path, "/api/platform-model");
+  assert.equal(calls.at(-1).query.view, "testRuns");
+  assert.equal(calls.at(-1).query.id, "branch.demo");
+
+  const ran = await executeMcpTool("platform.test", {
+    args: {
+      operation: "run",
+      id: "testRun.platform.demo",
+      gateId: "gate:plugins/platform/platform.test.js",
+      branchId: "branch.platform.demo",
+      changeSetId: "changeSet:platform-demo",
+      candidateSnapshotId: "candidateSnapshot:platform-demo:1"
+    },
+    callHandler
+  });
+  assert.equal(ran.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.testRun.create");
+  assert.equal(calls.at(-1).path, "/api/platform-test-runs");
+  assert.equal(calls.at(-1).body.id, "testRun.platform.demo");
+  assert.equal(calls.at(-1).body.gateId, "gate:plugins/platform/platform.test.js");
+
+  const read = await executeMcpTool("platform.test", {
+    args: { operation: "read", id: "testRun.platform.demo" },
+    callHandler
+  });
+  assert.equal(read.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.testRun.read");
+  assert.equal(calls.at(-1).path, "/api/platform-test-runs/testRun.platform.demo");
+  assert.equal(calls.at(-1).params.id, "testRun.platform.demo");
 });
 
 test("mcp runtime ownership is not implemented in core compatibility files", async () => {
