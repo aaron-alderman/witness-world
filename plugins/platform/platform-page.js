@@ -58,6 +58,11 @@ export function renderPlatformPage(model) {
   const branches = model.branches ?? [];
   const changeSets = model.changeSets ?? [];
   const candidateSnapshots = model.candidateSnapshots ?? [];
+  const runtimeRevisions = model.runtimeRevisions ?? [];
+  const activeRuntimeRevision = model.activeRuntimeRevision ?? null;
+  const snapshotBuilds = model.snapshotBuilds ?? [];
+  const snapshotBuildErrors = model.snapshotBuildErrors ?? [];
+  const snapshotDiagnostics = model.snapshotDiagnostics ?? null;
   const roadmapTasks = model.roadmapTasks ?? [];
   const proposalActions = model.proposalActions ?? [];
   const proposals = model.proposals ?? [];
@@ -300,6 +305,56 @@ export function renderPlatformPage(model) {
           row => row.revision
         ])}</tbody>
       </table>
+    </section>
+
+    <section class="grid2">
+      <div>
+        <h2>Runtime Revisions</h2>
+        <div class="platform-branch-summary">
+          <div class="card">
+            <h3>Active Revision</h3>
+            <div>${esc(activeRuntimeRevision?.revision ?? "")}</div>
+            <div class="muted">${esc(activeRuntimeRevision?.trigger || "")}</div>
+          </div>
+          <div class="card">
+            <h3>Last Good</h3>
+            <div>${esc(snapshotDiagnostics?.lastGoodAppRevision ?? "")}</div>
+            <div class="muted">${esc(snapshotDiagnostics?.devMode ? "dev-mode active" : "")}</div>
+          </div>
+          <div class="card">
+            <h3>Pending Dirty</h3>
+            <div>${esc((snapshotDiagnostics?.pendingDirtySources ?? []).length)}</div>
+            <div class="muted">${esc((snapshotDiagnostics?.pendingDirtySources ?? []).join(", "))}</div>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>Status</th><th>Revision</th><th>Trigger</th><th>Changed Sources</th><th>Candidate Branches</th><th>Build Errors</th></tr></thead>
+          <tbody>${tableRows(runtimeRevisions.slice(0, 40), [
+            row => row.status,
+            row => row.revision,
+            row => row.trigger,
+            row => row.changedSources.join(", "),
+            row => row.candidateBranchCount,
+            row => row.buildErrorCount
+          ])}</tbody>
+        </table>
+      </div>
+      <div>
+        <h2>Snapshot Builds</h2>
+        <table>
+          <thead><tr><th>Status</th><th>Build</th><th>Branch</th><th>Change Set</th><th>Files</th><th>Errors</th></tr></thead>
+          <tbody>${tableRows(snapshotBuilds.slice(0, 80), [
+            row => row.status,
+            row => row.id,
+            row => row.branchId,
+            row => row.changeSetId,
+            row => row.fileCount,
+            row => row.errorCount
+          ])}</tbody>
+        </table>
+        <h3>Failed Snapshot Builds</h3>
+        <pre>${esc(JSON.stringify(snapshotBuildErrors.slice(0, 40), null, 2))}</pre>
+      </div>
     </section>
 
     <section>

@@ -24,6 +24,11 @@ import { buildPlatformProposalCreateBody } from "./platform-proposals.js";
 
 function diagnosticsFromAppContext(appContext) {
   const summary = appContext?.runtimeBundleSummary ?? {};
+  const snapshotManager = appContext?.appSnapshotManager ?? null;
+  const snapshotDiagnostics = snapshotManager?.diagnostics?.() ?? null;
+  const activeSnapshot = snapshotManager?.getActiveSnapshot?.() ?? null;
+  const lastRevisionEvent = snapshotManager?.getLastRevisionEvent?.() ?? null;
+  const lastGoodSnapshot = snapshotManager?.lastGoodSnapshot ?? activeSnapshot ?? null;
   return {
     activeProfile: appContext?.runtimeProfile ?? summary.profile ?? null,
     activeBundles: (summary.bundles ?? []).map(bundle => ({
@@ -39,7 +44,23 @@ function diagnosticsFromAppContext(appContext) {
       activePluginIds: [...(appContext?.activeRuntimePluginIds ?? appContext?.runtimePluginCatalog?.activePluginIds ?? [])],
       effectivePluginIds: [...(appContext?.effectiveRuntimePluginIds ?? appContext?.runtimePluginCatalog?.effectivePluginIds ?? [])],
       rejectedPlugins: [...(appContext?.runtimePluginCatalog?.rejectedPlugins ?? [])]
-    }
+    },
+    appSnapshot: snapshotDiagnostics
+      ? {
+          ...snapshotDiagnostics,
+          lastGoodAppRevision: Number(lastGoodSnapshot?.appRevision || snapshotDiagnostics.appRevision || 0),
+          activeSourceIds: Array.isArray(activeSnapshot?.sourceIndex)
+            ? activeSnapshot.sourceIndex.map(row => String(row.sourceId || row.filePath || ""))
+            : [],
+          lastRevisionEvent: lastRevisionEvent
+            ? {
+                appRevision: Number(lastRevisionEvent.appRevision || 0),
+                changedSources: Array.isArray(lastRevisionEvent.changedSources) ? lastRevisionEvent.changedSources.map(String) : [],
+                trigger: String(lastRevisionEvent.trigger || "initial")
+              }
+            : null
+        }
+      : null
   };
 }
 

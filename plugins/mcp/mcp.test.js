@@ -40,6 +40,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("proposals"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("branches"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("candidateSnapshots"), true);
+  assert.equal(platformRead.inputSchema.properties.view.enum.includes("runtimeRevisions"), true);
   assert.deepEqual(platformBranch.inputSchema.properties.operation.enum, ["list", "read", "create"]);
   assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "parentBranchId"), true);
   assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "epic"), true);
@@ -153,6 +154,24 @@ test("platform MCP proposal tool routes through platform proposal handlers", asy
   assert.equal(approved.isError, false);
   assert.equal(calls.at(-1).handler, "platform.proposal.approve");
   assert.equal(calls.at(-1).params.id, "proposal.platform.install");
+});
+
+test("platform MCP read tool routes runtime revision view through platform model handlers", async () => {
+  const calls = [];
+  const callHandler = async request => {
+    calls.push(request);
+    return { status: 200, body: { ok: true, handler: request.handler, view: request.query?.view ?? null } };
+  };
+
+  const result = await executeMcpTool("platform.read", {
+    args: { view: "runtimeRevisions", id: "branch.demo" },
+    callHandler
+  });
+  assert.equal(result.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.model.read");
+  assert.equal(calls.at(-1).path, "/api/platform-model");
+  assert.equal(calls.at(-1).query.view, "runtimeRevisions");
+  assert.equal(calls.at(-1).query.id, "branch.demo");
 });
 
 test("platform MCP branch tool routes through platform branch handlers", async () => {

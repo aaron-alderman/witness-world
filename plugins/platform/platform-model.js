@@ -197,6 +197,96 @@ function pushByKey(target, key, value) {
   target[key].push(value);
 }
 
+function candidateSnapshotsByBranchIndex(candidateSnapshots = []) {
+  const byBranch = Object.create(null);
+  for (const snapshot of candidateSnapshots) pushByKey(byBranch, snapshot.branchId, { ...snapshot });
+  for (const rows of Object.values(byBranch)) {
+    rows.sort((left, right) =>
+      Number(right.revision || 0) - Number(left.revision || 0)
+      || String(right.createdAt || "").localeCompare(String(left.createdAt || ""))
+      || String(right.id || "").localeCompare(String(left.id || ""))
+    );
+  }
+  return byBranch;
+}
+
+function normalizeSnapshotDiagnostics(appSnapshot = null) {
+  if (!appSnapshot || typeof appSnapshot !== "object") return null;
+  const lastRevisionEvent = appSnapshot.lastRevisionEvent && typeof appSnapshot.lastRevisionEvent === "object"
+    ? {
+        appRevision: Number(appSnapshot.lastRevisionEvent.appRevision || 0),
+        changedSources: Array.isArray(appSnapshot.lastRevisionEvent.changedSources)
+          ? appSnapshot.lastRevisionEvent.changedSources.map(String)
+          : [],
+        trigger: appSnapshot.lastRevisionEvent.trigger ? String(appSnapshot.lastRevisionEvent.trigger) : "initial"
+      }
+    : null;
+  return {
+    appRevision: Number(appSnapshot.appRevision || 0),
+    lastGoodAppRevision: Number(appSnapshot.lastGoodAppRevision || appSnapshot.appRevision || 0),
+    buildErrors: Array.isArray(appSnapshot.buildErrors) ? appSnapshot.buildErrors.map(error => ({ ...error })) : [],
+    pendingDirtySources: Array.isArray(appSnapshot.pendingDirtySources) ? appSnapshot.pendingDirtySources.map(String) : [],
+    activeSourceIds: Array.isArray(appSnapshot.activeSourceIds) ? appSnapshot.activeSourceIds.map(String) : [],
+    sourceCount: Number(appSnapshot.sourceCount || 0),
+    devMode: appSnapshot.devMode === true,
+    lastRevisionEvent
+  };
+}
+
+function buildRuntimeRevisionRows(snapshotDiagnostics, candidateSnapshotsByBranch) {
+  if (!snapshotDiagnostics?.appRevision) return [];
+  return [{
+    id: `runtimeRevision:backend:${snapshotDiagnostics.appRevision}`,
+    backendRevisionId: `backendRevision:${snapshotDiagnostics.appRevision}`,
+    revision: snapshotDiagnostics.appRevision,
+    kind: "backend",
+    status: "active",
+    trigger: snapshotDiagnostics.lastRevisionEvent?.trigger || "initial",
+    changedSources: [...(snapshotDiagnostics.lastRevisionEvent?.changedSources ?? [])],
+    pendingDirtySources: [...snapshotDiagnostics.pendingDirtySources],
+    activeSourceIds: [...snapshotDiagnostics.activeSourceIds],
+    sourceCount: snapshotDiagnostics.sourceCount,
+    candidateBranchCount: Object.keys(candidateSnapshotsByBranch).length,
+    buildErrorCount: snapshotDiagnostics.buildErrors.length,
+    devMode: snapshotDiagnostics.devMode
+  }];
+}
+
+function buildSnapshotBuildRows(candidateSnapshots = []) {
+  return candidateSnapshots.map(snapshot => ({
+    id: `snapshotBuild:${snapshot.id}`,
+    candidateSnapshotId: snapshot.id,
+    branchId: snapshot.branchId,
+    changeSetId: snapshot.changeSetId,
+    revision: Number(snapshot.revision || 0),
+    status: snapshot.status === "valid" ? "succeeded" : "failed",
+    createdAt: snapshot.createdAt ?? null,
+    fileCount: Array.isArray(snapshot.files) ? snapshot.files.length : 0,
+    errorCount: Array.isArray(snapshot.errors) ? snapshot.errors.length : 0
+  }));
+}
+
+function buildSnapshotBuildErrorRows(candidateSnapshots = []) {
+  const rows = [];
+  for (const snapshot of candidateSnapshots) {
+    const errors = Array.isArray(snapshot.errors) ? snapshot.errors : [];
+    for (const [index, error] of errors.entries()) {
+      rows.push({
+        id: `snapshotBuildError:${snapshot.id}:${index + 1}`,
+        snapshotBuildId: `snapshotBuild:${snapshot.id}`,
+        candidateSnapshotId: snapshot.id,
+        branchId: snapshot.branchId,
+        changeSetId: snapshot.changeSetId,
+        revision: Number(snapshot.revision || 0),
+        kind: String(error?.kind || "validation"),
+        message: String(error?.message || "snapshot build error"),
+        sourcePath: error?.path ? String(error.path) : null
+      });
+    }
+  }
+  return rows;
+}
+
 function buildGaps(nodes, edges) {
   const incoming = new Map();
   const outgoing = new Map();
@@ -370,6 +460,12 @@ export async function buildPlatformModel({
     })
   }));
   const candidateSnapshots = projectRows(project, moduleProjectors.candidateSnapshots);
+  const candidateSnapshotsByBranch = candidateSnapshotsByBranchIndex(candidateSnapshots);
+  const snapshotDiagnostics = normalizeSnapshotDiagnostics(diagnostics?.appSnapshot ?? null);
+  const runtimeRevisions = buildRuntimeRevisionRows(snapshotDiagnostics, candidateSnapshotsByBranch);
+  const activeRuntimeRevision = runtimeRevisions[0] ?? null;
+  const snapshotBuilds = buildSnapshotBuildRows(candidateSnapshots);
+  const snapshotBuildErrors = buildSnapshotBuildErrorRows(candidateSnapshots);
 
   for (const row of pluginPackages) {
     const manifest = await readJson(`plugins/${row.directory}/plugin.json`, {});
@@ -660,6 +756,54 @@ export async function buildPlatformModel({
     addEdge(edges, `changeSet:${snapshot.changeSetId}`, "produces", snapshot.id, "witnesses");
     addEdge(edges, `branch:${snapshot.branchId}`, "tracks", snapshot.id, "witnesses");
   }
+  for (const revision of runtimeRevisions) {
+    addNode(nodes, {
+      id: revision.id,
+      kind: "runtimeRevision",
+      title: `Runtime Revision ${revision.revision}`,
+      lifecycle: ["execute", "observe", "verify"],
+      owner: "runtime",
+      status: revision.status,
+      source: "appSnapshot"
+    });
+    addNode(nodes, {
+      id: revision.backendRevisionId,
+      kind: "backendRevision",
+      title: `Backend Revision ${revision.revision}`,
+      lifecycle: ["execute", "observe", "verify"],
+      owner: "runtime",
+      status: revision.status,
+      source: "appSnapshot"
+    });
+    addEdge(edges, revision.id, "materializes", revision.backendRevisionId, "appSnapshot");
+    for (const sourceId of revision.changedSources) addEdge(edges, revision.id, "observes", sourceId, "appSnapshot");
+  }
+  for (const build of snapshotBuilds) {
+    addNode(nodes, {
+      id: build.id,
+      kind: "snapshotBuild",
+      title: build.candidateSnapshotId,
+      lifecycle: ["transform", "verify"],
+      owner: "plugin.platform",
+      status: build.status,
+      source: build.candidateSnapshotId
+    });
+    addEdge(edges, `changeSet:${build.changeSetId}`, "builds", build.id, "witnesses");
+    addEdge(edges, build.id, "produces", build.candidateSnapshotId, "witnesses");
+  }
+  for (const error of snapshotBuildErrors) {
+    addNode(nodes, {
+      id: error.id,
+      kind: "snapshotBuildError",
+      title: error.message,
+      lifecycle: ["verify", "steward"],
+      owner: "plugin.platform",
+      status: "open",
+      source: error.sourcePath || error.candidateSnapshotId
+    });
+    addEdge(edges, error.snapshotBuildId, "failedWith", error.id, "witnesses");
+    addEdge(edges, error.id, "targets", error.candidateSnapshotId, "witnesses");
+  }
   for (const conflict of conflicts) {
     addNode(nodes, {
       id: conflict.id,
@@ -737,6 +881,12 @@ export async function buildPlatformModel({
     changeSets: changeSets.map(row => ({ ...row })),
     changeSetEdits: changeSetEdits.map(row => ({ ...row })),
     candidateSnapshots: candidateSnapshots.map(row => ({ ...row })),
+    candidateSnapshotsByBranch,
+    runtimeRevisions,
+    activeRuntimeRevision,
+    snapshotBuilds,
+    snapshotBuildErrors,
+    snapshotDiagnostics,
     conflicts: conflicts.map(row => ({ ...row })),
     mergeIntents: mergeIntents.map(row => ({ ...row })),
     roadmapTasks
@@ -759,6 +909,24 @@ export function filterPlatformModel(model, view, id = null) {
   if (view === "candidateSnapshots") {
     const candidateSnapshots = id ? model.candidateSnapshots.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.candidateSnapshots;
     return { candidateSnapshots, summaries: model.summaries };
+  }
+  if (view === "runtimeRevisions") {
+    const runtimeRevisions = id
+      ? model.runtimeRevisions.filter(row => row.id === id || row.backendRevisionId === id)
+      : model.runtimeRevisions;
+    return {
+      runtimeRevisions,
+      activeRuntimeRevision: model.activeRuntimeRevision,
+      snapshotBuilds: id
+        ? model.snapshotBuilds.filter(row => row.id === id || row.branchId === id || row.changeSetId === id || row.candidateSnapshotId === id)
+        : model.snapshotBuilds,
+      snapshotBuildErrors: id
+        ? model.snapshotBuildErrors.filter(row => row.id === id || row.branchId === id || row.changeSetId === id || row.candidateSnapshotId === id)
+        : model.snapshotBuildErrors,
+      candidateSnapshotsByBranch: model.candidateSnapshotsByBranch,
+      snapshotDiagnostics: model.snapshotDiagnostics,
+      summaries: model.summaries
+    };
   }
   if (view === "conflicts") {
     const conflicts = id ? model.conflicts.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.conflicts;

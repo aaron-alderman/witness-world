@@ -408,17 +408,18 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### 2.1 Snapshot Model
 
-- [ ] Promote `AppSnapshotManager` concepts into platform model nodes.
-- [ ] Add `runtimeRevision` module kind.
-- [ ] Add `backendRevision` module kind.
+- [X] Promote `AppSnapshotManager` concepts into platform model nodes.
+- [~] Add `runtimeRevision` module kind.
+- [X] Add `backendRevision` module kind.
 - [ ] Add `frontendRevision` module kind.
-- [ ] Add `snapshotBuild` module kind.
-- [ ] Add `snapshotBuildError` module kind.
-- [ ] Add projector `runtimeRevisions`.
-- [ ] Add projector `activeRuntimeRevision`.
-- [ ] Add projector `candidateSnapshotsByBranch`.
-- [ ] Expose snapshot diagnostics in `/api/platform-model`.
-- [ ] Show active, candidate, last-good, and failed snapshots in `/platform`.
+- [X] Add `snapshotBuild` module kind.
+- [X] Add `snapshotBuildError` module kind.
+- [~] Add projector `runtimeRevisions`.
+- [~] Add projector `activeRuntimeRevision`.
+- [X] Add projector `candidateSnapshotsByBranch`.
+- [X] Expose snapshot diagnostics in `/api/platform-model`.
+- [X] Show active, candidate, last-good, and failed snapshots in `/platform`.
+- [L] Current runtime-revision modeling is diagnostics-backed: `/api/platform-model`, `/platform`, and MCP now expose the active `AppSnapshotManager` backend revision plus snapshot-build summaries, but request-time activation/swap semantics are still not implemented.
 
 ### 2.2 RVM/WTOML Backend Reload
 
@@ -432,7 +433,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] `GET /api/runtime/backend-revisions/events`
   - [ ] event fields: revision, branch, changeSet, trigger, changedSources, status
 - [ ] Add Platform Console backend revision stream.
-- [ ] Add MCP read view `platform.read { view: "runtimeRevisions" }`.
+- [X] Add MCP read view `platform.read { view: "runtimeRevisions" }`.
 - [ ] Add tests for RVM route/process changes changing backend behavior without process restart.
 - [ ] Add tests for invalid RVM preserving last good backend behavior.
 - [ ] Add tests for SSE event after backend candidate activation.

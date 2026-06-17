@@ -153,6 +153,71 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   assert.equal(model.roadmapTasks.some(task => task.doc === "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"), true);
 });
 
+test("platform model promotes runtime snapshot diagnostics into revision and build nodes", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [],
+      surfaces: [],
+      plugins: { activePluginIds: [], effectivePluginIds: [], rejectedPlugins: [] },
+      appSnapshot: {
+        appRevision: 7,
+        lastGoodAppRevision: 7,
+        buildErrors: [{ message: "Broken route projection", code: "BROKEN_ROUTE" }],
+        pendingDirtySources: ["plugins/platform/platform-console.rvm"],
+        activeSourceIds: ["plugins/platform/platform-console.rvm", "plugins/platform/platform-console.wcss"],
+        sourceCount: 2,
+        devMode: true,
+        lastRevisionEvent: {
+          appRevision: 7,
+          changedSources: ["plugins/platform/platform-console.rvm"],
+          trigger: "watch"
+        }
+      }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.candidateSnapshots) {
+        return [
+          {
+            id: "candidateSnapshot:branch.demo:1",
+            branchId: "branch.demo",
+            changeSetId: "changeSet:demo",
+            status: "valid",
+            revision: 1,
+            createdAt: "2026-06-18T00:00:00.000Z",
+            files: [{ path: "plugins/platform/platform-console.rvm" }],
+            errors: []
+          },
+          {
+            id: "candidateSnapshot:branch.demo:2",
+            branchId: "branch.demo",
+            changeSetId: "changeSet:demo",
+            status: "invalid",
+            revision: 2,
+            createdAt: "2026-06-18T00:01:00.000Z",
+            files: [{ path: "plugins/platform/platform-console.wcss" }],
+            errors: [{ kind: "parse", message: "Unexpected selector", path: "plugins/platform/platform-console.wcss" }]
+          }
+        ];
+      }
+      return [];
+    }
+  });
+
+  assert.equal(model.nodes.some(node => node.kind === "runtimeRevision" && node.id === "runtimeRevision:backend:7"), true);
+  assert.equal(model.nodes.some(node => node.kind === "backendRevision" && node.id === "backendRevision:7"), true);
+  assert.equal(model.nodes.some(node => node.kind === "snapshotBuild" && node.id === "snapshotBuild:candidateSnapshot:branch.demo:1"), true);
+  assert.equal(model.nodes.some(node => node.kind === "snapshotBuildError" && node.id === "snapshotBuildError:candidateSnapshot:branch.demo:2:1"), true);
+  assert.equal(model.runtimeRevisions[0].revision, 7);
+  assert.equal(model.activeRuntimeRevision.id, "runtimeRevision:backend:7");
+  assert.equal(model.snapshotBuilds.length, 2);
+  assert.equal(model.snapshotBuildErrors.length, 1);
+  assert.equal(model.candidateSnapshotsByBranch["branch.demo"].length, 2);
+  assert.equal(model.snapshotDiagnostics.lastGoodAppRevision, 7);
+});
+
 test("platform console is declared through RVM and styled through WCSS", async () => {
   const rvm = await readFile(new URL("./platform-console.rvm", import.meta.url), "utf8");
   const desirePlus = compileRvmToDesirePlus(rvm, { file: "plugins/platform/platform-console.rvm" });
@@ -193,11 +258,22 @@ test("platform model filters support MCP views", async () => {
     changeSets: [{ id: "changeset.demo", status: "draft" }],
     candidateSnapshots: [{ id: "candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo" }]
   }, "branches");
+  const runtimeRevisions = filterPlatformModel({
+    ...model,
+    runtimeRevisions: [{ id: "runtimeRevision:backend:3", backendRevisionId: "backendRevision:3", revision: 3, status: "active", trigger: "watch", changedSources: [], candidateBranchCount: 1, buildErrorCount: 0 }],
+    activeRuntimeRevision: { id: "runtimeRevision:backend:3", revision: 3 },
+    snapshotBuilds: [{ id: "snapshotBuild:candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo", candidateSnapshotId: "candidateSnapshot:demo:1" }],
+    snapshotBuildErrors: [],
+    candidateSnapshotsByBranch: { "branch.demo": [{ id: "candidateSnapshot:demo:1", branchId: "branch.demo" }] },
+    snapshotDiagnostics: { appRevision: 3, lastGoodAppRevision: 3, pendingDirtySources: [] }
+  }, "runtimeRevisions");
 
   assert.equal(mcp.nodes.some(node => node.id === "mcp:mcp.platform"), true);
   assert.equal(mcp.nodes.some(node => node.id === "mcpTool:platform.read"), true);
   assert.equal(gates.gates.every(node => node.kind === "gate"), true);
   assert.equal(branches.branches[0].id, "branch.demo");
+  assert.equal(runtimeRevisions.runtimeRevisions[0].id, "runtimeRevision:backend:3");
+  assert.equal(runtimeRevisions.activeRuntimeRevision.revision, 3);
 });
 
 test("platform roadmap task parser preserves extended status markers", () => {
@@ -1966,6 +2042,10 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Affected systems/);
   assert.match(html, /Telemetry impacts/);
   assert.match(html, /Candidate Snapshots/);
+  assert.match(html, /Runtime Revisions/);
+  assert.match(html, /Snapshot Builds/);
+  assert.match(html, /Last Good/);
+  assert.match(html, /Failed Snapshot Builds/);
   assert.match(html, /Roadmap Tasks/);
   assert.match(html, /platform-proposal-form/);
   assert.match(html, /platform-review-form/);
