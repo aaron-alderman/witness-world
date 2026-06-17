@@ -227,6 +227,39 @@ test("platform model groups branches into lifecycle board lanes", async () => {
   assert.equal(branches.branchBoard.find(lane => lane.id === "ship")?.branches[0]?.id, "branch.ship");
 });
 
+test("platform model carries branch docs freshness and impact summaries", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [],
+      surfaces: [],
+      plugins: { activePluginIds: [], effectivePluginIds: [], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [{ id: "branch.summary", title: "Summary Branch", status: "open", changeSetIds: ["changeset.summary"] }];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [{ id: "changeset.summary", branchId: "branch.summary", status: "draft" }];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [
+          { id: "changeSetEdit:changeset.summary:platform", changeSetId: "changeset.summary", path: "plugins/platform/platform-console.rvm" },
+          { id: "changeSetEdit:changeset.summary:docs", changeSetId: "changeset.summary", path: "docs/CAPABILITIES.md" }
+        ];
+      }
+      return [];
+    }
+  });
+
+  const branch = filterPlatformModel(model, "branches").branches.find(row => row.id === "branch.summary");
+  assert.equal(branch?.docsFreshness?.status, "fresh");
+  assert.equal(branch?.affectedSystemSummaries?.some(row => row.system === "plugin.platform"), true);
+  assert.equal(branch?.telemetryImpactSummaries?.some(row => row.id === "platform.self"), true);
+});
+
 test("platform model includes witnessed operating objects and proposal state", async () => {
   const model = await buildPlatformModel({
     diagnostics: {
@@ -894,10 +927,73 @@ test("platform branch detail includes multiple change sets and validation histor
   });
 
   assert.equal(sent.at(-1).status, 200);
+  assert.equal(sent.at(-1).body.branch.docsFreshness.status, "stale");
+  assert.equal(sent.at(-1).body.branch.docsFreshness.missingDocs.includes("docs/CAPABILITIES.md"), true);
+  assert.equal(sent.at(-1).body.branch.affectedSystemSummaries.some(row => row.system === "plugin.platform"), true);
+  assert.equal(sent.at(-1).body.branch.telemetryImpactSummaries.some(row => row.id === "platform.self"), true);
   assert.equal(sent.at(-1).body.changeSets.length, 2);
+  assert.equal(sent.at(-1).body.edits.length, 1);
   assert.equal(sent.at(-1).body.candidateSnapshots.length, 1);
   assert.equal(sent.at(-1).body.validationHistory.length, 1);
   assert.equal(sent.at(-1).body.validationHistory[0].changeSetId, "changeset.branch.a");
+}));
+
+test("platform branch docs freshness becomes fresh when governed docs are staged with code edits", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    sendGateFailure: () => {},
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.branch.create"]({
+    req: { body: { id: "branch.docs.fresh", title: "Fresh Docs" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  await handlers["platform.changeSet.create"]({
+    req: { body: { id: "changeset.docs.fresh", branchId: "branch.docs.fresh" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  const rvm = await readFile(new URL("./platform-console.rvm", import.meta.url), "utf8");
+  const capabilities = await readFile(new URL("../../docs/CAPABILITIES.md", import.meta.url), "utf8");
+  await handlers["platform.changeSet.edit"]({
+    req: {
+      body: {
+        edits: [
+          { path: "plugins/platform/platform-console.rvm", content: `${rvm}\n` },
+          { path: "docs/CAPABILITIES.md", content: `${capabilities}\n` }
+        ]
+      }
+    },
+    res: {},
+    params: { id: "changeset.docs.fresh" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+
+  await handlers["platform.branch.read"]({
+    res: {},
+    params: { id: "branch.docs.fresh" }
+  });
+
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(sent.at(-1).body.branch.docsFreshness.status, "fresh");
+  assert.equal(sent.at(-1).body.branch.docsFreshness.touchedDocs.includes("docs/CAPABILITIES.md"), true);
+  assert.equal(sent.at(-1).body.branch.affectedSystemSummaries.some(row => row.system === "docs"), true);
 }));
 
 test("platform change-set handlers list, read, remove edits, and close change sets", async () => withRegisteredPluginProjectors(providers, async () => {
@@ -1363,6 +1459,9 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Change Sets/);
   assert.match(html, /Branches/);
   assert.match(html, /Branch Detail/);
+  assert.match(html, /Docs freshness/);
+  assert.match(html, /Affected systems/);
+  assert.match(html, /Telemetry impacts/);
   assert.match(html, /Candidate Snapshots/);
   assert.match(html, /Roadmap Tasks/);
   assert.match(html, /platform-proposal-form/);
@@ -1381,6 +1480,9 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /data-branch-lane="push"/);
   assert.match(html, /data-branch-lane="ship"/);
   assert.match(html, />Lane</);
+  assert.match(html, />Docs</);
+  assert.match(html, />Affected Systems</);
+  assert.match(html, />Telemetry</);
   assert.match(html, /Parent branch/);
   assert.match(html, /Epic/);
   assert.match(html, /Feature/);

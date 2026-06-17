@@ -110,6 +110,7 @@ export function createPlatformHandlers({
       sendJson(res, result.status, {
         branch: result.branch,
         changeSets: result.changeSets,
+        edits: result.edits,
         candidateSnapshots: result.candidateSnapshots,
         latestCandidateSnapshot: result.latestCandidateSnapshot,
         validationHistory: result.validationHistory

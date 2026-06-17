@@ -65,6 +65,12 @@ export function createPlatformConsoleStylesheet() {
           "grid-template-columns": "minmax(0, 1fr) minmax(320px, .55fr)",
           gap: "18px",
           "align-items": "start"
+        }),
+        rule(".platform-branch-summary", {
+          display: "grid",
+          gap: "10px",
+          "grid-template-columns": "repeat(auto-fit, minmax(180px, 1fr))",
+          margin: "12px 0 0"
         })
       ]),
       group("panels", [

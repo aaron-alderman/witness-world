@@ -40,6 +40,12 @@ function branchBoardColumn(lane) {
   `;
 }
 
+function inlineSummary(items, labelKey = "label") {
+  const rows = Array.isArray(items) ? items : [];
+  if (!rows.length) return "";
+  return rows.map(row => typeof row === "string" ? row : row?.[labelKey] || row?.id || "").filter(Boolean).join(", ");
+}
+
 function tableRows(rows, cells) {
   return rows.map(row => `<tr>${cells.map(cell => `<td>${esc(cell(row))}</td>`).join("")}</tr>`).join("");
 }
@@ -215,11 +221,14 @@ export function renderPlatformPage(model) {
       <div>
         <h2>Branches</h2>
         <table>
-          <thead><tr><th>Status</th><th>Lane</th><th>Branch</th><th>Parent</th><th>Owner</th><th>Change Sets</th><th>Latest Candidate</th></tr></thead>
+          <thead><tr><th>Status</th><th>Lane</th><th>Branch</th><th>Docs</th><th>Affected Systems</th><th>Telemetry</th><th>Parent</th><th>Owner</th><th>Change Sets</th><th>Latest Candidate</th></tr></thead>
           <tbody>${tableRows(branches.slice(0, 80), [
             row => row.status,
             row => row.lifecycleLane || "",
             row => row.id,
+            row => row.docsFreshness?.status || "",
+            row => inlineSummary(row.affectedSystemSummaries),
+            row => inlineSummary(row.telemetryImpactSummaries),
             row => row.parentBranchId || "",
             row => row.owner || "",
             row => (row.changeSetIds || []).join(", "),
@@ -251,6 +260,21 @@ export function renderPlatformPage(model) {
           </select>
         </label>
         <pre id="platform-branch-detail-output">${esc(JSON.stringify(initialBranch, null, 2))}</pre>
+        <div class="platform-branch-summary">
+          <div class="card">
+            <h3>Docs freshness</h3>
+            <div id="platform-branch-docs-status">${esc(initialBranch?.docsFreshness?.status || "")}</div>
+            <div class="muted" id="platform-branch-docs-summary">${esc(initialBranch?.docsFreshness?.summary || "")}</div>
+          </div>
+          <div class="card">
+            <h3>Affected systems</h3>
+            <div id="platform-branch-systems-summary">${esc(inlineSummary(initialBranch?.affectedSystemSummaries))}</div>
+          </div>
+          <div class="card">
+            <h3>Telemetry impacts</h3>
+            <div id="platform-branch-telemetry-summary">${esc(inlineSummary(initialBranch?.telemetryImpactSummaries))}</div>
+          </div>
+        </div>
       </div>
       <div>
         <h2>Branch Validation History</h2>
@@ -341,7 +365,15 @@ export function renderPlatformPage(model) {
       const branch = platformBranches.find(entry => entry.id === branchId) || null;
       const detail = document.getElementById("platform-branch-detail-output");
       const history = document.getElementById("platform-branch-history-output");
+      const docsStatus = document.getElementById("platform-branch-docs-status");
+      const docsSummary = document.getElementById("platform-branch-docs-summary");
+      const systemsSummary = document.getElementById("platform-branch-systems-summary");
+      const telemetrySummary = document.getElementById("platform-branch-telemetry-summary");
       if (detail) detail.textContent = JSON.stringify(branch, null, 2);
+      if (docsStatus) docsStatus.textContent = branch?.docsFreshness?.status || "";
+      if (docsSummary) docsSummary.textContent = branch?.docsFreshness?.summary || "";
+      if (systemsSummary) systemsSummary.textContent = (branch?.affectedSystemSummaries || []).map(row => row.label || row.system || "").join(", ");
+      if (telemetrySummary) telemetrySummary.textContent = (branch?.telemetryImpactSummaries || []).map(row => row.label || row.id || "").join(", ");
       if (history) {
         history.textContent = JSON.stringify(platformCandidateSnapshots
           .filter(snapshot => snapshot.branchId === branchId)

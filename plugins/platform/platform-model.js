@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { moduleProjectors } from "../../src/modules.js";
-import { platformBranchLifecycle, PLATFORM_BRANCH_LIFECYCLE_LANES } from "./change-sets.js";
+import { platformBranchInsights, PLATFORM_BRANCH_LIFECYCLE_LANES } from "./branch-insights.js";
 import { platformProposalTemplates } from "./platform-proposals.js";
 
 export const PLATFORM_LIFECYCLES = Object.freeze([
@@ -192,6 +192,11 @@ function buildBranchBoard(branches = []) {
   return lanes;
 }
 
+function pushByKey(target, key, value) {
+  if (!target[key]) target[key] = [];
+  target[key].push(value);
+}
+
 function buildGaps(nodes, edges) {
   const incoming = new Map();
   const outgoing = new Map();
@@ -350,10 +355,15 @@ export async function buildPlatformModel({
   const proposals = projectRows(project, moduleProjectors.proposals);
   const changeSets = projectRows(project, moduleProjectors.changeSets);
   const changeSetEdits = projectRows(project, moduleProjectors.changeSetEdits);
+  const changeSetsByBranch = Object.create(null);
+  const editsByChangeSet = Object.create(null);
+  for (const changeSet of changeSets) pushByKey(changeSetsByBranch, changeSet.branchId, changeSet);
+  for (const edit of changeSetEdits) pushByKey(editsByChangeSet, edit.changeSetId, edit);
   const branches = projectRows(project, moduleProjectors.branches).map(branch => ({
     ...branch,
-    ...platformBranchLifecycle(branch, {
-      changeSets: changeSets.filter(changeSet => changeSet.branchId === branch.id),
+    ...platformBranchInsights(branch, {
+      changeSets: changeSetsByBranch[branch.id] ?? [],
+      edits: (changeSetsByBranch[branch.id] ?? []).flatMap(changeSet => editsByChangeSet[changeSet.id] ?? []),
       proposals
     })
   }));

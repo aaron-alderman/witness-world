@@ -361,9 +361,9 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Branches can be opened from `/platform`.
 - [X] Branches have candidate snapshots.
 - [X] Branches have validation history.
-- [ ] Branches have docs freshness status.
-- [ ] Branches have telemetry impact summaries.
-- [ ] Branches have affected system summaries.
+- [X] Branches have docs freshness status.
+- [X] Branches have telemetry impact summaries.
+- [X] Branches have affected system summaries.
 - [X] Add Platform Console branch list view.
 - [X] Add branch detail page or panel.
 - [X] Add branch lifecycle board lane:
@@ -375,6 +375,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] ship
 - [L] Automatic branch creation currently happens when approving `changeSet.create` without a supplied branch, preserving proposal non-mutation at creation time.
   - [ ] observe
+- [L] Branch docs freshness and telemetry/system summaries are currently derived from affected edit paths plus governed-doc ownership heuristics; deeper dependency-backed freshness remains later work.
 
 ### 1.5 Proposal Integration
 
