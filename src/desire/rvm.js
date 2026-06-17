@@ -231,7 +231,7 @@ function parseRvmForms(source, { file = null } = {}) {
       index = endLine;
       continue;
     }
-    const blockHeader = trimmed.match(/^([A-Za-z_][A-Za-z0-9_./-]*)\s+([A-Za-z_][A-Za-z0-9_.:/-]*)(?:\s+(?:using|of)\s+([A-Za-z_][A-Za-z0-9_.:/-]*))?(?:\s*:\s*([A-Za-z_][A-Za-z0-9_.:/-]*))?\s*\{$/);
+    const blockHeader = trimmed.match(/^([A-Za-z_][A-Za-z0-9_./-]*)\s+([A-Za-z_][A-Za-z0-9_.:/-]*)(?:\s+(?:using|of)\s+([A-Za-z_][A-Za-z0-9_.:/-]*))?(?:\s*:\s*([A-Za-z_][A-Za-z0-9_.:/\-[\]]*))?\s*\{$/);
     if (blockHeader) {
       const { rawText, endLine, bodyLines } = readBraceBlock(lines, index, { file });
       forms.push(makeBlockForm({
@@ -393,7 +393,7 @@ function makeBlockForm({ kind, name, owns, using, type, header, raw, startLine, 
 function makeInlineSemanticForm(line, index) {
   const actor = makeInlineActorForm(line, index);
   if (actor) return actor;
-  const match = line.match(/^([A-Za-z_][A-Za-z0-9_./-]*)\s+([A-Za-z_][A-Za-z0-9_./-]*)(?:\s+using\s+([A-Za-z_][A-Za-z0-9_.:/-]*))?(?:\s*:\s*([A-Za-z_][A-Za-z0-9_.:/-]*))?(?:\s+(.*))?$/);
+  const match = line.match(/^([A-Za-z_][A-Za-z0-9_./-]*)\s+([A-Za-z_][A-Za-z0-9_./-]*)(?:\s+using\s+([A-Za-z_][A-Za-z0-9_.:/-]*))?(?:\s*:\s*([A-Za-z_][A-Za-z0-9_.:/\-[\]]*))?(?:\s+(.*))?$/);
   if (!match) return null;
   const [, kind, name, using = null, type = null, rest = ""] = match;
   if (!INLINE_SEMANTIC_KINDS.has(kind)) return null;
@@ -566,7 +566,7 @@ function semanticRvmShape(kind, name, type, bodyLines, header = {}) {
         kind: "state",
         name,
         valueType: type,
-        initial: readSimpleValue(bodyLines, "initial")
+        initial: parseScalarValue(readSimpleValue(bodyLines, "initial"))
       };
     case "boundary":
       return {
@@ -868,7 +868,7 @@ function semanticInlineRvmShape(kind, name, type, { using = null, attrs = {}, ta
         kind: "state",
         name,
         valueType: type,
-        initial: attrs.initial ?? null,
+        initial: attrs.initial == null ? null : parseScalarValue(attrs.initial),
         target
       };
     case "event":
@@ -1148,6 +1148,8 @@ function parseSurfaceInteractionsBlock(bodyLines) {
             ? { kind: "eventValue" }
             : rawValue === "eventChecked"
               ? { kind: "eventChecked" }
+              : rawValue === "eventValues"
+                ? { kind: "eventValues" }
           : { literal: parseScalarValue(rawValue) };
         return {
           target: setMatch[2],
@@ -1423,6 +1425,11 @@ function cleanRvmValue(value) {
 
 function parseScalarValue(value) {
   const cleaned = cleanRvmValue(value);
+  if (cleaned.startsWith("[") && cleaned.endsWith("]")) {
+    const inner = cleaned.slice(1, -1).trim();
+    if (!inner) return [];
+    return splitCommaList(inner).map(parseScalarValue);
+  }
   if (cleaned === "true") return true;
   if (cleaned === "false") return false;
   if (/^-?\d+(?:\.\d+)?$/.test(cleaned)) return Number(cleaned);

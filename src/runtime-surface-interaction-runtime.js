@@ -474,6 +474,7 @@ function genericSurfaceRuntimeView(surface) {
   const inputId = trimString(props.inputId);
   const directTag = (trimString(props.tag) ?? "").toLowerCase();
   const isDirectValueControl = ["input", "select", "textarea"].includes(directTag);
+  const isMultiSelect = directTag === "select" && (surface?.surfaceKind === "multi-select" || props.multiple === true);
   const propTargets = {};
   if (domId) {
     propTargets.className = [{ id: domId, mode: "className", baseClass: classTokensForSurface(surface).join(" ") }];
@@ -488,7 +489,7 @@ function genericSurfaceRuntimeView(surface) {
     }
     if (isDirectValueControl) {
       propTargets.inputType = [{ id: domId, mode: "attribute", attr: "type" }];
-      propTargets.value = [{ id: domId, mode: "value" }];
+      propTargets.value = [{ id: domId, mode: isMultiSelect ? "selectedValues" : "value" }];
       if (directTag === "input") propTargets.checked = [{ id: domId, mode: "checked" }];
     }
     if (directTag === "option") {
@@ -818,6 +819,22 @@ function eventValueFromSpec(spec, event, processRuntime) {
   if (spec.kind === "toggleState") return !Boolean(processRuntime.value(spec.state));
   if (spec.kind === "eventValue") return event?.target && "value" in event.target ? event.target.value : null;
   if (spec.kind === "eventChecked") return event?.target && "checked" in event.target ? Boolean(event.target.checked) : false;
+  if (spec.kind === "eventValues") {
+    const selected = event?.target?.selectedOptions;
+    if (selected && typeof selected.length === "number") {
+      return [...selected]
+        .map(option => option?.value == null ? "" : String(option.value))
+        .filter((value, index, values) => value !== "" && values.indexOf(value) === index);
+    }
+    const options = event?.target?.options;
+    if (options && typeof options.length === "number") {
+      return [...options]
+        .filter(option => option?.selected)
+        .map(option => option?.value == null ? "" : String(option.value))
+        .filter((value, index, values) => value !== "" && values.indexOf(value) === index);
+    }
+    return [];
+  }
   return null;
 }
 

@@ -662,6 +662,7 @@ function serializeInteractionValue(value) {
   if (value?.kind === "toggleState") return "toggle";
   if (value?.kind === "eventValue") return "eventValue";
   if (value?.kind === "eventChecked") return "eventChecked";
+  if (value?.kind === "eventValues") return "eventValues";
   if (value && Object.prototype.hasOwnProperty.call(value, "literal")) return serializeRvmScalar(value.literal);
   return serializeRvmScalar("");
 }
@@ -708,6 +709,7 @@ function serializeNamedAssignment(name, value) {
 }
 
 function serializeRvmScalar(value) {
+  if (Array.isArray(value)) return `[${value.map(serializeRvmScalar).join(", ")}]`;
   if (typeof value === "boolean" || typeof value === "number") return String(value);
   return String(value);
 }

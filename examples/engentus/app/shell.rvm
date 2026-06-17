@@ -285,8 +285,8 @@ state PlatformConfigAccessIdentityInitials: string {
   initial ""
 }
 
-state PlatformConfigAccessIdentityRoles: string {
-  initial ""
+state PlatformConfigAccessIdentityRoles: string[] {
+  initial []
 }
 
 state PlatformConfigAccessIdentitySummary: string {
@@ -305,8 +305,8 @@ state PlatformConfigAccessFeatureVisibilityMode: string {
   initial "normal"
 }
 
-state PlatformConfigAccessFeatureAllowedRoles: string {
-  initial ""
+state PlatformConfigAccessFeatureAllowedRoles: string[] {
+  initial []
 }
 
 state PlatformConfigAccessFeatureSummary: string {
@@ -1248,7 +1248,7 @@ command PlatformConfigUpdateAccessIdentity {
     displayName: PlatformConfigAccessIdentityDisplayName
     jobTitle: PlatformConfigAccessIdentityJobTitle
     initials: PlatformConfigAccessIdentityInitials
-    rolesCsv: PlatformConfigAccessIdentityRoles
+    roles: PlatformConfigAccessIdentityRoles
   }
 }
 
@@ -1262,7 +1262,7 @@ command PlatformConfigUpdateAccessFeature {
   fields {
     id: PlatformConfigAccessFeatureSelectedId
     visibilityMode: PlatformConfigAccessFeatureVisibilityMode
-    allowedRolesCsv: PlatformConfigAccessFeatureAllowedRoles
+    allowedRoles: PlatformConfigAccessFeatureAllowedRoles
   }
 }
 
@@ -1280,6 +1280,7 @@ adapter PlatformConfigSnapshotHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthRoles = "authRoles"
   }
 }
 
@@ -1317,6 +1318,7 @@ adapter PlatformConfigSecretReadHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthRoles = "authRoles"
   }
 }
 
@@ -1334,6 +1336,7 @@ adapter PlatformConfigSecretCreateHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthRoles = "authRoles"
   }
 }
 
@@ -1351,6 +1354,7 @@ adapter PlatformConfigSecretOverwriteHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthRoles = "authRoles"
   }
 }
 
@@ -1368,6 +1372,7 @@ adapter PlatformConfigSecretDeleteHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthRoles = "authRoles"
   }
 }
 
@@ -1385,6 +1390,7 @@ adapter PlatformConfigDatasourceReadHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthRoles = "authRoles"
   }
 }
 
@@ -1402,6 +1408,7 @@ adapter PlatformConfigDatasourceCreateHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthRoles = "authRoles"
   }
 }
 
@@ -1419,6 +1426,7 @@ adapter PlatformConfigDatasourceUpdateHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthRoles = "authRoles"
   }
 }
 
@@ -1436,6 +1444,7 @@ adapter PlatformConfigDatasourceDeleteHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthRoles = "authRoles"
   }
 }
 
@@ -1453,6 +1462,7 @@ adapter PlatformConfigDatasourceTestHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthRoles = "authRoles"
   }
 }
 
@@ -1481,6 +1491,7 @@ adapter PlatformConfigAccessIdentityReadHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthRoles = "authRoles"
   }
 }
 
@@ -1498,6 +1509,7 @@ adapter PlatformConfigAccessIdentityUpdateHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthRoles = "authRoles"
   }
 }
 
@@ -1515,6 +1527,7 @@ adapter PlatformConfigAccessFeatureReadHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthRoles = "authRoles"
   }
 }
 
@@ -1532,6 +1545,7 @@ adapter PlatformConfigAccessFeatureUpdateHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthRoles = "authRoles"
   }
 }
 

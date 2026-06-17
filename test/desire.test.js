@@ -2290,6 +2290,53 @@ adapter PlatformConfigSnapshotHttp using HTTP {
   assert.equal(witnesses.some(witness => witness.process === "desire.defineCollection" && witness.body?.id === "PlatformConfigSecrets"), true);
 });
 
+test("RVM multi-select state lists and eventValues round-trip semantically", () => {
+  const source = `
+import desire/v3-alpha
+
+state SelectedRoles: string[] {
+  initial [engentus_user, platform_admin]
+}
+
+view RoleSelect {
+  kind multi-select
+  prop tag = "select"
+  prop domId = "role-select"
+  interactions {
+    on change self set SelectedRoles eventValues
+  }
+}
+`.trim();
+  const desirePlus = compileRvmToDesirePlus(source, { file: "C:/demo/multi-select.rvm" });
+  const desire = normalizeDesirePlusToDesire(desirePlus);
+  const roleState = desire.nodes.find(node => node.kind === "type" && node.name === "SelectedRoles");
+  const roleSelect = desire.nodes.find(node => node.kind === "surface" && node.name === "RoleSelect");
+
+  assert.equal(roleState?.body?.valueType, "string[]");
+  assert.deepEqual(roleState?.body?.initial, ["engentus_user", "platform_admin"]);
+  assert.equal(roleSelect?.body?.surfaceKind, "multi-select");
+  assert.deepEqual(roleSelect?.body?.interactions, [{
+    target: "self",
+    event: "change",
+    action: {
+      kind: "setState",
+      state: "SelectedRoles",
+      value: { kind: "eventValues" }
+    }
+  }]);
+
+  const text = serializeDesirePlusToRvm(desirePlus);
+  assert.match(text, /state SelectedRoles: string\[\]/);
+  assert.match(text, /initial \[engentus_user, platform_admin\]/);
+  assert.match(text, /on change self set SelectedRoles eventValues/);
+
+  const reparsed = compileRvmToDesirePlus(text, { file: "C:/demo/multi-select.rvm" });
+  assert.deepEqual(
+    desire.nodes.map(signature),
+    normalizeDesirePlusToDesire(reparsed).nodes.map(signature)
+  );
+});
+
 test("RVM serializer emits semantic fallback for broad supported DESIRE+ forms", () => {
   const source = `
 context todo_items {

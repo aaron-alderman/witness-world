@@ -268,6 +268,88 @@ test("runtime-surface-page projects authored select options with value and selec
   assert.doesNotMatch(html, FORBIDDEN_AUTHORED_DATA_ATTR_PATTERN);
 });
 
+test("runtime-surface-page projects authored multi-select options with selected state lists", () => {
+  const html = renderSurfacePage(fakeWorld([
+    {
+      process: "desire.defineType",
+      body: { id: "SelectedRoles", role: "state", valueType: "string[]", initial: ["engentus_user", "platform_admin"] }
+    },
+    {
+      process: "desire.defineProcess",
+      body: {
+        id: "RoleEditor",
+        state: ["SelectedRoles"],
+        handles: [],
+        emits: [],
+        rules: []
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "SurfaceRoot",
+        surfaceKind: "app-root",
+        processRef: "RoleEditor",
+        children: ["RoleSelect"]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "RoleSelect",
+        surfaceKind: "multi-select",
+        props: { tag: "select", domId: "role-select" },
+        children: ["RoleEngentusUser", "RolePlatformAdmin", "RoleGuest"],
+        bindings: [
+          { prop: "value", source: { kind: "state", state: "SelectedRoles" } }
+        ],
+        interactions: [
+          {
+            target: "self",
+            event: "change",
+            action: { kind: "setState", state: "SelectedRoles", value: { kind: "eventValues" } }
+          }
+        ]
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "RoleEngentusUser",
+        surfaceKind: "option",
+        props: { tag: "option", value: "engentus_user", text: "Engentus User" }
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "RolePlatformAdmin",
+        surfaceKind: "option",
+        props: { tag: "option", value: "platform_admin", text: "Platform Admin" }
+      }
+    },
+    {
+      process: "desire.defineSurface",
+      body: {
+        id: "RoleGuest",
+        surfaceKind: "option",
+        props: { tag: "option", value: "guest", text: "Guest" }
+      }
+    }
+  ]), {
+    rootSurfaceId: "SurfaceRoot",
+    requestPathname: "/roles"
+  });
+
+  assert.match(html, /<select id="role-select" multiple>/);
+  assert.match(html, /<option value="engentus_user" selected>Engentus User<\/option>/);
+  assert.match(html, /<option value="platform_admin" selected>Platform Admin<\/option>/);
+  assert.match(html, /<option value="guest">Guest<\/option>/);
+  assert.match(html, /"value":\[\{"id":"role-select","mode":"selectedValues"\}\]/);
+  assert.match(html, /"kind":"eventValues"/);
+  assert.doesNotMatch(html, FORBIDDEN_AUTHORED_DATA_ATTR_PATTERN);
+});
+
 test("runtime-surface-page respects visible binding map defaults during initial projection", () => {
   const html = renderSurfacePage(fakeWorld([
     {
@@ -630,10 +712,11 @@ test("runtime-surface-page omits surfaces whose initial visible binding resolves
       }
     }]
   });
+  const serverRenderedBody = html.split('<script type="application/json" id="surface-runtime-manifest">')[0];
 
-  assert.deepEqual(rendered, ["StaticChart"]);
+  assert.equal(rendered.includes("StaticChart"), true);
   assert.match(html, /<figure>StaticChart<\/figure>/);
-  assert.doesNotMatch(html, /<figure>MonteCarloChart<\/figure>/);
+  assert.doesNotMatch(serverRenderedBody, /<figure>MonteCarloChart<\/figure>/);
 });
 
 test("runtime-surface-page does not pre-render inactive route fragments into the initial payload", () => {

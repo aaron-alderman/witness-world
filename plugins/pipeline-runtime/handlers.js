@@ -35,6 +35,13 @@ function normalizeCsvList(value) {
     .filter(Boolean))];
 }
 
+function normalizeRoleList(value, fallbackCsv = null) {
+  const list = Array.isArray(value)
+    ? value.map(entry => normalizeText(entry, "")).filter(Boolean)
+    : normalizeCsvList(fallbackCsv ?? value);
+  return [...new Set(list)];
+}
+
 function safeIso(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
@@ -253,7 +260,7 @@ function accessIdentityEditorPayload(identity, extras = {}) {
     PlatformConfigAccessIdentityDisplayName: normalizeText(identity?.displayName, normalizeText(identity?.label, "")),
     PlatformConfigAccessIdentityJobTitle: normalizeText(identity?.jobTitle, ""),
     PlatformConfigAccessIdentityInitials: normalizeText(identity?.initials, ""),
-    PlatformConfigAccessIdentityRoles: Array.isArray(identity?.roles) ? identity.roles.join(", ") : "",
+    PlatformConfigAccessIdentityRoles: Array.isArray(identity?.roles) ? [...identity.roles] : [],
     PlatformConfigAccessIdentitySummary: `Selected identity "${normalizeText(identity?.username, "identity")}". Update profile fields or role grants and save.`,
     ...extras
   };
@@ -264,7 +271,7 @@ function accessFeatureEditorPayload(policy, extras = {}) {
     PlatformConfigAccessFeatureSelectedId: String(policy?.featureId ?? policy?.id ?? ""),
     PlatformConfigAccessFeatureLabel: normalizeText(policy?.label, normalizeText(policy?.featureId, "")),
     PlatformConfigAccessFeatureVisibilityMode: normalizeText(policy?.visibilityMode, "normal"),
-    PlatformConfigAccessFeatureAllowedRoles: Array.isArray(policy?.allowedRoles) ? policy.allowedRoles.join(", ") : "",
+    PlatformConfigAccessFeatureAllowedRoles: Array.isArray(policy?.allowedRoles) ? [...policy.allowedRoles] : [],
     PlatformConfigAccessFeatureSummary: `Selected feature policy "${normalizeText(policy?.label, normalizeText(policy?.featureId, "feature"))}".`,
     ...extras
   };
@@ -310,6 +317,7 @@ async function pipelineSnapshotPayload(appContext, projectionWorld, {
     datasources: datasourceSelection.rows,
     identities,
     featurePolicies,
+    authRoles: authRoleRows,
     PlatformConfigSecretSearchVisible: secretSelection.searchVisible,
     PlatformConfigDatasourceSearchVisible: datasourceSelection.searchVisible,
     PlatformConfigSecretSummary: summarizeRows("secrets", secretSelection.totalCount, secretSelection.filteredCount, secretQuery),
@@ -587,7 +595,7 @@ export function createPipelineRuntimeHandlers(deps) {
         sendJson(res, 404, { error: "identity not found" });
         return;
       }
-      const requestedRoles = normalizeCsvList(body?.rolesCsv);
+      const requestedRoles = normalizeRoleList(body?.roles, body?.rolesCsv);
       const unknownRoles = requestedRoles.filter(roleId => !authRoleIndex?.byId?.[roleId]);
       if (unknownRoles.length) {
         sendJson(res, 400, { error: `unknown roles: ${unknownRoles.join(", ")}` });
@@ -662,7 +670,7 @@ export function createPipelineRuntimeHandlers(deps) {
         sendJson(res, 404, { error: "feature policy not found" });
         return;
       }
-      const requestedRoles = normalizeCsvList(body?.allowedRolesCsv);
+      const requestedRoles = normalizeRoleList(body?.allowedRoles, body?.allowedRolesCsv);
       const unknownRoles = requestedRoles.filter(roleId => !authRoleIndex?.byId?.[roleId]);
       if (unknownRoles.length) {
         sendJson(res, 400, { error: `unknown roles: ${unknownRoles.join(", ")}` });

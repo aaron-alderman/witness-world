@@ -152,6 +152,18 @@ export function patchSurfaceDom(document, surface, nextProps) {
           if (value == null) node.removeAttribute("value");
           else node.setAttribute("value", String(value));
           break;
+        case "selectedValues": {
+          const selectedValues = new Set(
+            Array.isArray(value)
+              ? value.map(entry => String(entry ?? "").trim()).filter(Boolean)
+              : []
+          );
+          const options = node?.options && typeof node.options.length === "number"
+            ? [...node.options]
+            : [];
+          for (const option of options) option.selected = selectedValues.has(String(option?.value ?? ""));
+          break;
+        }
         case "visibility":
           if (value) node.removeAttribute("hidden");
           else node.setAttribute("hidden", "");

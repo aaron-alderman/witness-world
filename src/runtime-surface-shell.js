@@ -357,15 +357,18 @@ function renderAttributes(surface, tagName, options = {}) {
     const optionLabel = staticTextValue(props, "label");
     if (optionLabel) attrs.push(`label="${escapeAttr(optionLabel)}"`);
     const parentSelectValue = options.parentSelectValue;
-    const selectedByParent = parentSelectValue != null
-      && value != null
-      && String(parentSelectValue) === String(value);
+    const selectedByParent = Array.isArray(parentSelectValue)
+      ? value != null && parentSelectValue.map(entry => String(entry)).includes(String(value))
+      : parentSelectValue != null
+        && value != null
+        && String(parentSelectValue) === String(value);
     if (coerceBooleanAttr(props.selected) || selectedByParent) attrs.push("selected");
     if (coerceBooleanAttr(props.disabled)) attrs.push("disabled");
   }
   if (tagName === "select") {
     const name = staticTextValue(props, "name");
     if (name) attrs.push(`name="${escapeAttr(name)}"`);
+    if (surface?.surfaceKind === "multi-select" || coerceBooleanAttr(props.multiple)) attrs.push("multiple");
     if (coerceBooleanAttr(props.disabled)) attrs.push("disabled");
   }
   if (tagName === "textarea") {

@@ -1346,3 +1346,53 @@ test("the shell applies into witnessed surfaces with route, process, and capabil
   assert.ok(rels.some(row => row.from === "EngentusApp" && row.rel === "dependsOnCapability" && row.to === "chart.render"));
   assert.equal(loginSurface?.props?.routePath, "/engentus/login");
 });
+
+test("the platform-config shell authors role editors as canonical multi-select controls", async () => {
+  const desire = await shellDesire();
+  const surfaces = nodeMap(desire, "surface");
+  const types = nodeMap(desire, "type");
+  const source = await shellSource();
+
+  assert.equal(types.get("PlatformConfigAccessIdentityRoles")?.body?.valueType, "string[]");
+  assert.deepEqual(types.get("PlatformConfigAccessIdentityRoles")?.body?.initial, []);
+  assert.equal(types.get("PlatformConfigAccessFeatureAllowedRoles")?.body?.valueType, "string[]");
+  assert.deepEqual(types.get("PlatformConfigAccessFeatureAllowedRoles")?.body?.initial, []);
+
+  assert.equal(surfaces.get("PlatformConfigAccessIdentityRolesSelect")?.body?.surfaceKind, "multi-select");
+  assert.equal(surfaces.get("PlatformConfigAccessIdentityRolesSelect")?.body?.bindings?.[0]?.prop, "value");
+  assert.equal(surfaces.get("PlatformConfigAccessIdentityRolesSelect")?.body?.bindings?.[0]?.source?.state, "PlatformConfigAccessIdentityRoles");
+  assert.deepEqual(surfaces.get("PlatformConfigAccessIdentityRolesSelect")?.body?.interactions, [
+    {
+      target: "self",
+      event: "change",
+      action: { kind: "setState", state: "PlatformConfigAccessIdentityRoles", value: { kind: "eventValues" } }
+    }
+  ]);
+  assert.deepEqual(surfaces.get("PlatformConfigAccessIdentityRolesSelect")?.body?.repeat, {
+    collection: "PlatformConfigAuthRoles",
+    template: "PlatformConfigAccessRoleOptionTemplate",
+    itemAs: "item",
+    indexAs: "index"
+  });
+
+  assert.equal(surfaces.get("PlatformConfigAccessFeatureRolesSelect")?.body?.surfaceKind, "multi-select");
+  assert.equal(surfaces.get("PlatformConfigAccessFeatureRolesSelect")?.body?.bindings?.[0]?.source?.state, "PlatformConfigAccessFeatureAllowedRoles");
+  assert.deepEqual(surfaces.get("PlatformConfigAccessFeatureRolesSelect")?.body?.interactions, [
+    {
+      target: "self",
+      event: "change",
+      action: { kind: "setState", state: "PlatformConfigAccessFeatureAllowedRoles", value: { kind: "eventValues" } }
+    }
+  ]);
+  assert.deepEqual(surfaces.get("PlatformConfigAccessFeatureRolesSelect")?.body?.repeat, {
+    collection: "PlatformConfigAuthRoles",
+    template: "PlatformConfigAccessRoleOptionTemplate",
+    itemAs: "item",
+    indexAs: "index"
+  });
+
+  assert.match(source, /command PlatformConfigUpdateAccessIdentity \{[\s\S]*?roles: PlatformConfigAccessIdentityRoles[\s\S]*?\}/);
+  assert.doesNotMatch(source, /command PlatformConfigUpdateAccessIdentity \{[\s\S]*?rolesCsv:/);
+  assert.match(source, /command PlatformConfigUpdateAccessFeature \{[\s\S]*?allowedRoles: PlatformConfigAccessFeatureAllowedRoles[\s\S]*?\}/);
+  assert.doesNotMatch(source, /command PlatformConfigUpdateAccessFeature \{[\s\S]*?allowedRolesCsv:/);
+});

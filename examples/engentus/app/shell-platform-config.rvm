@@ -1335,19 +1335,48 @@ view PlatformConfigAccessIdentityInitialsField {
   }
 }
 
-view PlatformConfigAccessIdentityRolesField {
-  kind form-field
-  class platform-config-field
-  prop label = "Roles (comma separated)"
-  prop inputId = "platform-config-access-identity-roles"
-  prop inputClass = "platform-config-input"
-  prop placeholder = "engentus_user, mill_force_access"
+view PlatformConfigAccessRoleOptionTemplate {
+  kind option
+  prop tag = "option"
+  prop value = "${item.id}"
+  prop text = "${item.label}"
+  prop template = true
+}
+
+view PlatformConfigAccessIdentityRolesLabel {
+  kind text
+  prop tag = "label"
+  class platform-config-field-label
+  prop text = "Roles"
+  prop for = "platform-config-access-identity-roles"
+}
+
+view PlatformConfigAccessIdentityRolesSelect {
+  kind multi-select
+  prop tag = "select"
+  prop domId = "platform-config-access-identity-roles"
+  class platform-config-input
   bindings {
     value from state PlatformConfigAccessIdentityRoles
     disabled from state PlatformConfigAccessBusy
   }
   interactions {
-    on input self set PlatformConfigAccessIdentityRoles eventValue
+    on change self set PlatformConfigAccessIdentityRoles eventValues
+  }
+  repeat {
+    collection PlatformConfigAuthRoles
+    template PlatformConfigAccessRoleOptionTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigAccessIdentityRolesField {
+  kind region
+  class platform-config-field
+  children {
+    PlatformConfigAccessIdentityRolesLabel
+    PlatformConfigAccessIdentityRolesSelect
   }
 }
 
@@ -1558,19 +1587,40 @@ view PlatformConfigAccessFeatureVisibilityLabel {
   prop for = "platform-config-access-feature-visibility"
 }
 
-view PlatformConfigAccessFeatureRolesField {
-  kind form-field
-  class platform-config-field
-  prop label = "Allowed roles (comma separated)"
-  prop inputId = "platform-config-access-feature-roles"
-  prop inputClass = "platform-config-input"
-  prop placeholder = "platform_admin"
+view PlatformConfigAccessFeatureRolesLabel {
+  kind text
+  prop tag = "label"
+  class platform-config-field-label
+  prop text = "Allowed roles"
+  prop for = "platform-config-access-feature-roles"
+}
+
+view PlatformConfigAccessFeatureRolesSelect {
+  kind multi-select
+  prop tag = "select"
+  prop domId = "platform-config-access-feature-roles"
+  class platform-config-input
   bindings {
     value from state PlatformConfigAccessFeatureAllowedRoles
     disabled from state PlatformConfigAccessBusy
   }
   interactions {
-    on input self set PlatformConfigAccessFeatureAllowedRoles eventValue
+    on change self set PlatformConfigAccessFeatureAllowedRoles eventValues
+  }
+  repeat {
+    collection PlatformConfigAuthRoles
+    template PlatformConfigAccessRoleOptionTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigAccessFeatureRolesField {
+  kind region
+  class platform-config-field
+  children {
+    PlatformConfigAccessFeatureRolesLabel
+    PlatformConfigAccessFeatureRolesSelect
   }
 }
 

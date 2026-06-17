@@ -189,5 +189,21 @@ export function eventValueFromSpec(spec, event, processRuntime) {
   if (spec.kind === "toggleState") return !Boolean(processRuntime.value(spec.state));
   if (spec.kind === "eventValue") return event?.target && "value" in event.target ? event.target.value : null;
   if (spec.kind === "eventChecked") return event?.target && "checked" in event.target ? Boolean(event.target.checked) : false;
+  if (spec.kind === "eventValues") {
+    const selected = event?.target?.selectedOptions;
+    if (selected && typeof selected.length === "number") {
+      return [...selected]
+        .map(option => option?.value == null ? "" : String(option.value))
+        .filter((value, index, values) => value !== "" && values.indexOf(value) === index);
+    }
+    const options = event?.target?.options;
+    if (options && typeof options.length === "number") {
+      return [...options]
+        .filter(option => option?.selected)
+        .map(option => option?.value == null ? "" : String(option.value))
+        .filter((value, index, values) => value !== "" && values.indexOf(value) === index);
+    }
+    return [];
+  }
   return null;
 }

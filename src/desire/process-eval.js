@@ -79,6 +79,13 @@ function witnessesOf(world) {
 }
 
 function coerce(raw, valueType) {
+  if (typeof valueType === "string" && valueType.endsWith("[]")) {
+    const itemType = valueType.slice(0, -2);
+    const list = Array.isArray(raw)
+      ? raw
+      : (raw == null || raw === "" ? [] : [raw]);
+    return list.map(item => coerce(item, itemType));
+  }
   if (valueType === "bool") return raw === true || raw === "true";
   if (valueType === "number") return raw === "" || raw == null ? 0 : Number(raw);
   return raw == null ? "" : String(raw);
