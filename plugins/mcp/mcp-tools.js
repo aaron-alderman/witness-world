@@ -470,12 +470,13 @@ const TOOL_DEFINITIONS = [
   {
     name: "platform.changeSet",
     title: "Platform Change Set",
-    description: "Create platform change sets, stage overlay edits, validate candidate snapshots, and apply validated overlays through the shared platform handlers.",
+    description: "Inspect platform change sets, stage or remove overlay edits, validate candidate snapshots, and apply or close change sets through the shared platform handlers.",
     inputSchema: jsonSchemaObject({
-      operation: { type: "string", enum: ["create", "edit", "validate", "apply"] },
+      operation: { type: "string", enum: ["list", "read", "create", "edit", "removeEdit", "validate", "apply", "reject", "abandon"] },
       id: { type: "string" },
       changeSetId: { type: "string" },
       branchId: { type: "string" },
+      pathHash: { type: "string" },
       title: { type: "string" },
       reason: { type: "string" },
       edits: {
@@ -494,6 +495,13 @@ const TOOL_DEFINITIONS = [
     },
     async run({ args, callHandler }) {
       const operation = args.operation || "create";
+      if (operation === "list") {
+        return runJsonHandler(callHandler, {
+          handler: "platform.changeSet.list",
+          method: "GET",
+          path: "/api/platform-change-sets"
+        });
+      }
       if (operation === "create") {
         return runJsonHandler(callHandler, {
           handler: "platform.changeSet.create",
@@ -509,6 +517,14 @@ const TOOL_DEFINITIONS = [
       }
       const changeSetId = args.changeSetId || args.id || "";
       if (!changeSetId) return errorToolResult("change set id is required", { operation });
+      if (operation === "read") {
+        return runJsonHandler(callHandler, {
+          handler: "platform.changeSet.read",
+          method: "GET",
+          path: `/api/platform-change-sets/${encodeURIComponent(changeSetId)}`,
+          params: { id: changeSetId }
+        });
+      }
       if (operation === "edit") {
         return runJsonHandler(callHandler, {
           handler: "platform.changeSet.edit",
@@ -516,6 +532,16 @@ const TOOL_DEFINITIONS = [
           path: `/api/platform-change-sets/${encodeURIComponent(changeSetId)}/edits`,
           params: { id: changeSetId },
           body: { edits: Array.isArray(args.edits) ? args.edits : [] }
+        });
+      }
+      if (operation === "removeEdit") {
+        const pathHash = args.pathHash || "";
+        if (!pathHash) return errorToolResult("path hash is required", { operation, changeSetId });
+        return runJsonHandler(callHandler, {
+          handler: "platform.changeSet.removeEdit",
+          method: "DELETE",
+          path: `/api/platform-change-sets/${encodeURIComponent(changeSetId)}/edits/${encodeURIComponent(pathHash)}`,
+          params: { id: changeSetId, pathHash }
         });
       }
       if (operation === "validate") {
@@ -532,6 +558,16 @@ const TOOL_DEFINITIONS = [
           method: "POST",
           path: `/api/platform-change-sets/${encodeURIComponent(changeSetId)}/apply`,
           params: { id: changeSetId }
+        });
+      }
+      if (operation === "reject" || operation === "abandon") {
+        const handler = operation === "reject" ? "platform.changeSet.reject" : "platform.changeSet.abandon";
+        return runJsonHandler(callHandler, {
+          handler,
+          method: "POST",
+          path: `/api/platform-change-sets/${encodeURIComponent(changeSetId)}/${operation}`,
+          params: { id: changeSetId },
+          body: { reason: args.reason ?? null }
         });
       }
       return errorToolResult("unknown platform change set operation", { operation });

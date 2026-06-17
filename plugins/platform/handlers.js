@@ -5,6 +5,11 @@ import {
   requestBootstrapProposalReject
 } from "../proposals/proposal-processes.js";
 import {
+  abandonPlatformChangeSet,
+  listPlatformChangeSets,
+  readPlatformChangeSet,
+  rejectPlatformChangeSet,
+  removePlatformChangeSetEdit,
   createPlatformChangeSet,
   applyPlatformChangeSet,
   stagePlatformChangeSetEdits,
@@ -89,6 +94,26 @@ export function createPlatformHandlers({
       sendJson(res, 200, { gaps: model.gaps, summaries: model.summaries });
     },
 
+    "platform.changeSet.list": async ({ res }) => {
+      sendJson(res, 200, { changeSets: listPlatformChangeSets(world) });
+    },
+
+    "platform.changeSet.read": async ({ res, params }) => {
+      const result = readPlatformChangeSet(world, params.id || "");
+      if (!result.ok) {
+        sendJson(res, result.status || 404, { error: result.error });
+        return;
+      }
+      sendJson(res, result.status, {
+        changeSet: result.changeSet,
+        branch: result.branch,
+        edits: result.edits,
+        candidateSnapshots: result.candidateSnapshots,
+        latestCandidateSnapshot: result.latestCandidateSnapshot,
+        activeCandidateSnapshot: result.activeCandidateSnapshot
+      });
+    },
+
     "platform.changeSet.create": async ({ req, res, requestActor, requestSession, appContext }) => {
       const actor = requirePlatformMutationActor(res, requestActor);
       if (!actor) return;
@@ -137,6 +162,26 @@ export function createPlatformHandlers({
       });
     },
 
+    "platform.changeSet.removeEdit": async ({ res, params, requestActor, requestSession }) => {
+      const actor = requirePlatformMutationActor(res, requestActor);
+      if (!actor) return;
+      const result = removePlatformChangeSetEdit(world, {
+        actor,
+        changeSetId: params.id || "",
+        pathHash: params.pathHash || "",
+        session: requestSession ?? null
+      });
+      if (!result.ok) {
+        sendJson(res, result.status || 400, { error: result.error });
+        return;
+      }
+      sendJson(res, result.status, {
+        changeSet: result.changeSet,
+        edits: result.edits,
+        witness: result.witness
+      });
+    },
+
     "platform.changeSet.validate": async ({ res, params, requestActor, requestSession }) => {
       const actor = requirePlatformMutationActor(res, requestActor);
       if (!actor) return;
@@ -176,6 +221,46 @@ export function createPlatformHandlers({
       sendJson(res, result.status, {
         changeSet: result.changeSet,
         candidateSnapshotId: result.candidateSnapshotId,
+        witness: result.witness
+      });
+    },
+
+    "platform.changeSet.reject": async ({ req, res, params, requestActor, requestSession }) => {
+      const actor = requirePlatformMutationActor(res, requestActor);
+      if (!actor) return;
+      const body = req ? await readJson(req) : {};
+      const result = rejectPlatformChangeSet(world, {
+        actor,
+        changeSetId: params.id || "",
+        session: requestSession ?? null,
+        reason: typeof body?.reason === "string" ? body.reason : null
+      });
+      if (!result.ok) {
+        sendJson(res, result.status || 400, { error: result.error });
+        return;
+      }
+      sendJson(res, result.status, {
+        changeSet: result.changeSet,
+        witness: result.witness
+      });
+    },
+
+    "platform.changeSet.abandon": async ({ req, res, params, requestActor, requestSession }) => {
+      const actor = requirePlatformMutationActor(res, requestActor);
+      if (!actor) return;
+      const body = req ? await readJson(req) : {};
+      const result = abandonPlatformChangeSet(world, {
+        actor,
+        changeSetId: params.id || "",
+        session: requestSession ?? null,
+        reason: typeof body?.reason === "string" ? body.reason : null
+      });
+      if (!result.ok) {
+        sendJson(res, result.status || 400, { error: result.error });
+        return;
+      }
+      sendJson(res, result.status, {
+        changeSet: result.changeSet,
         witness: result.witness
       });
     },

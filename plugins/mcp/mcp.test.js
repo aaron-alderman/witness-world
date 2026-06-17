@@ -41,7 +41,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("changeSet.apply"), true);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("branch.create"), true);
   assert.equal(platformProposal.inputSchema.properties.operation.enum.includes("approve"), true);
-  assert.deepEqual(platformChangeSet.inputSchema.properties.operation.enum, ["create", "edit", "validate", "apply"]);
+  assert.deepEqual(platformChangeSet.inputSchema.properties.operation.enum, ["list", "read", "create", "edit", "removeEdit", "validate", "apply", "reject", "abandon"]);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("process.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("type.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("projection.create"), true);
@@ -153,6 +153,16 @@ test("platform MCP change-set tool routes through platform change-set handlers",
     return { status: 200, body: { ok: true, handler: request.handler, id: request.params?.id ?? null } };
   };
 
+  const listed = await executeMcpTool("platform.changeSet", {
+    args: {
+      operation: "list"
+    },
+    callHandler
+  });
+  assert.equal(listed.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.changeSet.list");
+  assert.equal(calls.at(-1).path, "/api/platform-change-sets");
+
   const created = await executeMcpTool("platform.changeSet", {
     args: {
       operation: "create",
@@ -178,6 +188,29 @@ test("platform MCP change-set tool routes through platform change-set handlers",
   assert.equal(calls.at(-1).handler, "platform.changeSet.edit");
   assert.equal(calls.at(-1).params.id, "changeset.platform.console");
 
+  const read = await executeMcpTool("platform.changeSet", {
+    args: {
+      operation: "read",
+      changeSetId: "changeset.platform.console"
+    },
+    callHandler
+  });
+  assert.equal(read.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.changeSet.read");
+  assert.equal(calls.at(-1).params.id, "changeset.platform.console");
+
+  const removed = await executeMcpTool("platform.changeSet", {
+    args: {
+      operation: "removeEdit",
+      changeSetId: "changeset.platform.console",
+      pathHash: "abc123"
+    },
+    callHandler
+  });
+  assert.equal(removed.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.changeSet.removeEdit");
+  assert.equal(calls.at(-1).params.pathHash, "abc123");
+
   const validated = await executeMcpTool("platform.changeSet", {
     args: {
       operation: "validate",
@@ -199,6 +232,28 @@ test("platform MCP change-set tool routes through platform change-set handlers",
   assert.equal(applied.isError, false);
   assert.equal(calls.at(-1).handler, "platform.changeSet.apply");
   assert.equal(calls.at(-1).params.id, "changeset.platform.console");
+
+  const rejected = await executeMcpTool("platform.changeSet", {
+    args: {
+      operation: "reject",
+      changeSetId: "changeset.platform.console",
+      reason: "No longer needed"
+    },
+    callHandler
+  });
+  assert.equal(rejected.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.changeSet.reject");
+
+  const abandoned = await executeMcpTool("platform.changeSet", {
+    args: {
+      operation: "abandon",
+      changeSetId: "changeset.platform.console",
+      reason: "Superseded"
+    },
+    callHandler
+  });
+  assert.equal(abandoned.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.changeSet.abandon");
 });
 
 test("mcp runtime ownership is not implemented in core compatibility files", async () => {

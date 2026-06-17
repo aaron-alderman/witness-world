@@ -370,6 +370,60 @@ function snapshotMatchesEdits(snapshot, files) {
   return true;
 }
 
+function immutableChangeSetStatusError(changeSet, action) {
+  const status = String(changeSet?.status || "draft");
+  if (status === "rejected" || status === "abandoned") {
+    return {
+      ok: false,
+      status: 409,
+      error: `cannot ${action} a ${status} change set`
+    };
+  }
+  if (status === "applied" && action !== "read") {
+    return {
+      ok: false,
+      status: 409,
+      error: `cannot ${action} an applied change set`
+    };
+  }
+  return null;
+}
+
+function changeSetDetail(world, changeSetId) {
+  const changeSetIndex = world.project(moduleProjectors.changeSetIndex);
+  const branchIndex = world.project(moduleProjectors.branchIndex);
+  const editIndex = world.project(moduleProjectors.changeSetEditIndex);
+  const snapshotIndex = world.project(moduleProjectors.candidateSnapshotIndex);
+  const changeSet = changeSetIndex.byId?.[changeSetId] ?? null;
+  if (!changeSet) return null;
+  return {
+    changeSet: { ...changeSet },
+    branch: changeSet.branchId ? (branchIndex.byId?.[changeSet.branchId] ? { ...branchIndex.byId[changeSet.branchId] } : null) : null,
+    edits: (editIndex.byChangeSet?.[changeSetId] ?? []).map(edit => ({ ...edit })),
+    candidateSnapshots: (snapshotIndex.byChangeSet?.[changeSetId] ?? []).map(snapshot => ({ ...snapshot })),
+    latestCandidateSnapshot: changeSet.latestCandidateSnapshotId
+      ? (snapshotIndex.byId?.[changeSet.latestCandidateSnapshotId] ? { ...snapshotIndex.byId[changeSet.latestCandidateSnapshotId] } : null)
+      : null,
+    activeCandidateSnapshot: changeSet.activeCandidateSnapshotId
+      ? (snapshotIndex.byId?.[changeSet.activeCandidateSnapshotId] ? { ...snapshotIndex.byId[changeSet.activeCandidateSnapshotId] } : null)
+      : null
+  };
+}
+
+export function listPlatformChangeSets(world) {
+  return world.project(moduleProjectors.changeSets).map(row => ({ ...row }));
+}
+
+export function readPlatformChangeSet(world, changeSetId) {
+  const detail = changeSetDetail(world, changeSetId);
+  if (!detail) return { ok: false, status: 404, error: "change set not found" };
+  return {
+    ok: true,
+    status: 200,
+    ...detail
+  };
+}
+
 export function createPlatformChangeSet(world, {
   actor,
   id = null,
@@ -432,6 +486,8 @@ export async function stagePlatformChangeSetEdits(world, {
 }) {
   const changeSet = world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? null;
   if (!changeSet) return { ok: false, status: 404, error: "change set not found" };
+  const immutable = immutableChangeSetStatusError(changeSet, "edit");
+  if (immutable) return immutable;
   const staged = [];
   for (const rawEdit of Array.isArray(edits) ? edits : []) {
     const pathResult = resolveEditPath(rawEdit?.path);
@@ -490,6 +546,10 @@ export async function validatePlatformChangeSet(world, {
   changeSetId,
   session = null
 }) {
+  const current = world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? null;
+  if (!current) return { ok: false, status: 404, error: "change set not found" };
+  const immutable = immutableChangeSetStatusError(current, "validate");
+  if (immutable) return immutable;
   const inspected = await inspectPlatformChangeSet(world, changeSetId);
   if (!inspected.ok) return inspected;
   const { changeSet, previousActive, revision, candidateSnapshotId, files, errors } = inspected;
@@ -554,6 +614,10 @@ export async function applyPlatformChangeSet(world, {
   session = null,
   hooks = null
 }) {
+  const current = world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? null;
+  if (!current) return { ok: false, status: 404, error: "change set not found" };
+  const immutable = immutableChangeSetStatusError(current, "apply");
+  if (immutable) return immutable;
   const inspected = await inspectPlatformChangeSet(world, changeSetId);
   if (!inspected.ok) return inspected;
   const { changeSet, materializedFiles, files, errors } = inspected;
@@ -679,4 +743,114 @@ export async function applyPlatformChangeSet(world, {
     candidateSnapshotId,
     changeSet: world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? changeSet
   };
+}
+
+export function removePlatformChangeSetEdit(world, {
+  actor,
+  changeSetId,
+  pathHash,
+  session = null
+}) {
+  const changeSet = world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? null;
+  if (!changeSet) return { ok: false, status: 404, error: "change set not found" };
+  const immutable = immutableChangeSetStatusError(changeSet, "remove edits from");
+  if (immutable) return immutable;
+  const edit = (world.project(moduleProjectors.changeSetEditIndex).byChangeSet?.[changeSetId] ?? [])
+    .find(row => row.pathHash === String(pathHash || ""));
+  if (!edit) return { ok: false, status: 404, error: "change set edit not found" };
+  const witness = world.emit({
+    process: "platform.changeSet.edit.remove",
+    actor,
+    claims: [relation(changeSetId, "removedChangeSetEdit", edit.id)],
+    body: {
+      id: edit.id,
+      changeSetId,
+      path: edit.path,
+      pathHash: edit.pathHash,
+      actor,
+      session: session?.id ?? null,
+      removedAt: nowIso()
+    }
+  });
+  return {
+    ok: true,
+    status: 200,
+    witness,
+    changeSet: world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? null,
+    edits: world.project(moduleProjectors.changeSetEditIndex).byChangeSet?.[changeSetId] ?? []
+  };
+}
+
+function transitionPlatformChangeSet(world, {
+  actor,
+  changeSetId,
+  process,
+  nextStatus,
+  session = null,
+  reason = null
+}) {
+  const changeSet = world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? null;
+  if (!changeSet) return { ok: false, status: 404, error: "change set not found" };
+  const immutable = immutableChangeSetStatusError(changeSet, nextStatus);
+  if (immutable && changeSet.status !== nextStatus) return immutable;
+  if (String(changeSet.status || "") === nextStatus) {
+    return {
+      ok: true,
+      status: 200,
+      witness: null,
+      changeSet
+    };
+  }
+  const bodyField = nextStatus === "rejected" ? "rejectedAt" : "abandonedAt";
+  const witness = world.emit({
+    process,
+    actor,
+    claims: [relation(changeSetId, "hasStatus", nextStatus)],
+    body: {
+      id: changeSetId,
+      branchId: changeSet.branchId,
+      status: nextStatus,
+      reason: reason ? String(reason) : null,
+      session: session?.id ?? null,
+      [bodyField]: nowIso()
+    }
+  });
+  return {
+    ok: true,
+    status: 200,
+    witness,
+    changeSet: world.project(moduleProjectors.changeSetIndex).byId?.[changeSetId] ?? null
+  };
+}
+
+export function rejectPlatformChangeSet(world, {
+  actor,
+  changeSetId,
+  session = null,
+  reason = null
+}) {
+  return transitionPlatformChangeSet(world, {
+    actor,
+    changeSetId,
+    process: "platform.changeSet.reject",
+    nextStatus: "rejected",
+    session,
+    reason
+  });
+}
+
+export function abandonPlatformChangeSet(world, {
+  actor,
+  changeSetId,
+  session = null,
+  reason = null
+}) {
+  return transitionPlatformChangeSet(world, {
+    actor,
+    changeSetId,
+    process: "platform.changeSet.abandon",
+    nextStatus: "abandoned",
+    session,
+    reason
+  });
 }

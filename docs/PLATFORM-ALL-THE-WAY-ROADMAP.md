@@ -249,45 +249,45 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### 1.1 Data Model
 
-- [ ] Add `changeSet` module kind.
-- [ ] Add `changeSetEdit` module kind.
-- [ ] Add `branch` module kind.
-- [ ] Add `candidateSnapshot` module kind.
+- [X] Add `changeSet` module kind.
+- [X] Add `changeSetEdit` module kind.
+- [X] Add `branch` module kind.
+- [X] Add `candidateSnapshot` module kind.
 - [ ] Add `mergeIntent` module kind.
 - [ ] Add `conflict` module kind.
 - [ ] Add `pushRecord` module kind.
 - [ ] Add `shipRecord` module kind.
-- [ ] Add module projectors for change sets:
-  - [ ] `changeSets`
-  - [ ] `changeSetIndex`
-  - [ ] `changeSetEdits`
-  - [ ] `changeSetEditIndex`
-  - [ ] `branches`
-  - [ ] `branchIndex`
-  - [ ] `candidateSnapshots`
-  - [ ] `candidateSnapshotIndex`
+- [~] Add module projectors for change sets:
+  - [X] `changeSets`
+  - [X] `changeSetIndex`
+  - [X] `changeSetEdits`
+  - [X] `changeSetEditIndex`
+  - [X] `branches`
+  - [X] `branchIndex`
+  - [X] `candidateSnapshots`
+  - [X] `candidateSnapshotIndex`
   - [ ] `mergeIntents`
   - [ ] `conflicts`
   - [ ] `pushRecords`
   - [ ] `shipRecords`
-- [ ] Define stable IDs:
+- [~] Define stable IDs:
   - [ ] `changeSet:<slug>`
-  - [ ] `changeSetEdit:<changeSetId>:<pathHash>`
+  - [X] `changeSetEdit:<changeSetId>:<pathHash>`
   - [ ] `branch:<name>`
-  - [ ] `candidateSnapshot:<changeSetId>:<revision>`
+  - [X] `candidateSnapshot:<changeSetId>:<revision>`
   - [ ] `conflict:<changeSetId>:<pathHash>`
-- [ ] Add canonical status values for change sets:
-  - [ ] `draft`
+- [~] Add canonical status values for change sets:
+  - [X] `draft`
   - [ ] `validating`
-  - [ ] `valid`
-  - [ ] `invalid`
-  - [ ] `applied`
-  - [ ] `rejected`
-  - [ ] `abandoned`
-- [ ] Add canonical status values for branches:
-  - [ ] `open`
-  - [ ] `valid`
-  - [ ] `blocked`
+  - [X] `valid`
+  - [X] `invalid`
+  - [X] `applied`
+  - [X] `rejected`
+  - [X] `abandoned`
+- [~] Add canonical status values for branches:
+  - [X] `open`
+  - [X] `valid`
+  - [X] `blocked`
   - [ ] `merged`
   - [ ] `pushed`
   - [ ] `shipped`
@@ -295,40 +295,41 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### 1.2 Change Set API
 
-- [ ] Add `plugin.platform-change-sets` or extend `plugin.platform` with change-set routes.
-- [ ] Add `POST /api/platform-change-sets`.
-- [ ] Add `GET /api/platform-change-sets`.
-- [ ] Add `GET /api/platform-change-sets/:id`.
-- [ ] Add `POST /api/platform-change-sets/:id/edits`.
-- [ ] Add `DELETE /api/platform-change-sets/:id/edits/:pathHash`.
-- [ ] Add `POST /api/platform-change-sets/:id/validate`.
+- [X] Add `plugin.platform-change-sets` or extend `plugin.platform` with change-set routes.
+- [X] Add `POST /api/platform-change-sets`.
+- [X] Add `GET /api/platform-change-sets`.
+- [X] Add `GET /api/platform-change-sets/:id`.
+- [X] Add `POST /api/platform-change-sets/:id/edits`.
+- [X] Add `DELETE /api/platform-change-sets/:id/edits/:pathHash`.
+- [X] Add `POST /api/platform-change-sets/:id/validate`.
 - [X] Add `POST /api/platform-change-sets/:id/apply`.
-- [ ] Add `POST /api/platform-change-sets/:id/reject`.
-- [ ] Add `POST /api/platform-change-sets/:id/abandon`.
-- [ ] Add `POST /api/platform-change-sets/:id/rebase`.
-- [ ] Add route ownership tests for all change-set routes.
-- [ ] Add `minimal` profile isolation tests for change-set routes.
-- [ ] Add `full` profile exposure tests for change-set routes.
+- [X] Add `POST /api/platform-change-sets/:id/reject`.
+- [X] Add `POST /api/platform-change-sets/:id/abandon`.
+- [B] Add `POST /api/platform-change-sets/:id/rebase`.
+- [~] Add route ownership tests for all change-set routes.
+- [~] Add `minimal` profile isolation tests for change-set routes.
+- [~] Add `full` profile exposure tests for change-set routes.
+- [L] Rebase remains blocked on explicit merge/re-anchor semantics for branch overlays; V1 currently has conflict detection and closure, but not a defensible rebase story yet.
 
 ### 1.3 Multi-File Atomic Edits
 
-- [ ] Implement change-set overlays instead of immediate disk writes.
-- [ ] Represent each edit as:
-  - [ ] path
-  - [ ] previous hash
-  - [ ] next content hash
-  - [ ] source language
-  - [ ] actor
-  - [ ] session
-  - [ ] timestamp
-- [ ] Validate each path is inside allowed app/plugin/doc roots.
-- [ ] Reject path traversal.
-- [ ] Reject binary writes in V1 unless explicitly marked artifact-safe.
-- [ ] Detect conflicts when base file hash changed after change-set creation.
-- [ ] Build candidate source tree from:
-  - [ ] base filesystem
-  - [ ] branch overlay
-  - [ ] change-set overlay
+- [X] Implement change-set overlays instead of immediate disk writes.
+- [X] Represent each edit as:
+  - [X] path
+  - [X] previous hash
+  - [X] next content hash
+  - [X] source language
+  - [X] actor
+  - [X] session
+  - [X] timestamp
+- [X] Validate each path is inside allowed app/plugin/doc roots.
+- [X] Reject path traversal.
+- [X] Reject binary writes in V1 unless explicitly marked artifact-safe.
+- [X] Detect conflicts when base file hash changed after change-set creation.
+- [~] Build candidate source tree from:
+  - [X] base filesystem
+  - [B] branch overlay
+  - [X] change-set overlay
 - [X] Validate all edits together before applying any to disk.
 - [~] Persist successful apply atomically:
   - [X] write temp files
@@ -338,9 +339,10 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Preserve previous active snapshot on failed validation.
 - [~] Add tests for two-file RVM edits applying atomically.
 - [X] Add tests for one invalid file causing the whole change set to remain unapplied.
-- [ ] Add tests for conflict detection when base hash changed.
+- [X] Add tests for conflict detection when base hash changed.
 - [X] Add tests for rollback of partial disk write failure.
 - [L] Current apply semantics are temp-write plus promote plus rollback; this is best-effort atomicity across multiple files, not a stronger cross-file filesystem transaction.
+- [L] V1 candidate materialization is currently base filesystem plus the active change-set overlay; true branch-overlay composition remains blocked on the later branch graph/multi-change-set semantics.
 
 ### 1.4 Branch Semantics
 

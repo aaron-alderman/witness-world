@@ -40,20 +40,30 @@ test("platform plugin exposes platform bundle ownership", async () => {
   assert.deepEqual(capabilities, ["platform.self"]);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.model.read"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.gaps.read"), true);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.list"), true);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.read"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.create"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.edit"), true);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.removeEdit"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.validate"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.apply"), true);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.reject"), true);
+  assert.equal(handlerCatalog.dispatchHandlers.includes("platform.changeSet.abandon"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.proposal.create"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.proposal.approve"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("platform.proposal.reject"), true);
   assert.equal(handlerCatalog.pageHandlers.includes("page.platform"), true);
   assert.equal(routes.some(route => route.path === "/platform" && route.handler === "page.platform"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-model" && route.handler === "platform.model.read"), true);
+  assert.equal(routes.some(route => route.path === "/api/platform-change-sets" && route.handler === "platform.changeSet.list"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-change-sets" && route.handler === "platform.changeSet.create"), true);
+  assert.equal(routes.some(route => route.handler === "platform.changeSet.read"), true);
   assert.equal(routes.some(route => route.handler === "platform.changeSet.edit"), true);
+  assert.equal(routes.some(route => route.handler === "platform.changeSet.removeEdit"), true);
   assert.equal(routes.some(route => route.handler === "platform.changeSet.validate"), true);
   assert.equal(routes.some(route => route.handler === "platform.changeSet.apply"), true);
+  assert.equal(routes.some(route => route.handler === "platform.changeSet.reject"), true);
+  assert.equal(routes.some(route => route.handler === "platform.changeSet.abandon"), true);
   assert.equal(routes.some(route => route.path === "/api/platform-proposals" && route.handler === "platform.proposal.create"), true);
   assert.equal(routes.some(route => route.handler === "platform.proposal.approve"), true);
   assert.equal(surfaces.some(surface => surface.id === "surface:platform" && surface.href === "/platform"), true);
@@ -577,6 +587,99 @@ test("platform change-set handlers stage overlays and validate candidate snapsho
   assert.equal(world.project(moduleProjectors.candidateSnapshotIndex).rows.length, 1);
 }));
 
+test("platform change-set handlers list, read, remove edits, and close change sets", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    sendGateFailure: () => {},
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.changeSet.create"]({
+    req: { body: { id: "changeset.inspect.lifecycle", branchId: "branch.inspect.lifecycle" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  const rvm = await readFile(new URL("./platform-console.rvm", import.meta.url), "utf8");
+  await handlers["platform.changeSet.edit"]({
+    req: { body: { edits: [{ path: "plugins/platform/platform-console.rvm", content: `${rvm}\n` }] } },
+    res: {},
+    params: { id: "changeset.inspect.lifecycle" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  const pathHash = sent.at(-1).body.edits[0].pathHash;
+
+  await handlers["platform.changeSet.list"]({ res: {} });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(sent.at(-1).body.changeSets.some(row => row.id === "changeset.inspect.lifecycle"), true);
+
+  await handlers["platform.changeSet.read"]({
+    res: {},
+    params: { id: "changeset.inspect.lifecycle" }
+  });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(sent.at(-1).body.changeSet.id, "changeset.inspect.lifecycle");
+  assert.equal(sent.at(-1).body.branch.id, "branch.inspect.lifecycle");
+  assert.equal(sent.at(-1).body.edits.length, 1);
+
+  await handlers["platform.changeSet.removeEdit"]({
+    res: {},
+    params: { id: "changeset.inspect.lifecycle", pathHash },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(sent.at(-1).body.edits.length, 0);
+  assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.inspect.lifecycle"].status, "draft");
+
+  await handlers["platform.changeSet.reject"]({
+    req: { body: { reason: "Not pursuing this path" } },
+    res: {},
+    params: { id: "changeset.inspect.lifecycle" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(sent.at(-1).body.changeSet.status, "rejected");
+
+  await handlers["platform.changeSet.edit"]({
+    req: { body: { edits: [{ path: "plugins/platform/platform-console.rvm", content: rvm }] } },
+    res: {},
+    params: { id: "changeset.inspect.lifecycle" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  assert.equal(sent.at(-1).status, 409);
+
+  await handlers["platform.changeSet.create"]({
+    req: { body: { id: "changeset.inspect.abandon", branchId: "branch.inspect.abandon" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+  await handlers["platform.changeSet.abandon"]({
+    req: { body: { reason: "Superseded elsewhere" } },
+    res: {},
+    params: { id: "changeset.inspect.abandon" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  assert.equal(sent.at(-1).status, 200);
+  assert.equal(sent.at(-1).body.changeSet.status, "abandoned");
+}));
+
 test("platform change-set apply persists multi-file edits atomically", async () => withRegisteredPluginProjectors(providers, async () => {
   const fixture = await createTempPlatformApplyFixture();
   try {
@@ -684,6 +787,7 @@ test("invalid WCSS keeps the last active candidate snapshot unchanged", async ()
     requestActor: "aaron",
     requestSession: { id: "session.platform" }
   });
+  assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.invalid.wcss"].status, "draft");
   await handlers["platform.changeSet.validate"]({
     res: {},
     params: { id: "changeset.invalid.wcss" },
@@ -692,6 +796,51 @@ test("invalid WCSS keeps the last active candidate snapshot unchanged", async ()
   });
   assert.equal(sent.at(-1).body.candidateSnapshot.status, "invalid");
   assert.equal(sent.at(-1).body.activeCandidateSnapshotId, validSnapshotId);
+}));
+
+test("platform change-set edits reject path traversal and binary payloads", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    sendGateFailure: () => {},
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.changeSet.create"]({
+    req: { body: { id: "changeset.path.guard", branchId: "branch.path.guard" } },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+
+  await handlers["platform.changeSet.edit"]({
+    req: { body: { edits: [{ path: "../outside.txt", content: "nope" }] } },
+    res: {},
+    params: { id: "changeset.path.guard" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  assert.equal(sent.at(-1).status, 400);
+  assert.match(sent.at(-1).body.error, /inside the workspace|allowed roots/);
+
+  await handlers["platform.changeSet.edit"]({
+    req: { body: { edits: [{ path: "plugins/platform/platform-console.rvm", content: "bad\u0000binary" }] } },
+    res: {},
+    params: { id: "changeset.path.guard" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+  assert.equal(sent.at(-1).status, 400);
+  assert.match(sent.at(-1).body.error, /binary edits are not supported/);
 }));
 
 test("an invalid file prevents the whole change set from being applied", async () => withRegisteredPluginProjectors(providers, async () => {
@@ -749,6 +898,63 @@ test("an invalid file prevents the whole change set from being applied", async (
     assert.equal(sent.at(-1).status, 409);
     assert.deepEqual(JSON.parse(await readFile(path.join(fixture.root, "first.json"), "utf8")), { value: 1 });
     assert.deepEqual(JSON.parse(await readFile(path.join(fixture.root, "second.json"), "utf8")), { value: 2 });
+  } finally {
+    await removeTempPlatformApplyFixture(fixture.root);
+  }
+}));
+
+test("platform change-set validation detects base hash conflicts after staging", async () => withRegisteredPluginProjectors(providers, async () => {
+  const fixture = await createTempPlatformApplyFixture();
+  try {
+    const world = createWorld();
+    const sent = [];
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: (res, status, body) => sent.push({ status, body })
+    });
+
+    await handlers["platform.changeSet.create"]({
+      req: { body: { id: "changeset.conflict.validate", branchId: "branch.conflict.validate" } },
+      res: {},
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext: { runtimeProfile: "full" }
+    });
+    await handlers["platform.changeSet.edit"]({
+      req: { body: { edits: [{ path: fixture.first, content: JSON.stringify({ value: 99 }, null, 2) }] } },
+      res: {},
+      params: { id: "changeset.conflict.validate" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await writeFile(path.join(fixture.root, "first.json"), JSON.stringify({ value: 1234 }, null, 2), "utf8");
+
+    await handlers["platform.changeSet.validate"]({
+      res: {},
+      params: { id: "changeset.conflict.validate" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    assert.equal(sent.at(-1).status, 200);
+    assert.equal(sent.at(-1).body.candidateSnapshot.status, "invalid");
+    assert.match(sent.at(-1).body.candidateSnapshot.errors[0].message, /base file hash changed since the edit was staged/);
+
+    await handlers["platform.changeSet.apply"]({
+      res: {},
+      params: { id: "changeset.conflict.validate" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    assert.equal(sent.at(-1).status, 409);
+    assert.match(sent.at(-1).body.details[0].message, /base file hash changed since the edit was staged/);
   } finally {
     await removeTempPlatformApplyFixture(fixture.root);
   }
@@ -847,7 +1053,10 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /platform-review-form/);
   assert.match(html, /platform-change-set-create-form/);
   assert.match(html, /platform-change-set-apply-form/);
+  assert.match(html, /platform-change-set-lifecycle-form/);
   assert.match(html, /\/api\/platform-proposals/);
   assert.match(html, /\/api\/platform-change-sets/);
   assert.match(html, /\/apply/);
+  assert.match(html, /\/reject/);
+  assert.match(html, /\/abandon/);
 });

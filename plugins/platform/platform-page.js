@@ -157,6 +157,23 @@ export function renderPlatformPage(model) {
           <button type="submit">Apply Change Set</button>
           <div id="change-set-apply-status"></div>
         </form>
+
+        <form id="platform-change-set-lifecycle-form">
+          <label>Change set
+            <select name="changeSetId">
+              ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
+            </select>
+          </label>
+          <label>Action
+            <select name="action">
+              <option value="reject">reject</option>
+              <option value="abandon">abandon</option>
+            </select>
+          </label>
+          <label>Reason <input name="reason" placeholder="Optional lifecycle reason"></label>
+          <button type="submit">Update Change Set</button>
+          <div id="change-set-lifecycle-status"></div>
+        </form>
       </aside>
     </section>
 
@@ -383,6 +400,20 @@ export function renderPlatformPage(model) {
       });
       const json = await response.json().catch(() => ({}));
       status.textContent = response.ok ? "Change set applied." : (json.error || "Apply failed.");
+    });
+    document.getElementById("platform-change-set-lifecycle-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const status = document.getElementById("change-set-lifecycle-status");
+      const changeSetId = form.elements.changeSetId.value;
+      const action = form.elements.action.value || "reject";
+      const response = await fetch("/api/platform-change-sets/" + encodeURIComponent(changeSetId) + "/" + action, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: form.elements.reason.value || null })
+      });
+      const json = await response.json().catch(() => ({}));
+      status.textContent = response.ok ? ("Change set " + action + "ed.") : (json.error || "Lifecycle update failed.");
     });
   </script>
 </body>

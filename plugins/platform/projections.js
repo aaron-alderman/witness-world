@@ -23,23 +23,30 @@ function sortRows(rows, keys) {
 }
 
 function changeSetEditRows(witnesses) {
-  const latest = latestBodiesByProcess(witnesses, "platform.changeSet.edit.upsert");
-  return sortRows(
-    [...latest.values()].map(body => ({
-      id: String(body.id),
-      changeSetId: String(body.changeSetId),
-      path: String(body.path),
-      pathHash: String(body.pathHash),
-      previousHash: body.previousHash ?? null,
-      nextContentHash: String(body.nextContentHash),
-      nextContent: String(body.nextContent ?? ""),
-      sourceLanguage: String(body.sourceLanguage || "text"),
-      actor: body.actor ? String(body.actor) : null,
-      session: body.session ? String(body.session) : null,
-      updatedAt: body.updatedAt ?? null
-    })),
-    ["changeSetId", "path"]
-  );
+  const latest = new Map();
+  for (const witness of witnesses) {
+    if (witness.process === "platform.changeSet.edit.upsert" && witness.body?.id) {
+      const body = witness.body;
+      latest.set(String(body.id), {
+        id: String(body.id),
+        changeSetId: String(body.changeSetId),
+        path: String(body.path),
+        pathHash: String(body.pathHash),
+        previousHash: body.previousHash ?? null,
+        nextContentHash: String(body.nextContentHash),
+        nextContent: String(body.nextContent ?? ""),
+        sourceLanguage: String(body.sourceLanguage || "text"),
+        actor: body.actor ? String(body.actor) : null,
+        session: body.session ? String(body.session) : null,
+        updatedAt: body.updatedAt ?? null
+      });
+      continue;
+    }
+    if (witness.process === "platform.changeSet.edit.remove" && witness.body?.id) {
+      latest.delete(String(witness.body.id));
+    }
+  }
+  return sortRows([...latest.values()], ["changeSetId", "path"]);
 }
 
 function candidateSnapshotRows(witnesses) {
@@ -146,7 +153,6 @@ export const platformModuleProjectors = {
 
   changeSets(witnesses) {
     const latest = latestBodiesByProcess(witnesses, "platform.changeSet.create");
-    const editIndex = platformModuleProjectors.changeSetEditIndex(witnesses);
     const rows = new Map();
     for (const body of latest.values()) {
       rows.set(String(body.id), {
@@ -166,22 +172,37 @@ export const platformModuleProjectors = {
       });
     }
     for (const witness of witnesses) {
-      if (witness.process !== "platform.changeSet.validate" || !witness.body?.id) continue;
-      const row = rows.get(String(witness.body.id));
+      const changeSetId = witness.process === "platform.changeSet.edit.upsert" || witness.process === "platform.changeSet.edit.remove"
+        ? String(witness.body?.changeSetId || "")
+        : String(witness.body?.id || "");
+      const row = rows.get(changeSetId);
       if (!row) continue;
-      row.status = String(witness.body.status || row.status);
-      row.latestCandidateSnapshotId = witness.body.candidateSnapshot?.id ?? row.latestCandidateSnapshotId;
-      row.activeCandidateSnapshotId = witness.body.activeCandidateSnapshotId ?? row.activeCandidateSnapshotId;
-      row.validationCount += 1;
+      if (witness.process === "platform.changeSet.edit.upsert" || witness.process === "platform.changeSet.edit.remove") {
+        row.status = "draft";
+        continue;
+      }
+      if (witness.process === "platform.changeSet.validate") {
+        row.status = String(witness.body.status || row.status);
+        row.latestCandidateSnapshotId = witness.body.candidateSnapshot?.id ?? row.latestCandidateSnapshotId;
+        row.activeCandidateSnapshotId = witness.body.activeCandidateSnapshotId ?? row.activeCandidateSnapshotId;
+        row.validationCount += 1;
+        continue;
+      }
+      if (witness.process === "platform.changeSet.apply") {
+        row.status = "applied";
+        row.latestCandidateSnapshotId = witness.body.candidateSnapshotId ?? row.latestCandidateSnapshotId;
+        row.appliedAt = witness.body.appliedAt ?? null;
+        continue;
+      }
+      if (witness.process === "platform.changeSet.reject") {
+        row.status = "rejected";
+        continue;
+      }
+      if (witness.process === "platform.changeSet.abandon") {
+        row.status = "abandoned";
+      }
     }
-    for (const witness of witnesses) {
-      if (witness.process !== "platform.changeSet.apply" || !witness.body?.id) continue;
-      const row = rows.get(String(witness.body.id));
-      if (!row) continue;
-      row.status = "applied";
-      row.latestCandidateSnapshotId = witness.body.candidateSnapshotId ?? row.latestCandidateSnapshotId;
-      row.appliedAt = witness.body.appliedAt ?? null;
-    }
+    const editIndex = platformModuleProjectors.changeSetEditIndex(witnesses);
     return sortRows([...rows.values()].map(row => ({
       ...row,
       editCount: (editIndex.byChangeSet[row.id] ?? []).length
