@@ -337,7 +337,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] rename into place
   - [X] record applied edit witnesses
 - [X] Preserve previous active snapshot on failed validation.
-- [~] Add tests for two-file RVM edits applying atomically.
+- [X] Add tests for two-file RVM edits applying atomically.
 - [X] Add tests for one invalid file causing the whole change set to remain unapplied.
 - [X] Add tests for conflict detection when base hash changed.
 - [X] Add tests for rollback of partial disk write failure.

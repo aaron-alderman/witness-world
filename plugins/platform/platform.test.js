@@ -32,6 +32,22 @@ async function removeTempPlatformApplyFixture(root) {
   await rm(root, { recursive: true, force: true });
 }
 
+async function createTempPlatformRvmApplyFixture() {
+  const root = path.join(process.cwd(), "test", `.platform-rvm-apply-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`);
+  await mkdir(root, { recursive: true });
+  const first = path.join(root, "first.rvm");
+  const second = path.join(root, "second.rvm");
+  const source = await readFile(new URL("./platform-console.rvm", import.meta.url), "utf8");
+  await writeFile(first, source, "utf8");
+  await writeFile(second, source, "utf8");
+  return {
+    root,
+    source,
+    first: path.relative(process.cwd(), first).replaceAll("\\", "/"),
+    second: path.relative(process.cwd(), second).replaceAll("\\", "/")
+  };
+}
+
 test("platform plugin exposes platform bundle ownership", async () => {
   const manifest = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
 
@@ -1210,6 +1226,67 @@ test("platform change-set apply persists multi-file edits atomically", async () 
     assert.equal(sent.at(-1).body.changeSet.status, "applied");
     assert.deepEqual(JSON.parse(await readFile(path.join(fixture.root, "first.json"), "utf8")), { value: 11 });
     assert.deepEqual(JSON.parse(await readFile(path.join(fixture.root, "second.json"), "utf8")), { value: 22 });
+  } finally {
+    await removeTempPlatformApplyFixture(fixture.root);
+  }
+}));
+
+test("platform change-set apply persists two-file RVM edits atomically", async () => withRegisteredPluginProjectors(providers, async () => {
+  const fixture = await createTempPlatformRvmApplyFixture();
+  try {
+    const world = createWorld();
+    const sent = [];
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: (res, status, body) => sent.push({ status, body })
+    });
+
+    await handlers["platform.changeSet.create"]({
+      req: { body: { id: "changeset.apply.rvm", branchId: "branch.apply.rvm" } },
+      res: {},
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext: { runtimeProfile: "full" }
+    });
+    await handlers["platform.changeSet.edit"]({
+      req: {
+        body: {
+          edits: [
+            { path: fixture.first, content: `${fixture.source}\n` },
+            { path: fixture.second, content: `${fixture.source}\n\n` }
+          ]
+        }
+      },
+      res: {},
+      params: { id: "changeset.apply.rvm" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await handlers["platform.changeSet.validate"]({
+      res: {},
+      params: { id: "changeset.apply.rvm" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+    await handlers["platform.changeSet.apply"]({
+      res: {},
+      params: { id: "changeset.apply.rvm" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+
+    assert.equal(sent.at(-1).status, 200);
+    assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.apply.rvm"].status, "applied");
+    assert.equal(await readFile(path.join(process.cwd(), fixture.first), "utf8"), `${fixture.source}\n`);
+    assert.equal(await readFile(path.join(process.cwd(), fixture.second), "utf8"), `${fixture.source}\n\n`);
   } finally {
     await removeTempPlatformApplyFixture(fixture.root);
   }
