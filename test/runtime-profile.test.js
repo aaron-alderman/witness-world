@@ -472,7 +472,10 @@ test("full runtime exposes platform console and platform self-model API", async 
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
 
     assert.equal(page.status, 200);
-    assert.match(await page.text(), /Platform Console/);
+    const pageHtml = await page.text();
+    assert.match(pageHtml, /Platform Console/);
+    assert.match(pageHtml, /Backend Revision Stream/);
+    assert.match(pageHtml, /\/api\/runtime\/backend-revisions\/events/);
     assert.equal(model.nodes.some(node => node.id === "plugin.platform"), true);
     assert.equal(model.nodes.some(node => node.id === "surface:platform"), true);
     assert.equal(model.nodes.some(node => node.kind === "task" && node.id.includes("docs/PLATFORM-ALL-THE-WAY-ROADMAP.md")), true);

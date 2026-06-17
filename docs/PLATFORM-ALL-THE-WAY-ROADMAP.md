@@ -432,7 +432,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add backend revision SSE:
   - [X] `GET /api/runtime/backend-revisions/events`
   - [X] event fields: revision, branch, changeSet, trigger, changedSources, status
-- [ ] Add Platform Console backend revision stream.
+- [X] Add Platform Console backend revision stream.
 - [X] Add MCP read view `platform.read { view: "runtimeRevisions" }`.
 - [X] Add tests for RVM route/process changes changing backend behavior without process restart.
 - [ ] Add tests for invalid RVM preserving last good backend behavior.
@@ -1229,6 +1229,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add runtime revision view.
 - [X] Add tests for backend behavior changing from RVM without process restart.
 - [X] Add tests for failed candidate preserving old behavior.
+- [L] The current runtime revision view is the live Runtime Revisions section inside `/platform`, including the backend revision stream panel. A separate dedicated revision page or drill-down remains optional follow-on UX, not missing core runtime behavior.
 
 ### Milestone C: Docs Live Model V1
 

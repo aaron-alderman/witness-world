@@ -2043,6 +2043,7 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Telemetry impacts/);
   assert.match(html, /Candidate Snapshots/);
   assert.match(html, /Runtime Revisions/);
+  assert.match(html, /Backend Revision Stream/);
   assert.match(html, /Snapshot Builds/);
   assert.match(html, /Last Good/);
   assert.match(html, /Failed Snapshot Builds/);
@@ -2075,6 +2076,7 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /\/api\/platform-branches/);
   assert.match(html, /\/api\/platform-proposals/);
   assert.match(html, /\/api\/platform-change-sets/);
+  assert.match(html, /\/api\/runtime\/backend-revisions\/events/);
   assert.match(html, /\/apply/);
   assert.match(html, /\/reject/);
   assert.match(html, /\/abandon/);

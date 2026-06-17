@@ -338,6 +338,11 @@ export function renderPlatformPage(model) {
             row => row.buildErrorCount
           ])}</tbody>
         </table>
+        <div class="card">
+          <h3>Backend Revision Stream</h3>
+          <div id="backend-revision-stream-status" class="muted">Connecting to /api/runtime/backend-revisions/events…</div>
+          <pre id="backend-revision-stream-output">[]</pre>
+        </div>
       </div>
       <div>
         <h2>Snapshot Builds</h2>
@@ -416,6 +421,34 @@ export function renderPlatformPage(model) {
     const platformActionTemplates = new Map((platformState.proposalActions || []).map(action => [action.action, action]));
     const platformBranches = platformState.branches || [];
     const platformCandidateSnapshots = platformState.candidateSnapshots || [];
+    const backendRevisionEvents = [];
+    function syncBackendRevisionStream() {
+      const output = document.getElementById("backend-revision-stream-output");
+      if (output) output.textContent = JSON.stringify(backendRevisionEvents.slice(-12), null, 2);
+    }
+    function connectBackendRevisionStream() {
+      const status = document.getElementById("backend-revision-stream-status");
+      if (!status) return;
+      if (typeof EventSource !== "function") {
+        status.textContent = "Backend revision stream unavailable in this browser.";
+        return;
+      }
+      const source = new EventSource("/api/runtime/backend-revisions/events");
+      source.onmessage = event => {
+        try {
+          const payload = JSON.parse(event.data || "{}");
+          backendRevisionEvents.push(payload);
+          while (backendRevisionEvents.length > 12) backendRevisionEvents.shift();
+          status.textContent = "Live revision " + String(payload.revision || "") + " via " + String(payload.trigger || "initial");
+          syncBackendRevisionStream();
+        } catch {
+          status.textContent = "Backend revision stream decode failed.";
+        }
+      };
+      source.onerror = () => {
+        status.textContent = "Backend revision stream reconnecting…";
+      };
+    }
     function renderBranchDetail(branchId) {
       const branch = platformBranches.find(entry => entry.id === branchId) || null;
       const detail = document.getElementById("platform-branch-detail-output");
@@ -605,6 +638,7 @@ export function renderPlatformPage(model) {
       });
       if (branchDetailSelect.value) renderBranchDetail(branchDetailSelect.value);
     }
+    connectBackendRevisionStream();
   </script>
 </body>
 </html>`;
