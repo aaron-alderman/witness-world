@@ -645,7 +645,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### 5.1 Test Gate Model
 
-- [ ] Add `testGate` module kind.
+- [~] Add `testGate` module kind.
 - [ ] Add `testSuite` module kind.
 - [ ] Add `testCase` module kind.
 - [ ] Add `testRun` module kind.
@@ -653,33 +653,34 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add `testArtifact` module kind.
 - [ ] Add `coverageEdge` module kind.
 - [ ] Add projectors:
-  - [ ] `testGates`
+  - [~] `testGates`
   - [ ] `testGateIndex`
   - [ ] `testRuns`
   - [ ] `testResults`
   - [ ] `latestTestResultsByGate`
-  - [ ] `coverageEdges`
-  - [ ] `affectedTestGates`
-- [ ] Model gate fields:
-  - [ ] id
-  - [ ] title
-  - [ ] command
-  - [ ] runner
-  - [ ] environment
-  - [ ] timeout
-  - [ ] protected objects
-  - [ ] source dependencies
-  - [ ] last result
-  - [ ] flake score
-  - [ ] cost estimate
-- [ ] Add test gate discovery from:
-  - [ ] `test/*.test.js`
-  - [ ] `plugins/**/*.test.js`
+  - [ ] coverageEdges
+  - [~] `affectedTestGates`
+- [~] Model gate fields:
+  - [X] id
+  - [X] title
+  - [X] command
+  - [X] runner
+  - [X] environment
+  - [X] timeout
+  - [X] protected objects
+  - [X] source dependencies
+  - [X] last result
+  - [X] flake score
+  - [X] cost estimate
+- [~] Add test gate discovery from:
+  - [X] `test/*.test.js`
+  - [X] `plugins/**/*.test.js`
   - [ ] package scripts
   - [ ] explicit docs
   - [ ] platform model hints
-- [ ] Add Platform Console gates view.
-- [ ] Add MCP view `platform.read { view: "testGates" }`.
+- [X] Add Platform Console gates view.
+- [X] Add MCP view `platform.read { view: "testGates" }`.
+- [L] Current V1 gate modeling is a platform self-model projection with branch-aware affected gate selection and placeholder result fields, not yet standalone witness-backed `testRun`/`testResult` history.
 
 ### 5.2 Test Execution Environment
 
@@ -1127,7 +1128,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add Candidate Snapshots view.
 - [ ] Add Runtime Revisions view.
 - [ ] Add Docs view.
-- [ ] Add Test Gates view.
+- [X] Add Test Gates view.
 - [ ] Add Test Runs view.
 - [ ] Add Dependency Graph view.
 - [ ] Add Coverage Matrix view.
@@ -1157,6 +1158,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add MCP tool:
   - [X] `platform.branch`
   - [X] `platform.changeSet`
+  - [X] `platform.read { view: "testGates" }`
   - [ ] `platform.test`
   - [ ] `platform.docs`
   - [ ] `platform.telemetry`
@@ -1244,13 +1246,13 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### Milestone D: Test Gate V1
 
-- [ ] Discover test gates.
+- [~] Discover test gates.
 - [ ] Run tests as platform executions.
 - [ ] Capture test artifacts.
-- [ ] Link gates to changed objects.
+- [~] Link gates to changed objects.
 - [ ] Run dependency-aware selected tests.
 - [ ] Add red/green view.
-- [ ] Add tests for affected test selection.
+- [X] Add tests for affected test selection.
 
 ### Milestone E: Defects And Telemetry V1
 

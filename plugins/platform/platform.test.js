@@ -259,6 +259,28 @@ test("platform model filters support MCP views", async () => {
   const mcp = filterPlatformModel(model, "mcp");
   const docs = filterPlatformModel(model, "docs", "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md");
   const gates = filterPlatformModel(model, "gates");
+  const testGates = filterPlatformModel({
+    ...model,
+    testGates: [
+      {
+        id: "gate:test/runtime-profile.test.js",
+        title: "test/runtime-profile.test.js",
+        protectedObjects: ["profile:minimal", "plugin.platform"],
+        protectedObjectLabels: ["Minimal runtime", "Platform plugin"],
+        selectedByBranches: ["branch.demo"]
+      },
+      {
+        id: "gate:plugins/platform/platform.test.js",
+        title: "plugins/platform/platform.test.js",
+        protectedObjects: ["plugin.platform"],
+        protectedObjectLabels: ["Platform plugin"],
+        selectedByBranches: []
+      }
+    ],
+    affectedTestGatesByBranch: {
+      "branch.demo": ["gate:test/runtime-profile.test.js"]
+    }
+  }, "testGates", "branch.demo");
   const branches = filterPlatformModel({
     ...model,
     branches: [{ id: "branch.demo", status: "open" }],
@@ -311,6 +333,9 @@ test("platform model filters support MCP views", async () => {
   assert.equal(docs.docSections.length > 0, true);
   assert.equal(docs.docTasks.length > 0, true);
   assert.equal(gates.gates.every(node => node.kind === "gate"), true);
+  assert.equal(testGates.testGates.length, 1);
+  assert.equal(testGates.testGates[0].id, "gate:test/runtime-profile.test.js");
+  assert.deepEqual(testGates.affectedTestGatesByBranch["branch.demo"], ["gate:test/runtime-profile.test.js"]);
   assert.equal(branches.branches[0].id, "branch.demo");
   assert.equal(runtimeRevisions.runtimeRevisions[0].id, "runtimeRevision:backend:3");
   assert.equal(runtimeRevisions.activeRuntimeRevision.revision, 3);
@@ -318,6 +343,51 @@ test("platform model filters support MCP views", async () => {
   assert.equal(runtimeRevisionDetail.snapshotBuildErrors.length, 1);
   assert.equal(runtimeRevisionDetail.candidateSnapshots.length, 1);
   assert.equal(runtimeRevisionDetail.candidateSnapshots[0].id, "candidateSnapshot:demo:1");
+});
+
+test("platform model projects structured test gates and affected branch selection", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [{ id: "branch.platform.gates", title: "Platform Gates", status: "open" }];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [{ id: "changeSet:platform-gates", branchId: "branch.platform.gates", status: "draft" }];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [{ id: "changeSetEdit:platform-gates:model", changeSetId: "changeSet:platform-gates", path: "plugins/platform/platform-model.js" }];
+      }
+      return [];
+    }
+  });
+
+  const runtimeProfileGate = model.testGates.find(row => row.id === "gate:test/runtime-profile.test.js");
+  const platformGate = model.testGates.find(row => row.id === "gate:plugins/platform/platform.test.js");
+  const branchView = filterPlatformModel(model, "testGates", "branch.platform.gates");
+
+  assert.ok(runtimeProfileGate);
+  assert.equal(runtimeProfileGate.runner, "node-test");
+  assert.equal(runtimeProfileGate.environment, "local-node");
+  assert.equal(runtimeProfileGate.timeoutMs, 180000);
+  assert.equal(runtimeProfileGate.protectedObjects.includes("profile:minimal"), true);
+  assert.equal(runtimeProfileGate.protectedObjects.includes("plugin.platform"), true);
+  assert.deepEqual(runtimeProfileGate.sourceDependencies, ["test/runtime-profile.test.js"]);
+  assert.equal(runtimeProfileGate.costEstimate, "high");
+  assert.equal(runtimeProfileGate.selectedByBranches.includes("branch.platform.gates"), true);
+  assert.ok(platformGate);
+  assert.equal(platformGate.selectedByBranches.includes("branch.platform.gates"), true);
+  assert.equal(model.affectedTestGatesByBranch["branch.platform.gates"].includes("gate:test/runtime-profile.test.js"), true);
+  assert.equal(model.affectedTestGatesByBranch["branch.platform.gates"].includes("gate:plugins/platform/platform.test.js"), true);
+  assert.equal(branchView.testGates.some(row => row.id === "gate:test/runtime-profile.test.js"), true);
+  assert.deepEqual(branchView.affectedTestGatesByBranch["branch.platform.gates"], model.affectedTestGatesByBranch["branch.platform.gates"]);
 });
 
 test("platform roadmap task parser preserves extended status markers", () => {
@@ -2146,6 +2216,11 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Docs freshness/);
   assert.match(html, /Affected systems/);
   assert.match(html, /Telemetry impacts/);
+  assert.match(html, /Selected test gates/);
+  assert.match(html, /Test Gates/);
+  assert.match(html, /Affected Test Gates By Branch/);
+  assert.match(html, /Protected Objects/);
+  assert.match(html, /Selected Branches/);
   assert.match(html, /Candidate Snapshots/);
   assert.match(html, /Runtime Revisions/);
   assert.match(html, /Revision detail/);
@@ -2172,6 +2247,7 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /platform-change-set-apply-form/);
   assert.match(html, /platform-change-set-lifecycle-form/);
   assert.match(html, /platform-branch-detail-select/);
+  assert.match(html, /platform-branch-test-gates-summary/);
   assert.match(html, /data-branch-lane="draft"/);
   assert.match(html, /data-branch-lane="validate"/);
   assert.match(html, /data-branch-lane="review"/);

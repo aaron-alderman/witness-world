@@ -494,6 +494,84 @@ async function listMarkdownDocs() {
     .sort((left, right) => left.localeCompare(right));
 }
 
+function gateRunnerForPath(relativePath) {
+  const value = String(relativePath || "");
+  if (value.includes(".rs") || value.includes("cargo")) return "cargo-test";
+  return "node-test";
+}
+
+function gateEnvironmentForPath(relativePath) {
+  const value = String(relativePath || "");
+  if (value.includes("ui.") || value.includes("browser")) return "local-browser";
+  return "local-node";
+}
+
+function gateTimeoutForPath(relativePath) {
+  const value = String(relativePath || "");
+  if (value.includes("runtime") || value.includes("ui.") || value.includes("host")) return 180000;
+  return 120000;
+}
+
+function gateCostEstimateForPath(relativePath) {
+  const value = String(relativePath || "");
+  if (value.includes("runtime") || value.includes("ui.") || value.includes("host")) return "high";
+  if (value.includes("platform") || value.includes("pipeline")) return "medium";
+  return "low";
+}
+
+function buildTestGateRows(nodes, edges, branches = []) {
+  const outgoing = new Map();
+  for (const edge of edges.values()) {
+    if (!outgoing.has(edge.from)) outgoing.set(edge.from, []);
+    outgoing.get(edge.from).push(edge);
+  }
+  const rows = [...nodes.values()]
+    .filter(node => node.kind === "gate")
+    .map(node => {
+      const gateEdges = outgoing.get(node.id) ?? [];
+      const protectedObjects = unique(gateEdges.filter(edge => edge.rel === "verifies").map(edge => edge.to));
+      const protectedObjectLabels = protectedObjects.map(target => nodes.get(target)?.title || target);
+      return {
+        id: node.id,
+        title: node.title,
+        command: `node --test ${node.title}`,
+        runner: gateRunnerForPath(node.title),
+        environment: gateEnvironmentForPath(node.title),
+        timeoutMs: gateTimeoutForPath(node.title),
+        protectedObjects,
+        protectedObjectLabels,
+        sourceDependencies: [node.source],
+        lastResult: null,
+        flakeScore: null,
+        costEstimate: gateCostEstimateForPath(node.title),
+        selectedByBranches: []
+      };
+    })
+    .sort((left, right) => left.id.localeCompare(right.id));
+
+  const byBranch = Object.create(null);
+  for (const branch of branches) {
+    const affectedSystems = new Set((branch.affectedSystemSummaries ?? []).map(row => String(row.system || "")));
+    const docTargets = new Set([
+      ...(branch.docsFreshness?.requiredDocs ?? []).map(doc => `doc:${doc}`),
+      ...(branch.docsFreshness?.touchedDocs ?? []).map(doc => `doc:${doc}`),
+      ...(branch.docsFreshness?.missingDocs ?? []).map(doc => `doc:${doc}`)
+    ]);
+    const selected = rows.filter(gate =>
+      gate.protectedObjects.some(target =>
+        affectedSystems.has(target)
+        || affectedSystems.has(target.replace(/^profile:/, ""))
+        || affectedSystems.has(target.replace(/^capability:/, ""))
+        || docTargets.has(target)
+      )
+    );
+    byBranch[String(branch.id)] = selected.map(gate => gate.id);
+    for (const gate of selected) gate.selectedByBranches.push(String(branch.id));
+  }
+  for (const row of rows) row.selectedByBranches = unique(row.selectedByBranches);
+  return { rows, byBranch };
+}
+
 export function parseRoadmapTasks(docPath, source) {
   const lines = String(source || "").replace(/\r\n/g, "\n").split("\n");
   const headings = [];
@@ -1059,9 +1137,14 @@ export async function buildPlatformModel({
       }
     }
     if (relative.includes("plugin-boundaries")) addEdge(edges, id, "verifies", "doc:docs/PLUGIN-MIGRATION-CONTROL.md", "tests");
-    if (relative.includes("runtime-profile")) addEdge(edges, id, "verifies", "profile:minimal", "tests");
+    if (relative.includes("runtime-profile")) {
+      addEdge(edges, id, "verifies", "profile:minimal", "tests");
+      addEdge(edges, id, "verifies", "profile:full", "tests");
+      addEdge(edges, id, "verifies", "plugin.platform", "tests");
+    }
   }
 
+  const testGateProjection = buildTestGateRows(nodes, edges, branches);
   const gaps = buildGaps(nodes, edges);
   const docs = parsedDocs.map(doc => ({
     id: doc.id,
@@ -1094,6 +1177,8 @@ export async function buildPlatformModel({
     docs,
     docSections,
     docTasks,
+    testGates: testGateProjection.rows,
+    affectedTestGatesByBranch: testGateProjection.byBranch,
     proposals: proposals.map(row => ({ ...row })),
     proposalActions: platformProposalTemplates(),
     branches: branches.map(row => ({ ...row })),
@@ -1136,6 +1221,26 @@ export function filterPlatformModel(model, view, id = null) {
   if (view === "changeSets") {
     const changeSets = id ? model.changeSets.filter(row => row.id === id) : model.changeSets;
     return { changeSets, summaries: model.summaries };
+  }
+  if (view === "testGates") {
+    const testGates = id
+      ? model.testGates.filter(row =>
+        row.id === id
+        || row.protectedObjects.includes(id)
+        || row.selectedByBranches.includes(id)
+      )
+      : model.testGates;
+    const relevantBranchIds = new Set();
+    if (id && Object.prototype.hasOwnProperty.call(model.affectedTestGatesByBranch ?? {}, id)) relevantBranchIds.add(id);
+    for (const gate of testGates) {
+      for (const branchId of gate.selectedByBranches ?? []) relevantBranchIds.add(branchId);
+    }
+    const affectedTestGatesByBranch = Object.fromEntries(
+      Object.entries(model.affectedTestGatesByBranch ?? {})
+        .filter(([branchId, gateIds]) => !id || relevantBranchIds.has(branchId) || gateIds.includes(id))
+        .map(([branchId, gateIds]) => [branchId, [...gateIds]])
+    );
+    return { testGates, affectedTestGatesByBranch, summaries: model.summaries };
   }
   if (view === "candidateSnapshots") {
     const candidateSnapshots = id ? model.candidateSnapshots.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.candidateSnapshots;

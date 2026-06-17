@@ -66,6 +66,8 @@ export function renderPlatformPage(model) {
   const docs = model.docs ?? [];
   const docSections = model.docSections ?? [];
   const docTasks = model.docTasks ?? [];
+  const testGates = model.testGates ?? [];
+  const affectedTestGatesByBranch = model.affectedTestGatesByBranch ?? {};
   const roadmapTasks = model.roadmapTasks ?? [];
   const proposalActions = model.proposalActions ?? [];
   const proposals = model.proposals ?? [];
@@ -292,6 +294,11 @@ export function renderPlatformPage(model) {
             <h3>Telemetry impacts</h3>
             <div id="platform-branch-telemetry-summary">${esc(inlineSummary(initialBranch?.telemetryImpactSummaries))}</div>
           </div>
+          <div class="card">
+            <h3>Selected test gates</h3>
+            <div id="platform-branch-test-gates-count">${esc((affectedTestGatesByBranch[initialBranch?.id] ?? []).length)}</div>
+            <div class="muted" id="platform-branch-test-gates-summary">${esc((affectedTestGatesByBranch[initialBranch?.id] ?? []).join(", "))}</div>
+          </div>
         </div>
       </div>
       <div>
@@ -303,6 +310,26 @@ export function renderPlatformPage(model) {
           revision: snapshot.revision,
           errorCount: Array.isArray(snapshot.errors) ? snapshot.errors.length : 0
         })), null, 2))}</pre>
+      </div>
+    </section>
+
+    <section>
+      <h2>Test Gates</h2>
+      <table>
+        <thead><tr><th>Gate</th><th>Runner</th><th>Environment</th><th>Timeout</th><th>Protected Objects</th><th>Selected Branches</th><th>Cost</th></tr></thead>
+        <tbody>${tableRows(testGates.slice(0, 80), [
+          row => row.title,
+          row => row.runner,
+          row => row.environment,
+          row => row.timeoutMs,
+          row => row.protectedObjectLabels.join(", "),
+          row => row.selectedByBranches.join(", "),
+          row => row.costEstimate
+        ])}</tbody>
+      </table>
+      <div class="card">
+        <h3>Affected Test Gates By Branch</h3>
+        <pre>${esc(JSON.stringify(affectedTestGatesByBranch, null, 2))}</pre>
       </div>
     </section>
 
@@ -492,6 +519,7 @@ export function renderPlatformPage(model) {
     const platformRuntimeRevisions = platformState.runtimeRevisions || [];
     const platformSnapshotBuilds = platformState.snapshotBuilds || [];
     const platformSnapshotBuildErrors = platformState.snapshotBuildErrors || [];
+    const platformAffectedTestGatesByBranch = platformState.affectedTestGatesByBranch || {};
     const backendRevisionEvents = [];
     function deriveRuntimeRevisionDetail(revisionId) {
       const runtimeRevision = platformRuntimeRevisions.find(entry => entry.id === revisionId || entry.backendRevisionId === revisionId) || null;
@@ -571,11 +599,16 @@ export function renderPlatformPage(model) {
       const docsSummary = document.getElementById("platform-branch-docs-summary");
       const systemsSummary = document.getElementById("platform-branch-systems-summary");
       const telemetrySummary = document.getElementById("platform-branch-telemetry-summary");
+      const testGateCount = document.getElementById("platform-branch-test-gates-count");
+      const testGateSummary = document.getElementById("platform-branch-test-gates-summary");
+      const selectedTestGates = platformAffectedTestGatesByBranch[branchId] || [];
       if (detail) detail.textContent = JSON.stringify(branch, null, 2);
       if (docsStatus) docsStatus.textContent = branch?.docsFreshness?.status || "";
       if (docsSummary) docsSummary.textContent = branch?.docsFreshness?.summary || "";
       if (systemsSummary) systemsSummary.textContent = (branch?.affectedSystemSummaries || []).map(row => row.label || row.system || "").join(", ");
       if (telemetrySummary) telemetrySummary.textContent = (branch?.telemetryImpactSummaries || []).map(row => row.label || row.id || "").join(", ");
+      if (testGateCount) testGateCount.textContent = String(selectedTestGates.length);
+      if (testGateSummary) testGateSummary.textContent = selectedTestGates.join(", ");
       if (history) {
         history.textContent = JSON.stringify(platformCandidateSnapshots
           .filter(snapshot => snapshot.branchId === branchId)
