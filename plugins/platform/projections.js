@@ -1,3 +1,5 @@
+import { moduleProjectors } from "../../src/modules.js";
+
 function latestBodiesByProcess(witnesses, process) {
   const rows = new Map();
   for (const witness of witnesses) {
@@ -100,6 +102,32 @@ function conflictRows(witnesses) {
   return sortRows(rows, ["branchId", "changeSetId", "path"]);
 }
 
+function mergeIntentRows(witnesses) {
+  const proposals = moduleProjectors.proposals(witnesses);
+  const rows = [];
+  for (const proposal of proposals) {
+    const targetProcess = String(proposal?.targetProcess || "");
+    if (targetProcess !== "branch.merge" && targetProcess !== "branch.rebase") continue;
+    const body = proposal.body && typeof proposal.body === "object" ? proposal.body : {};
+    const branchId = String(body.branchId || proposal.targetId || "");
+    if (!branchId) continue;
+    const mode = targetProcess === "branch.merge" ? "merge" : "rebase";
+    rows.push({
+      id: `mergeIntent:${proposal.id}`,
+      proposalId: String(proposal.id),
+      branchId,
+      mode,
+      intoBranchId: body.intoBranchId ? String(body.intoBranchId) : null,
+      ontoBranchId: body.ontoBranchId ? String(body.ontoBranchId) : null,
+      status: String(proposal.status || "open"),
+      proposer: proposal.proposer ? String(proposal.proposer) : null,
+      reviewer: proposal.reviewer ? String(proposal.reviewer) : null,
+      reason: proposal.reason ? String(proposal.reason) : null
+    });
+  }
+  return sortRows(rows, ["branchId", "mode", "proposalId"]);
+}
+
 export const platformModuleProjectors = {
   changeSetEdits(witnesses) {
     return changeSetEditRows(witnesses);
@@ -137,6 +165,10 @@ export const platformModuleProjectors = {
 
   conflicts(witnesses) {
     return conflictRows(witnesses);
+  },
+
+  mergeIntents(witnesses) {
+    return mergeIntentRows(witnesses);
   },
 
   branches(witnesses) {

@@ -1,5 +1,7 @@
 export const PLATFORM_PROPOSAL_ACTIONS = Object.freeze([
   "branch.create",
+  "branch.merge",
+  "branch.rebase",
   "changeSet.create",
   "changeSet.edit",
   "changeSet.validate",
@@ -28,6 +30,28 @@ export const PLATFORM_PROPOSAL_TEMPLATES = Object.freeze({
       epic: "platform-self-model",
       feature: "branch-api",
       defect: "none"
+    })
+  }),
+  "branch.merge": Object.freeze({
+    action: "branch.merge",
+    title: "Merge branch",
+    targetKind: "branch",
+    requiredBodyFields: Object.freeze(["branchId", "intoBranchId"]),
+    sampleBody: Object.freeze({
+      branchId: "branch.platform.console",
+      intoBranchId: "branch.platform.root",
+      reason: "Ready to merge after validation"
+    })
+  }),
+  "branch.rebase": Object.freeze({
+    action: "branch.rebase",
+    title: "Rebase branch",
+    targetKind: "branch",
+    requiredBodyFields: Object.freeze(["branchId", "ontoBranchId"]),
+    sampleBody: Object.freeze({
+      branchId: "branch.platform.console",
+      ontoBranchId: "branch.platform.root",
+      reason: "Refresh branch against latest parent"
     })
   }),
   "changeSet.create": Object.freeze({
@@ -198,6 +222,9 @@ export function platformProposalTarget(action, body, explicit = {}) {
   switch (action) {
     case "branch.create":
       return { targetKind: "branch", targetId: String(body.id || "") };
+    case "branch.merge":
+    case "branch.rebase":
+      return { targetKind: "branch", targetId: String(body.branchId || "") };
     case "changeSet.create":
       return { targetKind: "changeSet", targetId: String(body.id || "") };
     case "changeSet.edit":

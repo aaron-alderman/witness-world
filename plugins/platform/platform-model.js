@@ -356,6 +356,7 @@ export async function buildPlatformModel({
   const changeSets = projectRows(project, moduleProjectors.changeSets);
   const changeSetEdits = projectRows(project, moduleProjectors.changeSetEdits);
   const conflicts = projectRows(project, moduleProjectors.conflicts);
+  const mergeIntents = projectRows(project, moduleProjectors.mergeIntents);
   const changeSetsByBranch = Object.create(null);
   const editsByChangeSet = Object.create(null);
   for (const changeSet of changeSets) pushByKey(changeSetsByBranch, changeSet.branchId, changeSet);
@@ -673,6 +674,21 @@ export async function buildPlatformModel({
     addEdge(edges, `branch:${conflict.branchId}`, "contains", conflict.id, "witnesses");
     if (conflict.candidateSnapshotId) addEdge(edges, conflict.id, "detectedBy", conflict.candidateSnapshotId, "witnesses");
   }
+  for (const mergeIntent of mergeIntents) {
+    addNode(nodes, {
+      id: mergeIntent.id,
+      kind: "mergeIntent",
+      title: `${mergeIntent.mode} ${mergeIntent.branchId}`,
+      lifecycle: ["review", "steward"],
+      owner: "plugin.platform",
+      status: mergeIntent.status || "open",
+      source: "witnesses"
+    });
+    addEdge(edges, `branch:${mergeIntent.branchId}`, "requests", mergeIntent.id, "witnesses");
+    addEdge(edges, `proposal:${mergeIntent.proposalId}`, "expresses", mergeIntent.id, "witnesses");
+    if (mergeIntent.intoBranchId) addEdge(edges, mergeIntent.id, "targets", `branch:${mergeIntent.intoBranchId}`, "witnesses");
+    if (mergeIntent.ontoBranchId) addEdge(edges, mergeIntent.id, "targets", `branch:${mergeIntent.ontoBranchId}`, "witnesses");
+  }
   addEdge(edges, "doc:docs/PLUGIN-MIGRATION-CONTROL.md", "governs", "plugin.authoring", "docs");
   addEdge(edges, "doc:docs/RUNTIME-STACK-MAP.md", "governs", "bundle-core-runtime", "docs");
   addEdge(edges, "doc:docs/CAPABILITIES.md", "governs", "plugin.platform", "docs");
@@ -722,6 +738,7 @@ export async function buildPlatformModel({
     changeSetEdits: changeSetEdits.map(row => ({ ...row })),
     candidateSnapshots: candidateSnapshots.map(row => ({ ...row })),
     conflicts: conflicts.map(row => ({ ...row })),
+    mergeIntents: mergeIntents.map(row => ({ ...row })),
     roadmapTasks
   };
 }
@@ -746,6 +763,10 @@ export function filterPlatformModel(model, view, id = null) {
   if (view === "conflicts") {
     const conflicts = id ? model.conflicts.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.conflicts;
     return { conflicts, summaries: model.summaries };
+  }
+  if (view === "mergeIntents") {
+    const mergeIntents = id ? model.mergeIntents.filter(row => row.id === id || row.branchId === id || row.proposalId === id) : model.mergeIntents;
+    return { mergeIntents, summaries: model.summaries };
   }
   if (view === "gates") return { gates: model.nodes.filter(node => node.kind === "gate"), summaries: model.summaries };
   if (view === "mcp") return {

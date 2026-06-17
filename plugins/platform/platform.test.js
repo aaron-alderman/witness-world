@@ -333,6 +333,47 @@ test("platform model includes projected conflict nodes from validation errors", 
   assert.equal(filterPlatformModel(model, "conflicts").conflicts[0].id, "conflict:changeSet:demo:abc123");
 });
 
+test("platform model includes projected merge intent nodes from proposal state", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [],
+      surfaces: [],
+      plugins: { activePluginIds: [], effectivePluginIds: [], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.proposals) {
+        return [{
+          id: "proposal.branch.merge.demo",
+          status: "open",
+          targetProcess: "branch.merge",
+          targetKind: "branch",
+          targetId: "branch.demo",
+          reason: "Merge demo branch"
+        }];
+      }
+      if (projector === moduleProjectors.mergeIntents) {
+        return [{
+          id: "mergeIntent:proposal.branch.merge.demo",
+          proposalId: "proposal.branch.merge.demo",
+          branchId: "branch.demo",
+          mode: "merge",
+          intoBranchId: "branch.root",
+          status: "open"
+        }];
+      }
+      return [];
+    }
+  });
+
+  assert.equal(model.nodes.some(node => node.id === "mergeIntent:proposal.branch.merge.demo" && node.kind === "mergeIntent"), true);
+  assert.equal(model.edges.some(edge => edge.from === "branch:branch.demo" && edge.rel === "requests" && edge.to === "mergeIntent:proposal.branch.merge.demo"), true);
+  assert.equal(model.edges.some(edge => edge.from === "proposal:proposal.branch.merge.demo" && edge.rel === "expresses" && edge.to === "mergeIntent:proposal.branch.merge.demo"), true);
+  assert.equal(filterPlatformModel(model, "mergeIntents").mergeIntents[0].id, "mergeIntent:proposal.branch.merge.demo");
+});
+
 test("platform model includes witnessed operating objects and proposal state", async () => {
   const model = await buildPlatformModel({
     diagnostics: {
@@ -374,6 +415,16 @@ test("platform proposal builder normalizes supported proposal bodies", () => {
     },
     reason: "Create a platform branch"
   });
+  const merge = buildPlatformProposalCreateBody({
+    id: "proposal.platform.merge",
+    action: "branch.merge",
+    body: {
+      branchId: "branch.platform.console",
+      intoBranchId: "branch.platform.root",
+      reason: "Merge validated branch"
+    },
+    reason: "Merge the validated branch"
+  });
   const built = buildPlatformProposalCreateBody({
     id: "proposal.platform.mcp",
     action: "mcpTool.install",
@@ -399,7 +450,18 @@ test("platform proposal builder normalizes supported proposal bodies", () => {
     feature: "console",
     defect: "n/a"
   });
+  assert.equal(merge.ok, true);
+  assert.equal(merge.value.targetProcess, "branch.merge");
+  assert.equal(merge.value.targetKind, "branch");
+  assert.equal(merge.value.targetId, "branch.platform.console");
+  assert.deepEqual(JSON.parse(merge.value.bodyJson), {
+    branchId: "branch.platform.console",
+    intoBranchId: "branch.platform.root",
+    reason: "Merge validated branch"
+  });
   assert.equal(platformProposalTemplates().some(template => template.action === "changeSet.apply"), true);
+  assert.equal(platformProposalTemplates().some(template => template.action === "branch.merge"), true);
+  assert.equal(platformProposalTemplates().some(template => template.action === "branch.rebase"), true);
   assert.equal(built.ok, true);
   assert.equal(built.value.targetProcess, "mcpTool.install");
   assert.equal(built.value.targetKind, "mcpServer");
@@ -449,6 +511,26 @@ test("platform proposal handlers create and review through proposal machinery", 
   assert.equal(sent.at(-1).body.proposal.targetProcess, "runtimePlugin.install");
   assert.equal(sent.at(-1).body.proposal.targetKind, "serverRunner");
   assert.equal(sent.at(-1).body.proposal.targetId, "runner.platform");
+
+  await handlers["platform.proposal.create"]({
+    req: {
+      body: {
+        id: "proposal.platform.merge.intent",
+        action: "branch.merge",
+        body: {
+          branchId: "branch.platform.console",
+          intoBranchId: "branch.platform.root"
+        },
+        reason: "Merge platform branch"
+      }
+    },
+    res: {},
+    requestActor: "aaron"
+  });
+  assert.equal(sent.at(-1).status, 201);
+  assert.equal(sent.at(-1).body.proposal.targetProcess, "branch.merge");
+  assert.equal(sent.at(-1).body.proposal.targetKind, "branch");
+  assert.equal(sent.at(-1).body.proposal.targetId, "branch.platform.console");
 
   await handlers["platform.proposal.approve"]({
     res: {},
@@ -607,6 +689,49 @@ test("platform proposal execution can attach a change set to an existing branch"
   assert.equal(sent.at(-1).status, 200);
   assert.equal(world.project(moduleProjectors.branchIndex).rows.filter(row => row.id === "branch.proposal.attach").length, 1);
   assert.equal(world.project(moduleProjectors.changeSetIndex).byId["changeset.proposal.attach"].branchId, "branch.proposal.attach");
+}));
+
+test("platform merge intent projector derives rows from merge proposals", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" },
+      executeBootstrapProposal: actor => async proposal => ({ ok: true, witnessIds: [`${actor}:${proposal.id}`] })
+    },
+    sendGateFailure: (res, gate) => sent.push({ status: gate.status, body: { error: gate.reason } }),
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.proposal.create"]({
+    req: {
+      body: {
+        id: "proposal.platform.merge.projector",
+        action: "branch.merge",
+        body: {
+          branchId: "branch.platform.console",
+          intoBranchId: "branch.platform.root"
+        },
+        reason: "Merge validated branch"
+      }
+    },
+    res: {},
+    requestActor: "aaron"
+  });
+
+  assert.equal(sent.at(-1).status, 201);
+  const mergeIntents = world.project(moduleProjectors.mergeIntents);
+  assert.equal(mergeIntents.length, 1);
+  assert.equal(mergeIntents[0].id, "mergeIntent:proposal.platform.merge.projector");
+  assert.equal(mergeIntents[0].branchId, "branch.platform.console");
+  assert.equal(mergeIntents[0].mode, "merge");
+  assert.equal(mergeIntents[0].intoBranchId, "branch.platform.root");
+  assert.equal(mergeIntents[0].status, "open");
 }));
 
 test("platform proposal approval atomically applies all staged files", async () => withRegisteredPluginProjectors(providers, async () => {

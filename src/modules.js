@@ -1747,6 +1747,8 @@ export const moduleProjectors = {
 
   conflicts: delegatedModuleProjector("conflicts", emptyRows),
 
+  mergeIntents: delegatedModuleProjector("mergeIntents", emptyRows),
+
   assets: delegatedModuleProjector("assets", emptyRows),
 
   assetIndex: delegatedModuleProjector("assetIndex", emptyIndex),

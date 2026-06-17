@@ -253,7 +253,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add `changeSetEdit` module kind.
 - [X] Add `branch` module kind.
 - [X] Add `candidateSnapshot` module kind.
-- [ ] Add `mergeIntent` module kind.
+- [X] Add `mergeIntent` module kind.
 - [X] Add `conflict` module kind.
 - [ ] Add `pushRecord` module kind.
 - [ ] Add `shipRecord` module kind.
@@ -266,7 +266,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] `branchIndex`
   - [X] `candidateSnapshots`
   - [X] `candidateSnapshotIndex`
-  - [ ] `mergeIntents`
+  - [X] `mergeIntents`
   - [X] `conflicts`
   - [ ] `pushRecords`
   - [ ] `shipRecords`
@@ -294,6 +294,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] `shipped`
   - [X] `closed`
 - [L] V1 derives `closed` for branches whose change sets are all terminal `rejected`/`abandoned`; merge/push/ship closure remains later lifecycle work.
+- [L] V1 merge intents are proposal-derived rows with IDs of the form `mergeIntent:<proposalId>`; execution-time merge/rebase semantics remain later work.
 
 ### 1.2 Change Set API
 
@@ -401,6 +402,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add test that approved change-set proposal atomically applies all edits.
 - [X] Add test that rejected proposal leaves branch/change-set intact but unapplied.
 - [L] Implementation note: proposal creation remains non-mutating by design; the current proof is that approving `changeSet.create` can auto-create the branch before staging work.
+- [L] V1 can now model `branch.merge` / `branch.rebase` proposals as `mergeIntent` objects before approval support exists; executing those proposal target processes remains blocked on explicit branch-overlay semantics.
 
 ## Phase 2: Candidate Snapshot And Backend Hot Reload
 
