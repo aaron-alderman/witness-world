@@ -53,6 +53,8 @@ export const routes = Object.freeze([
   patternRoute("POST", /^\/api\/platform-change-sets\/([^/]+)\/apply$/, "platform.changeSet.apply", Object.freeze(["id"])),
   patternRoute("POST", /^\/api\/platform-change-sets\/([^/]+)\/reject$/, "platform.changeSet.reject", Object.freeze(["id"])),
   patternRoute("POST", /^\/api\/platform-change-sets\/([^/]+)\/abandon$/, "platform.changeSet.abandon", Object.freeze(["id"])),
+  exactRoute("POST", "/api/platform-test-runs", "platform.testRun.create"),
+  patternRoute("GET", /^\/api\/platform-test-runs\/([^/]+)$/, "platform.testRun.read", Object.freeze(["id"])),
   exactRoute("POST", "/api/platform-proposals", "platform.proposal.create"),
   patternRoute("POST", /^\/api\/platform-proposals\/([^/]+)\/approve$/, "platform.proposal.approve", Object.freeze(["id"])),
   patternRoute("POST", /^\/api\/platform-proposals\/([^/]+)\/reject$/, "platform.proposal.reject", Object.freeze(["id"]))

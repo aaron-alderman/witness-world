@@ -392,9 +392,9 @@ const TOOL_DEFINITIONS = [
   {
     name: "platform.read",
     title: "Platform Read",
-    description: "Read the platform self-model, gaps, profiles, branches, change sets, test gates, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
+    description: "Read the platform self-model, gaps, profiles, branches, change sets, test gates, test runs, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["model", "gaps", "profiles", "plugin", "bundle", "capability", "mcp", "gates", "proposals", "branches", "changeSets", "testGates", "candidateSnapshots", "runtimeRevisions"] },
+      view: { type: "string", enum: ["model", "gaps", "profiles", "plugin", "bundle", "capability", "mcp", "gates", "proposals", "branches", "changeSets", "testGates", "testRuns", "candidateSnapshots", "runtimeRevisions"] },
       id: { type: "string" }
     }, ["view"]),
     scope(args) {

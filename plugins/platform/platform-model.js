@@ -381,6 +381,15 @@ function projectRows(project, projector) {
   }
 }
 
+function projectValue(project, projector, fallback) {
+  if (!project) return fallback;
+  try {
+    return projector ? (project(projector) ?? fallback) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function slugify(value) {
   return String(value || "")
     .trim()
@@ -555,7 +564,7 @@ function packageScriptProtectedObjects(scriptName, command, nodes) {
   return unique(targets);
 }
 
-function buildTestGateRows(nodes, edges, branches = []) {
+function buildTestGateRows(nodes, edges, branches = [], latestResultsByGate = Object.create(null)) {
   const outgoing = new Map();
   for (const edge of edges.values()) {
     if (!outgoing.has(edge.from)) outgoing.set(edge.from, []);
@@ -583,7 +592,15 @@ function buildTestGateRows(nodes, edges, branches = []) {
         protectedObjects,
         protectedObjectLabels,
         sourceDependencies,
-        lastResult: null,
+        lastResult: latestResultsByGate[node.id]
+          ? {
+              runId: latestResultsByGate[node.id].runId,
+              status: latestResultsByGate[node.id].status,
+              exitCode: latestResultsByGate[node.id].exitCode,
+              durationMs: latestResultsByGate[node.id].durationMs,
+              producedAt: latestResultsByGate[node.id].producedAt ?? null
+            }
+          : null,
         flakeScore: null,
         costEstimate: gateCostEstimateForPath(command || node.title),
         selectedByBranches: []
@@ -694,6 +711,9 @@ export async function buildPlatformModel({
     })
   }));
   const candidateSnapshots = projectRows(project, moduleProjectors.candidateSnapshots);
+  const testRuns = projectRows(project, moduleProjectors.testRuns);
+  const testResults = projectRows(project, moduleProjectors.testResults);
+  const latestTestResultsProjection = projectValue(project, moduleProjectors.latestTestResultsByGate, { rows: [], byGate: Object.create(null) });
   const candidateSnapshotsByBranch = candidateSnapshotsByBranchIndex(candidateSnapshots);
   const snapshotDiagnostics = normalizeSnapshotDiagnostics(diagnostics?.appSnapshot ?? null);
   const runtimeRevisions = buildRuntimeRevisionRows(snapshotDiagnostics, candidateSnapshotsByBranch);
@@ -1231,7 +1251,7 @@ export async function buildPlatformModel({
     }
   }
 
-  const testGateProjection = buildTestGateRows(nodes, edges, branches);
+  const testGateProjection = buildTestGateRows(nodes, edges, branches, latestTestResultsProjection.byGate ?? Object.create(null));
   const gaps = buildGaps(nodes, edges);
   const docs = parsedDocs.map(doc => ({
     id: doc.id,
@@ -1266,6 +1286,9 @@ export async function buildPlatformModel({
     docTasks,
     testGates: testGateProjection.rows,
     affectedTestGatesByBranch: testGateProjection.byBranch,
+    testRuns: testRuns.map(row => ({ ...row })),
+    testResults: testResults.map(row => ({ ...row })),
+    latestTestResultsByGate: latestTestResultsProjection.byGate ?? Object.create(null),
     proposals: proposals.map(row => ({ ...row })),
     proposalActions: platformProposalTemplates(),
     branches: branches.map(row => ({ ...row })),
@@ -1328,6 +1351,33 @@ export function filterPlatformModel(model, view, id = null) {
         .map(([branchId, gateIds]) => [branchId, [...gateIds]])
     );
     return { testGates, affectedTestGatesByBranch, summaries: model.summaries };
+  }
+  if (view === "testRuns") {
+    const testRuns = id
+      ? model.testRuns.filter(row =>
+        row.id === id
+        || row.gateId === id
+        || row.branchId === id
+        || row.changeSetId === id
+        || row.candidateSnapshotId === id
+      )
+      : model.testRuns;
+    const runIds = new Set(testRuns.map(row => row.id));
+    const gateIds = new Set(testRuns.map(row => row.gateId));
+    const testResults = id
+      ? model.testResults.filter(row =>
+        runIds.has(row.runId)
+        || gateIds.has(row.gateId)
+        || row.id === id
+        || row.gateId === id
+      )
+      : model.testResults;
+    const latestTestResultsByGate = Object.fromEntries(
+      Object.entries(model.latestTestResultsByGate ?? {})
+        .filter(([gateId, row]) => !id || gateIds.has(gateId) || runIds.has(row.runId) || gateId === id || row.runId === id)
+        .map(([gateId, row]) => [gateId, { ...row }])
+    );
+    return { testRuns, testResults, latestTestResultsByGate, summaries: model.summaries };
   }
   if (view === "candidateSnapshots") {
     const candidateSnapshots = id ? model.candidateSnapshots.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.candidateSnapshots;

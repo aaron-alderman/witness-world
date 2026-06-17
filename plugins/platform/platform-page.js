@@ -68,6 +68,8 @@ export function renderPlatformPage(model) {
   const docTasks = model.docTasks ?? [];
   const testGates = model.testGates ?? [];
   const affectedTestGatesByBranch = model.affectedTestGatesByBranch ?? {};
+  const testRuns = model.testRuns ?? [];
+  const latestTestResultsByGate = model.latestTestResultsByGate ?? {};
   const roadmapTasks = model.roadmapTasks ?? [];
   const proposalActions = model.proposalActions ?? [];
   const proposals = model.proposals ?? [];
@@ -316,7 +318,7 @@ export function renderPlatformPage(model) {
     <section>
       <h2>Test Gates</h2>
       <table>
-        <thead><tr><th>Gate</th><th>Runner</th><th>Environment</th><th>Timeout</th><th>Protected Objects</th><th>Selected Branches</th><th>Cost</th></tr></thead>
+        <thead><tr><th>Gate</th><th>Runner</th><th>Environment</th><th>Timeout</th><th>Protected Objects</th><th>Selected Branches</th><th>Last Result</th><th>Cost</th></tr></thead>
         <tbody>${tableRows(testGates.slice(0, 80), [
           row => row.title,
           row => row.runner,
@@ -324,12 +326,46 @@ export function renderPlatformPage(model) {
           row => row.timeoutMs,
           row => row.protectedObjectLabels.join(", "),
           row => row.selectedByBranches.join(", "),
+          row => row.lastResult ? `${row.lastResult.status} (${row.lastResult.exitCode ?? "n/a"})` : "",
           row => row.costEstimate
         ])}</tbody>
       </table>
       <div class="card">
         <h3>Affected Test Gates By Branch</h3>
         <pre>${esc(JSON.stringify(affectedTestGatesByBranch, null, 2))}</pre>
+      </div>
+    </section>
+
+    <section class="grid2">
+      <div>
+        <h2>Test Runs</h2>
+        <form id="platform-test-run-form">
+          <label>Test gate
+            <select name="gateId">
+              ${testGates.map(gate => `<option value="${esc(gate.id)}">${esc(gate.title)}</option>`).join("")}
+            </select>
+          </label>
+          <label>Branch id <input name="branchId" placeholder="Optional branch id"></label>
+          <label>Change set id <input name="changeSetId" placeholder="Optional change set id"></label>
+          <label>Candidate snapshot id <input name="candidateSnapshotId" placeholder="Optional candidate snapshot id"></label>
+          <button type="submit">Run Test Gate</button>
+          <div id="test-run-status"></div>
+        </form>
+        <table>
+          <thead><tr><th>Status</th><th>Gate</th><th>Branch</th><th>Duration</th><th>Exit</th><th>Started</th></tr></thead>
+          <tbody>${tableRows(testRuns.slice(0, 80), [
+            row => row.status,
+            row => row.title,
+            row => row.branchId || "",
+            row => row.durationMs ?? "",
+            row => row.exitCode ?? "",
+            row => row.startedAt || ""
+          ])}</tbody>
+        </table>
+      </div>
+      <div>
+        <h2>Latest Test Results</h2>
+        <pre>${esc(JSON.stringify(latestTestResultsByGate, null, 2))}</pre>
       </div>
     </section>
 
@@ -784,6 +820,25 @@ export function renderPlatformPage(model) {
       });
       const json = await response.json().catch(() => ({}));
       status.textContent = response.ok ? ("Change set " + action + "ed.") : (json.error || "Lifecycle update failed.");
+    });
+    document.getElementById("platform-test-run-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const status = document.getElementById("test-run-status");
+      const response = await fetch("/api/platform-test-runs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          gateId: form.elements.gateId.value || null,
+          branchId: form.elements.branchId.value || null,
+          changeSetId: form.elements.changeSetId.value || null,
+          candidateSnapshotId: form.elements.candidateSnapshotId.value || null
+        })
+      });
+      const json = await response.json().catch(() => ({}));
+      status.textContent = response.ok
+        ? ("Test run finished: " + String(json.latestResult?.status || json.testRun?.status || "unknown"))
+        : (json.error || "Test run failed.");
     });
     const branchDetailSelect = document.getElementById("platform-branch-detail-select");
     if (branchDetailSelect) {

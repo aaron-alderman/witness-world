@@ -648,16 +648,16 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [~] Add `testGate` module kind.
 - [ ] Add `testSuite` module kind.
 - [ ] Add `testCase` module kind.
-- [ ] Add `testRun` module kind.
-- [ ] Add `testResult` module kind.
+- [X] Add `testRun` module kind.
+- [X] Add `testResult` module kind.
 - [ ] Add `testArtifact` module kind.
 - [ ] Add `coverageEdge` module kind.
 - [ ] Add projectors:
   - [~] `testGates`
   - [ ] `testGateIndex`
-  - [ ] `testRuns`
-  - [ ] `testResults`
-  - [ ] `latestTestResultsByGate`
+  - [X] `testRuns`
+  - [X] `testResults`
+  - [X] `latestTestResultsByGate`
   - [ ] coverageEdges
   - [~] `affectedTestGates`
 - [~] Model gate fields:
@@ -680,7 +680,8 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] platform model hints
 - [X] Add Platform Console gates view.
 - [X] Add MCP view `platform.read { view: "testGates" }`.
-- [L] Current V1 gate modeling is a platform self-model projection with branch-aware affected gate selection plus discovery from test files, package scripts, and explicit doc commands. It is not yet standalone witness-backed `testRun`/`testResult` history, and doc command parsing still treats inline code tokens as hints rather than full fenced-block semantics.
+- [L] Current V1 gate modeling is a platform self-model projection with branch-aware affected gate selection plus discovery from test files, package scripts, and explicit doc commands. It now includes witness-backed `testRun`/`testResult` history plus `lastResult` projection, but doc command parsing still treats inline code tokens as hints rather than full fenced-block semantics.
+- [L] Current V1 test execution records one synthesized `testResult` per run with stdout/stderr captured in witness-backed rows. Artifact storage, structured report ingestion, and richer per-test-case modeling remain later work.
 
 ### 5.2 Test Execution Environment
 
@@ -691,18 +692,20 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] local Rust/cargo
   - [ ] isolated temp workspace
   - [ ] platform candidate snapshot
-- [ ] Run tests inside platform execution commands.
+- [~] Run tests inside platform execution commands.
 - [ ] Capture stdout/stderr as artifacts.
 - [ ] Capture structured TAP/JUnit where available.
-- [ ] Capture duration, memory, CPU, exit code.
-- [ ] Capture environment inputs.
-- [ ] Capture source revision and branch.
-- [ ] Capture candidate snapshot ID.
-- [ ] Add `POST /api/platform-test-runs`.
-- [ ] Add `GET /api/platform-test-runs/:id`.
+- [~] Capture duration, memory, CPU, exit code.
+- [~] Capture environment inputs.
+- [~] Capture source revision and branch.
+- [X] Capture candidate snapshot ID.
+- [X] Add `POST /api/platform-test-runs`.
+- [X] Add `GET /api/platform-test-runs/:id`.
 - [ ] Add test run SSE events.
-- [ ] Add Platform Console test run panel.
+- [X] Add Platform Console test run panel.
 - [ ] Add MCP tool `platform.test` or extend `platform.proposal` gate execution.
+- [L] Current V1 test execution runs modeled gate commands through the same `plugin.platform` handler lane used by the human HTTP path, with branch/changeSet/candidateSnapshot/runtimeProfile context carried into witness-backed rows. It does not yet isolate runs behind a modeled `testRunner` boundary actor or candidate-snapshot workspace.
+- [L] Current V1 captures exit code, duration, stdout, stderr, timeout state, branch id, change-set id, candidate snapshot id, runtime profile, source dependencies, and protected objects. Memory, CPU, structured reports, source revision hashes, artifact storage, and SSE streaming remain later work.
 
 ### 5.3 Efficient Red/Green
 
@@ -1129,7 +1132,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add Runtime Revisions view.
 - [ ] Add Docs view.
 - [X] Add Test Gates view.
-- [ ] Add Test Runs view.
+- [X] Add Test Runs view.
 - [ ] Add Dependency Graph view.
 - [ ] Add Coverage Matrix view.
 - [ ] Add Defects view.
@@ -1159,6 +1162,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] `platform.branch`
   - [X] `platform.changeSet`
   - [X] `platform.read { view: "testGates" }`
+  - [X] `platform.read { view: "testRuns" }`
   - [ ] `platform.test`
   - [ ] `platform.docs`
   - [ ] `platform.telemetry`
@@ -1247,12 +1251,13 @@ This section is the execution contract for a fresh agent. Read it before startin
 ### Milestone D: Test Gate V1
 
 - [~] Discover test gates.
-- [ ] Run tests as platform executions.
+- [~] Run tests as platform executions.
 - [ ] Capture test artifacts.
 - [~] Link gates to changed objects.
 - [ ] Run dependency-aware selected tests.
-- [ ] Add red/green view.
+- [~] Add red/green view.
 - [X] Add tests for affected test selection.
+- [L] Current V1 exposes per-gate `lastResult`, a test-runs panel, and latest-result state in the platform model and console. It is not yet a dependency-aware red/green orchestration view with artifact-backed history.
 
 ### Milestone E: Defects And Telemetry V1
 

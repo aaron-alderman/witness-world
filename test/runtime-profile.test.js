@@ -391,6 +391,12 @@ test("minimal runtime profile does not expose platform self-model routes", async
       headers: { "content-type": "application/json" },
       body: JSON.stringify({})
     })).status, 404);
+    assert.equal((await fetch(`${server.url}/api/platform-test-runs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({})
+    })).status, 404);
+    assert.equal((await fetch(`${server.url}/api/platform-test-runs/demo`)).status, 404);
     assert.equal((await fetch(`${server.url}/api/platform-proposals`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -464,6 +470,13 @@ test("full runtime exposes platform console and platform self-model API", async 
       headers: { "content-type": "application/json" },
       body: JSON.stringify({})
     });
+    const testRunRoute = await fetch(`${server.url}/api/platform-test-runs`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ gateId: "gate:plugins/platform/platform.test.js" })
+    });
+    const testRunBody = await testRunRoute.json();
+    const testRunReadRoute = await fetch(`${server.url}/api/platform-test-runs/${encodeURIComponent(testRunBody.testRun?.id || "missing")}`);
     const proposalRoute = await fetch(`${server.url}/api/platform-proposals`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -496,6 +509,8 @@ test("full runtime exposes platform console and platform self-model API", async 
     assert.notEqual(applyRoute.status, 404);
     assert.notEqual(rejectRoute.status, 404);
     assert.notEqual(abandonRoute.status, 404);
+    assert.notEqual(testRunRoute.status, 404);
+    assert.notEqual(testRunReadRoute.status, 404);
     assert.notEqual(proposalRoute.status, 404);
     assert.equal(diagnostics.plugins.activePluginIds.includes("plugin.platform"), true);
     assert.equal(diagnostics.routes.some(route => route.matcher === "/platform" && route.handler === "page.platform"), true);
@@ -511,6 +526,8 @@ test("full runtime exposes platform console and platform self-model API", async 
     assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-change-sets") && route.handler === "platform.changeSet.apply"), true);
     assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-change-sets") && route.handler === "platform.changeSet.reject"), true);
     assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-change-sets") && route.handler === "platform.changeSet.abandon"), true);
+    assert.equal(diagnostics.routes.some(route => route.matcher === "/api/platform-test-runs" && route.handler === "platform.testRun.create"), true);
+    assert.equal(diagnostics.routes.some(route => String(route.matcher).includes("platform-test-runs") && route.handler === "platform.testRun.read"), true);
     assert.equal(diagnostics.routes.some(route => route.matcher === "/api/platform-proposals" && route.handler === "platform.proposal.create"), true);
   } finally {
     await server.close();

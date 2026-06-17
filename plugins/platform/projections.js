@@ -128,6 +128,108 @@ function mergeIntentRows(witnesses) {
   return sortRows(rows, ["branchId", "mode", "proposalId"]);
 }
 
+function testRunRows(witnesses) {
+  const rows = new Map();
+  for (const witness of witnesses) {
+    if (witness.process === "platform.test.run.start" && witness.body?.id) {
+      const body = witness.body;
+      rows.set(String(body.id), {
+        id: String(body.id),
+        gateId: String(body.gateId || ""),
+        title: String(body.title || body.gateId || body.id),
+        command: String(body.command || ""),
+        runner: String(body.runner || "node-test"),
+        environment: String(body.environment || "local-node"),
+        timeoutMs: Number(body.timeoutMs || 0),
+        branchId: body.branchId ? String(body.branchId) : null,
+        changeSetId: body.changeSetId ? String(body.changeSetId) : null,
+        candidateSnapshotId: body.candidateSnapshotId ? String(body.candidateSnapshotId) : null,
+        sourceDependencies: Array.isArray(body.sourceDependencies) ? body.sourceDependencies.map(String) : [],
+        protectedObjects: Array.isArray(body.protectedObjects) ? body.protectedObjects.map(String) : [],
+        actor: body.actor ? String(body.actor) : null,
+        session: body.session ? String(body.session) : null,
+        runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
+        status: "running",
+        startedAt: body.startedAt ?? null,
+        finishedAt: null,
+        durationMs: null,
+        exitCode: null,
+        signal: null,
+        stdout: "",
+        stderr: "",
+        timedOut: false,
+        error: null
+      });
+      continue;
+    }
+    if (witness.process === "platform.test.run.finish" && witness.body?.id) {
+      const body = witness.body;
+      const id = String(body.id);
+      const previous = rows.get(id) ?? {
+        id,
+        gateId: String(body.gateId || ""),
+        title: String(body.title || body.gateId || body.id),
+        command: String(body.command || ""),
+        runner: String(body.runner || "node-test"),
+        environment: String(body.environment || "local-node"),
+        timeoutMs: Number(body.timeoutMs || 0),
+        branchId: body.branchId ? String(body.branchId) : null,
+        changeSetId: body.changeSetId ? String(body.changeSetId) : null,
+        candidateSnapshotId: body.candidateSnapshotId ? String(body.candidateSnapshotId) : null,
+        sourceDependencies: Array.isArray(body.sourceDependencies) ? body.sourceDependencies.map(String) : [],
+        protectedObjects: Array.isArray(body.protectedObjects) ? body.protectedObjects.map(String) : [],
+        actor: body.actor ? String(body.actor) : null,
+        session: body.session ? String(body.session) : null,
+        runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
+        startedAt: body.startedAt ?? null
+      };
+      rows.set(id, {
+        ...previous,
+        status: String(body.status || previous.status || "failed"),
+        finishedAt: body.finishedAt ?? null,
+        durationMs: typeof body.durationMs === "number" ? body.durationMs : null,
+        exitCode: typeof body.exitCode === "number" ? body.exitCode : null,
+        signal: body.signal ? String(body.signal) : null,
+        stdout: String(body.stdout || ""),
+        stderr: String(body.stderr || ""),
+        timedOut: body.timedOut === true,
+        error: body.error ? String(body.error) : null
+      });
+    }
+  }
+  return sortRows([...rows.values()], ["gateId", "id"]);
+}
+
+function testResultRows(witnesses) {
+  const rows = [];
+  for (const witness of witnesses) {
+    if (witness.process !== "platform.test.run.finish" || !Array.isArray(witness.body?.results)) continue;
+    for (const result of witness.body.results) {
+      if (!result?.id) continue;
+      rows.push({
+        id: String(result.id),
+        runId: String(result.runId || witness.body.id || ""),
+        gateId: String(result.gateId || witness.body.gateId || ""),
+        title: String(result.title || witness.body.title || result.gateId || result.id),
+        status: String(result.status || witness.body.status || "failed"),
+        exitCode: typeof result.exitCode === "number" ? result.exitCode : null,
+        signal: result.signal ? String(result.signal) : null,
+        stdout: String(result.stdout || ""),
+        stderr: String(result.stderr || ""),
+        durationMs: typeof result.durationMs === "number" ? result.durationMs : null,
+        timedOut: result.timedOut === true,
+        branchId: result.branchId ? String(result.branchId) : null,
+        changeSetId: result.changeSetId ? String(result.changeSetId) : null,
+        candidateSnapshotId: result.candidateSnapshotId ? String(result.candidateSnapshotId) : null,
+        sourceDependencies: Array.isArray(result.sourceDependencies) ? result.sourceDependencies.map(String) : [],
+        protectedObjects: Array.isArray(result.protectedObjects) ? result.protectedObjects.map(String) : [],
+        producedAt: result.producedAt ?? witness.body.finishedAt ?? null
+      });
+    }
+  }
+  return sortRows(rows, ["gateId", "id"]);
+}
+
 export const platformModuleProjectors = {
   changeSetEdits(witnesses) {
     return changeSetEditRows(witnesses);
@@ -161,6 +263,32 @@ export const platformModuleProjectors = {
       if (row.status === "valid") activeByBranch[row.branchId] = row;
     }
     return { rows, byId, byChangeSet, byBranch, activeByBranch };
+  },
+
+  testRuns(witnesses) {
+    return testRunRows(witnesses);
+  },
+
+  testRunIndex(witnesses) {
+    const rows = platformModuleProjectors.testRuns(witnesses);
+    const byId = Object.create(null);
+    const byGate = Object.create(null);
+    for (const row of rows) {
+      byId[row.id] = row;
+      pushByKey(byGate, row.gateId, row);
+    }
+    return { rows, byId, byGate };
+  },
+
+  testResults(witnesses) {
+    return testResultRows(witnesses);
+  },
+
+  latestTestResultsByGate(witnesses) {
+    const rows = platformModuleProjectors.testResults(witnesses);
+    const byGate = Object.create(null);
+    for (const row of rows) byGate[row.gateId] = row;
+    return { rows, byGate };
   },
 
   conflicts(witnesses) {

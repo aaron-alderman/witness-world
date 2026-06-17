@@ -22,6 +22,7 @@ import {
 import { buildPlatformModel, filterPlatformModel } from "./platform-model.js";
 import { renderPlatformPage } from "./platform-page.js";
 import { buildPlatformProposalCreateBody } from "./platform-proposals.js";
+import { readPlatformTestRun, runPlatformTestCommand, runPlatformTestGate } from "./test-runs.js";
 
 function diagnosticsFromAppContext(appContext) {
   const summary = appContext?.runtimeBundleSummary ?? {};
@@ -136,6 +137,7 @@ export function createPlatformHandlers({
   frontendHost,
   readJson,
   authoringServices,
+  platformTestRunner = runPlatformTestCommand,
   sendGateFailure,
   send,
   sendJson
@@ -405,6 +407,54 @@ export function createPlatformHandlers({
       sendJson(res, result.status, {
         changeSet: result.changeSet,
         witness: result.witness
+      });
+    },
+
+    "platform.testRun.create": async ({ req, res, requestActor, requestSession, appContext }) => {
+      const actor = requirePlatformMutationActor(res, requestActor);
+      if (!actor) return;
+      const body = await readJson(req);
+      const model = await platformModelFor(appContext);
+      const gateId = body?.gateId ? String(body.gateId) : "";
+      const gate = model.testGates?.find(row => row.id === gateId) ?? null;
+      if (!gate) {
+        sendJson(res, 404, { error: "test gate not found" });
+        return;
+      }
+      const result = await runPlatformTestGate(world, {
+        actor,
+        gate,
+        id: body?.id ?? null,
+        branchId: body?.branchId ?? null,
+        changeSetId: body?.changeSetId ?? null,
+        candidateSnapshotId: body?.candidateSnapshotId ?? null,
+        session: requestSession ?? null,
+        runtimeProfile: appContext?.runtimeProfile ?? null,
+        runCommand: platformTestRunner
+      });
+      if (!result.ok) {
+        sendJson(res, result.status || 400, { error: result.error });
+        return;
+      }
+      sendJson(res, result.status, {
+        testRun: result.testRun,
+        testResults: result.testResults,
+        latestResult: result.latestResult,
+        startWitness: result.startWitness,
+        finishWitness: result.finishWitness
+      });
+    },
+
+    "platform.testRun.read": async ({ res, params }) => {
+      const result = readPlatformTestRun(world, params.id || "");
+      if (!result.ok) {
+        sendJson(res, result.status || 404, { error: result.error });
+        return;
+      }
+      sendJson(res, result.status, {
+        testRun: result.testRun,
+        testResults: result.testResults,
+        latestResult: result.latestResult
       });
     },
 

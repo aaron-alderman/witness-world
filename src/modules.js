@@ -1745,6 +1745,21 @@ export const moduleProjectors = {
     activeByBranch: Object.create(null)
   })),
 
+  testRuns: delegatedModuleProjector("testRuns", emptyRows),
+
+  testRunIndex: delegatedModuleProjector("testRunIndex", () => ({
+    rows: [],
+    byId: Object.create(null),
+    byGate: Object.create(null)
+  })),
+
+  testResults: delegatedModuleProjector("testResults", emptyRows),
+
+  latestTestResultsByGate: delegatedModuleProjector("latestTestResultsByGate", () => ({
+    rows: [],
+    byGate: Object.create(null)
+  })),
+
   conflicts: delegatedModuleProjector("conflicts", emptyRows),
 
   mergeIntents: delegatedModuleProjector("mergeIntents", emptyRows),
