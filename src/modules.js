@@ -1745,6 +1745,8 @@ export const moduleProjectors = {
     activeByBranch: Object.create(null)
   })),
 
+  conflicts: delegatedModuleProjector("conflicts", emptyRows),
+
   assets: delegatedModuleProjector("assets", emptyRows),
 
   assetIndex: delegatedModuleProjector("assetIndex", emptyIndex),

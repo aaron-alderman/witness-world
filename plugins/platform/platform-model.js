@@ -355,6 +355,7 @@ export async function buildPlatformModel({
   const proposals = projectRows(project, moduleProjectors.proposals);
   const changeSets = projectRows(project, moduleProjectors.changeSets);
   const changeSetEdits = projectRows(project, moduleProjectors.changeSetEdits);
+  const conflicts = projectRows(project, moduleProjectors.conflicts);
   const changeSetsByBranch = Object.create(null);
   const editsByChangeSet = Object.create(null);
   for (const changeSet of changeSets) pushByKey(changeSetsByBranch, changeSet.branchId, changeSet);
@@ -658,6 +659,20 @@ export async function buildPlatformModel({
     addEdge(edges, `changeSet:${snapshot.changeSetId}`, "produces", snapshot.id, "witnesses");
     addEdge(edges, `branch:${snapshot.branchId}`, "tracks", snapshot.id, "witnesses");
   }
+  for (const conflict of conflicts) {
+    addNode(nodes, {
+      id: conflict.id,
+      kind: "conflict",
+      title: conflict.path || conflict.id,
+      lifecycle: ["verify", "steward"],
+      owner: "plugin.platform",
+      status: conflict.status || "open",
+      source: conflict.path || "witnesses"
+    });
+    addEdge(edges, `changeSet:${conflict.changeSetId}`, "conflictsWith", conflict.id, "witnesses");
+    addEdge(edges, `branch:${conflict.branchId}`, "contains", conflict.id, "witnesses");
+    if (conflict.candidateSnapshotId) addEdge(edges, conflict.id, "detectedBy", conflict.candidateSnapshotId, "witnesses");
+  }
   addEdge(edges, "doc:docs/PLUGIN-MIGRATION-CONTROL.md", "governs", "plugin.authoring", "docs");
   addEdge(edges, "doc:docs/RUNTIME-STACK-MAP.md", "governs", "bundle-core-runtime", "docs");
   addEdge(edges, "doc:docs/CAPABILITIES.md", "governs", "plugin.platform", "docs");
@@ -706,6 +721,7 @@ export async function buildPlatformModel({
     changeSets: changeSets.map(row => ({ ...row })),
     changeSetEdits: changeSetEdits.map(row => ({ ...row })),
     candidateSnapshots: candidateSnapshots.map(row => ({ ...row })),
+    conflicts: conflicts.map(row => ({ ...row })),
     roadmapTasks
   };
 }
@@ -726,6 +742,10 @@ export function filterPlatformModel(model, view, id = null) {
   if (view === "candidateSnapshots") {
     const candidateSnapshots = id ? model.candidateSnapshots.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.candidateSnapshots;
     return { candidateSnapshots, summaries: model.summaries };
+  }
+  if (view === "conflicts") {
+    const conflicts = id ? model.conflicts.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.conflicts;
+    return { conflicts, summaries: model.summaries };
   }
   if (view === "gates") return { gates: model.nodes.filter(node => node.kind === "gate"), summaries: model.summaries };
   if (view === "mcp") return {

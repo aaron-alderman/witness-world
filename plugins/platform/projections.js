@@ -70,6 +70,36 @@ function candidateSnapshotRows(witnesses) {
   return sortRows(rows, ["branchId", "changeSetId", "id"]);
 }
 
+function conflictRows(witnesses) {
+  const latestByChangeSet = new Map();
+  for (const witness of witnesses) {
+    if (witness.process !== "platform.changeSet.validate" || !witness.body?.id) continue;
+    latestByChangeSet.set(String(witness.body.id), witness.body);
+  }
+  const rows = [];
+  for (const body of latestByChangeSet.values()) {
+    const errors = Array.isArray(body.candidateSnapshot?.errors) ? body.candidateSnapshot.errors : [];
+    for (const error of errors) {
+      if (String(error?.kind || "") !== "conflict" || !error?.id) continue;
+      rows.push({
+        id: String(error.id),
+        changeSetId: String(error.changeSetId || body.id),
+        branchId: String(error.branchId || body.branchId),
+        candidateSnapshotId: String(body.candidateSnapshot?.id || ""),
+        path: String(error.path || ""),
+        pathHash: String(error.pathHash || ""),
+        sourceLanguage: String(error.sourceLanguage || "text"),
+        previousHash: error.previousHash ?? null,
+        currentHash: error.currentHash ?? null,
+        message: String(error.message || "change-set conflict"),
+        status: "open",
+        detectedAt: body.validatedAt ?? body.candidateSnapshot?.createdAt ?? null
+      });
+    }
+  }
+  return sortRows(rows, ["branchId", "changeSetId", "path"]);
+}
+
 export const platformModuleProjectors = {
   changeSetEdits(witnesses) {
     return changeSetEditRows(witnesses);
@@ -103,6 +133,10 @@ export const platformModuleProjectors = {
       if (row.status === "valid") activeByBranch[row.branchId] = row;
     }
     return { rows, byId, byChangeSet, byBranch, activeByBranch };
+  },
+
+  conflicts(witnesses) {
+    return conflictRows(witnesses);
   },
 
   branches(witnesses) {

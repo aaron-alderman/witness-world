@@ -365,8 +365,15 @@ async function inspectPlatformChangeSet(world, changeSetId) {
     const currentHash = currentContent == null ? null : hashText(currentContent);
     if (currentHash !== (edit.previousHash ?? null)) {
       errors.push({
+        id: `conflict:${changeSetId}:${edit.pathHash}`,
+        kind: "conflict",
+        changeSetId,
+        branchId: changeSet.branchId,
         path: edit.path,
+        pathHash: edit.pathHash,
         sourceLanguage: edit.sourceLanguage,
+        previousHash: edit.previousHash ?? null,
+        currentHash,
         message: "base file hash changed since the edit was staged"
       });
     } else {
@@ -374,6 +381,7 @@ async function inspectPlatformChangeSet(world, changeSetId) {
         validateOverlaySource(edit.path, edit.nextContent);
       } catch (error) {
         errors.push({
+          kind: "invalidSource",
           path: edit.path,
           sourceLanguage: edit.sourceLanguage,
           message: error instanceof Error ? error.message : String(error)
@@ -669,6 +677,12 @@ export async function validatePlatformChangeSet(world, {
   const { changeSet, previousActive, revision, candidateSnapshotId, files, errors } = inspected;
   const status = errors.length ? "invalid" : "valid";
   ensureThing(world, actor, candidateSnapshotId);
+  const conflictIds = [];
+  for (const error of errors) {
+    if (error?.kind !== "conflict" || !error.id) continue;
+    conflictIds.push(String(error.id));
+    ensureThing(world, actor, String(error.id));
+  }
   const candidateSnapshot = {
     id: candidateSnapshotId,
     changeSetId,
@@ -687,7 +701,10 @@ export async function validatePlatformChangeSet(world, {
       relation(candidateSnapshotId, "hasModuleKind", "candidateSnapshot"),
       relation(changeSetId, "producesCandidateSnapshot", candidateSnapshotId),
       relation(changeSet.branchId, "hasCandidateSnapshot", candidateSnapshotId)
-    ],
+    ].concat(conflictIds.flatMap(conflictId => ([
+      relation(conflictId, "hasModuleKind", "conflict"),
+      relation(changeSetId, "hasConflict", conflictId)
+    ]))),
     body: {
       id: changeSetId,
       branchId: changeSet.branchId,

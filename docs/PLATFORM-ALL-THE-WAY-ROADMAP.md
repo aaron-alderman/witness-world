@@ -254,7 +254,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add `branch` module kind.
 - [X] Add `candidateSnapshot` module kind.
 - [ ] Add `mergeIntent` module kind.
-- [ ] Add `conflict` module kind.
+- [X] Add `conflict` module kind.
 - [ ] Add `pushRecord` module kind.
 - [ ] Add `shipRecord` module kind.
 - [~] Add module projectors for change sets:
@@ -267,7 +267,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] `candidateSnapshots`
   - [X] `candidateSnapshotIndex`
   - [ ] `mergeIntents`
-  - [ ] `conflicts`
+  - [X] `conflicts`
   - [ ] `pushRecords`
   - [ ] `shipRecords`
 - [~] Define stable IDs:
@@ -275,7 +275,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] `changeSetEdit:<changeSetId>:<pathHash>`
   - [X] `branch:<name>`
   - [X] `candidateSnapshot:<changeSetId>:<revision>`
-  - [ ] `conflict:<changeSetId>:<pathHash>`
+  - [X] `conflict:<changeSetId>:<pathHash>`
 - [~] Add canonical status values for change sets:
   - [X] `draft`
   - [ ] `validating`

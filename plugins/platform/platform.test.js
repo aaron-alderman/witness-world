@@ -302,6 +302,37 @@ test("platform model carries branch docs freshness and impact summaries", async 
   assert.equal(branch?.telemetryImpactSummaries?.some(row => row.id === "platform.self"), true);
 });
 
+test("platform model includes projected conflict nodes from validation errors", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [],
+      surfaces: [],
+      plugins: { activePluginIds: [], effectivePluginIds: [], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.conflicts) {
+        return [{
+          id: "conflict:changeSet:demo:abc123",
+          changeSetId: "changeSet:demo",
+          branchId: "branch:demo",
+          candidateSnapshotId: "candidateSnapshot:changeSet:demo:1",
+          path: "plugins/platform/platform-console.rvm",
+          pathHash: "abc123",
+          status: "open"
+        }];
+      }
+      return [];
+    }
+  });
+
+  assert.equal(model.nodes.some(node => node.id === "conflict:changeSet:demo:abc123" && node.kind === "conflict"), true);
+  assert.equal(model.edges.some(edge => edge.from === "changeSet:changeSet:demo" && edge.rel === "conflictsWith" && edge.to === "conflict:changeSet:demo:abc123"), true);
+  assert.equal(filterPlatformModel(model, "conflicts").conflicts[0].id, "conflict:changeSet:demo:abc123");
+});
+
 test("platform model includes witnessed operating objects and proposal state", async () => {
   const model = await buildPlatformModel({
     diagnostics: {
@@ -1496,7 +1527,13 @@ test("platform change-set validation detects base hash conflicts after staging",
     });
     assert.equal(sent.at(-1).status, 200);
     assert.equal(sent.at(-1).body.candidateSnapshot.status, "invalid");
+    assert.equal(sent.at(-1).body.candidateSnapshot.errors[0].kind, "conflict");
+    assert.match(sent.at(-1).body.candidateSnapshot.errors[0].id, /^conflict:/);
     assert.match(sent.at(-1).body.candidateSnapshot.errors[0].message, /base file hash changed since the edit was staged/);
+    const projectedConflicts = world.project(moduleProjectors.conflicts);
+    assert.equal(projectedConflicts.length, 1);
+    assert.equal(projectedConflicts[0].changeSetId, "changeset.conflict.validate");
+    assert.equal(projectedConflicts[0].path, fixture.first);
 
     await handlers["platform.changeSet.apply"]({
       res: {},
