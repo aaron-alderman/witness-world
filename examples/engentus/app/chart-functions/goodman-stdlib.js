@@ -21,7 +21,15 @@ function escapeHtml(value) {
 }
 
 function tooltipRowHtml({ color, name, sigmaA, shear, damage }) {
-  return `<span style="color:${escapeHtml(color)}">■</span> ${escapeHtml(name)}: <b>${escapeHtml(sigmaA)}</b> F_shear=${escapeHtml(shear)} Δ/cyc=${damage}`;
+  return [
+    `<div class="goodman-hover-row">`,
+    `<span class="goodman-hover-swatch" style="background:${escapeHtml(color)}"></span>`,
+    `<span class="goodman-hover-name">${escapeHtml(name)}:</span>`,
+    `<strong class="goodman-hover-value">${escapeHtml(sigmaA)}</strong>`,
+    `<span class="goodman-hover-metric">F_shear=${escapeHtml(shear)}</span>`,
+    `<span class="goodman-hover-metric">&Delta;/cyc=${damage}</span>`,
+    `</div>`
+  ].join("");
 }
 
 export const goodmanFunctions = {
@@ -71,8 +79,8 @@ export const goodmanFunctions = {
 
   damage_per_million_text: value => {
     const numeric = Number(value);
-    if (!Number.isFinite(numeric) || Math.abs(numeric) < 0.0005) return "0.000 / 1M cycles";
-    return `${numeric.toFixed(3)} / 1M cycles`;
+    if (!Number.isFinite(numeric) || Math.abs(numeric) < 0.001) return "≈0";
+    return numeric.toFixed(3);
   },
 
   goodman_tooltip_markup: ({ readout = {}, plan = {} } = {}) => {
@@ -89,8 +97,8 @@ export const goodmanFunctions = {
     const formatShear = reading => `${Math.round(Number(reading?.tooltip?.F_shear_N ?? 0)).toLocaleString("en-US")} N`;
     const formatDamage = reading => {
       const numeric = Number(reading?.tooltip?.damage_per_cycle_x10_6 ?? 0);
-      if (!Number.isFinite(numeric) || Math.abs(numeric) < 0.0005) return "≈0×10<sup>-6</sup>";
-      return `${numeric.toFixed(3)}×10<sup>-6</sup>`;
+      if (!Number.isFinite(numeric) || Math.abs(numeric) < 0.0005) return "&asymp;0&times;10<sup>-6</sup>";
+      return `${numeric.toFixed(3)}&times;10<sup>-6</sup>`;
     };
     const rows = [];
     if (primary) {
@@ -111,13 +119,16 @@ export const goodmanFunctions = {
         damage: formatDamage(maintenance)
       }));
     }
-    return `<b>σ_m = ${escapeHtml(Number(sigmaM).toFixed(0))} MPa</b><br>${rows.join("<br>")}`;
+    return [
+      `<div class="goodman-hover-title">&sigma;<sub>m</sub> = ${escapeHtml(Number(sigmaM).toFixed(0))} MPa</div>`,
+      ...rows
+    ].join("");
   },
 
   slip_text: value => {
     const numeric = Number(value);
-    if (!Number.isFinite(numeric)) return "not reached";
-    return numeric > 650 ? "> 650 MPa" : `${numeric.toFixed(1)} MPa`;
+    if (!Number.isFinite(numeric) || numeric >= 660) return "> 660";
+    return `${numeric.toFixed(0)} MPa`;
   },
 
   shore_a_to_E_pa: shoreA =>

@@ -11,18 +11,40 @@ view EngentusLoginSubtitle {
   kind text
   prop tag = "p"
   class auth-form-sub
-  prop text = "Sign in to your Engentus account"
+  prop text = "Demo sign-in uses the seeded local identities below."
+}
+
+view EngentusLoginDemoHint {
+  kind text
+  prop tag = "p"
+  class auth-form-sub
+  prop text = "Use aaron / aaron or callan / callan."
+}
+
+view EngentusLoginAuthNotice {
+  kind text
+  prop tag = "p"
+  class auth-form-sub
+  bindings {
+    text from state EngentusAuthNotice
+  }
 }
 
 view EngentusLoginEmailField {
   kind form-field
   class auth-field
-  prop label = "Email address"
-  prop inputType = "email"
+  prop label = "Username"
+  prop inputType = "text"
   prop inputId = "login-email"
   prop inputClass = "auth-input"
-  prop placeholder = "you@company.com"
-  prop autocomplete = "email"
+  prop placeholder = "aaron"
+  prop autocomplete = "username"
+  bindings {
+    value from state EngentusLoginUsername
+  }
+  interactions {
+    on input self set EngentusLoginUsername eventValue
+  }
 }
 
 view EngentusLoginPasswordField {
@@ -38,6 +60,10 @@ view EngentusLoginPasswordField {
   prop inputWrapClass = "auth-pw-wrap"
   bindings {
     inputType from state EngentusPasswordRevealed map true text false password default password
+    value from state EngentusLoginPassword
+  }
+  interactions {
+    on input self set EngentusLoginPassword eventValue
   }
   children {
     EngentusLoginPasswordToggle
@@ -62,6 +88,8 @@ view EngentusLoginPrimaryAction {
     disabled from state EngentusShellAuthStatus map pending true folding true default false
   }
   interactions {
+    on click self set EngentusLoginUsername "aaron"
+    on click self set EngentusLoginPassword "aaron"
     on click self deliver EngentusSignInRequested
   }
   children {
@@ -78,9 +106,9 @@ view EngentusLoginMicrosoftIcon {
 view EngentusLoginMicrosoftLabel {
   kind text
   prop tag = "span"
-  prop text = "Sign in with Microsoft"
+  prop text = "Use Aaron Demo Account"
   bindings {
-    text from state EngentusShellAuthStatus map pending "Signing in…" folding "Signing in…" default "Sign in with Microsoft"
+    text from state EngentusShellAuthStatus map pending "Signing in…" folding "Signing in…" default "Use Aaron Demo Account"
   }
 }
 
@@ -185,6 +213,8 @@ view EngentusLoginForm {
     EngentusLoginFormLogo
     EngentusLoginHeader
     EngentusLoginSubtitle
+    EngentusLoginDemoHint
+    EngentusLoginAuthNotice
     EngentusLoginPrimaryAction
     EngentusLoginDivider
     EngentusLoginEmailField

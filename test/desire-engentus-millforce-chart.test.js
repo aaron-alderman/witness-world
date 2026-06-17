@@ -145,6 +145,7 @@ test("MillForce model authors sidebar result readouts as active-method scalar ou
   assert.equal(grounded.fields.phiText.data, "9.3°");
   assert.equal(grounded.fields.phiPrimeText.data, "226.6°");
   assert.match(grounded.fields.phiText.data, /°$/);
+  assert.equal(grounded.fields.gammaText.data, `${grounded.fields.gammaActive.data.toFixed(1)}°`);
   assert.match(grounded.fields.omegaText.data, / rad\/s$/);
   assert.match(grounded.fields.rhoChargeText.data, / SG$/);
   assert.match(grounded.fields.F_r_max_text.data, / kN$/);

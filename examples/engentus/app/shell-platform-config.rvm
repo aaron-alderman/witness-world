@@ -19,47 +19,151 @@ view PlatformConfigDatasourceOptionTemplate {
   prop template = true
 }
 
-view PlatformConfigSecretResultTemplate {
+view PlatformConfigSecretTableRowAction {
   kind action
   prop tag = "button"
   prop buttonType = "button"
   prop value = "${item.id}"
-  prop text = "${item.title}"
-  prop template = true
-  class platform-config-result
+  prop text = "Edit"
+  class platform-config-row-action
+  interactions {
+    on click self set PlatformConfigSecretSelectedId eventValue
+    on click self deliver PlatformConfigLoadSecretRequested
+  }
 }
 
-view PlatformConfigDatasourceResultTemplate {
+view PlatformConfigSecretTableRowTemplate {
+  kind region
+  prop tag = "tr"
+  prop template = true
+  children {
+    PlatformConfigSecretTableRowTitle
+    PlatformConfigSecretTableRowStatus
+    PlatformConfigSecretTableRowValue
+    PlatformConfigSecretTableRowUpdated
+    PlatformConfigSecretTableRowActionCell
+  }
+}
+
+view PlatformConfigSecretTableRowTitle {
+  kind text
+  prop tag = "td"
+  prop text = "${item.title}"
+}
+
+view PlatformConfigSecretTableRowStatus {
+  kind text
+  prop tag = "td"
+  prop text = "${item.status}"
+}
+
+view PlatformConfigSecretTableRowValue {
+  kind text
+  prop tag = "td"
+  prop text = "${item.hasValueText}"
+}
+
+view PlatformConfigSecretTableRowUpdated {
+  kind text
+  prop tag = "td"
+  prop text = "${item.updatedAtText}"
+  prop title = "${item.updatedAtTitle}"
+}
+
+view PlatformConfigSecretTableRowActionCell {
+  kind region
+  prop tag = "td"
+  children {
+    PlatformConfigSecretTableRowAction
+  }
+}
+
+view PlatformConfigDatasourceTableRowAction {
   kind action
   prop tag = "button"
   prop buttonType = "button"
   prop value = "${item.id}"
-  prop text = "${item.title}"
-  prop template = true
-  class platform-config-result
+  prop text = "Edit"
+  class platform-config-row-action
+  interactions {
+    on click self set PlatformConfigDatasourceSelectedId eventValue
+    on click self deliver PlatformConfigLoadDatasourceRequested
+  }
 }
 
-view PlatformConfigTitle {
+view PlatformConfigDatasourceTableRowTemplate {
+  kind region
+  prop tag = "tr"
+  prop template = true
+  children {
+    PlatformConfigDatasourceTableRowTitle
+    PlatformConfigDatasourceTableRowProvider
+    PlatformConfigDatasourceTableRowStatus
+    PlatformConfigDatasourceTableRowTest
+    PlatformConfigDatasourceTableRowUpdated
+    PlatformConfigDatasourceTableRowActionCell
+  }
+}
+
+view PlatformConfigDatasourceTableRowTitle {
+  kind text
+  prop tag = "td"
+  prop text = "${item.title}"
+}
+
+view PlatformConfigDatasourceTableRowProvider {
+  kind text
+  prop tag = "td"
+  prop text = "${item.providerText}"
+}
+
+view PlatformConfigDatasourceTableRowStatus {
+  kind text
+  prop tag = "td"
+  prop text = "${item.status}"
+}
+
+view PlatformConfigDatasourceTableRowTest {
+  kind text
+  prop tag = "td"
+  prop text = "${item.lastTestResultText}"
+}
+
+view PlatformConfigDatasourceTableRowUpdated {
+  kind text
+  prop tag = "td"
+  prop text = "${item.updatedAtText}"
+  prop title = "${item.updatedAtTitle}"
+}
+
+view PlatformConfigDatasourceTableRowActionCell {
+  kind region
+  prop tag = "td"
+  children {
+    PlatformConfigDatasourceTableRowAction
+  }
+}
+
+view PlatformConfigPageTitle {
   kind screen-header
   prop tag = "h2"
   class platform-config-title
   prop text = "Platform Config"
 }
 
-view PlatformConfigIntro {
+view PlatformConfigPageIntro {
   kind text
   prop tag = "p"
   class platform-config-intro
-  prop text = "Runner-scoped secrets and named SQL datasources live here. This screen is authored as a normal Engentus app surface and drives backend capabilities through explicit process commands."
+  prop text = "Runner-scoped secrets, datasources, and script plumbing are managed here as an authored Engentus app."
 }
 
-view PlatformConfigHero {
+view PlatformConfigPageHero {
   kind region
   class platform-config-hero
-  prop domId = "platform-config-hero"
   children {
-    PlatformConfigTitle
-    PlatformConfigIntro
+    PlatformConfigPageTitle
+    PlatformConfigPageIntro
   }
 }
 
@@ -74,11 +178,110 @@ view PlatformConfigNotice {
   }
 }
 
-view PlatformConfigActorSectionTitle {
+view PlatformConfigSidebarTitle {
   kind text
   prop tag = "h3"
-  class platform-config-card-title
+  class platform-config-sidebar-title
+  prop text = "Admin Areas"
+}
+
+view PlatformConfigSidebarHint {
+  kind text
+  prop tag = "p"
+  class platform-config-sidebar-hint
+  prop text = "Route-backed operator tooling for this runner."
+}
+
+view PlatformConfigSidebarOperatorAction {
+  kind action
+  prop tag = "button"
+  prop buttonType = "button"
+  prop text = "Operator"
+  class platform-config-side-link
+  bindings {
+    className from state EngentusShellActiveRoute map platform-config-operator "platform-config-side-link active" default "platform-config-side-link"
+  }
+  interactions {
+    on click self deliver PlatformConfigOpenOperatorRequested
+  }
+}
+
+view PlatformConfigSidebarSecretsAction {
+  kind action
+  prop tag = "button"
+  prop buttonType = "button"
+  prop text = "Secrets"
+  class platform-config-side-link
+  bindings {
+    className from state EngentusShellActiveRoute map platform-config-secrets "platform-config-side-link active" default "platform-config-side-link"
+  }
+  interactions {
+    on click self deliver PlatformConfigOpenSecretsRequested
+  }
+}
+
+view PlatformConfigSidebarDatasourcesAction {
+  kind action
+  prop tag = "button"
+  prop buttonType = "button"
+  prop text = "Data Sources"
+  class platform-config-side-link
+  bindings {
+    className from state EngentusShellActiveRoute map platform-config-datasources "platform-config-side-link active" default "platform-config-side-link"
+  }
+  interactions {
+    on click self deliver PlatformConfigOpenDatasourcesRequested
+  }
+}
+
+view PlatformConfigSidebarScriptsAction {
+  kind action
+  prop tag = "button"
+  prop buttonType = "button"
+  prop text = "Scripts"
+  class platform-config-side-link
+  bindings {
+    className from state EngentusShellActiveRoute map platform-config-scripts "platform-config-side-link active" default "platform-config-side-link"
+  }
+  interactions {
+    on click self deliver PlatformConfigOpenScriptsRequested
+  }
+}
+
+view PlatformConfigSidebarNav {
+  kind region
+  class platform-config-sidebar-nav
+  children {
+    PlatformConfigSidebarOperatorAction
+    PlatformConfigSidebarSecretsAction
+    PlatformConfigSidebarDatasourcesAction
+    PlatformConfigSidebarScriptsAction
+  }
+}
+
+view PlatformConfigSidebar {
+  kind aside
+  class platform-config-sidebar
+  prop domId = "platform-config-sidebar"
+  children {
+    PlatformConfigSidebarTitle
+    PlatformConfigSidebarHint
+    PlatformConfigSidebarNav
+  }
+}
+
+view PlatformConfigOperatorSectionTitle {
+  kind text
+  prop tag = "h3"
+  class platform-config-section-title
   prop text = "Operator Session"
+}
+
+view PlatformConfigOperatorSectionIntro {
+  kind text
+  prop tag = "p"
+  class platform-config-hint
+  prop text = "The sign-in flow is still fake, so requests use the actor header below."
 }
 
 view PlatformConfigActorField {
@@ -96,28 +299,40 @@ view PlatformConfigActorField {
   }
 }
 
-view PlatformConfigActorHint {
+view PlatformConfigOperatorSummary {
   kind text
-  prop tag = "p"
-  class platform-config-hint
-  prop text = "The sign-in flow is still fake, so requests use the actor header state above. Secret values remain write-only."
+  prop tag = "pre"
+  class platform-config-output
+  bindings {
+    text from state PlatformConfigNoticeText
+  }
 }
 
-view PlatformConfigActorSection {
+view PlatformConfigOperatorContent {
   kind section
-  class ssec platform-config-card
-  prop domId = "platform-config-session"
+  class platform-config-content-card
+  prop domId = "platform-config-operator-content"
   children {
-    PlatformConfigActorSectionTitle
+    PlatformConfigOperatorSectionTitle
+    PlatformConfigOperatorSectionIntro
     PlatformConfigActorField
-    PlatformConfigActorHint
+    PlatformConfigOperatorSummary
+  }
+}
+
+view PlatformConfigSectionShell {
+  kind region
+  class platform-config-section-shell
+  children {
+    PlatformConfigPageHero
+    PlatformConfigNotice
   }
 }
 
 view PlatformConfigSecretsSectionTitle {
   kind text
   prop tag = "h3"
-  class platform-config-card-title
+  class platform-config-section-title
   prop text = "Secrets"
 }
 
@@ -125,48 +340,7 @@ view PlatformConfigSecretsSectionIntro {
   kind text
   prop tag = "p"
   class platform-config-hint
-  prop text = "Secret ids are generated quietly. Operators work with labels and never read stored secret values back out."
-}
-
-view PlatformConfigSecretSelectorLabel {
-  kind text
-  prop tag = "label"
-  class platform-config-field-label
-  prop text = "Existing secret"
-  prop for = "platform-config-secret-select"
-}
-
-view PlatformConfigSecretSelect {
-  kind select
-  prop tag = "select"
-  prop domId = "platform-config-secret-select"
-  class platform-config-input
-  bindings {
-    value from state PlatformConfigSecretSelectedId
-    disabled from state PlatformConfigSecretBusy
-  }
-  interactions {
-    on change self set PlatformConfigSecretSelectedId eventValue
-    on change self deliver PlatformConfigLoadSecretRequested
-  }
-  repeat {
-    collection PlatformConfigSecrets
-    template PlatformConfigSecretOptionTemplate
-    itemAs item
-    indexAs index
-  }
-}
-
-view PlatformConfigSecretSelectField {
-  kind region
-  class platform-config-field
-  bindings {
-    visible from state PlatformConfigSecretSearchVisible map true false default true
-  }
-  children {
-    PlatformConfigSecretSelectorLabel
-    PlatformConfigSecretSelect
-  }
+  prop text = "Labels are operator-facing. Internal ids are generated quietly and secret values stay write-only."
 }
 
 view PlatformConfigSecretSearchField {
@@ -201,22 +375,75 @@ view PlatformConfigSecretSearchAction {
   }
 }
 
-view PlatformConfigSecretResults {
+view PlatformConfigSecretTableHeader {
   kind region
-  class platform-config-results
-  prop domId = "platform-config-secret-results"
-  bindings {
-    visible from state PlatformConfigSecretSearchVisible
+  prop tag = "thead"
+  children {
+    PlatformConfigSecretTableHeaderRow
   }
-  interactions {
-    on click self set PlatformConfigSecretSelectedId eventValue
-    on click self deliver PlatformConfigLoadSecretRequested
+}
+
+view PlatformConfigSecretTableHeaderRow {
+  kind region
+  prop tag = "tr"
+  children {
+    PlatformConfigSecretTableHeaderTitle
+    PlatformConfigSecretTableHeaderStatus
+    PlatformConfigSecretTableHeaderValue
+    PlatformConfigSecretTableHeaderUpdated
+    PlatformConfigSecretTableHeaderActions
   }
+}
+
+view PlatformConfigSecretTableHeaderTitle {
+  kind text
+  prop tag = "th"
+  prop text = "Label"
+}
+
+view PlatformConfigSecretTableHeaderStatus {
+  kind text
+  prop tag = "th"
+  prop text = "Status"
+}
+
+view PlatformConfigSecretTableHeaderValue {
+  kind text
+  prop tag = "th"
+  prop text = "Has Value"
+}
+
+view PlatformConfigSecretTableHeaderUpdated {
+  kind text
+  prop tag = "th"
+  prop text = "Updated"
+}
+
+view PlatformConfigSecretTableHeaderActions {
+  kind text
+  prop tag = "th"
+  prop text = "Actions"
+}
+
+view PlatformConfigSecretTableBody {
+  kind region
+  prop tag = "tbody"
+  prop domId = "platform-config-secret-table-body"
   repeat {
     collection PlatformConfigSecrets
-    template PlatformConfigSecretResultTemplate
+    template PlatformConfigSecretTableRowTemplate
     itemAs item
     indexAs index
+  }
+}
+
+view PlatformConfigSecretsTable {
+  kind region
+  prop tag = "table"
+  class platform-config-table
+  children {
+    PlatformConfigSecretTableHeader
+    PlatformConfigSecretTableBody
   }
 }
 
@@ -336,23 +563,21 @@ view PlatformConfigSecretSummary {
   kind text
   prop tag = "pre"
   class platform-config-output
-  prop domId = "platform-config-secret-summary"
   bindings {
     text from state PlatformConfigSecretSummary
   }
 }
 
-view PlatformConfigSecretsSection {
+view PlatformConfigSecretsContent {
   kind section
-  class ssec platform-config-card
-  prop domId = "platform-config-secrets"
+  class platform-config-content-card
+  prop domId = "platform-config-secrets-content"
   children {
     PlatformConfigSecretsSectionTitle
     PlatformConfigSecretsSectionIntro
-    PlatformConfigSecretSelectField
     PlatformConfigSecretSearchField
     PlatformConfigSecretSearchAction
-    PlatformConfigSecretResults
+    PlatformConfigSecretsTable
     PlatformConfigSecretLabelField
     PlatformConfigSecretValueField
     PlatformConfigSecretActions
@@ -363,62 +588,21 @@ view PlatformConfigSecretsSection {
 view PlatformConfigDatasourcesSectionTitle {
   kind text
   prop tag = "h3"
-  class platform-config-card-title
-  prop text = "Datasources"
+  class platform-config-section-title
+  prop text = "Data Sources"
 }
 
 view PlatformConfigDatasourcesSectionIntro {
   kind text
   prop tag = "p"
   class platform-config-hint
-  prop text = "Datasource ids are generated quietly. Operators configure labels, providers, connection details, and referenced secrets."
-}
-
-view PlatformConfigDatasourceSelectorLabel {
-  kind text
-  prop tag = "label"
-  class platform-config-field-label
-  prop text = "Existing datasource"
-  prop for = "platform-config-datasource-select"
-}
-
-view PlatformConfigDatasourceSelect {
-  kind select
-  prop tag = "select"
-  prop domId = "platform-config-datasource-select"
-  class platform-config-input
-  bindings {
-    value from state PlatformConfigDatasourceSelectedId
-    disabled from state PlatformConfigDatasourceBusy
-  }
-  interactions {
-    on change self set PlatformConfigDatasourceSelectedId eventValue
-    on change self deliver PlatformConfigLoadDatasourceRequested
-  }
-  repeat {
-    collection PlatformConfigDatasources
-    template PlatformConfigDatasourceOptionTemplate
-    itemAs item
-    indexAs index
-  }
-}
-
-view PlatformConfigDatasourceSelectField {
-  kind region
-  class platform-config-field
-  bindings {
-    visible from state PlatformConfigDatasourceSearchVisible map true false default true
-  }
-  children {
-    PlatformConfigDatasourceSelectorLabel
-    PlatformConfigDatasourceSelect
-  }
+  prop text = "Use the table to load an existing datasource into the editor. Draft forms can be tested before save."
 }
 
 view PlatformConfigDatasourceSearchField {
   kind form-field
   class platform-config-field
-  prop label = "Search datasources"
+  prop label = "Search data sources"
   prop inputId = "platform-config-datasource-search"
   prop inputClass = "platform-config-input"
   prop placeholder = "Search by label"
@@ -447,22 +631,82 @@ view PlatformConfigDatasourceSearchAction {
   }
 }
 
-view PlatformConfigDatasourceResults {
+view PlatformConfigDatasourceTableHeader {
   kind region
-  class platform-config-results
-  prop domId = "platform-config-datasource-results"
-  bindings {
-    visible from state PlatformConfigDatasourceSearchVisible
+  prop tag = "thead"
+  children {
+    PlatformConfigDatasourceTableHeaderRow
   }
-  interactions {
-    on click self set PlatformConfigDatasourceSelectedId eventValue
-    on click self deliver PlatformConfigLoadDatasourceRequested
+}
+
+view PlatformConfigDatasourceTableHeaderRow {
+  kind region
+  prop tag = "tr"
+  children {
+    PlatformConfigDatasourceTableHeaderTitle
+    PlatformConfigDatasourceTableHeaderProvider
+    PlatformConfigDatasourceTableHeaderStatus
+    PlatformConfigDatasourceTableHeaderTest
+    PlatformConfigDatasourceTableHeaderUpdated
+    PlatformConfigDatasourceTableHeaderActions
   }
+}
+
+view PlatformConfigDatasourceTableHeaderTitle {
+  kind text
+  prop tag = "th"
+  prop text = "Label"
+}
+
+view PlatformConfigDatasourceTableHeaderProvider {
+  kind text
+  prop tag = "th"
+  prop text = "Provider"
+}
+
+view PlatformConfigDatasourceTableHeaderStatus {
+  kind text
+  prop tag = "th"
+  prop text = "Status"
+}
+
+view PlatformConfigDatasourceTableHeaderTest {
+  kind text
+  prop tag = "th"
+  prop text = "Last Test"
+}
+
+view PlatformConfigDatasourceTableHeaderUpdated {
+  kind text
+  prop tag = "th"
+  prop text = "Updated"
+}
+
+view PlatformConfigDatasourceTableHeaderActions {
+  kind text
+  prop tag = "th"
+  prop text = "Actions"
+}
+
+view PlatformConfigDatasourceTableBody {
+  kind region
+  prop tag = "tbody"
+  prop domId = "platform-config-datasource-table-body"
   repeat {
     collection PlatformConfigDatasources
-    template PlatformConfigDatasourceResultTemplate
+    template PlatformConfigDatasourceTableRowTemplate
     itemAs item
     indexAs index
+  }
+}
+
+view PlatformConfigDatasourcesTable {
+  kind region
+  prop tag = "table"
+  class platform-config-table
+  children {
+    PlatformConfigDatasourceTableHeader
+    PlatformConfigDatasourceTableBody
   }
 }
 
@@ -504,13 +748,6 @@ view PlatformConfigDatasourceProviderMysql {
   prop text = "mysql"
 }
 
-view PlatformConfigDatasourceProviderSqlite {
-  kind option
-  prop tag = "option"
-  prop value = "sqlite"
-  prop text = "sqlite"
-}
-
 view PlatformConfigDatasourceProviderSelect {
   kind select
   prop tag = "select"
@@ -526,7 +763,6 @@ view PlatformConfigDatasourceProviderSelect {
   children {
     PlatformConfigDatasourceProviderPostgres
     PlatformConfigDatasourceProviderMysql
-    PlatformConfigDatasourceProviderSqlite
   }
 }
 
@@ -536,6 +772,22 @@ view PlatformConfigDatasourceProviderField {
   children {
     PlatformConfigDatasourceProviderLabel
     PlatformConfigDatasourceProviderSelect
+  }
+}
+
+view PlatformConfigDatasourceNetworkFields {
+  kind region
+  class platform-config-field-stack
+  bindings {
+    visible from state PlatformConfigDatasourceProvider map postgres true mysql true default false
+  }
+  children {
+    PlatformConfigDatasourceHostField
+    PlatformConfigDatasourcePortField
+    PlatformConfigDatasourceDatabaseField
+    PlatformConfigDatasourceUserField
+    PlatformConfigDatasourcePasswordSecretField
+    PlatformConfigDatasourceSslField
   }
 }
 
@@ -561,7 +813,7 @@ view PlatformConfigDatasourcePortField {
   prop label = "Port"
   prop inputId = "platform-config-datasource-port"
   prop inputClass = "platform-config-input"
-  prop placeholder = "5432"
+  prop placeholder = "5432 or 3306"
   bindings {
     value from state PlatformConfigDatasourcePort
     disabled from state PlatformConfigDatasourceBusy
@@ -637,22 +889,6 @@ view PlatformConfigDatasourcePasswordSecretField {
   children {
     PlatformConfigDatasourcePasswordSecretLabel
     PlatformConfigDatasourcePasswordSecretSelect
-  }
-}
-
-view PlatformConfigDatasourcePathField {
-  kind form-field
-  class platform-config-field
-  prop label = "SQLite path"
-  prop inputId = "platform-config-datasource-path"
-  prop inputClass = "platform-config-input"
-  prop placeholder = "db/main.sqlite"
-  bindings {
-    value from state PlatformConfigDatasourcePath
-    disabled from state PlatformConfigDatasourceBusy
-  }
-  interactions {
-    on input self set PlatformConfigDatasourcePath eventValue
   }
 }
 
@@ -742,7 +978,7 @@ view PlatformConfigDatasourceTestAction {
   class rbtn
   prop tag = "button"
   prop buttonType = "button"
-  prop label = "Test Selected"
+  prop label = "Test Connection"
   bindings {
     disabled from state PlatformConfigDatasourceBusy
   }
@@ -769,32 +1005,24 @@ view PlatformConfigDatasourceSummary {
   kind text
   prop tag = "pre"
   class platform-config-output
-  prop domId = "platform-config-datasource-summary"
   bindings {
     text from state PlatformConfigDatasourceSummary
   }
 }
 
-view PlatformConfigDatasourcesSection {
+view PlatformConfigDatasourcesContent {
   kind section
-  class ssec platform-config-card
-  prop domId = "platform-config-datasources"
+  class platform-config-content-card
+  prop domId = "platform-config-datasources-content"
   children {
     PlatformConfigDatasourcesSectionTitle
     PlatformConfigDatasourcesSectionIntro
-    PlatformConfigDatasourceSelectField
     PlatformConfigDatasourceSearchField
     PlatformConfigDatasourceSearchAction
-    PlatformConfigDatasourceResults
+    PlatformConfigDatasourcesTable
     PlatformConfigDatasourceLabelField
     PlatformConfigDatasourceProviderField
-    PlatformConfigDatasourceHostField
-    PlatformConfigDatasourcePortField
-    PlatformConfigDatasourceDatabaseField
-    PlatformConfigDatasourceUserField
-    PlatformConfigDatasourcePasswordSecretField
-    PlatformConfigDatasourcePathField
-    PlatformConfigDatasourceSslField
+    PlatformConfigDatasourceNetworkFields
     PlatformConfigDatasourceActions
     PlatformConfigDatasourceSummary
   }
@@ -803,8 +1031,8 @@ view PlatformConfigDatasourcesSection {
 view PlatformConfigScriptSectionTitle {
   kind text
   prop tag = "h3"
-  class platform-config-card-title
-  prop text = "Script Stub"
+  class platform-config-section-title
+  prop text = "Scripts"
 }
 
 view PlatformConfigScriptSectionIntro {
@@ -885,16 +1113,15 @@ view PlatformConfigScriptResult {
   kind text
   prop tag = "pre"
   class platform-config-output
-  prop domId = "platform-config-script-result"
   bindings {
     text from state PlatformConfigScriptResult
   }
 }
 
-view PlatformConfigScriptSection {
+view PlatformConfigScriptsContent {
   kind section
-  class ssec platform-config-card
-  prop domId = "platform-config-script"
+  class platform-config-content-card
+  prop domId = "platform-config-scripts-content"
   children {
     PlatformConfigScriptSectionTitle
     PlatformConfigScriptSectionIntro
@@ -905,15 +1132,39 @@ view PlatformConfigScriptSection {
   }
 }
 
-view PlatformConfigCards {
+view PlatformConfigOperatorMainColumn {
   kind region
-  class platform-config-grid
-  prop domId = "platform-config-grid"
+  class platform-config-main
   children {
-    PlatformConfigActorSection
-    PlatformConfigSecretsSection
-    PlatformConfigDatasourcesSection
-    PlatformConfigScriptSection
+    PlatformConfigSectionShell
+    PlatformConfigOperatorContent
+  }
+}
+
+view PlatformConfigSecretsMainColumn {
+  kind region
+  class platform-config-main
+  children {
+    PlatformConfigSectionShell
+    PlatformConfigSecretsContent
+  }
+}
+
+view PlatformConfigDatasourcesMainColumn {
+  kind region
+  class platform-config-main
+  children {
+    PlatformConfigSectionShell
+    PlatformConfigDatasourcesContent
+  }
+}
+
+view PlatformConfigScriptsMainColumn {
+  kind region
+  class platform-config-main
+  children {
+    PlatformConfigSectionShell
+    PlatformConfigScriptsContent
   }
 }
 
@@ -922,9 +1173,38 @@ view EngentusPlatformConfigBody {
   class engentus-platform-body
   prop domId = "platform-config-body"
   children {
-    PlatformConfigHero
-    PlatformConfigNotice
-    PlatformConfigCards
+    PlatformConfigSidebar
+    PlatformConfigOperatorMainColumn
+  }
+}
+
+view PlatformConfigSecretsBody {
+  kind body
+  class engentus-platform-body
+  prop domId = "platform-config-secrets-body"
+  children {
+    PlatformConfigSidebar
+    PlatformConfigSecretsMainColumn
+  }
+}
+
+view PlatformConfigDatasourcesBody {
+  kind body
+  class engentus-platform-body
+  prop domId = "platform-config-datasources-body"
+  children {
+    PlatformConfigSidebar
+    PlatformConfigDatasourcesMainColumn
+  }
+}
+
+view PlatformConfigScriptsBody {
+  kind body
+  class engentus-platform-body
+  prop domId = "platform-config-scripts-body"
+  children {
+    PlatformConfigSidebar
+    PlatformConfigScriptsMainColumn
   }
 }
 
@@ -934,11 +1214,56 @@ view EngentusPlatformConfigApp {
   process EngentusShellNavigation
   prop domId = "view-platform-config"
   prop documentTitle = "Platform Config"
-  prop routeKey = "platform-config"
+  prop routeKey = "platform-config-operator"
   prop routePath = "/engentus/platform-config"
   prop mountMode = "mounted-panel"
   children {
     EngentusModuleChrome
     EngentusPlatformConfigBody
+  }
+}
+
+view EngentusPlatformConfigSecretsApp {
+  kind app-shell
+  class engentus-platform-app
+  process EngentusShellNavigation
+  prop domId = "view-platform-config-secrets"
+  prop documentTitle = "Platform Config Secrets"
+  prop routeKey = "platform-config-secrets"
+  prop routePath = "/engentus/platform-config/secrets"
+  prop mountMode = "mounted-panel"
+  children {
+    EngentusModuleChrome
+    PlatformConfigSecretsBody
+  }
+}
+
+view EngentusPlatformConfigDatasourcesApp {
+  kind app-shell
+  class engentus-platform-app
+  process EngentusShellNavigation
+  prop domId = "view-platform-config-datasources"
+  prop documentTitle = "Platform Config Data Sources"
+  prop routeKey = "platform-config-datasources"
+  prop routePath = "/engentus/platform-config/datasources"
+  prop mountMode = "mounted-panel"
+  children {
+    EngentusModuleChrome
+    PlatformConfigDatasourcesBody
+  }
+}
+
+view EngentusPlatformConfigScriptsApp {
+  kind app-shell
+  class engentus-platform-app
+  process EngentusShellNavigation
+  prop domId = "view-platform-config-scripts"
+  prop documentTitle = "Platform Config Scripts"
+  prop routeKey = "platform-config-scripts"
+  prop routePath = "/engentus/platform-config/scripts"
+  prop mountMode = "mounted-panel"
+  children {
+    EngentusModuleChrome
+    PlatformConfigScriptsBody
   }
 }

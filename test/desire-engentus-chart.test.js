@@ -32,8 +32,11 @@ test("planChart turns the Goodman chart + model into a faithful render plan", as
   assert.equal(evaluated.fields.probe_mean_stress_text.data, "300.0 MPa");
   assert.equal(evaluated.fields.probe_alt_stress_text.data, `${evaluated.fields.curve_probe.data.toFixed(1)} MPa`);
   assert.equal(evaluated.fields.probe_shear_text.data, `${Math.round(evaluated.fields.probe_F_shear.data).toLocaleString("en-US")} N`);
-  assert.match(evaluated.fields.probe_damage_text.data, /\/ 1M cycles$/);
-  assert.equal(evaluated.fields.slip_threshold_text.data, `${evaluated.fields.slip.data.toFixed(1)} MPa`);
+  assert.match(evaluated.fields.probe_damage_text.data, /^(≈0|\d+\.\d{3})$/);
+  assert.equal(
+    evaluated.fields.slip_threshold_text.data,
+    evaluated.fields.slip.data < 660 ? `${evaluated.fields.slip.data.toFixed(0)} MPa` : "> 660"
+  );
 
   // frame + scales
   assert.equal(plan.frame, "cartesian");

@@ -156,6 +156,11 @@ export const ENGENTUS_SHELL_THEME_STYLESHEET = createWcssStylesheet({
         rule("&:hover", {
           "border-color": "var(--brd)",
           color: "var(--t1)"
+        }),
+        rule("&.on", {
+          background: "var(--mid)",
+          "border-color": "var(--blue)",
+          color: "var(--blue)"
         })
       ]),
       rule("#user-prof", {
@@ -824,13 +829,13 @@ export const ENGENTUS_SHELL_THEME_STYLESHEET = createWcssStylesheet({
     ]),
 
     group("shared views", [
-      rule("#view-goodman, #view-mill, #view-mill-force", {
+      rule("#view-goodman, #view-mill, #view-mill-force, #view-platform-config, #view-platform-config-secrets, #view-platform-config-datasources, #view-platform-config-scripts", {
         flex: "1",
         display: "flex",
         "flex-direction": "column",
         overflow: "hidden"
       }),
-      rule("#body, #mill-body, #mill-force-body", {
+      rule("#body, #mill-body, #mill-force-body, #platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body", {
         flex: "1",
         display: "flex",
         overflow: "hidden"
@@ -1953,7 +1958,11 @@ export const ENGENTUS_SHELL_THEME_STYLESHEET = createWcssStylesheet({
         display: "flex",
         "justify-content": "space-between",
         "align-items": "center"
-      }),
+      }, [
+        rule("&:hover", {
+          color: "var(--blue)"
+        })
+      ]),
       rule(".mill-force-cht-tab", {
         background: "none",
         border: "1px solid transparent",
@@ -1977,9 +1986,34 @@ export const ENGENTUS_SHELL_THEME_STYLESHEET = createWcssStylesheet({
         position: "relative",
         background: "var(--dk)"
       }),
+      rule("#mill-force-mc-canvas", {
+        position: "absolute",
+        top: "0",
+        left: "0"
+      }),
+      rule("#mill-force-tip", {
+        position: "absolute",
+        background: "rgba(29,39,83,.95)",
+        color: "#f1f5f9",
+        padding: "8px 12px",
+        "border-radius": "5px",
+        "font-size": "10.5px",
+        "z-index": "100",
+        "pointer-events": "none",
+        display: "none",
+        border: "1px solid var(--brd)",
+        "box-shadow": "0 4px 12px rgba(0,0,0,.4)"
+      }),
       rule("#mill-force-svg-cross, #mill-force-svg-force, #mill-force-svg-rose", {
         width: "100%",
         height: "100%"
+      }),
+      rule(".mill-force-slider", {
+        width: "100%",
+        height: "4px",
+        "border-radius": "2px",
+        background: "var(--brd)",
+        cursor: "pointer"
       }),
       rule(".mill-force-result-row", {
         display: "flex",
@@ -2000,8 +2034,200 @@ export const ENGENTUS_SHELL_THEME_STYLESHEET = createWcssStylesheet({
       })
     ]),
 
+    group("platform config", [
+      rule("#platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body", {
+        background: "linear-gradient(180deg, #f7fafc 0%, #edf3f8 100%)",
+        padding: "18px",
+        gap: "14px",
+        "align-items": "stretch"
+      }),
+      rule(".platform-config-main", {
+        "min-width": "0",
+        flex: "1",
+        display: "flex",
+        "flex-direction": "column",
+        gap: "14px",
+        overflow: "auto",
+        "padding-right": "4px"
+      }),
+      rule("#platform-config-hero", {
+        display: "flex",
+        "flex-direction": "column",
+        gap: "6px"
+      }),
+      rule(".platform-config-title", {
+        "font-size": "24px",
+        color: "#102338",
+        "letter-spacing": "-.03em"
+      }),
+      rule(".platform-config-intro", {
+        "font-size": "12.5px",
+        "line-height": "1.6",
+        color: "#4c5f78",
+        "max-width": "920px"
+      }),
+      rule(".platform-config-notice", {
+        "border-radius": "10px",
+        padding: "11px 13px",
+        border: "1px solid rgba(61,88,128,.16)",
+        background: "rgba(255,255,255,.9)",
+        color: "#22364d",
+        "font-size": "12px",
+        "line-height": "1.5"
+      }),
+      rule(".platform-config-notice.success", {
+        "border-color": "rgba(22,163,74,.25)",
+        background: "rgba(22,163,74,.08)",
+        color: "#166534"
+      }),
+      rule(".platform-config-notice.error", {
+        "border-color": "rgba(220,38,38,.25)",
+        background: "rgba(220,38,38,.08)",
+        color: "#991b1b"
+      }),
+      rule(".platform-config-notice.warn", {
+        "border-color": "rgba(236,116,36,.25)",
+        background: "rgba(236,116,36,.08)",
+        color: "#9a3412"
+      }),
+      rule(".platform-config-content-card", {
+        background: "rgba(255,255,255,.95)",
+        border: "1px solid rgba(61,88,128,.16)",
+        "border-radius": "12px",
+        "box-shadow": "0 16px 42px rgba(12,20,42,.09)",
+        padding: "16px"
+      }),
+      rule(".platform-config-sidebar", {
+        width: "220px",
+        flex: "0 0 220px",
+        background: "rgba(255,255,255,.9)",
+        border: "1px solid rgba(61,88,128,.16)",
+        "border-radius": "12px",
+        "box-shadow": "0 16px 42px rgba(12,20,42,.09)",
+        padding: "14px",
+        display: "flex",
+        "flex-direction": "column",
+        gap: "10px"
+      }),
+      rule(".platform-config-sidebar-title, .platform-config-section-title", {
+        "font-size": "15px",
+        "font-weight": "700",
+        color: "#102338",
+        "margin-bottom": "8px",
+        "letter-spacing": "-.02em"
+      }),
+      rule(".platform-config-sidebar-hint", {
+        "font-size": "11px",
+        "line-height": "1.55",
+        color: "#64748b"
+      }),
+      rule(".platform-config-sidebar-nav", {
+        display: "flex",
+        "flex-direction": "column",
+        gap: "8px"
+      }),
+      rule(".platform-config-side-link", {
+        width: "100%",
+        "justify-content": "flex-start",
+        border: "1px solid rgba(61,88,128,.16)",
+        background: "rgba(247,250,252,.85)",
+        color: "#334155"
+      }),
+      rule(".platform-config-side-link.active", {
+        background: "rgba(140,196,212,.16)",
+        "border-color": "rgba(140,196,212,.35)",
+        color: "#0f4f6a"
+      }),
+      rule(".platform-config-field", {
+        "margin-bottom": "10px"
+      }),
+      rule(".platform-config-field label, .platform-config-checkbox label", {
+        color: "#334155"
+      }),
+      rule(".platform-config-input", {
+        background: "#fff",
+        color: "#0f172a",
+        border: "1px solid #cbd5e1",
+        "border-radius": "6px"
+      }),
+      rule(".platform-config-input:focus", {
+        "border-color": "var(--blue)",
+        "box-shadow": "0 0 0 3px rgba(140,196,212,.2)"
+      }),
+      rule(".platform-config-hint", {
+        "font-size": "11px",
+        "line-height": "1.55",
+        color: "#64748b",
+        "margin-top": "4px"
+      }),
+      rule(".platform-config-field-stack", {
+        display: "flex",
+        "flex-direction": "column"
+      }),
+      rule(".platform-config-actions", {
+        "flex-wrap": "wrap"
+      }),
+      rule(".platform-config-actions .rbtn", {
+        "min-width": "108px"
+      }),
+      rule(".platform-config-checkbox", {
+        margin: "10px 0"
+      }),
+      rule(".platform-config-output", {
+        "margin-top": "10px",
+        padding: "12px",
+        "min-height": "148px",
+        background: "#0f172a",
+        color: "#d8e5f2",
+        "border-radius": "8px",
+        overflow: "auto",
+        "white-space": "pre-wrap",
+        "word-break": "break-word",
+        "font-size": "11px",
+        "line-height": "1.5"
+      }),
+      rule(".platform-config-output::-webkit-scrollbar", {
+        width: "6px",
+        height: "6px"
+      }),
+      rule(".platform-config-output::-webkit-scrollbar-thumb", {
+        background: "rgba(140,196,212,.35)",
+        "border-radius": "999px"
+      }),
+      rule(".platform-config-table", {
+        width: "100%",
+        "border-collapse": "collapse",
+        margin: "8px 0 14px",
+        "font-size": "12px",
+        background: "#fff",
+        border: "1px solid rgba(61,88,128,.12)",
+        "border-radius": "10px",
+        overflow: "hidden"
+      }),
+      rule(".platform-config-table th, .platform-config-table td", {
+        padding: "10px 12px",
+        "border-bottom": "1px solid rgba(61,88,128,.1)",
+        "text-align": "left",
+        "vertical-align": "middle",
+        color: "#22364d"
+      }),
+      rule(".platform-config-table th", {
+        "font-size": "11px",
+        "text-transform": "uppercase",
+        "letter-spacing": ".04em",
+        color: "#64748b",
+        background: "rgba(241,245,249,.9)"
+      }),
+      rule(".platform-config-table tr:last-child td", {
+        "border-bottom": "none"
+      }),
+      rule(".platform-config-row-action", {
+        "min-width": "72px"
+      })
+    ]),
+
     media("(max-width: 980px)", [
-      rule(".auth-book, #view-home, #body, #mill-body, #mill-force-body", {
+      rule(".auth-book, #view-home, #body, #mill-body, #mill-force-body, #platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body", {
         "flex-direction": "column"
       }),
       rule(".auth-left, .auth-right", {
@@ -2013,6 +2239,10 @@ export const ENGENTUS_SHELL_THEME_STYLESHEET = createWcssStylesheet({
       }),
       rule("#module-grid", {
         "grid-template-columns": "1fr"
+      }),
+      rule(".platform-config-sidebar", {
+        width: "auto",
+        "flex-basis": "auto"
       })
     ])
   ]

@@ -107,6 +107,9 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.ok(messages.has("EngentusSaveGuidedTourSession"));
   assert.ok(messages.has("EngentusSignOutRequested"));
   assert.ok(messages.has("EngentusSignBackInRequested"));
+  assert.ok(messages.has("EngentusSessionOpened"));
+  assert.ok(messages.has("EngentusSessionOpenFailed"));
+  assert.ok(messages.has("EngentusSessionClosed"));
   assert.ok(messages.has("EngentusNavigateHomeRequested"));
   assert.ok(messages.has("EngentusNavigateGoodmanRequested"));
   assert.ok(messages.has("EngentusNavigateMillChargeRequested"));
@@ -139,6 +142,9 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(types.get("EngentusShellAuthStatus")?.body?.role, "state");
   assert.equal(types.get("EngentusProfileMenuVisible")?.body?.role, "state");
   assert.equal(types.get("EngentusPasswordRevealed")?.body?.role, "state");
+  assert.equal(types.get("EngentusLoginUsername")?.body?.role, "state");
+  assert.equal(types.get("EngentusLoginPassword")?.body?.role, "state");
+  assert.equal(types.get("EngentusAuthNotice")?.body?.role, "state");
   assert.equal(types.get("MillForceChartTab")?.body?.role, "enum");
   assert.equal(types.get("MillForceActiveChartTab")?.body?.role, "state");
   assert.equal(types.get("MillForceAnalysisMode")?.body?.role, "enum");
@@ -183,10 +189,24 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
   assert.equal(types.get("GoodmanBoltPrimaryYieldStress")?.body?.valueType, "number");
   assert.equal(surfaces.get("EngentusRoot")?.body?.processRef, "EngentusShellNavigation");
   assert.equal(surfaces.get("EngentusLoginBook")?.body?.bindings[0]?.prop, "className");
+  assert.equal(surfaces.get("EngentusLoginEmailField")?.body?.bindings[0]?.source?.state, "EngentusLoginUsername");
+  assert.equal(surfaces.get("EngentusLoginEmailField")?.body?.interactions[0]?.action?.state, "EngentusLoginUsername");
   assert.equal(surfaces.get("EngentusLoginPasswordField")?.body?.bindings[0]?.prop, "inputType");
+  assert.equal(surfaces.get("EngentusLoginPasswordField")?.body?.bindings[1]?.source?.state, "EngentusLoginPassword");
+  assert.equal(surfaces.get("EngentusLoginPasswordField")?.body?.interactions[0]?.action?.state, "EngentusLoginPassword");
   assert.equal(surfaces.get("EngentusProfileMenu")?.body?.bindings[0]?.prop, "className");
   assert.equal(surfaces.get("EngentusProfileMenu")?.body?.bindings[0]?.source?.map?.true, "open");
   assert.deepEqual(surfaces.get("EngentusLoginPrimaryAction")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "setState", state: "EngentusLoginUsername", value: { literal: "aaron" } }
+    },
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "setState", state: "EngentusLoginPassword", value: { literal: "aaron" } }
+    },
     {
       target: "self",
       event: "click",
@@ -389,6 +409,13 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
       trigger: "EngentusSignInRequested",
       steps: [
         { kind: "setState", state: "EngentusShellAuthStatus", value: "pending" },
+        { kind: "setState", state: "EngentusAuthNotice", value: "" },
+        { kind: "command", command: "EngentusOpenSession" }
+      ]
+    },
+    {
+      trigger: "EngentusSessionOpened",
+      steps: [
         {
           kind: "option",
           config: "config.presentation.guidedTour",
@@ -402,11 +429,19 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
       ]
     },
     {
+      trigger: "EngentusSessionOpenFailed",
+      steps: [
+        { kind: "setState", state: "EngentusProfileMenuVisible", value: false },
+        { kind: "setState", state: "EngentusShellActiveRoute", value: "login" }
+      ]
+    },
+    {
       trigger: "EngentusSignOutRequested",
       steps: [
         { kind: "setState", state: "EngentusProfileMenuVisible", value: false },
         { kind: "setState", state: "EngentusShellAuthStatus", value: "signingOut" },
         { kind: "setState", state: "EngentusShellActiveRoute", value: "signout" },
+        { kind: "command", command: "EngentusCloseSession" },
         { kind: "delay", ms: 950 },
         { kind: "setState", state: "EngentusShellAuthStatus", value: "signedOut" }
       ]
@@ -415,7 +450,60 @@ test("the engentus shell normalizes major screens plus authored shell behavior n
       trigger: "EngentusSignBackInRequested",
       steps: [
         { kind: "setState", state: "EngentusShellActiveRoute", value: "login" },
-        { kind: "setState", state: "EngentusShellAuthStatus", value: "idle" }
+        { kind: "setState", state: "EngentusShellAuthStatus", value: "idle" },
+        { kind: "setState", state: "EngentusAuthNotice", value: "Demo accounts: aaron / aaron or callan / callan." }
+      ]
+    },
+    {
+      trigger: "EngentusNavigatePlatformConfigRequested",
+      steps: [
+        { kind: "setState", state: "EngentusShellActiveRoute", value: "platform-config-operator" },
+        { kind: "setState", state: "PlatformConfigSecretBusy", value: true },
+        { kind: "setState", state: "PlatformConfigDatasourceBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Loading platform config..." },
+        { kind: "command", command: "PlatformConfigLoadSnapshot" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigOpenOperatorRequested",
+      steps: [
+        { kind: "setState", state: "EngentusShellActiveRoute", value: "platform-config-operator" },
+        { kind: "setState", state: "PlatformConfigSecretBusy", value: true },
+        { kind: "setState", state: "PlatformConfigDatasourceBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Loading platform config..." },
+        { kind: "command", command: "PlatformConfigLoadSnapshot" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigOpenSecretsRequested",
+      steps: [
+        { kind: "setState", state: "EngentusShellActiveRoute", value: "platform-config-secrets" },
+        { kind: "setState", state: "PlatformConfigSecretBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Loading secret metadata..." },
+        { kind: "command", command: "PlatformConfigLoadSnapshot" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigOpenDatasourcesRequested",
+      steps: [
+        { kind: "setState", state: "EngentusShellActiveRoute", value: "platform-config-datasources" },
+        { kind: "setState", state: "PlatformConfigDatasourceBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Loading data sources..." },
+        { kind: "command", command: "PlatformConfigLoadSnapshot" }
+      ]
+    },
+    {
+      trigger: "PlatformConfigOpenScriptsRequested",
+      steps: [
+        { kind: "setState", state: "EngentusShellActiveRoute", value: "platform-config-scripts" },
+        { kind: "setState", state: "PlatformConfigDatasourceBusy", value: true },
+        { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+        { kind: "setState", state: "PlatformConfigNoticeText", value: "Loading data sources for scripts..." },
+        { kind: "command", command: "PlatformConfigLoadSnapshot" }
       ]
     },
     {
@@ -576,7 +664,19 @@ test("the authored Engentus sign-in story runs through generic process rules wit
   const delays = [];
   const runtime = createProcessRuntime(world, {
     config: { presentation: { guidedTour: false } },
-    delayScheduler: async ms => delays.push(ms)
+    delayScheduler: async ms => delays.push(ms),
+    routeInvoker: async ({ command }) => {
+      assert.equal(command, "EngentusOpenSession");
+      return {
+        status: "success",
+        payload: {
+          authenticated: true,
+          actor: "aaron",
+          identity: "identity.aaron",
+          label: "Aaron"
+        }
+      };
+    }
   });
 
   assert.equal(runtime.value("EngentusShellActiveRoute"), "login");
@@ -587,15 +687,18 @@ test("the authored Engentus sign-in story runs through generic process rules wit
   assert.deepEqual(delays, [1250, 920]);
   assert.equal(runtime.value("EngentusShellAuthStatus"), "signedIn");
   assert.equal(runtime.value("EngentusShellActiveRoute"), "home");
+  assert.equal(runtime.value("PlatformConfigActorHeader"), "aaron");
   assert.deepEqual(runtime.history("EngentusShellAuthStatus"), ["pending", "folding", "signedIn"]);
   assert.deepEqual(runtime.history("EngentusShellActiveRoute"), ["home"]);
   assert.deepEqual(runtime.trace.map(row => [row.kind, row.label]), [
     ["rule.setState", "EngentusSignInRequested:EngentusShellAuthStatus"],
-    ["rule.delay", "EngentusSignInRequested:1250ms"],
-    ["rule.setState", "EngentusSignInRequested:EngentusShellAuthStatus"],
-    ["rule.delay", "EngentusSignInRequested:920ms"],
-    ["rule.setState", "EngentusSignInRequested:EngentusShellActiveRoute"],
-    ["rule.setState", "EngentusSignInRequested:EngentusShellAuthStatus"]
+    ["rule.setState", "EngentusSignInRequested:EngentusAuthNotice"],
+    ["dispatch", "EngentusOpenSession"],
+    ["rule.delay", "EngentusSessionOpened:1250ms"],
+    ["rule.setState", "EngentusSessionOpened:EngentusShellAuthStatus"],
+    ["rule.delay", "EngentusSessionOpened:920ms"],
+    ["rule.setState", "EngentusSessionOpened:EngentusShellActiveRoute"],
+    ["rule.setState", "EngentusSessionOpened:EngentusShellAuthStatus"]
   ]);
 });
 
@@ -1123,16 +1226,106 @@ test("the shell is structured through explicit child regions instead of flattene
   ]);
 
   assert.deepEqual(surfaces.get("EngentusPlatformConfigBody")?.body?.children, [
-    "PlatformConfigHero",
-    "PlatformConfigNotice",
-    "PlatformConfigCards"
+    "PlatformConfigSidebar",
+    "PlatformConfigOperatorMainColumn"
   ]);
 
-  assert.deepEqual(surfaces.get("PlatformConfigCards")?.body?.children, [
-    "PlatformConfigActorSection",
-    "PlatformConfigSecretsSection",
-    "PlatformConfigDatasourcesSection",
-    "PlatformConfigScriptSection"
+  assert.deepEqual(surfaces.get("PlatformConfigSidebar")?.body?.children, [
+    "PlatformConfigSidebarTitle",
+    "PlatformConfigSidebarHint",
+    "PlatformConfigSidebarNav"
+  ]);
+
+  assert.deepEqual(surfaces.get("PlatformConfigSidebarNav")?.body?.children, [
+    "PlatformConfigSidebarOperatorAction",
+    "PlatformConfigSidebarSecretsAction",
+    "PlatformConfigSidebarDatasourcesAction",
+    "PlatformConfigSidebarScriptsAction"
+  ]);
+
+  assert.deepEqual(surfaces.get("PlatformConfigOperatorMainColumn")?.body?.children, [
+    "PlatformConfigSectionShell",
+    "PlatformConfigOperatorContent"
+  ]);
+
+  assert.deepEqual(surfaces.get("PlatformConfigSectionShell")?.body?.children, [
+    "PlatformConfigPageHero",
+    "PlatformConfigNotice"
+  ]);
+
+  assert.deepEqual(surfaces.get("PlatformConfigSecretTableRowAction")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "setState", state: "PlatformConfigSecretSelectedId", value: { kind: "eventValue" } }
+    },
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "PlatformConfigLoadSecretRequested" }
+    }
+  ]);
+  assert.equal(surfaces.get("PlatformConfigSecretTableBody")?.body?.interactions?.length ?? 0, 0);
+  assert.equal(surfaces.get("PlatformConfigSecretTableRowUpdated")?.body?.props?.title, "${item.updatedAtTitle}");
+
+  assert.deepEqual(surfaces.get("PlatformConfigDatasourceTableRowAction")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "setState", state: "PlatformConfigDatasourceSelectedId", value: { kind: "eventValue" } }
+    },
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "PlatformConfigLoadDatasourceRequested" }
+    }
+  ]);
+  assert.equal(surfaces.get("PlatformConfigDatasourceTableBody")?.body?.interactions?.length ?? 0, 0);
+  assert.equal(surfaces.get("PlatformConfigDatasourceTableRowUpdated")?.body?.props?.title, "${item.updatedAtTitle}");
+
+  assert.deepEqual(surfaces.get("EngentusPlatformConfigSecretsApp")?.body?.children, [
+    "EngentusModuleChrome",
+    "PlatformConfigSecretsBody"
+  ]);
+
+  assert.deepEqual(surfaces.get("PlatformConfigSecretsBody")?.body?.children, [
+    "PlatformConfigSidebar",
+    "PlatformConfigSecretsMainColumn"
+  ]);
+
+  assert.deepEqual(surfaces.get("PlatformConfigSecretsMainColumn")?.body?.children, [
+    "PlatformConfigSectionShell",
+    "PlatformConfigSecretsContent"
+  ]);
+
+  assert.deepEqual(surfaces.get("EngentusPlatformConfigDatasourcesApp")?.body?.children, [
+    "EngentusModuleChrome",
+    "PlatformConfigDatasourcesBody"
+  ]);
+
+  assert.deepEqual(surfaces.get("PlatformConfigDatasourcesBody")?.body?.children, [
+    "PlatformConfigSidebar",
+    "PlatformConfigDatasourcesMainColumn"
+  ]);
+
+  assert.deepEqual(surfaces.get("PlatformConfigDatasourcesMainColumn")?.body?.children, [
+    "PlatformConfigSectionShell",
+    "PlatformConfigDatasourcesContent"
+  ]);
+
+  assert.deepEqual(surfaces.get("EngentusPlatformConfigScriptsApp")?.body?.children, [
+    "EngentusModuleChrome",
+    "PlatformConfigScriptsBody"
+  ]);
+
+  assert.deepEqual(surfaces.get("PlatformConfigScriptsBody")?.body?.children, [
+    "PlatformConfigSidebar",
+    "PlatformConfigScriptsMainColumn"
+  ]);
+
+  assert.deepEqual(surfaces.get("PlatformConfigScriptsMainColumn")?.body?.children, [
+    "PlatformConfigSectionShell",
+    "PlatformConfigScriptsContent"
   ]);
 
   assert.deepEqual(surfaces.get("MillChargeBody")?.body?.children, [

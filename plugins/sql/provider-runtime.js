@@ -56,8 +56,10 @@ export function createDbSqlRuntime({
     return { database, sqlitePath };
   };
 
-  const resolveDatasource = async datasourceId => {
-    const datasource = getDatasource(datasourceId);
+  const resolveDatasource = async (datasourceOrId) => {
+    const datasource = typeof datasourceOrId === "string"
+      ? getDatasource(datasourceOrId)
+      : (datasourceOrId && typeof datasourceOrId === "object" ? { ...datasourceOrId } : null);
     if (!datasource) return { ok: false, status: 404, reason: "datasource not found", datasource: null };
     if (!datasource.provider) return { ok: false, status: 400, reason: "datasource provider required", datasource };
     if (datasource.provider === "sqlite") {
@@ -94,8 +96,8 @@ export function createDbSqlRuntime({
     };
   };
 
-  const testConnection = async ({ datasourceId }) => {
-    const resolved = await resolveDatasource(datasourceId);
+  const testConnection = async ({ datasourceId = null, datasource = null } = {}) => {
+    const resolved = await resolveDatasource(datasource ?? datasourceId);
     if (!resolved.ok) return resolved;
     try {
       if (resolved.datasource.provider === "sqlite") {

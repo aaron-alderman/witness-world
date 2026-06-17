@@ -248,6 +248,7 @@ export const millForceKernels = {
   pct_delta_text: values => `${signedFixed(methodRelativeDeltaPercent(values), 2)}%`,
   physical_display_deg: physicalDisplayDeg,
   force_chart_display_deg: forceChartDisplayDeg,
+  fill_angle_text: value => `${Number(value).toFixed(1)}°`,
   normal_param: (sample, value, enabled, std, salt = 0) =>
     enabled ? Number(value) + Number(std) * seededNormal(sample, salt) : Number(value),
 

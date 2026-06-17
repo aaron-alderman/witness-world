@@ -80,6 +80,20 @@ route = "engentus_screen_route"
 
 [[route]]
 actor = "aaron"
+id = "engentus_platform_config_screen_route"
+method = "GET"
+path = "/engentus/platform-config/:screen"
+serves = "engentusShell"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "login", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_screen_route"
+
+[[route]]
+actor = "aaron"
 id = "engentus_platform_config_snapshot_route"
 method = "POST"
 path = "/api/pipeline/platform-config/snapshot"
@@ -199,7 +213,7 @@ route = "engentus_platform_config_datasource_delete_route"
 actor = "aaron"
 id = "engentus_platform_config_datasource_test_route"
 method = "POST"
-path = "/api/pipeline/platform-config/datasources/:id/test"
+path = "/api/pipeline/platform-config/datasources/test"
 serves = "platformConfigDatasourceTest"
 handler = "pipeline.platform-config.datasource.test"
 

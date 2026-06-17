@@ -57,6 +57,11 @@
       },
       {
         "method": "POST",
+        "path": "/api/db/sql/datasources/test",
+        "handler": "db.sql.datasource.testDraft"
+      },
+      {
+        "method": "POST",
         "path": "/api/db/sql/query",
         "handler": "db.sql.query"
       },

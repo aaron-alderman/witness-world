@@ -155,6 +155,12 @@ a {
   color: var(--t1);
 }
 
+.tbw.on {
+  background: var(--mid);
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
 #user-prof {
   display: flex;
   align-items: center;
@@ -977,14 +983,14 @@ a {
 }
 
 /* shared views */
-#view-goodman, #view-mill, #view-mill-force, #view-platform-config {
+#view-goodman, #view-mill, #view-mill-force, #view-platform-config, #view-platform-config-secrets, #view-platform-config-datasources, #view-platform-config-scripts {
   flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-#body, #mill-body, #mill-force-body, #platform-config-body {
+#body, #mill-body, #mill-force-body, #platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body {
   flex: 1;
   display: flex;
   overflow: hidden;
@@ -1955,10 +1961,6 @@ body.edit-mode #chart-svg [data-editable]:hover {
   gap: 3px;
   cursor: pointer;
   flex-shrink: 0;
-  background: transparent;
-  border: none;
-  padding: 0;
-  appearance: none;
 }
 
 .tog-track {
@@ -2343,6 +2345,10 @@ input[type=range], .mill-slider {
   align-items: center;
 }
 
+.mill-force-mc-toggle:hover {
+  color: var(--blue);
+}
+
 .mill-force-cht-tab {
   background: none;
   border: 1px solid transparent;
@@ -2371,12 +2377,78 @@ input[type=range], .mill-slider {
   background: var(--dk);
 }
 
-#platform-config-body {
+#mill-force-mc-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+#mill-force-tip {
+  position: absolute;
+  background: rgba(29,39,83,.95);
+  color: #f1f5f9;
+  padding: 8px 12px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  z-index: 100;
+  pointer-events: none;
+  display: none;
+  border: 1px solid var(--brd);
+  box-shadow: 0 4px 12px rgba(0,0,0,.4);
+}
+
+#mill-force-svg-cross, #mill-force-svg-force, #mill-force-svg-rose {
+  width: 100%;
+  height: 100%;
+}
+
+.mill-force-slider {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--brd);
+  cursor: pointer;
+}
+
+.mill-force-result-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 5px 0;
+  font-size: 11px;
+  gap: 8px;
+}
+
+.mill-force-rl {
+  color: var(--t2);
+}
+
+.mill-force-rv {
+  color: var(--t1);
+  font-weight: 600;
+  margin-left: auto;
+}
+
+.mill-force-rd {
+  color: var(--ylw);
+  font-size: 10px;
+}
+
+/* platform config */
+#platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body {
   background: linear-gradient(180deg, #f7fafc 0%, #edf3f8 100%);
   padding: 18px;
-  overflow: auto;
   gap: 14px;
+  align-items: stretch;
+}
+
+.platform-config-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
   flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 #platform-config-hero {
@@ -2426,21 +2498,28 @@ input[type=range], .mill-slider {
   color: #9a3412;
 }
 
-#platform-config-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  align-items: start;
-}
-
-.platform-config-card {
+.platform-config-content-card {
   background: rgba(255,255,255,.95);
   border: 1px solid rgba(61,88,128,.16);
   border-radius: 12px;
   box-shadow: 0 16px 42px rgba(12,20,42,.09);
+  padding: 16px;
 }
 
-.platform-config-card-title {
+.platform-config-sidebar {
+  width: 220px;
+  flex: 0 0 220px;
+  background: rgba(255,255,255,.9);
+  border: 1px solid rgba(61,88,128,.16);
+  border-radius: 12px;
+  box-shadow: 0 16px 42px rgba(12,20,42,.09);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.platform-config-sidebar-title, .platform-config-section-title {
   font-size: 15px;
   font-weight: 700;
   color: #102338;
@@ -2448,12 +2527,37 @@ input[type=range], .mill-slider {
   letter-spacing: -.02em;
 }
 
+.platform-config-sidebar-hint {
+  font-size: 11px;
+  line-height: 1.55;
+  color: #64748b;
+}
+
+.platform-config-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.platform-config-side-link {
+  width: 100%;
+  justify-content: flex-start;
+  border: 1px solid rgba(61,88,128,.16);
+  background: rgba(247,250,252,.85);
+  color: #334155;
+}
+
+.platform-config-side-link.active {
+  background: rgba(140,196,212,.16);
+  border-color: rgba(140,196,212,.35);
+  color: #0f4f6a;
+}
+
 .platform-config-field {
   margin-bottom: 10px;
 }
 
-.platform-config-field label,
-.platform-config-checkbox label {
+.platform-config-field label, .platform-config-checkbox label {
   color: #334155;
 }
 
@@ -2474,6 +2578,11 @@ input[type=range], .mill-slider {
   line-height: 1.55;
   color: #64748b;
   margin-top: 4px;
+}
+
+.platform-config-field-stack {
+  display: flex;
+  flex-direction: column;
 }
 
 .platform-config-actions {
@@ -2512,36 +2621,43 @@ input[type=range], .mill-slider {
   border-radius: 999px;
 }
 
-#mill-force-svg-cross, #mill-force-svg-force, #mill-force-svg-rose {
+.platform-config-table {
   width: 100%;
-  height: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 14px;
+  font-size: 12px;
+  background: #fff;
+  border: 1px solid rgba(61,88,128,.12);
+  border-radius: 10px;
+  overflow: hidden;
 }
 
-.mill-force-result-row {
-  display: flex;
-  justify-content: space-between;
-  padding: 5px 0;
+.platform-config-table th, .platform-config-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(61,88,128,.1);
+  text-align: left;
+  vertical-align: middle;
+  color: #22364d;
+}
+
+.platform-config-table th {
   font-size: 11px;
-  gap: 8px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: #64748b;
+  background: rgba(241,245,249,.9);
 }
 
-.mill-force-rl {
-  color: var(--t2);
+.platform-config-table tr:last-child td {
+  border-bottom: none;
 }
 
-.mill-force-rv {
-  color: var(--t1);
-  font-weight: 600;
-  margin-left: auto;
-}
-
-.mill-force-rd {
-  color: var(--ylw);
-  font-size: 10px;
+.platform-config-row-action {
+  min-width: 72px;
 }
 
 @media (max-width: 980px) {
-  .auth-book, #view-home, #body, #mill-body, #mill-force-body, #platform-config-body {
+  .auth-book, #view-home, #body, #mill-body, #mill-force-body, #platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body {
     flex-direction: column;
   }
 
@@ -2558,7 +2674,8 @@ input[type=range], .mill-slider {
     grid-template-columns: 1fr;
   }
 
-  #platform-config-grid {
-    grid-template-columns: 1fr;
+  .platform-config-sidebar {
+    width: auto;
+    flex-basis: auto;
   }
 }

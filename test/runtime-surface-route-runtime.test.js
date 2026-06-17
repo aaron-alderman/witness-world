@@ -39,6 +39,103 @@ test("createBrowserRouteInvoker interpolates route templates and normalizes the 
   assert.match(result.payload.summary, /"value": 42/);
 });
 
+test("createBrowserRouteInvoker maps successful response collections into the runtime collection store", async () => {
+  const calls = [];
+  const collectionWrites = [];
+  const invoke = createBrowserRouteInvoker({
+    async fetch(url, init) {
+      calls.push({ url, init });
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get(name) {
+            return String(name).toLowerCase() === "content-type" ? "application/json" : null;
+          }
+        },
+        async text() {
+          return JSON.stringify({
+            message: "Snapshot loaded",
+            secrets: [{ id: "sec_1", title: "Primary password" }],
+            datasources: [{ id: "ds_1", title: "Main postgres" }]
+          });
+        }
+      };
+    }
+  }, {
+    collectionStore: {
+      replaceMany(entries) {
+        collectionWrites.push(entries);
+      }
+    }
+  });
+
+  const result = await invoke({
+    route: "/api/platform-config/snapshot",
+    method: "post",
+    binding: {
+      op: {
+        collectionOutputs: {
+          PlatformConfigSecrets: "secrets",
+          PlatformConfigDatasources: "datasources"
+        }
+      }
+    }
+  });
+
+  assert.equal(calls.length, 1);
+  assert.deepEqual(collectionWrites, [{
+    PlatformConfigSecrets: [{ id: "sec_1", title: "Primary password" }],
+    PlatformConfigDatasources: [{ id: "ds_1", title: "Main postgres" }]
+  }]);
+  assert.deepEqual(result.collections, collectionWrites[0]);
+});
+
+test("createBrowserRouteInvoker leaves collections unchanged on failed responses", async () => {
+  const collectionWrites = [];
+  const invoke = createBrowserRouteInvoker({
+    async fetch() {
+      return {
+        ok: false,
+        status: 500,
+        headers: {
+          get(name) {
+            return String(name).toLowerCase() === "content-type" ? "application/json" : null;
+          }
+        },
+        async text() {
+          return JSON.stringify({
+            message: "Snapshot failed",
+            secrets: [{ id: "sec_2", title: "Should not apply" }]
+          });
+        }
+      };
+    }
+  }, {
+    collectionStore: {
+      replaceMany(entries) {
+        collectionWrites.push(entries);
+      }
+    }
+  });
+
+  const result = await invoke({
+    route: "/api/platform-config/snapshot",
+    method: "post",
+    binding: {
+      op: {
+        collectionOutputs: {
+          PlatformConfigSecrets: "secrets"
+        }
+      }
+    }
+  });
+
+  assert.equal(result.status, "failure");
+  assert.equal(result.collections, null);
+  assert.deepEqual(collectionWrites, []);
+});
+
 test("loadRouteSurfacePage caches the parsed fragment by route key", async () => {
   const responses = [];
   const window = {

@@ -42,7 +42,8 @@ test("engentus nested WCSS grammar keeps theme ownership grouped by family", () 
     "floating windows",
     "controls and editor",
     "mill charge",
-    "mill force"
+    "mill force",
+    "platform config"
   ]);
   assert.deepEqual(chartGroupNames, [
     "chart tokens",

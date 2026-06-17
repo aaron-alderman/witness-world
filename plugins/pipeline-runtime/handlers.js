@@ -1,6 +1,6 @@
 import { relation } from "../../src/kernel.js";
 import { createSecretStoreHandlers } from "../secret/handlers.js";
-import { createSqlDbHandlers } from "../sql/handlers.js";
+import { createSqlDbHandlers, normalizeDatasourcePayload } from "../sql/handlers.js";
 
 const SELECT_SLOT_LIMIT = 10;
 
@@ -20,6 +20,96 @@ function normalizeDatasourceId(value) {
   return normalizeText(value, "") || null;
 }
 
+function safeIso(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function pluralize(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function formatRelativeTime(value, now = Date.now()) {
+  const iso = safeIso(value);
+  if (!iso) return "Never";
+  const timestamp = Date.parse(iso);
+  if (!Number.isFinite(timestamp)) return iso;
+  const deltaMs = now - timestamp;
+  const future = deltaMs < 0;
+  const absSeconds = Math.abs(Math.round(deltaMs / 1000));
+  if (absSeconds < 10) return future ? "in a few seconds" : "just now";
+  if (absSeconds < 60) return future ? `in ${pluralize(absSeconds, "second")}` : `${pluralize(absSeconds, "second")} ago`;
+  const absMinutes = Math.round(absSeconds / 60);
+  if (absMinutes < 60) return future ? `in ${pluralize(absMinutes, "minute")}` : `${pluralize(absMinutes, "minute")} ago`;
+  const absHours = Math.round(absMinutes / 60);
+  if (absHours < 24) return future ? `in ${pluralize(absHours, "hour")}` : `${pluralize(absHours, "hour")} ago`;
+  const absDays = Math.round(absHours / 24);
+  if (absDays < 7) return future ? `in ${pluralize(absDays, "day")}` : `${pluralize(absDays, "day")} ago`;
+  const absWeeks = Math.round(absDays / 7);
+  if (absWeeks < 5) return future ? `in ${pluralize(absWeeks, "week")}` : `${pluralize(absWeeks, "week")} ago`;
+  const absMonths = Math.round(absDays / 30);
+  if (absMonths < 12) return future ? `in ${pluralize(absMonths, "month")}` : `${pluralize(absMonths, "month")} ago`;
+  const absYears = Math.round(absDays / 365);
+  return future ? `in ${pluralize(absYears, "year")}` : `${pluralize(absYears, "year")} ago`;
+}
+
+function summarizeSecretEditor(secret) {
+  const title = titleForRow(secret, "secret");
+  const updatedAt = formatRelativeTime(secret?.updatedAt);
+  const hasValue = secret?.hasValue === true ? "A value is stored." : "No value is stored yet.";
+  return `Selected secret "${title}". ${hasValue} Values stay hidden; enter a new value to rotate it. Updated ${updatedAt}.`;
+}
+
+function summarizeDatasourceEditor(datasource) {
+  const title = titleForRow(datasource, "datasource");
+  const provider = normalizeText(datasource?.provider, "sql");
+  const status = normalizeText(datasource?.status, "configured");
+  const lastTest = normalizeText(datasource?.lastTestResult, "") ? `Last test ${datasource.lastTestResult}.` : "No connection test has been recorded yet.";
+  return `Selected datasource "${title}" (${provider}). Current status is ${status}. ${lastTest}`;
+}
+
+function summarizeDatasourceTestResult(result, datasource) {
+  const title = titleForRow(datasource, "datasource");
+  if (!result || result.ok !== true) {
+    const reason = normalizeText(result?.reason, "Connection test failed.");
+    return `Connection test failed for "${title}": ${reason}`;
+  }
+  return `Connection test succeeded for "${title}".`;
+}
+
+function summarizeScriptStub(scriptName, datasourceId) {
+  return datasourceId
+    ? `Script stub only. "${scriptName}" would run against datasource "${datasourceId}" once execution is implemented.`
+    : `Script stub only. "${scriptName}" would run once execution is implemented.`;
+}
+
+function decorateSecretRow(row, now = Date.now()) {
+  return {
+    ...row,
+    title: titleForRow(row),
+    hasValueText: row?.hasValue === true ? "Stored" : "Missing",
+    updatedAtText: formatRelativeTime(row?.updatedAt, now),
+    updatedAtTitle: safeIso(row?.updatedAt) ?? "Unknown update time"
+  };
+}
+
+function decorateDatasourceRow(row, now = Date.now()) {
+  const provider = normalizeText(row?.provider, "");
+  const providerText = provider === "postgres"
+    ? "Postgres"
+    : provider === "mysql"
+      ? "MySQL"
+      : provider;
+  const lastTestResult = normalizeText(row?.lastTestResult, "");
+  return {
+    ...row,
+    title: titleForRow(row),
+    providerText: providerText || "Unknown",
+    lastTestResultText: lastTestResult || "Not tested",
+    updatedAtText: formatRelativeTime(row?.updatedAt, now),
+    updatedAtTitle: safeIso(row?.updatedAt) ?? "Unknown update time"
+  };
+}
+
 function titleForRow(row, fallback = "") {
   return normalizeText(row?.title, normalizeText(row?.label, normalizeText(row?.datasourceName, normalizeText(row?.id, fallback))));
 }
@@ -37,6 +127,7 @@ function matchesQuery(row, query) {
 }
 
 function filterCollectionRows(rows, query) {
+  const now = Date.now();
   const filtered = rows.filter(row => matchesQuery(row, query));
   const searchVisible = rows.length > SELECT_SLOT_LIMIT;
   const limited = searchVisible && !query
@@ -45,7 +136,9 @@ function filterCollectionRows(rows, query) {
   return {
     rows: limited.map(row => ({
       ...row,
-      title: titleForRow(row)
+      title: titleForRow(row),
+      updatedAtText: formatRelativeTime(row?.updatedAt, now),
+      updatedAtTitle: safeIso(row?.updatedAt) ?? "Unknown update time"
     })),
     totalCount: rows.length,
     filteredCount: filtered.length,
@@ -66,7 +159,7 @@ function secretEditorPayload(secret, extras = {}) {
     PlatformConfigSecretSelectedId: String(secret?.id ?? ""),
     PlatformConfigSecretLabel: titleForRow(secret),
     PlatformConfigSecretValue: "",
-    PlatformConfigSecretSummary: JSON.stringify(secret ?? {}, null, 2),
+    PlatformConfigSecretSummary: summarizeSecretEditor(secret),
     ...extras
   };
 }
@@ -93,7 +186,7 @@ function datasourceEditorPayload(datasource, extras = {}) {
     PlatformConfigDatasourcePath: normalizeText(datasource?.path, ""),
     PlatformConfigDatasourceSsl: datasource?.ssl === true,
     PlatformConfigScriptDatasourceId: String(datasource?.id ?? ""),
-    PlatformConfigDatasourceSummary: JSON.stringify(datasource ?? {}, null, 2),
+    PlatformConfigDatasourceSummary: summarizeDatasourceEditor(datasource),
     ...extras
   };
 }
@@ -135,8 +228,8 @@ async function pipelineSnapshotPayload(appContext, {
 } = {}) {
   const secrets = await (appContext?.secretStore?.listMetadata?.() ?? []);
   const datasources = appContext?.dbSql?.listDatasources?.() ?? [];
-  const secretSelection = filterCollectionRows(secrets, normalizeQuery(secretQuery));
-  const datasourceSelection = filterCollectionRows(datasources, normalizeQuery(datasourceQuery));
+  const secretSelection = filterCollectionRows(secrets.map(row => decorateSecretRow(row)), normalizeQuery(secretQuery));
+  const datasourceSelection = filterCollectionRows(datasources.map(row => decorateDatasourceRow(row)), normalizeQuery(datasourceQuery));
   return {
     secrets: secretSelection.rows,
     datasources: datasourceSelection.rows,
@@ -186,7 +279,7 @@ export function createPipelineRuntimeHandlers(deps) {
       }
       sendJson(res, 200, {
         ...(await pipelineSnapshotPayload(appContext)),
-        ...secretEditorPayload(delegated.body.secret),
+        ...secretEditorPayload(decorateSecretRow(delegated.body.secret)),
         message: `Loaded secret ${titleForRow(delegated.body.secret, "secret")}.`
       });
     },
@@ -204,7 +297,7 @@ export function createPipelineRuntimeHandlers(deps) {
       }
       sendJson(res, delegated.status, {
         ...(await pipelineSnapshotPayload(appContext)),
-        ...secretEditorPayload(delegated.body.secret),
+        ...secretEditorPayload(decorateSecretRow(delegated.body.secret)),
         message: `Saved secret ${titleForRow(delegated.body.secret, "secret")}.`
       });
     },
@@ -223,7 +316,7 @@ export function createPipelineRuntimeHandlers(deps) {
       }
       sendJson(res, delegated.status, {
         ...(await pipelineSnapshotPayload(appContext)),
-        ...secretEditorPayload(delegated.body.secret),
+        ...secretEditorPayload(decorateSecretRow(delegated.body.secret)),
         message: `Updated secret ${titleForRow(delegated.body.secret, "secret")}.`
       });
     },
@@ -263,7 +356,7 @@ export function createPipelineRuntimeHandlers(deps) {
       }
       sendJson(res, 200, {
         ...(await pipelineSnapshotPayload(appContext)),
-        ...datasourceEditorPayload(delegated.body.datasource),
+        ...datasourceEditorPayload(decorateDatasourceRow(delegated.body.datasource)),
         message: `Loaded datasource ${titleForRow(delegated.body.datasource, "datasource")}.`
       });
     },
@@ -281,7 +374,7 @@ export function createPipelineRuntimeHandlers(deps) {
       }
       sendJson(res, delegated.status, {
         ...(await pipelineSnapshotPayload(appContext)),
-        ...datasourceEditorPayload(delegated.body.datasource),
+        ...datasourceEditorPayload(decorateDatasourceRow(delegated.body.datasource)),
         message: `Saved datasource ${titleForRow(delegated.body.datasource, "datasource")}.`
       });
     },
@@ -300,7 +393,7 @@ export function createPipelineRuntimeHandlers(deps) {
       }
       sendJson(res, delegated.status, {
         ...(await pipelineSnapshotPayload(appContext)),
-        ...datasourceEditorPayload(delegated.body.datasource),
+        ...datasourceEditorPayload(decorateDatasourceRow(delegated.body.datasource)),
         message: `Updated datasource ${titleForRow(delegated.body.datasource, "datasource")}.`
       });
     },
@@ -326,20 +419,43 @@ export function createPipelineRuntimeHandlers(deps) {
       });
     },
 
-    "pipeline.platform-config.datasource.test": async ({ res, params, requestActor, appContext }) => {
-      const delegated = await delegateJsonHandler(createSqlDbHandlers, deps, "db.sql.datasource.test", {
-        req: {},
-        res: {},
-        params,
-        requestActor,
-        appContext
-      });
+    "pipeline.platform-config.datasource.test": async ({ req, res, requestActor, appContext }) => {
+      const body = await readJson(req);
+      const datasourceId = normalizeDatasourceId(body?.id);
+      const existing = datasourceId ? (appContext?.dbSql?.getDatasource?.(datasourceId) ?? null) : null;
+      const normalized = normalizeDatasourcePayload({
+        ...body,
+        id: datasourceId ?? existing?.id ?? "draft_test_connection"
+      }, existing);
+      const delegated = !normalized.ok
+        ? {
+            status: normalized.status || 400,
+            body: { error: normalized.reason, datasource: existing ?? null }
+          }
+        : await (async () => {
+            const responses = [];
+            const handlers = createSqlDbHandlers({
+              ...deps,
+              readJson: async () => normalized.payload,
+              sendJson: (_res, status, body) => responses.push({ status, body })
+            });
+            await handlers["db.sql.datasource.testDraft"]({
+              req: {},
+              res: {},
+              requestActor,
+              appContext
+            });
+            return responses[0] ?? { status: 500, body: { error: "no response from db.sql.datasource.testDraft" } };
+          })();
       const datasource = delegated.body?.datasource
-        ?? appContext?.dbSql?.getDatasource?.(normalizeDatasourceId(params?.id) || "") ?? null;
+        ?? existing
+        ?? normalized.payload
+        ?? null;
+      const decoratedDatasource = datasource ? decorateDatasourceRow(datasource) : null;
       const basePayload = {
         ...(await pipelineSnapshotPayload(appContext)),
-        ...(datasource ? datasourceEditorPayload(datasource) : {}),
-        PlatformConfigDatasourceSummary: JSON.stringify(delegated.body ?? {}, null, 2)
+        ...(decoratedDatasource ? datasourceEditorPayload(decoratedDatasource) : {}),
+        PlatformConfigDatasourceSummary: summarizeDatasourceTestResult(delegated, decoratedDatasource)
       };
       if (delegated.status >= 400) {
         sendJson(res, delegated.status, {
@@ -383,6 +499,7 @@ export function createPipelineRuntimeHandlers(deps) {
         stub: true,
         status: "not-implemented",
         message: "Script execution is not implemented yet. This endpoint is a demo-app stub.",
+        summary: summarizeScriptStub(scriptName, datasourceId),
         request: {
           serverRunner: appContext?.serverRunnerId || "",
           scriptName,

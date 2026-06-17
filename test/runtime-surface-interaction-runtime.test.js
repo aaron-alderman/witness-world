@@ -363,6 +363,134 @@ test("createSurfaceInteractionRuntime ignores inactive route subtree capability 
   assert.equal(listeners.has("click"), true);
 });
 
+test("createSurfaceInteractionRuntime renders and updates repeated select options from runtime collections", async () => {
+  const createNode = ({ id, tagName }) => ({
+    id,
+    tagName,
+    innerHTML: "",
+    className: "",
+    hidden: false,
+    style: {},
+    value: "",
+    attributes: new Map(id ? [["id", id]] : []),
+    addEventListener() {},
+    removeEventListener() {},
+    setAttribute(name, value) {
+      this.attributes.set(String(name), String(value));
+      if (String(name) === "id") this.id = String(value);
+    },
+    getAttribute(name) {
+      return this.attributes.get(String(name)) ?? null;
+    },
+    removeAttribute(name) {
+      this.attributes.delete(String(name));
+    }
+  });
+  const nodes = new Map([
+    ["surface-root", createNode({ id: "surface-root", tagName: "DIV" })],
+    ["secret-select", createNode({ id: "secret-select", tagName: "SELECT" })]
+  ]);
+  const runtimeWindow = {
+    location: {
+      href: "http://127.0.0.1:3000/platform-config",
+      hostname: "127.0.0.1",
+      pathname: "/platform-config"
+    },
+    addEventListener() {},
+    removeEventListener() {},
+    console: { error() {} }
+  };
+
+  const runtime = createSurfaceInteractionRuntime({
+    document: {
+      getElementById(id) {
+        return nodes.get(String(id)) ?? null;
+      }
+    },
+    window: runtimeWindow,
+    manifest: {
+      activeSurfaceId: "Surface.Root",
+      collections: [{ id: "PlatformConfigSecrets" }],
+      templates: [{
+        id: "SecretOptionTemplate",
+        tag: "option",
+        html: '<option value="${item.id}">${item.title}</option>'
+      }],
+      surfaces: [
+        {
+          id: "Surface.Root",
+          children: ["SecretSelect"],
+          runtime: {
+            processRef: "ShellNavigation",
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: []
+          },
+          view: {
+            rootId: "surface-root",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        },
+        {
+          id: "SecretSelect",
+          parentId: "Surface.Root",
+          runtime: {
+            processRef: null,
+            projectionRefs: [],
+            capabilityRefs: [],
+            bindings: [],
+            interactions: [],
+            repeat: {
+              collection: "PlatformConfigSecrets",
+              template: "SecretOptionTemplate",
+              itemAs: "item",
+              indexAs: "index"
+            }
+          },
+          view: {
+            rootId: "secret-select",
+            propTargets: {},
+            interactionTargets: {}
+          }
+        }
+      ],
+      processWitnesses: [
+        { process: "desire.defineType", body: { id: "StatusText", role: "state", valueType: "text", initial: "idle" } },
+        { process: "desire.defineProcess", body: {
+          id: "ShellNavigation",
+          state: ["StatusText"],
+          handles: [],
+          emits: [],
+          rules: []
+        } }
+      ]
+    },
+    createProcessRuntimeImpl({ witnesses }) {
+      return createProcessRuntime(witnesses);
+    }
+  });
+
+  await runtime.whenSettled();
+  runtime.setCollection("PlatformConfigSecrets", [
+    { id: "sec_1", title: "Primary password" },
+    { id: "sec_2", title: "Reporting password" }
+  ]);
+  await runtime.refresh();
+
+  assert.equal(runtime.getCollection("PlatformConfigSecrets").length, 2);
+  assert.match(nodes.get("secret-select").innerHTML, /<option value="sec_1">Primary password<\/option>/);
+  assert.match(nodes.get("secret-select").innerHTML, /<option value="sec_2">Reporting password<\/option>/);
+
+  runtime.setCollection("PlatformConfigSecrets", [
+    { id: "sec_3", title: "Rotated password" }
+  ]);
+  await runtime.refresh();
+
+  assert.equal(nodes.get("secret-select").innerHTML, '<option value="sec_3">Rotated password</option>');
+});
+
 test("createSurfaceInteractionRuntime dispatches authored event rules and patches bound text", async () => {
   const listeners = new Map();
   const nodes = new Map([

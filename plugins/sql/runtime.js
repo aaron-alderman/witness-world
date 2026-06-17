@@ -29,6 +29,7 @@ export const routes = Object.freeze([
   patternRoute("PATCH", /^\/api\/db\/sql\/datasources\/([^/]+)$/, "db.sql.datasource.update", ["id"]),
   patternRoute("DELETE", /^\/api\/db\/sql\/datasources\/([^/]+)$/, "db.sql.datasource.delete", ["id"]),
   patternRoute("POST", /^\/api\/db\/sql\/datasources\/([^/]+)\/test$/, "db.sql.datasource.test", ["id"]),
+  exactRoute("POST", "/api/db/sql/datasources/test", "db.sql.datasource.testDraft"),
   exactRoute("POST", "/api/db/sql/migrate", "db.sql.migrate"),
   exactRoute("POST", "/api/db/sql/query", "db.sql.query"),
   exactRoute("POST", "/api/db/sql/command", "db.sql.command"),

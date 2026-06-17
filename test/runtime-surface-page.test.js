@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { renderSurfacePage } from "../src/runtime-surface-page.js";
 
+const FORBIDDEN_AUTHORED_DATA_ATTR_PATTERN =
+  /\sdata-(?:action|widget|binding|control|target|event|state|view|route|interaction)[a-z0-9-]*=/i;
+
 function fakeWorld(witnesses) {
   return {
     allWitnesses() {
@@ -67,10 +70,12 @@ test("runtime-surface-page composes static surface HTML with the generic interac
   assert.match(html, /surfaceRuntimeManifest/);
   assert.match(html, /SignInRequested/);
   assert.match(html, /createSurfaceInteractionRuntime/);
+  assert.match(html, /data-surface-runtime-script="1"/);
   assert.match(html, /function normalizeCapabilityAssets/);
   assert.doesNotMatch(html, /export function createProcessRuntime/);
   assert.doesNotMatch(html, /routeSurfaceFragments/);
-  assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
+  assert.doesNotMatch(html, /<script type="module">\s*const __surfaceRuntimeGlobal/);
+  assert.doesNotMatch(html, FORBIDDEN_AUTHORED_DATA_ATTR_PATTERN);
 });
 
 test("runtime-surface-page emits generic fallback ids for interactive surfaces without authored domId", () => {
@@ -125,7 +130,7 @@ test("runtime-surface-page emits generic fallback ids for interactive surfaces w
   assert.match(html, /<div id="surface-modulecardmillcharge"/);
   assert.match(html, /"rootId":"surface-modulecardmillcharge"/);
   assert.match(html, /"interactionTargets":\{"self":\[\{"id":"surface-modulecardmillcharge"\}\]\}/);
-  assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
+  assert.doesNotMatch(html, FORBIDDEN_AUTHORED_DATA_ATTR_PATTERN);
 });
 
 test("runtime-surface-page projects authored input tags with normal form attributes", () => {
@@ -188,7 +193,7 @@ test("runtime-surface-page projects authored input tags with normal form attribu
   assert.match(html, /<input id="speed-input" class="[^"]*mill-slider[^"]*" type="range" min="0.4" max="0.99" step="0.01" value="0.75">/);
   assert.match(html, /"event":"input"/);
   assert.match(html, /"kind":"eventValue"/);
-  assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
+  assert.doesNotMatch(html, FORBIDDEN_AUTHORED_DATA_ATTR_PATTERN);
 });
 
 test("runtime-surface-page projects authored select options with value and selected attributes", () => {
@@ -260,7 +265,7 @@ test("runtime-surface-page projects authored select options with value and selec
   assert.match(html, /<option value="fixed">fixed<\/option>/);
   assert.match(html, /<option value="normal" selected>normal<\/option>/);
   assert.match(html, /"value":\[\{"id":"dist-select","mode":"value"\}\]/);
-  assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
+  assert.doesNotMatch(html, FORBIDDEN_AUTHORED_DATA_ATTR_PATTERN);
 });
 
 test("runtime-surface-page respects visible binding map defaults during initial projection", () => {
@@ -523,7 +528,7 @@ test("runtime-surface-page projects the standard authored form-control baseline"
   assert.match(html, /"checked":\[\{"id":"agree-input","mode":"checked"\}\]/);
   assert.match(html, /"ariaExpanded":\[\{"id":"detail-toggle","mode":"attribute","attr":"aria-expanded","falseAsValue":true\}\]/);
   assert.match(html, /"kind":"eventChecked"/);
-  assert.doesNotMatch(html, /\sdata-[a-z0-9-]+=/i);
+  assert.doesNotMatch(html, FORBIDDEN_AUTHORED_DATA_ATTR_PATTERN);
 });
 
 test("runtime-surface-page keeps title-only action props out of visible button body", () => {

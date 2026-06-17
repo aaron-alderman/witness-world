@@ -16,7 +16,7 @@ function escapeScriptBody(source) {
 function injectInteractionRuntime(html, manifest) {
   if (!manifest) return html;
   const manifestScript = `<script type="application/json" id="surface-runtime-manifest">${escapeScriptBody(JSON.stringify(manifest))}</script>`;
-  const script = `<script type="module">\n${escapeScriptBody(renderSurfaceInteractionRuntimeModule())}\n</script>`;
+  const script = `<script data-surface-runtime-script="1">\n${escapeScriptBody(renderSurfaceInteractionRuntimeModule())}\n</script>`;
   return String(html).includes("</body>")
     ? String(html).replace("</body>", `    ${manifestScript}\n    ${script}\n  </body>`)
     : `${html}\n${manifestScript}\n${script}`;

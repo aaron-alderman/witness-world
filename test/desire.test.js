@@ -90,7 +90,7 @@ test("DESIRE kernel kind set excludes bridge-only runtime residuals", () => {
   assert.equal(DESIRE_BRIDGE_KINDS.has("runtime.declaration"), true);
   assert.equal(DESIRE_NODE_KINDS.has("runtime.doc"), false);
   assert.equal(DESIRE_NODE_KINDS.has("runtime.declaration"), false);
-  for (const kind of ["context", "type", "message", "store", "entity", "graph", "projection", "capability", "boundary", "policy", "process", "surface", "dataflow"]) {
+  for (const kind of ["context", "type", "message", "store", "entity", "graph", "projection", "capability", "boundary", "policy", "process", "surface", "dataflow", "collection"]) {
     assert.equal(DESIRE_KERNEL_KINDS.has(kind), true, kind);
     assert.equal(DESIRE_NODE_KINDS.has(kind), true, kind);
   }
@@ -110,7 +110,8 @@ test("DESIRE kernel validators cover every node kind", () => {
     { kind: "policy", valid: { subject: "Todo", policyOutcomes: {} }, invalid: { policyOutcomes: [] }, error: /policyOutcomes/ },
     { kind: "process", valid: { state: [], handles: [], emits: [], rules: [] }, invalid: { state: {} }, error: /state/ },
     { kind: "surface", valid: { surfaceKind: "chart", children: [], props: {}, encoding: {}, editable: [], layers: [] }, invalid: { encoding: [] }, error: /encoding/ },
-    { kind: "dataflow", valid: { axes: [], params: [], derives: [], reduces: [] }, invalid: { axes: {} }, error: /axes/ }
+    { kind: "dataflow", valid: { axes: [], params: [], derives: [], reduces: [] }, invalid: { axes: {} }, error: /axes/ },
+    { kind: "collection", valid: {}, invalid: { id: [] }, error: /body\.id/ }
   ];
   assert.deepEqual(cases.map(row => row.kind).sort(), [...DESIRE_KERNEL_KINDS].sort());
   for (const row of cases) {
@@ -133,7 +134,8 @@ test("DESIRE native application covers every kernel node kind", () => {
     createDesireNode({ kind: "boundary", name: "TodoApi", body: { capabilities: ["capability:read:todo"], operations: [{ name: "list", query: "TodoQuery", successEvent: "TodoListed", route: "/api/todos" }] } }),
     createDesireNode({ kind: "policy", name: "TodoPolicy", body: { subject: "TodoFlow", initialState: "pending", stateField: "policy_state", readyState: "ready", disagreementState: null, policyOutcomes: { promote: "ready" }, disagreementOutcomes: {} } }),
     createDesireNode({ kind: "process", name: "TodoFlow", body: { state: ["DraftTitle"], handles: ["TodoCreated"], emits: ["TodoCreate"], rules: [] } }),
-    createDesireNode({ kind: "surface", name: "TodoPage", body: { surfaceKind: "page", className: "todo-page", children: ["TodoList"], props: {}, modelRef: "TodoMetrics", frame: null, encoding: {}, editable: [], layers: [] } })
+    createDesireNode({ kind: "surface", name: "TodoPage", body: { surfaceKind: "page", className: "todo-page", children: ["TodoList"], props: {}, modelRef: "TodoMetrics", frame: null, encoding: {}, editable: [], layers: [] } }),
+    createDesireNode({ kind: "collection", name: "TodoOptions", body: {} })
   ];
   assert.deepEqual(nodes.map(node => node.kind).sort(), [...DESIRE_KERNEL_KINDS].sort());
 
@@ -154,7 +156,8 @@ test("DESIRE native application covers every kernel node kind", () => {
     boundary: "desire.defineBoundary",
     policy: "desire.definePolicy",
     process: "desire.defineProcess",
-    surface: "desire.defineSurface"
+    surface: "desire.defineSurface",
+    collection: "desire.defineCollection"
   };
   for (const node of nodes) {
     assert.equal(
@@ -457,6 +460,7 @@ test("concise RVM extension elaborates into native DESIRE semantics and applies"
         capabilityRefs: [],
         bindings: [],
         interactions: [],
+        repeat: null,
         modelRef: "TodoMetrics",
         frame: "cartesian",
         encoding: {},
@@ -2202,6 +2206,78 @@ message TodoSelectedPayload {
     normalizeDesirePlusToDesire(desirePlus).nodes.map(signature),
     normalizeDesirePlusToDesire(reparsed).nodes.map(signature)
   );
+});
+
+test("RVM collections, repeated surfaces, and adapter collection outputs round-trip semantically", () => {
+  const source = `
+import desire/v3-alpha
+
+module PlatformConfig
+
+collection PlatformConfigSecrets
+
+view SecretOptionTemplate {
+  kind option
+  prop tag = "option"
+  prop value = "\${item.id}"
+  prop text = "\${item.title}"
+  prop template = true
+}
+
+view SecretSelect {
+  kind select
+  prop tag = "select"
+  repeat {
+    collection PlatformConfigSecrets
+    template SecretOptionTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+event SnapshotLoaded {
+  payload {
+    message: string
+  }
+}
+
+adapter PlatformConfigSnapshotHttp using HTTP {
+  kind query
+  route /api/platform-config/snapshot
+  success_event SnapshotLoaded
+  collection_outputs {
+    PlatformConfigSecrets = "secrets"
+  }
+}
+`.trim();
+  const desirePlus = compileRvmToDesirePlus(source, { file: "C:/demo/platform-config.rvm" });
+  const desire = normalizeDesirePlusToDesire(desirePlus);
+  const collectionNode = desire.nodes.find(node => node.kind === "collection");
+  const selectNode = desire.nodes.find(node => node.kind === "surface" && node.name === "SecretSelect");
+
+  assert.equal(collectionNode?.name, "PlatformConfigSecrets");
+  assert.deepEqual(selectNode?.body?.repeat, {
+    collection: "PlatformConfigSecrets",
+    template: "SecretOptionTemplate",
+    itemAs: "item",
+    indexAs: "index"
+  });
+
+  const text = serializeDesirePlusToRvm(desirePlus);
+  assert.match(text, /collection PlatformConfigSecrets/);
+  assert.match(text, /repeat \{/);
+  assert.match(text, /collection_outputs \{/);
+
+  const reparsed = compileRvmToDesirePlus(text, { file: "C:/demo/platform-config.rvm" });
+  assert.deepEqual(
+    desire.nodes.map(signature),
+    normalizeDesirePlusToDesire(reparsed).nodes.map(signature)
+  );
+
+  const world = createWorld();
+  applyDesire(world, desire);
+  const witnesses = world.allWitnesses();
+  assert.equal(witnesses.some(witness => witness.process === "desire.defineCollection" && witness.body?.id === "PlatformConfigSecrets"), true);
 });
 
 test("RVM serializer emits semantic fallback for broad supported DESIRE+ forms", () => {

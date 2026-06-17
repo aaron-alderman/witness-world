@@ -35,7 +35,7 @@ view GoodmanModeEdit {
   class mode-btn
   prop tag = "button"
   prop buttonType = "button"
-  prop label = "Edit"
+  prop label = "✏ Edit"
   prop modeKey = "edit"
   bindings {
     className from state GoodmanActiveMode map edit on default ""
@@ -467,6 +467,32 @@ view GoodmanProbePrimaryShearRow {
   }
 }
 
+view GoodmanProbePrimaryStressLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "σ_a"
+}
+
+view GoodmanProbePrimaryStressValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "0.0 MPa"
+  bindings {
+    text from capability GoodmanDiagram.probe_alt_stress_text
+  }
+}
+
+view GoodmanProbePrimaryStressRow {
+  kind metric-row
+  class info-row
+  children {
+    GoodmanProbePrimaryStressLabel
+    GoodmanProbePrimaryStressValue
+  }
+}
+
 view GoodmanProbePrimaryDamageLabel {
   kind text
   class info-label
@@ -524,6 +550,7 @@ view GoodmanProbePrimaryCard {
   class goodman-probe-bolt goodman-probe-bolt--primary
   children {
     GoodmanProbePrimaryName
+    GoodmanProbePrimaryStressRow
     GoodmanProbePrimaryShearRow
     GoodmanProbePrimaryDamageRow
     GoodmanProbePrimarySlipRow
@@ -553,6 +580,32 @@ view GoodmanProbeMaintenanceShearRow {
   children {
     GoodmanProbeMaintenanceShearLabel
     GoodmanProbeMaintenanceShearValue
+  }
+}
+
+view GoodmanProbeMaintenanceStressLabel {
+  kind text
+  class info-label
+  prop tag = "span"
+  prop text = "σ_a"
+}
+
+view GoodmanProbeMaintenanceStressValue {
+  kind text
+  class info-value
+  prop tag = "span"
+  prop text = "0.0 MPa"
+  bindings {
+    text from capability GoodmanDiagram.probe_alt_stress_jemtec_text
+  }
+}
+
+view GoodmanProbeMaintenanceStressRow {
+  kind metric-row
+  class info-row
+  children {
+    GoodmanProbeMaintenanceStressLabel
+    GoodmanProbeMaintenanceStressValue
   }
 }
 
@@ -613,6 +666,7 @@ view GoodmanProbeMaintenanceCard {
   class goodman-probe-bolt goodman-probe-bolt--maintenance
   children {
     GoodmanProbeMaintenanceName
+    GoodmanProbeMaintenanceStressRow
     GoodmanProbeMaintenanceShearRow
     GoodmanProbeMaintenanceDamageRow
     GoodmanProbeMaintenanceSlipRow

@@ -106,7 +106,7 @@ model MillForce {
   derive rhoChargeText = rho_charge_text(rhoCharge)
   reduce gammaActive = pick_method(gamma, active_method) over method
   reduce phiPrimeActive = pick_method(phiPrime, active_method) over method
-  derive gammaText = deg_text(gammaActive)
+  derive gammaText = fill_angle_text(gammaActive)
   derive phiPrimeText = display_deg_text(phiPrimeActive)
   reduce gammaDeltaText = deg_delta_text(gamma) over method
   reduce phiPrimeDeltaText = deg_delta_text(phiPrime) over method

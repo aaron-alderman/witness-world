@@ -11,10 +11,9 @@ import { samplingFunctions } from "../examples/engentus/app/chart-functions/samp
 import { millChargeKernels } from "../examples/engentus/app/chart-functions/mill-charge-kernels.js";
 import { planChart, probeReadout, frameIndexForValue } from "../plugins/chart-runtime/gog-runtime.js";
 
-// ── Probe / scrubber: the axis-binding logic behind drawChart's interactivity ─────
-// The DOM drag/hover wiring is browser-only (waits on the live render), but the pure
-// binding — read model values at an arbitrary x (probe), map an axis value to a frame
-// (scrubber) — is node-verified here.
+// Probe / scrubber: the axis-binding logic behind drawChart interactivity.
+// The DOM drag/hover wiring is browser-only, but the pure binding contracts are
+// node-verified here.
 
 const appDir = path.join(process.cwd(), "examples", "engentus", "app");
 
@@ -28,7 +27,6 @@ async function loadBody(file, kind, name) {
 const close = (a, b) => Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(b));
 const GOODMAN_FNS = { ...goodmanFunctions, ...samplingFunctions };
 
-// ── probe over the deterministic Goodman chart ──
 test("probeReadout reads the bolt-response curve at an exact x (no interpolation error)", async () => {
   const model = await loadBody("models/goodman.rvm", "dataflow", "BoltFatigue");
   const ev = evaluateModel(model, { functions: GOODMAN_FNS });
@@ -45,10 +43,7 @@ test("probeReadout reads the bolt-response curve at an exact x (no interpolation
   assert.ok(band, "expected a reading for the authored background band");
   assert.ok(Number.isFinite(band.y0));
   assert.ok(Number.isFinite(band.y1));
-  // rules (slip/probe) are not data readings
   assert.ok(!out.readings.some(r => r.mark === "rule"));
-  // Static distribution cloud points are visual marks; point probing is not a
-  // supported chart-runtime contract yet.
   assert.ok(!out.readings.some(r => r.mark === "point"));
 });
 
@@ -58,14 +53,57 @@ test("probeReadout linearly interpolates between grid points", async () => {
   const plan = planChart(await loadBody("views/goodman.rvm", "surface", "GoodmanDiagram"), ev, {});
 
   const sm = ev.axes.sm.values;
-  const x = (sm[100] + sm[101]) / 2; // midpoint between two grid points
+  const x = (sm[100] + sm[101]) / 2;
   const out = probeReadout(plan, x);
   const got = out.readings.find(r => r.layer === "curves").y;
   const exp = (ev.fields.curve.data[100] + ev.fields.curve.data[101]) / 2;
   assert.ok(close(got, exp), `interp ${got} vs ${exp}`);
 });
 
-// ── probe over the MC band chart: reads the uncertainty range at x ──
+test("Goodman tooltip helper emits oracle-shaped rows with layer-derived colours", () => {
+  const markup = goodmanFunctions.goodman_tooltip_markup({
+    readout: {
+      readings: [
+        {
+          layer: "curves",
+          tooltip: {
+            sigma_m_MPa: 201,
+            sigma_a_MPa: 57.6,
+            F_shear_N: 2496,
+            damage_per_cycle_x10_6: 2.574
+          }
+        },
+        {
+          layer: "curve_jemtec",
+          tooltip: {
+            sigma_m_MPa: 201,
+            sigma_a_MPa: 3.0,
+            F_shear_N: 131,
+            damage_per_cycle_x10_6: 0
+          }
+        }
+      ]
+    },
+    plan: {
+      layers: [
+        { name: "curves", stroke: "#dc2626" },
+        { name: "curve_jemtec", stroke: "#8CC4D4" }
+      ]
+    }
+  });
+
+  assert.match(markup, /goodman-hover-title/);
+  assert.match(markup, /&sigma;<sub>m<\/sub> = 201 MPa/);
+  assert.match(markup, /goodman-hover-swatch" style="background:#dc2626"/);
+  assert.match(markup, /goodman-hover-swatch" style="background:#8CC4D4"/);
+  assert.match(markup, /No Jemtec:/);
+  assert.match(markup, /Jemtec:/);
+  assert.match(markup, /57\.6 MPa/);
+  assert.match(markup, /2,496 N/);
+  assert.match(markup, /2\.574&times;10<sup>-6<\/sup>/);
+  assert.match(markup, /&asymp;0&times;10<sup>-6<\/sup>/);
+});
+
 test("probeReadout reads the p10/p90 band and per-sample cloud at x", async () => {
   const model = await loadBody("models/goodman.rvm", "dataflow", "BoltFatigueMC");
   const ev = evaluateModel(model, { functions: { ...goodmanFunctions, ...samplingFunctions } });
@@ -79,21 +117,18 @@ test("probeReadout reads the p10/p90 band and per-sample cloud at x", async () =
   assert.ok(close(band.y1, ev.fields.sa_p90.data[i]), "band.y1 = p90@x");
   const med = out.readings.find(r => r.layer === "med");
   assert.ok(close(med.y, ev.fields.sa_p50.data[i]), "median reading = p50@x");
-  // The reference clears the static distribution cloud in MC mode; do not
-  // reintroduce the previous invented per-sample MC cloud readout.
   assert.equal(out.readings.filter(r => r.mark === "cloud").length, 0);
 });
 
-// ── scrubber: bind an axis value to the nearest frame ──
 test("frameIndexForValue maps an axis value to the nearest frame index (with clamp)", async () => {
   const model = await loadBody("models/mill-charge.rvm", "dataflow", "MillCharge");
   const ev = evaluateModel(model, { functions: millChargeKernels });
-  const t = ev.axes.t.values; // 0, 0.05, … 1.10
+  const t = ev.axes.t.values;
 
   assert.equal(frameIndexForValue(t, 0), 0);
-  assert.equal(frameIndexForValue(t, 0.07), 1);              // nearest 0.05
+  assert.equal(frameIndexForValue(t, 0.07), 1);
   assert.equal(frameIndexForValue(t, t[t.length - 1]), t.length - 1);
-  assert.equal(frameIndexForValue(t, -5), 0);                // clamp low
-  assert.equal(frameIndexForValue(t, 99), t.length - 1);     // clamp high
-  assert.equal(frameIndexForValue([], 3), 0);                // degenerate
+  assert.equal(frameIndexForValue(t, -5), 0);
+  assert.equal(frameIndexForValue(t, 99), t.length - 1);
+  assert.equal(frameIndexForValue([], 3), 0);
 });

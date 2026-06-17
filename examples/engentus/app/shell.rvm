@@ -12,6 +12,10 @@ enum EngentusShellRoute {
     mill-charge
     mill-force
     platform-config
+    platform-config-operator
+    platform-config-secrets
+    platform-config-datasources
+    platform-config-scripts
     signout
   }
 }
@@ -86,6 +90,18 @@ state EngentusPasswordRevealed: bool {
   initial false
 }
 
+state EngentusLoginUsername: string {
+  initial "aaron"
+}
+
+state EngentusLoginPassword: string {
+  initial "aaron"
+}
+
+state EngentusAuthNotice: string {
+  initial "Demo accounts: aaron / aaron or callan / callan."
+}
+
 state EngentusShellActiveRoute: EngentusShellRoute {
   initial login
 }
@@ -99,7 +115,7 @@ state PlatformConfigActorHeader: string {
 }
 
 state PlatformConfigNoticeText: string {
-  initial "Platform config is authored here. Refresh to load secrets and datasources."
+  initial "Platform config is ready. Open Secrets or Data Sources to load runner metadata."
 }
 
 state PlatformConfigNoticeTone: string {
@@ -127,7 +143,7 @@ state PlatformConfigSecretValue: string {
 }
 
 state PlatformConfigSecretSummary: string {
-  initial "Refresh to load runner secret metadata."
+  initial "No secret selected. Enter a label and value to create one."
 }
 
 state PlatformConfigSecretBusy: bool {
@@ -183,7 +199,7 @@ state PlatformConfigDatasourceSsl: bool {
 }
 
 state PlatformConfigDatasourceSummary: string {
-  initial "Refresh to load datasource metadata and latest test results."
+  initial "No datasource selected. Enter connection details to test a draft or save it."
 }
 
 state PlatformConfigDatasourceBusy: bool {
@@ -199,7 +215,7 @@ state PlatformConfigScriptDatasourceId: string {
 }
 
 state PlatformConfigScriptResult: string {
-  initial "Run script stub to capture the latest response."
+  initial "Script execution is still a stub. Choose a datasource and run it to see the planned request."
 }
 
 state PlatformConfigScriptBusy: bool {
@@ -724,13 +740,36 @@ event EngentusSignInRequested {
 }
 
 event EngentusSignOutRequested {
-  writes {
-    EngentusShellAuthStatus: signedOut
-    EngentusShellActiveRoute: signout
-  }
 }
 
 event EngentusSignBackInRequested {
+}
+
+event EngentusSessionOpened {
+  payload {
+    actor: PlatformConfigActorHeader
+  }
+  writes {
+    EngentusAuthNotice: ""
+    EngentusPasswordRevealed: false
+    EngentusProfileMenuVisible: false
+  }
+}
+
+event EngentusSessionOpenFailed {
+  payload {
+    error: EngentusAuthNotice
+  }
+  writes {
+    EngentusShellAuthStatus: idle
+  }
+}
+
+event EngentusSessionClosed {
+  writes {
+    EngentusAuthNotice: "Signed out. Demo accounts: aaron / aaron or callan / callan."
+    EngentusPasswordRevealed: false
+  }
 }
 
 event EngentusNavigateHomeRequested {
@@ -758,9 +797,18 @@ event EngentusNavigateMillForceRequested {
 }
 
 event EngentusNavigatePlatformConfigRequested {
-  writes {
-    EngentusShellActiveRoute: platform-config
-  }
+}
+
+event PlatformConfigOpenOperatorRequested {
+}
+
+event PlatformConfigOpenSecretsRequested {
+}
+
+event PlatformConfigOpenDatasourcesRequested {
+}
+
+event PlatformConfigOpenScriptsRequested {
 }
 
 event PlatformConfigRefreshSecretsRequested {
@@ -812,7 +860,7 @@ event PlatformConfigNewDatasourceRequested {
     PlatformConfigDatasourcePath: ""
     PlatformConfigDatasourceSsl: false
     PlatformConfigScriptDatasourceId: ""
-    PlatformConfigDatasourceSummary: "Creating a new datasource. Enter a label, choose a provider, and save it."
+    PlatformConfigDatasourceSummary: "Creating a new datasource. Enter a label, choose a provider, test the draft, or save it."
   }
 }
 
@@ -923,6 +971,16 @@ command PlatformConfigLoadSnapshot {
   }
 }
 
+command EngentusOpenSession {
+  fields {
+    username: EngentusLoginUsername
+    password: EngentusLoginPassword
+  }
+}
+
+command EngentusCloseSession {
+}
+
 command PlatformConfigLoadSecret {
   fields {
     id: PlatformConfigSecretSelectedId
@@ -994,6 +1052,14 @@ command PlatformConfigDeleteDatasource {
 command PlatformConfigTestDatasource {
   fields {
     id: PlatformConfigDatasourceSelectedId
+    title: PlatformConfigDatasourceLabel
+    provider: PlatformConfigDatasourceProvider
+    host: PlatformConfigDatasourceHost
+    port: PlatformConfigDatasourcePort
+    database: PlatformConfigDatasourceDatabase
+    user: PlatformConfigDatasourceUser
+    passwordSecretId: PlatformConfigDatasourcePasswordSecretId
+    ssl: PlatformConfigDatasourceSsl
   }
 }
 
@@ -1018,6 +1084,26 @@ adapter PlatformConfigSnapshotHttp using HTTP {
     PlatformConfigSecrets = "secrets"
     PlatformConfigDatasources = "datasources"
   }
+}
+
+adapter EngentusSessionOpenHttp using HTTP {
+  command EngentusOpenSession
+  kind command
+  method POST
+  route /api/session
+  host_operation engentus.session.open
+  success_event EngentusSessionOpened
+  failure_event EngentusSessionOpenFailed
+}
+
+adapter EngentusSessionCloseHttp using HTTP {
+  command EngentusCloseSession
+  kind command
+  method DELETE
+  route /api/session
+  host_operation engentus.session.logout
+  success_event EngentusSessionClosed
+  failure_event EngentusSessionClosed
 }
 
 adapter PlatformConfigSecretReadHttp using HTTP {
@@ -1152,7 +1238,7 @@ adapter PlatformConfigDatasourceTestHttp using HTTP {
   command PlatformConfigTestDatasource
   kind command
   method POST
-  route /api/pipeline/platform-config/datasources/${id}/test
+  route /api/pipeline/platform-config/datasources/test
   actor_state PlatformConfigActorHeader
   host_operation engentus.platform.datasource.test
   success_event PlatformConfigStateLoaded
@@ -1395,6 +1481,9 @@ process EngentusShellNavigation {
     EngentusShellAuthStatus
     EngentusProfileMenuVisible
     EngentusPasswordRevealed
+    EngentusLoginUsername
+    EngentusLoginPassword
+    EngentusAuthNotice
     PlatformConfigActorHeader
     PlatformConfigNoticeText
     PlatformConfigNoticeTone
@@ -1503,11 +1592,18 @@ process EngentusShellNavigation {
     EngentusSignInRequested
     EngentusSignOutRequested
     EngentusSignBackInRequested
+    EngentusSessionOpened
+    EngentusSessionOpenFailed
+    EngentusSessionClosed
     EngentusNavigateHomeRequested
     EngentusNavigateGoodmanRequested
     EngentusNavigateMillChargeRequested
     EngentusNavigateMillForceRequested
     EngentusNavigatePlatformConfigRequested
+    PlatformConfigOpenOperatorRequested
+    PlatformConfigOpenSecretsRequested
+    PlatformConfigOpenDatasourcesRequested
+    PlatformConfigOpenScriptsRequested
     PlatformConfigRefreshSecretsRequested
     PlatformConfigSearchSecretsRequested
     PlatformConfigLoadSecretRequested
@@ -1561,6 +1657,8 @@ process EngentusShellNavigation {
     MillChargePresetDenseSlurryRequested
   }
   emits {
+    EngentusOpenSession
+    EngentusCloseSession
     EngentusSaveGuidedTourSession
     PlatformConfigLoadSnapshot
     PlatformConfigLoadSecret
@@ -1577,6 +1675,10 @@ process EngentusShellNavigation {
   rules {
     on EngentusSignInRequested {
       set EngentusShellAuthStatus pending
+      set EngentusAuthNotice ""
+      command EngentusOpenSession
+    }
+    on EngentusSessionOpened {
       option config.presentation.guidedTour {
         real {
           command EngentusSaveGuidedTourSession
@@ -1590,16 +1692,59 @@ process EngentusShellNavigation {
       set EngentusShellActiveRoute home
       set EngentusShellAuthStatus signedIn
     }
+    on EngentusSessionOpenFailed {
+      set EngentusProfileMenuVisible false
+      set EngentusShellActiveRoute login
+    }
     on EngentusSignOutRequested {
       set EngentusProfileMenuVisible false
       set EngentusShellAuthStatus signingOut
       set EngentusShellActiveRoute signout
+      command EngentusCloseSession
       delay 950ms
       set EngentusShellAuthStatus signedOut
     }
     on EngentusSignBackInRequested {
       set EngentusShellActiveRoute login
       set EngentusShellAuthStatus idle
+      set EngentusAuthNotice "Demo accounts: aaron / aaron or callan / callan."
+    }
+    on EngentusNavigatePlatformConfigRequested {
+      set EngentusShellActiveRoute platform-config-operator
+      set PlatformConfigSecretBusy true
+      set PlatformConfigDatasourceBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Loading platform config..."
+      command PlatformConfigLoadSnapshot
+    }
+    on PlatformConfigOpenOperatorRequested {
+      set EngentusShellActiveRoute platform-config-operator
+      set PlatformConfigSecretBusy true
+      set PlatformConfigDatasourceBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Loading platform config..."
+      command PlatformConfigLoadSnapshot
+    }
+    on PlatformConfigOpenSecretsRequested {
+      set EngentusShellActiveRoute platform-config-secrets
+      set PlatformConfigSecretBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Loading secret metadata..."
+      command PlatformConfigLoadSnapshot
+    }
+    on PlatformConfigOpenDatasourcesRequested {
+      set EngentusShellActiveRoute platform-config-datasources
+      set PlatformConfigDatasourceBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Loading data sources..."
+      command PlatformConfigLoadSnapshot
+    }
+    on PlatformConfigOpenScriptsRequested {
+      set EngentusShellActiveRoute platform-config-scripts
+      set PlatformConfigDatasourceBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Loading data sources for scripts..."
+      command PlatformConfigLoadSnapshot
     }
     on PlatformConfigRefreshSecretsRequested {
       set PlatformConfigSecretBusy true
@@ -1717,6 +1862,9 @@ view EngentusRoot {
     EngentusMillChargeApp
     EngentusMillForceApp
     EngentusPlatformConfigApp
+    EngentusPlatformConfigSecretsApp
+    EngentusPlatformConfigDatasourcesApp
+    EngentusPlatformConfigScriptsApp
     EngentusSignout
   }
 }

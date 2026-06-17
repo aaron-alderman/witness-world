@@ -370,7 +370,10 @@ export function createProcessRuntime(world, options = {}) {
     return trackAsync("process.host-operation", async () => {
       const response = await runtime.invoke({ host_operation: hostOp, request });
       const outcome = response?.status === "failure" ? "failure" : "success";
-      const obs = resolve(commandId, outcome, response?.payload ?? null);
+      const eventId = outcome === "failure" ? binding.op.failureEvent : binding.op.successEvent;
+      const obs = eventId
+        ? await deliverAuthored(eventId, response?.payload ?? null)
+        : resolve(commandId, outcome, response?.payload ?? null);
       obs.hostOperation = hostOp;
       obs.outcome = outcome;
       obs.request = request;
@@ -406,7 +409,10 @@ export function createProcessRuntime(world, options = {}) {
         }
       });
       const outcome = response?.status === "failure" ? "failure" : "success";
-      const obs = resolve(commandId, outcome, response?.payload ?? null);
+      const eventId = outcome === "failure" ? binding.op.failureEvent : binding.op.successEvent;
+      const obs = eventId
+        ? await deliverAuthored(eventId, response?.payload ?? null)
+        : resolve(commandId, outcome, response?.payload ?? null);
       obs.route = route;
       obs.method = binding.op.method ?? "POST";
       obs.outcome = outcome;

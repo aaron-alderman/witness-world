@@ -7,7 +7,7 @@ function normalizeDatasourceId(value) {
   return /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(id) ? id : null;
 }
 
-function normalizeProvider(value) {
+export function normalizeProvider(value) {
   const provider = typeof value === "string" ? value.trim().toLowerCase() : "";
   return ["sqlite", "postgres", "mysql"].includes(provider) ? provider : null;
 }
@@ -43,7 +43,7 @@ function normalizePort(value, fallback = null) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function normalizeDatasourcePayload(body, existing = null) {
+export function normalizeDatasourcePayload(body, existing = null) {
   const provider = normalizeProvider(body?.provider ?? existing?.provider);
   if (!provider) return { ok: false, status: 400, reason: "provider must be sqlite, postgres, or mysql" };
   const id = normalizeDatasourceId(body?.id ?? existing?.id);
@@ -370,6 +370,78 @@ export function createSqlDbHandlers({
           migrationCount: 0,
           skippedCount: 0,
           stepCount: 0,
+          lastError: null
+        })
+      });
+    },
+
+    "db.sql.datasource.testDraft": async ({ req, res, requestActor, appContext }) => {
+      const gate = await withSqlGate({ world, backendHost, requestActor, appContext, requireBackendCapabilities, canMutateTarget, sendGateFailure, res, sendJson });
+      if (!gate.ok) return;
+      const body = await readJson(req);
+      const datasourceId = normalizeDatasourceId(body?.id);
+      const existing = datasourceId ? (appContext?.dbSql?.getDatasource?.(datasourceId) ?? null) : null;
+      const normalized = normalizeDatasourcePayload({
+        ...body,
+        id: datasourceId ?? existing?.id ?? "draft_test_connection"
+      }, existing);
+      if (!normalized.ok) {
+        sendJson(res, normalized.status || 400, { error: normalized.reason });
+        return;
+      }
+      const operationId = `sqlop_${Math.random().toString(36).slice(2, 12)}`;
+      const title = `test ${normalized.payload.datasourceName || normalized.payload.id}`;
+      const result = await appContext.dbSql.testConnection({ datasource: normalized.payload });
+      emitDbSqlOperation({
+        actor: requestActor,
+        kind: "test",
+        operationId,
+        title,
+        datasource: result.datasource || normalized.payload,
+        ok: result.ok,
+        body: result.ok ? { draft: true } : { reason: result.reason || "connection test failed", draft: true }
+      });
+      if (!result.ok) {
+        sendJson(res, result.status || 500, {
+          error: result.reason || "connection test failed",
+          datasource: result.datasource || normalized.payload,
+          operation: operationShape(gate.serverRunnerId, operationId, {
+            id: operationId,
+            title,
+            serverRunner: gate.serverRunnerId,
+            datasourceId: normalized.payload.id,
+            datasourceName: normalized.payload.datasourceName,
+            provider: normalized.payload.provider,
+            kind: "test",
+            status: "failed",
+            rowCount: 0,
+            changes: 0,
+            lastInsertRowid: 0,
+            migrationCount: 0,
+            skippedCount: 0,
+            stepCount: 0,
+            lastError: result.reason || "connection test failed"
+          })
+        });
+        return;
+      }
+      sendJson(res, 200, {
+        datasource: result.datasource || normalized.payload,
+        operation: operationShape(gate.serverRunnerId, operationId, {
+          id: operationId,
+          title,
+          serverRunner: gate.serverRunnerId,
+          datasourceId: normalized.payload.id,
+          datasourceName: normalized.payload.datasourceName,
+          provider: normalized.payload.provider,
+          kind: "test",
+          status: "succeeded",
+          rowCount: 1,
+          changes: 0,
+          lastInsertRowid: 0,
+          migrationCount: 0,
+          skippedCount: 0,
+          stepCount: 1,
           lastError: null
         })
       });

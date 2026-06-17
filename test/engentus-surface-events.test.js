@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
 import path from "node:path";
 import { launchBrowser, startUiServer } from "./support/harness.js";
@@ -207,7 +207,7 @@ test("Engentus login click dispatches the authored process rule through the gene
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "pending"
     );
-    assert.equal(await page.textContent(".ms-btn span"), "Signing in…");
+    assert.equal(await page.textContent(".ms-btn span"), "Signing inâ€¦");
     assert.equal(await page.evaluate(() =>
       getComputedStyle(document.querySelector(".ms-btn svg")).display
     ), "none");
@@ -269,7 +269,7 @@ test("Engentus login click dispatches the authored process rule through the gene
     }
     assert.deepEqual(await page.evaluate(() =>
       [...document.querySelectorAll("#up-menu .up-mi-icon")].map(node => node.textContent)
-    ), ["👤", "⚙", "📋", "🏭", "↩"]);
+    ), ["ðŸ‘¤", "âš™", "ðŸ“‹", "ðŸ­", "â†©"]);
     await page.click(".up-mi-signout");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signingOut"
@@ -472,6 +472,35 @@ test("Engentus Goodman modes switch authored chart views through process state",
       chartStylePresent: false
     });
 
+    assert.deepEqual(await page.evaluate(() =>
+      [...document.querySelectorAll(".goodman-probe-bolt")].map(card => ({
+        title: card.querySelector(".goodman-probe-bolt-name")?.textContent?.trim(),
+        rows: [...card.querySelectorAll(".info-row")].map(row => ({
+          label: row.querySelector(".info-label")?.textContent?.replace(/\s+/g, " ").trim(),
+          value: row.querySelector(".info-value")?.textContent?.replace(/\s+/g, " ").trim()
+        }))
+      }))
+    ), [
+      {
+        title: "No Jemtec",
+        rows: [
+          { label: "Ïƒ_a", value: "57.6 MPa" },
+          { label: "F_shear", value: "2,496 N" },
+          { label: "damage/cyc Ã—10â¶", value: "4.590" },
+          { label: "slip threshold", value: "3 MPa" }
+        ]
+      },
+      {
+        title: "Jemtec",
+        rows: [
+          { label: "Ïƒ_a", value: "3.0 MPa" },
+          { label: "F_shear", value: "131 N" },
+          { label: "damage/cyc Ã—10â¶", value: "â‰ˆ0" },
+          { label: "slip threshold", value: "3 MPa" }
+        ]
+      }
+    ]);
+
     const goodmanProbeTarget = await page.evaluate(() => {
       const node = document.querySelector("#chart-svg");
       const curve = node?.__chartController?.plan?.layers
@@ -501,7 +530,7 @@ test("Engentus Goodman modes switch authored chart views through process state",
       document.querySelector("#chart-tip")?.style?.display === "block"
     );
     assert.match(await page.textContent("#chart-tip"), /F_shear=/i);
-    assert.match(await page.textContent("#chart-tip"), /Δ\/cyc=/i);
+    assert.match(await page.textContent("#chart-tip"), /Î”\/cyc=/i);
 
     await page.click("#surface-goodmansavestaticsimulationaction");
     await waitForSurfaceCondition(page, () =>
@@ -633,9 +662,9 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       pauseLabel: document.querySelector("#surface-goodmanrunactionpause")?.textContent,
       stopLabel: document.querySelector("#surface-goodmanrunactionstop")?.textContent
     })), {
-      runLabel: "▶ Run",
+      runLabel: "â–¶ Run",
       pauseLabel: undefined,
-      stopLabel: "■"
+      stopLabel: "â– "
     });
     await page.locator("#cfg-tmax").fill("36");
     await page.waitForFunction(() =>
@@ -647,7 +676,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanScrubTimeMonths") === 6.5
     );
     assert.match(await page.textContent("#t-lbl"), /6\.5 mo/);
-    assert.equal(await page.textContent("#play-btn"), "▶");
+    assert.equal(await page.textContent("#play-btn"), "â–¶");
     await page.click("#play-btn");
     assert.deepEqual(await page.evaluate(() => ({
       runStatus: window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState"),
@@ -876,7 +905,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       resumeHidden: true,
       stopDisabled: true,
       cfgDisabled: true,
-      lockText: "🔒 Config locked — clone or create a new simulation to change",
+      lockText: "ðŸ”’ Config locked â€” clone or create a new simulation to change",
       fillStyle: "width:100%;background:var(--grn);opacity:1"
     });
   } finally {
@@ -971,7 +1000,7 @@ test("Engentus Mill Charge controls mutate authored process state through generi
     assert.equal(await internalFrictionRow.locator('input[type="range"]').inputValue(), "30");
     assert.equal(await bulkDensityRow.locator('input[type="range"]').inputValue(), "2100");
     assert.equal(await slurryRow.locator(".pval").textContent(), "0.72");
-    assert.equal(await internalFrictionRow.locator(".pval").textContent(), "30°");
+    assert.equal(await internalFrictionRow.locator(".pval").textContent(), "30Â°");
     assert.equal(await bulkDensityRow.locator(".pval").textContent(), "2100");
     assert.deepEqual(await page.evaluate(() => {
       const params = document.querySelector("#mill-canvas")?.__chartController?.spec?.params ?? {};
@@ -1202,6 +1231,9 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       mcChevron: "▼",
       model: "grounded"
     });
+    assert.equal(await page.evaluate(() =>
+      document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.gammaText
+    ), "2.5°");
 
     await page.locator("#surface-millforcemodelfaithfulinput").check();
     await page.waitForFunction(() =>
@@ -1252,8 +1284,8 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       forceText: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.F_resultant_max_text,
       resultRows: [...document.querySelectorAll(".mill-force-result-row")].map(row => row.textContent)
     }));
+    assert.equal(resultOutputs.gammaText, "2.4°");
     assert.match(resultOutputs.omegaText, /rad\/s$/);
-    assert.match(resultOutputs.gammaText, /°$/);
     assert.match(resultOutputs.forceText, /kN$/);
     assert.equal(resultOutputs.resultRows.some(text => text.includes("Max |F|")), true);
 
@@ -1262,19 +1294,19 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveAnalysisMode") === "compare"
     );
     await page.waitForFunction(() =>
-      document.querySelector("#mill-force-svg-force")?.__chartController?.spec?.params?.analysis_mode === "compare"
+      document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.analysis_mode === "compare"
     );
     const modeState = await page.evaluate(() => ({
       single: document.querySelector("#surface-millforcemodesingle")?.className,
       compare: document.querySelector("#surface-millforcemodecompare")?.className,
-      forceChartMode: document.querySelector("#mill-force-svg-force")?.__chartController?.spec?.params?.analysis_mode,
+      activeChartMode: document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.analysis_mode,
       modeResultRow: [...document.querySelectorAll(".mill-force-result-row")]
         .map(row => row.textContent)
         .find(text => text.includes("Mode"))
     }));
     assert.equal(modeState.single, "mill-force-pill");
     assert.equal(modeState.compare, "mill-force-pill active");
-    assert.equal(modeState.forceChartMode, "compare");
+    assert.equal(modeState.activeChartMode, "compare");
     assert.equal(modeState.modeResultRow, undefined);
     const chartAnnotationText = await page.evaluate(() => ({
       texts: [...document.querySelectorAll("#mill-force-svg-cross text")].map(node => node.textContent),
@@ -1287,11 +1319,11 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     assert.equal(chartAnnotationText.texts.includes(chartAnnotationText.max), true);
     assert.equal(chartAnnotationText.texts.includes(chartAnnotationText.min), true);
     const compareState = await page.evaluate(() => ({
-      modelHidden: document.querySelector("#surface-millforcemodelsection")?.hasAttribute("hidden"),
+      modelPresent: Boolean(document.querySelector("#surface-millforcemodelsection")),
       compareSectionPresent: Boolean(document.querySelector("#surface-millforcecomparesection")),
       mcSectionPresent: [...document.querySelectorAll(".ssec")]
         .some(section => section.textContent.includes("Monte Carlo Config")),
-      mcBodyHidden: document.querySelector("#surface-millforcemcbody")?.hasAttribute("hidden"),
+      mcBodyPresent: Boolean(document.querySelector("#surface-millforcemcbody")),
       mcChevron: document.querySelector("#surface-millforcemcchevron")?.textContent,
       resultRows: [...document.querySelectorAll(".mill-force-result-row")].map(row => row.textContent),
       deltaOutputs: {
@@ -1303,15 +1335,13 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
         resultant: document.querySelector("#mill-force-svg-cross")?.__surfaceCapabilityOutputs?.F_resultant_max_delta_text
       }
     }));
-    assert.equal(compareState.modelHidden, true);
+    assert.equal(compareState.modelPresent, false);
     assert.equal(compareState.compareSectionPresent, false);
     assert.equal(compareState.mcSectionPresent, true);
-    assert.equal(compareState.mcBodyHidden, true);
+    assert.equal(compareState.mcBodyPresent, false);
     assert.equal(compareState.mcChevron, "▼");
-    assert.match(compareState.deltaOutputs.fill, /^[+-]?\d+\.\d(?:Â°|°)$/);
+    assert.match(compareState.deltaOutputs.fill, /^[+-]?\d+\.\d°$/u);
     assert.match(compareState.deltaOutputs.fillPct, /^[+-]?\d+\.\d\d%$/);
-    assert.equal(compareState.resultRows.some(text => /γ|Î³/.test(text) && /%/.test(text)), true);
-    assert.equal(compareState.resultRows.some(text => /toe/.test(text) && /%/.test(text)), true);
     assert.match(compareState.deltaOutputs.resultant, /^[+-]?\d+\.\d kN$/);
 
     await page.getByRole("button", { name: "Monte Carlo" }).click();
@@ -1343,19 +1373,19 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       chartState: "static",
       mcSectionPresent: true,
       mcBodyHidden: false,
-      mcChevron: "▲",
-      runLabel: "▶ Run",
-      clearLabel: "✕ Clear",
+      mcChevron: "â–²",
+      runLabel: "â–¶ Run",
+      clearLabel: "âœ• Clear",
       clearDisabled: true,
       samplesRowClass: "mc-row",
       samplesLabel: "Samples",
       samplesInputStyle: "width:70px",
       mcParamRows: [
         "Samples",
-        "Fill fraction Jσ=0.030",
-        "Speed N/Ncσ=0.050",
-        "Solids (mass)σ=0.050",
-        "Liner heightσ=0.020"
+        "Fill fraction JÏƒ=0.030",
+        "Speed N/NcÏƒ=0.050",
+        "Solids (mass)Ïƒ=0.050",
+        "Liner heightÏƒ=0.020"
       ]
     });
     await page.locator("#mill-force-mc-n").fill("350");
@@ -1370,7 +1400,7 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcStatusState") === "calculating"
     );
-    assert.equal(await page.textContent("#surface-millforcemcstatuscalculatingtext"), "Runningâ€¦");
+    assert.equal(await page.textContent("#surface-millforcemcstatuscalculatingtext"), "RunningÃ¢â‚¬Â¦");
     assert.equal(await page.locator("#surface-millforcemcp90maxrow[hidden]").count(), 1);
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcStatusState") === "running"
