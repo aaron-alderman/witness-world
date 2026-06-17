@@ -11,11 +11,14 @@ enum EngentusShellRoute {
     goodman
     mill-charge
     mill-force
+    access-denied
+    not-found
     platform-config
     platform-config-operator
     platform-config-secrets
     platform-config-datasources
     platform-config-scripts
+    platform-config-access
     signout
   }
 }
@@ -102,6 +105,42 @@ state EngentusAuthNotice: string {
   initial "Demo accounts: aaron / aaron or callan / callan."
 }
 
+state EngentusSessionActor: string {
+  initial ""
+}
+
+state EngentusSessionIdentityId: string {
+  initial ""
+}
+
+state EngentusProfileDisplayName: string {
+  initial ""
+}
+
+state EngentusProfileJobTitle: string {
+  initial ""
+}
+
+state EngentusProfileInitials: string {
+  initial ""
+}
+
+state EngentusPendingRouteKey: string {
+  initial ""
+}
+
+state EngentusPendingFeatureId: string {
+  initial ""
+}
+
+state EngentusPendingRoutePath: string {
+  initial ""
+}
+
+state EngentusCurrentPath: string {
+  initial ""
+}
+
 state EngentusShellActiveRoute: EngentusShellRoute {
   initial login
 }
@@ -110,8 +149,12 @@ state EngentusShellAuthStatus: EngentusShellAuthState {
   initial idle
 }
 
-state PlatformConfigActorHeader: string {
-  initial "aaron"
+state EngentusMillForceAccess: string {
+  initial "login"
+}
+
+state EngentusPlatformConfigAccess: string {
+  initial "hidden"
 }
 
 state PlatformConfigNoticeText: string {
@@ -219,6 +262,62 @@ state PlatformConfigScriptResult: string {
 }
 
 state PlatformConfigScriptBusy: bool {
+  initial false
+}
+
+state PlatformConfigAccessIdentitySelectedId: string {
+  initial ""
+}
+
+state PlatformConfigAccessIdentityUsername: string {
+  initial ""
+}
+
+state PlatformConfigAccessIdentityDisplayName: string {
+  initial ""
+}
+
+state PlatformConfigAccessIdentityJobTitle: string {
+  initial ""
+}
+
+state PlatformConfigAccessIdentityInitials: string {
+  initial ""
+}
+
+state PlatformConfigAccessIdentityRoles: string {
+  initial ""
+}
+
+state PlatformConfigAccessIdentitySummary: string {
+  initial "Select an identity to edit profile fields and role assignments."
+}
+
+state PlatformConfigAccessFeatureSelectedId: string {
+  initial ""
+}
+
+state PlatformConfigAccessFeatureLabel: string {
+  initial ""
+}
+
+state PlatformConfigAccessFeatureVisibilityMode: string {
+  initial "normal"
+}
+
+state PlatformConfigAccessFeatureAllowedRoles: string {
+  initial ""
+}
+
+state PlatformConfigAccessFeatureSummary: string {
+  initial "Select a feature policy to edit visibility and required roles."
+}
+
+state PlatformConfigAccessRolesHint: string {
+  initial ""
+}
+
+state PlatformConfigAccessBusy: bool {
   initial false
 }
 
@@ -747,12 +846,22 @@ event EngentusSignBackInRequested {
 
 event EngentusSessionOpened {
   payload {
-    actor: PlatformConfigActorHeader
+    actor: EngentusSessionActor
+    identity: EngentusSessionIdentityId
+    displayName: EngentusProfileDisplayName
+    jobTitle: EngentusProfileJobTitle
+    initials: EngentusProfileInitials
+    resumeRouteKey: EngentusShellActiveRoute
+    featureAccess__engentus_mill_force: EngentusMillForceAccess
+    featureAccess__engentus_platform_config: EngentusPlatformConfigAccess
   }
   writes {
     EngentusAuthNotice: ""
     EngentusPasswordRevealed: false
     EngentusProfileMenuVisible: false
+    EngentusPendingRouteKey: ""
+    EngentusPendingFeatureId: ""
+    EngentusPendingRoutePath: ""
   }
 }
 
@@ -769,6 +878,17 @@ event EngentusSessionClosed {
   writes {
     EngentusAuthNotice: "Signed out. Demo accounts: aaron / aaron or callan / callan."
     EngentusPasswordRevealed: false
+    EngentusSessionActor: ""
+    EngentusSessionIdentityId: ""
+    EngentusProfileDisplayName: ""
+    EngentusProfileJobTitle: ""
+    EngentusProfileInitials: ""
+    EngentusPendingRouteKey: ""
+    EngentusPendingFeatureId: ""
+    EngentusPendingRoutePath: ""
+    EngentusCurrentPath: ""
+    EngentusMillForceAccess: "login"
+    EngentusPlatformConfigAccess: "hidden"
   }
 }
 
@@ -809,6 +929,9 @@ event PlatformConfigOpenDatasourcesRequested {
 }
 
 event PlatformConfigOpenScriptsRequested {
+}
+
+event PlatformConfigOpenAccessRequested {
 }
 
 event PlatformConfigRefreshSecretsRequested {
@@ -876,6 +999,18 @@ event PlatformConfigDeleteDatasourceRequested {
 event PlatformConfigTestDatasourceRequested {
 }
 
+event PlatformConfigLoadAccessIdentityRequested {
+}
+
+event PlatformConfigUpdateAccessIdentityRequested {
+}
+
+event PlatformConfigLoadAccessFeatureRequested {
+}
+
+event PlatformConfigUpdateAccessFeatureRequested {
+}
+
 event PlatformConfigStateLoaded {
   payload {
     PlatformConfigSecretSelectedId: PlatformConfigSecretSelectedId
@@ -896,11 +1031,25 @@ event PlatformConfigStateLoaded {
     PlatformConfigDatasourceSearchVisible: PlatformConfigDatasourceSearchVisible
     PlatformConfigDatasourceSummary: PlatformConfigDatasourceSummary
     PlatformConfigScriptDatasourceId: PlatformConfigScriptDatasourceId
+    PlatformConfigAccessIdentitySelectedId: PlatformConfigAccessIdentitySelectedId
+    PlatformConfigAccessIdentityUsername: PlatformConfigAccessIdentityUsername
+    PlatformConfigAccessIdentityDisplayName: PlatformConfigAccessIdentityDisplayName
+    PlatformConfigAccessIdentityJobTitle: PlatformConfigAccessIdentityJobTitle
+    PlatformConfigAccessIdentityInitials: PlatformConfigAccessIdentityInitials
+    PlatformConfigAccessIdentityRoles: PlatformConfigAccessIdentityRoles
+    PlatformConfigAccessIdentitySummary: PlatformConfigAccessIdentitySummary
+    PlatformConfigAccessFeatureSelectedId: PlatformConfigAccessFeatureSelectedId
+    PlatformConfigAccessFeatureLabel: PlatformConfigAccessFeatureLabel
+    PlatformConfigAccessFeatureVisibilityMode: PlatformConfigAccessFeatureVisibilityMode
+    PlatformConfigAccessFeatureAllowedRoles: PlatformConfigAccessFeatureAllowedRoles
+    PlatformConfigAccessFeatureSummary: PlatformConfigAccessFeatureSummary
+    PlatformConfigAccessRolesHint: PlatformConfigAccessRolesHint
     message: PlatformConfigNoticeText
   }
   writes {
     PlatformConfigSecretBusy: false
     PlatformConfigDatasourceBusy: false
+    PlatformConfigAccessBusy: false
     PlatformConfigNoticeTone: success
   }
 }
@@ -913,6 +1062,7 @@ event PlatformConfigStateLoadFailed {
   writes {
     PlatformConfigSecretBusy: false
     PlatformConfigDatasourceBusy: false
+    PlatformConfigAccessBusy: false
     PlatformConfigNoticeTone: error
   }
 }
@@ -935,6 +1085,17 @@ event PlatformConfigDatasourceMutationFailed {
   }
   writes {
     PlatformConfigDatasourceBusy: false
+    PlatformConfigNoticeTone: error
+  }
+}
+
+event PlatformConfigAccessMutationFailed {
+  payload {
+    summary: PlatformConfigAccessIdentitySummary
+    message: PlatformConfigNoticeText
+  }
+  writes {
+    PlatformConfigAccessBusy: false
     PlatformConfigNoticeTone: error
   }
 }
@@ -975,6 +1136,11 @@ command EngentusOpenSession {
   fields {
     username: EngentusLoginUsername
     password: EngentusLoginPassword
+    pendingRouteKey: EngentusPendingRouteKey
+    pendingFeatureId: EngentusPendingFeatureId
+    defaultRouteKey: "home"
+    forbiddenRouteKey: "access-denied"
+    notFoundRouteKey: "not-found"
   }
 }
 
@@ -1070,12 +1236,41 @@ command PlatformConfigRunScript {
   }
 }
 
+command PlatformConfigLoadAccessIdentity {
+  fields {
+    id: PlatformConfigAccessIdentitySelectedId
+  }
+}
+
+command PlatformConfigUpdateAccessIdentity {
+  fields {
+    id: PlatformConfigAccessIdentitySelectedId
+    displayName: PlatformConfigAccessIdentityDisplayName
+    jobTitle: PlatformConfigAccessIdentityJobTitle
+    initials: PlatformConfigAccessIdentityInitials
+    rolesCsv: PlatformConfigAccessIdentityRoles
+  }
+}
+
+command PlatformConfigLoadAccessFeature {
+  fields {
+    id: PlatformConfigAccessFeatureSelectedId
+  }
+}
+
+command PlatformConfigUpdateAccessFeature {
+  fields {
+    id: PlatformConfigAccessFeatureSelectedId
+    visibilityMode: PlatformConfigAccessFeatureVisibilityMode
+    allowedRolesCsv: PlatformConfigAccessFeatureAllowedRoles
+  }
+}
+
 adapter PlatformConfigSnapshotHttp using HTTP {
   command PlatformConfigLoadSnapshot
   kind command
   method POST
   route /api/pipeline/platform-config/snapshot
-  actor_state PlatformConfigActorHeader
   host_operation engentus.platform.snapshot
   success_event PlatformConfigStateLoaded
   failure_event PlatformConfigStateLoadFailed
@@ -1083,6 +1278,8 @@ adapter PlatformConfigSnapshotHttp using HTTP {
   collection_outputs = {
     PlatformConfigSecrets = "secrets"
     PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
   }
 }
 
@@ -1111,7 +1308,6 @@ adapter PlatformConfigSecretReadHttp using HTTP {
   kind command
   method GET
   route /api/pipeline/platform-config/secrets/${id}
-  actor_state PlatformConfigActorHeader
   host_operation engentus.platform.secret.read
   success_event PlatformConfigStateLoaded
   failure_event PlatformConfigSecretMutationFailed
@@ -1119,6 +1315,8 @@ adapter PlatformConfigSecretReadHttp using HTTP {
   collection_outputs = {
     PlatformConfigSecrets = "secrets"
     PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
   }
 }
 
@@ -1127,7 +1325,6 @@ adapter PlatformConfigSecretCreateHttp using HTTP {
   kind command
   method POST
   route /api/pipeline/platform-config/secrets
-  actor_state PlatformConfigActorHeader
   host_operation engentus.platform.secret.create
   success_event PlatformConfigStateLoaded
   failure_event PlatformConfigSecretMutationFailed
@@ -1135,6 +1332,8 @@ adapter PlatformConfigSecretCreateHttp using HTTP {
   collection_outputs = {
     PlatformConfigSecrets = "secrets"
     PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
   }
 }
 
@@ -1143,7 +1342,6 @@ adapter PlatformConfigSecretOverwriteHttp using HTTP {
   kind command
   method PUT
   route /api/pipeline/platform-config/secrets/${id}/value
-  actor_state PlatformConfigActorHeader
   host_operation engentus.platform.secret.write
   success_event PlatformConfigStateLoaded
   failure_event PlatformConfigSecretMutationFailed
@@ -1151,6 +1349,8 @@ adapter PlatformConfigSecretOverwriteHttp using HTTP {
   collection_outputs = {
     PlatformConfigSecrets = "secrets"
     PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
   }
 }
 
@@ -1159,7 +1359,6 @@ adapter PlatformConfigSecretDeleteHttp using HTTP {
   kind command
   method DELETE
   route /api/pipeline/platform-config/secrets/${id}
-  actor_state PlatformConfigActorHeader
   host_operation engentus.platform.secret.delete
   success_event PlatformConfigStateLoaded
   failure_event PlatformConfigSecretMutationFailed
@@ -1167,6 +1366,8 @@ adapter PlatformConfigSecretDeleteHttp using HTTP {
   collection_outputs = {
     PlatformConfigSecrets = "secrets"
     PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
   }
 }
 
@@ -1175,7 +1376,6 @@ adapter PlatformConfigDatasourceReadHttp using HTTP {
   kind command
   method GET
   route /api/pipeline/platform-config/datasources/${id}
-  actor_state PlatformConfigActorHeader
   host_operation engentus.platform.datasource.read
   success_event PlatformConfigStateLoaded
   failure_event PlatformConfigDatasourceMutationFailed
@@ -1183,6 +1383,8 @@ adapter PlatformConfigDatasourceReadHttp using HTTP {
   collection_outputs = {
     PlatformConfigSecrets = "secrets"
     PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
   }
 }
 
@@ -1191,7 +1393,6 @@ adapter PlatformConfigDatasourceCreateHttp using HTTP {
   kind command
   method POST
   route /api/pipeline/platform-config/datasources
-  actor_state PlatformConfigActorHeader
   host_operation engentus.platform.datasource.create
   success_event PlatformConfigStateLoaded
   failure_event PlatformConfigDatasourceMutationFailed
@@ -1199,6 +1400,8 @@ adapter PlatformConfigDatasourceCreateHttp using HTTP {
   collection_outputs = {
     PlatformConfigSecrets = "secrets"
     PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
   }
 }
 
@@ -1207,7 +1410,6 @@ adapter PlatformConfigDatasourceUpdateHttp using HTTP {
   kind command
   method PATCH
   route /api/pipeline/platform-config/datasources/${id}
-  actor_state PlatformConfigActorHeader
   host_operation engentus.platform.datasource.update
   success_event PlatformConfigStateLoaded
   failure_event PlatformConfigDatasourceMutationFailed
@@ -1215,6 +1417,8 @@ adapter PlatformConfigDatasourceUpdateHttp using HTTP {
   collection_outputs = {
     PlatformConfigSecrets = "secrets"
     PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
   }
 }
 
@@ -1223,7 +1427,6 @@ adapter PlatformConfigDatasourceDeleteHttp using HTTP {
   kind command
   method DELETE
   route /api/pipeline/platform-config/datasources/${id}
-  actor_state PlatformConfigActorHeader
   host_operation engentus.platform.datasource.delete
   success_event PlatformConfigStateLoaded
   failure_event PlatformConfigDatasourceMutationFailed
@@ -1231,6 +1434,8 @@ adapter PlatformConfigDatasourceDeleteHttp using HTTP {
   collection_outputs = {
     PlatformConfigSecrets = "secrets"
     PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
   }
 }
 
@@ -1239,7 +1444,6 @@ adapter PlatformConfigDatasourceTestHttp using HTTP {
   kind command
   method POST
   route /api/pipeline/platform-config/datasources/test
-  actor_state PlatformConfigActorHeader
   host_operation engentus.platform.datasource.test
   success_event PlatformConfigStateLoaded
   failure_event PlatformConfigDatasourceMutationFailed
@@ -1247,6 +1451,8 @@ adapter PlatformConfigDatasourceTestHttp using HTTP {
   collection_outputs = {
     PlatformConfigSecrets = "secrets"
     PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
   }
 }
 
@@ -1255,11 +1461,78 @@ adapter PlatformConfigScriptStubHttp using HTTP {
   kind command
   method POST
   route /api/pipeline/scripts/run
-  actor_state PlatformConfigActorHeader
   host_operation engentus.platform.script.stub
   success_event PlatformConfigScriptSucceeded
   failure_event PlatformConfigScriptFailed
   loading_state PlatformConfigScriptBusy
+}
+
+adapter PlatformConfigAccessIdentityReadHttp using HTTP {
+  command PlatformConfigLoadAccessIdentity
+  kind command
+  method GET
+  route /api/pipeline/platform-config/access/identities/${id}
+  host_operation engentus.platform.access.identity.read
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigAccessMutationFailed
+  loading_state PlatformConfigAccessBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
+  }
+}
+
+adapter PlatformConfigAccessIdentityUpdateHttp using HTTP {
+  command PlatformConfigUpdateAccessIdentity
+  kind command
+  method PATCH
+  route /api/pipeline/platform-config/access/identities/${id}
+  host_operation engentus.platform.access.identity.update
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigAccessMutationFailed
+  loading_state PlatformConfigAccessBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
+  }
+}
+
+adapter PlatformConfigAccessFeatureReadHttp using HTTP {
+  command PlatformConfigLoadAccessFeature
+  kind command
+  method GET
+  route /api/pipeline/platform-config/access/feature-policies/${id}
+  host_operation engentus.platform.access.feature.read
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigAccessMutationFailed
+  loading_state PlatformConfigAccessBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
+  }
+}
+
+adapter PlatformConfigAccessFeatureUpdateHttp using HTTP {
+  command PlatformConfigUpdateAccessFeature
+  kind command
+  method PATCH
+  route /api/pipeline/platform-config/access/feature-policies/${id}
+  host_operation engentus.platform.access.feature.update
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigAccessMutationFailed
+  loading_state PlatformConfigAccessBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
+  }
 }
 
 event MillForceShowCrossSectionRequested {
@@ -1484,7 +1757,17 @@ process EngentusShellNavigation {
     EngentusLoginUsername
     EngentusLoginPassword
     EngentusAuthNotice
-    PlatformConfigActorHeader
+    EngentusSessionActor
+    EngentusSessionIdentityId
+    EngentusProfileDisplayName
+    EngentusProfileJobTitle
+    EngentusProfileInitials
+    EngentusPendingRouteKey
+    EngentusPendingFeatureId
+    EngentusPendingRoutePath
+    EngentusCurrentPath
+    EngentusMillForceAccess
+    EngentusPlatformConfigAccess
     PlatformConfigNoticeText
     PlatformConfigNoticeTone
     PlatformConfigSecretSelectedId
@@ -1512,6 +1795,20 @@ process EngentusShellNavigation {
     PlatformConfigScriptDatasourceId
     PlatformConfigScriptResult
     PlatformConfigScriptBusy
+    PlatformConfigAccessIdentitySelectedId
+    PlatformConfigAccessIdentityUsername
+    PlatformConfigAccessIdentityDisplayName
+    PlatformConfigAccessIdentityJobTitle
+    PlatformConfigAccessIdentityInitials
+    PlatformConfigAccessIdentityRoles
+    PlatformConfigAccessIdentitySummary
+    PlatformConfigAccessFeatureSelectedId
+    PlatformConfigAccessFeatureLabel
+    PlatformConfigAccessFeatureVisibilityMode
+    PlatformConfigAccessFeatureAllowedRoles
+    PlatformConfigAccessFeatureSummary
+    PlatformConfigAccessRolesHint
+    PlatformConfigAccessBusy
     MillChargeSpeedFrac
     MillChargeFillFrac
     MillChargeSlurryContent
@@ -1604,6 +1901,7 @@ process EngentusShellNavigation {
     PlatformConfigOpenSecretsRequested
     PlatformConfigOpenDatasourcesRequested
     PlatformConfigOpenScriptsRequested
+    PlatformConfigOpenAccessRequested
     PlatformConfigRefreshSecretsRequested
     PlatformConfigSearchSecretsRequested
     PlatformConfigLoadSecretRequested
@@ -1623,6 +1921,11 @@ process EngentusShellNavigation {
     PlatformConfigDeleteDatasourceRequested
     PlatformConfigTestDatasourceRequested
     PlatformConfigDatasourceMutationFailed
+    PlatformConfigLoadAccessIdentityRequested
+    PlatformConfigUpdateAccessIdentityRequested
+    PlatformConfigLoadAccessFeatureRequested
+    PlatformConfigUpdateAccessFeatureRequested
+    PlatformConfigAccessMutationFailed
     PlatformConfigRunScriptRequested
     PlatformConfigScriptSucceeded
     PlatformConfigScriptFailed
@@ -1670,6 +1973,10 @@ process EngentusShellNavigation {
     PlatformConfigUpdateDatasource
     PlatformConfigDeleteDatasource
     PlatformConfigTestDatasource
+    PlatformConfigLoadAccessIdentity
+    PlatformConfigUpdateAccessIdentity
+    PlatformConfigLoadAccessFeature
+    PlatformConfigUpdateAccessFeature
     PlatformConfigRunScript
   }
   rules {
@@ -1689,7 +1996,6 @@ process EngentusShellNavigation {
       }
       set EngentusShellAuthStatus folding
       delay 920ms
-      set EngentusShellActiveRoute home
       set EngentusShellAuthStatus signedIn
     }
     on EngentusSessionOpenFailed {
@@ -1708,11 +2014,15 @@ process EngentusShellNavigation {
       set EngentusShellActiveRoute login
       set EngentusShellAuthStatus idle
       set EngentusAuthNotice "Demo accounts: aaron / aaron or callan / callan."
+      set EngentusPendingRouteKey ""
+      set EngentusPendingFeatureId ""
+      set EngentusPendingRoutePath ""
     }
     on EngentusNavigatePlatformConfigRequested {
       set EngentusShellActiveRoute platform-config-operator
       set PlatformConfigSecretBusy true
       set PlatformConfigDatasourceBusy true
+      set PlatformConfigAccessBusy true
       set PlatformConfigNoticeTone warn
       set PlatformConfigNoticeText "Loading platform config..."
       command PlatformConfigLoadSnapshot
@@ -1721,6 +2031,7 @@ process EngentusShellNavigation {
       set EngentusShellActiveRoute platform-config-operator
       set PlatformConfigSecretBusy true
       set PlatformConfigDatasourceBusy true
+      set PlatformConfigAccessBusy true
       set PlatformConfigNoticeTone warn
       set PlatformConfigNoticeText "Loading platform config..."
       command PlatformConfigLoadSnapshot
@@ -1744,6 +2055,13 @@ process EngentusShellNavigation {
       set PlatformConfigDatasourceBusy true
       set PlatformConfigNoticeTone warn
       set PlatformConfigNoticeText "Loading data sources for scripts..."
+      command PlatformConfigLoadSnapshot
+    }
+    on PlatformConfigOpenAccessRequested {
+      set EngentusShellActiveRoute platform-config-access
+      set PlatformConfigAccessBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Loading identities and feature policies..."
       command PlatformConfigLoadSnapshot
     }
     on PlatformConfigRefreshSecretsRequested {
@@ -1824,6 +2142,30 @@ process EngentusShellNavigation {
       set PlatformConfigNoticeText "Testing datasource connection..."
       command PlatformConfigTestDatasource
     }
+    on PlatformConfigLoadAccessIdentityRequested {
+      set PlatformConfigAccessBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Loading identity..."
+      command PlatformConfigLoadAccessIdentity
+    }
+    on PlatformConfigUpdateAccessIdentityRequested {
+      set PlatformConfigAccessBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Updating identity access..."
+      command PlatformConfigUpdateAccessIdentity
+    }
+    on PlatformConfigLoadAccessFeatureRequested {
+      set PlatformConfigAccessBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Loading feature policy..."
+      command PlatformConfigLoadAccessFeature
+    }
+    on PlatformConfigUpdateAccessFeatureRequested {
+      set PlatformConfigAccessBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Updating feature policy..."
+      command PlatformConfigUpdateAccessFeature
+    }
     on PlatformConfigRunScriptRequested {
       set PlatformConfigScriptBusy true
       set PlatformConfigNoticeTone warn
@@ -1861,10 +2203,13 @@ view EngentusRoot {
     EngentusApp
     EngentusMillChargeApp
     EngentusMillForceApp
+    EngentusAccessDenied
+    EngentusNotFound
     EngentusPlatformConfigApp
     EngentusPlatformConfigSecretsApp
     EngentusPlatformConfigDatasourcesApp
     EngentusPlatformConfigScriptsApp
+    EngentusPlatformConfigAccessApp
     EngentusSignout
   }
 }

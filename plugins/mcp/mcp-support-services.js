@@ -1,4 +1,5 @@
 import { moduleProjectors } from "../../src/modules.js";
+import { normalizeAuthorityTuple } from "../../src/runtime-authz.js";
 
 export function createMcpBundleSupportServices({
   world,
@@ -62,7 +63,7 @@ export function createMcpBundleSupportServices({
         return true;
     }
   };
-  const resolveMcpPrincipal = ({ req, requestActor, mcpServer, appContext }) => {
+  const resolveMcpPrincipal = ({ req, requestActor, requestIdentity, requestSession, mcpServer, appContext }) => {
     const transport = String(headerValue(req?.headers?.["x-witness-mcp-transport"]) || "http").trim().toLowerCase();
     const overrideToken = headerValue(req?.headers?.["x-witness-mcp-internal-token"]).trim();
     const overrideActor = headerValue(req?.headers?.["x-witness-mcp-actor"]).trim() || null;
@@ -71,18 +72,52 @@ export function createMcpBundleSupportServices({
     const validServiceToken = typeof serviceToken === "string" && serviceToken.trim()
       ? bearer === `Bearer ${serviceToken.trim()}`
       : false;
+    const requestAuthority = requestSession
+      ? normalizeAuthorityTuple(requestSession, { allowAliases: true })
+      : normalizeAuthorityTuple({
+          authenticatedIdentity: requestIdentity?.id ?? requestIdentity ?? null,
+          authenticatedActor: requestActor,
+          effectiveIdentity: requestIdentity?.id ?? requestIdentity ?? null,
+          effectiveActor: requestActor,
+          authorityMode: "direct"
+        });
+    const okPrincipal = (actingMode, authority) => ({
+      ok: true,
+      actingMode,
+      actor: authority.effectiveActor,
+      identity: authority.effectiveIdentity,
+      authenticatedIdentity: authority.authenticatedIdentity,
+      authenticatedActor: authority.authenticatedActor,
+      effectiveIdentity: authority.effectiveIdentity,
+      effectiveActor: authority.effectiveActor,
+      authorityMode: authority.authorityMode,
+      assumptionGrantId: authority.assumptionGrantId,
+      transport
+    });
     if (transport === "stdio" && overrideActor && (!mcpInternalToken || overrideToken === mcpInternalToken)) {
-      return { ok: true, actingMode: "delegated", actor: overrideActor, transport };
+      return okPrincipal("delegated", normalizeAuthorityTuple({
+        authenticatedActor: overrideActor,
+        effectiveActor: overrideActor,
+        authorityMode: "direct"
+      }));
     }
     if (transport === "stdio" && mcpServer.serviceIdentity) {
-      return { ok: true, actingMode: "service", actor: mcpServer.serviceIdentity, transport };
+      return okPrincipal("service", normalizeAuthorityTuple({
+        authenticatedActor: mcpServer.serviceIdentity,
+        effectiveActor: mcpServer.serviceIdentity,
+        authorityMode: "service"
+      }));
     }
     if (validServiceToken) {
       if (!mcpServer.serviceIdentity) return { ok: false, status: 403, reason: "mcp server has no service identity", transport };
-      return { ok: true, actingMode: "service", actor: mcpServer.serviceIdentity, transport };
+      return okPrincipal("service", normalizeAuthorityTuple({
+        authenticatedActor: mcpServer.serviceIdentity,
+        effectiveActor: mcpServer.serviceIdentity,
+        authorityMode: "service"
+      }));
     }
-    if (requestActor) return { ok: true, actingMode: "delegated", actor: requestActor, transport };
-    return { ok: true, actingMode: null, actor: null, transport };
+    if (requestAuthority.effectiveActor) return okPrincipal("delegated", requestAuthority);
+    return okPrincipal(null, requestAuthority);
   };
   const mcpScopeAllows = (install, args, appContext) => {
     if ((!install.scopeContexts || !install.scopeContexts.length) && (!install.scopeTargets || !install.scopeTargets.length)) {

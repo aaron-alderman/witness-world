@@ -3,43 +3,59 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
-  ENGENTUS_CHART_THEME_STYLESHEET,
-  ENGENTUS_SHELL_THEME_STYLESHEET
-} from "../examples/engentus/app/engentus-theme.wcss.js";
-import { renderWcssStylesheet } from "../src/uplift/wcss-grammar.js";
+  composeEngentusStylesheets,
+  loadEngentusAppliedWcss,
+  loadEngentusBrowserDeclarationGroups,
+  loadEngentusBrowserLoweringMap,
+  renderOracleStylesheet
+} from "../examples/engentus/app/engentus-style-application.js";
 
-function render(stylesheet) {
-  return renderWcssStylesheet(stylesheet, {
-    banner: "Generated from examples/engentus/app/engentus-theme.wcss.js"
-  });
-}
-
-test("engentus nested WCSS theme grammar emits the checked-in shell and chart CSS", async () => {
-  const [shellCss, chartCss] = await Promise.all([
+test("engentus canonical browser declaration grammar emits the checked-in shell and chart CSS", async () => {
+  const [authoredPlan, shellCss, chartCss] = await Promise.all([
+    loadEngentusAppliedWcss(),
     readFile(path.join(process.cwd(), "examples", "engentus", "app", "engentus-shell.css"), "utf8"),
     readFile(path.join(process.cwd(), "examples", "engentus", "app", "engentus-chart-pages.css"), "utf8")
   ]);
 
-  assert.equal(shellCss, render(ENGENTUS_SHELL_THEME_STYLESHEET));
-  assert.equal(chartCss, render(ENGENTUS_CHART_THEME_STYLESHEET));
+  const stylesheets = composeEngentusStylesheets({
+    authoredPlan,
+    switchManifest: {
+      theme: "engentus",
+      slices: {}
+    }
+  });
+
+  assert.equal(shellCss, renderOracleStylesheet(stylesheets.shell));
+  assert.equal(chartCss, renderOracleStylesheet(stylesheets.chart));
 });
 
-test("engentus nested WCSS grammar keeps theme ownership grouped by family", () => {
-  const shellGroupNames = ENGENTUS_SHELL_THEME_STYLESHEET.blocks
-    .filter(block => block.kind === "group")
-    .map(block => block.name);
-  const chartGroupNames = ENGENTUS_CHART_THEME_STYLESHEET.blocks
-    .filter(block => block.kind === "group")
-    .map(block => block.name);
+test("engentus canonical browser lowering keeps declaration groups partitioned by backend bucket", async () => {
+  const [browserLowering, declarationGroups] = await Promise.all([
+    loadEngentusBrowserLoweringMap(),
+    loadEngentusBrowserDeclarationGroups()
+  ]);
+
+  const shellGroupNames = browserLowering.assets
+    .find(asset => asset.name === "shell")
+    .declarationGroups
+    .map(group => group.name);
+  const chartGroupNames = browserLowering.assets
+    .find(asset => asset.name === "chart")
+    .declarationGroups
+    .map(group => group.name);
 
   assert.deepEqual(shellGroupNames, [
     "foundation",
     "toolbar",
+    "goodman toolbar",
     "auth",
     "home",
     "shared views",
+    "goodman view",
     "chart scaffold",
+    "goodman chart scaffold",
     "floating windows",
+    "goodman windows",
     "controls and editor",
     "mill charge",
     "mill force",
@@ -51,7 +67,7 @@ test("engentus nested WCSS grammar keeps theme ownership grouped by family", () 
     "chart surfaces"
   ]);
 
-  const rootTokens = ENGENTUS_SHELL_THEME_STYLESHEET.blocks[0].blocks[1];
+  const rootTokens = declarationGroups.shell[0].blocks[1];
   assert.equal(rootTokens.selector, ":root");
   assert.deepEqual(
     rootTokens.declarations.map(([property]) => property).slice(0, 5),

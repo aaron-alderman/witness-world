@@ -656,6 +656,7 @@ function semanticRvmShape(kind, name, type, bodyLines, header = {}) {
       return {
         kind: "surface",
         name,
+        identity: readSimpleValue(bodyLines, "identity"),
         surfaceKind: readSimpleValue(bodyLines, "kind"),
         className: readSimpleValue(bodyLines, "class"),
         processRef: readSimpleValue(bodyLines, "process"),
@@ -680,6 +681,7 @@ function semanticRvmShape(kind, name, type, bodyLines, header = {}) {
       return {
         kind: "surface",
         name,
+        identity: readSimpleValue(bodyLines, "identity"),
         surfaceKind: "chart",
         modelRef: header.using ?? null,
         frame: readSimpleValue(bodyLines, "frame"),
@@ -940,6 +942,7 @@ function semanticInlineRvmShape(kind, name, type, { using = null, attrs = {}, ta
       return {
         kind: "surface",
         name,
+        identity: attrs.identity ?? null,
         surfaceKind: attrs.kind ?? null,
         className: attrs.class ?? null,
         processRef: attrs.process ?? null,

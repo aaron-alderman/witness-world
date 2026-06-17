@@ -1,3 +1,5 @@
+import { normalizeAuthorityTuple } from "./runtime-authz.js";
+
 export function sseFrame(count, witness) {
   return `data: ${JSON.stringify({ count, id: witness?.id ?? null, process: witness?.process ?? null })}\n\n`;
 }
@@ -24,9 +26,16 @@ export function resolveRequestContext(req, sessionStore, { allowActorHeader = fa
   const sessionId = cookies.witness_session || "";
   const session = sessionId ? sessionStore?.get(sessionId) ?? null : null;
   if (session) {
+    const authority = normalizeAuthorityTuple(session, { allowAliases: true });
     return {
-      actor: session.actor,
-      identity: session.identity,
+      actor: authority.effectiveActor,
+      identity: authority.effectiveIdentity,
+      authenticatedIdentity: authority.authenticatedIdentity,
+      authenticatedActor: authority.authenticatedActor,
+      effectiveIdentity: authority.effectiveIdentity,
+      effectiveActor: authority.effectiveActor,
+      authorityMode: authority.authorityMode,
+      assumptionGrantId: authority.assumptionGrantId,
       session
     };
   }
@@ -34,14 +43,31 @@ export function resolveRequestContext(req, sessionStore, { allowActorHeader = fa
     return {
       actor: null,
       identity: null,
+      authenticatedIdentity: null,
+      authenticatedActor: null,
+      effectiveIdentity: null,
+      effectiveActor: null,
+      authorityMode: "direct",
+      assumptionGrantId: null,
       session: null
     };
   }
   const raw = req.headers["x-witness-actor"];
   const headerActor = typeof raw === "string" && raw.trim() ? raw.trim() : null;
+  const authority = normalizeAuthorityTuple({
+    authenticatedActor: headerActor,
+    effectiveActor: headerActor,
+    authorityMode: "direct"
+  });
   return {
-    actor: headerActor,
-    identity: null,
+    actor: authority.effectiveActor,
+    identity: authority.effectiveIdentity,
+    authenticatedIdentity: authority.authenticatedIdentity,
+    authenticatedActor: authority.authenticatedActor,
+    effectiveIdentity: authority.effectiveIdentity,
+    effectiveActor: authority.effectiveActor,
+    authorityMode: authority.authorityMode,
+    assumptionGrantId: authority.assumptionGrantId,
     session: null
   };
 }

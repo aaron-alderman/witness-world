@@ -120,7 +120,7 @@ Shipped runtime status so far:
   - authored `mcpServer` definitions bound to an existing `serverRunner`
   - authored `mcpToolInstall` rows that choose a tool family, acting mode, and optional `scopeContexts` / `scopeTargets`
   - local-first `stdio` and HTTP transports
-  - delegated mode using the requesting actor and service mode using `mcpServer.serviceIdentity`
+  - delegated mode using the requesting authority tuple and service mode using the same runtime authority tuple with `authorityMode = "service"` and `mcpServer.serviceIdentity` as the canonical actor
   - runtime-config-backed bearer auth for HTTP service mode through `mcp.<serverId>.token`
   - MCP lifecycle and tools methods for `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call`
   - a first tool catalog over real witnessed seams such as world reads, authoring/proposals, canvas, blobs/streams/assets, runtime config, SQL, search, jobs, outbound HTTP, webhooks, and notifications

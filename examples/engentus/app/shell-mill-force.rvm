@@ -1,4 +1,4 @@
-import desire/v3-alpha
+﻿import desire/v3-alpha
 
 view MillForceModeTitle {
   kind text
@@ -845,7 +845,7 @@ view MillForceFillAngleValue {
   prop tag = "span"
   prop text = "0.0°"
   bindings {
-    text from capability MillForceCross.gammaText
+    text from projection gammaText
   }
 }
 
@@ -866,7 +866,7 @@ view MillForceFillAngleDiff {
   prop text = "0.00%"
   bindings {
     visible from state MillForceActiveAnalysisMode map compare true default false
-    text from capability MillForceCross.gammaDeltaPercentText
+    text from projection gammaDeltaPercentText
   }
 }
 
@@ -883,7 +883,7 @@ view MillForceShoulderAngleValue {
   prop tag = "span"
   prop text = "0.0°"
   bindings {
-    text from capability MillForceCross.phiText
+    text from projection phiText
   }
 }
 
@@ -909,7 +909,7 @@ view MillForceToeAngleValue {
   prop tag = "span"
   prop text = "0.0°"
   bindings {
-    text from capability MillForceCross.phiPrimeText
+    text from projection phiPrimeText
   }
 }
 
@@ -930,7 +930,7 @@ view MillForceToeAngleDiff {
   prop text = "0.00%"
   bindings {
     visible from state MillForceActiveAnalysisMode map compare true default false
-    text from capability MillForceCross.phiPrimeDeltaPercentText
+    text from projection phiPrimeDeltaPercentText
   }
 }
 
@@ -947,7 +947,7 @@ view MillForceOmegaValue {
   prop tag = "span"
   prop text = "0.00 rad/s"
   bindings {
-    text from capability MillForceCross.omegaText
+    text from projection omegaText
   }
 }
 
@@ -973,7 +973,7 @@ view MillForceChargeDensityValue {
   prop tag = "span"
   prop text = "0.000 SG"
   bindings {
-    text from capability MillForceCross.rhoChargeText
+    text from projection rhoChargeText
   }
 }
 
@@ -999,7 +999,7 @@ view MillForceMaxRadialValue {
   prop tag = "span"
   prop text = "0.0 kN"
   bindings {
-    text from capability MillForceCross.F_r_max_text
+    text from projection F_r_max_text
   }
 }
 
@@ -1025,7 +1025,7 @@ view MillForceMaxResultantValue {
   prop tag = "span"
   prop text = "0.0 kN"
   bindings {
-    text from capability MillForceCross.F_resultant_max_text
+    text from projection F_resultant_max_text
   }
 }
 
@@ -1432,7 +1432,7 @@ view MillForceMcStatusCalculatingText {
   kind text
   class mill-force-rd
   prop tag = "span"
-  prop text = "Runningâ€¦"
+  prop text = "Running…"
   bindings {
     visible from state MillForceMcStatusState map calculating true default false
   }
@@ -1687,4 +1687,7 @@ view EngentusMillForceApp {
     MillForceBody
   }
 }
+
+
+
 

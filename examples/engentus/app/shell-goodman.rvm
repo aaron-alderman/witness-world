@@ -1783,7 +1783,7 @@ view GoodmanBoltSetLoadAppliedShearValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "10000 N  Â· free normal"
+  prop text = "10000 N  · free normal"
 }
 
 view GoodmanBoltSetLoadAngularSpanRow {
@@ -1806,7 +1806,7 @@ view GoodmanBoltSetLoadAngularSpanValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "1.00  Â· free normal"
+  prop text = "1.00  · free normal"
 }
 
 view GoodmanBoltSetLoadRpmRow {
@@ -1829,7 +1829,7 @@ view GoodmanBoltSetLoadRpmValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "11.0 RPM  Â· fixed"
+  prop text = "11.0 RPM  · fixed"
 }
 
 view GoodmanBoltSetLoadGroup {
@@ -1863,7 +1863,7 @@ view GoodmanBoltSetJointJemtecValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "No  Â· fixed"
+  prop text = "No  · fixed"
 }
 
 view GoodmanBoltSetJointFrictionRow {
@@ -1879,14 +1879,14 @@ view GoodmanBoltSetJointFrictionLabel {
   kind text
   class info-label
   prop tag = "span"
-  prop text = "Friction coeff. Î¼"
+  prop text = "Friction coeff. μ"
 }
 
 view GoodmanBoltSetJointFrictionValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "0.30  Â· free normal"
+  prop text = "0.30  · free normal"
 }
 
 view GoodmanBoltSetJointBoltCountRow {
@@ -1909,7 +1909,7 @@ view GoodmanBoltSetJointBoltCountValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "4  Â· fixed"
+  prop text = "4  · fixed"
 }
 
 view GoodmanBoltSetJointInterfacesRow {
@@ -1932,7 +1932,7 @@ view GoodmanBoltSetJointInterfacesValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "2  Â· fixed"
+  prop text = "2  · fixed"
 }
 
 view GoodmanBoltSetJointRubberShoreRow {
@@ -1955,7 +1955,7 @@ view GoodmanBoltSetJointRubberShoreValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "70  Â· free normal"
+  prop text = "70  · free normal"
 }
 
 view GoodmanBoltSetJointRubberThicknessRow {
@@ -1978,7 +1978,7 @@ view GoodmanBoltSetJointRubberThicknessValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "10.0 mm  Â· free normal"
+  prop text = "10.0 mm  · free normal"
 }
 
 view GoodmanBoltSetJointRubberAreaRow {
@@ -2001,7 +2001,7 @@ view GoodmanBoltSetJointRubberAreaValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "200 cmÂ²  Â· fixed"
+  prop text = "200 cm²  · fixed"
 }
 
 view GoodmanBoltSetJointRubberNuRow {
@@ -2017,14 +2017,14 @@ view GoodmanBoltSetJointRubberNuLabel {
   kind text
   class info-label
   prop tag = "span"
-  prop text = "Rubber Poisson Î½"
+  prop text = "Rubber Poisson ν"
 }
 
 view GoodmanBoltSetJointRubberNuValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "0.490  Â· fixed"
+  prop text = "0.490  · fixed"
 }
 
 view GoodmanBoltSetJointRelaxARow {
@@ -2040,14 +2040,14 @@ view GoodmanBoltSetJointRelaxALabel {
   kind text
   class info-label
   prop tag = "span"
-  prop text = "Rubber relax Î±"
+  prop text = "Rubber relax α"
 }
 
 view GoodmanBoltSetJointRelaxAValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "0.00  Â· fixed"
+  prop text = "0.00  · fixed"
 }
 
 view GoodmanBoltSetJointRelaxBRow {
@@ -2063,14 +2063,14 @@ view GoodmanBoltSetJointRelaxBLabel {
   kind text
   class info-label
   prop tag = "span"
-  prop text = "Rubber relax Î²"
+  prop text = "Rubber relax β"
 }
 
 view GoodmanBoltSetJointRelaxBValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "0.00  Â· fixed"
+  prop text = "0.00  · fixed"
 }
 
 view GoodmanBoltSetJointGroup {
@@ -2111,7 +2111,7 @@ view GoodmanBoltSetGeometryGripValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "105 mm  Â· free normal"
+  prop text = "105 mm  · free normal"
 }
 
 view GoodmanBoltSetGeometryHeadRow {
@@ -2134,7 +2134,7 @@ view GoodmanBoltSetGeometryHeadValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "Aligned  Â· fixed"
+  prop text = "Aligned  · fixed"
 }
 
 view GoodmanBoltSetGeometryShankRow {
@@ -2157,7 +2157,7 @@ view GoodmanBoltSetGeometryShankValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "48 mm  Â· fixed"
+  prop text = "48 mm  · fixed"
 }
 
 view GoodmanBoltSetGeometryMinorRow {
@@ -2180,7 +2180,7 @@ view GoodmanBoltSetGeometryMinorValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "41 mm  Â· fixed"
+  prop text = "41 mm  · fixed"
 }
 
 view GoodmanBoltSetGeometryStressAreaRow {
@@ -2203,7 +2203,7 @@ view GoodmanBoltSetGeometryStressAreaValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "1473 mmÂ²  Â· fixed"
+  prop text = "1473 mm²  · fixed"
 }
 
 view GoodmanBoltSetGeometryLengthFactorRow {
@@ -2226,7 +2226,7 @@ view GoodmanBoltSetGeometryLengthFactorValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "1.190  Â· fixed"
+  prop text = "1.190  · fixed"
 }
 
 view GoodmanBoltSetGeometryGroup {
@@ -2621,7 +2621,7 @@ view GoodmanBoltSetYoungsModulusValue {
   kind text
   class info-value
   prop tag = "span"
-  prop text = "200 GPa  Â· fixed"
+  prop text = "200 GPa  · fixed"
 }
 
 view GoodmanBoltSetMaterialGroup {

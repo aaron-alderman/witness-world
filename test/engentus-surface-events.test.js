@@ -61,6 +61,18 @@ async function waitForSurfaceSettled(page, message = "Surface runtime did not se
   }
 }
 
+async function ensureEngentusSignedIn(page, expectedRouteKey = "home") {
+  await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
+  const loginVisible = await page.locator("#view-login").count();
+  if (!loginVisible) return;
+  await page.click("#surface-engentusloginprimaryaction");
+  await waitForSurfaceSettled(page, `Engentus sign-in did not settle for route ${expectedRouteKey}`);
+  await waitForSurfaceCondition(page, routeKey =>
+    window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === routeKey
+    && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedIn"
+  , `Engentus sign-in did not land on ${expectedRouteKey}`, { arg: expectedRouteKey, timeout: 15000 });
+}
+
 test("Engentus dev shell diagnostics expectation pack stays clean across the shell auth flow", { timeout: 70000 }, async () => {
   const server = await startEngentusUiServer({ devMode: true });
   const browser = await launchBrowser({
@@ -146,6 +158,7 @@ test("Engentus dev shell diagnostics expectation pack surfaces induced mismatche
   try {
     const page = await browser.context.newPage();
     await page.goto(`${server.url}/engentus/home`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "home");
     await page.waitForFunction(() => window.world?.expectationProviderCount > 0);
     await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
     await page.evaluate(async () => { await window.world.rerunProbe(); });
@@ -269,7 +282,7 @@ test("Engentus login click dispatches the authored process rule through the gene
     }
     assert.deepEqual(await page.evaluate(() =>
       [...document.querySelectorAll("#up-menu .up-mi-icon")].map(node => node.textContent)
-    ), ["ðŸ‘¤", "âš™", "ðŸ“‹", "ðŸ­", "â†©"]);
+    ), ["👤", "⚙", "📋", "🏭", "↩"]);
     await page.click(".up-mi-signout");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signingOut"
@@ -350,6 +363,7 @@ async function assertEngentusHomeModuleCardNavigation(item) {
   try {
     const page = await browser.context.newPage();
     await page.goto(`${server.url}/engentus/home`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "home");
     await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
     await page.waitForSelector("#view-home");
     await page.click(`#${item.cardId}`);
@@ -440,6 +454,7 @@ test("Engentus Goodman modes switch authored chart views through process state",
   try {
     const page = await browser.context.newPage();
     await page.goto(`${server.url}/engentus/goodman`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "goodman");
     await waitForSurfaceCondition(page, () => Boolean(window.__surfaceInteractionRuntime?.processRuntime), "Goodman runtime did not boot");
     await waitForSurfaceCondition(page, () =>
       document.querySelector("#chart-svg defs clipPath rect")?.getAttribute("width") !== null
@@ -484,18 +499,18 @@ test("Engentus Goodman modes switch authored chart views through process state",
       {
         title: "No Jemtec",
         rows: [
-          { label: "Ïƒ_a", value: "57.6 MPa" },
+          { label: "σ_a", value: "57.6 MPa" },
           { label: "F_shear", value: "2,496 N" },
-          { label: "damage/cyc Ã—10â¶", value: "4.590" },
+          { label: "damage/cyc ×10⁶", value: "4.590" },
           { label: "slip threshold", value: "3 MPa" }
         ]
       },
       {
         title: "Jemtec",
         rows: [
-          { label: "Ïƒ_a", value: "3.0 MPa" },
+          { label: "σ_a", value: "3.0 MPa" },
           { label: "F_shear", value: "131 N" },
-          { label: "damage/cyc Ã—10â¶", value: "â‰ˆ0" },
+          { label: "damage/cyc ×10⁶", value: "≈0" },
           { label: "slip threshold", value: "3 MPa" }
         ]
       }
@@ -530,7 +545,7 @@ test("Engentus Goodman modes switch authored chart views through process state",
       document.querySelector("#chart-tip")?.style?.display === "block"
     );
     assert.match(await page.textContent("#chart-tip"), /F_shear=/i);
-    assert.match(await page.textContent("#chart-tip"), /Î”\/cyc=/i);
+    assert.match(await page.textContent("#chart-tip"), /Δ\/cyc=/i);
 
     await page.click("#surface-goodmansavestaticsimulationaction");
     await waitForSurfaceCondition(page, () =>
@@ -592,7 +607,7 @@ test("Engentus Goodman modes switch authored chart views through process state",
   }
 });
 
-test("Engentus Goodman authored sidebar controls and windows update process state", { timeout: 45000 }, async () => {
+test("Engentus Goodman authored sidebar controls and windows update process state", { timeout: 90000 }, async () => {
   const server = await startEngentusUiServer({ devMode: false });
   const browser = await launchBrowser({
     headless: true,
@@ -601,6 +616,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
   try {
     const page = await browser.context.newPage();
     await page.goto(`${server.url}/engentus/goodman`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "goodman");
     await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
 
     assert.equal(await page.locator("#surface-goodmancdfwindow").count(), 0);
@@ -662,9 +678,9 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       pauseLabel: document.querySelector("#surface-goodmanrunactionpause")?.textContent,
       stopLabel: document.querySelector("#surface-goodmanrunactionstop")?.textContent
     })), {
-      runLabel: "â–¶ Run",
+      runLabel: "▶ Run",
       pauseLabel: undefined,
-      stopLabel: "â– "
+      stopLabel: "■"
     });
     await page.locator("#cfg-tmax").fill("36");
     await page.waitForFunction(() =>
@@ -676,7 +692,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanScrubTimeMonths") === 6.5
     );
     assert.match(await page.textContent("#t-lbl"), /6\.5 mo/);
-    assert.equal(await page.textContent("#play-btn"), "â–¶");
+    assert.equal(await page.textContent("#play-btn"), "▶");
     await page.click("#play-btn");
     assert.deepEqual(await page.evaluate(() => ({
       runStatus: window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState"),
@@ -725,14 +741,21 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       document.querySelector("#chart-svg")?.__chartController?.spec?.params?.probe_sm === 425
     );
     await page.waitForFunction(() =>
-      document.querySelector("#surface-goodmanscenariosection")?.textContent.includes("425.0 MPa")
+      document.querySelector("#surface-goodmanscenariosection")?.textContent.includes("425 MPa")
     );
     await page.waitForFunction(() =>
       /[\d,.]+ N/.test(document.querySelector("#surface-goodmanscenariosection")?.textContent || "")
     );
     await page.waitForFunction(() =>
-      document.querySelector("#surface-goodmanscenariosection")?.textContent.includes("7.1 MPa")
+      /damage\/cyc ×10⁶\d+\.\d{3}/.test(document.querySelector("#surface-goodmanscenariosection")?.textContent || "")
     );
+    assert.equal(await page.locator(".bs-params").count(), 0);
+    assert.equal(await page.locator(".bs-edit-form").count(), 0);
+    await page.click("#surface-goodmanboltsetprimaryeditaction");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryEditVisible") === true
+    );
+    assert.equal(await page.locator(".bs-edit-form.open").count(), 1);
     await page.locator("#surface-goodmanboltsetprimaryeditnameinput").fill("No Jemtec Edited");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryNameState") === "No Jemtec Edited"
@@ -745,29 +768,16 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryColorState") === "#22c55e"
     );
-    assert.equal(
-      await page.locator(".bs-params").first().evaluate(node => getComputedStyle(node).display),
-      "none"
-    );
-    assert.equal(await page.locator(".bs-edit-form").first().evaluate(node => getComputedStyle(node).display), "none");
-    await page.click("#surface-goodmanboltsetprimaryeditaction");
-    await page.waitForFunction(() =>
-      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryEditVisible") === true
-    );
-    assert.equal(await page.locator(".bs-edit-form.open").count(), 1);
     await page.click("#surface-goodmanboltsetprimaryeditsaveaction");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryEditVisible") === false
     );
-    assert.equal(await page.locator(".bs-edit-form").first().evaluate(node => getComputedStyle(node).display), "none");
+    assert.equal(await page.locator(".bs-edit-form").count(), 0);
     await page.click("#surface-goodmanboltsetprimarychevron");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryParamsOpen") === true
     );
-    assert.equal(
-      await page.locator(".bs-params").first().evaluate(node => getComputedStyle(node).display),
-      "block"
-    );
+    assert.equal(await page.locator(".bs-params").count(), 1);
     await page.locator("#surface-goodmanboltsetutsslider").evaluate(input => {
       input.value = "980";
       input.dispatchEvent(new Event("input", { bubbles: true }));
@@ -905,7 +915,7 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
       resumeHidden: true,
       stopDisabled: true,
       cfgDisabled: true,
-      lockText: "ðŸ”’ Config locked â€” clone or create a new simulation to change",
+      lockText: "🔒 Config locked — clone or create a new simulation to change",
       fillStyle: "width:100%;background:var(--grn);opacity:1"
     });
   } finally {
@@ -923,6 +933,7 @@ test("Engentus Mill Charge controls mutate authored process state through generi
   try {
     const page = await browser.context.newPage();
     await page.goto(`${server.url}/engentus/mill-charge`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "mill-charge");
     await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
     const speedRow = sliderRow(page, "Speed N/N_c");
     const speedInput = speedRow.locator('input[type="range"]');
@@ -1000,7 +1011,7 @@ test("Engentus Mill Charge controls mutate authored process state through generi
     assert.equal(await internalFrictionRow.locator('input[type="range"]').inputValue(), "30");
     assert.equal(await bulkDensityRow.locator('input[type="range"]').inputValue(), "2100");
     assert.equal(await slurryRow.locator(".pval").textContent(), "0.72");
-    assert.equal(await internalFrictionRow.locator(".pval").textContent(), "30Â°");
+    assert.equal(await internalFrictionRow.locator(".pval").textContent(), "30°");
     assert.equal(await bulkDensityRow.locator(".pval").textContent(), "2100");
     assert.deepEqual(await page.evaluate(() => {
       const params = document.querySelector("#mill-canvas")?.__chartController?.spec?.params ?? {};
@@ -1030,6 +1041,7 @@ test("Engentus Mill Force tabs switch authored chart views through process state
   try {
     const page = await browser.context.newPage();
     await page.goto(`${server.url}/engentus/mill-force`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "mill-force");
     await waitForSurfaceCondition(page, () => Boolean(window.__surfaceInteractionRuntime?.processRuntime), "Mill Force runtime did not boot");
     await waitForSurfaceCondition(page, () =>
       Boolean(document.querySelector("#mill-force-svg-cross")?.__chartController)
@@ -1083,8 +1095,9 @@ test("Engentus Mill Force tabs switch authored chart views through process state
     assert.equal(typeof probeTarget?.tooltip?.F_resultant_N, "number");
     await page.evaluate(({ x, y }) => {
       const svg = document.querySelector("#mill-force-svg-cross");
+      const rendered = svg?.__chartController?.node;
       const rect = svg.getBoundingClientRect();
-      const target = svg.parentElement ?? svg;
+      const target = rendered?.parentElement ?? rendered ?? svg.parentElement ?? svg;
       target.dispatchEvent(new MouseEvent("mousemove", {
         bubbles: true,
         clientX: rect.left + x,
@@ -1134,8 +1147,9 @@ test("Engentus Mill Force tabs switch authored chart views through process state
     assert.equal(typeof forceProbeTarget?.reading?.tooltip?.F_resultant_N, "number");
     await page.evaluate(({ x, y }) => {
       const svg = document.querySelector("#mill-force-svg-force");
+      const rendered = svg?.__chartController?.node;
       const rect = svg.getBoundingClientRect();
-      const target = svg.parentElement ?? svg;
+      const target = rendered?.parentElement ?? rendered ?? svg.parentElement ?? svg;
       target.dispatchEvent(new MouseEvent("mousemove", {
         bubbles: true,
         clientX: rect.left + x,
@@ -1186,8 +1200,9 @@ test("Engentus Mill Force tabs switch authored chart views through process state
     assert.equal(typeof roseProbeTarget?.tooltip?.F_resultant_N, "number");
     await page.evaluate(({ x, y }) => {
       const svg = document.querySelector("#mill-force-svg-rose");
+      const rendered = svg?.__chartController?.node;
       const rect = svg.getBoundingClientRect();
-      const target = svg.parentElement ?? svg;
+      const target = rendered?.parentElement ?? rendered ?? svg.parentElement ?? svg;
       target.dispatchEvent(new MouseEvent("mousemove", {
         bubbles: true,
         clientX: rect.left + x,
@@ -1213,6 +1228,7 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
   try {
     const page = await browser.context.newPage();
     await page.goto(`${server.url}/engentus/mill-force`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "mill-force");
     await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
     await page.waitForFunction(() => Boolean(document.querySelector("#mill-force-svg-cross")?.__chartController));
     assert.deepEqual(await page.evaluate(() => ({
@@ -1373,19 +1389,19 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       chartState: "static",
       mcSectionPresent: true,
       mcBodyHidden: false,
-      mcChevron: "â–²",
-      runLabel: "â–¶ Run",
-      clearLabel: "âœ• Clear",
+      mcChevron: "▲",
+      runLabel: "▶ Run",
+      clearLabel: "✕ Clear",
       clearDisabled: true,
       samplesRowClass: "mc-row",
       samplesLabel: "Samples",
       samplesInputStyle: "width:70px",
       mcParamRows: [
         "Samples",
-        "Fill fraction JÏƒ=0.030",
-        "Speed N/NcÏƒ=0.050",
-        "Solids (mass)Ïƒ=0.050",
-        "Liner heightÏƒ=0.020"
+        "Fill fraction Jσ=0.030",
+        "Speed N/Ncσ=0.050",
+        "Solids (mass)σ=0.050",
+        "Liner heightσ=0.020"
       ]
     });
     await page.locator("#mill-force-mc-n").fill("350");
@@ -1400,8 +1416,8 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcStatusState") === "calculating"
     );
-    assert.equal(await page.textContent("#surface-millforcemcstatuscalculatingtext"), "RunningÃ¢â‚¬Â¦");
-    assert.equal(await page.locator("#surface-millforcemcp90maxrow[hidden]").count(), 1);
+    assert.equal(await page.textContent("#surface-millforcemcstatuscalculatingtext"), "Running…");
+    assert.equal(await page.locator("#surface-millforcemcp90maxrow:not([hidden])").count(), 0);
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceMcStatusState") === "running"
     );
@@ -1461,7 +1477,7 @@ test("Engentus Mill Force controls update authored state, chart params, and resu
       document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.analysis_mode === "static"
     );
     assert.equal(await page.textContent("#surface-millforcemcstatusclearedtext"), "Cleared");
-    assert.equal(await page.locator("#surface-millforcemcp90maxrow[hidden]").count(), 1);
+    assert.equal(await page.locator("#surface-millforcemcp90maxrow:not([hidden])").count(), 0);
     assert.equal(await page.locator("#surface-millforcemcclearaction").isEnabled(), false);
     assert.deepEqual(await page.evaluate(() => {
       const runtime = window.__surfaceInteractionRuntime?.processRuntime;

@@ -57,7 +57,7 @@ test("mcp plugin owns origin, principal, and scope support services", () => {
     world,
     backendHost: {},
     mcpInternalToken: "secret",
-    runtimeConfigLookup: () => null,
+    runtimeConfigLookup: (runtimeConfig, key) => runtimeConfig?.[key],
     resolveMcpToolScope: () => ({ contextIds: ["ctx.docs"], targetIds: [] }),
     hostCapabilities: () => projected.backendCapabilities,
     headerValue: value => String(value || "")
@@ -70,6 +70,29 @@ test("mcp plugin owns origin, principal, and scope support services", () => {
   assert.deepEqual(
     services.validateMcpOrigin({ headers: { origin: "http://localhost:3000", host: "127.0.0.1:8787" } }),
     { ok: true }
+  );
+  assert.deepEqual(
+    services.resolveMcpPrincipal({
+      req: { headers: { authorization: "Bearer svc-token" } },
+      requestActor: null,
+      requestIdentity: null,
+      requestSession: null,
+      mcpServer: { id: "mcp.demo", serviceIdentity: "service.actor" },
+      appContext: { runtimeConfig: { "mcp.mcp.demo.token": "svc-token" } }
+    }),
+    {
+      ok: true,
+      actingMode: "service",
+      actor: "service.actor",
+      identity: null,
+      authenticatedIdentity: null,
+      authenticatedActor: "service.actor",
+      effectiveIdentity: null,
+      effectiveActor: "service.actor",
+      authorityMode: "service",
+      assumptionGrantId: null,
+      transport: "http"
+    }
   );
   assert.equal(services.mcpScopeAllows(projected.mcpToolInstalls[0], {}, {}).ok, true);
 });

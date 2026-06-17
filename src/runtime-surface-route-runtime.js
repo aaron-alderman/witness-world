@@ -141,8 +141,13 @@ export async function loadRouteSurfacePage({ document, window, manifest, surface
   const rootId = trimString(surfaceById?.get(target.surfaceId)?.view?.rootId);
   const loadAttempt = async headers => {
     const response = await fetchImpl(target.path, headers ? { headers } : {});
-    if (!response?.ok) return null;
     const html = await response.text();
+    if (!response?.ok) {
+      const contentType = typeof response?.headers?.get === "function"
+        ? String(response.headers.get("content-type") || "")
+        : "";
+      if (!contentType.includes("text/html")) return null;
+    }
     return parseRouteSurfacePage({
       document,
       window,

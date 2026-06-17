@@ -203,7 +203,7 @@ The adjacent risk is "one more special route" gradually avoiding the shared gove
   - it currently supports `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call`
   - `GET /mcp/:id` is intentionally a `405` in the current slice because streaming GET/SSE transport is not yet implemented
   - tool exposure is authored per server through `mcpToolInstall`, filtered by acting mode and current runtime capability availability
-  - delegated calls use the requesting actor, while service calls use `mcpServer.serviceIdentity`
+  - delegated and service calls both normalize through the runtime authority tuple; service mode uses `mcpServer.serviceIdentity` as the canonical actor with `authorityMode = "service"`
   - HTTP service mode requires `Authorization: Bearer` matching `serverRunner.runtimeConfig["mcp.<serverId>.token"]`
   - stdio transport treats subprocess launch as the trust boundary and may optionally bind a delegated actor through `--actor`
   - installed MCP tools may further narrow mutation/read reach through `scopeContexts` and `scopeTargets`

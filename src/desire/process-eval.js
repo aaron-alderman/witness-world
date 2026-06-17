@@ -321,13 +321,15 @@ export function createProcessRuntime(world, options = {}) {
     const proc = handlerOf.get(eventId);
     if (!proc) throw new Error(`deliverAuthored: event '${eventId}' is handled by no process`);
     const rule = ruleFor(eventId);
-    if (!rule) return deliver(eventId, payload);
-    return trackAsync("process.rule", () => runRuleSteps(rule.steps ?? [], eventId, proc), {
+    const delivered = deliver(eventId, payload);
+    if (!rule) return delivered;
+    const outcome = await trackAsync("process.rule", () => runRuleSteps(rule.steps ?? [], eventId, proc), {
       label: eventId,
       processRef: proc,
       correlationId: eventId,
       phase: "process-rule"
     });
+    return outcome ?? delivered;
   }
 
   function resolve(commandId, outcome = "success", payload = null) {

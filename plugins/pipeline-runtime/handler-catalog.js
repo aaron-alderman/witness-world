@@ -14,6 +14,10 @@ export const handlerCatalog = Object.freeze({
     "pipeline.platform-config.datasource.update",
     "pipeline.platform-config.datasource.delete",
     "pipeline.platform-config.datasource.test",
+    "pipeline.platform-config.access.identity.read",
+    "pipeline.platform-config.access.identity.update",
+    "pipeline.platform-config.access.feature.read",
+    "pipeline.platform-config.access.feature.update",
     "pipeline.script.run"
   ]),
   pageHandlers: freezeStrings([]),
@@ -28,6 +32,10 @@ export const handlerCatalog = Object.freeze({
     "pipeline.platform-config.datasource.update",
     "pipeline.platform-config.datasource.delete",
     "pipeline.platform-config.datasource.test",
+    "pipeline.platform-config.access.identity.read",
+    "pipeline.platform-config.access.identity.update",
+    "pipeline.platform-config.access.feature.read",
+    "pipeline.platform-config.access.feature.update",
     "pipeline.script.run"
   ]),
   handlerMetadata: Object.freeze({
@@ -41,6 +49,10 @@ export const handlerCatalog = Object.freeze({
     "pipeline.platform-config.datasource.update": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["PATCH"] }),
     "pipeline.platform-config.datasource.delete": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["DELETE"] }),
     "pipeline.platform-config.datasource.test": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "pipeline.platform-config.access.identity.read": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["GET"] }),
+    "pipeline.platform-config.access.identity.update": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["PATCH"] }),
+    "pipeline.platform-config.access.feature.read": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["GET"] }),
+    "pipeline.platform-config.access.feature.update": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["PATCH"] }),
     "pipeline.script.run": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] })
   })
 });

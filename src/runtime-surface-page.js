@@ -146,16 +146,20 @@ export function renderSurfacePage(world, {
   routeStateDescriptor = null,
   surfaceCapabilityRenderers = [],
   surfaceRuntimeSupportAssets = [],
-  devMode = false
+  devMode = false,
+  initialStateOverrides = null
 } = {}) {
   const initialState = readInitialStateFromWorld(world);
+  const mergedInitialState = initialStateOverrides && typeof initialStateOverrides === "object"
+    ? { ...initialState, ...initialStateOverrides }
+    : initialState;
   const surfaces = readSurfaceMapFromWorld(world);
   const shellState = resolveSurfaceShellFromMap({
     surfaces,
     rootSurfaceId,
     requestPathname,
     route,
-    initialState
+    initialState: mergedInitialState
   });
   if (!shellState?.html) return null;
   const requiredCapabilities = activeSurfaceCapabilityRefs(shellState.surfaces, shellState.activeSurface?.id);
@@ -166,7 +170,7 @@ export function renderSurfacePage(world, {
     activeSurface: shellState.activeSurface,
     surfaces: shellState.surfaces,
     browserRuntimeCapabilities,
-    initialState,
+    initialState: mergedInitialState,
     requestPathname,
     route,
     devMode
@@ -189,7 +193,7 @@ export function renderSurfacePage(world, {
         requestPathname,
         route,
         surfaceRenderers,
-        initialState
+        initialState: mergedInitialState
       })
     : shellState;
   if (!shell?.html) return null;
@@ -211,7 +215,8 @@ export function renderSurfacePage(world, {
     requestPathname: shell.requestPathname,
     routeStateDescriptor,
     surfaceRenderers,
-    initialState
+    initialState: mergedInitialState,
+    initialStateOverrides
   });
   return injectInteractionRuntime(injectCapabilityAssets(shell.html, [
     ...surfaceRenderers,

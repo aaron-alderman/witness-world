@@ -90,10 +90,51 @@ test("mcp bundle support services provide origin, principal, scope, and capabili
         }
       },
       requestActor: null,
+      requestIdentity: null,
+      requestSession: null,
       mcpServer: { id: "mcp.demo", serviceIdentity: "service.actor" },
       appContext: { runtimeConfig: {} }
     }),
-    { ok: true, actingMode: "delegated", actor: "aaron", transport: "stdio" }
+    {
+      ok: true,
+      actingMode: "delegated",
+      actor: "aaron",
+      identity: null,
+      authenticatedIdentity: null,
+      authenticatedActor: "aaron",
+      effectiveIdentity: null,
+      effectiveActor: "aaron",
+      authorityMode: "direct",
+      assumptionGrantId: null,
+      transport: "stdio"
+    }
+  );
+  assert.deepEqual(
+    services.resolveMcpPrincipal({
+      req: {
+        headers: {
+          authorization: "Bearer svc-token"
+        }
+      },
+      requestActor: null,
+      requestIdentity: null,
+      requestSession: null,
+      mcpServer: { id: "mcp.demo", serviceIdentity: "service.actor" },
+      appContext: { runtimeConfig: { "mcp.mcp.demo.token": "svc-token" } }
+    }),
+    {
+      ok: true,
+      actingMode: "service",
+      actor: "service.actor",
+      identity: null,
+      authenticatedIdentity: null,
+      authenticatedActor: "service.actor",
+      effectiveIdentity: null,
+      effectiveActor: "service.actor",
+      authorityMode: "service",
+      assumptionGrantId: null,
+      transport: "http"
+    }
   );
   assert.deepEqual(
     services.mcpScopeAllows(

@@ -24,6 +24,10 @@ import {
   createRuntimeAuthoringPolicy,
   defaultRuntimeAuthoringMode
 } from "./runtime-authoring-policy.js";
+import {
+  authSummaryForAuthority,
+  resolveSessionAuthorityForIdentity
+} from "./runtime-authz.js";
 
 function widgetPageGuidanceSurface(world, {
   route = null,
@@ -60,6 +64,7 @@ export function createCoreRuntimeBundleHandlers({
   sessionStore,
   createSessionForIdentity,
   sessionResponseShape,
+  syncSessionAuthSummary,
   sessionCookieHeader,
   clearSessionCookieHeader,
   tutorialProgressFor,
@@ -137,8 +142,8 @@ export function createCoreRuntimeBundleHandlers({
   const backendSessionShape = requestSession => requestSession
     ? {
         authenticated: true,
-        actor: requestSession.actor ?? null,
-        identity: requestSession.identity ?? null,
+        actor: requestSession.effectiveActor ?? requestSession.actor ?? null,
+        identity: requestSession.effectiveIdentity ?? requestSession.identity ?? null,
         label: requestSession.label ?? null,
         perspective: requestSession.perspective ?? null
       }
@@ -150,6 +155,31 @@ export function createCoreRuntimeBundleHandlers({
         perspective: null
       };
   const devHtmlHeaders = appContext => appContext?.devMode ? { "cache-control": "no-cache" } : {};
+  const resolveSessionOpenRouteKey = (body, summary) => {
+    const defaultRouteKey = typeof body?.defaultRouteKey === "string" && body.defaultRouteKey.trim()
+      ? body.defaultRouteKey.trim()
+      : "home";
+    const pendingRouteKey = typeof body?.pendingRouteKey === "string" && body.pendingRouteKey.trim()
+      ? body.pendingRouteKey.trim()
+      : "";
+    const pendingFeatureId = typeof body?.pendingFeatureId === "string" && body.pendingFeatureId.trim()
+      ? body.pendingFeatureId.trim()
+      : "";
+    if (!pendingRouteKey || !pendingFeatureId) return defaultRouteKey;
+    const access = summary?.featureAccess?.[pendingFeatureId] ?? "granted";
+    if (access === "granted") return pendingRouteKey;
+    if (access === "hidden") {
+      return typeof body?.notFoundRouteKey === "string" && body.notFoundRouteKey.trim()
+        ? body.notFoundRouteKey.trim()
+        : defaultRouteKey;
+    }
+    if (access === "locked") {
+      return typeof body?.forbiddenRouteKey === "string" && body.forbiddenRouteKey.trim()
+        ? body.forbiddenRouteKey.trim()
+        : defaultRouteKey;
+    }
+    return defaultRouteKey;
+  };
   const appRenderWorld = appContext => appContext?.appSnapshotManager?.getActiveSnapshot()?.world
     ?? (typeof currentAppRenderWorld === "function" ? currentAppRenderWorld() : null)
     ?? world;
@@ -369,23 +399,68 @@ export function createCoreRuntimeBundleHandlers({
   return {
     ...guidanceHandlers,
     "session.read": async ({ res, requestActor, requestIdentity, requestSession }) => {
+      const authoritySummary = requestSession
+        ? authSummaryForAuthority(world, requestSession)
+        : authSummaryForAuthority(world, {
+            authenticatedActor: requestActor,
+            effectiveActor: requestActor,
+            effectiveIdentity: requestIdentity
+          });
       world.observe({
         process: "session.read",
         actor: requestActor || backendHost,
         claims: [],
-        body: { authenticated: Boolean(requestSession), identity: requestIdentity || null, actor: requestActor || null }
+        body: {
+          authenticated: Boolean(requestSession),
+          identity: requestIdentity || null,
+          actor: requestActor || null,
+          authenticatedIdentity: authoritySummary.authenticatedIdentity?.id ?? null,
+          authenticatedActor: authoritySummary.authenticatedActor ?? null,
+          effectiveIdentity: authoritySummary.effectiveIdentity?.id ?? null,
+          effectiveActor: authoritySummary.effectiveActor ?? null,
+          authorityMode: authoritySummary.authorityMode ?? "direct",
+          assumptionGrantId: authoritySummary.assumptionGrantId ?? null
+        }
       });
       if (!requestSession) {
-        sendJson(res, 200, { authenticated: false, identity: null, actor: null, label: null, homeContext: null, perspective: null });
+        sendJson(res, 200, {
+          authenticated: false,
+          identity: null,
+          actor: null,
+          authenticatedIdentity: null,
+          authenticatedActor: null,
+          effectiveIdentity: null,
+          effectiveActor: null,
+          authorityMode: "direct",
+          assumptionGrantId: null,
+          label: null,
+          authenticatedLabel: null,
+          effectiveLabel: null,
+          profile: { displayName: null, jobTitle: null, initials: null },
+          authenticatedProfile: { displayName: null, jobTitle: null, initials: null },
+          effectiveProfile: { displayName: null, jobTitle: null, initials: null },
+          roles: [],
+          featureAccess: {},
+          homeContext: null,
+          perspective: null,
+          authenticatedHomeContext: null,
+          authenticatedPerspective: null,
+          effectiveHomeContext: null,
+          effectivePerspective: null
+        });
         return;
       }
-      sendJson(res, 200, sessionResponseShape(requestSession));
+      const syncedSession = authoritySummary?.effectiveActor
+        ? (syncSessionAuthSummary?.(requestSession, authoritySummary) ?? requestSession)
+        : requestSession;
+      sendJson(res, 200, sessionResponseShape(syncedSession));
     },
 
     "session.open": async ({ req, res }) => {
       const body = await readJson(req);
       const username = typeof body.username === "string" ? body.username.trim() : "";
       const password = typeof body.password === "string" ? body.password : "";
+      const assumeActor = typeof body.assumeActor === "string" ? body.assumeActor.trim() : "";
       const identityIndex = currentIdentityIndex();
       const identity = username ? identityIndex.byUsername[username] ?? null : null;
       if (!identity || identity.password !== password) {
@@ -398,7 +473,29 @@ export function createCoreRuntimeBundleHandlers({
         sendJson(res, 401, { error: "invalid credentials" });
         return;
       }
-      const session = createSessionForIdentity(identity);
+      const authority = resolveSessionAuthorityForIdentity(world, identity, { assumeActor });
+      if (!authority.ok) {
+        world.emit({
+          process: "session.open.failed",
+          actor: identity.actor,
+          claims: [],
+          body: {
+            username,
+            assumeActor: assumeActor || null,
+            reason: authority.reason
+          }
+        });
+        sendJson(res, Number(authority.status || 403), { error: authority.reason || "assumption denied" });
+        return;
+      }
+      const session = createSessionForIdentity({
+        ...identity,
+        displayName: authority.authenticatedIdentity?.displayName ?? identity.displayName ?? null,
+        jobTitle: authority.authenticatedIdentity?.jobTitle ?? identity.jobTitle ?? null,
+        initials: authority.authenticatedIdentity?.initials ?? identity.initials ?? null
+      }, authority);
+      const syncedSession = syncSessionAuthSummary?.(session, authority) ?? session;
+      const resumeRouteKey = resolveSessionOpenRouteKey(body, authority);
       world.emit({
         process: "session.open",
         actor: identity.actor,
@@ -407,14 +504,24 @@ export function createCoreRuntimeBundleHandlers({
           ...(identity.homePerspective ? [relation(identity.id, "openedPerspective", identity.homePerspective)] : [])
         ],
         body: {
-          identity: identity.id,
-          actor: identity.actor,
-          label: identity.label,
-          homeContext: identity.homeContext ?? null,
-          perspective: identity.homePerspective ?? null
+          identity: syncedSession.identity ?? null,
+          actor: syncedSession.actor ?? null,
+          authenticatedIdentity: syncedSession.authenticatedIdentity ?? null,
+          authenticatedActor: syncedSession.authenticatedActor ?? null,
+          effectiveIdentity: syncedSession.effectiveIdentity ?? null,
+          effectiveActor: syncedSession.effectiveActor ?? null,
+          authorityMode: syncedSession.authorityMode ?? "direct",
+          assumptionGrantId: syncedSession.assumptionGrantId ?? null,
+          label: syncedSession.label ?? identity.label,
+          homeContext: syncedSession.homeContext ?? null,
+          perspective: syncedSession.perspective ?? null,
+          resumeRouteKey
         }
       });
-      sendJson(res, 200, sessionResponseShape(session), { "set-cookie": sessionCookieHeader(session.id) });
+      sendJson(res, 200, {
+        ...sessionResponseShape(syncedSession),
+        resumeRouteKey
+      }, { "set-cookie": sessionCookieHeader(syncedSession.id) });
     },
 
     "session.logout": async ({ res, requestSession, requestActor }) => {
@@ -424,8 +531,14 @@ export function createCoreRuntimeBundleHandlers({
         actor: requestActor || backendHost,
         claims: [],
         body: {
-          identity: requestSession?.identity ?? null,
-          actor: requestActor || null,
+          identity: requestSession?.effectiveIdentity ?? requestSession?.identity ?? null,
+          actor: requestSession?.effectiveActor ?? requestActor ?? null,
+          authenticatedIdentity: requestSession?.authenticatedIdentity ?? null,
+          authenticatedActor: requestSession?.authenticatedActor ?? null,
+          effectiveIdentity: requestSession?.effectiveIdentity ?? null,
+          effectiveActor: requestSession?.effectiveActor ?? null,
+          authorityMode: requestSession?.authorityMode ?? "direct",
+          assumptionGrantId: requestSession?.assumptionGrantId ?? null,
           perspective: requestSession?.perspective ?? null
         }
       });
@@ -451,8 +564,8 @@ export function createCoreRuntimeBundleHandlers({
         claims: [relation(frontendHost, "rendered", route.serves || rootWidget)],
         body: { route: route.path }
       });
-      const pageTheme = projectPagePresentationThemeHook(requestVisibleWitnesses(requestSession?.actor || null, appContext), {
-        actor: requestSession?.actor || null,
+      const pageTheme = projectPagePresentationThemeHook(requestVisibleWitnesses(requestSession?.effectiveActor || requestSession?.actor || null, appContext), {
+        actor: requestSession?.effectiveActor || requestSession?.actor || null,
         pageId: rootWidget
       });
         const guidanceSurface = widgetPageGuidanceSurface(world, {
@@ -497,6 +610,7 @@ export function createCoreRuntimeBundleHandlers({
 
     "page.surface": async ({ res, route, requestUrl, appContext }) => {
       const rootSurfaceId = route?.params?.rootSurface ?? null;
+      const pageStatus = Number(route?.params?.responseStatus ?? 200) || 200;
       if (!rootSurfaceId) {
         sendJson(res, 404, { error: "surface page not configured", route: route?.id ?? null });
         return;
@@ -510,6 +624,7 @@ export function createCoreRuntimeBundleHandlers({
           .map(definition => typeof definition?.id === "string" ? definition.id : "")
           .filter(Boolean),
         routeStateDescriptor: route?.params?.routeState ?? null,
+        initialStateOverrides: route?.params?.initialStateOverrides ?? null,
         surfaceCapabilityRenderers: appContext?.runtimeContributions?.surfaceCapabilityRenderers ?? [],
         surfaceRuntimeSupportAssets: appContext?.runtimeContributions?.surfaceRuntimeSupportAssets ?? [],
         devMode: appContext?.devMode === true
@@ -524,7 +639,7 @@ export function createCoreRuntimeBundleHandlers({
         claims: [relation(frontendHost, "rendered", route?.serves || rootSurfaceId)],
         body: { route: requestUrl?.pathname ?? route?.path ?? "/", rootSurface: rootSurfaceId }
       });
-      send(res, 200, "text/html", maybeInjectDevClient(html, appContext), devHtmlHeaders(appContext));
+      send(res, pageStatus, "text/html", maybeInjectDevClient(html, appContext), devHtmlHeaders(appContext));
     },
 
     "app.revision.events": async ({ req, res, appContext }) => {

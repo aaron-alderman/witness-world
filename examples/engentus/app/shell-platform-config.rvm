@@ -2,6 +2,8 @@ import desire/v3-alpha
 
 collection PlatformConfigSecrets
 collection PlatformConfigDatasources
+collection PlatformConfigIdentities
+collection PlatformConfigFeaturePolicies
 
 view PlatformConfigSecretOptionTemplate {
   kind option
@@ -248,6 +250,20 @@ view PlatformConfigSidebarScriptsAction {
   }
 }
 
+view PlatformConfigSidebarAccessAction {
+  kind action
+  prop tag = "button"
+  prop buttonType = "button"
+  prop text = "Access"
+  class platform-config-side-link
+  bindings {
+    className from state EngentusShellActiveRoute map platform-config-access "platform-config-side-link active" default "platform-config-side-link"
+  }
+  interactions {
+    on click self deliver PlatformConfigOpenAccessRequested
+  }
+}
+
 view PlatformConfigSidebarNav {
   kind region
   class platform-config-sidebar-nav
@@ -256,6 +272,7 @@ view PlatformConfigSidebarNav {
     PlatformConfigSidebarSecretsAction
     PlatformConfigSidebarDatasourcesAction
     PlatformConfigSidebarScriptsAction
+    PlatformConfigSidebarAccessAction
   }
 }
 
@@ -281,22 +298,7 @@ view PlatformConfigOperatorSectionIntro {
   kind text
   prop tag = "p"
   class platform-config-hint
-  prop text = "The sign-in flow is still fake, so requests use the actor header below."
-}
-
-view PlatformConfigActorField {
-  kind form-field
-  class platform-config-field
-  prop label = "Actor header"
-  prop inputId = "platform-config-actor"
-  prop inputClass = "platform-config-input"
-  prop placeholder = "aaron"
-  bindings {
-    value from state PlatformConfigActorHeader
-  }
-  interactions {
-    on input self set PlatformConfigActorHeader eventValue
-  }
+  prop text = "This area reflects the signed-in session and runner-scoped platform capability state."
 }
 
 view PlatformConfigOperatorSummary {
@@ -315,7 +317,6 @@ view PlatformConfigOperatorContent {
   children {
     PlatformConfigOperatorSectionTitle
     PlatformConfigOperatorSectionIntro
-    PlatformConfigActorField
     PlatformConfigOperatorSummary
   }
 }
@@ -1132,6 +1133,494 @@ view PlatformConfigScriptsContent {
   }
 }
 
+view PlatformConfigAccessSectionTitle {
+  kind text
+  prop tag = "h3"
+  class platform-config-section-title
+  prop text = "Access"
+}
+
+view PlatformConfigAccessSectionIntro {
+  kind text
+  prop tag = "p"
+  class platform-config-hint
+  bindings {
+    text from state PlatformConfigAccessRolesHint
+  }
+}
+
+view PlatformConfigAccessIdentityRowAction {
+  kind action
+  prop tag = "button"
+  prop buttonType = "button"
+  prop value = "${item.id}"
+  prop text = "Edit"
+  class platform-config-row-action
+  interactions {
+    on click self set PlatformConfigAccessIdentitySelectedId eventValue
+    on click self deliver PlatformConfigLoadAccessIdentityRequested
+  }
+}
+
+view PlatformConfigAccessIdentityRowTemplate {
+  kind region
+  prop tag = "tr"
+  prop template = true
+  children {
+    PlatformConfigAccessIdentityRowUsername
+    PlatformConfigAccessIdentityRowDisplayName
+    PlatformConfigAccessIdentityRowJobTitle
+    PlatformConfigAccessIdentityRowRoles
+    PlatformConfigAccessIdentityRowActionCell
+  }
+}
+
+view PlatformConfigAccessIdentityRowUsername {
+  kind text
+  prop tag = "td"
+  prop text = "${item.username}"
+}
+
+view PlatformConfigAccessIdentityRowDisplayName {
+  kind text
+  prop tag = "td"
+  prop text = "${item.displayName}"
+}
+
+view PlatformConfigAccessIdentityRowJobTitle {
+  kind text
+  prop tag = "td"
+  prop text = "${item.jobTitle}"
+}
+
+view PlatformConfigAccessIdentityRowRoles {
+  kind text
+  prop tag = "td"
+  prop text = "${item.rolesText}"
+}
+
+view PlatformConfigAccessIdentityRowActionCell {
+  kind region
+  prop tag = "td"
+  children {
+    PlatformConfigAccessIdentityRowAction
+  }
+}
+
+view PlatformConfigAccessIdentityTableBody {
+  kind region
+  prop tag = "tbody"
+  repeat {
+    collection PlatformConfigIdentities
+    template PlatformConfigAccessIdentityRowTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigAccessIdentityTable {
+  kind region
+  prop tag = "table"
+  class platform-config-table
+  children {
+    PlatformConfigAccessIdentityHeader
+    PlatformConfigAccessIdentityTableBody
+  }
+}
+
+view PlatformConfigAccessIdentityHeader {
+  kind region
+  prop tag = "thead"
+  children {
+    PlatformConfigAccessIdentityHeaderRow
+  }
+}
+
+view PlatformConfigAccessIdentityHeaderRow {
+  kind region
+  prop tag = "tr"
+  children {
+    PlatformConfigAccessIdentityHeaderUsername
+    PlatformConfigAccessIdentityHeaderDisplayName
+    PlatformConfigAccessIdentityHeaderJobTitle
+    PlatformConfigAccessIdentityHeaderRoles
+    PlatformConfigAccessIdentityHeaderActions
+  }
+}
+
+view PlatformConfigAccessIdentityHeaderUsername {
+  kind text
+  prop tag = "th"
+  prop text = "Username"
+}
+
+view PlatformConfigAccessIdentityHeaderDisplayName {
+  kind text
+  prop tag = "th"
+  prop text = "Display Name"
+}
+
+view PlatformConfigAccessIdentityHeaderJobTitle {
+  kind text
+  prop tag = "th"
+  prop text = "Job Title"
+}
+
+view PlatformConfigAccessIdentityHeaderRoles {
+  kind text
+  prop tag = "th"
+  prop text = "Roles"
+}
+
+view PlatformConfigAccessIdentityHeaderActions {
+  kind text
+  prop tag = "th"
+  prop text = "Actions"
+}
+
+view PlatformConfigAccessIdentityUsernameField {
+  kind form-field
+  class platform-config-field
+  prop label = "Username"
+  prop inputId = "platform-config-access-identity-username"
+  prop inputClass = "platform-config-input"
+  bindings {
+    value from state PlatformConfigAccessIdentityUsername
+    disabled from state PlatformConfigAccessBusy map true true default true
+  }
+}
+
+view PlatformConfigAccessIdentityDisplayNameField {
+  kind form-field
+  class platform-config-field
+  prop label = "Display name"
+  prop inputId = "platform-config-access-identity-display-name"
+  prop inputClass = "platform-config-input"
+  bindings {
+    value from state PlatformConfigAccessIdentityDisplayName
+    disabled from state PlatformConfigAccessBusy
+  }
+  interactions {
+    on input self set PlatformConfigAccessIdentityDisplayName eventValue
+  }
+}
+
+view PlatformConfigAccessIdentityJobTitleField {
+  kind form-field
+  class platform-config-field
+  prop label = "Job title"
+  prop inputId = "platform-config-access-identity-job-title"
+  prop inputClass = "platform-config-input"
+  bindings {
+    value from state PlatformConfigAccessIdentityJobTitle
+    disabled from state PlatformConfigAccessBusy
+  }
+  interactions {
+    on input self set PlatformConfigAccessIdentityJobTitle eventValue
+  }
+}
+
+view PlatformConfigAccessIdentityInitialsField {
+  kind form-field
+  class platform-config-field
+  prop label = "Initials"
+  prop inputId = "platform-config-access-identity-initials"
+  prop inputClass = "platform-config-input"
+  bindings {
+    value from state PlatformConfigAccessIdentityInitials
+    disabled from state PlatformConfigAccessBusy
+  }
+  interactions {
+    on input self set PlatformConfigAccessIdentityInitials eventValue
+  }
+}
+
+view PlatformConfigAccessIdentityRolesField {
+  kind form-field
+  class platform-config-field
+  prop label = "Roles (comma separated)"
+  prop inputId = "platform-config-access-identity-roles"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "engentus_user, mill_force_access"
+  bindings {
+    value from state PlatformConfigAccessIdentityRoles
+    disabled from state PlatformConfigAccessBusy
+  }
+  interactions {
+    on input self set PlatformConfigAccessIdentityRoles eventValue
+  }
+}
+
+view PlatformConfigAccessIdentitySaveAction {
+  kind action
+  class rbtn go
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Save Identity"
+  bindings {
+    disabled from state PlatformConfigAccessBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigUpdateAccessIdentityRequested
+  }
+}
+
+view PlatformConfigAccessIdentitySummary {
+  kind text
+  prop tag = "pre"
+  class platform-config-output
+  bindings {
+    text from state PlatformConfigAccessIdentitySummary
+  }
+}
+
+view PlatformConfigAccessFeatureRowAction {
+  kind action
+  prop tag = "button"
+  prop buttonType = "button"
+  prop value = "${item.id}"
+  prop text = "Edit"
+  class platform-config-row-action
+  interactions {
+    on click self set PlatformConfigAccessFeatureSelectedId eventValue
+    on click self deliver PlatformConfigLoadAccessFeatureRequested
+  }
+}
+
+view PlatformConfigAccessFeatureRowTemplate {
+  kind region
+  prop tag = "tr"
+  prop template = true
+  children {
+    PlatformConfigAccessFeatureRowLabel
+    PlatformConfigAccessFeatureRowVisibility
+    PlatformConfigAccessFeatureRowRoles
+    PlatformConfigAccessFeatureRowActionCell
+  }
+}
+
+view PlatformConfigAccessFeatureRowLabel {
+  kind text
+  prop tag = "td"
+  prop text = "${item.label}"
+}
+
+view PlatformConfigAccessFeatureRowVisibility {
+  kind text
+  prop tag = "td"
+  prop text = "${item.visibilityMode}"
+}
+
+view PlatformConfigAccessFeatureRowRoles {
+  kind text
+  prop tag = "td"
+  prop text = "${item.allowedRolesText}"
+}
+
+view PlatformConfigAccessFeatureRowActionCell {
+  kind region
+  prop tag = "td"
+  children {
+    PlatformConfigAccessFeatureRowAction
+  }
+}
+
+view PlatformConfigAccessFeatureTableBody {
+  kind region
+  prop tag = "tbody"
+  repeat {
+    collection PlatformConfigFeaturePolicies
+    template PlatformConfigAccessFeatureRowTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigAccessFeatureTable {
+  kind region
+  prop tag = "table"
+  class platform-config-table
+  children {
+    PlatformConfigAccessFeatureHeader
+    PlatformConfigAccessFeatureTableBody
+  }
+}
+
+view PlatformConfigAccessFeatureHeader {
+  kind region
+  prop tag = "thead"
+  children {
+    PlatformConfigAccessFeatureHeaderRow
+  }
+}
+
+view PlatformConfigAccessFeatureHeaderRow {
+  kind region
+  prop tag = "tr"
+  children {
+    PlatformConfigAccessFeatureHeaderLabel
+    PlatformConfigAccessFeatureHeaderVisibility
+    PlatformConfigAccessFeatureHeaderRoles
+    PlatformConfigAccessFeatureHeaderActions
+  }
+}
+
+view PlatformConfigAccessFeatureHeaderLabel {
+  kind text
+  prop tag = "th"
+  prop text = "Feature"
+}
+
+view PlatformConfigAccessFeatureHeaderVisibility {
+  kind text
+  prop tag = "th"
+  prop text = "Visibility"
+}
+
+view PlatformConfigAccessFeatureHeaderRoles {
+  kind text
+  prop tag = "th"
+  prop text = "Allowed Roles"
+}
+
+view PlatformConfigAccessFeatureHeaderActions {
+  kind text
+  prop tag = "th"
+  prop text = "Actions"
+}
+
+view PlatformConfigAccessFeatureLabelField {
+  kind form-field
+  class platform-config-field
+  prop label = "Feature"
+  prop inputId = "platform-config-access-feature-label"
+  prop inputClass = "platform-config-input"
+  bindings {
+    value from state PlatformConfigAccessFeatureLabel
+    disabled from state PlatformConfigAccessBusy map true true default true
+  }
+}
+
+view PlatformConfigAccessFeatureVisibilityHidden {
+  kind option
+  prop tag = "option"
+  prop value = "hidden"
+  prop text = "hidden"
+}
+
+view PlatformConfigAccessFeatureVisibilityLocked {
+  kind option
+  prop tag = "option"
+  prop value = "locked"
+  prop text = "locked"
+}
+
+view PlatformConfigAccessFeatureVisibilityNormal {
+  kind option
+  prop tag = "option"
+  prop value = "normal"
+  prop text = "normal"
+}
+
+view PlatformConfigAccessFeatureVisibilityField {
+  kind select
+  prop tag = "select"
+  class platform-config-input
+  prop domId = "platform-config-access-feature-visibility"
+  bindings {
+    value from state PlatformConfigAccessFeatureVisibilityMode
+    disabled from state PlatformConfigAccessBusy
+  }
+  interactions {
+    on change self set PlatformConfigAccessFeatureVisibilityMode eventValue
+  }
+  children {
+    PlatformConfigAccessFeatureVisibilityHidden
+    PlatformConfigAccessFeatureVisibilityLocked
+    PlatformConfigAccessFeatureVisibilityNormal
+  }
+}
+
+view PlatformConfigAccessFeatureVisibilityGroup {
+  kind region
+  class platform-config-field
+  children {
+    PlatformConfigAccessFeatureVisibilityLabel
+    PlatformConfigAccessFeatureVisibilityField
+  }
+}
+
+view PlatformConfigAccessFeatureVisibilityLabel {
+  kind text
+  prop tag = "label"
+  class platform-config-field-label
+  prop text = "Visibility"
+  prop for = "platform-config-access-feature-visibility"
+}
+
+view PlatformConfigAccessFeatureRolesField {
+  kind form-field
+  class platform-config-field
+  prop label = "Allowed roles (comma separated)"
+  prop inputId = "platform-config-access-feature-roles"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "platform_admin"
+  bindings {
+    value from state PlatformConfigAccessFeatureAllowedRoles
+    disabled from state PlatformConfigAccessBusy
+  }
+  interactions {
+    on input self set PlatformConfigAccessFeatureAllowedRoles eventValue
+  }
+}
+
+view PlatformConfigAccessFeatureSaveAction {
+  kind action
+  class rbtn go
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Save Feature Policy"
+  bindings {
+    disabled from state PlatformConfigAccessBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigUpdateAccessFeatureRequested
+  }
+}
+
+view PlatformConfigAccessFeatureSummary {
+  kind text
+  prop tag = "pre"
+  class platform-config-output
+  bindings {
+    text from state PlatformConfigAccessFeatureSummary
+  }
+}
+
+view PlatformConfigAccessContent {
+  kind section
+  class platform-config-content-card
+  prop domId = "platform-config-access-content"
+  children {
+    PlatformConfigAccessSectionTitle
+    PlatformConfigAccessSectionIntro
+    PlatformConfigAccessIdentityTable
+    PlatformConfigAccessIdentityUsernameField
+    PlatformConfigAccessIdentityDisplayNameField
+    PlatformConfigAccessIdentityJobTitleField
+    PlatformConfigAccessIdentityInitialsField
+    PlatformConfigAccessIdentityRolesField
+    PlatformConfigAccessIdentitySaveAction
+    PlatformConfigAccessIdentitySummary
+    PlatformConfigAccessFeatureTable
+    PlatformConfigAccessFeatureLabelField
+    PlatformConfigAccessFeatureVisibilityGroup
+    PlatformConfigAccessFeatureRolesField
+    PlatformConfigAccessFeatureSaveAction
+    PlatformConfigAccessFeatureSummary
+  }
+}
+
 view PlatformConfigOperatorMainColumn {
   kind region
   class platform-config-main
@@ -1165,6 +1654,15 @@ view PlatformConfigScriptsMainColumn {
   children {
     PlatformConfigSectionShell
     PlatformConfigScriptsContent
+  }
+}
+
+view PlatformConfigAccessMainColumn {
+  kind region
+  class platform-config-main
+  children {
+    PlatformConfigSectionShell
+    PlatformConfigAccessContent
   }
 }
 
@@ -1205,6 +1703,16 @@ view PlatformConfigScriptsBody {
   children {
     PlatformConfigSidebar
     PlatformConfigScriptsMainColumn
+  }
+}
+
+view PlatformConfigAccessBody {
+  kind body
+  class engentus-platform-body
+  prop domId = "platform-config-access-body"
+  children {
+    PlatformConfigSidebar
+    PlatformConfigAccessMainColumn
   }
 }
 
@@ -1265,5 +1773,20 @@ view EngentusPlatformConfigScriptsApp {
   children {
     EngentusModuleChrome
     PlatformConfigScriptsBody
+  }
+}
+
+view EngentusPlatformConfigAccessApp {
+  kind app-shell
+  class engentus-platform-app
+  process EngentusShellNavigation
+  prop domId = "view-platform-config-access"
+  prop documentTitle = "Platform Config Access"
+  prop routeKey = "platform-config-access"
+  prop routePath = "/engentus/platform-config/access"
+  prop mountMode = "mounted-panel"
+  children {
+    EngentusModuleChrome
+    PlatformConfigAccessBody
   }
 }

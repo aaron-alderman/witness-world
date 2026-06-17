@@ -26,9 +26,19 @@ function createOverlayTestDocument() {
     }
 
     appendChild(child) {
-      child.parentNode = this;
-      this.children.push(child);
-      return child;
+      const nextChild = child?.firstElementChild && !child?.tagName ? child.firstElementChild : child;
+      nextChild.parentNode = this;
+      this.children.push(nextChild);
+      return nextChild;
+    }
+
+    insertBefore(child, beforeChild) {
+      const nextChild = child?.firstElementChild && !child?.tagName ? child.firstElementChild : child;
+      const index = this.children.indexOf(beforeChild);
+      nextChild.parentNode = this;
+      if (index < 0) this.children.push(nextChild);
+      else this.children.splice(index, 0, nextChild);
+      return nextChild;
     }
 
     removeChild(child) {
@@ -630,6 +640,7 @@ test("createSurfaceInteractionRuntime dispatches authored event rules and patche
   assert.deepEqual(delayed, [{ ms: 605, eventId: "SignInRequested" }]);
   assert.deepEqual(pushed, ["/home"]);
   assert.deepEqual(runtime.processRuntime.trace.map(step => step.kind), [
+    "deliver",
     "rule.setState",
     "rule.delay",
     "rule.setState",

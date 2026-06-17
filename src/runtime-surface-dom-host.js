@@ -83,11 +83,15 @@ export function materializeMissingVisibleSurface(document, surfaceById, surface)
   const parentRootId = trimString(parentSurface?.view?.rootId);
   const parentRoot = parentRootId ? document?.getElementById?.(parentRootId) : null;
   if (!parentRoot) return null;
-  const nextRoot = parseFirstElement(document, fragmentHtml);
+  const template = document?.createElement?.("template");
+  if (!template?.content) return null;
+  template.innerHTML = fragmentHtml.trim();
+  const nextRoot = template.content.firstElementChild;
   if (!nextRoot) return null;
+  const fragment = template.content;
   const beforeNode = nextPresentSiblingRoot(document, surfaceById, parentSurface, surface.id);
-  if (beforeNode && beforeNode.parentNode === parentRoot) parentRoot.insertBefore(nextRoot, beforeNode);
-  else parentRoot.appendChild(nextRoot);
+  if (beforeNode && beforeNode.parentNode === parentRoot) parentRoot.insertBefore(fragment, beforeNode);
+  else parentRoot.appendChild(fragment);
   return nextRoot;
 }
 

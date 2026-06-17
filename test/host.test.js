@@ -6,6 +6,7 @@ import path from "node:path";
 import { createWorld } from "../src/kernel.js";
 import { declareBackendHost, declareFrontendHost, startServer, hostCapabilities } from "../src/host.js";
 import { applyWitnessToml, applyWitnessDocs, loadWitnessTomlFile, parseWitnessToml } from "../src/dsl.js";
+import { grantIdentityActorAssumption } from "../src/modules.js";
 
 async function tempStore() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "witness-todo-"));
@@ -16,11 +17,11 @@ function cookieHeader(setCookie) {
   return (setCookie || "").split(";")[0];
 }
 
-async function openSession(serverUrl, { username = "aaron", password = username } = {}) {
+async function openSession(serverUrl, { username = "aaron", password = username, ...rest } = {}) {
   const response = await fetch(`${serverUrl}/api/session`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ username, password })
+    body: JSON.stringify({ username, password, ...rest })
   });
   return {
     response,
@@ -501,14 +502,18 @@ test("session api authenticates authored identities and cookie actor wins over r
     const session = await fetch(`${server.url}/api/session`, {
       headers: { cookie: login.cookie }
     }).then(r => r.json());
-    assert.deepEqual(session, {
-      authenticated: true,
-      identity: "identity.aaron",
-      actor: "aaron",
-      label: "Aaron",
-      homeContext: null,
-      perspective: "aaron:personal"
-    });
+    assert.equal(session.authenticated, true);
+    assert.equal(session.identity, "identity.aaron");
+    assert.equal(session.actor, "aaron");
+    assert.equal(session.authenticatedIdentity, "identity.aaron");
+    assert.equal(session.authenticatedActor, "aaron");
+    assert.equal(session.effectiveIdentity, "identity.aaron");
+    assert.equal(session.effectiveActor, "aaron");
+    assert.equal(session.authorityMode, "direct");
+    assert.equal(session.assumptionGrantId, null);
+    assert.equal(session.label, "Aaron");
+    assert.equal(session.homeContext, null);
+    assert.equal(session.perspective, "aaron:personal");
 
     const note = await fetch(`${server.url}/api/private-notes`, {
       method: "POST",
@@ -1701,12 +1706,41 @@ test("personal projections: identity session, themes, and private notes are sess
     assert.match(html, /renderCollection/);
 
     const session = await fetch(`${server.url}/api/session`).then(r => r.json());
-    assert.deepEqual(session, { authenticated: false, identity: null, actor: null, label: null, homeContext: null, perspective: null });
+    assert.deepEqual(session, {
+      authenticated: false,
+      identity: null,
+      actor: null,
+      authenticatedIdentity: null,
+      authenticatedActor: null,
+      effectiveIdentity: null,
+      effectiveActor: null,
+      authorityMode: "direct",
+      assumptionGrantId: null,
+      label: null,
+      authenticatedLabel: null,
+      effectiveLabel: null,
+      profile: { displayName: null, jobTitle: null, initials: null },
+      authenticatedProfile: { displayName: null, jobTitle: null, initials: null },
+      effectiveProfile: { displayName: null, jobTitle: null, initials: null },
+      roles: [],
+      featureAccess: {},
+      homeContext: null,
+      perspective: null,
+      authenticatedHomeContext: null,
+      authenticatedPerspective: null,
+      effectiveHomeContext: null,
+      effectivePerspective: null
+    });
 
     const login = await openSession(server.url, { username: "aaron", password: "aaron" });
     assert.equal(login.response.status, 200);
     assert.equal(login.body.identity, "identity.aaron");
     assert.equal(login.body.actor, "aaron");
+    assert.equal(login.body.authenticatedIdentity, "identity.aaron");
+    assert.equal(login.body.authenticatedActor, "aaron");
+    assert.equal(login.body.effectiveIdentity, "identity.aaron");
+    assert.equal(login.body.effectiveActor, "aaron");
+    assert.equal(login.body.authorityMode, "direct");
     assert.ok(login.cookie);
 
     const signedOutNotes = await fetch(`${server.url}/api/private-notes`).then(r => r.json());
@@ -1750,6 +1784,99 @@ test("personal projections: identity session, themes, and private notes are sess
     assert.equal(aaronWitnesses.witnesses.some(w => w.process === "privateNote.create"), true);
     assert.equal(callanWitnesses.witnesses.some(w => w.process === "privateNote.create"), false);
     assert.equal(world.allWitnesses().some(w => w.process === "session.open" && w.actor === "aaron"), true);
+  } finally {
+    await server.close();
+  }
+});
+
+test("session open can assume a granted actor and subsequent requests act as the effective actor", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  const docs = await loadWitnessTomlFile(path.join(process.cwd(), "examples", "demo-todo-app/app.wtoml"));
+  applyWitnessDocs(world, docs);
+  grantIdentityActorAssumption(world, {
+    actor: "adam",
+    identityId: "identity.aaron",
+    targetActor: "callan"
+  });
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "demo_server",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const login = await openSession(server.url, {
+      username: "aaron",
+      password: "aaron",
+      assumeActor: "callan"
+    });
+    assert.equal(login.response.status, 200);
+    assert.equal(login.body.authenticatedIdentity, "identity.aaron");
+    assert.equal(login.body.authenticatedActor, "aaron");
+    assert.equal(login.body.effectiveIdentity, "identity.callan");
+    assert.equal(login.body.effectiveActor, "callan");
+    assert.equal(login.body.identity, "identity.callan");
+    assert.equal(login.body.actor, "callan");
+    assert.equal(login.body.authorityMode, "assumed");
+    assert.equal(login.body.assumptionGrantId, "identity.aaron=>callan");
+
+    const note = await fetch(`${server.url}/api/private-notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: login.cookie },
+      body: JSON.stringify({ text: "Assumed note" })
+    }).then(r => r.json());
+    assert.equal(note.privacy.actor, "callan");
+
+    const readback = await fetch(`${server.url}/api/session`, {
+      headers: { cookie: login.cookie }
+    }).then(r => r.json());
+    assert.equal(readback.authenticatedIdentity, "identity.aaron");
+    assert.equal(readback.effectiveActor, "callan");
+    assert.equal(readback.authorityMode, "assumed");
+
+    const openWitness = world.allWitnesses().findLast(w => w.process === "session.open");
+    assert.equal(openWitness?.body?.authenticatedIdentity, "identity.aaron");
+    assert.equal(openWitness?.body?.effectiveActor, "callan");
+    assert.equal(openWitness?.body?.authorityMode, "assumed");
+  } finally {
+    await server.close();
+  }
+});
+
+test("session open rejects ungranted actor assumptions without creating a session", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "adam", id: "backendHost" });
+  declareFrontendHost(world, { actor: "adam", id: "frontendHost" });
+  applyMinimalTodoDsl(world);
+
+  const server = await startServer(world, {
+    actor: "adam",
+    serverRunnerId: "server_runner",
+    runtimeRoot: path.dirname(await tempStore())
+  });
+
+  try {
+    const response = await fetch(`${server.url}/api/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        username: "aaron",
+        password: "aaron",
+        assumeActor: "callan"
+      })
+    });
+    assert.equal(response.status, 403);
+    assert.equal(response.headers.get("set-cookie"), null);
+    assert.deepEqual(await response.json(), { error: "assumption denied" });
+
+    const failureWitness = world.allWitnesses().findLast(w => w.process === "session.open.failed");
+    assert.equal(failureWitness?.body?.username, "aaron");
+    assert.equal(failureWitness?.body?.assumeActor, "callan");
+    assert.equal(failureWitness?.body?.reason, "assumption denied");
+    assert.equal(world.allWitnesses().some(w => w.process === "session.open"), false);
   } finally {
     await server.close();
   }

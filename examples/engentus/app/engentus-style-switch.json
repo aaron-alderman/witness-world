@@ -1,0 +1,13 @@
+{
+  "theme": "engentus",
+  "slices": {
+    "shell-base": "legacy",
+    "auth": "legacy",
+    "home": "legacy",
+    "goodman": "legacy",
+    "mill-charge": "legacy",
+    "mill-force": "legacy",
+    "platform-config": "legacy",
+    "chart-pages": "legacy"
+  }
+}

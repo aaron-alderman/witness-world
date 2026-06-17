@@ -89,6 +89,11 @@ test("auth.oauth creates a linked identity on first stub login and exposes inspe
     assert.equal(callbackBody.identity.actor, "stub-user-1");
     assert.equal(callbackBody.link.providerAccountId, "stub-account-1");
     assert.equal(callbackBody.session.authenticated, true);
+    assert.equal(callbackBody.session.authenticatedIdentity, callbackBody.identity.id);
+    assert.equal(callbackBody.session.authenticatedActor, "stub-user-1");
+    assert.equal(callbackBody.session.effectiveIdentity, callbackBody.identity.id);
+    assert.equal(callbackBody.session.effectiveActor, "stub-user-1");
+    assert.equal(callbackBody.session.authorityMode, "direct");
 
     const session = await fetch(`${server.url}/api/session`, {
       headers: { cookie: cookieHeader(callback.headers.get("set-cookie")) }
@@ -114,7 +119,7 @@ test("auth.oauth creates a linked identity on first stub login and exposes inspe
     assert.equal(diagnosticsBody.oauth.linkCount, 1);
     assert.equal(diagnosticsBody.oauth.failedCount, 0);
     assert.equal(diagnosticsBody.oauth.providerAccountCount, 1);
-    assert.equal(diagnosticsBody.backendCapabilities.find(row => row.id === "auth.oauth").providerAdapters.some(row => row.id === "stub" && row.default === true), true);
+    assert.equal(diagnosticsBody.oauth.providers.includes("stub"), true);
 
     assert(world.allWitnesses().some(witness => witness.process === "auth.oauth.start"));
     assert(world.allWitnesses().some(witness => witness.process === "auth.oauth.callback"));
@@ -190,6 +195,9 @@ homePerspective = "aaron:personal"
     assert.equal(linkedBody.createdIdentity, false);
     assert.equal(linkedBody.link.identity, "identity.aaron");
     assert.equal(linkedBody.session.identity, "identity.aaron");
+    assert.equal(linkedBody.session.authenticatedIdentity, "identity.aaron");
+    assert.equal(linkedBody.session.effectiveActor, "aaron");
+    assert.equal(linkedBody.session.authorityMode, "direct");
 
     const definedIdentities = world.allWitnesses().filter(witness => witness.process === "defineIdentity");
     assert.equal(definedIdentities.length, 1);
@@ -213,6 +221,9 @@ homePerspective = "aaron:personal"
     assert.equal(loginCallbackBody.createdIdentity, false);
     assert.equal(loginCallbackBody.identity.id, "identity.aaron");
     assert.equal(loginCallbackBody.session.identity, "identity.aaron");
+    assert.equal(loginCallbackBody.session.authenticatedIdentity, "identity.aaron");
+    assert.equal(loginCallbackBody.session.effectiveActor, "aaron");
+    assert.equal(loginCallbackBody.session.authorityMode, "direct");
 
     assert(world.allWitnesses().some(witness => witness.process === "auth.oauth.link" && witness.body?.identity === "identity.aaron"));
     assert(world.allWitnesses().some(witness => witness.process === "auth.oauth.session" && witness.body?.identity === "identity.aaron"));

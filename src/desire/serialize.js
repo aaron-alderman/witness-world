@@ -193,6 +193,7 @@ function semanticWtomlDoc(semantic) {
         docKind: "surface",
         values: {
           id: semantic.name,
+          identity: semantic.identity,
           surfaceKind: semantic.surfaceKind,
           className: semantic.className,
           children: semantic.children,
@@ -391,6 +392,7 @@ function serializeSemanticRvmNode(node) {
     if (semantic.kind === "surface") {
       if (semantic.surfaceKind === "chart") return serializeRvmChart(semantic);
       return block("view", semantic.name, [
+        simpleLine("identity", semantic.identity),
         simpleLine("kind", semantic.surfaceKind),
         simpleLine("class", semantic.className),
         simpleLine("process", semantic.processRef),
@@ -530,6 +532,7 @@ function serializeRvmDataflow(semantic) {
 function serializeRvmChart(semantic) {
   const encoding = semantic.encoding ?? {};
   return block("chart", semantic.name, [
+    simpleLine("identity", semantic.identity),
     simpleLine("frame", semantic.frame),
     ...Object.entries(encoding).flatMap(([channel, spec]) => [
       simpleLine(channel, spec?.field),

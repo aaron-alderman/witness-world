@@ -614,6 +614,9 @@ export function createIdentity(world, {
   label,
   username,
   password,
+  displayName = null,
+  jobTitle = null,
+  initials = null,
   homePerspective = null,
   homeContext = null,
   owner = actor
@@ -634,6 +637,9 @@ export function createIdentity(world, {
       label: String(label),
       username: String(username),
       password: String(password),
+      displayName: displayName ? String(displayName) : null,
+      jobTitle: jobTitle ? String(jobTitle) : null,
+      initials: initials ? String(initials) : null,
       homeContext: homeContext ? String(homeContext) : null,
       homePerspective: homePerspective ? String(homePerspective) : null
     }
@@ -646,6 +652,9 @@ export function updateIdentity(world, {
   label,
   username,
   password,
+  displayName = null,
+  jobTitle = null,
+  initials = null,
   homeContext = null,
   homePerspective = null
 }) {
@@ -674,8 +683,164 @@ export function updateIdentity(world, {
       label: String(label),
       username: String(username),
       password: String(password),
+      displayName: displayName ? String(displayName) : null,
+      jobTitle: jobTitle ? String(jobTitle) : null,
+      initials: initials ? String(initials) : null,
       homeContext: nextHomeContext,
       homePerspective: nextHomePerspective
+    }
+  });
+}
+
+export function defineAuthRole(world, {
+  actor,
+  id,
+  label = id,
+  description = "",
+  owner = actor
+}) {
+  createThing(world, { actor, id, owner });
+  return world.emit({
+    process: "defineAuthRole",
+    actor,
+    claims: [
+      relation(id, "hasModuleKind", "authRole")
+    ],
+    body: {
+      id: String(id),
+      label: String(label ?? id),
+      description: String(description ?? "")
+    }
+  });
+}
+
+export function updateAuthRole(world, {
+  actor,
+  id,
+  label = id,
+  description = ""
+}) {
+  return world.emit({
+    process: "updateAuthRole",
+    actor,
+    claims: [
+      relation(id, "hasModuleKind", "authRole")
+    ],
+    body: {
+      id: String(id),
+      label: String(label ?? id),
+      description: String(description ?? "")
+    }
+  });
+}
+
+export function grantIdentityRole(world, {
+  actor,
+  identityId,
+  roleId
+}) {
+  return world.emit({
+    process: "grantIdentityRole",
+    actor,
+    claims: [
+      relation(identityId, "hasAuthRole", roleId)
+    ],
+    body: {
+      identityId: String(identityId),
+      roleId: String(roleId)
+    }
+  });
+}
+
+export function revokeIdentityRole(world, {
+  actor,
+  identityId,
+  roleId
+}) {
+  return world.emit({
+    process: "revokeIdentityRole",
+    actor,
+    claims: [
+      retract(identityId, "hasAuthRole", roleId)
+    ],
+    body: {
+      identityId: String(identityId),
+      roleId: String(roleId)
+    }
+  });
+}
+
+function identityActorAssumptionGrantId(identityId, targetActor) {
+  return `${String(identityId)}=>${String(targetActor)}`;
+}
+
+export function grantIdentityActorAssumption(world, {
+  actor,
+  identityId,
+  targetActor
+}) {
+  return world.emit({
+    process: "grantIdentityActorAssumption",
+    actor,
+    claims: [
+      relation(identityId, "mayAssumeActor", targetActor)
+    ],
+    body: {
+      id: identityActorAssumptionGrantId(identityId, targetActor),
+      identityId: String(identityId),
+      targetActor: String(targetActor)
+    }
+  });
+}
+
+export function revokeIdentityActorAssumption(world, {
+  actor,
+  identityId,
+  targetActor
+}) {
+  return world.emit({
+    process: "revokeIdentityActorAssumption",
+    actor,
+    claims: [
+      retract(identityId, "mayAssumeActor", targetActor)
+    ],
+    body: {
+      id: identityActorAssumptionGrantId(identityId, targetActor),
+      identityId: String(identityId),
+      targetActor: String(targetActor)
+    }
+  });
+}
+
+export function setAppFeatureAccessPolicy(world, {
+  actor,
+  featureId,
+  label = featureId,
+  appId = "",
+  requireAuth = false,
+  visibilityMode = "normal",
+  allowedRoles = [],
+  guestBehavior = "allow",
+  deniedBehavior = "403",
+  owner = actor
+}) {
+  createThing(world, { actor, id: featureId, owner });
+  return world.emit({
+    process: "setAppFeatureAccessPolicy",
+    actor,
+    claims: [
+      relation(featureId, "hasModuleKind", "appFeatureAccessPolicy")
+    ],
+    body: {
+      id: String(featureId),
+      featureId: String(featureId),
+      label: String(label ?? featureId),
+      appId: String(appId ?? ""),
+      requireAuth: requireAuth === true,
+      visibilityMode: String(visibilityMode || "normal"),
+      allowedRoles: [...new Set((Array.isArray(allowedRoles) ? allowedRoles : []).map(String).filter(Boolean))],
+      guestBehavior: String(guestBehavior || "allow"),
+      deniedBehavior: String(deniedBehavior || "403")
     }
   });
 }
@@ -1658,11 +1823,115 @@ export const moduleProjectors = {
         label: String(w.body.label || previous?.label || ""),
         username: String(w.body.username || previous?.username || ""),
         password: String(w.body.password || previous?.password || ""),
+        displayName: w.body.displayName == null ? (previous?.displayName ?? null) : String(w.body.displayName),
+        jobTitle: w.body.jobTitle == null ? (previous?.jobTitle ?? null) : String(w.body.jobTitle),
+        initials: w.body.initials == null ? (previous?.initials ?? null) : String(w.body.initials),
         homeContext: w.body.homeContext ? String(w.body.homeContext) : null,
         homePerspective: w.body.homePerspective ? String(w.body.homePerspective) : null
       });
     }
     return [...identityMap.values()];
+  },
+
+  authRoles(witnesses) {
+    const roleMap = new Map();
+    for (const w of witnesses) {
+      if ((w.process !== "defineAuthRole" && w.process !== "updateAuthRole") || !w.body?.id) continue;
+      roleMap.set(w.body.id, {
+        id: String(w.body.id),
+        label: String(w.body.label ?? w.body.id),
+        description: String(w.body.description ?? "")
+      });
+    }
+    return [...roleMap.values()].sort((a, b) => String(a.label).localeCompare(String(b.label)));
+  },
+
+  authRoleIndex(witnesses) {
+    const rows = moduleProjectors.authRoles(witnesses);
+    const byId = Object.create(null);
+    for (const row of rows) byId[row.id] = row;
+    return { rows, byId };
+  },
+
+  identityRoleGrants(witnesses) {
+    return currentRelations(witnesses)
+      .filter(row => row.rel === "hasAuthRole")
+      .map(row => ({
+        identityId: String(row.from),
+        roleId: String(row.to)
+      }))
+      .sort((a, b) =>
+        String(a.identityId).localeCompare(String(b.identityId))
+        || String(a.roleId).localeCompare(String(b.roleId))
+      );
+  },
+
+  identityRoleGrantIndex(witnesses) {
+    const rows = moduleProjectors.identityRoleGrants(witnesses);
+    const byIdentity = Object.create(null);
+    const byRole = Object.create(null);
+    for (const row of rows) {
+      if (!byIdentity[row.identityId]) byIdentity[row.identityId] = [];
+      if (!byRole[row.roleId]) byRole[row.roleId] = [];
+      byIdentity[row.identityId].push(row.roleId);
+      byRole[row.roleId].push(row.identityId);
+    }
+    return { rows, byIdentity, byRole };
+  },
+
+  identityActorAssumptionGrants(witnesses) {
+    return currentRelations(witnesses)
+      .filter(row => row.rel === "mayAssumeActor")
+      .map(row => ({
+        id: identityActorAssumptionGrantId(row.from, row.to),
+        identityId: String(row.from),
+        targetActor: String(row.to)
+      }))
+      .sort((a, b) =>
+        String(a.identityId).localeCompare(String(b.identityId))
+        || String(a.targetActor).localeCompare(String(b.targetActor))
+      );
+  },
+
+  identityActorAssumptionGrantIndex(witnesses) {
+    const rows = moduleProjectors.identityActorAssumptionGrants(witnesses);
+    const byIdentity = Object.create(null);
+    const byTargetActor = Object.create(null);
+    const byPair = Object.create(null);
+    for (const row of rows) {
+      if (!byIdentity[row.identityId]) byIdentity[row.identityId] = [];
+      if (!byTargetActor[row.targetActor]) byTargetActor[row.targetActor] = [];
+      byIdentity[row.identityId].push(row);
+      byTargetActor[row.targetActor].push(row);
+      byPair[row.id] = row;
+    }
+    return { rows, byIdentity, byTargetActor, byPair };
+  },
+
+  appFeatureAccessPolicies(witnesses) {
+    const policyMap = new Map();
+    for (const w of witnesses) {
+      if (w.process !== "setAppFeatureAccessPolicy" || !w.body?.featureId) continue;
+      policyMap.set(String(w.body.featureId), {
+        id: String(w.body.id ?? w.body.featureId),
+        featureId: String(w.body.featureId),
+        label: String(w.body.label ?? w.body.featureId),
+        appId: String(w.body.appId ?? ""),
+        requireAuth: w.body.requireAuth === true,
+        visibilityMode: String(w.body.visibilityMode ?? "normal"),
+        allowedRoles: [...new Set((Array.isArray(w.body.allowedRoles) ? w.body.allowedRoles : []).map(String).filter(Boolean))],
+        guestBehavior: String(w.body.guestBehavior ?? "allow"),
+        deniedBehavior: String(w.body.deniedBehavior ?? "403")
+      });
+    }
+    return [...policyMap.values()].sort((a, b) => String(a.label).localeCompare(String(b.label)));
+  },
+
+  appFeatureAccessPolicyIndex(witnesses) {
+    const rows = moduleProjectors.appFeatureAccessPolicies(witnesses);
+    const byFeatureId = Object.create(null);
+    for (const row of rows) byFeatureId[row.featureId] = row;
+    return { rows, byFeatureId };
   },
 
   proposals(witnesses) {

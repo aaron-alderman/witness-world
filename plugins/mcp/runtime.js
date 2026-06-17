@@ -81,7 +81,14 @@ export function createHandlers({
         sendJson(res, 403, { error: originGate.reason });
         return;
       }
-      const principal = resolveMcpPrincipal({ req, requestActor, mcpServer, appContext });
+      const principal = resolveMcpPrincipal({
+        req,
+        requestActor,
+        requestIdentity,
+        requestSession,
+        mcpServer,
+        appContext
+      });
       if (!principal.ok) {
         sendJson(res, principal.status || 403, { error: principal.reason || "forbidden" });
         return;
@@ -169,6 +176,13 @@ export function createHandlers({
         sendJson(res, 200, { jsonrpc: "2.0", id: message.id, result: {} });
         return;
       }
+      const requestSessionMatchesPrincipal = Boolean(
+        requestSession
+        && requestSession.effectiveActor === principal.effectiveActor
+        && (requestSession.effectiveIdentity ?? null) === (principal.effectiveIdentity ?? null)
+        && (requestSession.authorityMode ?? "direct") === (principal.authorityMode ?? "direct")
+        && (requestSession.assumptionGrantId ?? null) === (principal.assumptionGrantId ?? null)
+      );
       const installs = currentMcpToolInstalls(appContext)
         .filter(row => row.server === mcpServer.id)
         .filter(row => row.actingMode === principal.actingMode)
@@ -229,9 +243,9 @@ export function createHandlers({
           appContext,
           callHandler: request => invokeRouteHandler({
             ...request,
-            requestActor: principal.actor,
-            requestIdentity: requestIdentity?.actor === principal.actor ? requestIdentity : null,
-            requestSession: requestSession?.actor === principal.actor ? requestSession : null,
+            requestActor: principal.effectiveActor,
+            requestIdentity: principal.effectiveIdentity ?? null,
+            requestSession: requestSessionMatchesPrincipal ? requestSession : null,
             appContext
           })
         });

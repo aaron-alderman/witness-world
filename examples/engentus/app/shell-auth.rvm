@@ -21,6 +21,15 @@ view EngentusLoginDemoHint {
   prop text = "Use aaron / aaron or callan / callan."
 }
 
+view EngentusLoginPendingHint {
+  kind text
+  prop tag = "p"
+  class auth-form-sub
+  bindings {
+    text from state EngentusPendingRoutePath map default ""
+  }
+}
+
 view EngentusLoginAuthNotice {
   kind text
   prop tag = "p"
@@ -106,9 +115,9 @@ view EngentusLoginMicrosoftIcon {
 view EngentusLoginMicrosoftLabel {
   kind text
   prop tag = "span"
-  prop text = "Use Aaron Demo Account"
+  prop text = "Use Demo Account"
   bindings {
-    text from state EngentusShellAuthStatus map pending "Signing in…" folding "Signing in…" default "Use Aaron Demo Account"
+    text from state EngentusShellAuthStatus map pending "Signing in…" folding "Signing in…" default "Use Demo Account"
   }
 }
 
@@ -214,6 +223,7 @@ view EngentusLoginForm {
     EngentusLoginHeader
     EngentusLoginSubtitle
     EngentusLoginDemoHint
+    EngentusLoginPendingHint
     EngentusLoginAuthNotice
     EngentusLoginPrimaryAction
     EngentusLoginDivider
@@ -364,6 +374,160 @@ view EngentusSignout {
   }
   children {
     EngentusSignoutBook
+  }
+}
+
+view EngentusAccessDeniedHeader {
+  kind screen-header
+  class auth-so-title
+  prop text = "Access denied"
+}
+
+view EngentusAccessDeniedSubtitle {
+  kind text
+  class auth-so-sub
+  prop text = "Your account is signed in, but this feature requires a role you do not currently have."
+}
+
+view EngentusAccessDeniedAction {
+  kind action
+  class auth-submit
+  prop tag = "button"
+  prop label = "Back to Home"
+  prop href = "/engentus/home"
+  prop messageRef = "EngentusNavigateHomeRequested"
+  interactions {
+    on click self deliver EngentusNavigateHomeRequested
+  }
+}
+
+view EngentusAccessDeniedActions {
+  kind form-region
+  class auth-form-wrap
+  prop style = "text-align:center"
+  children {
+    EngentusLoginFormLogo
+    EngentusAccessDeniedHeader
+    EngentusAccessDeniedSubtitle
+    EngentusAccessDeniedAction
+    EngentusSignoutLegal
+  }
+}
+
+view EngentusAccessDeniedLeft {
+  kind region
+  class auth-left
+  children {
+    EngentusAuthBrand
+    EngentusValueHero
+    EngentusAuthFooter
+  }
+}
+
+view EngentusAccessDeniedRight {
+  kind region
+  class auth-right
+  children {
+    EngentusAccessDeniedActions
+  }
+}
+
+view EngentusAccessDeniedBook {
+  kind region
+  class auth-book
+  children {
+    EngentusAccessDeniedLeft
+    EngentusAccessDeniedRight
+  }
+}
+
+view EngentusAccessDenied {
+  kind auth-screen
+  class engentus-signout surface-auth-view
+  process EngentusShellNavigation
+  prop domId = "view-access-denied"
+  prop documentTitle = "Access denied"
+  prop routeKey = "access-denied"
+  prop routePath = "/engentus/access-denied"
+  children {
+    EngentusAccessDeniedBook
+  }
+}
+
+view EngentusNotFoundHeader {
+  kind screen-header
+  class auth-so-title
+  prop text = "Page not found"
+}
+
+view EngentusNotFoundSubtitle {
+  kind text
+  class auth-so-sub
+  prop text = "This route is not available for your account or does not exist."
+}
+
+view EngentusNotFoundAction {
+  kind action
+  class auth-submit
+  prop tag = "button"
+  prop label = "Back to Home"
+  prop href = "/engentus/home"
+  prop messageRef = "EngentusNavigateHomeRequested"
+  interactions {
+    on click self deliver EngentusNavigateHomeRequested
+  }
+}
+
+view EngentusNotFoundActions {
+  kind form-region
+  class auth-form-wrap
+  prop style = "text-align:center"
+  children {
+    EngentusLoginFormLogo
+    EngentusNotFoundHeader
+    EngentusNotFoundSubtitle
+    EngentusNotFoundAction
+    EngentusSignoutLegal
+  }
+}
+
+view EngentusNotFoundLeft {
+  kind region
+  class auth-left
+  children {
+    EngentusAuthBrand
+    EngentusValueHero
+    EngentusAuthFooter
+  }
+}
+
+view EngentusNotFoundRight {
+  kind region
+  class auth-right
+  children {
+    EngentusNotFoundActions
+  }
+}
+
+view EngentusNotFoundBook {
+  kind region
+  class auth-book
+  children {
+    EngentusNotFoundLeft
+    EngentusNotFoundRight
+  }
+}
+
+view EngentusNotFound {
+  kind auth-screen
+  class engentus-signout surface-auth-view
+  process EngentusShellNavigation
+  prop domId = "view-not-found"
+  prop documentTitle = "Not found"
+  prop routeKey = "not-found"
+  prop routePath = "/engentus/not-found"
+  children {
+    EngentusNotFoundBook
   }
 }
 

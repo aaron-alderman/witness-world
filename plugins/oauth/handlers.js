@@ -138,9 +138,11 @@ export function createOauthHandlers({
           sendJson(res, 401, { error: "sign in first to link an oauth account" });
           return;
         }
-        if (existingLink && existingLink.identity && existingLink.identity !== requestSession.identity) {
+        const authenticatedIdentityId = requestSession.authenticatedIdentity ?? requestSession.identity ?? null;
+        const authenticatedActor = requestSession.authenticatedActor ?? requestSession.effectiveActor ?? requestSession.actor ?? backendHost;
+        if (existingLink && existingLink.identity && existingLink.identity !== authenticatedIdentityId) {
           emitAuthOauthLink({
-            actor: requestSession.actor,
+            actor: authenticatedActor,
             flow,
             identity: null,
             profile,
@@ -150,10 +152,10 @@ export function createOauthHandlers({
           sendJson(res, 409, { error: "oauth account already linked to another identity" });
           return;
         }
-        const identity = currentIdentityIndex().byId[requestSession.identity] ?? null;
+        const identity = authenticatedIdentityId ? (currentIdentityIndex().byId[authenticatedIdentityId] ?? null) : null;
         if (!identity) {
           emitAuthOauthLink({
-            actor: requestSession.actor,
+            actor: authenticatedActor,
             flow,
             identity: null,
             profile,
@@ -163,8 +165,8 @@ export function createOauthHandlers({
           sendJson(res, 409, { error: "signed-in identity not found" });
           return;
         }
-        const linkId = emitAuthOauthLink({ actor: requestSession.actor, flow, identity, profile, createdIdentity: false });
-        emitAuthOauthSession({ actor: requestSession.actor, flow, identity, session: requestSession, createdIdentity: false });
+        const linkId = emitAuthOauthLink({ actor: authenticatedActor, flow, identity, profile, createdIdentity: false });
+        emitAuthOauthSession({ actor: authenticatedActor, flow, identity, session: requestSession, createdIdentity: false });
         sendJson(res, 200, {
           linked: true,
           createdIdentity: false,

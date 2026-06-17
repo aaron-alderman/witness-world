@@ -9,7 +9,7 @@ id = "engentus_server"
 backendHost = "backendHost"
 frontendHost = "frontendHost"
 default = true
-allowActorHeader = true
+allowActorHeader = false
 
 [[runtimePluginInstall]]
 actor = "aaron"
@@ -36,9 +36,102 @@ actor = "aaron"
 serverRunner = "engentus_server"
 plugin = "plugin.engentus-dev-diagnostics"
 
+[[authRole]]
+actor = "aaron"
+id = "engentus_user"
+label = "Engentus User"
+description = "Base signed-in access for Engentus."
+
+[[authRole]]
+actor = "aaron"
+id = "platform_admin"
+label = "Platform Admin"
+description = "Can access Platform Config and manage access policy."
+
+[[authRole]]
+actor = "aaron"
+id = "mill_force_access"
+label = "Mill Force Access"
+description = "Can access the Mill Force Analysis module."
+
+[[identityRoleGrant]]
+actor = "aaron"
+identityId = "identity.aaron"
+roleId = "engentus_user"
+
+[[identityRoleGrant]]
+actor = "aaron"
+identityId = "identity.aaron"
+roleId = "platform_admin"
+
+[[identityRoleGrant]]
+actor = "aaron"
+identityId = "identity.aaron"
+roleId = "mill_force_access"
+
+[[identityRoleGrant]]
+actor = "aaron"
+identityId = "identity.callan"
+roleId = "engentus_user"
+
+[[appFeatureAccessPolicy]]
+actor = "aaron"
+featureId = "engentus.home"
+label = "Home"
+appId = "engentus_frontend_app"
+requireAuth = true
+visibilityMode = "normal"
+allowedRoles = ["engentus_user"]
+guestBehavior = "login"
+deniedBehavior = "403"
+
+[[appFeatureAccessPolicy]]
+actor = "aaron"
+featureId = "engentus.goodman"
+label = "Goodman Fatigue Diagram"
+appId = "engentus_frontend_app"
+requireAuth = true
+visibilityMode = "normal"
+allowedRoles = ["engentus_user"]
+guestBehavior = "login"
+deniedBehavior = "403"
+
+[[appFeatureAccessPolicy]]
+actor = "aaron"
+featureId = "engentus.mill_charge"
+label = "Mill Charge Motion"
+appId = "engentus_frontend_app"
+requireAuth = true
+visibilityMode = "normal"
+allowedRoles = ["engentus_user"]
+guestBehavior = "login"
+deniedBehavior = "403"
+
+[[appFeatureAccessPolicy]]
+actor = "aaron"
+featureId = "engentus.mill_force"
+label = "Mill Force Analysis"
+appId = "engentus_frontend_app"
+requireAuth = true
+visibilityMode = "locked"
+allowedRoles = ["mill_force_access"]
+guestBehavior = "login"
+deniedBehavior = "403"
+
+[[appFeatureAccessPolicy]]
+actor = "aaron"
+featureId = "engentus.platform_config"
+label = "Platform Config"
+appId = "engentus_frontend_app"
+requireAuth = true
+visibilityMode = "hidden"
+allowedRoles = ["platform_admin"]
+guestBehavior = "login"
+deniedBehavior = "404"
+
 [[route]]
 actor = "aaron"
-id = "engentus_home_route"
+id = "engentus_root_route"
 method = "GET"
 path = "/"
 serves = "engentusShell"
@@ -48,7 +141,7 @@ params = { rootSurface = "EngentusRoot", defaultScreen = "login", routeState = {
 [[serve]]
 actor = "aaron"
 serverRunner = "engentus_server"
-route = "engentus_home_route"
+route = "engentus_root_route"
 
 [[route]]
 actor = "aaron"
@@ -66,31 +159,185 @@ route = "engentus_alias_route"
 
 [[route]]
 actor = "aaron"
-id = "engentus_screen_route"
+id = "engentus_login_route"
 method = "GET"
-path = "/engentus/:screen"
-serves = "engentusShell"
+path = "/engentus/login"
+serves = "engentusLogin"
 handler = "page.surface"
 params = { rootSurface = "EngentusRoot", defaultScreen = "login", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" } }
 
 [[serve]]
 actor = "aaron"
 serverRunner = "engentus_server"
-route = "engentus_screen_route"
+route = "engentus_login_route"
 
 [[route]]
 actor = "aaron"
-id = "engentus_platform_config_screen_route"
+id = "engentus_signout_route"
 method = "GET"
-path = "/engentus/platform-config/:screen"
-serves = "engentusShell"
+path = "/engentus/signout"
+serves = "engentusSignout"
 handler = "page.surface"
-params = { rootSurface = "EngentusRoot", defaultScreen = "login", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" } }
+params = { rootSurface = "EngentusRoot", defaultScreen = "signout", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" } }
 
 [[serve]]
 actor = "aaron"
 serverRunner = "engentus_server"
-route = "engentus_platform_config_screen_route"
+route = "engentus_signout_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_access_denied_route"
+method = "GET"
+path = "/engentus/access-denied"
+serves = "engentusAccessDenied"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "access-denied", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_access_denied_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_not_found_route"
+method = "GET"
+path = "/engentus/not-found"
+serves = "engentusNotFound"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "not-found", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_not_found_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_home_route"
+method = "GET"
+path = "/engentus/home"
+serves = "engentusHome"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "home", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" }, auth = { featureId = "engentus.home", resumeRouteKey = "home", login = { routePath = "/engentus/login", routeKey = "login", responseStatus = 200 }, forbidden = { routePath = "/engentus/access-denied", routeKey = "access-denied", responseStatus = 403 }, notFound = { routePath = "/engentus/not-found", routeKey = "not-found", responseStatus = 404 }, stateMap = { actor = "EngentusSessionActor", identity = "EngentusSessionIdentityId", displayName = "EngentusProfileDisplayName", jobTitle = "EngentusProfileJobTitle", initials = "EngentusProfileInitials", authStatus = "EngentusShellAuthStatus", pendingRouteKey = "EngentusPendingRouteKey", pendingFeatureId = "EngentusPendingFeatureId", pendingPath = "EngentusPendingRoutePath", currentPath = "EngentusCurrentPath", millForceAccess = "EngentusMillForceAccess", platformConfigAccess = "EngentusPlatformConfigAccess" } } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_home_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_goodman_route"
+method = "GET"
+path = "/engentus/goodman"
+serves = "engentusGoodman"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "goodman", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" }, auth = { featureId = "engentus.goodman", resumeRouteKey = "goodman", login = { routePath = "/engentus/login", routeKey = "login", responseStatus = 200 }, forbidden = { routePath = "/engentus/access-denied", routeKey = "access-denied", responseStatus = 403 }, notFound = { routePath = "/engentus/not-found", routeKey = "not-found", responseStatus = 404 }, stateMap = { actor = "EngentusSessionActor", identity = "EngentusSessionIdentityId", displayName = "EngentusProfileDisplayName", jobTitle = "EngentusProfileJobTitle", initials = "EngentusProfileInitials", authStatus = "EngentusShellAuthStatus", pendingRouteKey = "EngentusPendingRouteKey", pendingFeatureId = "EngentusPendingFeatureId", pendingPath = "EngentusPendingRoutePath", currentPath = "EngentusCurrentPath", millForceAccess = "EngentusMillForceAccess", platformConfigAccess = "EngentusPlatformConfigAccess" } } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_goodman_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_mill_charge_route"
+method = "GET"
+path = "/engentus/mill-charge"
+serves = "engentusMillCharge"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "mill-charge", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" }, auth = { featureId = "engentus.mill_charge", resumeRouteKey = "mill-charge", login = { routePath = "/engentus/login", routeKey = "login", responseStatus = 200 }, forbidden = { routePath = "/engentus/access-denied", routeKey = "access-denied", responseStatus = 403 }, notFound = { routePath = "/engentus/not-found", routeKey = "not-found", responseStatus = 404 }, stateMap = { actor = "EngentusSessionActor", identity = "EngentusSessionIdentityId", displayName = "EngentusProfileDisplayName", jobTitle = "EngentusProfileJobTitle", initials = "EngentusProfileInitials", authStatus = "EngentusShellAuthStatus", pendingRouteKey = "EngentusPendingRouteKey", pendingFeatureId = "EngentusPendingFeatureId", pendingPath = "EngentusPendingRoutePath", currentPath = "EngentusCurrentPath", millForceAccess = "EngentusMillForceAccess", platformConfigAccess = "EngentusPlatformConfigAccess" } } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_mill_charge_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_mill_force_route"
+method = "GET"
+path = "/engentus/mill-force"
+serves = "engentusMillForce"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "mill-force", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" }, auth = { featureId = "engentus.mill_force", resumeRouteKey = "mill-force", login = { routePath = "/engentus/login", routeKey = "login", responseStatus = 200 }, forbidden = { routePath = "/engentus/access-denied", routeKey = "access-denied", responseStatus = 403 }, notFound = { routePath = "/engentus/not-found", routeKey = "not-found", responseStatus = 404 }, stateMap = { actor = "EngentusSessionActor", identity = "EngentusSessionIdentityId", displayName = "EngentusProfileDisplayName", jobTitle = "EngentusProfileJobTitle", initials = "EngentusProfileInitials", authStatus = "EngentusShellAuthStatus", pendingRouteKey = "EngentusPendingRouteKey", pendingFeatureId = "EngentusPendingFeatureId", pendingPath = "EngentusPendingRoutePath", currentPath = "EngentusCurrentPath", millForceAccess = "EngentusMillForceAccess", platformConfigAccess = "EngentusPlatformConfigAccess" } } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_mill_force_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_operator_route"
+method = "GET"
+path = "/engentus/platform-config"
+serves = "engentusPlatformConfigOperator"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "platform-config-operator", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" }, auth = { featureId = "engentus.platform_config", resumeRouteKey = "platform-config-operator", login = { routePath = "/engentus/login", routeKey = "login", responseStatus = 200 }, forbidden = { routePath = "/engentus/access-denied", routeKey = "access-denied", responseStatus = 403 }, notFound = { routePath = "/engentus/not-found", routeKey = "not-found", responseStatus = 404 }, stateMap = { actor = "EngentusSessionActor", identity = "EngentusSessionIdentityId", displayName = "EngentusProfileDisplayName", jobTitle = "EngentusProfileJobTitle", initials = "EngentusProfileInitials", authStatus = "EngentusShellAuthStatus", pendingRouteKey = "EngentusPendingRouteKey", pendingFeatureId = "EngentusPendingFeatureId", pendingPath = "EngentusPendingRoutePath", currentPath = "EngentusCurrentPath", millForceAccess = "EngentusMillForceAccess", platformConfigAccess = "EngentusPlatformConfigAccess" } } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_operator_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_secrets_route"
+method = "GET"
+path = "/engentus/platform-config/secrets"
+serves = "engentusPlatformConfigSecrets"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "platform-config-secrets", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" }, auth = { featureId = "engentus.platform_config", resumeRouteKey = "platform-config-secrets", login = { routePath = "/engentus/login", routeKey = "login", responseStatus = 200 }, forbidden = { routePath = "/engentus/access-denied", routeKey = "access-denied", responseStatus = 403 }, notFound = { routePath = "/engentus/not-found", routeKey = "not-found", responseStatus = 404 }, stateMap = { actor = "EngentusSessionActor", identity = "EngentusSessionIdentityId", displayName = "EngentusProfileDisplayName", jobTitle = "EngentusProfileJobTitle", initials = "EngentusProfileInitials", authStatus = "EngentusShellAuthStatus", pendingRouteKey = "EngentusPendingRouteKey", pendingFeatureId = "EngentusPendingFeatureId", pendingPath = "EngentusPendingRoutePath", currentPath = "EngentusCurrentPath", millForceAccess = "EngentusMillForceAccess", platformConfigAccess = "EngentusPlatformConfigAccess" } } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_secrets_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_datasources_route"
+method = "GET"
+path = "/engentus/platform-config/datasources"
+serves = "engentusPlatformConfigDatasources"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "platform-config-datasources", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" }, auth = { featureId = "engentus.platform_config", resumeRouteKey = "platform-config-datasources", login = { routePath = "/engentus/login", routeKey = "login", responseStatus = 200 }, forbidden = { routePath = "/engentus/access-denied", routeKey = "access-denied", responseStatus = 403 }, notFound = { routePath = "/engentus/not-found", routeKey = "not-found", responseStatus = 404 }, stateMap = { actor = "EngentusSessionActor", identity = "EngentusSessionIdentityId", displayName = "EngentusProfileDisplayName", jobTitle = "EngentusProfileJobTitle", initials = "EngentusProfileInitials", authStatus = "EngentusShellAuthStatus", pendingRouteKey = "EngentusPendingRouteKey", pendingFeatureId = "EngentusPendingFeatureId", pendingPath = "EngentusPendingRoutePath", currentPath = "EngentusCurrentPath", millForceAccess = "EngentusMillForceAccess", platformConfigAccess = "EngentusPlatformConfigAccess" } } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_datasources_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_scripts_route"
+method = "GET"
+path = "/engentus/platform-config/scripts"
+serves = "engentusPlatformConfigScripts"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "platform-config-scripts", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" }, auth = { featureId = "engentus.platform_config", resumeRouteKey = "platform-config-scripts", login = { routePath = "/engentus/login", routeKey = "login", responseStatus = 200 }, forbidden = { routePath = "/engentus/access-denied", routeKey = "access-denied", responseStatus = 403 }, notFound = { routePath = "/engentus/not-found", routeKey = "not-found", responseStatus = 404 }, stateMap = { actor = "EngentusSessionActor", identity = "EngentusSessionIdentityId", displayName = "EngentusProfileDisplayName", jobTitle = "EngentusProfileJobTitle", initials = "EngentusProfileInitials", authStatus = "EngentusShellAuthStatus", pendingRouteKey = "EngentusPendingRouteKey", pendingFeatureId = "EngentusPendingFeatureId", pendingPath = "EngentusPendingRoutePath", currentPath = "EngentusCurrentPath", millForceAccess = "EngentusMillForceAccess", platformConfigAccess = "EngentusPlatformConfigAccess" } } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_scripts_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_access_route"
+method = "GET"
+path = "/engentus/platform-config/access"
+serves = "engentusPlatformConfigAccess"
+handler = "page.surface"
+params = { rootSurface = "EngentusRoot", defaultScreen = "platform-config-access", routeState = { process = "EngentusShellNavigation", state = "EngentusShellActiveRoute" }, auth = { featureId = "engentus.platform_config", resumeRouteKey = "platform-config-access", login = { routePath = "/engentus/login", routeKey = "login", responseStatus = 200 }, forbidden = { routePath = "/engentus/access-denied", routeKey = "access-denied", responseStatus = 403 }, notFound = { routePath = "/engentus/not-found", routeKey = "not-found", responseStatus = 404 }, stateMap = { actor = "EngentusSessionActor", identity = "EngentusSessionIdentityId", displayName = "EngentusProfileDisplayName", jobTitle = "EngentusProfileJobTitle", initials = "EngentusProfileInitials", authStatus = "EngentusShellAuthStatus", pendingRouteKey = "EngentusPendingRouteKey", pendingFeatureId = "EngentusPendingFeatureId", pendingPath = "EngentusPendingRoutePath", currentPath = "EngentusCurrentPath", millForceAccess = "EngentusMillForceAccess", platformConfigAccess = "EngentusPlatformConfigAccess" } } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_access_route"
 
 [[route]]
 actor = "aaron"
@@ -99,6 +346,7 @@ method = "POST"
 path = "/api/pipeline/platform-config/snapshot"
 serves = "platformConfigSnapshot"
 handler = "pipeline.platform-config.snapshot"
+params = { auth = { featureId = "engentus.platform_config" } }
 
 [[serve]]
 actor = "aaron"
@@ -112,6 +360,7 @@ method = "GET"
 path = "/api/pipeline/platform-config/secrets/:id"
 serves = "platformConfigSecretRead"
 handler = "pipeline.platform-config.secret.read"
+params = { auth = { featureId = "engentus.platform_config" } }
 
 [[serve]]
 actor = "aaron"
@@ -125,6 +374,7 @@ method = "POST"
 path = "/api/pipeline/platform-config/secrets"
 serves = "platformConfigSecretCreate"
 handler = "pipeline.platform-config.secret.create"
+params = { auth = { featureId = "engentus.platform_config" } }
 
 [[serve]]
 actor = "aaron"
@@ -138,6 +388,7 @@ method = "PUT"
 path = "/api/pipeline/platform-config/secrets/:id/value"
 serves = "platformConfigSecretWrite"
 handler = "pipeline.platform-config.secret.write"
+params = { auth = { featureId = "engentus.platform_config" } }
 
 [[serve]]
 actor = "aaron"
@@ -151,6 +402,7 @@ method = "DELETE"
 path = "/api/pipeline/platform-config/secrets/:id"
 serves = "platformConfigSecretDelete"
 handler = "pipeline.platform-config.secret.delete"
+params = { auth = { featureId = "engentus.platform_config" } }
 
 [[serve]]
 actor = "aaron"
@@ -164,6 +416,7 @@ method = "GET"
 path = "/api/pipeline/platform-config/datasources/:id"
 serves = "platformConfigDatasourceRead"
 handler = "pipeline.platform-config.datasource.read"
+params = { auth = { featureId = "engentus.platform_config" } }
 
 [[serve]]
 actor = "aaron"
@@ -177,6 +430,7 @@ method = "POST"
 path = "/api/pipeline/platform-config/datasources"
 serves = "platformConfigDatasourceCreate"
 handler = "pipeline.platform-config.datasource.create"
+params = { auth = { featureId = "engentus.platform_config" } }
 
 [[serve]]
 actor = "aaron"
@@ -190,6 +444,7 @@ method = "PATCH"
 path = "/api/pipeline/platform-config/datasources/:id"
 serves = "platformConfigDatasourceUpdate"
 handler = "pipeline.platform-config.datasource.update"
+params = { auth = { featureId = "engentus.platform_config" } }
 
 [[serve]]
 actor = "aaron"
@@ -203,6 +458,7 @@ method = "DELETE"
 path = "/api/pipeline/platform-config/datasources/:id"
 serves = "platformConfigDatasourceDelete"
 handler = "pipeline.platform-config.datasource.delete"
+params = { auth = { featureId = "engentus.platform_config" } }
 
 [[serve]]
 actor = "aaron"
@@ -216,6 +472,7 @@ method = "POST"
 path = "/api/pipeline/platform-config/datasources/test"
 serves = "platformConfigDatasourceTest"
 handler = "pipeline.platform-config.datasource.test"
+params = { auth = { featureId = "engentus.platform_config" } }
 
 [[serve]]
 actor = "aaron"
@@ -224,11 +481,68 @@ route = "engentus_platform_config_datasource_test_route"
 
 [[route]]
 actor = "aaron"
+id = "engentus_platform_config_access_identity_read_route"
+method = "GET"
+path = "/api/pipeline/platform-config/access/identities/:id"
+serves = "platformConfigAccessIdentityRead"
+handler = "pipeline.platform-config.access.identity.read"
+params = { auth = { featureId = "engentus.platform_config" } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_access_identity_read_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_access_identity_update_route"
+method = "PATCH"
+path = "/api/pipeline/platform-config/access/identities/:id"
+serves = "platformConfigAccessIdentityUpdate"
+handler = "pipeline.platform-config.access.identity.update"
+params = { auth = { featureId = "engentus.platform_config" } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_access_identity_update_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_access_feature_read_route"
+method = "GET"
+path = "/api/pipeline/platform-config/access/feature-policies/:id"
+serves = "platformConfigAccessFeatureRead"
+handler = "pipeline.platform-config.access.feature.read"
+params = { auth = { featureId = "engentus.platform_config" } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_access_feature_read_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_platform_config_access_feature_update_route"
+method = "PATCH"
+path = "/api/pipeline/platform-config/access/feature-policies/:id"
+serves = "platformConfigAccessFeatureUpdate"
+handler = "pipeline.platform-config.access.feature.update"
+params = { auth = { featureId = "engentus.platform_config" } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_platform_config_access_feature_update_route"
+
+[[route]]
+actor = "aaron"
 id = "engentus_pipeline_script_run_route"
 method = "POST"
 path = "/api/pipeline/scripts/run"
 serves = "pipelineScriptRun"
 handler = "pipeline.script.run"
+params = { auth = { featureId = "engentus.platform_config" } }
 
 [[serve]]
 actor = "aaron"

@@ -551,7 +551,8 @@ export function buildSurfaceRuntimeManifest({
   describeSurfaceRuntimeViewImpl = null,
   routeStateDescriptor = null,
   surfaceRenderers = [],
-  initialState = null
+  initialState = null,
+  initialStateOverrides = null
 }) {
   const rootId = rootSurfaceId ?? root?.id ?? activeSurface.id;
   const parentById = new Map();
@@ -623,7 +624,7 @@ export function buildSurfaceRuntimeManifest({
         view,
         fragmentHtml: runtime.bindings.some(binding => trimString(binding?.prop) === "visible")
           ? renderSurfaceStaticFragment(surfaces, surface.id, {
-            surfaceRenderers: [],
+            surfaceRenderers,
             initialState,
             forceVisibleSurfaceIds: [surface.id]
             })
@@ -686,6 +687,7 @@ export function buildSurfaceRuntimeManifest({
       collections,
       templates,
       processWitnesses: runtimeFragment.processWitnesses,
+      initialStateOverrides: normalizeRuntimeObject(initialStateOverrides),
       routeState: normalizeRouteStateDescriptor(routeStateDescriptor),
       diagnostics
   };
@@ -843,6 +845,7 @@ export function createSurfaceInteractionRuntime({
   createProcessRuntimeImpl,
   expectationProviders = []
 }) {
+  const normalizePathname = value => String(value || "/").replace(/\/+$/, "") || "/";
   const processRuntimeFactory = typeof createProcessRuntimeImpl === "function"
     ? createProcessRuntimeImpl
     : (() => {
@@ -1007,6 +1010,21 @@ export function createSurfaceInteractionRuntime({
       ...entry
     });
     if (routeDebugLog.length > 40) routeDebugLog.shift();
+  };
+  const syncLocationToManifestRequestPath = reason => {
+    const manifestPath = trimString(manifest?.requestPathname);
+    if (!manifestPath || !window?.history || !window?.location) return false;
+    const currentPath = normalizePathname(window.location.pathname);
+    const nextPath = normalizePathname(manifestPath);
+    if (currentPath === nextPath) return false;
+    window.history.replaceState({ surfaceRoutePath: nextPath }, "", nextPath);
+    pushRouteDebug({
+      kind: "manifest-path-sync",
+      reason: trimString(reason) || "runtime",
+      previousPath: currentPath,
+      nextPath
+    });
+    return true;
   };
   const probeManagedIssueIds = new Set();
   const reportIssue = issue => issueLedger.upsert({
@@ -1215,6 +1233,12 @@ export function createSurfaceInteractionRuntime({
             bridge();
             inFlightRuntimeBridges.delete(bridge);
           });
+      }
+    }
+    if (manifest?.initialStateOverrides && typeof manifest.initialStateOverrides === "object") {
+      for (const [stateId, value] of Object.entries(manifest.initialStateOverrides)) {
+        if (nextRuntime.value(stateId) === undefined) continue;
+        nextRuntime.set(stateId, value);
       }
     }
     unsubscribeProcessRuntime?.();
@@ -1447,7 +1471,7 @@ export function createSurfaceInteractionRuntime({
       }
       disposeInteractions();
       currentRoot.replaceWith(nextRoot);
-        if (page?.manifest?.surfaces) {
+      if (page?.manifest?.surfaces) {
         pushRouteDebug({
           kind: "replace:manifest",
           targetSurfaceId: target.surfaceId,
@@ -1456,6 +1480,7 @@ export function createSurfaceInteractionRuntime({
           manifestSurfaceCount: Array.isArray(page.manifest.surfaces) ? page.manifest.surfaces.length : 0
         });
         manifest.surfaces = page.manifest.surfaces;
+        manifest.requestPathname = page.manifest.requestPathname ?? manifest.requestPathname;
         manifest.routeTargets = page.manifest.routeTargets ?? manifest.routeTargets;
           manifest.routeState = page.manifest.routeState ?? manifest.routeState;
           manifest.browserRuntimeCapabilities = page.manifest.browserRuntimeCapabilities ?? manifest.browserRuntimeCapabilities;
@@ -1471,6 +1496,7 @@ export function createSurfaceInteractionRuntime({
         activeSurfaceId = target.surfaceId;
       }
       manifest.activeSurfaceId = activeSurfaceId;
+      syncLocationToManifestRequestPath("route-swap");
       fallbackNavigationPath = null;
       try {
         await executionRunner.track("capability-assets", () =>
@@ -1657,6 +1683,7 @@ export function createSurfaceInteractionRuntime({
     } while (syncQueued);
     return null;
   };
+  syncLocationToManifestRequestPath("boot");
   for (const processRef of currentProcessRefs()) {
     syncUrlToRouteState({ manifest, processRuntime, processRef, window });
   }

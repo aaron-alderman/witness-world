@@ -84,19 +84,25 @@ view EngentusToolbarMiddle {
 view EngentusProfileAvatar {
   kind avatar
   prop domId = "up-avatar"
-  prop text = "AA"
+  bindings {
+    text from state EngentusProfileInitials
+  }
 }
 
 view EngentusProfileName {
   kind text
   prop domId = "up-name"
-  prop text = "Aaron A."
+  bindings {
+    text from state EngentusProfileDisplayName
+  }
 }
 
 view EngentusProfileRole {
   kind text
   prop domId = "up-role"
-  prop text = "Lead Engineer"
+  bindings {
+    text from state EngentusProfileJobTitle
+  }
 }
 
 view EngentusProfileInfo {
@@ -813,6 +819,13 @@ view ModuleStatusComingSoon {
   prop text = "Coming Soon"
 }
 
+view ModuleStatusLocked {
+  kind text
+  class mod-status ms-soon
+  prop tag = "div"
+  prop text = "Locked"
+}
+
 view ModuleCardMillCharge {
   kind module-card
   class mod-card active
@@ -859,6 +872,9 @@ view ModuleCardMillForce {
   prop href = "/engentus/mill-force"
   prop assetRef = "FORCE"
   prop messageRef = "EngentusNavigateMillForceRequested"
+  bindings {
+    visible from state EngentusMillForceAccess map granted true default false
+  }
   interactions {
     on click self deliver EngentusNavigateMillForceRequested
   }
@@ -870,14 +886,32 @@ view ModuleCardMillForce {
   }
 }
 
+view ModuleCardMillForceLocked {
+  kind module-card
+  class mod-card locked
+  bindings {
+    visible from state EngentusMillForceAccess map locked true default false
+  }
+  children {
+    ModuleCardLockedBadge
+    ModuleIconForce
+    ModuleCardMillForceName
+    ModuleCardMillForceDesc
+    ModuleStatusLocked
+  }
+}
+
 view ModuleCardPlatformConfig {
   kind module-card
   class mod-card active
   prop tag = "div"
-  prop routeKey = "platform-config"
+  prop routeKey = "platform-config-operator"
   prop href = "/engentus/platform-config"
   prop assetRef = "PLATFORM"
   prop messageRef = "EngentusNavigatePlatformConfigRequested"
+  bindings {
+    visible from state EngentusPlatformConfigAccess map granted true default false
+  }
   interactions {
     on click self deliver EngentusNavigatePlatformConfigRequested
   }
@@ -1342,6 +1376,7 @@ view ModuleGrid {
     ModuleCardMillCharge
     ModuleCardGoodman
     ModuleCardMillForce
+    ModuleCardMillForceLocked
     ModuleCardPlatformConfig
     ModuleCardTensionTimeSeries
     ModuleCardBoltLoadDistribution

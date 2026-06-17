@@ -1,4 +1,12 @@
 import { relation } from "../../src/kernel.js";
+import {
+  grantIdentityRole,
+  moduleProjectors,
+  revokeIdentityRole,
+  setAppFeatureAccessPolicy,
+  updateIdentity
+} from "../../src/modules.js";
+import { authSummaryForActor } from "../../src/runtime-authz.js";
 import { createSecretStoreHandlers } from "../secret/handlers.js";
 import { createSqlDbHandlers, normalizeDatasourcePayload } from "../sql/handlers.js";
 
@@ -18,6 +26,13 @@ function normalizeScriptName(value) {
 
 function normalizeDatasourceId(value) {
   return normalizeText(value, "") || null;
+}
+
+function normalizeCsvList(value) {
+  return [...new Set(String(value ?? "")
+    .split(",")
+    .map(part => part.trim())
+    .filter(Boolean))];
 }
 
 function safeIso(value) {
@@ -114,6 +129,29 @@ function titleForRow(row, fallback = "") {
   return normalizeText(row?.title, normalizeText(row?.label, normalizeText(row?.datasourceName, normalizeText(row?.id, fallback))));
 }
 
+function rolesHint(roleRows = []) {
+  if (!roleRows.length) return "No roles are currently defined.";
+  return `Available roles: ${roleRows.map(row => row.id).join(", ")}`;
+}
+
+function decorateIdentityRow(row) {
+  return {
+    ...row,
+    displayName: normalizeText(row?.displayName, normalizeText(row?.label, normalizeText(row?.username, ""))),
+    jobTitle: normalizeText(row?.jobTitle, ""),
+    initials: normalizeText(row?.initials, ""),
+    rolesText: Array.isArray(row?.roles) && row.roles.length ? row.roles.join(", ") : "No roles"
+  };
+}
+
+function decorateFeaturePolicyRow(row) {
+  return {
+    ...row,
+    label: normalizeText(row?.label, normalizeText(row?.featureId, "")),
+    allowedRolesText: Array.isArray(row?.allowedRoles) && row.allowedRoles.length ? row.allowedRoles.join(", ") : "No role gate"
+  };
+}
+
 function matchesQuery(row, query) {
   if (!query) return true;
   const haystacks = [
@@ -208,6 +246,30 @@ function blankDatasourcePayload(extras = {}) {
   };
 }
 
+function accessIdentityEditorPayload(identity, extras = {}) {
+  return {
+    PlatformConfigAccessIdentitySelectedId: String(identity?.id ?? ""),
+    PlatformConfigAccessIdentityUsername: normalizeText(identity?.username, ""),
+    PlatformConfigAccessIdentityDisplayName: normalizeText(identity?.displayName, normalizeText(identity?.label, "")),
+    PlatformConfigAccessIdentityJobTitle: normalizeText(identity?.jobTitle, ""),
+    PlatformConfigAccessIdentityInitials: normalizeText(identity?.initials, ""),
+    PlatformConfigAccessIdentityRoles: Array.isArray(identity?.roles) ? identity.roles.join(", ") : "",
+    PlatformConfigAccessIdentitySummary: `Selected identity "${normalizeText(identity?.username, "identity")}". Update profile fields or role grants and save.`,
+    ...extras
+  };
+}
+
+function accessFeatureEditorPayload(policy, extras = {}) {
+  return {
+    PlatformConfigAccessFeatureSelectedId: String(policy?.featureId ?? policy?.id ?? ""),
+    PlatformConfigAccessFeatureLabel: normalizeText(policy?.label, normalizeText(policy?.featureId, "")),
+    PlatformConfigAccessFeatureVisibilityMode: normalizeText(policy?.visibilityMode, "normal"),
+    PlatformConfigAccessFeatureAllowedRoles: Array.isArray(policy?.allowedRoles) ? policy.allowedRoles.join(", ") : "",
+    PlatformConfigAccessFeatureSummary: `Selected feature policy "${normalizeText(policy?.label, normalizeText(policy?.featureId, "feature"))}".`,
+    ...extras
+  };
+}
+
 async function delegateJsonHandler(factory, deps, handlerId, args) {
   const responses = [];
   const handlers = factory({
@@ -222,21 +284,37 @@ function sendDelegated(sendJson, res, delegated, body) {
   sendJson(res, Number(delegated?.status || 500), body);
 }
 
-async function pipelineSnapshotPayload(appContext, {
+async function pipelineSnapshotPayload(appContext, projectionWorld, {
   secretQuery = "",
   datasourceQuery = ""
 } = {}) {
   const secrets = await (appContext?.secretStore?.listMetadata?.() ?? []);
   const datasources = appContext?.dbSql?.listDatasources?.() ?? [];
+  const identityRows = projectionWorld?.project?.(moduleProjectors.identities)
+    ?? [];
+  const roleGrantIndex = projectionWorld?.project?.(moduleProjectors.identityRoleGrantIndex)
+    ?? { byIdentity: {} };
+  const featurePolicyRows = projectionWorld?.project?.(moduleProjectors.appFeatureAccessPolicies)
+    ?? [];
+  const authRoleRows = projectionWorld?.project?.(moduleProjectors.authRoles)
+    ?? [];
   const secretSelection = filterCollectionRows(secrets.map(row => decorateSecretRow(row)), normalizeQuery(secretQuery));
   const datasourceSelection = filterCollectionRows(datasources.map(row => decorateDatasourceRow(row)), normalizeQuery(datasourceQuery));
+  const identities = identityRows.map(row => decorateIdentityRow({
+    ...row,
+    roles: roleGrantIndex?.byIdentity?.[row.id] ?? []
+  }));
+  const featurePolicies = featurePolicyRows.map(row => decorateFeaturePolicyRow(row));
   return {
     secrets: secretSelection.rows,
     datasources: datasourceSelection.rows,
+    identities,
+    featurePolicies,
     PlatformConfigSecretSearchVisible: secretSelection.searchVisible,
     PlatformConfigDatasourceSearchVisible: datasourceSelection.searchVisible,
     PlatformConfigSecretSummary: summarizeRows("secrets", secretSelection.totalCount, secretSelection.filteredCount, secretQuery),
-    PlatformConfigDatasourceSummary: summarizeRows("datasources", datasourceSelection.totalCount, datasourceSelection.filteredCount, datasourceQuery)
+    PlatformConfigDatasourceSummary: summarizeRows("datasources", datasourceSelection.totalCount, datasourceSelection.filteredCount, datasourceQuery),
+    PlatformConfigAccessRolesHint: rolesHint(authRoleRows)
   };
 }
 
@@ -255,7 +333,7 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       const body = await readJson(req);
-      const payload = await pipelineSnapshotPayload(appContext, {
+      const payload = await pipelineSnapshotPayload(appContext, world, {
         secretQuery: normalizeText(body?.secretQuery, ""),
         datasourceQuery: normalizeText(body?.datasourceQuery, "")
       });
@@ -278,7 +356,7 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, 200, {
-        ...(await pipelineSnapshotPayload(appContext)),
+        ...(await pipelineSnapshotPayload(appContext, world)),
         ...secretEditorPayload(decorateSecretRow(delegated.body.secret)),
         message: `Loaded secret ${titleForRow(delegated.body.secret, "secret")}.`
       });
@@ -296,7 +374,7 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, delegated.status, {
-        ...(await pipelineSnapshotPayload(appContext)),
+        ...(await pipelineSnapshotPayload(appContext, world)),
         ...secretEditorPayload(decorateSecretRow(delegated.body.secret)),
         message: `Saved secret ${titleForRow(delegated.body.secret, "secret")}.`
       });
@@ -315,7 +393,7 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, delegated.status, {
-        ...(await pipelineSnapshotPayload(appContext)),
+        ...(await pipelineSnapshotPayload(appContext, world)),
         ...secretEditorPayload(decorateSecretRow(delegated.body.secret)),
         message: `Updated secret ${titleForRow(delegated.body.secret, "secret")}.`
       });
@@ -334,7 +412,7 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, delegated.status, {
-        ...(await pipelineSnapshotPayload(appContext)),
+        ...(await pipelineSnapshotPayload(appContext, world)),
         ...blankSecretPayload({
           PlatformConfigSecretSummary: "Secret deleted."
         }),
@@ -355,7 +433,7 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, 200, {
-        ...(await pipelineSnapshotPayload(appContext)),
+        ...(await pipelineSnapshotPayload(appContext, world)),
         ...datasourceEditorPayload(decorateDatasourceRow(delegated.body.datasource)),
         message: `Loaded datasource ${titleForRow(delegated.body.datasource, "datasource")}.`
       });
@@ -373,7 +451,7 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, delegated.status, {
-        ...(await pipelineSnapshotPayload(appContext)),
+        ...(await pipelineSnapshotPayload(appContext, world)),
         ...datasourceEditorPayload(decorateDatasourceRow(delegated.body.datasource)),
         message: `Saved datasource ${titleForRow(delegated.body.datasource, "datasource")}.`
       });
@@ -392,7 +470,7 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, delegated.status, {
-        ...(await pipelineSnapshotPayload(appContext)),
+        ...(await pipelineSnapshotPayload(appContext, world)),
         ...datasourceEditorPayload(decorateDatasourceRow(delegated.body.datasource)),
         message: `Updated datasource ${titleForRow(delegated.body.datasource, "datasource")}.`
       });
@@ -411,7 +489,7 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, delegated.status, {
-        ...(await pipelineSnapshotPayload(appContext)),
+        ...(await pipelineSnapshotPayload(appContext, world)),
         ...blankDatasourcePayload({
           PlatformConfigDatasourceSummary: "Datasource deleted."
         }),
@@ -453,7 +531,7 @@ export function createPipelineRuntimeHandlers(deps) {
         ?? null;
       const decoratedDatasource = datasource ? decorateDatasourceRow(datasource) : null;
       const basePayload = {
-        ...(await pipelineSnapshotPayload(appContext)),
+        ...(await pipelineSnapshotPayload(appContext, world)),
         ...(decoratedDatasource ? datasourceEditorPayload(decoratedDatasource) : {}),
         PlatformConfigDatasourceSummary: summarizeDatasourceTestResult(delegated, decoratedDatasource)
       };
@@ -467,6 +545,146 @@ export function createPipelineRuntimeHandlers(deps) {
       sendJson(res, 200, {
         ...basePayload,
         message: `Datasource test succeeded for ${titleForRow(datasource, "datasource")}.`
+      });
+    },
+
+    "pipeline.platform-config.access.identity.read": async ({ res, params, requestActor, appContext }) => {
+      if (!requestActor) {
+        sendJson(res, 401, { error: "sign in first" });
+        return;
+      }
+      const identityId = normalizeText(params?.id, "");
+      const identityIndex = world.project(moduleProjectors.identityIndex);
+      const roleGrantIndex = world.project(moduleProjectors.identityRoleGrantIndex);
+      const identity = identityIndex?.byId?.[identityId] ?? null;
+      if (!identity) {
+        sendJson(res, 404, { error: "identity not found" });
+        return;
+      }
+      const decoratedIdentity = decorateIdentityRow({
+        ...identity,
+        roles: roleGrantIndex?.byIdentity?.[identity.id] ?? []
+      });
+      sendJson(res, 200, {
+        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...accessIdentityEditorPayload(decoratedIdentity),
+        message: `Loaded identity ${normalizeText(identity.username, identity.id)}.`
+      });
+    },
+
+    "pipeline.platform-config.access.identity.update": async ({ req, res, params, requestActor, appContext }) => {
+      if (!requestActor) {
+        sendJson(res, 401, { error: "sign in first" });
+        return;
+      }
+      const identityId = normalizeText(params?.id, "");
+      const body = await readJson(req);
+      const identityIndex = world.project(moduleProjectors.identityIndex);
+      const roleGrantIndex = world.project(moduleProjectors.identityRoleGrantIndex);
+      const authRoleIndex = world.project(moduleProjectors.authRoleIndex);
+      const existing = identityIndex?.byId?.[identityId] ?? null;
+      if (!existing) {
+        sendJson(res, 404, { error: "identity not found" });
+        return;
+      }
+      const requestedRoles = normalizeCsvList(body?.rolesCsv);
+      const unknownRoles = requestedRoles.filter(roleId => !authRoleIndex?.byId?.[roleId]);
+      if (unknownRoles.length) {
+        sendJson(res, 400, { error: `unknown roles: ${unknownRoles.join(", ")}` });
+        return;
+      }
+      updateIdentity(world, {
+        actor: requestActor,
+        id: existing.id,
+        label: existing.label,
+        username: existing.username,
+        password: existing.password,
+        displayName: normalizeText(body?.displayName, existing.displayName ?? existing.label),
+        jobTitle: normalizeText(body?.jobTitle, ""),
+        initials: normalizeText(body?.initials, ""),
+        homeContext: existing.homeContext,
+        homePerspective: existing.homePerspective
+      });
+      const currentRoles = new Set(roleGrantIndex?.byIdentity?.[existing.id] ?? []);
+      const nextRoles = new Set(requestedRoles);
+      for (const roleId of currentRoles) {
+        if (nextRoles.has(roleId)) continue;
+        revokeIdentityRole(world, { actor: requestActor, identityId: existing.id, roleId });
+      }
+      for (const roleId of nextRoles) {
+        if (currentRoles.has(roleId)) continue;
+        grantIdentityRole(world, { actor: requestActor, identityId: existing.id, roleId });
+      }
+      const refreshedIdentity = world.project(moduleProjectors.identityIndex)?.byId?.[existing.id] ?? existing;
+      const refreshedRoles = world.project(moduleProjectors.identityRoleGrantIndex)?.byIdentity?.[existing.id] ?? requestedRoles;
+      const decoratedIdentity = decorateIdentityRow({
+        ...refreshedIdentity,
+        roles: refreshedRoles
+      });
+      sendJson(res, 200, {
+        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...accessIdentityEditorPayload(decoratedIdentity),
+        message: `Updated identity ${normalizeText(refreshedIdentity.username, refreshedIdentity.id)}.`
+      });
+    },
+
+    "pipeline.platform-config.access.feature.read": async ({ res, params, requestActor, appContext }) => {
+      if (!requestActor) {
+        sendJson(res, 401, { error: "sign in first" });
+        return;
+      }
+      const featureId = normalizeText(params?.id, "");
+      const policyIndex = world.project(moduleProjectors.appFeatureAccessPolicyIndex);
+      const policy = policyIndex?.byFeatureId?.[featureId] ?? null;
+      if (!policy) {
+        sendJson(res, 404, { error: "feature policy not found" });
+        return;
+      }
+      const decoratedPolicy = decorateFeaturePolicyRow(policy);
+      sendJson(res, 200, {
+        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...accessFeatureEditorPayload(decoratedPolicy),
+        message: `Loaded feature policy ${normalizeText(policy.label, policy.featureId)}.`
+      });
+    },
+
+    "pipeline.platform-config.access.feature.update": async ({ req, res, params, requestActor, appContext }) => {
+      if (!requestActor) {
+        sendJson(res, 401, { error: "sign in first" });
+        return;
+      }
+      const featureId = normalizeText(params?.id, "");
+      const body = await readJson(req);
+      const policyIndex = world.project(moduleProjectors.appFeatureAccessPolicyIndex);
+      const authRoleIndex = world.project(moduleProjectors.authRoleIndex);
+      const existing = policyIndex?.byFeatureId?.[featureId] ?? null;
+      if (!existing) {
+        sendJson(res, 404, { error: "feature policy not found" });
+        return;
+      }
+      const requestedRoles = normalizeCsvList(body?.allowedRolesCsv);
+      const unknownRoles = requestedRoles.filter(roleId => !authRoleIndex?.byId?.[roleId]);
+      if (unknownRoles.length) {
+        sendJson(res, 400, { error: `unknown roles: ${unknownRoles.join(", ")}` });
+        return;
+      }
+      setAppFeatureAccessPolicy(world, {
+        actor: requestActor,
+        featureId: existing.featureId,
+        label: existing.label,
+        appId: existing.appId,
+        requireAuth: existing.requireAuth,
+        visibilityMode: normalizeText(body?.visibilityMode, existing.visibilityMode || "normal"),
+        allowedRoles: requestedRoles,
+        guestBehavior: existing.guestBehavior,
+        deniedBehavior: existing.deniedBehavior
+      });
+      const refreshedPolicy = world.project(moduleProjectors.appFeatureAccessPolicyIndex)?.byFeatureId?.[existing.featureId] ?? existing;
+      const decoratedPolicy = decorateFeaturePolicyRow(refreshedPolicy);
+      sendJson(res, 200, {
+        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...accessFeatureEditorPayload(decoratedPolicy),
+        message: `Updated feature policy ${normalizeText(refreshedPolicy.label, refreshedPolicy.featureId)}.`
       });
     },
 

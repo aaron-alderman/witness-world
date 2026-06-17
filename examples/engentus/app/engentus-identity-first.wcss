@@ -1,0 +1,76 @@
+theme engentus
+
+slice shell-base
+  asset shell
+  oracle foundation
+  oracle toolbar
+  oracle "shared views"
+  oracle "chart scaffold"
+  oracle "floating windows"
+  oracle "controls and editor"
+  identity EngentusRoot
+  trait engentus-spa
+  override className
+  override style
+
+slice auth
+  asset shell
+  oracle auth
+  identity EngentusLogin
+  identity EngentusSignout
+  trait engentus-login
+  trait surface-auth-view
+  override className
+
+slice home
+  asset shell
+  oracle home
+  identity EngentusHome
+  identity EngentusHomeBody
+  trait engentus-home
+  override className
+
+slice goodman
+  asset shell
+  oracle "goodman toolbar"
+  oracle "goodman view"
+  oracle "goodman chart scaffold"
+  oracle "goodman windows"
+  identity EngentusApp
+  identity GoodmanBody
+  identity GoodmanWindowLayer
+  trait engentus-app
+  override className
+  override style
+
+slice mill-charge
+  asset shell
+  oracle "mill charge"
+  identity EngentusMillChargeApp
+  identity MillChargeBody
+  trait engentus-mill-charge
+  override style
+
+slice mill-force
+  asset shell
+  oracle "mill force"
+  identity EngentusMillForceApp
+  identity MillForceBody
+  trait engentus-mill-force
+  override className
+
+slice platform-config
+  asset shell
+  oracle "platform config"
+  identity EngentusPlatformConfigApp
+  identity EngentusPlatformConfigBody
+  trait engentus-platform-app
+  trait engentus-platform-body
+  override className
+
+slice chart-pages
+  asset chart
+  oracle "chart tokens"
+  oracle "chart foundation"
+  oracle "chart surfaces"
+  identity GoodmanDiagram

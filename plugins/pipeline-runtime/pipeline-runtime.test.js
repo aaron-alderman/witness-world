@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { moduleProjectors } from "../../src/modules.js";
 import { handlerCatalog } from "./handler-catalog.js";
 import runtimeModule from "./runtime.js";
 
@@ -15,6 +16,10 @@ test("pipeline runtime exposes the platform-config demo handlers and no plugin-o
     "pipeline.platform-config.datasource.update",
     "pipeline.platform-config.datasource.delete",
     "pipeline.platform-config.datasource.test",
+    "pipeline.platform-config.access.identity.read",
+    "pipeline.platform-config.access.identity.update",
+    "pipeline.platform-config.access.feature.read",
+    "pipeline.platform-config.access.feature.update",
     "pipeline.script.run"
   ]);
   assert.deepEqual(handlerCatalog.pageHandlers, []);
@@ -51,7 +56,16 @@ test("pipeline runtime handlers render the page and return a stub script respons
 test("pipeline platform-config snapshot presents human-readable table content", async () => {
   const json = [];
   const handlers = runtimeModule.createHandlers({
-    world: { observe() {} },
+    world: {
+      observe() {},
+      project(projector) {
+        if (projector === moduleProjectors.identities) return [];
+        if (projector === moduleProjectors.identityRoleGrantIndex) return { byIdentity: {} };
+        if (projector === moduleProjectors.appFeatureAccessPolicies) return [];
+        if (projector === moduleProjectors.authRoles) return [];
+        return [];
+      }
+    },
     backendHost: "backendHost",
     sendJson: (res, status, body) => json.push({ res, status, body }),
     readJson: async () => ({ secretQuery: "", datasourceQuery: "" })
@@ -92,4 +106,5 @@ test("pipeline platform-config snapshot presents human-readable table content", 
   assert.equal(json[0].body.datasources[0].providerText, "Postgres");
   assert.equal(json[0].body.datasources[0].lastTestResultText, "succeeded");
   assert.equal(json[0].body.datasources[0].updatedAtTitle, "2026-06-17T00:00:00.000Z");
+  assert.equal(json[0].body.PlatformConfigAccessRolesHint, "No roles are currently defined.");
 });

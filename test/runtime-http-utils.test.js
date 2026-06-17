@@ -25,17 +25,76 @@ test("runtime HTTP utils resolve request context from cookie-backed session befo
       "x-witness-actor": "header-actor"
     }
   };
-  const sessionStore = new Map([["session-1", { actor: "cookie-actor", identity: "identity.cookie" }]]);
+  const sessionStore = new Map([["session-1", {
+    actor: "cookie-actor",
+    identity: "identity.cookie",
+    authenticatedIdentity: "identity.cookie",
+    authenticatedActor: "cookie-actor",
+    effectiveIdentity: "identity.cookie",
+    effectiveActor: "cookie-actor",
+    authorityMode: "direct",
+    assumptionGrantId: null
+  }]]);
 
   assert.deepEqual(resolveRequestContext(request, sessionStore), {
     actor: "cookie-actor",
     identity: "identity.cookie",
-    session: { actor: "cookie-actor", identity: "identity.cookie" }
+    authenticatedIdentity: "identity.cookie",
+    authenticatedActor: "cookie-actor",
+    effectiveIdentity: "identity.cookie",
+    effectiveActor: "cookie-actor",
+    authorityMode: "direct",
+    assumptionGrantId: null,
+    session: {
+      actor: "cookie-actor",
+      identity: "identity.cookie",
+      authenticatedIdentity: "identity.cookie",
+      authenticatedActor: "cookie-actor",
+      effectiveIdentity: "identity.cookie",
+      effectiveActor: "cookie-actor",
+      authorityMode: "direct",
+      assumptionGrantId: null
+    }
   });
   assert.deepEqual(resolveRequestContext({ headers: { "x-witness-actor": "header-actor" } }, sessionStore, { allowActorHeader: true }), {
     actor: "header-actor",
     identity: null,
+    authenticatedIdentity: null,
+    authenticatedActor: "header-actor",
+    effectiveIdentity: null,
+    effectiveActor: "header-actor",
+    authorityMode: "direct",
+    assumptionGrantId: null,
     session: null
+  });
+});
+
+test("runtime HTTP utils prefer canonical authority tuple over compatibility aliases", () => {
+  const request = {
+    headers: {
+      cookie: "witness_session=session-2"
+    }
+  };
+  const sessionStore = new Map([["session-2", {
+    actor: "legacy-actor",
+    identity: "identity.legacy",
+    authenticatedIdentity: "identity.aaron",
+    authenticatedActor: "aaron",
+    effectiveIdentity: "identity.callan",
+    effectiveActor: "callan",
+    authorityMode: "assumed",
+    assumptionGrantId: "identity.aaron=>callan"
+  }]]);
+  assert.deepEqual(resolveRequestContext(request, sessionStore), {
+    actor: "callan",
+    identity: "identity.callan",
+    authenticatedIdentity: "identity.aaron",
+    authenticatedActor: "aaron",
+    effectiveIdentity: "identity.callan",
+    effectiveActor: "callan",
+    authorityMode: "assumed",
+    assumptionGrantId: "identity.aaron=>callan",
+    session: sessionStore.get("session-2")
   });
 });
 

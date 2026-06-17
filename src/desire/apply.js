@@ -6,6 +6,10 @@ import {
   defineCapability,
   moduleProjectors,
   createIdentity,
+  defineAuthRole,
+  grantIdentityRole,
+  revokeIdentityRole,
+  setAppFeatureAccessPolicy,
   definePerspective,
   grantStewardship,
   revokeStewardship,
@@ -84,6 +88,10 @@ export const NATIVE_RUNTIME_DECLARATION_KINDS = new Set([
   "serverRunner",
   "route",
   "serve",
+  "authRole",
+  "identityRoleGrant",
+  "identityRoleRevoke",
+  "appFeatureAccessPolicy",
   "widget",
   "widgetVersion",
   "widgetVersionTransition",
@@ -541,6 +549,9 @@ function applyNativeWtomlIdentity(world, node, runtimeNodesBySourceNodeId, handl
     label: String(values.label ?? id),
     username: String(values.username ?? ""),
     password: String(values.password ?? ""),
+    displayName: values.displayName ?? null,
+    jobTitle: values.jobTitle ?? null,
+    initials: values.initials ?? null,
     homeContext: values.homeContext ?? null,
     homePerspective: values.homePerspective ?? null,
     owner: values.owner ?? authorActor
@@ -1235,6 +1246,47 @@ function applyCoreRuntimeDeclaration(world, doc) {
           })
         ]);
       }
+    case "authRole":
+      return withSourceAnnotations(world, doc, [req(values, "id")], req(values, "actor"), [
+        defineAuthRole(world, {
+          actor: req(values, "actor"),
+          id: req(values, "id"),
+          label: values.label ?? values.id,
+          description: values.description ?? "",
+          owner: values.owner ?? values.actor
+        })
+      ]);
+    case "identityRoleGrant":
+      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+        grantIdentityRole(world, {
+          actor: req(values, "actor"),
+          identityId: req(values, "identityId"),
+          roleId: req(values, "roleId")
+        })
+      ]);
+    case "identityRoleRevoke":
+      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+        revokeIdentityRole(world, {
+          actor: req(values, "actor"),
+          identityId: req(values, "identityId"),
+          roleId: req(values, "roleId")
+        })
+      ]);
+    case "appFeatureAccessPolicy":
+      return withSourceAnnotations(world, doc, [req(values, "featureId")], req(values, "actor"), [
+        setAppFeatureAccessPolicy(world, {
+          actor: req(values, "actor"),
+          featureId: req(values, "featureId"),
+          label: values.label ?? values.featureId,
+          appId: values.appId ?? "",
+          requireAuth: values.requireAuth === true,
+          visibilityMode: values.visibilityMode ?? "normal",
+          allowedRoles: values.allowedRoles ?? [],
+          guestBehavior: values.guestBehavior ?? "allow",
+          deniedBehavior: values.deniedBehavior ?? "403",
+          owner: values.owner ?? values.actor
+        })
+      ]);
     case "serve":
       {
         const serverRunner = resolvePreparedDocRef(world, values, {

@@ -49,6 +49,7 @@ import {
   createRuntimeAuthoringPolicy,
   defaultRuntimeAuthoringMode
 } from "./runtime-authoring-policy.js";
+import { evaluateRouteAccess } from "./runtime-authz.js";
 import {
   applyRuntimePluginLoadState,
   loadRuntimePluginModules
@@ -448,6 +449,54 @@ export async function startRuntimeServer(world, {
   const sseClients = new Set();
   const appStaticRoot = appContext.appRoot;
   const APP_STATIC_PREFIX = "/app-static/";
+  const trimString = value => typeof value === "string" && value.trim() ? value.trim() : "";
+  const authSurfaceStateOverrides = ({
+    route,
+    requestActor,
+    requestIdentity,
+    requestPathname,
+    decision,
+    pendingRouteKey = "",
+    pendingFeatureId = "",
+    pendingPath = "",
+    authStatus = ""
+  } = {}) => {
+    const stateMap = route?.params?.auth?.stateMap;
+    if (!stateMap || typeof stateMap !== "object") return null;
+    const overrides = {};
+    const write = (key, value) => {
+      const stateId = trimString(stateMap[key]);
+      if (!stateId) return;
+      overrides[stateId] = value;
+    };
+    write("actor", requestActor ?? "");
+    write("identity", (typeof requestIdentity === "string" ? requestIdentity : requestIdentity?.id) ?? decision?.identity?.id ?? "");
+    write("displayName", decision?.profile?.displayName ?? "");
+    write("jobTitle", decision?.profile?.jobTitle ?? "");
+    write("initials", decision?.profile?.initials ?? "");
+    write("authStatus", authStatus);
+    write("pendingRouteKey", pendingRouteKey);
+    write("pendingFeatureId", pendingFeatureId);
+    write("pendingPath", pendingPath);
+    write("currentPath", requestPathname ?? "");
+    write("millForceAccess", decision?.featureAccess?.["engentus.mill_force"] ?? "login");
+    write("platformConfigAccess", decision?.featureAccess?.["engentus.platform_config"] ?? "hidden");
+    const routeStateId = trimString(route?.params?.routeState?.state);
+    const routeDefault = trimString(route?.params?.defaultScreen);
+    if (routeStateId && routeDefault) overrides[routeStateId] = routeDefault;
+    return overrides;
+  };
+  const authPageSpecFor = (route, branch) => {
+    const params = route?.params?.auth?.[branch];
+    if (!params || typeof params !== "object") return null;
+    const routePath = trimString(params.routePath);
+    if (!routePath) return null;
+    return {
+      routePath,
+      routeKey: trimString(params.routeKey),
+      responseStatus: Number(params.responseStatus || 200) || 200
+    };
+  };
 
   function mimeTypeForAppStatic(filePath) {
     switch (path.extname(filePath).toLowerCase()) {
@@ -629,13 +678,87 @@ export async function startRuntimeServer(world, {
         sendJson(res, 500, { error: "route handler not configured", route: matched.route.id });
         return;
       }
+      const routeWorld = runtime.context?.appSnapshotManager?.getActiveSnapshot()?.world ?? world;
+      const accessDecision = evaluateRouteAccess(routeWorld, matched.route, requestContext);
+      if (!accessDecision.ok) {
+        if (matched.route.handler === "page.surface") {
+          const denialBranch = accessDecision.access === "login"
+            ? "login"
+            : accessDecision.access === "hidden"
+              ? "notFound"
+              : "forbidden";
+          const authPage = authPageSpecFor(matched.route, denialBranch);
+          if (authPage) {
+            const denialRoute = {
+              ...matched.route,
+              params: {
+                ...(matched.route.params ?? {}),
+                defaultScreen: authPage.routeKey || matched.route.params?.defaultScreen || "",
+                responseStatus: authPage.responseStatus,
+                initialStateOverrides: authSurfaceStateOverrides({
+                  route: matched.route,
+                  requestActor: requestContext.actor,
+                  requestIdentity: requestContext.identity,
+                  requestPathname: requestUrl.pathname,
+                  decision: accessDecision,
+                  pendingRouteKey: accessDecision.access === "login"
+                    ? trimString(matched.route.params?.auth?.resumeRouteKey ?? matched.route.params?.defaultScreen ?? "")
+                    : "",
+                  pendingFeatureId: accessDecision.access === "login" ? trimString(accessDecision.featureId) : "",
+                  pendingPath: accessDecision.access === "login" ? requestUrl.pathname : "",
+                  authStatus: accessDecision.identity ? "signedIn" : "idle"
+                })
+              }
+            };
+            await handler({
+              req,
+              res,
+              requestId,
+              requestUrl: new URL(authPage.routePath, "http://127.0.0.1"),
+              route: denialRoute,
+              params: matched.params,
+              requestActor: requestContext.actor,
+              requestIdentity: requestContext.identity,
+              requestSession: requestContext.session,
+              appContext: runtime.context
+            });
+            return;
+          }
+        }
+        if (accessDecision.access === "login") {
+          sendJson(res, 401, { error: "sign in first" });
+          return;
+        }
+        if (accessDecision.access === "hidden") {
+          sendJson(res, 404, { error: "not found" });
+          return;
+        }
+        sendJson(res, 403, { error: "forbidden" });
+        return;
+      }
+      const authorizedRoute = matched.route.handler === "page.surface"
+        ? {
+            ...matched.route,
+            params: {
+              ...(matched.route.params ?? {}),
+              initialStateOverrides: authSurfaceStateOverrides({
+                route: matched.route,
+                requestActor: requestContext.actor,
+                requestIdentity: requestContext.identity,
+                requestPathname: requestUrl.pathname,
+                decision: accessDecision,
+                authStatus: accessDecision.identity ? "signedIn" : "idle"
+              })
+            }
+          }
+        : matched.route;
 
       await handler({
         req,
         res,
         requestId,
         requestUrl,
-        route: matched.route,
+        route: authorizedRoute,
         params: matched.params,
         requestActor: requestContext.actor,
         requestIdentity: requestContext.identity,

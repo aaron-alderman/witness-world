@@ -24,7 +24,7 @@ order = 1
 op = "setText"
 on = "load"
 widget = "todo_session_status"
-text = "${state.session && state.session.authenticated ? 'Signed in as ' + state.session.label + ' (' + state.session.actor + ')' + (state.session.perspective ? ' in ' + state.session.perspective : '') : 'Not signed in'}"
+text = "${state.session && state.session.authenticated ? 'Signed in as ' + state.session.label + ' (' + state.session.effectiveActor + ')' + (state.session.perspective ? ' in ' + state.session.perspective : '') : 'Not signed in'}"
 
 [[step]]
 order = 3
@@ -70,7 +70,7 @@ One plausible `DESIRE+` normalization:
         "Signed in as "
         state.session.label
         " ("
-        state.session.actor
+        state.session.effectiveActor
         ")"
         (if state.session.perspective
           (concat " in " state.session.perspective)
@@ -145,7 +145,7 @@ Kernel lowering:
           "Signed in as "
           session.label
           " ("
-          session.actor
+          session.effectiveActor
           ")"
           (if session.perspective
             (concat " in " session.perspective)
