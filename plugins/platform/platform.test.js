@@ -673,6 +673,12 @@ test("platform console layout compiles authored top-level surface metadata from 
     "snapshotHistory",
     "editHistory"
   ]);
+  assert.deepEqual(workflowDetailSurface.childSurfaces.map(surface => surface.props.detailKinds || null), [
+    "branch|changeSet|proposal",
+    "branch|changeSet|proposal",
+    "branch|changeSet",
+    "changeSet"
+  ]);
   assert.equal(workflowDetailSurface.childSurfaces.some(surface => surface.name === "PlatformWorkflowSnapshotHistory" && surface.summary === "Candidate snapshot history for the selected workflow object when available."), true);
   const workflowSnapshotSurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowSnapshotHistory");
   assert.ok(workflowSnapshotSurface);
@@ -855,6 +861,18 @@ test("platform console layout compiles authored top-level surface metadata from 
     "failingCases",
     "regressionSummary"
   ]);
+  assert.deepEqual(verificationDetailSurface.childSurfaces.map(surface => surface.props.detailKinds || null), [
+    "verificationPolicy|verificationExecution|gate|runtimeRevision|candidateSnapshot|testRun|testReport",
+    "verificationPolicy|gate|runtimeRevision|candidateSnapshot|testRun|testReport",
+    "gate",
+    "runtimeRevision",
+    "runtimeRevision",
+    "testRun|testReport",
+    "testRun|testReport",
+    "testRun|testReport",
+    "testRun|testReport",
+    "testRun|testReport"
+  ]);
   assert.equal(verificationDetailSurface.childSurfaces.some(surface => surface.name === "PlatformVerificationBuildErrors" && surface.summary === "Build errors for the selected runtime revision when available."), true);
   const verificationRunSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationRunHistory");
   assert.ok(verificationRunSurface);
@@ -977,6 +995,11 @@ test("platform console layout compiles authored top-level surface metadata from 
     "related",
     "relationships"
   ]);
+  assert.deepEqual(signalDetailSurface.childSurfaces.map(surface => surface.props.detailKinds || null), [
+    "gap|signal",
+    "gap",
+    "gap|signal"
+  ]);
   assert.equal(signalDetailSurface.childSurfaces.some(surface => surface.name === "PlatformSignalRelationships" && surface.summary === "Linked graph relationships for the selected signal when available."), true);
   const signalRelationshipsSurface = signalDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalRelationships");
   assert.ok(signalRelationshipsSurface);
@@ -1020,6 +1043,12 @@ test("platform console layout compiles authored top-level surface metadata from 
     "related",
     "sections",
     "tasks"
+  ]);
+  assert.deepEqual(knowledgeDetailSurface.childSurfaces.map(surface => surface.props.detailKinds || null), [
+    "document|roadmapTask|epic|feature",
+    "document|roadmapTask|epic|feature",
+    "document",
+    "document"
   ]);
   assert.equal(knowledgeDetailSurface.childSurfaces.some(surface => surface.name === "PlatformKnowledgeTasks" && surface.summary === "Document or roadmap tasks for the selected knowledge object when available."), true);
   const knowledgeTaskSurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeTasks");
@@ -1219,6 +1248,10 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.deepEqual(modelDetailSurface.childSurfaces.map(surface => surface.props.detailPanelRole || null), [
     "primary",
     "relationships"
+  ]);
+  assert.deepEqual(modelDetailSurface.childSurfaces.map(surface => surface.props.detailKinds || null), [
+    "object",
+    "object"
   ]);
   assert.equal(modelDetailSurface.childSurfaces.some(surface => surface.name === "PlatformModelRelationships" && surface.summary === "Linked graph relationships for the selected platform object when available."), true);
   const modelRelationshipsSurface = modelDetailSurface.childSurfaces.find(surface => surface.name === "PlatformModelRelationships");
@@ -6588,6 +6621,11 @@ test("platform detail sections render authored child-surface metadata", () => {
   const knowledgePage = consoleLayout.children.find(surface => surface.props?.pageId === "knowledge");
   const signalsPage = consoleLayout.children.find(surface => surface.props?.pageId === "signals");
   const modelPage = consoleLayout.children.find(surface => surface.props?.pageId === "model");
+  const appliesToDetailKind = (surface, detailKind) => {
+    const raw = surface?.props?.detailKinds;
+    if (!raw) return true;
+    return String(raw).split("|").map(part => part.trim()).filter(Boolean).includes(detailKind);
+  };
   const workflowDetailSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowDetail");
   const verificationDetailSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationDetail");
   const knowledgeDetailSurface = knowledgePage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDetail");
@@ -6764,51 +6802,65 @@ test("platform detail sections render authored child-surface metadata", () => {
   const signalHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signals&id=gap.demo") });
   const modelHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=model&id=route:GET%20/platform") });
 
-  for (const child of workflowDetailSurface.childSurfaces) {
+  for (const child of workflowDetailSurface.childSurfaces.filter(surface => appliesToDetailKind(surface, "changeSet"))) {
     if (child.title) assert.match(workflowHtml, new RegExp(escapeRegExp(child.title)));
     if (child.summary) assert.match(workflowHtml, new RegExp(escapeRegExp(child.summary)));
   }
-  for (const child of verificationDetailSurface.childSurfaces.filter(surface => [
-    "PlatformVerificationPrimaryPanel",
-    "PlatformVerificationRelatedPanel",
-    "PlatformVerificationRunHistory"
-  ].includes(surface.name))) {
+  for (const child of verificationDetailSurface.childSurfaces.filter(surface => appliesToDetailKind(surface, "gate"))) {
     if (child.title) assert.match(verificationGateHtml, new RegExp(escapeRegExp(child.title)));
     if (child.summary) assert.match(verificationGateHtml, new RegExp(escapeRegExp(child.summary)));
   }
-  for (const child of verificationDetailSurface.childSurfaces.filter(surface => [
-    "PlatformVerificationPrimaryPanel",
-    "PlatformVerificationRelatedPanel",
-    "PlatformVerificationBuildHistory",
-    "PlatformVerificationBuildErrors"
-  ].includes(surface.name))) {
+  for (const child of verificationDetailSurface.childSurfaces.filter(surface => appliesToDetailKind(surface, "runtimeRevision"))) {
     if (child.title) assert.match(verificationRevisionHtml, new RegExp(escapeRegExp(child.title)));
     if (child.summary) assert.match(verificationRevisionHtml, new RegExp(escapeRegExp(child.summary)));
   }
-  for (const child of verificationDetailSurface.childSurfaces.filter(surface => [
-    "PlatformVerificationPrimaryPanel",
-    "PlatformVerificationRelatedPanel",
-    "PlatformVerificationReportSummary",
-    "PlatformVerificationArtifactsReport",
-    "PlatformVerificationSuiteSummary",
-    "PlatformVerificationFailingCases",
-    "PlatformVerificationRegressionSummary"
-  ].includes(surface.name))) {
+  for (const child of verificationDetailSurface.childSurfaces.filter(surface => appliesToDetailKind(surface, "testRun"))) {
     if (child.title) assert.match(verificationRunHtml, new RegExp(escapeRegExp(child.title)));
     if (child.summary) assert.match(verificationRunHtml, new RegExp(escapeRegExp(child.summary)));
   }
-  for (const child of knowledgeDetailSurface.childSurfaces) {
+  for (const child of knowledgeDetailSurface.childSurfaces.filter(surface => appliesToDetailKind(surface, "document"))) {
     if (child.title) assert.match(knowledgeHtml, new RegExp(escapeRegExp(child.title)));
     if (child.summary) assert.match(knowledgeHtml, new RegExp(escapeRegExp(child.summary)));
   }
-  for (const child of signalDetailSurface.childSurfaces) {
+  for (const child of signalDetailSurface.childSurfaces.filter(surface => appliesToDetailKind(surface, "gap"))) {
     if (child.title) assert.match(signalHtml, new RegExp(escapeRegExp(child.title)));
     if (child.summary) assert.match(signalHtml, new RegExp(escapeRegExp(child.summary)));
   }
-  for (const child of modelDetailSurface.childSurfaces) {
+  for (const child of modelDetailSurface.childSurfaces.filter(surface => appliesToDetailKind(surface, "object"))) {
     if (child.title) assert.match(modelHtml, new RegExp(escapeRegExp(child.title)));
     if (child.summary) assert.match(modelHtml, new RegExp(escapeRegExp(child.summary)));
   }
+});
+
+test("platform detail sections filter child surfaces by authored detailKinds", () => {
+  const model = {
+    lifecycleVocabulary: [],
+    lifecycleBoard: [],
+    branchLifecycleVocabulary: [],
+    branchBoard: [],
+    nodes: [{
+      id: "telemetryMetric:platform.self",
+      kind: "telemetryMetric",
+      title: "platform.self latency",
+      status: "active",
+      owner: "plugin.platform",
+      source: "platform",
+      lifecycle: ["observe"]
+    }],
+    edges: [{
+      from: "telemetryMetric:platform.self",
+      rel: "observes",
+      to: "plugin.platform"
+    }],
+    gaps: [],
+    summaries: {}
+  };
+
+  const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signals&id=telemetryMetric:platform.self") });
+
+  assert.match(html, /Primary Detail/);
+  assert.match(html, /Related Relationships/);
+  assert.doesNotMatch(html, /Linked proposals, selector drift, and supporting signal context\./);
 });
 
 test("platform verification run detail respects authored empty states for reports, suites, and failures", () => {

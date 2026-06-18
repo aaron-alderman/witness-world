@@ -1643,6 +1643,7 @@ function countByStatus(rows = []) {
 
 function verificationStatusRecord(model) {
   const runs = model.testRuns ?? [];
+  const freshnessRows = model.verificationFreshness ?? [];
   const runningCount = runs.filter(run => run.status === "running").length;
   const queueCount = (model.verificationQueue ?? []).filter(row => row.status === "queued" || row.status === "running").length;
   const latestResults = Object.values(model.latestTestResultsByGate ?? {});
@@ -1652,12 +1653,19 @@ function verificationStatusRecord(model) {
   ).length;
   const regressionRows = (model.testReports ?? []).filter(report => report.reportKind === "regression");
   const regressedRunCount = regressionRows.filter(report => report.status === "regressed").length;
+  const freshGateCount = freshnessRows.filter(row => row.status === "fresh").length;
+  const staleGateCount = freshnessRows.filter(row => row.status === "stale").length;
+  const missingGateCount = freshnessRows.filter(row => row.status === "missing").length;
   const completedRuns = runs
     .filter(run => optionalText(run.finishedAt))
     .sort((left, right) => String(right.finishedAt || "").localeCompare(String(left.finishedAt || "")));
   const latestCompletedRun = completedRuns[0] ?? null;
   const status = failingGateCount > 0
     ? "failed"
+    : staleGateCount > 0
+      ? "stale"
+      : missingGateCount > 0
+        ? "missing"
     : regressedRunCount > 0
       ? "regressed"
       : runningCount > 0
@@ -1665,6 +1673,10 @@ function verificationStatusRecord(model) {
         : "passed";
   const summary = failingGateCount > 0
     ? `${failingGateCount} failing gate${failingGateCount === 1 ? "" : "s"} need attention.`
+    : staleGateCount > 0
+      ? `${staleGateCount} gate${staleGateCount === 1 ? "" : "s"} have stale verification evidence.`
+      : missingGateCount > 0
+        ? `${missingGateCount} gate${missingGateCount === 1 ? "" : "s"} have no verification evidence yet.`
     : regressedRunCount > 0
       ? `${regressedRunCount} run${regressedRunCount === 1 ? "" : "s"} show a timing regression.`
       : runningCount > 0
@@ -1674,6 +1686,9 @@ function verificationStatusRecord(model) {
     id: "verificationStatus:current",
     status,
     summary,
+    freshGateCount,
+    staleGateCount,
+    missingGateCount,
     runningCount,
     failingGateCount,
     regressedRunCount,
@@ -1943,7 +1958,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         <td>${esc(artifact.sizeBytes ?? "")}</td>
       </tr>
     `)
-  )));
+  ));
   setAuthoredDetailSection(sections, suiteSummarySurface, detailKind, renderAuthoredSurfaceTable(
     suiteSummarySurface,
     renderRowsFromSurfaceSchema(suiteSummarySurface, "rowFields", suiteRows.slice(0, surfaceRowLimit(suiteSummarySurface, 12)), ctx, suite => `
@@ -1955,7 +1970,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         <td>${esc(suite.errors ?? "")}</td>
       </tr>
     `)
-  )));
+  ));
   setAuthoredDetailSection(sections, failingCasesSurface, detailKind, renderAuthoredSurfaceTable(
     failingCasesSurface,
     renderRowsFromSurfaceSchema(failingCasesSurface, "rowFields", failureRows.slice(0, surfaceRowLimit(failingCasesSurface, 20)), ctx, testCase => `
@@ -1967,7 +1982,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         <td>${esc(testCase.durationMs ?? "")}</td>
       </tr>
     `)
-  )));
+  ));
   if (regressionReport) {
     const regression = regressionReport.regressionSummary ?? {};
     const regressionRecord = {
