@@ -859,6 +859,23 @@ function renderAuthoredFormField(surface, field, model, defaultsMap, placeholder
   `;
 }
 
+function surfaceFormRequestSpec(surface) {
+  const path = surfacePropText(surface, "submitPath", "");
+  if (!path) return null;
+  return {
+    path,
+    method: surfacePropText(surface, "submitMethod", "POST"),
+    bodyFields: parseSurfaceSchemaEntries(surface?.props?.submitBodyFields).map(entry => ({
+      target: entry.label,
+      source: entry.path,
+      mode: entry.mode || "value"
+    })),
+    requiredFieldMessages: Object.fromEntries(parseSurfaceLabelMap(surface?.props?.requiredFieldMessages).entries()),
+    successMessage: surfacePropText(surface, "successMessage", ""),
+    errorMessage: surfacePropText(surface, "errorMessage", "")
+  };
+}
+
 function renderFormActionButtons(surface) {
   const actionButtons = parseSurfaceLabelMap(surface?.props?.actionButtons);
   if (!actionButtons.size) {
@@ -1843,8 +1860,10 @@ function renderAuthoredFormSection(surface, model) {
   const formId = surfacePropText(surface, "formId", `${surface?.name || "platform-form"}`);
   const statusId = surfacePropText(surface, "statusId", `${surface?.name || "platform-status"}`);
   const clientAction = optionalText(surface?.props?.clientAction);
+  const requestSpec = surfaceFormRequestSpec(surface);
+  const requestAttrs = requestSpec ? ` data-platform-submit-spec="${esc(JSON.stringify(requestSpec))}"` : "";
   return renderSurfaceFrame(surface, `
-      <form id="${esc(formId)}"${clientAction ? ` data-platform-client-action="${esc(clientAction)}"` : ""} data-platform-status-id="${esc(statusId)}">
+      <form id="${esc(formId)}"${clientAction ? ` data-platform-client-action="${esc(clientAction)}"` : ""}${requestAttrs} data-platform-status-id="${esc(statusId)}">
         ${fields.map(field => renderAuthoredFormField(surface, field, model, defaultsMap, placeholdersMap, rowMap)).join("")}
         ${renderFormActionButtons(surface)}
         <div id="${esc(statusId)}"></div>
@@ -1921,6 +1940,76 @@ function renderAuthoringClientScript() {
         async function readResponseJson(response) {
           return response.json().catch(() => ({}));
         }
+        function parseSubmitSpec(form) {
+          const raw = form && form.getAttribute("data-platform-submit-spec");
+          if (!raw) return null;
+          try {
+            return JSON.parse(raw);
+          } catch {
+            return null;
+          }
+        }
+        function assignBodyPath(target, path, value) {
+          const tokens = String(path || "").match(/[^.[\\]]+|\\[\\d+\\]/g) || [];
+          if (!tokens.length) return;
+          let cursor = target;
+          for (let index = 0; index < tokens.length; index += 1) {
+            const token = tokens[index];
+            const isIndex = token.startsWith("[") && token.endsWith("]");
+            const key = isIndex ? Number(token.slice(1, -1)) : token;
+            const next = tokens[index + 1];
+            const nextIsIndex = Boolean(next && next.startsWith("[") && next.endsWith("]"));
+            if (index === tokens.length - 1) {
+              cursor[key] = value;
+              return;
+            }
+            if (cursor[key] === undefined) cursor[key] = nextIsIndex ? [] : {};
+            cursor = cursor[key];
+          }
+        }
+        function formFieldRequestValue(form, entry) {
+          const element = form && form.elements ? form.elements[entry.source] : null;
+          const raw = element ? element.value : "";
+          switch (entry.mode) {
+            case "nullable":
+              return raw === "" ? null : raw;
+            case "value":
+            default:
+              return raw;
+          }
+        }
+        function resolveSubmitPath(form, pathTemplate) {
+          return String(pathTemplate || "").replaceAll(/\\{([^}]+)\\}/g, (_, fieldName) => {
+            const value = form?.elements?.[fieldName]?.value || "";
+            return encodeURIComponent(value);
+          });
+        }
+        function bindAuthoredJsonSubmit(form) {
+          const spec = parseSubmitSpec(form);
+          if (!spec || !spec.path) return false;
+          form.addEventListener("submit", async event => {
+            event.preventDefault();
+            for (const [fieldName, message] of Object.entries(spec.requiredFieldMessages || {})) {
+              if (!form?.elements?.[fieldName]?.value) {
+                setFormStatus(form, message || "Required field missing.");
+                return;
+              }
+            }
+            const requestPath = resolveSubmitPath(form, spec.path);
+            const bodyEntries = Array.isArray(spec.bodyFields) ? spec.bodyFields : [];
+            const requestBody = {};
+            for (const entry of bodyEntries) assignBodyPath(requestBody, entry.target, formFieldRequestValue(form, entry));
+            const requestInit = {
+              method: spec.method || "POST",
+              headers: { "content-type": "application/json" }
+            };
+            if (bodyEntries.length) requestInit.body = JSON.stringify(requestBody);
+            const response = await fetch(requestPath, requestInit);
+            const json = await readResponseJson(response);
+            setFormStatus(form, response.ok ? (spec.successMessage || "Submitted.") : (json.error || spec.errorMessage || "Request failed."));
+          });
+          return true;
+        }
         function bindProposalCreate(form) {
           const actionSelect = form.elements.action;
           if (!actionSelect) return;
@@ -1978,61 +2067,6 @@ function renderAuthoringClientScript() {
             setFormStatus(form, response.ok ? (action === "approve" ? "Proposal approved." : "Proposal rejected.") : (json.error || "Review failed."));
           });
         }
-        function bindBranchCreate(form) {
-          form.addEventListener("submit", async event => {
-            event.preventDefault();
-            const response = await fetch("/api/platform-branches", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                id: form.elements.id.value || null,
-                title: form.elements.title.value || null,
-                parentBranchId: form.elements.parentBranchId.value || null,
-                epic: form.elements.epic.value || null,
-                feature: form.elements.feature.value || null,
-                defect: form.elements.defect.value || null
-              })
-            });
-            const json = await readResponseJson(response);
-            setFormStatus(form, response.ok ? "Branch created." : (json.error || "Branch creation failed."));
-          });
-        }
-        function bindChangeSetCreate(form) {
-          form.addEventListener("submit", async event => {
-            event.preventDefault();
-            const response = await fetch("/api/platform-change-sets", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                id: form.elements.id.value || null,
-                branchId: form.elements.branchId.value || null,
-                title: form.elements.title.value || null,
-                reason: form.elements.reason.value || null
-              })
-            });
-            const json = await readResponseJson(response);
-            setFormStatus(form, response.ok ? "Change set created." : (json.error || "Change set creation failed."));
-          });
-        }
-        function bindChangeSetEdit(form) {
-          form.addEventListener("submit", async event => {
-            event.preventDefault();
-            const changeSetId = form.elements.changeSetId.value;
-            if (!changeSetId) {
-              setFormStatus(form, "Select a change set first.");
-              return;
-            }
-            const response = await fetch("/api/platform-change-sets/" + encodeURIComponent(changeSetId) + "/edits", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                edits: [{ path: form.elements.path.value, content: form.elements.content.value }]
-              })
-            });
-            const json = await readResponseJson(response);
-            setFormStatus(form, response.ok ? "Edit staged." : (json.error || "Edit staging failed."));
-          });
-        }
         function bindChangeSetValidate(form) {
           form.addEventListener("submit", async event => {
             event.preventDefault();
@@ -2052,22 +2086,6 @@ function renderAuthoringClientScript() {
                 ? (json.candidateSnapshot?.status === "valid" ? "Change set valid." : "Change set invalid.")
                 : (json.error || "Validation failed.")
             );
-          });
-        }
-        function bindChangeSetApply(form) {
-          form.addEventListener("submit", async event => {
-            event.preventDefault();
-            const changeSetId = form.elements.changeSetId.value;
-            if (!changeSetId) {
-              setFormStatus(form, "Select a change set first.");
-              return;
-            }
-            const response = await fetch("/api/platform-change-sets/" + encodeURIComponent(changeSetId) + "/apply", {
-              method: "POST",
-              headers: { "content-type": "application/json" }
-            });
-            const json = await readResponseJson(response);
-            setFormStatus(form, response.ok ? "Change set applied." : (json.error || "Apply failed."));
           });
         }
         function bindChangeSetLifecycle(form) {
@@ -2130,11 +2148,7 @@ function renderAuthoringClientScript() {
         const handlers = {
           "proposal.create": bindProposalCreate,
           "proposal.review": bindProposalReview,
-          "branch.create": bindBranchCreate,
-          "changeSet.create": bindChangeSetCreate,
-          "changeSet.edit": bindChangeSetEdit,
           "changeSet.validate": bindChangeSetValidate,
-          "changeSet.apply": bindChangeSetApply,
           "changeSet.lifecycle": bindChangeSetLifecycle,
           "testRun.single": bindTestRunSingle,
           "testRun.selected": bindTestRunSelected
@@ -2143,6 +2157,7 @@ function renderAuthoringClientScript() {
           const action = form.getAttribute("data-platform-client-action") || "";
           const handler = handlers[action];
           if (handler) handler(form);
+          else bindAuthoredJsonSubmit(form);
         });
       }());
     </script>
