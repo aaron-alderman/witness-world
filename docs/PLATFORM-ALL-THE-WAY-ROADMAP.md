@@ -592,7 +592,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] LLM provider
   - [ ] package registry
   - [ ] OS process
-- [ ] Add projectors:
+- [~] Add projectors:
   - [ ] `boundaries`
   - [ ] `boundaryIndex`
   - [ ] `boundaryLeases`
@@ -646,8 +646,8 @@ This section is the execution contract for a fresh agent. Read it before startin
 ### 5.1 Test Gate Model
 
 - [~] Add `testGate` module kind.
-- [ ] Add `testSuite` module kind.
-- [ ] Add `testCase` module kind.
+- [X] Add `testSuite` module kind.
+- [X] Add `testCase` module kind.
 - [X] Add `testRun` module kind.
 - [X] Add `testResult` module kind.
 - [X] Add `testArtifact` module kind.
@@ -657,6 +657,8 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] `testGateIndex`
   - [X] `testRuns`
   - [X] `testResults`
+  - [X] `testSuites`
+  - [X] `testCases`
   - [X] `latestTestResultsByGate`
   - [~] coverageEdges
   - [X] `affectedTestGates`
@@ -682,7 +684,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add MCP view `platform.read { view: "testGates" }`.
 - [L] Current V1 gate modeling is a platform self-model projection with branch-aware affected gate selection plus discovery from test files, package scripts, explicit doc commands, and test-source platform hints. Test-source hints currently come from repo-relative imports, quoted repo paths, route literals, and known plugin/capability/handler identifiers; they are not yet a full AST/import dependency graph.
 - [L] Current V1 now also derives `coverageEdge` rows from each gate's protected objects and source dependencies, emits `coverageEdge` nodes in the platform graph, and exposes those rows through `/api/platform-model?view=testGates`. This is still model-local rather than a delegated module projector, and it is not yet the broader coverage matrix planned in Phase 6.
-- [L] Current V1 test execution records one synthesized `testResult` per run with stdout/stderr captured in witness-backed rows. Artifact storage, structured report ingestion, and richer per-test-case modeling remain later work.
+- [L] Current V1 test execution still records one synthesized `testResult` per run, but structured TAP/JUnit artifacts now derive `testSuite` and `testCase` rows opportunistically from captured stdout/stderr content. Artifact storage, standalone structured report ingestion, and richer runner-native per-case modeling remain later work.
 
 ### 5.2 Test Execution Environment
 
@@ -708,7 +710,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [L] Current V1 test execution now models a `testRunner` boundary actor plus named local-node, local-browser, isolated-temp-workspace, and candidate-snapshot execution environments in the platform graph. Commands still run through the same `plugin.platform` handler lane used by the human HTTP path, but explicit `isolated-temp-workspace` runs and candidate-snapshot runs now materialize a temp workspace copy before execution instead of running directly against the live repo root.
 - [L] `local Rust/cargo` is named in the execution environment catalog and chosen for cargo-shaped gate commands, but the current repo does not yet expose a discovered cargo gate that exercises that path end to end.
 - [L] Current stdout/stderr artifacts are projected as inline witness-backed `testArtifact` rows attached to each run/result. They are first-class platform objects now, but they are not yet external blob-backed artifacts or structured report files.
-- [L] Structured report capture currently derives TAP and JUnit artifacts opportunistically from captured stdout/stderr content. It does not yet ingest standalone report files, merge multi-file reports, or model per-test-case objects.
+- [L] Structured report capture currently derives TAP and JUnit artifacts opportunistically from captured stdout/stderr content and projects `testSuite` / `testCase` rows from those structured artifacts. It does not yet ingest standalone report files, merge multi-file reports, or preserve richer failure metadata.
 - [L] Current V1 captures exit code, duration, stdout, stderr, timeout state, branch id, change-set id, candidate snapshot id, runtime profile, shell/cwd/env input metadata, and source revision dependency hashes for candidate-snapshot/workspace inputs. Memory, CPU, standalone structured report ingestion, artifact storage, and richer SSE/replay semantics remain later work.
 - [L] Source revision capture is mixed by design in V1: dependency hashes come from candidate snapshot overlay entries when the dependency is staged there, and from the live workspace for other declared source dependencies. This improves provenance, and candidate-snapshot execution now applies those staged overlays inside a temp workspace, but local-node/local-browser/local-rust-cargo execution still runs directly from the live workspace.
 - [L] Candidate-snapshot temp workspaces currently reconstruct overlay content from the current staged `changeSetEdit` rows by matching the requested snapshot file hashes. This means a stale candidate snapshot ID can stop being executable once its change-set edits drift, because the platform does not yet store full overlay contents as snapshot artifacts.
@@ -1275,12 +1277,12 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 - [~] Discover test gates.
 - [~] Run tests as platform executions.
-- [ ] Capture test artifacts.
+- [~] Capture test artifacts.
 - [~] Link gates to changed objects.
 - [ ] Run dependency-aware selected tests.
 - [~] Add red/green view.
 - [X] Add tests for affected test selection.
-- [L] Current V1 exposes per-gate `lastResult`, a test-runs panel, and latest-result state in the platform model and console. It is not yet a dependency-aware red/green orchestration view with artifact-backed history.
+- [L] Current V1 exposes per-gate `lastResult`, witness-backed stdout/stderr/TAP/JUnit artifacts, derived `testSuite` / `testCase` rows, a test-runs panel, and latest-result state in the platform model and console. It is not yet a dependency-aware red/green orchestration view with durable artifact-backed history.
 
 ### Milestone E: Defects And Telemetry V1
 

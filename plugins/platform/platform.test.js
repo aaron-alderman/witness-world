@@ -426,6 +426,12 @@ test("platform model filters support MCP views", async () => {
     testArtifacts: [
       { id: "testArtifact:demo:stdout", runId: "testRun:demo", resultId: "testResult:demo:1", gateId: "gate:test/runtime-profile.test.js", artifactKind: "stdout" }
     ],
+    testSuites: [
+      { id: "testSuite:demo", runId: "testRun:demo", resultId: "testResult:demo:1", artifactId: "testArtifact:demo:stdout", gateId: "gate:test/runtime-profile.test.js", status: "passed" }
+    ],
+    testCases: [
+      { id: "testCase:demo:1", suiteId: "testSuite:demo", runId: "testRun:demo", resultId: "testResult:demo:1", artifactId: "testArtifact:demo:stdout", gateId: "gate:test/runtime-profile.test.js", status: "passed" }
+    ],
     latestTestResultsByGate: {
       "gate:test/runtime-profile.test.js": { id: "testResult:demo:1", runId: "testRun:demo", gateId: "gate:test/runtime-profile.test.js", status: "passed" }
     }
@@ -500,6 +506,8 @@ test("platform model filters support MCP views", async () => {
   assert.equal(testRuns.testRuns[0].id, "testRun:demo");
   assert.equal(testRuns.testResults[0].id, "testResult:demo:1");
   assert.equal(testRuns.testArtifacts[0].id, "testArtifact:demo:stdout");
+  assert.equal(testRuns.testSuites[0].id, "testSuite:demo");
+  assert.equal(testRuns.testCases[0].id, "testCase:demo:1");
   assert.equal(testRuns.latestTestResultsByGate["gate:test/runtime-profile.test.js"].status, "passed");
   assert.equal(branches.branches[0].id, "branch.demo");
   assert.equal(runtimeRevisions.runtimeRevisions[0].id, "runtimeRevision:backend:3");
@@ -2194,6 +2202,8 @@ test("platform test run handlers execute modeled gates and expose read model sta
   assert.equal(world.project(moduleProjectors.testRuns).length, 1);
   assert.equal(world.project(moduleProjectors.testResults).length, 1);
   assert.equal(world.project(moduleProjectors.testArtifacts).length, 4);
+  assert.equal(world.project(moduleProjectors.testSuites).length, 2);
+  assert.equal(world.project(moduleProjectors.testCases).length, 1);
   assert.equal(world.project(moduleProjectors.latestTestResultsByGate).byGate["gate:plugins/platform/platform.test.js"].status, "passed");
   const runtimeModel = await buildPlatformModel({
     diagnostics: {
@@ -2211,6 +2221,9 @@ test("platform test run handlers execute modeled gates and expose read model sta
   assert.equal(runtimeModel.nodes.some(node => node.id === "testArtifact:testRun.platform.demo:stdout" && node.kind === "testArtifact"), true);
   assert.equal(runtimeModel.nodes.some(node => node.id === "testArtifact:testRun.platform.demo:tap:stdout" && node.kind === "testArtifact"), true);
   assert.equal(runtimeModel.nodes.some(node => node.id === "testArtifact:testRun.platform.demo:junit:stderr" && node.kind === "testArtifact"), true);
+  assert.equal(runtimeModel.nodes.some(node => node.kind === "testSuite" && node.id === "testSuite:testArtifact:testRun.platform.demo:tap:stdout"), true);
+  assert.equal(runtimeModel.nodes.some(node => node.kind === "testSuite" && node.id === "testSuite:testArtifact:testRun.platform.demo:junit:stderr:suite-1"), true);
+  assert.equal(runtimeModel.nodes.some(node => node.kind === "testCase" && node.id === "testCase:testArtifact:testRun.platform.demo:tap:stdout:1"), true);
   assert.equal(runtimeModel.nodes.some(node => node.id === "testEnvironment:platform-candidate-snapshot" && node.kind === "testEnvironment" && node.status === "active"), true);
   assert.equal(runtimeModel.edges.some(edge => edge.from === "testRun.platform.demo" && edge.rel === "usesBoundary" && edge.to === "boundary:testRunner.platform"), true);
   assert.equal(runtimeModel.edges.some(edge => edge.from === "testRun.platform.demo" && edge.rel === "executesOn" && edge.to === "testEnvironment:platform-candidate-snapshot"), true);
@@ -3727,6 +3740,8 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Selected Branches/);
   assert.match(html, /Test Runs/);
   assert.match(html, /Latest Test Results/);
+  assert.match(html, /Test Suites/);
+  assert.match(html, /Test Cases/);
   assert.match(html, /Live Test Run Events/);
   assert.match(html, /Run Test Gate/);
   assert.match(html, /Candidate Snapshots/);

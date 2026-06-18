@@ -373,6 +373,35 @@ function parseTapSummary(content) {
   };
 }
 
+function parseTapCases(content) {
+  const text = String(content || "");
+  if (!/^\s*TAP version \d+/m.test(text)) return [];
+  const rows = [];
+  const pattern = /^\s*(not ok|ok)\b(?:\s+(\d+))?(?:\s*-\s*([^\r\n#]*?))?(?:\s*#\s*(SKIP|TODO)\b(.*))?\s*$/gmi;
+  let match;
+  let ordinal = 0;
+  while ((match = pattern.exec(text)) !== null) {
+    ordinal += 1;
+    const directive = String(match[4] || "").toUpperCase();
+    const rawStatus = String(match[1] || "").toLowerCase();
+    rows.push({
+      ordinal,
+      testNumber: match[2] ? Number(match[2]) : ordinal,
+      name: String(match[3] || `test ${match[2] || ordinal}`).trim() || `test ${match[2] || ordinal}`,
+      status: directive === "SKIP"
+        ? "skipped"
+        : directive === "TODO"
+          ? "todo"
+          : rawStatus === "ok"
+            ? "passed"
+            : "failed",
+      directive: directive || null,
+      directiveDetail: match[5] ? String(match[5]).trim() || null : null
+    });
+  }
+  return rows;
+}
+
 function parseJUnitSummary(content) {
   const text = String(content || "");
   if (!/<testsuite\b/i.test(text) && !/<testsuites\b/i.test(text)) return null;
@@ -398,6 +427,73 @@ function parseJUnitSummary(content) {
     failed: totals.failures,
     errors: totals.errors,
     skipped: totals.skipped
+  };
+}
+
+function parseXmlAttr(source, attr) {
+  const match = String(source || "").match(new RegExp(`\\b${attr}="([^"]*)"`, "i"));
+  return match ? match[1] : null;
+}
+
+function parseJUnitSuitesAndCases(content) {
+  const text = String(content || "");
+  if (!/<testsuite\b/i.test(text) && !/<testsuites\b/i.test(text)) return { suites: [], cases: [] };
+  const suites = [];
+  const cases = [];
+  const suitePattern = /<testsuite\b([^>]*)>([\s\S]*?)<\/testsuite>|<testsuite\b([^>]*)\/>/gi;
+  let suiteMatch;
+  let suiteOrdinal = 0;
+  while ((suiteMatch = suitePattern.exec(text)) !== null) {
+    suiteOrdinal += 1;
+    const attrs = suiteMatch[1] || suiteMatch[3] || "";
+    const body = suiteMatch[2] || "";
+    const suiteId = `suite-${suiteOrdinal}`;
+    suites.push({
+      suiteId,
+      ordinal: suiteOrdinal,
+      name: parseXmlAttr(attrs, "name") || `suite ${suiteOrdinal}`,
+      tests: Number(parseXmlAttr(attrs, "tests") || 0),
+      failures: Number(parseXmlAttr(attrs, "failures") || 0),
+      errors: Number(parseXmlAttr(attrs, "errors") || 0),
+      skipped: Number(parseXmlAttr(attrs, "skipped") || 0),
+      timeSeconds: (() => {
+        const value = parseXmlAttr(attrs, "time");
+        return value == null ? null : Number(value);
+      })(),
+      body
+    });
+    const casePattern = /<testcase\b([^>]*)>([\s\S]*?)<\/testcase>|<testcase\b([^>]*)\/>/gi;
+    let caseMatch;
+    let caseOrdinal = 0;
+    while ((caseMatch = casePattern.exec(body)) !== null) {
+      caseOrdinal += 1;
+      const caseAttrs = caseMatch[1] || caseMatch[3] || "";
+      const caseBody = caseMatch[2] || "";
+      const hasFailure = /<failure\b/i.test(caseBody);
+      const hasError = /<error\b/i.test(caseBody);
+      const hasSkipped = /<skipped\b/i.test(caseBody);
+      cases.push({
+        suiteId,
+        ordinal: caseOrdinal,
+        classname: parseXmlAttr(caseAttrs, "classname"),
+        name: parseXmlAttr(caseAttrs, "name") || `case ${caseOrdinal}`,
+        timeSeconds: (() => {
+          const value = parseXmlAttr(caseAttrs, "time");
+          return value == null ? null : Number(value);
+        })(),
+        status: hasError
+          ? "error"
+          : hasFailure
+            ? "failed"
+            : hasSkipped
+              ? "skipped"
+              : "passed"
+      });
+    }
+  }
+  return {
+    suites: suites.map(({ body, ...suite }) => suite),
+    cases
   };
 }
 
@@ -438,6 +534,143 @@ function structuredArtifactsForStream({
   pushStructured("tap", `${streamKind}.tap`, "application/tap", parseTapSummary(content));
   pushStructured("junit", `${streamKind}.junit.xml`, "application/xml", parseJUnitSummary(content));
   return rows;
+}
+
+function testSuiteRows(witnesses) {
+  const artifacts = platformModuleProjectors.testArtifacts(witnesses);
+  const rows = [];
+  for (const artifact of artifacts) {
+    if (artifact.structuredFormat === "tap" && artifact.summary) {
+      rows.push({
+        id: `testSuite:${artifact.id}`,
+        runId: artifact.runId,
+        resultId: artifact.resultId,
+        gateId: artifact.gateId,
+        artifactId: artifact.id,
+        format: "tap",
+        name: artifact.title || artifact.fileName || artifact.id,
+        status: Number(artifact.summary.failed || 0) > 0 ? "failed" : "passed",
+        total: Number(artifact.summary.total || 0),
+        passed: Number(artifact.summary.passed || 0),
+        failed: Number(artifact.summary.failed || 0),
+        errors: 0,
+        skipped: Number(artifact.summary.skipped || 0),
+        durationMs: null,
+        branchId: artifact.branchId ? String(artifact.branchId) : null,
+        changeSetId: artifact.changeSetId ? String(artifact.changeSetId) : null,
+        candidateSnapshotId: artifact.candidateSnapshotId ? String(artifact.candidateSnapshotId) : null,
+        producedAt: artifact.producedAt ?? null
+      });
+      continue;
+    }
+    if (artifact.structuredFormat === "junit") {
+      const parsed = parseJUnitSuitesAndCases(artifact.content);
+      if (parsed.suites.length) {
+        for (const suite of parsed.suites) {
+          rows.push({
+            id: `testSuite:${artifact.id}:${suite.suiteId}`,
+            runId: artifact.runId,
+            resultId: artifact.resultId,
+            gateId: artifact.gateId,
+            artifactId: artifact.id,
+            format: "junit",
+            name: suite.name,
+            status: suite.errors > 0 ? "error" : (suite.failures > 0 ? "failed" : "passed"),
+            total: suite.tests,
+            passed: Math.max(0, suite.tests - suite.failures - suite.errors - suite.skipped),
+            failed: suite.failures,
+            errors: suite.errors,
+            skipped: suite.skipped,
+            durationMs: typeof suite.timeSeconds === "number" && Number.isFinite(suite.timeSeconds)
+              ? Math.round(suite.timeSeconds * 1000)
+              : null,
+            branchId: artifact.branchId ? String(artifact.branchId) : null,
+            changeSetId: artifact.changeSetId ? String(artifact.changeSetId) : null,
+            candidateSnapshotId: artifact.candidateSnapshotId ? String(artifact.candidateSnapshotId) : null,
+            producedAt: artifact.producedAt ?? null
+          });
+        }
+      } else if (artifact.summary) {
+        rows.push({
+          id: `testSuite:${artifact.id}`,
+          runId: artifact.runId,
+          resultId: artifact.resultId,
+          gateId: artifact.gateId,
+          artifactId: artifact.id,
+          format: "junit",
+          name: artifact.title || artifact.fileName || artifact.id,
+          status: Number(artifact.summary.errors || 0) > 0 ? "error" : (Number(artifact.summary.failed || 0) > 0 ? "failed" : "passed"),
+          total: Number(artifact.summary.total || 0),
+          passed: Number(artifact.summary.passed || 0),
+          failed: Number(artifact.summary.failed || 0),
+          errors: Number(artifact.summary.errors || 0),
+          skipped: Number(artifact.summary.skipped || 0),
+          durationMs: null,
+          branchId: artifact.branchId ? String(artifact.branchId) : null,
+          changeSetId: artifact.changeSetId ? String(artifact.changeSetId) : null,
+          candidateSnapshotId: artifact.candidateSnapshotId ? String(artifact.candidateSnapshotId) : null,
+          producedAt: artifact.producedAt ?? null
+        });
+      }
+    }
+  }
+  return sortRows(rows, ["runId", "artifactId", "id"]);
+}
+
+function testCaseRows(witnesses) {
+  const artifacts = platformModuleProjectors.testArtifacts(witnesses);
+  const rows = [];
+  for (const artifact of artifacts) {
+    if (artifact.structuredFormat === "tap") {
+      for (const testCase of parseTapCases(artifact.content)) {
+        rows.push({
+          id: `testCase:${artifact.id}:${testCase.ordinal}`,
+          suiteId: `testSuite:${artifact.id}`,
+          runId: artifact.runId,
+          resultId: artifact.resultId,
+          gateId: artifact.gateId,
+          artifactId: artifact.id,
+          format: "tap",
+          name: testCase.name,
+          status: testCase.status,
+          testNumber: testCase.testNumber,
+          classname: null,
+          durationMs: null,
+          branchId: artifact.branchId ? String(artifact.branchId) : null,
+          changeSetId: artifact.changeSetId ? String(artifact.changeSetId) : null,
+          candidateSnapshotId: artifact.candidateSnapshotId ? String(artifact.candidateSnapshotId) : null,
+          producedAt: artifact.producedAt ?? null
+        });
+      }
+      continue;
+    }
+    if (artifact.structuredFormat === "junit") {
+      const parsed = parseJUnitSuitesAndCases(artifact.content);
+      for (const testCase of parsed.cases) {
+        rows.push({
+          id: `testCase:${artifact.id}:${testCase.suiteId}:${testCase.ordinal}`,
+          suiteId: `testSuite:${artifact.id}:${testCase.suiteId}`,
+          runId: artifact.runId,
+          resultId: artifact.resultId,
+          gateId: artifact.gateId,
+          artifactId: artifact.id,
+          format: "junit",
+          name: testCase.name,
+          status: testCase.status,
+          testNumber: testCase.ordinal,
+          classname: testCase.classname ? String(testCase.classname) : null,
+          durationMs: typeof testCase.timeSeconds === "number" && Number.isFinite(testCase.timeSeconds)
+            ? Math.round(testCase.timeSeconds * 1000)
+            : null,
+          branchId: artifact.branchId ? String(artifact.branchId) : null,
+          changeSetId: artifact.changeSetId ? String(artifact.changeSetId) : null,
+          candidateSnapshotId: artifact.candidateSnapshotId ? String(artifact.candidateSnapshotId) : null,
+          producedAt: artifact.producedAt ?? null
+        });
+      }
+    }
+  }
+  return sortRows(rows, ["runId", "suiteId", "id"]);
 }
 
 export const platformModuleProjectors = {
@@ -496,6 +729,14 @@ export const platformModuleProjectors = {
 
   testArtifacts(witnesses) {
     return testArtifactRows(witnesses);
+  },
+
+  testSuites(witnesses) {
+    return testSuiteRows(witnesses);
+  },
+
+  testCases(witnesses) {
+    return testCaseRows(witnesses);
   },
 
   latestTestResultsByGate(witnesses) {

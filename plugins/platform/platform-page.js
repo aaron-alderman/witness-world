@@ -75,6 +75,8 @@ export function renderPlatformPage(model) {
   const selectedTestGatesByBranch = model.selectedTestGatesByBranch ?? {};
   const selectedTestGatesByChangeSet = model.selectedTestGatesByChangeSet ?? {};
   const testRuns = model.testRuns ?? [];
+  const testSuites = model.testSuites ?? [];
+  const testCases = model.testCases ?? [];
   const latestTestResultsByGate = model.latestTestResultsByGate ?? {};
   const roadmapTasks = model.roadmapTasks ?? [];
   const proposalActions = model.proposalActions ?? [];
@@ -397,6 +399,17 @@ export function renderPlatformPage(model) {
       <div>
         <h2>Latest Test Results</h2>
         <pre>${esc(JSON.stringify(latestTestResultsByGate, null, 2))}</pre>
+      </div>
+    </section>
+
+    <section class="grid2">
+      <div>
+        <h2>Test Suites</h2>
+        <pre>${esc(JSON.stringify(testSuites.slice(0, 80), null, 2))}</pre>
+      </div>
+      <div>
+        <h2>Test Cases</h2>
+        <pre>${esc(JSON.stringify(testCases.slice(0, 120), null, 2))}</pre>
       </div>
     </section>
 
