@@ -2,3 +2,4 @@ node_modules
 example-ports/engentus-pipeline
 example-ports/engentus-pipeline-r
 tmp
+.vscode
