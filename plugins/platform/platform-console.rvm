@@ -575,7 +575,7 @@ view PlatformVerificationStatusBanner {
   class platform-verification-status
   prop title = "Live Verification Status"
   prop summary = "Current verification health, active execution, and first-pass regression signals."
-  prop verificationPanelKind = "statusBanner"
+  prop propertyRecordSource = "verificationStatus"
   prop propertyCardTitle = "Current Verification State"
   prop propertyFields = "Status=status|Summary=summary|Running runs=runningCount|Failing gates=failingGateCount|Regressed runs=regressedRunCount|Latest completed run=latestCompletedRunId@concept|Latest completion=latestCompletedAt|Active runtime revision=activeRuntimeRevision@concept"
   projections {

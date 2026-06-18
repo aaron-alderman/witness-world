@@ -853,7 +853,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationStreamsSurface.props.propertyValues, "testRunEventsHref=/api/platform-test-runs/events|backendRevisionEventsHref=/api/runtime/backend-revisions/events");
   const verificationStatusSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationStatusBanner");
   assert.ok(verificationStatusSurface);
-  assert.equal(verificationStatusSurface.props.verificationPanelKind, "statusBanner");
+  assert.equal(verificationStatusSurface.props.propertyRecordSource, "verificationStatus");
   assert.match(verificationStatusSurface.props.propertyFields, /Running runs=runningCount/);
   const verificationReportSummarySurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationReportSummary");
   assert.ok(verificationReportSummarySurface);

@@ -1610,11 +1610,27 @@ function verificationStatusRecord(model) {
   };
 }
 
-function renderVerificationPanel(surface, model, ctx) {
-  const panelKind = surfacePropText(surface, "verificationPanelKind", "");
-  if (panelKind !== "statusBanner") return "";
-  const record = verificationStatusRecord(model);
-  const card = propertyRowsFromSurfaceSchema(surface, "propertyCardTitle", "propertyFields", ctx, record, "Live Verification Status");
+function propertyRecordForSource(source, model) {
+  switch (source) {
+    case "verificationStatus":
+      return verificationStatusRecord(model);
+    default:
+      return null;
+  }
+}
+
+function renderComputedPropertySection(surface, model, ctx) {
+  const source = surfacePropText(surface, "propertyRecordSource", "");
+  const record = propertyRecordForSource(source, model);
+  if (!record) return "";
+  const card = propertyRowsFromSurfaceSchema(
+    surface,
+    "propertyCardTitle",
+    "propertyFields",
+    ctx,
+    record,
+    surfacePropText(surface, "title", "Properties")
+  );
   return renderSurfaceFrame(surface, renderPropertyCard(card));
 }
 
@@ -2508,8 +2524,8 @@ function renderAuthoringClientScript() {
 }
 
 function renderSurfaceSection(surface, model, ctx, consoleLayout) {
-  if (surfacePropText(surface, "verificationPanelKind", "")) {
-    return renderVerificationPanel(surface, model, ctx);
+  if (surfacePropText(surface, "propertyRecordSource", "")) {
+    return renderComputedPropertySection(surface, model, ctx);
   }
   if (surface?.props?.summaryPageId) {
     const sourcePageId = surfacePropText(surface, "summaryPageId", "overview");
