@@ -818,6 +818,41 @@ function buildTestGateIndex(rows, affectedRows = [], affectedRowsByChangeSet = [
   return { byId, byProtectedObject, byBranch, byChangeSet };
 }
 
+function buildCoverageEdgeRows(testGates = [], nodes = new Map()) {
+  const rows = [];
+  for (const gate of Array.isArray(testGates) ? testGates : []) {
+    for (const targetId of Array.isArray(gate.protectedObjects) ? gate.protectedObjects : []) {
+      rows.push({
+        id: `coverageEdge:${gate.id}:protectedObject:${targetId}`,
+        gateId: String(gate.id || ""),
+        gateTitle: String(gate.title || gate.id || ""),
+        coverageKind: "protectedObject",
+        targetId: String(targetId),
+        targetLabel: platformModelTargetTitle(targetId, nodes),
+        sourceDependency: null,
+        sourcePath: gate.sourcePath ? String(gate.sourcePath) : null
+      });
+    }
+    for (const sourceDependency of Array.isArray(gate.sourceDependencies) ? gate.sourceDependencies : []) {
+      rows.push({
+        id: `coverageEdge:${gate.id}:sourceDependency:${sourceDependency}`,
+        gateId: String(gate.id || ""),
+        gateTitle: String(gate.title || gate.id || ""),
+        coverageKind: "sourceDependency",
+        targetId: `file:${String(sourceDependency)}`,
+        targetLabel: String(sourceDependency),
+        sourceDependency: String(sourceDependency),
+        sourcePath: gate.sourcePath ? String(gate.sourcePath) : null
+      });
+    }
+  }
+  return rows.sort((left, right) =>
+    String(left.gateId || "").localeCompare(String(right.gateId || ""))
+    || String(left.coverageKind || "").localeCompare(String(right.coverageKind || ""))
+    || String(left.targetId || "").localeCompare(String(right.targetId || ""))
+  );
+}
+
 function testGateCostRank(costEstimate) {
   switch (String(costEstimate || "")) {
     case "low":
@@ -2047,8 +2082,24 @@ export async function buildPlatformModel({
     defectClusters,
     bundleIdsByPlugin
   );
+  const coverageEdges = buildCoverageEdgeRows(testGateProjection.rows, nodes);
   addTestGateTelemetryEdges(nodes, edges, testGateProjection.rows);
   addTestExecutionNodes(nodes, edges, testGateProjection.rows, testRuns, testResults, testArtifacts);
+  for (const coverageEdge of coverageEdges) {
+    addNode(nodes, {
+      id: coverageEdge.id,
+      kind: "coverageEdge",
+      title: `${coverageEdge.gateTitle} -> ${coverageEdge.targetLabel}`,
+      lifecycle: ["verify", "steward"],
+      owner: "plugin.platform",
+      status: "known",
+      source: coverageEdge.sourcePath ?? "platform"
+    });
+    addEdge(edges, coverageEdge.gateId, "covers", coverageEdge.id, "tests");
+    if (coverageEdge.coverageKind === "protectedObject" && isKnownPlatformModelTarget(coverageEdge.targetId, nodes)) {
+      addEdge(edges, coverageEdge.id, "protects", coverageEdge.targetId, "tests");
+    }
+  }
   const gaps = buildGaps(nodes, edges, { branches, changeSets, testGateProjection });
   const docs = parsedDocs.map(doc => ({
     id: doc.id,
@@ -2083,6 +2134,7 @@ export async function buildPlatformModel({
     docTasks,
     testGates: testGateProjection.rows,
     testGateIndex: testGateProjection.index,
+    coverageEdges,
     affectedTestGates: [
       ...testGateProjection.affectedRows,
       ...testGateProjection.affectedRowsByChangeSet
@@ -2182,12 +2234,20 @@ export function filterPlatformModel(model, view, id = null) {
         .filter(([branchId, gateIds]) => !id || relevantBranchIds.has(branchId) || gateIds.includes(id))
         .map(([branchId, gateIds]) => [branchId, [...gateIds]])
     );
+    const gateIds = new Set(testGates.map(row => String(row.id || "")));
+    const coverageEdges = (model.coverageEdges ?? []).filter(row =>
+      !id
+      || gateIds.has(String(row.gateId || ""))
+      || String(row.targetId || "") === String(id)
+      || String(row.sourceDependency || "") === String(id)
+    );
     const affectedTestGatesForBranches = affectedTestGates.filter(row => row.branchId);
     const affectedTestGatesForChangeSets = affectedTestGates.filter(row => row.changeSetId);
     const testGateIndex = buildTestGateIndex(testGates, affectedTestGatesForBranches, affectedTestGatesForChangeSets);
     return {
       testGates,
       testGateIndex,
+      coverageEdges,
       affectedTestGates,
       affectedTestGatesByBranch,
       affectedTestGatesByChangeSet,

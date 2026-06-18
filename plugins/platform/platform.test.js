@@ -310,6 +310,18 @@ test("platform model filters support MCP views", async () => {
         "changeset.demo": ["gate:test/runtime-profile.test.js"]
       }
     },
+    coverageEdges: [
+      {
+        id: "coverageEdge:gate:test/runtime-profile.test.js:protectedObject:profile:minimal",
+        gateId: "gate:test/runtime-profile.test.js",
+        gateTitle: "test/runtime-profile.test.js",
+        coverageKind: "protectedObject",
+        targetId: "profile:minimal",
+        targetLabel: "Minimal runtime",
+        sourceDependency: null,
+        sourcePath: "test/runtime-profile.test.js"
+      }
+    ],
     affectedTestGates: [
       {
         id: "affectedTestGate:branch.demo:gate:test/runtime-profile.test.js",
@@ -372,6 +384,18 @@ test("platform model filters support MCP views", async () => {
         "changeset.demo": ["gate:test/runtime-profile.test.js"]
       }
     },
+    coverageEdges: [
+      {
+        id: "coverageEdge:gate:test/runtime-profile.test.js:protectedObject:profile:minimal",
+        gateId: "gate:test/runtime-profile.test.js",
+        gateTitle: "test/runtime-profile.test.js",
+        coverageKind: "protectedObject",
+        targetId: "profile:minimal",
+        targetLabel: "Minimal runtime",
+        sourceDependency: null,
+        sourcePath: "test/runtime-profile.test.js"
+      }
+    ],
     affectedTestGates: [
       {
         id: "affectedTestGate:changeSet:changeset.demo:gate:test/runtime-profile.test.js",
@@ -466,9 +490,12 @@ test("platform model filters support MCP views", async () => {
   assert.equal(testGates.affectedTestGates[0].branchId, "branch.demo");
   assert.equal(testGates.affectedTestGates[0].gateId, "gate:test/runtime-profile.test.js");
   assert.deepEqual(testGates.affectedTestGatesByBranch["branch.demo"], ["gate:test/runtime-profile.test.js"]);
+  assert.equal(testGates.coverageEdges.length, 1);
+  assert.equal(testGates.coverageEdges[0].targetId, "profile:minimal");
   assert.equal(testGatesByChangeSet.testGates[0].selectedByChangeSets.includes("changeset.demo"), true);
   assert.equal(testGatesByChangeSet.affectedTestGates[0].changeSetId, "changeset.demo");
   assert.deepEqual(testGatesByChangeSet.affectedTestGatesByChangeSet["changeset.demo"], ["gate:test/runtime-profile.test.js"]);
+  assert.equal(testGatesByChangeSet.coverageEdges[0].gateId, "gate:test/runtime-profile.test.js");
   assert.equal(testRuns.testRuns.length, 1);
   assert.equal(testRuns.testRuns[0].id, "testRun:demo");
   assert.equal(testRuns.testResults[0].id, "testResult:demo:1");
@@ -565,6 +592,17 @@ test("platform model projects structured test gates and affected branch selectio
   assert.equal(model.testGateIndex.byId["gate:test/runtime-profile.test.js"].title, "test/runtime-profile.test.js");
   assert.equal(model.testGateIndex.byProtectedObject["plugin.platform"].includes("gate:plugins/platform/platform.test.js"), true);
   assert.equal(model.testGateIndex.byProtectedObject["telemetryMetric:platform.self"].includes("gate:test/runtime-profile.test.js"), true);
+  assert.equal(model.coverageEdges.some(row =>
+    row.gateId === "gate:test/runtime-profile.test.js"
+    && row.coverageKind === "protectedObject"
+    && row.targetId === "profile:minimal"
+  ), true);
+  assert.equal(model.coverageEdges.some(row =>
+    row.gateId === "gate:plugins/platform/platform.test.js"
+    && row.coverageKind === "sourceDependency"
+    && row.sourceDependency === "plugins/platform/platform-model.js"
+  ), true);
+  assert.equal(model.nodes.some(node => node.kind === "coverageEdge" && node.id.includes("gate:test/runtime-profile.test.js")), true);
   assert.equal(model.nodes.some(node => node.id === "telemetryMetric:platform.self" && node.kind === "telemetryMetric"), true);
   assert.equal(model.affectedTestGates.some(row =>
     row.branchId === "branch.platform.gates"
@@ -591,12 +629,14 @@ test("platform model projects structured test gates and affected branch selectio
   assert.equal(packageGateSelection.selectionReasons.some(reason => reason.kind === "direct-file-dependency" && reason.paths.includes("package.json")), true);
   assert.equal(branchView.testGates.some(row => row.id === "gate:test/runtime-profile.test.js"), true);
   assert.equal(branchView.testGates.some(row => row.id === packageScriptGate.id), true);
+  assert.equal(branchView.coverageEdges.some(row => row.gateId === "gate:test/runtime-profile.test.js"), true);
   assert.equal(branchView.affectedTestGates.some(row => row.branchId === "branch.platform.gates"), true);
   assert.deepEqual(branchView.testGateIndex.byBranch["branch.platform.gates"], model.testGateIndex.byBranch["branch.platform.gates"]);
   assert.deepEqual(branchView.affectedTestGatesByBranch["branch.platform.gates"], model.affectedTestGatesByBranch["branch.platform.gates"]);
   assert.deepEqual(branchView.selectedTestGatesByBranch["branch.platform.gates"], model.selectedTestGatesByBranch["branch.platform.gates"]);
   const changeSetView = filterPlatformModel(model, "testGates", "changeSet:platform-gates");
   assert.equal(changeSetView.testGates.some(row => row.id === "gate:test/runtime-profile.test.js"), true);
+  assert.equal(changeSetView.coverageEdges.some(row => row.gateId === "gate:test/runtime-profile.test.js"), true);
   assert.equal(changeSetView.affectedTestGates.some(row => row.changeSetId === "changeSet:platform-gates"), true);
   assert.deepEqual(changeSetView.testGateIndex.byChangeSet["changeSet:platform-gates"], model.testGateIndex.byChangeSet["changeSet:platform-gates"]);
   assert.deepEqual(changeSetView.affectedTestGatesByChangeSet["changeSet:platform-gates"], model.affectedTestGatesByChangeSet["changeSet:platform-gates"]);

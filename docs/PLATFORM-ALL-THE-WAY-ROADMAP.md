@@ -651,14 +651,14 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add `testRun` module kind.
 - [X] Add `testResult` module kind.
 - [X] Add `testArtifact` module kind.
-- [ ] Add `coverageEdge` module kind.
+- [~] Add `coverageEdge` module kind.
 - [ ] Add projectors:
   - [~] `testGates`
   - [X] `testGateIndex`
   - [X] `testRuns`
   - [X] `testResults`
   - [X] `latestTestResultsByGate`
-  - [ ] coverageEdges
+  - [~] coverageEdges
   - [X] `affectedTestGates`
 - [~] Model gate fields:
   - [X] id
@@ -681,6 +681,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add Platform Console gates view.
 - [X] Add MCP view `platform.read { view: "testGates" }`.
 - [L] Current V1 gate modeling is a platform self-model projection with branch-aware affected gate selection plus discovery from test files, package scripts, explicit doc commands, and test-source platform hints. Test-source hints currently come from repo-relative imports, quoted repo paths, route literals, and known plugin/capability/handler identifiers; they are not yet a full AST/import dependency graph.
+- [L] Current V1 now also derives `coverageEdge` rows from each gate's protected objects and source dependencies, emits `coverageEdge` nodes in the platform graph, and exposes those rows through `/api/platform-model?view=testGates`. This is still model-local rather than a delegated module projector, and it is not yet the broader coverage matrix planned in Phase 6.
 - [L] Current V1 test execution records one synthesized `testResult` per run with stdout/stderr captured in witness-backed rows. Artifact storage, structured report ingestion, and richer per-test-case modeling remain later work.
 
 ### 5.2 Test Execution Environment

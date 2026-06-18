@@ -68,6 +68,7 @@ export function renderPlatformPage(model) {
   const docTasks = model.docTasks ?? [];
   const testGates = model.testGates ?? [];
   const testGateIndex = model.testGateIndex ?? { byId: {}, byProtectedObject: {}, byBranch: {}, byChangeSet: {} };
+  const coverageEdges = model.coverageEdges ?? [];
   const affectedTestGates = model.affectedTestGates ?? [];
   const affectedTestGatesByBranch = model.affectedTestGatesByBranch ?? {};
   const affectedTestGatesByChangeSet = model.affectedTestGatesByChangeSet ?? {};
@@ -359,6 +360,10 @@ export function renderPlatformPage(model) {
       <div class="card">
         <h3>Test Gate Index</h3>
         <pre>${esc(JSON.stringify(testGateIndex, null, 2))}</pre>
+      </div>
+      <div class="card">
+        <h3>Coverage Edges</h3>
+        <pre>${esc(JSON.stringify(coverageEdges.slice(0, 120), null, 2))}</pre>
       </div>
     </section>
 
