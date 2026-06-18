@@ -8,8 +8,11 @@ test("live bootstrap state readers resolve authored, model, session, scoped sele
       identities: [],
       contexts: [{ id: "ctx.one" }],
       perspectives: [{ id: "perspective.one" }],
+      contextualTargets: [{ id: "widget.one", context: "ctx.one" }],
       contextScopes: [{ context: "ctx.one", sourceKind: "local", target: "widget.one", name: "homePage" }],
-      contextExports: [{ context: "ctx.one", name: "homePage", target: "widget.one" }]
+      contextExports: [{ context: "ctx.one", name: "homePage", target: "widget.one" }],
+      contextNameResolutions: [{ context: "ctx.one", name: "homePage", resolution: "resolved", target: "widget.one", targets: ["widget.one"], sourceKinds: ["local"], rows: [{ context: "ctx.one", sourceKind: "local", target: "widget.one", name: "homePage" }] }],
+      contextNameConflicts: []
     },
     session: { authenticated: false },
     model: {
@@ -38,8 +41,18 @@ test("live bootstrap state readers resolve authored, model, session, scoped sele
     identities: [{ id: "identity.aaron" }],
     contexts: [{ id: "ctx.two" }],
     perspectives: [{ id: "perspective.two" }],
-    contextScopes: [{ context: "ctx.two", sourceKind: "local", target: "widget.two", name: "homePage" }],
-    contextExports: [{ context: "ctx.two", name: "homePage", target: "widget.two" }]
+    contextualTargets: [{ id: "widget.two", context: "ctx.two" }, { id: "widget.source", context: "ctx.source" }],
+    contextScopes: [
+      { context: "ctx.two", sourceKind: "local", target: "widget.two", name: "homePage" },
+      { context: "ctx.two", sourceKind: "import", target: "widget.source", name: "sourcePage", sourceContext: "ctx.source", exportName: "homePage" }
+    ],
+    contextExports: [{ context: "ctx.two", name: "homePage", target: "widget.two" }],
+    contextNameResolutions: [
+      { context: "ctx.two", name: "homePage", resolution: "resolved", target: "widget.two", targets: ["widget.two"], sourceKinds: ["local"], rows: [{ context: "ctx.two", sourceKind: "local", target: "widget.two", name: "homePage" }] },
+      { context: "ctx.two", name: "sourcePage", resolution: "resolved", target: "widget.source", targets: ["widget.source"], sourceKinds: ["import"], rows: [{ context: "ctx.two", sourceKind: "import", target: "widget.source", name: "sourcePage", sourceContext: "ctx.source", exportName: "homePage" }] },
+      { context: "ctx.two", name: "collision", resolution: "ambiguous", target: null, targets: ["widget.source", "widget.two"], sourceKinds: ["import", "local"], rows: [] }
+    ],
+    contextNameConflicts: [{ context: "ctx.two", name: "collision", targets: ["widget.source", "widget.two"], sourceKinds: ["import", "local"], rows: [] }]
   };
   state.session = { authenticated: true };
   state.model = {
@@ -57,6 +70,14 @@ test("live bootstrap state readers resolve authored, model, session, scoped sele
   assert.deepEqual(readers.contextBindableTargets("ctx.two"), [{ id: "widget.two", context: "ctx.two" }]);
   assert.deepEqual(readers.contextScopeRows("ctx.two", "local"), [{ context: "ctx.two", sourceKind: "local", target: "widget.two", name: "homePage" }]);
   assert.deepEqual(readers.contextExportRows("ctx.two"), [{ context: "ctx.two", name: "homePage", target: "widget.two" }]);
+  assert.equal(readers.contextNameResolutionRows("ctx.two").length, 3);
+  assert.deepEqual(readers.contextNameConflictRows("ctx.two"), [{ context: "ctx.two", name: "collision", targets: ["widget.source", "widget.two"], sourceKinds: ["import", "local"], rows: [] }]);
+  assert.equal(readers.explainContextualName("ctx.two", "homePage").target, "widget.two");
+  assert.equal(readers.explainContextualName("ctx.two", "sourcePage").resolution, "import");
+  assert.equal(readers.explainContextualName("ctx.two", "collision").ok, false);
+  assert.equal(readers.explainTargetVisibility("ctx.two", "widget.source").visibility, "import");
+  assert.equal(readers.explainTargetVisibility("ctx.two", "widget.two").visibility, "local");
+  assert.equal(readers.explainTargetVisibility("ctx.two", "widget.missing").visibility, "unscoped");
   assert.deepEqual(readers.stewardshipTargetKinds(), []);
   assert.deepEqual(readers.stewardshipTargetsFor("context"), [{ id: "ctx.two" }]);
   assert.deepEqual(readers.stewardshipTargetsFor("perspective"), [{ id: "perspective.two" }]);

@@ -1321,23 +1321,266 @@ function exportIndex(witnesses) {
   return map;
 }
 
+function uniqueSortedStrings(values) {
+  return [...new Set((values ?? []).map(value => String(value)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function contextNameResolutionRows(witnesses) {
+  const grouped = new Map();
+  for (const row of moduleProjectors.contextScopes(witnesses)) {
+    const key = `${row.context}${CONTEXT_REF_SEP}${row.name}`;
+    const current = grouped.get(key) ?? {
+      context: row.context,
+      name: row.name,
+      resolution: "resolved",
+      target: null,
+      targets: [],
+      sourceKinds: [],
+      localTargets: [],
+      importedTargets: [],
+      imports: [],
+      witnesses: [],
+      rows: []
+    };
+    current.targets.push(row.target);
+    current.sourceKinds.push(row.sourceKind);
+    if (row.sourceKind === "local") current.localTargets.push(row.target);
+    if (row.sourceKind === "import") {
+      current.importedTargets.push(row.target);
+      current.imports.push({
+        sourceContext: row.sourceContext ?? null,
+        exportName: row.exportName ?? null,
+        target: row.target
+      });
+    }
+    if (row.witness) current.witnesses.push(row.witness);
+    current.rows.push({ ...row });
+    grouped.set(key, current);
+  }
+
+  return [...grouped.values()]
+    .map(row => {
+      const targets = uniqueSortedStrings(row.targets);
+      const sourceKinds = uniqueSortedStrings(row.sourceKinds);
+      const localTargets = uniqueSortedStrings(row.localTargets);
+      const importedTargets = uniqueSortedStrings(row.importedTargets);
+      const witnesses = uniqueSortedStrings(row.witnesses);
+      const imports = row.imports
+        .map(spec => ({
+          sourceContext: spec.sourceContext,
+          exportName: spec.exportName,
+          target: spec.target
+        }))
+        .sort((a, b) =>
+          String(a.sourceContext).localeCompare(String(b.sourceContext))
+          || String(a.exportName).localeCompare(String(b.exportName))
+          || String(a.target).localeCompare(String(b.target))
+        );
+      return {
+        context: row.context,
+        name: row.name,
+        resolution: targets.length === 1 ? "resolved" : "ambiguous",
+        target: targets.length === 1 ? targets[0] : null,
+        targets,
+        sourceKinds,
+        localTargets,
+        importedTargets,
+        imports,
+        witnesses,
+        rows: row.rows
+      };
+    })
+    .sort((a, b) =>
+      String(a.context).localeCompare(String(b.context))
+      || String(a.name).localeCompare(String(b.name))
+    );
+}
+
+function contextNameConflictRows(witnesses) {
+  return contextNameResolutionRows(witnesses)
+    .filter(row => row.resolution === "ambiguous")
+    .map(row => ({
+      context: row.context,
+      name: row.name,
+      targets: [...row.targets],
+      sourceKinds: [...row.sourceKinds],
+      imports: row.imports.map(spec => ({ ...spec })),
+      witnesses: [...row.witnesses],
+      rows: row.rows.map(spec => ({ ...spec }))
+    }));
+}
+
 export function resolveContextualName(witnesses, {
+  context,
+  name
+}) {
+  const explanation = explainContextualName(witnesses, { context, name });
+  if (!explanation.ok) return { ok: false, error: explanation.reason };
+  return { ok: true, target: explanation.target, row: explanation.rows[0] ?? null };
+}
+
+export function explainContextualName(witnesses, {
   context,
   name
 }) {
   const wantedContext = typeof context === "string" && context.trim() ? context.trim() : "";
   const wantedName = typeof name === "string" && name.trim() ? name.trim() : "";
-  if (!wantedContext || !wantedName) return { ok: false, error: "context and name are required for contextual resolution" };
-  const matches = moduleProjectors.contextScopes(witnesses)
-    .filter(row => row.context === wantedContext && row.name === wantedName);
-  if (matches.length === 0) {
-    return { ok: false, error: `name not visible in context: ${wantedName}` };
+  if (!wantedContext || !wantedName) {
+    return {
+      ok: false,
+      context: wantedContext || null,
+      name: wantedName || null,
+      resolution: "invalid",
+      target: null,
+      targets: [],
+      rows: [],
+      reason: "context and name are required for contextual resolution"
+    };
   }
-  const targets = [...new Set(matches.map(row => row.target).filter(Boolean))];
-  if (targets.length !== 1) {
-    return { ok: false, error: `name resolves ambiguously in context: ${wantedName}` };
+  const resolution = contextNameResolutionRows(witnesses)
+    .find(row => row.context === wantedContext && row.name === wantedName) ?? null;
+  if (!resolution) {
+    return {
+      ok: false,
+      context: wantedContext,
+      name: wantedName,
+      resolution: "missing",
+      target: null,
+      targets: [],
+      rows: [],
+      reason: `name not visible in context: ${wantedName}`
+    };
   }
-  return { ok: true, target: targets[0], row: matches[0] };
+  if (resolution.resolution !== "resolved" || !resolution.target) {
+    return {
+      ok: false,
+      context: wantedContext,
+      name: wantedName,
+      resolution: "ambiguous",
+      target: null,
+      targets: [...resolution.targets],
+      rows: resolution.rows.map(row => ({ ...row })),
+      reason: `name resolves ambiguously in context: ${wantedName}`
+    };
+  }
+  return {
+    ok: true,
+    context: wantedContext,
+    name: wantedName,
+    resolution: resolution.sourceKinds.includes("local") ? "local" : "import",
+    target: resolution.target,
+    targets: [...resolution.targets],
+    rows: resolution.rows.map(row => ({ ...row })),
+    reason: resolution.sourceKinds.includes("local")
+      ? `name resolves through a local binding in context: ${wantedName}`
+      : `name resolves through an imported binding in context: ${wantedName}`
+  };
+}
+
+export function explainContextualTargetVisibility(witnesses, {
+  context,
+  target
+}) {
+  const authoringContext = typeof context === "string" && context.trim() ? context.trim() : "";
+  const canonicalTarget = typeof target === "string" && target.trim() ? target.trim() : "";
+  if (!authoringContext || !canonicalTarget) {
+    return {
+      ok: false,
+      context: authoringContext || null,
+      target: canonicalTarget || null,
+      visible: false,
+      visibility: "invalid",
+      targetContext: null,
+      names: [],
+      rows: [],
+      reason: "context and target are required for visibility explanation"
+    };
+  }
+  if (!projectors.things(witnesses).has(canonicalTarget)) {
+    return {
+      ok: false,
+      context: authoringContext,
+      target: canonicalTarget,
+      visible: false,
+      visibility: "missing-target",
+      targetContext: null,
+      names: [],
+      rows: [],
+      reason: `target not found: ${canonicalTarget}`
+    };
+  }
+  const targetContext = moduleProjectors.objectContexts(witnesses).get(canonicalTarget) ?? null;
+  const rows = moduleProjectors.contextScopes(witnesses)
+    .filter(row => row.context === authoringContext && row.target === canonicalTarget)
+    .map(row => ({ ...row }));
+  const names = uniqueSortedStrings(rows.map(row => row.name));
+  if (!targetContext && rows.length) {
+    return {
+      ok: true,
+      context: authoringContext,
+      target: canonicalTarget,
+      visible: true,
+      visibility: rows.some(row => row.sourceKind === "import") ? "import" : "local",
+      targetContext,
+      names,
+      rows,
+      reason: rows.some(row => row.sourceKind === "import")
+        ? `target is visible in context ${authoringContext} through explicit import or binding`
+        : `target is locally bound in context ${authoringContext}`
+    };
+  }
+  if (!targetContext) {
+    return {
+      ok: true,
+      context: authoringContext,
+      target: canonicalTarget,
+      visible: true,
+      visibility: "unscoped",
+      targetContext,
+      names,
+      rows,
+      reason: `target is unscoped and remains canonically visible in context ${authoringContext}`
+    };
+  }
+  if (targetContext === authoringContext) {
+    return {
+      ok: true,
+      context: authoringContext,
+      target: canonicalTarget,
+      visible: true,
+      visibility: rows.some(row => row.sourceKind === "local") ? "local" : "same-context",
+      targetContext,
+      names,
+      rows,
+      reason: rows.some(row => row.sourceKind === "local")
+        ? `target is locally bound in context ${authoringContext}`
+        : `target belongs to authoring context ${authoringContext}`
+    };
+  }
+  if (rows.length) {
+    return {
+      ok: true,
+      context: authoringContext,
+      target: canonicalTarget,
+      visible: true,
+      visibility: "import",
+      targetContext,
+      names,
+      rows,
+      reason: `target is visible in context ${authoringContext} through explicit import or binding`
+    };
+  }
+  return {
+    ok: false,
+    context: authoringContext,
+    target: canonicalTarget,
+    visible: false,
+    visibility: "hidden",
+    targetContext,
+    names,
+    rows,
+    reason: `target ${canonicalTarget} belongs to context ${targetContext} and is not visible in authoring context ${authoringContext}`
+  };
 }
 
 export function resolveContextualRef(witnesses, {
@@ -1483,6 +1726,15 @@ export const moduleProjectors = {
     return map;
   },
 
+  contextualTargets(witnesses) {
+    return [...moduleProjectors.objectContexts(witnesses).entries()]
+      .map(([id, context]) => ({ id, context }))
+      .sort((a, b) =>
+        String(a.context).localeCompare(String(b.context))
+        || String(a.id).localeCompare(String(b.id))
+      );
+  },
+
   contexts(witnesses) {
     const map = new Map();
     const rels = currentRelations(witnesses);
@@ -1591,6 +1843,14 @@ export const moduleProjectors = {
       || String(a.sourceKind).localeCompare(String(b.sourceKind))
       || String(a.target).localeCompare(String(b.target))
     );
+  },
+
+  contextNameResolutions(witnesses) {
+    return contextNameResolutionRows(witnesses);
+  },
+
+  contextNameConflicts(witnesses) {
+    return contextNameConflictRows(witnesses);
   },
 
   stewardships(witnesses) {

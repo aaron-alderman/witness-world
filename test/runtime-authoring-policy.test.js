@@ -45,13 +45,14 @@ test("authoring capability matrix reports page.surface pathway semantics separat
   const matrix = buildRuntimeAuthoringCapabilityMatrix(createRuntimeAuthoringPolicy({ mode: AUTHORING_MODE_MCP_ONLY }));
   const pageSurface = matrix.runtimeConsumers["page.surface"];
 
-  assert.equal(pageSurface.status, "partial");
+  assert.equal(pageSurface.status, "supported");
   assert.equal(pageSurface.pairings.surface, "supported");
   assert.equal(pageSurface.pairings.process, "supported");
-  assert.equal(pageSurface.pairings.projection, "blocked");
+  assert.equal(pageSurface.pairings.projection, "supported");
   assert.equal(pageSurface.pathwaySemantics.blockedResetHost.status, "supported");
   assert.equal(pageSurface.pathwaySemantics.staticSurfaceProjection.status, "supported");
   assert.equal(pageSurface.pathwaySemantics.routeSelectedSurface.status, "supported");
+  assert.equal(pageSurface.pathwaySemantics.surfaceProjectionPairing.status, "supported");
   assert.equal(pageSurface.pathwaySemantics.urlToRouteState.status, "supported");
   assert.equal(pageSurface.pathwaySemantics.interactionToRouteState.status, "supported");
   assert.equal(pageSurface.pathwaySemantics.routeStateToUrl.status, "supported");

@@ -614,8 +614,12 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
   const surfaceStaticId = `${stamp}_surface_static`;
   const surfaceAlternateId = `${stamp}_surface_alternate`;
   const routeStateTypeId = `${stamp}_route_state`;
+  const projectionSourceTypeId = `${stamp}_projection_source`;
+  const surfaceProjectionId = `${stamp}_surface_projection`;
   const routeStateProcessId = `${stamp}_route_process`;
   const routeStateMessageId = `${stamp}_route_message`;
+  const surfaceStaticProjectionTextId = `${stamp}_surface_static_projection_text`;
+  const surfaceAlternateProjectionTextId = `${stamp}_surface_alternate_projection_text`;
   const surfaceRouteId = `${stamp}_surface_route`;
   const surfaceRouteAltId = `${stamp}_surface_route_alt`;
   const surfaceRoutePath = `/${stamp}-surface`;
@@ -704,13 +708,20 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     initial: surfaceRoutePath
   }, 12);
 
+  const createdProjectionSourceType = await write("type.create", {
+    id: projectionSourceTypeId,
+    role: "state",
+    valueType: "text",
+    initial: "projection-ready"
+  }, 13);
+
   const createdProcess = await write("process.create", {
     id: routeStateProcessId,
-    state: [routeStateTypeId],
+    state: [routeStateTypeId, projectionSourceTypeId],
     handles: [routeStateMessageId],
     emits: [],
     rules: []
-  }, 13);
+  }, 14);
 
   const createdMessage = await write("message.create", {
     id: routeStateMessageId,
@@ -718,7 +729,16 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     writes: {
       [routeStateTypeId]: surfaceRouteAltPath
     }
-  }, 14);
+  }, 15);
+
+  const createdProjection = await write("projection.create", {
+    id: surfaceProjectionId,
+    projectionKind: "format",
+    source: projectionSourceTypeId,
+    props: {
+      prefix: "Derived surface label: "
+    }
+  }, 16);
 
   const createdSurfaces = await write("surface.create", [
     {
@@ -736,7 +756,20 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
         routePath: surfaceRoutePath,
         title: "Canonical authored surface",
         body: "This text was projected from a surface witness through page.surface."
-      }
+      },
+      children: [surfaceStaticProjectionTextId]
+    },
+    {
+      id: surfaceStaticProjectionTextId,
+      surfaceKind: "text",
+      context: contextId,
+      props: {
+        domId: "surface-static-projection-text",
+        text: "Pending projection"
+      },
+      bindings: [
+        { prop: "text", source: { kind: "projection", projection: surfaceProjectionId } }
+      ]
     },
     {
       id: surfaceAlternateId,
@@ -746,9 +779,22 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
         routePath: surfaceRouteAltPath,
         title: "Canonical alternate surface",
         body: "This alternate text was projected from the same root through route-selected surface output."
-      }
+      },
+      children: [surfaceAlternateProjectionTextId]
+    },
+    {
+      id: surfaceAlternateProjectionTextId,
+      surfaceKind: "text",
+      context: contextId,
+      props: {
+        domId: "surface-alternate-projection-text",
+        text: "Pending projection"
+      },
+      bindings: [
+        { prop: "text", source: { kind: "projection", projection: surfaceProjectionId } }
+      ]
     }
-  ], 15);
+  ], 17);
 
   const createdSurfaceRoute = await write("route.create", {
     id: surfaceRouteId,
@@ -759,7 +805,7 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     serves: surfaceRootId,
     rootSurface: surfaceRootId,
     defaultScreen: surfaceStaticId
-  }, 16);
+  }, 18);
 
   const createdSurfaceAltRoute = await write("route.create", {
     id: surfaceRouteAltId,
@@ -770,22 +816,24 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     serves: surfaceRootId,
     rootSurface: surfaceRootId,
     defaultScreen: surfaceAlternateId
-  }, 17);
+  }, 19);
 
   const createdSurfaceServe = await write("serve.create", {
     serverRunner: runnerId,
     route: surfaceRouteId
-  }, 18);
+  }, 20);
 
   const createdSurfaceAltServe = await write("serve.create", {
     serverRunner: runnerId,
     route: surfaceRouteAltId
-  }, 19);
+  }, 21);
 
   const creationErrors = [
     createdType,
+    createdProjectionSourceType,
     createdProcess,
     createdMessage,
+    createdProjection,
     createdSurfaces,
     createdSurfaceRoute,
     createdSurfaceAltRoute,
@@ -808,6 +856,8 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     && /Canonical alternate surface/.test(alternateSurfaceHtml)
     && /This alternate text was projected from the same root through route-selected surface output\./.test(alternateSurfaceHtml)
     && new RegExp(`activeSurface=${surfaceAlternateId}`).test(alternateSurfaceHtml);
+  const surfaceProjectionPairingVisible = /Derived surface label: projection-ready/.test(surfaceHtml)
+    && /Derived surface label: projection-ready/.test(alternateSurfaceHtml);
   const blockedResetHostVisible = (
     /page\.surface reset host/i.test(surfaceHtml) && /blocked_reset_host/i.test(surfaceHtml)
   ) || (
@@ -856,6 +906,28 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
       });
       rungResults.push(buildRungResult("routeSelectedSurface", "blocked", firstBlocked.missingPrimitive));
       firstBlockedRung = "routeSelectedSurface";
+    }
+  }
+
+  if (!firstBlocked) {
+    if (surfaceProjectionPairingVisible) {
+      rungResults.push(buildRungResult("surfaceProjectionPairing", "supported", "page.surface now consumes authored projection bindings through the shared runtime projection rules"));
+    } else {
+      firstBlocked = buildBlockedAuthoringHandoff({
+        limitationType: "platform",
+        goal: "consume authored projection bindings on canonical page.surface routes",
+        attemptedAuthoringPath: "authoring.write(type.create/projection.create/surface.create/route.create/serve.create)",
+        missingPrimitive: "page.surface could not prove authored projection consumption on the canonical route host",
+        minimumHumanAction: "extend the shared page.surface projection floor so initial route output and runtime fragments honor authored projection bindings without app-local render glue",
+        proof: [
+          `type.create succeeded for ${projectionSourceTypeId}: ${createdProjectionSourceType?.isError !== true}`,
+          `projection.create succeeded for ${surfaceProjectionId}: ${createdProjection?.isError !== true}`,
+          `primary route projection text visible: ${/Derived surface label: projection-ready/.test(surfaceHtml)}`,
+          `alternate route projection text visible: ${/Derived surface label: projection-ready/.test(alternateSurfaceHtml)}`
+        ]
+      });
+      rungResults.push(buildRungResult("surfaceProjectionPairing", "blocked", firstBlocked.missingPrimitive));
+      firstBlockedRung = "surfaceProjectionPairing";
     }
   }
 
@@ -1050,7 +1122,7 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
 
   const finalState = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
     view: "bootstrapState"
-  }, 20);
+  }, 22);
   if (finalState.isError) {
     throw new Error(`world.read failed: ${JSON.stringify(finalState.structuredContent ?? null)}`);
   }
@@ -1066,6 +1138,7 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     alternateSurfaceHttpStatus: alternateSurfacePage.status,
     staticSurfaceProjectionVisible,
     routeSelectedSurfaceVisible,
+    surfaceProjectionPairingVisible,
     blockedResetHostVisible,
     rungResults,
     firstBlockedRung,
@@ -1108,6 +1181,9 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
       routeStateTypePresent: finalState.structuredContent.witnesses
         ? finalState.structuredContent.witnesses.some(row => row.process === "desire.defineType" && row.body?.id === routeStateTypeId)
         : true,
+      surfaceProjectionPresent: finalState.structuredContent.witnesses
+        ? finalState.structuredContent.witnesses.some(row => row.process === "desire.defineProjection" && row.body?.id === surfaceProjectionId)
+        : true,
       routeStateMessagePresent: finalState.structuredContent.witnesses
         ? finalState.structuredContent.witnesses.some(row => row.process === "desire.defineMessage" && row.body?.id === routeStateMessageId)
         : true
@@ -1137,6 +1213,9 @@ async function main(argv = process.argv.slice(2)) {
     process.exit(1);
   }
   if (!result.pathwayProbe.routeSelectedSurfaceVisible) {
+    process.exit(1);
+  }
+  if (!result.pathwayProbe.surfaceProjectionPairingVisible) {
     process.exit(1);
   }
   if (!result.engentusReauthoring?.servedChecks?.loginVisible) {

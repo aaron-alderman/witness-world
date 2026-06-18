@@ -19,6 +19,8 @@ import {
   bindContextName,
   exportContextName,
   importContextName,
+  explainContextualName,
+  explainContextualTargetVisibility,
   resolveContextualName,
   moduleProjectors
 } from "../src/modules.js";
@@ -148,6 +150,9 @@ test("identity projector indexes authored identities by id, username, and actor"
     label: "Aaron",
     username: "aaron",
     password: "aaron",
+    displayName: null,
+    jobTitle: null,
+    initials: null,
     homeContext: null,
     homePerspective: "aaron:personal"
   }]);
@@ -192,4 +197,72 @@ test("context composition projectors expose local bindings, exports, imports, an
   const resolved = resolveContextualName(world.allWitnesses(), { context: "ctx.target", name: "landingPage" });
   assert.equal(resolved.ok, true);
   assert.equal(resolved.target, "page.root");
+});
+
+test("context explanation helpers expose resolved, ambiguous, and hidden contextual cases", () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "system" });
+  defineContext(world, { actor: "system", id: "ctx.source", label: "Source" });
+  defineContext(world, { actor: "system", id: "ctx.target", label: "Target" });
+  createThing(world, { actor: "system", id: "page.root" });
+  createThing(world, { actor: "system", id: "page.alt" });
+  createThing(world, { actor: "system", id: "page.hidden" });
+  createThing(world, { actor: "system", id: "legacy.shell" });
+  world.emit({
+    process: "scope.page.alt",
+    actor: "system",
+    claims: [{ op: "relation", from: "page.alt", rel: "inContext", to: "ctx.source" }],
+    body: {}
+  });
+  world.emit({
+    process: "scope.page.hidden",
+    actor: "system",
+    claims: [{ op: "relation", from: "page.hidden", rel: "inContext", to: "ctx.source" }],
+    body: {}
+  });
+  bindContextName(world, { actor: "system", context: "ctx.source", name: "homePage", target: "page.root" });
+  exportContextName(world, { actor: "system", context: "ctx.source", name: "homePage", target: "page.root" });
+  importContextName(world, { actor: "system", context: "ctx.target", sourceContext: "ctx.source", exportName: "homePage", name: "landingPage" });
+
+  const imported = explainContextualName(world.allWitnesses(), { context: "ctx.target", name: "landingPage" });
+  assert.equal(imported.ok, true);
+  assert.equal(imported.resolution, "import");
+  assert.equal(imported.target, "page.root");
+
+  bindContextName(world, { actor: "system", context: "ctx.target", name: "landingPage", target: "page.alt" });
+  const ambiguity = explainContextualName(world.allWitnesses(), { context: "ctx.target", name: "landingPage" });
+  assert.equal(ambiguity.ok, false);
+  assert.equal(ambiguity.resolution, "ambiguous");
+  assert.deepEqual(ambiguity.targets, ["page.alt", "page.root"]);
+
+  const resolutions = world.project(moduleProjectors.contextNameResolutions);
+  assert.equal(resolutions.some(row =>
+    row.context === "ctx.target"
+    && row.name === "landingPage"
+    && row.resolution === "ambiguous"
+    && row.targets.includes("page.root")
+    && row.targets.includes("page.alt")
+  ), true);
+  const conflicts = world.project(moduleProjectors.contextNameConflicts);
+  assert.equal(conflicts.some(row =>
+    row.context === "ctx.target"
+    && row.name === "landingPage"
+    && row.targets.includes("page.root")
+    && row.targets.includes("page.alt")
+  ), true);
+  assert.equal(world.project(moduleProjectors.contextualTargets).some(row => row.id === "page.hidden" && row.context === "ctx.source"), true);
+
+  const hidden = explainContextualTargetVisibility(world.allWitnesses(), { context: "ctx.target", target: "page.hidden" });
+  assert.equal(hidden.ok, false);
+  assert.equal(hidden.visibility, "hidden");
+  assert.equal(hidden.targetContext, "ctx.source");
+
+  const importedVisibility = explainContextualTargetVisibility(world.allWitnesses(), { context: "ctx.target", target: "page.root" });
+  assert.equal(importedVisibility.ok, true);
+  assert.equal(importedVisibility.visibility, "import");
+  assert.deepEqual(importedVisibility.names, ["landingPage"]);
+
+  const unscoped = explainContextualTargetVisibility(world.allWitnesses(), { context: "ctx.target", target: "legacy.shell" });
+  assert.equal(unscoped.ok, true);
+  assert.equal(unscoped.visibility, "unscoped");
 });

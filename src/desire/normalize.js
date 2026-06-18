@@ -318,6 +318,7 @@ function normalizeSemanticNode(node, versionFieldsByName) {
         kind: "surface",
         name: semantic.name,
         body: {
+          ...(semantic.context ? { context: semantic.context } : {}),
           surfaceKind: semantic.surfaceKind ?? null,
           className: semantic.className ?? null,
           children: semantic.children ?? [],

@@ -197,6 +197,7 @@ test("canonical authoring pathway probe proves interactive page.surface routing 
     assert.equal(result.pathwayProbe.alternateSurfaceHttpStatus, 200);
     assert.equal(result.pathwayProbe.staticSurfaceProjectionVisible, true);
     assert.equal(result.pathwayProbe.routeSelectedSurfaceVisible, true);
+    assert.equal(result.pathwayProbe.surfaceProjectionPairingVisible, true);
     assert.equal(result.pathwayProbe.blockedResetHostVisible, false);
     assert.equal(result.pathwayProbe.firstBlockedRung, null);
     assert.equal(result.blockers.firstBlocked ?? null, null);
@@ -205,6 +206,7 @@ test("canonical authoring pathway probe proves interactive page.surface routing 
       "canonicalActionsExist",
       "staticSurfaceProjection",
       "routeSelectedSurface",
+      "surfaceProjectionPairing",
       "urlToRouteState",
       "interactionToRouteState",
       "routeStateToUrl",
@@ -212,6 +214,7 @@ test("canonical authoring pathway probe proves interactive page.surface routing 
       "interactiveSurfaceExecution"
     ]);
     assert.deepEqual(result.pathwayProbe.rungResults.map(row => row.status), [
+      "supported",
       "supported",
       "supported",
       "supported",
@@ -320,13 +323,14 @@ test("live constrained MCP keeps canonical authoring actions available while pag
     assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.projection.status, "supported");
     assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.process.status, "supported");
     assert.equal(matrixAfter.structuredContent.publicAuthoringConcepts.type.status, "supported");
-    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].status, "partial");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].status, "supported");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.surface, "supported");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.process, "supported");
-    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.projection, "blocked");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pairings.projection, "supported");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.blockedResetHost.status, "supported");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.staticSurfaceProjection.status, "supported");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.routeSelectedSurface.status, "supported");
+    assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.surfaceProjectionPairing.status, "supported");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.urlToRouteState.status, "supported");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.interactionToRouteState.status, "supported");
     assert.equal(matrixAfter.structuredContent.runtimeConsumers["page.surface"].pathwaySemantics.routeStateToUrl.status, "supported");

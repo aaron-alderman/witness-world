@@ -741,6 +741,7 @@ function applyGenericSemanticDefinition(world, node) {
     if (node.body?.projectionKind) claims.push(relation(name, "projectionKind", node.body.projectionKind));
   }
   if (node.kind === "surface") {
+    if (node.body?.context) claims.push(relation(name, "inContext", node.body.context));
     if (node.body?.surfaceKind) claims.push(relation(name, "surfaceKind", node.body.surfaceKind));
     if (node.body?.className) claims.push(relation(name, "surfaceClass", node.body.className));
     if (node.body?.processRef) claims.push(relation(name, "surfaceProcess", node.body.processRef));
@@ -1873,6 +1874,10 @@ function routeParamsResolved(world, values) {
     params.rootWidget = values.defaultRootWidget.trim();
   }
   return { ok: true, value: Object.keys(params).length ? params : null };
+}
+
+function trimOptionalString(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
 function resolvePreparedDocRef(world, values, {

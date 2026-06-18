@@ -408,6 +408,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   const workflowDetailSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowDetail");
   assert.ok(workflowDetailSurface);
   assert.equal(workflowDetailSurface.props.detailSource, "workflow");
+  assert.equal(workflowDetailSurface.props.detailSelectionSources, "branches|changeSets|proposals");
   assert.equal(workflowDetailSurface.props.branchIdPrefixes, "branch:");
   assert.equal(workflowDetailSurface.props.changeSetIdPrefixes, "changeSet:|changeset.");
   assert.equal(workflowDetailSurface.props.proposalIdPrefixes, "proposal:");
@@ -522,6 +523,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   const verificationDetailSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationDetail");
   assert.ok(verificationDetailSurface);
   assert.equal(verificationDetailSurface.props.detailSource, "verification");
+  assert.equal(verificationDetailSurface.props.detailSelectionSources, "testGates|runtimeRevisions|testRuns|candidateSnapshots");
   assert.equal(verificationDetailSurface.props.gateIdPrefixes, "gate:");
   assert.equal(verificationDetailSurface.props.runtimeRevisionIdPrefixes, "runtimeRevision:|backendRevision:|frontendRevision:");
   assert.equal(verificationDetailSurface.props.candidateSnapshotIdPrefixes, "candidateSnapshot:");

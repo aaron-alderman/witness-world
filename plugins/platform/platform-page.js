@@ -5,8 +5,8 @@ import { filterPlatformModel } from "./platform-model.js";
 const FALLBACK_PLATFORM_PAGE_VIEWS = Object.freeze([
   Object.freeze({ id: "overview", title: "Overview", subtitle: "Counts, authored surfaces, lifecycle, and quick links." }),
   Object.freeze({ id: "workflow", title: "Workflow", subtitle: "Branches, change sets, proposals, and authoring commands." }),
-  Object.freeze({ id: "verification", title: "Verification", subtitle: "Test gates, test runs, candidate snapshots, and runtime revisions." }),
-  Object.freeze({ id: "knowledge", title: "Knowledge", subtitle: "Governed docs, roadmap tasks, epics, and features." }),
+  Object.freeze({ id: "verification", title: "Verification", subtitle: "Live test runs, RVM-authored reports, candidate snapshots, failures, regressions, and runtime revisions." }),
+  Object.freeze({ id: "knowledge", title: "Knowledge", subtitle: "Governed docs, roadmap tasks, epics, features, and intent-linked knowledge." }),
   Object.freeze({ id: "signals", title: "Signals", subtitle: "Gaps, telemetry, defect clusters, and boundaries." }),
   Object.freeze({ id: "model", title: "Model", subtitle: "Platform objects, relationships, profiles, and dependency evidence." })
 ]);
@@ -1142,23 +1142,6 @@ function modelItems(model) {
   }));
 }
 
-function findWorkflowDetail(model, id) {
-  if (!id) return (model.branches ?? [])[0] || (model.changeSets ?? [])[0] || (model.proposals ?? [])[0] || null;
-  return (model.branches ?? []).find(branch => branch.id === id)
-    || (model.changeSets ?? []).find(changeSet => changeSet.id === id)
-    || (model.proposals ?? []).find(proposal => proposal.id === id)
-    || null;
-}
-
-function findVerificationDetail(model, id) {
-  if (!id) return (model.testGates ?? [])[0] || (model.runtimeRevisions ?? [])[0] || (model.testRuns ?? [])[0] || (model.candidateSnapshots ?? [])[0] || null;
-  return (model.testGates ?? []).find(gate => gate.id === id)
-    || (model.runtimeRevisions ?? []).find(revision => revision.id === id)
-    || (model.testRuns ?? []).find(run => run.id === id)
-    || (model.candidateSnapshots ?? []).find(snapshot => snapshot.id === id)
-    || null;
-}
-
 function findModelDetail(model, id) {
   return (model.nodes ?? []).find(node => node.id === id) || (model.nodes ?? [])[0] || null;
 }
@@ -1189,6 +1172,20 @@ function recordMatchesKinds(record, kinds = []) {
 
 function detailRecordsForSource(source, model) {
   switch (source) {
+    case "branches":
+      return model.branches ?? [];
+    case "changeSets":
+      return model.changeSets ?? [];
+    case "proposals":
+      return model.proposals ?? [];
+    case "testGates":
+      return model.testGates ?? [];
+    case "runtimeRevisions":
+      return model.runtimeRevisions ?? [];
+    case "testRuns":
+      return model.testRuns ?? [];
+    case "candidateSnapshots":
+      return model.candidateSnapshots ?? [];
     case "docs":
       return model.docs ?? [];
     case "roadmapTasks":
@@ -1823,9 +1820,19 @@ function renderAuthoredStaticPropertySection(surface) {
 function renderAuthoredDetailSourceSection(surface, model, ctx) {
   switch (surfacePropText(surface, "detailSource", "")) {
     case "workflow":
-      return renderSurfaceFrame(surface, renderWorkflowDetail(surface, findWorkflowDetail(model, ctx.id), model, ctx));
+      return renderSurfaceFrame(surface, renderWorkflowDetail(
+        surface,
+        findAuthoredDetailBySources(surface, model, ctx.id, ["branches", "changeSets", "proposals"]),
+        model,
+        ctx
+      ));
     case "verification":
-      return renderSurfaceFrame(surface, renderVerificationDetail(surface, findVerificationDetail(model, ctx.id), model, ctx));
+      return renderSurfaceFrame(surface, renderVerificationDetail(
+        surface,
+        findAuthoredDetailBySources(surface, model, ctx.id, ["testGates", "runtimeRevisions", "testRuns", "candidateSnapshots"]),
+        model,
+        ctx
+      ));
     case "knowledge":
       return renderSurfaceFrame(surface, renderKnowledgeDetail(
         surface,

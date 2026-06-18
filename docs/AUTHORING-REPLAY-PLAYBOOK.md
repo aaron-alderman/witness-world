@@ -31,14 +31,16 @@ frontend progress.
 2. canonical actions still exist
 3. minimal static authored `page.surface` projection
 4. route-selected alternate authored `page.surface` output
-5. URL -> route-state synchronization
-6. interaction -> route-state transition
-7. route-state -> URL synchronization
-8. same-document surface refresh after route-state change
-9. interactive `page.surface` execution through authored process rules
+5. authored `surface + projection` consumption on `page.surface`
+6. URL -> route-state synchronization
+7. interaction -> route-state transition
+8. route-state -> URL synchronization
+9. same-document surface refresh after route-state change
+10. interactive `page.surface` execution through authored process rules
 
-The routing cluster is now green on the canonical pathway. The next blocked
-semantic remains projection consumption on `page.surface`.
+The canonical `surface + process + projection` lane is now green on
+`page.surface`. The next blocked work is broader authored module behavior on
+canonical seams.
 
 ## Current truth
 
@@ -47,6 +49,8 @@ What the pathway probe now proves:
 - a minimal surface tree can be authored through constrained MCP
 - `page.surface` can project one minimal authored static text payload
 - `page.surface` can serve alternate authored output by route
+- `page.surface` can consume authored projection bindings during initial route
+  projection
 - `page.surface` can synchronize direct route entry URL state into authored
   route state
 - `page.surface` can transition authored route state from live interactions
@@ -61,7 +65,7 @@ What the pathway probe now proves:
 
 What remains blocked:
 
-- projection consumption by `page.surface`
+- broader authored module behavior on canonical `page.surface` seams
 
 ## Evidence rules
 

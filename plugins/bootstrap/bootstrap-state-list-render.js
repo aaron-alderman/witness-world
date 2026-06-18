@@ -120,6 +120,8 @@ export function renderBootstrapStateInventory({
   renderList("state-context-exports", authored.contextExports || [], row => row.context + " :: " + row.name + " -> " + row.target);
   renderList("state-context-imports", authored.contextImports || [], row => row.context + " <- " + row.sourceContext + " :: " + row.name + " => " + row.exportName);
   renderList("state-context-scopes", authored.contextScopes || [], row => row.context + " :: " + row.name + " -> " + row.target + (row.sourceKind === "import" ? " [import]" : " [local]"));
+  renderList("state-context-name-resolutions", authored.contextNameResolutions || [], row => row.context + " :: " + row.name + " -> " + (row.target || row.targets?.join(", ") || "(none)") + " [" + row.resolution + "]");
+  renderList("state-context-name-conflicts", authored.contextNameConflicts || [], row => row.context + " :: " + row.name + " -> " + ((row.targets || []).join(", ") || "(none)") + " [conflict]");
   renderList("state-perspectives", authored.perspectives || [], row => row.id + (row.context ? " @" + row.context : ""));
   renderList("state-stewardships", authored.stewardships || [], row => row.steward + " -> " + row.target);
   renderList("state-proposals", authored.proposals || [], row => row.id + " [" + row.status + "] " + row.targetProcess);

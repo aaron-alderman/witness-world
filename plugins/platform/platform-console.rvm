@@ -122,7 +122,7 @@ view PlatformVerificationPage {
   prop modelView = "verification"
   prop summaryCards = "Test Gates=testGates@count|Test Runs=testRuns@count|Runtime Revisions=runtimeRevisions@count|Snapshot Builds=snapshotBuilds@count"
   prop title = "Verification"
-  prop summary = "Test gates, test runs, candidate snapshots, and runtime revisions."
+  prop summary = "Live test runs, RVM-authored reports, candidate snapshots, failures, regressions, and runtime revisions."
   children {
     PlatformVerificationList
     PlatformVerificationDetail
@@ -141,7 +141,7 @@ view PlatformKnowledgePage {
   prop modelView = "knowledge"
   prop summaryCards = "Governed Docs=docs@count|Roadmap Tasks=roadmapTasks@count|Epics=epics@count|Features=features@count"
   prop title = "Knowledge"
-  prop summary = "Governed docs, roadmap tasks, epics, and features."
+  prop summary = "Governed docs, roadmap tasks, epics, features, and intent-linked knowledge."
   children {
     PlatformKnowledgeList
     PlatformKnowledgeDetail
@@ -274,6 +274,7 @@ view PlatformWorkflowDetail {
   prop title = "Workflow Detail"
   prop summary = "Properties and linked resources for the selected workflow item."
   prop detailSource = "workflow"
+  prop detailSelectionSources = "branches|changeSets|proposals"
   prop branchIdPrefixes = "branch:"
   prop changeSetIdPrefixes = "changeSet:|changeset."
   prop proposalIdPrefixes = "proposal:"
@@ -485,6 +486,7 @@ view PlatformVerificationDetail {
   prop title = "Verification Detail"
   prop summary = "Properties and linked resources for the selected verification object."
   prop detailSource = "verification"
+  prop detailSelectionSources = "testGates|runtimeRevisions|testRuns|candidateSnapshots"
   prop gateIdPrefixes = "gate:"
   prop runtimeRevisionIdPrefixes = "runtimeRevision:|backendRevision:|frontendRevision:"
   prop candidateSnapshotIdPrefixes = "candidateSnapshot:"

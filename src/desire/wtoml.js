@@ -272,6 +272,7 @@ function semanticWtomlShape(doc) {
         kind: "surface",
         name: values.id ?? null,
         identity: values.identity ?? null,
+        context: values.context ?? null,
         surfaceKind: values.surfaceKind ?? values.kind ?? null,
         className: values.className ?? values.class ?? null,
         children: values.children ?? [],

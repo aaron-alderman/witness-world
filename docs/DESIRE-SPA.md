@@ -104,7 +104,7 @@ Current truth:
 - it now claims canonical route/state equivalence support
 - it now claims canonical interactive execution through authored process rules
 - it now claims `surface + process` runtime support
-- it does not yet claim `surface + projection` runtime support
+- it now claims `surface + projection` runtime support
 
 The next honest work does not begin from the old shell host. It begins from the
 clean floor proved by the canonical authoring pathway probe.
@@ -129,8 +129,9 @@ clean floor proved by the canonical authoring pathway probe.
 
 ### Still blocked
 
-- `surface + projection` runtime support on canonical `page.surface`
 - Goodman, mill-charge, and mill-force live behavior on canonical seams
+- legacy `page.home` widget/frontend-program execution remains outside the
+  canonical constrained lane
 
 ### Newly proved
 
@@ -138,6 +139,7 @@ clean floor proved by the canonical authoring pathway probe.
   tree through the canonical authoring pathway probe
 - route-selected alternate authored `page.surface` output through the canonical
   authoring pathway probe
+- authored `surface + projection` consumption on canonical `page.surface`
 - URL -> route-state synchronization on canonical `page.surface`
 - interaction -> route-state transition on canonical `page.surface`
 - route-state -> URL synchronization on canonical `page.surface`
@@ -168,7 +170,8 @@ For Engentus this is now the shell substrate for:
 
 Route and shell state are two representations of the same authored problem.
 The constrained pathway now proves them together on canonical seams, so the
-next honest gap is broader module behavior and projection consumption.
+next honest gap is broader module behavior and legacy widget-program
+compatibility removal.
 
 ## Restart lane
 

@@ -553,6 +553,7 @@ export function buildSurfaceRuntimeManifest({
   routeStateDescriptor = null,
   surfaceRenderers = [],
   initialState = null,
+  projectionState = {},
   initialStateOverrides = null
 }) {
   const rootId = rootSurfaceId ?? root?.id ?? activeSurface.id;
@@ -627,6 +628,7 @@ export function buildSurfaceRuntimeManifest({
           ? renderSurfaceStaticFragment(surfaces, surface.id, {
             surfaceRenderers,
             initialState,
+            projectionState,
             forceVisibleSurfaceIds: [surface.id]
             })
           : null
@@ -646,6 +648,7 @@ export function buildSurfaceRuntimeManifest({
         const html = renderSurfaceStaticFragment(surfaces, templateId, {
           surfaceRenderers,
           initialState,
+          projectionState,
           forceVisibleSurfaceIds: [templateId],
           templateContent: true
         });

@@ -147,6 +147,9 @@ export function createBootstrapReadModels({
     const contextExports = project(moduleProjectors.contextExports);
     const contextImports = project(moduleProjectors.contextImports);
     const contextScopes = project(moduleProjectors.contextScopes);
+    const contextualTargets = project(moduleProjectors.contextualTargets);
+    const contextNameResolutions = project(moduleProjectors.contextNameResolutions);
+    const contextNameConflicts = project(moduleProjectors.contextNameConflicts);
     const perspectives = project(moduleProjectors.perspectives);
     const stewardships = project(moduleProjectors.stewardships);
     const proposals = project(moduleProjectors.proposals);
@@ -200,6 +203,9 @@ export function createBootstrapReadModels({
       contextExports,
       contextImports,
       contextScopes,
+      contextualTargets,
+      contextNameResolutions,
+      contextNameConflicts,
       perspectives,
       stewardships,
       authority: authorityForActor(world, requestActor),

@@ -263,7 +263,7 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
       }),
       projection: capabilityState({
         publicAction: "projection.create",
-        runtimeConsumers: [],
+        runtimeConsumers: ["page.surface"],
         status: "supported"
       }),
       type: capabilityState({
@@ -303,16 +303,16 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
     runtimeConsumers: {
       "page.surface": {
         consumes: ["surface", "process", "projection"],
-        status: "partial",
+        status: "supported",
         staticProjection: "supported",
         interactiveProjection: "supported",
         pairings: {
           surface: "supported",
           process: "supported",
-          projection: "blocked"
+          projection: "supported"
         },
-        limitationType: "platform",
-        reason: "page.surface now supports authored surface and process execution on canonical routes; projection pairing remains the next unproven gap",
+        limitationType: null,
+        reason: "page.surface now supports authored surface, process, and projection pairings on canonical routes",
         pathwaySemantics: {
           blockedResetHost: pathwaySemanticState({
             status: "supported",
@@ -328,6 +328,11 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
             status: "supported",
             limitationType: null,
             reason: "page.surface can now serve alternate authored surface output by route through the canonical authoring pathway probe"
+          }),
+          surfaceProjectionPairing: pathwaySemanticState({
+            status: "supported",
+            limitationType: null,
+            reason: "page.surface now consumes authored projection bindings during canonical route projection through shared runtime rules"
           }),
           urlToRouteState: pathwaySemanticState({
             status: "supported",
@@ -385,9 +390,9 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
       {
         authoring: ["surface", "projection"],
         runtime: "page.surface",
-        status: "blocked",
-        limitationType: "platform",
-        reason: "page.surface projection pairing remains unproven on the canonical authoring pathway probe"
+        status: "supported",
+        limitationType: null,
+        reason: "page.surface now projects authored projection-bound surface output on canonical routes through shared runtime rules"
       },
       {
         authoring: ["widget", "frontendProgram", "frontendStep"],

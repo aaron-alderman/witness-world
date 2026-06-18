@@ -24,6 +24,7 @@ The platform must dogfood itself. RVM, WCSS, proposals, MCP, docs, runtime diagn
 Related follow-on:
 
 - [docs/CONTINUOUS-VERIFICATION-ROADMAP.md](C:\Users\aaron\Documents\world\docs\CONTINUOUS-VERIFICATION-ROADMAP.md)
+- [docs/INTENT-REGISTRY-ROADMAP.md](C:\Users\aaron\Documents\world\docs\INTENT-REGISTRY-ROADMAP.md)
 
 ## Status Key
 
@@ -233,6 +234,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 ## Core Vocabulary
 
 - [ ] Define `intent`: a human or LLM goal statement that starts platform work.
+- [ ] Define `intentRegistryEntry`: the canonical classified registry row for an intent, with scope, actors, linked docs, linked tests, linked features, and freshness evidence.
 - [ ] Define `proposal`: a reviewable request to mutate platform state.
 - [ ] Define `changeSet`: a multi-file and multi-object staged change.
 - [ ] Define `branch`: an isolated platform work line backed by a change set graph.
@@ -511,10 +513,14 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] API
   - [ ] operations
   - [ ] test strategy
+  - [ ] product
+  - [ ] developer
+  - [ ] system
+  - [ ] admin
+  - [ ] actor-facing
   - [X] migration
   - [X] roadmap
   - [X] runbook
-  - [ ] product
   - [ ] rationale
 - [ ] Add stable doc IDs independent of file paths.
 - [X] Add doc ownership metadata.
@@ -573,6 +579,19 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add MCP helper to request doc obligations for current branch.
 - [ ] Add tests that platform proposes doc updates for changed public routes.
 - [ ] Add tests that branch cannot ship while required docs are stale unless explicitly waived.
+
+### 3.5 Intent Registry And Knowledge Facets
+
+- [ ] Add `intentRegistryEntry` projector rows derived from authored docs, roadmap tasks, branch metadata, and later explicit intent records.
+- [ ] Classify each registry row by context, actor, lifecycle, and knowledge facet instead of forcing one flat docs list.
+- [ ] Support linked facets such as product docs, developer docs, system docs, admin docs, test reports, roadmap tasks, and operator runbooks.
+- [ ] Add stable intent IDs independent of file paths.
+- [ ] Prefer doc ids and platform concept ids over brittle absolute file references inside generated knowledge scaffolds.
+- [ ] Generate lightweight templates and gap reports when an intent lacks nearby docs, tests, owner, or feature linkage.
+- [ ] Allow partial drift but surface it as freshness or alignment debt rather than pretending the registry is canonical truth.
+- [ ] Add `/platform` knowledge views that can pivot by intent, actor, and facet.
+- [ ] Add MCP read support for intent-registry slices on the same handler lane.
+- [ ] Add tests for intent-to-doc, intent-to-test, and intent-to-feature linkage.
 
 ## Phase 4: External Boundaries As Managed Actors
 
@@ -1212,6 +1231,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [L] Knowledge detail cards are now more RVM-owned too: `PlatformKnowledgePrimaryPanel` authors the visible document/roadmap-task/epic/feature property-card titles and field schemas, while `PlatformKnowledgeRelatedPanel` authors the related-resource card titles and source lists for document references, linked roadmap targets, and epic/feature resource links.
 - [L] Signal and model detail cards are now more RVM-owned too: `PlatformSignalPrimaryPanel` authors the visible gap/signal property-card titles and field schemas, `PlatformSignalRelatedPanel` authors the gap follow-up/selector-drift card titles and source lists, and `PlatformModelPrimaryPanel` authors the platform-object property-card title and field schema. The signal/model relationship tables remain separately authored child surfaces.
 - [L] Knowledge and signal detail selection order are now a bit more RVM-owned too: `PlatformKnowledgeDetail` authors `detailSelectionSources = "docs|roadmapTasks|epics|features"` and `PlatformSignalDetail` authors `detailSelectionSources = "gaps|telemetryMetric|defectCluster|boundary"`, and `plugins/platform/platform-page.js` now resolves the default or requested record by walking those authored source lists instead of hardcoding the current knowledge/signal lookup order in JS.
+- [L] Workflow and verification detail selection order are now more RVM-owned too: `PlatformWorkflowDetail` authors `detailSelectionSources = "branches|changeSets|proposals"` and `PlatformVerificationDetail` authors `detailSelectionSources = "testGates|runtimeRevisions|testRuns|candidateSnapshots"`, and `plugins/platform/platform-page.js` now routes both pages through the same authored source-walk helper instead of keeping dedicated `findWorkflowDetail(...)` / `findVerificationDetail(...)` selectors with hardcoded order in JS.
 - [L] Primary detail surfaces now also author the long-tail property card title through `longTailCardTitle`, and the renderer consumes that prop instead of hardcoding the fallback `Properties` heading for leftover scalar fields.
 - [L] The currently active long-tail exclusion rules are now more RVM-owned too: workflow, verification, knowledge, and gap detail primary surfaces author the extra object-specific field names that should stay out of the generic long-tail card, and the renderer consumes those props instead of hardcoding those exclusion lists by surface name.
 - [L] The scalar-only long-tail filter policy is now more RVM-owned too: primary detail surfaces author `longTailValueKinds`, and the renderer consumes that prop instead of hardcoding the current scalar/scalar-list inclusion rule for leftover property values.

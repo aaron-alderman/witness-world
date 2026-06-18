@@ -1,5 +1,6 @@
 import {
   readInitialStateFromWorld,
+  readProjectionStateFromWorld,
   readSurfaceMapFromWorld,
   renderSurfaceStaticFragment,
   resolveSurfaceShellFromMap
@@ -154,6 +155,7 @@ export function renderSurfacePage(world, {
   const mergedInitialState = initialStateOverrides && typeof initialStateOverrides === "object"
     ? { ...initialState, ...initialStateOverrides }
     : initialState;
+  const projectionState = readProjectionStateFromWorld(world, mergedInitialState);
   const surfaces = readSurfaceMapFromWorld(world);
   const shellState = resolveSurfaceShellFromMap({
     surfaces,
@@ -161,6 +163,7 @@ export function renderSurfacePage(world, {
     requestPathname,
     route,
     initialState: mergedInitialState,
+    projectionState,
     stylesheetQuery
   });
   if (!shellState?.html) return null;
@@ -196,6 +199,7 @@ export function renderSurfacePage(world, {
         route,
       surfaceRenderers,
       initialState: mergedInitialState,
+      projectionState,
       stylesheetQuery
       })
     : shellState;
@@ -219,6 +223,7 @@ export function renderSurfacePage(world, {
     routeStateDescriptor,
     surfaceRenderers,
     initialState: mergedInitialState,
+    projectionState,
     initialStateOverrides
   });
   return injectInteractionRuntime(injectCapabilityAssets(shell.html, [

@@ -1496,6 +1496,9 @@ test("bootstrap context composition endpoints expose scope state and lower conte
     assert.equal(state.contextImports.some(row => row.context === "ctx.target" && row.sourceContext === "ctx.source" && row.exportName === "homePage" && row.name === "landingPage"), true);
     assert.equal(state.contextScopes.some(row => row.context === "ctx.target" && row.name === "landingPage" && row.target === "page_root" && row.sourceKind === "import" && row.sourceContext === "ctx.source" && row.exportName === "homePage"), true);
     assert.equal(state.contextScopes.some(row => row.context === "ctx.target" && row.name === "homePage"), false);
+    assert.equal(state.contextualTargets.some(row => row.id === "page_root" && row.context === "ctx.source"), true);
+    assert.equal(state.contextNameResolutions.some(row => row.context === "ctx.target" && row.name === "landingPage" && row.target === "page_root" && row.resolution === "resolved"), true);
+    assert.equal((state.contextNameConflicts || []).length, 0);
     assert.equal(state.contextScopes.some(row => row.context === "ctx.target" && row.name === "backendAlias" && row.target === backendHost && row.sourceKind === "import"), true);
     assert.equal(state.widgets.some(row => row.id === "shell_child" && row.context === "ctx.target"), true);
     assert.equal(state.widgets.some(row => row.id === "legacy_child" && row.context === "ctx.target"), true);

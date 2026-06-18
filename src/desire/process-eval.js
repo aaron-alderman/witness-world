@@ -30,6 +30,12 @@
 //                   repair_required).
 
 import { createExecutionRunner } from "../runtime-execution-runner.js";
+import {
+  deriveProjectionSnapshot,
+  deriveProjectionValue,
+  formatProjectionValue,
+  projectionTruthiness
+} from "./projection-eval.js";
 
 const KIND_BY_PROCESS = {
   "desire.defineProcess": "process",
@@ -39,37 +45,6 @@ const KIND_BY_PROCESS = {
   "desire.defineProjection": "projection",
   "desire.definePolicy": "policy"
 };
-
-const DERIVE_OPS = {
-  bool_not: ([x]) => !truthy(x),
-  format: ([x], body) => formatProjectionValue(x, body?.props ?? {}),
-  identity: ([x]) => x
-};
-
-function formatProjectionValue(value, props = {}) {
-  if (value == null || value === "") return "";
-  const scale = props.style === "percent"
-    ? 100
-    : (props.scale != null ? Number(props.scale) : 1);
-  const numeric = Number(value) * (Number.isFinite(scale) ? scale : 1);
-  const hasNumeric = Number.isFinite(numeric);
-  const digits = props.digits != null ? Number(props.digits) : null;
-  const suffix = props.suffix != null
-    ? String(props.suffix)
-    : (props.style === "percent" ? "%" : "");
-  const prefix = props.prefix != null ? String(props.prefix) : "";
-  const body = hasNumeric
-    ? (Number.isFinite(digits) ? numeric.toFixed(Math.max(0, digits)) : String(numeric))
-    : String(value);
-  return `${prefix}${body}${suffix}`;
-}
-
-function truthy(v) {
-  if (typeof v === "boolean") return v;
-  if (typeof v === "number") return v !== 0;
-  if (typeof v === "string") return v !== "" && v !== "false";
-  return Boolean(v);
-}
 
 function witnessesOf(world) {
   if (world && typeof world.allWitnesses === "function") return world.allWitnesses();
@@ -154,12 +129,10 @@ export function createProcessRuntime(world, options = {}) {
   }
 
   function deriveSnapshot() {
-    const out = {};
-    for (const d of derives) {
-      const op = DERIVE_OPS[d.body.projectionKind];
-      out[d.id] = op ? op([state.get(d.body.source)], d.body) : undefined;
-    }
-    return out;
+    return deriveProjectionSnapshot(
+      derives.map(d => ({ body: d.body })),
+      state
+    );
   }
 
   function snapshot(processId) {
@@ -506,14 +479,18 @@ const KIND_BY_PROCESS = {
 };
 
 const DERIVE_OPS = {
-  bool_not: ([x]) => !truthy(x),
-  format: ([x], body) => formatProjectionValue(x, body?.props ?? {}),
-  identity: ([x]) => x
+  bool_not: value => !projectionTruthiness(value),
+  format: (value, body) => formatProjectionValue(value, body?.props ?? {}),
+  identity: value => value
 };
 
-${truthy.toString()}
+${projectionTruthiness.toString()}
 
 ${formatProjectionValue.toString()}
+
+${deriveProjectionValue.toString()}
+
+${deriveProjectionSnapshot.toString()}
 
 ${witnessesOf.toString()}
 
