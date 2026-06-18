@@ -313,6 +313,62 @@ state PlatformConfigAccessFeatureSummary: string {
   initial "Select a feature policy to edit visibility and required roles."
 }
 
+state PlatformConfigAuthorityAuthenticatedIdentity: string {
+  initial ""
+}
+
+state PlatformConfigAuthorityAuthenticatedActor: string {
+  initial ""
+}
+
+state PlatformConfigAuthorityEffectiveIdentity: string {
+  initial ""
+}
+
+state PlatformConfigAuthorityEffectiveActor: string {
+  initial ""
+}
+
+state PlatformConfigAuthorityMode: string {
+  initial "direct"
+}
+
+state PlatformConfigAuthorityAssumptionGrantId: string {
+  initial ""
+}
+
+state PlatformConfigAuthoritySummary: string {
+  initial "No authority summary loaded yet."
+}
+
+state PlatformConfigGrantSourceIdentityId: string {
+  initial ""
+}
+
+state PlatformConfigGrantTargetActor: string {
+  initial ""
+}
+
+state PlatformConfigGrantSelectedId: string {
+  initial ""
+}
+
+state PlatformConfigGrantSummary: string {
+  initial "Choose a source identity and target actor, then create a grant."
+}
+
+state PlatformConfigAssumeIdentityId: string {
+  initial ""
+}
+
+state PlatformConfigAssumeTargetActor: string {
+  initial ""
+}
+
+state PlatformConfigAssumeSummary: string {
+  initial "Choose a source identity and target actor, then open an assumed session."
+}
+
 state PlatformConfigAccessRolesHint: string {
   initial ""
 }
@@ -1011,8 +1067,28 @@ event PlatformConfigLoadAccessFeatureRequested {
 event PlatformConfigUpdateAccessFeatureRequested {
 }
 
+event PlatformConfigCreateAuthorityGrantRequested {
+}
+
+event PlatformConfigRevokeAuthorityGrantRequested {
+}
+
+event PlatformConfigOpenAssumedSessionRequested {
+}
+
+event PlatformConfigReturnDirectSessionRequested {
+}
+
 event PlatformConfigStateLoaded {
   payload {
+    EngentusShellActiveRoute: EngentusShellActiveRoute
+    EngentusSessionActor: EngentusSessionActor
+    EngentusSessionIdentityId: EngentusSessionIdentityId
+    EngentusProfileDisplayName: EngentusProfileDisplayName
+    EngentusProfileJobTitle: EngentusProfileJobTitle
+    EngentusProfileInitials: EngentusProfileInitials
+    EngentusMillForceAccess: EngentusMillForceAccess
+    EngentusPlatformConfigAccess: EngentusPlatformConfigAccess
     PlatformConfigSecretSelectedId: PlatformConfigSecretSelectedId
     PlatformConfigSecretLabel: PlatformConfigSecretLabel
     PlatformConfigSecretValue: PlatformConfigSecretValue
@@ -1043,6 +1119,20 @@ event PlatformConfigStateLoaded {
     PlatformConfigAccessFeatureVisibilityMode: PlatformConfigAccessFeatureVisibilityMode
     PlatformConfigAccessFeatureAllowedRoles: PlatformConfigAccessFeatureAllowedRoles
     PlatformConfigAccessFeatureSummary: PlatformConfigAccessFeatureSummary
+    PlatformConfigAuthorityAuthenticatedIdentity: PlatformConfigAuthorityAuthenticatedIdentity
+    PlatformConfigAuthorityAuthenticatedActor: PlatformConfigAuthorityAuthenticatedActor
+    PlatformConfigAuthorityEffectiveIdentity: PlatformConfigAuthorityEffectiveIdentity
+    PlatformConfigAuthorityEffectiveActor: PlatformConfigAuthorityEffectiveActor
+    PlatformConfigAuthorityMode: PlatformConfigAuthorityMode
+    PlatformConfigAuthorityAssumptionGrantId: PlatformConfigAuthorityAssumptionGrantId
+    PlatformConfigAuthoritySummary: PlatformConfigAuthoritySummary
+    PlatformConfigGrantSourceIdentityId: PlatformConfigGrantSourceIdentityId
+    PlatformConfigGrantTargetActor: PlatformConfigGrantTargetActor
+    PlatformConfigGrantSelectedId: PlatformConfigGrantSelectedId
+    PlatformConfigGrantSummary: PlatformConfigGrantSummary
+    PlatformConfigAssumeIdentityId: PlatformConfigAssumeIdentityId
+    PlatformConfigAssumeTargetActor: PlatformConfigAssumeTargetActor
+    PlatformConfigAssumeSummary: PlatformConfigAssumeSummary
     PlatformConfigAccessRolesHint: PlatformConfigAccessRolesHint
     message: PlatformConfigNoticeText
   }
@@ -1092,6 +1182,10 @@ event PlatformConfigDatasourceMutationFailed {
 event PlatformConfigAccessMutationFailed {
   payload {
     summary: PlatformConfigAccessIdentitySummary
+    featureSummary: PlatformConfigAccessFeatureSummary
+    grantSummary: PlatformConfigGrantSummary
+    authoritySummary: PlatformConfigAuthoritySummary
+    assumeSummary: PlatformConfigAssumeSummary
     message: PlatformConfigNoticeText
   }
   writes {
@@ -1266,6 +1360,32 @@ command PlatformConfigUpdateAccessFeature {
   }
 }
 
+command PlatformConfigCreateAuthorityGrant {
+  fields {
+    identityId: PlatformConfigGrantSourceIdentityId
+    targetActor: PlatformConfigGrantTargetActor
+  }
+}
+
+command PlatformConfigRevokeAuthorityGrant {
+  fields {
+    grantId: PlatformConfigGrantSelectedId
+  }
+}
+
+command PlatformConfigOpenAssumedSession {
+  fields {
+    identityId: PlatformConfigAssumeIdentityId
+    targetActor: PlatformConfigAssumeTargetActor
+  }
+}
+
+command PlatformConfigReturnDirectSession {
+  fields {
+    identityId: PlatformConfigAuthorityAuthenticatedIdentity
+  }
+}
+
 adapter PlatformConfigSnapshotHttp using HTTP {
   command PlatformConfigLoadSnapshot
   kind command
@@ -1280,6 +1400,8 @@ adapter PlatformConfigSnapshotHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthorityGrants = "authorityGrants"
+    PlatformConfigAuthorityActors = "authorityActors"
     PlatformConfigAuthRoles = "authRoles"
   }
 }
@@ -1318,6 +1440,8 @@ adapter PlatformConfigSecretReadHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthorityGrants = "authorityGrants"
+    PlatformConfigAuthorityActors = "authorityActors"
     PlatformConfigAuthRoles = "authRoles"
   }
 }
@@ -1336,6 +1460,88 @@ adapter PlatformConfigSecretCreateHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthorityGrants = "authorityGrants"
+    PlatformConfigAuthorityActors = "authorityActors"
+    PlatformConfigAuthRoles = "authRoles"
+  }
+}
+
+adapter PlatformConfigAuthorityGrantCreateHttp using HTTP {
+  command PlatformConfigCreateAuthorityGrant
+  kind command
+  method POST
+  route /api/pipeline/platform-config/access/grants
+  host_operation engentus.platform.access.grant.create
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigAccessMutationFailed
+  loading_state PlatformConfigAccessBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthorityGrants = "authorityGrants"
+    PlatformConfigAuthorityActors = "authorityActors"
+    PlatformConfigAuthRoles = "authRoles"
+  }
+}
+
+adapter PlatformConfigAuthorityGrantRevokeHttp using HTTP {
+  command PlatformConfigRevokeAuthorityGrant
+  kind command
+  method DELETE
+  route /api/pipeline/platform-config/access/grants/${grantId}
+  host_operation engentus.platform.access.grant.revoke
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigAccessMutationFailed
+  loading_state PlatformConfigAccessBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthorityGrants = "authorityGrants"
+    PlatformConfigAuthorityActors = "authorityActors"
+    PlatformConfigAuthRoles = "authRoles"
+  }
+}
+
+adapter PlatformConfigAssumedSessionOpenHttp using HTTP {
+  command PlatformConfigOpenAssumedSession
+  kind command
+  method POST
+  route /api/pipeline/platform-config/access/session/assume
+  host_operation engentus.platform.access.session.assume
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigAccessMutationFailed
+  loading_state PlatformConfigAccessBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthorityGrants = "authorityGrants"
+    PlatformConfigAuthorityActors = "authorityActors"
+    PlatformConfigAuthRoles = "authRoles"
+  }
+}
+
+adapter PlatformConfigDirectSessionOpenHttp using HTTP {
+  command PlatformConfigReturnDirectSession
+  kind command
+  method POST
+  route /api/pipeline/platform-config/access/session/direct
+  host_operation engentus.platform.access.session.direct
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigAccessMutationFailed
+  loading_state PlatformConfigAccessBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthorityGrants = "authorityGrants"
+    PlatformConfigAuthorityActors = "authorityActors"
     PlatformConfigAuthRoles = "authRoles"
   }
 }
@@ -1491,6 +1697,8 @@ adapter PlatformConfigAccessIdentityReadHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthorityGrants = "authorityGrants"
+    PlatformConfigAuthorityActors = "authorityActors"
     PlatformConfigAuthRoles = "authRoles"
   }
 }
@@ -1509,6 +1717,8 @@ adapter PlatformConfigAccessIdentityUpdateHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthorityGrants = "authorityGrants"
+    PlatformConfigAuthorityActors = "authorityActors"
     PlatformConfigAuthRoles = "authRoles"
   }
 }
@@ -1527,6 +1737,8 @@ adapter PlatformConfigAccessFeatureReadHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthorityGrants = "authorityGrants"
+    PlatformConfigAuthorityActors = "authorityActors"
     PlatformConfigAuthRoles = "authRoles"
   }
 }
@@ -1545,6 +1757,8 @@ adapter PlatformConfigAccessFeatureUpdateHttp using HTTP {
     PlatformConfigDatasources = "datasources"
     PlatformConfigIdentities = "identities"
     PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthorityGrants = "authorityGrants"
+    PlatformConfigAuthorityActors = "authorityActors"
     PlatformConfigAuthRoles = "authRoles"
   }
 }
@@ -1821,6 +2035,20 @@ process EngentusShellNavigation {
     PlatformConfigAccessFeatureVisibilityMode
     PlatformConfigAccessFeatureAllowedRoles
     PlatformConfigAccessFeatureSummary
+    PlatformConfigAuthorityAuthenticatedIdentity
+    PlatformConfigAuthorityAuthenticatedActor
+    PlatformConfigAuthorityEffectiveIdentity
+    PlatformConfigAuthorityEffectiveActor
+    PlatformConfigAuthorityMode
+    PlatformConfigAuthorityAssumptionGrantId
+    PlatformConfigAuthoritySummary
+    PlatformConfigGrantSourceIdentityId
+    PlatformConfigGrantTargetActor
+    PlatformConfigGrantSelectedId
+    PlatformConfigGrantSummary
+    PlatformConfigAssumeIdentityId
+    PlatformConfigAssumeTargetActor
+    PlatformConfigAssumeSummary
     PlatformConfigAccessRolesHint
     PlatformConfigAccessBusy
     MillChargeSpeedFrac
@@ -1939,6 +2167,10 @@ process EngentusShellNavigation {
     PlatformConfigUpdateAccessIdentityRequested
     PlatformConfigLoadAccessFeatureRequested
     PlatformConfigUpdateAccessFeatureRequested
+    PlatformConfigCreateAuthorityGrantRequested
+    PlatformConfigRevokeAuthorityGrantRequested
+    PlatformConfigOpenAssumedSessionRequested
+    PlatformConfigReturnDirectSessionRequested
     PlatformConfigAccessMutationFailed
     PlatformConfigRunScriptRequested
     PlatformConfigScriptSucceeded
@@ -1991,6 +2223,10 @@ process EngentusShellNavigation {
     PlatformConfigUpdateAccessIdentity
     PlatformConfigLoadAccessFeature
     PlatformConfigUpdateAccessFeature
+    PlatformConfigCreateAuthorityGrant
+    PlatformConfigRevokeAuthorityGrant
+    PlatformConfigOpenAssumedSession
+    PlatformConfigReturnDirectSession
     PlatformConfigRunScript
   }
   rules {
@@ -2179,6 +2415,30 @@ process EngentusShellNavigation {
       set PlatformConfigNoticeTone warn
       set PlatformConfigNoticeText "Updating feature policy..."
       command PlatformConfigUpdateAccessFeature
+    }
+    on PlatformConfigCreateAuthorityGrantRequested {
+      set PlatformConfigAccessBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Creating authority grant..."
+      command PlatformConfigCreateAuthorityGrant
+    }
+    on PlatformConfigRevokeAuthorityGrantRequested {
+      set PlatformConfigAccessBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Revoking authority grant..."
+      command PlatformConfigRevokeAuthorityGrant
+    }
+    on PlatformConfigOpenAssumedSessionRequested {
+      set PlatformConfigAccessBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Opening assumed session..."
+      command PlatformConfigOpenAssumedSession
+    }
+    on PlatformConfigReturnDirectSessionRequested {
+      set PlatformConfigAccessBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Returning to direct session..."
+      command PlatformConfigReturnDirectSession
     }
     on PlatformConfigRunScriptRequested {
       set PlatformConfigScriptBusy true

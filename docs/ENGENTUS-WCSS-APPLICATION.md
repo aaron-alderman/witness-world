@@ -81,6 +81,12 @@ and writes offline proof artifacts outside the app source tree:
   against canonical V1 plus the browser lowering map
 - `auth` and `platform-config` are the current `native-browser` slices; the
   remaining Engentus slices still lower through declaration groups
+- native slices are expected to target identities, traits, variants, tags, and
+  pseudos first; raw selector escapes are treated as backend debt and surfaced
+  in the proof reports
+- native inventory recovery now follows repeat-template descendants for the
+  active native slices, so row-action and similar templated nodes can be owned
+  semantically without inventing a second authored tree
 - layout ownership remains with RVM; V1 WCSS does not invent a second runtime
   structure tree
 

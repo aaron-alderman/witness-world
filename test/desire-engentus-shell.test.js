@@ -1396,3 +1396,178 @@ test("the platform-config shell authors role editors as canonical multi-select c
   assert.match(source, /command PlatformConfigUpdateAccessFeature \{[\s\S]*?allowedRoles: PlatformConfigAccessFeatureAllowedRoles[\s\S]*?\}/);
   assert.doesNotMatch(source, /command PlatformConfigUpdateAccessFeature \{[\s\S]*?allowedRolesCsv:/);
 });
+
+test("the platform-config access shell authors authority inspection, grant management, and assumed-session switching on the existing finite-option controls", async () => {
+  const desire = await shellDesire();
+  const surfaces = nodeMap(desire, "surface");
+  const types = nodeMap(desire, "type");
+  const messages = nodeMap(desire, "message");
+  const processes = nodeMap(desire, "process");
+  const source = await shellSource();
+
+  for (const stateName of [
+    "PlatformConfigAuthorityAuthenticatedIdentity",
+    "PlatformConfigAuthorityAuthenticatedActor",
+    "PlatformConfigAuthorityEffectiveIdentity",
+    "PlatformConfigAuthorityEffectiveActor",
+    "PlatformConfigAuthorityMode",
+    "PlatformConfigAuthorityAssumptionGrantId",
+    "PlatformConfigAuthoritySummary",
+    "PlatformConfigGrantSourceIdentityId",
+    "PlatformConfigGrantTargetActor",
+    "PlatformConfigGrantSelectedId",
+    "PlatformConfigGrantSummary",
+    "PlatformConfigAssumeIdentityId",
+    "PlatformConfigAssumeTargetActor",
+    "PlatformConfigAssumeSummary"
+  ]) {
+    assert.equal(types.get(stateName)?.body?.role, "state");
+    assert.equal(types.get(stateName)?.body?.valueType, "string");
+  }
+
+  assert.ok(messages.has("PlatformConfigCreateAuthorityGrantRequested"));
+  assert.ok(messages.has("PlatformConfigRevokeAuthorityGrantRequested"));
+  assert.ok(messages.has("PlatformConfigOpenAssumedSessionRequested"));
+  assert.ok(messages.has("PlatformConfigReturnDirectSessionRequested"));
+
+  assert.equal(surfaces.get("PlatformConfigAuthoritySummary")?.body?.surfaceKind, "text");
+  assert.equal(surfaces.get("PlatformConfigAuthoritySummary")?.body?.bindings?.[0]?.source?.state, "PlatformConfigAuthoritySummary");
+
+  assert.equal(surfaces.get("PlatformConfigGrantIdentitySelect")?.body?.surfaceKind, "select");
+  assert.equal(surfaces.get("PlatformConfigGrantIdentitySelect")?.body?.bindings?.[0]?.source?.state, "PlatformConfigGrantSourceIdentityId");
+  assert.deepEqual(surfaces.get("PlatformConfigGrantIdentitySelect")?.body?.repeat, {
+    collection: "PlatformConfigIdentities",
+    template: "PlatformConfigAuthorityIdentityOptionTemplate",
+    itemAs: "item",
+    indexAs: "index"
+  });
+  assert.deepEqual(surfaces.get("PlatformConfigGrantIdentitySelect")?.body?.interactions, [
+    {
+      target: "self",
+      event: "change",
+      action: { kind: "setState", state: "PlatformConfigGrantSourceIdentityId", value: { kind: "eventValue" } }
+    }
+  ]);
+
+  assert.equal(surfaces.get("PlatformConfigGrantActorSelect")?.body?.surfaceKind, "select");
+  assert.equal(surfaces.get("PlatformConfigGrantActorSelect")?.body?.bindings?.[0]?.source?.state, "PlatformConfigGrantTargetActor");
+  assert.deepEqual(surfaces.get("PlatformConfigGrantActorSelect")?.body?.repeat, {
+    collection: "PlatformConfigAuthorityActors",
+    template: "PlatformConfigAuthorityActorOptionTemplate",
+    itemAs: "item",
+    indexAs: "index"
+  });
+  assert.deepEqual(surfaces.get("PlatformConfigGrantActorSelect")?.body?.interactions, [
+    {
+      target: "self",
+      event: "change",
+      action: { kind: "setState", state: "PlatformConfigGrantTargetActor", value: { kind: "eventValue" } }
+    }
+  ]);
+
+  assert.deepEqual(surfaces.get("PlatformConfigGrantCreateAction")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "PlatformConfigCreateAuthorityGrantRequested" }
+    }
+  ]);
+
+  assert.deepEqual(surfaces.get("PlatformConfigAuthorityGrantRowAction")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "setState", state: "PlatformConfigGrantSelectedId", value: { kind: "eventValue" } }
+    },
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "PlatformConfigRevokeAuthorityGrantRequested" }
+    }
+  ]);
+
+  assert.equal(surfaces.get("PlatformConfigAssumeIdentitySelect")?.body?.surfaceKind, "select");
+  assert.equal(surfaces.get("PlatformConfigAssumeIdentitySelect")?.body?.bindings?.[0]?.source?.state, "PlatformConfigAssumeIdentityId");
+  assert.deepEqual(surfaces.get("PlatformConfigAssumeIdentitySelect")?.body?.repeat, {
+    collection: "PlatformConfigIdentities",
+    template: "PlatformConfigAuthorityIdentityOptionTemplate",
+    itemAs: "item",
+    indexAs: "index"
+  });
+  assert.deepEqual(surfaces.get("PlatformConfigAssumeIdentitySelect")?.body?.interactions, [
+    {
+      target: "self",
+      event: "change",
+      action: { kind: "setState", state: "PlatformConfigAssumeIdentityId", value: { kind: "eventValue" } }
+    }
+  ]);
+
+  assert.equal(surfaces.get("PlatformConfigAssumeActorSelect")?.body?.surfaceKind, "select");
+  assert.equal(surfaces.get("PlatformConfigAssumeActorSelect")?.body?.bindings?.[0]?.source?.state, "PlatformConfigAssumeTargetActor");
+  assert.deepEqual(surfaces.get("PlatformConfigAssumeActorSelect")?.body?.repeat, {
+    collection: "PlatformConfigAuthorityActors",
+    template: "PlatformConfigAuthorityActorOptionTemplate",
+    itemAs: "item",
+    indexAs: "index"
+  });
+  assert.deepEqual(surfaces.get("PlatformConfigAssumeActorSelect")?.body?.interactions, [
+    {
+      target: "self",
+      event: "change",
+      action: { kind: "setState", state: "PlatformConfigAssumeTargetActor", value: { kind: "eventValue" } }
+    }
+  ]);
+
+  assert.deepEqual(surfaces.get("PlatformConfigAssumeOpenAction")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "PlatformConfigOpenAssumedSessionRequested" }
+    }
+  ]);
+
+  assert.deepEqual(surfaces.get("PlatformConfigAssumeReturnAction")?.body?.interactions, [
+    {
+      target: "self",
+      event: "click",
+      action: { kind: "deliver", message: "PlatformConfigReturnDirectSessionRequested" }
+    }
+  ]);
+  assert.deepEqual(surfaces.get("PlatformConfigAssumeReturnAction")?.body?.bindings, [
+    { prop: "disabled", source: { kind: "state", state: "PlatformConfigAccessBusy" } },
+    { prop: "visible", source: { kind: "state", state: "PlatformConfigAuthorityMode", map: { assumed: true, default: false } } }
+  ]);
+
+  const shellRules = new Map((processes.get("EngentusShellNavigation")?.body?.rules ?? []).map(rule => [rule.trigger, rule.steps]));
+  assert.deepEqual(shellRules.get("PlatformConfigCreateAuthorityGrantRequested"), [
+    { kind: "setState", state: "PlatformConfigAccessBusy", value: true },
+    { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+    { kind: "setState", state: "PlatformConfigNoticeText", value: "Creating authority grant..." },
+    { kind: "command", command: "PlatformConfigCreateAuthorityGrant" }
+  ]);
+  assert.deepEqual(shellRules.get("PlatformConfigRevokeAuthorityGrantRequested"), [
+    { kind: "setState", state: "PlatformConfigAccessBusy", value: true },
+    { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+    { kind: "setState", state: "PlatformConfigNoticeText", value: "Revoking authority grant..." },
+    { kind: "command", command: "PlatformConfigRevokeAuthorityGrant" }
+  ]);
+  assert.deepEqual(shellRules.get("PlatformConfigOpenAssumedSessionRequested"), [
+    { kind: "setState", state: "PlatformConfigAccessBusy", value: true },
+    { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+    { kind: "setState", state: "PlatformConfigNoticeText", value: "Opening assumed session..." },
+    { kind: "command", command: "PlatformConfigOpenAssumedSession" }
+  ]);
+  assert.deepEqual(shellRules.get("PlatformConfigReturnDirectSessionRequested"), [
+    { kind: "setState", state: "PlatformConfigAccessBusy", value: true },
+    { kind: "setState", state: "PlatformConfigNoticeTone", value: "warn" },
+    { kind: "setState", state: "PlatformConfigNoticeText", value: "Returning to direct session..." },
+    { kind: "command", command: "PlatformConfigReturnDirectSession" }
+  ]);
+
+  assert.match(source, /command PlatformConfigCreateAuthorityGrant \{[\s\S]*?identityId: PlatformConfigGrantSourceIdentityId[\s\S]*?targetActor: PlatformConfigGrantTargetActor[\s\S]*?\}/);
+  assert.match(source, /command PlatformConfigRevokeAuthorityGrant \{[\s\S]*?grantId: PlatformConfigGrantSelectedId[\s\S]*?\}/);
+  assert.match(source, /command PlatformConfigOpenAssumedSession \{[\s\S]*?identityId: PlatformConfigAssumeIdentityId[\s\S]*?targetActor: PlatformConfigAssumeTargetActor[\s\S]*?\}/);
+  assert.match(source, /command PlatformConfigReturnDirectSession \{[\s\S]*?identityId: PlatformConfigAuthorityAuthenticatedIdentity[\s\S]*?\}/);
+  assert.doesNotMatch(source, /PlatformConfigGrantActor.*inputClass.*text/i);
+  assert.doesNotMatch(source, /PlatformConfigAssumeActor.*inputClass.*text/i);
+});

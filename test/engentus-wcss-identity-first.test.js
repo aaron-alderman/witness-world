@@ -42,6 +42,7 @@ test("engentus canonical V1 WCSS source declares the expected slice coverage and
   assert.ok(!authored.styles.includes("controls and editor"));
   assert.ok(authored.lowering?.byBackend?.browser);
   assert.equal(authored.slices.find(slice => slice.name === "auth")?.lowering?.browser?.mode, "native-browser");
+  assert.equal(authored.slices.find(slice => slice.name === "home")?.lowering?.browser?.mode, "native-browser");
   assert.equal(authored.slices.find(slice => slice.name === "platform-config")?.lowering?.browser?.mode, "native-browser");
   assert.deepEqual(
     authored.slices.find(slice => slice.name === "auth")?.seams,
@@ -169,10 +170,19 @@ test("engentus browser lowering map is parsed separately from application slices
     { family: "surface.window", group: "goodman windows" }
   );
   assert.equal(browserLowering.slices.find(slice => slice.name === "auth")?.mode, "native-browser");
+  assert.equal(browserLowering.slices.find(slice => slice.name === "home")?.mode, "native-browser");
   assert.equal(browserLowering.slices.find(slice => slice.name === "platform-config")?.mode, "native-browser");
   assert.equal(
     browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.auth?.refs.hasRawSelectors,
-    true
+    false
+  );
+  assert.equal(
+    browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.auth?.refs.rawSelectorCount,
+    0
+  );
+  assert.equal(
+    browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.["platform-config"]?.refs.rawSelectorCount,
+    0
   );
   assert.ok(browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.["platform-config"]);
   assert.deepEqual(
@@ -188,6 +198,7 @@ test("engentus presentation inventory extracts structured identities, traits, an
   const goodman = inventory.slices.find(slice => slice.name === "goodman");
   const shellBase = inventory.slices.find(slice => slice.name === "shell-base");
   const platformConfig = inventory.slices.find(slice => slice.name === "platform-config");
+  const home = inventory.slices.find(slice => slice.name === "home");
 
   assert.ok(auth?.identities.includes("EngentusLogin"));
   assert.ok(auth?.identities.includes("EngentusSignout"));
@@ -205,9 +216,15 @@ test("engentus presentation inventory extracts structured identities, traits, an
   assert.ok(goodman?.identities.includes("GoodmanBody"));
   assert.ok(goodman?.overrideProps.includes("style"));
   assert.ok(goodman?.overrideProps.includes("className"));
+  assert.ok(home?.identities.includes("NewsPanel"));
+  assert.ok(home?.traits.includes("news-item"));
+  assert.ok(home?.surfaces.find(surface => surface.identity === "ModuleGrid")?.presentationAnchor);
   assert.ok(platformConfig?.identities.includes("PlatformConfigNotice"));
   assert.ok(platformConfig?.traits.includes("platform-config-side-link"));
+  assert.ok(platformConfig?.traits.includes("platform-config-row-action"));
   assert.ok(platformConfig?.surfaces.find(surface => surface.identity === "EngentusPlatformConfigApp")?.presentationAnchor);
+  assert.ok(platformConfig?.surfaces.find(surface => surface.name === "PlatformConfigSecretTableRowAction")?.reachableViaTemplate);
+  assert.ok(platformConfig?.surfaces.find(surface => surface.name === "PlatformConfigAccessIdentityRowAction")?.reachableViaTemplate);
 });
 
 test("engentus style artifacts keep current asset outputs stable while defaulting slices to legacy", async () => {
@@ -224,17 +241,20 @@ test("engentus style artifacts keep current asset outputs stable while defaultin
     artifacts.parity.slices.find(slice => slice.name === "auth")?.loweringMode,
     "declaration-groups"
   );
+  assert.equal(
+    artifacts.parity.slices.find(slice => slice.name === "home")?.loweringMode,
+    "declaration-groups"
+  );
   assert.deepEqual(
     artifacts.parity.slices.find(slice => slice.name === "goodman")?.legacyGroups,
     ["goodman chart scaffold", "goodman toolbar", "goodman view", "goodman windows"]
   );
 });
 
-test("engentus can switch isolated slices onto the authored WCSS lane without changing emitted CSS", async () => {
-  const [authoredPlan, inventory, expectedShellCss, expectedChartCss] = await Promise.all([
+test("engentus can switch isolated slices onto the authored WCSS lane while shrinking native selector debt", async () => {
+  const [authoredPlan, inventory, expectedChartCss] = await Promise.all([
     loadEngentusAppliedWcss(),
     buildEngentusPresentationInventory(),
-    readFile(path.join(process.cwd(), "examples", "engentus", "app", "engentus-shell.css"), "utf8"),
     readFile(path.join(process.cwd(), "examples", "engentus", "app", "engentus-chart-pages.css"), "utf8")
   ]);
 
@@ -243,7 +263,7 @@ test("engentus can switch isolated slices onto the authored WCSS lane without ch
     slices: {
       "shell-base": "wcss",
       "auth": "wcss",
-      "home": "wcss",
+      "home": "legacy",
       "goodman": "legacy",
       "mill-charge": "wcss",
       "mill-force": "wcss",
@@ -263,7 +283,12 @@ test("engentus can switch isolated slices onto the authored WCSS lane without ch
     authoredPlan,
     switchManifest
   });
-  assert.equal(renderOracleStylesheet(stylesheets.shell), expectedShellCss);
+  const shellCss = renderOracleStylesheet(stylesheets.shell);
+  assert.equal(shellCss.includes(".auth-submit.pending"), false);
+  assert.equal(shellCss.includes(".auth-signout-icon"), false);
+  assert.equal(shellCss.includes(".ms-btn.folding svg"), false);
+  assert.equal(shellCss.includes(".ms-btn.pending svg"), true);
+  assert.equal(shellCss.includes(".platform-config-row-action"), true);
   assert.equal(renderOracleStylesheet(stylesheets.chart), expectedChartCss);
   assert.equal(
     ownership.slices.find(slice => slice.name === "auth")?.loweringMode,
@@ -277,6 +302,59 @@ test("engentus can switch isolated slices onto the authored WCSS lane without ch
     ownership.slices.find(slice => slice.name === "platform-config")?.anchorCoverage?.missing,
     []
   );
+  assert.equal(
+    ownership.slices.find(slice => slice.name === "auth")?.nativeDebt?.rawSelectorCount,
+    0
+  );
+  assert.equal(
+    ownership.slices.find(slice => slice.name === "platform-config")?.nativeDebt?.rawSelectorCount,
+    0
+  );
+  assert.deepEqual(
+    ownership.slices.find(slice => slice.name === "platform-config")?.descendantCoverage?.missingTraits,
+    []
+  );
+  assert.ok(
+    ownership.slices.find(slice => slice.name === "platform-config")?.descendantCoverage?.templateTraits.includes("platform-config-row-action")
+  );
+});
+
+test("engentus can switch home onto the authored native proof lane without changing the checked-in default contract", async () => {
+  const [authoredPlan, inventory] = await Promise.all([
+    loadEngentusAppliedWcss(),
+    buildEngentusPresentationInventory()
+  ]);
+
+  const switchManifest = {
+    theme: "engentus",
+    slices: {
+      home: "wcss"
+    }
+  };
+
+  const ownership = verifyEngentusStyleOwnership({
+    inventory,
+    authoredPlan,
+    switchManifest
+  });
+  assert.equal(ownership.ok, true);
+
+  const stylesheets = await composeEngentusStylesheets({
+    authoredPlan,
+    switchManifest
+  });
+  const shellCss = renderOracleStylesheet(stylesheets.shell);
+  assert.equal(shellCss.includes("#news-panel"), true);
+  assert.equal(shellCss.includes(".news-item.ni-alert"), true);
+  assert.equal(shellCss.includes(".mod-card.active:hover"), true);
+  assert.equal(shellCss.includes(".mod-status.ms-open"), true);
+  assert.equal(shellCss.includes(".news-list::-webkit-scrollbar-thumb"), true);
+
+  const homeSlice = ownership.slices.find(slice => slice.name === "home");
+  assert.equal(homeSlice?.loweringMode, "native-browser");
+  assert.equal(homeSlice?.nativeDebt?.rawSelectorCount, 0);
+  assert.deepEqual(homeSlice?.anchorCoverage?.missing, []);
+  assert.deepEqual(homeSlice?.descendantCoverage?.missingTraits, []);
 });
 
 test("engentus build script writes proof artifacts under tmp without changing live asset paths", async () => {
@@ -289,8 +367,12 @@ test("engentus build script writes proof artifacts under tmp without changing li
   ]);
 
   assert.match(inventory, /"theme": "engentus"/);
+  assert.match(inventory, /"reachableViaTemplate": true/);
   assert.match(parity, /"name": "goodman"/);
+  assert.match(parity, /"rawSelectorCount": 0/);
   assert.match(ownership, /"chart-pages"/);
+  assert.match(ownership, /"platform-config-row-action"/);
+  assert.match(ownership, /"nativeDebt"/);
 });
 
 test("engentus ownership checks reject unknown structured identities when a slice is switched to WCSS", async () => {

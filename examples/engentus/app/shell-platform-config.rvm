@@ -4,6 +4,8 @@ collection PlatformConfigSecrets
 collection PlatformConfigDatasources
 collection PlatformConfigIdentities
 collection PlatformConfigFeaturePolicies
+collection PlatformConfigAuthorityGrants
+collection PlatformConfigAuthorityActors
 
 view PlatformConfigSecretOptionTemplate {
   kind option
@@ -1149,6 +1151,472 @@ view PlatformConfigAccessSectionIntro {
   }
 }
 
+view PlatformConfigAuthoritySectionTitle {
+  kind text
+  prop tag = "h4"
+  class platform-config-section-title
+  prop text = "Current Authority"
+}
+
+view PlatformConfigAuthorityModeText {
+  kind text
+  prop tag = "div"
+  class platform-config-hint
+  bindings {
+    text from state PlatformConfigAuthorityMode
+  }
+}
+
+view PlatformConfigAuthoritySummary {
+  kind text
+  prop tag = "pre"
+  class platform-config-output
+  bindings {
+    text from state PlatformConfigAuthoritySummary
+  }
+}
+
+view PlatformConfigAuthorityCard {
+  kind section
+  class platform-config-content-card
+  children {
+    PlatformConfigAuthoritySectionTitle
+    PlatformConfigAuthorityModeText
+    PlatformConfigAuthoritySummary
+  }
+}
+
+view PlatformConfigAssumeSessionTitle {
+  kind text
+  prop tag = "h4"
+  class platform-config-section-title
+  prop text = "Assumed Session"
+}
+
+view PlatformConfigAssumeSessionIntro {
+  kind text
+  prop tag = "p"
+  class platform-config-hint
+  prop text = "Open an assumed session on the existing authority tuple, then return to the authenticated identity when finished."
+}
+
+view PlatformConfigAssumeIdentityLabel {
+  kind text
+  prop tag = "label"
+  class platform-config-field-label
+  prop text = "Assume from identity"
+  prop for = "platform-config-assume-identity"
+}
+
+view PlatformConfigAssumeIdentitySelect {
+  kind select
+  prop tag = "select"
+  prop domId = "platform-config-assume-identity"
+  class platform-config-input
+  bindings {
+    value from state PlatformConfigAssumeIdentityId
+    disabled from state PlatformConfigAccessBusy
+  }
+  interactions {
+    on change self set PlatformConfigAssumeIdentityId eventValue
+  }
+  repeat {
+    collection PlatformConfigIdentities
+    template PlatformConfigAuthorityIdentityOptionTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigAssumeIdentityField {
+  kind region
+  class platform-config-field
+  children {
+    PlatformConfigAssumeIdentityLabel
+    PlatformConfigAssumeIdentitySelect
+  }
+}
+
+view PlatformConfigAssumeActorLabel {
+  kind text
+  prop tag = "label"
+  class platform-config-field-label
+  prop text = "Assume target actor"
+  prop for = "platform-config-assume-actor"
+}
+
+view PlatformConfigAssumeActorSelect {
+  kind select
+  prop tag = "select"
+  prop domId = "platform-config-assume-actor"
+  class platform-config-input
+  bindings {
+    value from state PlatformConfigAssumeTargetActor
+    disabled from state PlatformConfigAccessBusy
+  }
+  interactions {
+    on change self set PlatformConfigAssumeTargetActor eventValue
+  }
+  repeat {
+    collection PlatformConfigAuthorityActors
+    template PlatformConfigAuthorityActorOptionTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigAssumeActorField {
+  kind region
+  class platform-config-field
+  children {
+    PlatformConfigAssumeActorLabel
+    PlatformConfigAssumeActorSelect
+  }
+}
+
+view PlatformConfigAssumeOpenAction {
+  kind action
+  class rbtn go
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Open Assumed Session"
+  bindings {
+    disabled from state PlatformConfigAccessBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigOpenAssumedSessionRequested
+  }
+}
+
+view PlatformConfigAssumeReturnAction {
+  kind action
+  class rbtn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Return to Direct Session"
+  bindings {
+    disabled from state PlatformConfigAccessBusy
+    visible from state PlatformConfigAuthorityMode map assumed true default false
+  }
+  interactions {
+    on click self deliver PlatformConfigReturnDirectSessionRequested
+  }
+}
+
+view PlatformConfigAssumeSummary {
+  kind text
+  prop tag = "pre"
+  class platform-config-output
+  bindings {
+    text from state PlatformConfigAssumeSummary
+  }
+}
+
+view PlatformConfigAssumeSessionCard {
+  kind section
+  class platform-config-content-card
+  children {
+    PlatformConfigAssumeSessionTitle
+    PlatformConfigAssumeSessionIntro
+    PlatformConfigAssumeIdentityField
+    PlatformConfigAssumeActorField
+    PlatformConfigAssumeOpenAction
+    PlatformConfigAssumeReturnAction
+    PlatformConfigAssumeSummary
+  }
+}
+
+view PlatformConfigAuthorityIdentityOptionTemplate {
+  kind option
+  prop tag = "option"
+  prop value = "${item.id}"
+  prop text = "${item.username}"
+  prop template = true
+}
+
+view PlatformConfigAuthorityActorOptionTemplate {
+  kind option
+  prop tag = "option"
+  prop value = "${item.actor}"
+  prop text = "${item.title}"
+  prop template = true
+}
+
+view PlatformConfigGrantIdentityLabel {
+  kind text
+  prop tag = "label"
+  class platform-config-field-label
+  prop text = "Source identity"
+  prop for = "platform-config-grant-identity"
+}
+
+view PlatformConfigGrantIdentitySelect {
+  kind select
+  prop tag = "select"
+  prop domId = "platform-config-grant-identity"
+  class platform-config-input
+  bindings {
+    value from state PlatformConfigGrantSourceIdentityId
+    disabled from state PlatformConfigAccessBusy
+  }
+  interactions {
+    on change self set PlatformConfigGrantSourceIdentityId eventValue
+  }
+  repeat {
+    collection PlatformConfigIdentities
+    template PlatformConfigAuthorityIdentityOptionTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigGrantIdentityField {
+  kind region
+  class platform-config-field
+  children {
+    PlatformConfigGrantIdentityLabel
+    PlatformConfigGrantIdentitySelect
+  }
+}
+
+view PlatformConfigGrantActorLabel {
+  kind text
+  prop tag = "label"
+  class platform-config-field-label
+  prop text = "Target actor"
+  prop for = "platform-config-grant-actor"
+}
+
+view PlatformConfigGrantActorSelect {
+  kind select
+  prop tag = "select"
+  prop domId = "platform-config-grant-actor"
+  class platform-config-input
+  bindings {
+    value from state PlatformConfigGrantTargetActor
+    disabled from state PlatformConfigAccessBusy
+  }
+  interactions {
+    on change self set PlatformConfigGrantTargetActor eventValue
+  }
+  repeat {
+    collection PlatformConfigAuthorityActors
+    template PlatformConfigAuthorityActorOptionTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigGrantActorField {
+  kind region
+  class platform-config-field
+  children {
+    PlatformConfigGrantActorLabel
+    PlatformConfigGrantActorSelect
+  }
+}
+
+view PlatformConfigGrantCreateAction {
+  kind action
+  class rbtn go
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Create Grant"
+  bindings {
+    disabled from state PlatformConfigAccessBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigCreateAuthorityGrantRequested
+  }
+}
+
+view PlatformConfigGrantSummary {
+  kind text
+  prop tag = "pre"
+  class platform-config-output
+  bindings {
+    text from state PlatformConfigGrantSummary
+  }
+}
+
+view PlatformConfigGrantEditor {
+  kind section
+  class platform-config-content-card
+  children {
+    PlatformConfigGrantEditorTitle
+    PlatformConfigGrantIdentityField
+    PlatformConfigGrantActorField
+    PlatformConfigGrantCreateAction
+    PlatformConfigGrantSummary
+  }
+}
+
+view PlatformConfigGrantEditorTitle {
+  kind text
+  prop tag = "h4"
+  class platform-config-section-title
+  prop text = "Assumption Grant Editor"
+}
+
+view PlatformConfigAuthorityGrantRowAction {
+  kind action
+  prop tag = "button"
+  prop buttonType = "button"
+  prop value = "${item.id}"
+  prop text = "Revoke"
+  class platform-config-row-action
+  interactions {
+    on click self set PlatformConfigGrantSelectedId eventValue
+    on click self deliver PlatformConfigRevokeAuthorityGrantRequested
+  }
+}
+
+view PlatformConfigAuthorityGrantRowTemplate {
+  kind region
+  prop tag = "tr"
+  prop template = true
+  children {
+    PlatformConfigAuthorityGrantRowSource
+    PlatformConfigAuthorityGrantRowTarget
+    PlatformConfigAuthorityGrantRowTargetIdentity
+    PlatformConfigAuthorityGrantRowStatus
+    PlatformConfigAuthorityGrantRowProvenance
+    PlatformConfigAuthorityGrantRowActionCell
+  }
+}
+
+view PlatformConfigAuthorityGrantRowSource {
+  kind text
+  prop tag = "td"
+  prop text = "${item.sourceIdentityLabel}"
+}
+
+view PlatformConfigAuthorityGrantRowTarget {
+  kind text
+  prop tag = "td"
+  prop text = "${item.targetActorLabel}"
+}
+
+view PlatformConfigAuthorityGrantRowTargetIdentity {
+  kind text
+  prop tag = "td"
+  prop text = "${item.targetIdentityLabel}"
+}
+
+view PlatformConfigAuthorityGrantRowStatus {
+  kind text
+  prop tag = "td"
+  prop text = "${item.statusText}"
+}
+
+view PlatformConfigAuthorityGrantRowProvenance {
+  kind text
+  prop tag = "td"
+  prop text = "${item.provenanceText}"
+}
+
+view PlatformConfigAuthorityGrantRowActionCell {
+  kind region
+  prop tag = "td"
+  children {
+    PlatformConfigAuthorityGrantRowAction
+  }
+}
+
+view PlatformConfigAuthorityGrantTableBody {
+  kind region
+  prop tag = "tbody"
+  repeat {
+    collection PlatformConfigAuthorityGrants
+    template PlatformConfigAuthorityGrantRowTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigAuthorityGrantTable {
+  kind region
+  prop tag = "table"
+  class platform-config-table
+  children {
+    PlatformConfigAuthorityGrantHeader
+    PlatformConfigAuthorityGrantTableBody
+  }
+}
+
+view PlatformConfigAuthorityGrantHeader {
+  kind region
+  prop tag = "thead"
+  children {
+    PlatformConfigAuthorityGrantHeaderRow
+  }
+}
+
+view PlatformConfigAuthorityGrantHeaderRow {
+  kind region
+  prop tag = "tr"
+  children {
+    PlatformConfigAuthorityGrantHeaderSource
+    PlatformConfigAuthorityGrantHeaderTarget
+    PlatformConfigAuthorityGrantHeaderTargetIdentity
+    PlatformConfigAuthorityGrantHeaderStatus
+    PlatformConfigAuthorityGrantHeaderProvenance
+    PlatformConfigAuthorityGrantHeaderActions
+  }
+}
+
+view PlatformConfigAuthorityGrantHeaderSource {
+  kind text
+  prop tag = "th"
+  prop text = "Source Identity"
+}
+
+view PlatformConfigAuthorityGrantHeaderTarget {
+  kind text
+  prop tag = "th"
+  prop text = "Target Actor"
+}
+
+view PlatformConfigAuthorityGrantHeaderTargetIdentity {
+  kind text
+  prop tag = "th"
+  prop text = "Target Identity"
+}
+
+view PlatformConfigAuthorityGrantHeaderStatus {
+  kind text
+  prop tag = "th"
+  prop text = "Status"
+}
+
+view PlatformConfigAuthorityGrantHeaderProvenance {
+  kind text
+  prop tag = "th"
+  prop text = "Provenance"
+}
+
+view PlatformConfigAuthorityGrantHeaderActions {
+  kind text
+  prop tag = "th"
+  prop text = "Actions"
+}
+
+view PlatformConfigAuthorityGrantSection {
+  kind section
+  class platform-config-content-card
+  children {
+    PlatformConfigAuthorityGrantSectionTitle
+    PlatformConfigAuthorityGrantTable
+  }
+}
+
+view PlatformConfigAuthorityGrantSectionTitle {
+  kind text
+  prop tag = "h4"
+  class platform-config-section-title
+  prop text = "Assumption Grants"
+}
+
 view PlatformConfigAccessIdentityRowAction {
   kind action
   prop tag = "button"
@@ -1654,6 +2122,10 @@ view PlatformConfigAccessContent {
   children {
     PlatformConfigAccessSectionTitle
     PlatformConfigAccessSectionIntro
+    PlatformConfigAuthorityCard
+    PlatformConfigAssumeSessionCard
+    PlatformConfigGrantEditor
+    PlatformConfigAuthorityGrantSection
     PlatformConfigAccessIdentityTable
     PlatformConfigAccessIdentityUsernameField
     PlatformConfigAccessIdentityDisplayNameField

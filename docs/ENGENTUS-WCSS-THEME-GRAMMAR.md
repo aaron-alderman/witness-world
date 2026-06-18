@@ -64,6 +64,14 @@ specific identities or traits and may describe:
 - theme `token` substitutions
 - explicit `escape` seams where fidelity still requires them
 
+For the current native lane, the intended steady state is stricter:
+
+- `auth` and `platform-config` should lower through semantic nouns first
+- raw selector escapes remain available, but they are reported as debt rather
+  than treated as normal authored shape
+- repeat-template descendants that belong to a native slice should be recovered
+  into the presentation inventory instead of forcing structural shadow models
+
 ## Ownership Rule
 
 The authored WCSS grammar should describe presentation law first and selector

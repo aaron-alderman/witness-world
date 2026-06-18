@@ -2,6 +2,11 @@
 import test from "node:test";
 import path from "node:path";
 import { launchBrowser, startUiServer } from "./support/harness.js";
+import {
+  composeEngentusStylesheets,
+  loadEngentusAppliedWcss,
+  renderOracleStylesheet
+} from "../examples/engentus/app/engentus-style-application.js";
 
 function sliderRow(page, label) {
   return page.locator(".prow").filter({ hasText: label });
@@ -14,6 +19,29 @@ function startEngentusUiServer({ devMode = false } = {}) {
     runtimeProfile: "authoring",
     devMode
   });
+}
+
+async function interceptEngentusWcssAssets(page, switchManifest) {
+  const authoredPlan = await loadEngentusAppliedWcss();
+  const stylesheets = await composeEngentusStylesheets({
+    authoredPlan,
+    switchManifest
+  });
+  const shellCss = renderOracleStylesheet(stylesheets.shell);
+  const chartCss = renderOracleStylesheet(stylesheets.chart);
+
+  await page.route("**/app-static/app/engentus-shell.css", route => route.fulfill({
+    status: 200,
+    contentType: "text/css",
+    body: shellCss
+  }));
+  await page.route("**/app-static/app/engentus-chart-pages.css", route => route.fulfill({
+    status: 200,
+    contentType: "text/css",
+    body: chartCss
+  }));
+
+  return { shellCss, chartCss };
 }
 
 async function readSurfaceRuntimeDebugSnapshot(page) {
@@ -61,6 +89,25 @@ async function waitForSurfaceSettled(page, message = "Surface runtime did not se
   }
 }
 
+async function assertNoActiveShellIssues(page, label) {
+  await waitForNoRouteUnderlay(page, `${label}: route underlay never cleared before diagnostics check`);
+  const snapshot = await page.evaluate(async () => {
+    await window.world.rerunProbe();
+    return {
+      activeIssues: window.world.issues.filter(issue => issue.status === "active"),
+      expectationProviderCount: window.world.expectationProviderCount,
+      latestProbe: window.world.latestProbe
+    };
+  });
+  assert.equal(snapshot.expectationProviderCount > 0, true, `${label}: expectation pack not registered`);
+  assert.deepEqual(
+    snapshot.activeIssues,
+    [],
+    `${label}: expected no active shell diagnostics issues, saw ${JSON.stringify(snapshot.activeIssues, null, 2)}`
+  );
+  assert.equal(Array.isArray(snapshot.latestProbe?.expectationIssues), true, `${label}: latest probe missing expectation issues`);
+}
+
 async function ensureEngentusSignedIn(page, expectedRouteKey = "home") {
   await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
   const loginVisible = await page.locator("#view-login").count();
@@ -85,26 +132,7 @@ test("Engentus dev shell diagnostics expectation pack stays clean across the she
     await page.waitForFunction(() => window.world?.expectationProviderCount > 0);
     await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
 
-    const assertNoActiveIssues = async label => {
-      await waitForNoRouteUnderlay(page, `${label}: route underlay never cleared before diagnostics check`);
-      const snapshot = await page.evaluate(async () => {
-        await window.world.rerunProbe();
-        return {
-          activeIssues: window.world.issues.filter(issue => issue.status === "active"),
-          expectationProviderCount: window.world.expectationProviderCount,
-          latestProbe: window.world.latestProbe
-        };
-      });
-      assert.equal(snapshot.expectationProviderCount > 0, true, `${label}: expectation pack not registered`);
-      assert.deepEqual(
-        snapshot.activeIssues,
-        [],
-        `${label}: expected no active shell diagnostics issues, saw ${JSON.stringify(snapshot.activeIssues, null, 2)}`
-      );
-      assert.equal(Array.isArray(snapshot.latestProbe?.expectationIssues), true, `${label}: latest probe missing expectation issues`);
-    };
-
-    await assertNoActiveIssues("login-initial");
+    await assertNoActiveShellIssues(page, "login-initial");
 
     await page.click(".ms-btn");
     await waitForSurfaceSettled(page, "Shell sign-in did not settle");
@@ -113,7 +141,7 @@ test("Engentus dev shell diagnostics expectation pack stays clean across the she
       && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedIn"
     );
     await page.waitForSelector("#module-area");
-    await assertNoActiveIssues("home-after-sign-in");
+    await assertNoActiveShellIssues(page, "home-after-sign-in");
 
     await page.evaluate(() => {
       document.getElementById("user-prof")?.click();
@@ -122,7 +150,7 @@ test("Engentus dev shell diagnostics expectation pack stays clean across the she
       document.getElementById("up-menu")?.classList.contains("open") === true
       && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusProfileMenuVisible") === true
     );
-    await assertNoActiveIssues("home-menu-open");
+    await assertNoActiveShellIssues(page, "home-menu-open");
 
     await page.evaluate(() => {
       document.querySelector(".up-mi-signout")?.click();
@@ -133,7 +161,7 @@ test("Engentus dev shell diagnostics expectation pack stays clean across the she
       && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedOut"
     );
     await page.waitForSelector("#view-signout");
-    await assertNoActiveIssues("signout");
+    await assertNoActiveShellIssues(page, "signout");
 
     await page.getByRole("button", { name: "Sign back in" }).click();
     await waitForSurfaceSettled(page, "Shell return-to-login did not settle");
@@ -142,7 +170,7 @@ test("Engentus dev shell diagnostics expectation pack stays clean across the she
       && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "idle"
     );
     await page.waitForSelector("#view-login");
-    await assertNoActiveIssues("login-after-return");
+    await assertNoActiveShellIssues(page, "login-after-return");
   } finally {
     await browser.close();
     await server.close();
@@ -196,6 +224,102 @@ test("Engentus dev shell diagnostics expectation pack surfaces induced mismatche
     assert.deepEqual(repaired.activeIssues, []);
     assert.equal(repaired.resolvedIssues.includes("engentus-shell:stale-underlay:home"), true);
     assert.equal(await page.evaluate(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime)), true);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
+test("Engentus native auth/platform-config WCSS lane preserves shell behavior on auth flow and operator route", { timeout: 90000 }, async () => {
+  const server = await startEngentusUiServer({ devMode: true });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    const switchManifest = {
+      theme: "engentus",
+      slices: {
+        auth: "wcss",
+        "platform-config": "wcss"
+      }
+    };
+    const { shellCss } = await interceptEngentusWcssAssets(page, switchManifest);
+    assert.equal(shellCss.includes(".auth-submit.pending"), false);
+    assert.equal(shellCss.includes(".auth-signout-icon"), false);
+    assert.equal(shellCss.includes(".ms-btn.folding svg"), false);
+
+    await page.goto(`${server.url}/engentus/platform-config`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => window.world?.expectationProviderCount > 0);
+    await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
+    await page.click("#surface-engentusloginprimaryaction");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "pending"
+    );
+    await waitForSurfaceSettled(page, "Platform-config sign-in did not settle");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "platform-config-operator"
+      && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedIn"
+    , "Platform-config sign-in did not land on the operator route", { timeout: 15000 });
+    await page.waitForSelector("#view-platform-config");
+    await assertNoActiveShellIssues(page, "platform-operator");
+
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
+test("Engentus native home WCSS proof lane preserves home route behavior under injected assets", { timeout: 90000 }, async () => {
+  const server = await startEngentusUiServer({ devMode: true });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    const switchManifest = {
+      theme: "engentus",
+      slices: {
+        home: "wcss"
+      }
+    };
+    const { shellCss } = await interceptEngentusWcssAssets(page, switchManifest);
+    assert.equal(shellCss.includes(".news-item.ni-alert"), true);
+    assert.equal(shellCss.includes(".mod-card.active:hover"), true);
+    assert.equal(shellCss.includes(".mod-status.ms-open"), true);
+
+    await page.goto(`${server.url}/engentus/home`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "home");
+    await page.waitForSelector("#view-home");
+    await assertNoActiveShellIssues(page, "home-wcss");
+
+    assert.ok(await page.locator(".news-item").count() >= 4);
+    assert.ok(await page.locator(".mod-card.active").count() >= 2);
+    assert.ok(await page.locator(".mod-card.locked").count() >= 1);
+
+    const [activeCard, lockedCard, liveDot] = await Promise.all([
+      page.locator(".mod-card.active").first().evaluate(node => {
+        const style = getComputedStyle(node);
+        return {
+          cursor: style.cursor,
+          backgroundColor: style.backgroundColor
+        };
+      }),
+      page.locator(".mod-card.locked").first().evaluate(node => {
+        const style = getComputedStyle(node);
+        return {
+          opacity: style.opacity
+        };
+      }),
+      page.locator(".news-live-dot").evaluate(node => getComputedStyle(node).animationName)
+    ]);
+
+    assert.equal(activeCard.cursor, "pointer");
+    assert.notEqual(activeCard.backgroundColor, "rgba(0, 0, 0, 0)");
+    assert.notEqual(lockedCard.opacity, "1");
+    assert.match(liveDot, /livepulse/i);
   } finally {
     await browser.close();
     await server.close();

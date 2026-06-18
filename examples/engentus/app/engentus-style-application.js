@@ -701,12 +701,12 @@ function collectNativeBlockRefs(blocks = []) {
   const identities = new Set();
   const traits = new Set();
   const variants = new Set();
-  let hasRawSelectors = false;
+  const rawSelectors = new Set();
 
   for (const block of blocks) {
     if (block.kind === "native-rule") {
       if (block.target.kind === "raw") {
-        hasRawSelectors = true;
+        rawSelectors.add(block.target.selector);
       } else {
         for (const identity of block.target.refs.identities) identities.add(identity);
         for (const trait of block.target.refs.traits) traits.add(trait);
@@ -719,7 +719,7 @@ function collectNativeBlockRefs(blocks = []) {
       for (const identity of nested.identities) identities.add(identity);
       for (const trait of nested.traits) traits.add(trait);
       for (const variant of nested.variants) variants.add(variant);
-      hasRawSelectors ||= nested.hasRawSelectors;
+      for (const selector of nested.rawSelectors ?? []) rawSelectors.add(selector);
       continue;
     }
   }
@@ -728,7 +728,9 @@ function collectNativeBlockRefs(blocks = []) {
     identities: uniqueSorted([...identities]),
     traits: uniqueSorted([...traits]),
     variants: uniqueSorted([...variants]),
-    hasRawSelectors
+    hasRawSelectors: rawSelectors.size > 0,
+    rawSelectorCount: rawSelectors.size,
+    rawSelectors: uniqueSorted([...rawSelectors])
   };
 }
 
@@ -1131,6 +1133,8 @@ async function compileSliceSurfaceRecords(definition) {
         props: structuredClone(surface.props ?? {}),
         bindings: structuredClone(surface.bindings ?? []),
         children: [...(surface.children ?? [])],
+        repeatTemplate: trimDomString(surface.repeat?.template),
+        isTemplate: surface.props?.template === true,
         sourceFile: relativeFile
       };
       allRecords.push(record);
@@ -1140,19 +1144,34 @@ async function compileSliceSurfaceRecords(definition) {
   }
 
   if (!definition.identities?.length) {
-    return allRecords.sort((left, right) => String(left.identity || left.name).localeCompare(String(right.identity || right.name)));
+    return allRecords
+      .map(record => ({ ...record, reachableViaTemplate: false }))
+      .sort((left, right) => String(left.identity || left.name).localeCompare(String(right.identity || right.name)));
   }
 
   const selected = new Map();
-  const queue = [...definition.identities];
+  const queue = definition.identities.map(candidate => ({ candidate, reachableViaTemplate: false }));
   while (queue.length) {
-    const candidate = queue.shift();
+    const { candidate, reachableViaTemplate } = queue.shift();
     const record = surfacesByIdentity.get(candidate) ?? surfacesByName.get(candidate) ?? null;
     if (!record) continue;
     const key = record.identity || record.name;
-    if (!key || selected.has(key)) continue;
-    selected.set(key, record);
-    for (const childName of record.children ?? []) queue.push(childName);
+    if (!key) continue;
+    const existing = selected.get(key) ?? null;
+    if (existing) {
+      if (reachableViaTemplate && !existing.reachableViaTemplate) existing.reachableViaTemplate = true;
+      continue;
+    }
+    selected.set(key, {
+      ...record,
+      reachableViaTemplate
+    });
+    for (const childName of record.children ?? []) {
+      queue.push({ candidate: childName, reachableViaTemplate });
+    }
+    if (record.repeatTemplate) {
+      queue.push({ candidate: record.repeatTemplate, reachableViaTemplate: true });
+    }
   }
 
   const reachable = selected.size ? [...selected.values()] : allRecords;
@@ -1190,6 +1209,9 @@ export async function buildEngentusPresentationInventory(authoredPlan = null) {
         traits: surface.traits,
         overrideProps: surface.overrideProps,
         presentationAnchor: surface.presentationAnchor,
+        reachableViaTemplate: Boolean(surface.reachableViaTemplate),
+        repeatTemplate: surface.repeatTemplate ?? null,
+        isTemplate: Boolean(surface.isTemplate),
         sourceFile: surface.sourceFile
       }))
     });
@@ -1223,17 +1245,25 @@ export async function buildEngentusParityReport(authoredPlan, stylesheets, switc
         exactParity: emittedCss === checkedInByAsset[asset]
       }])
     ),
-    slices: (authoredPlan?.slices ?? []).map(slice => ({
-      name: slice.name,
-      asset: slice.asset,
-      loweringMode: effectiveLoweringMode(slice, switchManifest),
-      authoredGroups: [...slice.oracleGroups],
-      legacyGroups: [...slice.oracleGroups],
-      exactOracleParity: emittedByAsset[slice.asset] === checkedInByAsset[slice.asset],
-      authoredOnly: [],
-      legacyOnly: [],
-      notes: [...slice.notes]
-    }))
+    slices: (authoredPlan?.slices ?? []).map(slice => {
+      const browserAsset = authoredPlan?.lowering?.byBackend?.[DEFAULT_BROWSER_BACKEND]?.assetsByName?.[slice.asset] ?? null;
+      const nativeBlock = browserAsset?.nativeBlocksBySlice?.[slice.name] ?? null;
+      return {
+        name: slice.name,
+        asset: slice.asset,
+        loweringMode: effectiveLoweringMode(slice, switchManifest),
+        authoredGroups: [...slice.oracleGroups],
+        legacyGroups: [...slice.oracleGroups],
+        exactOracleParity: emittedByAsset[slice.asset] === checkedInByAsset[slice.asset],
+        authoredOnly: [],
+        legacyOnly: [],
+        nativeDebt: {
+          rawSelectorCount: nativeBlock?.refs?.rawSelectorCount ?? 0,
+          rawSelectors: [...(nativeBlock?.refs?.rawSelectors ?? [])]
+        },
+        notes: [...slice.notes]
+      };
+    })
   };
 }
 
@@ -1295,6 +1325,8 @@ export function verifyEngentusStyleOwnership({
       seamsByProp.get(seam.prop).push(seam);
     }
     const loweringMode = effectiveLoweringMode(authoredSlice, switchManifest);
+    const browserAsset = authoredPlan?.lowering?.byBackend?.[DEFAULT_BROWSER_BACKEND]?.assetsByName?.[authoredSlice.asset] ?? null;
+    const nativeBlock = browserAsset?.nativeBlocksBySlice?.[authoredSlice.name] ?? null;
 
     if (!selectedGroups.length) {
       errors.push(`Slice ${authoredSlice.name} has no backend group coverage for ${DEFAULT_BROWSER_BACKEND}`);
@@ -1332,8 +1364,6 @@ export function verifyEngentusStyleOwnership({
         }
       }
       if (loweringMode === "native-browser") {
-        const browserAsset = authoredPlan?.lowering?.byBackend?.[DEFAULT_BROWSER_BACKEND]?.assetsByName?.[authoredSlice.asset] ?? null;
-        const nativeBlock = browserAsset?.nativeBlocksBySlice?.[authoredSlice.name] ?? null;
         if (!nativeBlock) {
           errors.push(`Slice ${authoredSlice.name} is switched to native-browser without a native lowering block`);
         } else {
@@ -1389,6 +1419,33 @@ export function verifyEngentusStyleOwnership({
         missing: uniqueSorted((browserAssetIdentitiesForSlice(authoredPlan, authoredSlice) ?? [])
           .filter(identity => !inventorySlice.surfaces.some(surface => surface.identity === identity && surface.presentationAnchor)))
       } : { required: [], resolved: [], missing: [] },
+      descendantCoverage: inventorySlice ? {
+        templateSurfaceCount: inventorySlice.surfaces.filter(surface => surface.reachableViaTemplate).length,
+        templateTraits: uniqueSorted(
+          inventorySlice.surfaces
+            .filter(surface => surface.reachableViaTemplate)
+            .flatMap(surface => surface.traits ?? [])
+        ),
+        requiredTraits: uniqueSorted(nativeBlock?.refs?.traits ?? []),
+        resolvedTraits: uniqueSorted(
+          (nativeBlock?.refs?.traits ?? [])
+            .filter(trait => inventorySlice.traits.includes(trait))
+        ),
+        missingTraits: uniqueSorted(
+          (nativeBlock?.refs?.traits ?? [])
+            .filter(trait => !inventorySlice.traits.includes(trait))
+        )
+      } : {
+        templateSurfaceCount: 0,
+        templateTraits: [],
+        requiredTraits: [],
+        resolvedTraits: [],
+        missingTraits: []
+      },
+      nativeDebt: {
+        rawSelectorCount: nativeBlock?.refs?.rawSelectorCount ?? 0,
+        rawSelectors: [...(nativeBlock?.refs?.rawSelectors ?? [])]
+      },
       loweringMode,
       lowering: lowering ? structuredClone(lowering) : null,
       overrides: [...authoredSlice.overrides],

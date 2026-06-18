@@ -36,6 +36,7 @@ const VISIBLE_ROUTE_IDS = Object.freeze(Object.values(ROUTE_VIEW_BY_KEY).map(ent
 const SIGN_OUT_VISIBLE_STATES = new Set(["signingOut", "signedOut"]);
 const LOGIN_VISIBLE_INVALID_STATES = new Set(["signedIn", "signingOut", "signedOut"]);
 const APP_SHELL_INVALID_STATES = new Set(["signingOut", "signedOut"]);
+const PLATFORM_NOTICE_TONES = new Set(["success", "warn", "error"]);
 
 function normalizeText(value) {
   return typeof value === "string" ? value.trim() : "";
@@ -267,7 +268,7 @@ export function engentusShellExpectationProvider(snapshot, context = {}) {
       ));
     } else {
       const tone = normalizeText(processStateValue(snapshot, "PlatformConfigNoticeTone"));
-      if (tone && !notice.classList.contains(tone)) {
+      if (PLATFORM_NOTICE_TONES.has(tone) && !notice.classList.contains(tone)) {
         push(issue(
           `engentus-shell:platform-notice-tone:${activeRoute}`,
           "Platform-config notice tone should match the rendered class state",

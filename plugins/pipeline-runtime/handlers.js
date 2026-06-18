@@ -1,12 +1,18 @@
 import { relation } from "../../src/kernel.js";
 import {
+  grantIdentityActorAssumption,
   grantIdentityRole,
   moduleProjectors,
+  revokeIdentityActorAssumption,
   revokeIdentityRole,
   setAppFeatureAccessPolicy,
   updateIdentity
 } from "../../src/modules.js";
-import { authSummaryForActor } from "../../src/runtime-authz.js";
+import {
+  authSummaryForAuthority,
+  identityActorAssumptionGrantHistory,
+  resolveSessionAuthorityForIdentity
+} from "../../src/runtime-authz.js";
 import { createSecretStoreHandlers } from "../secret/handlers.js";
 import { createSqlDbHandlers, normalizeDatasourcePayload } from "../sql/handlers.js";
 
@@ -159,6 +165,117 @@ function decorateFeaturePolicyRow(row) {
   };
 }
 
+function authorityTargetLabel(row) {
+  const identityLabel = normalizeText(row?.targetIdentity?.displayName, normalizeText(row?.targetIdentity?.label, normalizeText(row?.targetIdentity?.username, "")));
+  if (identityLabel) return `${identityLabel} (${row.targetActor})`;
+  return normalizeText(row?.targetActor, "unknown actor");
+}
+
+function decorateAuthorityGrantRow(row) {
+  const identity = row?.identity ?? null;
+  const targetIdentity = row?.targetIdentity ?? null;
+  const sourceLabel = normalizeText(identity?.displayName, normalizeText(identity?.label, normalizeText(identity?.username, normalizeText(row?.identityId, ""))));
+  const targetIdentityLabel = normalizeText(targetIdentity?.displayName, normalizeText(targetIdentity?.label, normalizeText(targetIdentity?.username, "")));
+  const statusText = row?.active ? "Active" : "Revoked";
+  const provenanceParts = [];
+  if (row?.grantedBy) provenanceParts.push(`Granted by ${row.grantedBy}`);
+  if (row?.revokedBy) provenanceParts.push(`Revoked by ${row.revokedBy}`);
+  return {
+    ...row,
+    sourceIdentityLabel: sourceLabel || normalizeText(row?.identityId, "Unknown identity"),
+    targetActorLabel: authorityTargetLabel(row),
+    targetIdentityLabel: targetIdentityLabel || "No linked identity",
+    statusText,
+    provenanceText: provenanceParts.join(" · ") || "No provenance recorded"
+  };
+}
+
+function authorityGrantReadShape(grantRow, projectionWorld) {
+  const identityIndex = projectionWorld?.project?.(moduleProjectors.identityIndex) ?? { byId: {}, byActor: {} };
+  return {
+    ...grantRow,
+    identity: identityIndex?.byId?.[grantRow.identityId] ?? null,
+    targetIdentity: identityIndex?.byActor?.[grantRow.targetActor]?.[0] ?? null
+  };
+}
+
+function authorityActorOptionRows(identityIndex) {
+  return Object.entries(identityIndex?.byActor ?? {})
+    .map(([actor, identities]) => {
+      const identity = Array.isArray(identities) ? identities[0] ?? null : null;
+      const label = normalizeText(identity?.displayName, normalizeText(identity?.label, normalizeText(identity?.username, actor)));
+      return {
+        id: actor,
+        actor,
+        title: label ? `${label} (${actor})` : actor,
+        label: label || actor,
+        identityId: identity?.id ?? null
+      };
+    })
+    .sort((left, right) => String(left.actor).localeCompare(String(right.actor)));
+}
+
+function authoritySummaryPayload(summary, extras = {}) {
+  return {
+    PlatformConfigAuthorityAuthenticatedIdentity: normalizeText(summary?.authenticatedIdentity?.id, ""),
+    PlatformConfigAuthorityAuthenticatedActor: normalizeText(summary?.authenticatedActor, ""),
+    PlatformConfigAuthorityEffectiveIdentity: normalizeText(summary?.effectiveIdentity?.id, ""),
+    PlatformConfigAuthorityEffectiveActor: normalizeText(summary?.effectiveActor, ""),
+    PlatformConfigAuthorityMode: normalizeText(summary?.authorityMode, "direct"),
+    PlatformConfigAuthorityAssumptionGrantId: normalizeText(summary?.assumptionGrantId, ""),
+    PlatformConfigAuthoritySummary: summary
+      ? [
+          `Authenticated identity: ${normalizeText(summary.authenticatedIdentity?.id, "None")}`,
+          `Authenticated actor: ${normalizeText(summary.authenticatedActor, "None")}`,
+          `Effective identity: ${normalizeText(summary.effectiveIdentity?.id, "None")}`,
+          `Effective actor: ${normalizeText(summary.effectiveActor, "None")}`,
+          `Authority mode: ${normalizeText(summary.authorityMode, "direct")}`,
+          `Assumption grant: ${normalizeText(summary.assumptionGrantId, "None")}`
+        ].join("\n")
+      : "No authority summary available.",
+    ...extras
+  };
+}
+
+function authorityGrantEditorPayload({ identityId = "", targetActor = "", summary = "" } = {}) {
+  return {
+    PlatformConfigGrantSourceIdentityId: normalizeText(identityId, ""),
+    PlatformConfigGrantTargetActor: normalizeText(targetActor, ""),
+    PlatformConfigGrantSelectedId: "",
+    PlatformConfigGrantSummary: normalizeText(summary, "Choose a source identity and target actor, then create a grant.")
+  };
+}
+
+function assumedSessionEditorPayload({ identityId = "", targetActor = "", summary = "" } = {}) {
+  return {
+    PlatformConfigAssumeIdentityId: normalizeText(identityId, ""),
+    PlatformConfigAssumeTargetActor: normalizeText(targetActor, ""),
+    PlatformConfigAssumeSummary: normalizeText(summary, "Choose a source identity and target actor, then open an assumed session.")
+  };
+}
+
+function platformConfigRouteKeyForSession(session = {}) {
+  const access = normalizeText(session?.featureAccess?.engentus_platform_config, "hidden");
+  if (access === "granted") return "platform-config-access";
+  if (access === "locked") return "access-denied";
+  if (access === "hidden") return "not-found";
+  if (access === "login") return "login";
+  return "home";
+}
+
+function engentusSessionPayload(session = {}, { routeKey = null } = {}) {
+  return {
+    EngentusSessionActor: normalizeText(session?.effectiveActor, normalizeText(session?.actor, "")),
+    EngentusSessionIdentityId: normalizeText(session?.effectiveIdentity, normalizeText(session?.identity, "")),
+    EngentusProfileDisplayName: normalizeText(session?.profile?.displayName, normalizeText(session?.displayName, "")),
+    EngentusProfileJobTitle: normalizeText(session?.profile?.jobTitle, normalizeText(session?.jobTitle, "")),
+    EngentusProfileInitials: normalizeText(session?.profile?.initials, normalizeText(session?.initials, "")),
+    EngentusMillForceAccess: normalizeText(session?.featureAccess?.engentus_mill_force, "login"),
+    EngentusPlatformConfigAccess: normalizeText(session?.featureAccess?.engentus_platform_config, "hidden"),
+    ...(routeKey ? { EngentusShellActiveRoute: routeKey } : {})
+  };
+}
+
 function matchesQuery(row, query) {
   if (!query) return true;
   const haystacks = [
@@ -293,18 +410,31 @@ function sendDelegated(sendJson, res, delegated, body) {
 
 async function pipelineSnapshotPayload(appContext, projectionWorld, {
   secretQuery = "",
-  datasourceQuery = ""
+  datasourceQuery = "",
+  requestSession = null,
+  requestActor = null
 } = {}) {
   const secrets = await (appContext?.secretStore?.listMetadata?.() ?? []);
   const datasources = appContext?.dbSql?.listDatasources?.() ?? [];
   const identityRows = projectionWorld?.project?.(moduleProjectors.identities)
     ?? [];
+  const identityIndex = projectionWorld?.project?.(moduleProjectors.identityIndex)
+    ?? { byId: {}, byActor: {} };
   const roleGrantIndex = projectionWorld?.project?.(moduleProjectors.identityRoleGrantIndex)
     ?? { byIdentity: {} };
   const featurePolicyRows = projectionWorld?.project?.(moduleProjectors.appFeatureAccessPolicies)
     ?? [];
   const authRoleRows = projectionWorld?.project?.(moduleProjectors.authRoles)
     ?? [];
+  const authoritySummary = authSummaryForAuthority(projectionWorld, requestSession ?? {
+    authenticatedActor: requestActor,
+    effectiveActor: requestActor,
+    authorityMode: "direct"
+  });
+  const authorityGrants = identityActorAssumptionGrantHistory(projectionWorld).map(row =>
+    decorateAuthorityGrantRow(authorityGrantReadShape(row, projectionWorld))
+  );
+  const authorityActors = authorityActorOptionRows(identityIndex);
   const secretSelection = filterCollectionRows(secrets.map(row => decorateSecretRow(row)), normalizeQuery(secretQuery));
   const datasourceSelection = filterCollectionRows(datasources.map(row => decorateDatasourceRow(row)), normalizeQuery(datasourceQuery));
   const identities = identityRows.map(row => decorateIdentityRow({
@@ -317,12 +447,31 @@ async function pipelineSnapshotPayload(appContext, projectionWorld, {
     datasources: datasourceSelection.rows,
     identities,
     featurePolicies,
+    authorityGrants,
+    authorityActors,
     authRoles: authRoleRows,
     PlatformConfigSecretSearchVisible: secretSelection.searchVisible,
     PlatformConfigDatasourceSearchVisible: datasourceSelection.searchVisible,
     PlatformConfigSecretSummary: summarizeRows("secrets", secretSelection.totalCount, secretSelection.filteredCount, secretQuery),
     PlatformConfigDatasourceSummary: summarizeRows("datasources", datasourceSelection.totalCount, datasourceSelection.filteredCount, datasourceQuery),
-    PlatformConfigAccessRolesHint: rolesHint(authRoleRows)
+    PlatformConfigAccessRolesHint: rolesHint(authRoleRows),
+    ...authoritySummaryPayload(authoritySummary),
+    ...authorityGrantEditorPayload({
+      identityId: authoritySummary?.authenticatedIdentity?.id ?? identities[0]?.id ?? "",
+      targetActor: authoritySummary?.effectiveActor ?? authorityActors[0]?.actor ?? "",
+      summary: authorityGrants.length
+        ? `Loaded ${pluralize(authorityGrants.length, "assumption grant")}.`
+        : "No assumption grants defined yet."
+    }),
+    ...assumedSessionEditorPayload({
+      identityId: authoritySummary?.authenticatedIdentity?.id ?? identities[0]?.id ?? "",
+      targetActor: authoritySummary?.authorityMode === "assumed"
+        ? authoritySummary?.effectiveActor ?? authorityActors[0]?.actor ?? ""
+        : authorityActors[0]?.actor ?? "",
+      summary: authoritySummary?.authorityMode === "assumed"
+        ? `Currently acting as ${normalizeText(authoritySummary?.effectiveActor, "unknown actor")} via ${normalizeText(authoritySummary?.assumptionGrantId, "direct authority")}.`
+        : "Choose a source identity and target actor, then open an assumed session."
+    })
   };
 }
 
@@ -331,11 +480,15 @@ export function createPipelineRuntimeHandlers(deps) {
     world,
     backendHost,
     sendJson,
-    readJson
+    readJson,
+    sessionStore,
+    createSessionForIdentity,
+    sessionResponseShape,
+    sessionCookieHeader
   } = deps;
 
   return {
-    "pipeline.platform-config.snapshot": async ({ req, res, requestActor, appContext }) => {
+    "pipeline.platform-config.snapshot": async ({ req, res, requestActor, requestSession, appContext }) => {
       if (!requestActor) {
         sendJson(res, 401, { error: "sign in first" });
         return;
@@ -343,7 +496,9 @@ export function createPipelineRuntimeHandlers(deps) {
       const body = await readJson(req);
       const payload = await pipelineSnapshotPayload(appContext, world, {
         secretQuery: normalizeText(body?.secretQuery, ""),
-        datasourceQuery: normalizeText(body?.datasourceQuery, "")
+        datasourceQuery: normalizeText(body?.datasourceQuery, ""),
+        requestActor,
+        requestSession
       });
       sendJson(res, 200, {
         ...payload,
@@ -351,7 +506,7 @@ export function createPipelineRuntimeHandlers(deps) {
       });
     },
 
-    "pipeline.platform-config.secret.read": async ({ res, params, requestActor, appContext }) => {
+    "pipeline.platform-config.secret.read": async ({ res, params, requestActor, requestSession, appContext }) => {
       const delegated = await delegateJsonHandler(createSecretStoreHandlers, deps, "secret.store.read", {
         req: {},
         res: {},
@@ -364,13 +519,13 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, 200, {
-        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor, requestSession })),
         ...secretEditorPayload(decorateSecretRow(delegated.body.secret)),
         message: `Loaded secret ${titleForRow(delegated.body.secret, "secret")}.`
       });
     },
 
-    "pipeline.platform-config.secret.create": async ({ req, res, requestActor, appContext }) => {
+    "pipeline.platform-config.secret.create": async ({ req, res, requestActor, requestSession, appContext }) => {
       const delegated = await delegateJsonHandler(createSecretStoreHandlers, deps, "secret.store.create", {
         req,
         res: {},
@@ -382,13 +537,13 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, delegated.status, {
-        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor, requestSession })),
         ...secretEditorPayload(decorateSecretRow(delegated.body.secret)),
         message: `Saved secret ${titleForRow(delegated.body.secret, "secret")}.`
       });
     },
 
-    "pipeline.platform-config.secret.write": async ({ req, res, params, requestActor, appContext }) => {
+    "pipeline.platform-config.secret.write": async ({ req, res, params, requestActor, requestSession, appContext }) => {
       const delegated = await delegateJsonHandler(createSecretStoreHandlers, deps, "secret.store.write", {
         req,
         res: {},
@@ -401,13 +556,13 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, delegated.status, {
-        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor, requestSession })),
         ...secretEditorPayload(decorateSecretRow(delegated.body.secret)),
         message: `Updated secret ${titleForRow(delegated.body.secret, "secret")}.`
       });
     },
 
-    "pipeline.platform-config.secret.delete": async ({ res, params, requestActor, appContext }) => {
+    "pipeline.platform-config.secret.delete": async ({ res, params, requestActor, requestSession, appContext }) => {
       const delegated = await delegateJsonHandler(createSecretStoreHandlers, deps, "secret.store.delete", {
         req: {},
         res: {},
@@ -420,7 +575,7 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, delegated.status, {
-        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor, requestSession })),
         ...blankSecretPayload({
           PlatformConfigSecretSummary: "Secret deleted."
         }),
@@ -428,7 +583,7 @@ export function createPipelineRuntimeHandlers(deps) {
       });
     },
 
-    "pipeline.platform-config.datasource.read": async ({ res, params, requestActor, appContext }) => {
+    "pipeline.platform-config.datasource.read": async ({ res, params, requestActor, requestSession, appContext }) => {
       const delegated = await delegateJsonHandler(createSqlDbHandlers, deps, "db.sql.datasource.read", {
         req: {},
         res: {},
@@ -441,13 +596,13 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, 200, {
-        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor, requestSession })),
         ...datasourceEditorPayload(decorateDatasourceRow(delegated.body.datasource)),
         message: `Loaded datasource ${titleForRow(delegated.body.datasource, "datasource")}.`
       });
     },
 
-    "pipeline.platform-config.datasource.create": async ({ req, res, requestActor, appContext }) => {
+    "pipeline.platform-config.datasource.create": async ({ req, res, requestActor, requestSession, appContext }) => {
       const delegated = await delegateJsonHandler(createSqlDbHandlers, deps, "db.sql.datasource.create", {
         req,
         res: {},
@@ -459,13 +614,13 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, delegated.status, {
-        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor, requestSession })),
         ...datasourceEditorPayload(decorateDatasourceRow(delegated.body.datasource)),
         message: `Saved datasource ${titleForRow(delegated.body.datasource, "datasource")}.`
       });
     },
 
-    "pipeline.platform-config.datasource.update": async ({ req, res, params, requestActor, appContext }) => {
+    "pipeline.platform-config.datasource.update": async ({ req, res, params, requestActor, requestSession, appContext }) => {
       const delegated = await delegateJsonHandler(createSqlDbHandlers, deps, "db.sql.datasource.update", {
         req,
         res: {},
@@ -478,13 +633,13 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, delegated.status, {
-        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor, requestSession })),
         ...datasourceEditorPayload(decorateDatasourceRow(delegated.body.datasource)),
         message: `Updated datasource ${titleForRow(delegated.body.datasource, "datasource")}.`
       });
     },
 
-    "pipeline.platform-config.datasource.delete": async ({ res, params, requestActor, appContext }) => {
+    "pipeline.platform-config.datasource.delete": async ({ res, params, requestActor, requestSession, appContext }) => {
       const delegated = await delegateJsonHandler(createSqlDbHandlers, deps, "db.sql.datasource.delete", {
         req: {},
         res: {},
@@ -497,7 +652,7 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       sendJson(res, delegated.status, {
-        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor, requestSession })),
         ...blankDatasourcePayload({
           PlatformConfigDatasourceSummary: "Datasource deleted."
         }),
@@ -505,7 +660,7 @@ export function createPipelineRuntimeHandlers(deps) {
       });
     },
 
-    "pipeline.platform-config.datasource.test": async ({ req, res, requestActor, appContext }) => {
+    "pipeline.platform-config.datasource.test": async ({ req, res, requestActor, requestSession, appContext }) => {
       const body = await readJson(req);
       const datasourceId = normalizeDatasourceId(body?.id);
       const existing = datasourceId ? (appContext?.dbSql?.getDatasource?.(datasourceId) ?? null) : null;
@@ -539,7 +694,7 @@ export function createPipelineRuntimeHandlers(deps) {
         ?? null;
       const decoratedDatasource = datasource ? decorateDatasourceRow(datasource) : null;
       const basePayload = {
-        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor, requestSession })),
         ...(decoratedDatasource ? datasourceEditorPayload(decoratedDatasource) : {}),
         PlatformConfigDatasourceSummary: summarizeDatasourceTestResult(delegated, decoratedDatasource)
       };
@@ -556,7 +711,7 @@ export function createPipelineRuntimeHandlers(deps) {
       });
     },
 
-    "pipeline.platform-config.access.identity.read": async ({ res, params, requestActor, appContext }) => {
+    "pipeline.platform-config.access.identity.read": async ({ res, params, requestActor, requestSession, appContext }) => {
       if (!requestActor) {
         sendJson(res, 401, { error: "sign in first" });
         return;
@@ -574,13 +729,13 @@ export function createPipelineRuntimeHandlers(deps) {
         roles: roleGrantIndex?.byIdentity?.[identity.id] ?? []
       });
       sendJson(res, 200, {
-        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor, requestSession })),
         ...accessIdentityEditorPayload(decoratedIdentity),
         message: `Loaded identity ${normalizeText(identity.username, identity.id)}.`
       });
     },
 
-    "pipeline.platform-config.access.identity.update": async ({ req, res, params, requestActor, appContext }) => {
+    "pipeline.platform-config.access.identity.update": async ({ req, res, params, requestActor, requestSession, appContext }) => {
       if (!requestActor) {
         sendJson(res, 401, { error: "sign in first" });
         return;
@@ -630,13 +785,13 @@ export function createPipelineRuntimeHandlers(deps) {
         roles: refreshedRoles
       });
       sendJson(res, 200, {
-        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor, requestSession })),
         ...accessIdentityEditorPayload(decoratedIdentity),
         message: `Updated identity ${normalizeText(refreshedIdentity.username, refreshedIdentity.id)}.`
       });
     },
 
-    "pipeline.platform-config.access.feature.read": async ({ res, params, requestActor, appContext }) => {
+    "pipeline.platform-config.access.feature.read": async ({ res, params, requestActor, requestSession, appContext }) => {
       if (!requestActor) {
         sendJson(res, 401, { error: "sign in first" });
         return;
@@ -650,13 +805,13 @@ export function createPipelineRuntimeHandlers(deps) {
       }
       const decoratedPolicy = decorateFeaturePolicyRow(policy);
       sendJson(res, 200, {
-        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor, requestSession })),
         ...accessFeatureEditorPayload(decoratedPolicy),
         message: `Loaded feature policy ${normalizeText(policy.label, policy.featureId)}.`
       });
     },
 
-    "pipeline.platform-config.access.feature.update": async ({ req, res, params, requestActor, appContext }) => {
+    "pipeline.platform-config.access.feature.update": async ({ req, res, params, requestActor, requestSession, appContext }) => {
       if (!requestActor) {
         sendJson(res, 401, { error: "sign in first" });
         return;
@@ -690,10 +845,272 @@ export function createPipelineRuntimeHandlers(deps) {
       const refreshedPolicy = world.project(moduleProjectors.appFeatureAccessPolicyIndex)?.byFeatureId?.[existing.featureId] ?? existing;
       const decoratedPolicy = decorateFeaturePolicyRow(refreshedPolicy);
       sendJson(res, 200, {
-        ...(await pipelineSnapshotPayload(appContext, world)),
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor, requestSession })),
         ...accessFeatureEditorPayload(decoratedPolicy),
         message: `Updated feature policy ${normalizeText(refreshedPolicy.label, refreshedPolicy.featureId)}.`
       });
+    },
+
+    "pipeline.platform-config.access.grant.create": async ({ req, res, requestActor, requestSession, appContext }) => {
+      if (!requestActor) {
+        sendJson(res, 401, { error: "sign in first" });
+        return;
+      }
+      const body = await readJson(req);
+      const identityId = normalizeText(body?.identityId, "");
+      const targetActor = normalizeText(body?.targetActor, "");
+      const identityIndex = world.project(moduleProjectors.identityIndex);
+      const existingIdentity = identityIndex?.byId?.[identityId] ?? null;
+      if (!existingIdentity) {
+        sendJson(res, 400, {
+          error: "identity not found",
+          message: "Select a valid source identity.",
+          grantSummary: "Select a valid source identity before creating a grant."
+        });
+        return;
+      }
+      if (!targetActor || !(identityIndex?.byActor?.[targetActor]?.length)) {
+        sendJson(res, 400, {
+          error: "target actor not found",
+          message: "Select a valid target actor.",
+          grantSummary: "Select a valid target actor before creating a grant."
+        });
+        return;
+      }
+      const existingGrant = identityActorAssumptionGrantHistory(world, { identityId, targetActor }).find(row => row.active);
+      if (existingGrant) {
+        sendJson(res, 409, {
+          error: "active grant already exists",
+          message: `Grant ${existingGrant.id} already exists.`,
+          grantSummary: `Grant ${existingGrant.id} is already active.`
+        });
+        return;
+      }
+      const granted = grantIdentityActorAssumption(world, { actor: requestActor, identityId, targetActor });
+      sendJson(res, 200, {
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor, requestSession })),
+        ...authorityGrantEditorPayload({
+          identityId,
+          targetActor,
+          summary: `Created grant ${granted.body?.id ?? `${identityId}=>${targetActor}`}.`
+        }),
+        PlatformConfigGrantSelectedId: granted.body?.id ?? `${identityId}=>${targetActor}`,
+        message: `Created assumption grant for ${identityId} -> ${targetActor}.`
+      });
+    },
+
+    "pipeline.platform-config.access.grant.revoke": async ({ res, params, requestActor, requestSession, appContext }) => {
+      if (!requestActor) {
+        sendJson(res, 401, { error: "sign in first" });
+        return;
+      }
+      const grantId = normalizeText(params?.grantId, "");
+      const grant = identityActorAssumptionGrantHistory(world, { grantId })[0] ?? null;
+      if (!grant) {
+        sendJson(res, 404, {
+          error: "grant not found",
+          message: "Grant not found.",
+          grantSummary: "Select an active grant to revoke."
+        });
+        return;
+      }
+      revokeIdentityActorAssumption(world, {
+        actor: requestActor,
+        identityId: grant.identityId,
+        targetActor: grant.targetActor
+      });
+      sendJson(res, 200, {
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor, requestSession })),
+        ...authorityGrantEditorPayload({
+          identityId: grant.identityId,
+          targetActor: grant.targetActor,
+          summary: `Revoked grant ${grant.id}.`
+        }),
+        PlatformConfigGrantSelectedId: grant.id,
+        message: `Revoked assumption grant ${grant.id}.`
+      });
+    },
+
+    "pipeline.platform-config.access.session.assume": async ({ req, res, requestActor, requestSession, appContext }) => {
+      if (!requestActor || !requestSession) {
+        sendJson(res, 401, { error: "sign in first" });
+        return;
+      }
+      if (typeof createSessionForIdentity !== "function" || typeof sessionResponseShape !== "function" || typeof sessionCookieHeader !== "function") {
+        sendJson(res, 500, { error: "session switching unavailable" });
+        return;
+      }
+      const body = await readJson(req);
+      const identityId = normalizeText(body?.identityId, "");
+      const targetActor = normalizeText(body?.targetActor, "");
+      const identityIndex = world.project(moduleProjectors.identityIndex);
+      const identity = identityIndex?.byId?.[identityId] ?? null;
+      if (!identity) {
+        sendJson(res, 400, {
+          error: "identity not found",
+          message: "Select a valid source identity.",
+          ...assumedSessionEditorPayload({
+            identityId,
+            targetActor,
+            summary: "Select a valid source identity before opening an assumed session."
+          })
+        });
+        return;
+      }
+      if (!normalizeText(identity?.password, "")) {
+        sendJson(res, 400, {
+          error: "identity cannot authenticate",
+          message: "Selected identity cannot authenticate through the current session path.",
+          ...assumedSessionEditorPayload({
+            identityId,
+            targetActor,
+            summary: "Selected identity cannot authenticate through the current session path."
+          })
+        });
+        return;
+      }
+      const authority = resolveSessionAuthorityForIdentity(world, identity, { assumeActor: targetActor });
+      if (!authority.ok) {
+        world.emit({
+          process: "session.open.failed",
+          actor: identity.actor,
+          claims: [],
+          body: {
+            username: identity.username ?? null,
+            assumeActor: targetActor || null,
+            reason: authority.reason
+          }
+        });
+        sendJson(res, Number(authority.status || 403), {
+          error: authority.reason || "assumption denied",
+          message: authority.reason || "assumption denied",
+          ...assumedSessionEditorPayload({
+            identityId,
+            targetActor,
+            summary: authority.reason || "assumption denied"
+          })
+        });
+        return;
+      }
+      const session = createSessionForIdentity({
+        ...identity,
+        displayName: authority.authenticatedIdentity?.displayName ?? identity.displayName ?? null,
+        jobTitle: authority.authenticatedIdentity?.jobTitle ?? identity.jobTitle ?? null,
+        initials: authority.authenticatedIdentity?.initials ?? identity.initials ?? null
+      }, authority);
+      if (requestSession?.id && sessionStore?.delete) sessionStore.delete(requestSession.id);
+      const shapedSession = sessionResponseShape(session);
+      const routeKey = platformConfigRouteKeyForSession(shapedSession);
+      world.emit({
+        process: "session.open",
+        actor: identity.actor,
+        claims: [
+          relation(identity.id, "authenticatedAs", identity.actor),
+          ...(identity.homePerspective ? [relation(identity.id, "openedPerspective", identity.homePerspective)] : [])
+        ],
+        body: {
+          identity: session.identity ?? null,
+          actor: session.actor ?? null,
+          authenticatedIdentity: session.authenticatedIdentity ?? null,
+          authenticatedActor: session.authenticatedActor ?? null,
+          effectiveIdentity: session.effectiveIdentity ?? null,
+          effectiveActor: session.effectiveActor ?? null,
+          authorityMode: session.authorityMode ?? "direct",
+          assumptionGrantId: session.assumptionGrantId ?? null,
+          label: session.label ?? identity.label ?? null,
+          homeContext: session.homeContext ?? null,
+          perspective: session.perspective ?? null,
+          resumeRouteKey: routeKey
+        }
+      });
+      sendJson(res, 200, {
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor: shapedSession.effectiveActor, requestSession: session })),
+        ...engentusSessionPayload(shapedSession, { routeKey }),
+        ...assumedSessionEditorPayload({
+          identityId,
+          targetActor,
+          summary: `Opened assumed session for ${normalizeText(identity.username, identity.id)} as ${targetActor}.`
+        }),
+        message: `Assumed session opened for ${normalizeText(identity.username, identity.id)} as ${targetActor}.`
+      }, { "set-cookie": sessionCookieHeader(session.id) });
+    },
+
+    "pipeline.platform-config.access.session.direct": async ({ res, requestActor, requestSession, appContext }) => {
+      if (!requestActor || !requestSession) {
+        sendJson(res, 401, { error: "sign in first" });
+        return;
+      }
+      if (typeof createSessionForIdentity !== "function" || typeof sessionResponseShape !== "function" || typeof sessionCookieHeader !== "function") {
+        sendJson(res, 500, { error: "session switching unavailable" });
+        return;
+      }
+      const authenticatedIdentityId = normalizeText(requestSession?.authenticatedIdentity, "");
+      const identityIndex = world.project(moduleProjectors.identityIndex);
+      const identity = identityIndex?.byId?.[authenticatedIdentityId] ?? null;
+      if (!identity) {
+        sendJson(res, 400, {
+          error: "authenticated identity not found",
+          message: "Current authenticated identity is unavailable.",
+          ...assumedSessionEditorPayload({
+            summary: "Current authenticated identity is unavailable."
+          })
+        });
+        return;
+      }
+      const authority = resolveSessionAuthorityForIdentity(world, identity, { assumeActor: identity.actor });
+      if (!authority.ok) {
+        sendJson(res, Number(authority.status || 403), {
+          error: authority.reason || "direct authority unavailable",
+          message: authority.reason || "direct authority unavailable",
+          ...assumedSessionEditorPayload({
+            identityId: identity.id,
+            targetActor: identity.actor,
+            summary: authority.reason || "direct authority unavailable"
+          })
+        });
+        return;
+      }
+      const session = createSessionForIdentity({
+        ...identity,
+        displayName: authority.authenticatedIdentity?.displayName ?? identity.displayName ?? null,
+        jobTitle: authority.authenticatedIdentity?.jobTitle ?? identity.jobTitle ?? null,
+        initials: authority.authenticatedIdentity?.initials ?? identity.initials ?? null
+      }, authority);
+      if (requestSession?.id && sessionStore?.delete) sessionStore.delete(requestSession.id);
+      const shapedSession = sessionResponseShape(session);
+      const routeKey = platformConfigRouteKeyForSession(shapedSession);
+      world.emit({
+        process: "session.open",
+        actor: identity.actor,
+        claims: [
+          relation(identity.id, "authenticatedAs", identity.actor),
+          ...(identity.homePerspective ? [relation(identity.id, "openedPerspective", identity.homePerspective)] : [])
+        ],
+        body: {
+          identity: session.identity ?? null,
+          actor: session.actor ?? null,
+          authenticatedIdentity: session.authenticatedIdentity ?? null,
+          authenticatedActor: session.authenticatedActor ?? null,
+          effectiveIdentity: session.effectiveIdentity ?? null,
+          effectiveActor: session.effectiveActor ?? null,
+          authorityMode: session.authorityMode ?? "direct",
+          assumptionGrantId: session.assumptionGrantId ?? null,
+          label: session.label ?? identity.label ?? null,
+          homeContext: session.homeContext ?? null,
+          perspective: session.perspective ?? null,
+          resumeRouteKey: routeKey
+        }
+      });
+      sendJson(res, 200, {
+        ...(await pipelineSnapshotPayload(appContext, world, { requestActor: shapedSession.effectiveActor, requestSession: session })),
+        ...engentusSessionPayload(shapedSession, { routeKey }),
+        ...assumedSessionEditorPayload({
+          identityId: identity.id,
+          targetActor: shapedSession.effectiveActor ?? identity.actor,
+          summary: `Returned to direct session for ${normalizeText(identity.username, identity.id)}.`
+        }),
+        message: `Returned to direct session for ${normalizeText(identity.username, identity.id)}.`
+      }, { "set-cookie": sessionCookieHeader(session.id) });
     },
 
     "pipeline.script.run": async ({ req, res, requestActor, appContext }) => {

@@ -18,6 +18,10 @@ export const handlerCatalog = Object.freeze({
     "pipeline.platform-config.access.identity.update",
     "pipeline.platform-config.access.feature.read",
     "pipeline.platform-config.access.feature.update",
+    "pipeline.platform-config.access.grant.create",
+    "pipeline.platform-config.access.grant.revoke",
+    "pipeline.platform-config.access.session.assume",
+    "pipeline.platform-config.access.session.direct",
     "pipeline.script.run"
   ]),
   pageHandlers: freezeStrings([]),
@@ -36,6 +40,10 @@ export const handlerCatalog = Object.freeze({
     "pipeline.platform-config.access.identity.update",
     "pipeline.platform-config.access.feature.read",
     "pipeline.platform-config.access.feature.update",
+    "pipeline.platform-config.access.grant.create",
+    "pipeline.platform-config.access.grant.revoke",
+    "pipeline.platform-config.access.session.assume",
+    "pipeline.platform-config.access.session.direct",
     "pipeline.script.run"
   ]),
   handlerMetadata: Object.freeze({
@@ -53,6 +61,10 @@ export const handlerCatalog = Object.freeze({
     "pipeline.platform-config.access.identity.update": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["PATCH"] }),
     "pipeline.platform-config.access.feature.read": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["GET"] }),
     "pipeline.platform-config.access.feature.update": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["PATCH"] }),
+    "pipeline.platform-config.access.grant.create": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "pipeline.platform-config.access.grant.revoke": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["DELETE"] }),
+    "pipeline.platform-config.access.session.assume": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
+    "pipeline.platform-config.access.session.direct": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] }),
     "pipeline.script.run": Object.freeze({ routeKind: "json", responseKind: "json", methods: ["POST"] })
   })
 });

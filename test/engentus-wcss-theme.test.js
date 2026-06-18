@@ -71,10 +71,15 @@ test("engentus canonical browser lowering keeps declaration groups partitioned b
     "native-browser"
   );
   assert.equal(
+    browserLowering.slices.find(slice => slice.name === "home")?.mode,
+    "native-browser"
+  );
+  assert.equal(
     browserLowering.slices.find(slice => slice.name === "platform-config")?.mode,
     "native-browser"
   );
   assert.ok(browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.auth);
+  assert.ok(browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.home);
   assert.ok(browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.["platform-config"]);
 
   const rootTokens = declarationGroups.shell[0].blocks[1];

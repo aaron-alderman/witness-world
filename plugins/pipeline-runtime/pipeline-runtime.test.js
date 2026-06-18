@@ -5,9 +5,12 @@ import { moduleProjectors } from "../../src/modules.js";
 import {
   createIdentity,
   defineAuthRole,
+  grantIdentityActorAssumption,
   grantIdentityRole,
   setAppFeatureAccessPolicy
 } from "../../src/modules.js";
+import { createRuntimeSessionServices } from "../../src/runtime-session-services.js";
+import { sessionCookieHeader } from "../../src/runtime-http-utils.js";
 import { handlerCatalog } from "./handler-catalog.js";
 import { createPipelineRuntimeHandlers } from "./handlers.js";
 import runtimeModule from "./runtime.js";
@@ -28,6 +31,10 @@ test("pipeline runtime exposes the platform-config demo handlers and no plugin-o
     "pipeline.platform-config.access.identity.update",
     "pipeline.platform-config.access.feature.read",
     "pipeline.platform-config.access.feature.update",
+    "pipeline.platform-config.access.grant.create",
+    "pipeline.platform-config.access.grant.revoke",
+    "pipeline.platform-config.access.session.assume",
+    "pipeline.platform-config.access.session.direct",
     "pipeline.script.run"
   ]);
   assert.deepEqual(handlerCatalog.pageHandlers, []);
@@ -146,6 +153,72 @@ test("pipeline platform-config snapshot exposes the live auth role catalog", asy
   assert.equal(json[0].body.PlatformConfigAccessRolesHint, "Available roles: engentus_user, platform_admin");
 });
 
+test("pipeline platform-config snapshot exposes authority tuple, actor options, and grants", async () => {
+  const json = [];
+  const world = createWorld();
+  createIdentity(world, {
+    actor: "bootstrap",
+    id: "identity.aaron",
+    identityActor: "aaron",
+    label: "Aaron",
+    username: "aaron",
+    password: "pw",
+    displayName: "Aaron A."
+  });
+  createIdentity(world, {
+    actor: "bootstrap",
+    id: "identity.callan",
+    identityActor: "callan",
+    label: "Callan",
+    username: "callan",
+    password: "pw",
+    displayName: "Callan C."
+  });
+  grantIdentityActorAssumption(world, {
+    actor: "bootstrap",
+    identityId: "identity.aaron",
+    targetActor: "callan"
+  });
+  const handlers = createPipelineRuntimeHandlers({
+    world,
+    backendHost: "backendHost",
+    sendJson: (_res, status, body) => json.push({ status, body }),
+    readJson: async () => ({})
+  });
+
+  await handlers["pipeline.platform-config.snapshot"]({
+    req: {},
+    res: {},
+    requestActor: "aaron",
+    requestSession: {
+      authenticatedIdentity: "identity.aaron",
+      authenticatedActor: "aaron",
+      effectiveIdentity: "identity.callan",
+      effectiveActor: "callan",
+      authorityMode: "assumed",
+      assumptionGrantId: "identity.aaron=>callan"
+    },
+    appContext: {
+      secretStore: { listMetadata: async () => [] },
+      dbSql: { listDatasources: () => [] }
+    }
+  });
+
+  assert.equal(json[0].status, 200);
+  assert.equal(json[0].body.PlatformConfigAuthorityAuthenticatedIdentity, "identity.aaron");
+  assert.equal(json[0].body.PlatformConfigAuthorityEffectiveActor, "callan");
+  assert.equal(json[0].body.PlatformConfigAuthorityMode, "assumed");
+  assert.equal(json[0].body.PlatformConfigAuthorityAssumptionGrantId, "identity.aaron=>callan");
+  assert.match(json[0].body.PlatformConfigAuthoritySummary, /Authenticated identity: identity\.aaron/);
+  assert.equal(json[0].body.PlatformConfigAssumeIdentityId, "identity.aaron");
+  assert.equal(json[0].body.PlatformConfigAssumeTargetActor, "callan");
+  assert.match(json[0].body.PlatformConfigAssumeSummary, /Currently acting as callan via identity\.aaron=>callan\./);
+  assert.deepEqual(json[0].body.authorityActors.map(row => row.actor), ["aaron", "callan"]);
+  assert.equal(json[0].body.authorityGrants[0].id, "identity.aaron=>callan");
+  assert.equal(json[0].body.authorityGrants[0].sourceIdentityLabel, "Aaron A.");
+  assert.equal(json[0].body.authorityGrants[0].statusText, "Active");
+});
+
 test("pipeline platform-config identity access handlers round-trip canonical role lists", async () => {
   const json = [];
   const world = createWorld();
@@ -256,4 +329,185 @@ test("pipeline platform-config feature access handlers accept canonical arrays, 
   });
   assert.equal(json[2].status, 200);
   assert.deepEqual(json[2].body.PlatformConfigAccessFeatureAllowedRoles, ["engentus_user", "platform_admin"]);
+});
+
+test("pipeline platform-config authority grant handlers create, reject duplicate active grants, and revoke", async () => {
+  const world = createWorld();
+  createIdentity(world, {
+    actor: "bootstrap",
+    id: "identity.aaron",
+    identityActor: "aaron",
+    label: "Aaron",
+    username: "aaron",
+    password: "pw",
+    displayName: "Aaron A."
+  });
+  createIdentity(world, {
+    actor: "bootstrap",
+    id: "identity.callan",
+    identityActor: "callan",
+    label: "Callan",
+    username: "callan",
+    password: "pw",
+    displayName: "Callan C."
+  });
+
+  const json = [];
+  let readBody = { identityId: "identity.aaron", targetActor: "callan" };
+  const handlers = createPipelineRuntimeHandlers({
+    world,
+    backendHost: "backendHost",
+    sendJson: (_res, status, body) => json.push({ status, body }),
+    readJson: async () => readBody
+  });
+  const appContext = {
+    secretStore: { listMetadata: async () => [] },
+    dbSql: { listDatasources: () => [] }
+  };
+
+  await handlers["pipeline.platform-config.access.grant.create"]({
+    req: {},
+    res: {},
+    requestActor: "aaron",
+    requestSession: {
+      authenticatedIdentity: "identity.aaron",
+      authenticatedActor: "aaron",
+      effectiveIdentity: "identity.aaron",
+      effectiveActor: "aaron",
+      authorityMode: "direct"
+    },
+    appContext
+  });
+
+  assert.equal(json[0].status, 200);
+  assert.equal(json[0].body.PlatformConfigGrantSelectedId, "identity.aaron=>callan");
+  assert.equal(json[0].body.authorityGrants[0].statusText, "Active");
+
+  await handlers["pipeline.platform-config.access.grant.create"]({
+    req: {},
+    res: {},
+    requestActor: "aaron",
+    requestSession: {
+      authenticatedIdentity: "identity.aaron",
+      authenticatedActor: "aaron",
+      effectiveIdentity: "identity.aaron",
+      effectiveActor: "aaron",
+      authorityMode: "direct"
+    },
+    appContext
+  });
+
+  assert.equal(json[1].status, 409);
+  assert.match(json[1].body.error, /active grant already exists/);
+
+  await handlers["pipeline.platform-config.access.grant.revoke"]({
+    req: {},
+    res: {},
+    params: { grantId: "identity.aaron=>callan" },
+    requestActor: "aaron",
+    requestSession: {
+      authenticatedIdentity: "identity.aaron",
+      authenticatedActor: "aaron",
+      effectiveIdentity: "identity.aaron",
+      effectiveActor: "aaron",
+      authorityMode: "direct"
+    },
+    appContext
+  });
+
+  assert.equal(json[2].status, 200);
+  assert.equal(json[2].body.PlatformConfigGrantSelectedId, "identity.aaron=>callan");
+  assert.equal(json[2].body.authorityGrants[0].statusText, "Revoked");
+});
+
+test("pipeline platform-config session switching opens assumed sessions and returns to direct mode", async () => {
+  const world = createWorld();
+  createIdentity(world, {
+    actor: "bootstrap",
+    id: "identity.aaron",
+    identityActor: "aaron",
+    label: "Aaron",
+    username: "aaron",
+    password: "aaron",
+    displayName: "Aaron A."
+  });
+  createIdentity(world, {
+    actor: "bootstrap",
+    id: "identity.callan",
+    identityActor: "callan",
+    label: "Callan",
+    username: "callan",
+    password: "callan",
+    displayName: "Callan C."
+  });
+  grantIdentityActorAssumption(world, {
+    actor: "bootstrap",
+    identityId: "identity.aaron",
+    targetActor: "callan"
+  });
+
+  const sessionStore = new Map();
+  const sessionServices = createRuntimeSessionServices({ sessionStore });
+  const json = [];
+  let readBody = { identityId: "identity.aaron", targetActor: "callan" };
+  const handlers = createPipelineRuntimeHandlers({
+    world,
+    backendHost: "backendHost",
+    sendJson: (_res, status, body, headers) => json.push({ status, body, headers }),
+    readJson: async () => readBody,
+    sessionStore,
+    sessionCookieHeader,
+    ...sessionServices
+  });
+  const appContext = {
+    secretStore: { listMetadata: async () => [] },
+    dbSql: { listDatasources: () => [] }
+  };
+  const directSession = sessionServices.createSessionForIdentity({
+    id: "identity.aaron",
+    actor: "aaron",
+    username: "aaron",
+    password: "aaron",
+    label: "Aaron",
+    displayName: "Aaron A."
+  });
+
+  await handlers["pipeline.platform-config.access.session.assume"]({
+    req: {},
+    res: {},
+    requestActor: "aaron",
+    requestSession: directSession,
+    appContext
+  });
+
+  assert.equal(json[0].status, 200);
+  assert.equal(json[0].body.PlatformConfigAuthorityMode, "assumed");
+  assert.equal(json[0].body.PlatformConfigAuthorityAuthenticatedIdentity, "identity.aaron");
+  assert.equal(json[0].body.PlatformConfigAuthorityEffectiveActor, "callan");
+  assert.equal(json[0].body.EngentusSessionActor, "callan");
+  assert.match(json[0].body.PlatformConfigAssumeSummary, /Opened assumed session for aaron as callan\./);
+  assert.equal(typeof json[0].headers?.["set-cookie"], "string");
+  assert.equal(sessionStore.has(directSession.id), false);
+
+  const assumedSessionId = String(json[0].headers["set-cookie"]).split(";")[0].split("=")[1];
+  const assumedSession = sessionStore.get(assumedSessionId);
+  assert.equal(assumedSession?.effectiveActor, "callan");
+  assert.equal(assumedSession?.authorityMode, "assumed");
+
+  readBody = {};
+  await handlers["pipeline.platform-config.access.session.direct"]({
+    req: {},
+    res: {},
+    requestActor: "callan",
+    requestSession: assumedSession,
+    appContext
+  });
+
+  assert.equal(json[1].status, 200);
+  assert.equal(json[1].body.PlatformConfigAuthorityMode, "direct");
+  assert.equal(json[1].body.PlatformConfigAuthorityEffectiveActor, "aaron");
+  assert.equal(json[1].body.EngentusSessionActor, "aaron");
+  assert.match(json[1].body.PlatformConfigAssumeSummary, /Returned to direct session for aaron\./);
+  assert.equal(typeof json[1].headers?.["set-cookie"], "string");
+  assert.equal(sessionStore.has(assumedSession.id), false);
 });
