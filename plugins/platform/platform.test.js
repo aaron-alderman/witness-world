@@ -531,6 +531,10 @@ test("platform console layout compiles authored top-level surface metadata from 
   const changeSetLifecycleSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformChangeSetLifecyclePanel");
   assert.ok(changeSetLifecycleSurface);
   assert.equal(changeSetLifecycleSurface.props.formFields, "Change set=changeSetId@select:changeSetOptions|Action=action@select:lifecycleActions|Reason=reason@text");
+  assert.equal(changeSetLifecycleSurface.props.submitPath, "/api/platform-change-sets/{changeSetId}/{action}");
+  assert.equal(changeSetLifecycleSurface.props.submitBodyFields, "reason=reason@nullable");
+  assert.equal(changeSetLifecycleSurface.props.requiredFieldMessages, "changeSetId=Select a change set first.");
+  assert.equal(changeSetLifecycleSurface.props.successMessageTemplate, "Change set {action}ed.");
   assert.equal(changeSetLifecycleSurface.props.changeSetOptionsSource, "changeSets");
   assert.equal(changeSetLifecycleSurface.props.changeSetOptionsValuePath, "id");
   assert.equal(changeSetLifecycleSurface.props.changeSetOptionsLabelPath, "id");
@@ -611,6 +615,9 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(testRunPanelSurface);
   assert.equal(testRunPanelSurface.props.formId, "platform-test-run-form");
   assert.equal(testRunPanelSurface.props.formFields, "Test gate=gateId@select:testGateOptions|Branch id=branchId@text|Change set id=changeSetId@text|Candidate snapshot id=candidateSnapshotId@text");
+  assert.equal(testRunPanelSurface.props.submitPath, "/api/platform-test-runs");
+  assert.equal(testRunPanelSurface.props.submitBodyFields, "gateId=gateId@nullable|branchId=branchId@nullable|changeSetId=changeSetId@nullable|candidateSnapshotId=candidateSnapshotId@nullable");
+  assert.equal(testRunPanelSurface.props.successMessageTemplate, "Test run finished: {latestResult.status||testRun.status||unknown}");
   assert.equal(testRunPanelSurface.props.testGateOptionsSource, "testGates");
   assert.equal(testRunPanelSurface.props.testGateOptionsValuePath, "id");
   assert.equal(testRunPanelSurface.props.testGateOptionsLabelPath, "title||id");
@@ -618,6 +625,9 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(selectedTestRunPanelSurface);
   assert.equal(selectedTestRunPanelSurface.props.formId, "platform-selected-test-run-form");
   assert.equal(selectedTestRunPanelSurface.props.formFields, "Branch id=branchId@text|Change set id=changeSetId@text|Candidate snapshot id=candidateSnapshotId@text");
+  assert.equal(selectedTestRunPanelSurface.props.submitPath, "/api/platform-test-runs");
+  assert.equal(selectedTestRunPanelSurface.props.submitBodyFields, "branchId=branchId@nullable|changeSetId=changeSetId@nullable|candidateSnapshotId=candidateSnapshotId@nullable");
+  assert.equal(selectedTestRunPanelSurface.props.successMessageTemplate, "Selected gates finished: {summaries.passed}/{summaries.totalRuns} passed");
   const branchRedGreenSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformBranchRedGreenList");
   assert.ok(branchRedGreenSurface);
   assert.equal(branchRedGreenSurface.props.tableSource, "branchRedGreenRows");
@@ -5442,7 +5452,7 @@ test("platform page renders required operating views", async () => {
   assert.match(workflowHtml, /<option value="proposal:demo">proposal:demo<\/option>/);
   assert.match(workflowHtml, /name="reviewAction" value="approve"/);
   assert.match(workflowHtml, /<form id="platform-change-set-edit-form"/);
-  assert.match(workflowHtml, /<form id="platform-change-set-lifecycle-form"/);
+  assert.match(workflowHtml, /<form id="platform-change-set-lifecycle-form" data-platform-client-action="changeSet.lifecycle" data-platform-submit-spec=/);
   assert.match(workflowHtml, /<option value="reject" selected>Reject<\/option>/);
   assert.match(workflowHtml, /<option value="abandon">Abandon<\/option>/);
   assert.match(workflowHtml, /\/api\/platform-branches\/branch%3Ademo-0/);
@@ -5470,9 +5480,9 @@ test("platform page renders required operating views", async () => {
   assert.match(verificationHtml, /Event Streams/);
   assert.match(verificationHtml, />Test run event stream</);
   assert.match(verificationHtml, />Backend revision event stream</);
-  assert.match(verificationHtml, /<form id="platform-test-run-form"/);
+  assert.match(verificationHtml, /<form id="platform-test-run-form" data-platform-client-action="testRun.single" data-platform-submit-spec=/);
   assert.match(verificationHtml, /<option value="gate:demo">Demo gate<\/option>/);
-  assert.match(verificationHtml, /<form id="platform-selected-test-run-form"/);
+  assert.match(verificationHtml, /<form id="platform-selected-test-run-form" data-platform-client-action="testRun.selected" data-platform-submit-spec=/);
   assert.match(verificationHtml, /\/api\/platform-test-runs\/events/);
   assert.match(verificationHtml, /\/api\/runtime\/backend-revisions\/events/);
   assert.doesNotMatch(verificationHtml, /<pre/);
