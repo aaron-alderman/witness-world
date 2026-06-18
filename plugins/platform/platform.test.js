@@ -521,6 +521,53 @@ test("platform model filters support MCP views", async () => {
       "gate:test/runtime-profile.test.js": { id: "testResult:demo:1", runId: "testRun:demo", gateId: "gate:test/runtime-profile.test.js", status: "passed" }
     }
   }, "testRuns", "branch.demo");
+  const testRedGreen = filterPlatformModel({
+    ...model,
+    branchTestRedGreen: [
+      {
+        id: "testRedGreen:branch:branch.demo",
+        scopeType: "branch",
+        branchId: "branch.demo",
+        title: "branch.demo",
+        status: "green",
+        summary: "1 selected, 1 passed",
+        selectedGateIds: ["gate:test/runtime-profile.test.js"],
+        totalSelectedGates: 1,
+        passedGateIds: ["gate:test/runtime-profile.test.js"],
+        failedGateIds: [],
+        errorGateIds: [],
+        timedOutGateIds: [],
+        runningGateIds: [],
+        pendingGateIds: [],
+        latestActivityAt: "2026-06-18T00:00:00.000Z",
+        gateStates: []
+      }
+    ],
+    changeSetTestRedGreen: [
+      {
+        id: "testRedGreen:changeSet:changeset.demo",
+        scopeType: "changeSet",
+        changeSetId: "changeset.demo",
+        title: "changeset.demo",
+        status: "red",
+        summary: "1 selected, 1 failed",
+        selectedGateIds: ["gate:test/runtime-profile.test.js"],
+        totalSelectedGates: 1,
+        passedGateIds: [],
+        failedGateIds: ["gate:test/runtime-profile.test.js"],
+        errorGateIds: [],
+        timedOutGateIds: [],
+        runningGateIds: [],
+        pendingGateIds: [],
+        latestActivityAt: "2026-06-18T00:01:00.000Z",
+        gateStates: []
+      }
+    ],
+    testGates: [{ id: "gate:test/runtime-profile.test.js", title: "test/runtime-profile.test.js" }],
+    latestTestResultsByGate: {
+      "gate:test/runtime-profile.test.js": { id: "testResult:demo:1", runId: "testRun:demo", gateId: "gate:test/runtime-profile.test.js", status: "passed" }
+    }
+  }, "testRedGreen");
   const branches = filterPlatformModel({
     ...model,
     branches: [{ id: "branch.demo", status: "open" }],
@@ -594,6 +641,9 @@ test("platform model filters support MCP views", async () => {
   assert.equal(testRuns.testSuites[0].id, "testSuite:demo");
   assert.equal(testRuns.testCases[0].id, "testCase:demo:1");
   assert.equal(testRuns.latestTestResultsByGate["gate:test/runtime-profile.test.js"].status, "passed");
+  assert.equal(testRedGreen.branchTestRedGreen[0].status, "green");
+  assert.equal(testRedGreen.changeSetTestRedGreen[0].status, "red");
+  assert.equal(testRedGreen.testGates[0].id, "gate:test/runtime-profile.test.js");
   assert.equal(branches.branches[0].id, "branch.demo");
   assert.equal(runtimeRevisions.runtimeRevisions[0].id, "runtimeRevision:backend:3");
   assert.equal(runtimeRevisions.activeRuntimeRevision.revision, 3);
@@ -734,6 +784,136 @@ test("platform model projects structured test gates and affected branch selectio
   assert.deepEqual(changeSetView.testGateIndex.byChangeSet["changeSet:platform-gates"], model.testGateIndex.byChangeSet["changeSet:platform-gates"]);
   assert.deepEqual(changeSetView.affectedTestGatesByChangeSet["changeSet:platform-gates"], model.affectedTestGatesByChangeSet["changeSet:platform-gates"]);
   assert.deepEqual(changeSetView.selectedTestGatesByChangeSet["changeSet:platform-gates"], model.selectedTestGatesByChangeSet["changeSet:platform-gates"]);
+});
+
+test("platform model derives scope specific red green summaries from scoped test results", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [
+          { id: "branch.tests.green", title: "Green Branch", status: "open" },
+          { id: "branch.tests.red", title: "Red Branch", status: "open" }
+        ];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [
+          { id: "changeSet:tests.green", branchId: "branch.tests.green", title: "Green Change Set", status: "draft" },
+          { id: "changeSet:tests.red", branchId: "branch.tests.red", title: "Red Change Set", status: "draft" }
+        ];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [
+          { id: "changeSetEdit:tests.green:gate", changeSetId: "changeSet:tests.green", path: "plugins/platform/platform.test.js" },
+          { id: "changeSetEdit:tests.red:gate", changeSetId: "changeSet:tests.red", path: "plugins/platform/platform.test.js" }
+        ];
+      }
+      if (projector === moduleProjectors.testGates) {
+        return [{
+          id: "gate:plugins/platform/platform.test.js",
+          title: "plugins/platform/platform.test.js",
+          sourcePath: "plugins/platform/platform.test.js",
+          command: "node --test plugins/platform/platform.test.js",
+          runner: "node-test",
+          environment: "local-node",
+          timeoutMs: 120000,
+          protectedObjects: ["verification.tests"],
+          protectedObjectLabels: ["Verification tests"],
+          sourceDependencies: ["plugins/platform/platform.test.js"],
+          costEstimate: "low",
+          selectedByBranches: [],
+          selectedByChangeSets: []
+        }];
+      }
+      if (projector === moduleProjectors.testRuns) {
+        return [
+          {
+            id: "testRun:tests.green",
+            gateId: "gate:plugins/platform/platform.test.js",
+            title: "plugins/platform/platform.test.js",
+            status: "passed",
+            branchId: "branch.tests.green",
+            changeSetId: "changeSet:tests.green",
+            startedAt: "2026-06-18T00:00:00.000Z",
+            finishedAt: "2026-06-18T00:00:02.000Z",
+            durationMs: 2000,
+            exitCode: 0
+          },
+          {
+            id: "testRun:tests.red",
+            gateId: "gate:plugins/platform/platform.test.js",
+            title: "plugins/platform/platform.test.js",
+            status: "failed",
+            branchId: "branch.tests.red",
+            changeSetId: "changeSet:tests.red",
+            startedAt: "2026-06-18T00:01:00.000Z",
+            finishedAt: "2026-06-18T00:01:03.000Z",
+            durationMs: 3000,
+            exitCode: 1
+          }
+        ];
+      }
+      if (projector === moduleProjectors.testResults) {
+        return [
+          {
+            id: "testResult:tests.green:1",
+            runId: "testRun:tests.green",
+            gateId: "gate:plugins/platform/platform.test.js",
+            status: "passed",
+            branchId: "branch.tests.green",
+            changeSetId: "changeSet:tests.green",
+            exitCode: 0,
+            durationMs: 2000,
+            producedAt: "2026-06-18T00:00:02.000Z"
+          },
+          {
+            id: "testResult:tests.red:1",
+            runId: "testRun:tests.red",
+            gateId: "gate:plugins/platform/platform.test.js",
+            status: "failed",
+            branchId: "branch.tests.red",
+            changeSetId: "changeSet:tests.red",
+            exitCode: 1,
+            durationMs: 3000,
+            producedAt: "2026-06-18T00:01:03.000Z"
+          }
+        ];
+      }
+      return [];
+    }
+  });
+
+  const branchGreen = model.branchTestRedGreen.find(row => row.branchId === "branch.tests.green");
+  const branchRed = model.branchTestRedGreen.find(row => row.branchId === "branch.tests.red");
+  const changeSetGreen = model.changeSetTestRedGreen.find(row => row.changeSetId === "changeSet:tests.green");
+  const changeSetRed = model.changeSetTestRedGreen.find(row => row.changeSetId === "changeSet:tests.red");
+  const branchRedGreenView = filterPlatformModel(model, "testRedGreen", "branch.tests.red");
+  const changeSetRedGreenView = filterPlatformModel(model, "testRedGreen", "changeSet:tests.red");
+
+  assert.ok(branchGreen);
+  assert.equal(branchGreen.status, "green");
+  assert.deepEqual(branchGreen.selectedGateIds, ["gate:plugins/platform/platform.test.js"]);
+  assert.deepEqual(branchGreen.passedGateIds, ["gate:plugins/platform/platform.test.js"]);
+  assert.ok(branchRed);
+  assert.equal(branchRed.status, "red");
+  assert.ok(changeSetGreen);
+  assert.equal(changeSetGreen.status, "green");
+  assert.ok(changeSetRed);
+  assert.equal(changeSetRed.status, "red");
+  assert.equal(model.branches.find(row => row.id === "branch.tests.green")?.testRedGreen?.status, "green");
+  assert.equal(model.changeSets.find(row => row.id === "changeSet:tests.red")?.testRedGreen?.status, "red");
+  assert.equal(branchRedGreenView.branchTestRedGreen.length, 1);
+  assert.equal(branchRedGreenView.branchTestRedGreen[0].branchId, "branch.tests.red");
+  assert.equal(changeSetRedGreenView.changeSetTestRedGreen.length, 1);
+  assert.equal(changeSetRedGreenView.changeSetTestRedGreen[0].changeSetId, "changeSet:tests.red");
+  assert.equal(changeSetRedGreenView.testGates.some(row => row.id === "gate:plugins/platform/platform.test.js"), true);
 });
 
 test("platform route edits select platform and runtime-profile gates through owned route targets", async () => {
@@ -3821,6 +4001,9 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Affected systems/);
   assert.match(html, /Telemetry impacts/);
   assert.match(html, /Selected test gates/);
+  assert.match(html, /Red \/ Green/);
+  assert.match(html, /Branch Red \/ Green/);
+  assert.match(html, /Change Set Red \/ Green/);
   assert.match(html, /Test Gates/);
   assert.match(html, /Affected Test Gates By Branch/);
   assert.match(html, /Selected Test Gates By Branch/);
@@ -3865,6 +4048,8 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /test-run-stream-log/);
   assert.match(html, /platform-branch-detail-select/);
   assert.match(html, /platform-branch-test-gates-summary/);
+  assert.match(html, /platform-branch-red-green-status/);
+  assert.match(html, /platform-branch-red-green-summary/);
   assert.match(html, /data-branch-lane="draft"/);
   assert.match(html, /data-branch-lane="validate"/);
   assert.match(html, /data-branch-lane="review"/);

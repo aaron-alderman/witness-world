@@ -768,6 +768,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [L] The current WCSS-only backend exclusion proof is anchored on runtime-core gate selection: a `plugins/platform/platform-console.wcss` change continues to select platform-facing gates while leaving `gate:test/runtime-server.test.js` unselected.
 - [L] Current RVM-only proof now covers both platform-facing and candidate-snapshot verification: a `plugins/platform/platform-console.rvm` change selects `gate:test/runtime-profile.test.js` through the current `/platform` route-hint heuristic, selects `gate:test/app-snapshot-runtime.test.js` through the modeled `testEnvironment:platform-candidate-snapshot` target, and still leaves `gate:test/runtime-server.test.js` unselected.
 - [L] Current dependency-graph miss detection is gap-backed rather than full defect-backed: when a change set changes non-doc, non-test sources and the current gate model selects no verification gates, `platform-model` emits a `meta-defect` gap with `category = "dependency-graph-miss"` until the dedicated defect/meta-defect projectors land later.
+- [L] Current V1 now also derives scope-specific red/green summaries for branches and change sets from their selected gate sets plus the latest scoped running/result witnesses, annotates branch/change-set rows with `testRedGreen`, and exposes the same state through `/api/platform-model?view=testRedGreen` and `/platform`. It still does not auto-run selected gates or preserve durable history beyond witness-backed runs/results.
 
 ## Phase 6: Pure Dependency Analysis And Coverage
 
@@ -1283,9 +1284,9 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [~] Capture test artifacts.
 - [~] Link gates to changed objects.
 - [ ] Run dependency-aware selected tests.
-- [~] Add red/green view.
+- [X] Add red/green view.
 - [X] Add tests for affected test selection.
-- [L] Current V1 exposes per-gate `lastResult`, witness-backed stdout/stderr/TAP/JUnit artifacts, derived `testSuite` / `testCase` rows, a test-runs panel, and latest-result state in the platform model and console. It is not yet a dependency-aware red/green orchestration view with durable artifact-backed history.
+- [L] Current V1 exposes per-gate `lastResult`, witness-backed stdout/stderr/TAP/JUnit artifacts, derived `testSuite` / `testCase` rows, a test-runs panel, latest-result state, and scope-specific branch/change-set red/green summaries in the platform model and console. It is not yet an automatically executed dependency-aware red/green orchestration view with durable artifact-backed history.
 
 ### Milestone E: Defects And Telemetry V1
 
@@ -1317,7 +1318,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] JS/plugin implementation changes are validated in an isolated execution context.
 - [ ] Tests run inside the platform execution environment.
 - [ ] Test selection is dependency-path aware.
-- [ ] Test red/green is visible as platform state.
+- [X] Test red/green is visible as platform state.
 - [ ] Docs are first-class nodes with freshness and ownership.
 - [ ] LLM sessions produce doc/update obligations tied to branches.
 - [ ] Defects are first-class proposals.

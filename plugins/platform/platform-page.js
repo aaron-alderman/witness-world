@@ -74,6 +74,8 @@ export function renderPlatformPage(model) {
   const affectedTestGatesByChangeSet = model.affectedTestGatesByChangeSet ?? {};
   const selectedTestGatesByBranch = model.selectedTestGatesByBranch ?? {};
   const selectedTestGatesByChangeSet = model.selectedTestGatesByChangeSet ?? {};
+  const branchTestRedGreen = model.branchTestRedGreen ?? [];
+  const changeSetTestRedGreen = model.changeSetTestRedGreen ?? [];
   const testRuns = model.testRuns ?? [];
   const testSuites = model.testSuites ?? [];
   const testCases = model.testCases ?? [];
@@ -251,12 +253,13 @@ export function renderPlatformPage(model) {
       <div>
         <h2>Branches</h2>
         <table>
-          <thead><tr><th>Status</th><th>Lane</th><th>Branch</th><th>Docs</th><th>Affected Systems</th><th>Telemetry</th><th>Parent</th><th>Owner</th><th>Change Sets</th><th>Latest Candidate</th></tr></thead>
+          <thead><tr><th>Status</th><th>Lane</th><th>Branch</th><th>Docs</th><th>Red/Green</th><th>Affected Systems</th><th>Telemetry</th><th>Parent</th><th>Owner</th><th>Change Sets</th><th>Latest Candidate</th></tr></thead>
           <tbody>${tableRows(branches.slice(0, 80), [
             row => row.status,
             row => row.lifecycleLane || "",
             row => row.id,
             row => row.docsFreshness?.status || "",
+            row => row.testRedGreen?.status || "",
             row => inlineSummary(row.affectedSystemSummaries),
             row => inlineSummary(row.telemetryImpactSummaries),
             row => row.parentBranchId || "",
@@ -269,11 +272,12 @@ export function renderPlatformPage(model) {
       <div>
         <h2>Change Sets</h2>
         <table>
-          <thead><tr><th>Status</th><th>Change Set</th><th>Branch</th><th>Edits</th><th>Candidate</th></tr></thead>
+          <thead><tr><th>Status</th><th>Change Set</th><th>Branch</th><th>Red/Green</th><th>Edits</th><th>Candidate</th></tr></thead>
           <tbody>${tableRows(changeSets.slice(0, 80), [
             row => row.status,
             row => row.id,
             row => row.branchId,
+            row => row.testRedGreen?.status || "",
             row => row.editCount ?? 0,
             row => row.latestCandidateSnapshotId || ""
           ])}</tbody>
@@ -309,6 +313,11 @@ export function renderPlatformPage(model) {
             <div id="platform-branch-test-gates-count">${esc((selectedTestGatesByBranch[initialBranch?.id] ?? []).length)}</div>
             <div class="muted" id="platform-branch-test-gates-summary">${esc((selectedTestGatesByBranch[initialBranch?.id] ?? []).join(", "))}</div>
           </div>
+          <div class="card">
+            <h3>Red / Green</h3>
+            <div id="platform-branch-red-green-status">${esc(initialBranch?.testRedGreen?.status || "idle")}</div>
+            <div class="muted" id="platform-branch-red-green-summary">${esc(initialBranch?.testRedGreen?.summary || "No selected gates")}</div>
+          </div>
         </div>
       </div>
       <div>
@@ -320,6 +329,41 @@ export function renderPlatformPage(model) {
           revision: snapshot.revision,
           errorCount: Array.isArray(snapshot.errors) ? snapshot.errors.length : 0
         })), null, 2))}</pre>
+      </div>
+    </section>
+
+    <section class="grid2">
+      <div>
+        <h2>Branch Red / Green</h2>
+        <table>
+          <thead><tr><th>Status</th><th>Branch</th><th>Selected</th><th>Passed</th><th>Failed</th><th>Pending</th><th>Running</th><th>Summary</th></tr></thead>
+          <tbody>${tableRows(branchTestRedGreen.slice(0, 80), [
+            row => row.status,
+            row => row.branchId,
+            row => row.totalSelectedGates,
+            row => row.passedGateIds.length,
+            row => row.failedGateIds.length + row.errorGateIds.length + row.timedOutGateIds.length,
+            row => row.pendingGateIds.length,
+            row => row.runningGateIds.length,
+            row => row.summary
+          ])}</tbody>
+        </table>
+      </div>
+      <div>
+        <h2>Change Set Red / Green</h2>
+        <table>
+          <thead><tr><th>Status</th><th>Change Set</th><th>Selected</th><th>Passed</th><th>Failed</th><th>Pending</th><th>Running</th><th>Summary</th></tr></thead>
+          <tbody>${tableRows(changeSetTestRedGreen.slice(0, 80), [
+            row => row.status,
+            row => row.changeSetId,
+            row => row.totalSelectedGates,
+            row => row.passedGateIds.length,
+            row => row.failedGateIds.length + row.errorGateIds.length + row.timedOutGateIds.length,
+            row => row.pendingGateIds.length,
+            row => row.runningGateIds.length,
+            row => row.summary
+          ])}</tbody>
+        </table>
       </div>
     </section>
 
@@ -607,6 +651,7 @@ export function renderPlatformPage(model) {
     const platformSnapshotBuildErrors = platformState.snapshotBuildErrors || [];
     const platformAffectedTestGates = platformState.affectedTestGates || [];
     const platformSelectedTestGatesByBranch = platformState.selectedTestGatesByBranch || {};
+    const platformBranchTestRedGreen = platformState.branchTestRedGreen || [];
     const backendRevisionEvents = [];
     function deriveRuntimeRevisionDetail(revisionId) {
       const runtimeRevision = platformRuntimeRevisions.find(entry => entry.id === revisionId || entry.backendRevisionId === revisionId) || null;
@@ -688,7 +733,10 @@ export function renderPlatformPage(model) {
       const telemetrySummary = document.getElementById("platform-branch-telemetry-summary");
       const testGateCount = document.getElementById("platform-branch-test-gates-count");
       const testGateSummary = document.getElementById("platform-branch-test-gates-summary");
+      const redGreenStatus = document.getElementById("platform-branch-red-green-status");
+      const redGreenSummary = document.getElementById("platform-branch-red-green-summary");
       const selectedTestGates = platformSelectedTestGatesByBranch[branchId] || [];
+      const redGreen = platformBranchTestRedGreen.find(entry => entry.branchId === branchId) || branch?.testRedGreen || null;
       if (detail) detail.textContent = JSON.stringify(branch, null, 2);
       if (docsStatus) docsStatus.textContent = branch?.docsFreshness?.status || "";
       if (docsSummary) docsSummary.textContent = branch?.docsFreshness?.summary || "";
@@ -696,6 +744,8 @@ export function renderPlatformPage(model) {
       if (telemetrySummary) telemetrySummary.textContent = (branch?.telemetryImpactSummaries || []).map(row => row.label || row.id || "").join(", ");
       if (testGateCount) testGateCount.textContent = String(selectedTestGates.length);
       if (testGateSummary) testGateSummary.textContent = selectedTestGates.join(", ");
+      if (redGreenStatus) redGreenStatus.textContent = redGreen?.status || "idle";
+      if (redGreenSummary) redGreenSummary.textContent = redGreen?.summary || "No selected gates";
       if (history) {
         history.textContent = JSON.stringify(platformCandidateSnapshots
           .filter(snapshot => snapshot.branchId === branchId)

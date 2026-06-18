@@ -990,6 +990,111 @@ function selectMeaningfulTestGates(scopeRows = [], testGateRows = []) {
   return selected;
 }
 
+function compareTestActivityRows(left, right) {
+  for (const key of ["producedAt", "finishedAt", "startedAt", "createdAt"]) {
+    const leftValue = String(left?.[key] || "");
+    const rightValue = String(right?.[key] || "");
+    if (leftValue && rightValue && leftValue !== rightValue) return leftValue.localeCompare(rightValue);
+  }
+  return String(left?.id || "").localeCompare(String(right?.id || ""));
+}
+
+function summarizeTestRedGreenScope({
+  scopeType,
+  scopeId,
+  title,
+  selectedGateIds = [],
+  testGateRows = [],
+  testRuns = [],
+  testResults = []
+}) {
+  const normalizedScopeId = String(scopeId || "");
+  const selected = unique(selectedGateIds);
+  const gateById = Object.fromEntries((Array.isArray(testGateRows) ? testGateRows : []).map(row => [String(row.id || ""), row]));
+  const scopeField = scopeType === "changeSet" ? "changeSetId" : "branchId";
+  const scopedResults = (Array.isArray(testResults) ? testResults : [])
+    .filter(row => String(row?.[scopeField] || "") === normalizedScopeId && String(row?.gateId || ""));
+  const latestResultByGate = Object.create(null);
+  for (const result of scopedResults) {
+    const gateId = String(result.gateId || "");
+    const previous = latestResultByGate[gateId] ?? null;
+    if (!previous || compareTestActivityRows(previous, result) < 0) latestResultByGate[gateId] = result;
+  }
+  const scopedRuns = (Array.isArray(testRuns) ? testRuns : [])
+    .filter(row => String(row?.[scopeField] || "") === normalizedScopeId && String(row?.status || "") === "running" && String(row?.gateId || ""));
+  const latestRunningByGate = Object.create(null);
+  for (const run of scopedRuns) {
+    const gateId = String(run.gateId || "");
+    const previous = latestRunningByGate[gateId] ?? null;
+    if (!previous || compareTestActivityRows(previous, run) < 0) latestRunningByGate[gateId] = run;
+  }
+  const gateStates = selected.map(gateId => {
+    const gate = gateById[gateId] ?? null;
+    const latestResult = latestResultByGate[gateId] ?? null;
+    const latestRunning = latestRunningByGate[gateId] ?? null;
+    let status = "pending";
+    if (latestResult) status = String(latestResult.status || "pending");
+    else if (latestRunning) status = "running";
+    return {
+      gateId,
+      gateTitle: String(gate?.title || gateId),
+      status,
+      runId: latestResult?.runId ?? latestRunning?.id ?? null,
+      resultId: latestResult?.id ?? null,
+      exitCode: typeof latestResult?.exitCode === "number" ? latestResult.exitCode : null,
+      durationMs: typeof latestResult?.durationMs === "number" ? latestResult.durationMs : null,
+      cacheStatus: latestResult?.cacheStatus ? String(latestResult.cacheStatus) : (latestRunning?.cacheStatus ? String(latestRunning.cacheStatus) : null),
+      producedAt: latestResult?.producedAt ?? null,
+      startedAt: latestRunning?.startedAt ?? null
+    };
+  });
+  const passedGateIds = gateStates.filter(row => row.status === "passed").map(row => row.gateId);
+  const failedGateIds = gateStates.filter(row => row.status === "failed").map(row => row.gateId);
+  const errorGateIds = gateStates.filter(row => row.status === "error").map(row => row.gateId);
+  const timedOutGateIds = gateStates.filter(row => row.status === "timed_out").map(row => row.gateId);
+  const runningGateIds = gateStates.filter(row => row.status === "running").map(row => row.gateId);
+  const pendingGateIds = gateStates.filter(row => row.status === "pending").map(row => row.gateId);
+  let status = "idle";
+  if (failedGateIds.length || errorGateIds.length || timedOutGateIds.length) status = "red";
+  else if (runningGateIds.length) status = "running";
+  else if (pendingGateIds.length) status = "pending";
+  else if (selected.length) status = "green";
+  const latestActivityAt = gateStates
+    .map(row => String(row.producedAt || row.startedAt || ""))
+    .filter(Boolean)
+    .sort((left, right) => left.localeCompare(right))
+    .at(-1) ?? null;
+  const summaryParts = [];
+  if (!selected.length) summaryParts.push("No selected gates");
+  else {
+    summaryParts.push(`${selected.length} selected`);
+    if (passedGateIds.length) summaryParts.push(`${passedGateIds.length} passed`);
+    if (failedGateIds.length) summaryParts.push(`${failedGateIds.length} failed`);
+    if (errorGateIds.length) summaryParts.push(`${errorGateIds.length} errors`);
+    if (timedOutGateIds.length) summaryParts.push(`${timedOutGateIds.length} timed out`);
+    if (runningGateIds.length) summaryParts.push(`${runningGateIds.length} running`);
+    if (pendingGateIds.length) summaryParts.push(`${pendingGateIds.length} pending`);
+  }
+  return {
+    id: `testRedGreen:${scopeType}:${normalizedScopeId}`,
+    scopeType,
+    ...(scopeType === "changeSet" ? { changeSetId: normalizedScopeId } : { branchId: normalizedScopeId }),
+    title: String(title || normalizedScopeId),
+    status,
+    summary: summaryParts.join(", "),
+    selectedGateIds: selected,
+    totalSelectedGates: selected.length,
+    passedGateIds,
+    failedGateIds,
+    errorGateIds,
+    timedOutGateIds,
+    runningGateIds,
+    pendingGateIds,
+    latestActivityAt,
+    gateStates
+  };
+}
+
 function telemetryMetricNodeId(id) {
   return `telemetryMetric:${String(id || "")}`;
 }
@@ -2157,6 +2262,38 @@ export async function buildPlatformModel({
     projectedTestGates.length ? projectedTestGates : null,
     flakeScoresByGate
   );
+  const branchTestRedGreen = branches
+    .map(branch => summarizeTestRedGreenScope({
+      scopeType: "branch",
+      scopeId: branch.id,
+      title: branch.title || branch.id,
+      selectedGateIds: testGateProjection.selectedByBranch[branch.id] ?? [],
+      testGateRows: testGateProjection.rows,
+      testRuns,
+      testResults
+    }))
+    .sort((left, right) => String(left.branchId || "").localeCompare(String(right.branchId || "")));
+  const changeSetTestRedGreen = changeSets
+    .map(changeSet => summarizeTestRedGreenScope({
+      scopeType: "changeSet",
+      scopeId: changeSet.id,
+      title: changeSet.title || changeSet.id,
+      selectedGateIds: testGateProjection.selectedByChangeSet[changeSet.id] ?? [],
+      testGateRows: testGateProjection.rows,
+      testRuns,
+      testResults
+    }))
+    .sort((left, right) => String(left.changeSetId || "").localeCompare(String(right.changeSetId || "")));
+  const branchTestRedGreenById = Object.fromEntries(branchTestRedGreen.map(row => [String(row.branchId || ""), row]));
+  const changeSetTestRedGreenById = Object.fromEntries(changeSetTestRedGreen.map(row => [String(row.changeSetId || ""), row]));
+  const enrichedBranches = branches.map(row => ({
+    ...row,
+    testRedGreen: branchTestRedGreenById[String(row.id || "")] ?? null
+  }));
+  const enrichedChangeSets = changeSets.map(row => ({
+    ...row,
+    testRedGreen: changeSetTestRedGreenById[String(row.id || "")] ?? null
+  }));
   const coverageEdges = projectedCoverageEdges.length
     ? projectedCoverageEdges.map(row => ({
         ...row,
@@ -2231,11 +2368,13 @@ export async function buildPlatformModel({
     testSuites: testSuites.map(row => ({ ...row })),
     testCases: testCases.map(row => ({ ...row })),
     latestTestResultsByGate: latestTestResultsProjection.byGate ?? Object.create(null),
+    branchTestRedGreen,
+    changeSetTestRedGreen,
     proposals: proposals.map(row => ({ ...row })),
     proposalActions: platformProposalTemplates(),
-    branches: branches.map(row => ({ ...row })),
-    branchBoard: buildBranchBoard(branches),
-    changeSets: changeSets.map(row => ({ ...row })),
+    branches: enrichedBranches,
+    branchBoard: buildBranchBoard(enrichedBranches),
+    changeSets: enrichedChangeSets,
     changeSetEdits: changeSetEdits.map(row => ({ ...row })),
     candidateSnapshots: candidateSnapshots.map(row => ({ ...row })),
     candidateSnapshotsByBranch,
@@ -2408,6 +2547,41 @@ export function filterPlatformModel(model, view, id = null) {
         .map(([gateId, row]) => [gateId, { ...row }])
     );
     return { testRuns, testResults, testArtifacts, testSuites, testCases, latestTestResultsByGate, summaries: model.summaries };
+  }
+  if (view === "testRedGreen") {
+    const branchTestRedGreen = id
+      ? (model.branchTestRedGreen ?? []).filter(row =>
+        row.id === id
+        || row.branchId === id
+        || (row.selectedGateIds ?? []).includes(id)
+      )
+      : (model.branchTestRedGreen ?? []);
+    const changeSetTestRedGreen = id
+      ? (model.changeSetTestRedGreen ?? []).filter(row =>
+        row.id === id
+        || row.changeSetId === id
+        || (row.selectedGateIds ?? []).includes(id)
+      )
+      : (model.changeSetTestRedGreen ?? []);
+    const gateIds = new Set([
+      ...branchTestRedGreen.flatMap(row => row.selectedGateIds ?? []),
+      ...changeSetTestRedGreen.flatMap(row => row.selectedGateIds ?? [])
+    ]);
+    const testGates = id
+      ? model.testGates.filter(row => gateIds.has(row.id) || row.id === id)
+      : model.testGates;
+    const latestTestResultsByGate = Object.fromEntries(
+      Object.entries(model.latestTestResultsByGate ?? {})
+        .filter(([gateId]) => !id || gateIds.has(gateId) || gateId === id)
+        .map(([gateId, row]) => [gateId, { ...row }])
+    );
+    return {
+      branchTestRedGreen,
+      changeSetTestRedGreen,
+      testGates,
+      latestTestResultsByGate,
+      summaries: model.summaries
+    };
   }
   if (view === "candidateSnapshots") {
     const candidateSnapshots = id ? model.candidateSnapshots.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.candidateSnapshots;

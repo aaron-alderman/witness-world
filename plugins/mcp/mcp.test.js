@@ -42,6 +42,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("proposals"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("branches"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("testGates"), true);
+  assert.equal(platformRead.inputSchema.properties.view.enum.includes("testRedGreen"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("testRuns"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("candidateSnapshots"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("runtimeRevisions"), true);
@@ -198,6 +199,16 @@ test("platform MCP read tool routes runtime revision view through platform model
   assert.equal(calls.at(-1).handler, "platform.model.read");
   assert.equal(calls.at(-1).path, "/api/platform-model");
   assert.equal(calls.at(-1).query.view, "testRuns");
+  assert.equal(calls.at(-1).query.id, "branch.demo");
+
+  const redGreenResult = await executeMcpTool("platform.read", {
+    args: { view: "testRedGreen", id: "branch.demo" },
+    callHandler
+  });
+  assert.equal(redGreenResult.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.model.read");
+  assert.equal(calls.at(-1).path, "/api/platform-model");
+  assert.equal(calls.at(-1).query.view, "testRedGreen");
   assert.equal(calls.at(-1).query.id, "branch.demo");
 });
 
