@@ -266,6 +266,21 @@ function renderSurfaceFrame(surface, bodyHtml, {
   `;
 }
 
+function nestedSurface(surface, name, {
+  title = null,
+  summary = null,
+  surfaceKind = "region",
+  className = null
+} = {}) {
+  return surface?.childSurfaces?.find(child => child.name === name) || {
+    name,
+    title,
+    summary,
+    surfaceKind,
+    className
+  };
+}
+
 function renderLongTailProperties(ctx, record, usedKeys = []) {
   const used = new Set(usedKeys);
   const entries = Object.entries(record ?? {})
@@ -628,7 +643,25 @@ function findModelDetail(model, id) {
   return (model.nodes ?? []).find(node => node.id === id) || (model.nodes ?? [])[0] || null;
 }
 
-function renderWorkflowDetail(detail, model, ctx) {
+function renderWorkflowDetail(surface, detail, model, ctx) {
+  const primarySurface = nestedSurface(surface, "PlatformWorkflowPrimaryPanel", {
+    title: "Primary Detail",
+    summary: "Selected workflow object properties and long-tail fields."
+  });
+  const relatedSurface = nestedSurface(surface, "PlatformWorkflowRelatedPanel", {
+    title: "Related Resources",
+    summary: "Linked resources and supporting context for the selected workflow object."
+  });
+  const snapshotSurface = nestedSurface(surface, "PlatformWorkflowSnapshotHistory", {
+    title: "Candidate Snapshots",
+    summary: "Candidate snapshot history for the selected workflow object when available.",
+    surfaceKind: "table"
+  });
+  const editSurface = nestedSurface(surface, "PlatformWorkflowEditHistory", {
+    title: "Staged Edits",
+    summary: "Staged overlay edits for the selected change set when available.",
+    surfaceKind: "table"
+  });
   if (!detail) return `<div class="card"><h2>Detail</h2><div class="muted">No workflow rows are projected yet.</div></div>`;
   if (detail.id?.startsWith?.("branch:")) {
     const branch = detail;
@@ -637,7 +670,8 @@ function renderWorkflowDetail(detail, model, ctx) {
     return `
       <section class="grid2">
         <div>
-          ${renderPropertyTable("Branch Detail", [
+          ${renderSurfaceFrame(primarySurface, `
+            ${renderPropertyTable("Branch Detail", [
             { label: "Branch", valueHtml: renderConceptLink(ctx, branch.id) },
             { label: "Status", valueHtml: esc(branch.status || "") },
             { label: "Title", valueHtml: esc(branch.title || "") },
@@ -652,16 +686,19 @@ function renderWorkflowDetail(detail, model, ctx) {
             { label: "Red / green", valueHtml: esc(branch.testRedGreen?.status || "") },
             { label: "Latest candidate", valueHtml: branch.latestCandidateSnapshotId ? renderConceptLink(ctx, branch.latestCandidateSnapshotId) : "" },
             { label: "API resource", valueHtml: renderApiLink(branch.id) }
-          ])}
-          ${renderLongTailProperties(ctx, branch, usedKeys)}
+            ])}
+            ${renderLongTailProperties(ctx, branch, usedKeys)}
+          `)}
         </div>
         <div>
-          ${renderLinksCard("Change Sets", ctx, branch.changeSetIds ?? [])}
-          ${renderTextListCard("Affected Systems", (branch.affectedSystemSummaries ?? []).map(summary => summary.label || summary.system || summary.id || ""))}
-          ${renderTextListCard("Telemetry Impacts", (branch.telemetryImpactSummaries ?? []).map(summary => summary.label || summary.id || ""))}
+          ${renderSurfaceFrame(relatedSurface, `
+            ${renderLinksCard("Change Sets", ctx, branch.changeSetIds ?? [])}
+            ${renderTextListCard("Affected Systems", (branch.affectedSystemSummaries ?? []).map(summary => summary.label || summary.system || summary.id || ""))}
+            ${renderTextListCard("Telemetry Impacts", (branch.telemetryImpactSummaries ?? []).map(summary => summary.label || summary.id || ""))}
+          `)}
         </div>
       </section>
-      ${renderDataTable("Candidate Snapshot History", ["Status", "Snapshot", "Revision", "Change Set", "Errors"], snapshots.map(snapshot => `
+      ${renderSurfaceFrame(snapshotSurface, renderTable(["Status", "Snapshot", "Revision", "Change Set", "Errors"], snapshots.map(snapshot => `
         <tr>
           <td>${esc(snapshot.status || "")}</td>
           <td>${renderConceptLink(ctx, snapshot.id)}</td>
@@ -669,7 +706,7 @@ function renderWorkflowDetail(detail, model, ctx) {
           <td>${renderConceptLink(ctx, snapshot.changeSetId)}</td>
           <td>${esc(Array.isArray(snapshot.errors) ? snapshot.errors.length : 0)}</td>
         </tr>
-      `), "No candidate snapshots for this branch.")}
+      `), "No candidate snapshots for this branch."))}
     `;
   }
   if (detail.id?.startsWith?.("changeSet:") || detail.id?.startsWith?.("changeset.")) {
@@ -680,7 +717,8 @@ function renderWorkflowDetail(detail, model, ctx) {
     return `
       <section class="grid2">
         <div>
-          ${renderPropertyTable("Change Set Detail", [
+          ${renderSurfaceFrame(primarySurface, `
+            ${renderPropertyTable("Change Set Detail", [
             { label: "Change set", valueHtml: renderConceptLink(ctx, changeSet.id) },
             { label: "Status", valueHtml: esc(changeSet.status || "") },
             { label: "Title", valueHtml: esc(changeSet.title || "") },
@@ -691,29 +729,32 @@ function renderWorkflowDetail(detail, model, ctx) {
             { label: "Red / green", valueHtml: esc(changeSet.testRedGreen?.status || "") },
             { label: "Latest candidate", valueHtml: changeSet.latestCandidateSnapshotId ? renderConceptLink(ctx, changeSet.latestCandidateSnapshotId) : "" },
             { label: "API resource", valueHtml: renderApiLink(changeSet.id) }
-          ])}
-          ${renderLongTailProperties(ctx, changeSet, usedKeys)}
+            ])}
+            ${renderLongTailProperties(ctx, changeSet, usedKeys)}
+          `)}
         </div>
         <div>
-          ${renderLinksCard("Changed Paths", ctx, changeSet.changedPaths ?? [])}
+          ${renderSurfaceFrame(relatedSurface, `
+            ${renderLinksCard("Changed Paths", ctx, changeSet.changedPaths ?? [])}
+          `)}
         </div>
       </section>
-      ${renderDataTable("Staged Edits", ["Path", "Language", "Previous Hash", "Next Hash"], edits.map(edit => `
+      ${renderSurfaceFrame(editSurface, renderTable(["Path", "Language", "Previous Hash", "Next Hash"], edits.map(edit => `
         <tr>
           <td>${esc(edit.path || "")}</td>
           <td>${esc(edit.sourceLanguage || "")}</td>
           <td>${esc(edit.previousHash ? String(edit.previousHash).slice(0, 12) : "")}</td>
           <td>${esc(edit.nextHash ? String(edit.nextHash).slice(0, 12) : "")}</td>
         </tr>
-      `), "No staged edits.")}
-      ${renderDataTable("Candidate Snapshots", ["Status", "Snapshot", "Revision", "Errors"], snapshots.map(snapshot => `
+      `), "No staged edits."))}
+      ${renderSurfaceFrame(snapshotSurface, renderTable(["Status", "Snapshot", "Revision", "Errors"], snapshots.map(snapshot => `
         <tr>
           <td>${esc(snapshot.status || "")}</td>
           <td>${renderConceptLink(ctx, snapshot.id)}</td>
           <td>${esc(snapshot.revision ?? "")}</td>
           <td>${esc(Array.isArray(snapshot.errors) ? snapshot.errors.length : 0)}</td>
         </tr>
-      `), "No candidate snapshots for this change set.")}
+      `), "No candidate snapshots for this change set."))}
     `;
   }
   const proposal = detail;
@@ -721,18 +762,22 @@ function renderWorkflowDetail(detail, model, ctx) {
   return `
     <section class="grid2">
       <div>
-        ${renderPropertyTable("Proposal Detail", [
+        ${renderSurfaceFrame(primarySurface, `
+          ${renderPropertyTable("Proposal Detail", [
           { label: "Proposal", valueHtml: renderConceptLink(ctx, proposal.id) },
           { label: "Status", valueHtml: esc(proposal.status || "") },
           { label: "Target process", valueHtml: esc(proposal.targetProcess || "") },
           { label: "Target", valueHtml: proposal.targetId ? renderConceptLink(ctx, proposal.targetId) : "" },
           { label: "Reason", valueHtml: esc(proposal.reason || "") },
           { label: "API resource", valueHtml: renderApiLink(proposal.id) }
-        ])}
-        ${renderLongTailProperties(ctx, proposal, usedKeys)}
+          ])}
+          ${renderLongTailProperties(ctx, proposal, usedKeys)}
+        `)}
       </div>
       <div>
-        ${renderLinksCard("Target Resource", ctx, proposal.targetId ? [proposal.targetId] : [])}
+        ${renderSurfaceFrame(relatedSurface, `
+          ${renderLinksCard("Target Resource", ctx, proposal.targetId ? [proposal.targetId] : [])}
+        `)}
       </div>
     </section>
   `;
@@ -1691,7 +1736,7 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
     case "PlatformWorkflowList":
       return renderWorkflowListSection(surface, model, ctx);
     case "PlatformWorkflowDetail":
-      return renderSurfaceFrame(surface, renderWorkflowDetail(findWorkflowDetail(model, ctx.id), model, ctx));
+      return renderSurfaceFrame(surface, renderWorkflowDetail(surface, findWorkflowDetail(model, ctx.id), model, ctx));
     case "PlatformProposalPanel":
       return renderProposalPanelSection(surface, model);
     case "PlatformProposalReviewList":

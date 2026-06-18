@@ -229,9 +229,43 @@ view PlatformWorkflowDetail {
   class platform-workflow-detail
   prop title = "Workflow Detail"
   prop summary = "Properties and linked resources for the selected workflow item."
+  children {
+    PlatformWorkflowPrimaryPanel
+    PlatformWorkflowRelatedPanel
+    PlatformWorkflowSnapshotHistory
+    PlatformWorkflowEditHistory
+  }
   projections {
     PlatformModelRead
   }
+}
+
+view PlatformWorkflowPrimaryPanel {
+  kind region
+  class platform-workflow-primary
+  prop title = "Primary Detail"
+  prop summary = "Selected workflow object properties and long-tail fields."
+}
+
+view PlatformWorkflowRelatedPanel {
+  kind region
+  class platform-workflow-related
+  prop title = "Related Resources"
+  prop summary = "Linked resources and supporting context for the selected workflow object."
+}
+
+view PlatformWorkflowSnapshotHistory {
+  kind table
+  class platform-workflow-snapshots
+  prop title = "Candidate Snapshots"
+  prop summary = "Candidate snapshot history for the selected workflow object when available."
+}
+
+view PlatformWorkflowEditHistory {
+  kind table
+  class platform-workflow-edits
+  prop title = "Staged Edits"
+  prop summary = "Staged overlay edits for the selected change set when available."
 }
 
 view PlatformBranchCreatePanel {

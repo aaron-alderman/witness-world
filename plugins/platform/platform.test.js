@@ -372,6 +372,15 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformChangeSetApplyPanel",
     "PlatformChangeSetLifecyclePanel"
   ]);
+  const workflowDetailSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowDetail");
+  assert.ok(workflowDetailSurface);
+  assert.deepEqual(workflowDetailSurface.children, [
+    "PlatformWorkflowPrimaryPanel",
+    "PlatformWorkflowRelatedPanel",
+    "PlatformWorkflowSnapshotHistory",
+    "PlatformWorkflowEditHistory"
+  ]);
+  assert.equal(workflowDetailSurface.childSurfaces.some(surface => surface.name === "PlatformWorkflowSnapshotHistory" && surface.summary === "Candidate snapshot history for the selected workflow object when available."), true);
   assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformProposalPanel" && surface.processRoute === "/api/platform-proposals"), true);
   assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformChangeSetEditPanel"), true);
   assert.ok(verificationPage);
@@ -4917,6 +4926,12 @@ test("platform page renders required operating views", async () => {
   assert.match(workflowHtml, /Platform Console - Workflow/);
   assert.match(workflowHtml, /Workflow Items/);
   assert.match(workflowHtml, /Properties and linked resources for the selected workflow item\./);
+  assert.match(workflowHtml, /Primary Detail/);
+  assert.match(workflowHtml, /Selected workflow object properties and long-tail fields\./);
+  assert.match(workflowHtml, /Related Resources/);
+  assert.match(workflowHtml, /Linked resources and supporting context for the selected workflow object\./);
+  assert.match(workflowHtml, /Candidate Snapshots/);
+  assert.match(workflowHtml, /Candidate snapshot history for the selected workflow object when available\./);
   assert.match(workflowHtml, /Branch Detail/);
   assert.match(workflowHtml, /Proposal Panel/);
   assert.match(workflowHtml, /Stage an authored source edit into the selected change set\./);
