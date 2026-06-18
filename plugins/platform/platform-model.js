@@ -349,6 +349,41 @@ function platformObjectKindForId(targetId, nodes) {
   return "platformObject";
 }
 
+function resolveMarkdownReferenceTargets(references = {}, nodes, routeIdsByMatcher = {}) {
+  const targets = [];
+  const seen = new Set();
+  const pushTarget = (referenceKind, targetId) => {
+    const normalizedTargetId = String(targetId || "");
+    if (!normalizedTargetId) return;
+    const key = [referenceKind, normalizedTargetId].join("\u0000");
+    if (seen.has(key)) return;
+    seen.add(key);
+    targets.push({
+      referenceKind,
+      targetId: normalizedTargetId,
+      targetKind: platformObjectKindForId(normalizedTargetId, nodes),
+      targetLabel: platformModelTargetTitle(normalizedTargetId, nodes)
+    });
+  };
+
+  for (const routeRef of references.routes ?? []) {
+    const routeId = routeIdsByMatcher[routeRef];
+    if (routeId) pushTarget("route", routeId);
+  }
+  for (const pluginId of references.pluginIds ?? []) pushTarget("plugin", pluginId);
+  for (const capabilityId of references.capabilityIds ?? []) pushTarget("capability", `capability:${capabilityId}`);
+  for (const filePath of references.filePaths ?? []) {
+    const targetId = nodes.has(`doc:${filePath}`)
+      ? `doc:${filePath}`
+      : (nodes.has(`rvm:${filePath}`)
+        ? `rvm:${filePath}`
+        : (nodes.has(`wcss:${filePath}`) ? `wcss:${filePath}` : null));
+    if (!targetId) continue;
+    pushTarget(targetId.startsWith("doc:") ? "doc" : (targetId.startsWith("rvm:") ? "rvmSource" : "wcssSource"), targetId);
+  }
+  return targets;
+}
+
 function buildDocProjectionRows(parsedDocs, nodes, routeIdsByMatcher = {}) {
   const docReferences = [];
   const docDependencies = [];
@@ -424,28 +459,11 @@ function buildDocProjectionRows(parsedDocs, nodes, routeIdsByMatcher = {}) {
         targetId
       });
     }
-    for (const routeRef of doc.references.routes) {
-      const routeId = routeIdsByMatcher[routeRef];
-      if (!routeId) continue;
-      pushReference({ doc, referenceKind: "route", targetId: routeId });
-    }
-    for (const pluginId of doc.references.pluginIds) {
-      pushReference({ doc, referenceKind: "plugin", targetId: pluginId });
-    }
-    for (const capabilityId of doc.references.capabilityIds) {
-      pushReference({ doc, referenceKind: "capability", targetId: `capability:${capabilityId}` });
-    }
-    for (const filePath of doc.references.filePaths) {
-      const targetId = nodes.has(`doc:${filePath}`)
-        ? `doc:${filePath}`
-        : (nodes.has(`rvm:${filePath}`)
-          ? `rvm:${filePath}`
-          : (nodes.has(`wcss:${filePath}`) ? `wcss:${filePath}` : null));
-      if (!targetId) continue;
+    for (const target of resolveMarkdownReferenceTargets(doc.references, nodes, routeIdsByMatcher)) {
       pushReference({
         doc,
-        referenceKind: targetId.startsWith("doc:") ? "doc" : (targetId.startsWith("rvm:") ? "rvmSource" : "wcssSource"),
-        targetId
+        referenceKind: target.referenceKind,
+        targetId: target.targetId
       });
     }
   }
@@ -1871,7 +1889,9 @@ export function parseRoadmapTasks(docPath, source) {
       section,
       marker,
       checked: parsedStatus.checked,
-      status: parsedStatus.status
+      status: parsedStatus.status,
+      references: extractMarkdownReferences(title),
+      targets: []
     });
   }
   return tasks;
@@ -2384,6 +2404,12 @@ export async function buildPlatformModel({
     String(route.matcher || ""),
     `route:${route.method || "GET"} ${route.matcher}`
   ]));
+  for (const doc of parsedDocs) {
+    for (const task of doc.tasks) {
+      task.targets = resolveMarkdownReferenceTargets(task.references, nodes, routeIdsByMatcher);
+      for (const target of task.targets) addEdge(edges, task.id, "targets", target.targetId, "roadmap");
+    }
+  }
   const { docReferences, docDependencies } = buildDocProjectionRows(parsedDocs, nodes, routeIdsByMatcher);
   for (const doc of parsedDocs) {
     for (const target of GOVERNED_DOC_TARGETS[doc.path] ?? []) {
@@ -2595,7 +2621,17 @@ export async function buildPlatformModel({
     }
   }));
   const docSections = parsedDocs.flatMap(doc => doc.sections.map(section => ({ ...section })));
-  const docTasks = parsedDocs.flatMap(doc => doc.tasks.map(task => ({ ...task })));
+  const docTasks = parsedDocs.flatMap(doc => doc.tasks.map(task => ({
+    ...task,
+    references: {
+      codeTokens: [...(task.references?.codeTokens ?? [])],
+      filePaths: [...(task.references?.filePaths ?? [])],
+      pluginIds: [...(task.references?.pluginIds ?? [])],
+      capabilityIds: [...(task.references?.capabilityIds ?? [])],
+      routes: [...(task.references?.routes ?? [])]
+    },
+    targets: (task.targets ?? []).map(target => ({ ...target }))
+  })));
   const docIndex = buildDocIndex(docs);
   const docsByPlatformObject = buildDocsByPlatformObject(docs, docDependencies);
   return {

@@ -1085,8 +1085,8 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### 10.2 Executable Roadmaps
 
-- [ ] Parse checkbox tasks from roadmap docs into platform task nodes.
-- [ ] Link checkbox tasks to code/test/doc/platform objects.
+- [X] Parse checkbox tasks from roadmap docs into platform task nodes.
+- [~] Link checkbox tasks to code/test/doc/platform objects.
 - [ ] Track task status from platform evidence, not only Markdown text.
 - [ ] Add roadmap validation:
   - [ ] every feature has acceptance criteria
@@ -1094,6 +1094,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] every feature has docs owner
   - [ ] every epic has branch/proposal status
 - [ ] Add proposal target process `roadmap.update`.
+- [L] Roadmap checkbox tasks are now modeled as task rows and graph nodes, and tasks that reference existing platform objects in Markdown now link to resolved plugin, route, capability, and modeled doc/RVM/WCSS targets. Generic unresolved source files plus branch/proposal/task-status evidence linkage remain later work.
 - [ ] Add proposal target process `epic.create`.
 - [ ] Add proposal target process `feature.create`.
 - [ ] Add tests for this roadmap being ingested into roadmap/task nodes.

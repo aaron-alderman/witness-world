@@ -707,6 +707,40 @@ test("platform docs projections expose dependency indexes and reverse target loo
   ), true);
 });
 
+test("roadmap task projections link resolved platform targets", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: ["platform.self"],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [{ id: "surface:platform", href: "/platform" }],
+      plugins: {
+        activePluginIds: ["plugin.platform", "plugin.mcp"],
+        effectivePluginIds: ["plugin.platform", "plugin.mcp"],
+        rejectedPlugins: []
+      }
+    },
+    project: () => []
+  });
+
+  const pluginTask = model.roadmapTasks.find(task => task.title === "Treat `plugin.platform` as the existing home for this work.");
+  const routeTask = model.roadmapTasks.find(task => task.title === "Treat `/platform` as the human surface for platform self-inspection.");
+  const sourceTask = model.roadmapTasks.find(task => task.title === "Read `plugins/platform/platform-console.rvm`.");
+
+  assert.ok(pluginTask);
+  assert.equal(pluginTask.targets.some(target => target.targetId === "plugin.platform"), true);
+  assert.equal(model.edges.some(edge => edge.from === pluginTask.id && edge.rel === "targets" && edge.to === "plugin.platform"), true);
+
+  assert.ok(routeTask);
+  assert.equal(routeTask.targets.some(target => target.targetId === "route:GET /platform"), true);
+  assert.equal(model.edges.some(edge => edge.from === routeTask.id && edge.rel === "targets" && edge.to === "route:GET /platform"), true);
+
+  assert.ok(sourceTask);
+  assert.equal(sourceTask.targets.some(target => target.targetId === "rvm:plugins/platform/platform-console.rvm"), true);
+  assert.equal(model.edges.some(edge => edge.from === sourceTask.id && edge.rel === "targets" && edge.to === "rvm:plugins/platform/platform-console.rvm"), true);
+});
+
 test("platform model projects structured test gates and affected branch selection", async () => {
   const model = await buildPlatformModel({
     diagnostics: {
