@@ -407,10 +407,15 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.match(workflowPrimarySurface.props.proposalFields, /Target process=targetProcess/);
   const workflowRelatedSurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowRelatedPanel");
   assert.ok(workflowRelatedSurface);
+  assert.equal(workflowRelatedSurface.props.cardItemLimit, "12");
   assert.equal(workflowRelatedSurface.props.branchLinkCards, "Change Sets=changeSetIds");
+  assert.equal(workflowRelatedSurface.props.branchLinkCardEmptyStates, "Change Sets=No change sets linked to this branch.");
   assert.equal(workflowRelatedSurface.props.branchTextCards, "Affected Systems=affectedSystemSummaries@label|Telemetry Impacts=telemetryImpactSummaries@label");
+  assert.equal(workflowRelatedSurface.props.branchTextCardEmptyStates, "Affected Systems=No affected system summaries.|Telemetry Impacts=No telemetry impact summaries.");
   assert.equal(workflowRelatedSurface.props.changeSetLinkCards, "Changed Paths=changedPaths");
+  assert.equal(workflowRelatedSurface.props.changeSetLinkCardEmptyStates, "Changed Paths=No changed paths staged for this change set.");
   assert.equal(workflowRelatedSurface.props.proposalLinkCards, "Target Resource=targetId");
+  assert.equal(workflowRelatedSurface.props.proposalLinkCardEmptyStates, "Target Resource=No linked target resource.");
   const workflowListSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowList");
   assert.ok(workflowListSurface);
   assert.equal(workflowListSurface.props.columns, "Kind|Status|Resource|Scope|Summary");
@@ -487,11 +492,15 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.match(verificationPrimarySurface.props.testRunFields, /Gate=gateId@concept/);
   const verificationRelatedSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationRelatedPanel");
   assert.ok(verificationRelatedSurface);
+  assert.equal(verificationRelatedSurface.props.cardItemLimit, "12");
   assert.equal(verificationRelatedSurface.props.gateLinkCards, "Protected Objects=protectedObjects|Selected Branches=selectedByBranches|Selected Change Sets=selectedByChangeSets");
+  assert.equal(verificationRelatedSurface.props.gateLinkCardEmptyStates, "Protected Objects=No protected objects linked to this gate.|Selected Branches=No branches currently select this gate.|Selected Change Sets=No change sets currently select this gate.");
   assert.equal(verificationRelatedSurface.props.runtimeRevisionLinkCards, "Changed Sources=changedSources");
+  assert.equal(verificationRelatedSurface.props.runtimeRevisionLinkCardEmptyStates, "Changed Sources=No changed sources recorded for this revision.");
   assert.equal(verificationRelatedSurface.props.runtimeRevisionPropertyCardTitle, "Snapshot Diagnostics");
   assert.equal(verificationRelatedSurface.props.runtimeRevisionPropertyFields, "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Backend revision event stream=backendRevisionEventsHref@href");
   assert.equal(verificationRelatedSurface.props.candidateSnapshotTextCards, "Files=files@path|Errors=errors@errorMessage");
+  assert.equal(verificationRelatedSurface.props.candidateSnapshotTextCardEmptyStates, "Files=No files captured in this candidate snapshot.|Errors=No build or validation errors.");
   assert.equal(verificationRelatedSurface.props.testRunPropertyCardTitle, "Verification Streams");
   assert.equal(verificationRelatedSurface.props.testRunPropertyFields, "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href");
   const verificationStreamsSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationStreams");
@@ -567,10 +576,15 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.match(knowledgePrimarySurface.props.featureFields, /Epic=epicId@concept/);
   const knowledgeRelatedSurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeRelatedPanel");
   assert.ok(knowledgeRelatedSurface);
+  assert.equal(knowledgeRelatedSurface.props.cardItemLimit, "12");
   assert.equal(knowledgeRelatedSurface.props.documentLinkCards, "Referenced Routes=references.routes|Referenced Plugins=references.pluginIds|Referenced Files=references.filePaths");
+  assert.equal(knowledgeRelatedSurface.props.documentLinkCardEmptyStates, "Referenced Routes=No referenced routes in this document.|Referenced Plugins=No referenced plugins in this document.|Referenced Files=No referenced files in this document.");
   assert.equal(knowledgeRelatedSurface.props.roadmapTaskLinkCards, "Linked Targets=targets@targetId");
+  assert.equal(knowledgeRelatedSurface.props.roadmapTaskLinkCardEmptyStates, "Linked Targets=No linked platform targets for this roadmap task.");
   assert.equal(knowledgeRelatedSurface.props.epicLinkCards, "Branches=branchIds|Features=featureIds|Verification Gates=gateIds|Docs=docIds");
+  assert.equal(knowledgeRelatedSurface.props.epicLinkCardEmptyStates, "Branches=No branches linked to this epic.|Features=No features linked to this epic.|Verification Gates=No verification gates linked to this epic.|Docs=No docs linked to this epic.");
   assert.equal(knowledgeRelatedSurface.props.featureLinkCards, "Branches=branchIds|Verification Gates=gateIds|Docs=docIds");
+  assert.equal(knowledgeRelatedSurface.props.featureLinkCardEmptyStates, "Branches=No branches linked to this feature.|Verification Gates=No verification gates linked to this feature.|Docs=No docs linked to this feature.");
   const signalPrimarySurface = signalDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalPrimaryPanel");
   assert.ok(signalPrimarySurface);
   assert.equal(signalPrimarySurface.props.longTailCardTitle, "Properties");
@@ -581,8 +595,11 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.match(signalPrimarySurface.props.signalFields, /Node=id@concept/);
   const signalRelatedSurface = signalDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalRelatedPanel");
   assert.ok(signalRelatedSurface);
+  assert.equal(signalRelatedSurface.props.cardItemLimit, "12");
   assert.equal(signalRelatedSurface.props.gapLinkCards, "Recommended Proposal=recommendedProposal");
+  assert.equal(signalRelatedSurface.props.gapLinkCardEmptyStates, "Recommended Proposal=No recommended proposal is attached to this gap.");
   assert.equal(signalRelatedSurface.props.gapTextCards, "Missing In Generated=missingInGenerated|Extra In Generated=extraInGenerated");
+  assert.equal(signalRelatedSurface.props.gapTextCardEmptyStates, "Missing In Generated=No missing selectors detected.|Extra In Generated=No extra selectors detected.");
   const modelPage = layout.children.find(surface => surface.name === "PlatformModelPage");
   assert.ok(modelPage);
   assert.equal(modelPage.props.modelView, "model");
@@ -5337,6 +5354,53 @@ test("platform page renders required operating views", async () => {
   assert.match(modelHtml, /Platform Object Detail/);
   assert.match(modelHtml, /Coverage Edges/);
   assert.doesNotMatch(modelHtml, /<pre/);
+});
+
+test("platform page uses authored related-card empty states and item limits", () => {
+  const changeSetIds = Array.from({ length: 13 }, (_, index) => `changeSet:demo-${index}`);
+  const model = {
+    lifecycleVocabulary: [],
+    lifecycleBoard: [],
+    branchLifecycleVocabulary: ["draft"],
+    branchBoard: [{
+      id: "draft",
+      title: "Draft",
+      count: 1,
+      countLabel: "1 branch",
+      branches: [{
+        id: "branch:demo",
+        titleLink: { id: "branch:demo", title: "Demo Branch" },
+        status: "draft",
+        activitySummary: "change sets 13"
+      }]
+    }],
+    branches: [{
+      id: "branch:demo",
+      title: "Demo Branch",
+      status: "draft",
+      lifecycleLane: "draft",
+      owner: "aaron",
+      changeSetIds,
+      affectedSystemSummaries: [],
+      telemetryImpactSummaries: []
+    }],
+    changeSets: [],
+    changeSetEdits: [],
+    candidateSnapshots: [],
+    proposals: [],
+    proposalActions: [],
+    summaries: {}
+  };
+
+  const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:demo") });
+
+  assert.match(html, /No affected system summaries\./);
+  assert.match(html, /No telemetry impact summaries\./);
+  assert.match(html, /Showing first 12 of 13 entries\./);
+  assert.match(html, /changeSet:demo-11/);
+  assert.doesNotMatch(html, /changeSet:demo-12/);
+  assert.doesNotMatch(html, /No linked resources\./);
+  assert.doesNotMatch(html, /No entries\./);
 });
 
 test("platform page applies authored list sort semantics and preserves them through pagination links", async () => {

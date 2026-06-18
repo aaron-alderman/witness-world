@@ -369,24 +369,54 @@ function renderLongTailProperties(surface, ctx, record, usedKeys = [], fallbackT
   return renderPropertyTable(surfacePropText(surface, "longTailCardTitle", fallbackTitle), entries);
 }
 
-function renderLinksCard(title, ctx, values = []) {
-  const items = uniqueStrings(values)
+function surfaceCardItemLimit(surface, fallback = 12) {
+  const parsed = safeInteger(surfacePropText(surface, "cardItemLimit", fallback), fallback);
+  return Math.max(1, parsed || fallback);
+}
+
+function parseSurfaceLabelMap(raw) {
+  const text = optionalText(raw);
+  if (!text) return new Map();
+  return new Map(text
+    .split("|")
+    .map(part => part.trim())
+    .filter(Boolean)
+    .map(part => {
+      const [left, ...rest] = part.split("=");
+      const label = optionalText(left);
+      const value = optionalText(rest.join("="));
+      return label && value ? [label, value] : null;
+    })
+    .filter(Boolean));
+}
+
+function renderListOverflowSummary(totalItems, renderedItems) {
+  if (totalItems <= renderedItems) return "";
+  return `<div class="muted">Showing first ${esc(renderedItems)} of ${esc(totalItems)} entries.</div>`;
+}
+
+function renderLinksCard(title, ctx, values = [], { emptyState = "No linked resources.", itemLimit = 12 } = {}) {
+  const allItems = uniqueStrings(values);
+  const renderedItems = allItems.slice(0, itemLimit);
+  const items = renderedItems
     .map(value => `<li>${renderConceptLink(ctx, value)}${conceptApiHref(value) ? ` <span class="muted">(${renderApiLink(value)})</span>` : ""}</li>`)
     .join("");
   return `
     <div class="card">
       <h3>${esc(title)}</h3>
-      ${items ? `<ul>${items}</ul>` : `<div class="muted">No linked resources.</div>`}
+      ${items ? `<ul>${items}</ul>${renderListOverflowSummary(allItems.length, renderedItems.length)}` : `<div class="muted">${esc(emptyState)}</div>`}
     </div>
   `;
 }
 
-function renderTextListCard(title, values = []) {
-  const items = uniqueStrings(values).map(value => `<li>${esc(value)}</li>`).join("");
+function renderTextListCard(title, values = [], { emptyState = "No entries.", itemLimit = 12 } = {}) {
+  const allItems = uniqueStrings(values);
+  const renderedItems = allItems.slice(0, itemLimit);
+  const items = renderedItems.map(value => `<li>${esc(value)}</li>`).join("");
   return `
     <div class="card">
       <h3>${esc(title)}</h3>
-      ${items ? `<ul>${items}</ul>` : `<div class="muted">No entries.</div>`}
+      ${items ? `<ul>${items}</ul>${renderListOverflowSummary(allItems.length, renderedItems.length)}` : `<div class="muted">${esc(emptyState)}</div>`}
     </div>
   `;
 }
@@ -623,12 +653,20 @@ function listValuesFromMode(value, mode = "text") {
   }
 }
 
-function renderCardSpecs(raw, ctx, record, kind) {
-  return parseCardSpecs(raw).map(spec => {
+function renderCardSpecs(surface, schemaProp, emptyStateProp, ctx, record, kind) {
+  const emptyStateMap = parseSurfaceLabelMap(surface?.props?.[emptyStateProp]);
+  const itemLimit = surfaceCardItemLimit(surface, 12);
+  return parseCardSpecs(surface?.props?.[schemaProp]).map(spec => {
     const value = resolveSchemaPath(record, spec.path);
     return kind === "links"
-      ? renderLinksCard(spec.title, ctx, listValuesFromMode(value, spec.mode))
-      : renderTextListCard(spec.title, listValuesFromMode(value, spec.mode));
+      ? renderLinksCard(spec.title, ctx, listValuesFromMode(value, spec.mode), {
+          emptyState: emptyStateMap.get(spec.title) || "No linked resources.",
+          itemLimit
+        })
+      : renderTextListCard(spec.title, listValuesFromMode(value, spec.mode), {
+          emptyState: emptyStateMap.get(spec.title) || "No entries.",
+          itemLimit
+        });
   }).join("");
 }
 
@@ -1033,8 +1071,8 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.branchLinkCards, ctx, branch, "links")}
-            ${renderCardSpecs(relatedSurface?.props?.branchTextCards, ctx, branch, "text")}
+            ${renderCardSpecs(relatedSurface, "branchLinkCards", "branchLinkCardEmptyStates", ctx, branch, "links")}
+            ${renderCardSpecs(relatedSurface, "branchTextCards", "branchTextCardEmptyStates", ctx, branch, "text")}
           `)}
         </div>
       </section>
@@ -1079,7 +1117,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.changeSetLinkCards, ctx, changeSet, "links")}
+            ${renderCardSpecs(relatedSurface, "changeSetLinkCards", "changeSetLinkCardEmptyStates", ctx, changeSet, "links")}
           `)}
         </div>
       </section>
@@ -1115,11 +1153,11 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
           ${renderLongTailProperties(primarySurface, ctx, proposal, usedKeys)}
         `)}
       </div>
-      <div>
-        ${renderSurfaceFrame(relatedSurface, `
-          ${renderCardSpecs(relatedSurface?.props?.proposalLinkCards, ctx, proposal, "links")}
+        <div>
+          ${renderSurfaceFrame(relatedSurface, `
+          ${renderCardSpecs(relatedSurface, "proposalLinkCards", "proposalLinkCardEmptyStates", ctx, proposal, "links")}
         `)}
-      </div>
+        </div>
     </section>
   `;
 }
@@ -1169,7 +1207,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.gateLinkCards, ctx, gate, "links")}
+            ${renderCardSpecs(relatedSurface, "gateLinkCards", "gateLinkCardEmptyStates", ctx, gate, "links")}
           `)}
         </div>
       </section>
@@ -1213,7 +1251,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.runtimeRevisionLinkCards, ctx, revision, "links")}
+            ${renderCardSpecs(relatedSurface, "runtimeRevisionLinkCards", "runtimeRevisionLinkCardEmptyStates", ctx, revision, "links")}
             ${renderPropertyCard(diagnosticsCard)}
           `)}
         </div>
@@ -1256,7 +1294,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.candidateSnapshotTextCards, ctx, snapshot, "text")}
+            ${renderCardSpecs(relatedSurface, "candidateSnapshotTextCards", "candidateSnapshotTextCardEmptyStates", ctx, snapshot, "text")}
           `)}
         </div>
       </section>
@@ -1331,7 +1369,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.documentLinkCards, ctx, doc, "links")}
+            ${renderCardSpecs(relatedSurface, "documentLinkCards", "documentLinkCardEmptyStates", ctx, doc, "links")}
           `)}
         </div>
       </section>
@@ -1371,7 +1409,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.roadmapTaskLinkCards, ctx, task, "links")}
+            ${renderCardSpecs(relatedSurface, "roadmapTaskLinkCards", "roadmapTaskLinkCardEmptyStates", ctx, task, "links")}
           `)}
         </div>
       </section>
@@ -1396,7 +1434,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.epicLinkCards, ctx, epic, "links")}
+            ${renderCardSpecs(relatedSurface, "epicLinkCards", "epicLinkCardEmptyStates", ctx, epic, "links")}
           `)}
         </div>
       </section>
@@ -1418,11 +1456,11 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
           ${renderLongTailProperties(primarySurface, ctx, feature, usedKeys)}
         `)}
       </div>
-      <div>
-        ${renderSurfaceFrame(relatedSurface, `
-          ${renderCardSpecs(relatedSurface?.props?.featureLinkCards, ctx, feature, "links")}
+        <div>
+          ${renderSurfaceFrame(relatedSurface, `
+          ${renderCardSpecs(relatedSurface, "featureLinkCards", "featureLinkCardEmptyStates", ctx, feature, "links")}
         `)}
-      </div>
+        </div>
     </section>
   `;
 }
@@ -1461,8 +1499,8 @@ function renderSignalDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.gapLinkCards, ctx, gap, "links")}
-            ${renderCardSpecs(relatedSurface?.props?.gapTextCards, ctx, gap, "text")}
+            ${renderCardSpecs(relatedSurface, "gapLinkCards", "gapLinkCardEmptyStates", ctx, gap, "links")}
+            ${renderCardSpecs(relatedSurface, "gapTextCards", "gapTextCardEmptyStates", ctx, gap, "text")}
           `)}
         </div>
       </section>

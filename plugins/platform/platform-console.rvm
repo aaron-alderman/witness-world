@@ -304,10 +304,15 @@ view PlatformWorkflowRelatedPanel {
   class platform-workflow-related
   prop title = "Related Resources"
   prop summary = "Linked resources and supporting context for the selected workflow object."
+  prop cardItemLimit = "12"
   prop branchLinkCards = "Change Sets=changeSetIds"
+  prop branchLinkCardEmptyStates = "Change Sets=No change sets linked to this branch."
   prop branchTextCards = "Affected Systems=affectedSystemSummaries@label|Telemetry Impacts=telemetryImpactSummaries@label"
+  prop branchTextCardEmptyStates = "Affected Systems=No affected system summaries.|Telemetry Impacts=No telemetry impact summaries."
   prop changeSetLinkCards = "Changed Paths=changedPaths"
+  prop changeSetLinkCardEmptyStates = "Changed Paths=No changed paths staged for this change set."
   prop proposalLinkCards = "Target Resource=targetId"
+  prop proposalLinkCardEmptyStates = "Target Resource=No linked target resource."
 }
 
 view PlatformWorkflowSnapshotHistory {
@@ -454,11 +459,15 @@ view PlatformVerificationRelatedPanel {
   class platform-verification-related
   prop title = "Related Resources"
   prop summary = "Linked verification resources, streams, and supporting context."
+  prop cardItemLimit = "12"
   prop gateLinkCards = "Protected Objects=protectedObjects|Selected Branches=selectedByBranches|Selected Change Sets=selectedByChangeSets"
+  prop gateLinkCardEmptyStates = "Protected Objects=No protected objects linked to this gate.|Selected Branches=No branches currently select this gate.|Selected Change Sets=No change sets currently select this gate."
   prop runtimeRevisionLinkCards = "Changed Sources=changedSources"
+  prop runtimeRevisionLinkCardEmptyStates = "Changed Sources=No changed sources recorded for this revision."
   prop runtimeRevisionPropertyCardTitle = "Snapshot Diagnostics"
   prop runtimeRevisionPropertyFields = "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Backend revision event stream=backendRevisionEventsHref@href"
   prop candidateSnapshotTextCards = "Files=files@path|Errors=errors@errorMessage"
+  prop candidateSnapshotTextCardEmptyStates = "Files=No files captured in this candidate snapshot.|Errors=No build or validation errors."
   prop testRunPropertyCardTitle = "Verification Streams"
   prop testRunPropertyFields = "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href"
 }
@@ -625,8 +634,11 @@ view PlatformSignalRelatedPanel {
   class platform-signal-related
   prop title = "Related Resources"
   prop summary = "Linked proposals, selector drift, and supporting signal context."
+  prop cardItemLimit = "12"
   prop gapLinkCards = "Recommended Proposal=recommendedProposal"
+  prop gapLinkCardEmptyStates = "Recommended Proposal=No recommended proposal is attached to this gap."
   prop gapTextCards = "Missing In Generated=missingInGenerated|Extra In Generated=extraInGenerated"
+  prop gapTextCardEmptyStates = "Missing In Generated=No missing selectors detected.|Extra In Generated=No extra selectors detected."
 }
 
 view PlatformSignalRelationships {
@@ -712,10 +724,15 @@ view PlatformKnowledgeRelatedPanel {
   class platform-knowledge-related
   prop title = "Related Resources"
   prop summary = "Linked platform resources and supporting context for the selected knowledge object."
+  prop cardItemLimit = "12"
   prop documentLinkCards = "Referenced Routes=references.routes|Referenced Plugins=references.pluginIds|Referenced Files=references.filePaths"
+  prop documentLinkCardEmptyStates = "Referenced Routes=No referenced routes in this document.|Referenced Plugins=No referenced plugins in this document.|Referenced Files=No referenced files in this document."
   prop roadmapTaskLinkCards = "Linked Targets=targets@targetId"
+  prop roadmapTaskLinkCardEmptyStates = "Linked Targets=No linked platform targets for this roadmap task."
   prop epicLinkCards = "Branches=branchIds|Features=featureIds|Verification Gates=gateIds|Docs=docIds"
+  prop epicLinkCardEmptyStates = "Branches=No branches linked to this epic.|Features=No features linked to this epic.|Verification Gates=No verification gates linked to this epic.|Docs=No docs linked to this epic."
   prop featureLinkCards = "Branches=branchIds|Verification Gates=gateIds|Docs=docIds"
+  prop featureLinkCardEmptyStates = "Branches=No branches linked to this feature.|Verification Gates=No verification gates linked to this feature.|Docs=No docs linked to this feature."
 }
 
 view PlatformKnowledgeSections {
