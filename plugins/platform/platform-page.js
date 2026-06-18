@@ -320,7 +320,7 @@ function renderPropertyCard(card) {
   return renderPropertyTable(card?.title || "Properties", card?.entries || []);
 }
 
-function renderLongTailProperties(ctx, record, usedKeys = [], title = "Properties") {
+function renderLongTailProperties(surface, ctx, record, usedKeys = [], fallbackTitle = "Properties") {
   const used = new Set(usedKeys);
   const entries = Object.entries(record ?? {})
     .filter(([key, value]) => !used.has(key) && value !== undefined && value !== null && value !== "")
@@ -332,7 +332,7 @@ function renderLongTailProperties(ctx, record, usedKeys = [], title = "Propertie
       label: humanizeKey(key),
       valueHtml: renderValue(ctx, value)
     }));
-  return renderPropertyTable(title, entries);
+  return renderPropertyTable(surfacePropText(surface, "longTailCardTitle", fallbackTitle), entries);
 }
 
 function renderLinksCard(title, ctx, values = []) {
@@ -968,7 +968,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
         <div>
           ${renderSurfaceFrame(primarySurface, `
             ${renderPropertyCard(primaryCard)}
-            ${renderLongTailProperties(ctx, branch, usedKeys)}
+            ${renderLongTailProperties(primarySurface, ctx, branch, usedKeys)}
           `)}
         </div>
         <div>
@@ -1027,7 +1027,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
         <div>
           ${renderSurfaceFrame(primarySurface, `
             ${renderPropertyCard(primaryCard)}
-            ${renderLongTailProperties(ctx, changeSet, usedKeys)}
+            ${renderLongTailProperties(primarySurface, ctx, changeSet, usedKeys)}
           `)}
         </div>
         <div>
@@ -1072,7 +1072,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
       <div>
         ${renderSurfaceFrame(primarySurface, `
           ${renderPropertyCard(primaryCard)}
-          ${renderLongTailProperties(ctx, proposal, usedKeys)}
+          ${renderLongTailProperties(primarySurface, ctx, proposal, usedKeys)}
         `)}
       </div>
       <div>
@@ -1144,7 +1144,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         <div>
           ${renderSurfaceFrame(primarySurface, `
             ${renderPropertyCard(primaryCard)}
-            ${renderLongTailProperties(ctx, gate, usedKeys)}
+            ${renderLongTailProperties(primarySurface, ctx, gate, usedKeys)}
           `)}
         </div>
         <div>
@@ -1217,7 +1217,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         <div>
           ${renderSurfaceFrame(primarySurface, `
             ${renderPropertyCard(primaryCard)}
-            ${renderLongTailProperties(ctx, revision, usedKeys)}
+            ${renderLongTailProperties(primarySurface, ctx, revision, usedKeys)}
           `)}
         </div>
         <div>
@@ -1268,7 +1268,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         <div>
           ${renderSurfaceFrame(primarySurface, `
             ${renderPropertyCard(primaryCard)}
-            ${renderLongTailProperties(ctx, snapshot, usedKeys)}
+            ${renderLongTailProperties(primarySurface, ctx, snapshot, usedKeys)}
           `)}
         </div>
         <div>
@@ -1315,7 +1315,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       <div>
         ${renderSurfaceFrame(primarySurface, `
           ${renderPropertyCard(primaryCard)}
-          ${renderLongTailProperties(ctx, run, usedKeys)}
+          ${renderLongTailProperties(primarySurface, ctx, run, usedKeys)}
         `)}
       </div>
       <div>
@@ -1376,7 +1376,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
         <div>
           ${renderSurfaceFrame(primarySurface, `
             ${renderPropertyCard(primaryCard)}
-            ${renderLongTailProperties(ctx, doc, usedKeys)}
+            ${renderLongTailProperties(primarySurface, ctx, doc, usedKeys)}
           `)}
         </div>
         <div>
@@ -1431,7 +1431,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
         <div>
           ${renderSurfaceFrame(primarySurface, `
             ${renderPropertyCard(primaryCard)}
-            ${renderLongTailProperties(ctx, task, usedKeys)}
+            ${renderLongTailProperties(primarySurface, ctx, task, usedKeys)}
           `)}
         </div>
         <div>
@@ -1465,7 +1465,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
         <div>
           ${renderSurfaceFrame(primarySurface, `
             ${renderPropertyCard(primaryCard)}
-            ${renderLongTailProperties(ctx, epic, usedKeys)}
+            ${renderLongTailProperties(primarySurface, ctx, epic, usedKeys)}
           `)}
         </div>
         <div>
@@ -1497,7 +1497,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
       <div>
         ${renderSurfaceFrame(primarySurface, `
           ${renderPropertyCard(primaryCard)}
-          ${renderLongTailProperties(ctx, feature, usedKeys)}
+          ${renderLongTailProperties(primarySurface, ctx, feature, usedKeys)}
         `)}
       </div>
       <div>
@@ -1547,7 +1547,7 @@ function renderSignalDetail(surface, detail, model, ctx) {
         <div>
           ${renderSurfaceFrame(primarySurface, `
             ${renderPropertyCard(primaryCard)}
-            ${renderLongTailProperties(ctx, gap, usedKeys)}
+            ${renderLongTailProperties(primarySurface, ctx, gap, usedKeys)}
           `)}
         </div>
         <div>
@@ -1584,7 +1584,7 @@ function renderSignalDetail(surface, detail, model, ctx) {
       <div>
         ${renderSurfaceFrame(primarySurface, `
           ${renderPropertyCard(primaryCard)}
-          ${renderLongTailProperties(ctx, node, usedKeys)}
+          ${renderLongTailProperties(primarySurface, ctx, node, usedKeys)}
         `)}
       </div>
       <div>
@@ -1634,7 +1634,7 @@ function renderModelDetail(surface, node, model, ctx) {
       <div>
         ${renderSurfaceFrame(primarySurface, `
           ${renderPropertyCard(primaryCard)}
-          ${renderLongTailProperties(ctx, node, usedKeys)}
+          ${renderLongTailProperties(primarySurface, ctx, node, usedKeys)}
         `)}
       </div>
       <div>

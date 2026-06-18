@@ -255,6 +255,7 @@ view PlatformWorkflowPrimaryPanel {
   class platform-workflow-primary
   prop title = "Primary Detail"
   prop summary = "Selected workflow object properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
   prop branchCardTitle = "Branch Detail"
   prop branchFields = "Branch=id@concept|Status=status|Title=title|Lane=lifecycleLane|Owner=owner|Parent=parentBranchId@concept|Epic=epic@concept|Feature=feature@concept|Defect=defect@concept|Runtime profile=runtimeProfile|Docs freshness=docsFreshness.status|Red / green=testRedGreen.status|Latest candidate=latestCandidateSnapshotId@concept|API resource=id@api"
   prop changeSetCardTitle = "Change Set Detail"
@@ -398,6 +399,7 @@ view PlatformVerificationPrimaryPanel {
   class platform-verification-primary
   prop title = "Primary Detail"
   prop summary = "Selected verification object properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
   prop gateCardTitle = "Test Gate Detail"
   prop gateFields = "Gate=id@concept|Runner=runner|Environment=environment|Timeout=timeoutMs|Cost=costEstimate|Command=command|Latest result=lastResultLabel|API resource=id@api"
   prop runtimeRevisionCardTitle = "Runtime Revision Detail"
@@ -568,6 +570,7 @@ view PlatformSignalPrimaryPanel {
   class platform-signal-primary
   prop title = "Primary Detail"
   prop summary = "Selected signal properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
   prop gapCardTitle = "Gap Detail"
   prop gapFields = "Gap=id|Severity=severity|Kind=kind|Target=target@concept|Reason=reason|API resource=id@api"
   prop signalCardTitle = "Signal Detail"
@@ -645,6 +648,7 @@ view PlatformKnowledgePrimaryPanel {
   class platform-knowledge-primary
   prop title = "Primary Detail"
   prop summary = "Selected knowledge object properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
   prop documentCardTitle = "Document Detail"
   prop documentFields = "Document=path@concept|Role=role|Owner=owner|Status=status|Freshness=freshness.status|Sections=sectionCount|Tasks=taskCount|API resource=path@api"
   prop roadmapTaskCardTitle = "Roadmap Task Detail"
@@ -723,6 +727,7 @@ view PlatformModelPrimaryPanel {
   class platform-model-primary
   prop title = "Primary Detail"
   prop summary = "Selected platform object properties and long-tail fields."
+  prop longTailCardTitle = "Properties"
   prop objectCardTitle = "Platform Object Detail"
   prop objectFields = "Object=id@concept|Kind=kind|Status=status|Owner=owner|Source=source|Lifecycle=lifecycle|API resource=id@api"
 }

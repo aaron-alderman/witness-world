@@ -391,6 +391,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(workflowEditSurface.props.rowFields, "Path=path|Language=sourceLanguage|Previous Hash=previousHashShort|Next Hash=nextHashShort");
   const workflowPrimarySurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowPrimaryPanel");
   assert.ok(workflowPrimarySurface);
+  assert.equal(workflowPrimarySurface.props.longTailCardTitle, "Properties");
   assert.equal(workflowPrimarySurface.props.branchCardTitle, "Branch Detail");
   assert.match(workflowPrimarySurface.props.branchFields, /Branch=id@concept/);
   assert.match(workflowPrimarySurface.props.changeSetFields, /Change set=id@concept/);
@@ -448,6 +449,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationBuildErrorsSurface.props.rowFields, "Build=buildLink@concept|Path=path|Kind=kind|Message=message");
   const verificationPrimarySurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationPrimaryPanel");
   assert.ok(verificationPrimarySurface);
+  assert.equal(verificationPrimarySurface.props.longTailCardTitle, "Properties");
   assert.equal(verificationPrimarySurface.props.gateCardTitle, "Test Gate Detail");
   assert.match(verificationPrimarySurface.props.gateFields, /Gate=id@concept/);
   assert.match(verificationPrimarySurface.props.runtimeRevisionFields, /Revision=revisionLink@concept/);
@@ -514,6 +516,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(knowledgeSectionsSurface.props.rowFields, "Title=title|Line=line|Depth=depth");
   const knowledgePrimarySurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgePrimaryPanel");
   assert.ok(knowledgePrimarySurface);
+  assert.equal(knowledgePrimarySurface.props.longTailCardTitle, "Properties");
   assert.equal(knowledgePrimarySurface.props.documentCardTitle, "Document Detail");
   assert.match(knowledgePrimarySurface.props.documentFields, /Document=path@concept/);
   assert.match(knowledgePrimarySurface.props.roadmapTaskFields, /Evidence=evidenceSummary/);
@@ -527,6 +530,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(knowledgeRelatedSurface.props.featureLinkCards, "Branches=branchIds|Verification Gates=gateIds|Docs=docIds");
   const signalPrimarySurface = signalDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalPrimaryPanel");
   assert.ok(signalPrimarySurface);
+  assert.equal(signalPrimarySurface.props.longTailCardTitle, "Properties");
   assert.equal(signalPrimarySurface.props.gapCardTitle, "Gap Detail");
   assert.match(signalPrimarySurface.props.gapFields, /Target=target@concept/);
   assert.match(signalPrimarySurface.props.signalFields, /Node=id@concept/);
@@ -563,6 +567,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(modelRelationshipsSurface.props.rowLimit, "20");
   const modelPrimarySurface = modelDetailSurface.childSurfaces.find(surface => surface.name === "PlatformModelPrimaryPanel");
   assert.ok(modelPrimarySurface);
+  assert.equal(modelPrimarySurface.props.longTailCardTitle, "Properties");
   assert.equal(modelPrimarySurface.props.objectCardTitle, "Platform Object Detail");
   assert.match(modelPrimarySurface.props.objectFields, /Object=id@concept/);
 });
