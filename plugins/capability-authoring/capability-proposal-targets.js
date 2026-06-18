@@ -1,4 +1,5 @@
 import {
+  resolveCapabilityTargetInput,
   requestBootstrapCapabilityDefine,
   requestBootstrapCapabilityInstall,
   requestBootstrapCapabilityRemove
@@ -21,15 +22,31 @@ export function executeCapabilityAuthoringProposalTarget({
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     case "capability.install": {
-      const gate = ensureTargetAuthority(actor, body.target);
+      const resolvedTarget = resolveCapabilityTargetInput(world, body, {
+        label: "capability install target"
+      });
+      if (!resolvedTarget.ok) return { ok: false, status: 400, error: resolvedTarget.error };
+      const gate = ensureTargetAuthority(actor, resolvedTarget.target);
       if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
-      const result = requestBootstrapCapabilityInstall(world, { actor, backendHost, body });
+      const result = requestBootstrapCapabilityInstall(world, {
+        actor,
+        backendHost,
+        body: { ...body, target: resolvedTarget.target, targetRef: null }
+      });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     case "capability.remove": {
-      const gate = ensureTargetAuthority(actor, body.target);
+      const resolvedTarget = resolveCapabilityTargetInput(world, body, {
+        label: "capability remove target"
+      });
+      if (!resolvedTarget.ok) return { ok: false, status: 400, error: resolvedTarget.error };
+      const gate = ensureTargetAuthority(actor, resolvedTarget.target);
       if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
-      const result = requestBootstrapCapabilityRemove(world, { actor, backendHost, body });
+      const result = requestBootstrapCapabilityRemove(world, {
+        actor,
+        backendHost,
+        body: { ...body, target: resolvedTarget.target, targetRef: null }
+      });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     default:

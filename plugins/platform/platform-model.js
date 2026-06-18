@@ -2,7 +2,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { APP_REVISION_EVENTS_PATH } from "../../src/app-snapshot-manager.js";
+import { buildCompatibilityBridgeLedger } from "../../src/compatibility-bridges.js";
 import { moduleProjectors } from "../../src/modules.js";
+import { buildGovernanceRouteInventory } from "../../src/runtime-governance.js";
 import {
   platformBranchInsights,
   platformChangeSetInsights,
@@ -508,6 +510,62 @@ function normalizeSnapshotDiagnostics(appSnapshot = null) {
     frontendEventsPath: appSnapshot.frontendEventsPath ? String(appSnapshot.frontendEventsPath) : APP_REVISION_EVENTS_PATH,
     lastRevisionEvent
   };
+}
+
+function normalizeTestMonitorDiagnostics(testMonitor = null) {
+  if (!testMonitor || typeof testMonitor !== "object") return null;
+  const pendingSourcePaths = Array.isArray(testMonitor.pendingSourcePaths)
+    ? testMonitor.pendingSourcePaths.map(String)
+    : [];
+  const pendingChangeSets = Array.isArray(testMonitor.pendingChangeSets)
+    ? testMonitor.pendingChangeSets.map(row => ({
+        branchId: row?.branchId ? String(row.branchId) : null,
+        changeSetId: row?.changeSetId ? String(row.changeSetId) : null,
+        candidateSnapshotId: row?.candidateSnapshotId ? String(row.candidateSnapshotId) : null,
+        queuedAt: row?.queuedAt ? String(row.queuedAt) : null
+      }))
+    : [];
+  const status = testMonitor.status
+    ? String(testMonitor.status)
+    : (!testMonitor.enabled ? "disabled" : ((testMonitor.processing || pendingSourcePaths.length || pendingChangeSets.length) ? "queued" : "idle"));
+  return {
+    enabled: testMonitor.enabled === true,
+    watchFs: testMonitor.watchFs === true,
+    maxAutoRunsPerCycle: Number(testMonitor.maxAutoRunsPerCycle || 0),
+    watchDebounceMs: Number(testMonitor.watchDebounceMs || 0),
+    status,
+    processing: testMonitor.processing === true,
+    pendingSourcePaths,
+    pendingSourceCount: Number(testMonitor.pendingSourceCount || pendingSourcePaths.length),
+    pendingChangeSets,
+    pendingChangeSetCount: Number(testMonitor.pendingChangeSetCount || pendingChangeSets.length)
+  };
+}
+
+function normalizeGovernanceRoutes(rows = []) {
+  return (Array.isArray(rows) ? rows : [])
+    .map(row => ({
+      id: String(row?.id || ""),
+      routeId: String(row?.routeId || ""),
+      method: String(row?.method || "GET").toUpperCase(),
+      matcher: String(row?.matcher || ""),
+      handler: String(row?.handler || ""),
+      operationSemantics: String(row?.operationSemantics || "unknown"),
+      governanceMode: String(row?.governanceMode || "missing"),
+      authorityMechanism: String(row?.authorityMechanism || "missing"),
+      sharedAuthorityPath: row?.sharedAuthorityPath === true,
+      workflowRole: String(row?.workflowRole || "missing"),
+      notes: String(row?.notes || ""),
+      ownerClass: row?.ownerClass ? String(row.ownerClass) : null,
+      ownerBundleId: row?.ownerBundleId ? String(row.ownerBundleId) : null,
+      ownerPluginId: row?.ownerPluginId ? String(row.ownerPluginId) : null
+    }))
+    .filter(row => row.id && row.handler)
+    .sort((left, right) =>
+      left.handler.localeCompare(right.handler)
+      || left.method.localeCompare(right.method)
+      || left.matcher.localeCompare(right.matcher)
+    );
 }
 
 function buildRuntimeRevisionRows(snapshotDiagnostics, candidateSnapshotsByBranch) {
@@ -2331,11 +2389,16 @@ export async function buildPlatformModel({
   const effectivePlugins = new Set(diagnostics?.plugins?.effectivePluginIds ?? []);
   const serverRunners = projectRows(project, moduleProjectors.serverRunners);
   const runtimePluginInstalls = projectRows(project, moduleProjectors.runtimePluginInstalls);
+  const capabilityDefinitions = projectRows(project, moduleProjectors.capabilities);
   const authoredCapabilities = [
-    ...projectRows(project, moduleProjectors.capabilities),
+    ...capabilityDefinitions,
     ...projectRows(project, moduleProjectors.capabilityCatalog)
   ];
   const capabilityInstalls = projectRows(project, moduleProjectors.capabilityInstalls);
+  const compatibilityBridges = buildCompatibilityBridgeLedger({
+    capabilities: capabilityDefinitions,
+    capabilityInstalls
+  });
   const proposals = projectRows(project, moduleProjectors.proposals);
   const rawChangeSets = projectRows(project, moduleProjectors.changeSets);
   const changeSetEdits = projectRows(project, moduleProjectors.changeSetEdits);
@@ -2371,6 +2434,11 @@ export async function buildPlatformModel({
   const latestTestResultsProjection = projectValue(project, moduleProjectors.latestTestResultsByGate, { rows: [], byGate: Object.create(null) });
   const candidateSnapshotsByBranch = candidateSnapshotsByBranchIndex(candidateSnapshots);
   const snapshotDiagnostics = normalizeSnapshotDiagnostics(diagnostics?.appSnapshot ?? null);
+  const testMonitorDiagnostics = normalizeTestMonitorDiagnostics(diagnostics?.testMonitor ?? null);
+  const governanceRoutes = normalizeGovernanceRoutes(
+    diagnostics?.governanceRoutes
+    ?? buildGovernanceRouteInventory(diagnostics?.routes ?? [])
+  );
   const runtimeRevisions = buildRuntimeRevisionRows(snapshotDiagnostics, candidateSnapshotsByBranch);
   const activeRuntimeRevision = runtimeRevisions[0] ?? null;
   const snapshotBuilds = buildSnapshotBuildRows(candidateSnapshots);
@@ -2404,6 +2472,32 @@ export async function buildPlatformModel({
       source: "store/seeds/first-party-plugin-catalog.json"
     });
     if (row.plugin) addEdge(edges, row.plugin, "owns", row.id, "catalog");
+  }
+
+  for (const bridge of compatibilityBridges) {
+    addNode(nodes, {
+      id: bridge.id,
+      kind: "compatibilityBridge",
+      title: bridge.title,
+      lifecycle: ["steward"],
+      owner: bridge.owner,
+      status: bridge.status,
+      source: "compatibility-ledger"
+    });
+  }
+
+  for (const governanceRoute of governanceRoutes) {
+    addNode(nodes, {
+      id: governanceRoute.id,
+      kind: "governanceRoute",
+      title: `${governanceRoute.method} ${governanceRoute.matcher}`,
+      lifecycle: ["steward"],
+      owner: governanceRoute.ownerPluginId ?? governanceRoute.ownerBundleId ?? governanceRoute.handler,
+      status: governanceRoute.governanceMode,
+      source: "governance-ledger"
+    });
+    if (governanceRoute.routeId) addEdge(edges, governanceRoute.id, "governs", governanceRoute.routeId, "governance-ledger");
+    addEdge(edges, governanceRoute.id, "dispatchesTo", `handler:${governanceRoute.handler}`, "governance-ledger");
   }
 
   const profiles = Object.entries(profilesSeed.profiles ?? {}).map(([id, profile]) => ({
@@ -3219,6 +3313,9 @@ export async function buildPlatformModel({
     snapshotBuilds,
     snapshotBuildErrors,
     snapshotDiagnostics,
+    testMonitorDiagnostics,
+    compatibilityBridges,
+    governanceRoutes,
     conflicts: conflicts.map(row => ({ ...row })),
     mergeIntents: mergeIntents.map(row => ({ ...row })),
     roadmapTasks
@@ -3262,6 +3359,7 @@ export function filterPlatformModel(model, view, id = null) {
       snapshotBuilds: model.snapshotBuilds,
       snapshotBuildErrors: model.snapshotBuildErrors,
       snapshotDiagnostics: model.snapshotDiagnostics,
+      testMonitorDiagnostics: model.testMonitorDiagnostics,
       branchTestRedGreen: model.branchTestRedGreen,
       changeSetTestRedGreen: model.changeSetTestRedGreen,
       latestTestResultsByGate: model.latestTestResultsByGate,
@@ -3661,6 +3759,32 @@ export function filterPlatformModel(model, view, id = null) {
   if (view === "mergeIntents") {
     const mergeIntents = id ? model.mergeIntents.filter(row => row.id === id || row.branchId === id || row.proposalId === id) : model.mergeIntents;
     return { mergeIntents, summaries: model.summaries };
+  }
+  if (view === "bridges") {
+    const compatibilityBridges = id
+      ? (model.compatibilityBridges ?? []).filter(row =>
+        row.id === id
+        || row.bridgeClass === id
+        || row.owner === id
+        || row.surfaces.includes(id)
+        || row.sampleTargets.includes(id)
+      )
+      : (model.compatibilityBridges ?? []);
+    return { compatibilityBridges, summaries: model.summaries };
+  }
+  if (view === "governance") {
+    const governanceRoutes = id
+      ? (model.governanceRoutes ?? []).filter(row =>
+        row.id === id
+        || row.routeId === id
+        || row.handler === id
+        || row.governanceMode === id
+        || row.authorityMechanism === id
+        || row.ownerBundleId === id
+        || row.ownerPluginId === id
+      )
+      : (model.governanceRoutes ?? []);
+    return { governanceRoutes, summaries: model.summaries };
   }
   if (view === "gates") return { gates: model.nodes.filter(node => node.kind === "testGate"), summaries: model.summaries };
   if (view === "mcp") return {

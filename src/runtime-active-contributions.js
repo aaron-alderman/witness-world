@@ -21,6 +21,8 @@ function collectProviders(bundles = []) {
   return bundles.flatMap(bundle =>
     (bundle?.contributes?.providers ?? []).map((provider, index) => ({
       bundleId: bundle.id,
+      bundleKind: bundle.kind,
+      pluginId: bundle.pluginId ?? null,
       provider,
       providerId: `${bundle.id}:${providerIdentity(provider, index)}`
     }))
@@ -48,7 +50,7 @@ export function collectActiveRuntimeContributions({
   const starterBlueprints = [];
   const starterBlueprintIndex = new Map();
 
-  for (const { provider, providerId } of collectProviders(bundles)) {
+  for (const { provider, providerId, bundleId, bundleKind, pluginId } of collectProviders(bundles)) {
     if (!provider || typeof provider !== "object") continue;
     if (provider.kind === "supportServiceFactory") {
       if (typeof provider.factory !== "function") {
@@ -82,7 +84,14 @@ export function collectActiveRuntimeContributions({
       continue;
     }
     if (provider.kind === "handlerSet") {
-      if (provider.id) handlerSetProviders[String(provider.id)] = provider;
+      if (provider.id) {
+        handlerSetProviders[String(provider.id)] = {
+          ...provider,
+          bundleId,
+          bundleKind,
+          pluginId
+        };
+      }
       continue;
     }
     if (provider.kind === "runtimeBuiltinSeeds") {

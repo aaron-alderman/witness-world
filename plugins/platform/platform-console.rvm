@@ -525,7 +525,7 @@ view PlatformVerificationRelatedPanel {
   prop runtimeRevisionLinkCards = "Changed Sources=changedSources"
   prop runtimeRevisionLinkCardEmptyStates = "Changed Sources=No changed sources recorded for this revision."
   prop runtimeRevisionPropertyCardTitle = "Snapshot Diagnostics"
-  prop runtimeRevisionPropertyFields = "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Backend revision event stream=backendRevisionEventsHref@href"
+  prop runtimeRevisionPropertyFields = "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Monitor status=testMonitorDiagnostics.status|Queued sources=testMonitorDiagnostics.pendingSourceCount|Queued change sets=testMonitorDiagnostics.pendingChangeSetCount|Backend revision event stream=backendRevisionEventsHref@href"
   prop candidateSnapshotTextCards = "Files=files@path|Errors=errors@errorMessage"
   prop candidateSnapshotTextCardEmptyStates = "Files=No files captured in this candidate snapshot.|Errors=No build or validation errors."
   prop testRunPropertyCardTitle = "Verification Streams"
@@ -570,6 +570,7 @@ view PlatformVerificationStreams {
   class platform-verification-streams
   prop title = "Verification Streams"
   prop summary = "Links to live test-run and backend-revision event streams."
+  prop propertySource = "verificationStreams"
   prop streamCardTitle = "Event Streams"
   prop streamFields = "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href"
 }

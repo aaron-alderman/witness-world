@@ -93,6 +93,7 @@ test("platform plugin exposes platform bundle ownership", async () => {
   assert.equal(routes.some(route => route.handler === "platform.proposal.approve"), true);
   assert.equal(surfaces.some(surface => surface.id === "surface:platform" && surface.href === "/platform"), true);
   assert.equal(providers.some(provider => provider.kind === "moduleProjectors" && provider.id === "platform.projections"), true);
+  assert.equal(providers.some(provider => provider.kind === "providerRuntimeFactory" && provider.id === "platform.testMonitor"), true);
 });
 
 test("platform runtime declares every change-set route with owned handler metadata", () => {
@@ -130,12 +131,31 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
       activeProfile: "full",
       activeBundles: [{ id: "bundle-platform", displayName: "Platform Self Model" }],
       providedCapabilities: ["platform.self"],
-      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      routes: [
+        { method: "GET", matcher: "/platform", handler: "page.platform" },
+        { method: "POST", matcher: "/api/platform-change-sets/demo/apply", handler: "platform.changeSet.apply" }
+      ],
       surfaces: [{ id: "surface:platform", href: "/platform" }],
       plugins: {
         activePluginIds: ["plugin.platform"],
         effectivePluginIds: ["plugin.platform"],
         rejectedPlugins: []
+      },
+      testMonitor: {
+        enabled: true,
+        watchFs: true,
+        maxAutoRunsPerCycle: 6,
+        watchDebounceMs: 150,
+        status: "queued",
+        processing: false,
+        pendingSourcePaths: ["plugins/platform/platform-page.js"],
+        pendingSourceCount: 1,
+        pendingChangeSets: [{
+          branchId: "branch.platform",
+          changeSetId: "changeSet:platform",
+          candidateSnapshotId: "candidateSnapshot:platform:1"
+        }],
+        pendingChangeSetCount: 1
       }
     },
     project: () => []
@@ -155,6 +175,8 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   assert.equal(model.nodes.some(node => node.kind === "docSection" && node.id.includes("docs/PLATFORM-ALL-THE-WAY-ROADMAP.md")), true);
   assert.equal(model.nodes.some(node => node.kind === "task" && node.id.includes("docs/PLATFORM-ALL-THE-WAY-ROADMAP.md")), true);
   assert.equal(model.nodes.some(node => node.id === "boundary:testRunner.platform" && node.kind === "boundary"), true);
+  assert.equal(model.nodes.some(node => node.id === "compatibilityBridge:canonicalIdSugar.sameContextVisibleTarget" && node.kind === "compatibilityBridge"), true);
+  assert.equal(model.nodes.some(node => node.id === "governanceRoute:POST /api/platform-change-sets/demo/apply" && node.kind === "governanceRoute"), true);
   assert.equal(model.nodes.some(node => node.id === "testEnvironment:local-node" && node.kind === "testEnvironment"), true);
   assert.equal(model.nodes.some(node => node.id === "testEnvironment:local-browser" && node.kind === "testEnvironment"), true);
   assert.equal(model.edges.some(edge => edge.from === "surface:platform" && edge.rel === "authoredBy" && edge.to === "rvm:plugins/platform/platform-console.rvm"), true);
@@ -169,6 +191,11 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   assert.equal(Array.isArray(model.docSections), true);
   assert.equal(Array.isArray(model.docTasks), true);
   assert.equal(Array.isArray(model.roadmapTasks), true);
+  assert.equal(model.testMonitorDiagnostics?.status, "queued");
+  assert.equal(model.testMonitorDiagnostics?.pendingSourceCount, 1);
+  assert.equal(model.testMonitorDiagnostics?.pendingChangeSetCount, 1);
+  assert.equal(model.compatibilityBridges.some(row => row.id === "compatibilityBridge:canonicalIdSugar.importedVisibleTarget" && row.status === "policy"), true);
+  assert.equal(model.governanceRoutes.some(row => row.handler === "platform.changeSet.apply" && row.governanceMode === "operator-only"), true);
   assert.equal(model.roadmapTasks.some(task => task.doc === "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"), true);
 });
 
@@ -531,7 +558,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationRelatedSurface.props.runtimeRevisionLinkCards, "Changed Sources=changedSources");
   assert.equal(verificationRelatedSurface.props.runtimeRevisionLinkCardEmptyStates, "Changed Sources=No changed sources recorded for this revision.");
   assert.equal(verificationRelatedSurface.props.runtimeRevisionPropertyCardTitle, "Snapshot Diagnostics");
-  assert.equal(verificationRelatedSurface.props.runtimeRevisionPropertyFields, "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Backend revision event stream=backendRevisionEventsHref@href");
+  assert.equal(verificationRelatedSurface.props.runtimeRevisionPropertyFields, "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Monitor status=testMonitorDiagnostics.status|Queued sources=testMonitorDiagnostics.pendingSourceCount|Queued change sets=testMonitorDiagnostics.pendingChangeSetCount|Backend revision event stream=backendRevisionEventsHref@href");
   assert.equal(verificationRelatedSurface.props.candidateSnapshotTextCards, "Files=files@path|Errors=errors@errorMessage");
   assert.equal(verificationRelatedSurface.props.candidateSnapshotTextCardEmptyStates, "Files=No files captured in this candidate snapshot.|Errors=No build or validation errors.");
   assert.equal(verificationRelatedSurface.props.testRunPropertyCardTitle, "Verification Streams");
@@ -734,6 +761,9 @@ test("platform page views filter the model to page-scoped slices", () => {
     snapshotBuilds: [{ id: "snapshotBuild:platform", candidateSnapshotId: "candidateSnapshot:platform" }],
     snapshotBuildErrors: [{ id: "snapshotBuildError:platform", candidateSnapshotId: "candidateSnapshot:platform" }],
     snapshotDiagnostics: { appRevision: 7 },
+    testMonitorDiagnostics: { status: "idle", pendingSourceCount: 0, pendingChangeSetCount: 0 },
+    compatibilityBridges: [{ id: "compatibilityBridge:canonicalIdSugar.sameContextVisibleTarget", bridgeClass: "canonical-id-sugar", owner: "context.naming", surfaces: ["src/modules.js"], sampleTargets: [], status: "policy" }],
+    governanceRoutes: [{ id: "governanceRoute:POST /api/platform-change-sets/demo/apply", routeId: "route:POST /api/platform-change-sets/demo/apply", method: "POST", matcher: "/api/platform-change-sets/demo/apply", handler: "platform.changeSet.apply", operationSemantics: "governed-mutation", governanceMode: "operator-only", authorityMechanism: "bootstrap-operator", sharedAuthorityPath: false, workflowRole: "direct-mutation", notes: "Platform change-set apply is still bootstrap-operator-only.", ownerClass: "runtime-plugin", ownerBundleId: "bundle-platform", ownerPluginId: "plugin.platform" }],
     branchTestRedGreen: [{ id: "branchRedGreen:platform", branchId: "branch:platform", status: "green" }],
     changeSetTestRedGreen: [{ id: "changeSetRedGreen:platform", changeSetId: "changeSet:platform", status: "green" }],
     latestTestResultsByGate: { "gate:platform": { runId: "testRun:platform", status: "passed" } },
@@ -752,17 +782,23 @@ test("platform page views filter the model to page-scoped slices", () => {
   const knowledge = filterPlatformModel(model, "knowledge");
   const signals = filterPlatformModel(model, "signals");
   const modelPage = filterPlatformModel(model, "model");
+  const bridges = filterPlatformModel(model, "bridges");
+  const governance = filterPlatformModel(model, "governance");
 
   assert.deepEqual(Object.keys(overview).sort(), ["changeSets", "docs", "gaps", "lifecycleBoard", "lifecycleVocabulary", "nodes", "profiles", "summaries", "testGates"]);
   assert.deepEqual(Object.keys(workflow).sort(), ["branchBoard", "branchLifecycleVocabulary", "branches", "candidateSnapshots", "changeSetEdits", "changeSets", "proposalActions", "proposals", "summaries"]);
-  assert.deepEqual(Object.keys(verification).sort(), ["activeRuntimeRevision", "branchTestRedGreen", "candidateSnapshots", "changeSetTestRedGreen", "latestTestResultsByGate", "runtimeRevisions", "snapshotBuildErrors", "snapshotBuilds", "snapshotDiagnostics", "summaries", "testGates", "testRuns"]);
+  assert.deepEqual(Object.keys(verification).sort(), ["activeRuntimeRevision", "branchTestRedGreen", "candidateSnapshots", "changeSetTestRedGreen", "latestTestResultsByGate", "runtimeRevisions", "snapshotBuildErrors", "snapshotBuilds", "snapshotDiagnostics", "summaries", "testGates", "testMonitorDiagnostics", "testRuns"]);
   assert.deepEqual(Object.keys(knowledge).sort(), ["docSections", "docTasks", "docs", "epics", "features", "roadmapTasks", "summaries"]);
   assert.deepEqual(Object.keys(modelPage).sort(), ["coverageEdges", "edges", "nodes", "profiles", "summaries"]);
+  assert.deepEqual(Object.keys(bridges).sort(), ["compatibilityBridges", "summaries"]);
+  assert.deepEqual(Object.keys(governance).sort(), ["governanceRoutes", "summaries"]);
   assert.equal("nodes" in workflow, false);
   assert.equal("docs" in verification, false);
   assert.equal(signals.nodes.length, 3);
   assert.equal(signals.edges.length, 2);
   assert.equal(signals.nodes.some(node => node.id === "plugin.platform"), false);
+  assert.equal(bridges.compatibilityBridges.length, 1);
+  assert.equal(governance.governanceRoutes.length, 1);
 });
 
 test("platform delegated test-gate projectors discover gate catalog rows", async () => withRegisteredPluginProjectors(providers, async () => {

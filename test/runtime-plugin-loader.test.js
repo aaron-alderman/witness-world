@@ -61,8 +61,11 @@ test("plugin runtime loader supports multi-bundle plugin-owned modules", async (
 
     assert.equal(loadResult.hasBlockingErrors, false);
     assert.deepEqual(Object.keys(loadResult.bundleOverrides).sort(), ["bundle-authoring-local", "bundle-tutorial-local"]);
+    assert.equal(loadResult.bundleOverrides["bundle-authoring-local"].pluginId, "plugin.authoring");
     assert.equal(authoring.runtimeModule.loadStatus, "loaded");
     assert.deepEqual([...authoring.runtimeModule.bundleIds].sort(), ["bundle-authoring-local", "bundle-tutorial-local"]);
+    assert.equal(authoring.resolvedRuntimeContributions.routes.find(route => route.handler === "bootstrap.page")?.ownerClass, "runtime-plugin");
+    assert.equal(authoring.resolvedRuntimeContributions.routes.find(route => route.handler === "bootstrap.page")?.ownerPluginId, "plugin.authoring");
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
@@ -114,6 +117,7 @@ test("plugin runtime loader loads standalone plugin-owned bundle ids that are no
     assert.equal(loadResult.bundleOverrides["bundle-wcss-runtime"].kind, "plugin");
     assert.equal(pluginRow.runtimeModule.loadStatus, "loaded");
     assert.deepEqual(pluginRow.runtimeModule.bundleIds, ["bundle-wcss-runtime"]);
+    assert.equal(pluginRow.resolvedRuntimeContributions.handlerMetadata["wcss.stylesheet.read"].ownerClass, "runtime-plugin");
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

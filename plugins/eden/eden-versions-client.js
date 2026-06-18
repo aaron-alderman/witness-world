@@ -188,6 +188,8 @@ function createEdenVersionsSurfaceNode(surface, deps) {
   node.querySelector('[data-eden-version-open-published]').addEventListener('click', async () => {
     const runtime = versionsRuntime(surface);
     if (runtime.authority?.canPropose) {
+      setVersionStatus('Proposed loading the published version into the board as proposal.', 'ok');
+      render();
       await createEdenVersionProposal(surface, {
         processName: 'widgetVersion.activate',
         version: runtime.publishedVersion,
@@ -216,6 +218,8 @@ function createEdenVersionsSurfaceNode(surface, deps) {
   node.querySelector('[data-eden-version-open-draft]').addEventListener('click', async () => {
     const runtime = versionsRuntime(surface);
     if (runtime.authority?.canPropose) {
+      setVersionStatus('Proposed opening the draft version in the board as proposal.', 'ok');
+      render();
       await createEdenVersionProposal(surface, {
         processName: 'widgetVersion.activate',
         version: runtime.draftVersion,
@@ -244,6 +248,8 @@ function createEdenVersionsSurfaceNode(surface, deps) {
   node.querySelector('[data-eden-version-restore]').addEventListener('click', async () => {
     const runtime = versionsRuntime(surface);
     if (runtime.authority?.canPropose) {
+      setVersionStatus('Proposed restoring the last good version as proposal.', 'ok');
+      render();
       await createEdenVersionProposal(surface, {
         processName: 'widgetVersion.rollback',
         reason: 'Restore the last good shared version through proposal review',
@@ -269,6 +275,8 @@ function createEdenVersionsSurfaceNode(surface, deps) {
   node.querySelector('[data-eden-version-publish]').addEventListener('click', async () => {
     const runtime = versionsRuntime(surface);
     if (runtime.authority?.canPropose) {
+      setVersionStatus('Proposed publishing the current live version as proposal.', 'ok');
+      render();
       await createEdenVersionProposal(surface, {
         processName: 'edenVersions.publish',
         version: runtime.activeVersion,

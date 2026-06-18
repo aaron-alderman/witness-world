@@ -190,8 +190,13 @@ test("runtime diagnostics summarize seed profile and loaded composition separate
   assert.equal(diagnostics.authoringMatrix.publicAuthoringConcepts.frontendProgram.status, "legacy_only");
   assert.deepEqual(diagnostics.profilePluginIds, []);
   assert.equal(diagnostics.activeBundles.some(bundle => bundle.id === "bundle-inspect"), true);
+  assert.equal(diagnostics.activeBundles.find(bundle => bundle.id === "bundle-inspect")?.ownerClass, "runtime-plugin");
   assert.equal(diagnostics.surfaces.some(surface => surface.id === "surface:process-view"), true);
+  assert.equal(diagnostics.surfaces.find(surface => surface.id === "surface:process-view")?.ownerClass, "runtime-plugin");
   assert.equal(diagnostics.handlerMetadata["events.stream"].routeKind, "stream");
+  assert.equal(diagnostics.handlerMetadata["events.stream"].ownerClass, "runtime-plugin");
+  assert.equal(diagnostics.routes.find(route => route.handler === "events.stream")?.ownerClass, "runtime-plugin");
+  assert.equal(diagnostics.shells.shells.find(shell => shell.id === "browser")?.ownerClass, "shell");
 });
 
 test("runtime diagnostics include authored, operator, and effective runtime plugin request state", () => {

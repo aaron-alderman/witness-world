@@ -449,7 +449,9 @@ const PROCESS_SPECS = [
     process: "capability.install",
     inputs: [
       { name: "capability", accepts: "capability.id", required: true },
-      { name: "target", accepts: "capability.target", required: true },
+      { name: "target", accepts: "capability.target", required: false },
+      { name: "targetRef", accepts: "context.name", required: false },
+      { name: "context", accepts: "context.id", required: false },
       { name: "targetKind", accepts: "capability.targetKind", required: true }
     ],
     outputs: [{ name: "capability", accepts: "capability.id", required: true }]
@@ -459,7 +461,9 @@ const PROCESS_SPECS = [
     process: "capability.remove",
     inputs: [
       { name: "capability", accepts: "capability.id", required: true },
-      { name: "target", accepts: "capability.target", required: true },
+      { name: "target", accepts: "capability.target", required: false },
+      { name: "targetRef", accepts: "context.name", required: false },
+      { name: "context", accepts: "context.id", required: false },
       { name: "targetKind", accepts: "capability.targetKind", required: true }
     ],
     outputs: [{ name: "capability", accepts: "capability.id", required: true }]

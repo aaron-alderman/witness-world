@@ -1,6 +1,7 @@
 import { handlerCatalog } from "./handler-catalog.js";
 import { platformModuleProjectors } from "./projections.js";
 import { createPlatformHandlers } from "./handlers.js";
+import { createPlatformTestMonitorRuntime } from "./provider-runtime.js";
 
 export const bundleId = "bundle-platform";
 export { handlerCatalog };
@@ -78,6 +79,11 @@ export const providers = Object.freeze([
     kind: "moduleProjectors",
     id: "platform.projections",
     projectors: platformModuleProjectors
+  },
+  {
+    kind: "providerRuntimeFactory",
+    id: "platform.testMonitor",
+    factory: createPlatformTestMonitorRuntime
   }
 ]);
 

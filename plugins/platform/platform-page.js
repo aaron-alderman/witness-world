@@ -197,6 +197,7 @@ function conceptDestination(value) {
   if (raw.startsWith("telemetryMetric:") || raw.startsWith("gap.") || raw.startsWith("defectCluster:") || raw.startsWith("boundary:")) {
     return { view: "signals", id: raw };
   }
+  if (raw.startsWith("compatibilityBridge:")) return { view: "model", id: raw };
   if (raw.startsWith("route:") || raw.startsWith("handler:") || raw.startsWith("surface:") || raw.startsWith("capability:") || raw.startsWith("plugin.") || raw.startsWith("bundle:") || raw.startsWith("rvm:") || raw.startsWith("wcss:") || raw.startsWith("wtoml:") || raw.startsWith("json:") || raw.startsWith("file:")) {
     return { view: "model", id: raw };
   }
@@ -222,6 +223,7 @@ function conceptApiHref(value) {
   if (raw.startsWith("doc:")) return `/api/platform-model?view=docs&id=${encodeURIComponent(raw.slice(4))}`;
   if (raw.endsWith(".md")) return `/api/platform-model?view=docs&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("telemetryMetric:")) return `/api/platform-model?view=telemetry&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("compatibilityBridge:")) return `/api/platform-model?view=bridges&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("gap.")) return "/api/platform-gaps";
   if (raw.startsWith("proposal:")) return "/api/platform-model?view=proposals";
   return "/api/platform-model";
@@ -1358,6 +1360,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
     const diagnosticsRecord = {
       ...revision,
       snapshotDiagnostics: model.snapshotDiagnostics,
+      testMonitorDiagnostics: model.testMonitorDiagnostics,
       backendRevisionEventsHref: "/api/runtime/backend-revisions/events"
     };
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "runtimeRevisionCardTitle", "runtimeRevisionFields", ctx, revision, "Runtime Revision Detail");
@@ -1743,6 +1746,15 @@ function renderVerificationStreamsSection(surface) {
   )));
 }
 
+function renderAuthoredPropertySourceSection(surface) {
+  switch (surfacePropText(surface, "propertySource", "")) {
+    case "verificationStreams":
+      return renderVerificationStreamsSection(surface);
+    default:
+      return "";
+  }
+}
+
 function renderAuthoringClientScript() {
   return `
     <script>
@@ -1987,6 +1999,16 @@ function renderAuthoringClientScript() {
 }
 
 function renderSurfaceSection(surface, model, ctx, consoleLayout) {
+  if (surface?.props?.summaryPageId) {
+    const sourcePageId = surfacePropText(surface, "summaryPageId", "overview");
+    return renderSummaryCardsFromSurface(pageSurfaceById(consoleLayout, sourcePageId), model);
+  }
+  if (surface?.props?.surfaceFields) {
+    return renderSurfaceTree(surface, consoleLayout, ctx);
+  }
+  if (surface?.props?.boardSource) {
+    return renderAuthoredBoard(surface, model, ctx);
+  }
   if (surface?.props?.listSource) {
     return renderAuthoredListSection(surface, model, ctx);
   }
@@ -1996,23 +2018,14 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
   if (surface?.props?.formId && surface?.props?.formFields) {
     return renderAuthoredFormSection(surface, model);
   }
+  if (surface?.props?.propertySource) {
+    return renderAuthoredPropertySourceSection(surface);
+  }
   switch (surface?.name) {
-    case "PlatformConsoleSummary": {
-      const sourcePageId = surfacePropText(surface, "summaryPageId", "overview");
-      return renderSummaryCardsFromSurface(pageSurfaceById(consoleLayout, sourcePageId), model);
-    }
-    case "PlatformAuthoredSurfaceTree":
-      return renderSurfaceTree(surface, consoleLayout, ctx);
-    case "PlatformLifecycleBoard":
-      return renderLifecycleBoard(surface, model, ctx);
-    case "PlatformBranchBoard":
-      return renderBranchBoard(surface, model, ctx);
     case "PlatformWorkflowDetail":
       return renderSurfaceFrame(surface, renderWorkflowDetail(surface, findWorkflowDetail(model, ctx.id), model, ctx));
     case "PlatformVerificationDetail":
       return renderSurfaceFrame(surface, renderVerificationDetail(surface, findVerificationDetail(model, ctx.id), model, ctx));
-    case "PlatformVerificationStreams":
-      return renderVerificationStreamsSection(surface);
     case "PlatformKnowledgeDetail":
       return renderSurfaceFrame(surface, renderKnowledgeDetail(surface, findKnowledgeDetail(model, ctx.id), model, ctx));
     case "PlatformSignalDetail":

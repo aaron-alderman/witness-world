@@ -46,6 +46,10 @@ test("live page inspector exposes right-click widget inspection, version activat
         inspector
         && inspector.textContent
         && inspector.textContent.includes("todo_versioned_banner")
+        && inspector.textContent.includes("Runtime Owner")
+        && inspector.textContent.includes("Runtime Profile")
+        && inspector.textContent.includes("demo_server")
+        && inspector.textContent.includes("plugin.inspect")
         && inspector.textContent.includes("Widget Versions")
         && inspector.textContent.includes("todo_versioned_banner_v2")
       );
@@ -90,6 +94,8 @@ test("live page inspector can derive a truthful process handoff from a live widg
   try {
     await page.goto(`${server.url}/`);
     await waitForAppReady(page);
+    const routeId = await page.evaluate(() => document.body.dataset.surfaceRoute || "");
+    assert.equal(Boolean(routeId), true);
 
     await page.locator('[data-surface-inspector-toggle]').click();
     await page.locator('[data-widget="todo_add_button"]').click({ button: "right" });
@@ -102,6 +108,95 @@ test("live page inspector can derive a truthful process handoff from a live widg
       && url.searchParams.get("event") === "submit:todo_form"
     );
     await page.locator('[data-process-view]').waitFor();
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("live page inspector can hand off a selected widget to its owning route object", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    const routeId = await page.evaluate(() => document.body.dataset.surfaceRoute || "");
+    assert.equal(Boolean(routeId), true);
+
+    await page.locator('[data-surface-inspector-toggle]').click();
+    await page.locator('[data-widget="todo_add_button"]').click({ button: "right" });
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("todo_add_button")
+        && inspector.textContent.includes("Show Route")
+        && inspector.textContent.includes("Runtime Correlation")
+        && inspector.textContent.includes("submit:todo_form")
+      );
+    });
+
+    await page.locator(`[data-surface-inspector-world-select="${routeId}"]`).click();
+    await page.waitForURL(url => url.pathname === "/world" && url.searchParams.get("select") === routeId);
+    await page.waitForFunction(expected => {
+      const inspector = document.querySelector('.world-graph-inspector');
+      return Boolean(inspector && inspector.textContent && inspector.textContent.includes(expected));
+    }, routeId);
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
+test("live page inspector can hand off a selected widget to its owning backend program", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+
+    await page.locator('[data-surface-inspector-toggle]').click();
+    await page.locator('[data-widget="todo_add_button"]').click({ button: "right" });
+    await page.locator('.surface-inspector-menu').waitFor();
+    await page.locator('.surface-inspector-menu [data-surface-inspector-select]').click();
+    await page.waitForFunction(() => {
+      const inspector = document.querySelector('.surface-inspector-panel');
+      return Boolean(
+        inspector
+        && inspector.textContent
+        && inspector.textContent.includes("todo_add_button")
+        && inspector.textContent.includes("Runtime Correlation")
+        && inspector.textContent.includes("submit:todo_form")
+      );
+    });
+
+    await page.locator('[data-surface-inspector-runtime-select]').first().waitFor();
+    const backendTarget = await page.locator('[data-surface-inspector-runtime-select]').first().getAttribute('data-surface-inspector-runtime-select');
+    assert.equal(Boolean(backendTarget), true);
+
+    await page.locator('[data-surface-inspector-runtime-select]').first().click();
+    await page.waitForURL(url => url.pathname === "/world" && url.searchParams.get("select") === backendTarget);
+    await page.waitForFunction(expected => {
+      const inspector = document.querySelector('.world-graph-inspector');
+      return Boolean(inspector && inspector.textContent && inspector.textContent.includes(expected));
+    }, backendTarget);
 
     await expectNoRuntimeErrors(runtime);
   } finally {

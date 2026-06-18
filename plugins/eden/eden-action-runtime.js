@@ -78,6 +78,8 @@ async function createEdenVersionProposalRequest(surface, proposal, deps) {
     surfaceId: runtime.surfaceId || surface.id,
     soul: runtime.soul || surface.versionSoul || ""
   };
+  setVersionStatus(statusText + " as proposal.", "ok");
+  render();
   if (version) body.version = version;
   if (runtime.publishedVersion) body.publishedVersion = runtime.publishedVersion;
   if (runtime.draftVersion) body.draftVersion = runtime.draftVersion;
@@ -98,7 +100,7 @@ async function createEdenVersionProposalRequest(surface, proposal, deps) {
     render();
     return false;
   }
-  setVersionStatus(statusText + " as " + (response.body?.proposal?.id || "proposal") + ".", "ok");
+  setVersionStatus(statusText + " as proposal.", "ok");
   return true;
 }
 
@@ -120,6 +122,8 @@ async function createEdenCapabilityInstallProposalRequest(surface, row, deps) {
   const runtime = capabilityInstallRuntime(surface);
   const targetLabel = runtime.targetLabel || runtime.target || "this target";
   const capabilityLabel = row.label || row.id;
+  setCapabilityStatus("Proposed installing " + capabilityLabel + " on " + targetLabel + " as proposal.", "ok");
+  render();
   const response = await requestJson("/api/proposals", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -141,7 +145,7 @@ async function createEdenCapabilityInstallProposalRequest(surface, row, deps) {
     render();
     return false;
   }
-  setCapabilityStatus("Proposed installing " + capabilityLabel + " on " + targetLabel + " as " + (response.body?.proposal?.id || "proposal") + ".", "ok");
+  setCapabilityStatus("Proposed installing " + capabilityLabel + " on " + targetLabel + " as proposal.", "ok");
   return true;
 }
 

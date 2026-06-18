@@ -11,6 +11,7 @@ import {
   runtimeBundleManifest
 } from "./runtime-bundles.js";
 import { availableRuntimeShellIds } from "./runtime-shell-contract.js";
+import { cloneRuntimeOwnerChain, extractRuntimeOwnershipFields } from "./runtime-ownership.js";
 
 export const DEFAULT_RUNTIME_PLUGIN_DIRECTORY = "plugins";
 export const DEFAULT_PLUGIN_EXECUTION_REASON = "metadata-only plugin package; provider loading is not enabled";
@@ -593,7 +594,8 @@ function summarizeRoute(route) {
 function cloneHandlerMetadataEntry(entry = {}) {
   return {
     ...(entry || {}),
-    methods: Array.isArray(entry?.methods) ? [...entry.methods] : undefined
+    methods: Array.isArray(entry?.methods) ? [...entry.methods] : undefined,
+    ownerChain: cloneRuntimeOwnerChain(entry?.ownerChain)
   };
 }
 
@@ -618,6 +620,7 @@ function enrichRouteSummary(route, handlerMetadata = {}) {
   return metadata
     ? {
         ...summary,
+        ...extractRuntimeOwnershipFields(metadata),
         handlerMetadata: cloneHandlerMetadataEntry(metadata)
       }
     : summary;
@@ -683,6 +686,7 @@ function cloneContributionRoute(route) {
     method: route.method,
     matcher: route.matcher,
     handler: route.handler,
+    ...extractRuntimeOwnershipFields(route),
     handlerMetadata: route.handlerMetadata ? cloneHandlerMetadataEntry(route.handlerMetadata) : undefined
   };
 }

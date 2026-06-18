@@ -1,5 +1,6 @@
 import path from "node:path";
 import { relation } from "../../src/kernel.js";
+import { diagnosticsFromPlatformAppContext } from "./app-context-diagnostics.js";
 import {
   requestBootstrapProposalApprove,
   requestBootstrapProposalCreate,
@@ -51,52 +52,6 @@ function platformTestRunEventPayload(witness) {
     timedOut: body.timedOut === true,
     error: body.error ?? null,
     resultIds: results.map(result => String(result?.id || "")).filter(Boolean)
-  };
-}
-
-function diagnosticsFromAppContext(appContext) {
-  const summary = appContext?.runtimeBundleSummary ?? {};
-  const snapshotManager = appContext?.appSnapshotManager ?? null;
-  const snapshotDiagnostics = snapshotManager?.diagnostics?.() ?? null;
-  const activeSnapshot = snapshotManager?.getActiveSnapshot?.() ?? null;
-  const lastRevisionEvent = snapshotManager?.getLastRevisionEvent?.() ?? null;
-  const lastGoodSnapshot = snapshotManager?.lastGoodSnapshot ?? activeSnapshot ?? null;
-  return {
-    activeProfile: appContext?.runtimeProfile ?? summary.profile ?? null,
-    activeBundles: (summary.bundles ?? []).map(bundle => ({
-      id: bundle.id,
-      kind: bundle.kind,
-      displayName: bundle.displayName,
-      description: bundle.description
-    })),
-    providedCapabilities: [...(summary.capabilities ?? [])],
-    routes: (summary.routes ?? []).map(route => ({ ...route })),
-    surfaces: (summary.surfaces ?? appContext?.runtimeSurfaceEntries ?? []).map(surface => ({ ...surface })),
-    plugins: {
-      activePluginIds: [...(appContext?.activeRuntimePluginIds ?? appContext?.runtimePluginCatalog?.activePluginIds ?? [])],
-      effectivePluginIds: [...(appContext?.effectiveRuntimePluginIds ?? appContext?.runtimePluginCatalog?.effectivePluginIds ?? [])],
-      rejectedPlugins: [...(appContext?.runtimePluginCatalog?.rejectedPlugins ?? [])]
-    },
-    appSnapshot: snapshotDiagnostics
-      ? {
-          ...snapshotDiagnostics,
-          lastGoodAppRevision: Number(lastGoodSnapshot?.appRevision || snapshotDiagnostics.appRevision || 0),
-          activeSourceIds: Array.isArray(activeSnapshot?.sourceIndex)
-            ? activeSnapshot.sourceIndex.map(row => String(row.sourceId || row.filePath || ""))
-            : [],
-          lastRevisionEvent: lastRevisionEvent
-            ? {
-                revision: Number(lastRevisionEvent.revision || lastRevisionEvent.appRevision || 0),
-                appRevision: Number(lastRevisionEvent.appRevision || 0),
-                changedSources: Array.isArray(lastRevisionEvent.changedSources) ? lastRevisionEvent.changedSources.map(String) : [],
-                trigger: String(lastRevisionEvent.trigger || "initial"),
-                status: String(lastRevisionEvent.status || "active"),
-                branchId: lastRevisionEvent.branchId ? String(lastRevisionEvent.branchId) : null,
-                changeSetId: lastRevisionEvent.changeSetId ? String(lastRevisionEvent.changeSetId) : null
-              }
-            : null
-        }
-      : null
   };
 }
 
@@ -177,7 +132,7 @@ async function refreshSnapshotAfterPlatformApply(snapshotManager, appliedFiles =
 async function platformModelFor(appContext) {
   return buildPlatformModel({
     appContext,
-    diagnostics: diagnosticsFromAppContext(appContext),
+    diagnostics: diagnosticsFromPlatformAppContext(appContext),
     project: appContext?.project ?? null
   });
 }
@@ -362,7 +317,7 @@ export function createPlatformHandlers({
       });
     },
 
-    "platform.changeSet.validate": async ({ res, params, requestActor, requestSession }) => {
+    "platform.changeSet.validate": async ({ res, params, requestActor, requestSession, appContext }) => {
       const actor = requirePlatformMutationActor(res, requestActor);
       if (!actor) return;
       const result = await validatePlatformChangeSet(world, {
@@ -380,6 +335,12 @@ export function createPlatformHandlers({
         activeCandidateSnapshotId: result.activeCandidateSnapshotId,
         witness: result.witness,
         revisionEvent: result.revisionEvent
+      });
+      appContext?.providerRuntimes?.["platform.testMonitor"]?.scheduleChangeSetValidation?.({
+        branchId: result.changeSet?.branchId ?? null,
+        changeSetId: result.changeSet?.id ?? null,
+        candidateSnapshotId: result.candidateSnapshot?.id ?? null,
+        status: result.candidateSnapshot?.status ?? null
       });
     },
 

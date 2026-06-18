@@ -397,6 +397,71 @@ export function buildProjectedCoverageEdges(testGates = []) {
   return sortRows(rows, ["gateId", "coverageKind", "targetId"]);
 }
 
+function autoSelectionCostRank(costEstimate) {
+  const value = String(costEstimate || "").toLowerCase();
+  if (value === "low") return 0;
+  if (value === "medium") return 1;
+  if (value === "high") return 2;
+  return 3;
+}
+
+function autoSelectionSpecificityRank(gate) {
+  const sourcePath = String(gate?.sourcePath || "");
+  const command = normalizeGateCommand(gate?.command || "");
+  if (sourcePath.endsWith(".test.js")) return 0;
+  if (sourcePath.startsWith("docs/")) return 1;
+  if (sourcePath === "package.json" && /^npm run test:[^ ]+/i.test(command)) return 2;
+  if (sourcePath === "package.json" && /^npm run test\b/i.test(command)) return 3;
+  return 4;
+}
+
+function autoSelectionTargetHintsForPath(relativePath) {
+  const hints = new Set();
+  const system = summarizePlatformPathSystem(relativePath);
+  if (
+    system.id === "runtime.core"
+    || system.id === "runtime.profile"
+    || system.id === "surface.platform"
+    || system.id.startsWith("plugin.")
+  ) {
+    hints.add(system.id);
+  }
+  if (relativePath.startsWith("docs/")) hints.add(`doc:${relativePath}`);
+  if (relativePath.endsWith(".rvm")) hints.add(`rvm:${relativePath}`);
+  if (relativePath.endsWith(".wcss")) hints.add(`wcss:${relativePath}`);
+  return [...hints];
+}
+
+export function selectContinuousTestGates(testGates = [], changedSources = [], { maxGateCount = Infinity } = {}) {
+  const normalizedSources = unique(changedSources);
+  const changedSourceSet = new Set(normalizedSources);
+  const targetHints = new Set(normalizedSources.flatMap(autoSelectionTargetHintsForPath));
+  const candidates = [];
+  for (const gate of Array.isArray(testGates) ? testGates : []) {
+    const matchedSourceDependencies = unique((gate?.sourceDependencies ?? []).filter(source => changedSourceSet.has(source)));
+    const matchedTargets = unique((gate?.protectedObjects ?? []).filter(target => targetHints.has(target)));
+    if (!matchedSourceDependencies.length && !matchedTargets.length) continue;
+    candidates.push({
+      ...gate,
+      matchedSourceDependencies,
+      matchedTargets,
+      specificityRank: autoSelectionSpecificityRank(gate)
+    });
+  }
+  candidates.sort((left, right) => {
+    const sourceMatchDiff = right.matchedSourceDependencies.length - left.matchedSourceDependencies.length;
+    if (sourceMatchDiff) return sourceMatchDiff;
+    const targetMatchDiff = right.matchedTargets.length - left.matchedTargets.length;
+    if (targetMatchDiff) return targetMatchDiff;
+    const specificityDiff = Number(left.specificityRank || 0) - Number(right.specificityRank || 0);
+    if (specificityDiff) return specificityDiff;
+    const costDiff = autoSelectionCostRank(left.costEstimate) - autoSelectionCostRank(right.costEstimate);
+    if (costDiff) return costDiff;
+    return String(left.id || "").localeCompare(String(right.id || ""));
+  });
+  return candidates.slice(0, Math.max(0, Number(maxGateCount) || 0));
+}
+
 function isTerminalGateResultStatus(status) {
   return ["passed", "failed", "error", "timed_out"].includes(String(status || ""));
 }

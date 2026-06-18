@@ -35,6 +35,10 @@ import {
   normalizeAuthorityTuple,
   resolveSessionAuthorityForIdentity
 } from "./runtime-authz.js";
+import {
+  cloneRuntimeOwnerChain,
+  describeMountedRouteOwnership
+} from "./runtime-ownership.js";
 
 function widgetPageGuidanceSurface(world, {
   route = null,
@@ -982,8 +986,37 @@ export function createCoreRuntimeBundleHandlers({
         activePluginIds: pluginCatalog.activePluginIds,
         rejectedPlugins: pluginCatalog.rejectedPlugins,
         pluginAddedBundleIds: pluginCatalog.addedBundleIds,
-        authoringPolicy: currentAuthoringPolicy(appContext)
+        authoringPolicy: currentAuthoringPolicy(appContext),
+        handlerSetProviders: appContext?.runtimeContributions?.handlerSetProviders ?? {}
       });
+      diagnostics.mountedRoutes = world.project(moduleProjectors.servedRoutes)
+        .filter(route => !appContext?.serverRunnerId || route.serverRunner === appContext.serverRunnerId)
+        .map(route => {
+          const ownership = describeMountedRouteOwnership({
+            route,
+            handlerMetadataById: diagnostics.handlerMetadata ?? {},
+            handlerSetDefinitions,
+            handlerSetProviders: appContext?.runtimeContributions?.handlerSetProviders ?? {}
+          });
+          const handlerMetadata = diagnostics.handlerMetadata?.[String(route.handler || "")] ?? null;
+          return {
+            id: route.id,
+            serverRunner: route.serverRunner ?? null,
+            method: route.method,
+            path: route.path,
+            handler: route.handler,
+            serves: route.serves ?? null,
+            params: route.params && typeof route.params === "object" ? { ...route.params } : {},
+            ...ownership,
+            ownerChain: cloneRuntimeOwnerChain(ownership.ownerChain),
+            handlerMetadata: handlerMetadata
+              ? {
+                  ...handlerMetadata,
+                  ownerChain: cloneRuntimeOwnerChain(handlerMetadata.ownerChain)
+                }
+              : null
+          };
+        });
       diagnostics.appSnapshot = appContext?.appSnapshotManager?.diagnostics?.() ?? null;
       world.observe({
         process: "runtime.diagnostics.read",

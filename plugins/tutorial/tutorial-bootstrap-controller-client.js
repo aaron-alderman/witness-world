@@ -142,6 +142,8 @@ export function renderBootstrapTutorialControllerFactory() {
         if (!field) return;
         if (field.type === "checkbox") field.checked = value === true;
         else field.value = value == null ? "" : String(value);
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        field.dispatchEvent(new Event("change", { bubbles: true }));
       };
       const fillForm = (target, payload) => {
         revealTarget(target);
@@ -423,7 +425,7 @@ export function renderBootstrapTutorialControllerFactory() {
         const submitter = form.querySelector('button[type="submit"], input[type="submit"], button:not([type])');
         if (!submitter) throw new Error("Tutorial form has no submit control.");
         flashAutoClick(submitter);
-        await sleep(120);
+        await sleep(20);
         submitter.click();
       };
       const autoCompleteCurrentChapter = async () => {
@@ -443,11 +445,17 @@ export function renderBootstrapTutorialControllerFactory() {
           fillForm(target, current.payload);
           await persistTutorialProgress({ ...state.tutorialProgress, draftInputs: current.payload, hidden: false, replayScopeKey: null });
           renderTutorialOverlay();
-          await sleep(180);
+          await sleep(40);
           await submitTutorialForm(target);
           const previousStepId = current.id;
-          await waitFor(() => (state.tutorialProgress?.stepId !== previousStepId) || Boolean(state.tutorialProgress?.completedAt));
-          await sleep(120);
+          await waitFor(async () => {
+            if ((state.tutorialProgress?.stepId !== previousStepId) || Boolean(state.tutorialProgress?.completedAt)) return true;
+            return isStepComplete(tutorialStep());
+          });
+          if (state.tutorialProgress?.stepId === previousStepId && isStepComplete(tutorialStep())) {
+            await advanceTutorial();
+          }
+          await sleep(20);
         }
       };
       const clearReplayForInteraction = async eventTarget => {
@@ -656,7 +664,7 @@ export function renderBootstrapTutorialControllerFactory() {
             renderTutorialOverlay();
             const form = target?.matches?.("form") ? target : target?.closest?.("form") || target?.querySelector?.("form");
             if (form) {
-              await sleep(120);
+              await sleep(20);
               await submitTutorialForm(target);
               return;
             }

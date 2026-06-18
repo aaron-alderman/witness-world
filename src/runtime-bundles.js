@@ -5,7 +5,7 @@ import {
 import {
   CORE_RUNTIME_CAPABILITY_IDS
 } from "./runtime-builtins.js";
-import { renderWidgetPage } from "./runtime-widget-page.js";
+import { renderWidgetPage } from "../plugins/inspect/widget-page.js";
 import { buildRuntimeShellDiagnostics } from "./runtime-shell-contract.js";
 import {
   buildRuntimeAuthoringCapabilityMatrix,
@@ -13,6 +13,19 @@ import {
   createRuntimeAuthoringPolicy,
   defaultRuntimeAuthoringMode
 } from "./runtime-authoring-policy.js";
+import {
+  cloneRuntimeOwnerChain,
+  describeHandlerOwnership,
+  describeHandlerSetOwnership,
+  describeRuntimeRouteOwnership,
+  describeShellOwnership,
+  describeSurfaceOwnership,
+  summarizeRuntimeBundleOwner
+} from "./runtime-ownership.js";
+import {
+  buildGovernanceRouteInventory,
+  runtimeGovernanceEntry
+} from "./runtime-governance.js";
 import {
   firstPartyBundleRows,
   runtimeProfilePresetsFromSeeds
@@ -209,7 +222,9 @@ function cloneSurface(surface) {
 function cloneHandlerMetadataEntry(entry = {}) {
   return {
     ...(entry || {}),
-    methods: Array.isArray(entry?.methods) ? [...entry.methods] : undefined
+    methods: Array.isArray(entry?.methods) ? [...entry.methods] : undefined,
+    ownerChain: cloneRuntimeOwnerChain(entry?.ownerChain),
+    governance: entry?.governance ? { ...entry.governance } : undefined
   };
 }
 
@@ -242,6 +257,7 @@ function handlerCatalogProviderForBundle(bundle) {
 function pluginOwnedBundle(bundleId, override = {}) {
   return deepFreezeBundle({
     id: String(bundleId || ""),
+    pluginId: override.pluginId ?? null,
     version: override.version ?? "0",
     kind: "plugin",
     displayName: override.displayName ?? String(bundleId || ""),
@@ -269,6 +285,8 @@ function materializeBundle(bundleId, bundleOverrides = {}) {
   const overrideProviders = override.contributes?.providers ?? base.contributes.providers;
   return deepFreezeBundle({
     ...base,
+    kind: override.kind ?? base.kind,
+    pluginId: override.pluginId ?? base.pluginId ?? null,
     displayName: override.displayName ?? base.displayName,
     description: override.description ?? base.description,
     dependsOn: override.dependsOn ?? base.dependsOn,
@@ -317,34 +335,49 @@ export function availableRuntimeBundleIds() {
 export function runtimeBundleManifest(bundleId) {
   const bundle = BUNDLE_BY_ID.get(String(bundleId || ""));
   if (!bundle) return null;
-  const handlerCatalog = cloneHandlerCatalogProvider(handlerCatalogProviderForBundle(bundle));
+  const handlerCatalogProvider = cloneHandlerCatalogProvider(handlerCatalogProviderForBundle(bundle));
+  const handlerCatalogMetadata = Object.fromEntries(
+    Object.entries(handlerCatalogProvider.handlerMetadata ?? {})
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([handlerId, entry]) => [
+        handlerId,
+        {
+          ...cloneHandlerMetadataEntry(entry),
+          ...(runtimeGovernanceEntry(handlerId) ? { governance: runtimeGovernanceEntry(handlerId) } : {}),
+          ...describeHandlerOwnership({
+            handlerId,
+            handlerMetadata: entry,
+            bundle
+          })
+        }
+      ])
+  );
   return {
     ...bundle,
     handlerCatalog: {
-      authorableHandlers: [...handlerCatalog.authorableHandlers],
-      pageHandlers: [...handlerCatalog.pageHandlers],
-      dispatchHandlers: [...handlerCatalog.dispatchHandlers],
-      handlerMetadata: Object.fromEntries(
-        Object.entries(handlerCatalog.handlerMetadata ?? {})
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([handlerId, entry]) => [
-            handlerId,
-            {
-              ...cloneHandlerMetadataEntry(entry)
-            }
-          ])
-      )
+      authorableHandlers: [...handlerCatalogProvider.authorableHandlers],
+      pageHandlers: [...handlerCatalogProvider.pageHandlers],
+      dispatchHandlers: [...handlerCatalogProvider.dispatchHandlers],
+      handlerMetadata: handlerCatalogMetadata
     },
     contributes: {
       capabilities: [...bundle.contributes.capabilities],
       providers: [...bundle.contributes.providers],
       routes: bundle.contributes.routes.map(route => ({
         ...route,
-        handlerMetadata: handlerCatalog.handlerMetadata?.[String(route.handler)] ? {
-          ...cloneHandlerMetadataEntry(handlerCatalog.handlerMetadata[String(route.handler)])
+        ...describeRuntimeRouteOwnership({
+          route,
+          handlerMetadata: handlerCatalogMetadata[String(route.handler)] ?? {},
+          bundle
+        }),
+        handlerMetadata: handlerCatalogMetadata?.[String(route.handler)] ? {
+          ...cloneHandlerMetadataEntry(handlerCatalogMetadata[String(route.handler)])
         } : undefined
       })),
-      surfaces: bundle.contributes.surfaces.map(cloneSurface)
+      surfaces: bundle.contributes.surfaces.map(surface => ({
+        ...cloneSurface(surface),
+        ...describeSurfaceOwnership({ surface, bundle })
+      }))
     },
     dependsOn: [...bundle.dependsOn]
   };
@@ -608,7 +641,16 @@ export function handlerMetadataForProfile(profileName = DEFAULT_RUNTIME_PROFILE,
     for (const provider of bundle.contributes.providers) {
       if (provider?.kind !== "handlerCatalog") continue;
       for (const [handlerId, entry] of Object.entries(provider.handlerMetadata ?? {})) {
-        metadata[String(handlerId)] = { ...(entry || {}) };
+        const governance = runtimeGovernanceEntry(handlerId);
+        metadata[String(handlerId)] = {
+          ...cloneHandlerMetadataEntry(entry),
+          ...(governance ? { governance } : {}),
+          ...describeHandlerOwnership({
+            handlerId,
+            handlerMetadata: entry,
+            bundle
+          })
+        };
       }
     }
   }
@@ -618,6 +660,44 @@ export function handlerMetadataForProfile(profileName = DEFAULT_RUNTIME_PROFILE,
 export function runtimeBundleSummaryForProfile(profileName = DEFAULT_RUNTIME_PROFILE, options = {}) {
   const resolved = selectedComposition(profileName, options);
   const handlerMetadata = handlerMetadataForProfile(resolved.id, options);
+  const routeSummaries = [];
+  const surfaceSummaries = new Map();
+  for (const bundle of resolved.bundles) {
+    for (const route of bundle.contributes.routes ?? []) {
+      routeSummaries.push({
+        method: route.method,
+        matcher: route.kind === "exact" ? route.path : String(route.pattern),
+        handler: route.handler,
+        ...describeRuntimeRouteOwnership({
+          route,
+          handlerMetadata: handlerMetadata[String(route.handler)] ?? {},
+          bundle
+        }),
+        governance: handlerMetadata[String(route.handler)]?.governance
+          ? { ...handlerMetadata[String(route.handler)].governance }
+          : undefined,
+        handlerMetadata: handlerMetadata[String(route.handler)] ? {
+          ...(handlerMetadata[String(route.handler)] || {}),
+          governance: handlerMetadata[String(route.handler)]?.governance
+            ? { ...handlerMetadata[String(route.handler)].governance }
+            : undefined,
+          methods: Array.isArray(handlerMetadata[String(route.handler)]?.methods)
+            ? [...handlerMetadata[String(route.handler)].methods]
+            : undefined
+        } : undefined
+      });
+    }
+    for (const surface of bundle.contributes.surfaces ?? []) {
+      surfaceSummaries.set(surface.id, {
+        id: surface.id,
+        href: surface.href,
+        action: surface.action ? { ...surface.action } : null,
+        tier: surface.tier,
+        contexts: [...(surface.contexts ?? [])],
+        ...describeSurfaceOwnership({ surface, bundle })
+      });
+    }
+  }
   return {
     profile: resolved.id,
     profilePluginIds: [...resolved.profilePluginIds],
@@ -626,9 +706,11 @@ export function runtimeBundleSummaryForProfile(profileName = DEFAULT_RUNTIME_PRO
     bundleIds: [...resolved.bundleIds],
     bundles: resolved.bundles.map(bundle => ({
       id: bundle.id,
+      pluginId: bundle.pluginId ?? null,
       kind: bundle.kind,
       displayName: bundle.displayName,
       description: bundle.description,
+      ...summarizeRuntimeBundleOwner(bundle),
       dependsOn: [...bundle.dependsOn],
       capabilityCount: bundle.contributes.capabilities.length,
       providerCount: bundle.contributes.providers.length,
@@ -647,24 +729,9 @@ export function runtimeBundleSummaryForProfile(profileName = DEFAULT_RUNTIME_PRO
     pageHandlers: pageHandlerIdsForProfile(resolved.id, options),
     dispatchHandlers: dispatchHandlerIdsForProfile(resolved.id, options),
     handlerMetadata,
-    routes: runtimeRouteEntriesForProfile(resolved.id, options).map(route => ({
-      method: route.method,
-      matcher: route.kind === "exact" ? route.path : String(route.pattern),
-      handler: route.handler,
-      handlerMetadata: handlerMetadata[String(route.handler)] ? {
-        ...(handlerMetadata[String(route.handler)] || {}),
-        methods: Array.isArray(handlerMetadata[String(route.handler)]?.methods)
-          ? [...handlerMetadata[String(route.handler)].methods]
-          : undefined
-      } : undefined
-    })),
-    surfaces: runtimeSurfaceEntriesForProfile(resolved.id, null, options).map(surface => ({
-      id: surface.id,
-      href: surface.href,
-      action: surface.action ? { ...surface.action } : null,
-      tier: surface.tier,
-      contexts: [...(surface.contexts ?? [])]
-    }))
+    governanceRoutes: buildGovernanceRouteInventory(routeSummaries),
+    routes: routeSummaries,
+    surfaces: [...surfaceSummaries.values()]
   };
 }
 
@@ -687,9 +754,14 @@ export function buildRuntimeDiagnosticsForProfile({
   activePluginIds = [],
   rejectedPlugins = [],
   pluginAddedBundleIds = [],
-  authoringPolicy = null
+  authoringPolicy = null,
+  handlerSetProviders = {}
 } = {}) {
   const summary = runtimeBundleSummaryForProfile(profileName, { additionalBundleIds, bundleOverrides });
+  const shellDiagnostics = buildRuntimeShellDiagnostics({
+    activeBundleIds: summary.bundleIds,
+    startupMode
+  });
   const effectiveAuthoringPolicy = cloneRuntimeAuthoringPolicy(
     authoringPolicy
     ?? createRuntimeAuthoringPolicy({
@@ -709,9 +781,14 @@ export function buildRuntimeDiagnosticsForProfile({
     } : null,
     activeBundles: summary.bundles.map(bundle => ({
       id: bundle.id,
+      pluginId: bundle.pluginId ?? null,
       kind: bundle.kind,
       displayName: bundle.displayName,
       description: bundle.description,
+      ownerClass: bundle.ownerClass,
+      ownerBundleId: bundle.ownerBundleId,
+      ownerPluginId: bundle.ownerPluginId,
+      ownerNote: bundle.ownerNote,
       dependsOn: [...bundle.dependsOn],
       capabilityCount: bundle.capabilityCount,
       providerCount: bundle.providerCount,
@@ -735,6 +812,7 @@ export function buildRuntimeDiagnosticsForProfile({
       frontend: [...(installedHostCapabilities.frontend ?? [])].map(String).sort()
     },
     routes: summary.routes.map(route => ({ ...route })),
+    governanceRoutes: summary.governanceRoutes.map(route => ({ ...route })),
     surfaces: summary.surfaces.map(surface => ({
       ...surface,
       action: surface.action ? { ...surface.action } : null,
@@ -750,7 +828,8 @@ export function buildRuntimeDiagnosticsForProfile({
           handlerId,
           {
             ...(metadata || {}),
-            methods: Array.isArray(metadata?.methods) ? [...metadata.methods] : undefined
+            methods: Array.isArray(metadata?.methods) ? [...metadata.methods] : undefined,
+            ownerChain: cloneRuntimeOwnerChain(metadata?.ownerChain)
           }
         ])
     ),
@@ -758,12 +837,20 @@ export function buildRuntimeDiagnosticsForProfile({
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([id, definition]) => ({
         id,
+        ...describeHandlerSetOwnership({
+          handlerSetId: id,
+          provider: handlerSetProviders?.[id] ?? null,
+          handlers: definition?.handlers ?? []
+        }),
         handlers: [...(definition?.handlers ?? [])].map(String).sort()
       })),
-    shells: buildRuntimeShellDiagnostics({
-      activeBundleIds: summary.bundleIds,
-      startupMode
-    }),
+    shells: {
+      ...shellDiagnostics,
+      shells: shellDiagnostics.shells.map(shell => ({
+        ...shell,
+        ...describeShellOwnership(shell.id)
+      }))
+    },
     authoringPolicy: effectiveAuthoringPolicy,
     authoringMatrix: buildRuntimeAuthoringCapabilityMatrix(effectiveAuthoringPolicy),
     operator: operatorContract

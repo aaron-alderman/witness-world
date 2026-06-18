@@ -3,7 +3,8 @@ import {
   defineCapability,
   installCapability,
   removeCapability,
-  moduleProjectors
+  moduleProjectors,
+  resolveContextualRef
 } from "../../src/modules.js";
 import { processSpecFor, typeModelProjection, validateProcessInput } from "../../src/type-model.js";
 import { widgetDefinitions } from "../../src/widgets.js";
@@ -79,6 +80,23 @@ function isRoutePageTarget(world, routeId) {
 function installExists(world, { capability, target, targetKind }) {
   return world.project(moduleProjectors.capabilityInstalls)
     .some(row => row.capability === capability && row.target === target && row.targetKind === targetKind);
+}
+
+export function resolveCapabilityTargetInput(world, body, {
+  contextField = "context",
+  idField = "target",
+  refField = "targetRef",
+  label = "capability target"
+} = {}) {
+  const resolved = resolveContextualRef(world.allWitnesses(), {
+    context: body?.[contextField] ?? null,
+    id: body?.[idField] ?? null,
+    ref: body?.[refField] ?? null,
+    label
+  });
+  if (!resolved.ok) return resolved;
+  if (!resolved.target) return { ok: false, error: `${label} is required` };
+  return resolved;
 }
 
 export function requestBootstrapCapabilityDefine(world, {
@@ -214,7 +232,21 @@ export function requestBootstrapCapabilityInstall(world, {
     });
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
-  const input = validated.value;
+  const resolvedTarget = resolveCapabilityTargetInput(world, validated.value, {
+    label: "capability install target"
+  });
+  if (!resolvedTarget.ok) {
+    const witness = fail(world, {
+      process: "capability.install.failed",
+      actor: actor || backendHost,
+      body: { reason: resolvedTarget.error }
+    });
+    return { ok: false, status: 400, error: resolvedTarget.error, witness };
+  }
+  const input = {
+    ...validated.value,
+    target: resolvedTarget.target
+  };
   const capability = knownCapability(world, input.capability);
   if (!capability) {
     const witness = fail(world, {
@@ -317,7 +349,21 @@ export function requestBootstrapCapabilityRemove(world, {
     });
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
-  const input = validated.value;
+  const resolvedTarget = resolveCapabilityTargetInput(world, validated.value, {
+    label: "capability remove target"
+  });
+  if (!resolvedTarget.ok) {
+    const witness = fail(world, {
+      process: "capability.remove.failed",
+      actor: actor || backendHost,
+      body: { reason: resolvedTarget.error }
+    });
+    return { ok: false, status: 400, error: resolvedTarget.error, witness };
+  }
+  const input = {
+    ...validated.value,
+    target: resolvedTarget.target
+  };
   if (!installExists(world, input)) {
     const witness = fail(world, {
       process: "capability.remove.failed",

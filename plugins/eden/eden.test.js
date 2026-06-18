@@ -428,6 +428,7 @@ test("eden page script and client runtime delegate per-surface assembly and deta
   assert.equal(pageScriptSource.includes('from "./eden-surface-adapters.js"'), true);
   assert.equal(pageScriptSource.includes("renderEdenSurfaceAdaptersPrelude()"), true);
   assert.equal(clientRuntimeSource.includes("return ensureEdenPageSurface(surface, {"), true);
+  assert.equal(clientRuntimeSource.includes("createEdenVersionProposal,"), true);
   assert.equal(clientRuntimeSource.includes("return renderEdenPageSurfaceDetails(node, surface, {"), true);
   assert.equal(clientRuntimeSource.includes("function renderTreeSurface("), false);
   assert.equal(clientRuntimeSource.includes("return ensureEdenSurfaceNode(surface, {"), false);

@@ -2,6 +2,8 @@ export function renderSurfaceInspectorPanelViewFactory() {
   return String.raw`
     const renderSurfaceInspectorEditorView = ${renderSurfaceInspectorEditorView.toString()};
     const renderSurfaceInspectorVersionsView = ${renderSurfaceInspectorVersionsView.toString()};
+    const renderSurfaceInspectorOwnershipView = ${renderSurfaceInspectorOwnershipView.toString()};
+    const renderSurfaceInspectorRuntimeCorrelationView = ${renderSurfaceInspectorRuntimeCorrelationView.toString()};
     const renderSurfaceInspectorPanelView = ${renderSurfaceInspectorPanelView.toString()};
     const renderSurfaceInspectorMenuView = ${renderSurfaceInspectorMenuView.toString()};
   `;
@@ -102,10 +104,99 @@ function renderSurfaceInspectorVersionsView({
     + "</section>";
 }
 
+function renderSurfaceInspectorOwnershipView({
+  widgetId = "",
+  ownershipSummary = "",
+  ownershipRows = [],
+  ownershipChain = [],
+  ownershipUnavailableReason = "",
+  escapeHtml = value => String(value ?? "")
+} = {}) {
+  if (!widgetId) return "";
+  const rows = Array.isArray(ownershipRows) ? ownershipRows.filter(([, value]) => value) : [];
+  const chain = Array.isArray(ownershipChain) ? ownershipChain.filter(entry => entry && typeof entry === "object") : [];
+  const unavailable = String(ownershipUnavailableReason || "").trim();
+  if (!rows.length && !chain.length && !ownershipSummary && !unavailable) return "";
+  const chainHtml = chain.length
+    ? '<div class="surface-item-list">' + chain.map(entry => {
+        const labels = [
+          entry.class || "",
+          entry.pluginId ? ("plugin " + entry.pluginId) : "",
+          entry.bundleId ? ("bundle " + entry.bundleId) : "",
+          entry.handlerSetId ? ("handler set " + entry.handlerSetId) : "",
+          entry.handlerId ? ("handler " + entry.handlerId) : "",
+          entry.shellId ? ("shell " + entry.shellId) : ""
+        ].filter(Boolean).join(" / ");
+        return '<div class="surface-item">'
+          + '<strong>' + escapeHtml(labels || "owner") + "</strong>"
+          + (entry.note ? '<div class="surface-inspector-summary">' + escapeHtml(entry.note) + "</div>" : "")
+          + "</div>";
+      }).join("") + "</div>"
+    : "";
+  return '<section data-surface-inspector-ownership>'
+    + '<div class="surface-inspector-meta">Runtime Owner</div>'
+    + (ownershipSummary
+      ? '<div class="surface-inspector-summary">' + escapeHtml(ownershipSummary) + "</div>"
+      : "")
+    + (unavailable
+      ? '<div class="surface-inspector-summary">' + escapeHtml(ownershipUnavailableReason) + "</div>"
+      : "")
+    + (rows.length
+      ? '<div class="surface-inspector-grid">' + rows.map(([label, value]) =>
+          '<div class="surface-inspector-row"><div class="surface-inspector-label">' + escapeHtml(label) + '</div><div class="surface-inspector-value">' + escapeHtml(value) + "</div></div>"
+        ).join("") + "</div>"
+      : "")
+    + chainHtml
+    + "</section>";
+}
+
+function renderSurfaceInspectorRuntimeCorrelationView({
+  widgetId = "",
+  runtimeCorrelationSummary = "",
+  runtimeCorrelationRows = [],
+  runtimeCorrelationOps = [],
+  runtimeCorrelationUnavailableReason = "",
+  escapeHtml = value => String(value ?? "")
+} = {}) {
+  if (!widgetId) return "";
+  const rows = Array.isArray(runtimeCorrelationRows) ? runtimeCorrelationRows.filter(([, value]) => value) : [];
+  const ops = Array.isArray(runtimeCorrelationOps) ? runtimeCorrelationOps.filter(entry => entry && typeof entry === "object") : [];
+  const unavailable = String(runtimeCorrelationUnavailableReason || "").trim();
+  if (!rows.length && !ops.length && !runtimeCorrelationSummary && !unavailable) return "";
+  const opsHtml = ops.length
+    ? '<div class="surface-item-list">' + ops.map(entry =>
+        '<div class="surface-item">'
+          + '<strong>' + escapeHtml(entry.label || entry.request || "operation") + "</strong>"
+          + (entry.summary ? '<div class="surface-inspector-summary">' + escapeHtml(entry.summary) + "</div>" : "")
+          + (entry.selectTarget
+            ? '<div class="surface-actions-compact"><button type="button" data-surface-inspector-runtime-select="' + escapeHtml(entry.selectTarget) + '">' + escapeHtml(entry.selectLabel || "Open In World") + "</button></div>"
+            : "")
+          + "</div>"
+      ).join("") + "</div>"
+    : "";
+  return '<section data-surface-inspector-runtime-correlation>'
+    + '<div class="surface-inspector-meta">Runtime Correlation</div>'
+    + (runtimeCorrelationSummary
+      ? '<div class="surface-inspector-summary">' + escapeHtml(runtimeCorrelationSummary) + "</div>"
+      : "")
+    + (unavailable
+      ? '<div class="surface-inspector-summary">' + escapeHtml(runtimeCorrelationUnavailableReason) + "</div>"
+      : "")
+    + (rows.length
+      ? '<div class="surface-inspector-grid">' + rows.map(([label, value]) =>
+          '<div class="surface-inspector-row"><div class="surface-inspector-label">' + escapeHtml(label) + '</div><div class="surface-inspector-value">' + escapeHtml(value) + "</div></div>"
+        ).join("") + "</div>"
+      : "")
+    + opsHtml
+    + "</section>";
+}
+
 export function renderSurfaceInspectorPanelView({
   liveSurfaceInspectable = false,
   surfaceInspectorOpen = false,
   widgetId = "",
+  selectedRouteId = "",
+  selectedProgramId = "",
   selectedNodeKind = "",
   selectedNodeContext = "",
   selectedElementTag = "",
@@ -118,6 +209,14 @@ export function renderSurfaceInspectorPanelView({
   statusMessage = "",
   statusLevel = "ok",
   graphError = "",
+  ownershipSummary = "",
+  ownershipRows = [],
+  ownershipChain = [],
+  ownershipUnavailableReason = "",
+  runtimeCorrelationSummary = "",
+  runtimeCorrelationRows = [],
+  runtimeCorrelationOps = [],
+  runtimeCorrelationUnavailableReason = "",
   editorHtml = "",
   escapeHtml = value => String(value ?? "")
 } = {}) {
@@ -141,6 +240,8 @@ export function renderSurfaceInspectorPanelView({
     ? [
         '<button type="button" data-surface-inspector-world>Open In World</button>',
         '<button type="button" data-surface-inspector-world-mode="witness">Show Witnesses</button>',
+        selectedRouteId ? '<button type="button" data-surface-inspector-world-select="' + escapeHtml(selectedRouteId) + '">Show Route</button>' : "",
+        selectedProgramId ? '<button type="button" data-surface-inspector-world-select="' + escapeHtml(selectedProgramId) + '">Show Frontend Program</button>' : "",
         selectedSourceFile ? '<button type="button" data-surface-inspector-world-mode="source">Show Source</button>' : "",
         processEvent ? '<button type="button" data-surface-inspector-open-process>Open Process View</button>' : ""
       ].filter(Boolean).join("")
@@ -168,6 +269,22 @@ export function renderSurfaceInspectorPanelView({
         ).join("") + "</div>"
       : "")
     + (actions ? '<div class="surface-actions-compact">' + actions + "</div>" : "")
+    + renderSurfaceInspectorOwnershipView({
+      widgetId,
+      ownershipSummary,
+      ownershipRows,
+      ownershipChain,
+      ownershipUnavailableReason,
+      escapeHtml
+    })
+    + renderSurfaceInspectorRuntimeCorrelationView({
+      widgetId,
+      runtimeCorrelationSummary,
+      runtimeCorrelationRows,
+      runtimeCorrelationOps,
+      runtimeCorrelationUnavailableReason,
+      escapeHtml
+    })
     + renderSurfaceInspectorVersionsView({
       versionState,
       versionRows,

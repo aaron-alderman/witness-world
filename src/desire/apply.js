@@ -1157,24 +1157,42 @@ function applyCoreRuntimeDeclaration(world, doc) {
         output: req(values, "output")
       });
     case "capabilityInstall":
-      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+      {
+        const target = resolvePreparedDocRef(world, values, {
+          idField: "target",
+          refField: "targetRef",
+          label: "capability target"
+        });
+        if (!target.ok) throw new Error(target.error);
+        if (!target.target) throw new Error("capability target is required");
+        return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
         installCapability(world, {
           actor: req(values, "actor"),
           capability: req(values, "capability"),
-          target: req(values, "target"),
+          target: target.target,
           targetKind: req(values, "targetKind"),
           config: values.config ?? null
         })
-      ]);
+        ]);
+      }
     case "capabilityRemove":
-      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+      {
+        const target = resolvePreparedDocRef(world, values, {
+          idField: "target",
+          refField: "targetRef",
+          label: "capability target"
+        });
+        if (!target.ok) throw new Error(target.error);
+        if (!target.target) throw new Error("capability target is required");
+        return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
         removeCapability(world, {
           actor: req(values, "actor"),
           capability: req(values, "capability"),
-          target: req(values, "target"),
+          target: target.target,
           targetKind: values.targetKind ?? null
         })
-      ]);
+        ]);
+      }
     case "runtimePluginInstall":
       return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
         installRuntimePlugin(world, {

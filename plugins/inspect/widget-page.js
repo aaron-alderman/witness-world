@@ -324,6 +324,14 @@ function renderClientEngine(program) {
     if (event) url.searchParams.set('event', event);
     return url.pathname + url.search;
   };
+  const currentSurfaceRouteId = () => typeof config.surfaceRouteId === 'string' && config.surfaceRouteId.trim()
+    ? config.surfaceRouteId.trim()
+    : '';
+  const currentSurfaceRuntimeInspection = () => {
+    const inspection = window?.__surfaceRuntimeInspection;
+    return inspection && typeof inspection === 'object' ? inspection : null;
+  };
+  const backendFacingStepOps = new Set(['fetchJson', 'postJson', 'patchJson', 'deleteJson', 'refreshProjection', 'run']);
   const worldSurfaceHref = ({ select = '', mode = '' } = {}) => {
     const url = new URL('/world', window.location.origin);
     if (select) url.searchParams.set('select', select);
@@ -365,6 +373,13 @@ function renderClientEngine(program) {
   const selectedSurfaceWidgetSource = () => {
     const node = selectedSurfaceWidgetNode();
     return (node?.sources || []).slice(-1)[0] || null;
+  };
+  const surfaceInspectorNodeValueString = (node, key) => {
+    const row = [...(node?.values || []), ...(node?.properties || [])].find(entry => entry?.key === key);
+    if (!row?.value || typeof row.value !== 'object') return '';
+    if (row.value.type === 'string') return String(row.value.value || '');
+    if (row.value.type === 'ref') return String(row.value.target || '');
+    return '';
   };
   const selectedSurfaceWidgetVersionState = () => selectedSurfaceWidgetNode()?.widgetVersionState || null;
   const selectedSurfaceWidgetVersions = () => selectedSurfaceWidgetNode()?.widgetVersions || [];
@@ -478,6 +493,11 @@ function renderClientEngine(program) {
     state.surfaceInspectorWidgetsLoaded = false;
     state.surfaceInspectorWidgetsError = null;
   };
+  const invalidateSurfaceInspectorRuntimeDiagnostics = () => {
+    state.surfaceInspectorRuntimeDiagnostics = null;
+    state.surfaceInspectorRuntimeDiagnosticsLoaded = false;
+    state.surfaceInspectorRuntimeDiagnosticsError = null;
+  };
   const setSurfaceInspectorStatus = (message, level = 'ok') => {
     state.surfaceInspectorStatus = message ? { message: String(message), level } : null;
   };
@@ -485,6 +505,84 @@ function renderClientEngine(program) {
     const selectedNode = selectedSurfaceWidgetNode();
     if (selectedNode?.processSelection?.program && selectedNode?.processSelection?.event) return selectedNode.processSelection;
     return deriveSurfaceInspectorProcessSelection(selectedSurfaceWidgetId());
+  };
+  const selectedSurfaceWidgetRuntimeCorrelation = () => {
+    const widgetId = selectedSurfaceWidgetId();
+    if (!widgetId) return null;
+    const selectedElement = selectedSurfaceWidgetElement();
+    const processSelection = selectedSurfaceInspectorProcessSelection();
+    const ops = summarizeSurfaceInspectorBackendOperations({
+      processSelection,
+      selectedElement,
+      diagnostics: state.surfaceInspectorRuntimeDiagnostics
+    });
+    const inspection = currentSurfaceRuntimeInspection();
+    if (!inspection) {
+      if (!processSelection?.program || !processSelection?.event) {
+        return {
+          summary: '',
+          rows: [],
+          ops,
+          unavailableReason: 'Shared runtime inspection is unavailable for this page.'
+        };
+      }
+      return {
+        summary: 'Authored event ' + processSelection.event + ' in ' + processSelection.program + ' is declared for this widget, but shared runtime probe data is unavailable for this page.',
+        rows: [
+          ['Frontend Program', processSelection.program],
+          ['Frontend Event', processSelection.event]
+        ],
+        ops,
+        unavailableReason: 'Shared runtime inspection is unavailable for this page.'
+      };
+    }
+    const latestProbe = inspection.latestProbe && typeof inspection.latestProbe === 'object' ? inspection.latestProbe : null;
+    const processInfo = inspection.process && typeof inspection.process === 'object' ? inspection.process : null;
+    const currentProcessRefs = Array.isArray(latestProbe?.currentProcessRefs) ? latestProbe.currentProcessRefs.map(String).filter(Boolean) : [];
+    const processStateKeys = latestProbe?.processState && typeof latestProbe.processState === 'object'
+      ? Object.keys(latestProbe.processState)
+      : [];
+    const processDeriveKeys = latestProbe?.processDerives && typeof latestProbe.processDerives === 'object'
+      ? Object.keys(latestProbe.processDerives)
+      : [];
+    if (!processSelection?.program || !processSelection?.event) {
+      return {
+        summary: currentProcessRefs.length
+          ? ('No direct authored event is attached to this selected widget. The active surface still runs ' + currentProcessRefs.join(', ') + '.')
+          : 'No direct authored event is attached to this selected widget.',
+        rows: [
+          ['Current Process Refs', currentProcessRefs.join(', ')],
+          ['Trace Entries', processInfo?.traceLength ?? ''],
+          ['Runtime Bridges', inspection.runtimeBridgeCount ?? latestProbe?.runtimeBridgeCount ?? ''],
+          ['Bound Interactions', latestProbe?.boundInteractionCount ?? '']
+        ].filter(([, value]) => value !== '' && value != null),
+        ops,
+        unavailableReason: latestProbe || processInfo ? '' : 'Runtime probe data has not arrived yet.'
+      };
+    }
+    const processActive = currentProcessRefs.includes(processSelection.program);
+    return {
+      summary: 'Authored event ' + processSelection.event + ' in ' + processSelection.program
+        + (processActive
+          ? ' is active in the shared runtime probe for this surface.'
+          : ' is declared for this widget, but is not currently the active process ref in the live probe.'),
+      rows: [
+        ['Frontend Program', processSelection.program],
+        ['Frontend Event', processSelection.event],
+        ['Process Active', processActive ? 'yes' : 'no'],
+        ['Current Process Refs', currentProcessRefs.join(', ')],
+        ['Trace Entries', processInfo?.traceLength ?? ''],
+        ['In-Flight Steps', processInfo?.inFlightCount ?? ''],
+        ['Runtime Bridges', inspection.runtimeBridgeCount ?? latestProbe?.runtimeBridgeCount ?? ''],
+        ['Bound Interactions', latestProbe?.boundInteractionCount ?? ''],
+        ['Route State Target', latestProbe?.routeStateTarget?.path || latestProbe?.routeStateTarget?.surfaceId || ''],
+        ['Active Route Target', latestProbe?.activeRouteTarget?.path || latestProbe?.activeRouteTarget?.surfaceId || ''],
+        ['State Keys', summarizeSurfaceInspectorKeyList(processStateKeys)],
+        ['Derives', summarizeSurfaceInspectorKeyList(processDeriveKeys)]
+      ].filter(([, value]) => value !== '' && value != null),
+      ops,
+      unavailableReason: latestProbe || processInfo ? '' : 'Runtime probe data has not arrived yet.'
+    };
   };
   const ensureSurfaceInspectorGraph = async ({ force = false } = {}) => {
     if (!liveSurfaceInspectable) return { ok: false, error: 'surface inspector unavailable' };
@@ -551,6 +649,114 @@ function renderClientEngine(program) {
       state.surfaceInspectorWidgetsPromise = null;
     }
   };
+  const ensureSurfaceInspectorRuntimeDiagnostics = async ({ force = false } = {}) => {
+    if (!liveSurfaceInspectable) return { ok: false, error: 'surface inspector unavailable' };
+    if (force) invalidateSurfaceInspectorRuntimeDiagnostics();
+    if (state.surfaceInspectorRuntimeDiagnosticsLoaded && state.surfaceInspectorRuntimeDiagnostics) {
+      return { ok: true, diagnostics: state.surfaceInspectorRuntimeDiagnostics };
+    }
+    if (state.surfaceInspectorRuntimeDiagnosticsPromise) return state.surfaceInspectorRuntimeDiagnosticsPromise;
+    state.surfaceInspectorRuntimeDiagnosticsPromise = (async () => {
+      try {
+        const inspection = currentSurfaceRuntimeInspection();
+        let diagnostics = null;
+        if (!force && inspection?.serverDiagnostics && typeof inspection.serverDiagnostics === 'object') {
+          diagnostics = inspection.serverDiagnostics;
+        } else if (inspection && typeof inspection.refreshServerDiagnostics === 'function') {
+          diagnostics = await inspection.refreshServerDiagnostics();
+        } else {
+          const url = '/api/runtime/diagnostics';
+          const response = await fetch(url, requestOptions({}, { url }));
+          diagnostics = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(diagnostics?.error || ('runtime diagnostics request failed (' + response.status + ')'));
+          }
+        }
+        state.surfaceInspectorRuntimeDiagnostics = diagnostics && typeof diagnostics === 'object' ? diagnostics : null;
+        state.surfaceInspectorRuntimeDiagnosticsLoaded = true;
+        state.surfaceInspectorRuntimeDiagnosticsError = null;
+        return { ok: true, diagnostics: state.surfaceInspectorRuntimeDiagnostics };
+      } catch (error) {
+        state.surfaceInspectorRuntimeDiagnostics = null;
+        state.surfaceInspectorRuntimeDiagnosticsLoaded = true;
+        state.surfaceInspectorRuntimeDiagnosticsError = error instanceof Error ? error.message : String(error);
+        return { ok: false, error: state.surfaceInspectorRuntimeDiagnosticsError };
+      }
+    })();
+    try {
+      return await state.surfaceInspectorRuntimeDiagnosticsPromise;
+    } finally {
+      state.surfaceInspectorRuntimeDiagnosticsPromise = null;
+    }
+  };
+  const selectedSurfaceWidgetOwnership = () => {
+    const widgetId = selectedSurfaceWidgetId();
+    if (!widgetId) return null;
+    const routeId = currentSurfaceRouteId();
+    const surfaceProgramId = typeof config.surfaceProgramId === 'string' && config.surfaceProgramId.trim()
+      ? config.surfaceProgramId.trim()
+      : '';
+    const inspection = currentSurfaceRuntimeInspection();
+    const runtimeIds = Array.isArray(inspection?.runtimeIds) ? inspection.runtimeIds.map(String).filter(Boolean) : [];
+    const browserRuntimeCapabilities = Array.isArray(inspection?.browserRuntimeCapabilities)
+      ? inspection.browserRuntimeCapabilities.map(String).filter(Boolean)
+      : [];
+    const activeSurfaceId = typeof inspection?.activeSurfaceId === 'string' && inspection.activeSurfaceId.trim()
+      ? inspection.activeSurfaceId.trim()
+      : '';
+    if (!routeId) {
+      return {
+        summary: 'Runtime ownership explains the current served route for this visible widget.',
+        rows: [],
+        chain: [],
+        unavailableReason: 'Current page route metadata is unavailable for this selection.'
+      };
+    }
+    const diagnostics = state.surfaceInspectorRuntimeDiagnostics;
+    if (!diagnostics || typeof diagnostics !== 'object') {
+      return {
+        summary: 'Runtime ownership explains the current served route for this visible widget.',
+        rows: [],
+        chain: [],
+        unavailableReason: state.surfaceInspectorRuntimeDiagnosticsError
+          ? ('Runtime ownership metadata is unavailable right now. ' + state.surfaceInspectorRuntimeDiagnosticsError)
+          : 'Loading runtime ownership metadata...'
+      };
+    }
+    const mountedRoutes = Array.isArray(diagnostics.mountedRoutes) ? diagnostics.mountedRoutes : [];
+    const mountedRoute = mountedRoutes.find(route => String(route?.id || '') === routeId) || null;
+    if (!mountedRoute) {
+      return {
+        summary: 'Runtime ownership explains the current served route for this visible widget.',
+        rows: [],
+        chain: [],
+        unavailableReason: 'Runtime diagnostics do not currently expose mounted route ' + routeId + '.'
+      };
+    }
+    return {
+      summary: mountedRoute.ownerNote || ('Selected widget inherits runtime behavior from mounted route ' + routeId + '.'),
+      rows: [
+        ['Runtime Profile', diagnostics.activeProfile || ''],
+        ['Server Runner', diagnostics.serverRunner?.id || mountedRoute.serverRunner || ''],
+        ['Active Surface', activeSurfaceId || ''],
+        ['Frontend Program', surfaceProgramId || ''],
+        ['Runtime IDs', runtimeIds.join(', ')],
+        ['Browser Capabilities', browserRuntimeCapabilities.join(', ')],
+        ['Active Plugins', Array.isArray(diagnostics.plugins?.activePluginIds) ? diagnostics.plugins.activePluginIds.join(', ') : ''],
+        ['Route', mountedRoute.id || routeId],
+        ['Path', mountedRoute.path || ''],
+        ['Handler', mountedRoute.handler || ''],
+        ['Owner Class', mountedRoute.ownerClass || ''],
+        ['Plugin', mountedRoute.ownerPluginId || ''],
+        ['Bundle', mountedRoute.ownerBundleId || ''],
+        ['Handler Set', mountedRoute.ownerHandlerSetId || (Array.isArray(mountedRoute.ownerHandlerSetIds) ? mountedRoute.ownerHandlerSetIds.join(', ') : '')],
+        ['Backend Program', mountedRoute.ownerBackendProgramSoul || ''],
+        ['Serves', mountedRoute.serves || '']
+      ].filter(([, value]) => value),
+      chain: Array.isArray(mountedRoute.ownerChain) ? mountedRoute.ownerChain : [],
+      unavailableReason: ''
+    };
+  };
   const selectSurfaceInspectorWidget = async (widgetId, { refreshGraph = false, statusMessage = null } = {}) => {
     state.surfaceInspectorOpen = true;
     state.surfaceInspectorSelectedId = widgetId || '';
@@ -565,12 +771,15 @@ function renderClientEngine(program) {
     }
     const [loaded, authored] = await Promise.all([
       ensureSurfaceInspectorGraph({ force: refreshGraph }),
-      ensureSurfaceInspectorWidgets({ force: refreshGraph })
+      ensureSurfaceInspectorWidgets({ force: refreshGraph }),
+      ensureSurfaceInspectorRuntimeDiagnostics({ force: refreshGraph })
     ]);
     if (!loaded.ok) {
       setSurfaceInspectorStatus(loaded.error || 'Failed to load world graph for inspector.', 'error');
     } else if (!authored.ok) {
       setSurfaceInspectorStatus(authored.error || 'Failed to load authored widget state for inspector.', 'error');
+    } else if (state.surfaceInspectorRuntimeDiagnosticsError && !state.surfaceInspectorRuntimeDiagnostics) {
+      setSurfaceInspectorStatus('Runtime ownership metadata is unavailable right now.', 'error');
     } else if (!state.surfaceInspectorGraphById?.[widgetId] && !statusMessage) {
       setSurfaceInspectorStatus('Selected widget is not yet visible in the world graph.', 'error');
     } else if (!statusMessage) {
@@ -677,6 +886,8 @@ function renderClientEngine(program) {
     const selectedNode = selectedSurfaceWidgetNode();
     const selectedElement = selectedSurfaceWidgetElement();
     const selectedSource = selectedSurfaceWidgetSource();
+    const ownership = selectedSurfaceWidgetOwnership();
+    const runtimeCorrelation = selectedSurfaceWidgetRuntimeCorrelation();
     const versionState = selectedSurfaceWidgetVersionState();
     const versionRows = selectedSurfaceWidgetVersions();
     const versionAuthority = versionRows.length ? selectedSurfaceWidgetEditAuthority() : { ok: false, reason: '' };
@@ -685,6 +896,8 @@ function renderClientEngine(program) {
       liveSurfaceInspectable,
       surfaceInspectorOpen: state.surfaceInspectorOpen === true,
       widgetId,
+      selectedRouteId: currentSurfaceRouteId(),
+      selectedProgramId: typeof config.surfaceProgramId === 'string' && config.surfaceProgramId.trim() ? config.surfaceProgramId.trim() : '',
       selectedNodeKind: selectedNode?.kind || selectedElement?.getAttribute?.('data-kind') || surfaceInspectorTagLabel(selectedElement) || 'widget',
       selectedNodeContext: selectedNode?.context || '',
       selectedElementTag: surfaceInspectorTagLabel(selectedElement),
@@ -697,6 +910,14 @@ function renderClientEngine(program) {
       statusMessage: state.surfaceInspectorStatus?.message || '',
       statusLevel: state.surfaceInspectorStatus?.level || 'ok',
       graphError: state.surfaceInspectorGraphError || '',
+      ownershipSummary: ownership?.summary || '',
+      ownershipRows: ownership?.rows || [],
+      ownershipChain: ownership?.chain || [],
+      ownershipUnavailableReason: ownership?.unavailableReason || '',
+      runtimeCorrelationSummary: runtimeCorrelation?.summary || '',
+      runtimeCorrelationRows: runtimeCorrelation?.rows || [],
+      runtimeCorrelationOps: runtimeCorrelation?.ops || [],
+      runtimeCorrelationUnavailableReason: runtimeCorrelation?.unavailableReason || '',
       editorHtml: renderSurfaceInspectorEditor(),
       escapeHtml
     });
@@ -1099,6 +1320,7 @@ function renderClientEngine(program) {
       updateSurfaceInspectorUi,
       invalidateSurfaceInspectorGraph,
       invalidateSurfaceInspectorWidgets,
+      invalidateSurfaceInspectorRuntimeDiagnostics,
       selectSurfaceInspectorWidget,
       worldSurfaceHref,
       selectedSurfaceInspectorProcessSelection,
@@ -1617,6 +1839,145 @@ function renderClientEngine(program) {
     if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, interpolateValue(item, scope)]));
     return value;
   };
+  function summarizeSurfaceInspectorKeyList(keys = []) {
+    const values = Array.isArray(keys) ? keys.map(String).filter(Boolean) : [];
+    if (!values.length) return '';
+    if (values.length <= 4) return values.join(', ');
+    return values.slice(0, 4).join(', ') + ' +' + (values.length - 4);
+  }
+  function surfaceInspectorTypedValueToString(value) {
+    if (!value || typeof value !== 'object') return '';
+    if (value.type === 'string') return String(value.value || '');
+    if (value.type === 'ref') return String(value.target || '');
+    return '';
+  }
+  function surfaceInspectorRecordFieldString(record = null, key = '') {
+    const fields = record && typeof record === 'object' && record.type === 'record' && record.fields && typeof record.fields === 'object'
+      ? record.fields
+      : null;
+    if (!fields || !key || !Object.prototype.hasOwnProperty.call(fields, key)) return '';
+    return surfaceInspectorTypedValueToString(fields[key]);
+  }
+  function surfaceInspectorNodeRecordFieldString(node = null, containerKey = '', key = '') {
+    const row = [...(node?.values || []), ...(node?.properties || [])]
+      .find(entry => entry?.key === containerKey);
+    return surfaceInspectorRecordFieldString(row?.value, key);
+  }
+  function surfaceInspectorEventDataForElement(element = null) {
+    const payload = {};
+    const dataset = element?.dataset && typeof element.dataset === 'object' ? element.dataset : {};
+    for (const [key, value] of Object.entries(dataset)) {
+      if (!key || key === 'widget' || key === 'surfaceInspectorSelected') continue;
+      payload[key] = value === 'true' ? true : value === 'false' ? false : value;
+    }
+    return payload;
+  }
+  function surfaceInspectorPathSegments(value = '') {
+    const text = String(value || '').trim();
+    if (!text) return [];
+    try {
+      return new URL(text, window.location.origin).pathname.split('/').filter(Boolean);
+    } catch {
+      return text.split('?')[0].split('/').filter(Boolean);
+    }
+  }
+  function surfaceInspectorRouteMatchesTemplate(routePath = '', templateUrl = '') {
+    const routeSegments = surfaceInspectorPathSegments(routePath);
+    const templateSegments = surfaceInspectorPathSegments(templateUrl);
+    if (!routeSegments.length || routeSegments.length !== templateSegments.length) return false;
+    for (let index = 0; index < routeSegments.length; index += 1) {
+      const routeSegment = routeSegments[index];
+      const templateSegment = templateSegments[index];
+      const routeWildcard = routeSegment.startsWith(':');
+      const templateWildcard = templateSegment.includes('$' + '{');
+      if (routeWildcard || templateWildcard) continue;
+      if (routeSegment !== templateSegment) return false;
+    }
+    return true;
+  }
+  function resolveSurfaceInspectorRouteForRequest({ method = '', url = '', diagnostics = null } = {}) {
+    const upperMethod = String(method || '').toUpperCase();
+    const mountedRoutes = Array.isArray(diagnostics?.mountedRoutes) ? diagnostics.mountedRoutes : [];
+    const routeMatch = mountedRoutes.find(route =>
+      String(route?.method || '').toUpperCase() === upperMethod
+      && surfaceInspectorRouteMatchesTemplate(route?.path || route?.matcher || '', url)
+    );
+    if (routeMatch) return routeMatch;
+    const routes = Array.isArray(diagnostics?.routes) ? diagnostics.routes : [];
+    return routes.find(route =>
+      String(route?.method || '').toUpperCase() === upperMethod
+      && surfaceInspectorRouteMatchesTemplate(route?.matcher || route?.path || '', url)
+    ) || null;
+  }
+  function resolveSurfaceInspectorGraphRouteForRequest({ method = '', url = '' } = {}) {
+    const upperMethod = String(method || '').toUpperCase();
+    const nodes = Object.values(state.surfaceInspectorGraphById || {});
+    return nodes.find(node => {
+      const nodeMethod = surfaceInspectorNodeValueString(node, 'method').toUpperCase();
+      const nodePath = surfaceInspectorNodeValueString(node, 'path');
+      if (!nodeMethod || !nodePath) return false;
+      return nodeMethod === upperMethod && surfaceInspectorRouteMatchesTemplate(nodePath, url);
+    }) || null;
+  }
+  function summarizeSurfaceInspectorBackendOperations({
+    processSelection = null,
+    selectedElement = null,
+    diagnostics = null
+  } = {}) {
+    if (!processSelection?.program || !processSelection?.event) return [];
+    if (processSelection.program !== program.id) return [];
+    const eventData = surfaceInspectorEventDataForElement(selectedElement);
+    const scope = { state, event: eventData };
+    const steps = (program.graph || program.steps || []).filter(step => step.event === processSelection.event);
+    return steps
+      .filter(step => backendFacingStepOps.has(step.op))
+      .map(step => {
+        const params = interpolateValue(step.params || {}, scope);
+        if (step.op === 'refreshProjection') {
+          return {
+            label: 'refreshProjection',
+            summary: 'Re-runs the shared page projection instead of treating client state as the source of truth.'
+          };
+        }
+        if (step.op === 'run') {
+          return {
+            label: 'run ' + String(params.event || ''),
+            summary: 'Dispatches authored frontend event ' + String(params.event || '') + ' through the shared process graph.'
+          };
+        }
+        const method = step.op === 'fetchJson'
+          ? 'GET'
+          : step.op === 'postJson'
+            ? String(params.method || 'POST').toUpperCase()
+            : step.op === 'patchJson'
+              ? String(params.method || 'PATCH').toUpperCase()
+              : String(params.method || 'DELETE').toUpperCase();
+        const url = String(params.url || '').trim();
+        const route = resolveSurfaceInspectorRouteForRequest({ method, url, diagnostics });
+        const routeNode = route?.id
+          ? (state.surfaceInspectorGraphById?.[route.id] || null)
+          : resolveSurfaceInspectorGraphRouteForRequest({ method, url });
+        const authoredBackendProgramSoul = route?.ownerBackendProgramSoul
+          || surfaceInspectorNodeValueString(routeNode, 'backendProgramSoul')
+          || surfaceInspectorNodeRecordFieldString(routeNode, 'params', 'backendProgramSoul')
+          || surfaceInspectorNodeRecordFieldString(routeNode, 'values', 'backendProgramSoul');
+        const routeLabel = route?.path || route?.matcher || surfaceInspectorNodeValueString(routeNode, 'path');
+        const routeOwner = [
+          route?.ownerClass || (authoredBackendProgramSoul ? 'backend-program' : ''),
+          authoredBackendProgramSoul || '',
+          route?.ownerPluginId || '',
+          route?.handler || surfaceInspectorNodeValueString(routeNode, 'handler')
+        ].filter(Boolean).join(' / ');
+        return {
+          label: (method + ' ' + (url || routeLabel || step.op)).trim(),
+          selectTarget: authoredBackendProgramSoul || route?.id || routeNode?.id || '',
+          selectLabel: authoredBackendProgramSoul ? 'Show Backend Program' : ((route?.id || routeNode?.id) ? 'Show Backend Route' : ''),
+          summary: (route || routeNode)
+            ? ('Lowers through ' + routeLabel + ' with owner ' + routeOwner + '.')
+            : ('Authored step ' + step.op + ' targets ' + (url || 'a runtime route') + '.')
+        };
+      });
+  }
   const applyInterpolations = (root, scope) => {
     const applyElementAttrs = element => {
       for (const attr of [...element.attributes]) {

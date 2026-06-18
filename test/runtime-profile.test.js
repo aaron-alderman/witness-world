@@ -1132,14 +1132,21 @@ test("runtime diagnostics endpoint exposes truthful minimal composition", async 
     assert.equal(body.activeProfile, "minimal");
     assert.deepEqual(body.availableProfiles, ["minimal", "authoring", "inspect", "practical-backend", "full"]);
     assert.deepEqual(body.activeBundles.map(bundle => bundle.id), ["bundle-core-runtime"]);
+    assert.equal(body.activeBundles.every(bundle => bundle.ownerClass === "generic-host"), true);
     assert.equal(body.routes.some(route => route.matcher === "/api/runtime/diagnostics" && route.handler === "runtime.diagnostics.read"), true);
+    assert.equal(body.routes.find(route => route.handler === "runtime.diagnostics.read")?.ownerClass, "generic-host");
     assert.equal(body.handlerMetadata["backendProgram.run"].routeKind, "backendProgram");
+    assert.equal(body.handlerMetadata["backendProgram.run"].ownerClass, "backend-program");
     assert.deepEqual(body.handlerMetadata["page.home"].methods, ["GET"]);
+    assert.equal(body.handlerMetadata["page.home"].ownerClass, "generic-host");
     assert.deepEqual(body.installedHostCapabilities.backend, ["http.serve", "runtime.config"]);
     assert.deepEqual(body.installedHostCapabilities.frontend, ["dom.render", "http.fetch"]);
     assert.equal(body.surfaces.some(surface => surface.id === "surface:bootstrap"), false);
+    assert.equal(body.surfaces.find(surface => surface.id === "surface:home")?.ownerClass, "generic-host");
     assert.equal(body.shells.shells.some(shell => shell.id === "browser" && shell.active === true), true);
+    assert.equal(body.shells.shells.find(shell => shell.id === "browser")?.ownerClass, "shell");
     assert.equal(body.shells.shells.some(shell => shell.id === "desktop" && shell.status === "present"), true);
+    assert.equal(body.mountedRoutes.find(route => route.id === "home_route")?.ownerClass, "generic-host");
     assert.equal(typeof body.operator.directories.runtimeRoot, "string");
     assert.equal(body.plugins.validCount >= 5, true);
     assert.equal(body.plugins.activePluginIds.length, 0);
@@ -1172,10 +1179,15 @@ test("runtime diagnostics endpoint exposes full-profile bundle and handler-set c
 
     assert.equal(body.activeProfile, "full");
     assert.equal(body.activeBundles.some(bundle => bundle.id === "bundle-demo"), true);
+    assert.equal(body.activeBundles.find(bundle => bundle.id === "bundle-demo")?.ownerClass, "runtime-plugin");
     assert.equal(body.surfaces.some(surface => surface.id === "surface:world"), true);
+    assert.equal(body.surfaces.find(surface => surface.id === "surface:world")?.ownerClass, "runtime-plugin");
     assert.equal(body.providedCapabilities.includes("db.sql"), true);
     assert.equal(body.handlerSets.some(entry => entry.id === "demo"), true);
+    assert.equal(body.handlerSets.find(entry => entry.id === "demo")?.ownerClass, "handler-set");
+    assert.equal(body.handlerSets.find(entry => entry.id === "demo")?.ownerPluginId, "plugin.demo");
     assert.equal(body.handlerMetadata["events.stream"].routeKind, "stream");
+    assert.equal(body.handlerMetadata["events.stream"].ownerClass, "runtime-plugin");
     assert.deepEqual(body.handlerMetadata["events.stream"].methods, ["GET"]);
     assert.equal(body.plugins.validCount >= 5, true);
     assert.equal(body.plugins.compatibleCount >= 1, true);
@@ -1229,6 +1241,9 @@ test("runtime plugins endpoint exposes local plugin package metadata and activat
     assert.equal(inspectPlugin.resolvedBundles.some(row => row.id === "bundle-inspect"), true);
     assert.equal(inspectPlugin.resolvedRuntimeContributions.surfaces.some(row => row.id === "surface:world"), true);
     assert.equal(inspectPlugin.resolvedRuntimeContributions.handlerMetadata["events.stream"].routeKind, "stream");
+    assert.equal(inspectPlugin.resolvedRuntimeContributions.handlerMetadata["events.stream"].ownerClass, "runtime-plugin");
+    assert.equal(inspectPlugin.resolvedRuntimeContributions.handlerMetadata["events.stream"].ownerPluginId, "plugin.inspect");
+    assert.equal(inspectPlugin.resolvedRuntimeContributions.routes.find(route => route.handler === "events.stream")?.ownerClass, "runtime-plugin");
     assert.deepEqual(inspectPlugin.resolvedRuntimeContributions.routes.find(route => route.handler === "events.stream")?.handlerMetadata?.methods, ["GET"]);
     const pluginPackage = body.packages.find(row => row.id === "plugin.notes-sidebar");
     assert.equal(Boolean(pluginPackage), true);

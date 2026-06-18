@@ -1,4 +1,5 @@
 import {
+  resolveCapabilityTargetInput,
   requestBootstrapCapabilityDefine,
   requestBootstrapCapabilityInstall,
   requestBootstrapCapabilityRemove
@@ -45,12 +46,23 @@ export function createCapabilityAuthoringBundleHandlers({
         return;
       }
       const body = await readJson(req);
-      const auth = ensureTargetAuthority(gate.actor, body.target);
+      const resolvedTarget = resolveCapabilityTargetInput(world, body, {
+        label: "capability install target"
+      });
+      if (!resolvedTarget.ok) {
+        sendJson(res, 400, { error: resolvedTarget.error });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedTarget.target);
       if (!auth.ok) {
         sendGateFailure(res, auth);
         return;
       }
-      const result = requestBootstrapCapabilityInstall(world, { actor: gate.actor, backendHost, body });
+      const result = requestBootstrapCapabilityInstall(world, {
+        actor: gate.actor,
+        backendHost,
+        body: { ...body, target: resolvedTarget.target, targetRef: null }
+      });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;
@@ -65,12 +77,23 @@ export function createCapabilityAuthoringBundleHandlers({
         return;
       }
       const body = await readJson(req);
-      const auth = ensureTargetAuthority(gate.actor, body.target);
+      const resolvedTarget = resolveCapabilityTargetInput(world, body, {
+        label: "capability remove target"
+      });
+      if (!resolvedTarget.ok) {
+        sendJson(res, 400, { error: resolvedTarget.error });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedTarget.target);
       if (!auth.ok) {
         sendGateFailure(res, auth);
         return;
       }
-      const result = requestBootstrapCapabilityRemove(world, { actor: gate.actor, backendHost, body });
+      const result = requestBootstrapCapabilityRemove(world, {
+        actor: gate.actor,
+        backendHost,
+        body: { ...body, target: resolvedTarget.target, targetRef: null }
+      });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;
