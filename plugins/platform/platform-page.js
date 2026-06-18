@@ -1378,6 +1378,12 @@ function detailRecordsForSource(source, model) {
       return model.features ?? [];
     case "gaps":
       return model.gaps ?? [];
+    case "bridges":
+    case "governance":
+    case "semantics":
+    case "packageCoexistence":
+    case "packageConvergence":
+      return platformSourceRows(source, model);
     case "telemetryMetric":
     case "defectCluster":
     case "boundary":
@@ -1392,6 +1398,22 @@ function detailRecordMatchesSource(source, record, id) {
   switch (source) {
     case "docs":
       return optionalText(record.path) === id || optionalText(record.id) === id;
+    case "packageConvergence":
+      return record.id === id
+        || record.packageId === id
+        || record.coexistenceId === id
+        || (record.transformerIds ?? []).includes(id)
+        || (record.convergencePatchIds ?? []).includes(id);
+    case "packageCoexistence":
+      return record.id === id
+        || record.packageId === id
+        || (record.revisionIds ?? []).includes(id)
+        || (record.selectedRevisionIds ?? []).includes(id)
+        || (record.namespaceSelections ?? []).some(namespace =>
+          namespace.id === id
+          || namespace.revision === id
+          || `${namespace.context}:${namespace.name}` === id
+        );
     default:
       return optionalText(record.id) === id;
   }
@@ -2074,6 +2096,12 @@ function recordsForAuthoredListSource(source, model) {
       return signalItems(model);
     case "modelItems":
       return modelItems(model);
+    case "bridges":
+    case "governance":
+    case "semantics":
+    case "packageCoexistence":
+    case "packageConvergence":
+      return platformSourceRows(source, model);
     default:
       return [];
   }
@@ -2164,6 +2192,34 @@ function renderAuthoredStaticPropertySection(surface) {
   )));
 }
 
+function renderAuthoredRecordDetailSection(surface, detail, ctx) {
+  if (!detail) {
+    return renderSurfaceEmptyCard(surface, {
+      title: surfacePropText(surface, "emptyTitle", surface.title || "Detail"),
+      message: surfaceEmptyState(surface, "No rows are projected yet.")
+    });
+  }
+  const primaryCard = propertyRowsFromSurfaceSchema(
+    surface,
+    "detailCardTitle",
+    "primaryFields",
+    ctx,
+    detail,
+    surfacePropText(surface, "detailCardTitle", surface.title || "Detail"),
+    []
+  );
+  const primaryKeys = new Set([
+    ...rootKeysFromSurfaceSchema(surface, "primaryFields"),
+    ...surfaceKeyList(surface, "longTailExcludedFields", ["title", "scope", "summary"])
+  ]);
+  return renderSurfaceFrame(surface, `
+    <div class="grid2">
+      <div>${renderPropertyCard(primaryCard)}</div>
+      <div>${renderRecordLongTailTable(ctx, surfacePropText(surface, "longTailCardTitle", "Properties"), detail, [...primaryKeys])}</div>
+    </div>
+  `);
+}
+
 function renderAuthoredDetailSourceSection(surface, model, ctx) {
   switch (surfacePropText(surface, "detailSource", "")) {
     case "workflow":
@@ -2201,6 +2257,16 @@ function renderAuthoredDetailSourceSection(surface, model, ctx) {
         model,
         ctx
       ));
+    case "bridges":
+    case "governance":
+    case "semantics":
+    case "packageCoexistence":
+    case "packageConvergence":
+      return renderAuthoredRecordDetailSection(
+        surface,
+        findAuthoredDetailBySources(surface, model, ctx.id, [surfacePropText(surface, "detailSource", "")]),
+        ctx
+      );
     default:
       return "";
   }
@@ -2490,17 +2556,11 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
   if (surface?.props?.tableSource) {
     return renderAuthoredTableSection(surface, model, ctx);
   }
-  if (surfacePropText(surface, "supplementalTableSource", "")) {
-    return renderAuthoredSupplementalTableSection(surface, model, ctx);
-  }
   if (surface?.props?.formId && surface?.props?.formFields) {
     return renderAuthoredFormSection(surface, model);
   }
   if (surface?.props?.propertyValues && surface?.props?.propertyFields) {
     return renderAuthoredStaticPropertySection(surface);
-  }
-  if (surfacePropText(surface, "supplementalDetailSource", "")) {
-    return renderAuthoredSupplementalDetailSection(surface, model, ctx);
   }
   if (surface?.props?.detailSource) {
     return renderAuthoredDetailSourceSection(surface, model, ctx);
@@ -2535,8 +2595,8 @@ function renderPageFromSurface(pageSurface, model, ctx, consoleLayout) {
   `;
 }
 
-function supplementalRowsForView(viewId, model) {
-  switch (viewId) {
+function platformSourceRows(source, model) {
+  switch (source) {
     case "bridges":
       return (model.compatibilityBridges ?? []).map(row => ({
         ...row,
@@ -2593,73 +2653,6 @@ function supplementalRowsForView(viewId, model) {
     default:
       return [];
   }
-}
-
-function supplementalRecordForView(viewId, model, id) {
-  const rows = supplementalRowsForView(viewId, model);
-  if (!id) return rows[0] ?? null;
-  if (viewId === "packageConvergence") {
-    return rows.find(row =>
-      row.id === id
-      || row.packageId === id
-      || row.coexistenceId === id
-      || (row.transformerIds ?? []).includes(id)
-      || (row.convergencePatchIds ?? []).includes(id)
-    ) ?? null;
-  }
-  if (viewId === "packageCoexistence") {
-    return rows.find(row =>
-      row.id === id
-      || row.packageId === id
-      || (row.revisionIds ?? []).includes(id)
-      || (row.selectedRevisionIds ?? []).includes(id)
-      || (row.namespaceSelections ?? []).some(namespace =>
-        namespace.id === id
-        || namespace.revision === id
-        || `${namespace.context}:${namespace.name}` === id
-      )
-    ) ?? null;
-  }
-  return rows.find(row => row.id === id) ?? null;
-}
-function renderAuthoredSupplementalTableSection(surface, model, ctx) {
-  const sourceId = surfacePropText(surface, "supplementalTableSource", "");
-  const rows = supplementalRowsForView(sourceId, model);
-  const page = paginateRows(rows, ctx, surfacePageSize(surface, DEFAULT_PAGE_SIZE));
-  return renderSurfaceFrame(surface, `
-    ${renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, () => ""))}
-    ${renderPagination(ctx, page.total, page.offset, page.limit)}
-  `);
-}
-
-function renderAuthoredSupplementalDetailSection(surface, model, ctx) {
-  const sourceId = surfacePropText(surface, "supplementalDetailSource", "");
-  const detail = supplementalRecordForView(sourceId, model, ctx.id);
-  if (!detail) {
-    return renderSurfaceEmptyCard(surface, {
-      title: surfacePropText(surface, "emptyTitle", surface.title || "Detail"),
-      message: surfaceEmptyState(surface, "No rows are projected yet.")
-    });
-  }
-  const primaryCard = propertyRowsFromSurfaceSchema(
-    surface,
-    "detailCardTitle",
-    "primaryFields",
-    ctx,
-    detail,
-    surfacePropText(surface, "detailCardTitle", surface.title || "Detail"),
-    []
-  );
-  const primaryKeys = new Set([
-    ...rootKeysFromSurfaceSchema(surface, "primaryFields"),
-    ...surfaceKeyList(surface, "longTailExcludedFields", ["title", "scope", "summary"])
-  ]);
-  return renderSurfaceFrame(surface, `
-    <div class="grid2">
-      <div>${renderPropertyCard(primaryCard)}</div>
-      <div>${renderRecordLongTailTable(ctx, surfacePropText(surface, "longTailCardTitle", "Properties"), detail, [...primaryKeys])}</div>
-    </div>
-  `);
 }
 
 export function renderPlatformPage(model, { requestUrl = null } = {}) {

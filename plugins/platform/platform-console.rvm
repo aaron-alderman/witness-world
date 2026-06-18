@@ -265,7 +265,7 @@ view PlatformBridgesList {
   class platform-model-list
   prop title = "Bridge Inventory"
   prop summary = "Compatibility bridge inventory for remaining convenience seams."
-  prop supplementalTableSource = "bridges"
+  prop listSource = "bridges"
   prop columns = "Bridge|Class|Owner|Status|Surfaces"
   prop rowFields = "Bridge=id@concept|Class=bridgeClass|Owner=owner@value|Status=status|Surfaces=surfaces@value"
   prop emptyState = "No compatibility bridges."
@@ -277,7 +277,7 @@ view PlatformBridgesDetail {
   class platform-model-detail
   prop title = "Bridge Detail"
   prop summary = "Selected bridge properties and long-tail fields."
-  prop supplementalDetailSource = "bridges"
+  prop detailSource = "bridges"
   prop detailCardTitle = "Bridge Detail"
   prop primaryFields = "Bridge=id@concept|Class=bridgeClass|Owner=owner@value|Status=status|Surfaces=surfaces@value|Sample Targets=sampleTargets@value"
   prop longTailCardTitle = "Properties"
@@ -291,7 +291,7 @@ view PlatformGovernanceList {
   class platform-model-list
   prop title = "Governance Rows"
   prop summary = "Route and proposal-target governance coverage for mutating platform seams."
-  prop supplementalTableSource = "governance"
+  prop listSource = "governance"
   prop columns = "Kind|Object|Mode|Authority|Scope"
   prop rowFields = "Kind=pageKind|Object=objectLink@concept|Mode=governanceMode|Authority=authorityMechanism|Scope=scopeValue@value"
   prop emptyState = "No governance rows."
@@ -303,7 +303,7 @@ view PlatformGovernanceDetail {
   class platform-model-detail
   prop title = "Governance Object Detail"
   prop summary = "Selected governance object properties and long-tail fields."
-  prop supplementalDetailSource = "governance"
+  prop detailSource = "governance"
   prop detailCardTitle = "Governance Object Detail"
   prop primaryFields = "Object=objectLink@concept|Kind=pageKind|Mode=governanceMode|Authority=authorityMechanism|Workflow=workflowRole|Operation=operationSemantics"
   prop longTailCardTitle = "Properties"
@@ -317,7 +317,7 @@ view PlatformSemanticsList {
   class platform-model-list
   prop title = "Mutable Surface Semantics"
   prop summary = "Personal, shared, and mixed mutable-surface semantics contract rows."
-  prop supplementalTableSource = "semantics"
+  prop listSource = "semantics"
   prop columns = "Surface|Sharing|State Class|Authority|Visibility"
   prop rowFields = "Surface=surfaceLink@concept|Sharing=sharingClass|State Class=stateClass|Authority=authorityRule|Visibility=visibilityRule"
   prop emptyState = "No mutable-surface semantics rows."
@@ -329,7 +329,7 @@ view PlatformSemanticsDetail {
   class platform-model-detail
   prop title = "Mutable Surface Detail"
   prop summary = "Selected mutable-surface properties and long-tail fields."
-  prop supplementalDetailSource = "semantics"
+  prop detailSource = "semantics"
   prop detailCardTitle = "Mutable Surface Detail"
   prop primaryFields = "Surface=surfaceLink@concept|Sharing=sharingClass|State Class=stateClass|Authority=authorityRule|Visibility=visibilityRule|Mutation Mode=mutationMode"
   prop longTailCardTitle = "Properties"
@@ -343,7 +343,7 @@ view PlatformPackageCoexistenceList {
   class platform-model-list
   prop title = "Package Coexistence Rows"
   prop summary = "Divergent package revision lines and namespace selections."
-  prop supplementalTableSource = "packageCoexistence"
+  prop listSource = "packageCoexistence"
   prop columns = "Package|Mode|Selected Revisions|Namespaces"
   prop rowFields = "Package=packageLink@concept|Mode=coexistenceMode|Selected Revisions=selectedRevisionIds@value|Namespaces=namespaceSelectionIds@value"
   prop emptyState = "No package coexistence rows."
@@ -355,7 +355,7 @@ view PlatformPackageCoexistenceDetail {
   class platform-model-detail
   prop title = "Package Coexistence Detail"
   prop summary = "Selected package coexistence properties and long-tail fields."
-  prop supplementalDetailSource = "packageCoexistence"
+  prop detailSource = "packageCoexistence"
   prop detailCardTitle = "Package Coexistence Detail"
   prop primaryFields = "Package=packageLink@concept|Mode=coexistenceMode|Selected Revisions=selectedRevisionIds@value|Revision Lines=revisionIds@value"
   prop longTailCardTitle = "Properties"
@@ -369,7 +369,7 @@ view PlatformPackageConvergenceList {
   class platform-model-list
   prop title = "Package Convergence Rows"
   prop summary = "Transformer contracts, convergence patches, and remaining authored glue."
-  prop supplementalTableSource = "packageConvergence"
+  prop listSource = "packageConvergence"
   prop columns = "Package|Status|Transformers|Patches|Glue"
   prop rowFields = "Package=packageLink@concept|Status=status|Transformers=transformerIds@value|Patches=convergencePatchIds@value|Glue=remainingGlueMessages@value"
   prop emptyState = "No package convergence rows."
@@ -381,7 +381,7 @@ view PlatformPackageConvergenceDetail {
   class platform-model-detail
   prop title = "Package Convergence Detail"
   prop summary = "Selected package convergence properties and long-tail fields."
-  prop supplementalDetailSource = "packageConvergence"
+  prop detailSource = "packageConvergence"
   prop detailCardTitle = "Package Convergence Detail"
   prop primaryFields = "Package=packageLink@concept|Status=status|Transformers=transformerIds@value|Convergence Patches=convergencePatchIds@value|Explanation=explanation"
   prop longTailCardTitle = "Properties"
