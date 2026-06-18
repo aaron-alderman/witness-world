@@ -1691,7 +1691,7 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
     case "PlatformWorkflowList":
       return renderWorkflowListSection(surface, model, ctx);
     case "PlatformWorkflowDetail":
-      return renderWorkflowDetail(findWorkflowDetail(model, ctx.id), model, ctx);
+      return renderSurfaceFrame(surface, renderWorkflowDetail(findWorkflowDetail(model, ctx.id), model, ctx));
     case "PlatformProposalPanel":
       return renderProposalPanelSection(surface, model);
     case "PlatformProposalReviewList":
@@ -1711,7 +1711,7 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
     case "PlatformVerificationList":
       return renderVerificationListSection(surface, model, ctx);
     case "PlatformVerificationDetail":
-      return renderVerificationDetail(findVerificationDetail(model, ctx.id), model, ctx);
+      return renderSurfaceFrame(surface, renderVerificationDetail(findVerificationDetail(model, ctx.id), model, ctx));
     case "PlatformVerificationStreams":
       return renderVerificationStreamsSection(surface);
     case "PlatformBranchRedGreenList":
@@ -1725,17 +1725,17 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
     case "PlatformKnowledgeList":
       return renderKnowledgeListSection(surface, model, ctx);
     case "PlatformKnowledgeDetail":
-      return renderKnowledgeDetail(findKnowledgeDetail(model, ctx.id), model, ctx);
+      return renderSurfaceFrame(surface, renderKnowledgeDetail(findKnowledgeDetail(model, ctx.id), model, ctx));
     case "PlatformGapList":
       return renderGapListSection(surface, model, ctx);
     case "PlatformSignalList":
       return renderSignalsListSection(surface, model, ctx);
     case "PlatformSignalDetail":
-      return renderSignalDetail(findSignalDetail(model, ctx.id), model, ctx);
+      return renderSurfaceFrame(surface, renderSignalDetail(findSignalDetail(model, ctx.id), model, ctx));
     case "PlatformModelList":
       return renderModelListSection(surface, model, ctx);
     case "PlatformModelDetail":
-      return renderModelDetail(findModelDetail(model, ctx.id), model, ctx);
+      return renderSurfaceFrame(surface, renderModelDetail(findModelDetail(model, ctx.id), model, ctx));
     case "PlatformCoverageMatrix":
       return renderCoverageMatrixSection(surface, model, ctx);
     default:

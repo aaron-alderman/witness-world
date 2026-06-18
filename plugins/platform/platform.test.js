@@ -4916,6 +4916,7 @@ test("platform page renders required operating views", async () => {
 
   assert.match(workflowHtml, /Platform Console - Workflow/);
   assert.match(workflowHtml, /Workflow Items/);
+  assert.match(workflowHtml, /Properties and linked resources for the selected workflow item\./);
   assert.match(workflowHtml, /Branch Detail/);
   assert.match(workflowHtml, /Proposal Panel/);
   assert.match(workflowHtml, /Stage an authored source edit into the selected change set\./);
@@ -4928,6 +4929,7 @@ test("platform page renders required operating views", async () => {
 
   assert.match(verificationHtml, /Platform Console - Verification/);
   assert.match(verificationHtml, /Verification Items/);
+  assert.match(verificationHtml, /Properties and linked resources for the selected verification object\./);
   assert.match(verificationHtml, /Test Gate Detail/);
   assert.match(verificationHtml, /Links to live test-run and backend-revision event streams\./);
   assert.match(verificationHtml, /<form id="platform-test-run-form"/);
@@ -4938,17 +4940,20 @@ test("platform page renders required operating views", async () => {
 
   assert.match(knowledgeHtml, /Platform Console - Knowledge/);
   assert.match(knowledgeHtml, /Knowledge Items/);
+  assert.match(knowledgeHtml, /Properties and linked resources for the selected knowledge object\./);
   assert.match(knowledgeHtml, /Document Detail/);
   assert.match(knowledgeHtml, /Roadmap/);
   assert.doesNotMatch(knowledgeHtml, /<pre/);
 
   assert.match(signalsHtml, /Platform Console - Signals/);
+  assert.match(signalsHtml, /Properties and linked relationships for the selected signal\./);
   assert.match(signalsHtml, /Gap Detail/);
   assert.match(signalsHtml, /API resource/);
   assert.doesNotMatch(signalsHtml, /<pre/);
 
   assert.match(modelHtml, /Platform Console - Model/);
   assert.match(modelHtml, /Platform Map/);
+  assert.match(modelHtml, /Properties and linked relationships for the selected platform object\./);
   assert.match(modelHtml, /Platform Object Detail/);
   assert.match(modelHtml, /Coverage Edges/);
   assert.doesNotMatch(modelHtml, /<pre/);
