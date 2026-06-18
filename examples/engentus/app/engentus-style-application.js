@@ -96,6 +96,418 @@ function structuredIdentityForSurface(surface) {
     : ambientIdentityForSurface(surface);
 }
 
+function selectorPresentationAnchor(selector) {
+  return `selector:${selector}`;
+}
+
+function chartRouteToken(props = {}) {
+  return splitClassTokens(props.bodyClass).find(token => token.startsWith("chart-page--")) ?? null;
+}
+
+function chartRouteName(props = {}) {
+  const token = chartRouteToken(props);
+  return token ? token.slice("chart-page--".length) : null;
+}
+
+function createSyntheticSurfaceRecord({
+  identity,
+  presentationAnchor,
+  sourceFile,
+  surfaceKind = "synthetic-surface",
+  traits = []
+}) {
+  return {
+    name: identity,
+    ambientIdentity: identity,
+    identity,
+    surfaceKind,
+    traits: uniqueSorted(traits),
+    overrideProps: [],
+    presentationAnchor,
+    props: {},
+    bindings: [],
+    children: [],
+    repeatTemplate: null,
+    isTemplate: false,
+    sourceFile
+  };
+}
+
+function shellBaseTraitSurfaceRecord({
+  identity,
+  trait,
+  sourceFile,
+  selector = null
+}) {
+  return createSyntheticSurfaceRecord({
+    identity,
+    presentationAnchor: selectorPresentationAnchor(selector ?? `.${trait}`),
+    sourceFile,
+    surfaceKind: "shell-base-trait",
+    traits: [trait]
+  });
+}
+
+function shellBaseSupplementalSurfaceRecords(definition) {
+  if (definition?.name !== "shell-base") return [];
+  const sourceFile = definition.sourceFiles?.[0] ?? "shell-shared.rvm";
+  const records = [
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseGlobalReset",
+      presentationAnchor: selectorPresentationAnchor("*, *::before, *::after"),
+      sourceFile,
+      surfaceKind: "shell-base-foundation"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseThemeRoot",
+      presentationAnchor: selectorPresentationAnchor(":root"),
+      sourceFile,
+      surfaceKind: "shell-base-foundation"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseDocumentBody",
+      presentationAnchor: selectorPresentationAnchor("body"),
+      sourceFile,
+      surfaceKind: "shell-base-foundation"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseLinkSurface",
+      presentationAnchor: selectorPresentationAnchor("a"),
+      sourceFile,
+      surfaceKind: "shell-base-foundation"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseToolbarBrandImage",
+      presentationAnchor: selectorPresentationAnchor("#tb-brand img, .auth-brand img"),
+      sourceFile,
+      surfaceKind: "shell-base-foundation"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseToolbarBrandClickable",
+      presentationAnchor: selectorPresentationAnchor("#tb-brand.clickable"),
+      sourceFile,
+      surfaceKind: "shell-base-toolbar"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseToolbarBrandClickableHover",
+      presentationAnchor: selectorPresentationAnchor("#tb-brand.clickable:hover"),
+      sourceFile,
+      surfaceKind: "shell-base-toolbar"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseModeButtonOn",
+      presentationAnchor: selectorPresentationAnchor(".mode-btn.on"),
+      sourceFile,
+      surfaceKind: "shell-base-toolbar"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseToolbarWindowButtonOn",
+      presentationAnchor: selectorPresentationAnchor(".tbw.on"),
+      sourceFile,
+      surfaceKind: "shell-base-toolbar"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseSharedRouteViews",
+      presentationAnchor: selectorPresentationAnchor("#view-goodman, #view-mill, #view-mill-force, #view-platform-config, #view-platform-config-secrets, #view-platform-config-datasources, #view-platform-config-scripts, #view-platform-config-access"),
+      sourceFile,
+      surfaceKind: "shell-base-layout"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseSharedBodies",
+      presentationAnchor: selectorPresentationAnchor("#body, #mill-body, #mill-force-body, #platform-config-body, #platform-config-secrets-body, #platform-config-datasources-body, #platform-config-scripts-body, #platform-config-access-body"),
+      sourceFile,
+      surfaceKind: "shell-base-layout"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseSharedSidebars",
+      presentationAnchor: selectorPresentationAnchor("#sb, #mill-sb, #mill-force-sb"),
+      sourceFile,
+      surfaceKind: "shell-base-layout"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseSharedFixedSidebars",
+      presentationAnchor: selectorPresentationAnchor("#sb, #mill-sb"),
+      sourceFile,
+      surfaceKind: "shell-base-layout"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseSharedSidebarScrollRegion",
+      presentationAnchor: selectorPresentationAnchor("#sb-scroll, #mill-sb-scroll, #mill-force-sb-scroll"),
+      sourceFile,
+      surfaceKind: "shell-base-layout"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseSharedSidebarScrollbar",
+      presentationAnchor: selectorPresentationAnchor("#sb-scroll::-webkit-scrollbar, #mill-sb-scroll::-webkit-scrollbar, #mill-force-sb-scroll::-webkit-scrollbar"),
+      sourceFile,
+      surfaceKind: "shell-base-layout"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseSharedSidebarScrollbarThumb",
+      presentationAnchor: selectorPresentationAnchor("#sb-scroll::-webkit-scrollbar-thumb, #mill-sb-scroll::-webkit-scrollbar-thumb, #mill-force-sb-scroll::-webkit-scrollbar-thumb"),
+      sourceFile,
+      surfaceKind: "shell-base-layout"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseMillViewer",
+      presentationAnchor: selectorPresentationAnchor("#mill-main"),
+      sourceFile,
+      surfaceKind: "shell-base-chart-scaffold"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseMillForceChartArea",
+      presentationAnchor: selectorPresentationAnchor("#mill-force-chart-area"),
+      sourceFile,
+      surfaceKind: "shell-base-chart-scaffold"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseMillForceChartFrame",
+      presentationAnchor: selectorPresentationAnchor("#mill-force-chart-wrap iframe"),
+      sourceFile,
+      surfaceKind: "shell-base-chart-scaffold"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseChartOverlayCanvas",
+      presentationAnchor: selectorPresentationAnchor(".chart-page__overlay-canvas"),
+      sourceFile,
+      surfaceKind: "shell-base-chart-scaffold"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseMonteCarloNumberInput",
+      presentationAnchor: selectorPresentationAnchor(".mc-row input[type=number]"),
+      sourceFile,
+      surfaceKind: "shell-base-control"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseRunButtonGo",
+      presentationAnchor: selectorPresentationAnchor(".rbtn.go"),
+      sourceFile,
+      surfaceKind: "shell-base-control"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseRunButtonGoDisabled",
+      presentationAnchor: selectorPresentationAnchor(".rbtn.go:disabled"),
+      sourceFile,
+      surfaceKind: "shell-base-control"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseRunButtonPause",
+      presentationAnchor: selectorPresentationAnchor(".rbtn.pause"),
+      sourceFile,
+      surfaceKind: "shell-base-control"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseRunButtonStop",
+      presentationAnchor: selectorPresentationAnchor(".rbtn.stop"),
+      sourceFile,
+      surfaceKind: "shell-base-control"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseRunButtonDisabled",
+      presentationAnchor: selectorPresentationAnchor(".rbtn:disabled"),
+      sourceFile,
+      surfaceKind: "shell-base-control"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseProgressFillReady",
+      presentationAnchor: selectorPresentationAnchor(".prog-fill.ready"),
+      sourceFile,
+      surfaceKind: "shell-base-control"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseProgressFillRunning",
+      presentationAnchor: selectorPresentationAnchor(".prog-fill.running"),
+      sourceFile,
+      surfaceKind: "shell-base-control"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseProgressFillPaused",
+      presentationAnchor: selectorPresentationAnchor(".prog-fill.paused"),
+      sourceFile,
+      surfaceKind: "shell-base-control"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseProgressFillDone",
+      presentationAnchor: selectorPresentationAnchor(".prog-fill.done"),
+      sourceFile,
+      surfaceKind: "shell-base-control"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ShellBaseProgressFillStopped",
+      presentationAnchor: selectorPresentationAnchor(".prog-fill.stopped"),
+      sourceFile,
+      surfaceKind: "shell-base-control"
+    })
+  ];
+
+  const traitRecords = [
+    ["ShellBaseToolbarModePillTrait", "mode-pill"],
+    ["ShellBaseToolbarModeButtonTrait", "mode-btn"],
+    ["ShellBaseToolbarWindowButtonTrait", "tbw"],
+    ["ShellBaseSiteSummaryTrait", "tb-site-summary"],
+    ["ShellBaseUserProfileMenuItemTrait", "up-mi"],
+    ["ShellBaseUserProfileMenuIconTrait", "up-mi-icon"],
+    ["ShellBaseUserProfileMenuDividerTrait", "up-sep"],
+    ["ShellBaseUserProfileMenuSignoutTrait", "up-mi-signout"],
+    ["ShellBaseSharedSectionTrait", "ssec"],
+    ["ShellBaseSharedSectionTitleTrait", "ssec-title"],
+    ["ShellBaseMetricGroupTitleTrait", "metric-group-title"],
+    ["ShellBaseSidebarListTrait", "sidebar-list"],
+    ["ShellBaseMetricListTrait", "metric-list"],
+    ["ShellBaseSidebarNoteTrait", "sidebar-note"],
+    ["ShellBaseFloatingWindowTrait", "fw"],
+    ["ShellBaseFloatingWindowTitlebarTrait", "fw-tb"],
+    ["ShellBaseFloatingWindowTitleTrait", "fw-title"],
+    ["ShellBaseFloatingWindowButtonTrait", "fw-btn"],
+    ["ShellBaseFloatingWindowBodyTrait", "fw-body"],
+    ["ShellBaseFloatingWindowResizeHandleTrait", "fw-rz"],
+    ["ShellBaseStatsTableTrait", "stbl"],
+    ["ShellBaseStatsTableNumberTrait", "num"],
+    ["ShellBaseScenarioDotTrait", "sc-dot"],
+    ["ShellBaseAnovaStatTrait", "anova-stat"],
+    ["ShellBaseAnovaMetaTrait", "anova-meta"],
+    ["ShellBaseAnovaKeyValueTrait", "anova-kv"],
+    ["ShellBaseAnovaKeyTrait", "anova-k"],
+    ["ShellBaseAnovaValueTrait", "anova-v"],
+    ["ShellBaseAnovaSignificanceTrait", "anova-sig"],
+    ["ShellBaseAnovaNoteTrait", "anova-note"],
+    ["ShellBaseLegendRowTrait", "leg-row"],
+    ["ShellBaseLegendSwatchTrait", "leg-sw"],
+    ["ShellBaseInfoBoxTrait", "info-box"],
+    ["ShellBaseInfoRowTrait", "info-row"],
+    ["ShellBaseInfoValueTrait", "info-value"],
+    ["ShellBaseMonteCarloRowTrait", "mc-row"],
+    ["ShellBaseRunRowTrait", "run-row"],
+    ["ShellBaseRunButtonTrait", "rbtn"],
+    ["ShellBaseProgressTrackTrait", "prog-wrap"],
+    ["ShellBaseProgressFillTrait", "prog-fill"],
+    ["ShellBaseProgressLabelTrait", "prog-lbl"],
+    ["ShellBaseSaveSimulationButtonTrait", "save-sim-btn"]
+  ].map(([identity, trait]) => shellBaseTraitSurfaceRecord({
+    identity,
+    trait,
+    sourceFile
+  }));
+
+  return [...records, ...traitRecords];
+}
+
+function chartSupplementalSurfaceRecords(record) {
+  if (record.surfaceKind !== "chart") return [];
+  const route = chartRouteName(record.props);
+  if (!route) return [];
+
+  const supplemental = [
+    createSyntheticSurfaceRecord({
+      identity: "ChartPageThemeRoot",
+      presentationAnchor: selectorPresentationAnchor(":root"),
+      sourceFile: record.sourceFile,
+      surfaceKind: "chart-theme-root"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ChartPageHtmlDocument",
+      presentationAnchor: selectorPresentationAnchor("html"),
+      sourceFile: record.sourceFile,
+      surfaceKind: "chart-document"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ChartPageBody",
+      presentationAnchor: selectorPresentationAnchor("body.chart-page"),
+      sourceFile: record.sourceFile,
+      surfaceKind: "chart-document"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ChartPageViewport",
+      presentationAnchor: selectorPresentationAnchor(".chart-page__viewport"),
+      sourceFile: record.sourceFile,
+      surfaceKind: "chart-viewport"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ChartPageHost",
+      presentationAnchor: selectorPresentationAnchor(".chart-page__host"),
+      sourceFile: record.sourceFile,
+      surfaceKind: "chart-host"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ChartPageMountSurface",
+      presentationAnchor: selectorPresentationAnchor(".chart-page__mount"),
+      sourceFile: record.sourceFile,
+      surfaceKind: "chart-mount"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ChartPageOverlayCanvasSurface",
+      presentationAnchor: selectorPresentationAnchor(".chart-page__overlay-canvas"),
+      sourceFile: record.sourceFile,
+      surfaceKind: "chart-overlay"
+    }),
+    createSyntheticSurfaceRecord({
+      identity: "ChartPageTooltipSurface",
+      presentationAnchor: selectorPresentationAnchor(".chart-page__tooltip"),
+      sourceFile: record.sourceFile,
+      surfaceKind: "chart-tooltip"
+    })
+  ];
+
+  if (route === "goodman") {
+    supplemental.push(
+      createSyntheticSurfaceRecord({
+        identity: "GoodmanChartHost",
+        presentationAnchor: selectorPresentationAnchor(".chart-page__host.chart-page__host--goodman"),
+        sourceFile: record.sourceFile,
+        surfaceKind: "chart-host"
+      }),
+      createSyntheticSurfaceRecord({
+        identity: "GoodmanChartOverlayCanvas",
+        presentationAnchor: trimDomString(record.props?.overlayCanvasId),
+        sourceFile: record.sourceFile,
+        surfaceKind: "chart-overlay"
+      }),
+      createSyntheticSurfaceRecord({
+        identity: "GoodmanChartTooltip",
+        presentationAnchor: trimDomString(record.props?.tooltipId),
+        sourceFile: record.sourceFile,
+        surfaceKind: "chart-tooltip"
+      })
+    );
+  }
+
+  if (route === "mill-charge") {
+    supplemental.push(
+      createSyntheticSurfaceRecord({
+        identity: "MillChargeChartHost",
+        presentationAnchor: selectorPresentationAnchor(".chart-page__host.chart-page__host--mill-charge"),
+        sourceFile: record.sourceFile,
+        surfaceKind: "chart-host"
+      })
+    );
+  }
+
+  if (route === "mill-force") {
+    supplemental.push(
+      createSyntheticSurfaceRecord({
+        identity: "MillForceChartHost",
+        presentationAnchor: selectorPresentationAnchor(".chart-page__host.chart-page__host--mill-force"),
+        sourceFile: record.sourceFile,
+        surfaceKind: "chart-host"
+      }),
+      createSyntheticSurfaceRecord({
+        identity: `${record.identity}OverlayCanvas`,
+        presentationAnchor: trimDomString(record.props?.overlayCanvasId),
+        sourceFile: record.sourceFile,
+        surfaceKind: "chart-overlay"
+      }),
+      createSyntheticSurfaceRecord({
+        identity: `${record.identity}Tooltip`,
+        presentationAnchor: trimDomString(record.props?.tooltipId),
+        sourceFile: record.sourceFile,
+        surfaceKind: "chart-tooltip"
+      })
+    );
+  }
+
+  return supplemental.filter(entry => entry.presentationAnchor);
+}
+
 function knownStyleAsset(assetName) {
   return KNOWN_STYLE_ASSETS.has(assetName);
 }
@@ -1102,6 +1514,7 @@ async function compileSliceSurfaceRecords(definition) {
   const surfacesByIdentity = new Map();
   const surfacesByName = new Map();
   const allRecords = [];
+  const shellBaseSupplementals = shellBaseSupplementalSurfaceRecords(definition);
 
   for (const relativeFile of definition.sourceFiles) {
     const absoluteFile = path.join(MODULE_DIR, relativeFile);
@@ -1140,6 +1553,25 @@ async function compileSliceSurfaceRecords(definition) {
       allRecords.push(record);
       if (record.identity && !surfacesByIdentity.has(record.identity)) surfacesByIdentity.set(record.identity, record);
       if (record.name && !surfacesByName.has(record.name)) surfacesByName.set(record.name, record);
+      for (const supplemental of chartSupplementalSurfaceRecords(record)) {
+        allRecords.push(supplemental);
+        if (supplemental.identity && !surfacesByIdentity.has(supplemental.identity)) {
+          surfacesByIdentity.set(supplemental.identity, supplemental);
+        }
+        if (supplemental.name && !surfacesByName.has(supplemental.name)) {
+          surfacesByName.set(supplemental.name, supplemental);
+        }
+      }
+    }
+  }
+
+  for (const supplemental of shellBaseSupplementals) {
+    allRecords.push(supplemental);
+    if (supplemental.identity && !surfacesByIdentity.has(supplemental.identity)) {
+      surfacesByIdentity.set(supplemental.identity, supplemental);
+    }
+    if (supplemental.name && !surfacesByName.has(supplemental.name)) {
+      surfacesByName.set(supplemental.name, supplemental);
     }
   }
 
@@ -1150,7 +1582,10 @@ async function compileSliceSurfaceRecords(definition) {
   }
 
   const selected = new Map();
-  const queue = definition.identities.map(candidate => ({ candidate, reachableViaTemplate: false }));
+  const queue = [
+    ...definition.identities.map(candidate => ({ candidate, reachableViaTemplate: false })),
+    ...shellBaseSupplementals.map(record => ({ candidate: record.identity, reachableViaTemplate: false }))
+  ];
   while (queue.length) {
     const { candidate, reachableViaTemplate } = queue.shift();
     const record = surfacesByIdentity.get(candidate) ?? surfacesByName.get(candidate) ?? null;
@@ -1482,6 +1917,9 @@ function selectorFromPseudo(pseudo) {
 function selectorForIdentity(identity, recordsByIdentity) {
   const record = recordsByIdentity.get(identity) ?? null;
   if (!record) throw new Error(`Native lowering references unknown identity ${identity}`);
+  if (typeof record.presentationAnchor === "string" && record.presentationAnchor.startsWith("selector:")) {
+    return record.presentationAnchor.slice("selector:".length);
+  }
   if (record.presentationAnchor) return `#${record.presentationAnchor}`;
   throw new Error(`Native lowering cannot derive a browser selector for identity ${identity}`);
 }

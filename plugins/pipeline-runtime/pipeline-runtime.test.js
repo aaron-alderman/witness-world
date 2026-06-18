@@ -42,13 +42,13 @@ test("pipeline runtime exposes the platform-config demo handlers and no plugin-o
   assert.equal(runtimeModule.bundleId, "bundle-pipeline-runtime");
   assert.deepEqual(runtimeModule.desireExtensions.rvmForms.map(entry => entry.kind), [
     "sync",
-    "sync_output",
     "input_transform",
     "output_transform",
-    "input_mapping",
-    "output_mapping",
     "pipeline_test"
   ]);
+  assert.equal(typeof runtimeModule.evaluatePipelineProof, "function");
+  assert.equal(typeof runtimeModule.createPipelineProofProgramFromDesire, "function");
+  assert.equal(runtimeModule.hasPipelineDeriveOperator("sample_timestamp"), true);
   assert.equal(
     runtimeModule.providers.some(provider =>
       provider?.kind === "coreHook" && provider?.id === "sessionOpenResponsePayload"

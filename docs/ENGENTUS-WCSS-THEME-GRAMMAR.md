@@ -12,10 +12,10 @@ The canonical file carries three internal layers:
 
 That separation is intentional.
 
-For `native-browser` slices such as `auth`, `home`, `mill-charge`,
-`mill-force`, and `platform-config`, the browser lowering map now also resolves
-authored identity references through explicit presentation anchors in the
-compiled surface metadata.
+For `native-browser` slices such as `shell-base`, `auth`, `home`, `goodman`,
+`mill-charge`, `mill-force`, `platform-config`, and `chart-pages`, the browser
+lowering map now also resolves authored identity references through explicit
+presentation anchors in the compiled surface metadata.
 
 ## Roles
 
@@ -39,6 +39,8 @@ The immediate goal of the lowering declaration grammar is now narrower:
 - preserve exact emitted CSS
 - keep selector/state groupings explicit for the browser backend
 - provide stable backend-group buckets for current proof tooling
+- let native proof slices lower against recovered presentation anchors even when
+  the current browser runtime still emits legacy ids/classes underneath
 
 ## Grammar Shape
 
@@ -67,18 +69,25 @@ specific identities or traits and may describe:
 
 For the current native lane, the intended steady state is stricter:
 
-- `auth`, `home`, `mill-charge`, `mill-force`, and `platform-config` should
-  lower through semantic nouns first
+- `shell-base`, `auth`, `home`, `goodman`, `mill-charge`, `mill-force`,
+  `platform-config`, and `chart-pages` should lower through semantic nouns
+  first
 - raw selector escapes remain available, but they are reported as debt rather
   than treated as normal authored shape
 - repeat-template descendants that belong to a native slice should be recovered
   into the presentation inventory instead of forcing structural shadow models
+- chart-page subparts such as host, mount, overlay canvas, and tooltip are now
+  recovered into the presentation inventory from chart-view metadata instead of
+  being treated as authored browser nouns
 
 ## Ownership Rule
 
 The authored WCSS grammar should describe presentation law first and selector
 accidents second. The lowering declaration grammar should preserve browser fidelity while
 remaining clearly downstream of that authored contract.
+
+At this point the proof lane is whole-app native. Browser declaration groups
+remain as backend-lowering buckets, not the authored slice contract.
 
 If later uplift work needs more browser detail, extend the lowering declaration
 layer as a backend artifact. Do not treat it as the primary style guide.

@@ -41,12 +41,14 @@ test("engentus canonical V1 WCSS source declares the expected slice coverage and
   assert.ok(authored.styles.includes("chart.page_tooltip"));
   assert.ok(!authored.styles.includes("controls and editor"));
   assert.ok(authored.lowering?.byBackend?.browser);
+  assert.equal(authored.slices.find(slice => slice.name === "shell-base")?.lowering?.browser?.mode, "native-browser");
   assert.equal(authored.slices.find(slice => slice.name === "auth")?.lowering?.browser?.mode, "native-browser");
   assert.equal(authored.slices.find(slice => slice.name === "home")?.lowering?.browser?.mode, "native-browser");
   assert.equal(authored.slices.find(slice => slice.name === "goodman")?.lowering?.browser?.mode, "native-browser");
   assert.equal(authored.slices.find(slice => slice.name === "mill-charge")?.lowering?.browser?.mode, "native-browser");
   assert.equal(authored.slices.find(slice => slice.name === "mill-force")?.lowering?.browser?.mode, "native-browser");
   assert.equal(authored.slices.find(slice => slice.name === "platform-config")?.lowering?.browser?.mode, "native-browser");
+  assert.equal(authored.slices.find(slice => slice.name === "chart-pages")?.lowering?.browser?.mode, "native-browser");
   assert.deepEqual(
     authored.slices.find(slice => slice.name === "auth")?.seams,
     [
@@ -89,17 +91,12 @@ test("engentus canonical V1 WCSS source declares the expected slice coverage and
       "goodman.run_progress_state"
     ]
   );
-  assert.deepEqual(
-    authored.slices.find(slice => slice.name === "chart-pages")?.identities,
-    [
-      "GoodmanDiagram",
-      "GoodmanMCBands",
-      "MillChargeCrossSection",
-      "MillForceAngle",
-      "MillForceCross",
-      "MillForceRose"
-    ]
-  );
+  const chartPages = authored.slices.find(slice => slice.name === "chart-pages");
+  assert.deepEqual(chartPages?.seams, []);
+  assert.ok(chartPages?.identities.includes("ChartPageBody"));
+  assert.ok(chartPages?.identities.includes("GoodmanChartTooltip"));
+  assert.ok(chartPages?.identities.includes("MillForceCrossTooltip"));
+  assert.ok(chartPages?.identities.includes("MillForceRoseOverlayCanvas"));
 });
 
 test("engentus canonical V1 parser exposes tokens, families, views, and application slices", async () => {
@@ -231,6 +228,7 @@ test("engentus presentation inventory extracts structured identities, traits, an
   const home = inventory.slices.find(slice => slice.name === "home");
   const millCharge = inventory.slices.find(slice => slice.name === "mill-charge");
   const millForce = inventory.slices.find(slice => slice.name === "mill-force");
+  const chartPages = inventory.slices.find(slice => slice.name === "chart-pages");
 
   assert.ok(auth?.identities.includes("EngentusLogin"));
   assert.ok(auth?.identities.includes("EngentusSignout"));
@@ -242,8 +240,14 @@ test("engentus presentation inventory extracts structured identities, traits, an
   assert.ok(auth?.overrideProps.includes("className"));
   assert.ok(auth?.surfaces.find(surface => surface.identity === "EngentusLogin")?.presentationAnchor);
 
-  assert.ok(shellBase?.identities.includes("EngentusRoot"));
-  assert.ok(shellBase?.traits.includes("engentus-spa"));
+  assert.ok(shellBase?.identities.includes("EngentusProfileMenu"));
+  assert.ok(shellBase?.identities.includes("ShellBaseDocumentBody"));
+  assert.ok(shellBase?.traits.includes("mode-btn"));
+  assert.ok(shellBase?.traits.includes("fw"));
+  assert.ok(shellBase?.overrideProps.includes("className"));
+  assert.equal(shellBase?.overrideProps.includes("style"), false);
+  assert.ok(shellBase?.surfaces.find(surface => surface.identity === "EngentusProfileMenu")?.presentationAnchor);
+  assert.ok(shellBase?.surfaces.find(surface => surface.identity === "ShellBaseGlobalReset")?.presentationAnchor);
 
   assert.ok(goodman?.identities.includes("GoodmanBody"));
   assert.ok(goodman?.overrideProps.includes("className"));
@@ -273,6 +277,22 @@ test("engentus presentation inventory extracts structured identities, traits, an
   assert.ok(platformConfig?.surfaces.find(surface => surface.identity === "EngentusPlatformConfigApp")?.presentationAnchor);
   assert.ok(platformConfig?.surfaces.find(surface => surface.name === "PlatformConfigSecretTableRowAction")?.reachableViaTemplate);
   assert.ok(platformConfig?.surfaces.find(surface => surface.name === "PlatformConfigAccessIdentityRowAction")?.reachableViaTemplate);
+  assert.ok(chartPages?.identities.includes("ChartPageBody"));
+  assert.ok(chartPages?.identities.includes("GoodmanChartOverlayCanvas"));
+  assert.ok(chartPages?.identities.includes("MillForceAngleTooltip"));
+  assert.deepEqual(chartPages?.overrideProps, []);
+  assert.equal(
+    chartPages?.surfaces.find(surface => surface.identity === "ChartPageBody")?.presentationAnchor,
+    "selector:body.chart-page"
+  );
+  assert.equal(
+    chartPages?.surfaces.find(surface => surface.identity === "GoodmanChartTooltip")?.presentationAnchor,
+    "chart-tip"
+  );
+  assert.equal(
+    chartPages?.surfaces.find(surface => surface.identity === "MillForceCrossTooltip")?.presentationAnchor,
+    "mill-force-cross-tip"
+  );
 });
 
 test("engentus style artifacts keep current asset outputs stable while defaulting slices to legacy", async () => {
@@ -300,10 +320,9 @@ test("engentus style artifacts keep current asset outputs stable while defaultin
 });
 
 test("engentus can switch isolated slices onto the authored WCSS lane while shrinking native selector debt", async () => {
-  const [authoredPlan, inventory, expectedChartCss] = await Promise.all([
+  const [authoredPlan, inventory] = await Promise.all([
     loadEngentusAppliedWcss(),
-    buildEngentusPresentationInventory(),
-    readFile(path.join(process.cwd(), "examples", "engentus", "app", "engentus-chart-pages.css"), "utf8")
+    buildEngentusPresentationInventory()
   ]);
 
   const switchManifest = {
@@ -332,6 +351,7 @@ test("engentus can switch isolated slices onto the authored WCSS lane while shri
     switchManifest
   });
   const shellCss = renderOracleStylesheet(stylesheets.shell);
+  const chartCss = renderOracleStylesheet(stylesheets.chart);
   assert.equal(shellCss.includes(".auth-submit.pending"), false);
   assert.equal(shellCss.includes(".auth-signout-icon"), false);
   assert.equal(shellCss.includes(".ms-btn.folding svg"), false);
@@ -341,7 +361,14 @@ test("engentus can switch isolated slices onto the authored WCSS lane while shri
   assert.equal(shellCss.includes(".mill-force-pill.active"), true);
   assert.equal(shellCss.includes(".mill-force-cht-tab.active"), true);
   assert.equal(shellCss.includes(".platform-config-row-action"), true);
-  assert.equal(renderOracleStylesheet(stylesheets.chart), expectedChartCss);
+  assert.equal(chartCss.includes("body.chart-page"), true);
+  assert.equal(chartCss.includes("#mill-force-force-tip"), true);
+  assert.equal(chartCss.includes("#mill-force-cross-tip"), true);
+  assert.equal(chartCss.includes("#mill-force-tip"), false);
+  assert.equal(
+    ownership.slices.find(slice => slice.name === "shell-base")?.loweringMode,
+    "native-browser"
+  );
   assert.equal(
     ownership.slices.find(slice => slice.name === "auth")?.loweringMode,
     "native-browser"
@@ -357,6 +384,22 @@ test("engentus can switch isolated slices onto the authored WCSS lane while shri
   assert.equal(
     ownership.slices.find(slice => slice.name === "platform-config")?.loweringMode,
     "native-browser"
+  );
+  assert.equal(
+    ownership.slices.find(slice => slice.name === "chart-pages")?.loweringMode,
+    "native-browser"
+  );
+  assert.deepEqual(
+    ownership.slices.find(slice => slice.name === "shell-base")?.anchorCoverage?.missing,
+    []
+  );
+  assert.equal(
+    ownership.slices.find(slice => slice.name === "shell-base")?.nativeDebt?.rawSelectorCount,
+    0
+  );
+  assert.deepEqual(
+    ownership.slices.find(slice => slice.name === "shell-base")?.descendantCoverage?.missingTraits,
+    []
   );
   assert.deepEqual(
     ownership.slices.find(slice => slice.name === "platform-config")?.anchorCoverage?.missing,
@@ -383,6 +426,10 @@ test("engentus can switch isolated slices onto the authored WCSS lane while shri
     []
   );
   assert.deepEqual(
+    ownership.slices.find(slice => slice.name === "chart-pages")?.anchorCoverage?.missing,
+    []
+  );
+  assert.deepEqual(
     ownership.slices.find(slice => slice.name === "mill-charge")?.descendantCoverage?.missingTraits,
     []
   );
@@ -394,13 +441,66 @@ test("engentus can switch isolated slices onto the authored WCSS lane while shri
     ownership.slices.find(slice => slice.name === "platform-config")?.nativeDebt?.rawSelectorCount,
     0
   );
+  assert.equal(
+    ownership.slices.find(slice => slice.name === "chart-pages")?.nativeDebt?.rawSelectorCount,
+    0
+  );
   assert.deepEqual(
     ownership.slices.find(slice => slice.name === "platform-config")?.descendantCoverage?.missingTraits,
+    []
+  );
+  assert.deepEqual(
+    ownership.slices.find(slice => slice.name === "chart-pages")?.descendantCoverage?.missingTraits,
     []
   );
   assert.ok(
     ownership.slices.find(slice => slice.name === "platform-config")?.descendantCoverage?.templateTraits.includes("platform-config-row-action")
   );
+});
+
+test("engentus can switch chart-pages onto the authored native proof lane without changing the checked-in default shell contract", async () => {
+  const [authoredPlan, inventory, shellCss] = await Promise.all([
+    loadEngentusAppliedWcss(),
+    buildEngentusPresentationInventory(),
+    readFile(path.join(process.cwd(), "examples", "engentus", "app", "engentus-shell.css"), "utf8")
+  ]);
+
+  const switchManifest = {
+    theme: "engentus",
+    slices: {
+      "chart-pages": "wcss"
+    }
+  };
+
+  const ownership = verifyEngentusStyleOwnership({
+    inventory,
+    authoredPlan,
+    switchManifest
+  });
+  assert.equal(ownership.ok, true);
+
+  const stylesheets = await composeEngentusStylesheets({
+    authoredPlan,
+    switchManifest
+  });
+  assert.equal(renderOracleStylesheet(stylesheets.shell), shellCss);
+
+  const chartCss = renderOracleStylesheet(stylesheets.chart);
+  assert.equal(chartCss.includes(":root"), true);
+  assert.equal(chartCss.includes("body.chart-page"), true);
+  assert.equal(chartCss.includes("#chart-tip"), true);
+  assert.equal(chartCss.includes("#mill-force-force-tip"), true);
+  assert.equal(chartCss.includes("#mill-force-cross-tip"), true);
+  assert.equal(chartCss.includes("#mill-force-rose-tip"), true);
+  assert.equal(chartCss.includes("#mill-force-tip"), false);
+  assert.equal(chartCss.includes("#mill-force-mc-canvas"), false);
+
+  const chartSlice = ownership.slices.find(slice => slice.name === "chart-pages");
+  assert.equal(chartSlice?.loweringMode, "native-browser");
+  assert.equal(chartSlice?.nativeDebt?.rawSelectorCount, 0);
+  assert.deepEqual(chartSlice?.anchorCoverage?.missing, []);
+  assert.deepEqual(chartSlice?.descendantCoverage?.missingTraits, []);
+  assert.deepEqual(chartSlice?.seams, []);
 });
 
 test("engentus can switch home onto the authored native proof lane without changing the checked-in default contract", async () => {

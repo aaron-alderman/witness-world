@@ -630,6 +630,278 @@ test("Engentus native mill-force WCSS proof lane preserves tabs, analysis mode, 
   }
 });
 
+test("Engentus native chart-pages WCSS proof lane preserves chart page host, mount, overlay, and tooltip behavior under injected assets", { timeout: 120000 }, async () => {
+  const server = await startEngentusUiServer({ devMode: true });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    const switchManifest = {
+      theme: "engentus",
+      slices: {
+        "chart-pages": "wcss"
+      }
+    };
+    const { chartCss } = await interceptEngentusWcssAssets(page, switchManifest);
+    assert.equal(chartCss.includes("body.chart-page"), true);
+    assert.equal(chartCss.includes("#mill-force-force-tip"), true);
+    assert.equal(chartCss.includes("#mill-force-cross-tip"), true);
+    assert.equal(chartCss.includes("#mill-force-rose-tip"), true);
+    assert.equal(chartCss.includes("#mill-force-tip"), false);
+    assert.equal(chartCss.includes("#mill-force-mc-canvas"), false);
+
+    await page.goto(`${server.url}/engentus/goodman`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "goodman");
+    await page.waitForSelector("#view-goodman");
+    await assertNoActiveShellIssues(page, "goodman-chart-pages-wcss");
+    await waitForSurfaceCondition(page, () => Boolean(document.querySelector("#chart-svg")?.__chartController), "Goodman chart page native lane did not mount the chart controller");
+
+    const goodmanStyles = await page.evaluate(() => {
+      const read = selector => {
+        const node = document.querySelector(selector);
+        const style = node ? getComputedStyle(node) : null;
+        return {
+          present: Boolean(node),
+          position: style?.position ?? null,
+          display: style?.display ?? null,
+          pointerEvents: style?.pointerEvents ?? null,
+          backgroundColor: style?.backgroundColor ?? null
+        };
+      };
+      return {
+        mount: read("#chart-svg"),
+        overlay: read("#mc-canvas"),
+        tooltip: read("#chart-tip")
+      };
+    });
+    assert.equal(goodmanStyles.mount.position, "absolute");
+    assert.equal(goodmanStyles.mount.display, "block");
+    assert.equal(goodmanStyles.overlay.pointerEvents, "none");
+    assert.equal(goodmanStyles.tooltip.position, "absolute");
+
+    await page.goto(`${server.url}/engentus/mill-charge`, { waitUntil: "domcontentloaded" });
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "mill-charge"
+    , "Mill Charge route did not settle after navigating under the native chart lane");
+    await page.waitForSelector("#view-mill");
+    await waitForSurfaceCondition(page, () => Boolean(document.querySelector("#mill-canvas")?.__chartController), "Mill Charge chart page native lane did not mount the canvas controller");
+    await assertNoActiveShellIssues(page, "mill-charge-chart-pages-wcss");
+
+    const millChargeStyles = await page.evaluate(() => {
+      const mount = document.querySelector("#mill-canvas");
+      const mountStyle = mount ? getComputedStyle(mount) : null;
+      return {
+        mountDisplay: mountStyle?.display ?? null,
+        mountRadius: mountStyle?.borderRadius ?? null
+      };
+    });
+    assert.equal(millChargeStyles.mountDisplay, "block");
+    assert.equal(millChargeStyles.mountRadius, "10px");
+
+    await page.goto(`${server.url}/engentus/mill-force`, { waitUntil: "domcontentloaded" });
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "mill-force"
+    , "Mill Force route did not settle after navigating under the native chart lane");
+    await page.waitForSelector("#view-mill-force");
+    await waitForSurfaceCondition(page, () => Boolean(document.querySelector("#mill-force-svg-cross")?.__chartController), "Mill Force cross chart did not mount under the native chart lane");
+    await assertNoActiveShellIssues(page, "mill-force-chart-pages-wcss");
+
+    const crossStyles = await page.evaluate(() => {
+      const overlay = document.querySelector("#mill-force-cross-canvas");
+      const tooltip = document.querySelector("#mill-force-cross-tip");
+      const overlayStyle = overlay ? getComputedStyle(overlay) : null;
+      const tooltipStyle = tooltip ? getComputedStyle(tooltip) : null;
+      return {
+        overlayPresent: Boolean(overlay),
+        overlayPosition: overlayStyle?.position ?? null,
+        tooltipPresent: Boolean(tooltip),
+        tooltipDisplay: tooltipStyle?.display ?? null,
+        tooltipPointerEvents: tooltipStyle?.pointerEvents ?? null
+      };
+    });
+    assert.equal(crossStyles.overlayPresent, true);
+    assert.equal(crossStyles.overlayPosition, "absolute");
+    assert.equal(crossStyles.tooltipPresent, true);
+    assert.equal(crossStyles.tooltipDisplay, "none");
+    assert.equal(crossStyles.tooltipPointerEvents, "none");
+
+    await page.click("#surface-millforcetabforcevsangle");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveChartTab") === "force"
+      && Boolean(document.querySelector("#mill-force-svg-force")?.__chartController)
+    , "Mill Force force-vs-angle chart did not materialize under the native chart lane");
+    const forceStyles = await page.evaluate(() => {
+      const overlay = document.querySelector("#mill-force-force-canvas");
+      const tooltip = document.querySelector("#mill-force-force-tip");
+      const overlayStyle = overlay ? getComputedStyle(overlay) : null;
+      const tooltipStyle = tooltip ? getComputedStyle(tooltip) : null;
+      return {
+        overlayPresent: Boolean(overlay),
+        overlayPosition: overlayStyle?.position ?? null,
+        tooltipPresent: Boolean(tooltip),
+        tooltipDisplay: tooltipStyle?.display ?? null
+      };
+    });
+    assert.equal(forceStyles.overlayPresent, true);
+    assert.equal(forceStyles.overlayPosition, "absolute");
+    assert.equal(forceStyles.tooltipPresent, true);
+    assert.equal(forceStyles.tooltipDisplay, "none");
+
+    await page.click("#surface-millforcetabforcerose");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveChartTab") === "rose"
+      && Boolean(document.querySelector("#mill-force-svg-rose")?.__chartController)
+    , "Mill Force rose chart did not materialize under the native chart lane");
+    const roseStyles = await page.evaluate(() => {
+      const overlay = document.querySelector("#mill-force-rose-canvas");
+      const tooltip = document.querySelector("#mill-force-rose-tip");
+      const overlayStyle = overlay ? getComputedStyle(overlay) : null;
+      const tooltipStyle = tooltip ? getComputedStyle(tooltip) : null;
+      return {
+        overlayPresent: Boolean(overlay),
+        overlayPosition: overlayStyle?.position ?? null,
+        tooltipPresent: Boolean(tooltip),
+        tooltipDisplay: tooltipStyle?.display ?? null
+      };
+    });
+    assert.equal(roseStyles.overlayPresent, true);
+    assert.equal(roseStyles.overlayPosition, "absolute");
+    assert.equal(roseStyles.tooltipPresent, true);
+    assert.equal(roseStyles.tooltipDisplay, "none");
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
+test("Engentus native shell-base WCSS proof lane preserves shared toolbar, route shell, and window chrome behavior under injected assets", { timeout: 120000 }, async () => {
+  const server = await startEngentusUiServer({ devMode: true });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    const switchManifest = {
+      theme: "engentus",
+      slices: {
+        "shell-base": "wcss"
+      }
+    };
+    const { shellCss } = await interceptEngentusWcssAssets(page, switchManifest);
+    assert.equal(shellCss.includes("#tb"), true);
+    assert.equal(shellCss.includes(".fw"), true);
+    assert.equal(shellCss.includes(".prog-fill.done"), true);
+    assert.equal(shellCss.includes("#mill-force-chart-wrap iframe"), true);
+
+    await page.goto(`${server.url}/engentus/home`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "home");
+    await page.waitForSelector("#view-home");
+    await assertNoActiveShellIssues(page, "shell-base-home-wcss");
+
+    const homeChrome = await page.evaluate(() => {
+      const toolbar = document.getElementById("tb");
+      const menu = document.getElementById("up-menu");
+      const body = document.getElementById("body");
+      const toolbarStyle = toolbar ? getComputedStyle(toolbar) : null;
+      const bodyStyle = body ? getComputedStyle(body) : null;
+      return {
+        toolbarDisplay: toolbarStyle?.display ?? null,
+        toolbarHeight: toolbarStyle?.height ?? null,
+        bodyDisplay: bodyStyle?.display ?? null,
+        menuDisplay: menu ? getComputedStyle(menu).display : null
+      };
+    });
+    assert.equal(homeChrome.toolbarDisplay, "flex");
+    assert.equal(homeChrome.bodyDisplay, "flex");
+    assert.equal(homeChrome.menuDisplay, "none");
+
+    await page.evaluate(() => {
+      document.getElementById("user-prof")?.click();
+    });
+    await waitForSurfaceCondition(page, () =>
+      document.getElementById("up-menu")?.classList.contains("open") === true,
+    "Shell-base native lane did not expose the profile menu open state");
+    await assertNoActiveShellIssues(page, "shell-base-home-menu-open");
+
+    await page.goto(`${server.url}/engentus/goodman`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "goodman");
+    await page.waitForSelector("#view-goodman");
+    await waitForSurfaceCondition(page, () => Boolean(document.querySelector("#chart-svg")?.__chartController), "Goodman chart controller did not mount under the native shell-base lane");
+    await assertNoActiveShellIssues(page, "shell-base-goodman-wcss");
+    await page.getByRole("button", { name: /stats/i }).click();
+    await waitForSurfaceCondition(page, () => Boolean(document.querySelector(".fw")), "Goodman floating window did not open under the native shell-base lane");
+
+    const goodmanChrome = await page.evaluate(() => {
+      const windowLayer = document.getElementById("wl");
+      const windowNode = document.querySelector(".fw");
+      const layerStyle = windowLayer ? getComputedStyle(windowLayer) : null;
+      const windowStyle = windowNode ? getComputedStyle(windowNode) : null;
+      return {
+        layerPointerEvents: layerStyle?.pointerEvents ?? null,
+        windowDisplay: windowStyle?.display ?? null,
+        windowPosition: windowStyle?.position ?? null
+      };
+    });
+    assert.equal(goodmanChrome.layerPointerEvents, "none");
+    assert.equal(goodmanChrome.windowDisplay, "flex");
+    assert.equal(goodmanChrome.windowPosition, "absolute");
+
+    await page.goto(`${server.url}/engentus/mill-charge`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "mill-charge");
+    await page.waitForSelector("#view-mill");
+    await waitForSurfaceCondition(page, () => Boolean(document.querySelector("#mill-canvas")?.__chartController), "Mill Charge chart controller did not mount under the native shell-base lane");
+    await assertNoActiveShellIssues(page, "shell-base-mill-charge-wcss");
+
+    const millChargeChrome = await page.evaluate(() => {
+      const body = document.getElementById("mill-body");
+      const main = document.getElementById("mill-main");
+      return {
+        bodyDisplay: body ? getComputedStyle(body).display : null,
+        mainDisplay: main ? getComputedStyle(main).display : null
+      };
+    });
+    assert.equal(millChargeChrome.bodyDisplay, "flex");
+    assert.equal(millChargeChrome.mainDisplay, "flex");
+
+    await page.goto(`${server.url}/engentus/mill-force`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "mill-force");
+    await page.waitForSelector("#view-mill-force");
+    await waitForSurfaceCondition(page, () => Boolean(document.querySelector("#mill-force-svg-cross")?.__chartController), "Mill Force cross chart did not mount under the native shell-base lane");
+    await assertNoActiveShellIssues(page, "shell-base-mill-force-wcss");
+
+    const millForceChrome = await page.evaluate(() => {
+      const chartArea = document.getElementById("mill-force-chart-area");
+      return {
+        chartAreaDisplay: chartArea ? getComputedStyle(chartArea).display : null,
+        chartAreaFlexDirection: chartArea ? getComputedStyle(chartArea).flexDirection : null
+      };
+    });
+    assert.equal(millForceChrome.chartAreaDisplay, "flex");
+    assert.equal(millForceChrome.chartAreaFlexDirection, "column");
+
+    await page.goto(`${server.url}/engentus/platform-config`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "platform-config-operator");
+    await page.waitForSelector("#view-platform-config");
+    await assertNoActiveShellIssues(page, "shell-base-platform-config-wcss");
+
+    const platformChrome = await page.evaluate(() => {
+      const body = document.getElementById("platform-config-body");
+      return {
+        bodyDisplay: body ? getComputedStyle(body).display : null,
+        bodyOverflow: body ? getComputedStyle(body).overflow : null
+      };
+    });
+    assert.equal(platformChrome.bodyDisplay, "flex");
+    assert.equal(platformChrome.bodyOverflow, "hidden");
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
 test("Engentus login click dispatches the authored process rule through the generic surface runtime", { timeout: 70000 }, async () => {
   const server = await startEngentusUiServer({ devMode: false });
   const browser = await launchBrowser({

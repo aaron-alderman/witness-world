@@ -4,6 +4,16 @@ import {
   pipelineSessionOpenResponsePayloadHook
 } from "./handlers.js";
 import { pipelineRvmForms } from "./desire-rvm.js";
+import {
+  createPipelineProofProgramFromDesire,
+  evaluateInputTransformSubject,
+  evaluateOutputTransformSubject,
+  evaluatePipelineProof,
+  evaluateSyncSubject,
+  hasPipelineDeriveOperator,
+  listPipelineDeriveOperatorIds,
+  pipelineDeriveOperators
+} from "./proof-runtime.js";
 
 export const bundleId = "bundle-pipeline-runtime";
 
@@ -22,6 +32,17 @@ export const desireExtensions = Object.freeze({
   rvmForms: pipelineRvmForms
 });
 
+export {
+  createPipelineProofProgramFromDesire,
+  evaluateInputTransformSubject,
+  evaluateOutputTransformSubject,
+  evaluatePipelineProof,
+  evaluateSyncSubject,
+  hasPipelineDeriveOperator,
+  listPipelineDeriveOperatorIds,
+  pipelineDeriveOperators
+};
+
 export function createHandlers(deps) {
   return createPipelineRuntimeHandlers(deps);
 }
@@ -33,5 +54,13 @@ export default {
   surfaces,
   providers,
   desireExtensions,
-  createHandlers
+  createHandlers,
+  createPipelineProofProgramFromDesire,
+  evaluateInputTransformSubject,
+  evaluateOutputTransformSubject,
+  evaluatePipelineProof,
+  evaluateSyncSubject,
+  hasPipelineDeriveOperator,
+  listPipelineDeriveOperatorIds,
+  pipelineDeriveOperators
 };

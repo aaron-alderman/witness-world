@@ -52,7 +52,10 @@ The three internal layers are now:
 
 Native-lowered slices also rely on compiled presentation anchors for the
 specific presentable nodes they address. Those anchors are backend metadata, not
-authored WCSS nouns.
+authored WCSS nouns. For `chart-pages`, that inventory now also recovers chart
+subparts such as the page body, viewport, host, mount, overlay canvas, and
+tooltip from the existing chart view metadata so the proof lane can target them
+through identity instead of raw browser selectors.
 
 ## Outputs
 
@@ -79,10 +82,13 @@ and writes offline proof artifacts outside the app source tree:
   application layer
 - the switch manifest still controls rollout, but its slice names are validated
   against canonical V1 plus the browser lowering map
-- `auth`, `home`, `mill-charge`, `mill-force`, and `platform-config` now have
-  `native-browser` lowering definitions; the checked-in switch manifest remains
-  legacy and only proof/injected lanes currently exercise `home`,
-  `mill-charge`, and `mill-force`
+- `shell-base`, `auth`, `home`, `goodman`, `mill-charge`, `mill-force`,
+  `platform-config`, and `chart-pages` now have `native-browser` lowering
+  definitions; the checked-in switch manifest remains legacy and the native lane
+  is still exercised through proof/injected assets rather than live default
+  serving
+- the proof lane now has whole-app native coverage; declaration groups remain a
+  backend artifact rather than the authored slice contract
 - native slices are expected to target identities, traits, variants, tags, and
   pseudos first; raw selector escapes are treated as backend debt and surfaced
   in the proof reports
