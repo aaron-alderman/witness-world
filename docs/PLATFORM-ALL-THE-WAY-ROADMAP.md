@@ -1283,10 +1283,10 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [~] Run tests as platform executions.
 - [~] Capture test artifacts.
 - [~] Link gates to changed objects.
-- [ ] Run dependency-aware selected tests.
+- [~] Run dependency-aware selected tests.
 - [X] Add red/green view.
 - [X] Add tests for affected test selection.
-- [L] Current V1 exposes per-gate `lastResult`, witness-backed stdout/stderr/TAP/JUnit artifacts, derived `testSuite` / `testCase` rows, a test-runs panel, latest-result state, and scope-specific branch/change-set red/green summaries in the platform model and console. It is not yet an automatically executed dependency-aware red/green orchestration view with durable artifact-backed history.
+- [L] Current V1 exposes per-gate `lastResult`, witness-backed stdout/stderr/TAP/JUnit artifacts, derived `testSuite` / `testCase` rows, a test-runs panel, on-demand selected-gate execution through the shared HTTP/MCP/platform-console path, latest-result state, and scope-specific branch/change-set red/green summaries in the platform model and console. It is not yet an automatically executed dependency-aware red/green orchestration view with durable artifact-backed history.
 
 ### Milestone E: Defects And Telemetry V1
 

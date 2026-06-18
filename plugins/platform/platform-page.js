@@ -428,6 +428,13 @@ export function renderPlatformPage(model) {
           <button type="submit">Run Test Gate</button>
           <div id="test-run-status"></div>
         </form>
+        <form id="platform-selected-test-run-form">
+          <label>Branch id <input name="branchId" placeholder="Optional branch id"></label>
+          <label>Change set id <input name="changeSetId" placeholder="Optional change set id"></label>
+          <label>Candidate snapshot id <input name="candidateSnapshotId" placeholder="Optional candidate snapshot id"></label>
+          <button type="submit">Run Selected Gates</button>
+          <div id="selected-test-run-status"></div>
+        </form>
         <table>
           <thead><tr><th>Status</th><th>Gate</th><th>Branch</th><th>Duration</th><th>Exit</th><th>Started</th></tr></thead>
           <tbody>${tableRows(testRuns.slice(0, 80), [
@@ -940,6 +947,24 @@ export function renderPlatformPage(model) {
       status.textContent = response.ok
         ? ("Test run finished: " + String(json.latestResult?.status || json.testRun?.status || "unknown"))
         : (json.error || "Test run failed.");
+    });
+    document.getElementById("platform-selected-test-run-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const status = document.getElementById("selected-test-run-status");
+      const response = await fetch("/api/platform-test-runs", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          branchId: form.elements.branchId.value || null,
+          changeSetId: form.elements.changeSetId.value || null,
+          candidateSnapshotId: form.elements.candidateSnapshotId.value || null
+        })
+      });
+      const json = await response.json().catch(() => ({}));
+      status.textContent = response.ok
+        ? ("Selected gates finished: " + String(json.summaries?.passed ?? 0) + "/" + String(json.summaries?.totalRuns ?? 0) + " passed")
+        : (json.error || "Selected gate run failed.");
     });
     if (window.EventSource) {
       const status = document.getElementById("test-run-stream-status");

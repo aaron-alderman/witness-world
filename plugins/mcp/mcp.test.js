@@ -57,7 +57,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("branch.create"), true);
   assert.equal(platformProposal.inputSchema.properties.operation.enum.includes("approve"), true);
   assert.deepEqual(platformChangeSet.inputSchema.properties.operation.enum, ["list", "read", "create", "edit", "removeEdit", "validate", "apply", "reject", "abandon"]);
-  assert.deepEqual(platformTest.inputSchema.properties.operation.enum, ["list", "read", "run"]);
+  assert.deepEqual(platformTest.inputSchema.properties.operation.enum, ["list", "read", "run", "runSelected"]);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("process.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("type.create"), true);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("projection.create"), true);
@@ -399,6 +399,23 @@ test("platform MCP test tool routes through platform test-run handlers", async (
   assert.equal(calls.at(-1).path, "/api/platform-test-runs");
   assert.equal(calls.at(-1).body.id, "testRun.platform.demo");
   assert.equal(calls.at(-1).body.gateId, "gate:plugins/platform/platform.test.js");
+
+  const selected = await executeMcpTool("platform.test", {
+    args: {
+      operation: "runSelected",
+      branchId: "branch.platform.demo",
+      changeSetId: "changeSet:platform-demo",
+      candidateSnapshotId: "candidateSnapshot:platform-demo:1"
+    },
+    callHandler
+  });
+  assert.equal(selected.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.testRun.create");
+  assert.equal(calls.at(-1).path, "/api/platform-test-runs");
+  assert.equal(calls.at(-1).body.gateId, undefined);
+  assert.equal(calls.at(-1).body.branchId, "branch.platform.demo");
+  assert.equal(calls.at(-1).body.changeSetId, "changeSet:platform-demo");
+  assert.equal(calls.at(-1).body.candidateSnapshotId, "candidateSnapshot:platform-demo:1");
 
   const read = await executeMcpTool("platform.test", {
     args: { operation: "read", id: "testRun.platform.demo" },

@@ -100,6 +100,27 @@ function diagnosticsFromAppContext(appContext) {
   };
 }
 
+function summarizePlatformTestBatch(results = []) {
+  const latestResults = (Array.isArray(results) ? results : []).map(result => result?.latestResult).filter(Boolean);
+  const counts = {
+    totalRuns: latestResults.length,
+    passed: 0,
+    failed: 0,
+    errors: 0,
+    timedOut: 0,
+    cached: 0
+  };
+  for (const result of latestResults) {
+    const status = String(result.status || "");
+    if (status === "passed") counts.passed += 1;
+    else if (status === "failed") counts.failed += 1;
+    else if (status === "error") counts.errors += 1;
+    else if (status === "timed_out") counts.timedOut += 1;
+    if (String(result.cacheStatus || "") === "hit") counts.cached += 1;
+  }
+  return counts;
+}
+
 function isWithinRoot(filePath, rootPath) {
   const relative = path.relative(rootPath, filePath);
   return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
@@ -446,35 +467,129 @@ export function createPlatformHandlers({
       const body = await readJson(req);
       const model = await platformModelFor(appContext);
       const gateId = body?.gateId ? String(body.gateId) : "";
-      const gate = model.testGates?.find(row => row.id === gateId) ?? null;
-      if (!gate) {
-        sendJson(res, 404, { error: "test gate not found" });
+      if (!gateId && body?.id) {
+        sendJson(res, 400, { error: "explicit run id requires a specific gate id" });
         return;
       }
-      const result = await runPlatformTestGate(world, {
-        actor,
-        gate,
-        id: body?.id ?? null,
-        branchId: body?.branchId ?? null,
-        changeSetId: body?.changeSetId ?? null,
-        candidateSnapshotId: body?.candidateSnapshotId ?? null,
-        session: requestSession ?? null,
-        runtimeProfile: appContext?.runtimeProfile ?? null,
-        runCommand: platformTestRunner
-      });
-      if (!result.ok) {
-        sendJson(res, result.status || 400, { error: result.error });
+      if (gateId) {
+        const gate = model.testGates?.find(row => row.id === gateId) ?? null;
+        if (!gate) {
+          sendJson(res, 404, { error: "test gate not found" });
+          return;
+        }
+        const result = await runPlatformTestGate(world, {
+          actor,
+          gate,
+          id: body?.id ?? null,
+          branchId: body?.branchId ?? null,
+          changeSetId: body?.changeSetId ?? null,
+          candidateSnapshotId: body?.candidateSnapshotId ?? null,
+          session: requestSession ?? null,
+          runtimeProfile: appContext?.runtimeProfile ?? null,
+          runCommand: platformTestRunner
+        });
+        if (!result.ok) {
+          sendJson(res, result.status || 400, { error: result.error });
+          return;
+        }
+        sendJson(res, result.status, {
+          testRun: result.testRun,
+          testResults: result.testResults,
+          testArtifacts: result.testArtifacts,
+          testSuites: result.testSuites,
+          testCases: result.testCases,
+          latestResult: result.latestResult,
+          startWitness: result.startWitness,
+          finishWitness: result.finishWitness
+        });
         return;
       }
-      sendJson(res, result.status, {
-        testRun: result.testRun,
-        testResults: result.testResults,
-        testArtifacts: result.testArtifacts,
-        testSuites: result.testSuites,
-        testCases: result.testCases,
-        latestResult: result.latestResult,
-        startWitness: result.startWitness,
-        finishWitness: result.finishWitness
+      const requestedChangeSetId = body?.changeSetId ? String(body.changeSetId) : "";
+      const requestedBranchId = body?.branchId ? String(body.branchId) : "";
+      if (!requestedChangeSetId && !requestedBranchId) {
+        sendJson(res, 400, { error: "gate id, branch id, or change set id is required" });
+        return;
+      }
+      const scopeType = requestedChangeSetId ? "changeSet" : "branch";
+      const changeSet = requestedChangeSetId
+        ? (model.changeSets?.find(row => row.id === requestedChangeSetId) ?? null)
+        : null;
+      if (requestedChangeSetId && !changeSet) {
+        sendJson(res, 404, { error: "change set not found" });
+        return;
+      }
+      const resolvedBranchId = requestedChangeSetId
+        ? String(changeSet?.branchId || requestedBranchId || "")
+        : requestedBranchId;
+      if (!resolvedBranchId) {
+        sendJson(res, 400, { error: "branch id is required for selected test execution" });
+        return;
+      }
+      const selectedGateIds = requestedChangeSetId
+        ? [...(model.selectedTestGatesByChangeSet?.[requestedChangeSetId] ?? [])]
+        : [...(model.selectedTestGatesByBranch?.[resolvedBranchId] ?? [])];
+      if (!selectedGateIds.length) {
+        sendJson(res, 409, {
+          error: "no selected test gates for scope",
+          selectionScope: {
+            scopeType,
+            branchId: resolvedBranchId,
+            changeSetId: requestedChangeSetId || null,
+            selectedGateIds: []
+          }
+        });
+        return;
+      }
+      const gateById = Object.fromEntries((model.testGates ?? []).map(row => [String(row.id || ""), row]));
+      const requestedCandidateSnapshotId = body?.candidateSnapshotId ? String(body.candidateSnapshotId) : null;
+      const results = [];
+      for (const selectedGateId of selectedGateIds) {
+        const gate = gateById[selectedGateId] ?? null;
+        if (!gate) continue;
+        const gateCandidateSnapshotId = requestedCandidateSnapshotId && (gate.protectedObjects ?? []).includes("testEnvironment:platform-candidate-snapshot")
+          ? requestedCandidateSnapshotId
+          : null;
+        const result = await runPlatformTestGate(world, {
+          actor,
+          gate,
+          id: null,
+          branchId: resolvedBranchId,
+          changeSetId: requestedChangeSetId || null,
+          candidateSnapshotId: gateCandidateSnapshotId,
+          session: requestSession ?? null,
+          runtimeProfile: appContext?.runtimeProfile ?? null,
+          runCommand: platformTestRunner
+        });
+        if (!result.ok) {
+          sendJson(res, result.status || 400, {
+            error: result.error,
+            selectionScope: {
+              scopeType,
+              branchId: resolvedBranchId,
+              changeSetId: requestedChangeSetId || null,
+              selectedGateIds
+            },
+            completedRuns: results.map(entry => entry.testRun?.id).filter(Boolean)
+          });
+          return;
+        }
+        results.push(result);
+      }
+      sendJson(res, 201, {
+        selectionScope: {
+          scopeType,
+          branchId: resolvedBranchId,
+          changeSetId: requestedChangeSetId || null,
+          requestedCandidateSnapshotId,
+          selectedGateIds
+        },
+        summaries: summarizePlatformTestBatch(results),
+        testRuns: results.map(result => result.testRun),
+        latestResults: results.map(result => result.latestResult).filter(Boolean),
+        testResults: results.flatMap(result => result.testResults ?? []),
+        testArtifacts: results.flatMap(result => result.testArtifacts ?? []),
+        testSuites: results.flatMap(result => result.testSuites ?? []),
+        testCases: results.flatMap(result => result.testCases ?? [])
       });
     },
 

@@ -2512,6 +2512,180 @@ test("platform test run handlers execute modeled gates and expose read model sta
   assert.equal(sent.at(-1).body.testResults[0].sourceRevision.branchId, "branch.platform.demo");
 }));
 
+test("platform test run handlers can execute the selected gate set for a change set", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const runnerCalls = [];
+  const rvm = await readFile(new URL("./platform-console.rvm", import.meta.url), "utf8");
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    platformTestRunner: async ({ command, candidateSnapshotId }) => {
+      runnerCalls.push({ command, candidateSnapshotId });
+      return {
+        startedAt: "2026-06-18T00:00:00.000Z",
+        finishedAt: "2026-06-18T00:00:01.000Z",
+        durationMs: 1000,
+        exitCode: 0,
+        signal: null,
+        status: "passed",
+        stdout: `TAP version 13\n1..1\nok 1 - ran ${command}\n`,
+        stderr: `<?xml version="1.0" encoding="UTF-8"?><testsuite name="platform" tests="1" failures="0" errors="0" skipped="0"></testsuite>`,
+        timedOut: false,
+        error: null
+      };
+    },
+    sendGateFailure: (res, gate) => sent.push({ status: gate.status, body: { error: gate.reason } }),
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.changeSet.create"]({
+    req: {
+      body: {
+        id: "changeset.test.run.selected",
+        branchId: "branch.test.run.selected",
+        title: "Selected test run snapshot"
+      }
+    },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+
+  await handlers["platform.changeSet.edit"]({
+    req: {
+      body: {
+        edits: [{
+          path: "plugins/platform/platform-console.rvm",
+          content: `${rvm}\n`
+        }]
+      }
+    },
+    res: {},
+    params: { id: "changeset.test.run.selected" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+
+  await handlers["platform.changeSet.validate"]({
+    res: {},
+    params: { id: "changeset.test.run.selected" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+
+  const candidateSnapshotId = sent.at(-1).body.candidateSnapshot.id;
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: ["platform.self"],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => world.project(projector)
+  });
+  const selectedGateIds = model.selectedTestGatesByChangeSet["changeset.test.run.selected"] ?? [];
+  assert.equal(selectedGateIds.length > 0, true);
+  assert.equal(selectedGateIds.includes("gate:plugins/platform/platform.test.js"), true);
+
+  await handlers["platform.testRun.create"]({
+    req: {
+      body: {
+        changeSetId: "changeset.test.run.selected",
+        candidateSnapshotId
+      }
+    },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: {
+      runtimeProfile: "full",
+      project: projector => world.project(projector)
+    }
+  });
+
+  assert.equal(sent.at(-1).status, 201);
+  assert.equal(sent.at(-1).body.selectionScope.scopeType, "changeSet");
+  assert.equal(sent.at(-1).body.selectionScope.branchId, "branch.test.run.selected");
+  assert.equal(sent.at(-1).body.selectionScope.changeSetId, "changeset.test.run.selected");
+  assert.deepEqual(sent.at(-1).body.selectionScope.selectedGateIds, selectedGateIds);
+  assert.equal(sent.at(-1).body.testRuns.length, selectedGateIds.length);
+  assert.equal(sent.at(-1).body.latestResults.length, selectedGateIds.length);
+  assert.equal(sent.at(-1).body.summaries.totalRuns, selectedGateIds.length);
+  assert.equal(sent.at(-1).body.summaries.passed, selectedGateIds.length);
+  assert.equal(sent.at(-1).body.testRuns.every(row => row.changeSetId === "changeset.test.run.selected"), true);
+  assert.equal(sent.at(-1).body.latestResults.every(row => row.status === "passed"), true);
+  assert.equal(sent.at(-1).body.testRuns.some(row => row.sourceRevision?.candidateSnapshotId === candidateSnapshotId), true);
+  assert.equal(world.project(moduleProjectors.testRuns).length, selectedGateIds.length);
+  assert.equal(runnerCalls.length, selectedGateIds.length);
+}));
+
+test("platform test run handlers reject selected gate execution when a scope has no selected gates", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    platformTestRunner: async () => {
+      throw new Error("selected gate runner should not execute");
+    },
+    sendGateFailure: (res, gate) => sent.push({ status: gate.status, body: { error: gate.reason } }),
+    send: () => {},
+    sendJson: (res, status, body) => sent.push({ status, body })
+  });
+
+  await handlers["platform.branch.create"]({
+    req: {
+      body: {
+        id: "branch.test.run.empty",
+        title: "Empty selected gate scope"
+      }
+    },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+
+  await handlers["platform.testRun.create"]({
+    req: {
+      body: {
+        branchId: "branch.test.run.empty"
+      }
+    },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: {
+      runtimeProfile: "full",
+      project: projector => world.project(projector)
+    }
+  });
+
+  assert.equal(sent.at(-1).status, 409);
+  assert.equal(sent.at(-1).body.error, "no selected test gates for scope");
+  assert.deepEqual(sent.at(-1).body.selectionScope, {
+    scopeType: "branch",
+    branchId: "branch.test.run.empty",
+    changeSetId: null,
+    selectedGateIds: []
+  });
+}));
+
 test("platform test runs capture environment inputs and prefer candidate snapshot hashes for source revision", async () => withRegisteredPluginProjectors(providers, async () => {
   const world = createWorld();
   const handlers = createHandlers({
@@ -4018,6 +4192,7 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Test Cases/);
   assert.match(html, /Live Test Run Events/);
   assert.match(html, /Run Test Gate/);
+  assert.match(html, /Run Selected Gates/);
   assert.match(html, /Candidate Snapshots/);
   assert.match(html, /Runtime Revisions/);
   assert.match(html, /Revision detail/);
@@ -4044,6 +4219,8 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /platform-change-set-apply-form/);
   assert.match(html, /platform-change-set-lifecycle-form/);
   assert.match(html, /platform-test-run-form/);
+  assert.match(html, /platform-selected-test-run-form/);
+  assert.match(html, /selected-test-run-status/);
   assert.match(html, /test-run-stream-status/);
   assert.match(html, /test-run-stream-log/);
   assert.match(html, /platform-branch-detail-select/);

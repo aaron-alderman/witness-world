@@ -631,9 +631,9 @@ const TOOL_DEFINITIONS = [
   {
     name: "platform.test",
     title: "Platform Test",
-    description: "Inspect platform test runs or execute a modeled test gate through the shared platform handlers.",
+    description: "Inspect platform test runs or execute a modeled test gate or selected gate set through the shared platform handlers.",
     inputSchema: jsonSchemaObject({
-      operation: { type: "string", enum: ["list", "read", "run"] },
+      operation: { type: "string", enum: ["list", "read", "run", "runSelected"] },
       id: { type: "string" },
       gateId: { type: "string" },
       branchId: { type: "string" },
@@ -677,6 +677,22 @@ const TOOL_DEFINITIONS = [
           body: {
             id: testRunId || null,
             gateId: args.gateId,
+            branchId: args.branchId ?? null,
+            changeSetId: args.changeSetId ?? null,
+            candidateSnapshotId: args.candidateSnapshotId ?? null
+          }
+        });
+      }
+      if (operation === "runSelected") {
+        if (testRunId) return errorToolResult("explicit run id requires a specific gate id", { operation });
+        if (!args.branchId && !args.changeSetId) {
+          return errorToolResult("branch id or change set id is required", { operation });
+        }
+        return runJsonHandler(callHandler, {
+          handler: "platform.testRun.create",
+          method: "POST",
+          path: "/api/platform-test-runs",
+          body: {
             branchId: args.branchId ?? null,
             changeSetId: args.changeSetId ?? null,
             candidateSnapshotId: args.candidateSnapshotId ?? null
