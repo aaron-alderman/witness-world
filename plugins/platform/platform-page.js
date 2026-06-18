@@ -53,6 +53,9 @@ function tableRows(rows, cells) {
 export function renderPlatformPage(model) {
   const lifecycle = model.lifecycleVocabulary ?? [];
   const topNodes = model.nodes.slice(0, 80);
+  const graphNodes = model.nodes.slice(0, 120);
+  const graphEdges = model.edges.slice(0, 160);
+  const graphRelations = [...new Set(graphEdges.map(edge => edge.rel).filter(Boolean))].sort();
   const gaps = model.gaps.slice(0, 80);
   const metaGaps = gaps.filter(gap =>
     gap?.kind === "meta-defect"
@@ -722,6 +725,42 @@ export function renderPlatformPage(model) {
       <div>
         <h2>Coverage Matrix Detail</h2>
         <pre>${esc(JSON.stringify(coverageEdges.slice(0, 120), null, 2))}</pre>
+      </div>
+    </section>
+
+    <section class="grid2">
+      <div>
+        <h2>Dependency Graph</h2>
+        <div class="platform-branch-summary">
+          <div class="card">
+            <h3>Graph nodes</h3>
+            <div>${esc(graphNodes.length)}</div>
+            <div class="muted">Sampled modeled platform objects</div>
+          </div>
+          <div class="card">
+            <h3>Graph edges</h3>
+            <div>${esc(graphEdges.length)}</div>
+            <div class="muted">Sampled modeled relationships</div>
+          </div>
+          <div class="card">
+            <h3>Relation kinds</h3>
+            <div>${esc(graphRelations.length)}</div>
+            <div class="muted">${esc(graphRelations.join(", "))}</div>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>From</th><th>Relation</th><th>To</th><th>Source</th></tr></thead>
+          <tbody>${tableRows(graphEdges, [
+            row => row.from,
+            row => row.rel,
+            row => row.to,
+            row => row.source || ""
+          ])}</tbody>
+        </table>
+      </div>
+      <div>
+        <h2>Dependency Graph Detail</h2>
+        <pre>${esc(JSON.stringify({ nodes: graphNodes, edges: graphEdges }, null, 2))}</pre>
       </div>
     </section>
 
