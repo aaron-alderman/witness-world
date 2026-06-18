@@ -1745,6 +1745,15 @@ export const moduleProjectors = {
     activeByBranch: Object.create(null)
   })),
 
+  testGates: delegatedModuleProjector("testGates", emptyRows),
+
+  testGateIndex: delegatedModuleProjector("testGateIndex", () => ({
+    byId: Object.create(null),
+    byProtectedObject: Object.create(null),
+    byBranch: Object.create(null),
+    byChangeSet: Object.create(null)
+  })),
+
   testRuns: delegatedModuleProjector("testRuns", emptyRows),
 
   testRunIndex: delegatedModuleProjector("testRunIndex", () => ({
@@ -1760,6 +1769,8 @@ export const moduleProjectors = {
   testSuites: delegatedModuleProjector("testSuites", emptyRows),
 
   testCases: delegatedModuleProjector("testCases", emptyRows),
+
+  coverageEdges: delegatedModuleProjector("coverageEdges", emptyRows),
 
   latestTestResultsByGate: delegatedModuleProjector("latestTestResultsByGate", () => ({
     rows: [],

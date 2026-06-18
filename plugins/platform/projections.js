@@ -1,5 +1,10 @@
 import { moduleProjectors } from "../../src/modules.js";
 import { platformChangeSetInsights } from "./branch-insights.js";
+import {
+  buildProjectedCoverageEdges,
+  buildProjectedTestGateIndex,
+  discoverProjectedTestGates
+} from "./test-gate-catalog.js";
 
 function latestBodiesByProcess(witnesses, process) {
   const rows = new Map();
@@ -737,6 +742,19 @@ export const platformModuleProjectors = {
 
   testCases(witnesses) {
     return testCaseRows(witnesses);
+  },
+
+  testGates(witnesses) {
+    const latestResultsByGate = platformModuleProjectors.latestTestResultsByGate(witnesses).byGate ?? Object.create(null);
+    return discoverProjectedTestGates(latestResultsByGate);
+  },
+
+  testGateIndex(witnesses) {
+    return buildProjectedTestGateIndex(platformModuleProjectors.testGates(witnesses));
+  },
+
+  coverageEdges(witnesses) {
+    return buildProjectedCoverageEdges(platformModuleProjectors.testGates(witnesses));
   },
 
   latestTestResultsByGate(witnesses) {

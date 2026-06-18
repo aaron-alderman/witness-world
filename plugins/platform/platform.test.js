@@ -249,6 +249,18 @@ test("platform console is declared through RVM and styled through WCSS", async (
   assert.match(css, /--platform-accent: #1f6feb;/);
 });
 
+test("platform delegated test-gate projectors discover gate catalog rows", async () => withRegisteredPluginProjectors(providers, async () => {
+  const testGates = moduleProjectors.testGates([]);
+  const testGateIndex = moduleProjectors.testGateIndex([]);
+  const coverageEdges = moduleProjectors.coverageEdges([]);
+
+  assert.equal(testGates.some(row => row.id === "gate:plugins/platform/platform.test.js"), true);
+  assert.equal(testGates.some(row => row.id === "gate:script:test-plugin-mcp"), true);
+  assert.equal(testGateIndex.byId["gate:plugins/platform/platform.test.js"].id, "gate:plugins/platform/platform.test.js");
+  assert.equal(Array.isArray(testGateIndex.byProtectedObject["plugin.platform"]), true);
+  assert.equal(coverageEdges.some(row => row.gateId === "gate:plugins/platform/platform.test.js" && row.coverageKind === "sourceDependency"), true);
+}));
+
 test("platform model filters support MCP views", async () => {
   const model = await buildPlatformModel({
     diagnostics: {

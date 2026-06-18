@@ -1116,7 +1116,8 @@ function buildTestGateRows(
   changeSets = [],
   latestResultsByGate = Object.create(null),
   defectClusters = [],
-  bundleIdsByPlugin = Object.create(null)
+  bundleIdsByPlugin = Object.create(null),
+  seedRows = null
 ) {
   function pushTarget(targets, id) {
     if (isKnownPlatformModelTarget(id, nodes)) targets.add(String(id));
@@ -1190,48 +1191,80 @@ function buildTestGateRows(
     if (!outgoing.has(edge.from)) outgoing.set(edge.from, []);
     outgoing.get(edge.from).push(edge);
   }
-  const rows = [...nodes.values()]
-    .filter(node => node.kind === "testGate")
-    .map(node => {
-      const gateEdges = outgoing.get(node.id) ?? [];
-      const baseProtectedObjects = unique(gateEdges.filter(edge => edge.rel === "verifies").map(edge => edge.to));
-      const protectedObjects = unique([
-        ...baseProtectedObjects,
-        ...telemetryMetricTargetsForProtectedObjects(baseProtectedObjects)
-      ]);
-      const protectedObjectLabels = protectedObjects.map(target => platformModelTargetTitle(target, nodes));
-      const command = normalizeGateCommand(node.command || `node --test ${node.title}`);
-      const sourceDependencies = unique(
-        Array.isArray(node.sourceDependencies) && node.sourceDependencies.length
-          ? node.sourceDependencies
-          : [node.source]
-      );
-      return {
-        id: node.id,
-        title: node.title,
-        sourcePath: node.source ? String(node.source) : null,
-        command,
-        runner: gateRunnerForPath(command || node.title),
-        environment: gateEnvironmentForPath(command || node.title),
-        timeoutMs: gateTimeoutForPath(command || node.title),
-        protectedObjects,
-        protectedObjectLabels,
-        sourceDependencies,
-        lastResult: latestResultsByGate[node.id]
-          ? {
-              runId: latestResultsByGate[node.id].runId,
-              status: latestResultsByGate[node.id].status,
-              exitCode: latestResultsByGate[node.id].exitCode,
-              durationMs: latestResultsByGate[node.id].durationMs,
-              producedAt: latestResultsByGate[node.id].producedAt ?? null
-            }
-          : null,
-        flakeScore: null,
-        costEstimate: gateCostEstimateForPath(command || node.title),
-        selectedByBranches: [],
-        selectedByChangeSets: []
-      };
-    })
+  const rows = (Array.isArray(seedRows) && seedRows.length
+    ? seedRows.map(row => {
+        const protectedObjects = unique([
+          ...(Array.isArray(row.protectedObjects) ? row.protectedObjects : []),
+          ...telemetryMetricTargetsForProtectedObjects(row.protectedObjects ?? [])
+        ]);
+        return {
+          id: String(row.id || ""),
+          title: String(row.title || row.id || ""),
+          sourcePath: row.sourcePath ? String(row.sourcePath) : null,
+          command: normalizeGateCommand(row.command || `node --test ${row.title || row.id || ""}`),
+          runner: String(row.runner || gateRunnerForPath(row.command || row.title || row.id || "")),
+          environment: String(row.environment || gateEnvironmentForPath(row.command || row.title || row.id || "")),
+          timeoutMs: Number(row.timeoutMs || gateTimeoutForPath(row.command || row.title || row.id || "")),
+          protectedObjects,
+          protectedObjectLabels: protectedObjects.map(target => platformModelTargetTitle(target, nodes)),
+          sourceDependencies: unique(Array.isArray(row.sourceDependencies) ? row.sourceDependencies : []),
+          lastResult: row.lastResult
+            ? {
+                runId: row.lastResult.runId,
+                status: row.lastResult.status,
+                exitCode: row.lastResult.exitCode,
+                durationMs: row.lastResult.durationMs,
+                producedAt: row.lastResult.producedAt ?? null
+              }
+            : null,
+          flakeScore: row.flakeScore ?? null,
+          costEstimate: row.costEstimate ? String(row.costEstimate) : gateCostEstimateForPath(row.command || row.title || row.id || ""),
+          selectedByBranches: [],
+          selectedByChangeSets: []
+        };
+      })
+    : [...nodes.values()]
+      .filter(node => node.kind === "testGate")
+      .map(node => {
+        const gateEdges = outgoing.get(node.id) ?? [];
+        const baseProtectedObjects = unique(gateEdges.filter(edge => edge.rel === "verifies").map(edge => edge.to));
+        const protectedObjects = unique([
+          ...baseProtectedObjects,
+          ...telemetryMetricTargetsForProtectedObjects(baseProtectedObjects)
+        ]);
+        const protectedObjectLabels = protectedObjects.map(target => platformModelTargetTitle(target, nodes));
+        const command = normalizeGateCommand(node.command || `node --test ${node.title}`);
+        const sourceDependencies = unique(
+          Array.isArray(node.sourceDependencies) && node.sourceDependencies.length
+            ? node.sourceDependencies
+            : [node.source]
+        );
+        return {
+          id: node.id,
+          title: node.title,
+          sourcePath: node.source ? String(node.source) : null,
+          command,
+          runner: gateRunnerForPath(command || node.title),
+          environment: gateEnvironmentForPath(command || node.title),
+          timeoutMs: gateTimeoutForPath(command || node.title),
+          protectedObjects,
+          protectedObjectLabels,
+          sourceDependencies,
+          lastResult: latestResultsByGate[node.id]
+            ? {
+                runId: latestResultsByGate[node.id].runId,
+                status: latestResultsByGate[node.id].status,
+                exitCode: latestResultsByGate[node.id].exitCode,
+                durationMs: latestResultsByGate[node.id].durationMs,
+                producedAt: latestResultsByGate[node.id].producedAt ?? null
+              }
+            : null,
+          flakeScore: null,
+          costEstimate: gateCostEstimateForPath(command || node.title),
+          selectedByBranches: [],
+          selectedByChangeSets: []
+        };
+      }))
     .sort((left, right) => left.id.localeCompare(right.id));
 
   const affectedRows = [];
@@ -1555,6 +1588,8 @@ export async function buildPlatformModel({
   const testArtifacts = projectRows(project, moduleProjectors.testArtifacts);
   const testSuites = projectRows(project, moduleProjectors.testSuites);
   const testCases = projectRows(project, moduleProjectors.testCases);
+  const projectedTestGates = projectRows(project, moduleProjectors.testGates);
+  const projectedCoverageEdges = projectRows(project, moduleProjectors.coverageEdges);
   const latestTestResultsProjection = projectValue(project, moduleProjectors.latestTestResultsByGate, { rows: [], byGate: Object.create(null) });
   const candidateSnapshotsByBranch = candidateSnapshotsByBranchIndex(candidateSnapshots);
   const snapshotDiagnostics = normalizeSnapshotDiagnostics(diagnostics?.appSnapshot ?? null);
@@ -2115,9 +2150,17 @@ export async function buildPlatformModel({
     changeSets,
     latestTestResultsProjection.byGate ?? Object.create(null),
     defectClusters,
-    bundleIdsByPlugin
+    bundleIdsByPlugin,
+    projectedTestGates.length ? projectedTestGates : null
   );
-  const coverageEdges = buildCoverageEdgeRows(testGateProjection.rows, nodes);
+  const coverageEdges = projectedCoverageEdges.length
+    ? projectedCoverageEdges.map(row => ({
+        ...row,
+        targetLabel: row.coverageKind === "protectedObject"
+          ? platformModelTargetTitle(row.targetId, nodes)
+          : (row.targetLabel || row.sourceDependency || row.targetId)
+      }))
+    : buildCoverageEdgeRows(testGateProjection.rows, nodes);
   addTestGateTelemetryEdges(nodes, edges, testGateProjection.rows);
   addTestExecutionNodes(nodes, edges, testGateProjection.rows, testRuns, testResults, testArtifacts, testSuites, testCases);
   for (const coverageEdge of coverageEdges) {

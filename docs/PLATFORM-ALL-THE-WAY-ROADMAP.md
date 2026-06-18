@@ -652,15 +652,15 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add `testResult` module kind.
 - [X] Add `testArtifact` module kind.
 - [~] Add `coverageEdge` module kind.
-- [ ] Add projectors:
-  - [~] `testGates`
+- [X] Add projectors:
+  - [X] `testGates`
   - [X] `testGateIndex`
   - [X] `testRuns`
   - [X] `testResults`
   - [X] `testSuites`
   - [X] `testCases`
   - [X] `latestTestResultsByGate`
-  - [~] coverageEdges
+  - [X] coverageEdges
   - [X] `affectedTestGates`
 - [~] Model gate fields:
   - [X] id
@@ -683,8 +683,8 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add Platform Console gates view.
 - [X] Add MCP view `platform.read { view: "testGates" }`.
 - [L] Current V1 gate modeling is a platform self-model projection with branch-aware affected gate selection plus discovery from test files, package scripts, explicit doc commands, and test-source platform hints. Test-source hints currently come from repo-relative imports, quoted repo paths, route literals, and known plugin/capability/handler identifiers; they are not yet a full AST/import dependency graph.
-- [L] Platform graph nodes for discovered verification commands now use the explicit `testGate` kind, while the higher-level `testGates` read model remains a platform-model projection rather than a delegated module projector.
-- [L] Current V1 now also derives `coverageEdge` rows from each gate's protected objects and source dependencies, emits `coverageEdge` nodes in the platform graph, and exposes those rows through `/api/platform-model?view=testGates`. This is still model-local rather than a delegated module projector, and it is not yet the broader coverage matrix planned in Phase 6.
+- [L] Platform graph nodes for discovered verification commands now use the explicit `testGate` kind, and the base `testGates` / `testGateIndex` / `coverageEdges` catalog is now available through delegated platform projectors. Branch-aware affected-gate selection and selected-gate reduction still remain platform-model-local because they depend on change-set/branch summaries, telemetry targets, and prior-defect context.
+- [L] Current V1 now also derives `coverageEdge` rows from each gate's protected objects and source dependencies, emits `coverageEdge` nodes in the platform graph, and exposes those rows through `/api/platform-model?view=testGates`. The delegated projector currently captures the base gate catalog and file/protected-object edges; it is not yet the broader coverage matrix planned in Phase 6.
 - [L] Current V1 test execution still records one synthesized `testResult` per run, but structured TAP/JUnit artifacts now derive `testSuite` and `testCase` rows opportunistically from captured stdout/stderr content. Artifact storage, standalone structured report ingestion, and richer runner-native per-case modeling remain later work.
 
 ### 5.2 Test Execution Environment
