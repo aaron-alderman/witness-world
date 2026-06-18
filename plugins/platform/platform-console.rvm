@@ -125,7 +125,7 @@ view PlatformVerificationPage {
   class platform-verification
   prop pageId = "verification"
   prop modelView = "verification"
-  prop summaryCards = "Test Gates=testGates@count|Test Runs=testRuns@count|Runtime Revisions=runtimeRevisions@count|Snapshot Builds=snapshotBuilds@count"
+  prop summaryCards = "Policies=verificationPolicies@count|Queue=verificationQueue@count|Executions=verificationExecutions@count|Test Gates=testGates@count|Test Runs=testRuns@count|Runtime Revisions=runtimeRevisions@count|Snapshot Builds=snapshotBuilds@count"
   prop title = "Verification"
   prop summary = "Live test runs, RVM-authored reports, candidate snapshots, failures, regressions, and runtime revisions."
   children {

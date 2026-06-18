@@ -5844,6 +5844,42 @@ test("platform page renders required operating views", async () => {
     candidateSnapshots,
     proposals: [{ id: "proposal:demo", status: "open", targetProcess: "platform.changeSet.create", targetId: "changeSet:demo-0", reason: "Demo proposal" }],
     proposalActions: [{ action: "changeSet.create", sampleBody: { branchId: "branch:demo-0" } }],
+    verificationPolicies: [{
+      id: "verificationPolicy:demo",
+      status: "active",
+      gateId: "gate:demo",
+      policySource: "workspace",
+      executionClass: "child_process",
+      enabled: true,
+      startup: "lazy",
+      watch: "changed-sources",
+      onChangeSet: true,
+      exclusive: false,
+      requiresCleanWorkspace: true,
+      priority: 5,
+      timeoutMs: 1000
+    }],
+    verificationQueue: [{
+      id: "verificationQueue:demo",
+      gateId: "gate:demo",
+      gateTitle: "Demo gate",
+      status: "queued",
+      triggerKind: "change-set",
+      executionClass: "child_process",
+      runId: "testRun:demo"
+    }],
+    verificationExecutions: [{
+      id: "verificationExecution:demo",
+      gateId: "gate:demo",
+      gateTitle: "Demo gate",
+      status: "running",
+      triggerKind: "change-set",
+      executionClass: "child_process",
+      runId: "testRun:demo",
+      exclusive: false,
+      startedAt: "2026-06-18T00:00:00.000Z",
+      finishedAt: null
+    }],
     testGates: [{
       id: "gate:demo",
       title: "Demo gate",
@@ -5865,6 +5901,8 @@ test("platform page renders required operating views", async () => {
       branchId: "branch:demo-0",
       changeSetId: "changeSet:demo-0",
       candidateSnapshotId: "candidateSnapshot:demo-0",
+      cacheStatus: "hit",
+      cacheHit: { runId: "testRun:baseline" },
       durationMs: 12,
       exitCode: 0
     }],
@@ -5925,6 +5963,15 @@ test("platform page renders required operating views", async () => {
     }],
     snapshotBuildErrors: [],
     snapshotDiagnostics: { appRevision: 21, lastGoodAppRevision: 21, pendingDirtySources: [] },
+    testMonitorDiagnostics: { status: "queued", pendingSourceCount: 1, pendingChangeSetCount: 1, policySource: "workspace" },
+    verificationPersistence: {
+      source: "sqlite",
+      verificationRoot: ".world/verification",
+      ledgerBackend: { provider: "sqlite" },
+      artifactBackend: { provider: "disk" },
+      cacheBackend: { provider: "disk" },
+      diagnostics: [{ id: "verificationPersistenceDiagnostic:demo" }]
+    },
     docs: [{
       id: "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md",
       path: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md",
@@ -5991,6 +6038,8 @@ test("platform page renders required operating views", async () => {
   const workflowHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:demo-0") });
   const workflowSortedHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:demo-0&sort=kind&dir=desc&limit=5") });
   const verificationHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=gate:demo") });
+  const verificationPolicyHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=verificationPolicy:demo") });
+  const verificationExecutionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=verificationExecution:demo") });
   const verificationRevisionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=runtimeRevision:demo") });
   const verificationRunHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=testRun:demo") });
   const knowledgeHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledge&id=docs/PLATFORM-ALL-THE-WAY-ROADMAP.md") });
@@ -6054,7 +6103,14 @@ test("platform page renders required operating views", async () => {
   assert.match(verificationHtml, /Platform Console - Verification/);
   assert.match(verificationHtml, /Live Verification Status/);
   assert.match(verificationHtml, /Current Verification State/);
+  assert.match(verificationHtml, /Queued items/);
+  assert.match(verificationHtml, /Policy source/);
+  assert.match(verificationHtml, /Persistence source/);
+  assert.match(verificationHtml, /Ledger backend/);
   assert.match(verificationHtml, /Verification Items/);
+  assert.match(verificationHtml, /Policies/);
+  assert.match(verificationHtml, /Queue/);
+  assert.match(verificationHtml, /Executions/);
   assert.match(verificationHtml, /Properties and linked resources for the selected verification object\./);
   assert.match(verificationHtml, /Primary Detail/);
   assert.match(verificationHtml, /Selected verification object properties and long-tail fields\./);
@@ -6074,10 +6130,19 @@ test("platform page renders required operating views", async () => {
   assert.match(verificationHtml, /\/api\/platform-test-runs\/events/);
   assert.match(verificationHtml, /\/api\/runtime\/backend-revisions\/events/);
   assert.doesNotMatch(verificationHtml, /<pre/);
+  assert.match(verificationPolicyHtml, /Verification Policy Detail/);
+  assert.match(verificationPolicyHtml, /Verification Persistence/);
+  assert.match(verificationPolicyHtml, /workspace/);
+  assert.match(verificationExecutionHtml, /Verification Execution Detail/);
+  assert.match(verificationExecutionHtml, /change-set/);
   assert.match(verificationRevisionHtml, />Backend revision event stream</);
+  assert.match(verificationRevisionHtml, /Verification status/);
+  assert.match(verificationRevisionHtml, /Persistence source/);
   assert.match(verificationRunHtml, />Test run event stream</);
   assert.match(verificationRunHtml, />Backend revision event stream</);
   assert.match(verificationRunHtml, /Run Report Summary/);
+  assert.match(verificationRunHtml, /Cache hit run/);
+  assert.match(verificationRunHtml, /testRun:baseline/);
   assert.match(verificationRunHtml, /Artifacts and Report Streams/);
   assert.match(verificationRunHtml, /Suite Summary/);
   assert.match(verificationRunHtml, /Failing Cases/);
