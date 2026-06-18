@@ -130,6 +130,8 @@ export function createBootstrapClientRuntimeGuidance({
     tutorialRevealedConcepts: guidanceRuntime.tutorialRevealedConcepts ?? guidanceRuntime.guidanceRevealedConcepts ?? (() => []),
     guidanceSurfaceState: guidanceRuntime.guidanceSurfaceState ?? guidanceRuntime.tutorialSurfaceState ?? (() => ({ kind: "idle" })),
     tutorialSurfaceState: guidanceRuntime.tutorialSurfaceState ?? guidanceRuntime.guidanceSurfaceState ?? (() => ({ kind: "idle" })),
+    guidanceScopeInventoryRows: guidanceRuntime.guidanceScopeInventoryRows ?? guidanceRuntime.tutorialScopeInventoryRows ?? (() => []),
+    tutorialScopeInventoryRows: guidanceRuntime.tutorialScopeInventoryRows ?? guidanceRuntime.guidanceScopeInventoryRows ?? (() => []),
     loadGuidanceProgress: guidanceRuntime.loadGuidanceProgress ?? guidanceRuntime.loadTutorialProgress ?? (async () => null),
     loadTutorialProgress: guidanceRuntime.loadTutorialProgress ?? guidanceRuntime.loadGuidanceProgress ?? (async () => null),
     openAppHome: guidanceRuntime.openAppHome ?? (async () => {}),

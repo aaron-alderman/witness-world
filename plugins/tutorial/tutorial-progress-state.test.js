@@ -103,20 +103,41 @@ test("tutorial progress state model normalizes replay, disabled guidance, and cu
   assert.deepEqual(
     state.tutorialDisabledGuidanceRows(progress),
     [{
-      type: "context",
-      contextId: "ctx.todo",
-      page: "app",
-      label: "Todo context",
-      currentStepTitle: "Create todo",
-      focusScopeKey: "section:app:todo-form",
-      target: "todo-form"
-    }, {
       type: "scope",
+      status: "muted",
       scopeKey: "page:app",
+      kind: "page",
       page: "app",
       label: "App",
+      pageLabel: "App",
       currentStepTitle: "Create todo",
-      target: null
+      isCurrentSurface: true,
+      target: null,
+      focusScopeKey: "page:app"
+    }, {
+      type: "scope",
+      status: "muted",
+      scopeKey: "section:app:todo-form",
+      kind: "section",
+      page: "app",
+      label: "Todo form",
+      pageLabel: "App",
+      currentStepTitle: "Create todo",
+      isCurrentSurface: true,
+      target: "todo-form",
+      focusScopeKey: "section:app:todo-form"
+    }, {
+      type: "context",
+      status: "muted",
+      contextId: "ctx.todo",
+      scopeKey: "section:app:todo-form",
+      page: "app",
+      label: "Todo context",
+      pageLabel: "App",
+      currentStepTitle: "Create todo",
+      isCurrentSurface: true,
+      target: "todo-form",
+      focusScopeKey: "section:app:todo-form"
     }]
   );
 

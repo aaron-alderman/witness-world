@@ -1,14 +1,16 @@
 import {
   renderBootstrapGuidanceConceptList,
-  renderBootstrapGuidanceDisabledRows,
+  renderBootstrapGuidanceScopeInventoryRows,
   renderBootstrapGuidanceSuggestionList
 } from "./runtime-guidance-bootstrap-view.js";
+import { renderGuidanceScopeInventoryFactory } from "./runtime-guidance-scope-inventory-factory.js";
 
 export function renderBootstrapGuidanceStateFactory() {
   return String.raw`
+    ${renderGuidanceScopeInventoryFactory()}
     const renderBootstrapGuidanceConceptList = ${renderBootstrapGuidanceConceptList.toString()};
     const renderBootstrapGuidanceSuggestionList = ${renderBootstrapGuidanceSuggestionList.toString()};
-    const renderBootstrapGuidanceDisabledRows = ${renderBootstrapGuidanceDisabledRows.toString()};
+    const renderBootstrapGuidanceScopeInventoryRows = ${renderBootstrapGuidanceScopeInventoryRows.toString()};
     const createBootstrapGuidanceStateRuntime = (env) => {
       const {
         tutorial,
@@ -398,43 +400,27 @@ export function renderBootstrapGuidanceStateFactory() {
           document
         });
       };
-      const tutorialDisabledPageRows = progress => {
-        const current = tutorialStep();
-        const currentScopeKey = tutorialStepScope(current)?.key || null;
-        const currentContextId = tutorialStepSurfaceContext(current)?.id || null;
-        const rows = tutorialDisabledContextIds(progress).map(contextId => {
-          const context = tutorialContextInfo(contextId);
-          const matchingStep = (currentContextId && currentContextId === contextId ? current : null)
-            || activeGuidance.steps.find(step => tutorialStepSurfaceContext(step)?.id === contextId && step.page === currentSurfacePage)
-            || activeGuidance.steps.find(step => tutorialStepSurfaceContext(step)?.id === contextId)
-            || null;
-          return {
-            type: "context",
-            contextId,
-            page: matchingStep?.page || null,
-            label: context?.label || tutorialContextLabel(contextId) || contextId,
-            currentStepTitle: currentContextId === contextId ? current?.title || null : null,
-            isCurrentSurface: matchingStep?.page === currentSurfacePage,
-            target: null
-          };
-        });
-        for (const scopeKey of tutorialDisabledScopeKeys(progress)) {
-          const scope = tutorialScopeInfo(scopeKey);
-          const currentScopeAncestors = tutorialScopeAncestors(currentScopeKey);
-          rows.push({
-            type: "scope",
-            scopeKey,
-            page: scope?.page || null,
-            label: scope?.kind === "page" && scope?.page ? tutorialPageLabel(scope.page) : (scope?.label || scopeKey),
-            currentStepTitle: currentScopeAncestors.includes(scopeKey) ? current?.title || null : null,
-            isCurrentSurface: scope?.page === currentSurfacePage,
-            target: scope?.page === currentSurfacePage ? tutorialScopeTargetName(scopeKey) : null
-          });
-        }
-        return rows;
-      };
+      const tutorialScopeInventoryRows = progress => buildGuidanceScopeInventoryRowsFromHelpers({
+        scopes: tutorialScopeCatalog,
+        steps: activeGuidance.steps,
+        progress,
+        currentStep: tutorialStep(),
+        currentSurfacePage,
+        stepScopeFn: tutorialStepScope,
+        stepSurfaceContextFn: tutorialStepSurfaceContext,
+        stepIndexFn: stepId => activeGuidance.steps.findIndex(step => step.id === stepId),
+        scopeInfoFn: tutorialScopeInfo,
+        contextInfoFn: tutorialContextInfo,
+        scopeTargetNameFn: tutorialScopeTargetName,
+        scopeAncestorsFn: tutorialScopeAncestors,
+        disabledScopeKeysFn: tutorialDisabledScopeKeys,
+        disabledContextIdsFn: tutorialDisabledContextIds,
+        isScopeDisabledFn: isTutorialScopeDisabled,
+        pageLabelFn: tutorialPageLabel
+      });
+      const tutorialDisabledPageRows = progress => tutorialScopeInventoryRows(progress).filter(row => row.status === "muted");
       const setDisabledPageRows = rows => {
-        renderBootstrapGuidanceDisabledRows({
+        renderBootstrapGuidanceScopeInventoryRows({
           root: byId("tutorial-disabled-pages"),
           rows,
           document
@@ -572,7 +558,10 @@ export function renderBootstrapGuidanceStateFactory() {
         setSuggestionRows,
         guidanceDisabledPageRows: tutorialDisabledPageRows,
         tutorialDisabledPageRows,
+        guidanceScopeInventoryRows: tutorialScopeInventoryRows,
+        tutorialScopeInventoryRows,
         setGuidanceDisabledPageRows: setDisabledPageRows,
+        setGuidanceScopeInventoryRows: setDisabledPageRows,
         setDisabledPageRows,
         guidanceSuggestions: tutorialSuggestions,
         tutorialSuggestions

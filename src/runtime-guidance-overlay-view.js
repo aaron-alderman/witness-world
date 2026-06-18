@@ -4,7 +4,23 @@ export function renderTutorialOverlayViewFactory() {
     const renderTutorialDisabledScopesPanel = ${renderTutorialDisabledScopesPanel.toString()};
     const renderTutorialOverlayView = ${renderTutorialOverlayView.toString()};
     const publishTutorialRuntimeState = ${publishTutorialRuntimeState.toString()};
+    const updateTutorialCompanionGuidanceState = ${updateTutorialCompanionGuidanceState.toString()};
   `;
+}
+
+function updateTutorialCompanionGuidanceState({
+  windowTarget = globalThis?.window || globalThis,
+  visible = false,
+  label = "Sourcery",
+  resumeButton = null
+} = {}) {
+  const shell = windowTarget?.__sourceryCompanionShell;
+  if (!shell?.updateGuidanceState) return;
+  shell.updateGuidanceState({
+    visible,
+    label,
+    onResume: () => resumeButton?.click?.()
+  });
 }
 
 export function renderTutorialConceptList({
@@ -44,15 +60,19 @@ export function renderTutorialDisabledScopesPanel({
   disabledScopesPanel = null,
   disabledScopesOpen = false,
   tutorialDisabledGuidanceRowsFn = () => [],
+  tutorialScopeInventoryRowsFn = null,
   currentSurfacePage = "app",
   tutorialPageLabel = page => page,
   renderTutorialDisabledScopeRowsFn = () => {},
   document = globalThis?.document || null
 } = {}) {
-  const rows = tutorialDisabledGuidanceRowsFn(progress);
+  const rows = typeof tutorialScopeInventoryRowsFn === "function"
+    ? tutorialScopeInventoryRowsFn(progress)
+    : tutorialDisabledGuidanceRowsFn(progress);
   const list = document?.getElementById?.("tutorial-disabled-scopes-list") || null;
   const visible = Boolean(progress && !progress.completedAt && rows.length);
-  if (disabledScopesToggle) disabledScopesToggle.hidden = !visible;
+  const companionActive = Boolean(globalThis?.window?.__sourceryCompanionShell);
+  if (disabledScopesToggle) disabledScopesToggle.hidden = !visible || companionActive;
   if (!visible) {
     if (disabledScopesPanel) disabledScopesPanel.hidden = true;
     if (list) {
@@ -110,9 +130,11 @@ export function renderTutorialOverlayView({
   renderTutorialConceptListFn = renderTutorialConceptList,
   renderTutorialDisabledScopesPanelFn = renderTutorialDisabledScopesPanel,
   tutorialDisabledGuidanceRowsFn = () => [],
+  tutorialScopeInventoryRowsFn = null,
   currentSurfacePage = "app",
   renderTutorialDisabledScopeRowsFn = () => {},
-  document = globalThis?.document || null
+  document = globalThis?.document || null,
+  windowTarget = globalThis?.window || globalThis
 } = {}) {
   clearHighlightFn();
   const step = currentStep();
@@ -121,6 +143,7 @@ export function renderTutorialOverlayView({
     if (overlay) overlay.hidden = true;
     if (dimmer) dimmer.hidden = true;
     if (resumeButton) resumeButton.hidden = true;
+    updateTutorialCompanionGuidanceState({ windowTarget, visible: false, resumeButton });
     if (disabledScopesToggle) disabledScopesToggle.hidden = true;
     if (disabledScopesPanel) disabledScopesPanel.hidden = true;
     return {
@@ -135,12 +158,19 @@ export function renderTutorialOverlayView({
     if (disableContextButton) disableContextButton.hidden = true;
     if (overlay) overlay.hidden = true;
     if (dimmer) dimmer.hidden = true;
+    const resumeLabel = surface.kind === "offpage"
+      ? ("Continue On " + tutorialPageLabel(surface.page))
+      : (surface.kind === "disabled-context" ? "Enable Sourcery In This Context" : (surface.kind === "disabled" ? "Enable Sourcery Here" : "Resume Tutorial"));
     if (resumeButton) {
-      resumeButton.hidden = false;
-      resumeButton.textContent = surface.kind === "offpage"
-        ? ("Continue On " + tutorialPageLabel(surface.page))
-        : (surface.kind === "disabled-context" ? "Enable Sourcery In This Context" : (surface.kind === "disabled" ? "Enable Sourcery Here" : "Resume Tutorial"));
+      resumeButton.hidden = true;
+      resumeButton.textContent = resumeLabel;
     }
+    updateTutorialCompanionGuidanceState({
+      windowTarget,
+      visible: true,
+      label: resumeLabel,
+      resumeButton
+    });
     return {
       lastRenderedStepId,
       activeHighlightTarget: null,
@@ -151,6 +181,7 @@ export function renderTutorialOverlayView({
         disabledScopesPanel,
         disabledScopesOpen,
         tutorialDisabledGuidanceRowsFn,
+        tutorialScopeInventoryRowsFn,
         currentSurfacePage,
         tutorialPageLabel,
         renderTutorialDisabledScopeRowsFn,
@@ -159,6 +190,7 @@ export function renderTutorialOverlayView({
     };
   }
   if (resumeButton) resumeButton.hidden = true;
+  updateTutorialCompanionGuidanceState({ windowTarget, visible: false, resumeButton });
   const target = step.target ? byTarget(step.target) : null;
   const scope = focusScopeFor(target);
   if (scope) scope.setAttribute?.("data-tutorial-focus-scope", "true");
@@ -211,6 +243,7 @@ export function renderTutorialOverlayView({
       disabledScopesPanel,
       disabledScopesOpen,
       tutorialDisabledGuidanceRowsFn,
+      tutorialScopeInventoryRowsFn,
       currentSurfacePage,
       tutorialPageLabel,
       renderTutorialDisabledScopeRowsFn,
@@ -237,7 +270,8 @@ export function publishTutorialRuntimeState({
   currentSurfaceRouteId = null,
   currentSurfaceRootWidgetId = null,
   currentSurfaceProgramId = null,
-  tutorialSurfaceStateFn = () => ({ kind: "idle" })
+  tutorialSurfaceStateFn = () => ({ kind: "idle" }),
+  tutorialScopeInventoryRowsFn = () => []
 } = {}) {
   windowTarget.__witnessTutorialApp = {
     get currentStepId() { return getProgress()?.stepId || null; },
@@ -259,7 +293,17 @@ export function publishTutorialRuntimeState({
     get surfaceRouteId() { return currentSurfaceRouteId; },
     get surfaceRootWidgetId() { return currentSurfaceRootWidgetId; },
     get surfaceProgramId() { return currentSurfaceProgramId; },
-    get surfaceStatus() { return tutorialSurfaceStateFn().kind; }
+    get surfaceStatus() { return tutorialSurfaceStateFn().kind; },
+    get scopes() {
+      return tutorialScopeInventoryRowsFn(getProgress()).map(row => ({
+        type: row.type,
+        status: row.status,
+        scopeKey: row.scopeKey || null,
+        contextId: row.contextId || null,
+        page: row.page || null,
+        label: row.label || null
+      }));
+    }
   };
   return windowTarget.__witnessTutorialApp;
 }

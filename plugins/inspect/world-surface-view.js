@@ -64,29 +64,45 @@ export function renderWorldTutorialPanelView({
   surfaceKind = "",
   summary = "",
   disabledRows = [],
+  inventoryRows = [],
   previousStep = null,
   currentSurfaceContext = null,
   currentConcepts = [],
   revealedConcepts = [],
   resumeLabel = "",
+  companionActive = Boolean(globalThis?.window?.__sourceryCompanionShell),
   escapeHtml = value => String(value ?? "")
 } = {}) {
   if (!sessionAuthenticated) return "";
   if (!progress && !error) return "";
   const secondaryClass = "surface-button-secondary";
-  const disabledList = disabledRows.length
-    ? '<div class="world-tutorial-list surface-item-list" data-world-tutorial-disabled-list>' + disabledRows.map(row =>
-      '<div class="world-tutorial-item surface-item surface-stack"><strong>' + escapeHtml(row.label) + "</strong><p>" + escapeHtml((row.pageLabel ? (row.pageLabel + " / ") : "") + (row.currentStepTitle ? ("Current step there: " + row.currentStepTitle + ".") : (row.type === "context" ? "Sourcery is disabled for this context, but you can re-enable it without resetting progress." : "Sourcery is disabled for this scope, but you can re-enable it without resetting progress."))) + '</p><div class="surface-actions">' + (row.target ? '<button type="button" class="' + secondaryClass + '" data-world-tutorial-focus-scope-target="' + escapeHtml(row.target) + '">Show This Control</button>' : "") + (row.type === "context" ? '<button type="button" class="' + secondaryClass + '" data-world-tutorial-enable-context="' + escapeHtml(row.contextId) + '">Enable This Context</button>' : '<button type="button" class="' + secondaryClass + '" data-world-tutorial-enable-scope="' + escapeHtml(row.scopeKey) + '">Enable Sourcery Here</button>') + (row.href ? '<button type="button" class="' + secondaryClass + '" data-world-tutorial-open-scope="' + escapeHtml(row.href) + '">Open Surface</button>' : "") + "</div></div>"
+  const scopeRows = inventoryRows.length ? inventoryRows : disabledRows;
+  const showCompanionRecovery = companionActive && progress && !progress.completedAt;
+  const scopeStatusLabel = status => status === "active" ? "Active" : status === "muted" ? "Muted" : status === "completed" ? "Completed" : "Available";
+  const scopeDescription = row => row.currentStepTitle
+    ? ("Current step there: " + row.currentStepTitle + ".")
+    : (row.status === "active"
+        ? "Sourcery is active on this scope right now."
+        : (row.status === "completed"
+            ? "This scope was already covered by tutorial progress."
+            : (row.type === "context"
+                ? "Sourcery is disabled for this context, but you can re-enable it without resetting progress."
+                : (row.status === "muted"
+                    ? "Sourcery is disabled for this scope, but you can re-enable it without resetting progress."
+                    : "Sourcery is available on this scope."))));
+  const disabledList = scopeRows.length
+    ? '<div class="world-tutorial-list surface-item-list" data-world-tutorial-disabled-list data-guidance-scope-inventory="true">' + scopeRows.map(row =>
+      '<div class="world-tutorial-item surface-item surface-stack" data-guidance-scope-status="' + escapeHtml(row.status || "muted") + '"><strong>' + escapeHtml((row.pageLabel ? (row.pageLabel + " / ") : "") + row.label) + '</strong><span class="surface-badge">' + escapeHtml(scopeStatusLabel(row.status || "muted")) + '</span><p>' + escapeHtml(scopeDescription(row)) + '</p><div class="surface-actions">' + (row.target && (row.status === "muted" || row.status === "active") ? '<button type="button" class="' + secondaryClass + '" data-world-tutorial-focus-scope-target="' + escapeHtml(row.target) + '">Show This Control</button>' : "") + (row.status === "muted" ? ((row.type === "context" ? '<button type="button" class="' + secondaryClass + '" data-world-tutorial-enable-context="' + escapeHtml(row.contextId) + '">Enable This Context</button>' : '<button type="button" class="' + secondaryClass + '" data-world-tutorial-enable-scope="' + escapeHtml(row.scopeKey) + '">Enable Sourcery Here</button>') + (row.href ? '<button type="button" class="' + secondaryClass + '" data-world-tutorial-open-scope="' + escapeHtml(row.href) + '">Open Surface</button>' : "")) : "") + "</div></div>"
     ).join("") + "</div>"
-    : '<div class="world-tutorial-list surface-item-list" data-world-tutorial-disabled-list><div class="world-tutorial-item surface-item"><p>No disabled Sourcery scopes right now.</p></div></div>';
+    : '<div class="world-tutorial-list surface-item-list" data-world-tutorial-disabled-list data-guidance-scope-inventory="true"><div class="world-tutorial-item surface-item"><p>No Sourcery scopes to show right now.</p></div></div>';
   return '<section class="world-tutorial-panel surface-card surface-stack" data-world-tutorial-panel>'
     + '<div class="world-tutorial-meta surface-kicker">Sourcery / ' + escapeHtml(surfaceKind) + "</div>"
     + "<h2>" + escapeHtml(step?.title || "Tutorial status") + "</h2>"
     + '<div class="world-tutorial-summary surface-note">' + escapeHtml(summary) + "</div>"
     + '<div class="surface-actions">'
-      + (disabledRows.length ? '<button type="button" class="' + secondaryClass + '" data-world-tutorial-show-disabled>Show Disabled Sourcery Scopes</button>' : "")
+      + (scopeRows.length && !showCompanionRecovery ? '<button type="button" class="' + secondaryClass + '" data-world-tutorial-show-disabled>Show Sourcery Scope Inventory</button>' : "")
       + (step?.target && surfaceKind === "active" ? '<button type="button" class="' + secondaryClass + '" data-world-tutorial-focus-target="' + escapeHtml(step.target) + '">Show Current Control</button>' : "")
-      + (progress && !progress.completedAt ? '<button type="button" class="' + secondaryClass + '" data-world-tutorial-resume>' + escapeHtml(resumeLabel) + "</button>" : "")
+      + (progress && !progress.completedAt && !showCompanionRecovery ? '<button type="button" class="' + secondaryClass + '" data-world-tutorial-resume>' + escapeHtml(resumeLabel) + "</button>" : "")
       + (surfaceKind === "active" && previousStep ? '<button type="button" class="' + secondaryClass + '" data-world-tutorial-back>Back</button>' : "")
       + (surfaceKind === "active" && step ? '<button type="button" data-world-tutorial-next>' + escapeHtml(step.nextLabel || "Next") + "</button>" : "")
       + (progress && !progress.completedAt ? '<button type="button" class="' + secondaryClass + '" data-world-tutorial-restart-chapter>Restart Chapter</button>' : "")

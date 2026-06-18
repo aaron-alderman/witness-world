@@ -242,7 +242,7 @@ export function normalizeGuidanceReplayStep(guidance, replayStepId) {
   return guidanceStep(guidance, id)?.id ?? null;
 }
 
-function scopeAncestors(guidance, scopeKey) {
+export function guidanceScopeAncestors(guidance, scopeKey) {
   const scope = guidanceScopeInfo(guidance, scopeKey);
   if (!scope?.key) return [];
   const keys = [scope.key];
@@ -270,7 +270,7 @@ export function guidanceDisabledContextIds(guidance, progress) {
 export function isGuidanceScopeDisabled(guidance, progress, scopeKey) {
   if (!progress) return false;
   const disabled = new Set(guidanceDisabledScopeKeys(guidance, progress));
-  return scopeAncestors(guidance, scopeKey).some(key => disabled.has(key));
+  return guidanceScopeAncestors(guidance, scopeKey).some(key => disabled.has(key));
 }
 
 export function isGuidanceContextDisabled(guidance, progress, contextId) {

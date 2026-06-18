@@ -41,6 +41,8 @@ import { renderWorldPostRenderFactory } from "./world-post-render.js";
 import { renderWorldShellViewFactory } from "./world-shell-view.js";
 import { renderWorldSurfaceViewFactory } from "./world-surface-view.js";
 import { renderWorldTutorialActionsFactory } from "./world-tutorial-actions.js";
+import { renderWorldTutorialCompanionFactory } from "./world-tutorial-companion.js";
+import { renderGuidanceScopeInventoryFactory } from "../../src/runtime-guidance-scope-inventory-factory.js";
 import { renderWidgetPageHead } from "./widget-page-head.js";
 export function renderWidgetPage(world, { actor, rootWidget, frontendProgram: programId = null, appConfig = {} }) {
   const tree = world.project(w => widgetTree(w, rootWidget));
@@ -232,6 +234,8 @@ function renderClientEngine(program) {
     ? program.config.frontendProgramScriptId.trim()
     : "witness-frontend-program";
   const engine = String.raw`(async () => {
+  ${renderWorldTutorialCompanionFactory()}
+  ${renderGuidanceScopeInventoryFactory()}
   ${renderSurfaceCommandActionsFactory()}
   ${renderSurfaceCommandIdentityActionsFactory()}
   ${renderSurfaceCommandViewFactory()}
@@ -2251,6 +2255,24 @@ function renderClientEngine(program) {
       }
       return rows;
     };
+    const commandTutorialScopeInventoryRows = () => buildGuidanceScopeInventoryRowsFromHelpers({
+      scopes: commandTutorialScopeCatalog,
+      steps: commandTutorial?.steps || [],
+      progress: state.worldTutorialProgress,
+      currentStep: currentWorldTutorialStep,
+      currentSurfacePage: 'world',
+      stepScopeFn: commandTutorialStepScope,
+      stepSurfaceContextFn: commandTutorialStepSurfaceContext,
+      stepIndexFn: stepId => (commandTutorial?.steps || []).findIndex(step => step.id === stepId),
+      scopeInfoFn: commandTutorialScopeInfo,
+      contextInfoFn: commandTutorialContextInfo,
+      scopeTargetNameFn: commandTutorialScopeTargetName,
+      scopeAncestorsFn: commandTutorialScopeAncestors,
+      disabledScopeKeysFn: commandTutorialDisabledScopeKeysFor,
+      disabledContextIdsFn: commandTutorialDisabledContextIdsFor,
+      isScopeDisabledFn: isCommandTutorialScopeDisabled,
+      pageLabelFn: commandTutorialPageLabel
+    });
     const continueWorldTutorialOnPage = page => {
       const href = commandTutorialPageHref(page);
       if (!href) return;
@@ -2555,6 +2577,7 @@ function renderClientEngine(program) {
       const currentConcepts = step ? commandTutorialStepConcepts(step) : [];
       const revealedConcepts = commandTutorialRevealedConcepts(progress);
       const disabledRows = commandTutorialDisabledScopeRows();
+      const inventoryRows = commandTutorialScopeInventoryRows();
       const previous = commandTutorialPreviousStep(progress);
       const currentScopeKey = commandTutorialStepScope(step)?.key || null;
       const currentScopeDisabled = Boolean(progress && currentScopeKey && isCommandTutorialScopeDisabled(progress, currentScopeKey));
@@ -2589,6 +2612,7 @@ function renderClientEngine(program) {
         surfaceKind: surface.kind,
         summary,
         disabledRows,
+        inventoryRows,
         previousStep: previous,
         currentSurfaceContext,
         currentConcepts,
@@ -2801,6 +2825,93 @@ function renderClientEngine(program) {
       }
       await persistWorldTutorialProgress({ ...current, hidden: false, replayScopeKey: null });
     };
+    const runWorldTutorialSuggestion = async suggestion => {
+      await runGuidanceSuggestionAction(suggestion, {
+        resumeTutorial: async () => {
+          await resumeWorldTutorial();
+          draw();
+        },
+        enableCurrentPage: async scopeKey => {
+          if (!state.worldTutorialProgress) return;
+          await persistWorldTutorialProgress(clearWorldTutorialScopeDisabled(state.worldTutorialProgress, scopeKey || commandTutorialStepScope(commandTutorialStep(state.worldTutorialProgress))?.key || 'world'));
+          draw();
+        },
+        enableContext: async contextId => {
+          if (!state.worldTutorialProgress) return;
+          await persistWorldTutorialProgress(clearWorldTutorialContextDisabled(state.worldTutorialProgress, contextId || commandTutorialStepSurfaceContext(commandTutorialStep(state.worldTutorialProgress))?.id || currentSurfaceContext));
+          draw();
+        },
+        enablePage: async (scopeKey, page) => {
+          if (!state.worldTutorialProgress) return;
+          await persistWorldTutorialProgress(clearWorldTutorialScopeDisabled(state.worldTutorialProgress, scopeKey || (page === 'world' ? 'world' : null)));
+          if (page && page !== 'world') continueWorldTutorialOnPage(page);
+          else draw();
+        },
+        continueSurface: async page => {
+          continueWorldTutorialOnPage(page);
+        },
+        focusDisabledScopes: async () => {
+          focusWorldTutorialDisabledList();
+        },
+        focusTarget: async target => {
+          focusWorldTutorialTarget(target);
+        },
+        openRuntimeIssues: async () => {
+          const shell = window.__sourceryCompanionShell;
+          if (!shell?.panel) return;
+          shell.panel.hidden = false;
+          shell.issues?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+        },
+        focusRuntimeTarget: async targetId => {
+          const node = document.getElementById(targetId);
+          node?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+          node?.focus?.();
+        },
+        rerunRuntimeProbe: async () => {
+          const inspection = window.world || window.__surfaceRuntimeInspection || null;
+          await inspection?.rerunProbe?.();
+        },
+        copyRuntimeInspection: async () => {
+          const inspection = window.world || window.__surfaceRuntimeInspection || null;
+          const payload = typeof inspection?.inspect === 'function' ? inspection.inspect() : null;
+          const json = JSON.stringify(payload, null, 2);
+          if (window.navigator?.clipboard?.writeText) {
+            try {
+              await window.navigator.clipboard.writeText(json);
+            } catch {}
+          }
+        }
+      });
+    };
+    const syncWorldTutorialCompanion = () => {
+      if (!state.session?.authenticated) return;
+      syncWorldTutorialCompanionShell({
+        windowTarget: window,
+        documentTarget: document,
+        progress: state.worldTutorialProgress,
+        currentStep: progress => commandTutorialStep(progress),
+        tutorialSurfaceState: worldTutorialSurfaceState,
+        tutorialPageLabel: commandTutorialPageLabel,
+        tutorialStepScope: commandTutorialStepScope,
+        tutorialStepSurfaceContext: commandTutorialStepSurfaceContext,
+        tutorialContextInfo: commandTutorialContextInfo,
+        isTutorialContextDisabled: isCommandTutorialContextDisabled,
+        isTutorialScopeDisabled: isCommandTutorialScopeDisabled,
+        scopeInventoryRowsFn: commandTutorialScopeInventoryRows,
+        onResume: async () => {
+          await resumeWorldTutorial();
+          draw();
+        }
+      });
+    };
+    if (!state.worldTutorialCompanionBound) {
+      state.worldTutorialCompanionBound = true;
+      ensureWorldTutorialCompanionShell({
+        documentTarget: document,
+        windowTarget: window,
+        runSuggestion: runWorldTutorialSuggestion
+      });
+    }
     const executeWorldCommand = async item => {
       if (!item?.action) return;
       const action = item.action;
@@ -3022,6 +3133,7 @@ function renderClientEngine(program) {
         tutorialDomRoot,
         syncWorldCommandFocus
       });
+      syncWorldTutorialCompanion();
     };
     if (!state.worldCommandShortcutBound) {
       state.worldCommandShortcutBound = true;
@@ -3383,7 +3495,6 @@ function renderClientEngine(program) {
   bootLiveProjection();
   updateSurfaceInspectorUi();
   safeRun('load');
-  function escapeHtml(value) { return String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 })();`;
   return `<script type="application/json" id="${escapeAttr(frontendProgramScriptId)}">${json}</script>\n<script>\n${engine}\n</script>`;
 }

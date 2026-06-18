@@ -85,10 +85,11 @@ export function createTutorialOverlayDom({
   const resumeButton = button({
     id: "tutorial-resume-page",
     text: "Resume Tutorial",
-    className: "tutorial-resume"
+    className: "tutorial-resume tutorial-hidden"
   });
   if (resumeButton) {
     resumeButton.hidden = true;
+    resumeButton.setAttribute("aria-hidden", "true");
     document.body.appendChild(resumeButton);
   }
 

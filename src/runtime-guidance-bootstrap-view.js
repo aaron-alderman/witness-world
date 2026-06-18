@@ -63,18 +63,34 @@ export function renderBootstrapGuidanceSuggestionList({
   }
 }
 
-export function renderBootstrapGuidanceDisabledRows({
+export function renderBootstrapGuidanceScopeInventoryRows({
   root,
   rows = [],
   document
 } = {}) {
+  function guidanceScopeInventoryStatusLabel(status = "") {
+    if (status === "active") return "Active";
+    if (status === "muted") return "Muted";
+    if (status === "completed") return "Completed";
+    return "Available";
+  }
+
+  function guidanceScopeInventoryDescription(row = {}) {
+    if (row.currentStepTitle) return "Current step there: " + row.currentStepTitle + ".";
+    if (row.status === "active") return "Sourcery is active on this scope right now.";
+    if (row.status === "completed") return "This scope was already covered by tutorial progress.";
+    if (row.type === "context") return "Sourcery is disabled for this context, but you can re-enable it without losing progress.";
+    if (row.status === "muted") return "Sourcery is disabled for this scope, but you can re-enable it without losing progress.";
+    return "Sourcery is available on this scope.";
+  }
+
   if (!root) return;
   root.innerHTML = "";
   if (!rows.length) {
     const empty = document.createElement("div");
     empty.className = "tutorial-disabled-item";
     const body = document.createElement("p");
-    body.textContent = "No disabled Sourcery scopes right now.";
+    body.textContent = "No Sourcery scopes to show right now.";
     empty.append(body);
     root.append(empty);
     return;
@@ -82,17 +98,17 @@ export function renderBootstrapGuidanceDisabledRows({
   for (const row of rows) {
     const item = document.createElement("div");
     item.className = "tutorial-disabled-item";
+    item.dataset.guidanceScopeStatus = row.status || "available";
     const title = document.createElement("strong");
-    title.textContent = row.label;
+    title.textContent = (row.pageLabel ? row.pageLabel + " / " : "") + row.label;
+    const badge = document.createElement("span");
+    badge.className = "surface-badge";
+    badge.textContent = guidanceScopeInventoryStatusLabel(row.status);
     const body = document.createElement("p");
-    body.textContent = row.currentStepTitle
-      ? ("Current step there: " + row.currentStepTitle + ".")
-      : (row.type === "context"
-          ? "Sourcery is disabled for this context, but you can re-enable it without losing progress."
-          : "Sourcery is disabled for this scope, but you can re-enable it without losing progress.");
+    body.textContent = guidanceScopeInventoryDescription(row);
     const actions = document.createElement("div");
     actions.className = "surface-actions";
-    if (row.target) {
+    if (row.target && (row.status === "muted" || row.status === "active")) {
       const focusButton = document.createElement("button");
       focusButton.type = "button";
       focusButton.className = "surface-button-secondary";
@@ -100,25 +116,39 @@ export function renderBootstrapGuidanceDisabledRows({
       focusButton.textContent = "Show This Control";
       actions.append(focusButton);
     }
-    const enableButton = document.createElement("button");
-    enableButton.type = "button";
-    enableButton.className = "surface-button-secondary";
-    if (row.type === "context") enableButton.dataset.disabledContext = row.contextId;
-    else enableButton.dataset.disabledScope = row.scopeKey;
-    enableButton.dataset.disabledEnable = row.page;
-    enableButton.textContent = row.type === "context"
-      ? (row.isCurrentSurface ? "Enable This Context" : "Enable Sourcery")
-      : (row.isCurrentSurface ? "Enable Sourcery Here" : "Enable Sourcery");
-    actions.append(enableButton);
-    if (!row.isCurrentSurface) {
-      const openButton = document.createElement("button");
-      openButton.type = "button";
-      openButton.className = "surface-button-secondary";
-      openButton.dataset.disabledOpen = row.page;
-      openButton.textContent = "Open " + row.label;
-      actions.append(openButton);
+    if (row.status === "muted") {
+      const enableButton = document.createElement("button");
+      enableButton.type = "button";
+      enableButton.className = "surface-button-secondary";
+      if (row.type === "context") enableButton.dataset.disabledContext = row.contextId;
+      else enableButton.dataset.disabledScope = row.scopeKey;
+      enableButton.dataset.disabledEnable = row.page;
+      enableButton.textContent = row.type === "context"
+        ? (row.isCurrentSurface ? "Enable This Context" : "Enable Sourcery")
+        : (row.isCurrentSurface ? "Enable Sourcery Here" : "Enable Sourcery");
+      actions.append(enableButton);
+      if (!row.isCurrentSurface && row.page) {
+        const openButton = document.createElement("button");
+        openButton.type = "button";
+        openButton.className = "surface-button-secondary";
+        openButton.dataset.disabledOpen = row.page;
+        openButton.textContent = "Open " + (row.pageLabel || row.label);
+        actions.append(openButton);
+      }
     }
-    item.append(title, body, actions);
+    item.append(title, badge, body, actions);
     root.append(item);
   }
+}
+
+export function renderBootstrapGuidanceDisabledRows({
+  root,
+  rows = [],
+  document
+} = {}) {
+  renderBootstrapGuidanceScopeInventoryRows({
+    root,
+    rows: rows.map(row => ({ ...row, status: row.status || "muted" })),
+    document
+  });
 }

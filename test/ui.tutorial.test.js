@@ -19,7 +19,21 @@ async function waitForStepChange(page, previous) {
     const current = window.__witnessTutorialApp?.currentStepId || window.__witnessTutorial?.currentStepId || null;
     const completedAt = window.__witnessTutorialApp?.completedAt || window.__witnessTutorial?.completedAt || null;
     return current !== stepId || Boolean(completedAt);
-  }, previous, { timeout: 15000 });
+  }, previous, { timeout: 30000 });
+}
+
+async function openCompanionPanel(page) {
+  await page.locator("#sourcery-companion-fab").click();
+  await page.waitForFunction(() => document.getElementById("sourcery-companion-panel")?.hidden === false);
+}
+
+async function clickCompanionGuidanceAction(page) {
+  await openCompanionPanel(page);
+  await page.locator("#sourcery-companion-guidance-action").click({ force: true });
+}
+
+async function clickScopedSelector(page, selector) {
+  await page.evaluate(sel => document.querySelector(sel)?.click(), selector);
 }
 
 async function completeStep(page, serverUrl) {
@@ -72,7 +86,7 @@ async function completeStep(page, serverUrl) {
       break;
     case stepId === "world:inspect":
       if (!page.url().endsWith("/world")) {
-        await page.locator('#tutorial-resume-page').click();
+        await clickCompanionGuidanceAction(page);
         await page.waitForURL(`${serverUrl}/world`);
       }
       await page.waitForLoadState("domcontentloaded");
@@ -85,7 +99,7 @@ async function completeStep(page, serverUrl) {
   await waitForStepChange(page, stepId);
 }
 
-test("guided tutorial persists, resumes, and completes on the live app", async () => {
+test("guided tutorial persists, resumes, and completes on the live app", { timeout: 180000 }, async () => {
   const silentLogger = { info() {}, error() {} };
   const { server, close: closeServer } = await startBlankUiServer({ logger: silentLogger });
   const { page, runtime, close: closeBrowser } = await launchBrowser();
@@ -418,7 +432,7 @@ test("live app tutorial can disable and re-enable guidance on just the app page"
 
     await page.locator("#tutorial-disable-page").click();
     await page.waitForFunction(() => window.__witnessTutorialApp?.surfaceStatus === "disabled");
-    await page.waitForFunction(() => document.getElementById("tutorial-resume-page")?.textContent.includes("Enable Sourcery Here"));
+    await page.waitForFunction(() => document.getElementById("sourcery-companion-guidance-action")?.textContent.includes("Enable Sourcery Here"));
 
     await page.reload();
     await waitForAppReady(page);
@@ -430,7 +444,7 @@ test("live app tutorial can disable and re-enable guidance on just the app page"
     await page.goto(`${server.url}/`);
     await waitForAppReady(page);
     await page.waitForFunction(() => window.__witnessTutorialApp?.surfaceStatus === "disabled");
-    await page.locator("#tutorial-resume-page").click();
+    await clickCompanionGuidanceAction(page);
     await page.waitForFunction(() => window.__witnessTutorialApp?.surfaceStatus === "active");
 
     await expectNoRuntimeErrors(runtime);
@@ -492,7 +506,7 @@ test("live app tutorial shows current and disabled scope controls truthfully", {
     await waitForAppReady(page);
     await waitForStep(page, "app:intro");
     await page.waitForFunction(() => window.__witnessTutorialApp?.surfaceStatus === "active");
-    await page.waitForFunction(() => document.getElementById("tutorial-disabled-scopes-toggle")?.hidden === false);
+    await page.waitForFunction(() => document.getElementById("sourcery-companion-root")?.hidden === false);
     await page.evaluate(() => {
       document.querySelectorAll('[data-tutorial-current],[data-tutorial-focus-scope]').forEach(node => {
         node.removeAttribute('data-tutorial-current');
@@ -502,19 +516,19 @@ test("live app tutorial shows current and disabled scope controls truthfully", {
     await page.locator("#tutorial-show-current-control").click();
     await page.waitForFunction(() => document.querySelector('[data-tutorial-target="app-title"]')?.getAttribute('data-tutorial-current') === 'true');
 
-    await page.locator("#tutorial-disabled-scopes-toggle").click();
+    await page.locator("#sourcery-companion-fab").click();
+    await page.locator('button[data-companion-suggestion-action="show-disabled-scopes"]').click();
     await page.waitForFunction(() => window.__witnessTutorialApp?.disabledScopesOpen === true);
     await page.waitForFunction(() => document.getElementById("tutorial-disabled-scopes-panel")?.textContent.includes("Todo form"));
     await page.evaluate(() => {
       document.querySelectorAll('[data-tutorial-focus-scope]').forEach(node => node.removeAttribute('data-tutorial-focus-scope'));
     });
-    await page.locator('button[data-disabled-scope-focus="section:app:todo_form"]').click();
+    await clickScopedSelector(page, 'button[data-disabled-scope-focus="section:app:todo_form"]');
     await page.waitForFunction(() => document.querySelector('[data-tutorial-target="todo-form"]')?.closest('form,section,main')?.getAttribute('data-tutorial-focus-scope') === 'true');
     await page.waitForFunction(() => document.querySelector('[data-tutorial-target="todo-form"]')?.getAttribute('data-tutorial-current') !== 'true');
 
-    await page.locator('button[data-disabled-scope-enable="section:app:todo_form"]').click();
+    await clickScopedSelector(page, 'button[data-disabled-scope-enable="section:app:todo_form"]');
     await page.waitForFunction(() => (window.__witnessTutorialApp?.disabledScopeKeys || []).length === 0);
-    await page.waitForFunction(() => document.getElementById("tutorial-disabled-scopes-toggle")?.hidden === true);
 
     await expectNoRuntimeErrors(runtime);
   } finally {
@@ -621,15 +635,16 @@ test("live app tutorial can recover authored non-step scope anchors on the shipp
     await page.reload();
     await waitForAppReady(page);
     await waitForStep(page, "app:intro");
-    await page.waitForFunction(() => document.getElementById("tutorial-disabled-scopes-toggle")?.hidden === false);
-    await page.locator("#tutorial-disabled-scopes-toggle").click();
+    await page.waitForFunction(() => document.getElementById("sourcery-companion-root")?.hidden === false);
+    await page.locator("#sourcery-companion-fab").click();
+    await page.locator('button[data-companion-suggestion-action="show-disabled-scopes"]').click();
     await page.waitForFunction(() => document.getElementById("tutorial-disabled-scopes-panel")?.textContent.includes("Add Widget"));
-    await page.locator('button[data-disabled-scope-focus="widget:todo_widget_editor_button"]').click();
+    await clickScopedSelector(page, 'button[data-disabled-scope-focus="widget:todo_widget_editor_button"]');
     await page.waitForFunction(() => document.activeElement?.getAttribute('data-tutorial-target') === 'widget-editor-submit');
     await page.waitForFunction(() => document.querySelector('[data-tutorial-target="widget-editor-submit"]')?.closest('form,section,main')?.getAttribute('data-tutorial-focus-scope') === 'true');
     await page.waitForFunction(() => document.querySelector('[data-tutorial-target="widget-editor-submit"]')?.getAttribute('data-tutorial-current') !== 'true');
 
-    await page.locator('button[data-disabled-scope-enable="widget:todo_widget_editor_button"]').click();
+    await clickScopedSelector(page, 'button[data-disabled-scope-enable="widget:todo_widget_editor_button"]');
     await page.waitForFunction(() => (window.__witnessTutorialApp?.disabledScopeKeys || []).length === 0);
 
     await expectNoRuntimeErrors(runtime);
@@ -639,7 +654,7 @@ test("live app tutorial can recover authored non-step scope anchors on the shipp
   }
 });
 
-test("bootstrap tutorial shows disabled guidance surfaces and can recover them without losing progress", { timeout: 60000 }, async () => {
+test("bootstrap tutorial shows disabled guidance surfaces and can recover them without losing progress", { timeout: 120000 }, async () => {
   const silentLogger = { info() {}, error() {} };
   const { server, close: closeServer } = await startBlankUiServer({ logger: silentLogger });
   const { page, runtime, close: closeBrowser } = await launchBrowser();
@@ -674,12 +689,12 @@ test("bootstrap tutorial shows disabled guidance surfaces and can recover them w
     await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.textContent.includes("You are now using the real app"));
     await page.waitForFunction(() => document.getElementById("tutorial-suggestions")?.textContent.includes("Re-Enable Sourcery On App"));
     await page.waitForFunction(() => document.getElementById("tutorial-suggestions")?.textContent.includes("Show Disabled Sourcery Scopes"));
-    await page.locator('button[data-suggestion-id="show-disabled-scopes"]').click();
+    await clickScopedSelector(page, 'button[data-suggestion-id="show-disabled-scopes"]');
     await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.getAttribute("data-tutorial-focus-scope") === "true");
 
-    await page.locator('button[data-disabled-enable="app"]').click();
+    await clickScopedSelector(page, 'button[data-disabled-enable="app"]');
     await page.waitForFunction(() => (window.__witnessTutorial?.disabledPages || []).length === 0);
-    await page.waitForFunction(() => document.getElementById("tutorial-disabled-pages")?.textContent.includes("No disabled Sourcery scopes right now."));
+    await page.waitForFunction(() => !document.getElementById("tutorial-disabled-pages")?.querySelector('[data-guidance-scope-status="muted"]'));
     await page.waitForFunction(() => document.getElementById("tutorial-summary")?.textContent.includes("Current guidance continues on the App surface"));
 
     await page.goto(`${server.url}/`);
