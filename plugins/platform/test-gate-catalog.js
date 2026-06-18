@@ -238,7 +238,7 @@ function targetLabel(targetId) {
   return value;
 }
 
-export function discoverProjectedTestGates(latestResultsByGate = Object.create(null)) {
+export function discoverProjectedTestGates(latestResultsByGate = Object.create(null), flakeScoresByGate = Object.create(null)) {
   const rows = new Map();
   const packageJson = readJsonSync("package.json", { scripts: {} });
   for (const [scriptName, command] of Object.entries(packageJson.scripts ?? {})) {
@@ -266,7 +266,7 @@ export function discoverProjectedTestGates(latestResultsByGate = Object.create(n
             producedAt: latestResultsByGate[gateId].producedAt ?? null
           }
         : null,
-      flakeScore: null,
+      flakeScore: typeof flakeScoresByGate[gateId] === "number" ? flakeScoresByGate[gateId] : null,
       costEstimate: gateCostEstimateForPath(normalizedCommand),
       selectedByBranches: [],
       selectedByChangeSets: []
@@ -298,7 +298,7 @@ export function discoverProjectedTestGates(latestResultsByGate = Object.create(n
               producedAt: latestResultsByGate[gateId].producedAt ?? null
             }
           : null,
-        flakeScore: null,
+        flakeScore: typeof flakeScoresByGate[gateId] === "number" ? flakeScoresByGate[gateId] : null,
         costEstimate: gateCostEstimateForPath(command),
         selectedByBranches: [],
         selectedByChangeSets: []
@@ -332,7 +332,7 @@ export function discoverProjectedTestGates(latestResultsByGate = Object.create(n
               producedAt: latestResultsByGate[gateId].producedAt ?? null
             }
           : null,
-        flakeScore: null,
+        flakeScore: typeof flakeScoresByGate[gateId] === "number" ? flakeScoresByGate[gateId] : null,
         costEstimate: gateCostEstimateForPath(relative),
         selectedByBranches: [],
         selectedByChangeSets: []
@@ -395,4 +395,41 @@ export function buildProjectedCoverageEdges(testGates = []) {
     }
   }
   return sortRows(rows, ["gateId", "coverageKind", "targetId"]);
+}
+
+function isTerminalGateResultStatus(status) {
+  return ["passed", "failed", "error", "timed_out"].includes(String(status || ""));
+}
+
+export function buildFlakeScoreByGate(testResults = []) {
+  const byGate = Object.create(null);
+  for (const row of Array.isArray(testResults) ? testResults : []) {
+    const gateId = String(row?.gateId || "");
+    if (!gateId) continue;
+    if (String(row?.cacheStatus || "") === "hit") continue;
+    if (!isTerminalGateResultStatus(row?.status)) continue;
+    if (!byGate[gateId]) byGate[gateId] = [];
+    byGate[gateId].push({
+      status: String(row.status),
+      producedAt: row.producedAt ?? null,
+      id: String(row.id || "")
+    });
+  }
+  const scores = Object.create(null);
+  for (const [gateId, rows] of Object.entries(byGate)) {
+    const ordered = [...rows].sort((left, right) =>
+      String(left.producedAt || "").localeCompare(String(right.producedAt || ""))
+      || String(left.id || "").localeCompare(String(right.id || ""))
+    );
+    if (ordered.length < 2) {
+      scores[gateId] = null;
+      continue;
+    }
+    let transitions = 0;
+    for (let index = 1; index < ordered.length; index += 1) {
+      if (ordered[index - 1].status !== ordered[index].status) transitions += 1;
+    }
+    scores[gateId] = Number((transitions / Math.max(1, ordered.length - 1)).toFixed(4));
+  }
+  return scores;
 }

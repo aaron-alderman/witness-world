@@ -10,6 +10,7 @@ import {
   TELEMETRY_IMPACT_RULES
 } from "./branch-insights.js";
 import { platformProposalTemplates } from "./platform-proposals.js";
+import { buildFlakeScoreByGate } from "./test-gate-catalog.js";
 
 export const PLATFORM_LIFECYCLES = Object.freeze([
   "author",
@@ -1117,7 +1118,8 @@ function buildTestGateRows(
   latestResultsByGate = Object.create(null),
   defectClusters = [],
   bundleIdsByPlugin = Object.create(null),
-  seedRows = null
+  seedRows = null,
+  flakeScoresByGate = Object.create(null)
 ) {
   function pushTarget(targets, id) {
     if (isKnownPlatformModelTarget(id, nodes)) targets.add(String(id));
@@ -1217,7 +1219,7 @@ function buildTestGateRows(
                 producedAt: row.lastResult.producedAt ?? null
               }
             : null,
-          flakeScore: row.flakeScore ?? null,
+          flakeScore: typeof row.flakeScore === "number" ? row.flakeScore : (typeof flakeScoresByGate[String(row.id || "")] === "number" ? flakeScoresByGate[String(row.id || "")] : null),
           costEstimate: row.costEstimate ? String(row.costEstimate) : gateCostEstimateForPath(row.command || row.title || row.id || ""),
           selectedByBranches: [],
           selectedByChangeSets: []
@@ -1259,7 +1261,7 @@ function buildTestGateRows(
                 producedAt: latestResultsByGate[node.id].producedAt ?? null
               }
             : null,
-          flakeScore: null,
+          flakeScore: typeof flakeScoresByGate[String(node.id || "")] === "number" ? flakeScoresByGate[String(node.id || "")] : null,
           costEstimate: gateCostEstimateForPath(command || node.title),
           selectedByBranches: [],
           selectedByChangeSets: []
@@ -1590,6 +1592,7 @@ export async function buildPlatformModel({
   const testCases = projectRows(project, moduleProjectors.testCases);
   const projectedTestGates = projectRows(project, moduleProjectors.testGates);
   const projectedCoverageEdges = projectRows(project, moduleProjectors.coverageEdges);
+  const flakeScoresByGate = buildFlakeScoreByGate(testResults);
   const latestTestResultsProjection = projectValue(project, moduleProjectors.latestTestResultsByGate, { rows: [], byGate: Object.create(null) });
   const candidateSnapshotsByBranch = candidateSnapshotsByBranchIndex(candidateSnapshots);
   const snapshotDiagnostics = normalizeSnapshotDiagnostics(diagnostics?.appSnapshot ?? null);
@@ -2151,7 +2154,8 @@ export async function buildPlatformModel({
     latestTestResultsProjection.byGate ?? Object.create(null),
     defectClusters,
     bundleIdsByPlugin,
-    projectedTestGates.length ? projectedTestGates : null
+    projectedTestGates.length ? projectedTestGates : null,
+    flakeScoresByGate
   );
   const coverageEdges = projectedCoverageEdges.length
     ? projectedCoverageEdges.map(row => ({

@@ -1,6 +1,7 @@
 import { moduleProjectors } from "../../src/modules.js";
 import { platformChangeSetInsights } from "./branch-insights.js";
 import {
+  buildFlakeScoreByGate,
   buildProjectedCoverageEdges,
   buildProjectedTestGateIndex,
   discoverProjectedTestGates
@@ -746,7 +747,8 @@ export const platformModuleProjectors = {
 
   testGates(witnesses) {
     const latestResultsByGate = platformModuleProjectors.latestTestResultsByGate(witnesses).byGate ?? Object.create(null);
-    return discoverProjectedTestGates(latestResultsByGate);
+    const flakeScoresByGate = buildFlakeScoreByGate(platformModuleProjectors.testResults(witnesses));
+    return discoverProjectedTestGates(latestResultsByGate, flakeScoresByGate);
   },
 
   testGateIndex(witnesses) {

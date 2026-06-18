@@ -261,6 +261,79 @@ test("platform delegated test-gate projectors discover gate catalog rows", async
   assert.equal(coverageEdges.some(row => row.gateId === "gate:plugins/platform/platform.test.js" && row.coverageKind === "sourceDependency"), true);
 }));
 
+test("platform test gates derive flake scores from non-cached result transitions", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const gate = {
+    id: "gate:plugins/platform/platform.test.js",
+    title: "plugins/platform/platform.test.js",
+    command: "node --test plugins/platform/platform.test.js",
+    runner: "node-test",
+    environment: "local-node",
+    timeoutMs: 180000,
+    sourceDependencies: ["plugins/platform/platform.test.js"],
+    protectedObjects: ["plugin.platform"]
+  };
+  let executions = 0;
+
+  async function runWith(version, status) {
+    return await runPlatformTestGate(world, {
+      actor: "aaron",
+      gate,
+      id: `testRun.flake.${version}`,
+      runtimeProfile: "full",
+      resolveRunnerVersion: async () => version,
+      runCommand: async () => {
+        executions += 1;
+        return {
+          startedAt: `2026-06-18T00:00:0${executions}.000Z`,
+          finishedAt: `2026-06-18T00:00:0${executions}.100Z`,
+          durationMs: 100,
+          exitCode: status === "passed" ? 0 : 1,
+          signal: null,
+          status,
+          stdout: `${status} ${executions}`,
+          stderr: "",
+          timedOut: false,
+          error: null
+        };
+      }
+    });
+  }
+
+  await runWith("node-test:flake-v1", "passed");
+  await runWith("node-test:flake-v2", "failed");
+  await runWith("node-test:flake-v3", "passed");
+  const cached = await runPlatformTestGate(world, {
+    actor: "aaron",
+    gate,
+    id: "testRun.flake.cached",
+    runtimeProfile: "full",
+    resolveRunnerVersion: async () => "node-test:flake-v3",
+    runCommand: async () => {
+      throw new Error("cache hit should not execute runner");
+    }
+  });
+
+  assert.equal(cached.testRun.cacheStatus, "hit");
+  assert.equal(executions, 3);
+  const projectedGate = world.project(moduleProjectors.testGates).find(row => row.id === gate.id);
+  assert.ok(projectedGate);
+  assert.equal(projectedGate.flakeScore, 1);
+
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: ["platform.self"],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => world.project(projector)
+  });
+  assert.equal(model.testGates.find(row => row.id === gate.id)?.flakeScore, 1);
+}));
+
 test("platform model filters support MCP views", async () => {
   const model = await buildPlatformModel({
     diagnostics: {
