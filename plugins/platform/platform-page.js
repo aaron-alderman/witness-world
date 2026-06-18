@@ -1192,14 +1192,24 @@ function renderSignalDetail(surface, detail, model, ctx) {
   `;
 }
 
-function renderModelDetail(node, model, ctx) {
+function renderModelDetail(surface, node, model, ctx) {
+  const primarySurface = nestedSurface(surface, "PlatformModelPrimaryPanel", {
+    title: "Primary Detail",
+    summary: "Selected platform object properties and long-tail fields."
+  });
+  const relationshipsSurface = nestedSurface(surface, "PlatformModelRelationships", {
+    title: "Relationships",
+    summary: "Linked graph relationships for the selected platform object when available.",
+    surfaceKind: "table"
+  });
   if (!node) return `<div class="card"><h2>Detail</h2><div class="muted">No platform objects are projected yet.</div></div>`;
   const relatedEdges = (model.edges ?? []).filter(edge => edge.from === node.id || edge.to === node.id).slice(0, 20);
   const usedKeys = ["id", "kind", "title", "status", "owner", "source", "lifecycle"];
   return `
     <section class="grid2">
       <div>
-        ${renderPropertyTable("Platform Object Detail", [
+        ${renderSurfaceFrame(primarySurface, `
+          ${renderPropertyTable("Platform Object Detail", [
           { label: "Object", valueHtml: renderConceptLink(ctx, node.id, node.title || node.id) },
           { label: "Kind", valueHtml: esc(node.kind || "") },
           { label: "Status", valueHtml: esc(node.status || "") },
@@ -1207,17 +1217,18 @@ function renderModelDetail(node, model, ctx) {
           { label: "Source", valueHtml: esc(node.source || "") },
           { label: "Lifecycle", valueHtml: esc((node.lifecycle ?? []).join(", ")) },
           { label: "API resource", valueHtml: renderApiLink(node.id) }
-        ])}
-        ${renderLongTailProperties(ctx, node, usedKeys)}
+          ])}
+          ${renderLongTailProperties(ctx, node, usedKeys)}
+        `)}
       </div>
       <div>
-        ${renderDataTable("Relationships", ["From", "Relation", "To"], relatedEdges.map(edge => `
+        ${renderSurfaceFrame(relationshipsSurface, renderTable(["From", "Relation", "To"], relatedEdges.map(edge => `
           <tr>
             <td>${renderConceptLink(ctx, edge.from)}</td>
             <td>${esc(edge.rel || "")}</td>
             <td>${renderConceptLink(ctx, edge.to)}</td>
           </tr>
-        `), "No relationships for this object.")}
+        `), "No relationships for this object."))}
       </div>
     </section>
   `;
@@ -1874,7 +1885,7 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
     case "PlatformModelList":
       return renderModelListSection(surface, model, ctx);
     case "PlatformModelDetail":
-      return renderSurfaceFrame(surface, renderModelDetail(findModelDetail(model, ctx.id), model, ctx));
+      return renderSurfaceFrame(surface, renderModelDetail(surface, findModelDetail(model, ctx.id), model, ctx));
     case "PlatformCoverageMatrix":
       return renderCoverageMatrixSection(surface, model, ctx);
     default:

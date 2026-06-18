@@ -580,7 +580,25 @@ view PlatformModelDetail {
   class platform-model-detail
   prop title = "Platform Object Detail"
   prop summary = "Properties and linked relationships for the selected platform object."
+  children {
+    PlatformModelPrimaryPanel
+    PlatformModelRelationships
+  }
   projections {
     PlatformModelRead
   }
+}
+
+view PlatformModelPrimaryPanel {
+  kind region
+  class platform-model-primary
+  prop title = "Primary Detail"
+  prop summary = "Selected platform object properties and long-tail fields."
+}
+
+view PlatformModelRelationships {
+  kind table
+  class platform-model-relationships
+  prop title = "Relationships"
+  prop summary = "Linked graph relationships for the selected platform object when available."
 }

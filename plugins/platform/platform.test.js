@@ -431,6 +431,15 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformKnowledgeTasks"
   ]);
   assert.equal(knowledgeDetailSurface.childSurfaces.some(surface => surface.name === "PlatformKnowledgeTasks" && surface.summary === "Document or roadmap tasks for the selected knowledge object when available."), true);
+  const modelPage = layout.children.find(surface => surface.name === "PlatformModelPage");
+  assert.ok(modelPage);
+  const modelDetailSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelDetail");
+  assert.ok(modelDetailSurface);
+  assert.deepEqual(modelDetailSurface.children, [
+    "PlatformModelPrimaryPanel",
+    "PlatformModelRelationships"
+  ]);
+  assert.equal(modelDetailSurface.childSurfaces.some(surface => surface.name === "PlatformModelRelationships" && surface.summary === "Linked graph relationships for the selected platform object when available."), true);
 });
 
 test("platform delegated test-gate projectors discover gate catalog rows", async () => withRegisteredPluginProjectors(providers, async () => {
@@ -5018,6 +5027,10 @@ test("platform page renders required operating views", async () => {
   assert.match(modelHtml, /Platform Console - Model/);
   assert.match(modelHtml, /Platform Map/);
   assert.match(modelHtml, /Properties and linked relationships for the selected platform object\./);
+  assert.match(modelHtml, /Primary Detail/);
+  assert.match(modelHtml, /Selected platform object properties and long-tail fields\./);
+  assert.match(modelHtml, /Relationships/);
+  assert.match(modelHtml, /Linked graph relationships for the selected platform object when available\./);
   assert.match(modelHtml, /Platform Object Detail/);
   assert.match(modelHtml, /Coverage Edges/);
   assert.doesNotMatch(modelHtml, /<pre/);
