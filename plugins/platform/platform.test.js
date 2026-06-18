@@ -732,17 +732,20 @@ test("roadmap task projections link resolved platform targets", async () => {
   assert.equal(pluginTask.targets.some(target => target.targetId === "plugin.platform"), true);
   assert.equal(model.edges.some(edge => edge.from === pluginTask.id && edge.rel === "targets" && edge.to === "plugin.platform"), true);
   assert.equal(pluginTask.evidence.status !== "unlinked", true);
+  assert.equal(pluginTask.derivedStatus !== "untracked", true);
   assert.equal(pluginTask.evidence.gateIds.length > 0, true);
 
   assert.ok(routeTask);
   assert.equal(routeTask.targets.some(target => target.targetId === "route:GET /platform"), true);
   assert.equal(model.edges.some(edge => edge.from === routeTask.id && edge.rel === "targets" && edge.to === "route:GET /platform"), true);
   assert.equal(routeTask.evidence.status !== "unlinked", true);
+  assert.equal(routeTask.derivedStatus !== "untracked", true);
 
   assert.ok(sourceTask);
   assert.equal(sourceTask.targets.some(target => target.targetId === "rvm:plugins/platform/platform-console.rvm"), true);
   assert.equal(model.edges.some(edge => edge.from === sourceTask.id && edge.rel === "targets" && edge.to === "rvm:plugins/platform/platform-console.rvm"), true);
   assert.equal(sourceTask.evidence.status !== "unlinked", true);
+  assert.equal(sourceTask.derivedStatus !== "untracked", true);
   assert.equal(sourceTask.evidence.targetCount > 0, true);
 });
 
@@ -775,8 +778,74 @@ test("roadmap task evidence tracks linked targets, gates, and gaps without repla
   assert.ok(task);
   assert.equal(task.status, "open");
   assert.equal(task.evidence.status !== "unlinked", true);
+  assert.equal(task.derivedStatus !== "untracked", true);
   assert.equal(Array.isArray(task.evidence.gapIds), true);
   assert.equal(task.evidence.gateIds.length > 0, true);
+});
+
+test("verified task evidence can derive ready or done without replacing markdown state", async () => {
+  const fixtureName = `PLATFORM-TEMP-DERIVED-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}.md`;
+  const fixtureRelativePath = `docs/${fixtureName}`;
+  const fixtureAbsolutePath = path.join(process.cwd(), fixtureRelativePath);
+  await writeFile(fixtureAbsolutePath, `# Temp Derived
+
+- [ ] Verify \`/platform\`
+- [X] Completed \`/platform\`
+`, "utf8");
+
+  try {
+    const sharedContext = {
+      diagnostics: {
+        activeProfile: "full",
+        activeBundles: [],
+        providedCapabilities: [],
+        routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+        surfaces: [],
+        plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+      }
+    };
+    const baseline = await buildPlatformModel({
+      ...sharedContext,
+      project: () => []
+    });
+    const baselineDoneTask = baseline.docTasks.find(row => row.doc === fixtureRelativePath && row.title === "Completed `/platform`");
+    const byGate = Object.fromEntries((baselineDoneTask?.evidence?.gateIds ?? []).map((gateId, index) => [gateId, {
+      id: `testResult:platform:derived:${index + 1}`,
+      runId: `testRun:platform:derived:${index + 1}`,
+      gateId,
+      status: "passed",
+      exitCode: 0,
+      durationMs: 1000,
+      producedAt: "2026-06-18T00:00:00.000Z"
+    }]));
+    const model = await buildPlatformModel({
+      ...sharedContext,
+      project: projector => {
+        if (projector === moduleProjectors.latestTestResultsByGate) {
+          return {
+            rows: Object.values(byGate),
+            byGate
+          };
+        }
+        return [];
+      }
+    });
+
+    const readyTask = model.docTasks.find(row => row.doc === fixtureRelativePath && row.title === "Verify `/platform`");
+    const doneTask = model.docTasks.find(row => row.doc === fixtureRelativePath && row.title === "Completed `/platform`");
+
+    assert.ok(readyTask);
+    assert.equal(readyTask.status, "open");
+    assert.equal(readyTask.evidence.status, "verified");
+    assert.equal(readyTask.derivedStatus, "ready");
+
+    assert.ok(doneTask);
+    assert.equal(doneTask.status, "done");
+    assert.equal(doneTask.evidence.status, "verified");
+    assert.equal(doneTask.derivedStatus, "done");
+  } finally {
+    await rm(fixtureAbsolutePath, { force: true });
+  }
 });
 
 test("platform model projects structured test gates and affected branch selection", async () => {
@@ -4384,6 +4453,7 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Doc Structure/);
   assert.match(html, /Doc Tasks/);
   assert.match(html, /Roadmap Tasks/);
+  assert.match(html, />Derived</);
   assert.match(html, />Evidence</);
   assert.match(html, /platform-proposal-form/);
   assert.match(html, /platform-review-form/);

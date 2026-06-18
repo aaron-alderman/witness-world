@@ -582,8 +582,24 @@ function buildDocTaskEvidence(tasks = [], testGates = [], gaps = []) {
       status = "linked";
       summary = `${targetIds.length} target${targetIds.length === 1 ? "" : "s"} linked without modeled gate coverage yet.`;
     }
+    let derivedStatus = "untracked";
+    let derivedSummary = "No evidence-derived task status yet.";
+    if (status === "at-risk") {
+      derivedStatus = "blocked";
+      derivedSummary = "Linked evidence shows blocking gaps or failing verification.";
+    } else if (status === "verified") {
+      derivedStatus = task.status === "done" ? "done" : "ready";
+      derivedSummary = task.status === "done"
+        ? "Evidence-backed targets are verified and the authored task is marked done."
+        : "Evidence-backed targets are verified, but the authored task is not yet marked done.";
+    } else if (status === "covered" || status === "linked") {
+      derivedStatus = "in-progress";
+      derivedSummary = "Evidence links the task to active platform objects or gates, but verification is incomplete.";
+    }
     return {
       ...task,
+      derivedStatus,
+      derivedSummary,
       evidence: {
         status,
         summary,

@@ -1087,15 +1087,15 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 - [X] Parse checkbox tasks from roadmap docs into platform task nodes.
 - [~] Link checkbox tasks to code/test/doc/platform objects.
-- [~] Track task status from platform evidence, not only Markdown text.
+- [X] Track task status from platform evidence, not only Markdown text.
 - [ ] Add roadmap validation:
   - [ ] every feature has acceptance criteria
   - [ ] every acceptance criterion has a gate
   - [ ] every feature has docs owner
   - [ ] every epic has branch/proposal status
 - [ ] Add proposal target process `roadmap.update`.
-- [L] Roadmap checkbox tasks are now modeled as task rows and graph nodes, and tasks that reference existing platform objects in Markdown now link to resolved plugin, route, capability, and modeled doc/RVM/WCSS targets. Generic unresolved source files plus branch/proposal/task-status evidence linkage remain later work.
-- [L] Roadmap and doc tasks now surface evidence summaries derived from linked platform targets, modeled protecting gates, latest gate results, and open target gaps. Markdown checkbox state remains the authoritative task status until acceptance-criteria and branch/proposal evidence rules land.
+- [L] Roadmap checkbox tasks are now modeled as task rows and graph nodes, and tasks that reference existing platform objects in Markdown now link to resolved plugin, route, capability, and modeled doc/RVM/WCSS targets. Generic unresolved source files remain later work.
+- [L] Roadmap and doc tasks now derive an evidence-backed status (`blocked`, `in-progress`, `ready`, `done`, `untracked`) from linked platform targets, modeled protecting gates, latest gate results, and open target gaps. Markdown checkbox state remains visible and authoritative as authored intent, while derived status tracks the live platform evidence separately.
 - [ ] Add proposal target process `epic.create`.
 - [ ] Add proposal target process `feature.create`.
 - [ ] Add tests for this roadmap being ingested into roadmap/task nodes.

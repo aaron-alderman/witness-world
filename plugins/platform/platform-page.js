@@ -637,12 +637,13 @@ export function renderPlatformPage(model) {
     <section>
       <h2>Roadmap Tasks</h2>
       <table>
-        <thead><tr><th>Status</th><th>Task</th><th>Section</th><th>Evidence</th><th>Source</th></tr></thead>
+        <thead><tr><th>Status</th><th>Derived</th><th>Task</th><th>Section</th><th>Evidence</th><th>Source</th></tr></thead>
         <tbody>${tableRows(roadmapTasks.slice(0, 80), [
           row => row.status,
+          row => row.derivedStatus || "",
           row => row.title,
           row => row.section,
-          row => row.evidence?.summary || "",
+          row => row.derivedSummary || row.evidence?.summary || "",
           row => `${row.doc}:${row.line}`
         ])}</tbody>
       </table>
