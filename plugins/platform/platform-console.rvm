@@ -280,6 +280,7 @@ view PlatformWorkflowSnapshotHistory {
   prop title = "Candidate Snapshots"
   prop summary = "Candidate snapshot history for the selected workflow object when available."
   prop columns = "Status|Snapshot|Revision|Change Set|Errors"
+  prop rowFields = "Status=status|Snapshot=snapshotLink@concept|Revision=revision|Change Set=changeSetLink@concept|Errors=errorCount"
   prop emptyState = "No candidate snapshots for this branch."
   prop rowLimit = "12"
 }
@@ -290,6 +291,7 @@ view PlatformWorkflowEditHistory {
   prop title = "Staged Edits"
   prop summary = "Staged overlay edits for the selected change set when available."
   prop columns = "Path|Language|Previous Hash|Next Hash"
+  prop rowFields = "Path=path|Language=sourceLanguage|Previous Hash=previousHashShort|Next Hash=nextHashShort"
   prop emptyState = "No staged edits."
   prop rowLimit = "20"
 }
@@ -426,6 +428,7 @@ view PlatformVerificationRunHistory {
   prop title = "Recent Test Runs"
   prop summary = "Recent test-run history for the selected verification object when available."
   prop columns = "Status|Run|Branch|Duration|Exit"
+  prop rowFields = "Status=status|Run=runLink@concept|Branch=branchLink@concept|Duration=durationMs|Exit=exitCode"
   prop emptyState = "No runs for this gate yet."
   prop rowLimit = "12"
 }
@@ -436,6 +439,7 @@ view PlatformVerificationBuildHistory {
   prop title = "Snapshot Builds"
   prop summary = "Snapshot build history for the selected runtime revision when available."
   prop columns = "Status|Build|Candidate Snapshot|Branch|Errors"
+  prop rowFields = "Status=status|Build=buildLink@concept|Candidate Snapshot=candidateSnapshotLink@concept|Branch=branchLink@concept|Errors=errorCount"
   prop emptyState = "No snapshot builds for this revision."
   prop rowLimit = "12"
 }
@@ -446,6 +450,7 @@ view PlatformVerificationBuildErrors {
   prop title = "Build Errors"
   prop summary = "Build errors for the selected runtime revision when available."
   prop columns = "Build|Path|Kind|Message"
+  prop rowFields = "Build=buildLink@concept|Path=path|Kind=kind|Message=message"
   prop emptyState = "No build errors for this revision."
   prop rowLimit = "12"
 }
@@ -584,6 +589,7 @@ view PlatformSignalRelationships {
   prop title = "Related Relationships"
   prop summary = "Linked graph relationships for the selected signal when available."
   prop columns = "From|Relation|To"
+  prop rowFields = "From=fromLink@concept|Relation=rel|To=toLink@concept"
   prop emptyState = "No related relationships."
   prop rowLimit = "20"
 }
@@ -666,6 +672,7 @@ view PlatformKnowledgeSections {
   prop title = "Sections"
   prop summary = "Document sections for the selected governed document when available."
   prop columns = "Title|Line|Depth"
+  prop rowFields = "Title=title|Line=line|Depth=depth"
   prop emptyState = "No sections projected for this document."
   prop rowLimit = "20"
 }
@@ -676,6 +683,7 @@ view PlatformKnowledgeTasks {
   prop title = "Tasks"
   prop summary = "Document or roadmap tasks for the selected knowledge object when available."
   prop columns = "Status|Task|Line|Section"
+  prop rowFields = "Status=status|Task=taskLink@concept|Line=line|Section=section"
   prop emptyState = "No tasks projected for this document."
   prop rowLimit = "20"
 }
@@ -725,6 +733,7 @@ view PlatformModelRelationships {
   prop title = "Relationships"
   prop summary = "Linked graph relationships for the selected platform object when available."
   prop columns = "From|Relation|To"
+  prop rowFields = "From=fromLink@concept|Relation=rel|To=toLink@concept"
   prop emptyState = "No relationships for this object."
   prop rowLimit = "20"
 }

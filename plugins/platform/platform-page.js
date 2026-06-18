@@ -612,6 +612,10 @@ function renderRowsFromSurfaceSchema(surface, schemaProp, records, ctx, fallback
   `);
 }
 
+function shortHash(value) {
+  return value ? String(value).slice(0, 12) : "";
+}
+
 function renderLifecycleBoard(surface, model) {
   const lifecycle = model.lifecycleVocabulary ?? [];
   const nodes = model.nodes ?? [];
@@ -924,6 +928,12 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
   if (detail.id?.startsWith?.("branch:")) {
     const branch = detail;
     const snapshots = (model.candidateSnapshots ?? []).filter(snapshot => snapshot.branchId === branch.id).slice(0, surfaceRowLimit(snapshotSurface, 12));
+    const snapshotRows = snapshots.map(snapshot => ({
+      ...snapshot,
+      snapshotLink: snapshot.id ? { id: snapshot.id, title: snapshot.id } : null,
+      changeSetLink: snapshot.changeSetId ? { id: snapshot.changeSetId, title: snapshot.changeSetId } : null,
+      errorCount: Array.isArray(snapshot.errors) ? snapshot.errors.length : (snapshot.errorCount ?? 0)
+    }));
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "branchCardTitle", "branchFields", ctx, branch, "Branch Detail", [
       { label: "Branch", valueHtml: renderConceptLink(ctx, branch.id) },
       { label: "Status", valueHtml: esc(branch.status || "") },
@@ -963,7 +973,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
           `)}
         </div>
       </section>
-      ${renderSurfaceFrame(snapshotSurface, renderSurfaceTable(snapshotSurface, ["Status", "Snapshot", "Revision", "Change Set", "Errors"], snapshots.map(snapshot => `
+      ${renderSurfaceFrame(snapshotSurface, renderSurfaceTable(snapshotSurface, ["Status", "Snapshot", "Revision", "Change Set", "Errors"], renderRowsFromSurfaceSchema(snapshotSurface, "rowFields", snapshotRows, ctx, snapshot => `
         <tr>
           <td>${esc(snapshot.status || "")}</td>
           <td>${renderConceptLink(ctx, snapshot.id)}</td>
@@ -978,6 +988,17 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
     const changeSet = detail;
     const edits = (model.changeSetEdits ?? []).filter(edit => edit.changeSetId === changeSet.id).slice(0, surfaceRowLimit(editSurface, 20));
     const snapshots = (model.candidateSnapshots ?? []).filter(snapshot => snapshot.changeSetId === changeSet.id).slice(0, surfaceRowLimit(snapshotSurface, 12));
+    const editRows = edits.map(edit => ({
+      ...edit,
+      previousHashShort: shortHash(edit.previousHash),
+      nextHashShort: shortHash(edit.nextHash)
+    }));
+    const snapshotRows = snapshots.map(snapshot => ({
+      ...snapshot,
+      snapshotLink: snapshot.id ? { id: snapshot.id, title: snapshot.id } : null,
+      changeSetLink: snapshot.changeSetId ? { id: snapshot.changeSetId, title: snapshot.changeSetId } : null,
+      errorCount: Array.isArray(snapshot.errors) ? snapshot.errors.length : (snapshot.errorCount ?? 0)
+    }));
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "changeSetCardTitle", "changeSetFields", ctx, changeSet, "Change Set Detail", [
       { label: "Change set", valueHtml: renderConceptLink(ctx, changeSet.id) },
       { label: "Status", valueHtml: esc(changeSet.status || "") },
@@ -1010,7 +1031,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
           `)}
         </div>
       </section>
-      ${renderSurfaceFrame(editSurface, renderSurfaceTable(editSurface, ["Path", "Language", "Previous Hash", "Next Hash"], edits.map(edit => `
+      ${renderSurfaceFrame(editSurface, renderSurfaceTable(editSurface, ["Path", "Language", "Previous Hash", "Next Hash"], renderRowsFromSurfaceSchema(editSurface, "rowFields", editRows, ctx, edit => `
         <tr>
           <td>${esc(edit.path || "")}</td>
           <td>${esc(edit.sourceLanguage || "")}</td>
@@ -1018,11 +1039,12 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
           <td>${esc(edit.nextHash ? String(edit.nextHash).slice(0, 12) : "")}</td>
         </tr>
       `), "No staged edits."))}
-      ${renderSurfaceFrame(snapshotSurface, renderSurfaceTable(snapshotSurface, ["Status", "Snapshot", "Revision", "Errors"], snapshots.map(snapshot => `
+      ${renderSurfaceFrame(snapshotSurface, renderSurfaceTable(snapshotSurface, ["Status", "Snapshot", "Revision", "Change Set", "Errors"], renderRowsFromSurfaceSchema(snapshotSurface, "rowFields", snapshotRows, ctx, snapshot => `
         <tr>
           <td>${esc(snapshot.status || "")}</td>
           <td>${renderConceptLink(ctx, snapshot.id)}</td>
           <td>${esc(snapshot.revision ?? "")}</td>
+          <td>${renderConceptLink(ctx, snapshot.changeSetId)}</td>
           <td>${esc(Array.isArray(snapshot.errors) ? snapshot.errors.length : 0)}</td>
         </tr>
       `), "No candidate snapshots for this change set."))}
@@ -1085,6 +1107,11 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   if (detail.id?.startsWith?.("gate:")) {
     const gate = detail;
     const runs = (model.testRuns ?? []).filter(run => run.gateId === gate.id).slice(0, surfaceRowLimit(runHistorySurface, 12));
+    const runRows = runs.map(run => ({
+      ...run,
+      runLink: run.id ? { id: run.id, title: run.id } : null,
+      branchLink: run.branchId ? { id: run.branchId, title: run.branchId } : null
+    }));
     const gateRecord = {
       ...gate,
       lastResultLabel: gate.lastResult ? `${gate.lastResult.status} (${gate.lastResult.exitCode ?? "n/a"})` : "idle"
@@ -1121,7 +1148,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
           `)}
         </div>
       </section>
-      ${renderSurfaceFrame(runHistorySurface, renderSurfaceTable(runHistorySurface, ["Status", "Run", "Branch", "Duration", "Exit"], runs.map(run => `
+      ${renderSurfaceFrame(runHistorySurface, renderSurfaceTable(runHistorySurface, ["Status", "Run", "Branch", "Duration", "Exit"], renderRowsFromSurfaceSchema(runHistorySurface, "rowFields", runRows, ctx, run => `
         <tr>
           <td>${esc(run.status || "")}</td>
           <td>${renderConceptLink(ctx, run.id)}</td>
@@ -1136,6 +1163,16 @@ function renderVerificationDetail(surface, detail, model, ctx) {
     const revision = detail;
     const builds = (model.snapshotBuilds ?? []).filter(build => Number(build.revision || 0) === Number(revision.revision || 0)).slice(0, surfaceRowLimit(buildHistorySurface, 12));
     const errors = (model.snapshotBuildErrors ?? []).filter(error => Number(error.revision || 0) === Number(revision.revision || 0)).slice(0, surfaceRowLimit(buildErrorsSurface, 12));
+    const buildRows = builds.map(build => ({
+      ...build,
+      buildLink: build.id ? { id: build.id, title: build.id } : null,
+      candidateSnapshotLink: build.candidateSnapshotId ? { id: build.candidateSnapshotId, title: build.candidateSnapshotId } : null,
+      branchLink: build.branchId ? { id: build.branchId, title: build.branchId } : null
+    }));
+    const errorRows = errors.map(error => ({
+      ...error,
+      buildLink: error.snapshotBuildId ? { id: error.snapshotBuildId, title: error.snapshotBuildId } : null
+    }));
     const revisionRecord = {
       ...revision,
       revisionLink: { id: revision.id, title: `Revision ${revision.revision}` }
@@ -1182,7 +1219,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
           `)}
         </div>
       </section>
-      ${renderSurfaceFrame(buildHistorySurface, renderSurfaceTable(buildHistorySurface, ["Status", "Build", "Candidate Snapshot", "Branch", "Errors"], builds.map(build => `
+      ${renderSurfaceFrame(buildHistorySurface, renderSurfaceTable(buildHistorySurface, ["Status", "Build", "Candidate Snapshot", "Branch", "Errors"], renderRowsFromSurfaceSchema(buildHistorySurface, "rowFields", buildRows, ctx, build => `
         <tr>
           <td>${esc(build.status || "")}</td>
           <td>${esc(build.id || "")}</td>
@@ -1191,7 +1228,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
           <td>${esc(build.errorCount ?? 0)}</td>
         </tr>
       `), "No snapshot builds for this revision."))}
-      ${renderSurfaceFrame(buildErrorsSurface, renderSurfaceTable(buildErrorsSurface, ["Build", "Path", "Kind", "Message"], errors.map(error => `
+      ${renderSurfaceFrame(buildErrorsSurface, renderSurfaceTable(buildErrorsSurface, ["Build", "Path", "Kind", "Message"], renderRowsFromSurfaceSchema(buildErrorsSurface, "rowFields", errorRows, ctx, error => `
         <tr>
           <td>${esc(error.snapshotBuildId || "")}</td>
           <td>${esc(error.path || "")}</td>
@@ -1300,6 +1337,10 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
     const doc = detail;
     const sections = (model.docSections ?? []).filter(section => section.doc === doc.path).slice(0, surfaceRowLimit(sectionsSurface, 20));
     const tasks = (model.docTasks ?? []).filter(task => task.doc === doc.path).slice(0, surfaceRowLimit(tasksSurface, 20));
+    const taskRows = tasks.map(task => ({
+      ...task,
+      taskLink: task.id ? { id: task.id, title: task.title || task.id } : null
+    }));
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "documentCardTitle", "documentFields", ctx, doc, "Document Detail", [
       { label: "Document", valueHtml: renderConceptLink(ctx, doc.path, doc.path) },
       { label: "Role", valueHtml: esc(doc.role || "") },
@@ -1330,14 +1371,14 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
           `)}
         </div>
       </section>
-      ${renderSurfaceFrame(sectionsSurface, renderSurfaceTable(sectionsSurface, ["Title", "Line", "Depth"], sections.map(section => `
+      ${renderSurfaceFrame(sectionsSurface, renderSurfaceTable(sectionsSurface, ["Title", "Line", "Depth"], renderRowsFromSurfaceSchema(sectionsSurface, "rowFields", sections, ctx, section => `
         <tr>
           <td>${esc(section.title || "")}</td>
           <td>${esc(section.line ?? "")}</td>
           <td>${esc(section.depth ?? "")}</td>
         </tr>
       `), "No sections projected for this document."))}
-      ${renderSurfaceFrame(tasksSurface, renderSurfaceTable(tasksSurface, ["Status", "Task", "Line", "Section"], tasks.map(task => `
+      ${renderSurfaceFrame(tasksSurface, renderSurfaceTable(tasksSurface, ["Status", "Task", "Line", "Section"], renderRowsFromSurfaceSchema(tasksSurface, "rowFields", taskRows, ctx, task => `
         <tr>
           <td>${esc(task.status || "")}</td>
           <td>${task.id ? renderConceptLink(ctx, task.id, task.title || task.id) : esc(task.title || "")}</td>
@@ -1507,6 +1548,11 @@ function renderSignalDetail(surface, detail, model, ctx) {
   }
   const node = detail;
   const relatedEdges = (model.edges ?? []).filter(edge => edge.from === node.id || edge.to === node.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
+  const relationshipRows = relatedEdges.map(edge => ({
+    ...edge,
+    fromLink: edge.from ? { id: edge.from, title: edge.from } : null,
+    toLink: edge.to ? { id: edge.to, title: edge.to } : null
+  }));
   const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "signalCardTitle", "signalFields", ctx, node, "Signal Detail", [
     { label: "Node", valueHtml: renderConceptLink(ctx, node.id, node.title || node.id) },
     { label: "Kind", valueHtml: esc(node.kind || "") },
@@ -1528,7 +1574,7 @@ function renderSignalDetail(surface, detail, model, ctx) {
         `)}
       </div>
       <div>
-        ${renderSurfaceFrame(relationshipsSurface, renderSurfaceTable(relationshipsSurface, ["From", "Relation", "To"], relatedEdges.map(edge => `
+        ${renderSurfaceFrame(relationshipsSurface, renderSurfaceTable(relationshipsSurface, ["From", "Relation", "To"], renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relationshipRows, ctx, edge => `
           <tr>
             <td>${renderConceptLink(ctx, edge.from)}</td>
             <td>${esc(edge.rel || "")}</td>
@@ -1552,6 +1598,11 @@ function renderModelDetail(surface, node, model, ctx) {
   });
   if (!node) return `<div class="card"><h2>Detail</h2><div class="muted">No platform objects are projected yet.</div></div>`;
   const relatedEdges = (model.edges ?? []).filter(edge => edge.from === node.id || edge.to === node.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
+  const relationshipRows = relatedEdges.map(edge => ({
+    ...edge,
+    fromLink: edge.from ? { id: edge.from, title: edge.from } : null,
+    toLink: edge.to ? { id: edge.to, title: edge.to } : null
+  }));
   const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "objectCardTitle", "objectFields", ctx, node, "Platform Object Detail", [
     { label: "Object", valueHtml: renderConceptLink(ctx, node.id, node.title || node.id) },
     { label: "Kind", valueHtml: esc(node.kind || "") },
@@ -1573,7 +1624,7 @@ function renderModelDetail(surface, node, model, ctx) {
         `)}
       </div>
       <div>
-        ${renderSurfaceFrame(relationshipsSurface, renderSurfaceTable(relationshipsSurface, ["From", "Relation", "To"], relatedEdges.map(edge => `
+        ${renderSurfaceFrame(relationshipsSurface, renderSurfaceTable(relationshipsSurface, ["From", "Relation", "To"], renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relationshipRows, ctx, edge => `
           <tr>
             <td>${renderConceptLink(ctx, edge.from)}</td>
             <td>${esc(edge.rel || "")}</td>

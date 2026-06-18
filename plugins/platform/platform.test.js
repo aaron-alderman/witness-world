@@ -384,7 +384,11 @@ test("platform console layout compiles authored top-level surface metadata from 
   const workflowSnapshotSurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowSnapshotHistory");
   assert.ok(workflowSnapshotSurface);
   assert.equal(workflowSnapshotSurface.props.columns, "Status|Snapshot|Revision|Change Set|Errors");
+  assert.equal(workflowSnapshotSurface.props.rowFields, "Status=status|Snapshot=snapshotLink@concept|Revision=revision|Change Set=changeSetLink@concept|Errors=errorCount");
   assert.equal(workflowSnapshotSurface.props.rowLimit, "12");
+  const workflowEditSurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowEditHistory");
+  assert.ok(workflowEditSurface);
+  assert.equal(workflowEditSurface.props.rowFields, "Path=path|Language=sourceLanguage|Previous Hash=previousHashShort|Next Hash=nextHashShort");
   const workflowPrimarySurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowPrimaryPanel");
   assert.ok(workflowPrimarySurface);
   assert.equal(workflowPrimarySurface.props.branchCardTitle, "Branch Detail");
@@ -434,7 +438,14 @@ test("platform console layout compiles authored top-level surface metadata from 
   const verificationRunSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationRunHistory");
   assert.ok(verificationRunSurface);
   assert.equal(verificationRunSurface.props.columns, "Status|Run|Branch|Duration|Exit");
+  assert.equal(verificationRunSurface.props.rowFields, "Status=status|Run=runLink@concept|Branch=branchLink@concept|Duration=durationMs|Exit=exitCode");
   assert.equal(verificationRunSurface.props.rowLimit, "12");
+  const verificationBuildSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationBuildHistory");
+  assert.ok(verificationBuildSurface);
+  assert.equal(verificationBuildSurface.props.rowFields, "Status=status|Build=buildLink@concept|Candidate Snapshot=candidateSnapshotLink@concept|Branch=branchLink@concept|Errors=errorCount");
+  const verificationBuildErrorsSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationBuildErrors");
+  assert.ok(verificationBuildErrorsSurface);
+  assert.equal(verificationBuildErrorsSurface.props.rowFields, "Build=buildLink@concept|Path=path|Kind=kind|Message=message");
   const verificationPrimarySurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationPrimaryPanel");
   assert.ok(verificationPrimarySurface);
   assert.equal(verificationPrimarySurface.props.gateCardTitle, "Test Gate Detail");
@@ -470,6 +481,9 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformSignalRelationships"
   ]);
   assert.equal(signalDetailSurface.childSurfaces.some(surface => surface.name === "PlatformSignalRelationships" && surface.summary === "Linked graph relationships for the selected signal when available."), true);
+  const signalRelationshipsSurface = signalDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalRelationships");
+  assert.ok(signalRelationshipsSurface);
+  assert.equal(signalRelationshipsSurface.props.rowFields, "From=fromLink@concept|Relation=rel|To=toLink@concept");
   assert.equal(signalsPage.childSurfaces.some(surface => surface.name === "PlatformGapList" && surface.projectionRoutes.includes("/api/platform-gaps")), true);
   const gapListSurface = signalsPage.childSurfaces.find(surface => surface.name === "PlatformGapList");
   assert.ok(gapListSurface);
@@ -491,7 +505,11 @@ test("platform console layout compiles authored top-level surface metadata from 
   const knowledgeTaskSurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeTasks");
   assert.ok(knowledgeTaskSurface);
   assert.equal(knowledgeTaskSurface.props.columns, "Status|Task|Line|Section");
+  assert.equal(knowledgeTaskSurface.props.rowFields, "Status=status|Task=taskLink@concept|Line=line|Section=section");
   assert.equal(knowledgeTaskSurface.props.rowLimit, "20");
+  const knowledgeSectionsSurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeSections");
+  assert.ok(knowledgeSectionsSurface);
+  assert.equal(knowledgeSectionsSurface.props.rowFields, "Title=title|Line=line|Depth=depth");
   const knowledgePrimarySurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgePrimaryPanel");
   assert.ok(knowledgePrimarySurface);
   assert.equal(knowledgePrimarySurface.props.documentCardTitle, "Document Detail");
@@ -539,6 +557,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   const modelRelationshipsSurface = modelDetailSurface.childSurfaces.find(surface => surface.name === "PlatformModelRelationships");
   assert.ok(modelRelationshipsSurface);
   assert.equal(modelRelationshipsSurface.props.columns, "From|Relation|To");
+  assert.equal(modelRelationshipsSurface.props.rowFields, "From=fromLink@concept|Relation=rel|To=toLink@concept");
   assert.equal(modelRelationshipsSurface.props.rowLimit, "20");
   const modelPrimarySurface = modelDetailSurface.childSurfaces.find(surface => surface.name === "PlatformModelPrimaryPanel");
   assert.ok(modelPrimarySurface);
