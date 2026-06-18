@@ -340,6 +340,11 @@ function surfaceRowLimit(surface, fallback = 12) {
   return Math.max(1, parsed || fallback);
 }
 
+function surfaceItemLimit(surface, fallback = 12) {
+  const parsed = safeInteger(surfacePropText(surface, "itemLimit", fallback), fallback);
+  return Math.max(1, parsed || fallback);
+}
+
 function renderPropertyCard(card) {
   return renderPropertyTable(card?.title || "Properties", card?.entries || []);
 }
@@ -384,6 +389,16 @@ function renderTextListCard(title, values = []) {
       ${items ? `<ul>${items}</ul>` : `<div class="muted">No entries.</div>`}
     </div>
   `;
+}
+
+function renderInlineSchemaSummary(record, entries = [], ctx, className = "muted") {
+  const parts = entries
+    .map(entry => {
+      const valueHtml = renderSchemaValue(ctx, resolveSchemaPath(record, entry.path), entry.mode, entry.label);
+      return valueHtml ? `<span>${esc(entry.label)}: ${valueHtml}</span>` : "";
+    })
+    .filter(Boolean);
+  return parts.length ? `<div class="${esc(className)}">${parts.join(" | ")}</div>` : "";
 }
 
 function renderSummaryCards(cards = []) {
@@ -687,44 +702,50 @@ function shortHash(value) {
   return value ? String(value).slice(0, 12) : "";
 }
 
-function renderLifecycleBoard(surface, model) {
-  const lifecycle = model.lifecycleVocabulary ?? [];
-  const nodes = model.nodes ?? [];
+function renderAuthoredBoard(surface, model, ctx) {
+  const lanes = resolveFieldPath(model, surfacePropText(surface, "boardSource", "")) ?? [];
+  const laneTitlePath = surfacePropText(surface, "laneTitlePath", "title||id");
+  const laneMetaEntries = parseSurfaceSchemaEntries(surface?.props?.laneMetaFields);
+  const laneItemsPath = surfacePropText(surface, "laneItemsPath", "items");
+  const itemTitlePath = surfacePropText(surface, "itemTitlePath", "title||id");
+  const itemTitleMode = surfacePropText(surface, "itemTitleMode", "text");
+  const itemFieldEntries = parseSurfaceSchemaEntries(surface?.props?.itemFields);
+  const itemLimit = surfaceItemLimit(surface, 14);
+  const itemEmptyState = surfacePropText(surface, "itemEmptyState", "No entries.");
   return renderSurfaceFrame(surface, `
     <div class="board">
-      ${lifecycle.map(step => `
-        <section class="platform-column" data-platform-lifecycle="${esc(step)}">
-          <h3>${esc(step)}</h3>
-          ${nodes
-            .filter(node => (node.lifecycle ?? []).includes(step))
-            .slice(0, 14)
-            .map(node => `<div class="platform-chip">${renderConceptLink({ url: new URL("http://platform.local/platform?view=model") }, node.id, node.title)} <span>${esc(node.kind)}</span></div>`)
-            .join("")}
+      ${lanes.map(lane => {
+        const laneTitle = resolveSchemaPath(lane, laneTitlePath) || lane.title || lane.id || "";
+        const items = Array.isArray(resolveFieldPath(lane, laneItemsPath)) ? resolveFieldPath(lane, laneItemsPath) : [];
+        return `
+        <section class="platform-column" data-platform-board-lane="${esc(lane.id || laneTitle)}">
+          <h3>${esc(laneTitle)}</h3>
+          ${renderInlineSchemaSummary(lane, laneMetaEntries, ctx)}
+          ${items.length
+            ? items.slice(0, itemLimit).map(item => {
+                const titleHtml = renderSchemaValue(ctx, resolveSchemaPath(item, itemTitlePath), itemTitleMode);
+                const detailHtml = renderInlineSchemaSummary(item, itemFieldEntries, ctx);
+                return `
+            <div class="platform-chip">
+              ${titleHtml ? `<div>${titleHtml}</div>` : ""}
+              ${detailHtml}
+            </div>
+          `;
+              }).join("")
+            : `<div class="muted">${esc(itemEmptyState)}</div>`}
         </section>
-      `).join("")}
+      `;
+      }).join("")}
     </div>
   `);
 }
 
+function renderLifecycleBoard(surface, model, ctx) {
+  return renderAuthoredBoard(surface, model, ctx);
+}
+
 function renderBranchBoard(surface, model, ctx) {
-  const branchBoard = model.branchBoard ?? [];
-  return renderSurfaceFrame(surface, `
-    <div class="board">
-      ${branchBoard.map(lane => `
-        <section class="platform-column" data-branch-lane="${esc(lane.id)}">
-          <h3>${esc(lane.title)}</h3>
-          <div class="muted">${esc(lane.count)} branch${lane.count === 1 ? "" : "es"}</div>
-          ${lane.branches.map(branch => `
-            <div class="platform-chip">
-              ${renderConceptLink(ctx, branch.id, branch.title || branch.id)}
-              <span>${esc(branch.status)}</span>
-              <div class="muted">change sets ${esc(branch.changeSetCount)}${branch.reviewProposalCount ? `, review ${esc(branch.reviewProposalCount)}` : ""}</div>
-            </div>
-          `).join("")}
-        </section>
-      `).join("")}
-    </div>
-  `);
+  return renderAuthoredBoard(surface, model, ctx);
 }
 
 function renderSurfaceTree(surface, consoleLayout, ctx) {
@@ -2101,7 +2122,7 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
     case "PlatformAuthoredSurfaceTree":
       return renderSurfaceTree(surface, consoleLayout, ctx);
     case "PlatformLifecycleBoard":
-      return renderLifecycleBoard(surface, model);
+      return renderLifecycleBoard(surface, model, ctx);
     case "PlatformBranchBoard":
       return renderBranchBoard(surface, model, ctx);
     case "PlatformMap":

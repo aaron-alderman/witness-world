@@ -142,6 +142,8 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   });
 
   assert.deepEqual(model.lifecycleVocabulary, PLATFORM_LIFECYCLES);
+  assert.equal(Array.isArray(model.lifecycleBoard), true);
+  assert.equal(model.lifecycleBoard.every(lane => Array.isArray(lane.nodes) && typeof lane.countLabel === "string"), true);
   assert.equal(model.proposalActions.some(action => action.action === "runtimePlugin.install"), true);
   assert.equal(model.nodes.some(node => node.id === "plugin.platform" && node.kind === "plugin" && node.lifecycle.includes("steward")), true);
   assert.equal(model.nodes.some(node => node.id === "bundle-platform" && node.kind === "bundle"), true);
@@ -423,6 +425,18 @@ test("platform console layout compiles authored top-level surface metadata from 
   const surfaceTreeSurface = overviewPage.childSurfaces.find(surface => surface.name === "PlatformAuthoredSurfaceTree");
   assert.ok(surfaceTreeSurface);
   assert.equal(surfaceTreeSurface.props.surfaceFields, "View=pageId||name|Kind=surfaceKind|Class=className|Process=processRoute|Projection=projectionRoutesText|Summary=summary|Sections=sectionTitles");
+  const lifecycleBoardSurface = overviewPage.childSurfaces.find(surface => surface.name === "PlatformLifecycleBoard");
+  assert.ok(lifecycleBoardSurface);
+  assert.equal(lifecycleBoardSurface.props.boardSource, "lifecycleBoard");
+  assert.equal(lifecycleBoardSurface.props.laneMetaFields, "Count=countLabel");
+  assert.equal(lifecycleBoardSurface.props.itemTitlePath, "titleLink");
+  assert.equal(lifecycleBoardSurface.props.itemFields, "Kind=kind");
+  const branchBoardSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformBranchBoard");
+  assert.ok(branchBoardSurface);
+  assert.equal(branchBoardSurface.props.boardSource, "branchBoard");
+  assert.equal(branchBoardSurface.props.laneMetaFields, "Count=countLabel");
+  assert.equal(branchBoardSurface.props.itemTitlePath, "titleLink");
+  assert.equal(branchBoardSurface.props.itemFields, "Status=status|Activity=activitySummary|Latest Candidate Snapshot=latestCandidateSnapshotId@concept");
   assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformProposalPanel" && surface.processRoute === "/api/platform-proposals"), true);
   assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformChangeSetEditPanel"), true);
   assert.ok(verificationPage);
@@ -612,6 +626,7 @@ test("platform console layout compiles authored top-level surface metadata from 
 test("platform page views filter the model to page-scoped slices", () => {
   const model = {
     lifecycleVocabulary: ["author", "verify"],
+    lifecycleBoard: [{ id: "author", title: "author", count: 1, countLabel: "1 object", nodes: [{ id: "plugin.platform", titleLink: { id: "plugin.platform", title: "plugin.platform" }, kind: "plugin" }] }],
     nodes: [
       { id: "plugin.platform", kind: "plugin" },
       { id: "telemetryMetric:platform.self", kind: "telemetryMetric" },
@@ -627,7 +642,7 @@ test("platform page views filter the model to page-scoped slices", () => {
     profiles: [{ id: "full", status: "active" }],
     changeSets: [{ id: "changeSet:platform", status: "draft" }],
     branches: [{ id: "branch:platform", status: "open" }],
-    branchBoard: [{ lane: "author", branchIds: ["branch:platform"] }],
+    branchBoard: [{ id: "draft", title: "Draft", count: 1, countLabel: "1 branch", branches: [{ id: "branch:platform", titleLink: { id: "branch:platform", title: "branch:platform" }, status: "open", activitySummary: "change sets 0" }] }],
     branchLifecycleVocabulary: ["author"],
     changeSetEdits: [{ id: "changeSetEdit:platform:rvm", changeSetId: "changeSet:platform" }],
     candidateSnapshots: [{ id: "candidateSnapshot:platform", branchId: "branch:platform", changeSetId: "changeSet:platform" }],
@@ -659,7 +674,7 @@ test("platform page views filter the model to page-scoped slices", () => {
   const signals = filterPlatformModel(model, "signals");
   const modelPage = filterPlatformModel(model, "model");
 
-  assert.deepEqual(Object.keys(overview).sort(), ["changeSets", "docs", "gaps", "lifecycleVocabulary", "nodes", "profiles", "summaries", "testGates"]);
+  assert.deepEqual(Object.keys(overview).sort(), ["changeSets", "docs", "gaps", "lifecycleBoard", "lifecycleVocabulary", "nodes", "profiles", "summaries", "testGates"]);
   assert.deepEqual(Object.keys(workflow).sort(), ["branchBoard", "branchLifecycleVocabulary", "branches", "candidateSnapshots", "changeSetEdits", "changeSets", "proposalActions", "proposals", "summaries"]);
   assert.deepEqual(Object.keys(verification).sort(), ["activeRuntimeRevision", "branchTestRedGreen", "candidateSnapshots", "changeSetTestRedGreen", "latestTestResultsByGate", "runtimeRevisions", "snapshotBuildErrors", "snapshotBuilds", "snapshotDiagnostics", "summaries", "testGates", "testRuns"]);
   assert.deepEqual(Object.keys(knowledge).sort(), ["docSections", "docTasks", "docs", "epics", "features", "roadmapTasks", "summaries"]);
@@ -5026,19 +5041,58 @@ test("platform page renders required operating views", async () => {
   }));
   const model = {
     ...baseModel,
+    lifecycleBoard: [
+      {
+        id: "author",
+        title: "author",
+        count: 2,
+        countLabel: "2 objects",
+        nodes: [
+          { id: "plugin.platform", titleLink: { id: "plugin.platform", title: "Platform Plugin" }, kind: "plugin" },
+          { id: "route:GET /platform", titleLink: { id: "route:GET /platform", title: "GET /platform" }, kind: "route" }
+        ]
+      },
+      {
+        id: "observe",
+        title: "observe",
+        count: 1,
+        countLabel: "1 object",
+        nodes: [{ id: "telemetryMetric:requests", titleLink: { id: "telemetryMetric:requests", title: "Requests" }, kind: "telemetryMetric" }]
+      }
+    ],
     profiles: [{ id: "full", status: "active", pluginIds: ["plugin.platform"], capabilities: ["platform.self"] }],
     branchBoard: [
       {
         id: "draft",
         title: "Draft",
         count: 1,
-        branches: [{ id: "branch:demo-0", title: "Demo Branch 0", status: "draft", changeSetCount: 1, reviewProposalCount: 0 }]
+        countLabel: "1 branch",
+        branches: [{
+          id: "branch:demo-0",
+          title: "Demo Branch 0",
+          titleLink: { id: "branch:demo-0", title: "Demo Branch 0" },
+          status: "draft",
+          changeSetCount: 1,
+          reviewProposalCount: 0,
+          activitySummary: "change sets 1",
+          latestCandidateSnapshotId: "candidateSnapshot:demo-0"
+        }]
       },
       {
         id: "review",
         title: "Review",
         count: 20,
-        branches: branches.slice(1).map(branch => ({ id: branch.id, title: branch.title, status: branch.status, changeSetCount: 1, reviewProposalCount: 1 }))
+        countLabel: "20 branches",
+        branches: branches.slice(1).map(branch => ({
+          id: branch.id,
+          title: branch.title,
+          titleLink: { id: branch.id, title: branch.title },
+          status: branch.status,
+          changeSetCount: 1,
+          reviewProposalCount: 1,
+          activitySummary: "change sets 1, review 1",
+          latestCandidateSnapshotId: branch.latestCandidateSnapshotId
+        }))
       }
     ],
     branches,

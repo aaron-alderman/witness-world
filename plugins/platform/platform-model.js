@@ -274,23 +274,51 @@ function summarize(nodes, edges, profiles = []) {
   };
 }
 
+function buildLifecycleBoard(nodes = [], lifecycleVocabulary = PLATFORM_LIFECYCLES) {
+  const lanes = lifecycleVocabulary.map(id => ({ id, title: id, nodes: [] }));
+  const byId = Object.fromEntries(lanes.map(lane => [lane.id, lane]));
+  for (const node of nodes) {
+    for (const lifecycle of node.lifecycle ?? []) {
+      const lane = byId[String(lifecycle)] ?? null;
+      if (!lane) continue;
+      lane.nodes.push({
+        id: node.id,
+        title: node.title || node.id,
+        titleLink: { id: node.id, title: node.title || node.id },
+        kind: node.kind || "node"
+      });
+    }
+  }
+  for (const lane of lanes) {
+    lane.nodes.sort((left, right) => String(left.id).localeCompare(String(right.id)));
+    lane.count = lane.nodes.length;
+    lane.countLabel = `${lane.count} object${lane.count === 1 ? "" : "s"}`;
+  }
+  return lanes;
+}
+
 function buildBranchBoard(branches = []) {
   const lanes = PLATFORM_BRANCH_LIFECYCLE_LANES.map(id => ({ id, title: id, branches: [] }));
   const byId = Object.fromEntries(lanes.map(lane => [lane.id, lane]));
   for (const branch of branches) {
+    const changeSetCount = Array.isArray(branch.changeSetIds) ? branch.changeSetIds.length : 0;
+    const reviewProposalCount = Array.isArray(branch.reviewProposalIds) ? branch.reviewProposalIds.length : 0;
     const lane = byId[String(branch.lifecycleLane || "draft")] ?? byId.draft;
     lane.branches.push({
       id: branch.id,
       title: branch.title || branch.id,
+      titleLink: { id: branch.id, title: branch.title || branch.id },
       status: branch.status || "open",
-      changeSetCount: Array.isArray(branch.changeSetIds) ? branch.changeSetIds.length : 0,
-      reviewProposalCount: Array.isArray(branch.reviewProposalIds) ? branch.reviewProposalIds.length : 0,
+      changeSetCount,
+      reviewProposalCount,
+      activitySummary: `change sets ${changeSetCount}${reviewProposalCount ? `, review ${reviewProposalCount}` : ""}`,
       latestCandidateSnapshotId: branch.latestCandidateSnapshotId ?? null
     });
   }
   for (const lane of lanes) {
     lane.branches.sort((left, right) => String(left.id).localeCompare(String(right.id)));
     lane.count = lane.branches.length;
+    lane.countLabel = `${lane.count} branch${lane.count === 1 ? "" : "es"}`;
   }
   return lanes;
 }
@@ -3141,6 +3169,7 @@ export async function buildPlatformModel({
     lifecycleVocabulary: [...PLATFORM_LIFECYCLES],
     branchLifecycleVocabulary: [...PLATFORM_BRANCH_LIFECYCLE_LANES],
     nodes: [...nodes.values()].sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id)),
+    lifecycleBoard: buildLifecycleBoard([...nodes.values()], PLATFORM_LIFECYCLES),
     edges: [...edges.values()].sort((a, b) => a.from.localeCompare(b.from) || a.rel.localeCompare(b.rel) || a.to.localeCompare(b.to)),
     summaries: summarize(nodes, edges, profiles),
     gaps,
@@ -3200,6 +3229,7 @@ export function filterPlatformModel(model, view, id = null) {
   if (view === "overview") {
     return {
       lifecycleVocabulary: model.lifecycleVocabulary,
+      lifecycleBoard: model.lifecycleBoard,
       nodes: model.nodes,
       docs: model.docs,
       gaps: model.gaps,

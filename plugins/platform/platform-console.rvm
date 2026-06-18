@@ -203,6 +203,15 @@ view PlatformLifecycleBoard {
   class platform-board
   prop title = "Lifecycle Board"
   prop summary = "Lifecycle-oriented chips sourced from the platform model."
+  prop boardSource = "lifecycleBoard"
+  prop laneTitlePath = "title"
+  prop laneMetaFields = "Count=countLabel"
+  prop laneItemsPath = "nodes"
+  prop itemTitlePath = "titleLink"
+  prop itemTitleMode = "concept"
+  prop itemFields = "Kind=kind"
+  prop itemLimit = "14"
+  prop itemEmptyState = "No platform objects in this lifecycle lane."
   projections {
     PlatformModelRead
   }
@@ -213,6 +222,15 @@ view PlatformBranchBoard {
   class platform-board
   prop title = "Branch Board"
   prop summary = "Lifecycle lanes for branch-backed work."
+  prop boardSource = "branchBoard"
+  prop laneTitlePath = "title"
+  prop laneMetaFields = "Count=countLabel"
+  prop laneItemsPath = "branches"
+  prop itemTitlePath = "titleLink"
+  prop itemTitleMode = "concept"
+  prop itemFields = "Status=status|Activity=activitySummary|Latest Candidate Snapshot=latestCandidateSnapshotId@concept"
+  prop itemLimit = "14"
+  prop itemEmptyState = "No branches in this lifecycle lane."
   projections {
     PlatformModelRead
   }
