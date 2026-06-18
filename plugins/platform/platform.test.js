@@ -351,6 +351,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(overviewPage);
   assert.equal(overviewPage.pageId, "overview");
   assert.equal(overviewPage.props.modelView, "overview");
+  assert.match(overviewPage.props.summaryCards, /Plugins=nodes@countKind:plugin/);
   assert.deepEqual(overviewPage.children, [
     "PlatformConsoleSummary",
     "PlatformAuthoredSurfaceTree",
@@ -361,6 +362,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(workflowPage);
   assert.equal(workflowPage.pageId, "workflow");
   assert.equal(workflowPage.props.modelView, "workflow");
+  assert.match(workflowPage.props.summaryCards, /Open Proposals=proposals@countWhere:status=open/);
   assert.deepEqual(workflowPage.children, [
     "PlatformBranchBoard",
     "PlatformWorkflowList",
@@ -423,6 +425,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(verificationPage);
   assert.equal(verificationPage.pageId, "verification");
   assert.equal(verificationPage.props.modelView, "verification");
+  assert.match(verificationPage.props.summaryCards, /Snapshot Builds=snapshotBuilds@count/);
   assert.deepEqual(verificationPage.children, [
     "PlatformVerificationList",
     "PlatformVerificationDetail",
@@ -487,6 +490,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(signalsPage);
   assert.equal(signalsPage.pageId, "signals");
   assert.equal(signalsPage.props.modelView, "signals");
+  assert.match(signalsPage.props.summaryCards, /Telemetry Metrics=nodes@countKind:telemetryMetric/);
   assert.deepEqual(signalsPage.children, [
     "PlatformGapList",
     "PlatformSignalList",
@@ -513,6 +517,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   const knowledgePage = layout.children.find(surface => surface.name === "PlatformKnowledgePage");
   assert.ok(knowledgePage);
   assert.equal(knowledgePage.props.modelView, "knowledge");
+  assert.match(knowledgePage.props.summaryCards, /Governed Docs=docs@count/);
   const knowledgeDetailSurface = knowledgePage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDetail");
   assert.ok(knowledgeDetailSurface);
   assert.deepEqual(knowledgeDetailSurface.children, [
@@ -564,6 +569,10 @@ test("platform console layout compiles authored top-level surface metadata from 
   const modelPage = layout.children.find(surface => surface.name === "PlatformModelPage");
   assert.ok(modelPage);
   assert.equal(modelPage.props.modelView, "model");
+  assert.match(modelPage.props.summaryCards, /Coverage Edges=coverageEdges@count/);
+  const consoleSummarySurface = overviewPage.childSurfaces.find(surface => surface.name === "PlatformConsoleSummary");
+  assert.ok(consoleSummarySurface);
+  assert.equal(consoleSummarySurface.props.summaryPageId, "overview");
   const profileSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformProfileComparison");
   assert.ok(profileSurface);
   assert.equal(profileSurface.props.columns, "Profile|Status|Plugins|Capabilities");

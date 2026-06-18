@@ -96,8 +96,27 @@ function humanizeKey(key) {
     .replace(/^./, char => char.toUpperCase());
 }
 
-function countByKind(model, kind) {
-  return (model?.nodes ?? []).filter(node => node.kind === kind).length;
+function summaryMetricValue(model, path, mode = "count") {
+  const value = resolveSchemaPath(model, path);
+  const [modeName, rawArg = ""] = String(mode || "count").split(/:(.+)/, 2);
+  switch (modeName) {
+    case "count":
+      if (Array.isArray(value)) return value.length;
+      if (value && typeof value === "object") return Object.keys(value).length;
+      if (typeof value === "number") return value;
+      return value ? 1 : 0;
+    case "countKind":
+      if (!Array.isArray(value)) return 0;
+      return value.filter(item => String(item?.kind || "") === rawArg).length;
+    case "countWhere": {
+      if (!Array.isArray(value)) return 0;
+      const [field, ...expectedParts] = rawArg.split("=");
+      const expected = expectedParts.join("=");
+      return value.filter(item => String(resolveFieldPath(item, field) ?? "") === expected).length;
+    }
+    default:
+      return value ?? "";
+  }
 }
 
 function paginateRows(rows, ctx, defaultLimit = DEFAULT_PAGE_SIZE) {
@@ -378,6 +397,19 @@ function renderSummaryCards(cards = []) {
       `).join("")}
     </section>
   `;
+}
+
+function renderSummaryCardsFromSurface(surface, model) {
+  const entries = parseSurfaceSchemaEntries(surface?.props?.summaryCards);
+  if (!entries.length) return "";
+  return renderSummaryCards(entries.map(entry => ({
+    label: entry.label,
+    value: summaryMetricValue(model, entry.path, entry.mode)
+  })));
+}
+
+function pageSurfaceById(consoleLayout, pageId) {
+  return (consoleLayout?.children ?? []).find(surface => surface.pageId === pageId) || null;
 }
 
 function renderNav(ctx, pageViews) {
@@ -1472,57 +1504,6 @@ function renderModelDetail(surface, node, model, ctx) {
   `;
 }
 
-function summaryCardsForPage(pageId, model) {
-  switch (pageId) {
-    case "workflow":
-      return renderSummaryCards([
-        { label: "Branches", value: (model.branches ?? []).length },
-        { label: "Change Sets", value: (model.changeSets ?? []).length },
-        { label: "Open Proposals", value: (model.proposals ?? []).filter(proposal => proposal.status === "open").length },
-        { label: "Candidate Snapshots", value: (model.candidateSnapshots ?? []).length }
-      ]);
-    case "verification":
-      return renderSummaryCards([
-        { label: "Test Gates", value: (model.testGates ?? []).length },
-        { label: "Test Runs", value: (model.testRuns ?? []).length },
-        { label: "Runtime Revisions", value: (model.runtimeRevisions ?? []).length },
-        { label: "Snapshot Builds", value: (model.snapshotBuilds ?? []).length }
-      ]);
-    case "knowledge":
-      return renderSummaryCards([
-        { label: "Governed Docs", value: (model.docs ?? []).length },
-        { label: "Roadmap Tasks", value: (model.roadmapTasks ?? []).length },
-        { label: "Epics", value: (model.epics ?? []).length },
-        { label: "Features", value: (model.features ?? []).length }
-      ]);
-    case "signals":
-      return renderSummaryCards([
-        { label: "Gaps", value: (model.gaps ?? []).length },
-        { label: "Telemetry Metrics", value: (model.nodes ?? []).filter(node => node.kind === "telemetryMetric").length },
-        { label: "Defect Clusters", value: (model.nodes ?? []).filter(node => node.kind === "defectCluster").length },
-        { label: "Boundaries", value: (model.nodes ?? []).filter(node => node.kind === "boundary").length }
-      ]);
-    case "model":
-      return renderSummaryCards([
-        { label: "Platform Objects", value: (model.nodes ?? []).length },
-        { label: "Relationships", value: (model.edges ?? []).length },
-        { label: "Profiles", value: (model.profiles ?? []).length },
-        { label: "Coverage Edges", value: (model.coverageEdges ?? []).length }
-      ]);
-    default:
-      return renderSummaryCards([
-        { label: "Plugins", value: countByKind(model, "plugin") },
-        { label: "Bundles", value: countByKind(model, "bundle") },
-        { label: "Handlers", value: countByKind(model, "handler") },
-        { label: "Routes", value: countByKind(model, "route") },
-        { label: "Docs", value: (model.docs ?? []).length },
-        { label: "Change Sets", value: (model.changeSets ?? []).length },
-        { label: "Test Gates", value: (model.testGates ?? []).length },
-        { label: "Gaps", value: (model.gaps ?? []).length }
-      ]);
-  }
-}
-
 function renderPlatformMapSection(surface, model, ctx) {
   const topNodes = (model.nodes ?? []).slice(0, surfaceRowLimit(surface, 12));
   const rows = topNodes.map(node => ({
@@ -2105,8 +2086,10 @@ function renderAuthoringClientScript() {
 
 function renderSurfaceSection(surface, model, ctx, consoleLayout) {
   switch (surface?.name) {
-    case "PlatformConsoleSummary":
-      return summaryCardsForPage("overview", model);
+    case "PlatformConsoleSummary": {
+      const sourcePageId = surfacePropText(surface, "summaryPageId", "overview");
+      return renderSummaryCardsFromSurface(pageSurfaceById(consoleLayout, sourcePageId), model);
+    }
     case "PlatformAuthoredSurfaceTree":
       return renderSurfaceTree(surface, consoleLayout, ctx);
     case "PlatformLifecycleBoard":
@@ -2201,10 +2184,9 @@ function pageNeedsClientScript(pageSurface) {
 }
 
 function renderPageFromSurface(pageSurface, model, ctx, consoleLayout) {
-  const pageId = pageSurface?.pageId || ctx.view || "overview";
   const sections = (pageSurface?.childSurfaces ?? []).map(surface => renderSurfaceSection(surface, model, ctx, consoleLayout)).join("");
   return `
-    ${summaryCardsForPage(pageId, model)}
+    ${renderSummaryCardsFromSurface(pageSurface, model)}
     ${sections}
     ${pageNeedsClientScript(pageSurface) ? renderAuthoringClientScript() : ""}
   `;

@@ -80,6 +80,7 @@ view PlatformOverviewPage {
   class platform-overview
   prop pageId = "overview"
   prop modelView = "overview"
+  prop summaryCards = "Plugins=nodes@countKind:plugin|Bundles=nodes@countKind:bundle|Handlers=nodes@countKind:handler|Routes=nodes@countKind:route|Docs=docs@count|Change Sets=changeSets@count|Test Gates=testGates@count|Gaps=gaps@count"
   prop title = "Overview"
   prop summary = "Counts, authored surface ownership, lifecycle, and quick platform links."
   children {
@@ -96,6 +97,7 @@ view PlatformWorkflowPage {
   class platform-workflow
   prop pageId = "workflow"
   prop modelView = "workflow"
+  prop summaryCards = "Branches=branches@count|Change Sets=changeSets@count|Open Proposals=proposals@countWhere:status=open|Candidate Snapshots=candidateSnapshots@count"
   prop title = "Workflow"
   prop summary = "Branches, change sets, proposals, and authoring commands."
   children {
@@ -118,6 +120,7 @@ view PlatformVerificationPage {
   class platform-verification
   prop pageId = "verification"
   prop modelView = "verification"
+  prop summaryCards = "Test Gates=testGates@count|Test Runs=testRuns@count|Runtime Revisions=runtimeRevisions@count|Snapshot Builds=snapshotBuilds@count"
   prop title = "Verification"
   prop summary = "Test gates, test runs, candidate snapshots, and runtime revisions."
   children {
@@ -136,6 +139,7 @@ view PlatformKnowledgePage {
   class platform-knowledge
   prop pageId = "knowledge"
   prop modelView = "knowledge"
+  prop summaryCards = "Governed Docs=docs@count|Roadmap Tasks=roadmapTasks@count|Epics=epics@count|Features=features@count"
   prop title = "Knowledge"
   prop summary = "Governed docs, roadmap tasks, epics, and features."
   children {
@@ -149,6 +153,7 @@ view PlatformSignalsPage {
   class platform-signals
   prop pageId = "signals"
   prop modelView = "signals"
+  prop summaryCards = "Gaps=gaps@count|Telemetry Metrics=nodes@countKind:telemetryMetric|Defect Clusters=nodes@countKind:defectCluster|Boundaries=nodes@countKind:boundary"
   prop title = "Signals"
   prop summary = "Gaps, telemetry, defect clusters, and boundary actors."
   children {
@@ -163,6 +168,7 @@ view PlatformModelPage {
   class platform-model
   prop pageId = "model"
   prop modelView = "model"
+  prop summaryCards = "Platform Objects=nodes@count|Relationships=edges@count|Profiles=profiles@count|Coverage Edges=coverageEdges@count"
   prop title = "Model"
   prop summary = "Platform objects, relationships, runtime profiles, and dependency evidence."
   children {
@@ -177,6 +183,7 @@ view PlatformConsoleSummary {
   kind region
   class platform-summary
   prop title = "Platform Summary"
+  prop summaryPageId = "overview"
   prop summary = "Snapshot counts for the current platform model."
   projections {
     PlatformModelRead

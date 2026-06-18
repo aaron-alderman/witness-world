@@ -27,6 +27,10 @@ const FALLBACK_LAYOUT = Object.freeze({
       surfaceKind: "page",
       className: "platform-overview",
       pageId: "overview",
+      props: Object.freeze({
+        modelView: "overview",
+        summaryCards: "Plugins=nodes@countKind:plugin|Bundles=nodes@countKind:bundle|Handlers=nodes@countKind:handler|Routes=nodes@countKind:route|Docs=docs@count|Change Sets=changeSets@count|Test Gates=testGates@count|Gaps=gaps@count"
+      }),
       title: "Overview",
       summary: "Counts, authored surface ownership, lifecycle, and quick platform links.",
       children: ["PlatformConsoleSummary", "PlatformAuthoredSurfaceTree", "PlatformLifecycleBoard", "PlatformMap", "PlatformProfileComparison"]
@@ -35,6 +39,10 @@ const FALLBACK_LAYOUT = Object.freeze({
       surfaceKind: "page",
       className: "platform-workflow",
       pageId: "workflow",
+      props: Object.freeze({
+        modelView: "workflow",
+        summaryCards: "Branches=branches@count|Change Sets=changeSets@count|Open Proposals=proposals@countWhere:status=open|Candidate Snapshots=candidateSnapshots@count"
+      }),
       title: "Workflow",
       summary: "Branches, change sets, proposals, and authoring commands.",
       children: [
@@ -55,6 +63,10 @@ const FALLBACK_LAYOUT = Object.freeze({
       surfaceKind: "page",
       className: "platform-verification",
       pageId: "verification",
+      props: Object.freeze({
+        modelView: "verification",
+        summaryCards: "Test Gates=testGates@count|Test Runs=testRuns@count|Runtime Revisions=runtimeRevisions@count|Snapshot Builds=snapshotBuilds@count"
+      }),
       title: "Verification",
       summary: "Test gates, test runs, candidate snapshots, and runtime revisions.",
       children: [
@@ -71,6 +83,10 @@ const FALLBACK_LAYOUT = Object.freeze({
       surfaceKind: "page",
       className: "platform-knowledge",
       pageId: "knowledge",
+      props: Object.freeze({
+        modelView: "knowledge",
+        summaryCards: "Governed Docs=docs@count|Roadmap Tasks=roadmapTasks@count|Epics=epics@count|Features=features@count"
+      }),
       title: "Knowledge",
       summary: "Governed docs, roadmap tasks, epics, and features.",
       children: ["PlatformKnowledgeList", "PlatformKnowledgeDetail"]
@@ -79,6 +95,10 @@ const FALLBACK_LAYOUT = Object.freeze({
       surfaceKind: "page",
       className: "platform-signals",
       pageId: "signals",
+      props: Object.freeze({
+        modelView: "signals",
+        summaryCards: "Gaps=gaps@count|Telemetry Metrics=nodes@countKind:telemetryMetric|Defect Clusters=nodes@countKind:defectCluster|Boundaries=nodes@countKind:boundary"
+      }),
       title: "Signals",
       summary: "Gaps, telemetry, defect clusters, and boundary actors.",
       children: ["PlatformGapList", "PlatformSignalList", "PlatformSignalDetail"]
@@ -87,6 +107,10 @@ const FALLBACK_LAYOUT = Object.freeze({
       surfaceKind: "page",
       className: "platform-model",
       pageId: "model",
+      props: Object.freeze({
+        modelView: "model",
+        summaryCards: "Platform Objects=nodes@count|Relationships=edges@count|Profiles=profiles@count|Coverage Edges=coverageEdges@count"
+      }),
       title: "Model",
       summary: "Platform objects, relationships, runtime profiles, and dependency evidence.",
       children: ["PlatformProfileComparison", "PlatformModelList", "PlatformModelDetail", "PlatformCoverageMatrix"]
