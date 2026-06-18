@@ -909,9 +909,22 @@ function addTestGateTelemetryEdges(nodes, edges, testGates = []) {
   }
 }
 
-function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestResultsByGate = Object.create(null), defectClusters = []) {
+function buildTestGateRows(
+  nodes,
+  edges,
+  branches = [],
+  changeSets = [],
+  latestResultsByGate = Object.create(null),
+  defectClusters = [],
+  bundleIdsByPlugin = Object.create(null)
+) {
   function pushTarget(targets, id) {
     if (id && nodes.has(id)) targets.add(id);
+  }
+  function addOwnedBundleTargets(targets, pluginId) {
+    for (const bundleId of bundleIdsByPlugin[String(pluginId || "")] ?? []) {
+      pushTarget(targets, bundleId);
+    }
   }
   function addPlatformRouteTargets(targets) {
     for (const node of nodes.values()) {
@@ -942,6 +955,7 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
       }
       if (changedPath === "plugins/platform/runtime.js" || changedPath === "plugins/platform/handlers.js") {
         pushTarget(targets, "plugin.platform");
+        addOwnedBundleTargets(targets, "plugin.platform");
         pushTarget(targets, "surface:platform");
         pushTarget(targets, "capability:platform.self");
         addPlatformRouteTargets(targets);
@@ -953,12 +967,14 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
         || changedPath === "plugins/platform/platform-console.wcss"
         || changedPath === "plugins/platform/platform-style.js"
       ) {
+        addOwnedBundleTargets(targets, "plugin.platform");
         pushTarget(targets, "surface:platform");
         pushTarget(targets, "route:GET /platform");
         pushTarget(targets, "handler:page.platform");
       }
       if (changedPath.startsWith("plugins/mcp/")) {
         pushTarget(targets, "plugin.mcp");
+        addOwnedBundleTargets(targets, "plugin.mcp");
       }
     }
     return targets;
@@ -1265,6 +1281,8 @@ export async function buildPlatformModel({
   const profilesSeed = await readJson("store/seeds/runtime-profiles.json", { profiles: {} });
   const pluginPackages = catalog.packages ?? [];
   const bundleRows = catalog.bundles ?? [];
+  const bundleIdsByPlugin = Object.create(null);
+  for (const row of bundleRows) pushByKey(bundleIdsByPlugin, row.plugin, row.id);
   const activePlugins = new Set(diagnostics?.plugins?.activePluginIds ?? appContext?.pluginCatalog?.summary?.activePluginIds ?? []);
   const effectivePlugins = new Set(diagnostics?.plugins?.effectivePluginIds ?? []);
   const serverRunners = projectRows(project, moduleProjectors.serverRunners);
@@ -1834,6 +1852,10 @@ export async function buildPlatformModel({
       if (relative.includes(`plugins/${plugin.directory}/`) || base.includes(plugin.directory)) {
         addEdge(edges, id, "verifies", plugin.id, "tests");
         addEdge(edges, plugin.id, "verifiedBy", id, "tests");
+        for (const bundleId of bundleIdsByPlugin[plugin.id] ?? []) {
+          addEdge(edges, id, "verifies", bundleId, "tests");
+          if (nodes.has(bundleId)) addEdge(edges, bundleId, "verifiedBy", id, "tests");
+        }
       }
     }
     for (const target of hints.protectedObjects) {
@@ -1850,7 +1872,15 @@ export async function buildPlatformModel({
 
   const defectClusters = buildDefectClusterRows(branches);
   addDefectClusterNodes(nodes, edges, defectClusters);
-  const testGateProjection = buildTestGateRows(nodes, edges, branches, changeSets, latestTestResultsProjection.byGate ?? Object.create(null), defectClusters);
+  const testGateProjection = buildTestGateRows(
+    nodes,
+    edges,
+    branches,
+    changeSets,
+    latestTestResultsProjection.byGate ?? Object.create(null),
+    defectClusters,
+    bundleIdsByPlugin
+  );
   addTestGateTelemetryEdges(nodes, edges, testGateProjection.rows);
   addTestExecutionNodes(nodes, edges, testGateProjection.rows, testRuns, testResults, testArtifacts);
   const gaps = buildGaps(nodes, edges, { branches, changeSets, testGateProjection });

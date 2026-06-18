@@ -859,6 +859,46 @@ test("platform RVM-only edits select platform-facing gates without runtime-core 
   assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-rvm"].includes("gate:test/runtime-server.test.js"), false);
 });
 
+test("platform authored source edits infer the owning platform bundle as an affected runtime object", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [{ id: "bundle-platform", displayName: "Platform Self Model" }],
+      providedCapabilities: [],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [{ id: "branch.platform.bundle", title: "Platform Bundle", status: "open" }];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [{ id: "changeSet:platform-bundle", branchId: "branch.platform.bundle", status: "draft" }];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [
+          { id: "changeSetEdit:platform-bundle:surface", changeSetId: "changeSet:platform-bundle", path: "plugins/platform/platform-console.rvm" }
+        ];
+      }
+      return [];
+    }
+  });
+
+  const platformGate = model.testGates.find(row => row.id === "gate:plugins/platform/platform.test.js");
+  const platformGateSelection = model.affectedTestGates.find(row =>
+    row.branchId === "branch.platform.bundle"
+    && row.gateId === "gate:plugins/platform/platform.test.js"
+  );
+
+  assert.ok(platformGate);
+  assert.equal(platformGate.protectedObjects.includes("bundle-platform"), true);
+  assert.ok(platformGateSelection);
+  assert.equal(platformGateSelection.matchedTargets.includes("bundle-platform"), true);
+  assert.equal(platformGateSelection.matchedTargetLabels.includes("Platform Self Model"), true);
+  assert.equal(model.affectedTestGatesByBranch["branch.platform.bundle"].includes("gate:plugins/platform/platform.test.js"), true);
+});
+
 test("dependency graph misses are logged as meta-defect gaps when no gates cover changed sources", async () => {
   const uncoveredPath = ["src", "unmodeled", "dependency-gap.js"].join("/");
   const model = await buildPlatformModel({
