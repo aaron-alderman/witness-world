@@ -110,6 +110,7 @@ function fallbackSurface(name, overrides = {}) {
     pageId: null,
     title: titleFromViewName(name),
     summary: null,
+    props: Object.freeze({}),
     ...overrides
   });
 }
@@ -124,6 +125,9 @@ function titleFromViewName(name) {
 function readSurfaceRow(semantic, name, routeByName) {
   const projectionRefs = Object.freeze([...(semantic?.projectionRefs ?? [])].map(String));
   const capabilityRefs = Object.freeze([...(semantic?.capabilityRefs ?? [])].map(String));
+  const props = Object.freeze(Object.fromEntries(
+    Object.entries(semantic?.props ?? {}).map(([key, value]) => [String(key), value == null ? null : String(value)])
+  ));
   return Object.freeze({
     name,
     identity: semantic?.identity ? String(semantic.identity) : null,
@@ -136,6 +140,7 @@ function readSurfaceRow(semantic, name, routeByName) {
     capabilityRefs,
     children: Object.freeze([...(semantic?.children ?? [])].map(String)),
     childSurfaces: Object.freeze([]),
+    props,
     pageId: semantic?.props?.pageId ? String(semantic.props.pageId) : null,
     title: semantic?.props?.title ? String(semantic.props.title) : titleFromViewName(name),
     summary: semantic?.props?.summary ? String(semantic.props.summary) : null

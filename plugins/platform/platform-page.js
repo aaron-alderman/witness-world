@@ -281,6 +281,22 @@ function nestedSurface(surface, name, {
   };
 }
 
+function surfacePropText(surface, key, fallback = null) {
+  const value = surface?.props?.[key];
+  return typeof value === "string" && value.length ? value : fallback;
+}
+
+function surfaceColumnLabels(surface, fallback = []) {
+  const raw = surfacePropText(surface, "columns", null);
+  if (!raw) return fallback;
+  const columns = raw.split("|").map(part => part.trim()).filter(Boolean);
+  return columns.length ? columns : fallback;
+}
+
+function surfaceEmptyState(surface, fallback = "No rows.") {
+  return surfacePropText(surface, "emptyState", fallback);
+}
+
 function renderLongTailProperties(ctx, record, usedKeys = []) {
   const used = new Set(usedKeys);
   const entries = Object.entries(record ?? {})
@@ -359,6 +375,14 @@ function renderTable(headers, rows, emptyMessage = "No rows.") {
       </tbody>
     </table>
   `;
+}
+
+function renderSurfaceTable(surface, fallbackHeaders, rows, fallbackEmptyMessage = "No rows.") {
+  return renderTable(
+    surfaceColumnLabels(surface, fallbackHeaders),
+    rows,
+    surfaceEmptyState(surface, fallbackEmptyMessage)
+  );
 }
 
 function renderDataTable(title, headers, rows, emptyMessage = "No rows.") {
@@ -1287,7 +1311,7 @@ function summaryCardsForPage(pageId, model) {
 
 function renderPlatformMapSection(surface, model, ctx) {
   const topNodes = (model.nodes ?? []).slice(0, 12);
-  return renderSurfaceFrame(surface, renderTable(["Kind", "Resource", "Lifecycle", "Status", "Source"], topNodes.map(node => `
+  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Kind", "Resource", "Lifecycle", "Status", "Source"], topNodes.map(node => `
     <tr>
       <td>${esc(node.kind || "")}</td>
       <td>${renderConceptLink(ctx, node.id, node.title || node.id)}</td>
@@ -1299,7 +1323,7 @@ function renderPlatformMapSection(surface, model, ctx) {
 }
 
 function renderProfileComparisonSection(surface, model) {
-  return renderSurfaceFrame(surface, renderTable(["Profile", "Status", "Plugins", "Capabilities"], (model.profiles ?? []).slice(0, 12).map(profile => `
+  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Profile", "Status", "Plugins", "Capabilities"], (model.profiles ?? []).slice(0, 12).map(profile => `
     <tr>
       <td>${esc(profile.id || "")}</td>
       <td>${esc(profile.status || "")}</td>
@@ -1313,7 +1337,7 @@ function renderWorkflowListSection(surface, model, ctx) {
   const items = workflowItems(model);
   const page = paginateRows(items, ctx);
   return renderSurfaceFrame(surface, `
-    ${renderTable(["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
+    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
         <td>${esc(item.status || "")}</td>
@@ -1330,7 +1354,7 @@ function renderVerificationListSection(surface, model, ctx) {
   const items = verificationItems(model);
   const page = paginateRows(items, ctx);
   return renderSurfaceFrame(surface, `
-    ${renderTable(["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
+    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
         <td>${esc(item.status || "")}</td>
@@ -1347,7 +1371,7 @@ function renderKnowledgeListSection(surface, model, ctx) {
   const items = knowledgeItems(model);
   const page = paginateRows(items, ctx);
   return renderSurfaceFrame(surface, `
-    ${renderTable(["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
+    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
         <td>${esc(item.status || "")}</td>
@@ -1364,7 +1388,7 @@ function renderSignalsListSection(surface, model, ctx) {
   const items = signalItems(model);
   const page = paginateRows(items, ctx);
   return renderSurfaceFrame(surface, `
-    ${renderTable(["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
+    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
         <td>${esc(item.status || "")}</td>
@@ -1381,7 +1405,7 @@ function renderModelListSection(surface, model, ctx) {
   const items = modelItems(model);
   const page = paginateRows(items, ctx);
   return renderSurfaceFrame(surface, `
-    ${renderTable(["Kind", "Status", "Resource", "Source", "Owner"], page.items.map(item => `
+    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Source", "Owner"], page.items.map(item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
         <td>${esc(item.status || "")}</td>
@@ -1395,7 +1419,7 @@ function renderModelListSection(surface, model, ctx) {
 }
 
 function renderGapListSection(surface, model, ctx) {
-  return renderSurfaceFrame(surface, renderTable(["Severity", "Kind", "Target", "Reason"], (model.gaps ?? []).slice(0, 12).map(gap => `
+  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Severity", "Kind", "Target", "Reason"], (model.gaps ?? []).slice(0, 12).map(gap => `
     <tr>
       <td>${esc(gap.severity || "")}</td>
       <td>${esc(gap.kind || "")}</td>
@@ -1406,7 +1430,7 @@ function renderGapListSection(surface, model, ctx) {
 }
 
 function renderCoverageMatrixSection(surface, model, ctx) {
-  return renderSurfaceFrame(surface, renderTable(["Gate", "Target", "Kind"], (model.coverageEdges ?? []).slice(0, 12).map(edge => `
+  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Gate", "Target", "Kind"], (model.coverageEdges ?? []).slice(0, 12).map(edge => `
     <tr>
       <td>${renderConceptLink(ctx, edge.gateId)}</td>
       <td>${edge.targetId ? renderConceptLink(ctx, edge.targetId, edge.targetLabel || edge.targetId) : esc(edge.targetLabel || "")}</td>
@@ -1561,7 +1585,7 @@ function renderVerificationStreamsSection(surface) {
 
 function renderBranchRedGreenSection(surface, model, ctx) {
   const branchRedGreen = (model.branchTestRedGreen ?? []).slice(0, 12);
-  return renderSurfaceFrame(surface, renderTable(["Status", "Branch", "Selected", "Passed", "Failed", "Summary"], branchRedGreen.map(row => `
+  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Status", "Branch", "Selected", "Passed", "Failed", "Summary"], branchRedGreen.map(row => `
     <tr>
       <td>${esc(row.status || "")}</td>
       <td>${renderConceptLink(ctx, row.branchId)}</td>
@@ -1575,7 +1599,7 @@ function renderBranchRedGreenSection(surface, model, ctx) {
 
 function renderChangeSetRedGreenSection(surface, model, ctx) {
   const changeSetRedGreen = (model.changeSetTestRedGreen ?? []).slice(0, 12);
-  return renderSurfaceFrame(surface, renderTable(["Status", "Change Set", "Selected", "Passed", "Failed", "Summary"], changeSetRedGreen.map(row => `
+  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Status", "Change Set", "Selected", "Passed", "Failed", "Summary"], changeSetRedGreen.map(row => `
     <tr>
       <td>${esc(row.status || "")}</td>
       <td>${renderConceptLink(ctx, row.changeSetId)}</td>

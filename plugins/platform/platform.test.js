@@ -381,6 +381,10 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformWorkflowEditHistory"
   ]);
   assert.equal(workflowDetailSurface.childSurfaces.some(surface => surface.name === "PlatformWorkflowSnapshotHistory" && surface.summary === "Candidate snapshot history for the selected workflow object when available."), true);
+  const workflowListSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowList");
+  assert.ok(workflowListSurface);
+  assert.equal(workflowListSurface.props.columns, "Kind|Status|Resource|Scope|Summary");
+  assert.equal(workflowListSurface.props.emptyState, "No workflow rows.");
   assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformProposalPanel" && surface.processRoute === "/api/platform-proposals"), true);
   assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformChangeSetEditPanel"), true);
   assert.ok(verificationPage);
@@ -420,6 +424,10 @@ test("platform console layout compiles authored top-level surface metadata from 
   ]);
   assert.equal(signalDetailSurface.childSurfaces.some(surface => surface.name === "PlatformSignalRelationships" && surface.summary === "Linked graph relationships for the selected signal when available."), true);
   assert.equal(signalsPage.childSurfaces.some(surface => surface.name === "PlatformGapList" && surface.projectionRoutes.includes("/api/platform-gaps")), true);
+  const gapListSurface = signalsPage.childSurfaces.find(surface => surface.name === "PlatformGapList");
+  assert.ok(gapListSurface);
+  assert.equal(gapListSurface.props.columns, "Severity|Kind|Target|Reason");
+  assert.equal(gapListSurface.props.emptyState, "No gaps.");
   const knowledgePage = layout.children.find(surface => surface.name === "PlatformKnowledgePage");
   assert.ok(knowledgePage);
   const knowledgeDetailSurface = knowledgePage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDetail");
@@ -433,6 +441,9 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(knowledgeDetailSurface.childSurfaces.some(surface => surface.name === "PlatformKnowledgeTasks" && surface.summary === "Document or roadmap tasks for the selected knowledge object when available."), true);
   const modelPage = layout.children.find(surface => surface.name === "PlatformModelPage");
   assert.ok(modelPage);
+  const profileSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformProfileComparison");
+  assert.ok(profileSurface);
+  assert.equal(profileSurface.props.columns, "Profile|Status|Plugins|Capabilities");
   const modelDetailSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelDetail");
   assert.ok(modelDetailSurface);
   assert.deepEqual(modelDetailSurface.children, [
