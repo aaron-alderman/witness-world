@@ -60,6 +60,8 @@ view PlatformConsolePage {
   identity surface:platform
   kind page
   class platform-console
+  prop title = "Platform Console"
+  prop summary = "Self-model, lifecycle board, profile map, verification gates, and proposal lane."
   capabilities {
     platform.self
   }
@@ -77,6 +79,8 @@ view PlatformConsolePage {
 view PlatformConsoleSummary {
   kind region
   class platform-summary
+  prop title = "Platform Summary"
+  prop summary = "Snapshot counts for the current platform model."
   projections {
     PlatformModelRead
   }
@@ -85,6 +89,8 @@ view PlatformConsoleSummary {
 view PlatformLifecycleBoard {
   kind region
   class platform-board
+  prop title = "Lifecycle Board"
+  prop summary = "Lifecycle-oriented chips sourced from the platform model."
   projections {
     PlatformModelRead
   }
@@ -93,6 +99,8 @@ view PlatformLifecycleBoard {
 view PlatformMap {
   kind table
   class platform-map
+  prop title = "Platform Map"
+  prop summary = "Primary platform objects projected from the live model."
   projections {
     PlatformModelRead
   }
@@ -102,6 +110,8 @@ view PlatformProposalPanel {
   kind form
   class platform-proposal-panel
   process PlatformProposalCreate
+  prop title = "Proposal Panel"
+  prop summary = "Create guarded platform proposals through the shared mutation lane."
   projections {
     PlatformModelRead
   }
@@ -111,6 +121,8 @@ view PlatformProposalReviewList {
   kind form
   class platform-review-panel
   process PlatformProposalApprove
+  prop title = "Review Proposals"
+  prop summary = "Approve or reject open platform proposals."
   projections {
     PlatformModelRead
   }
@@ -119,6 +131,8 @@ view PlatformProposalReviewList {
 view PlatformGapList {
   kind table
   class platform-gaps
+  prop title = "Platform Gaps"
+  prop summary = "Projected platform gaps and meta-defects."
   projections {
     PlatformGapsRead
   }
@@ -127,6 +141,8 @@ view PlatformGapList {
 view PlatformProfileComparison {
   kind table
   class platform-profiles
+  prop title = "Runtime Profiles"
+  prop summary = "Profile exposure and plugin composition differences."
   projections {
     PlatformModelRead
   }

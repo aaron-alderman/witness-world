@@ -10,6 +10,7 @@ import { compileRvmToDesirePlus } from "../../src/desire/index.js";
 import { bundleId, capabilities, createHandlers, handlerCatalog, providers, routes, surfaces } from "./runtime.js";
 import { buildPlatformModel, filterPlatformModel, parseRoadmapTasks, PLATFORM_LIFECYCLES } from "./platform-model.js";
 import { renderPlatformPage } from "./platform-page.js";
+import { readPlatformConsoleLayout } from "./platform-console-layout.js";
 import { buildPlatformProposalCreateBody, platformProposalTemplates } from "./platform-proposals.js";
 import { executePlatformProposalTarget } from "./platform-proposal-targets.js";
 import { applyPlatformChangeSet, readPlatformBranch, validatePlatformChangeSet } from "./change-sets.js";
@@ -301,11 +302,38 @@ test("platform console is declared through RVM and styled through WCSS", async (
 
   assert.equal(page?.semantic.identity, "surface:platform");
   assert.equal(page?.semantic.className, "platform-console");
+  assert.equal(page?.semantic.props?.title, "Platform Console");
+  assert.equal(page?.semantic.props?.summary, "Self-model, lifecycle board, profile map, verification gates, and proposal lane.");
   assert.equal(page?.semantic.children.includes("PlatformProposalPanel"), true);
   assert.equal(createCommand?.semantic.route, "/api/platform-proposals");
   assert.match(css, /Generated from plugins\/platform\/platform-console\.wcss/);
   assert.match(css, /body\.platform-console/);
   assert.match(css, /--platform-accent: #1f6feb;/);
+});
+
+test("platform console layout compiles authored top-level surface metadata from RVM", () => {
+  const layout = readPlatformConsoleLayout();
+
+  assert.equal(layout.error, null);
+  assert.equal(layout.page.title, "Platform Console");
+  assert.equal(layout.page.identity, "surface:platform");
+  assert.deepEqual(layout.page.children, [
+    "PlatformConsoleSummary",
+    "PlatformLifecycleBoard",
+    "PlatformMap",
+    "PlatformProposalPanel",
+    "PlatformGapList",
+    "PlatformProfileComparison",
+    "PlatformProposalReviewList"
+  ]);
+  const proposalPanel = layout.children.find(surface => surface.name === "PlatformProposalPanel");
+  const gapList = layout.children.find(surface => surface.name === "PlatformGapList");
+  assert.ok(proposalPanel);
+  assert.equal(proposalPanel.title, "Proposal Panel");
+  assert.equal(proposalPanel.processRoute, "/api/platform-proposals");
+  assert.ok(gapList);
+  assert.equal(gapList.title, "Platform Gaps");
+  assert.deepEqual(gapList.projectionRoutes, ["/api/platform-gaps"]);
 });
 
 test("platform delegated test-gate projectors discover gate catalog rows", async () => withRegisteredPluginProjectors(providers, async () => {
@@ -4632,6 +4660,11 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Platform Console/);
   assert.match(html, /Generated from plugins\/platform\/platform-console\.wcss/);
   assert.match(html, /body class="platform-console"/);
+  assert.match(html, /Authored Surface Tree/);
+  assert.match(html, /Rendered from plugins\/platform\/platform-console\.rvm top-level surface declarations\./);
+  assert.match(html, /data-platform-rvm-view="PlatformConsolePage"/);
+  assert.match(html, /data-platform-rvm-view="PlatformLifecycleBoard"/);
+  assert.match(html, /data-platform-rvm-view="PlatformProposalPanel"/);
   assert.match(html, /Lifecycle Board/);
   assert.match(html, /Branch Board/);
   assert.match(html, /Platform Map/);

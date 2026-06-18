@@ -1,4 +1,5 @@
 import { renderPlatformConsoleCss } from "./platform-style.js";
+import { readPlatformConsoleLayout } from "./platform-console-layout.js";
 
 function esc(value) {
   return String(value ?? "")
@@ -50,7 +51,37 @@ function tableRows(rows, cells) {
   return rows.map(row => `<tr>${cells.map(cell => `<td>${esc(cell(row))}</td>`).join("")}</tr>`).join("");
 }
 
+function surfaceAttrs(surface) {
+  if (!surface) return "";
+  const attrs = [
+    ["data-platform-rvm-view", surface.name],
+    ["data-platform-rvm-title", surface.title],
+    ["data-platform-rvm-kind", surface.surfaceKind],
+    ["data-platform-rvm-class", surface.className],
+    ["data-platform-rvm-process", surface.processRoute],
+    ["data-platform-rvm-projections", (surface.projectionRoutes ?? []).join(", ") || (surface.projectionRefs ?? []).join(", ")]
+  ];
+  return attrs
+    .filter(([, value]) => value)
+    .map(([name, value]) => ` ${name}="${esc(value)}"`)
+    .join("");
+}
+
+function surfaceMeta(surface) {
+  if (!surface) return "";
+  const parts = [];
+  if (surface.surfaceKind) parts.push(surface.surfaceKind);
+  if (surface.className) parts.push(`class ${surface.className}`);
+  if (surface.processRoute) parts.push(`process ${surface.processRoute}`);
+  const projectionLabel = (surface.projectionRoutes ?? []).join(", ") || (surface.projectionRefs ?? []).join(", ");
+  if (projectionLabel) parts.push(`projection ${projectionLabel}`);
+  return parts.join(" · ");
+}
+
 export function renderPlatformPage(model) {
+  const consoleLayout = readPlatformConsoleLayout();
+  const consolePage = consoleLayout.page ?? { title: "Platform Console", summary: "", className: "platform-console" };
+  const consoleSurfacesByName = new Map((consoleLayout.children ?? []).map(surface => [surface.name, surface]));
   const lifecycle = model.lifecycleVocabulary ?? [];
   const topNodes = model.nodes.slice(0, 80);
   const graphNodes = model.nodes.slice(0, 120);
@@ -152,21 +183,23 @@ export function renderPlatformPage(model) {
     branchesByEpic: initialEpic ? { [initialEpic.id]: [...(branchesByEpic[initialEpic.id] ?? [])] } : {}
   };
   const initialState = JSON.stringify(model).replaceAll("<", "\\u003c");
+  const summarySurface = consoleSurfacesByName.get("PlatformConsoleSummary") ?? null;
+  const lifecycleSurface = consoleSurfacesByName.get("PlatformLifecycleBoard") ?? null;
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Platform Console</title>
+  <title>${esc(consolePage.title || "Platform Console")}</title>
   <style>${renderPlatformConsoleCss()}</style>
 </head>
-<body class="platform-console">
+<body class="${esc(consolePage.className || "platform-console")}">
   <header>
-    <h1>Platform Console</h1>
-    <div class="muted">Self-model, lifecycle board, profile map, verification gates, and proposal lane.</div>
+    <h1>${esc(consolePage.title || "Platform Console")}</h1>
+    <div class="muted">${esc(consolePage.summary || "Self-model, lifecycle board, profile map, verification gates, and proposal lane.")}</div>
   </header>
   <main>
-    <section class="summary" aria-label="Platform summary">
+    <section class="summary" aria-label="Platform summary"${surfaceAttrs(summarySurface)}>
       <div class="card"><div class="metric">${countByKind(model, "plugin")}</div><div class="muted">Plugins</div></div>
       <div class="card"><div class="metric">${countByKind(model, "bundle")}</div><div class="muted">Bundles</div></div>
       <div class="card"><div class="metric">${countByKind(model, "route")}</div><div class="muted">Routes</div></div>
@@ -176,8 +209,24 @@ export function renderPlatformPage(model) {
       <div class="card"><div class="metric">${model.gaps.length}</div><div class="muted">Gaps</div></div>
     </section>
 
-    <section>
-      <h2>Lifecycle Board</h2>
+    <section${surfaceAttrs(consolePage)}>
+      <h2>Authored Surface Tree</h2>
+      <div class="muted">Rendered from ${esc(consoleLayout.sourceFile)} top-level surface declarations.</div>
+      ${consoleLayout.error ? `<div class="muted">Fallback metadata in use: ${esc(consoleLayout.error)}</div>` : ""}
+      <div class="summary">
+        ${(consoleLayout.children ?? []).map(surface => `
+          <div class="card"${surfaceAttrs(surface)}>
+            <div><strong>${esc(surface.title || surface.name)}</strong></div>
+            <div class="muted">${esc(surface.name)}</div>
+            <div class="muted">${esc(surfaceMeta(surface) || "No authored metadata")}</div>
+            ${surface.summary ? `<div class="muted">${esc(surface.summary)}</div>` : ""}
+          </div>
+        `).join("")}
+      </div>
+    </section>
+
+    <section${surfaceAttrs(lifecycleSurface)}>
+      <h2>${esc(lifecycleSurface?.title || "Lifecycle Board")}</h2>
       <div class="board">${lifecycle.map(item => lifecycleColumn(model, item)).join("")}</div>
     </section>
 
