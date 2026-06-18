@@ -71,6 +71,9 @@ function rootSegment(path) {
 
 export function summarizePlatformPathSystem(path) {
   const value = String(path || "");
+  if (value.startsWith("test/") || value.endsWith(".test.js")) {
+    return { id: "verification.tests", label: "Verification tests", kind: "test" };
+  }
   if (
     value === "plugins/platform/platform-page.js"
     || value === "plugins/platform/platform-console.rvm"
@@ -97,9 +100,6 @@ export function summarizePlatformPathSystem(path) {
   }
   if (value === "src/app-snapshot-manager.js" || value.startsWith("src/runtime-") || value === "src/runtime-server.js") {
     return { id: "runtime.core", label: "Runtime core", kind: "runtime" };
-  }
-  if (value.startsWith("test/") || value.endsWith(".test.js")) {
-    return { id: "verification.tests", label: "Verification tests", kind: "test" };
   }
   if (value.startsWith("docs/")) {
     return { id: "docs", label: "Governed docs", kind: "doc" };

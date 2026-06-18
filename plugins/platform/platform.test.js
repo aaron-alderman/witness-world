@@ -1076,7 +1076,52 @@ test("platform model carries branch docs freshness and impact summaries", async 
   const branch = filterPlatformModel(model, "branches").branches.find(row => row.id === "branch.summary");
   assert.equal(branch?.docsFreshness?.status, "fresh");
   assert.equal(branch?.affectedSystemSummaries?.some(row => row.system === "surface.platform"), true);
+  assert.equal(branch?.affectedSystemSummaries?.some(row => row.system === "docs"), true);
   assert.equal(branch?.telemetryImpactSummaries?.some(row => row.id === "platform.self"), true);
+});
+
+test("platform test file edits are surfaced as verification test systems and select the changed gate", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [{ id: "branch.tests.changed", title: "Changed Test", status: "open", changeSetIds: ["changeSet:tests-changed"] }];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [{ id: "changeSet:tests-changed", branchId: "branch.tests.changed", status: "draft" }];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [
+          { id: "changeSetEdit:tests-changed:platform-test", changeSetId: "changeSet:tests-changed", path: "plugins/platform/platform.test.js" }
+        ];
+      }
+      return [];
+    }
+  });
+
+  const branch = filterPlatformModel(model, "branches").branches.find(row => row.id === "branch.tests.changed");
+  const changedGateSelection = model.affectedTestGates.find(row =>
+    row.branchId === "branch.tests.changed"
+    && row.gateId === "gate:plugins/platform/platform.test.js"
+  );
+
+  assert.ok(branch);
+  assert.equal(branch.affectedSystemSummaries.some(row => row.system === "verification.tests"), true);
+  assert.equal(branch.telemetryImpactSummaries.some(row => row.id === "verification.gates"), true);
+  assert.ok(changedGateSelection);
+  assert.equal(changedGateSelection.matchedSourceDependencies.includes("plugins/platform/platform.test.js"), true);
+  assert.equal(changedGateSelection.selectionReasons.some(reason =>
+    reason.kind === "direct-file-dependency"
+    && reason.paths.includes("plugins/platform/platform.test.js")
+  ), true);
+  assert.equal(model.affectedTestGatesByBranch["branch.tests.changed"].includes("gate:plugins/platform/platform.test.js"), true);
 });
 
 test("platform docs view surfaces stale and fresh governed docs from branch changes", async () => {

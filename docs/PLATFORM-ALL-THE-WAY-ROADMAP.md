@@ -724,8 +724,8 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [~] plugins
   - [~] bundles
   - [~] surfaces
-  - [ ] docs
-  - [ ] tests
+  - [~] docs
+  - [~] tests
 - [ ] Select smallest meaningful gate set.
 - [~] Explain selection:
   - [X] direct file dependency
@@ -752,6 +752,8 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [L] Current prior defect cluster dependency is modeled through stable `defectCluster:*` objects built from earlier branches that share the same explicit branch `defect` tag. It proves recurring-history-sensitive gate selection for tagged regressions, but it is not yet backed by first-class defect observations, proposals, or automatic clustering heuristics.
 - [L] Current successful gate-result reuse is witness-backed and only reuses prior `passed` results whose cache identity matches on source hash set, candidate snapshot hash, environment identity, test runner version, and dependency graph version. It intentionally does not yet reuse failed runs, expose eviction policy, or persist cache state outside witness history.
 - [L] Bundle-aware affected-object inference is now partial: plugin-owned test gates verify their bundle targets, and changed platform/MCP sources can match those bundle objects during gate selection. This is still heuristic, not yet a general bundle dependency graph for arbitrary runtime files.
+- [L] Doc-aware affected-object inference is now partial: changed governed docs surface as the `docs` affected system, doc freshness flows into branch/change-set summaries, and affected gates can match concrete `doc:*` targets. This is not yet a full doc dependency graph with proposal/test/section-level impact propagation.
+- [L] Test-aware affected-object inference is now partial: changed test files surface as the `verification.tests` affected system, and changed test sources can select their own modeled gate through direct file dependency. Plugin-scoped `.test.js` files are now classified as tests before generic plugin ownership, but there is still no richer per-suite/per-case dependency analysis.
 - [L] Current route-aware gate selection is still heuristic rather than a general dependency graph. It now infers broad platform plugin/capability/profile targets from `plugins/platform/runtime.js`, `plugins/platform/handlers.js`, `plugins/mcp/*`, and `store/seeds/runtime-profiles.json`, while authored platform page sources such as `plugins/platform/platform-page.js`, `plugins/platform/platform-console.rvm`, `plugins/platform/platform-console.wcss`, and `plugins/platform/platform-style.js` are classified as a narrower `surface.platform` system and infer the `/platform` surface, route, and page-handler targets instead of the whole plugin.
 - [L] The current WCSS-only backend exclusion proof is anchored on runtime-core gate selection: a `plugins/platform/platform-console.wcss` change continues to select platform-facing gates while leaving `gate:test/runtime-server.test.js` unselected.
 - [L] Current RVM-only proof is still limited to backend exclusion. After the runtime-profile exposure suite was decoupled from direct `platform-console.rvm` fixture reads, a `plugins/platform/platform-console.rvm` change still selects `gate:test/runtime-profile.test.js` through the current `/platform` route-hint heuristic, while `gate:test/runtime-server.test.js` remains unselected.
