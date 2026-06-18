@@ -3197,7 +3197,82 @@ export async function buildPlatformModel({
 }
 
 export function filterPlatformModel(model, view, id = null) {
-  if (!view || view === "model") return model;
+  if (view === "overview") {
+    return {
+      lifecycleVocabulary: model.lifecycleVocabulary,
+      nodes: model.nodes,
+      docs: model.docs,
+      gaps: model.gaps,
+      profiles: model.profiles,
+      changeSets: model.changeSets,
+      testGates: model.testGates,
+      summaries: model.summaries
+    };
+  }
+  if (view === "workflow") {
+    return {
+      branches: model.branches,
+      branchBoard: model.branchBoard,
+      branchLifecycleVocabulary: model.branchLifecycleVocabulary,
+      changeSets: model.changeSets,
+      changeSetEdits: model.changeSetEdits,
+      candidateSnapshots: model.candidateSnapshots,
+      proposals: model.proposals,
+      proposalActions: model.proposalActions,
+      summaries: model.summaries
+    };
+  }
+  if (view === "verification") {
+    return {
+      testGates: model.testGates,
+      testRuns: model.testRuns,
+      runtimeRevisions: model.runtimeRevisions,
+      activeRuntimeRevision: model.activeRuntimeRevision,
+      candidateSnapshots: model.candidateSnapshots,
+      snapshotBuilds: model.snapshotBuilds,
+      snapshotBuildErrors: model.snapshotBuildErrors,
+      snapshotDiagnostics: model.snapshotDiagnostics,
+      branchTestRedGreen: model.branchTestRedGreen,
+      changeSetTestRedGreen: model.changeSetTestRedGreen,
+      latestTestResultsByGate: model.latestTestResultsByGate,
+      summaries: model.summaries
+    };
+  }
+  if (view === "knowledge") {
+    return {
+      docs: model.docs,
+      docSections: model.docSections,
+      docTasks: model.docTasks,
+      roadmapTasks: model.roadmapTasks,
+      epics: model.epics,
+      features: model.features,
+      summaries: model.summaries
+    };
+  }
+  if (view === "signals") {
+    const signalNodes = (model.nodes ?? []).filter(node =>
+      node.kind === "telemetryMetric"
+      || node.kind === "defectCluster"
+      || node.kind === "boundary"
+    );
+    const signalIds = new Set(signalNodes.map(node => node.id));
+    return {
+      gaps: model.gaps,
+      nodes: signalNodes,
+      edges: (model.edges ?? []).filter(edge => signalIds.has(edge.from) || signalIds.has(edge.to)),
+      summaries: model.summaries
+    };
+  }
+  if (!view) return model;
+  if (view === "model") {
+    return {
+      nodes: model.nodes,
+      edges: model.edges,
+      profiles: model.profiles,
+      coverageEdges: model.coverageEdges,
+      summaries: model.summaries
+    };
+  }
   if (view === "gaps") return { gaps: model.gaps, summaries: model.summaries };
   if (view === "roadmap") {
     const roadmapDocPath = "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md";

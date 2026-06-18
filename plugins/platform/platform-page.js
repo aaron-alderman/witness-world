@@ -1,5 +1,6 @@
 import { renderPlatformConsoleCss } from "./platform-style.js";
 import { readPlatformConsoleLayout } from "./platform-console-layout.js";
+import { filterPlatformModel } from "./platform-model.js";
 
 const FALLBACK_PLATFORM_PAGE_VIEWS = Object.freeze([
   Object.freeze({ id: "overview", title: "Overview", subtitle: "Counts, authored surfaces, lifecycle, and quick links." }),
@@ -66,6 +67,10 @@ function authoredPageViews(consoleLayout) {
 
 function pageDef(viewId, pageViews) {
   return pageViews.find(view => view.id === viewId) || pageViews[0];
+}
+
+function surfaceModelView(surface) {
+  return optionalText(surface?.props?.modelView) || optionalText(surface?.pageId) || null;
 }
 
 function platformHref(ctx, view, params = {}) {
@@ -2289,7 +2294,8 @@ export function renderPlatformPage(model, { requestUrl = null } = {}) {
     view: currentView.id
   };
   const consolePage = consoleLayout.page ?? { title: "Platform Console", summary: "" };
-  const body = renderPageFromSurface(currentView.surface ?? null, model, ctx, consoleLayout);
+  const pageModel = filterPlatformModel(model, surfaceModelView(currentView.surface), ctx.id);
+  const body = renderPageFromSurface(currentView.surface ?? null, pageModel, ctx, consoleLayout);
   return `<!doctype html>
 <html lang="en">
 <head>

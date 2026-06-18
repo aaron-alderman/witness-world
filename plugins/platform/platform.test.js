@@ -350,6 +350,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   const signalsPage = layout.children.find(surface => surface.name === "PlatformSignalsPage");
   assert.ok(overviewPage);
   assert.equal(overviewPage.pageId, "overview");
+  assert.equal(overviewPage.props.modelView, "overview");
   assert.deepEqual(overviewPage.children, [
     "PlatformConsoleSummary",
     "PlatformAuthoredSurfaceTree",
@@ -359,6 +360,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   ]);
   assert.ok(workflowPage);
   assert.equal(workflowPage.pageId, "workflow");
+  assert.equal(workflowPage.props.modelView, "workflow");
   assert.deepEqual(workflowPage.children, [
     "PlatformBranchBoard",
     "PlatformWorkflowList",
@@ -420,6 +422,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformChangeSetEditPanel"), true);
   assert.ok(verificationPage);
   assert.equal(verificationPage.pageId, "verification");
+  assert.equal(verificationPage.props.modelView, "verification");
   assert.deepEqual(verificationPage.children, [
     "PlatformVerificationList",
     "PlatformVerificationDetail",
@@ -483,6 +486,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(changeSetRedGreenSurface.props.rowFields, "Status=status|Change Set=changeSetLink@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary");
   assert.ok(signalsPage);
   assert.equal(signalsPage.pageId, "signals");
+  assert.equal(signalsPage.props.modelView, "signals");
   assert.deepEqual(signalsPage.children, [
     "PlatformGapList",
     "PlatformSignalList",
@@ -508,6 +512,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(gapListSurface.props.rowLimit, "12");
   const knowledgePage = layout.children.find(surface => surface.name === "PlatformKnowledgePage");
   assert.ok(knowledgePage);
+  assert.equal(knowledgePage.props.modelView, "knowledge");
   const knowledgeDetailSurface = knowledgePage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDetail");
   assert.ok(knowledgeDetailSurface);
   assert.deepEqual(knowledgeDetailSurface.children, [
@@ -558,6 +563,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(signalRelatedSurface.props.gapTextCards, "Missing In Generated=missingInGenerated|Extra In Generated=extraInGenerated");
   const modelPage = layout.children.find(surface => surface.name === "PlatformModelPage");
   assert.ok(modelPage);
+  assert.equal(modelPage.props.modelView, "model");
   const profileSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformProfileComparison");
   assert.ok(profileSurface);
   assert.equal(profileSurface.props.columns, "Profile|Status|Plugins|Capabilities");
@@ -589,6 +595,68 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(modelPrimarySurface.props.longTailValueKinds, "string|number|boolean|scalarList");
   assert.equal(modelPrimarySurface.props.objectCardTitle, "Platform Object Detail");
   assert.match(modelPrimarySurface.props.objectFields, /Object=id@concept/);
+});
+
+test("platform page views filter the model to page-scoped slices", () => {
+  const model = {
+    lifecycleVocabulary: ["author", "verify"],
+    nodes: [
+      { id: "plugin.platform", kind: "plugin" },
+      { id: "telemetryMetric:platform.self", kind: "telemetryMetric" },
+      { id: "boundary:testRunner.platform", kind: "boundary" },
+      { id: "defectCluster:platform", kind: "defectCluster" }
+    ],
+    edges: [
+      { from: "telemetryMetric:platform.self", rel: "observes", to: "plugin.platform" },
+      { from: "boundary:testRunner.platform", rel: "guards", to: "plugin.platform" }
+    ],
+    docs: [{ path: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" }],
+    gaps: [{ id: "gap.platform", kind: "missing-coverage" }],
+    profiles: [{ id: "full", status: "active" }],
+    changeSets: [{ id: "changeSet:platform", status: "draft" }],
+    branches: [{ id: "branch:platform", status: "open" }],
+    branchBoard: [{ lane: "author", branchIds: ["branch:platform"] }],
+    branchLifecycleVocabulary: ["author"],
+    changeSetEdits: [{ id: "changeSetEdit:platform:rvm", changeSetId: "changeSet:platform" }],
+    candidateSnapshots: [{ id: "candidateSnapshot:platform", branchId: "branch:platform", changeSetId: "changeSet:platform" }],
+    proposals: [{ id: "proposal:platform", status: "open" }],
+    proposalActions: [{ action: "proposal.create" }],
+    testGates: [{ id: "gate:platform", title: "Platform Gate" }],
+    testRuns: [{ id: "testRun:platform", gateId: "gate:platform", status: "passed" }],
+    runtimeRevisions: [{ id: "runtimeRevision:platform", revision: 7, status: "active" }],
+    activeRuntimeRevision: { id: "runtimeRevision:platform", revision: 7, status: "active" },
+    snapshotBuilds: [{ id: "snapshotBuild:platform", candidateSnapshotId: "candidateSnapshot:platform" }],
+    snapshotBuildErrors: [{ id: "snapshotBuildError:platform", candidateSnapshotId: "candidateSnapshot:platform" }],
+    snapshotDiagnostics: { appRevision: 7 },
+    branchTestRedGreen: [{ id: "branchRedGreen:platform", branchId: "branch:platform", status: "green" }],
+    changeSetTestRedGreen: [{ id: "changeSetRedGreen:platform", changeSetId: "changeSet:platform", status: "green" }],
+    latestTestResultsByGate: { "gate:platform": { runId: "testRun:platform", status: "passed" } },
+    docSections: [{ id: "docSection:platform", doc: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" }],
+    docTasks: [{ id: "docTask:platform", doc: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" }],
+    roadmapTasks: [{ id: "roadmapTask:platform", doc: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" }],
+    epics: [{ id: "epic:platform" }],
+    features: [{ id: "feature:platform" }],
+    coverageEdges: [{ id: "coverageEdge:platform", gateId: "gate:platform", targetId: "plugin.platform" }],
+    summaries: { byKind: { plugin: 1 } }
+  };
+
+  const overview = filterPlatformModel(model, "overview");
+  const workflow = filterPlatformModel(model, "workflow");
+  const verification = filterPlatformModel(model, "verification");
+  const knowledge = filterPlatformModel(model, "knowledge");
+  const signals = filterPlatformModel(model, "signals");
+  const modelPage = filterPlatformModel(model, "model");
+
+  assert.deepEqual(Object.keys(overview).sort(), ["changeSets", "docs", "gaps", "lifecycleVocabulary", "nodes", "profiles", "summaries", "testGates"]);
+  assert.deepEqual(Object.keys(workflow).sort(), ["branchBoard", "branchLifecycleVocabulary", "branches", "candidateSnapshots", "changeSetEdits", "changeSets", "proposalActions", "proposals", "summaries"]);
+  assert.deepEqual(Object.keys(verification).sort(), ["activeRuntimeRevision", "branchTestRedGreen", "candidateSnapshots", "changeSetTestRedGreen", "latestTestResultsByGate", "runtimeRevisions", "snapshotBuildErrors", "snapshotBuilds", "snapshotDiagnostics", "summaries", "testGates", "testRuns"]);
+  assert.deepEqual(Object.keys(knowledge).sort(), ["docSections", "docTasks", "docs", "epics", "features", "roadmapTasks", "summaries"]);
+  assert.deepEqual(Object.keys(modelPage).sort(), ["coverageEdges", "edges", "nodes", "profiles", "summaries"]);
+  assert.equal("nodes" in workflow, false);
+  assert.equal("docs" in verification, false);
+  assert.equal(signals.nodes.length, 3);
+  assert.equal(signals.edges.length, 2);
+  assert.equal(signals.nodes.some(node => node.id === "plugin.platform"), false);
 });
 
 test("platform delegated test-gate projectors discover gate catalog rows", async () => withRegisteredPluginProjectors(providers, async () => {

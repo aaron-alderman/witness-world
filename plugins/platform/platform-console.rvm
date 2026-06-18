@@ -79,6 +79,7 @@ view PlatformOverviewPage {
   kind page
   class platform-overview
   prop pageId = "overview"
+  prop modelView = "overview"
   prop title = "Overview"
   prop summary = "Counts, authored surface ownership, lifecycle, and quick platform links."
   children {
@@ -94,6 +95,7 @@ view PlatformWorkflowPage {
   kind page
   class platform-workflow
   prop pageId = "workflow"
+  prop modelView = "workflow"
   prop title = "Workflow"
   prop summary = "Branches, change sets, proposals, and authoring commands."
   children {
@@ -115,6 +117,7 @@ view PlatformVerificationPage {
   kind page
   class platform-verification
   prop pageId = "verification"
+  prop modelView = "verification"
   prop title = "Verification"
   prop summary = "Test gates, test runs, candidate snapshots, and runtime revisions."
   children {
@@ -132,6 +135,7 @@ view PlatformKnowledgePage {
   kind page
   class platform-knowledge
   prop pageId = "knowledge"
+  prop modelView = "knowledge"
   prop title = "Knowledge"
   prop summary = "Governed docs, roadmap tasks, epics, and features."
   children {
@@ -144,6 +148,7 @@ view PlatformSignalsPage {
   kind page
   class platform-signals
   prop pageId = "signals"
+  prop modelView = "signals"
   prop title = "Signals"
   prop summary = "Gaps, telemetry, defect clusters, and boundary actors."
   children {
@@ -157,6 +162,7 @@ view PlatformModelPage {
   kind page
   class platform-model
   prop pageId = "model"
+  prop modelView = "model"
   prop title = "Model"
   prop summary = "Platform objects, relationships, runtime profiles, and dependency evidence."
   children {
