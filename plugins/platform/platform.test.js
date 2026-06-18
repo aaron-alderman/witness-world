@@ -4,7 +4,8 @@ import { EventEmitter } from "node:events";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createWorld } from "../../src/kernel.js";
-import { moduleProjectors } from "../../src/modules.js";
+import { applyWitnessToml } from "../../src/dsl.js";
+import { bindContextName, moduleProjectors } from "../../src/modules.js";
 import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
 import { compileRvmToDesirePlus } from "../../src/desire/index.js";
 import { bundleId, capabilities, createHandlers, handlerCatalog, providers, routes, surfaces } from "./runtime.js";
@@ -189,6 +190,7 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   assert.equal(model.nodes.some(node => node.id === "compatibilityBridge:canonicalIdSugar.sameContextVisibleTarget" && node.kind === "compatibilityBridge"), true);
   assert.equal(model.nodes.some(node => node.id === "governanceRoute:POST /api/platform-change-sets/demo/apply" && node.kind === "governanceRoute"), true);
   assert.equal(model.nodes.some(node => node.id === "governanceProposalTarget:runtimePlugin.install" && node.kind === "governanceCommand"), true);
+  assert.equal(model.nodes.some(node => node.id === "mutableSurface:canvas.perspective" && node.kind === "mutableSurface"), true);
   assert.equal(model.nodes.some(node => node.id === "testEnvironment:local-node" && node.kind === "testEnvironment"), true);
   assert.equal(model.nodes.some(node => node.id === "testEnvironment:local-browser" && node.kind === "testEnvironment"), true);
   assert.equal(model.edges.some(edge => edge.from === "surface:platform" && edge.rel === "authoredBy" && edge.to === "rvm:plugins/platform/platform-console.rvm"), true);
@@ -209,7 +211,217 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   assert.equal(model.compatibilityBridges.some(row => row.id === "compatibilityBridge:canonicalIdSugar.importedVisibleTarget" && row.status === "policy"), true);
   assert.equal(model.governanceRoutes.some(row => row.handler === "platform.changeSet.apply" && row.governanceMode === "operator-only"), true);
   assert.equal(model.proposalTargetGovernance.some(row => row.targetProcess === "runtimePlugin.install" && row.governanceMode === "proposal-fallback"), true);
+  assert.equal(model.mutableSurfaceSemantics.some(row => row.id === "mutableSurface:demo.privateNotes" && row.sharingClass === "personal" && row.stateClass === "actor-scoped"), true);
+  assert.equal(model.mutableSurfaceSemantics.some(row => row.id === "mutableSurface:canvas.perspective" && row.sharingClass === "mixed"), true);
   assert.equal(model.roadmapTasks.some(task => task.doc === "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"), true);
+});
+
+test("platform package coexistence view surfaces divergent revisions as first-class review objects", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[package]]
+actor = "system"
+id = "package.plugin.inspect"
+label = "Inspect"
+packageKind = "plugin"
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v1"
+package = "package.plugin.inspect"
+version = "0.1.0"
+status = "published"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageRevision]]
+actor = "system"
+id = "packageRevision.plugin.inspect.v2"
+package = "package.plugin.inspect"
+version = "0.2.0"
+status = "review"
+manifest = { pluginId = "plugin.inspect" }
+
+[[packageNamespace]]
+actor = "system"
+context = "ctx.alpha"
+name = "inspectA"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v1"
+
+[[packageNamespace]]
+actor = "system"
+context = "ctx.beta"
+name = "inspectB"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+
+[[packageTransformer]]
+actor = "system"
+id = "packageTransformer.inspect.v1-to-v2"
+package = "package.plugin.inspect"
+sourceRevision = "packageRevision.plugin.inspect.v1"
+targetRevision = "packageRevision.plugin.inspect.v2"
+remainingGlue = ["rename remaining runtimePlugin installs"]
+
+[[packagePatch]]
+actor = "system"
+package = "package.plugin.inspect"
+revision = "packageRevision.plugin.inspect.v2"
+transformer = "packageTransformer.inspect.v1-to-v2"
+path = "plugins/inspect/runtime.js"
+operation = "replace"
+sourceLanguage = "js"
+body = { export = "migrated" }
+`);
+
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [],
+      surfaces: [],
+      plugins: {
+        activePluginIds: [],
+        effectivePluginIds: [],
+        rejectedPlugins: []
+      }
+    },
+    project: projector => world.project(projector)
+  });
+
+  assert.equal(model.nodes.some(node => node.id === "packageCoexistence:package.plugin.inspect" && node.kind === "packageCoexistence"), true);
+  assert.equal(model.nodes.some(node => node.id === "package.plugin.inspect" && node.kind === "package"), true);
+  assert.equal(model.nodes.some(node => node.id === "packageRevision.plugin.inspect.v1" && node.kind === "packageRevision"), true);
+  assert.equal(model.nodes.some(node => node.id === "packageNamespace:ctx.alpha:inspectA" && node.kind === "packageNamespace"), true);
+  assert.equal(model.nodes.some(node => node.id === "packageTransformer.inspect.v1-to-v2" && node.kind === "packageTransformer"), true);
+
+  const packageView = filterPlatformModel(model, "packageCoexistence", "package.plugin.inspect");
+  assert.equal(packageView.packageCoexistence.length, 1);
+  assert.equal(packageView.packageCoexistence[0].coexistenceMode, "coexisting");
+  assert.deepEqual(packageView.packageCoexistence[0].selectedRevisionIds, [
+    "packageRevision.plugin.inspect.v1",
+    "packageRevision.plugin.inspect.v2"
+  ]);
+
+  const revisionView = filterPlatformModel(model, "packageCoexistence", "packageRevision.plugin.inspect.v2");
+  assert.equal(revisionView.packageCoexistence.length, 1);
+  assert.equal(revisionView.packageCoexistence[0].packageId, "package.plugin.inspect");
+
+  const convergenceView = filterPlatformModel(model, "packageConvergence", "package.plugin.inspect");
+  assert.equal(convergenceView.packageConvergence.length, 1);
+  assert.equal(convergenceView.packageConvergence[0].status, "glue-required");
+  assert.deepEqual(convergenceView.packageConvergence[0].transformerIds, ["packageTransformer.inspect.v1-to-v2"]);
+});
+
+test("platform context naming view surfaces resolution and visibility explanations", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[thing]]
+actor = "system"
+id = "backendHost"
+
+[[thing]]
+actor = "system"
+id = "frontendHost"
+
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[context]]
+actor = "system"
+id = "ctx.hidden"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[serverRunner]]
+actor = "system"
+id = "hidden_server"
+context = "ctx.hidden"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[serverRunner]]
+actor = "system"
+id = "local_server"
+context = "ctx.target"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceRunner"
+name = "importedRunner"
+`);
+  bindContextName(world, {
+    actor: "system",
+    context: "ctx.target",
+    name: "importedRunner",
+    target: "local_server"
+  });
+
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [],
+      surfaces: [],
+      plugins: {
+        activePluginIds: [],
+        effectivePluginIds: [],
+        rejectedPlugins: []
+      }
+    },
+    project: projector => world.project(projector)
+  });
+
+  const contextView = filterPlatformModel(model, "contextNaming", null, {
+    context: "ctx.target",
+    name: "importedRunner",
+    target: "hidden_server"
+  });
+  assert.deepEqual(contextView.contextNaming.canonicalIdPolicyClasses, [
+    "same-context-convenience",
+    "imported-target-reference",
+    "legacy-only-path"
+  ]);
+  assert.equal(contextView.contextNaming.contextScopes.some(row =>
+    row.context === "ctx.target"
+    && row.name === "importedRunner"
+    && row.target === "source_server"
+    && row.sourceKind === "import"
+  ), true);
+  assert.equal(contextView.contextNaming.contextNameConflicts.length, 1);
+  assert.equal(contextView.contextNaming.nameExplanation.ok, false);
+  assert.equal(contextView.contextNaming.nameExplanation.resolution, "ambiguous");
+  assert.equal(contextView.contextNaming.canonicalIdPolicy.ok, false);
+  assert.equal(contextView.contextNaming.targetVisibility.ok, false);
+  assert.equal(contextView.contextNaming.targetVisibility.visibility, "hidden");
 });
 
 test("platform model emits a gap when a platform surface lacks modeled RVM or WCSS source", async () => {
@@ -878,6 +1090,7 @@ test("platform page views filter the model to page-scoped slices", () => {
     compatibilityBridges: [{ id: "compatibilityBridge:canonicalIdSugar.sameContextVisibleTarget", bridgeClass: "canonical-id-sugar", owner: "context.naming", surfaces: ["src/modules.js"], sampleTargets: [], status: "policy" }],
     governanceRoutes: [{ id: "governanceRoute:POST /api/platform-change-sets/demo/apply", routeId: "route:POST /api/platform-change-sets/demo/apply", method: "POST", matcher: "/api/platform-change-sets/demo/apply", handler: "platform.changeSet.apply", operationSemantics: "governed-mutation", governanceMode: "operator-only", authorityMechanism: "bootstrap-operator", sharedAuthorityPath: false, workflowRole: "direct-mutation", notes: "Platform change-set apply is still bootstrap-operator-only.", ownerClass: "runtime-plugin", ownerBundleId: "bundle-platform", ownerPluginId: "plugin.platform" }],
     proposalTargetGovernance: [{ id: "governanceProposalTarget:runtimePlugin.install", targetProcess: "runtimePlugin.install", operationSemantics: "governed-mutation", governanceMode: "proposal-fallback", authorityMechanism: "bootstrap-target-authority", sharedAuthorityPath: true, workflowRole: "proposal-target", bootstrapSelectable: true, notes: "Runtime-plugin install proposals execute through shared server-runner target authority once approved." }],
+    mutableSurfaceSemantics: [{ id: "mutableSurface:demo.privateNotes", surface: "demo.privateNotes", title: "Private Notes", sharingClass: "personal", stateClass: "actor-scoped", visibilityRule: "actor-private", authorityRule: "request-actor", mutationMode: "direct", variantOf: null, readSurfaces: ["/api/private-notes"], mutationSurfaces: ["POST /api/private-notes"], witnessProcesses: ["privateNote.create"], sourceFiles: ["plugins/demo/projections.js"], variants: [], notes: "Private notes stay actor-private." }],
     branchTestRedGreen: [{ id: "branchRedGreen:platform", branchId: "branch:platform", status: "green" }],
     changeSetTestRedGreen: [{ id: "changeSetRedGreen:platform", changeSetId: "changeSet:platform", status: "green" }],
     latestTestResultsByGate: { "gate:platform": { runId: "testRun:platform", status: "passed" } },
@@ -898,6 +1111,7 @@ test("platform page views filter the model to page-scoped slices", () => {
   const modelPage = filterPlatformModel(model, "model");
   const bridges = filterPlatformModel(model, "bridges");
   const governance = filterPlatformModel(model, "governance");
+  const semantics = filterPlatformModel(model, "semantics");
 
   assert.deepEqual(Object.keys(overview).sort(), ["changeSets", "docs", "gaps", "lifecycleBoard", "lifecycleVocabulary", "nodes", "profiles", "summaries", "testGates"]);
   assert.deepEqual(Object.keys(workflow).sort(), ["branchBoard", "branchLifecycleVocabulary", "branches", "candidateSnapshots", "changeSetEdits", "changeSets", "proposalActions", "proposals", "summaries"]);
@@ -906,6 +1120,7 @@ test("platform page views filter the model to page-scoped slices", () => {
   assert.deepEqual(Object.keys(modelPage).sort(), ["coverageEdges", "edges", "nodes", "profiles", "summaries"]);
   assert.deepEqual(Object.keys(bridges).sort(), ["compatibilityBridges", "summaries"]);
   assert.deepEqual(Object.keys(governance).sort(), ["governanceRoutes", "proposalTargetGovernance", "summaries"]);
+  assert.deepEqual(Object.keys(semantics).sort(), ["mutableSurfaceSemantics", "summaries"]);
   assert.equal("nodes" in workflow, false);
   assert.equal("docs" in verification, false);
   assert.equal(signals.nodes.length, 3);
@@ -914,6 +1129,7 @@ test("platform page views filter the model to page-scoped slices", () => {
   assert.equal(bridges.compatibilityBridges.length, 1);
   assert.equal(governance.governanceRoutes.length, 1);
   assert.equal(governance.proposalTargetGovernance.length, 1);
+  assert.equal(semantics.mutableSurfaceSemantics.length, 1);
 });
 
 test("platform delegated test-gate projectors discover gate catalog rows", async () => withRegisteredPluginProjectors(providers, async () => {
@@ -5700,6 +5916,7 @@ test("platform page renders required operating views", async () => {
   assert.match(overviewHtml, /Platform Summary, Authored Surface Tree, Lifecycle Board, Platform Map, Runtime Profiles/);
   assert.match(overviewHtml, /Counts, authored surface ownership, lifecycle, and quick platform links\./);
   assert.match(overviewHtml, /\?view=workflow/);
+  assert.doesNotMatch(overviewHtml, /bindAuthoredJsonSubmit/);
   assert.doesNotMatch(overviewHtml, /<pre/);
 
   assert.match(workflowHtml, /Platform Console - Workflow/);
@@ -5717,6 +5934,7 @@ test("platform page renders required operating views", async () => {
   assert.match(workflowHtml, /Proposal Panel/);
   assert.match(workflowHtml, /Stage an authored source edit into the selected change set\./);
   assert.match(workflowHtml, /<form id="platform-branch-create-form" data-platform-client-action="branch.create" data-platform-submit-spec=/);
+  assert.match(workflowHtml, /bindAuthoredJsonSubmit/);
   assert.match(workflowHtml, /<form id="platform-change-set-create-form" data-platform-client-action="changeSet.create" data-platform-submit-spec=/);
   assert.match(workflowHtml, /<form id="platform-proposal-form" data-platform-client-action="proposal.create" data-platform-submit-spec=.*data-platform-field-syncs=.*data-platform-status-id="proposal-status"/);
   assert.match(workflowHtml, /data-sample-body=/);

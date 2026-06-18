@@ -10,6 +10,33 @@ const FALLBACK_PLATFORM_PAGE_VIEWS = Object.freeze([
   Object.freeze({ id: "signals", title: "Signals", subtitle: "Gaps, telemetry, defect clusters, and boundaries." }),
   Object.freeze({ id: "model", title: "Model", subtitle: "Platform objects, relationships, profiles, and dependency evidence." })
 ]);
+const SUPPLEMENTAL_PLATFORM_PAGE_SPECS = Object.freeze({
+  bridges: Object.freeze({
+    hostPageId: "model",
+    title: "Bridges",
+    subtitle: "Compatibility bridge inventory for remaining convenience seams."
+  }),
+  governance: Object.freeze({
+    hostPageId: "model",
+    title: "Governance",
+    subtitle: "Route and proposal-target governance coverage for mutating platform seams."
+  }),
+  semantics: Object.freeze({
+    hostPageId: "model",
+    title: "Semantics",
+    subtitle: "Personal, shared, and mixed mutable-surface semantics contract rows."
+  }),
+  packageCoexistence: Object.freeze({
+    hostPageId: "model",
+    title: "Package Coexistence",
+    subtitle: "Divergent package revision lines and namespace selections."
+  }),
+  packageConvergence: Object.freeze({
+    hostPageId: "model",
+    title: "Package Convergence",
+    subtitle: "Transformer contracts, convergence patches, and remaining authored glue."
+  })
+});
 const DEFAULT_PAGE_SIZE = 20;
 
 function esc(value) {
@@ -46,6 +73,9 @@ function parsePlatformPageRequest(requestUrl) {
     url,
     requestedView: optionalText(url.searchParams.get("view")) || "overview",
     id: optionalText(url.searchParams.get("id")),
+    context: optionalText(url.searchParams.get("context")),
+    name: optionalText(url.searchParams.get("name")),
+    target: optionalText(url.searchParams.get("target")),
     offset: safeInteger(url.searchParams.get("offset"), 0),
     limit: limitParam ? clampPageSize(limitParam) : null,
     sort: optionalText(url.searchParams.get("sort")),
@@ -66,17 +96,44 @@ function authoredPageViews(consoleLayout) {
 }
 
 function pageDef(viewId, pageViews) {
-  return pageViews.find(view => view.id === viewId) || pageViews[0];
+  const authored = pageViews.find(view => view.id === viewId);
+  if (authored) return authored;
+  const supplemental = supplementalPageDef(viewId, pageViews);
+  return supplemental || pageViews[0];
 }
 
 function surfaceModelView(surface) {
   return optionalText(surface?.props?.modelView) || optionalText(surface?.pageId) || null;
 }
 
+function pageViewModelView(pageView) {
+  return optionalText(pageView?.modelView) || surfaceModelView(pageView?.surface);
+}
+
+function supplementalPageDef(viewId, pageViews) {
+  const spec = SUPPLEMENTAL_PLATFORM_PAGE_SPECS[viewId];
+  if (!spec) return null;
+  const hostPage = pageViews.find(view => view.id === spec.hostPageId);
+  if (!hostPage) return null;
+  return Object.freeze({
+    id: viewId,
+    title: spec.title,
+    subtitle: spec.subtitle,
+    surface: hostPage.surface,
+    modelView: viewId,
+    supplementalSpec: spec
+  });
+}
+
 function platformHref(ctx, view, params = {}) {
   const url = new URL(ctx?.url?.pathname || "/platform", "http://platform.local");
   if (view && view !== "overview") url.searchParams.set("view", view);
-  for (const [key, rawValue] of Object.entries(params)) {
+  for (const [key, rawValue] of Object.entries({
+    context: ctx?.context,
+    name: ctx?.name,
+    target: ctx?.target,
+    ...params
+  })) {
     if (rawValue === undefined || rawValue === null || rawValue === "" || (key === "offset" && Number(rawValue) === 0)) {
       url.searchParams.delete(key);
       continue;
@@ -197,7 +254,17 @@ function conceptDestination(value) {
   if (raw.startsWith("telemetryMetric:") || raw.startsWith("gap.") || raw.startsWith("defectCluster:") || raw.startsWith("boundary:")) {
     return { view: "signals", id: raw };
   }
-  if (raw.startsWith("compatibilityBridge:")) return { view: "model", id: raw };
+  if (raw.startsWith("compatibilityBridge:")) return { view: "bridges", id: raw };
+  if (raw.startsWith("governanceRoute:") || raw.startsWith("governanceProposalTarget:")) return { view: "governance", id: raw };
+  if (raw.startsWith("mutableSurface:")) return { view: "semantics", id: raw };
+  if (raw.startsWith("packageCoexistence:")) return { view: "packageCoexistence", id: raw };
+  if (raw.startsWith("packageConvergence:")) return { view: "packageConvergence", id: raw };
+  if (raw.startsWith("packageTransformer:") || raw.startsWith("packageTransformer.")) return { view: "packageConvergence", id: raw };
+  if (raw.startsWith("packagePatch:")) return { view: "packageConvergence", id: raw };
+  if (raw.startsWith("packageDependency:")) return { view: "model", id: raw };
+  if (raw.startsWith("package.") || raw.startsWith("packageRevision.") || raw.startsWith("packageNamespace:") || raw.startsWith("packageConflict:")) {
+    return { view: "packageCoexistence", id: raw };
+  }
   if (raw.startsWith("route:") || raw.startsWith("handler:") || raw.startsWith("surface:") || raw.startsWith("capability:") || raw.startsWith("plugin.") || raw.startsWith("bundle:") || raw.startsWith("rvm:") || raw.startsWith("wcss:") || raw.startsWith("wtoml:") || raw.startsWith("json:") || raw.startsWith("file:")) {
     return { view: "model", id: raw };
   }
@@ -224,6 +291,17 @@ function conceptApiHref(value) {
   if (raw.endsWith(".md")) return `/api/platform-model?view=docs&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("telemetryMetric:")) return `/api/platform-model?view=telemetry&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("compatibilityBridge:")) return `/api/platform-model?view=bridges&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("governanceRoute:") || raw.startsWith("governanceProposalTarget:")) return `/api/platform-model?view=governance&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("mutableSurface:")) return `/api/platform-model?view=semantics&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("packageCoexistence:")) return `/api/platform-model?view=packageCoexistence&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("packageConvergence:")) return `/api/platform-model?view=packageConvergence&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("packageTransformer:") || raw.startsWith("packageTransformer.") || raw.startsWith("packagePatch:")) {
+    return `/api/platform-model?view=packageConvergence&id=${encodeURIComponent(raw)}`;
+  }
+  if (raw.startsWith("packageDependency:")) return `/api/platform-model?id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("package.") || raw.startsWith("packageRevision.") || raw.startsWith("packageNamespace:") || raw.startsWith("packageConflict:")) {
+    return `/api/platform-model?view=packageCoexistence&id=${encodeURIComponent(raw)}`;
+  }
   if (raw.startsWith("gap.")) return "/api/platform-gaps";
   if (raw.startsWith("proposal:")) return "/api/platform-model?view=proposals";
   return "/api/platform-model";
@@ -242,6 +320,27 @@ function renderApiLink(value) {
   const href = conceptApiHref(value);
   if (!href) return "";
   return `<a href="${esc(href)}">API resource</a>`;
+}
+
+function renderValueWithApi(ctx, value) {
+  if (value === undefined || value === null || value === "") return "";
+  if (Array.isArray(value)) {
+    const items = value.map(item => renderValueWithApi(ctx, item)).filter(Boolean);
+    return items.length ? items.join(", ") : "";
+  }
+  if (typeof value === "object") {
+    const id = optionalText(value.id) || optionalText(value.path) || null;
+    const label = value.title || value.label || value.path || value.id || JSON.stringify(value);
+    const rendered = id ? renderConceptLink(ctx, id, label) : esc(label);
+    return id && conceptApiHref(id)
+      ? `${rendered} <span class="muted">(${renderApiLink(id)})</span>`
+      : rendered;
+  }
+  const text = String(value);
+  const rendered = renderValue(ctx, text);
+  return conceptDestination(text) && conceptApiHref(text)
+    ? `${rendered} <span class="muted">(${renderApiLink(text)})</span>`
+    : rendered;
 }
 
 function renderValue(ctx, value) {
@@ -470,6 +569,25 @@ function renderSummaryCards(cards = []) {
       `).join("")}
     </section>
   `;
+}
+
+function renderRecordPropertyTable(ctx, title, record, fields = []) {
+  const entries = fields.map(field => ({
+    label: field.label,
+    valueHtml: renderValueWithApi(ctx, record?.[field.key])
+  }));
+  return renderPropertyTable(title, entries);
+}
+
+function renderRecordLongTailTable(ctx, title, record, excludedKeys = []) {
+  const excluded = new Set(excludedKeys);
+  const entries = Object.entries(record ?? {})
+    .filter(([key, value]) => !excluded.has(key) && value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => ({
+      label: humanizeKey(key),
+      valueHtml: renderValueWithApi(ctx, value)
+    }));
+  return renderPropertyTable(title, entries);
 }
 
 function renderSummaryCardsFromSurface(surface, model) {
@@ -2377,7 +2495,7 @@ function renderAuthoringClientScript() {
           window.__platformVerificationSources = [testRunSource, backendSource];
         }
         function bindPlatformPage(root) {
-          root.querySelectorAll("form[data-platform-client-action]").forEach(form => {
+          root.querySelectorAll("form[data-platform-submit-spec], form[data-platform-field-syncs]").forEach(form => {
             bindAuthoredFieldSyncs(form);
             bindAuthoredJsonSubmit(form);
           });
@@ -2431,7 +2549,7 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
 
 function surfaceNeedsClientScript(surface) {
   if (!surface) return false;
-  if (optionalText(surface?.props?.clientAction)) return true;
+  if (surfaceFormRequestSpec(surface) || surfaceFieldSyncSpecs(surface).length) return true;
   return (surface.childSurfaces ?? []).some(child => surfaceNeedsClientScript(child));
 }
 
@@ -2448,6 +2566,203 @@ function renderPageFromSurface(pageSurface, model, ctx, consoleLayout) {
   `;
 }
 
+function supplementalRowsForView(viewId, model) {
+  switch (viewId) {
+    case "bridges":
+      return (model.compatibilityBridges ?? []).map(row => ({
+        ...row,
+        title: row.title || row.id,
+        scope: row.owner || "",
+        summary: inlineSummary(row.surfaces ?? [])
+      }));
+    case "governance":
+      return [
+        ...(model.governanceRoutes ?? []).map(row => ({
+          ...row,
+          pageKind: "route",
+          title: `${row.method} ${row.matcher}`,
+          scope: row.handler || "",
+          summary: row.notes || ""
+        })),
+        ...(model.proposalTargetGovernance ?? []).map(row => ({
+          ...row,
+          pageKind: "proposal-target",
+          title: row.targetProcess,
+          scope: row.authorityMechanism || "",
+          summary: row.notes || ""
+        }))
+      ];
+    case "semantics":
+      return (model.mutableSurfaceSemantics ?? []).map(row => ({
+        ...row,
+        scope: row.stateClass || "",
+        summary: row.authorityRule || ""
+      }));
+    case "packageCoexistence":
+      return (model.packageCoexistence ?? []).map(row => ({
+        ...row,
+        title: row.packageLabel || row.packageId,
+        scope: row.coexistenceMode || "",
+        summary: inlineSummary(row.selectedRevisionIds ?? [])
+      }));
+    case "packageConvergence":
+      return (model.packageConvergence ?? []).map(row => ({
+        ...row,
+        title: row.packageLabel || row.packageId,
+        scope: row.status || "",
+        summary: row.explanation || ""
+      }));
+    default:
+      return [];
+  }
+}
+
+function supplementalRecordForView(viewId, model, id) {
+  const rows = supplementalRowsForView(viewId, model);
+  if (!id) return rows[0] ?? null;
+  if (viewId === "packageConvergence") {
+    return rows.find(row =>
+      row.id === id
+      || row.packageId === id
+      || row.coexistenceId === id
+      || (row.transformerIds ?? []).includes(id)
+      || (row.convergencePatchIds ?? []).includes(id)
+    ) ?? null;
+  }
+  if (viewId === "packageCoexistence") {
+    return rows.find(row =>
+      row.id === id
+      || row.packageId === id
+      || (row.revisionIds ?? []).includes(id)
+      || (row.selectedRevisionIds ?? []).includes(id)
+      || (row.namespaceSelections ?? []).some(namespace =>
+        namespace.id === id
+        || namespace.revision === id
+        || `${namespace.context}:${namespace.name}` === id
+      )
+    ) ?? null;
+  }
+  return rows.find(row => row.id === id) ?? null;
+}
+
+function supplementalPrimaryFields(viewId) {
+  switch (viewId) {
+    case "bridges":
+      return [
+        { label: "Bridge", key: "id" },
+        { label: "Class", key: "bridgeClass" },
+        { label: "Owner", key: "owner" },
+        { label: "Status", key: "status" },
+        { label: "Surfaces", key: "surfaces" },
+        { label: "Sample Targets", key: "sampleTargets" }
+      ];
+    case "governance":
+      return [
+        { label: "Object", key: "id" },
+        { label: "Mode", key: "governanceMode" },
+        { label: "Authority", key: "authorityMechanism" },
+        { label: "Workflow", key: "workflowRole" },
+        { label: "Operation", key: "operationSemantics" }
+      ];
+    case "semantics":
+      return [
+        { label: "Surface", key: "surface" },
+        { label: "Sharing", key: "sharingClass" },
+        { label: "State Class", key: "stateClass" },
+        { label: "Authority", key: "authorityRule" },
+        { label: "Visibility", key: "visibilityRule" },
+        { label: "Mutation Mode", key: "mutationMode" }
+      ];
+    case "packageCoexistence":
+      return [
+        { label: "Package", key: "packageId" },
+        { label: "Mode", key: "coexistenceMode" },
+        { label: "Selected Revisions", key: "selectedRevisionIds" },
+        { label: "Revision Lines", key: "revisionIds" }
+      ];
+    case "packageConvergence":
+      return [
+        { label: "Package", key: "packageId" },
+        { label: "Status", key: "status" },
+        { label: "Transformers", key: "transformerIds" },
+        { label: "Convergence Patches", key: "convergencePatchIds" },
+        { label: "Explanation", key: "explanation" }
+      ];
+    default:
+      return [{ label: "Object", key: "id" }];
+  }
+}
+
+function supplementalTableHeaders(viewId) {
+  switch (viewId) {
+    case "bridges":
+      return ["Bridge", "Class", "Owner", "Status", "Surfaces"];
+    case "governance":
+      return ["Kind", "Object", "Mode", "Authority", "Scope"];
+    case "semantics":
+      return ["Surface", "Sharing", "State Class", "Authority", "Visibility"];
+    case "packageCoexistence":
+      return ["Package", "Mode", "Selected Revisions", "Namespaces"];
+    case "packageConvergence":
+      return ["Package", "Status", "Transformers", "Patches", "Glue"];
+    default:
+      return ["Object"];
+  }
+}
+
+function renderSupplementalRow(viewId, row, ctx) {
+  switch (viewId) {
+    case "bridges":
+      return `<tr><td>${renderConceptLink(ctx, row.id)}</td><td>${esc(row.bridgeClass || "")}</td><td>${renderValue(ctx, row.owner)}</td><td>${esc(row.status || "")}</td><td>${renderValue(ctx, row.surfaces || [])}</td></tr>`;
+    case "governance":
+      return `<tr><td>${esc(row.pageKind || "route")}</td><td>${renderConceptLink(ctx, row.id, row.title || row.id)}</td><td>${esc(row.governanceMode || "")}</td><td>${esc(row.authorityMechanism || "")}</td><td>${renderValue(ctx, row.handler || row.targetProcess || "")}</td></tr>`;
+    case "semantics":
+      return `<tr><td>${renderConceptLink(ctx, row.id, row.title || row.surface || row.id)}</td><td>${esc(row.sharingClass || "")}</td><td>${esc(row.stateClass || "")}</td><td>${esc(row.authorityRule || "")}</td><td>${esc(row.visibilityRule || "")}</td></tr>`;
+    case "packageCoexistence":
+      return `<tr><td>${renderConceptLink(ctx, row.packageId, row.packageLabel || row.packageId)}</td><td>${esc(row.coexistenceMode || "")}</td><td>${renderValue(ctx, row.selectedRevisionIds || [])}</td><td>${renderValue(ctx, (row.namespaceSelections ?? []).map(namespace => namespace.id))}</td></tr>`;
+    case "packageConvergence":
+      return `<tr><td>${renderConceptLink(ctx, row.packageId, row.packageLabel || row.packageId)}</td><td>${esc(row.status || "")}</td><td>${renderValue(ctx, row.transformerIds || [])}</td><td>${renderValue(ctx, row.convergencePatchIds || [])}</td><td>${renderValue(ctx, (row.remainingGlue ?? []).map(item => item.message))}</td></tr>`;
+    default:
+      return `<tr><td>${renderConceptLink(ctx, row.id)}</td></tr>`;
+  }
+}
+
+function renderSupplementalPage(currentView, model, ctx) {
+  const rows = supplementalRowsForView(currentView.id, model);
+  const page = paginateRows(rows, ctx, DEFAULT_PAGE_SIZE);
+  const detail = supplementalRecordForView(currentView.id, model, ctx.id);
+  const primaryFields = supplementalPrimaryFields(currentView.id);
+  const primaryKeys = new Set(primaryFields.map(field => field.key));
+  return `
+    ${renderSummaryCards([
+      { label: "Rows", value: rows.length },
+      { label: "Selected", value: detail ? 1 : 0 }
+    ])}
+    <section class="card">
+      <h2>${esc(currentView.title)}</h2>
+      <div class="muted">${esc(currentView.subtitle || "")}</div>
+      ${renderTable(
+        supplementalTableHeaders(currentView.id),
+        page.items.map(row => renderSupplementalRow(currentView.id, row, ctx)),
+        "No rows."
+      )}
+      ${renderPagination(ctx, page.total, page.offset, page.limit)}
+    </section>
+    <section class="grid2">
+      <div>
+        ${detail
+          ? renderRecordPropertyTable(ctx, `${currentView.title} Detail`, detail, primaryFields)
+          : renderPropertyTable(`${currentView.title} Detail`, [])}
+      </div>
+      <div>
+        ${detail
+          ? renderRecordLongTailTable(ctx, "Properties", detail, [...primaryKeys, "title", "scope", "summary"])
+          : renderPropertyTable("Properties", [])}
+      </div>
+    </section>
+  `;
+}
+
 export function renderPlatformPage(model, { requestUrl = null } = {}) {
   const consoleLayout = readPlatformConsoleLayout();
   const rawCtx = parsePlatformPageRequest(requestUrl);
@@ -2458,8 +2773,14 @@ export function renderPlatformPage(model, { requestUrl = null } = {}) {
     view: currentView.id
   };
   const consolePage = consoleLayout.page ?? { title: "Platform Console", summary: "" };
-  const pageModel = filterPlatformModel(model, surfaceModelView(currentView.surface), ctx.id);
-  const body = renderPageFromSurface(currentView.surface ?? null, pageModel, ctx, consoleLayout);
+  const pageModel = filterPlatformModel(model, pageViewModelView(currentView), ctx.id, {
+    context: ctx.context,
+    name: ctx.name,
+    target: ctx.target
+  });
+  const body = currentView.supplementalSpec
+    ? renderSupplementalPage(currentView, pageModel, ctx)
+    : renderPageFromSurface(currentView.surface ?? null, pageModel, ctx, consoleLayout);
   return `<!doctype html>
 <html lang="en">
 <head>
