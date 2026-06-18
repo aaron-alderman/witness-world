@@ -12,9 +12,10 @@ The canonical file carries three internal layers:
 
 That separation is intentional.
 
-For `native-browser` slices such as `auth` and `platform-config`, the browser
-lowering map now also resolves authored identity references through explicit
-presentation anchors in the compiled surface metadata.
+For `native-browser` slices such as `auth`, `home`, `mill-charge`,
+`mill-force`, and `platform-config`, the browser lowering map now also resolves
+authored identity references through explicit presentation anchors in the
+compiled surface metadata.
 
 ## Roles
 
@@ -66,7 +67,8 @@ specific identities or traits and may describe:
 
 For the current native lane, the intended steady state is stricter:
 
-- `auth` and `platform-config` should lower through semantic nouns first
+- `auth`, `home`, `mill-charge`, `mill-force`, and `platform-config` should
+  lower through semantic nouns first
 - raw selector escapes remain available, but they are reported as debt rather
   than treated as normal authored shape
 - repeat-template descendants that belong to a native slice should be recovered

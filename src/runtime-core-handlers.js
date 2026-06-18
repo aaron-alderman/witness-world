@@ -108,6 +108,8 @@ export function createCoreRuntimeBundleHandlers({
   const projectPagePresentationThemeHook = coreHooks.projectPagePresentationTheme
     ?? coreHooks.projectEdenPageTheme
     ?? (() => null);
+  const sessionOpenResponsePayloadHook = coreHooks.sessionOpenResponsePayload
+    ?? (() => null);
   const guidanceConfigForSessionHook = coreHooks.guidanceConfigForSession
     ?? coreHooks.appGuidanceConfigForSession
     ?? coreHooks.appTutorialConfigForSession
@@ -534,7 +536,7 @@ export function createCoreRuntimeBundleHandlers({
       sendJson(res, 200, sessionResponseShape(syncedSession));
     },
 
-    "session.open": async ({ req, res }) => {
+    "session.open": async ({ req, res, appContext }) => {
       const body = await readJson(req);
       const username = typeof body.username === "string" ? body.username.trim() : "";
       const password = typeof body.password === "string" ? body.password : "";
@@ -574,6 +576,18 @@ export function createCoreRuntimeBundleHandlers({
       }, authority);
       const syncedSession = syncSessionAuthSummary?.(session, authority) ?? session;
       const resumeRouteKey = resolveSessionOpenRouteKey(body, authority);
+      const additionalSessionOpenPayload = await Promise.resolve(sessionOpenResponsePayloadHook({
+        req,
+        res,
+        body,
+        world,
+        appContext: appContext ?? null,
+        identity,
+        authority,
+        session,
+        syncedSession,
+        resumeRouteKey
+      })) ?? {};
       world.emit({
         process: "session.open",
         actor: identity.actor,
@@ -598,6 +612,7 @@ export function createCoreRuntimeBundleHandlers({
       });
       sendJson(res, 200, {
         ...sessionResponseShape(syncedSession),
+        ...(additionalSessionOpenPayload && typeof additionalSessionOpenPayload === "object" ? additionalSessionOpenPayload : {}),
         resumeRouteKey
       }, { "set-cookie": sessionCookieHeader(syncedSession.id) });
     },

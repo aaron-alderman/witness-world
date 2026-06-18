@@ -905,7 +905,7 @@ view GoodmanRunProgressFill {
   class prog-fill
   prop domId = "prog-fill"
   bindings {
-    style from state GoodmanRunStatusState map running "width:0%;background:var(--blue);opacity:1" paused "width:0%;background:var(--blue);opacity:.4" done "width:100%;background:var(--grn);opacity:1" stopped "width:0%;background:var(--ylw);opacity:1" default "width:0%;background:var(--blue);opacity:1"
+    className from state GoodmanRunStatusState map ready ready running running paused paused done done stopped stopped default ready
   }
 }
 
@@ -1398,7 +1398,7 @@ view GoodmanBoltSetsTitle {
 view GoodmanBoltSetPrimarySwatch {
   kind marker
   class bs-dot
-  prop style = "background:#dc2626"
+  prop presentationAnchor = "goodman-bolt-primary-swatch"
 }
 
 view GoodmanBoltSetPrimaryName {
@@ -2665,7 +2665,7 @@ view GoodmanBoltSetPrimaryCard {
 view GoodmanBoltSetMaintenanceSwatch {
   kind marker
   class bs-dot
-  prop style = "background:#8CC4D4"
+  prop presentationAnchor = "goodman-bolt-maintenance-swatch"
 }
 
 view GoodmanBoltSetMaintenanceName {
@@ -2865,7 +2865,7 @@ view GoodmanBoltSetsSection {
 view GoodmanLegendInfiniteSwatch {
   kind marker
   class leg-sw
-  prop style = "background:#bbf7d0;border:1px solid #86efac"
+  prop presentationAnchor = "goodman-legend-infinite-swatch"
 }
 
 view GoodmanLegendInfiniteText {
@@ -2887,7 +2887,7 @@ view GoodmanLegendInfiniteRow {
 view GoodmanLegendFiniteSwatch {
   kind marker
   class leg-sw
-  prop style = "background:#d9f99d;border:1px solid #bef264"
+  prop presentationAnchor = "goodman-legend-finite-swatch"
 }
 
 view GoodmanLegendFiniteText {
@@ -2909,7 +2909,7 @@ view GoodmanLegendFiniteRow {
 view GoodmanLegendShortSwatch {
   kind marker
   class leg-sw
-  prop style = "background:#fef08a;border:1px solid #fde047"
+  prop presentationAnchor = "goodman-legend-short-swatch"
 }
 
 view GoodmanLegendShortText {
@@ -2931,7 +2931,7 @@ view GoodmanLegendShortRow {
 view GoodmanLegendImminentSwatch {
   kind marker
   class leg-sw
-  prop style = "background:#fde68a;border:1px solid #fbbf24"
+  prop presentationAnchor = "goodman-legend-imminent-swatch"
 }
 
 view GoodmanLegendImminentText {

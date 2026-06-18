@@ -305,10 +305,12 @@ test("plugin runtime loader supports DESIRE extension-only plugin modules", asyn
     assert.equal(loadResult.hasBlockingErrors, false);
     assert.deepEqual(loadResult.desireExtensions.elaborators.map(row => row.id), ["plugin.dashboard.elaborator"]);
     assert.deepEqual(loadResult.desireExtensions.runtimeDeclarations.map(row => row.kind), ["dashboardRuntime"]);
+    assert.deepEqual(loadResult.desireExtensions.rvmForms.map(row => row.kind), []);
     assert.deepEqual(Object.keys(loadResult.bundleOverrides), []);
     assert.equal(loadedPackage.runtimeModule.loadStatus, "loaded");
     assert.deepEqual(loadedPackage.runtimeModule.desireExtensions.elaborators, ["plugin.dashboard.elaborator"]);
     assert.deepEqual(loadedPackage.runtimeModule.desireExtensions.runtimeDeclarations, ["dashboardRuntime"]);
+    assert.deepEqual(loadedPackage.runtimeModule.desireExtensions.rvmForms, []);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
@@ -346,7 +348,49 @@ test("plugin runtime loader rejects malformed DESIRE extension exports", async (
       entry.id === "plugin.broken"
       && entry.reasons.some(reason => reason.includes("desireExtensions.elaborators[0].elaborate must be a function"))
       && entry.reasons.some(reason => reason.includes("desireExtensions.runtimeDeclarations[0].apply must be a function"))
+      && !entry.reasons.some(reason => reason.includes("desireExtensions.rvmForms"))
     ), true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin runtime loader supports plugin-owned RVM form extensions", async () => {
+  const root = await tempPluginRoot();
+  try {
+    await writePlugin(root, "pipeline", {
+      id: "plugin.pipeline-runtime",
+      version: "0.1.0",
+      displayName: "Pipeline",
+      description: "Pipeline authoring extension",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      contributes: {}
+    }, `
+      export const desireExtensions = {
+        rvmForms: [{
+          kind: "sync",
+          parse(form) { return { lines: form.bodyLines.length }; },
+          serialize(payload) { return \`sync \${payload.name} {\\n}\`; },
+          validate() {},
+          normalize() { return { nodes: [], runtimeResiduals: [] }; }
+        }]
+      };
+      export default { desireExtensions };
+    `);
+
+    const pluginCatalog = await readRuntimePluginCatalog({
+      pluginRoot: root,
+      runtimeProfile: "minimal",
+      configuredPluginIds: ["plugin.pipeline-runtime"]
+    });
+    const loadResult = await loadRuntimePluginModules({ pluginCatalog });
+    const loadedCatalog = applyRuntimePluginLoadState(pluginCatalog, loadResult);
+    const loadedPackage = loadedCatalog.packages.find(row => row.id === "plugin.pipeline-runtime");
+
+    assert.equal(loadResult.hasBlockingErrors, false);
+    assert.deepEqual(loadResult.desireExtensions.rvmForms.map(row => row.kind), ["sync"]);
+    assert.deepEqual(loadedPackage.runtimeModule.desireExtensions.rvmForms, ["sync"]);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

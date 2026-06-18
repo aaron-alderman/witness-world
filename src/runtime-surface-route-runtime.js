@@ -224,10 +224,12 @@ export function createBrowserRouteInvoker(window, {
     const parts = String(path || "").split(".").filter(Boolean);
     let current = body;
     for (const part of parts) {
-      if (current == null || typeof current !== "object" || !(part in current)) return undefined;
+      if (current == null || typeof current !== "object" || !(part in current)) {
+        return { found: false, value: undefined };
+      }
       current = current[part];
     }
-    return current;
+    return { found: true, value: current };
   };
   const resolveRouteCollectionOutputs = (body, mapping) => {
     const entries = Object.entries(mapping ?? {}).filter(([collectionId, responsePath]) => (
@@ -236,10 +238,11 @@ export function createBrowserRouteInvoker(window, {
     if (!entries.length) return null;
     const next = {};
     for (const [collectionId, responsePath] of entries) {
-      const value = readRouteResponsePath(body, responsePath);
-      next[collectionId] = Array.isArray(value) ? structuredClone(value) : [];
+      const resolved = readRouteResponsePath(body, responsePath);
+      if (!resolved.found) continue;
+      next[collectionId] = Array.isArray(resolved.value) ? structuredClone(resolved.value) : [];
     }
-    return next;
+    return Object.keys(next).length ? next : null;
   };
   return async ({
     route,

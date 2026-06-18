@@ -10,12 +10,25 @@ export function serializeDesirePlusToWtoml(desirePlus) {
     .join("\n\n");
 }
 
-export function serializeDesirePlusToRvm(desirePlus) {
+export function serializeDesirePlusToRvm(desirePlus, { rvmFormRegistry = null } = {}) {
   const validatedDesirePlus = validateDesirePlusDocument(desirePlus);
   return validatedDesirePlus.nodes
     .filter(node => node.kind === "rvm.form")
     .sort((a, b) => a.order - b.order)
-    .map(node => node.payload.raw || serializeSemanticRvmNode(node))
+    .map(node => {
+      if (node.payload.raw) return node.payload.raw;
+      if (node.payload.pluginFormKind) {
+        const pluginEntry = rvmFormRegistry?.get(node.payload.pluginFormKind) ?? null;
+        if (!pluginEntry) {
+          throw new Error(`RVM plugin form ${node.payload.pluginFormKind} is not available during serialization`);
+        }
+        return pluginEntry.serialize({
+          ...node.payload,
+          name: node.name
+        }, { sourceNode: node });
+      }
+      return serializeSemanticRvmNode(node);
+    })
     .join("\n\n");
 }
 

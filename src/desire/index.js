@@ -5,6 +5,7 @@ export * from "./normalize.js";
 export * from "./elaborate.js";
 export * from "./apply.js";
 export * from "./plugins.js";
+export * from "./rvm-forms.js";
 export * from "./serialize.js";
 export * from "./spec-integrity.js";
 export * from "./process-eval.js";

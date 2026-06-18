@@ -79,8 +79,10 @@ and writes offline proof artifacts outside the app source tree:
   application layer
 - the switch manifest still controls rollout, but its slice names are validated
   against canonical V1 plus the browser lowering map
-- `auth` and `platform-config` are the current `native-browser` slices; the
-  remaining Engentus slices still lower through declaration groups
+- `auth`, `home`, `mill-charge`, `mill-force`, and `platform-config` now have
+  `native-browser` lowering definitions; the checked-in switch manifest remains
+  legacy and only proof/injected lanes currently exercise `home`,
+  `mill-charge`, and `mill-force`
 - native slices are expected to target identities, traits, variants, tags, and
   pseudos first; raw selector escapes are treated as backend debt and surfaced
   in the proof reports

@@ -408,7 +408,7 @@ function sendDelegated(sendJson, res, delegated, body) {
   sendJson(res, Number(delegated?.status || 500), body);
 }
 
-async function pipelineSnapshotPayload(appContext, projectionWorld, {
+export async function pipelineSnapshotPayload(appContext, projectionWorld, {
   secretQuery = "",
   datasourceQuery = "",
   requestSession = null,
@@ -473,6 +473,26 @@ async function pipelineSnapshotPayload(appContext, projectionWorld, {
         : "Choose a source identity and target actor, then open an assumed session."
     })
   };
+}
+
+export async function pipelineSessionOpenResponsePayloadHook({
+  world,
+  appContext,
+  syncedSession,
+  session,
+  resumeRouteKey
+} = {}) {
+  const routeKey = normalizeText(resumeRouteKey, "");
+  if (!routeKey.startsWith("platform-config")) return null;
+  const activeSession = session ?? syncedSession ?? null;
+  const effectiveActor = normalizeText(
+    syncedSession?.effectiveActor,
+    normalizeText(activeSession?.effectiveActor, "")
+  );
+  return pipelineSnapshotPayload(appContext, world, {
+    requestActor: effectiveActor || null,
+    requestSession: activeSession
+  });
 }
 
 export function createPipelineRuntimeHandlers(deps) {

@@ -1,6 +1,6 @@
 import { createDesireDocument, createDesireNode, createRuntimeResidual, validateDesirePlusDocument } from "./ir.js";
 
-export function normalizeDesirePlusToDesire(desirePlus) {
+export function normalizeDesirePlusToDesire(desirePlus, { rvmFormRegistry = null } = {}) {
   const validatedDesirePlus = validateDesirePlusDocument(desirePlus);
   const nodes = [];
   const runtimeResiduals = [];
@@ -62,11 +62,52 @@ export function normalizeDesirePlusToDesire(desirePlus) {
       }));
     }
 
+    if (node.kind === "rvm.form" && node.payload?.pluginFormKind) {
+      const pluginEntry = rvmFormRegistry?.get(node.payload.pluginFormKind) ?? null;
+      if (!pluginEntry) {
+        throw new Error(`RVM plugin form ${node.payload.pluginFormKind} is not available during normalization`);
+      }
+      const normalized = pluginEntry.normalize(node, pluginNormalizeContext(node));
+      for (const semanticNode of normalized?.nodes ?? []) nodes.push(semanticNode);
+      for (const residual of normalized?.runtimeResiduals ?? []) runtimeResiduals.push(residual);
+      continue;
+    }
+
     const semanticNodes = normalizeSemanticNode(node, versionFieldsByName);
     for (const semantic of semanticNodes) nodes.push(semantic);
   }
 
   return createDesireDocument(nodes, { sourceKind: validatedDesirePlus.kind }, runtimeResiduals);
+}
+
+function pluginNormalizeContext(sourceNode) {
+  return {
+    sourceNode,
+    createRuntimeDeclarationResidual(kind, values, name = null, meta = {}) {
+      return createRuntimeResidual({
+        kind: "runtime.declaration",
+        name,
+        body: {
+          declaration: {
+            kind,
+            values: structuredClone(values ?? {}),
+            sourceDefaultsApplied: false,
+            source: {
+              language: sourceNode.trace.sourceLanguage,
+              kind: sourceNode.trace.sourceKind,
+              file: sourceNode.payload.file ?? sourceNode.trace.file ?? null,
+              line: sourceNode.trace.startLine ?? null,
+              order: sourceNode.order,
+              sectionStyle: "rvm",
+              trace: structuredClone(sourceNode.trace)
+            }
+          }
+        },
+        sourceNodeIds: [sourceNode.id],
+        meta
+      });
+    }
+  };
 }
 
 function isNativeSemanticWtomlNode(node) {

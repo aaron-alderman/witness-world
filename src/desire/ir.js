@@ -126,6 +126,13 @@ function assertBooleanOrNull(value, path) {
   if (value !== null && value !== undefined && typeof value !== "boolean") fail(path, "expected boolean or null");
 }
 
+function assertArrayOfObjects(value, path) {
+  assertArray(value, path);
+  for (let index = 0; index < value.length; index += 1) {
+    assertPlainObject(value[index], `${path}[${index}]`);
+  }
+}
+
 export function createTrace({
   sourceLanguage,
   file = null,

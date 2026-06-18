@@ -8,6 +8,7 @@ import {
   dbSqlOperationTitle
 } from "./glue.js";
 import { sqlModuleProjectors } from "./projections.js";
+import { sqlRvmForms } from "./desire-rvm.js";
 
 export const bundleId = "bundle-sql";
 
@@ -61,6 +62,10 @@ export const providers = Object.freeze([
   }
 ]);
 
+export const desireExtensions = Object.freeze({
+  rvmForms: sqlRvmForms
+});
+
 export function createHandlers(deps) {
   return createSqlDbHandlers(deps);
 }
@@ -71,5 +76,6 @@ export default {
   routes,
   surfaces,
   providers,
+  desireExtensions,
   createHandlers
 };

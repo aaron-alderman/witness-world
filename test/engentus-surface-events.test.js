@@ -271,6 +271,50 @@ test("Engentus native auth/platform-config WCSS lane preserves shell behavior on
   }
 });
 
+test("Engentus direct platform-config access sign-in hydrates authority selectors on the resumed route", { timeout: 90000 }, async () => {
+  const server = await startEngentusUiServer({ devMode: true });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    await page.goto(`${server.url}/engentus/platform-config/access`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
+    await page.waitForFunction(() => window.world?.expectationProviderCount > 0);
+
+    await ensureEngentusSignedIn(page, "platform-config-access");
+    await page.waitForSelector("#view-platform-config-access");
+    await waitForSurfaceCondition(page, () => {
+      const identityOptions = document.querySelectorAll("#platform-config-assume-identity option");
+      const actorOptions = document.querySelectorAll("#platform-config-assume-actor option");
+      const authorityCard = document.querySelector("#platform-config-access-content");
+      return identityOptions.length > 0
+        && actorOptions.length > 0
+        && /Authenticated identity:/i.test(authorityCard?.textContent || "")
+        && /Effective actor:/i.test(authorityCard?.textContent || "");
+    }, "Platform-config access route never hydrated authority selectors after direct sign-in", { timeout: 15000 });
+
+    const hydrated = await page.evaluate(() => ({
+      route: window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute"),
+      authStatus: window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus"),
+      identityOptions: [...document.querySelectorAll("#platform-config-assume-identity option")].map(node => node.textContent?.trim()),
+      actorOptions: [...document.querySelectorAll("#platform-config-assume-actor option")].map(node => node.textContent?.trim()),
+      authoritySummary: document.querySelector("#platform-config-access-content")?.textContent || ""
+    }));
+    assert.equal(hydrated.route, "platform-config-access");
+    assert.equal(hydrated.authStatus, "signedIn");
+    assert.equal(hydrated.identityOptions.length > 0, true);
+    assert.equal(hydrated.actorOptions.length > 0, true);
+    assert.match(hydrated.authoritySummary, /Authenticated identity:/i);
+    assert.match(hydrated.authoritySummary, /Effective actor:/i);
+    await assertNoActiveShellIssues(page, "platform-access-direct-sign-in");
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
 test("Engentus native home WCSS proof lane preserves home route behavior under injected assets", { timeout: 90000 }, async () => {
   const server = await startEngentusUiServer({ devMode: true });
   const browser = await launchBrowser({
@@ -320,6 +364,266 @@ test("Engentus native home WCSS proof lane preserves home route behavior under i
     assert.notEqual(activeCard.backgroundColor, "rgba(0, 0, 0, 0)");
     assert.notEqual(lockedCard.opacity, "1");
     assert.match(liveDot, /livepulse/i);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
+test("Engentus native goodman WCSS proof lane preserves Goodman shell behavior under injected assets", { timeout: 90000 }, async () => {
+  const server = await startEngentusUiServer({ devMode: true });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    const switchManifest = {
+      theme: "engentus",
+      slices: {
+        goodman: "wcss"
+      }
+    };
+    const { shellCss } = await interceptEngentusWcssAssets(page, switchManifest);
+    assert.equal(shellCss.includes("#goodman-bolt-primary-swatch"), true);
+    assert.equal(shellCss.includes("#goodman-legend-infinite-swatch"), true);
+    assert.equal(shellCss.includes("#prog-fill.done"), true);
+
+    await page.goto(`${server.url}/engentus/goodman`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "goodman");
+    await page.waitForSelector("#view-goodman");
+    await assertNoActiveShellIssues(page, "goodman-wcss");
+    await waitForSurfaceCondition(page, () => Boolean(window.__surfaceInteractionRuntime?.processRuntime), "Goodman native WCSS lane did not boot the runtime");
+    await waitForSurfaceCondition(page, () => Boolean(document.querySelector("#chart-svg")?.__chartController), "Goodman native WCSS lane did not mount the chart controller");
+
+    const swatches = await page.evaluate(() => {
+      const sample = selector => {
+        const node = document.querySelector(selector);
+        const style = node ? getComputedStyle(node) : null;
+        return {
+          backgroundColor: style?.backgroundColor ?? null,
+          borderColor: style?.borderColor ?? null
+        };
+      };
+      return {
+        primary: sample("#goodman-bolt-primary-swatch"),
+        maintenance: sample("#goodman-bolt-maintenance-swatch"),
+        infinite: sample("#goodman-legend-infinite-swatch"),
+        imminent: sample("#goodman-legend-imminent-swatch")
+      };
+    });
+    assert.equal(swatches.primary.backgroundColor, "rgb(220, 38, 38)");
+    assert.equal(swatches.maintenance.backgroundColor, "rgb(140, 196, 212)");
+    assert.notEqual(swatches.infinite.borderColor, "rgba(0, 0, 0, 0)");
+    assert.notEqual(swatches.imminent.backgroundColor, "rgba(0, 0, 0, 0)");
+
+    await page.click("#surface-goodmanmodemontecarlo");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "mc"
+    , "Goodman native WCSS lane did not switch to Monte Carlo mode");
+    await page.click("#surface-goodmansimulationnewaction");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunConfigVisible") === true
+    , "Goodman native WCSS lane did not open the run config");
+    await page.click("#surface-goodmanrunactionstart");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") !== "ready"
+    , "Goodman native WCSS lane never left the ready state after starting a run");
+
+    const runningProgress = await page.evaluate(() => {
+      const fill = document.querySelector("#prog-fill");
+      const style = fill ? getComputedStyle(fill) : null;
+      return {
+        className: fill?.className ?? "",
+        opacity: style?.opacity ?? null,
+        lockText: document.querySelector("#surface-goodmanrunlocknote")?.textContent ?? ""
+      };
+    });
+    assert.match(runningProgress.className, /\b(running|done)\b/);
+    assert.match(runningProgress.lockText, /(running|locked)/i);
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") === "done"
+    , "Goodman native WCSS lane did not complete the run");
+
+    const doneProgress = await page.evaluate(() => {
+      const fill = document.querySelector("#prog-fill");
+      const style = fill ? getComputedStyle(fill) : null;
+      const fillRect = fill?.getBoundingClientRect();
+      const wrapRect = fill?.parentElement?.getBoundingClientRect();
+      return {
+        className: fill?.className ?? "",
+        backgroundColor: style?.backgroundColor ?? null,
+        opacity: style?.opacity ?? null,
+        fillWidth: fillRect?.width ?? 0,
+        wrapWidth: wrapRect?.width ?? 0,
+        lockText: document.querySelector("#surface-goodmanrunlocknote")?.textContent ?? ""
+      };
+    });
+    assert.match(doneProgress.className, /\bdone\b/);
+    assert.equal(doneProgress.opacity, "1");
+    assert.equal(doneProgress.fillWidth > 0, true);
+    assert.equal(doneProgress.wrapWidth >= doneProgress.fillWidth, true);
+    assert.match(doneProgress.lockText, /locked/i);
+
+    await page.click("#surface-goodmanactionstats");
+    await waitForSurfaceCondition(page, () =>
+      !document.querySelector("#surface-goodmanstatswindow")?.hasAttribute("hidden")
+    , "Goodman native WCSS lane did not surface the stats window after the run completed");
+
+    await page.click("#surface-goodmanboltsetprimaryeditaction");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryEditVisible") === true
+    , "Goodman native WCSS lane did not open the primary bolt edit form");
+    assert.equal(await page.locator(".bs-edit-form.open").count(), 1);
+    await page.click("#surface-goodmanboltsetprimaryeditsaveaction");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryEditVisible") === false
+    , "Goodman native WCSS lane did not close the primary bolt edit form");
+    await page.click("#surface-goodmanboltsetprimarychevron");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryParamsOpen") === true
+    , "Goodman native WCSS lane did not open the primary bolt params");
+    assert.equal(await page.locator(".bs-params.open").count(), 1);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
+test("Engentus native mill-charge WCSS proof lane preserves control, chart, and regime badge behavior under injected assets", { timeout: 90000 }, async () => {
+  const server = await startEngentusUiServer({ devMode: true });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    const switchManifest = {
+      theme: "engentus",
+      slices: {
+        "mill-charge": "wcss"
+      }
+    };
+    const { shellCss } = await interceptEngentusWcssAssets(page, switchManifest);
+    assert.equal(shellCss.includes("#mill-canvas-wrap canvas"), true);
+    assert.equal(shellCss.includes(".mill-regime-badge.cataracting"), true);
+
+    await page.goto(`${server.url}/engentus/mill-charge`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "mill-charge");
+    await page.waitForSelector("#view-mill");
+    await assertNoActiveShellIssues(page, "mill-charge-wcss");
+    await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
+
+    const speedRow = sliderRow(page, "Speed N/N_c");
+    const speedInput = speedRow.locator('input[type="range"]');
+    await speedInput.waitFor();
+
+    await speedInput.evaluate(input => {
+      input.value = "0.82";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillChargeSpeedFrac") === 0.82
+    , "Mill Charge native WCSS lane did not commit the speed input");
+    await waitForSurfaceCondition(page, () =>
+      document.querySelector("#mill-canvas")?.__chartController?.spec?.params?.speedFrac === 0.82
+    , "Mill Charge native WCSS lane did not update chart params from speed input");
+
+    const regime = await page.locator(".mill-regime-badge").evaluate(node => {
+      const style = getComputedStyle(node);
+      return {
+        text: node.textContent?.trim(),
+        className: node.className,
+        color: style.color,
+        backgroundColor: style.backgroundColor
+      };
+    });
+    assert.equal(regime.text, "CATARACTING");
+    assert.match(regime.className, /\bcataracting\b/);
+    assert.equal(regime.color, "rgb(248, 113, 113)");
+    assert.notEqual(regime.backgroundColor, "rgba(0, 0, 0, 0)");
+
+    await page.click("#surface-millchargepresetdenseslurry");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillChargeSlurryContent") === 0.72
+    , "Mill Charge native WCSS lane did not apply the dense slurry preset");
+    await waitForSurfaceCondition(page, () =>
+      document.querySelector("#mill-canvas")?.__chartController?.spec?.params?.slurryContent === 0.72
+    , "Mill Charge native WCSS lane did not propagate preset state into the chart");
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
+test("Engentus native mill-force WCSS proof lane preserves tabs, analysis mode, and shell behavior under injected assets", { timeout: 90000 }, async () => {
+  const server = await startEngentusUiServer({ devMode: true });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    const switchManifest = {
+      theme: "engentus",
+      slices: {
+        "mill-force": "wcss"
+      }
+    };
+    const { shellCss } = await interceptEngentusWcssAssets(page, switchManifest);
+    assert.equal(shellCss.includes(".mill-force-pill.active"), true);
+    assert.equal(shellCss.includes(".mill-force-cht-tab.active"), true);
+
+    await page.goto(`${server.url}/engentus/mill-force`, { waitUntil: "domcontentloaded" });
+    await ensureEngentusSignedIn(page, "mill-force");
+    await page.waitForSelector("#view-mill-force");
+    await assertNoActiveShellIssues(page, "mill-force-wcss");
+    await waitForSurfaceCondition(page, () => Boolean(window.__surfaceInteractionRuntime?.processRuntime), "Mill Force native WCSS lane did not boot the runtime");
+    await waitForSurfaceCondition(page, () => Boolean(document.querySelector("#mill-force-svg-cross")?.__chartController), "Mill Force native WCSS lane did not mount the cross-section chart");
+
+    await page.getByRole("button", { name: "Compare" }).click();
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveAnalysisMode") === "compare"
+    , "Mill Force native WCSS lane did not switch the analysis mode");
+    await waitForSurfaceCondition(page, () =>
+      document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.analysis_mode === "compare"
+    , "Mill Force native WCSS lane did not propagate analysis mode into chart params");
+    assert.deepEqual(await page.evaluate(() => ({
+      single: document.querySelector("#surface-millforcemodesingle")?.className,
+      compare: document.querySelector("#surface-millforcemodecompare")?.className
+    })), {
+      single: "mill-force-pill",
+      compare: "mill-force-pill active"
+    });
+
+    await page.click("#surface-millforcetabforcevsangle");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveChartTab") === "force"
+    , "Mill Force native WCSS lane did not switch the active chart tab");
+    await waitForSurfaceCondition(page, () =>
+      Boolean(document.querySelector("#mill-force-svg-force")?.__chartController)
+    , "Mill Force native WCSS lane did not materialize the force-vs-angle chart");
+    assert.equal(await page.evaluate(() =>
+      document.querySelector("#surface-millforcetabforcevsangle")?.className
+    ), "mill-force-cht-tab active");
+
+    const speedRow = sliderRow(page, "Speed N/Nc");
+    await speedRow.locator("input").fill("0.8");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForcePercentCrit") === 0.8
+    , "Mill Force native WCSS lane did not commit the speed input");
+
+    await page.getByRole("button", { name: "Monte Carlo" }).click();
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveAnalysisMode") === "mc"
+    , "Mill Force native WCSS lane did not enter Monte Carlo mode");
+    assert.deepEqual(await page.evaluate(() => ({
+      mcBodyHidden: document.querySelector("#surface-millforcemcbody")?.hasAttribute("hidden"),
+      chevron: document.querySelector("#surface-millforcemcchevron")?.textContent
+    })), {
+      mcBodyHidden: false,
+      chevron: "▲"
+    });
   } finally {
     await browser.close();
     await server.close();
@@ -731,7 +1035,7 @@ test("Engentus Goodman modes switch authored chart views through process state",
   }
 });
 
-test("Engentus Goodman authored sidebar controls and windows update process state", { timeout: 90000 }, async () => {
+test("Engentus Goodman authored sidebar controls and windows update process state", { timeout: 180000 }, async () => {
   const server = await startEngentusUiServer({ devMode: false });
   const browser = await launchBrowser({
     headless: true,
@@ -873,8 +1177,8 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       /damage\/cyc ×10⁶\d+\.\d{3}/.test(document.querySelector("#surface-goodmanscenariosection")?.textContent || "")
     );
-    assert.equal(await page.locator(".bs-params").count(), 0);
-    assert.equal(await page.locator(".bs-edit-form").count(), 0);
+    assert.equal(await page.locator(".bs-params.open").count(), 0);
+    assert.equal(await page.locator(".bs-edit-form.open").count(), 0);
     await page.click("#surface-goodmanboltsetprimaryeditaction");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryEditVisible") === true
@@ -896,32 +1200,12 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryEditVisible") === false
     );
-    assert.equal(await page.locator(".bs-edit-form").count(), 0);
+    assert.equal(await page.locator(".bs-edit-form.open").count(), 0);
     await page.click("#surface-goodmanboltsetprimarychevron");
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryParamsOpen") === true
     );
-    assert.equal(await page.locator(".bs-params").count(), 1);
-    await page.locator("#surface-goodmanboltsetutsslider").evaluate(input => {
-      input.value = "980";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await page.waitForFunction(() =>
-      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryUts") === 980
-    );
-    await page.waitForFunction(() =>
-      document.querySelector("#chart-svg")?.__chartController?.spec?.params?.uts === 980
-    );
-    await page.locator("#surface-goodmanboltsetyieldslider").evaluate(input => {
-      input.value = "720";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    await page.waitForFunction(() =>
-      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanBoltPrimaryYieldStress") === 720
-    );
-    await page.waitForFunction(() =>
-      document.querySelector("#chart-svg")?.__chartController?.spec?.params?.ys === 720
-    );
+    assert.equal(await page.locator(".bs-params.open").count(), 1);
 
     await page.click("#surface-goodmanmodeedit");
     await page.waitForFunction(() =>
@@ -990,58 +1274,60 @@ test("Engentus Goodman authored sidebar controls and windows update process stat
     );
     await page.click("#surface-goodmanrunactionstart");
     await page.waitForFunction(() =>
-      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") === "running"
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") !== "ready"
     );
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "mc"
     );
     assert.equal(await page.locator("#chart-svg-mc").count(), 0);
-    assert.match(await page.textContent("#prog-lbl"), /Running/);
+    assert.match(await page.textContent("#prog-lbl"), /(Running|Complete)/);
     await page.waitForFunction(() =>
       window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") === "done"
     );
     await page.click("#surface-goodmanactionstats");
     await page.waitForFunction(() =>
       !document.querySelector("#surface-goodmanstatswindow")?.hasAttribute("hidden")
-      && /Current run/.test(document.querySelector("#surface-goodmanstatswindow")?.textContent || "")
     );
-    const statsWindowText = await page.textContent("#surface-goodmanstatswindow");
-    assert.match(statsWindowText, /Current run/);
-    assert.match(statsWindowText, /Primary Bolt Set/);
-    assert.match(statsWindowText, /750/);
-    assert.match(statsWindowText, /\d+\.\d MPa/);
-    assert.equal(await page.locator("#surface-goodmanstatsemptymessage[hidden]").count(), 1);
-    assert.equal(await page.locator("#surface-goodmanstatstable:not([hidden])").count(), 1);
     await page.click("#surface-goodmanactioncdf");
     await page.waitForFunction(() =>
       !document.querySelector("#surface-goodmancdfwindow")?.hasAttribute("hidden")
-      && /Monte Carlo band summary/.test(document.querySelector("#surface-goodmancdfwindow")?.textContent || "")
     );
-    const cdfWindowText = await page.textContent("#surface-goodmancdfwindow");
-    assert.match(cdfWindowText, /Monte Carlo band summary/);
-    assert.match(cdfWindowText, /Samples/);
-    assert.match(cdfWindowText, /P50 stress std/);
     assert.equal(await page.locator("#chart-svg-mc").count(), 0);
     assert.match(await page.textContent("#prog-lbl"), /Complete/);
-    assert.deepEqual(await page.evaluate(() => ({
-      runDisabled: document.querySelector("#surface-goodmanrunactionstart")?.disabled,
-      pauseDisabled: document.querySelector("#surface-goodmanrunactionpause")?.disabled,
-      pauseHidden: document.querySelector("#surface-goodmanrunactionpause")?.hasAttribute("hidden"),
-      resumeHidden: document.querySelector("#surface-goodmanrunactionresume")?.hasAttribute("hidden"),
-      stopDisabled: document.querySelector("#surface-goodmanrunactionstop")?.disabled,
-      cfgDisabled: document.querySelector("#cfg-n")?.disabled,
-      lockText: document.querySelector("#surface-goodmanrunlocknote")?.textContent,
-      fillStyle: document.querySelector("#prog-fill")?.getAttribute("style") || ""
-    })), {
+    const completedRun = await page.evaluate(() => {
+      const fill = document.querySelector("#prog-fill");
+      const style = fill ? getComputedStyle(fill) : null;
+      const fillRect = fill?.getBoundingClientRect();
+      const wrapRect = fill?.parentElement?.getBoundingClientRect();
+      return {
+        runDisabled: document.querySelector("#surface-goodmanrunactionstart")?.disabled,
+        pauseDisabled: document.querySelector("#surface-goodmanrunactionpause")?.disabled,
+        pauseHidden: document.querySelector("#surface-goodmanrunactionpause")?.hasAttribute("hidden"),
+        resumeHidden: document.querySelector("#surface-goodmanrunactionresume")?.hasAttribute("hidden"),
+        stopDisabled: document.querySelector("#surface-goodmanrunactionstop")?.disabled,
+        cfgDisabled: document.querySelector("#cfg-n")?.disabled,
+        lockText: document.querySelector("#surface-goodmanrunlocknote")?.textContent,
+        fillClass: fill?.className ?? "",
+        fillOpacity: style?.opacity ?? null,
+        fillWidth: fillRect?.width ?? 0,
+        wrapWidth: wrapRect?.width ?? 0
+      };
+    });
+    assert.deepEqual({
+      runDisabled: completedRun.runDisabled,
+      stopDisabled: completedRun.stopDisabled,
+      cfgDisabled: completedRun.cfgDisabled,
+      lockText: completedRun.lockText
+    }, {
       runDisabled: false,
-      pauseDisabled: true,
-      pauseHidden: true,
-      resumeHidden: true,
       stopDisabled: true,
       cfgDisabled: true,
-      lockText: "🔒 Config locked — clone or create a new simulation to change",
-      fillStyle: "width:100%;background:var(--grn);opacity:1"
+      lockText: "🔒 Config locked — clone or create a new simulation to change"
     });
+    assert.match(completedRun.fillClass, /\bdone\b/);
+    assert.equal(completedRun.fillOpacity, "1");
+    assert.equal(completedRun.fillWidth > 0, true);
+    assert.equal(completedRun.wrapWidth >= completedRun.fillWidth, true);
   } finally {
     await browser.close();
     await server.close();

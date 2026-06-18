@@ -1248,8 +1248,74 @@ application
     source shell-goodman.rvm
     identity EngentusApp
     identity GoodmanBody
+    identity GoodmanModesToolbar
+    identity GoodmanWindowToolbar
+    identity GoodmanScenarioSection
+    identity GoodmanSimulationSection
+    identity GoodmanChartStyleSection
+    identity GoodmanRunActionGroup
+    identity GoodmanRunProgress
+    identity GoodmanRunProgressFill
+    identity GoodmanRunLockNote
+    identity GoodmanRunConfigSection
+    identity GoodmanBoltSetPrimaryCard
+    identity GoodmanBoltSetPrimarySwatch
+    identity GoodmanBoltSetPrimaryChevron
+    identity GoodmanBoltSetPrimaryEditForm
+    identity GoodmanBoltSetPrimaryParams
+    identity GoodmanBoltSetMaintenanceCard
+    identity GoodmanBoltSetMaintenanceSwatch
+    identity GoodmanBoltSetMaintenanceChevron
+    identity GoodmanBoltSetMaintenanceEditForm
+    identity GoodmanBoltSetMaintenanceParams
+    identity GoodmanFatigueLegend
+    identity GoodmanLegendInfiniteSwatch
+    identity GoodmanLegendFiniteSwatch
+    identity GoodmanLegendShortSwatch
+    identity GoodmanLegendImminentSwatch
+    identity GoodmanSidebar
+    identity GoodmanSidebarScroll
+    identity GoodmanScrubber
+    identity GoodmanChartRegion
     identity GoodmanWindowLayer
+    identity GoodmanCdfWindow
+    identity GoodmanStatsWindow
+    identity GoodmanAnovaWindow
+    identity GoodmanChartArea
     trait engentus-app
+    trait mode-btn
+    trait goodman-window-toolbar
+    trait prog-fill
+    trait bs-dot
+    trait bs-chev
+    trait bs-edit-form
+    trait bs-params
+    trait leg-sw
+    trait goodman-chart-area
+    trait goodman-chart-region
+    trait goodman-scrubber
+    trait goodman-play-action
+    trait goodman-time-slider
+    trait goodman-time-label
+    trait fail-badge
+    trait goodman-speed-group
+    trait goodman-speed-slider
+    trait goodman-speed-label
+    trait goodman-trail-toggle
+    trait goodman-window-layer
+    trait goodman-window
+    trait stats-window
+    trait anova-window
+    trait goodman-window-empty
+    trait goodman-window-empty-text
+    trait goodman-window-empty-message
+    trait goodman-fatigue-legend-note
+    trait goodman-probe-intro
+    trait goodman-probe-bolt
+    trait goodman-probe-bolt-name
+    trait goodman-probe-bolt-name--primary
+    trait goodman-probe-bolt-name--maintenance
+    trait info-value
     family chrome.sidebar
     family chrome.section
     family goodman.simulation_row
@@ -1259,33 +1325,145 @@ application
     family surface.chart_stage
     family surface.window
     family chart.page_tooltip
-    seam escape className
+    seam variant goodman.mode_active
       prop className
-    seam escape style
-      prop style
+      trait mode-btn
+      values on
+    seam toggle goodman.bolt_params_open
+      prop className
+      traits bs-chev bs-params
+      token open
+    seam toggle goodman.bolt_edit_open
+      prop className
+      trait bs-edit-form
+      token open
+    seam variant goodman.run_progress_state
+      prop className
+      identity GoodmanRunProgressFill
+      values ready running paused done stopped
 
   slice mill-charge
     asset shell
     source shell-mill-charge.rvm
     identity EngentusMillChargeApp
     identity MillChargeBody
+    identity MillChargeSidebar
+    identity MillChargeSidebarScroll
+    identity MillChargeParameterSection
+    identity MillChargeParameterTitle
+    identity MillChargeSpeedRow
+    identity MillChargeSpeedInput
+    identity MillChargeFillRow
+    identity MillChargeFillInput
+    identity MillChargeSlurryRow
+    identity MillChargeSlurryInput
+    identity MillChargeWallFrictionRow
+    identity MillChargeWallFrictionInput
+    identity MillChargeInternalFrictionRow
+    identity MillChargeInternalFrictionInput
+    identity MillChargeBulkDensityRow
+    identity MillChargeBulkDensityInput
+    identity MillChargePresetSection
+    identity MillChargePresetTitle
+    identity MillChargePresetHardOre
+    identity MillChargePresetAverageOre
+    identity MillChargePresetClayeyOre
+    identity MillChargePresetDenseSlurry
+    identity MillChargeViewer
+    identity MillChargeCanvasWrap
+    identity MillChargeMetrics
+    identity MillChargeMetricsHeader
+    identity MillChargeMetricsPanel
+    identity MillChargeMetricShoulder
+    identity MillChargeMetricToe
+    identity MillChargeMetricCom
+    identity MillChargeMetricPower
+    identity MillChargeMetricCataracting
+    identity MillChargeRegimeBadge
     trait engentus-mill-charge
+    trait ssec
+    trait ssec-title
+    trait prow
+    trait prow-top
+    trait plabel
+    trait pval
+    trait mill-slider
+    trait mill-preset-btn
+    trait mill-metric-row
+    trait mill-metric-lbl
+    trait mill-metric-val
+    trait mill-regime-badge
     family chrome.sidebar
     family surface.metric_group
-    seam escape style
-      prop style
+    seam variant mill-charge.regime
+      prop className
+      identity MillChargeRegimeBadge
+      values rolling cascading cataracting centrifuging pooling slipping
 
   slice mill-force
     asset shell
     source shell-mill-force.rvm
     identity EngentusMillForceApp
     identity MillForceBody
+    identity MillForceSidebar
+    identity MillForceModeSection
+    identity MillForceModePills
+    identity MillForceModeSingle
+    identity MillForceModeCompare
+    identity MillForceModeMonteCarlo
+    identity MillForceInputsSection
+    identity MillForceControlHost
+    identity MillForceModelHost
+    identity MillForceMcBody
+    identity MillForceChartArea
+    identity MillForceTabs
+    identity MillForceTabCrossSection
+    identity MillForceTabForceVsAngle
+    identity MillForceTabForceRose
+    identity MillForceChartWrap
     trait engentus-mill-force
+    trait ssec
+    trait ssec-title
+    trait plabel
+    trait pval
+    trait prow
+    trait prow-top
+    trait mill-force-controls
+    trait mill-force-mode-pills
+    trait mill-force-pill
+    trait mill-force-slider
+    trait mill-force-model-host
+    trait mill-force-model-radios
+    trait mill-force-model-option
+    trait mill-force-model-grounded-text
+    trait mill-force-model-faithful-text
+    trait mill-force-mc-toggle
+    trait mill-force-mc-body
+    trait mc-row
+    trait run-row
+    trait rbtn
+    trait go
+    trait stop
+    trait mill-unit
+    trait mill-force-chart-tabs
+    trait mill-force-cht-tab
+    trait mill-force-chart-wrap
+    trait mill-force-viewer
+    trait mill-force-result-row
+    trait mill-force-rl
+    trait mill-force-rv
+    trait mill-force-rd
     family chrome.sidebar
     family interactive.pill
     family surface.result_row
-    seam escape className
+    seam variant mill-force.analysis_mode_active
       prop className
+      trait mill-force-pill
+      values active
+    seam variant mill-force.chart_tab_active
+      prop className
+      trait mill-force-cht-tab
+      values active
 
   slice platform-config
     asset shell
@@ -1857,6 +2035,7 @@ lowering
             grid-template-columns = 1fr
 
       slice goodman
+        mode native-browser
         group "goodman toolbar"
         group "goodman view"
         group "goodman chart scaffold"
@@ -1872,18 +2051,437 @@ lowering
         family surface.window -> "goodman windows"
         family chart.page_tooltip -> "goodman chart scaffold"
 
+      native goodman
+        rule trait engentus-app
+          flex = 1
+          display = flex
+          flex-direction = column
+          overflow = hidden
+        rule identity GoodmanWindowToolbar
+          display = flex
+          gap = 2px
+          margin-left = auto
+          padding-right = 8px
+          align-items = center
+        rule identity GoodmanChartArea
+          flex = 1
+          display = flex
+          flex-direction = column
+          overflow = hidden
+        rule identity GoodmanChartRegion
+          flex = 1
+          background = #fff
+          margin = 0 8px 8px
+          border-radius = 0 0 8px 8px
+          position = relative
+          overflow = hidden
+          box-shadow = 0 1px 4px rgba(0,0,0,.15)
+        rule identity GoodmanScrubber
+          height = var(--sch)
+          background = var(--mid)
+          border-bottom = 1px solid var(--brd)
+          display = flex
+          align-items = center
+          gap = 9px
+          padding = 0 12px
+          margin = 7px 8px 0
+          border-radius = 8px 8px 0 0
+          flex-shrink = 0
+        rule trait goodman-play-action
+          width = 26px
+          height = 26px
+          border-radius = 50%
+          border = none
+          background = var(--blue)
+          color = var(--dk)
+          cursor = pointer
+          font-size = 11px
+          flex-shrink = 0
+          transition = background .15s
+          display = flex
+          align-items = center
+          justify-content = center
+        rule trait goodman-play-action pseudo hover
+          background = var(--blu2)
+        rule trait goodman-time-slider
+          flex = 1
+        rule trait goodman-time-label
+          font-size = 11px
+          font-weight = 600
+          font-variant-numeric = tabular-nums
+          min-width = 54px
+          text-align = left
+          color = var(--t1)
+        rule trait fail-badge
+          font-size = 10.5px
+          min-width = 80px
+          text-align = right
+          color = #f87171
+          font-variant-numeric = tabular-nums
+        rule identity GoodmanSpeedGroup
+          display = flex
+          align-items = center
+          gap = 4px
+          flex-shrink = 0
+        rule identity GoodmanSpeedGroup tag label
+          font-size = 10.5px
+          color = var(--t2)
+          cursor = pointer
+        rule trait goodman-speed-slider
+          width = 72px
+          accent-color = var(--blue)
+          cursor = pointer
+        rule trait goodman-speed-label
+          min-width = 34px
+          text-align = right
+          color = var(--t1)
+          font-size = 10.5px
+          font-variant-numeric = tabular-nums
+        rule trait goodman-trail-toggle
+          display = flex
+          align-items = center
+          gap = 3px
+          flex-shrink = 0
+          cursor = pointer
+        rule trait goodman-trail-toggle tag label
+          font-size = 10.5px
+          color = var(--t2)
+          cursor = pointer
+        rule trait goodman-trail-toggle tag input
+          accent-color = var(--blue)
+          cursor = pointer
+        rule identity GoodmanWindowLayer
+          position = fixed
+          top = 0
+          left = 0
+          width = 100%
+          height = 100%
+          pointer-events = none
+          z-index = 200
+        rule trait goodman-window
+          top = 88px
+          left = 420px
+          width = 420px
+          max-width = calc(100vw - 460px)
+          pointer-events = all
+          z-index = 220
+        rule identity GoodmanStatsWindow
+          top = 118px
+          left = 460px
+        rule identity GoodmanAnovaWindow
+          top = 148px
+          left = 500px
+        rule trait goodman-window-empty
+          min-height = 180px
+          display = flex
+          align-items = center
+          justify-content = center
+          padding = 18px
+          color = #94a3b8
+          text-align = center
+        rule trait goodman-window-empty-text
+          margin = 0
+          font-size = 12px
+        rule trait goodman-window-empty-message
+          padding = 12px
+          margin = 0
+          font-size = 11.5px
+          color = #94a3b8
+        rule trait goodman-fatigue-legend-note
+          font-size = 9.5px
+          color = var(--t2)
+          margin-top = 6px
+          line-height = 1.5
+        rule trait goodman-probe-intro
+          display = flex
+          gap = 2px
+          font-size = 10.5px
+          color = var(--t2)
+          margin-bottom = 6px
+        rule trait goodman-probe-bolt
+          border = 1px solid var(--brd)
+          border-radius = 5px
+          padding = 6px 7px
+          background = rgba(0,0,0,.12)
+        rule trait goodman-probe-bolt-name
+          font-size = 11px
+          font-weight = 700
+          margin-bottom = 5px
+        rule trait goodman-probe-bolt-name--primary
+          color = #dc2626
+        rule trait goodman-probe-bolt-name--maintenance
+          color = #8CC4D4
+        rule identity GoodmanRunProgressFill
+          position = absolute
+          left = 0
+          top = 0
+          bottom = 0
+          width = 0
+          background = var(--blue)
+          transition = width .2s, opacity .15s
+        rule identity GoodmanRunProgressFill variant ready
+          width = 0
+          background = var(--blue)
+          opacity = 1
+        rule identity GoodmanRunProgressFill variant running
+          width = 0
+          background = var(--blue)
+          opacity = 1
+        rule identity GoodmanRunProgressFill variant paused
+          width = 0
+          background = var(--blue)
+          opacity = .4
+        rule identity GoodmanRunProgressFill variant done
+          width = 100%
+          background = var(--grn)
+          opacity = 1
+        rule identity GoodmanRunProgressFill variant stopped
+          width = 0
+          background = var(--ylw)
+          opacity = 1
+        rule identity GoodmanBoltSetPrimarySwatch
+          background = #dc2626
+        rule identity GoodmanBoltSetMaintenanceSwatch
+          background = #8CC4D4
+        rule identity GoodmanLegendInfiniteSwatch
+          background = #bbf7d0
+          border = 1px solid #86efac
+        rule identity GoodmanLegendFiniteSwatch
+          background = #d9f99d
+          border = 1px solid #bef264
+        rule identity GoodmanLegendShortSwatch
+          background = #fef08a
+          border = 1px solid #fde047
+        rule identity GoodmanLegendImminentSwatch
+          background = #fde68a
+          border = 1px solid #fbbf24
+
       slice mill-charge
+        mode native-browser
         group "mill charge"
         seam "mill charge"
         family chrome.sidebar -> "mill charge"
         family surface.metric_group -> "mill charge"
 
+      native mill-charge
+        rule identity MillChargeCanvasWrap
+          flex = 1
+          display = flex
+          align-items = center
+          justify-content = center
+          padding = 16px
+          min-width = 0
+        rule identity MillChargeCanvasWrap tag canvas
+          width = 100%
+          height = 100%
+          display = block
+          border = 0
+          border-radius = 10px
+        rule identity MillChargeMetrics
+          width = 190px
+          min-width = 190px
+          background = var(--mid)
+          border-left = 1px solid var(--brd)
+          display = flex
+          flex-direction = column
+          overflow = hidden
+        rule identity MillChargeMetricsHeader
+          padding = 10px 12px
+          border-bottom = 1px solid var(--brd)
+          font-size = 9.5px
+          font-weight = 700
+          text-transform = uppercase
+          letter-spacing = .08em
+          color = var(--t2)
+        rule identity MillChargeMetricsPanel
+          padding = 10px 12px
+        rule trait prow
+          margin = 8px 0
+          display = flex
+          flex-direction = column
+          gap = 4px
+        rule trait prow-top
+          display = flex
+          justify-content = space-between
+          align-items = center
+        rule trait plabel
+          font-size = 11px
+          color = var(--t2)
+        rule trait pval
+          font-size = 11px
+          color = var(--blue)
+          font-weight = 600
+        rule trait mill-slider
+          width = 100%
+          accent-color = var(--blue)
+          height = 3px
+          cursor = pointer
+        rule trait mill-preset-btn
+          display = block
+          width = 100%
+          text-align = left
+          padding = 6px 8px
+          margin-bottom = 4px
+          background = rgba(0,0,0,.18)
+          border = 1px solid var(--brd)
+          border-radius = 5px
+          color = var(--t1)
+          font-size = 11.5px
+          cursor = pointer
+          transition = background .1s, border-color .1s
+        rule trait mill-preset-btn pseudo hover
+          background = rgba(140,196,212,.12)
+          border-color = rgba(140,196,212,.35)
+        rule trait mill-metric-row
+          display = flex
+          justify-content = space-between
+          align-items = center
+          margin-bottom = 9px
+        rule trait mill-metric-lbl
+          font-size = 11px
+          color = var(--t2)
+        rule trait mill-metric-val
+          font-size = 12px
+          font-weight = 600
+          color = var(--blue)
+          font-variant-numeric = tabular-nums
+        rule trait mill-regime-badge
+          margin-top = 10px
+          padding = 6px 10px
+          border-radius = 6px
+          font-size = 11px
+          font-weight = 700
+          letter-spacing = .06em
+          text-align = center
+        rule trait mill-regime-badge variant rolling
+          background = #14532d
+          color = #4ade80
+        rule trait mill-regime-badge variant cascading
+          background = #78350f
+          color = #fbbf24
+        rule trait mill-regime-badge variant cataracting
+          background = #7f1d1d
+          color = #f87171
+        rule trait mill-regime-badge variant centrifuging
+          background = #3b0764
+          color = #c084fc
+        rule trait mill-regime-badge variant pooling
+          background = #1e3a5f
+          color = #60a5fa
+        rule trait mill-regime-badge variant slipping
+          background = #3f3700
+          color = #fde047
+        media "(max-width: 980px)"
+          rule identity MillChargeBody
+            flex-direction = column
+          rule identities MillChargeSidebar MillChargeMetrics
+            width = auto
+            min-width = 0
+
       slice mill-force
+        mode native-browser
         group "mill force"
         seam "mill force"
         family chrome.sidebar -> "mill force"
         family interactive.pill -> "mill force"
         family surface.result_row -> "mill force"
+
+      native mill-force
+        rule trait mill-force-mode-pills
+          display = flex
+          gap = 6px
+          padding = 6px 0
+        rule trait mill-force-pill
+          background = var(--dk)
+          border = 1px solid var(--brd)
+          color = var(--t2)
+          padding = 4px 12px
+          border-radius = 3px
+          cursor = pointer
+          font-size = 11px
+          transition = all 0.15s
+        rule trait mill-force-pill pseudo hover
+          background = rgba(140,196,212,.08)
+          border-color = var(--brd)
+        rule trait mill-force-pill variant active
+          background = rgba(140,196,212,.12)
+          color = var(--blue)
+          border-color = rgba(140,196,212,.35)
+        rule trait mill-force-model-radios
+          display = flex
+          gap = 12px
+          padding = 4px 0
+        rule trait mill-force-model-option
+          display = flex
+          align-items = center
+          gap = 5px
+          cursor = pointer
+          font-size = 11px
+        rule trait mill-force-model-grounded-text
+          color = var(--blue)
+        rule trait mill-force-model-faithful-text
+          color = var(--ylw)
+        rule trait mill-force-mc-toggle
+          cursor = pointer
+          display = flex
+          justify-content = space-between
+          align-items = center
+        rule trait mill-force-mc-toggle pseudo hover
+          color = var(--blue)
+        rule identity MillForceTabs
+          display = flex
+          gap = 0
+          padding = 8px 12px
+          border-bottom = 1px solid var(--brd)
+          background = var(--mid)
+          flex-shrink = 0
+        rule trait mill-force-cht-tab
+          background = none
+          border = 1px solid transparent
+          color = var(--t2)
+          padding = 5px 12px
+          border-radius = 3px
+          cursor = pointer
+          font-size = 11px
+          transition = all 0.15s
+        rule trait mill-force-cht-tab pseudo hover
+          color = var(--t1)
+        rule trait mill-force-cht-tab variant active
+          background = rgba(140,196,212,.12)
+          color = var(--blue)
+          border-color = rgba(140,196,212,.35)
+        rule identity MillForceChartWrap
+          flex = 1
+          overflow = hidden
+          position = relative
+          background = var(--dk)
+        rule trait mill-force-slider
+          width = 100%
+          height = 4px
+          border-radius = 2px
+          background = var(--brd)
+          cursor = pointer
+        rule trait mill-force-result-row
+          display = flex
+          justify-content = space-between
+          padding = 5px 0
+          font-size = 11px
+          gap = 8px
+        rule trait mill-force-rl
+          color = var(--t2)
+        rule trait mill-force-rv
+          color = var(--t1)
+          font-weight = 600
+          margin-left = auto
+        rule trait mill-force-rd
+          color = var(--ylw)
+          font-size = 10px
+        media "(max-width: 980px)"
+          rule identity MillForceBody
+            flex-direction = column
+          rule identity MillForceSidebar
+            width = auto
+            min-width = 0
 
       slice platform-config
         mode native-browser
@@ -3274,6 +3872,22 @@ lowering
           width = 0
           background = var(--blue)
           transition = width .2s, opacity .15s
+        rule ".prog-fill.ready, .prog-fill.running"
+          width = 0
+          background = var(--blue)
+          opacity = 1
+        rule ".prog-fill.paused"
+          width = 0
+          background = var(--blue)
+          opacity = .4
+        rule ".prog-fill.done"
+          width = 100%
+          background = var(--grn)
+          opacity = 1
+        rule ".prog-fill.stopped"
+          width = 0
+          background = var(--ylw)
+          opacity = 1
         rule ".prog-lbl"
           display = block
           margin-top = 3px
@@ -3727,6 +4341,24 @@ lowering
           font-weight = 700
           letter-spacing = .06em
           text-align = center
+        rule ".mill-regime-badge.rolling"
+          background = #14532d
+          color = #4ade80
+        rule ".mill-regime-badge.cascading"
+          background = #78350f
+          color = #fbbf24
+        rule ".mill-regime-badge.cataracting"
+          background = #7f1d1d
+          color = #f87171
+        rule ".mill-regime-badge.centrifuging"
+          background = #3b0764
+          color = #c084fc
+        rule ".mill-regime-badge.pooling"
+          background = #1e3a5f
+          color = #60a5fa
+        rule ".mill-regime-badge.slipping"
+          background = #3f3700
+          color = #fde047
         rule ".metric-group"
           background = rgba(0,0,0,.2)
           border-radius = 5px

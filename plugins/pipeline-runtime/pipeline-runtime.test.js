@@ -40,6 +40,69 @@ test("pipeline runtime exposes the platform-config demo handlers and no plugin-o
   assert.deepEqual(handlerCatalog.pageHandlers, []);
   assert.deepEqual(runtimeModule.routes, []);
   assert.equal(runtimeModule.bundleId, "bundle-pipeline-runtime");
+  assert.deepEqual(runtimeModule.desireExtensions.rvmForms.map(entry => entry.kind), [
+    "sync",
+    "sync_output",
+    "input_transform",
+    "output_transform",
+    "input_mapping",
+    "output_mapping",
+    "pipeline_test"
+  ]);
+  assert.equal(
+    runtimeModule.providers.some(provider =>
+      provider?.kind === "coreHook" && provider?.id === "sessionOpenResponsePayload"
+    ),
+    true
+  );
+});
+
+test("pipeline runtime session-open response hook hydrates platform-config routes only", async () => {
+  const world = createWorld();
+  createIdentity(world, {
+    actor: "bootstrap",
+    id: "identity.aaron",
+    identityActor: "aaron",
+    label: "Aaron",
+    username: "aaron",
+    password: "pw",
+    displayName: "Aaron A."
+  });
+  defineAuthRole(world, { actor: "bootstrap", id: "platform_admin", label: "Platform Admin" });
+  grantIdentityRole(world, { actor: "bootstrap", identityId: "identity.aaron", roleId: "platform_admin" });
+  const hook = runtimeModule.providers.find(provider => provider?.id === "sessionOpenResponsePayload")?.hook;
+  assert.equal(typeof hook, "function");
+
+  const appContext = {
+    secretStore: { listMetadata: async () => [] },
+    dbSql: { listDatasources: () => [] }
+  };
+  const directSession = {
+    authenticatedIdentity: "identity.aaron",
+    authenticatedActor: "aaron",
+    effectiveIdentity: "identity.aaron",
+    effectiveActor: "aaron",
+    authorityMode: "direct"
+  };
+
+  assert.equal(await hook({
+    world,
+    appContext,
+    session: directSession,
+    syncedSession: directSession,
+    resumeRouteKey: "home"
+  }), null);
+
+  const hydrated = await hook({
+    world,
+    appContext,
+    session: directSession,
+    syncedSession: directSession,
+    resumeRouteKey: "platform-config-access"
+  });
+  assert.equal(Array.isArray(hydrated.identities), true);
+  assert.equal(Array.isArray(hydrated.authorityActors), true);
+  assert.equal(hydrated.PlatformConfigAuthorityEffectiveActor, "aaron");
 });
 
 test("pipeline runtime handlers render the page and return a stub script response", async () => {

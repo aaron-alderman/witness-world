@@ -27,6 +27,8 @@ export function surfaceDomId(surface, {
   requireRuntimeAttachment = false
 } = {}) {
   const props = surface?.props && typeof surface.props === "object" ? surface.props : {};
+  const authoredPresentationAnchor = trimString(props.presentationAnchor);
+  if (authoredPresentationAnchor) return authoredPresentationAnchor;
   const authoredDomId = trimString(props.domId);
   if (authoredDomId) return authoredDomId;
   if (requireRuntimeAttachment && !surfaceNeedsRuntimeDomId(surface)) return null;

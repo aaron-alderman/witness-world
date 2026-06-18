@@ -7,13 +7,14 @@ import { createThing, createWorld, relation } from "../../src/kernel.js";
 import { moduleProjectors } from "../../src/modules.js";
 import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
 import { createDbSqlRuntime } from "./provider-runtime.js";
-import { bundleId, handlerCatalog, providers } from "./runtime.js";
+import { bundleId, desireExtensions, handlerCatalog, providers } from "./runtime.js";
 
 test("sql plugin exposes datasource CRUD and explicit db.sql operations", () => {
   assert.equal(bundleId, "bundle-sql");
   assert.equal(handlerCatalog.dispatchHandlers.includes("db.sql.datasource.create"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("db.sql.datasource.test"), true);
   assert.equal(handlerCatalog.dispatchHandlers.includes("db.sql.query"), true);
+  assert.deepEqual(desireExtensions.rvmForms.map(entry => entry.kind), ["sql_table"]);
 });
 
 test("sql plugin projectors track datasource test state and clear stale errors on success", () => withRegisteredPluginProjectors(providers, () => {

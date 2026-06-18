@@ -1693,6 +1693,30 @@ a {
   transition: width .2s, opacity .15s;
 }
 
+.prog-fill.ready, .prog-fill.running {
+  width: 0;
+  background: var(--blue);
+  opacity: 1;
+}
+
+.prog-fill.paused {
+  width: 0;
+  background: var(--blue);
+  opacity: .4;
+}
+
+.prog-fill.done {
+  width: 100%;
+  background: var(--grn);
+  opacity: 1;
+}
+
+.prog-fill.stopped {
+  width: 0;
+  background: var(--ylw);
+  opacity: 1;
+}
+
 .prog-lbl {
   display: block;
   margin-top: 3px;
@@ -2314,6 +2338,36 @@ input[type=range], .mill-slider {
   font-weight: 700;
   letter-spacing: .06em;
   text-align: center;
+}
+
+.mill-regime-badge.rolling {
+  background: #14532d;
+  color: #4ade80;
+}
+
+.mill-regime-badge.cascading {
+  background: #78350f;
+  color: #fbbf24;
+}
+
+.mill-regime-badge.cataracting {
+  background: #7f1d1d;
+  color: #f87171;
+}
+
+.mill-regime-badge.centrifuging {
+  background: #3b0764;
+  color: #c084fc;
+}
+
+.mill-regime-badge.pooling {
+  background: #1e3a5f;
+  color: #60a5fa;
+}
+
+.mill-regime-badge.slipping {
+  background: #3f3700;
+  color: #fde047;
 }
 
 .metric-group {

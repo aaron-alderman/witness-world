@@ -566,11 +566,11 @@ view MillChargeRegimeBadge {
   kind status
   class mill-regime-badge
   prop tag = "div"
-  prop style = "background:#7f1d1d;color:#f87171"
+  prop className = "cataracting"
   prop text = "CATARACTING"
   bindings {
     text from capability MillChargeCrossSection.regime map rolling ROLLING cascading CASCADING cataracting CATARACTING centrifuging CENTRIFUGING pooling POOLING slipping SLIPPING default CASCADING
-    style from capability MillChargeCrossSection.regime map rolling "background:#14532d;color:#4ade80" cascading "background:#78350f;color:#fbbf24" cataracting "background:#7f1d1d;color:#f87171" centrifuging "background:#3b0764;color:#c084fc" pooling "background:#1e3a5f;color:#60a5fa" slipping "background:#3f3700;color:#fde047" default "background:#78350f;color:#fbbf24"
+    className from capability MillChargeCrossSection.regime map rolling rolling cascading cascading cataracting cataracting centrifuging centrifuging pooling pooling slipping slipping default cascading
   }
 }
 

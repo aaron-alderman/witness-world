@@ -910,6 +910,20 @@ event EngentusSessionOpened {
     resumeRouteKey: EngentusShellActiveRoute
     featureAccess__engentus_mill_force: EngentusMillForceAccess
     featureAccess__engentus_platform_config: EngentusPlatformConfigAccess
+    PlatformConfigAccessRolesHint: PlatformConfigAccessRolesHint
+    PlatformConfigAuthorityAuthenticatedIdentity: PlatformConfigAuthorityAuthenticatedIdentity
+    PlatformConfigAuthorityAuthenticatedActor: PlatformConfigAuthorityAuthenticatedActor
+    PlatformConfigAuthorityEffectiveIdentity: PlatformConfigAuthorityEffectiveIdentity
+    PlatformConfigAuthorityEffectiveActor: PlatformConfigAuthorityEffectiveActor
+    PlatformConfigAuthorityMode: PlatformConfigAuthorityMode
+    PlatformConfigAuthorityAssumptionGrantId: PlatformConfigAuthorityAssumptionGrantId
+    PlatformConfigAuthoritySummary: PlatformConfigAuthoritySummary
+    PlatformConfigGrantSourceIdentityId: PlatformConfigGrantSourceIdentityId
+    PlatformConfigGrantTargetActor: PlatformConfigGrantTargetActor
+    PlatformConfigGrantSummary: PlatformConfigGrantSummary
+    PlatformConfigAssumeIdentityId: PlatformConfigAssumeIdentityId
+    PlatformConfigAssumeTargetActor: PlatformConfigAssumeTargetActor
+    PlatformConfigAssumeSummary: PlatformConfigAssumeSummary
   }
   writes {
     EngentusAuthNotice: ""
@@ -1414,6 +1428,13 @@ adapter EngentusSessionOpenHttp using HTTP {
   host_operation engentus.session.open
   success_event EngentusSessionOpened
   failure_event EngentusSessionOpenFailed
+  collection_outputs = {
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthorityGrants = "authorityGrants"
+    PlatformConfigAuthorityActors = "authorityActors"
+    PlatformConfigAuthRoles = "authRoles"
+  }
 }
 
 adapter EngentusSessionCloseHttp using HTTP {

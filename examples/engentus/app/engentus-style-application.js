@@ -1561,6 +1561,7 @@ async function composeStylesheetForAsset(browserLowering, authoredPlan, assetNam
   }
 
   const blocks = [];
+  const emittedNativeSlices = new Set();
   for (const declaredGroup of asset.declarationGroups) {
     const ownerSlice = ownedSliceByGroup.get(declaredGroup.name) ?? null;
     if (!ownerSlice) continue;
@@ -1570,11 +1571,13 @@ async function composeStylesheetForAsset(browserLowering, authoredPlan, assetNam
       blocks.push(structuredClone(declaredGroup));
       continue;
     }
+    if (emittedNativeSlices.has(ownerSlice.name)) continue;
     const nativeBlock = asset.nativeBlocksBySlice?.[ownerSlice.name] ?? null;
     const recordsByIdentity = nativeRecordsBySlice.get(ownerSlice.name) ?? null;
     if (!nativeBlock || !recordsByIdentity) {
       throw new Error(`Missing native lowering data for slice ${ownerSlice.name}`);
     }
+    emittedNativeSlices.add(ownerSlice.name);
     blocks.push({
       kind: "group",
       name: declaredGroup.name,

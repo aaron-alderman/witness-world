@@ -114,24 +114,30 @@ function validateDesireExtensions(pluginPackage, loaded, errors) {
   if (raw === null || raw === undefined) {
     return {
       elaborators: [],
-      runtimeDeclarations: []
+      runtimeDeclarations: [],
+      rvmForms: []
     };
   }
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     errors.push("desireExtensions must be an object");
     return {
       elaborators: [],
-      runtimeDeclarations: []
+      runtimeDeclarations: [],
+      rvmForms: []
     };
   }
   const pluginId = pluginPackage.id;
   const elaborators = [];
   const runtimeDeclarations = [];
+  const rvmForms = [];
   if (raw.elaborators !== undefined && !Array.isArray(raw.elaborators)) {
     errors.push("desireExtensions.elaborators must be an array");
   }
   if (raw.runtimeDeclarations !== undefined && !Array.isArray(raw.runtimeDeclarations)) {
     errors.push("desireExtensions.runtimeDeclarations must be an array");
+  }
+  if (raw.rvmForms !== undefined && !Array.isArray(raw.rvmForms)) {
+    errors.push("desireExtensions.rvmForms must be an array");
   }
   for (const [index, entry] of (Array.isArray(raw.elaborators) ? raw.elaborators : []).entries()) {
     const path = `desireExtensions.elaborators[${index}]`;
@@ -177,9 +183,33 @@ function validateDesireExtensions(pluginPackage, loaded, errors) {
       });
     }
   }
+  for (const [index, entry] of (Array.isArray(raw.rvmForms) ? raw.rvmForms : []).entries()) {
+    const path = `desireExtensions.rvmForms[${index}]`;
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      errors.push(`${path} must be an object`);
+      continue;
+    }
+    const kind = typeof entry.kind === "string" && entry.kind.trim() ? entry.kind.trim() : null;
+    if (!kind) errors.push(`${path}.kind must be a non-empty string`);
+    if (typeof entry.parse !== "function") errors.push(`${path}.parse must be a function`);
+    if (typeof entry.serialize !== "function") errors.push(`${path}.serialize must be a function`);
+    if (typeof entry.validate !== "function") errors.push(`${path}.validate must be a function`);
+    if (typeof entry.normalize !== "function") errors.push(`${path}.normalize must be a function`);
+    if (kind && typeof entry.parse === "function" && typeof entry.serialize === "function" && typeof entry.validate === "function" && typeof entry.normalize === "function") {
+      rvmForms.push({
+        pluginId,
+        kind,
+        parse: entry.parse,
+        serialize: entry.serialize,
+        validate: entry.validate,
+        normalize: entry.normalize
+      });
+    }
+  }
   return {
     elaborators,
-    runtimeDeclarations
+    runtimeDeclarations,
+    rvmForms
   };
 }
 
@@ -226,7 +256,7 @@ function validatePluginRuntimeModule(pluginPackage, loaded) {
     }
     bundleDefinitions.push(normalized);
   }
-  if (!bundleDefinitions.length && !desireExtensions.elaborators.length && !desireExtensions.runtimeDeclarations.length && !errors.length) {
+  if (!bundleDefinitions.length && !desireExtensions.elaborators.length && !desireExtensions.runtimeDeclarations.length && !desireExtensions.rvmForms.length && !errors.length) {
     errors.push("runtime module must export bundles, legacy bundleId/handlerCatalog/routes/surfaces/createHandlers, or desireExtensions");
   }
   if (errors.length) return { ok: false, errors };
@@ -247,9 +277,11 @@ export async function loadRuntimePluginModules({
   const claimedBundles = Object.create(null);
   const claimedElaborators = Object.create(null);
   const claimedRuntimeDeclarations = Object.create(null);
+  const claimedRvmForms = Object.create(null);
   const desireExtensions = {
     elaborators: [],
-    runtimeDeclarations: []
+    runtimeDeclarations: [],
+    rvmForms: []
   };
 
   for (const pluginPackage of pluginCatalog?.packages ?? []) {
@@ -318,6 +350,18 @@ export async function loadRuntimePluginModules({
           duplicateExtensionClaims.push(`DESIRE runtime declaration already claimed by ${claimedBy}: ${declaration.kind}`);
         }
       }
+      const localRvmForms = new Set();
+      for (const rvmForm of validated.desireExtensions.rvmForms) {
+        if (localRvmForms.has(rvmForm.kind)) {
+          duplicateExtensionClaims.push(`duplicate RVM form in plugin ${pluginPackage.id}: ${rvmForm.kind}`);
+          continue;
+        }
+        localRvmForms.add(rvmForm.kind);
+        const claimedBy = claimedRvmForms[rvmForm.kind];
+        if (claimedBy && claimedBy !== pluginPackage.id) {
+          duplicateExtensionClaims.push(`RVM form already claimed by ${claimedBy}: ${rvmForm.kind}`);
+        }
+      }
       if (duplicateBundleClaims.length || duplicateExtensionClaims.length) {
         const errors = [...duplicateBundleClaims, ...duplicateExtensionClaims];
         pluginStates[pluginPackage.id] = {
@@ -378,6 +422,10 @@ export async function loadRuntimePluginModules({
         claimedRuntimeDeclarations[declaration.kind] = pluginPackage.id;
         desireExtensions.runtimeDeclarations.push(declaration);
       }
+      for (const rvmForm of validated.desireExtensions.rvmForms) {
+        claimedRvmForms[rvmForm.kind] = pluginPackage.id;
+        desireExtensions.rvmForms.push(rvmForm);
+      }
       pluginStates[pluginPackage.id] = {
         ...baseState,
         loadStatus: "loaded",
@@ -385,7 +433,8 @@ export async function loadRuntimePluginModules({
         bundleId: bundleIds.length === 1 ? bundleIds[0] : null,
         desireExtensions: {
           elaborators: validated.desireExtensions.elaborators.map(entry => entry.id),
-          runtimeDeclarations: validated.desireExtensions.runtimeDeclarations.map(entry => entry.kind)
+          runtimeDeclarations: validated.desireExtensions.runtimeDeclarations.map(entry => entry.kind),
+          rvmForms: validated.desireExtensions.rvmForms.map(entry => entry.kind)
         },
         errors: []
       };

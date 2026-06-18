@@ -22,14 +22,14 @@ const RVM_SOURCE_ONLY_SEMANTIC_KINDS = new Set([
   "stdlib"
 ]);
 
-export async function compileRvmFileToDesirePlus(file) {
+export async function compileRvmFileToDesirePlus(file, options = {}) {
   const resolved = path.resolve(file);
   const source = await fs.readFile(resolved, "utf8");
-  return compileRvmToDesirePlus(source, { file: resolved });
+  return compileRvmToDesirePlus(source, { ...options, file: resolved });
 }
 
-export function compileRvmToDesirePlus(source, { file = null } = {}) {
-  const forms = parseRvmForms(source, { file });
+export function compileRvmToDesirePlus(source, { file = null, rvmFormRegistry = null } = {}) {
+  const forms = parseRvmForms(source, { file, rvmFormRegistry });
   const effectiveForms = forms.length === 0
     ? [{
         kind: "source",
@@ -43,6 +43,7 @@ export function compileRvmToDesirePlus(source, { file = null } = {}) {
         semantic: null
       }]
     : forms;
+  validateRvmSemanticForms(effectiveForms, { file, rvmFormRegistry });
   const nodes = effectiveForms.map((form, index) => {
     const classification = classifyRvmForm(form);
     return createDesirePlusNode({
@@ -61,7 +62,10 @@ export function compileRvmToDesirePlus(source, { file = null } = {}) {
         header: form.header,
         body: form.body,
         fields: form.fields,
-        file
+        file,
+        pluginFormKind: form.pluginFormKind ?? null,
+        pluginId: form.pluginId ?? null,
+        pluginData: form.pluginData ?? null
       },
       semantic: form.semantic,
       meta: classification
@@ -170,7 +174,7 @@ function isGitConflictMarker(line) {
   return /^(<<<<<<<|=======|>>>>>>>)(?:\s|$)/.test(line);
 }
 
-function parseRvmForms(source, { file = null } = {}) {
+function parseRvmForms(source, { file = null, rvmFormRegistry = null } = {}) {
   const lines = source.split(/\r?\n/);
   const forms = [];
   let index = 0;
@@ -234,8 +238,14 @@ function parseRvmForms(source, { file = null } = {}) {
     const blockHeader = trimmed.match(/^([A-Za-z_][A-Za-z0-9_./-]*)\s+([A-Za-z_][A-Za-z0-9_.:/-]*)(?:\s+(?:using|of)\s+([A-Za-z_][A-Za-z0-9_.:/-]*))?(?:\s*:\s*([A-Za-z_][A-Za-z0-9_.:/\-[\]]*))?\s*\{$/);
     if (blockHeader) {
       const { rawText, endLine, bodyLines } = readBraceBlock(lines, index, { file });
+      const pluginKind = blockHeader[1];
+      const pluginEntry = rvmFormRegistry?.get(pluginKind) ?? null;
+      const unresolvedPluginEntry = !pluginEntry ? (rvmFormRegistry?.getUnresolved(pluginKind) ?? null) : null;
+      if (unresolvedPluginEntry) {
+        throw createUnavailableRvmFormError(unresolvedPluginEntry, { file, line: index + 1 });
+      }
       forms.push(makeBlockForm({
-        kind: blockHeader[1],
+        kind: pluginKind,
         name: blockHeader[2],
         using: blockHeader[3] ?? null,
         type: blockHeader[4] ?? null,
@@ -243,7 +253,8 @@ function parseRvmForms(source, { file = null } = {}) {
         raw: rawText,
         startLine: index + 1,
         endLine,
-        bodyLines
+        bodyLines,
+        pluginEntry
       }));
       index = endLine;
       continue;
@@ -374,9 +385,43 @@ function makeConflictMarkerForm(line, index) {
   };
 }
 
-function makeBlockForm({ kind, name, owns, using, type, header, raw, startLine, endLine, bodyLines }) {
+function makeBlockForm({ kind, name, owns, using, type, header, raw, startLine, endLine, bodyLines, pluginEntry = null }) {
   const body = bodyLines.join("\n");
   const fields = parseRvmFieldMap(bodyLines);
+  if (pluginEntry) {
+    const parsed = pluginEntry.parse({
+      kind,
+      name,
+      using,
+      type,
+      header,
+      raw,
+      startLine,
+      endLine,
+      body,
+      bodyLines: [...bodyLines],
+      fields: structuredClone(fields)
+    }, {
+      pluginId: pluginEntry.pluginId,
+      formKind: pluginEntry.kind
+    }) ?? {};
+    return {
+      kind,
+      name,
+      header,
+      body,
+      raw,
+      fields: Array.isArray(parsed.fields) ? parsed.fields : fields,
+      startLine,
+      endLine,
+      semantic: null,
+      pluginFormKind: pluginEntry.kind,
+      pluginId: pluginEntry.pluginId ?? null,
+      pluginData: parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? { ...parsed }
+        : { value: parsed }
+    };
+  }
   return {
     kind,
     name,
@@ -1244,6 +1289,31 @@ function parseObjectAssignmentBlock(bodyLines, key) {
     out[match[1]] = parseScalarValue(match[2]);
   }
   return Object.keys(out).length ? out : null;
+}
+
+function validateRvmSemanticForms(forms, { file = null, rvmFormRegistry = null } = {}) {
+  for (const form of forms) {
+    if (form?.pluginFormKind) {
+      const pluginEntry = rvmFormRegistry?.get(form.pluginFormKind) ?? null;
+      if (!pluginEntry) {
+        throw new Error(`RVM plugin form ${form.pluginFormKind} is not available during validation`);
+      }
+      pluginEntry.validate(form, {
+        file,
+        forms,
+        rvmFormRegistry
+      });
+      continue;
+    }
+    if (!form?.semantic) continue;
+  }
+}
+
+function createUnavailableRvmFormError(entry, { file = null, line = null } = {}) {
+  const pluginId = entry?.pluginId ? ` ${entry.pluginId}` : " its owning plugin";
+  const location = file ? `${file}:${line ?? 1}` : `line ${line ?? 1}`;
+  const reason = entry?.reason ? ` (${entry.reason})` : "";
+  return new Error(`RVM form ${entry.kind} requires${pluginId} at ${location}${reason}`);
 }
 
 function parseSurfaceBindingsBlock(bodyLines) {

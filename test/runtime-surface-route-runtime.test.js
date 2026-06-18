@@ -136,6 +136,52 @@ test("createBrowserRouteInvoker leaves collections unchanged on failed responses
   assert.deepEqual(collectionWrites, []);
 });
 
+test("createBrowserRouteInvoker ignores missing collection paths instead of clearing collections", async () => {
+  const collectionWrites = [];
+  const invoke = createBrowserRouteInvoker({
+    async fetch() {
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get(name) {
+            return String(name).toLowerCase() === "content-type" ? "application/json" : null;
+          }
+        },
+        async text() {
+          return JSON.stringify({
+            message: "Session opened",
+            resumeRouteKey: "platform-config-access"
+          });
+        }
+      };
+    }
+  }, {
+    collectionStore: {
+      replaceMany(entries) {
+        collectionWrites.push(entries);
+      }
+    }
+  });
+
+  const result = await invoke({
+    route: "/api/session",
+    method: "post",
+    binding: {
+      op: {
+        collectionOutputs: {
+          PlatformConfigIdentities: "identities",
+          PlatformConfigAuthorityActors: "authorityActors"
+        }
+      }
+    }
+  });
+
+  assert.equal(result.status, "success");
+  assert.equal(result.collections, null);
+  assert.deepEqual(collectionWrites, []);
+});
+
 test("loadRouteSurfacePage caches the parsed fragment by route key", async () => {
   const responses = [];
   const window = {

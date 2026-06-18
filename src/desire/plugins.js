@@ -4,10 +4,14 @@ import {
 import {
   createDesirePlusElaboratorRegistry
 } from "./elaborate.js";
+import {
+  createRvmFormRegistry
+} from "./rvm-forms.js";
 
 export function createDesireRegistriesFromPluginExtensions(loadResult = {}) {
   const elaboratorRegistry = createDesirePlusElaboratorRegistry();
   const runtimeDeclarationRegistry = createCoreRuntimeDeclarationRegistry();
+  const rvmFormRegistry = createRvmFormRegistry();
   const seenElaborators = new Set();
   const extensions = loadResult.desireExtensions ?? loadResult ?? {};
 
@@ -44,8 +48,19 @@ export function createDesireRegistriesFromPluginExtensions(loadResult = {}) {
     });
   }
 
+  for (const entry of extensions.rvmForms ?? []) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error("plugin RVM form entry must be an object");
+    }
+    if (rvmFormRegistry.knows(entry.kind)) {
+      throw new Error(`duplicate plugin RVM form kind: ${entry.kind}`);
+    }
+    rvmFormRegistry.register(entry);
+  }
+
   return {
     elaboratorRegistry,
-    runtimeDeclarationRegistry
+    runtimeDeclarationRegistry,
+    rvmFormRegistry
   };
 }

@@ -72,12 +72,12 @@ export function parseWitnessToml(source) {
   return docs;
 }
 
-export async function loadWitnessTomlFile(file, { seen = new Set(), beforeLoad = null } = {}) {
-  const loaded = await loadWitnessAppFile(file, { seen, beforeLoad });
+export async function loadWitnessTomlFile(file, { seen = new Set(), beforeLoad = null, rvmFormRegistry = null } = {}) {
+  const loaded = await loadWitnessAppFile(file, { seen, beforeLoad, rvmFormRegistry });
   return loaded.witnessDocs;
 }
 
-export async function loadWitnessAppFile(file, { seen = new Set(), beforeLoad = null } = {}) {
+export async function loadWitnessAppFile(file, { seen = new Set(), beforeLoad = null, rvmFormRegistry = null } = {}) {
   const resolved = path.resolve(file);
   if (typeof beforeLoad === "function") {
     await beforeLoad(resolved);
@@ -97,7 +97,7 @@ export async function loadWitnessAppFile(file, { seen = new Set(), beforeLoad = 
     return {
       witnessDocs: [],
       authoredDesireDocs: [
-        normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(resolved))
+        normalizeDesirePlusToDesire(await compileRvmFileToDesirePlus(resolved, { rvmFormRegistry }), { rvmFormRegistry })
       ],
       allDocs: [],
       sourceFiles: [{ file: resolved, sourceLanguage: "rvm" }],
@@ -124,7 +124,7 @@ export async function loadWitnessAppFile(file, { seen = new Set(), beforeLoad = 
       spec,
       file: importedPath
     });
-    const loaded = await loadWitnessAppFile(importedPath, { seen, beforeLoad });
+    const loaded = await loadWitnessAppFile(importedPath, { seen, beforeLoad, rvmFormRegistry });
     witnessDocs.push(...loaded.witnessDocs);
     allDocs.push(...loaded.allDocs);
     authoredDesireDocs.push(...loaded.authoredDesireDocs);

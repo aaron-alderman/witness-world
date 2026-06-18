@@ -43,6 +43,9 @@ test("engentus canonical V1 WCSS source declares the expected slice coverage and
   assert.ok(authored.lowering?.byBackend?.browser);
   assert.equal(authored.slices.find(slice => slice.name === "auth")?.lowering?.browser?.mode, "native-browser");
   assert.equal(authored.slices.find(slice => slice.name === "home")?.lowering?.browser?.mode, "native-browser");
+  assert.equal(authored.slices.find(slice => slice.name === "goodman")?.lowering?.browser?.mode, "native-browser");
+  assert.equal(authored.slices.find(slice => slice.name === "mill-charge")?.lowering?.browser?.mode, "native-browser");
+  assert.equal(authored.slices.find(slice => slice.name === "mill-force")?.lowering?.browser?.mode, "native-browser");
   assert.equal(authored.slices.find(slice => slice.name === "platform-config")?.lowering?.browser?.mode, "native-browser");
   assert.deepEqual(
     authored.slices.find(slice => slice.name === "auth")?.seams,
@@ -76,6 +79,15 @@ test("engentus canonical V1 WCSS source declares the expected slice coverage and
   assert.deepEqual(
     authored.slices.find(slice => slice.name === "goodman")?.oracleGroups,
     ["goodman chart scaffold", "goodman toolbar", "goodman view", "goodman windows"]
+  );
+  assert.deepEqual(
+    authored.slices.find(slice => slice.name === "goodman")?.seams.map(seam => seam.name),
+    [
+      "goodman.bolt_edit_open",
+      "goodman.bolt_params_open",
+      "goodman.mode_active",
+      "goodman.run_progress_state"
+    ]
   );
   assert.deepEqual(
     authored.slices.find(slice => slice.name === "chart-pages")?.identities,
@@ -171,6 +183,9 @@ test("engentus browser lowering map is parsed separately from application slices
   );
   assert.equal(browserLowering.slices.find(slice => slice.name === "auth")?.mode, "native-browser");
   assert.equal(browserLowering.slices.find(slice => slice.name === "home")?.mode, "native-browser");
+  assert.equal(browserLowering.slices.find(slice => slice.name === "goodman")?.mode, "native-browser");
+  assert.equal(browserLowering.slices.find(slice => slice.name === "mill-charge")?.mode, "native-browser");
+  assert.equal(browserLowering.slices.find(slice => slice.name === "mill-force")?.mode, "native-browser");
   assert.equal(browserLowering.slices.find(slice => slice.name === "platform-config")?.mode, "native-browser");
   assert.equal(
     browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.auth?.refs.hasRawSelectors,
@@ -181,10 +196,25 @@ test("engentus browser lowering map is parsed separately from application slices
     0
   );
   assert.equal(
+    browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.goodman?.refs.rawSelectorCount,
+    0
+  );
+  assert.equal(
+    browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.["mill-charge"]?.refs.rawSelectorCount,
+    0
+  );
+  assert.equal(
+    browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.["mill-force"]?.refs.rawSelectorCount,
+    0
+  );
+  assert.equal(
     browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.["platform-config"]?.refs.rawSelectorCount,
     0
   );
+  assert.ok(browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.["mill-charge"]);
+  assert.ok(browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.["mill-force"]);
   assert.ok(browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.["platform-config"]);
+  assert.ok(browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.goodman);
   assert.deepEqual(
     declarationGroups.chart.map(group => group.name),
     ["chart tokens", "chart foundation", "chart surfaces"]
@@ -199,6 +229,8 @@ test("engentus presentation inventory extracts structured identities, traits, an
   const shellBase = inventory.slices.find(slice => slice.name === "shell-base");
   const platformConfig = inventory.slices.find(slice => slice.name === "platform-config");
   const home = inventory.slices.find(slice => slice.name === "home");
+  const millCharge = inventory.slices.find(slice => slice.name === "mill-charge");
+  const millForce = inventory.slices.find(slice => slice.name === "mill-force");
 
   assert.ok(auth?.identities.includes("EngentusLogin"));
   assert.ok(auth?.identities.includes("EngentusSignout"));
@@ -214,11 +246,27 @@ test("engentus presentation inventory extracts structured identities, traits, an
   assert.ok(shellBase?.traits.includes("engentus-spa"));
 
   assert.ok(goodman?.identities.includes("GoodmanBody"));
-  assert.ok(goodman?.overrideProps.includes("style"));
   assert.ok(goodman?.overrideProps.includes("className"));
+  assert.equal(goodman?.overrideProps.includes("style"), false);
+  assert.ok(goodman?.traits.includes("mode-btn"));
+  assert.ok(goodman?.traits.includes("bs-edit-form"));
+  assert.ok(goodman?.surfaces.find(surface => surface.identity === "GoodmanRunProgressFill")?.presentationAnchor);
+  assert.ok(goodman?.surfaces.find(surface => surface.identity === "GoodmanBoltSetPrimarySwatch")?.presentationAnchor);
+  assert.ok(goodman?.surfaces.find(surface => surface.identity === "GoodmanLegendInfiniteSwatch")?.presentationAnchor);
   assert.ok(home?.identities.includes("NewsPanel"));
   assert.ok(home?.traits.includes("news-item"));
   assert.ok(home?.surfaces.find(surface => surface.identity === "ModuleGrid")?.presentationAnchor);
+  assert.ok(millCharge?.identities.includes("MillChargeRegimeBadge"));
+  assert.ok(millCharge?.traits.includes("mill-regime-badge"));
+  assert.ok(millCharge?.overrideProps.includes("className"));
+  assert.equal(millCharge?.overrideProps.includes("style"), false);
+  assert.ok(millCharge?.surfaces.find(surface => surface.identity === "MillChargeMetricsPanel")?.presentationAnchor);
+  assert.ok(millForce?.identities.includes("MillForceTabs"));
+  assert.ok(millForce?.traits.includes("mill-force-pill"));
+  assert.ok(millForce?.traits.includes("mill-force-cht-tab"));
+  assert.ok(millForce?.overrideProps.includes("className"));
+  assert.equal(millForce?.overrideProps.includes("style"), false);
+  assert.ok(millForce?.surfaces.find(surface => surface.identity === "MillForceChartWrap")?.presentationAnchor);
   assert.ok(platformConfig?.identities.includes("PlatformConfigNotice"));
   assert.ok(platformConfig?.traits.includes("platform-config-side-link"));
   assert.ok(platformConfig?.traits.includes("platform-config-row-action"));
@@ -288,10 +336,22 @@ test("engentus can switch isolated slices onto the authored WCSS lane while shri
   assert.equal(shellCss.includes(".auth-signout-icon"), false);
   assert.equal(shellCss.includes(".ms-btn.folding svg"), false);
   assert.equal(shellCss.includes(".ms-btn.pending svg"), true);
+  assert.equal(shellCss.includes("#mill-canvas-wrap canvas"), true);
+  assert.equal(shellCss.includes(".mill-regime-badge.cataracting"), true);
+  assert.equal(shellCss.includes(".mill-force-pill.active"), true);
+  assert.equal(shellCss.includes(".mill-force-cht-tab.active"), true);
   assert.equal(shellCss.includes(".platform-config-row-action"), true);
   assert.equal(renderOracleStylesheet(stylesheets.chart), expectedChartCss);
   assert.equal(
     ownership.slices.find(slice => slice.name === "auth")?.loweringMode,
+    "native-browser"
+  );
+  assert.equal(
+    ownership.slices.find(slice => slice.name === "mill-charge")?.loweringMode,
+    "native-browser"
+  );
+  assert.equal(
+    ownership.slices.find(slice => slice.name === "mill-force")?.loweringMode,
     "native-browser"
   );
   assert.equal(
@@ -305,6 +365,30 @@ test("engentus can switch isolated slices onto the authored WCSS lane while shri
   assert.equal(
     ownership.slices.find(slice => slice.name === "auth")?.nativeDebt?.rawSelectorCount,
     0
+  );
+  assert.equal(
+    ownership.slices.find(slice => slice.name === "mill-charge")?.nativeDebt?.rawSelectorCount,
+    0
+  );
+  assert.equal(
+    ownership.slices.find(slice => slice.name === "mill-force")?.nativeDebt?.rawSelectorCount,
+    0
+  );
+  assert.deepEqual(
+    ownership.slices.find(slice => slice.name === "mill-charge")?.anchorCoverage?.missing,
+    []
+  );
+  assert.deepEqual(
+    ownership.slices.find(slice => slice.name === "mill-force")?.anchorCoverage?.missing,
+    []
+  );
+  assert.deepEqual(
+    ownership.slices.find(slice => slice.name === "mill-charge")?.descendantCoverage?.missingTraits,
+    []
+  );
+  assert.deepEqual(
+    ownership.slices.find(slice => slice.name === "mill-force")?.descendantCoverage?.missingTraits,
+    []
   );
   assert.equal(
     ownership.slices.find(slice => slice.name === "platform-config")?.nativeDebt?.rawSelectorCount,
@@ -355,6 +439,117 @@ test("engentus can switch home onto the authored native proof lane without chang
   assert.equal(homeSlice?.nativeDebt?.rawSelectorCount, 0);
   assert.deepEqual(homeSlice?.anchorCoverage?.missing, []);
   assert.deepEqual(homeSlice?.descendantCoverage?.missingTraits, []);
+});
+
+test("engentus can switch goodman onto the authored native proof lane without changing the checked-in default contract", async () => {
+  const [authoredPlan, inventory] = await Promise.all([
+    loadEngentusAppliedWcss(),
+    buildEngentusPresentationInventory()
+  ]);
+
+  const switchManifest = {
+    theme: "engentus",
+    slices: {
+      goodman: "wcss"
+    }
+  };
+
+  const ownership = verifyEngentusStyleOwnership({
+    inventory,
+    authoredPlan,
+    switchManifest
+  });
+  assert.equal(ownership.ok, true);
+
+  const stylesheets = await composeEngentusStylesheets({
+    authoredPlan,
+    switchManifest
+  });
+  const shellCss = renderOracleStylesheet(stylesheets.shell);
+  assert.equal(shellCss.includes("#goodman-bolt-primary-swatch"), true);
+  assert.equal(shellCss.includes("#goodman-legend-infinite-swatch"), true);
+  assert.equal(shellCss.includes("#prog-fill.done"), true);
+  assert.equal(shellCss.includes(".goodman-window-empty-message"), true);
+
+  const goodmanSlice = ownership.slices.find(slice => slice.name === "goodman");
+  assert.equal(goodmanSlice?.loweringMode, "native-browser");
+  assert.equal(goodmanSlice?.nativeDebt?.rawSelectorCount, 0);
+  assert.deepEqual(goodmanSlice?.anchorCoverage?.missing, []);
+  assert.deepEqual(goodmanSlice?.descendantCoverage?.missingTraits, []);
+});
+
+test("engentus can switch mill-charge onto the authored native proof lane without changing the checked-in default contract", async () => {
+  const [authoredPlan, inventory] = await Promise.all([
+    loadEngentusAppliedWcss(),
+    buildEngentusPresentationInventory()
+  ]);
+
+  const switchManifest = {
+    theme: "engentus",
+    slices: {
+      "mill-charge": "wcss"
+    }
+  };
+
+  const ownership = verifyEngentusStyleOwnership({
+    inventory,
+    authoredPlan,
+    switchManifest
+  });
+  assert.equal(ownership.ok, true);
+
+  const stylesheets = await composeEngentusStylesheets({
+    authoredPlan,
+    switchManifest
+  });
+  const shellCss = renderOracleStylesheet(stylesheets.shell);
+  assert.equal(shellCss.includes("#mill-canvas-wrap canvas"), true);
+  assert.equal(shellCss.includes(".mill-regime-badge.rolling"), true);
+  assert.equal(shellCss.includes(".mill-regime-badge.cataracting"), true);
+  assert.equal(shellCss.includes("@media (max-width: 980px)"), true);
+
+  const millChargeSlice = ownership.slices.find(slice => slice.name === "mill-charge");
+  assert.equal(millChargeSlice?.loweringMode, "native-browser");
+  assert.equal(millChargeSlice?.nativeDebt?.rawSelectorCount, 0);
+  assert.deepEqual(millChargeSlice?.anchorCoverage?.missing, []);
+  assert.deepEqual(millChargeSlice?.descendantCoverage?.missingTraits, []);
+});
+
+test("engentus can switch mill-force onto the authored native proof lane without changing the checked-in default contract", async () => {
+  const [authoredPlan, inventory] = await Promise.all([
+    loadEngentusAppliedWcss(),
+    buildEngentusPresentationInventory()
+  ]);
+
+  const switchManifest = {
+    theme: "engentus",
+    slices: {
+      "mill-force": "wcss"
+    }
+  };
+
+  const ownership = verifyEngentusStyleOwnership({
+    inventory,
+    authoredPlan,
+    switchManifest
+  });
+  assert.equal(ownership.ok, true);
+
+  const stylesheets = await composeEngentusStylesheets({
+    authoredPlan,
+    switchManifest
+  });
+  const shellCss = renderOracleStylesheet(stylesheets.shell);
+  assert.equal(shellCss.includes(".mill-force-pill.active"), true);
+  assert.equal(shellCss.includes(".mill-force-cht-tab.active"), true);
+  assert.equal(shellCss.includes(".mill-force-result-row"), true);
+  assert.equal(shellCss.includes(".mill-force-slider"), true);
+
+  const millForceSlice = ownership.slices.find(slice => slice.name === "mill-force");
+  assert.equal(millForceSlice?.loweringMode, "native-browser");
+  assert.equal(millForceSlice?.nativeDebt?.rawSelectorCount, 0);
+  assert.deepEqual(millForceSlice?.anchorCoverage?.missing, []);
+  assert.deepEqual(millForceSlice?.descendantCoverage?.missingTraits, []);
 });
 
 test("engentus build script writes proof artifacts under tmp without changing live asset paths", async () => {
@@ -452,5 +647,31 @@ test("engentus ownership checks reject native platform-config seams that do not 
 
   assert.equal(ownership.ok, false);
   assert.match(ownership.errors.join("\n"), /PlatformConfigSidebarOperatorAction/);
+  assert.match(ownership.errors.join("\n"), /undeclared variant value active/i);
+});
+
+test("engentus ownership checks reject native mill-force seams that do not target pill and tab active states", async () => {
+  const [authoredPlan, inventory] = await Promise.all([
+    loadEngentusAppliedWcss(),
+    buildEngentusPresentationInventory()
+  ]);
+  const brokenPlan = {
+    ...authoredPlan,
+    slices: authoredPlan.slices.map(slice => slice.name === "mill-force"
+      ? { ...slice, seams: [] }
+      : slice)
+  };
+
+  const ownership = verifyEngentusStyleOwnership({
+    inventory,
+    authoredPlan: brokenPlan,
+    switchManifest: {
+      theme: "engentus",
+      slices: { "mill-force": "wcss" }
+    }
+  });
+
+  assert.equal(ownership.ok, false);
+  assert.match(ownership.errors.join("\n"), /MillForceModeSingle/);
   assert.match(ownership.errors.join("\n"), /undeclared variant value active/i);
 });

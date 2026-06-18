@@ -1429,6 +1429,29 @@ test("the platform-config access shell authors authority inspection, grant manag
   assert.ok(messages.has("PlatformConfigRevokeAuthorityGrantRequested"));
   assert.ok(messages.has("PlatformConfigOpenAssumedSessionRequested"));
   assert.ok(messages.has("PlatformConfigReturnDirectSessionRequested"));
+  assert.deepEqual(
+    (messages.get("EngentusSessionOpened")?.body?.fields ?? [])
+      .map(field => field.name)
+      .filter(name => name.startsWith("PlatformConfig"))
+      .sort(),
+    [
+      "PlatformConfigAccessRolesHint",
+      "PlatformConfigAssumeIdentityId",
+      "PlatformConfigAssumeSummary",
+      "PlatformConfigAssumeTargetActor",
+      "PlatformConfigAuthorityAssumptionGrantId",
+      "PlatformConfigAuthorityAuthenticatedActor",
+      "PlatformConfigAuthorityAuthenticatedIdentity",
+      "PlatformConfigAuthorityEffectiveActor",
+      "PlatformConfigAuthorityEffectiveIdentity",
+      "PlatformConfigAuthorityMode",
+      "PlatformConfigAuthoritySummary",
+      "PlatformConfigGrantSourceIdentityId",
+      "PlatformConfigGrantSummary",
+      "PlatformConfigGrantTargetActor"
+    ]
+  );
+  assert.match(source, /adapter EngentusSessionOpenHttp using HTTP \{[\s\S]*?collection_outputs = \{[\s\S]*?PlatformConfigIdentities = "identities"[\s\S]*?PlatformConfigAuthorityActors = "authorityActors"[\s\S]*?\}/);
 
   assert.equal(surfaces.get("PlatformConfigAuthoritySummary")?.body?.surfaceKind, "text");
   assert.equal(surfaces.get("PlatformConfigAuthoritySummary")?.body?.bindings?.[0]?.source?.state, "PlatformConfigAuthoritySummary");
