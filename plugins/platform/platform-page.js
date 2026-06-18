@@ -1065,18 +1065,85 @@ function renderModelDetail(node, model, ctx) {
   `;
 }
 
-function renderWorkflowPage(model, ctx) {
+function summaryCardsForPage(pageId, model) {
+  switch (pageId) {
+    case "workflow":
+      return renderSummaryCards([
+        { label: "Branches", value: (model.branches ?? []).length },
+        { label: "Change Sets", value: (model.changeSets ?? []).length },
+        { label: "Open Proposals", value: (model.proposals ?? []).filter(proposal => proposal.status === "open").length },
+        { label: "Candidate Snapshots", value: (model.candidateSnapshots ?? []).length }
+      ]);
+    case "verification":
+      return renderSummaryCards([
+        { label: "Test Gates", value: (model.testGates ?? []).length },
+        { label: "Test Runs", value: (model.testRuns ?? []).length },
+        { label: "Runtime Revisions", value: (model.runtimeRevisions ?? []).length },
+        { label: "Snapshot Builds", value: (model.snapshotBuilds ?? []).length }
+      ]);
+    case "knowledge":
+      return renderSummaryCards([
+        { label: "Governed Docs", value: (model.docs ?? []).length },
+        { label: "Roadmap Tasks", value: (model.roadmapTasks ?? []).length },
+        { label: "Epics", value: (model.epics ?? []).length },
+        { label: "Features", value: (model.features ?? []).length }
+      ]);
+    case "signals":
+      return renderSummaryCards([
+        { label: "Gaps", value: (model.gaps ?? []).length },
+        { label: "Telemetry Metrics", value: (model.nodes ?? []).filter(node => node.kind === "telemetryMetric").length },
+        { label: "Defect Clusters", value: (model.nodes ?? []).filter(node => node.kind === "defectCluster").length },
+        { label: "Boundaries", value: (model.nodes ?? []).filter(node => node.kind === "boundary").length }
+      ]);
+    case "model":
+      return renderSummaryCards([
+        { label: "Platform Objects", value: (model.nodes ?? []).length },
+        { label: "Relationships", value: (model.edges ?? []).length },
+        { label: "Profiles", value: (model.profiles ?? []).length },
+        { label: "Coverage Edges", value: (model.coverageEdges ?? []).length }
+      ]);
+    default:
+      return renderSummaryCards([
+        { label: "Plugins", value: countByKind(model, "plugin") },
+        { label: "Bundles", value: countByKind(model, "bundle") },
+        { label: "Handlers", value: countByKind(model, "handler") },
+        { label: "Routes", value: countByKind(model, "route") },
+        { label: "Docs", value: (model.docs ?? []).length },
+        { label: "Change Sets", value: (model.changeSets ?? []).length },
+        { label: "Test Gates", value: (model.testGates ?? []).length },
+        { label: "Gaps", value: (model.gaps ?? []).length }
+      ]);
+  }
+}
+
+function renderPlatformMapSection(model, ctx) {
+  const topNodes = (model.nodes ?? []).slice(0, 12);
+  return renderDataTable("Platform Map Preview", ["Kind", "Resource", "Lifecycle", "Status", "Source"], topNodes.map(node => `
+    <tr>
+      <td>${esc(node.kind || "")}</td>
+      <td>${renderConceptLink(ctx, node.id, node.title || node.id)}</td>
+      <td>${esc((node.lifecycle ?? []).join(", "))}</td>
+      <td>${esc(node.status || "")}</td>
+      <td>${esc(node.source || "")}</td>
+    </tr>
+  `), "No platform objects.");
+}
+
+function renderProfileComparisonSection(model) {
+  return renderDataTable("Runtime Profiles", ["Profile", "Status", "Plugins", "Capabilities"], (model.profiles ?? []).slice(0, 12).map(profile => `
+    <tr>
+      <td>${esc(profile.id || "")}</td>
+      <td>${esc(profile.status || "")}</td>
+      <td>${esc((profile.pluginIds ?? []).length)}</td>
+      <td>${esc((profile.capabilities ?? []).length)}</td>
+    </tr>
+  `), "No runtime profiles.");
+}
+
+function renderWorkflowListSection(model, ctx) {
   const items = workflowItems(model);
   const page = paginateRows(items, ctx);
-  const detail = findWorkflowDetail(model, ctx.id);
   return `
-    ${renderSummaryCards([
-      { label: "Branches", value: (model.branches ?? []).length },
-      { label: "Change Sets", value: (model.changeSets ?? []).length },
-      { label: "Open Proposals", value: (model.proposals ?? []).filter(proposal => proposal.status === "open").length },
-      { label: "Candidate Snapshots", value: (model.candidateSnapshots ?? []).length }
-    ])}
-    ${renderBranchBoard(model, ctx)}
     ${renderDataTable("Workflow Items", ["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
@@ -1087,33 +1154,13 @@ function renderWorkflowPage(model, ctx) {
       </tr>
     `), "No workflow rows.")}
     ${renderPagination(ctx, page.total, page.offset, page.limit)}
-    ${renderWorkflowDetail(detail, model, ctx)}
-    ${renderDataTable("Existing Proposals", ["Status", "Proposal", "Target Process", "Target", "Reason"], (model.proposals ?? []).slice(0, 12).map(proposal => `
-      <tr>
-        <td>${esc(proposal.status || "")}</td>
-        <td>${renderConceptLink(ctx, proposal.id)}</td>
-        <td>${esc(proposal.targetProcess || "")}</td>
-        <td>${proposal.targetId ? renderConceptLink(ctx, proposal.targetId) : ""}</td>
-        <td>${esc(proposal.reason || "")}</td>
-      </tr>
-    `), "No proposals yet.")}
-    ${renderAuthoringPanel(model)}
   `;
 }
 
-function renderVerificationPage(model, ctx) {
+function renderVerificationListSection(model, ctx) {
   const items = verificationItems(model);
   const page = paginateRows(items, ctx);
-  const detail = findVerificationDetail(model, ctx.id);
-  const branchRedGreen = (model.branchTestRedGreen ?? []).slice(0, 12);
-  const changeSetRedGreen = (model.changeSetTestRedGreen ?? []).slice(0, 12);
   return `
-    ${renderSummaryCards([
-      { label: "Test Gates", value: (model.testGates ?? []).length },
-      { label: "Test Runs", value: (model.testRuns ?? []).length },
-      { label: "Runtime Revisions", value: (model.runtimeRevisions ?? []).length },
-      { label: "Snapshot Builds", value: (model.snapshotBuilds ?? []).length }
-    ])}
     ${renderDataTable("Verification Items", ["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
@@ -1124,51 +1171,13 @@ function renderVerificationPage(model, ctx) {
       </tr>
     `), "No verification rows.")}
     ${renderPagination(ctx, page.total, page.offset, page.limit)}
-    ${renderVerificationDetail(detail, model, ctx)}
-    ${renderPropertyTable("Verification Streams", [
-      { label: "Test run events", valueHtml: `<a href="/api/platform-test-runs/events">/api/platform-test-runs/events</a>` },
-      { label: "Backend revision events", valueHtml: `<a href="/api/runtime/backend-revisions/events">/api/runtime/backend-revisions/events</a>` }
-    ])}
-    <section class="grid2">
-      <div>
-        ${renderDataTable("Branch Red / Green", ["Status", "Branch", "Selected", "Passed", "Failed", "Summary"], branchRedGreen.map(row => `
-          <tr>
-            <td>${esc(row.status || "")}</td>
-            <td>${renderConceptLink(ctx, row.branchId)}</td>
-            <td>${esc(row.totalSelectedGates ?? 0)}</td>
-            <td>${esc((row.passedGateIds ?? []).length)}</td>
-            <td>${esc((row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length)}</td>
-            <td>${esc(row.summary || "")}</td>
-          </tr>
-        `), "No branch red/green summaries.")}
-      </div>
-      <div>
-        ${renderDataTable("Change Set Red / Green", ["Status", "Change Set", "Selected", "Passed", "Failed", "Summary"], changeSetRedGreen.map(row => `
-          <tr>
-            <td>${esc(row.status || "")}</td>
-            <td>${renderConceptLink(ctx, row.changeSetId)}</td>
-            <td>${esc(row.totalSelectedGates ?? 0)}</td>
-            <td>${esc((row.passedGateIds ?? []).length)}</td>
-            <td>${esc((row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length)}</td>
-            <td>${esc(row.summary || "")}</td>
-          </tr>
-        `), "No change-set red/green summaries.")}
-      </div>
-    </section>
   `;
 }
 
-function renderKnowledgePage(model, ctx) {
+function renderKnowledgeListSection(model, ctx) {
   const items = knowledgeItems(model);
   const page = paginateRows(items, ctx);
-  const detail = findKnowledgeDetail(model, ctx.id);
   return `
-    ${renderSummaryCards([
-      { label: "Governed Docs", value: (model.docs ?? []).length },
-      { label: "Roadmap Tasks", value: (model.roadmapTasks ?? []).length },
-      { label: "Epics", value: (model.epics ?? []).length },
-      { label: "Features", value: (model.features ?? []).length }
-    ])}
     ${renderDataTable("Knowledge Items", ["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
@@ -1179,21 +1188,13 @@ function renderKnowledgePage(model, ctx) {
       </tr>
     `), "No knowledge rows.")}
     ${renderPagination(ctx, page.total, page.offset, page.limit)}
-    ${renderKnowledgeDetail(detail, model, ctx)}
   `;
 }
 
-function renderSignalsPage(model, ctx) {
+function renderSignalsListSection(model, ctx) {
   const items = signalItems(model);
   const page = paginateRows(items, ctx);
-  const detail = findSignalDetail(model, ctx.id);
   return `
-    ${renderSummaryCards([
-      { label: "Gaps", value: (model.gaps ?? []).length },
-      { label: "Telemetry Metrics", value: (model.nodes ?? []).filter(node => node.kind === "telemetryMetric").length },
-      { label: "Defect Clusters", value: (model.nodes ?? []).filter(node => node.kind === "defectCluster").length },
-      { label: "Boundaries", value: (model.nodes ?? []).filter(node => node.kind === "boundary").length }
-    ])}
     ${renderDataTable("Signals", ["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
@@ -1204,21 +1205,13 @@ function renderSignalsPage(model, ctx) {
       </tr>
     `), "No signal rows.")}
     ${renderPagination(ctx, page.total, page.offset, page.limit)}
-    ${renderSignalDetail(detail, model, ctx)}
   `;
 }
 
-function renderModelPage(model, ctx) {
+function renderModelListSection(model, ctx) {
   const items = modelItems(model);
   const page = paginateRows(items, ctx);
-  const detail = findModelDetail(model, ctx.id);
   return `
-    ${renderSummaryCards([
-      { label: "Platform Objects", value: (model.nodes ?? []).length },
-      { label: "Relationships", value: (model.edges ?? []).length },
-      { label: "Profiles", value: (model.profiles ?? []).length },
-      { label: "Coverage Edges", value: (model.coverageEdges ?? []).length }
-    ])}
     ${renderDataTable("Platform Map", ["Kind", "Status", "Resource", "Source", "Owner"], page.items.map(item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
@@ -1229,272 +1222,305 @@ function renderModelPage(model, ctx) {
       </tr>
     `), "No platform objects.")}
     ${renderPagination(ctx, page.total, page.offset, page.limit)}
-    ${renderModelDetail(detail, model, ctx)}
-    <section class="grid2">
-      <div>
-        ${renderDataTable("Runtime Profiles", ["Profile", "Status", "Plugins", "Capabilities"], (model.profiles ?? []).slice(0, 12).map(profile => `
-          <tr>
-            <td>${esc(profile.id || "")}</td>
-            <td>${esc(profile.status || "")}</td>
-            <td>${esc((profile.pluginIds ?? []).length)}</td>
-            <td>${esc((profile.capabilities ?? []).length)}</td>
-          </tr>
-        `), "No runtime profiles.")}
-      </div>
-      <div>
-        ${renderDataTable("Coverage Edges", ["Gate", "Target", "Kind"], (model.coverageEdges ?? []).slice(0, 12).map(edge => `
-          <tr>
-            <td>${renderConceptLink(ctx, edge.gateId)}</td>
-            <td>${edge.targetId ? renderConceptLink(ctx, edge.targetId, edge.targetLabel || edge.targetId) : esc(edge.targetLabel || "")}</td>
-            <td>${esc(edge.coverageKind || "")}</td>
-          </tr>
-        `), "No coverage edges.")}
-      </div>
-    </section>
   `;
 }
 
-function renderOverviewPage(model, ctx, consoleLayout, currentView) {
-  const topNodes = (model.nodes ?? []).slice(0, 12);
-  return `
-    ${renderSummaryCards([
-      { label: "Plugins", value: countByKind(model, "plugin") },
-      { label: "Bundles", value: countByKind(model, "bundle") },
-      { label: "Handlers", value: countByKind(model, "handler") },
-      { label: "Routes", value: countByKind(model, "route") },
-      { label: "Docs", value: (model.docs ?? []).length },
-      { label: "Change Sets", value: (model.changeSets ?? []).length },
-      { label: "Test Gates", value: (model.testGates ?? []).length },
-      { label: "Gaps", value: (model.gaps ?? []).length }
-    ])}
-    <section class="card">
-      <h2>${esc(currentView.title)}</h2>
-      <div class="muted">${esc(currentView.subtitle)}</div>
-    </section>
-    ${renderSurfaceTree(consoleLayout, ctx)}
-    ${renderLifecycleBoard(model)}
-    ${renderBranchBoard(model, ctx)}
-    ${renderDataTable("Platform Map Preview", ["Kind", "Resource", "Lifecycle", "Status", "Source"], topNodes.map(node => `
-      <tr>
-        <td>${esc(node.kind || "")}</td>
-        <td>${renderConceptLink(ctx, node.id, node.title || node.id)}</td>
-        <td>${esc((node.lifecycle ?? []).join(", "))}</td>
-        <td>${esc(node.status || "")}</td>
-        <td>${esc(node.source || "")}</td>
-      </tr>
-    `), "No platform objects.")}
-    <section class="grid2">
-      <div>
-        ${renderDataTable("Runtime Profiles", ["Profile", "Status", "Plugins", "Capabilities"], (model.profiles ?? []).slice(0, 8).map(profile => `
-          <tr>
-            <td>${esc(profile.id || "")}</td>
-            <td>${esc(profile.status || "")}</td>
-            <td>${esc((profile.pluginIds ?? []).length)}</td>
-            <td>${esc((profile.capabilities ?? []).length)}</td>
-          </tr>
-        `), "No runtime profiles.")}
-      </div>
-      <div>
-        ${renderPropertyTable("Quick API Links", [
-          { label: "Platform model", valueHtml: `<a href="/api/platform-model">/api/platform-model</a>` },
-          { label: "Platform gaps", valueHtml: `<a href="/api/platform-gaps">/api/platform-gaps</a>` },
-          { label: "Branches", valueHtml: `<a href="/api/platform-branches">/api/platform-branches</a>` },
-          { label: "Change sets", valueHtml: `<a href="/api/platform-change-sets">/api/platform-change-sets</a>` }
-        ])}
-      </div>
-    </section>
-  `;
+function renderGapListSection(model, ctx) {
+  return renderDataTable("Platform Gaps", ["Severity", "Kind", "Target", "Reason"], (model.gaps ?? []).slice(0, 12).map(gap => `
+    <tr>
+      <td>${esc(gap.severity || "")}</td>
+      <td>${esc(gap.kind || "")}</td>
+      <td>${gap.target ? renderConceptLink(ctx, gap.target) : ""}</td>
+      <td>${esc(gap.reason || "")}</td>
+    </tr>
+  `), "No gaps.");
 }
 
-function renderAuthoringPanel(model) {
-  const changeSets = model.changeSets ?? [];
-  const testGates = model.testGates ?? [];
-  const proposals = model.proposals ?? [];
+function renderCoverageMatrixSection(model, ctx) {
+  return renderDataTable("Coverage Matrix", ["Gate", "Target", "Kind"], (model.coverageEdges ?? []).slice(0, 12).map(edge => `
+    <tr>
+      <td>${renderConceptLink(ctx, edge.gateId)}</td>
+      <td>${edge.targetId ? renderConceptLink(ctx, edge.targetId, edge.targetLabel || edge.targetId) : esc(edge.targetLabel || "")}</td>
+      <td>${esc(edge.coverageKind || "")}</td>
+    </tr>
+  `), "No coverage edges.");
+}
+
+function renderProposalPanelSection(model) {
   const proposalActions = model.proposalActions ?? [];
-  const openProposals = proposals.filter(proposal => proposal.status === "open");
   const firstActionBody = JSON.stringify(proposalActions[0]?.sampleBody ?? {}, null, 2);
   return `
-    <section class="grid2">
-      <div>
-        <h2>Proposal Panel</h2>
-        <form id="platform-proposal-form">
-          <label>Action
-            <select name="action">
-              ${proposalActions.map(action => `<option value="${esc(action.action)}" data-sample-body="${esc(JSON.stringify(action.sampleBody ?? {}))}">${esc(action.action)}</option>`).join("")}
-            </select>
-          </label>
-          <label>Proposal id <input name="id" value="proposal.platform.${Date.now().toString(36)}"></label>
-          <label>Target kind override <input name="targetKind" placeholder="derived from body"></label>
-          <label>Target id override <input name="targetId" placeholder="derived from body"></label>
-          <label>Reason <input name="reason" value="Platform stewardship change"></label>
-          <label>Body JSON <textarea name="bodyJson">${esc(firstActionBody)}</textarea></label>
-          <button type="submit">Create Proposal</button>
-          <div id="proposal-status"></div>
-        </form>
-      </div>
-      <div>
-        <h2>Review Proposals</h2>
-        <form id="platform-review-form">
-          <label>Open proposal
-            <select name="id">
-              ${openProposals.map(proposal => `<option value="${esc(proposal.id)}">${esc(proposal.id)}</option>`).join("")}
-            </select>
-          </label>
-          <label>Reject reason <input name="reason" placeholder="Only used when rejecting"></label>
-          <div style="display:flex; gap:8px;">
-            <button type="submit" name="reviewAction" value="approve">Approve</button>
-            <button type="submit" name="reviewAction" value="reject">Reject</button>
-          </div>
-          <div id="review-status"></div>
-        </form>
-      </div>
+    <section>
+      <h2>Proposal Panel</h2>
+      <form id="platform-proposal-form">
+        <label>Action
+          <select name="action">
+            ${proposalActions.map(action => `<option value="${esc(action.action)}" data-sample-body="${esc(JSON.stringify(action.sampleBody ?? {}))}">${esc(action.action)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Proposal id <input name="id" value="proposal.platform.${Date.now().toString(36)}"></label>
+        <label>Target kind override <input name="targetKind" placeholder="derived from body"></label>
+        <label>Target id override <input name="targetId" placeholder="derived from body"></label>
+        <label>Reason <input name="reason" value="Platform stewardship change"></label>
+        <label>Body JSON <textarea name="bodyJson">${esc(firstActionBody)}</textarea></label>
+        <button type="submit">Create Proposal</button>
+        <div id="proposal-status"></div>
+      </form>
     </section>
-    <section class="grid2">
-      <div>
-        <h2>Create Branch</h2>
-        <form id="platform-branch-create-form">
-          <label>Branch id <input name="id" value="branch:${Date.now().toString(36)}"></label>
-          <label>Title <input name="title" value="Platform branch"></label>
-          <label>Parent branch <input name="parentBranchId" placeholder="Optional parent branch id"></label>
-          <label>Epic <input name="epic" placeholder="Optional epic tag"></label>
-          <label>Feature <input name="feature" placeholder="Optional feature tag"></label>
-          <label>Defect <input name="defect" placeholder="Optional defect tag"></label>
-          <button type="submit">Create Branch</button>
-          <div id="branch-create-status"></div>
-        </form>
-      </div>
-      <div>
-        <h2>Create Change Set</h2>
-        <form id="platform-change-set-create-form">
-          <label>Change set id <input name="id" value="changeSet:${Date.now().toString(36)}"></label>
-          <label>Branch id <input name="branchId" value="branch:platform-console"></label>
-          <label>Title <input name="title" value="Platform console change"></label>
-          <label>Reason <input name="reason" value="Stage platform console edits"></label>
-          <button type="submit">Create Change Set</button>
-          <div id="change-set-create-status"></div>
-        </form>
-      </div>
+  `;
+}
+
+function renderProposalReviewPanelSection(model) {
+  const openProposals = (model.proposals ?? []).filter(proposal => proposal.status === "open");
+  return `
+    <section>
+      <h2>Review Proposals</h2>
+      <form id="platform-review-form">
+        <label>Open proposal
+          <select name="id">
+            ${openProposals.map(proposal => `<option value="${esc(proposal.id)}">${esc(proposal.id)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Reject reason <input name="reason" placeholder="Only used when rejecting"></label>
+        <div style="display:flex; gap:8px;">
+          <button type="submit" name="reviewAction" value="approve">Approve</button>
+          <button type="submit" name="reviewAction" value="reject">Reject</button>
+        </div>
+        <div id="review-status"></div>
+      </form>
     </section>
-    <section class="grid2">
-      <div>
-        <h2>Stage and Validate</h2>
-        <form id="platform-change-set-edit-form">
-          <label>Change set
-            <select name="changeSetId">
-              ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
-            </select>
-          </label>
-          <label>Path <input name="path" value="plugins/platform/platform-console.rvm"></label>
-          <label>Content <textarea name="content"></textarea></label>
-          <button type="submit">Stage Edit</button>
-          <div id="change-set-edit-status"></div>
-        </form>
-        <form id="platform-change-set-validate-form">
-          <label>Change set
-            <select name="changeSetId">
-              ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
-            </select>
-          </label>
-          <button type="submit">Validate Change Set</button>
-          <div id="change-set-validate-status"></div>
-        </form>
-      </div>
-      <div>
-        <h2>Apply and Lifecycle</h2>
-        <form id="platform-change-set-apply-form">
-          <label>Change set
-            <select name="changeSetId">
-              ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
-            </select>
-          </label>
-          <button type="submit">Apply Change Set</button>
-          <div id="change-set-apply-status"></div>
-        </form>
-        <form id="platform-change-set-lifecycle-form">
-          <label>Change set
-            <select name="changeSetId">
-              ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
-            </select>
-          </label>
-          <label>Action
-            <select name="action">
-              <option value="reject">reject</option>
-              <option value="abandon">abandon</option>
-            </select>
-          </label>
-          <label>Reason <input name="reason" placeholder="Optional lifecycle reason"></label>
-          <button type="submit">Update Change Set</button>
-          <div id="change-set-lifecycle-status"></div>
-        </form>
-      </div>
+  `;
+}
+
+function renderBranchCreatePanelSection() {
+  return `
+    <section>
+      <h2>Create Branch</h2>
+      <form id="platform-branch-create-form">
+        <label>Branch id <input name="id" value="branch:${Date.now().toString(36)}"></label>
+        <label>Title <input name="title" value="Platform branch"></label>
+        <label>Parent branch <input name="parentBranchId" placeholder="Optional parent branch id"></label>
+        <label>Epic <input name="epic" placeholder="Optional epic tag"></label>
+        <label>Feature <input name="feature" placeholder="Optional feature tag"></label>
+        <label>Defect <input name="defect" placeholder="Optional defect tag"></label>
+        <button type="submit">Create Branch</button>
+        <div id="branch-create-status"></div>
+      </form>
     </section>
-    <section class="grid2">
-      <div>
-        <h2>Run Test Gate</h2>
-        <form id="platform-test-run-form">
-          <label>Test gate
-            <select name="gateId">
-              ${testGates.map(gate => `<option value="${esc(gate.id)}">${esc(gate.title || gate.id)}</option>`).join("")}
-            </select>
-          </label>
-          <label>Branch id <input name="branchId" placeholder="Optional branch id"></label>
-          <label>Change set id <input name="changeSetId" placeholder="Optional change set id"></label>
-          <label>Candidate snapshot id <input name="candidateSnapshotId" placeholder="Optional candidate snapshot id"></label>
-          <button type="submit">Run Test Gate</button>
-          <div id="test-run-status"></div>
-        </form>
-      </div>
-      <div>
-        <h2>Run Selected Gates</h2>
-        <form id="platform-selected-test-run-form">
-          <label>Branch id <input name="branchId" placeholder="Optional branch id"></label>
-          <label>Change set id <input name="changeSetId" placeholder="Optional change set id"></label>
-          <label>Candidate snapshot id <input name="candidateSnapshotId" placeholder="Optional candidate snapshot id"></label>
-          <button type="submit">Run Selected Gates</button>
-          <div id="selected-test-run-status"></div>
-        </form>
-      </div>
+  `;
+}
+
+function renderChangeSetCreatePanelSection() {
+  return `
+    <section>
+      <h2>Create Change Set</h2>
+      <form id="platform-change-set-create-form">
+        <label>Change set id <input name="id" value="changeSet:${Date.now().toString(36)}"></label>
+        <label>Branch id <input name="branchId" value="branch:platform-console"></label>
+        <label>Title <input name="title" value="Platform console change"></label>
+        <label>Reason <input name="reason" value="Stage platform console edits"></label>
+        <button type="submit">Create Change Set</button>
+        <div id="change-set-create-status"></div>
+      </form>
     </section>
+  `;
+}
+
+function renderChangeSetEditPanelSection(model) {
+  const changeSets = model.changeSets ?? [];
+  return `
+    <section>
+      <h2>Stage Edit</h2>
+      <form id="platform-change-set-edit-form">
+        <label>Change set
+          <select name="changeSetId">
+            ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Path <input name="path" value="plugins/platform/platform-console.rvm"></label>
+        <label>Content <textarea name="content"></textarea></label>
+        <button type="submit">Stage Edit</button>
+        <div id="change-set-edit-status"></div>
+      </form>
+    </section>
+  `;
+}
+
+function renderChangeSetValidatePanelSection(model) {
+  const changeSets = model.changeSets ?? [];
+  return `
+    <section>
+      <h2>Validate Change Set</h2>
+      <form id="platform-change-set-validate-form">
+        <label>Change set
+          <select name="changeSetId">
+            ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
+          </select>
+        </label>
+        <button type="submit">Validate Change Set</button>
+        <div id="change-set-validate-status"></div>
+      </form>
+    </section>
+  `;
+}
+
+function renderChangeSetApplyPanelSection(model) {
+  const changeSets = model.changeSets ?? [];
+  return `
+    <section>
+      <h2>Apply Change Set</h2>
+      <form id="platform-change-set-apply-form">
+        <label>Change set
+          <select name="changeSetId">
+            ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
+          </select>
+        </label>
+        <button type="submit">Apply Change Set</button>
+        <div id="change-set-apply-status"></div>
+      </form>
+    </section>
+  `;
+}
+
+function renderChangeSetLifecyclePanelSection(model) {
+  const changeSets = model.changeSets ?? [];
+  return `
+    <section>
+      <h2>Change Set Lifecycle</h2>
+      <form id="platform-change-set-lifecycle-form">
+        <label>Change set
+          <select name="changeSetId">
+            ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Action
+          <select name="action">
+            <option value="reject">reject</option>
+            <option value="abandon">abandon</option>
+          </select>
+        </label>
+        <label>Reason <input name="reason" placeholder="Optional lifecycle reason"></label>
+        <button type="submit">Update Change Set</button>
+        <div id="change-set-lifecycle-status"></div>
+      </form>
+    </section>
+  `;
+}
+
+function renderVerificationStreamsSection() {
+  return renderPropertyTable("Verification Streams", [
+    { label: "Test run events", valueHtml: `<a href="/api/platform-test-runs/events">/api/platform-test-runs/events</a>` },
+    { label: "Backend revision events", valueHtml: `<a href="/api/runtime/backend-revisions/events">/api/runtime/backend-revisions/events</a>` }
+  ]);
+}
+
+function renderBranchRedGreenSection(model, ctx) {
+  const branchRedGreen = (model.branchTestRedGreen ?? []).slice(0, 12);
+  return renderDataTable("Branch Red / Green", ["Status", "Branch", "Selected", "Passed", "Failed", "Summary"], branchRedGreen.map(row => `
+    <tr>
+      <td>${esc(row.status || "")}</td>
+      <td>${renderConceptLink(ctx, row.branchId)}</td>
+      <td>${esc(row.totalSelectedGates ?? 0)}</td>
+      <td>${esc((row.passedGateIds ?? []).length)}</td>
+      <td>${esc((row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length)}</td>
+      <td>${esc(row.summary || "")}</td>
+    </tr>
+  `), "No branch red/green summaries.");
+}
+
+function renderChangeSetRedGreenSection(model, ctx) {
+  const changeSetRedGreen = (model.changeSetTestRedGreen ?? []).slice(0, 12);
+  return renderDataTable("Change Set Red / Green", ["Status", "Change Set", "Selected", "Passed", "Failed", "Summary"], changeSetRedGreen.map(row => `
+    <tr>
+      <td>${esc(row.status || "")}</td>
+      <td>${renderConceptLink(ctx, row.changeSetId)}</td>
+      <td>${esc(row.totalSelectedGates ?? 0)}</td>
+      <td>${esc((row.passedGateIds ?? []).length)}</td>
+      <td>${esc((row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length)}</td>
+      <td>${esc(row.summary || "")}</td>
+    </tr>
+  `), "No change-set red/green summaries.");
+}
+
+function renderTestRunPanelSection(model) {
+  const testGates = model.testGates ?? [];
+  return `
+    <section>
+      <h2>Run Test Gate</h2>
+      <form id="platform-test-run-form">
+        <label>Test gate
+          <select name="gateId">
+            ${testGates.map(gate => `<option value="${esc(gate.id)}">${esc(gate.title || gate.id)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Branch id <input name="branchId" placeholder="Optional branch id"></label>
+        <label>Change set id <input name="changeSetId" placeholder="Optional change set id"></label>
+        <label>Candidate snapshot id <input name="candidateSnapshotId" placeholder="Optional candidate snapshot id"></label>
+        <button type="submit">Run Test Gate</button>
+        <div id="test-run-status"></div>
+      </form>
+    </section>
+  `;
+}
+
+function renderSelectedTestRunPanelSection() {
+  return `
+    <section>
+      <h2>Run Selected Gates</h2>
+      <form id="platform-selected-test-run-form">
+        <label>Branch id <input name="branchId" placeholder="Optional branch id"></label>
+        <label>Change set id <input name="changeSetId" placeholder="Optional change set id"></label>
+        <label>Candidate snapshot id <input name="candidateSnapshotId" placeholder="Optional candidate snapshot id"></label>
+        <button type="submit">Run Selected Gates</button>
+        <div id="selected-test-run-status"></div>
+      </form>
+    </section>
+  `;
+}
+
+function renderAuthoringClientScript() {
+  return `
     <script>
       (function () {
         const proposalForm = document.getElementById("platform-proposal-form");
-        if (!proposalForm) return;
-        const actionSelect = proposalForm.elements.action;
-        function syncProposalBody() {
-          const option = actionSelect.options[actionSelect.selectedIndex];
-          if (!option) return;
-          const sample = option.getAttribute("data-sample-body") || "{}";
-          try {
-            proposalForm.elements.bodyJson.value = JSON.stringify(JSON.parse(sample), null, 2);
-          } catch {}
-        }
-        actionSelect.addEventListener("change", syncProposalBody);
-        syncProposalBody();
-        proposalForm.addEventListener("submit", async event => {
-          event.preventDefault();
-          const status = document.getElementById("proposal-status");
-          let body = {};
-          try {
-            body = JSON.parse(proposalForm.elements.bodyJson.value || "{}");
-          } catch {
-            status.textContent = "Body JSON is invalid.";
-            return;
+        if (proposalForm) {
+          const actionSelect = proposalForm.elements.action;
+          function syncProposalBody() {
+            const option = actionSelect.options[actionSelect.selectedIndex];
+            if (!option) return;
+            const sample = option.getAttribute("data-sample-body") || "{}";
+            try {
+              proposalForm.elements.bodyJson.value = JSON.stringify(JSON.parse(sample), null, 2);
+            } catch {}
           }
-          const response = await fetch("/api/platform-proposals", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              id: proposalForm.elements.id.value || null,
-              action: proposalForm.elements.action.value || null,
-              targetKind: proposalForm.elements.targetKind.value || null,
-              targetId: proposalForm.elements.targetId.value || null,
-              body,
-              reason: proposalForm.elements.reason.value || null
-            })
+          actionSelect.addEventListener("change", syncProposalBody);
+          syncProposalBody();
+          proposalForm.addEventListener("submit", async event => {
+            event.preventDefault();
+            const status = document.getElementById("proposal-status");
+            let body = {};
+            try {
+              body = JSON.parse(proposalForm.elements.bodyJson.value || "{}");
+            } catch {
+              status.textContent = "Body JSON is invalid.";
+              return;
+            }
+            const response = await fetch("/api/platform-proposals", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                id: proposalForm.elements.id.value || null,
+                action: proposalForm.elements.action.value || null,
+                targetKind: proposalForm.elements.targetKind.value || null,
+                targetId: proposalForm.elements.targetId.value || null,
+                body,
+                reason: proposalForm.elements.reason.value || null
+              })
+            });
+            const json = await response.json().catch(() => ({}));
+            status.textContent = response.ok ? "Proposal created." : (json.error || "Proposal creation failed.");
           });
-          const json = await response.json().catch(() => ({}));
-          status.textContent = response.ok ? "Proposal created." : (json.error || "Proposal creation failed.");
-        });
+        }
         document.getElementById("platform-review-form")?.addEventListener("submit", async event => {
           event.preventDefault();
           const form = event.currentTarget;
@@ -1659,6 +1685,113 @@ function renderAuthoringPanel(model) {
   `;
 }
 
+function renderSurfaceSection(surface, model, ctx, consoleLayout) {
+  switch (surface?.name) {
+    case "PlatformConsoleSummary":
+      return summaryCardsForPage("overview", model);
+    case "PlatformAuthoredSurfaceTree":
+      return renderSurfaceTree(consoleLayout, ctx);
+    case "PlatformLifecycleBoard":
+      return renderLifecycleBoard(model);
+    case "PlatformBranchBoard":
+      return renderBranchBoard(model, ctx);
+    case "PlatformMap":
+      return renderPlatformMapSection(model, ctx);
+    case "PlatformProfileComparison":
+      return renderProfileComparisonSection(model);
+    case "PlatformWorkflowList":
+      return renderWorkflowListSection(model, ctx);
+    case "PlatformWorkflowDetail":
+      return renderWorkflowDetail(findWorkflowDetail(model, ctx.id), model, ctx);
+    case "PlatformProposalPanel":
+      return renderProposalPanelSection(model);
+    case "PlatformProposalReviewList":
+      return renderProposalReviewPanelSection(model);
+    case "PlatformBranchCreatePanel":
+      return renderBranchCreatePanelSection();
+    case "PlatformChangeSetCreatePanel":
+      return renderChangeSetCreatePanelSection();
+    case "PlatformChangeSetEditPanel":
+      return renderChangeSetEditPanelSection(model);
+    case "PlatformChangeSetValidatePanel":
+      return renderChangeSetValidatePanelSection(model);
+    case "PlatformChangeSetApplyPanel":
+      return renderChangeSetApplyPanelSection(model);
+    case "PlatformChangeSetLifecyclePanel":
+      return renderChangeSetLifecyclePanelSection(model);
+    case "PlatformVerificationList":
+      return renderVerificationListSection(model, ctx);
+    case "PlatformVerificationDetail":
+      return renderVerificationDetail(findVerificationDetail(model, ctx.id), model, ctx);
+    case "PlatformVerificationStreams":
+      return renderVerificationStreamsSection();
+    case "PlatformBranchRedGreenList":
+      return renderBranchRedGreenSection(model, ctx);
+    case "PlatformChangeSetRedGreenList":
+      return renderChangeSetRedGreenSection(model, ctx);
+    case "PlatformTestRunPanel":
+      return renderTestRunPanelSection(model);
+    case "PlatformSelectedTestRunPanel":
+      return renderSelectedTestRunPanelSection();
+    case "PlatformKnowledgeList":
+      return renderKnowledgeListSection(model, ctx);
+    case "PlatformKnowledgeDetail":
+      return renderKnowledgeDetail(findKnowledgeDetail(model, ctx.id), model, ctx);
+    case "PlatformGapList":
+      return renderGapListSection(model, ctx);
+    case "PlatformSignalList":
+      return renderSignalsListSection(model, ctx);
+    case "PlatformSignalDetail":
+      return renderSignalDetail(findSignalDetail(model, ctx.id), model, ctx);
+    case "PlatformModelList":
+      return renderModelListSection(model, ctx);
+    case "PlatformModelDetail":
+      return renderModelDetail(findModelDetail(model, ctx.id), model, ctx);
+    case "PlatformCoverageMatrix":
+      return renderCoverageMatrixSection(model, ctx);
+    default:
+      return `
+        <section class="card" data-platform-rvm-view="${esc(surface?.name || "unknown")}">
+          <h2>${esc(surface?.title || surface?.name || "Surface")}</h2>
+          <div class="muted">${esc(surface?.summary || "No renderer is attached to this authored surface yet.")}</div>
+        </section>
+      `;
+  }
+}
+
+const CLIENT_SCRIPT_SURFACE_NAMES = new Set([
+  "PlatformProposalPanel",
+  "PlatformProposalReviewList",
+  "PlatformBranchCreatePanel",
+  "PlatformChangeSetCreatePanel",
+  "PlatformChangeSetEditPanel",
+  "PlatformChangeSetValidatePanel",
+  "PlatformChangeSetApplyPanel",
+  "PlatformChangeSetLifecyclePanel",
+  "PlatformTestRunPanel",
+  "PlatformSelectedTestRunPanel"
+]);
+
+function surfaceNeedsClientScript(surface) {
+  if (!surface) return false;
+  if (CLIENT_SCRIPT_SURFACE_NAMES.has(surface.name)) return true;
+  return (surface.childSurfaces ?? []).some(child => surfaceNeedsClientScript(child));
+}
+
+function pageNeedsClientScript(pageSurface) {
+  return surfaceNeedsClientScript(pageSurface);
+}
+
+function renderPageFromSurface(pageSurface, model, ctx, consoleLayout) {
+  const pageId = pageSurface?.pageId || ctx.view || "overview";
+  const sections = (pageSurface?.childSurfaces ?? []).map(surface => renderSurfaceSection(surface, model, ctx, consoleLayout)).join("");
+  return `
+    ${summaryCardsForPage(pageId, model)}
+    ${sections}
+    ${pageNeedsClientScript(pageSurface) ? renderAuthoringClientScript() : ""}
+  `;
+}
+
 export function renderPlatformPage(model, { requestUrl = null } = {}) {
   const consoleLayout = readPlatformConsoleLayout();
   const rawCtx = parsePlatformPageRequest(requestUrl);
@@ -1669,13 +1802,7 @@ export function renderPlatformPage(model, { requestUrl = null } = {}) {
     view: currentView.id
   };
   const consolePage = consoleLayout.page ?? { title: "Platform Console", summary: "" };
-  let body = "";
-  if (ctx.view === "workflow") body = renderWorkflowPage(model, ctx);
-  else if (ctx.view === "verification") body = renderVerificationPage(model, ctx);
-  else if (ctx.view === "knowledge") body = renderKnowledgePage(model, ctx);
-  else if (ctx.view === "signals") body = renderSignalsPage(model, ctx);
-  else if (ctx.view === "model") body = renderModelPage(model, ctx);
-  else body = renderOverviewPage(model, ctx, consoleLayout, currentView);
+  const body = renderPageFromSurface(currentView.surface ?? null, model, ctx, consoleLayout);
   return `<!doctype html>
 <html lang="en">
 <head>

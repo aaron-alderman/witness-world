@@ -83,6 +83,7 @@ view PlatformOverviewPage {
   prop summary = "Counts, authored surface ownership, lifecycle, and quick platform links."
   children {
     PlatformConsoleSummary
+    PlatformAuthoredSurfaceTree
     PlatformLifecycleBoard
     PlatformMap
     PlatformProfileComparison
@@ -101,6 +102,12 @@ view PlatformWorkflowPage {
     PlatformWorkflowDetail
     PlatformProposalPanel
     PlatformProposalReviewList
+    PlatformBranchCreatePanel
+    PlatformChangeSetCreatePanel
+    PlatformChangeSetEditPanel
+    PlatformChangeSetValidatePanel
+    PlatformChangeSetApplyPanel
+    PlatformChangeSetLifecyclePanel
   }
 }
 
@@ -113,6 +120,11 @@ view PlatformVerificationPage {
   children {
     PlatformVerificationList
     PlatformVerificationDetail
+    PlatformVerificationStreams
+    PlatformBranchRedGreenList
+    PlatformChangeSetRedGreenList
+    PlatformTestRunPanel
+    PlatformSelectedTestRunPanel
   }
 }
 
@@ -148,8 +160,10 @@ view PlatformModelPage {
   prop title = "Model"
   prop summary = "Platform objects, relationships, runtime profiles, and dependency evidence."
   children {
+    PlatformProfileComparison
     PlatformModelList
     PlatformModelDetail
+    PlatformCoverageMatrix
   }
 }
 
@@ -161,6 +175,13 @@ view PlatformConsoleSummary {
   projections {
     PlatformModelRead
   }
+}
+
+view PlatformAuthoredSurfaceTree {
+  kind region
+  class platform-surface-tree
+  prop title = "Authored Surface Tree"
+  prop summary = "Inspectable page and section ownership compiled from the authored console RVM."
 }
 
 view PlatformLifecycleBoard {
@@ -213,6 +234,48 @@ view PlatformWorkflowDetail {
   }
 }
 
+view PlatformBranchCreatePanel {
+  kind form
+  class platform-branch-create-panel
+  prop title = "Create Branch"
+  prop summary = "Create a branch from the shared platform mutation lane."
+}
+
+view PlatformChangeSetCreatePanel {
+  kind form
+  class platform-change-set-create-panel
+  prop title = "Create Change Set"
+  prop summary = "Create a staged change set attached to a branch."
+}
+
+view PlatformChangeSetEditPanel {
+  kind form
+  class platform-change-set-edit-panel
+  prop title = "Stage Edit"
+  prop summary = "Stage an authored source edit into the selected change set."
+}
+
+view PlatformChangeSetValidatePanel {
+  kind form
+  class platform-change-set-validate-panel
+  prop title = "Validate Change Set"
+  prop summary = "Validate the selected change set without mutating the active runtime."
+}
+
+view PlatformChangeSetApplyPanel {
+  kind form
+  class platform-change-set-apply-panel
+  prop title = "Apply Change Set"
+  prop summary = "Apply a validated change set through the shared platform handler lane."
+}
+
+view PlatformChangeSetLifecyclePanel {
+  kind form
+  class platform-change-set-lifecycle-panel
+  prop title = "Change Set Lifecycle"
+  prop summary = "Reject or abandon a change set through the shared platform handler lane."
+}
+
 view PlatformProposalPanel {
   kind form
   class platform-proposal-panel
@@ -255,6 +318,47 @@ view PlatformVerificationDetail {
   }
 }
 
+view PlatformVerificationStreams {
+  kind region
+  class platform-verification-streams
+  prop title = "Verification Streams"
+  prop summary = "Links to live test-run and backend-revision event streams."
+}
+
+view PlatformBranchRedGreenList {
+  kind table
+  class platform-branch-red-green
+  prop title = "Branch Red / Green"
+  prop summary = "Selected-gate status for branches."
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformChangeSetRedGreenList {
+  kind table
+  class platform-change-set-red-green
+  prop title = "Change Set Red / Green"
+  prop summary = "Selected-gate status for change sets."
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformTestRunPanel {
+  kind form
+  class platform-test-run-panel
+  prop title = "Run Test Gate"
+  prop summary = "Run a single modeled verification gate."
+}
+
+view PlatformSelectedTestRunPanel {
+  kind form
+  class platform-selected-test-run-panel
+  prop title = "Run Selected Gates"
+  prop summary = "Run the selected verification gates for a branch, change set, or candidate snapshot."
+}
+
 view PlatformGapList {
   kind table
   class platform-gaps
@@ -262,6 +366,16 @@ view PlatformGapList {
   prop summary = "Projected platform gaps and meta-defects."
   projections {
     PlatformGapsRead
+  }
+}
+
+view PlatformCoverageMatrix {
+  kind table
+  class platform-coverage-matrix
+  prop title = "Coverage Matrix"
+  prop summary = "Gate-to-target coverage rows for the current modeled platform."
+  projections {
+    PlatformModelRead
   }
 }
 

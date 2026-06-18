@@ -29,7 +29,7 @@ const FALLBACK_LAYOUT = Object.freeze({
       pageId: "overview",
       title: "Overview",
       summary: "Counts, authored surface ownership, lifecycle, and quick platform links.",
-      children: ["PlatformConsoleSummary", "PlatformLifecycleBoard", "PlatformMap", "PlatformProfileComparison"]
+      children: ["PlatformConsoleSummary", "PlatformAuthoredSurfaceTree", "PlatformLifecycleBoard", "PlatformMap", "PlatformProfileComparison"]
     }),
     fallbackSurface("PlatformWorkflowPage", {
       surfaceKind: "page",
@@ -37,7 +37,19 @@ const FALLBACK_LAYOUT = Object.freeze({
       pageId: "workflow",
       title: "Workflow",
       summary: "Branches, change sets, proposals, and authoring commands.",
-      children: ["PlatformBranchBoard", "PlatformWorkflowList", "PlatformWorkflowDetail", "PlatformProposalPanel", "PlatformProposalReviewList"]
+      children: [
+        "PlatformBranchBoard",
+        "PlatformWorkflowList",
+        "PlatformWorkflowDetail",
+        "PlatformProposalPanel",
+        "PlatformProposalReviewList",
+        "PlatformBranchCreatePanel",
+        "PlatformChangeSetCreatePanel",
+        "PlatformChangeSetEditPanel",
+        "PlatformChangeSetValidatePanel",
+        "PlatformChangeSetApplyPanel",
+        "PlatformChangeSetLifecyclePanel"
+      ]
     }),
     fallbackSurface("PlatformVerificationPage", {
       surfaceKind: "page",
@@ -45,7 +57,15 @@ const FALLBACK_LAYOUT = Object.freeze({
       pageId: "verification",
       title: "Verification",
       summary: "Test gates, test runs, candidate snapshots, and runtime revisions.",
-      children: ["PlatformVerificationList", "PlatformVerificationDetail"]
+      children: [
+        "PlatformVerificationList",
+        "PlatformVerificationDetail",
+        "PlatformVerificationStreams",
+        "PlatformBranchRedGreenList",
+        "PlatformChangeSetRedGreenList",
+        "PlatformTestRunPanel",
+        "PlatformSelectedTestRunPanel"
+      ]
     }),
     fallbackSurface("PlatformKnowledgePage", {
       surfaceKind: "page",
@@ -69,7 +89,7 @@ const FALLBACK_LAYOUT = Object.freeze({
       pageId: "model",
       title: "Model",
       summary: "Platform objects, relationships, runtime profiles, and dependency evidence.",
-      children: ["PlatformModelList", "PlatformModelDetail"]
+      children: ["PlatformProfileComparison", "PlatformModelList", "PlatformModelDetail", "PlatformCoverageMatrix"]
     })
   ])
 });

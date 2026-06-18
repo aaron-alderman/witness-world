@@ -325,8 +325,19 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformSignalsPage",
     "PlatformModelPage"
   ]);
+  const overviewPage = layout.children.find(surface => surface.name === "PlatformOverviewPage");
   const workflowPage = layout.children.find(surface => surface.name === "PlatformWorkflowPage");
+  const verificationPage = layout.children.find(surface => surface.name === "PlatformVerificationPage");
   const signalsPage = layout.children.find(surface => surface.name === "PlatformSignalsPage");
+  assert.ok(overviewPage);
+  assert.equal(overviewPage.pageId, "overview");
+  assert.deepEqual(overviewPage.children, [
+    "PlatformConsoleSummary",
+    "PlatformAuthoredSurfaceTree",
+    "PlatformLifecycleBoard",
+    "PlatformMap",
+    "PlatformProfileComparison"
+  ]);
   assert.ok(workflowPage);
   assert.equal(workflowPage.pageId, "workflow");
   assert.deepEqual(workflowPage.children, [
@@ -334,9 +345,27 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformWorkflowList",
     "PlatformWorkflowDetail",
     "PlatformProposalPanel",
-    "PlatformProposalReviewList"
+    "PlatformProposalReviewList",
+    "PlatformBranchCreatePanel",
+    "PlatformChangeSetCreatePanel",
+    "PlatformChangeSetEditPanel",
+    "PlatformChangeSetValidatePanel",
+    "PlatformChangeSetApplyPanel",
+    "PlatformChangeSetLifecyclePanel"
   ]);
   assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformProposalPanel" && surface.processRoute === "/api/platform-proposals"), true);
+  assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformChangeSetEditPanel"), true);
+  assert.ok(verificationPage);
+  assert.equal(verificationPage.pageId, "verification");
+  assert.deepEqual(verificationPage.children, [
+    "PlatformVerificationList",
+    "PlatformVerificationDetail",
+    "PlatformVerificationStreams",
+    "PlatformBranchRedGreenList",
+    "PlatformChangeSetRedGreenList",
+    "PlatformTestRunPanel",
+    "PlatformSelectedTestRunPanel"
+  ]);
   assert.ok(signalsPage);
   assert.equal(signalsPage.pageId, "signals");
   assert.deepEqual(signalsPage.children, [
@@ -4861,7 +4890,7 @@ test("platform page renders required operating views", async () => {
   assert.match(overviewHtml, /Generated from plugins\/platform\/platform-console\.wcss/);
   assert.match(overviewHtml, /Authored Surface Tree/);
   assert.match(overviewHtml, /data-platform-rvm-view="PlatformOverviewPage"/);
-  assert.match(overviewHtml, /Sections: Platform Summary, Lifecycle Board, Platform Map, Runtime Profiles/);
+  assert.match(overviewHtml, /Sections: Platform Summary, Authored Surface Tree, Lifecycle Board, Platform Map, Runtime Profiles/);
   assert.match(overviewHtml, /\?view=workflow/);
   assert.doesNotMatch(overviewHtml, /<pre/);
 
@@ -4869,9 +4898,8 @@ test("platform page renders required operating views", async () => {
   assert.match(workflowHtml, /Workflow Items/);
   assert.match(workflowHtml, /Branch Detail/);
   assert.match(workflowHtml, /Proposal Panel/);
-  assert.match(workflowHtml, /platform-proposal-form/);
-  assert.match(workflowHtml, /platform-change-set-edit-form/);
-  assert.match(workflowHtml, /platform-test-run-form/);
+  assert.match(workflowHtml, /<form id="platform-proposal-form"/);
+  assert.match(workflowHtml, /<form id="platform-change-set-edit-form"/);
   assert.match(workflowHtml, /\/api\/platform-branches\/branch%3Ademo-0/);
   assert.match(workflowHtml, /offset=20/);
   assert.doesNotMatch(workflowHtml, /platform-initial-state/);
@@ -4880,6 +4908,8 @@ test("platform page renders required operating views", async () => {
   assert.match(verificationHtml, /Platform Console - Verification/);
   assert.match(verificationHtml, /Verification Items/);
   assert.match(verificationHtml, /Test Gate Detail/);
+  assert.match(verificationHtml, /<form id="platform-test-run-form"/);
+  assert.match(verificationHtml, /<form id="platform-selected-test-run-form"/);
   assert.match(verificationHtml, /\/api\/platform-test-runs\/events/);
   assert.match(verificationHtml, /\/api\/runtime\/backend-revisions\/events/);
   assert.doesNotMatch(verificationHtml, /<pre/);
