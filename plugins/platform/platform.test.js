@@ -4908,6 +4908,7 @@ test("platform page renders required operating views", async () => {
   assert.match(overviewHtml, /Platform Console - Overview/);
   assert.match(overviewHtml, /Generated from plugins\/platform\/platform-console\.wcss/);
   assert.match(overviewHtml, /Authored Surface Tree/);
+  assert.match(overviewHtml, /Inspectable page and section ownership compiled from the authored console RVM\./);
   assert.match(overviewHtml, /data-platform-rvm-view="PlatformOverviewPage"/);
   assert.match(overviewHtml, /Sections: Platform Summary, Authored Surface Tree, Lifecycle Board, Platform Map, Runtime Profiles/);
   assert.match(overviewHtml, /\?view=workflow/);
@@ -4917,6 +4918,7 @@ test("platform page renders required operating views", async () => {
   assert.match(workflowHtml, /Workflow Items/);
   assert.match(workflowHtml, /Branch Detail/);
   assert.match(workflowHtml, /Proposal Panel/);
+  assert.match(workflowHtml, /Stage an authored source edit into the selected change set\./);
   assert.match(workflowHtml, /<form id="platform-proposal-form"/);
   assert.match(workflowHtml, /<form id="platform-change-set-edit-form"/);
   assert.match(workflowHtml, /\/api\/platform-branches\/branch%3Ademo-0/);
@@ -4927,6 +4929,7 @@ test("platform page renders required operating views", async () => {
   assert.match(verificationHtml, /Platform Console - Verification/);
   assert.match(verificationHtml, /Verification Items/);
   assert.match(verificationHtml, /Test Gate Detail/);
+  assert.match(verificationHtml, /Links to live test-run and backend-revision event streams\./);
   assert.match(verificationHtml, /<form id="platform-test-run-form"/);
   assert.match(verificationHtml, /<form id="platform-selected-test-run-form"/);
   assert.match(verificationHtml, /\/api\/platform-test-runs\/events/);
