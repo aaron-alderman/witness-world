@@ -1027,9 +1027,9 @@
     {
       "version": "todo.todos.create.v1",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "process.request",
       "order": 1,
-      "paramsJson": "{\"handler\":\"todos.createModel\",\"method\":\"POST\",\"path\":\"/api/todos\",\"from\":\"draftTodo\",\"into\":\"createResult\",\"allowFailure\":true}"
+      "paramsJson": "{\"process\":\"todo.create\",\"from\":\"draftTodo\",\"into\":\"createResult\",\"allowFailure\":true}"
     },
     {
       "version": "todo.todos.create.v1",
@@ -1064,9 +1064,9 @@
     {
       "version": "todo.todos.create.v2",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "process.request",
       "order": 1,
-      "paramsJson": "{\"handler\":\"todos.createModel\",\"method\":\"POST\",\"path\":\"/api/todos\",\"from\":\"draftTodo\",\"into\":\"createResult\",\"allowFailure\":true}"
+      "paramsJson": "{\"process\":\"todo.create\",\"from\":\"draftTodo\",\"into\":\"createResult\",\"allowFailure\":true}"
     },
     {
       "version": "todo.todos.create.v2",
@@ -1115,9 +1115,9 @@
     {
       "version": "todo.todos.update.v1",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "process.request",
       "order": 2,
-      "paramsJson": "{\"handler\":\"todos.updateModel\",\"method\":\"PATCH\",\"path\":\"/api/todos/${state.request.params.id}\",\"from\":\"todoPatch\",\"into\":\"updateResult\",\"allowFailure\":true,\"params\":{\"id\":\"${state.request.params.id}\"}}"
+      "paramsJson": "{\"process\":\"todo.update\",\"from\":\"todoPatch\",\"into\":\"updateResult\",\"allowFailure\":true,\"options\":{\"todoId\":\"${state.request.params.id}\"}}"
     },
     {
       "version": "todo.todos.update.v1",
@@ -1159,9 +1159,9 @@
     {
       "version": "todo.todos.update.v2",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "process.request",
       "order": 2,
-      "paramsJson": "{\"handler\":\"todos.updateModel\",\"method\":\"PATCH\",\"path\":\"/api/todos/${state.request.params.id}\",\"from\":\"todoPatch\",\"into\":\"updateResult\",\"allowFailure\":true,\"params\":{\"id\":\"${state.request.params.id}\"}}"
+      "paramsJson": "{\"process\":\"todo.update\",\"from\":\"todoPatch\",\"into\":\"updateResult\",\"allowFailure\":true,\"options\":{\"todoId\":\"${state.request.params.id}\"}}"
     },
     {
       "version": "todo.todos.update.v2",
@@ -1196,9 +1196,9 @@
     {
       "version": "todo.todos.delete.v1",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "process.request",
       "order": 0,
-      "paramsJson": "{\"handler\":\"todos.deleteModel\",\"method\":\"DELETE\",\"path\":\"/api/todos/${state.request.params.id}\",\"into\":\"deleteResult\",\"allowFailure\":true,\"params\":{\"id\":\"${state.request.params.id}\"}}"
+      "paramsJson": "{\"process\":\"todo.delete\",\"body\":{\"id\":\"${state.request.params.id}\"},\"into\":\"deleteResult\",\"allowFailure\":true,\"options\":{\"todoId\":\"${state.request.params.id}\"}}"
     },
     {
       "version": "todo.todos.delete.v1",
@@ -1226,9 +1226,9 @@
     {
       "version": "todo.todos.delete.v2",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "process.request",
       "order": 0,
-      "paramsJson": "{\"handler\":\"todos.deleteModel\",\"method\":\"DELETE\",\"path\":\"/api/todos/${state.request.params.id}\",\"into\":\"deleteResult\",\"allowFailure\":true,\"params\":{\"id\":\"${state.request.params.id}\"}}"
+      "paramsJson": "{\"process\":\"todo.delete\",\"body\":{\"id\":\"${state.request.params.id}\"},\"into\":\"deleteResult\",\"allowFailure\":true,\"options\":{\"todoId\":\"${state.request.params.id}\"}}"
     },
     {
       "version": "todo.todos.delete.v2",
@@ -1312,9 +1312,9 @@
     {
       "version": "todo.privateNotes.create.v1",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "process.request",
       "order": 1,
-      "paramsJson": "{\"handler\":\"privateNotes.createModel\",\"method\":\"POST\",\"path\":\"/api/private-notes\",\"from\":\"privateNoteDraft\",\"into\":\"privateNoteResult\",\"allowFailure\":true}"
+      "paramsJson": "{\"process\":\"privateNote.create\",\"from\":\"privateNoteDraft\",\"into\":\"privateNoteResult\",\"allowFailure\":true}"
     },
     {
       "version": "todo.privateNotes.create.v1",
@@ -1349,9 +1349,9 @@
     {
       "version": "todo.privateNotes.create.v2",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "process.request",
       "order": 1,
-      "paramsJson": "{\"handler\":\"privateNotes.createModel\",\"method\":\"POST\",\"path\":\"/api/private-notes\",\"from\":\"privateNoteDraft\",\"into\":\"privateNoteResult\",\"allowFailure\":true}"
+      "paramsJson": "{\"process\":\"privateNote.create\",\"from\":\"privateNoteDraft\",\"into\":\"privateNoteResult\",\"allowFailure\":true}"
     },
     {
       "version": "todo.privateNotes.create.v2",
@@ -1400,9 +1400,9 @@
     {
       "version": "todo.widgets.create.v1",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "process.request",
       "order": 2,
-      "paramsJson": "{\"handler\":\"widgets.createModel\",\"method\":\"POST\",\"path\":\"/api/widgets\",\"from\":\"widgetDraft\",\"into\":\"widgetCreateResult\",\"allowFailure\":true,\"params\":{\"rootWidget\":\"todo_app_widget\",\"context\":\"frontend\"}}"
+      "paramsJson": "{\"process\":\"widget.define\",\"from\":\"widgetDraft\",\"into\":\"widgetCreateResult\",\"allowFailure\":true,\"options\":{\"defaultParent\":\"todo_app_widget\",\"rootWidget\":\"todo_app_widget\",\"defaultContext\":\"frontend\",\"context\":\"frontend\"}}"
     },
     {
       "version": "todo.widgets.create.v1",
@@ -1444,9 +1444,9 @@
     {
       "version": "todo.widgets.create.v2",
       "event": "request",
-      "op": "handler.invoke",
+      "op": "process.request",
       "order": 2,
-      "paramsJson": "{\"handler\":\"widgets.createModel\",\"method\":\"POST\",\"path\":\"/api/widgets\",\"from\":\"widgetDraft\",\"into\":\"widgetCreateResult\",\"allowFailure\":true,\"params\":{\"rootWidget\":\"todo_app_widget\",\"context\":\"frontend\"}}"
+      "paramsJson": "{\"process\":\"widget.define\",\"from\":\"widgetDraft\",\"into\":\"widgetCreateResult\",\"allowFailure\":true,\"options\":{\"defaultParent\":\"todo_app_widget\",\"rootWidget\":\"todo_app_widget\",\"defaultContext\":\"frontend\",\"context\":\"frontend\"}}"
     },
     {
       "version": "todo.widgets.create.v2",

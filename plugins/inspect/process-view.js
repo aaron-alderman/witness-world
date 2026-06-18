@@ -12,7 +12,7 @@ import {
 } from "../../src/runtime-page-state.js";
 import { renderWidgetPage } from "./widget-page.js";
 
-const ASYNC_OPS = new Set(["fetchJson", "postJson", "patchJson", "deleteJson", "initSession", "setSession", "logout", "refreshProjection", "request.readJson", "handler.invoke", "run"]);
+const ASYNC_OPS = new Set(["fetchJson", "postJson", "patchJson", "deleteJson", "initSession", "setSession", "logout", "refreshProjection", "request.readJson", "handler.invoke", "process.request", "run"]);
 const TERMINAL_STEP_PROCESSES = new Set(["frontend.step.done", "frontend.step.skipped", "frontend.step.failed", "backend.step.done", "backend.step.skipped", "backend.step.failed"]);
 const PROCESS_EVENT_PROCESSES = new Set([
   "frontend.process.start",
@@ -334,7 +334,7 @@ function buildProcessPageState(model, currentPath) {
         labelWidgetId: `${base}.label`,
         statusWidgetId: `${base}.status`,
         messageWidgetId: `${base}.message`,
-        label: `${item.method} ${item.url}`,
+        label: item.process ? `${item.method} ${item.process}` : `${item.method} ${item.url}`,
         status: `Status ${item.statusCode}`,
         message: (item.failureWitnesses || [])
           .map(failure => `${failure.process} ${failure.body?.reason || failure.body?.message || ""}`.trim())
@@ -586,6 +586,7 @@ function correlateRequests(runId, observations, witnesses) {
         durationMs: observation.body.durationMs ?? 0,
         route: observation.body.route ?? null,
         handler: observation.body.handler ?? null,
+        process: observation.body.process ?? null,
         projector: observation.body.projector ?? null,
         failureWitnesses,
         emittedWitnesses

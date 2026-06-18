@@ -352,3 +352,148 @@ test("route-backed backend programs can read shared module projectors through pr
     await server.close();
   }
 });
+
+test("route-backed backend programs can execute governed mutation requests through process.request", async () => {
+  const world = createWorld();
+  declareBackendHost(world, { actor: "system", id: "backendHost" });
+  declareFrontendHost(world, { actor: "system", id: "frontendHost" });
+  createServerRunner(world, {
+    actor: "backendHost",
+    id: "runner",
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    allowActorHeader: true,
+    owner: "backendHost"
+  });
+  defineBackendProgram(world, {
+    actor: "backendHost",
+    soul: "backend.todoCreate",
+    label: "Backend Todo Create",
+    owner: "backendHost"
+  });
+  defineBackendProgramVersion(world, {
+    actor: "backendHost",
+    soul: "backend.todoCreate",
+    version: "backend.todoCreate.v1",
+    owner: "backendHost"
+  });
+  defineBackendStep(world, {
+    actor: "backendHost",
+    version: "backend.todoCreate.v1",
+    event: "request",
+    op: "request.readJson",
+    order: 0,
+    params: {
+      into: "draftTodo"
+    }
+  });
+  defineBackendStep(world, {
+    actor: "backendHost",
+    version: "backend.todoCreate.v1",
+    event: "request",
+    op: "process.request",
+    order: 1,
+    params: {
+      process: "todo.create",
+      from: "draftTodo",
+      into: "createResult",
+      allowFailure: true
+    }
+  });
+  defineBackendStep(world, {
+    actor: "backendHost",
+    version: "backend.todoCreate.v1",
+    event: "request",
+    op: "run",
+    order: 2,
+    params: {
+      event: "respond"
+    }
+  });
+  defineBackendStep(world, {
+    actor: "backendHost",
+    version: "backend.todoCreate.v1",
+    event: "respond",
+    op: "response.json",
+    order: 0,
+    when: { path: "createResult.ok", truthy: true },
+    params: {
+      from: "createResult.payload",
+      statusFrom: "createResult.status"
+    }
+  });
+  defineBackendStep(world, {
+    actor: "backendHost",
+    version: "backend.todoCreate.v1",
+    event: "respond",
+    op: "response.error",
+    order: 1,
+    when: { path: "createResult.ok", falsy: true },
+    params: {
+      statusFrom: "createResult.status",
+      messageFrom: "createResult.error",
+      bodyFrom: "createResult.payload"
+    }
+  });
+  activateBackendProgramVersion(world, {
+    actor: "backendHost",
+    soul: "backend.todoCreate",
+    version: "backend.todoCreate.v1"
+  });
+  defineRoute(world, {
+    actor: "backendHost",
+    id: "backend_todo_create_route",
+    path: "/api/runtime-todo-create",
+    serves: "backendProgram",
+    method: "POST",
+    handler: "backendProgram.run",
+    params: { backendProgramSoul: "backend.todoCreate" },
+    owner: "backendHost"
+  });
+  serveRoute(world, { actor: "backendHost", serverRunner: "runner", route: "backend_todo_create_route" });
+
+  const server = await startServer(world, {
+    actor: "backendHost",
+    serverRunnerId: "runner",
+    runtimeRoot: await tempRuntimeRoot()
+  });
+  assert.equal(server.ok, true);
+
+  try {
+    const response = await fetch(`${server.url}/api/runtime-todo-create`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-witness-actor": "aaron"
+      },
+      body: JSON.stringify({ title: "Created through process.request" })
+    });
+    assert.equal(response.status, 201);
+    const createdWitness = world.allWitnesses().find(witness =>
+      witness.process === "todo.create"
+      && witness.body?.todo?.title === "Created through process.request"
+    );
+    const body = await response.json();
+    assert.deepEqual(body, {
+      todo: {
+        id: createdWitness?.body?.todo?.id,
+        title: "Created through process.request",
+        done: false
+      },
+      witness: createdWitness,
+      authority: body.authority
+    });
+    assert.equal(body.authority?.authenticated, true);
+    assert.equal(body.authority?.canMutate, true);
+    assert.equal(body.authority?.mode, "mutate");
+
+    const requestObservation = world.allObservations()
+      .filter(observation => observation.process === "backend.request.finish")
+      .find(observation => observation.body?.process === "todo.create");
+    assert.equal(requestObservation?.body?.method, "PROCESS");
+    assert.equal(requestObservation?.body?.process, "todo.create");
+    assert.equal(requestObservation?.body?.url, "process:todo.create");
+  } finally {
+    await server.close();
+  }
+});

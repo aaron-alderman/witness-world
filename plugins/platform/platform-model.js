@@ -568,6 +568,23 @@ function normalizeGovernanceRoutes(rows = []) {
     );
 }
 
+function normalizeProposalTargetGovernance(rows = []) {
+  return (Array.isArray(rows) ? rows : [])
+    .map(row => ({
+      id: String(row?.id || ""),
+      targetProcess: String(row?.targetProcess || ""),
+      operationSemantics: String(row?.operationSemantics || "unknown"),
+      governanceMode: String(row?.governanceMode || "missing"),
+      authorityMechanism: String(row?.authorityMechanism || "missing"),
+      sharedAuthorityPath: row?.sharedAuthorityPath === true,
+      workflowRole: String(row?.workflowRole || "missing"),
+      bootstrapSelectable: row?.bootstrapSelectable === true,
+      notes: String(row?.notes || "")
+    }))
+    .filter(row => row.id && row.targetProcess)
+    .sort((left, right) => left.targetProcess.localeCompare(right.targetProcess));
+}
+
 function buildRuntimeRevisionRows(snapshotDiagnostics, candidateSnapshotsByBranch) {
   if (!snapshotDiagnostics?.appRevision) return [];
   return [{
@@ -2439,6 +2456,9 @@ export async function buildPlatformModel({
     diagnostics?.governanceRoutes
     ?? buildGovernanceRouteInventory(diagnostics?.routes ?? [])
   );
+  const proposalTargetGovernance = normalizeProposalTargetGovernance(
+    diagnostics?.proposalTargetGovernance
+  );
   const runtimeRevisions = buildRuntimeRevisionRows(snapshotDiagnostics, candidateSnapshotsByBranch);
   const activeRuntimeRevision = runtimeRevisions[0] ?? null;
   const snapshotBuilds = buildSnapshotBuildRows(candidateSnapshots);
@@ -2498,6 +2518,18 @@ export async function buildPlatformModel({
     });
     if (governanceRoute.routeId) addEdge(edges, governanceRoute.id, "governs", governanceRoute.routeId, "governance-ledger");
     addEdge(edges, governanceRoute.id, "dispatchesTo", `handler:${governanceRoute.handler}`, "governance-ledger");
+  }
+
+  for (const governanceCommand of proposalTargetGovernance) {
+    addNode(nodes, {
+      id: governanceCommand.id,
+      kind: "governanceCommand",
+      title: governanceCommand.targetProcess,
+      lifecycle: ["steward"],
+      owner: governanceCommand.targetProcess,
+      status: governanceCommand.governanceMode,
+      source: "governance-ledger"
+    });
   }
 
   const profiles = Object.entries(profilesSeed.profiles ?? {}).map(([id, profile]) => ({
@@ -3316,6 +3348,7 @@ export async function buildPlatformModel({
     testMonitorDiagnostics,
     compatibilityBridges,
     governanceRoutes,
+    proposalTargetGovernance,
     conflicts: conflicts.map(row => ({ ...row })),
     mergeIntents: mergeIntents.map(row => ({ ...row })),
     roadmapTasks
@@ -3784,7 +3817,15 @@ export function filterPlatformModel(model, view, id = null) {
         || row.ownerPluginId === id
       )
       : (model.governanceRoutes ?? []);
-    return { governanceRoutes, summaries: model.summaries };
+    const proposalTargetGovernance = id
+      ? (model.proposalTargetGovernance ?? []).filter(row =>
+        row.id === id
+        || row.targetProcess === id
+        || row.governanceMode === id
+        || row.authorityMechanism === id
+      )
+      : (model.proposalTargetGovernance ?? []);
+    return { governanceRoutes, proposalTargetGovernance, summaries: model.summaries };
   }
   if (view === "gates") return { gates: model.nodes.filter(node => node.kind === "testGate"), summaries: model.summaries };
   if (view === "mcp") return {

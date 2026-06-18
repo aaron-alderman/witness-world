@@ -717,6 +717,18 @@ export function proposalTargetGovernanceCatalog({
   );
 }
 
+export function proposalTargetGovernanceRows({
+  bootstrapSelectableOnly = false
+} = {}) {
+  return Object.entries(proposalTargetGovernanceCatalog({ bootstrapSelectableOnly }))
+    .map(([targetProcess, entry]) => ({
+      id: `governanceProposalTarget:${targetProcess}`,
+      targetProcess,
+      ...entry
+    }))
+    .sort((left, right) => left.targetProcess.localeCompare(right.targetProcess));
+}
+
 export function proposalTargetProcessIds({
   bootstrapSelectableOnly = false
 } = {}) {

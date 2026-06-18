@@ -199,11 +199,11 @@ Keep removing handler-set glue from shipped behavior.
 
 Priority order:
 
-1. `todos.createModel`
-2. `todos.updateModel`
-3. `todos.deleteModel`
-4. `privateNotes.createModel`
-5. `widgets.createModel`
+1. `todos.createModel` in authored backend programs
+2. `todos.updateModel` in authored backend programs
+3. `todos.deleteModel` in authored backend programs
+4. `privateNotes.createModel` in authored backend programs
+5. `widgets.createModel` in authored backend programs
 6. remaining demo helpers after those
 
 Slices:

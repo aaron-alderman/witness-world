@@ -1,22 +1,13 @@
-﻿import fs from "node:fs/promises";
-import path from "node:path";
-import { thing, relation } from "../../src/kernel.js";
-import { thingId } from "../../src/ids.js";
+import { relation } from "../../src/kernel.js";
 import { todoState, privateNotesFor, publicWitnessesFor } from "./projections.js";
 import { privateNotesPrivacyState } from "./private-notes-runtime.js";
-import { actorRequired, runGates, textRequired } from "../../src/gates.js";
-import { requestWidgetDefine } from "../authoring-core/authoring-core-processes.js";
-import { requestBootstrapProposalCreate } from "../proposals/proposal-processes.js";
+import { todoAuthorityState } from "./todo-runtime.js";
 import {
-  ensureTodoTargetAuthority,
-  requestTodoCreate,
-  requestTodoDelete,
-  requestTodoUpdate,
-  SHARED_TODO_CONTEXT_ID,
-  todoAuthorityState
-} from "./todo-runtime.js";
-
-const DEMO_TODO_ROOT_WIDGET_ID = "todo_app_widget";
+  ensureDemoProjectionCaches,
+  executeDemoMutationRequest,
+  writeDemoPrivateNotesProjectionCache,
+  writeDemoTodoProjectionCache
+} from "./backend-mutations.js";
 
 export const DEMO_HANDLER_SET_DEFINITION = Object.freeze({
   handlers: Object.freeze([
@@ -61,37 +52,15 @@ export async function createDemoHandlerSet({
   const todoProjectionPath = storage.todoProjection ?? null;
   const privateNotesProjectionPath = storage.privateNotesProjection ?? null;
   const failOnceAttempts = new Map();
-  await ensureProjectionCache(todoProjectionPath);
-  await ensureProjectionCache(privateNotesProjectionPath);
+  await ensureDemoProjectionCaches({
+    todoProjection: todoProjectionPath,
+    privateNotesProjection: privateNotesProjectionPath
+  });
 
   const projectTodos = () => todoState(world.allWitnesses());
   const projectPrivateNotes = actor => privateNotesFor(world.allWitnesses(), actor);
-  const writeTodoProjectionCache = () => writeProjectionCache(todoProjectionPath, projectTodos());
-  const writePrivateNotesProjectionCache = () => writeProjectionCache(
-    privateNotesProjectionPath,
-    world.allWitnesses().filter(w => w.process === "privateNote.create").map(w => w.body.note).filter(Boolean)
-  );
-  const nextTodoProposalId = (action, target = "") => {
-    const actionPart = String(action || "mutate").replace(/[^A-Za-z0-9_.:-]+/g, "-");
-    const targetPart = String(target || "shared").replace(/[^A-Za-z0-9_.:-]+/g, "-");
-    return `proposal.todo.${actionPart}.${targetPart}.${world.allWitnesses().length}`;
-  };
-  const nextWidgetProposalId = (target = "") => {
-    const targetPart = String(target || SHARED_TODO_CONTEXT_ID).replace(/[^A-Za-z0-9_.:-]+/g, "-");
-    return `proposal.widget.define.${targetPart}.${world.allWitnesses().length}`;
-  };
-  const todoProposalReason = action => ({
-    create: "Add a shared todo through witnessed proposal",
-    update: "Update a shared todo through witnessed proposal",
-    delete: "Delete a shared todo through witnessed proposal"
-  }[action] || "Mutate a shared todo through witnessed proposal");
-  const widgetProposalReason = () => "Add a shared widget through witnessed proposal";
-  const todoStatusMessage = action => ({
-    create: "Proposed add for review.",
-    update: "Proposed update for review.",
-    delete: "Proposed delete for review."
-  }[action] || "Proposed change for review.");
-  const widgetStatusMessage = () => "Proposed widget for review.";
+  const writeTodoProjectionCache = () => writeDemoTodoProjectionCache(todoProjectionPath, world);
+  const writePrivateNotesProjectionCache = () => writeDemoPrivateNotesProjectionCache(privateNotesProjectionPath, world);
   const readTodoModel = requestActor => {
     const todos = projectTodos();
     const authority = todoAuthorityState(world, requestActor);
@@ -116,430 +85,61 @@ export async function createDemoHandlerSet({
     return { notes, privacy };
   };
   const createPrivateNoteModel = async ({ requestActor, body }) => {
-    const privacy = privateNotesPrivacyState(requestActor);
-    if (!requestActor) {
-      world.emit({ process: "privateNote.create.failed", actor: backendHost, claims: [], body: { reason: "no actor" } });
-      return {
-        status: 401,
-        body: {
-          ok: false,
-          status: 401,
-          error: privacy.reason,
-          payload: { error: privacy.reason, privacy }
-        }
-      };
-    }
-    const text = typeof body?.text === "string" ? body.text.trim() : "";
-    if (!text) {
-      world.emit({ process: "privateNote.create.failed", actor: requestActor, claims: [], body: { reason: "text required" } });
-      return {
-        status: 400,
-        body: {
-          ok: false,
-          status: 400,
-          error: "text required",
-          payload: { error: "text required", privacy }
-        }
-      };
-    }
-    const gate = runGates(world, {
-      actor: requestActor,
+    const result = await executeDemoMutationRequest(world, {
       process: "privateNote.create",
-      gates: [actorRequired, textRequired("text")],
-      context: { actor: requestActor, text }
-    });
-    if (!gate.ok) {
-      return {
-        status: 400,
-        body: {
-          ok: false,
-          status: 400,
-          error: gate.reason,
-          payload: { error: gate.reason, privacy }
-        }
-      };
-    }
-    const note = {
-      id: thingId("private-note", { actor: requestActor, text, ordinal: world.allWitnesses().length }),
-      actor: requestActor,
-      text
-    };
-    world.emit({
-      process: "privateNote.create",
-      actor: requestActor,
-      claims: [thing(note.id), relation(note.id, "privateTo", requestActor)],
-      body: { id: note.id, actor: requestActor, note }
-    });
-    await writePrivateNotesProjectionCache();
-    return {
-      status: 201,
-      body: {
-        ok: true,
-        status: 201,
-        payload: { note, privacy }
-      }
-    };
-  };
-  const createTodoModel = async ({ requestActor, body }) => {
-    if (!requestActor) {
-      world.emit({ process: "todo.create.failed", actor: backendHost, claims: [], body: { reason: "sign in to change shared todos" } });
-      return {
-        status: 401,
-        body: {
-          ok: false,
-          status: 401,
-          error: "sign in to change shared todos",
-          payload: { error: "sign in to change shared todos" }
-        }
-      };
-    }
-    const authority = todoAuthorityState(world, requestActor);
-    if (!authority.canMutate) {
-      const proposal = createTodoProposal({
-        actor: requestActor,
-        action: "create",
-        body
-      });
-      return proposal.ok
-        ? {
-            status: 202,
-            body: {
-              ok: true,
-              status: 202,
-              payload: {
-                proposal: proposal.proposal,
-                witness: proposal.witness,
-                statusMessage: todoStatusMessage("create"),
-                authority
-              }
-            }
-          }
-        : {
-            status: proposal.status || 400,
-            body: {
-              ok: false,
-              status: proposal.status || 400,
-              error: proposal.error,
-              payload: {
-                error: proposal.error,
-                witness: proposal.witness,
-                authority
-              }
-            }
-          };
-    }
-    const result = requestTodoCreate(world, {
       actor: requestActor,
       backendHost,
       body,
-      contextId: authority.context
+      onPrivateNotesChanged: writePrivateNotesProjectionCache
     });
-    if (!result.ok) {
-      return {
-        status: result.status,
-        body: {
-          ok: false,
-          status: result.status,
-          error: result.error,
-          payload: { error: result.error, witness: result.witness, authority }
-        }
-      };
-    }
-    await writeTodoProjectionCache();
-    return {
-      status: result.status,
-      body: {
-        ok: true,
-        status: result.status,
-        payload: { todo: result.todo, witness: result.witness, authority }
-      }
-    };
+    return { status: result.status, body: { ...result, status: result.status } };
   };
-  const createTodoProposal = ({ actor, action, targetId = null, body = {} }) => requestBootstrapProposalCreate(world, {
-    actor,
-    backendHost,
-    body: {
-      id: nextTodoProposalId(action, targetId || SHARED_TODO_CONTEXT_ID),
-      targetProcess: `todo.${action}`,
-      targetKind: action === "create" ? "context" : "todo",
-      targetId: action === "create" ? SHARED_TODO_CONTEXT_ID : (targetId || null),
-      bodyJson: JSON.stringify(body),
-      reason: todoProposalReason(action)
-    }
-  });
-  const createWidgetProposal = ({ actor, body = {}, contextId = SHARED_TODO_CONTEXT_ID }) => requestBootstrapProposalCreate(world, {
-    actor,
-    backendHost,
-    body: {
-      id: nextWidgetProposalId(contextId),
-      targetProcess: "widget.define",
-      targetKind: "context",
-      targetId: contextId,
-      bodyJson: JSON.stringify(body),
-      reason: widgetProposalReason()
-    }
-  });
-  const updateTodoModel = async ({ requestActor, id, body }) => {
-    const todoId = typeof id === "string" && id.trim()
-      ? id.trim()
-      : (typeof body?.id === "string" ? body.id.trim() : "");
-    const nextBody = body && typeof body === "object"
-      ? { ...body, id: todoId }
-      : { id: todoId };
-    if (!requestActor) {
-      world.emit({ process: "todo.update.failed", actor: backendHost, claims: [], body: { id: todoId, reason: "sign in to change shared todos" } });
-      return {
-        status: 401,
-        body: {
-          ok: false,
-          status: 401,
-          error: "sign in to change shared todos",
-          payload: { error: "sign in to change shared todos" }
-        }
-      };
-    }
-    const gate = ensureTodoTargetAuthority(world, requestActor, todoId);
-    if (!gate.ok && gate.status !== 403) {
-      world.emit({ process: "todo.update.failed", actor: requestActor, claims: [], body: { id: todoId, reason: gate.reason, status: gate.status } });
-      return {
-        status: gate.status || 400,
-        body: {
-          ok: false,
-          status: gate.status || 400,
-          error: gate.reason,
-          payload: { error: gate.reason }
-        }
-      };
-    }
-    if (!gate.ok) {
-      const proposal = createTodoProposal({
-        actor: requestActor,
-        action: "update",
-        targetId: todoId,
-        body: nextBody
-      });
-      return proposal.ok
-        ? {
-            status: 202,
-            body: {
-              ok: true,
-              status: 202,
-              payload: {
-                proposal: proposal.proposal,
-                witness: proposal.witness,
-                statusMessage: todoStatusMessage("update")
-              }
-            }
-          }
-        : {
-            status: proposal.status || 400,
-            body: {
-              ok: false,
-              status: proposal.status || 400,
-              error: proposal.error,
-              payload: {
-                error: proposal.error,
-                witness: proposal.witness
-              }
-            }
-          };
-    }
-    const result = requestTodoUpdate(world, {
+  const createTodoModel = async ({ requestActor, body }) => {
+    const result = await executeDemoMutationRequest(world, {
+      process: "todo.create",
       actor: requestActor,
       backendHost,
-      body: nextBody
+      body,
+      onTodosChanged: writeTodoProjectionCache
     });
-    if (!result.ok) {
-      return {
-        status: result.status,
-        body: {
-          ok: false,
-          status: result.status,
-          error: result.error,
-          payload: { error: result.error, witness: result.witness }
-        }
-      };
-    }
-    await writeTodoProjectionCache();
-    return {
-      status: result.status,
-      body: {
-        ok: true,
-        status: result.status,
-        payload: { todo: result.todo, witness: result.witness }
-      }
-    };
+    return { status: result.status, body: { ...result, status: result.status } };
+  };
+  const updateTodoModel = async ({ requestActor, id, body }) => {
+    const result = await executeDemoMutationRequest(world, {
+      process: "todo.update",
+      actor: requestActor,
+      backendHost,
+      body,
+      options: { todoId: id || "" },
+      onTodosChanged: writeTodoProjectionCache
+    });
+    return { status: result.status, body: { ...result, status: result.status } };
   };
   const deleteTodoModel = async ({ requestActor, id }) => {
-    const todoId = typeof id === "string" ? id : "";
-    if (!requestActor) {
-      world.emit({ process: "todo.delete.failed", actor: backendHost, claims: [], body: { id: todoId, reason: "sign in to change shared todos" } });
-      return {
-        status: 401,
-        body: {
-          ok: false,
-          status: 401,
-          error: "sign in to change shared todos",
-          payload: { error: "sign in to change shared todos" }
-        }
-      };
-    }
-    const gate = ensureTodoTargetAuthority(world, requestActor, todoId);
-    if (!gate.ok && gate.status !== 403) {
-      world.emit({ process: "todo.delete.failed", actor: requestActor, claims: [], body: { id: todoId, reason: gate.reason, status: gate.status } });
-      return {
-        status: gate.status || 400,
-        body: {
-          ok: false,
-          status: gate.status || 400,
-          error: gate.reason,
-          payload: { error: gate.reason }
-        }
-      };
-    }
-    if (!gate.ok) {
-      const proposal = createTodoProposal({
-        actor: requestActor,
-        action: "delete",
-        targetId: todoId,
-        body: { id: todoId }
-      });
-      return proposal.ok
-        ? {
-            status: 202,
-            body: {
-              ok: true,
-              status: 202,
-              payload: {
-                proposal: proposal.proposal,
-                witness: proposal.witness,
-                statusMessage: todoStatusMessage("delete")
-              }
-            }
-          }
-        : {
-            status: proposal.status || 400,
-            body: {
-              ok: false,
-              status: proposal.status || 400,
-              error: proposal.error,
-              payload: {
-                error: proposal.error,
-                witness: proposal.witness
-              }
-            }
-          };
-    }
-    const result = requestTodoDelete(world, {
+    const result = await executeDemoMutationRequest(world, {
+      process: "todo.delete",
       actor: requestActor,
       backendHost,
-      body: { id: todoId }
+      body: { id: id || "" },
+      options: { todoId: id || "" },
+      onTodosChanged: writeTodoProjectionCache
     });
-    if (!result.ok) {
-      return {
-        status: result.status,
-        body: {
-          ok: false,
-          status: result.status,
-          error: result.error,
-          payload: { error: result.error, witness: result.witness }
-        }
-      };
-    }
-    await writeTodoProjectionCache();
-    return {
-      status: result.status,
-      body: {
-        ok: true,
-        status: result.status,
-        payload: { ok: true, id: result.id, witness: result.witness }
-      }
-    };
+    return { status: result.status, body: { ...result, status: result.status } };
   };
-  const createWidgetModel = async ({ requestActor, body, route = null, routeParams = {} }) => {
-    if (!requestActor) {
-      return {
-        status: 401,
-        body: {
-          ok: false,
-          status: 401,
-          error: "choose a perspective first",
-          payload: { error: "choose a perspective first" }
-        }
-      };
-    }
-    const defaultParent = typeof routeParams.rootWidget === "string" && routeParams.rootWidget.trim()
-      ? routeParams.rootWidget.trim()
-      : DEMO_TODO_ROOT_WIDGET_ID;
-    const defaultContext = typeof routeParams.context === "string" && routeParams.context.trim()
-      ? routeParams.context.trim()
-      : null;
-    const normalizedBody = body && typeof body === "object"
-      ? { ...body }
-      : {};
-    if (!(typeof normalizedBody.parent === "string" && normalizedBody.parent.trim())) {
-      normalizedBody.parent = defaultParent;
-    }
-    if (!(typeof normalizedBody.context === "string" && normalizedBody.context.trim()) && defaultContext) {
-      normalizedBody.context = defaultContext;
-    }
-    if (normalizedBody.context === SHARED_TODO_CONTEXT_ID && !todoAuthorityState(world, requestActor).canMutate) {
-      const proposal = createWidgetProposal({
-        actor: requestActor,
-        body: normalizedBody,
-        contextId: SHARED_TODO_CONTEXT_ID
-      });
-      return proposal.ok
-        ? {
-            status: 202,
-            body: {
-              ok: true,
-              status: 202,
-              payload: {
-                proposal: proposal.proposal,
-                witness: proposal.witness,
-                statusMessage: widgetStatusMessage()
-              }
-            }
-          }
-        : {
-            status: proposal.status || 400,
-            body: {
-              ok: false,
-              status: proposal.status || 400,
-              error: proposal.error,
-              payload: {
-                error: proposal.error,
-                witness: proposal.witness
-              }
-            }
-          };
-    }
-    const result = requestWidgetDefine(world, {
+  const createWidgetModel = async ({ requestActor, body, routeParams = {} }) => {
+    const result = await executeDemoMutationRequest(world, {
+      process: "widget.define",
       actor: requestActor,
       backendHost,
-      body: normalizedBody,
-      defaultParent
-    });
-    if (!result.ok) {
-      return {
-        status: result.status,
-        body: {
-          ok: false,
-          status: result.status,
-          error: result.error,
-          payload: { error: result.error, witness: result.witness }
-        }
-      };
-    }
-    return {
-      status: result.status,
-      body: {
-        ok: true,
-        status: result.status,
-        payload: { widget: result.widget, witness: result.witness }
+      body,
+      options: {
+        defaultParent: routeParams.rootWidget,
+        rootWidget: routeParams.rootWidget,
+        defaultContext: routeParams.context,
+        context: routeParams.context
       }
-    };
+    });
+    return { status: result.status, body: { ...result, status: result.status } };
   };
   const simulateNetworkErrorModel = ({ requestActor }) => {
     const actor = requestActor || frontendHost;
@@ -696,20 +296,5 @@ export async function createDemoHandlerSet({
       }
     }
   };
-}
-
-async function ensureProjectionCache(filePath) {
-  if (!filePath) return;
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  try {
-    await fs.access(filePath);
-  } catch {
-    await writeProjectionCache(filePath, []);
-  }
-}
-
-async function writeProjectionCache(filePath, value) {
-  if (!filePath) return;
-  await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 

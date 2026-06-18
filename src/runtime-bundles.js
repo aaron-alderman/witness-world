@@ -24,6 +24,7 @@ import {
 } from "./runtime-ownership.js";
 import {
   buildGovernanceRouteInventory,
+  proposalTargetGovernanceRows,
   runtimeGovernanceEntry
 } from "./runtime-governance.js";
 import {
@@ -730,6 +731,7 @@ export function runtimeBundleSummaryForProfile(profileName = DEFAULT_RUNTIME_PRO
     dispatchHandlers: dispatchHandlerIdsForProfile(resolved.id, options),
     handlerMetadata,
     governanceRoutes: buildGovernanceRouteInventory(routeSummaries),
+    proposalTargetGovernance: proposalTargetGovernanceRows(),
     routes: routeSummaries,
     surfaces: [...surfaceSummaries.values()]
   };
@@ -813,6 +815,7 @@ export function buildRuntimeDiagnosticsForProfile({
     },
     routes: summary.routes.map(route => ({ ...route })),
     governanceRoutes: summary.governanceRoutes.map(route => ({ ...route })),
+    proposalTargetGovernance: summary.proposalTargetGovernance.map(row => ({ ...row })),
     surfaces: summary.surfaces.map(surface => ({
       ...surface,
       action: surface.action ? { ...surface.action } : null,
