@@ -223,10 +223,14 @@ test("platform model promotes runtime snapshot diagnostics into revision and bui
 
   assert.equal(model.nodes.some(node => node.kind === "runtimeRevision" && node.id === "runtimeRevision:backend:7"), true);
   assert.equal(model.nodes.some(node => node.kind === "backendRevision" && node.id === "backendRevision:7"), true);
+  assert.equal(model.nodes.some(node => node.kind === "frontendRevision" && node.id === "frontendRevision:7"), true);
   assert.equal(model.nodes.some(node => node.kind === "snapshotBuild" && node.id === "snapshotBuild:candidateSnapshot:branch.demo:1"), true);
   assert.equal(model.nodes.some(node => node.kind === "snapshotBuildError" && node.id === "snapshotBuildError:candidateSnapshot:branch.demo:2:1"), true);
   assert.equal(model.runtimeRevisions[0].revision, 7);
   assert.equal(model.activeRuntimeRevision.id, "runtimeRevision:backend:7");
+  assert.equal(model.runtimeRevisions[0].frontendRevisionId, "frontendRevision:7");
+  assert.equal(model.runtimeRevisions[0].frontendEventsPath, "/api/runtime/app-revisions/events");
+  assert.equal(model.edges.some(edge => edge.from === "runtimeRevision:backend:7" && edge.rel === "materializes" && edge.to === "frontendRevision:7"), true);
   assert.equal(model.snapshotBuilds.length, 2);
   assert.equal(model.snapshotBuildErrors.length, 1);
   assert.equal(model.candidateSnapshotsByBranch["branch.demo"].length, 2);
@@ -577,7 +581,7 @@ test("platform model filters support MCP views", async () => {
   }, "branches");
   const runtimeRevisions = filterPlatformModel({
     ...model,
-    runtimeRevisions: [{ id: "runtimeRevision:backend:3", backendRevisionId: "backendRevision:3", revision: 3, status: "active", trigger: "watch", changedSources: [], branchId: "branch.demo", changeSetId: "changeset.demo", candidateBranchCount: 1, buildErrorCount: 1 }],
+    runtimeRevisions: [{ id: "runtimeRevision:backend:3", backendRevisionId: "backendRevision:3", frontendRevisionId: "frontendRevision:3", revision: 3, status: "active", trigger: "watch", changedSources: [], branchId: "branch.demo", changeSetId: "changeset.demo", candidateBranchCount: 1, buildErrorCount: 1 }],
     activeRuntimeRevision: { id: "runtimeRevision:backend:3", revision: 3 },
     snapshotBuilds: [
       { id: "snapshotBuild:candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo", candidateSnapshotId: "candidateSnapshot:demo:1", revision: 3 },
@@ -596,7 +600,7 @@ test("platform model filters support MCP views", async () => {
   }, "runtimeRevisions");
   const runtimeRevisionDetail = filterPlatformModel({
     ...model,
-    runtimeRevisions: [{ id: "runtimeRevision:backend:3", backendRevisionId: "backendRevision:3", revision: 3, status: "active", trigger: "watch", changedSources: [], branchId: "branch.demo", changeSetId: "changeset.demo", candidateBranchCount: 1, buildErrorCount: 1 }],
+    runtimeRevisions: [{ id: "runtimeRevision:backend:3", backendRevisionId: "backendRevision:3", frontendRevisionId: "frontendRevision:3", revision: 3, status: "active", trigger: "watch", changedSources: [], branchId: "branch.demo", changeSetId: "changeset.demo", candidateBranchCount: 1, buildErrorCount: 1 }],
     activeRuntimeRevision: { id: "runtimeRevision:backend:3", revision: 3 },
     snapshotBuilds: [
       { id: "snapshotBuild:candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo", candidateSnapshotId: "candidateSnapshot:demo:1", revision: 3 },
@@ -613,6 +617,25 @@ test("platform model filters support MCP views", async () => {
     candidateSnapshotsByBranch: { "branch.demo": [{ id: "candidateSnapshot:demo:1", branchId: "branch.demo" }] },
     snapshotDiagnostics: { appRevision: 3, lastGoodAppRevision: 3, pendingDirtySources: [] }
   }, "runtimeRevisions", "runtimeRevision:backend:3");
+  const frontendRevisionDetail = filterPlatformModel({
+    ...model,
+    runtimeRevisions: [{ id: "runtimeRevision:backend:3", backendRevisionId: "backendRevision:3", frontendRevisionId: "frontendRevision:3", revision: 3, status: "active", trigger: "watch", changedSources: [], branchId: "branch.demo", changeSetId: "changeset.demo", candidateBranchCount: 1, buildErrorCount: 1 }],
+    activeRuntimeRevision: { id: "runtimeRevision:backend:3", revision: 3 },
+    snapshotBuilds: [
+      { id: "snapshotBuild:candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo", candidateSnapshotId: "candidateSnapshot:demo:1", revision: 3 },
+      { id: "snapshotBuild:candidateSnapshot:other:1", branchId: "branch.other", changeSetId: "changeset.other", candidateSnapshotId: "candidateSnapshot:other:1", revision: 9 }
+    ],
+    snapshotBuildErrors: [
+      { id: "snapshotBuildError:candidateSnapshot:demo:1:1", snapshotBuildId: "snapshotBuild:candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo", candidateSnapshotId: "candidateSnapshot:demo:1", revision: 3 },
+      { id: "snapshotBuildError:candidateSnapshot:other:1:1", snapshotBuildId: "snapshotBuild:candidateSnapshot:other:1", branchId: "branch.other", changeSetId: "changeset.other", candidateSnapshotId: "candidateSnapshot:other:1", revision: 9 }
+    ],
+    candidateSnapshots: [
+      { id: "candidateSnapshot:demo:1", branchId: "branch.demo", changeSetId: "changeset.demo", revision: 3 },
+      { id: "candidateSnapshot:other:1", branchId: "branch.other", changeSetId: "changeset.other", revision: 9 }
+    ],
+    candidateSnapshotsByBranch: { "branch.demo": [{ id: "candidateSnapshot:demo:1", branchId: "branch.demo" }] },
+    snapshotDiagnostics: { appRevision: 3, lastGoodAppRevision: 3, pendingDirtySources: [] }
+  }, "runtimeRevisions", "frontendRevision:3");
 
   assert.equal(mcp.nodes.some(node => node.id === "mcp:mcp.platform"), true);
   assert.equal(mcp.nodes.some(node => node.id === "mcpTool:platform.read"), true);
@@ -653,11 +676,14 @@ test("platform model filters support MCP views", async () => {
   assert.equal(testRedGreen.testGates[0].id, "gate:test/runtime-profile.test.js");
   assert.equal(branches.branches[0].id, "branch.demo");
   assert.equal(runtimeRevisions.runtimeRevisions[0].id, "runtimeRevision:backend:3");
+  assert.equal(runtimeRevisions.runtimeRevisions[0].frontendRevisionId, "frontendRevision:3");
   assert.equal(runtimeRevisions.activeRuntimeRevision.revision, 3);
   assert.equal(runtimeRevisionDetail.snapshotBuilds.length, 1);
   assert.equal(runtimeRevisionDetail.snapshotBuildErrors.length, 1);
   assert.equal(runtimeRevisionDetail.candidateSnapshots.length, 1);
   assert.equal(runtimeRevisionDetail.candidateSnapshots[0].id, "candidateSnapshot:demo:1");
+  assert.equal(frontendRevisionDetail.runtimeRevisions.length, 1);
+  assert.equal(frontendRevisionDetail.runtimeRevisions[0].id, "runtimeRevision:backend:3");
 });
 
 test("platform docs projections expose dependency indexes and reverse target lookups", async () => {

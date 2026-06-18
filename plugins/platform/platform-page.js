@@ -683,7 +683,11 @@ export function renderPlatformPage(model) {
     const platformBranchTestRedGreen = platformState.branchTestRedGreen || [];
     const backendRevisionEvents = [];
     function deriveRuntimeRevisionDetail(revisionId) {
-      const runtimeRevision = platformRuntimeRevisions.find(entry => entry.id === revisionId || entry.backendRevisionId === revisionId) || null;
+      const runtimeRevision = platformRuntimeRevisions.find(entry =>
+        entry.id === revisionId
+        || entry.backendRevisionId === revisionId
+        || entry.frontendRevisionId === revisionId
+      ) || null;
       const revision = Number(runtimeRevision?.revision || 0);
       return {
         runtimeRevisions: runtimeRevision ? [runtimeRevision] : [],

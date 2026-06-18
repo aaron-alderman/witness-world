@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { APP_REVISION_EVENTS_PATH } from "../../src/app-snapshot-manager.js";
 import { moduleProjectors } from "../../src/modules.js";
 import {
   platformBranchInsights,
@@ -330,6 +331,7 @@ function normalizeSnapshotDiagnostics(appSnapshot = null) {
     activeSourceIds: Array.isArray(appSnapshot.activeSourceIds) ? appSnapshot.activeSourceIds.map(String) : [],
     sourceCount: Number(appSnapshot.sourceCount || 0),
     devMode: appSnapshot.devMode === true,
+    frontendEventsPath: appSnapshot.frontendEventsPath ? String(appSnapshot.frontendEventsPath) : APP_REVISION_EVENTS_PATH,
     lastRevisionEvent
   };
 }
@@ -346,6 +348,8 @@ function buildRuntimeRevisionRows(snapshotDiagnostics, candidateSnapshotsByBranc
     changedSources: [...(snapshotDiagnostics.lastRevisionEvent?.changedSources ?? [])],
     branchId: snapshotDiagnostics.lastRevisionEvent?.branchId ?? null,
     changeSetId: snapshotDiagnostics.lastRevisionEvent?.changeSetId ?? null,
+    frontendRevisionId: snapshotDiagnostics.devMode ? `frontendRevision:${snapshotDiagnostics.appRevision}` : null,
+    frontendEventsPath: snapshotDiagnostics.devMode ? snapshotDiagnostics.frontendEventsPath : null,
     pendingDirtySources: [...snapshotDiagnostics.pendingDirtySources],
     activeSourceIds: [...snapshotDiagnostics.activeSourceIds],
     sourceCount: snapshotDiagnostics.sourceCount,
@@ -2488,6 +2492,19 @@ export async function buildPlatformModel({
       source: "appSnapshot"
     });
     addEdge(edges, revision.id, "materializes", revision.backendRevisionId, "appSnapshot");
+    if (revision.frontendRevisionId) {
+      addNode(nodes, {
+        id: revision.frontendRevisionId,
+        kind: "frontendRevision",
+        title: `Frontend Revision ${revision.revision}`,
+        lifecycle: ["execute", "observe", "verify"],
+        owner: "runtime",
+        status: revision.status,
+        source: revision.frontendEventsPath || "appSnapshot"
+      });
+      addEdge(edges, revision.id, "materializes", revision.frontendRevisionId, "appSnapshot");
+      addEdge(edges, revision.frontendRevisionId, "tracks", revision.backendRevisionId, "appSnapshot");
+    }
     for (const sourceId of revision.changedSources) addEdge(edges, revision.id, "observes", sourceId, "appSnapshot");
   }
   for (const build of snapshotBuilds) {
@@ -3044,7 +3061,7 @@ export function filterPlatformModel(model, view, id = null) {
   }
   if (view === "runtimeRevisions") {
     const runtimeRevisions = id
-      ? model.runtimeRevisions.filter(row => row.id === id || row.backendRevisionId === id)
+      ? model.runtimeRevisions.filter(row => row.id === id || row.backendRevisionId === id || row.frontendRevisionId === id)
       : model.runtimeRevisions;
     const runtimeRevisionNumbers = new Set(runtimeRevisions.map(row => Number(row.revision || 0)).filter(revision => revision > 0));
     const runtimeBranchIds = new Set(runtimeRevisions.map(row => row.branchId).filter(Boolean));

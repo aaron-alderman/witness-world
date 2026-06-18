@@ -411,7 +411,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Promote `AppSnapshotManager` concepts into platform model nodes.
 - [~] Add `runtimeRevision` module kind.
 - [X] Add `backendRevision` module kind.
-- [ ] Add `frontendRevision` module kind.
+- [X] Add `frontendRevision` module kind.
 - [X] Add `snapshotBuild` module kind.
 - [X] Add `snapshotBuildError` module kind.
 - [~] Add projector `runtimeRevisions`.
@@ -419,7 +419,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add projector `candidateSnapshotsByBranch`.
 - [X] Expose snapshot diagnostics in `/api/platform-model`.
 - [X] Show active, candidate, last-good, and failed snapshots in `/platform`.
-- [L] Current runtime-revision modeling is diagnostics-backed: `/api/platform-model`, `/platform`, and MCP expose the active `AppSnapshotManager` backend revision plus snapshot-build summaries, and authored-source activation now reuses the live snapshot manager for new requests. In-flight revision pinning and the dedicated Platform Console backend-revision stream remain separate follow-on work.
+- [L] Current runtime-revision modeling is diagnostics-backed: `/api/platform-model`, `/platform`, and MCP expose the active `AppSnapshotManager` backend revision, the dev-mode frontend reload revision linked to `/api/runtime/app-revisions/events`, and snapshot-build summaries. Authored-source activation now reuses the live snapshot manager for new requests. In-flight revision pinning and the dedicated Platform Console backend-revision stream remain separate follow-on work.
 
 ### 2.2 RVM/WTOML Backend Reload
 
