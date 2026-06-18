@@ -791,7 +791,6 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
         || changedPath === "plugins/platform/platform-console.wcss"
         || changedPath === "plugins/platform/platform-style.js"
       ) {
-        pushTarget(targets, "plugin.platform");
         pushTarget(targets, "surface:platform");
         pushTarget(targets, "route:GET /platform");
         pushTarget(targets, "handler:page.platform");

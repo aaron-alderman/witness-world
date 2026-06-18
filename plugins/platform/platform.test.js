@@ -695,6 +695,63 @@ test("platform WCSS-only edits do not select runtime-core backend gates", async 
   assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-wcss"].includes("gate:test/runtime-server.test.js"), false);
 });
 
+test("platform RVM-only edits select platform snapshot gates without runtime-core backend gates", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [{ id: "branch.platform.rvm", title: "Platform RVM", status: "open" }];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [{ id: "changeSet:platform-rvm", branchId: "branch.platform.rvm", status: "draft" }];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [
+          { id: "changeSetEdit:platform-rvm:surface", changeSetId: "changeSet:platform-rvm", path: "plugins/platform/platform-console.rvm" }
+        ];
+      }
+      return [];
+    }
+  });
+
+  const platformGate = model.testGates.find(row => row.id === "gate:plugins/platform/platform.test.js");
+  const runtimeServerGate = model.testGates.find(row => row.id === "gate:test/runtime-server.test.js");
+  const platformGateSelection = model.affectedTestGates.find(row =>
+    row.branchId === "branch.platform.rvm"
+    && row.gateId === "gate:plugins/platform/platform.test.js"
+  );
+
+  assert.ok(platformGate);
+  assert.ok(runtimeServerGate);
+  assert.equal(platformGate.selectedByBranches.includes("branch.platform.rvm"), true);
+  assert.equal(platformGate.selectedByChangeSets.includes("changeSet:platform-rvm"), true);
+  assert.equal(runtimeServerGate.selectedByBranches.includes("branch.platform.rvm"), false);
+  assert.equal(runtimeServerGate.selectedByChangeSets.includes("changeSet:platform-rvm"), false);
+
+  assert.ok(platformGateSelection);
+  assert.equal(platformGateSelection.matchedSourceDependencies.includes("plugins/platform/platform-console.rvm"), true);
+  assert.equal(platformGateSelection.matchedTargets.includes("route:GET /platform"), true);
+  assert.equal(platformGateSelection.selectionReasons.some(reason =>
+    reason.kind === "direct-file-dependency"
+    && reason.paths.includes("plugins/platform/platform.test.js")
+  ), false);
+  assert.equal(platformGateSelection.selectionReasons.some(reason =>
+    reason.kind === "imported-source-dependency"
+    && reason.paths.includes("plugins/platform/platform-console.rvm")
+  ), true);
+  assert.equal(model.affectedTestGatesByBranch["branch.platform.rvm"].includes("gate:plugins/platform/platform.test.js"), true);
+  assert.equal(model.affectedTestGatesByBranch["branch.platform.rvm"].includes("gate:test/runtime-server.test.js"), false);
+  assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-rvm"].includes("gate:plugins/platform/platform.test.js"), true);
+  assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-rvm"].includes("gate:test/runtime-server.test.js"), false);
+});
+
 test("platform roadmap task parser preserves extended status markers", () => {
   const tasks = parseRoadmapTasks("docs/demo.md", `
 # Demo
@@ -793,7 +850,7 @@ test("platform model carries branch docs freshness and impact summaries", async 
 
   const branch = filterPlatformModel(model, "branches").branches.find(row => row.id === "branch.summary");
   assert.equal(branch?.docsFreshness?.status, "fresh");
-  assert.equal(branch?.affectedSystemSummaries?.some(row => row.system === "plugin.platform"), true);
+  assert.equal(branch?.affectedSystemSummaries?.some(row => row.system === "surface.platform"), true);
   assert.equal(branch?.telemetryImpactSummaries?.some(row => row.id === "platform.self"), true);
 });
 
@@ -2196,7 +2253,7 @@ test("platform branch detail includes multiple change sets and validation histor
   assert.equal(sent.at(-1).status, 200);
   assert.equal(sent.at(-1).body.branch.docsFreshness.status, "stale");
   assert.equal(sent.at(-1).body.branch.docsFreshness.missingDocs.includes("docs/CAPABILITIES.md"), true);
-  assert.equal(sent.at(-1).body.branch.affectedSystemSummaries.some(row => row.system === "plugin.platform"), true);
+  assert.equal(sent.at(-1).body.branch.affectedSystemSummaries.some(row => row.system === "surface.platform"), true);
   assert.equal(sent.at(-1).body.branch.telemetryImpactSummaries.some(row => row.id === "platform.self"), true);
   assert.equal(sent.at(-1).body.changeSets.length, 2);
   assert.equal(sent.at(-1).body.edits.length, 1);
@@ -2309,7 +2366,7 @@ test("platform change-set handlers list, read, remove edits, and close change se
   assert.equal(sent.at(-1).body.branch.id, "branch.inspect.lifecycle");
   assert.equal(sent.at(-1).body.edits.length, 1);
   assert.equal(sent.at(-1).body.changeSet.changedPaths.includes("plugins/platform/platform-console.rvm"), true);
-  assert.equal(sent.at(-1).body.changeSet.affectedSystemSummaries.some(row => row.system === "plugin.platform"), true);
+  assert.equal(sent.at(-1).body.changeSet.affectedSystemSummaries.some(row => row.system === "surface.platform"), true);
   assert.equal(sent.at(-1).body.changeSet.telemetryImpactSummaries.some(row => row.id === "platform.self"), true);
   assert.equal(sent.at(-1).body.changeSet.docsFreshness.status, "stale");
   assert.equal(sent.at(-1).body.changeSet.docsFreshness.missingDocs.includes("docs/CAPABILITIES.md"), true);

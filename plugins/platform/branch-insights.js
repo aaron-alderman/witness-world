@@ -2,6 +2,7 @@ export const PLATFORM_BRANCH_LIFECYCLE_LANES = Object.freeze(["draft", "validate
 
 const DOC_REQUIREMENTS = Object.freeze({
   "plugin.platform": Object.freeze(["docs/CAPABILITIES.md"]),
+  "surface.platform": Object.freeze(["docs/CAPABILITIES.md"]),
   "plugin.mcp": Object.freeze(["docs/CAPABILITIES.md"]),
   "runtime.profile": Object.freeze(["docs/RUNTIME-STACK-MAP.md"]),
   "runtime.core": Object.freeze(["docs/RUNTIME-AUDIT-INVENTORY.md"])
@@ -12,6 +13,11 @@ const TELEMETRY_IMPACT_RULES = Object.freeze({
     id: "platform.self",
     label: "Platform self surface",
     reason: "Touches platform console, platform model, or platform route ownership code."
+  }),
+  "surface.platform": Object.freeze({
+    id: "platform.self",
+    label: "Platform self surface",
+    reason: "Touches authored /platform page sources or styling that shape the platform console surface."
   }),
   "plugin.mcp": Object.freeze({
     id: "mcp.availability",
@@ -50,6 +56,14 @@ function rootSegment(path) {
 
 export function summarizePlatformPathSystem(path) {
   const value = String(path || "");
+  if (
+    value === "plugins/platform/platform-page.js"
+    || value === "plugins/platform/platform-console.rvm"
+    || value === "plugins/platform/platform-console.wcss"
+    || value === "plugins/platform/platform-style.js"
+  ) {
+    return { id: "surface.platform", label: "Platform surface", kind: "surface" };
+  }
   if (value.startsWith("plugins/platform/")) {
     return { id: "plugin.platform", label: "Platform plugin", kind: "plugin" };
   }
