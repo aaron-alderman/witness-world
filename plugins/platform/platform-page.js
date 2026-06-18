@@ -726,7 +726,6 @@ function workflowItems(model) {
     pageKind: "branch",
     id: branch.id,
     title: branch.title || branch.id,
-    resourceLink: { id: branch.id, title: branch.title || branch.id },
     status: branch.status,
     scope: branch.lifecycleLane || "",
     summary: `${branch.changeSetCount ?? 0} change sets, ${branch.docsFreshness?.status || "docs"} docs, ${branch.testRedGreen?.status || "tests"} tests`
@@ -735,7 +734,6 @@ function workflowItems(model) {
     pageKind: "changeSet",
     id: changeSet.id,
     title: changeSet.title || changeSet.id,
-    resourceLink: { id: changeSet.id, title: changeSet.title || changeSet.id },
     status: changeSet.status,
     scope: changeSet.branchId || "",
     summary: `${changeSet.editCount ?? 0} edits, ${changeSet.testRedGreen?.status || "tests"} tests`
@@ -744,7 +742,6 @@ function workflowItems(model) {
     pageKind: "proposal",
     id: proposal.id,
     title: proposal.id,
-    resourceLink: { id: proposal.id, title: proposal.id },
     status: proposal.status,
     scope: proposal.targetProcess || "",
     summary: `${proposal.targetId || "platform"}${proposal.reason ? `, ${proposal.reason}` : ""}`
@@ -761,7 +758,6 @@ function verificationItems(model) {
     pageKind: "testGate",
     id: gate.id,
     title: gate.title || gate.id,
-    resourceLink: { id: gate.id, title: gate.title || gate.id },
     status: gate.lastResult?.status || "idle",
     scope: gate.environment || "",
     summary: `${gate.runner || "runner"}, ${(gate.protectedObjects ?? []).length} protected objects`
@@ -770,7 +766,6 @@ function verificationItems(model) {
     pageKind: "testRun",
     id: run.id,
     title: run.title || run.id,
-    resourceLink: { id: run.id, title: run.title || run.id },
     status: run.status,
     scope: run.branchId || run.gateId || "",
     summary: `${run.durationMs ?? "?"} ms, exit ${run.exitCode ?? "n/a"}`
@@ -779,7 +774,6 @@ function verificationItems(model) {
     pageKind: "runtimeRevision",
     id: revision.id,
     title: `Revision ${revision.revision}`,
-    resourceLink: { id: revision.id, title: `Revision ${revision.revision}` },
     status: revision.status,
     scope: revision.trigger || "",
     summary: `${revision.changedSources?.length ?? 0} changed sources, ${revision.buildErrorCount ?? 0} build errors`
@@ -788,7 +782,6 @@ function verificationItems(model) {
     pageKind: "candidateSnapshot",
     id: snapshot.id,
     title: snapshot.id,
-    resourceLink: { id: snapshot.id, title: snapshot.id },
     status: snapshot.status,
     scope: snapshot.branchId || "",
     summary: `revision ${snapshot.revision ?? "n/a"}, ${snapshot.errorCount ?? snapshot.errors?.length ?? 0} errors`
@@ -804,7 +797,6 @@ function knowledgeItems(model) {
     pageKind: "doc",
     id: doc.path,
     title: doc.path,
-    resourceLink: { id: doc.path, title: doc.path },
     status: doc.freshness?.status || doc.status,
     scope: doc.role || "",
     summary: `${doc.sectionCount ?? 0} sections, ${doc.taskCount ?? 0} tasks`
@@ -813,7 +805,6 @@ function knowledgeItems(model) {
     pageKind: "roadmapTask",
     id: task.id,
     title: task.title,
-    resourceLink: { id: task.id, title: task.title },
     status: task.derivedStatus || task.status,
     scope: task.section || "",
     summary: task.derivedSummary || task.doc
@@ -822,7 +813,6 @@ function knowledgeItems(model) {
     pageKind: "epic",
     id: epic.id,
     title: epic.title,
-    resourceLink: { id: epic.id, title: epic.title },
     status: epic.status,
     scope: epic.roadmapId || "",
     summary: `${(epic.branchIds ?? []).length} branches, ${(epic.featureIds ?? []).length} features`
@@ -831,7 +821,6 @@ function knowledgeItems(model) {
     pageKind: "feature",
     id: feature.id,
     title: feature.title,
-    resourceLink: { id: feature.id, title: feature.title },
     status: feature.status,
     scope: feature.epicId || "",
     summary: `${(feature.branchIds ?? []).length} branches, ${(feature.gateIds ?? []).length} gates`
@@ -847,7 +836,6 @@ function signalItems(model) {
     pageKind: "gap",
     id: gap.id,
     title: gap.reason || gap.id,
-    resourceLink: { id: gap.id, title: gap.reason || gap.id },
     status: gap.severity || "",
     scope: gap.kind || "",
     summary: gap.target || ""
@@ -858,7 +846,6 @@ function signalItems(model) {
       pageKind: "telemetryMetric",
       id: node.id,
       title: node.title || node.id,
-      resourceLink: { id: node.id, title: node.title || node.id },
       status: node.status,
       scope: node.source || "",
       summary: node.owner || ""
@@ -869,7 +856,6 @@ function signalItems(model) {
       pageKind: "defectCluster",
       id: node.id,
       title: node.title || node.id,
-      resourceLink: { id: node.id, title: node.title || node.id },
       status: node.status,
       scope: node.source || "",
       summary: node.owner || ""
@@ -880,7 +866,6 @@ function signalItems(model) {
       pageKind: "boundary",
       id: node.id,
       title: node.title || node.id,
-      resourceLink: { id: node.id, title: node.title || node.id },
       status: node.status,
       scope: node.source || "",
       summary: node.owner || ""
@@ -899,7 +884,6 @@ function modelItems(model) {
     pageKind: node.kind,
     id: node.id,
     title: node.title || node.id,
-    resourceLink: { id: node.id, title: node.title || node.id },
     status: node.status,
     scope: node.source || "",
     summary: node.owner || ""
@@ -969,8 +953,6 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
     const snapshots = (model.candidateSnapshots ?? []).filter(snapshot => snapshot.branchId === branch.id).slice(0, surfaceRowLimit(snapshotSurface, 12));
     const snapshotRows = snapshots.map(snapshot => ({
       ...snapshot,
-      snapshotLink: snapshot.id ? { id: snapshot.id, title: snapshot.id } : null,
-      changeSetLink: snapshot.changeSetId ? { id: snapshot.changeSetId, title: snapshot.changeSetId } : null,
       errorCount: Array.isArray(snapshot.errors) ? snapshot.errors.length : (snapshot.errorCount ?? 0)
     }));
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "branchCardTitle", "branchFields", ctx, branch, "Branch Detail");
@@ -1017,8 +999,6 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
     }));
     const snapshotRows = snapshots.map(snapshot => ({
       ...snapshot,
-      snapshotLink: snapshot.id ? { id: snapshot.id, title: snapshot.id } : null,
-      changeSetLink: snapshot.changeSetId ? { id: snapshot.changeSetId, title: snapshot.changeSetId } : null,
       errorCount: Array.isArray(snapshot.errors) ? snapshot.errors.length : (snapshot.errorCount ?? 0)
     }));
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "changeSetCardTitle", "changeSetFields", ctx, changeSet, "Change Set Detail");
@@ -1110,12 +1090,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   if (!detail) return `<div class="card"><h2>Detail</h2><div class="muted">No verification rows are projected yet.</div></div>`;
   if (detail.id?.startsWith?.("gate:")) {
     const gate = detail;
-    const runs = (model.testRuns ?? []).filter(run => run.gateId === gate.id).slice(0, surfaceRowLimit(runHistorySurface, 12));
-    const runRows = runs.map(run => ({
-      ...run,
-      runLink: run.id ? { id: run.id, title: run.id } : null,
-      branchLink: run.branchId ? { id: run.branchId, title: run.branchId } : null
-    }));
+    const runRows = (model.testRuns ?? []).filter(run => run.gateId === gate.id).slice(0, surfaceRowLimit(runHistorySurface, 12));
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "gateCardTitle", "gateFields", ctx, gate, "Test Gate Detail");
     const usedKeys = [
       ...(rootKeysFromSurfaceSchema(primarySurface, "gateFields").length
@@ -1152,16 +1127,8 @@ function renderVerificationDetail(surface, detail, model, ctx) {
     const revision = detail;
     const builds = (model.snapshotBuilds ?? []).filter(build => Number(build.revision || 0) === Number(revision.revision || 0)).slice(0, surfaceRowLimit(buildHistorySurface, 12));
     const errors = (model.snapshotBuildErrors ?? []).filter(error => Number(error.revision || 0) === Number(revision.revision || 0)).slice(0, surfaceRowLimit(buildErrorsSurface, 12));
-    const buildRows = builds.map(build => ({
-      ...build,
-      buildLink: build.id ? { id: build.id, title: build.id } : null,
-      candidateSnapshotLink: build.candidateSnapshotId ? { id: build.candidateSnapshotId, title: build.candidateSnapshotId } : null,
-      branchLink: build.branchId ? { id: build.branchId, title: build.branchId } : null
-    }));
-    const errorRows = errors.map(error => ({
-      ...error,
-      buildLink: error.snapshotBuildId ? { id: error.snapshotBuildId, title: error.snapshotBuildId } : null
-    }));
+    const buildRows = builds.map(build => ({ ...build }));
+    const errorRows = errors.map(error => ({ ...error }));
     const revisionRecord = {
       ...revision,
       revisionLink: { id: revision.id, title: `Revision ${revision.revision}` }
@@ -1244,7 +1211,6 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   const run = detail;
   const runRecord = {
     ...run,
-    gateLink: run.gateId ? { id: run.gateId, title: run.title || run.gateId } : null,
     testEventsLink: {
       href: "/api/platform-test-runs/events",
       title: "Test run event stream"
@@ -1300,10 +1266,6 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
     const doc = detail;
     const sections = (model.docSections ?? []).filter(section => section.doc === doc.path).slice(0, surfaceRowLimit(sectionsSurface, 20));
     const tasks = (model.docTasks ?? []).filter(task => task.doc === doc.path).slice(0, surfaceRowLimit(tasksSurface, 20));
-    const taskRows = tasks.map(task => ({
-      ...task,
-      taskLink: task.id ? { id: task.id, title: task.title || task.id } : null
-    }));
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "documentCardTitle", "documentFields", ctx, doc, "Document Detail");
     const usedKeys = [
       ...(rootKeysFromSurfaceSchema(primarySurface, "documentFields").length
@@ -1332,7 +1294,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
           <td>${esc(section.depth ?? "")}</td>
         </tr>
       `), "No sections projected for this document."))}
-      ${renderSurfaceFrame(tasksSurface, renderSurfaceTable(tasksSurface, ["Status", "Task", "Line", "Section"], renderRowsFromSurfaceSchema(tasksSurface, "rowFields", taskRows, ctx, task => `
+      ${renderSurfaceFrame(tasksSurface, renderSurfaceTable(tasksSurface, ["Status", "Task", "Line", "Section"], renderRowsFromSurfaceSchema(tasksSurface, "rowFields", tasks, ctx, task => `
         <tr>
           <td>${esc(task.status || "")}</td>
           <td>${task.id ? renderConceptLink(ctx, task.id, task.title || task.id) : esc(task.title || "")}</td>
@@ -1461,11 +1423,6 @@ function renderSignalDetail(surface, detail, model, ctx) {
   }
   const node = detail;
   const relatedEdges = (model.edges ?? []).filter(edge => edge.from === node.id || edge.to === node.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
-  const relationshipRows = relatedEdges.map(edge => ({
-    ...edge,
-    fromLink: edge.from ? { id: edge.from, title: edge.from } : null,
-    toLink: edge.to ? { id: edge.to, title: edge.to } : null
-  }));
   const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "signalCardTitle", "signalFields", ctx, node, "Signal Detail");
   const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "signalFields").length
     ? rootKeysFromSurfaceSchema(primarySurface, "signalFields")
@@ -1479,7 +1436,7 @@ function renderSignalDetail(surface, detail, model, ctx) {
         `)}
       </div>
       <div>
-        ${renderSurfaceFrame(relationshipsSurface, renderSurfaceTable(relationshipsSurface, ["From", "Relation", "To"], renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relationshipRows, ctx, edge => `
+        ${renderSurfaceFrame(relationshipsSurface, renderSurfaceTable(relationshipsSurface, ["From", "Relation", "To"], renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
           <tr>
             <td>${renderConceptLink(ctx, edge.from)}</td>
             <td>${esc(edge.rel || "")}</td>
@@ -1503,11 +1460,6 @@ function renderModelDetail(surface, node, model, ctx) {
   });
   if (!node) return `<div class="card"><h2>Detail</h2><div class="muted">No platform objects are projected yet.</div></div>`;
   const relatedEdges = (model.edges ?? []).filter(edge => edge.from === node.id || edge.to === node.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
-  const relationshipRows = relatedEdges.map(edge => ({
-    ...edge,
-    fromLink: edge.from ? { id: edge.from, title: edge.from } : null,
-    toLink: edge.to ? { id: edge.to, title: edge.to } : null
-  }));
   const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "objectCardTitle", "objectFields", ctx, node, "Platform Object Detail");
   const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "objectFields").length
     ? rootKeysFromSurfaceSchema(primarySurface, "objectFields")
@@ -1521,7 +1473,7 @@ function renderModelDetail(surface, node, model, ctx) {
         `)}
       </div>
       <div>
-        ${renderSurfaceFrame(relationshipsSurface, renderSurfaceTable(relationshipsSurface, ["From", "Relation", "To"], renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relationshipRows, ctx, edge => `
+        ${renderSurfaceFrame(relationshipsSurface, renderSurfaceTable(relationshipsSurface, ["From", "Relation", "To"], renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
           <tr>
             <td>${renderConceptLink(ctx, edge.from)}</td>
             <td>${esc(edge.rel || "")}</td>
@@ -1588,7 +1540,6 @@ function renderPlatformMapSection(surface, model, ctx) {
   const topNodes = (model.nodes ?? []).slice(0, surfaceRowLimit(surface, 12));
   const rows = topNodes.map(node => ({
     ...node,
-    resourceLink: { id: node.id, title: node.title || node.id },
     lifecycleText: (node.lifecycle ?? []).join(", ")
   }));
   return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Kind", "Resource", "Lifecycle", "Status", "Source"], renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, node => `
@@ -1905,7 +1856,6 @@ function renderVerificationStreamsSection(surface) {
 function renderBranchRedGreenSection(surface, model, ctx) {
   const branchRedGreen = (model.branchTestRedGreen ?? []).slice(0, surfaceRowLimit(surface, 12)).map(row => ({
     ...row,
-    branchLink: { id: row.branchId, title: row.branchId },
     passedCount: (row.passedGateIds ?? []).length,
     failedCount: (row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length
   }));
@@ -1924,7 +1874,6 @@ function renderBranchRedGreenSection(surface, model, ctx) {
 function renderChangeSetRedGreenSection(surface, model, ctx) {
   const changeSetRedGreen = (model.changeSetTestRedGreen ?? []).slice(0, surfaceRowLimit(surface, 12)).map(row => ({
     ...row,
-    changeSetLink: { id: row.changeSetId, title: row.changeSetId },
     passedCount: (row.passedGateIds ?? []).length,
     failedCount: (row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length
   }));

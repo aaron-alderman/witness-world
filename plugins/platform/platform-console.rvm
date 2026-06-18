@@ -216,7 +216,7 @@ view PlatformMap {
   prop title = "Platform Map"
   prop summary = "Primary platform objects projected from the live model."
   prop columns = "Kind|Resource|Lifecycle|Status|Source"
-  prop rowFields = "Kind=kind|Resource=resourceLink@concept|Lifecycle=lifecycleText|Status=status|Source=source"
+  prop rowFields = "Kind=kind|Resource=id@concept|Lifecycle=lifecycleText|Status=status|Source=source"
   prop emptyState = "No platform objects."
   prop rowLimit = "12"
   projections {
@@ -230,7 +230,7 @@ view PlatformWorkflowList {
   prop title = "Workflow Items"
   prop summary = "Paginated list of branches, change sets, and proposals."
   prop columns = "Kind|Status|Resource|Scope|Summary"
-  prop rowFields = "Kind=pageKind|Status=status|Resource=resourceLink@concept|Scope=scope@value|Summary=summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
   prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
   prop defaultSort = "kind:asc"
   prop emptyState = "No workflow rows."
@@ -290,7 +290,7 @@ view PlatformWorkflowSnapshotHistory {
   prop title = "Candidate Snapshots"
   prop summary = "Candidate snapshot history for the selected workflow object when available."
   prop columns = "Status|Snapshot|Revision|Change Set|Errors"
-  prop rowFields = "Status=status|Snapshot=snapshotLink@concept|Revision=revision|Change Set=changeSetLink@concept|Errors=errorCount"
+  prop rowFields = "Status=status|Snapshot=id@concept|Revision=revision|Change Set=changeSetId@concept|Errors=errorCount"
   prop emptyState = "No candidate snapshots for this branch."
   prop rowLimit = "12"
 }
@@ -376,7 +376,7 @@ view PlatformVerificationList {
   prop title = "Verification Items"
   prop summary = "Paginated list of gates, runs, candidate snapshots, and runtime revisions."
   prop columns = "Kind|Status|Resource|Scope|Summary"
-  prop rowFields = "Kind=pageKind|Status=status|Resource=resourceLink@concept|Scope=scope@value|Summary=summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
   prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
   prop defaultSort = "kind:asc"
   prop emptyState = "No verification rows."
@@ -420,7 +420,7 @@ view PlatformVerificationPrimaryPanel {
   prop candidateSnapshotCardTitle = "Candidate Snapshot Detail"
   prop candidateSnapshotFields = "Snapshot=id@concept|Status=status|Branch=branchId@concept|Change set=changeSetId@concept|Revision=revision|API resource=id@api"
   prop testRunCardTitle = "Test Run Detail"
-  prop testRunFields = "Run=id@concept|Status=status|Gate=gateLink@concept|Branch=branchId@concept|Change set=changeSetId@concept|Candidate snapshot=candidateSnapshotId@concept|Duration=durationMs|Exit=exitCode|API resource=id@api"
+  prop testRunFields = "Run=id@concept|Status=status|Gate=gateId@concept|Branch=branchId@concept|Change set=changeSetId@concept|Candidate snapshot=candidateSnapshotId@concept|Duration=durationMs|Exit=exitCode|API resource=id@api"
 }
 
 view PlatformVerificationRelatedPanel {
@@ -443,7 +443,7 @@ view PlatformVerificationRunHistory {
   prop title = "Recent Test Runs"
   prop summary = "Recent test-run history for the selected verification object when available."
   prop columns = "Status|Run|Branch|Duration|Exit"
-  prop rowFields = "Status=status|Run=runLink@concept|Branch=branchLink@concept|Duration=durationMs|Exit=exitCode"
+  prop rowFields = "Status=status|Run=id@concept|Branch=branchId@concept|Duration=durationMs|Exit=exitCode"
   prop emptyState = "No runs for this gate yet."
   prop rowLimit = "12"
 }
@@ -454,7 +454,7 @@ view PlatformVerificationBuildHistory {
   prop title = "Snapshot Builds"
   prop summary = "Snapshot build history for the selected runtime revision when available."
   prop columns = "Status|Build|Candidate Snapshot|Branch|Errors"
-  prop rowFields = "Status=status|Build=buildLink@concept|Candidate Snapshot=candidateSnapshotLink@concept|Branch=branchLink@concept|Errors=errorCount"
+  prop rowFields = "Status=status|Build=id@concept|Candidate Snapshot=candidateSnapshotId@concept|Branch=branchId@concept|Errors=errorCount"
   prop emptyState = "No snapshot builds for this revision."
   prop rowLimit = "12"
 }
@@ -465,7 +465,7 @@ view PlatformVerificationBuildErrors {
   prop title = "Build Errors"
   prop summary = "Build errors for the selected runtime revision when available."
   prop columns = "Build|Path|Kind|Message"
-  prop rowFields = "Build=buildLink@concept|Path=path|Kind=kind|Message=message"
+  prop rowFields = "Build=snapshotBuildId@concept|Path=path|Kind=kind|Message=message"
   prop emptyState = "No build errors for this revision."
   prop rowLimit = "12"
 }
@@ -485,7 +485,7 @@ view PlatformBranchRedGreenList {
   prop title = "Branch Red / Green"
   prop summary = "Selected-gate status for branches."
   prop columns = "Status|Branch|Selected|Passed|Failed|Summary"
-  prop rowFields = "Status=status|Branch=branchLink@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary"
+  prop rowFields = "Status=status|Branch=branchId@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary"
   prop emptyState = "No branch red/green summaries."
   prop rowLimit = "12"
   projections {
@@ -499,7 +499,7 @@ view PlatformChangeSetRedGreenList {
   prop title = "Change Set Red / Green"
   prop summary = "Selected-gate status for change sets."
   prop columns = "Status|Change Set|Selected|Passed|Failed|Summary"
-  prop rowFields = "Status=status|Change Set=changeSetLink@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary"
+  prop rowFields = "Status=status|Change Set=changeSetId@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary"
   prop emptyState = "No change-set red/green summaries."
   prop rowLimit = "12"
   projections {
@@ -555,7 +555,7 @@ view PlatformSignalList {
   prop title = "Signals"
   prop summary = "Paginated list of gaps, telemetry metrics, defect clusters, and boundaries."
   prop columns = "Kind|Status|Resource|Scope|Summary"
-  prop rowFields = "Kind=pageKind|Status=status|Resource=resourceLink@concept|Scope=scope@value|Summary=summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
   prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
   prop defaultSort = "kind:asc"
   prop emptyState = "No signal rows."
@@ -609,7 +609,7 @@ view PlatformSignalRelationships {
   prop title = "Related Relationships"
   prop summary = "Linked graph relationships for the selected signal when available."
   prop columns = "From|Relation|To"
-  prop rowFields = "From=fromLink@concept|Relation=rel|To=toLink@concept"
+  prop rowFields = "From=from@concept|Relation=rel|To=to@concept"
   prop emptyState = "No related relationships."
   prop rowLimit = "20"
 }
@@ -634,7 +634,7 @@ view PlatformKnowledgeList {
   prop title = "Knowledge Items"
   prop summary = "Paginated list of docs, roadmap tasks, epics, and features."
   prop columns = "Kind|Status|Resource|Scope|Summary"
-  prop rowFields = "Kind=pageKind|Status=status|Resource=resourceLink@concept|Scope=scope@value|Summary=summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
   prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
   prop defaultSort = "kind:asc"
   prop emptyState = "No knowledge rows."
@@ -709,7 +709,7 @@ view PlatformKnowledgeTasks {
   prop title = "Tasks"
   prop summary = "Document or roadmap tasks for the selected knowledge object when available."
   prop columns = "Status|Task|Line|Section"
-  prop rowFields = "Status=status|Task=taskLink@concept|Line=line|Section=section"
+  prop rowFields = "Status=status|Task=id@concept|Line=line|Section=section"
   prop emptyState = "No tasks projected for this document."
   prop rowLimit = "20"
 }
@@ -720,7 +720,7 @@ view PlatformModelList {
   prop title = "Platform Map"
   prop summary = "Paginated list of modeled platform objects."
   prop columns = "Kind|Status|Resource|Source|Owner"
-  prop rowFields = "Kind=pageKind|Status=status|Resource=resourceLink@concept|Source=scope|Owner=summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Source=scope|Owner=summary"
   prop sortOptions = "kind=pageKind|status=status|resource=title|source=scope|owner=summary"
   prop defaultSort = "kind:asc"
   prop emptyState = "No platform objects."
@@ -761,7 +761,7 @@ view PlatformModelRelationships {
   prop title = "Relationships"
   prop summary = "Linked graph relationships for the selected platform object when available."
   prop columns = "From|Relation|To"
-  prop rowFields = "From=fromLink@concept|Relation=rel|To=toLink@concept"
+  prop rowFields = "From=from@concept|Relation=rel|To=to@concept"
   prop emptyState = "No relationships for this object."
   prop rowLimit = "20"
 }
