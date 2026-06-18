@@ -59,10 +59,10 @@ test("plugin discovery finds valid executable local plugin packages through bund
       description: "Inspect bundle bridge",
       kind: "plugin",
       runtime: { entry: "./runtime.js" },
-      activatesBundles: ["bundle-inspect"],
+      activatesBundles: ["bundle-local-inspect"],
       contributes: {}
     });
-    await writePluginRuntime(pluginDir, "export const bundleId = 'bundle-inspect'; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [], handlerMetadata: {} }; export const routes = []; export const surfaces = []; export function createHandlers() { return {}; }\n");
+    await writePluginRuntime(pluginDir, "export const bundleId = 'bundle-local-inspect'; export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [], handlerMetadata: {} }; export const routes = []; export const surfaces = []; export function createHandlers() { return {}; }\n");
 
     const discovered = await discoverRuntimePluginPackages({
       pluginRoot: root,
@@ -78,7 +78,7 @@ test("plugin discovery finds valid executable local plugin packages through bund
     assert.equal(discovered.packages[0].execution.mode, "plugin-owned");
     assert.equal(discovered.packages[0].metadata.runtime.entry, "./runtime.js");
     assert.equal(discovered.packages[0].runtimeModule.loadStatus, "not-loaded");
-    assert.equal(discovered.packages[0].resolvedBundles.some(row => row.id === "bundle-inspect"), true);
+    assert.equal(discovered.packages[0].resolvedBundles.some(row => row.id === "bundle-local-inspect"), true);
     assert.deepEqual(discovered.packages[0].resolvedRuntimeContributions.surfaces, []);
     assert.deepEqual(discovered.packages[0].resolvedRuntimeContributions.routes, []);
     assert.deepEqual(Object.keys(discovered.packages[0].resolvedRuntimeContributions.handlerMetadata), []);
@@ -97,7 +97,7 @@ test("plugin discovery rejects invalid runtime entry paths and missing runtime m
       description: "Absolute path plugin",
       kind: "plugin",
       runtime: { entry: "C:/bad/runtime.js" },
-      activatesBundles: ["bundle-inspect"],
+      activatesBundles: ["bundle-local-absolute"],
       contributes: {}
     });
     await writePlugin(root, "escape", {
@@ -107,7 +107,7 @@ test("plugin discovery rejects invalid runtime entry paths and missing runtime m
       description: "Escaping plugin",
       kind: "plugin",
       runtime: { entry: "../runtime.js" },
-      activatesBundles: ["bundle-inspect"],
+      activatesBundles: ["bundle-local-escape"],
       contributes: {}
     });
     await writePlugin(root, "missing", {
@@ -117,7 +117,7 @@ test("plugin discovery rejects invalid runtime entry paths and missing runtime m
       description: "Missing runtime file plugin",
       kind: "plugin",
       runtime: { entry: "./runtime.js" },
-      activatesBundles: ["bundle-inspect"],
+      activatesBundles: ["bundle-local-missing"],
       contributes: {}
     });
 
@@ -240,6 +240,64 @@ test("plugin discovery marks duplicate ids, missing dependencies, unknown profil
     assert.equal(discovered.invalidPackages.some(row => row.validation.errors.some(error => error.includes("missing plugin dependencies"))), true);
     assert.equal(discovered.invalidPackages.some(row => row.validation.errors.some(error => error.includes("unknown runtime profiles"))), true);
     assert.equal(discovered.invalidPackages.some(row => row.validation.errors.some(error => error.includes("unknown runtime bundles"))), true);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin discovery allows standalone plugin-owned bundle ids when a runtime module is present", async () => {
+  const root = await tempPluginRoot();
+  try {
+    const pluginDir = await writePlugin(root, "wcss-runtime", {
+      id: "plugin.wcss-runtime",
+      version: "1.0.0",
+      displayName: "WCSS Runtime",
+      description: "Generic runtime stylesheet delivery",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      activatesBundles: ["bundle-wcss-runtime"],
+      contributes: {}
+    });
+    await writePluginRuntime(pluginDir, `export default { bundles: { "bundle-wcss-runtime": { handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [], handlerMetadata: {} }, routes: [], surfaces: [], createHandlers() { return {}; } } } };`);
+
+    const discovered = await discoverRuntimePluginPackages({
+      pluginRoot: root,
+      runtimeProfile: "minimal"
+    });
+
+    assert.equal(discovered.summary.validCount, 1);
+    assert.equal(discovered.validPackages[0].validation.ok, true);
+    assert.deepEqual(discovered.validPackages[0].manifest.activatesBundles, ["bundle-wcss-runtime"]);
+    assert.deepEqual(discovered.validPackages[0].resolvedBundles.map(bundle => bundle.id), ["bundle-wcss-runtime"]);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin discovery allows runtime plugins to target existing core bundles as the core-override lane", async () => {
+  const root = await tempPluginRoot();
+  try {
+    const pluginDir = await writePlugin(root, "core-runtime", {
+      id: "plugin.core-runtime",
+      version: "1.0.0",
+      displayName: "Core Runtime",
+      description: "Valid runtime plugin targeting an existing core bundle",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      activatesBundles: ["bundle-assets"],
+      contributes: {}
+    });
+    await writePluginRuntime(pluginDir, `export default { bundles: { "bundle-assets": { handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [], handlerMetadata: {} }, routes: [], surfaces: [], createHandlers() { return {}; } } } };`);
+
+    const discovered = await discoverRuntimePluginPackages({
+      pluginRoot: root,
+      runtimeProfile: "minimal"
+    });
+
+    assert.equal(discovered.summary.validCount, 1);
+    assert.equal(discovered.validPackages[0].validation.ok, true);
+    assert.deepEqual(discovered.validPackages[0].resolvedBundles.map(bundle => bundle.id), ["bundle-assets"]);
+    assert.equal(discovered.validPackages[0].resolvedBundles[0].kind, "internal");
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }

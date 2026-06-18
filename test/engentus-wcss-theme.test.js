@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import path from "node:path";
+import fs from "node:fs/promises";
 import {
   ENGENTUS_GENERATED_STYLESHEET_PATHS,
   loadEngentusGeneratedCssBundle,
@@ -33,6 +34,13 @@ test("engentus generated stylesheet routes serve the canonical shell and chart C
   } finally {
     await server.close();
   }
+});
+
+test("engentus runtime installs the generic wcss runtime plugin and authored stylesheet routes", async () => {
+  const source = await fs.readFile(path.join(process.cwd(), "examples", "engentus", "app.wtoml"), "utf8");
+  assert.equal(source.includes('plugin = "plugin.wcss-runtime"'), true);
+  assert.equal(source.includes('plugin = "plugin.engentus-wcss-runtime"'), false);
+  assert.equal(source.includes('handler = "wcss.stylesheet.read"'), true);
 });
 
 test("engentus canonical browser lowering keeps declaration groups partitioned by backend bucket", async () => {

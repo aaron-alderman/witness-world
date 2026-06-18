@@ -23,6 +23,12 @@ responseKind = "json"
 enabledFields = []
 fieldSummary = "Backend JSON route. Page and backend-program fields are disabled."
 
+[[bootstrapRouteAuthoringPolicy]]
+routeKind = "resource"
+responseKind = "resource"
+enabledFields = []
+fieldSummary = "Backend resource route. Page and backend-program fields are disabled."
+
 [[bootstrapRouteAuthoringHandlerRule]]
 handler = "page.home"
 requiresRootWidget = true

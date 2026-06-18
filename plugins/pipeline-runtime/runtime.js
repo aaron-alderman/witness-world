@@ -4,6 +4,7 @@ import {
   pipelineSessionOpenResponsePayloadHook
 } from "./handlers.js";
 import { pipelineRvmForms } from "./desire-rvm.js";
+import { createPipelineCatalogFromAppProject } from "./catalog-runtime.js";
 import {
   createPipelineProofProgramFromDesire,
   evaluateInputTransformSubject,
@@ -23,6 +24,8 @@ import {
   planOutputTransform,
   planPipelineSync
 } from "./planner-runtime.js";
+import { createBuiltinPipelineJobHandlers } from "./job-handlers.js";
+import { pipelineModuleProjectors } from "./projections.js";
 
 export const bundleId = "bundle-pipeline-runtime";
 
@@ -31,6 +34,16 @@ export { handlerCatalog };
 export const routes = Object.freeze([]);
 export const surfaces = Object.freeze([]);
 export const providers = Object.freeze([
+  Object.freeze({
+    id: "pipeline.projections",
+    kind: "moduleProjectors",
+    projectors: pipelineModuleProjectors
+  }),
+  Object.freeze({
+    id: "pipeline.jobs",
+    kind: "jobHandlerFactory",
+    factory: deps => createBuiltinPipelineJobHandlers(deps)
+  }),
   Object.freeze({
     id: "sessionOpenResponsePayload",
     kind: "coreHook",
@@ -42,6 +55,7 @@ export const desireExtensions = Object.freeze({
 });
 
 export {
+  createPipelineCatalogFromAppProject,
   createPipelineExecutionPlanProgramFromDesire,
   createPipelineProofProgramFromDesire,
   evaluatePlannedInputTransform,
@@ -71,6 +85,7 @@ export default {
   providers,
   desireExtensions,
   createHandlers,
+  createPipelineCatalogFromAppProject,
   createPipelineExecutionPlanProgramFromDesire,
   createPipelineProofProgramFromDesire,
   evaluatePlannedInputTransform,

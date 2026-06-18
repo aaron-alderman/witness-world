@@ -25,7 +25,7 @@ export const DEFAULT_BOOTSTRAP_RUNTIME_PROFILE = "authoring";
  * @typedef {Object} BundleManifest
  * @property {string} id
  * @property {string} version
- * @property {"internal"} kind
+ * @property {"internal"|"plugin"} kind
  * @property {string} displayName
  * @property {string} description
  * @property {string[]} dependsOn
@@ -239,10 +239,28 @@ function handlerCatalogProviderForBundle(bundle) {
   return (bundle?.contributes?.providers ?? []).find(provider => provider?.kind === "handlerCatalog") ?? null;
 }
 
+function pluginOwnedBundle(bundleId, override = {}) {
+  return deepFreezeBundle({
+    id: String(bundleId || ""),
+    version: override.version ?? "0",
+    kind: "plugin",
+    displayName: override.displayName ?? String(bundleId || ""),
+    description: override.description ?? "Plugin-owned runtime bundle.",
+    dependsOn: override.dependsOn ?? [],
+    contributes: {
+      capabilities: override.contributes?.capabilities ?? [],
+      providers: override.contributes?.providers ?? [],
+      routes: override.contributes?.routes ?? [],
+      surfaces: override.contributes?.surfaces ?? []
+    }
+  });
+}
+
 function materializeBundle(bundleId, bundleOverrides = {}) {
-  const base = BUNDLE_BY_ID.get(String(bundleId || ""));
-  if (!base) return null;
-  const override = bundleOverrides?.[base.id] ?? null;
+  const resolvedBundleId = String(bundleId || "");
+  const base = BUNDLE_BY_ID.get(resolvedBundleId);
+  const override = bundleOverrides?.[resolvedBundleId] ?? null;
+  if (!base) return override ? pluginOwnedBundle(resolvedBundleId, override) : null;
   if (!override) return base;
   const baseProvidersToPreserve = base.contributes.providers.filter(provider =>
     provider?.kind !== "handlerCatalog"
@@ -344,8 +362,12 @@ export function resolveRuntimeComposition({
   const preset = resolveProfilePreset(profileName);
   const bundleIds = [];
   const seen = new Set();
+  const availableBundleIds = new Set([
+    ...BUNDLE_BY_ID.keys(),
+    ...Object.keys(bundleOverrides ?? {}).map(String)
+  ]);
   for (const bundleId of [...preset.bundleIds, ...additionalBundleIds.map(String)]) {
-    if (!BUNDLE_BY_ID.has(bundleId) || seen.has(bundleId)) continue;
+    if (!availableBundleIds.has(bundleId) || seen.has(bundleId)) continue;
     seen.add(bundleId);
     bundleIds.push(bundleId);
   }

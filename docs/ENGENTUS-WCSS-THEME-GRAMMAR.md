@@ -34,6 +34,15 @@ The browser declaration grammar is not the canonical style ontology. It is the
 lowering layer that lets the current browser runtime serve runtime-generated CSS
 while the authored/internal grammar becomes cleaner.
 
+The authored core is now also summarized as a formal grammar artifact under
+`tmp/engentus-wcss/engentus-style-grammar.json`, which captures the canonical
+token domains, style-family domains, and per-slice application contracts
+without browser bucket names mixed in.
+
+Route delivery for those generated stylesheets is app-owned through the
+standalone `plugin.wcss-runtime` lane rather than hard-coded into the shared
+runtime server.
+
 Browser group names such as `toolbar`, `goodman view`, or `platform config` are
 therefore backend-lowering nouns. They are not canonical style-family nouns.
 

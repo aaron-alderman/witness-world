@@ -394,6 +394,11 @@ export async function loadRuntimePluginModules({
           : [];
         bundleOverrides[bundleDefinition.bundleId] = {
           id: bundleDefinition.bundleId,
+          version: pluginPackage.metadata?.version ?? "0",
+          kind: "plugin",
+          displayName: pluginPackage.metadata?.displayName ?? bundleDefinition.bundleId,
+          description: pluginPackage.metadata?.description ?? "Plugin-owned runtime bundle.",
+          dependsOn: [],
           contributes: {
             providers: [
               ...capabilityProviders,

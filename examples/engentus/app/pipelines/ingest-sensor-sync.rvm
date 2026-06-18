@@ -1,0 +1,130 @@
+context EngentusPipelineWorld {
+}
+
+entity Device {
+  context EngentusPipelineWorld
+  id_prop device_id
+  fields {
+    device_id: string
+    source_device_id: string
+  }
+}
+
+entity Sensor {
+  context EngentusPipelineWorld
+  id_prop sensor_id
+  fields {
+    sensor_id: string
+    device_id: string
+    source_device_id: string
+    source_sensor_id: string
+    sensor_type: string
+  }
+}
+
+sql_table RawImuTransactions {
+  binding source_mysql
+  provider mysql
+  schema engentus
+  table Transactions_IMU
+  column tx_gateway_id varchar
+  column tx_IMU_device_id varchar
+  column tx_timestamp_start bigint
+  column tx_sample_counter int
+  column tx_sample_IMU double
+  key tx_gateway_id
+}
+
+sql_table CanonicalSensorsTable {
+  binding warehouse_pg
+  provider postgres
+  schema engentus
+  table sensors
+  column device_id varchar
+  column source_sensor_id varchar
+  column sensor_type varchar
+  key device_id
+  key source_sensor_id
+  key sensor_type
+}
+
+sql_table CanonicalSensorDataTable {
+  binding warehouse_pg
+  provider postgres
+  schema engentus
+  table sensor_data
+  column sensor_id varchar
+  column timestamp timestamptz
+  column value double
+  key sensor_id
+  key timestamp
+}
+
+input_transform EngentusImuRowsToWorld {
+  source RawImuTransactions
+  emit Device {
+    key device_id derive device_identity_key
+    arg source_device_id tx_gateway_id
+    field source_device_id from tx_gateway_id
+  }
+  emit Sensor {
+    key sensor_id derive sensor_identity_key
+    arg source_device_id tx_gateway_id
+    arg source_sensor_id tx_IMU_device_id
+    arg sensor_type "imu"
+    field device_id derive device_identity_key
+    arg source_device_id tx_gateway_id
+    field source_device_id from tx_gateway_id
+    field source_sensor_id from tx_IMU_device_id
+    field sensor_type literal "imu"
+  }
+  emit SensorSample {
+    field sensor_id derive sensor_identity_key
+    arg source_device_id tx_gateway_id
+    arg source_sensor_id tx_IMU_device_id
+    arg sensor_type "imu"
+    field timestamp derive sample_timestamp
+    arg start tx_timestamp_start
+    arg counter tx_sample_counter
+    arg interval_ms 50
+    arg epoch_unit auto
+    field value from tx_sample_IMU
+  }
+}
+
+output_transform EngentusCanonicalSensors {
+  source Sensor
+  target CanonicalSensorsTable
+  write_mode upsert
+  key device_id from device_id
+  key source_sensor_id from source_sensor_id
+  key sensor_type from sensor_type
+  field device_id from device_id
+  field source_sensor_id from source_sensor_id
+  field sensor_type from sensor_type
+}
+
+output_transform EngentusCanonicalSensorSamples {
+  source SensorSample
+  target CanonicalSensorDataTable
+  write_mode insert_ignore
+  key sensor_id from sensor_id
+  key timestamp from timestamp
+  field sensor_id from sensor_id
+  field timestamp from timestamp
+  field value from value
+}
+
+sync EngentusImuSensorIngest {
+  input EngentusImuRowsToWorld
+  output EngentusCanonicalSensors
+  output EngentusCanonicalSensorSamples
+  trigger manual
+  trigger scheduled
+  progress {
+    kind monotonic
+    field tx_timestamp_start
+    replay_window_ms 10050
+  }
+  consistency eventual
+}

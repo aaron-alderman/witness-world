@@ -1,0 +1,14 @@
+{
+  "id": "plugin.wcss-runtime",
+  "version": "0.1.0",
+  "displayName": "WCSS Runtime",
+  "description": "Generic runtime-generated stylesheet delivery and snapshot-scoped bundle caching for canonical WCSS adapters.",
+  "kind": "plugin",
+  "runtime": {
+    "entry": "./runtime.js"
+  },
+  "activatesBundles": [
+    "bundle-wcss-runtime"
+  ],
+  "contributes": {}
+}

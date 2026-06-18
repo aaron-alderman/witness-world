@@ -17,6 +17,28 @@ const DEFAULT_SWITCH_MANIFEST_FILE = path.join(MODULE_DIR, "engentus-style-switc
 const REQUIRED_TOP_LEVEL_SECTIONS = ["tokens", "styles", "views", "application", "lowering"];
 const DEFAULT_BROWSER_BACKEND = "browser";
 const KNOWN_STYLE_ASSETS = new Set(["shell", "chart"]);
+const CANONICAL_TOKEN_DOMAINS = Object.freeze(["color", "size", "radius", "font", "shadow"]);
+const CANONICAL_STYLE_DOMAINS = Object.freeze(["chrome", "interactive", "surface", "auth", "goodman", "platform", "chart"]);
+const CANONICAL_SLICE_FAMILY_DOMAINS = Object.freeze({
+  "shell-base": Object.freeze(["chrome", "interactive"]),
+  auth: Object.freeze(["auth"]),
+  home: Object.freeze(["chrome", "surface"]),
+  goodman: Object.freeze(["chart", "chrome", "goodman", "surface"]),
+  "mill-charge": Object.freeze(["chrome", "surface"]),
+  "mill-force": Object.freeze(["chrome", "interactive", "surface"]),
+  "platform-config": Object.freeze(["platform"]),
+  "chart-pages": Object.freeze(["chart"])
+});
+const CANONICAL_SLICE_SEAM_PREFIXES = Object.freeze({
+  "shell-base": "shell-base.",
+  auth: "auth.",
+  home: "home.",
+  goodman: "goodman.",
+  "mill-charge": "mill-charge.",
+  "mill-force": "mill-force.",
+  "platform-config": "platform.",
+  "chart-pages": "chart-pages."
+});
 const STYLESHEET_TITLES = Object.freeze({
   shell: "Engentus shell theme grammar",
   chart: "Engentus chart theme grammar"
@@ -44,6 +66,17 @@ function maybeUnquote(value) {
     return trimmed.slice(1, -1);
   }
   return trimmed;
+}
+
+function nameSegments(value) {
+  return String(value ?? "")
+    .split(".")
+    .map(segment => segment.trim())
+    .filter(Boolean);
+}
+
+function primaryNameDomain(value) {
+  return nameSegments(value)[0] ?? null;
 }
 
 function plainObject(value) {
@@ -1485,8 +1518,142 @@ export function parseEngentusCanonicalWcss(text) {
   };
 }
 
+function collectNamesByDomain(names = []) {
+  const grouped = new Map();
+  for (const name of names) {
+    const domain = primaryNameDomain(name) ?? "unknown";
+    if (!grouped.has(domain)) grouped.set(domain, []);
+    grouped.get(domain).push(name);
+  }
+  return [...grouped.entries()]
+    .map(([domain, values]) => ({
+      domain,
+      count: values.length,
+      names: uniqueSorted(values)
+    }))
+    .sort((left, right) => left.domain.localeCompare(right.domain));
+}
+
+export function buildEngentusCanonicalStyleGrammar(canonical) {
+  const tokensByDomain = collectNamesByDomain((canonical?.tokens ?? []).map(token => token.name));
+  const stylesByDomain = collectNamesByDomain((canonical?.styles ?? []).map(style => style.name));
+  const slices = (canonical?.slices ?? []).map(slice => {
+    const familyDomains = uniqueSorted(slice.families.map(family => primaryNameDomain(family)));
+    const seamKinds = uniqueSorted(slice.seams.map(seam => seam.kind));
+    return {
+      name: slice.name,
+      asset: slice.asset,
+      sourceFiles: [...slice.sourceFiles],
+      identities: [...slice.identities],
+      traits: [...slice.traits],
+      families: [...slice.families],
+      familyDomains,
+      seams: structuredClone(slice.seams),
+      seamKinds,
+      seamNames: slice.seams.map(seam => seam.name),
+      notes: [...slice.notes]
+    };
+  });
+
+  const tokenDomainNames = uniqueSorted(tokensByDomain.map(entry => entry.domain));
+  const styleDomainNames = uniqueSorted(stylesByDomain.map(entry => entry.domain));
+  const errors = [];
+  const warnings = [];
+
+  for (const token of canonical?.tokens ?? []) {
+    const segments = nameSegments(token.name);
+    if (segments.length < 2) {
+      errors.push(`Token ${token.name} must include at least a domain and one semantic segment`);
+      continue;
+    }
+    const domain = segments[0];
+    if (!CANONICAL_TOKEN_DOMAINS.includes(domain)) {
+      errors.push(`Token ${token.name} uses unsupported token domain ${domain}`);
+    }
+  }
+
+  for (const style of canonical?.styles ?? []) {
+    const segments = nameSegments(style.name);
+    if (segments.length < 2) {
+      errors.push(`Style family ${style.name} must include a domain and family name`);
+      continue;
+    }
+    const domain = segments[0];
+    if (!CANONICAL_STYLE_DOMAINS.includes(domain)) {
+      errors.push(`Style family ${style.name} uses unsupported style domain ${domain}`);
+    }
+  }
+
+  for (const slice of slices) {
+    const allowedFamilyDomains = CANONICAL_SLICE_FAMILY_DOMAINS[slice.name] ?? [];
+    if (!allowedFamilyDomains.length) {
+      warnings.push(`Slice ${slice.name} has no formal family-domain contract`);
+    }
+    for (const family of slice.families) {
+      const domain = primaryNameDomain(family);
+      if (domain && allowedFamilyDomains.length && !allowedFamilyDomains.includes(domain)) {
+        errors.push(`Slice ${slice.name} uses style family ${family} outside its allowed family domains: ${allowedFamilyDomains.join(", ")}`);
+      }
+    }
+    const seamPrefix = CANONICAL_SLICE_SEAM_PREFIXES[slice.name] ?? null;
+    if (!seamPrefix) {
+      warnings.push(`Slice ${slice.name} has no formal seam prefix contract`);
+    }
+    for (const seam of slice.seams) {
+      const seamName = String(seam.name || "");
+      const isExplicitEscape = seam.kind === "escape" && (seamName === seam.prop || ["className", "style"].includes(seamName));
+      if (seamPrefix && !isExplicitEscape && !seamName.startsWith(seamPrefix)) {
+        errors.push(`Slice ${slice.name} seam ${seam.name} must use prefix ${seamPrefix}`);
+      }
+    }
+  }
+
+  return {
+    theme: canonical?.theme ?? null,
+    views: (canonical?.views ?? []).map(view => view.name),
+    tokens: {
+      total: canonical?.tokens?.length ?? 0,
+      allowedDomains: [...CANONICAL_TOKEN_DOMAINS],
+      byDomain: tokensByDomain,
+      domains: tokenDomainNames
+    },
+    styles: {
+      total: canonical?.styles?.length ?? 0,
+      allowedDomains: [...CANONICAL_STYLE_DOMAINS],
+      byDomain: stylesByDomain,
+      domains: styleDomainNames
+    },
+    application: {
+      sliceCount: slices.length,
+      sliceFamilyDomainContracts: structuredClone(CANONICAL_SLICE_FAMILY_DOMAINS),
+      sliceSeamPrefixContracts: structuredClone(CANONICAL_SLICE_SEAM_PREFIXES),
+      slices
+    },
+    consistency: {
+      ok: errors.length === 0,
+      errors,
+      warnings
+    }
+  };
+}
+
+export function validateEngentusCanonicalStyleGrammar(canonical) {
+  const grammar = buildEngentusCanonicalStyleGrammar(canonical);
+  if (!grammar.consistency.ok) {
+    throw new Error(`Engentus canonical style grammar is inconsistent:\n${grammar.consistency.errors.map(line => `- ${line}`).join("\n")}`);
+  }
+  return grammar;
+}
+
 export async function loadEngentusCanonicalWcss(file = DEFAULT_CANONICAL_WCSS_FILE) {
-  return parseEngentusCanonicalWcss(await readFile(file, "utf8"));
+  const canonical = parseEngentusCanonicalWcss(await readFile(file, "utf8"));
+  canonical.grammar = validateEngentusCanonicalStyleGrammar(canonical);
+  return canonical;
+}
+
+export async function loadEngentusCanonicalStyleGrammar(file = DEFAULT_CANONICAL_WCSS_FILE) {
+  const canonical = await loadEngentusCanonicalWcss(file);
+  return structuredClone(canonical.grammar ?? buildEngentusCanonicalStyleGrammar(canonical));
 }
 
 export async function loadEngentusBrowserLoweringMap(file = DEFAULT_CANONICAL_WCSS_FILE) {
@@ -2097,6 +2264,7 @@ export async function loadEngentusGeneratedCssBundle({
 export async function buildEngentusStyleArtifacts() {
   const bundle = await loadEngentusGeneratedCssBundle();
   const { authoredPlan, switchManifest, stylesheets, files } = bundle;
+  const grammar = await loadEngentusCanonicalStyleGrammar();
   const inventory = await buildEngentusPresentationInventory(authoredPlan);
   const ownership = verifyEngentusStyleOwnership({
     inventory,
@@ -2110,6 +2278,7 @@ export async function buildEngentusStyleArtifacts() {
   return {
     authoredPlan,
     switchManifest,
+    grammar,
     inventory,
     parity,
     ownership,

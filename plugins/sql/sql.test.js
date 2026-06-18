@@ -201,3 +201,110 @@ test("sql runtime resolves multiple datasources explicitly and uses secret-backe
     await fs.rm(runtimeRoot, { recursive: true, force: true }).catch(() => {});
   }
 });
+
+test("sql runtime supports pipeline mysql reads and postgres writes", async () => {
+  const rows = [
+    {
+      id: "mysql.source",
+      serverRunner: "runner.demo",
+      provider: "mysql",
+      datasourceName: "source",
+      host: "127.0.0.1",
+      port: 3306,
+      database: "engentus",
+      user: "reader",
+      passwordSecretId: "secret.db",
+      ssl: false
+    },
+    {
+      id: "pg.target",
+      serverRunner: "runner.demo",
+      provider: "postgres",
+      datasourceName: "target",
+      host: "127.0.0.1",
+      port: 5432,
+      database: "engentus",
+      user: "writer",
+      passwordSecretId: "secret.db",
+      ssl: false
+    }
+  ];
+  const byId = Object.fromEntries(rows.map(row => [row.id, row]));
+  const runtimeRoot = await fs.mkdtemp(path.join(os.tmpdir(), "sql-pipeline-runtime-"));
+  const mysqlQueries = [];
+  const postgresQueries = [];
+  const runtime = createDbSqlRuntime({
+    project(projector) {
+      if (projector === moduleProjectors.sqlDatasources) return rows;
+      if (projector === moduleProjectors.sqlDatasourceIndex) return { rows, byId };
+      return [];
+    },
+    runtimeRoot,
+    serverRunnerId: "runner.demo",
+    getAppContext: () => ({
+      secretStore: {
+        resolveSecretValue() {
+          return Promise.resolve({ ok: true, value: "super-secret" });
+        }
+      }
+    }),
+    mysqlAdapter: {
+      createConnection: async () => ({
+        async query(sql, params) {
+          mysqlQueries.push({ sql, params });
+          return [[{
+            tx_timestamp_start: 1700000000000,
+            tx_gateway_id: "4EF47C45"
+          }]];
+        },
+        async end() {}
+      })
+    },
+    postgresAdapter: {
+      Client: class {
+        async connect() {}
+        async query(sql, params) {
+          postgresQueries.push({ sql, params });
+          return { rowCount: 1 };
+        }
+        async end() {}
+      }
+    }
+  });
+
+  try {
+    const readResult = await runtime.readOrderedBatch({
+      datasourceId: "mysql.source",
+      schema: "engentus",
+      table: "Transactions_IMU",
+      columns: ["tx_timestamp_start", "tx_gateway_id"],
+      progressField: "tx_timestamp_start",
+      lowerBound: 1699999999000,
+      rowLimit: 50
+    });
+    assert.equal(readResult.ok, true);
+    assert.equal(readResult.rowCount, 1);
+    assert.match(mysqlQueries[0].sql, /from `engentus`\.`Transactions_IMU`/);
+    assert.match(mysqlQueries[0].sql, /order by `tx_timestamp_start` asc limit \?/);
+    assert.deepEqual(mysqlQueries[0].params, [1699999999000, 50]);
+
+    const writeResult = await runtime.writeRows({
+      datasourceId: "pg.target",
+      schema: "engentus",
+      table: "sensor_data",
+      rows: [{
+        sensor_id: "sensor:1",
+        timestamp: "2023-11-14T22:13:20.000Z",
+        value: 12.5
+      }],
+      writeMode: "insert_ignore",
+      keyFields: ["sensor_id", "timestamp"]
+    });
+    assert.equal(writeResult.ok, true);
+    assert.match(postgresQueries[0].sql, /insert into "engentus"\."sensor_data"/);
+    assert.match(postgresQueries[0].sql, /on conflict \("sensor_id", "timestamp"\) do nothing/);
+  } finally {
+    runtime.close();
+    await fs.rm(runtimeRoot, { recursive: true, force: true }).catch(() => {});
+  }
+});

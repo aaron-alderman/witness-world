@@ -6,6 +6,10 @@ collection PlatformConfigIdentities
 collection PlatformConfigFeaturePolicies
 collection PlatformConfigAuthorityGrants
 collection PlatformConfigAuthorityActors
+collection PlatformConfigPipelineSyncs
+collection PlatformConfigPipelineBindings
+collection PlatformConfigPipelineRuns
+collection PlatformConfigPipelineRunLogs
 
 view PlatformConfigSecretOptionTemplate {
   kind option
@@ -1042,44 +1046,219 @@ view PlatformConfigScriptSectionIntro {
   kind text
   prop tag = "p"
   class platform-config-hint
-  prop text = "This remains demo-app behavior only. It does not introduce a new platform capability."
+  prop text = "Manual pipeline runs use authored sync definitions, runner-scoped logical bindings, and job-backed execution."
 }
 
-view PlatformConfigScriptNameField {
-  kind form-field
-  class platform-config-field
-  prop label = "Script name"
-  prop inputId = "platform-config-script-name"
-  prop inputClass = "platform-config-input"
-  prop placeholder = "engentus-pipeline-demo"
-  bindings {
-    value from state PlatformConfigScriptName
-    disabled from state PlatformConfigScriptBusy
-  }
-  interactions {
-    on input self set PlatformConfigScriptName eventValue
-  }
+view PlatformConfigPipelineSyncOptionTemplate {
+  kind option
+  prop tag = "option"
+  prop value = "${item.id}"
+  prop text = "${item.title}"
+  prop template = true
 }
 
-view PlatformConfigScriptDatasourceLabel {
+view PlatformConfigPipelineSyncLabel {
   kind text
   prop tag = "label"
   class platform-config-field-label
-  prop text = "Datasource"
-  prop for = "platform-config-script-datasource-id"
+  prop text = "Pipeline sync"
+  prop for = "platform-config-pipeline-sync-id"
 }
 
-view PlatformConfigScriptDatasourceSelect {
+view PlatformConfigPipelineSyncSelect {
   kind select
   prop tag = "select"
-  prop domId = "platform-config-script-datasource-id"
+  prop domId = "platform-config-pipeline-sync-id"
   class platform-config-input
   bindings {
-    value from state PlatformConfigScriptDatasourceId
+    value from state PlatformConfigPipelineSyncSelectedId
     disabled from state PlatformConfigScriptBusy
   }
   interactions {
-    on change self set PlatformConfigScriptDatasourceId eventValue
+    on change self set PlatformConfigPipelineSyncSelectedId eventValue
+    on change self set PlatformConfigPipelineBindingSelectedName ""
+    on change self set PlatformConfigPipelineRunSelectedId ""
+    on change self deliver PlatformConfigRefreshScriptsRequested
+  }
+  repeat {
+    collection PlatformConfigPipelineSyncs
+    template PlatformConfigPipelineSyncOptionTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigPipelineSyncField {
+  kind region
+  class platform-config-field
+  children {
+    PlatformConfigPipelineSyncLabel
+    PlatformConfigPipelineSyncSelect
+  }
+}
+
+view PlatformConfigPipelineBindingRowAction {
+  kind action
+  prop tag = "button"
+  prop buttonType = "button"
+  prop value = "${item.bindingName}"
+  prop text = "Edit"
+  class platform-config-row-action
+  interactions {
+    on click self set PlatformConfigPipelineBindingSelectedName eventValue
+    on click self deliver PlatformConfigRefreshScriptsRequested
+  }
+}
+
+view PlatformConfigPipelineBindingRowTemplate {
+  kind region
+  prop tag = "tr"
+  prop template = true
+  children {
+    PlatformConfigPipelineBindingRowName
+    PlatformConfigPipelineBindingRowRole
+    PlatformConfigPipelineBindingRowDatasource
+    PlatformConfigPipelineBindingRowProvider
+    PlatformConfigPipelineBindingRowTarget
+    PlatformConfigPipelineBindingRowActionCell
+  }
+}
+
+view PlatformConfigPipelineBindingRowName {
+  kind text
+  prop tag = "td"
+  prop text = "${item.bindingName}"
+}
+
+view PlatformConfigPipelineBindingRowRole {
+  kind text
+  prop tag = "td"
+  prop text = "${item.role}"
+}
+
+view PlatformConfigPipelineBindingRowDatasource {
+  kind text
+  prop tag = "td"
+  prop text = "${item.datasourceTitle}"
+}
+
+view PlatformConfigPipelineBindingRowProvider {
+  kind text
+  prop tag = "td"
+  prop text = "${item.providerHint}"
+}
+
+view PlatformConfigPipelineBindingRowTarget {
+  kind text
+  prop tag = "td"
+  prop text = "${item.targetText}"
+}
+
+view PlatformConfigPipelineBindingRowActionCell {
+  kind region
+  prop tag = "td"
+  children {
+    PlatformConfigPipelineBindingRowAction
+  }
+}
+
+view PlatformConfigPipelineBindingTableHeader {
+  kind region
+  prop tag = "thead"
+  children {
+    PlatformConfigPipelineBindingTableHeaderRow
+  }
+}
+
+view PlatformConfigPipelineBindingTableHeaderRow {
+  kind region
+  prop tag = "tr"
+  children {
+    PlatformConfigPipelineBindingTableHeaderName
+    PlatformConfigPipelineBindingTableHeaderRole
+    PlatformConfigPipelineBindingTableHeaderDatasource
+    PlatformConfigPipelineBindingTableHeaderProvider
+    PlatformConfigPipelineBindingTableHeaderTarget
+    PlatformConfigPipelineBindingTableHeaderActions
+  }
+}
+
+view PlatformConfigPipelineBindingTableHeaderName {
+  kind text
+  prop tag = "th"
+  prop text = "Binding"
+}
+
+view PlatformConfigPipelineBindingTableHeaderRole {
+  kind text
+  prop tag = "th"
+  prop text = "Role"
+}
+
+view PlatformConfigPipelineBindingTableHeaderDatasource {
+  kind text
+  prop tag = "th"
+  prop text = "Datasource"
+}
+
+view PlatformConfigPipelineBindingTableHeaderProvider {
+  kind text
+  prop tag = "th"
+  prop text = "Provider"
+}
+
+view PlatformConfigPipelineBindingTableHeaderTarget {
+  kind text
+  prop tag = "th"
+  prop text = "Target"
+}
+
+view PlatformConfigPipelineBindingTableHeaderActions {
+  kind text
+  prop tag = "th"
+  prop text = "Actions"
+}
+
+view PlatformConfigPipelineBindingTableBody {
+  kind region
+  prop tag = "tbody"
+  repeat {
+    collection PlatformConfigPipelineBindings
+    template PlatformConfigPipelineBindingRowTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigPipelineBindingTable {
+  kind region
+  prop tag = "table"
+  class platform-config-table
+  children {
+    PlatformConfigPipelineBindingTableHeader
+    PlatformConfigPipelineBindingTableBody
+  }
+}
+
+view PlatformConfigPipelineBindingEditorLabel {
+  kind text
+  prop tag = "label"
+  class platform-config-field-label
+  prop text = "Datasource assignment"
+  prop for = "platform-config-pipeline-binding-datasource"
+}
+
+view PlatformConfigPipelineBindingDatasourceSelect {
+  kind select
+  prop tag = "select"
+  prop domId = "platform-config-pipeline-binding-datasource"
+  class platform-config-input
+  bindings {
+    value from state PlatformConfigPipelineBindingDatasourceId
+    disabled from state PlatformConfigScriptBusy
+  }
+  interactions {
+    on change self set PlatformConfigPipelineBindingDatasourceId eventValue
   }
   repeat {
     collection PlatformConfigDatasources
@@ -1089,26 +1268,400 @@ view PlatformConfigScriptDatasourceSelect {
   }
 }
 
-view PlatformConfigScriptDatasourceField {
+view PlatformConfigPipelineBindingEditorField {
   kind region
   class platform-config-field
   children {
-    PlatformConfigScriptDatasourceLabel
-    PlatformConfigScriptDatasourceSelect
+    PlatformConfigPipelineBindingEditorLabel
+    PlatformConfigPipelineBindingDatasourceSelect
   }
 }
 
-view PlatformConfigScriptRunAction {
+view PlatformConfigPipelineBindingSaveAction {
   kind action
   class rbtn go
   prop tag = "button"
   prop buttonType = "button"
-  prop label = "Run Stub"
+  prop label = "Save Binding"
   bindings {
     disabled from state PlatformConfigScriptBusy
   }
   interactions {
+    on click self deliver PlatformConfigSaveScriptBindingRequested
+  }
+}
+
+view PlatformConfigPipelineBindingClearAction {
+  kind action
+  class rbtn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Clear Binding"
+  bindings {
+    disabled from state PlatformConfigScriptBusy
+  }
+  interactions {
+    on click self set PlatformConfigPipelineBindingDatasourceId ""
+    on click self deliver PlatformConfigSaveScriptBindingRequested
+  }
+}
+
+view PlatformConfigPipelineRowLimitField {
+  kind form-field
+  class platform-config-field
+  prop label = "Row limit"
+  prop inputId = "platform-config-pipeline-row-limit"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "500"
+  bindings {
+    value from state PlatformConfigPipelineRowLimit
+    disabled from state PlatformConfigScriptBusy
+  }
+  interactions {
+    on input self set PlatformConfigPipelineRowLimit eventValue
+  }
+}
+
+view PlatformConfigPipelineDryRunAction {
+  kind action
+  class rbtn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Dry Run"
+  bindings {
+    disabled from state PlatformConfigScriptBusy
+  }
+  interactions {
+    on click self set PlatformConfigPipelineRunMode "dry_run"
     on click self deliver PlatformConfigRunScriptRequested
+  }
+}
+
+view PlatformConfigPipelineExecuteAction {
+  kind action
+  class rbtn go
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Execute"
+  bindings {
+    disabled from state PlatformConfigScriptBusy
+  }
+  interactions {
+    on click self set PlatformConfigPipelineRunMode "execute"
+    on click self deliver PlatformConfigRunScriptRequested
+  }
+}
+
+view PlatformConfigPipelineRefreshAction {
+  kind action
+  class rbtn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Refresh"
+  bindings {
+    disabled from state PlatformConfigScriptBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigRefreshScriptsRequested
+  }
+}
+
+view PlatformConfigPipelineActions {
+  kind region
+  class run-row platform-config-actions
+  children {
+    PlatformConfigPipelineBindingSaveAction
+    PlatformConfigPipelineBindingClearAction
+    PlatformConfigPipelineDryRunAction
+    PlatformConfigPipelineExecuteAction
+    PlatformConfigPipelineRefreshAction
+  }
+}
+
+view PlatformConfigPipelineRunRowAction {
+  kind action
+  prop tag = "button"
+  prop buttonType = "button"
+  prop value = "${item.id}"
+  prop text = "View"
+  class platform-config-row-action
+  interactions {
+    on click self set PlatformConfigPipelineRunSelectedId eventValue
+    on click self deliver PlatformConfigRefreshScriptsRequested
+  }
+}
+
+view PlatformConfigPipelineRunRowTemplate {
+  kind region
+  prop tag = "tr"
+  prop template = true
+  children {
+    PlatformConfigPipelineRunRowSync
+    PlatformConfigPipelineRunRowMode
+    PlatformConfigPipelineRunRowStatus
+    PlatformConfigPipelineRunRowStarted
+    PlatformConfigPipelineRunRowRowsRead
+    PlatformConfigPipelineRunRowCounts
+    PlatformConfigPipelineRunRowCheckpoint
+    PlatformConfigPipelineRunRowError
+    PlatformConfigPipelineRunRowActionCell
+  }
+}
+
+view PlatformConfigPipelineRunRowSync {
+  kind text
+  prop tag = "td"
+  prop text = "${item.title}"
+}
+
+view PlatformConfigPipelineRunRowMode {
+  kind text
+  prop tag = "td"
+  prop text = "${item.modeText}"
+}
+
+view PlatformConfigPipelineRunRowStatus {
+  kind text
+  prop tag = "td"
+  prop text = "${item.statusText}"
+}
+
+view PlatformConfigPipelineRunRowStarted {
+  kind text
+  prop tag = "td"
+  prop text = "${item.startedAtText}"
+  prop title = "${item.startedAtTitle}"
+}
+
+view PlatformConfigPipelineRunRowRowsRead {
+  kind text
+  prop tag = "td"
+  prop text = "${item.rowsReadText}"
+}
+
+view PlatformConfigPipelineRunRowCounts {
+  kind text
+  prop tag = "td"
+  prop text = "${item.outputCountsText}"
+}
+
+view PlatformConfigPipelineRunRowCheckpoint {
+  kind text
+  prop tag = "td"
+  prop text = "${item.checkpointCommittedText}"
+}
+
+view PlatformConfigPipelineRunRowError {
+  kind text
+  prop tag = "td"
+  prop text = "${item.lastErrorText}"
+}
+
+view PlatformConfigPipelineRunRowActionCell {
+  kind region
+  prop tag = "td"
+  children {
+    PlatformConfigPipelineRunRowAction
+  }
+}
+
+view PlatformConfigPipelineRunTableHeader {
+  kind region
+  prop tag = "thead"
+  children {
+    PlatformConfigPipelineRunTableHeaderRow
+  }
+}
+
+view PlatformConfigPipelineRunTableHeaderRow {
+  kind region
+  prop tag = "tr"
+  children {
+    PlatformConfigPipelineRunHeaderSync
+    PlatformConfigPipelineRunHeaderMode
+    PlatformConfigPipelineRunHeaderStatus
+    PlatformConfigPipelineRunHeaderStarted
+    PlatformConfigPipelineRunHeaderRowsRead
+    PlatformConfigPipelineRunHeaderCounts
+    PlatformConfigPipelineRunHeaderCheckpoint
+    PlatformConfigPipelineRunHeaderError
+    PlatformConfigPipelineRunHeaderActions
+  }
+}
+
+view PlatformConfigPipelineRunHeaderSync {
+  kind text
+  prop tag = "th"
+  prop text = "Sync"
+}
+
+view PlatformConfigPipelineRunHeaderMode {
+  kind text
+  prop tag = "th"
+  prop text = "Mode"
+}
+
+view PlatformConfigPipelineRunHeaderStatus {
+  kind text
+  prop tag = "th"
+  prop text = "Status"
+}
+
+view PlatformConfigPipelineRunHeaderStarted {
+  kind text
+  prop tag = "th"
+  prop text = "Started"
+}
+
+view PlatformConfigPipelineRunHeaderRowsRead {
+  kind text
+  prop tag = "th"
+  prop text = "Rows"
+}
+
+view PlatformConfigPipelineRunHeaderCounts {
+  kind text
+  prop tag = "th"
+  prop text = "Outputs"
+}
+
+view PlatformConfigPipelineRunHeaderCheckpoint {
+  kind text
+  prop tag = "th"
+  prop text = "Checkpoint"
+}
+
+view PlatformConfigPipelineRunHeaderError {
+  kind text
+  prop tag = "th"
+  prop text = "Last Error"
+}
+
+view PlatformConfigPipelineRunHeaderActions {
+  kind text
+  prop tag = "th"
+  prop text = "Actions"
+}
+
+view PlatformConfigPipelineRunTableBody {
+  kind region
+  prop tag = "tbody"
+  repeat {
+    collection PlatformConfigPipelineRuns
+    template PlatformConfigPipelineRunRowTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigPipelineRunTable {
+  kind region
+  prop tag = "table"
+  class platform-config-table
+  children {
+    PlatformConfigPipelineRunTableHeader
+    PlatformConfigPipelineRunTableBody
+  }
+}
+
+view PlatformConfigPipelineLogRowTemplate {
+  kind region
+  prop tag = "tr"
+  prop template = true
+  children {
+    PlatformConfigPipelineLogRowTime
+    PlatformConfigPipelineLogRowStage
+    PlatformConfigPipelineLogRowStatus
+    PlatformConfigPipelineLogRowMessage
+  }
+}
+
+view PlatformConfigPipelineLogRowTime {
+  kind text
+  prop tag = "td"
+  prop text = "${item.atText}"
+  prop title = "${item.atTitle}"
+}
+
+view PlatformConfigPipelineLogRowStage {
+  kind text
+  prop tag = "td"
+  prop text = "${item.stageText}"
+}
+
+view PlatformConfigPipelineLogRowStatus {
+  kind text
+  prop tag = "td"
+  prop text = "${item.statusText}"
+}
+
+view PlatformConfigPipelineLogRowMessage {
+  kind text
+  prop tag = "td"
+  prop text = "${item.message}"
+}
+
+view PlatformConfigPipelineLogTableHeader {
+  kind region
+  prop tag = "thead"
+  children {
+    PlatformConfigPipelineLogTableHeaderRow
+  }
+}
+
+view PlatformConfigPipelineLogTableHeaderRow {
+  kind region
+  prop tag = "tr"
+  children {
+    PlatformConfigPipelineLogHeaderTime
+    PlatformConfigPipelineLogHeaderStage
+    PlatformConfigPipelineLogHeaderStatus
+    PlatformConfigPipelineLogHeaderMessage
+  }
+}
+
+view PlatformConfigPipelineLogHeaderTime {
+  kind text
+  prop tag = "th"
+  prop text = "When"
+}
+
+view PlatformConfigPipelineLogHeaderStage {
+  kind text
+  prop tag = "th"
+  prop text = "Stage"
+}
+
+view PlatformConfigPipelineLogHeaderStatus {
+  kind text
+  prop tag = "th"
+  prop text = "Status"
+}
+
+view PlatformConfigPipelineLogHeaderMessage {
+  kind text
+  prop tag = "th"
+  prop text = "Message"
+}
+
+view PlatformConfigPipelineLogTableBody {
+  kind region
+  prop tag = "tbody"
+  repeat {
+    collection PlatformConfigPipelineRunLogs
+    template PlatformConfigPipelineLogRowTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigPipelineLogTable {
+  kind region
+  prop tag = "table"
+  class platform-config-table
+  children {
+    PlatformConfigPipelineLogTableHeader
+    PlatformConfigPipelineLogTableBody
   }
 }
 
@@ -1128,9 +1681,13 @@ view PlatformConfigScriptsContent {
   children {
     PlatformConfigScriptSectionTitle
     PlatformConfigScriptSectionIntro
-    PlatformConfigScriptNameField
-    PlatformConfigScriptDatasourceField
-    PlatformConfigScriptRunAction
+    PlatformConfigPipelineSyncField
+    PlatformConfigPipelineBindingTable
+    PlatformConfigPipelineBindingEditorField
+    PlatformConfigPipelineRowLimitField
+    PlatformConfigPipelineActions
+    PlatformConfigPipelineRunTable
+    PlatformConfigPipelineLogTable
     PlatformConfigScriptResult
   }
 }

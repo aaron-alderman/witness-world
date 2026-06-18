@@ -29,18 +29,18 @@ test("plugin runtime loader supports multi-bundle plugin-owned modules", async (
       description: "Authoring plugin runtime",
       kind: "plugin",
       runtime: { entry: "./runtime.js" },
-      activatesBundles: ["bundle-authoring-core", "bundle-tutorial"],
+      activatesBundles: ["bundle-authoring-local", "bundle-tutorial-local"],
       contributes: {}
     }, `
       export default {
         bundles: {
-          "bundle-authoring-core": {
+          "bundle-authoring-local": {
             handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["bootstrap.page"], handlerMetadata: {} },
             routes: [{ kind: "exact", method: "GET", path: "/_bootstrap", handler: "bootstrap.page", params: {} }],
             surfaces: [{ id: "surface:bootstrap", title: "Bootstrap", href: "/_bootstrap", action: null, search: "bootstrap", type: "surface", tier: "harness", contexts: ["app-command"] }],
             createHandlers() { return { "bootstrap.page": async () => {} }; }
           },
-          "bundle-tutorial": {
+          "bundle-tutorial-local": {
             handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: ["tutorial.progress.read"], handlerMetadata: {} },
             routes: [{ kind: "pattern", method: "GET", pattern: /^\\/api\\/tutorial-progress\\/([^/]+)$/, handler: "tutorial.progress.read", paramNames: ["tutorialId"] }],
             surfaces: [],
@@ -60,9 +60,60 @@ test("plugin runtime loader supports multi-bundle plugin-owned modules", async (
     const authoring = loadedCatalog.packages.find(row => row.id === "plugin.authoring");
 
     assert.equal(loadResult.hasBlockingErrors, false);
-    assert.deepEqual(Object.keys(loadResult.bundleOverrides).sort(), ["bundle-authoring-core", "bundle-tutorial"]);
+    assert.deepEqual(Object.keys(loadResult.bundleOverrides).sort(), ["bundle-authoring-local", "bundle-tutorial-local"]);
     assert.equal(authoring.runtimeModule.loadStatus, "loaded");
-    assert.deepEqual([...authoring.runtimeModule.bundleIds].sort(), ["bundle-authoring-core", "bundle-tutorial"]);
+    assert.deepEqual([...authoring.runtimeModule.bundleIds].sort(), ["bundle-authoring-local", "bundle-tutorial-local"]);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test("plugin runtime loader loads standalone plugin-owned bundle ids that are not seeded in core", async () => {
+  const root = await tempPluginRoot();
+  try {
+    await writePlugin(root, "wcss-runtime", {
+      id: "plugin.wcss-runtime",
+      version: "0.1.0",
+      displayName: "WCSS Runtime",
+      description: "Generic stylesheet runtime plugin",
+      kind: "plugin",
+      runtime: { entry: "./runtime.js" },
+      activatesBundles: ["bundle-wcss-runtime"],
+      contributes: {}
+    }, `
+      export default {
+        bundles: {
+          "bundle-wcss-runtime": {
+            handlerCatalog: {
+              authorableHandlers: ["wcss.stylesheet.read"],
+              pageHandlers: [],
+              dispatchHandlers: ["wcss.stylesheet.read"],
+              handlerMetadata: {
+                "wcss.stylesheet.read": { routeKind: "resource", responseKind: "resource", methods: ["GET"] }
+              }
+            },
+            routes: [],
+            surfaces: [],
+            createHandlers() { return { "wcss.stylesheet.read": async () => {} }; }
+          }
+        }
+      };
+    `);
+
+    const pluginCatalog = await readRuntimePluginCatalog({
+      pluginRoot: root,
+      runtimeProfile: "minimal",
+      configuredPluginIds: ["plugin.wcss-runtime"]
+    });
+    const loadResult = await loadRuntimePluginModules({ pluginCatalog });
+    const loadedCatalog = applyRuntimePluginLoadState(pluginCatalog, loadResult);
+    const pluginRow = loadedCatalog.packages.find(row => row.id === "plugin.wcss-runtime");
+
+    assert.equal(loadResult.hasBlockingErrors, false);
+    assert.ok(loadResult.bundleOverrides["bundle-wcss-runtime"]);
+    assert.equal(loadResult.bundleOverrides["bundle-wcss-runtime"].kind, "plugin");
+    assert.equal(pluginRow.runtimeModule.loadStatus, "loaded");
+    assert.deepEqual(pluginRow.runtimeModule.bundleIds, ["bundle-wcss-runtime"]);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
   }
@@ -78,10 +129,10 @@ test("broken active product plugin fails instead of falling back to core impleme
       description: "Broken inspect product plugin runtime",
       kind: "plugin",
       runtime: { entry: "./runtime.js" },
-      activatesBundles: ["bundle-inspect"],
+      activatesBundles: ["bundle-inspect-local"],
       contributes: {}
     }, `
-      export const bundleId = "bundle-inspect";
+      export const bundleId = "bundle-inspect-local";
       export const handlerCatalog = { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [], handlerMetadata: {} };
       export const routes = [];
       export const surfaces = [];
@@ -97,11 +148,11 @@ test("broken active product plugin fails instead of falling back to core impleme
     const inspect = loadedCatalog.packages.find(row => row.id === "plugin.inspect");
 
     assert.equal(loadResult.hasBlockingErrors, true);
-    assert.equal(Object.prototype.hasOwnProperty.call(loadResult.bundleOverrides, "bundle-inspect"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(loadResult.bundleOverrides, "bundle-inspect-local"), false);
     assert.equal(inspect.runtimeModule.loadStatus, "failed");
     assert.equal(loadResult.failures.some(entry =>
       entry.id === "plugin.inspect"
-      && entry.reasons.some(reason => reason.includes("runtime bundle bundle-inspect must export createHandlers(deps)"))
+      && entry.reasons.some(reason => reason.includes("runtime bundle bundle-inspect-local must export createHandlers(deps)"))
     ), true);
   } finally {
     await fs.rm(root, { recursive: true, force: true });
@@ -118,12 +169,12 @@ test("plugin runtime loader rejects duplicate active bundle claims across plugin
       description: "Alpha plugin runtime",
       kind: "plugin",
       runtime: { entry: "./runtime.js" },
-      activatesBundles: ["bundle-authoring-core"],
+      activatesBundles: ["bundle-shared-local"],
       contributes: {}
     }, `
       export default {
         bundles: {
-          "bundle-authoring-core": {
+          "bundle-shared-local": {
             handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [], handlerMetadata: {} },
             routes: [],
             surfaces: [],
@@ -139,12 +190,12 @@ test("plugin runtime loader rejects duplicate active bundle claims across plugin
       description: "Beta plugin runtime",
       kind: "plugin",
       runtime: { entry: "./runtime.js" },
-      activatesBundles: ["bundle-authoring-core"],
+      activatesBundles: ["bundle-shared-local"],
       contributes: {}
     }, `
       export default {
         bundles: {
-          "bundle-authoring-core": {
+          "bundle-shared-local": {
             handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [], handlerMetadata: {} },
             routes: [],
             surfaces: [],
@@ -178,12 +229,12 @@ test("plugin runtime loader preserves plugin-owned handler-set providers", async
       description: "Demo handler set plugin runtime",
       kind: "plugin",
       runtime: { entry: "./runtime.js" },
-      activatesBundles: ["bundle-demo"],
+      activatesBundles: ["bundle-demo-local"],
       contributes: {}
     }, `
       export default {
         bundles: {
-          "bundle-demo": {
+          "bundle-demo-local": {
             handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [], handlerMetadata: {} },
             routes: [],
             surfaces: [],
@@ -205,7 +256,7 @@ test("plugin runtime loader preserves plugin-owned handler-set providers", async
       configuredPluginIds: ["plugin.demo"]
     });
     const loadResult = await loadRuntimePluginModules({ pluginCatalog });
-    const providers = loadResult.bundleOverrides["bundle-demo"]?.contributes?.providers ?? [];
+    const providers = loadResult.bundleOverrides["bundle-demo-local"]?.contributes?.providers ?? [];
     const handlerSetProvider = providers.find(provider => provider.kind === "handlerSet" && provider.id === "demo");
 
     assert.equal(loadResult.hasBlockingErrors, false);
@@ -228,14 +279,14 @@ test("plugin runtime loader preserves plugin-owned module projector providers", 
       description: "Asset read models",
       kind: "plugin",
       runtime: { entry: "./runtime.js" },
-      activatesBundles: ["bundle-assets"],
+      activatesBundles: ["bundle-assets-local"],
       contributes: {}
     }, `
       export function assets() { return [{ id: "asset.plugin" }]; }
       export function assetIndex() { return { rows: assets(), byId: { "asset.plugin": { id: "asset.plugin" } } }; }
       export default {
         bundles: {
-          "bundle-assets": {
+          "bundle-assets-local": {
             handlerCatalog: { authorableHandlers: [], pageHandlers: [], dispatchHandlers: [], handlerMetadata: {} },
             routes: [],
             surfaces: [],
@@ -256,7 +307,7 @@ test("plugin runtime loader preserves plugin-owned module projector providers", 
       configuredPluginIds: ["plugin.assets"]
     });
     const loadResult = await loadRuntimePluginModules({ pluginCatalog });
-    const providers = loadResult.bundleOverrides["bundle-assets"]?.contributes?.providers ?? [];
+    const providers = loadResult.bundleOverrides["bundle-assets-local"]?.contributes?.providers ?? [];
     const projectorProvider = providers.find(provider => provider.kind === "moduleProjectors" && provider.id === "assets.projections");
 
     assert.equal(loadResult.hasBlockingErrors, false);

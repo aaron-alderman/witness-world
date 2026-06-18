@@ -22,8 +22,10 @@ test("route authoring contracts load from authored WTOML", async () => {
   const contracts = loadBootstrapRouteAuthoringContracts();
 
   assert.equal(source.includes('routeKind = "backendProgram"'), true);
+  assert.equal(source.includes('routeKind = "resource"'), true);
   assert.equal(source.includes('handler = "page.home"'), true);
   assert.equal(contracts.policiesByRouteKind.backendProgram.responseKind, "json");
+  assert.equal(contracts.policiesByRouteKind.resource.responseKind, "resource");
   assert.equal(contracts.handlerRulesByHandler["page.world"].requiresRootWidget, true);
   assert.equal(contracts.managedFields.includes("rootWidgetRef"), true);
 });
@@ -97,6 +99,32 @@ test("route authoring view explains page handlers and preserves page fields", ()
   assert.equal(view.enabledFields.backendProgramSoul, false);
   assert.equal(view.helpText.includes("page.home"), true);
   assert.equal(view.helpText.includes("page -> page"), true);
+  assert.equal(view.submitDisabled, false);
+});
+
+test("route authoring view treats resource handlers like non-page backend routes", () => {
+  const harness = createRouteFormHarness();
+  harness.fields.handler.value = "wcss.stylesheet.read";
+  harness.fields.method.value = "GET";
+
+  const view = buildBootstrapRouteAuthoringView({
+    model: {
+      runtimeProfile: "full",
+      supportedHandlerMetadata: {
+        "wcss.stylesheet.read": {
+          routeKind: "resource",
+          responseKind: "resource",
+          methods: ["GET"]
+        }
+      }
+    },
+    readFieldValue: harness.readFieldValue,
+    routeAuthoringContracts: bootstrapRouteAuthoringContracts
+  });
+
+  assert.equal(view.enabledFields.page, false);
+  assert.equal(view.enabledFields.backendProgramSoul, false);
+  assert.equal(view.helpText.includes("resource -> resource"), true);
   assert.equal(view.submitDisabled, false);
 });
 

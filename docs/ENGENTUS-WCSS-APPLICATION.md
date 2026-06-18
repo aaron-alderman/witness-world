@@ -75,10 +75,22 @@ The build script writes proof/debug artifacts outside the app source tree:
 
 - `tmp/engentus-wcss/engentus-shell.css`
 - `tmp/engentus-wcss/engentus-chart-pages.css`
-
+- `tmp/engentus-wcss/engentus-style-grammar.json`
 - `tmp/engentus-wcss/engentus-style-inventory.json`
 - `tmp/engentus-wcss/engentus-style-parity.json`
 - `tmp/engentus-wcss/engentus-style-ownership.json`
+
+`engentus-style-grammar.json` is the formalized canonical style contract
+derived from the authored core of the WCSS file:
+
+- token domains
+- style-family domains
+- per-slice family-domain contracts
+- per-slice seam-prefix contracts
+
+The generated stylesheet URLs are owned by the standalone
+`plugin.wcss-runtime` lane, not by `src/runtime-server.js`. The shared server
+only dispatches the installed runtime bundle route.
 
 ## Current Limits
 

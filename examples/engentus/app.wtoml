@@ -1,6 +1,6 @@
 [app]
 id = "engentus_frontend_app"
-imports = ["../_lib/common.wtoml", "./app/models/burst-fit.rvm", "./app/models/clip.rvm", "./app/models/goodman.rvm", "./app/models/goodman-bolt-sets.rvm", "./app/models/health.rvm", "./app/models/kalman.rvm", "./app/models/mill-charge.rvm", "./app/models/mill-force.rvm", "./app/views/goodman.rvm", "./app/views/mill-charge.rvm", "./app/views/mill-force.rvm", "./app/shell-shared.rvm", "./app/shell-auth.rvm", "./app/shell-goodman.rvm", "./app/shell-mill-charge.rvm", "./app/shell-mill-force.rvm", "./app/shell-platform-config.rvm", "./app/shell.rvm"]
+imports = ["../_lib/common.wtoml", "./app/models/burst-fit.rvm", "./app/models/clip.rvm", "./app/models/goodman.rvm", "./app/models/goodman-bolt-sets.rvm", "./app/models/health.rvm", "./app/models/kalman.rvm", "./app/models/mill-charge.rvm", "./app/models/mill-force.rvm", "./app/views/goodman.rvm", "./app/views/mill-charge.rvm", "./app/views/mill-force.rvm", "./app/pipelines/ingest-sensor-sync.rvm", "./app/shell-shared.rvm", "./app/shell-auth.rvm", "./app/shell-goodman.rvm", "./app/shell-mill-charge.rvm", "./app/shell-mill-force.rvm", "./app/shell-platform-config.rvm", "./app/shell.rvm"]
 spawn = ["backend", "frontend"]
 
 [[serverRunner]]
@@ -15,6 +15,11 @@ allowActorHeader = false
 actor = "aaron"
 serverRunner = "engentus_server"
 plugin = "plugin.chart-runtime"
+
+[[runtimePluginInstall]]
+actor = "aaron"
+serverRunner = "engentus_server"
+plugin = "plugin.wcss-runtime"
 
 [[runtimePluginInstall]]
 actor = "aaron"
@@ -142,6 +147,34 @@ params = { rootSurface = "EngentusRoot", defaultScreen = "login", routeState = {
 actor = "aaron"
 serverRunner = "engentus_server"
 route = "engentus_root_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_shell_stylesheet_route"
+method = "GET"
+path = "/engentus/__generated/engentus-shell.css"
+serves = "engentusShellStylesheet"
+handler = "wcss.stylesheet.read"
+params = { asset = "shell", adapterModule = "./app/engentus-wcss-adapter.js", adapterExport = "buildEngentusGeneratedStylesheets" }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_shell_stylesheet_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_chart_stylesheet_route"
+method = "GET"
+path = "/engentus/__generated/engentus-chart-pages.css"
+serves = "engentusChartStylesheet"
+handler = "wcss.stylesheet.read"
+params = { asset = "chart", adapterModule = "./app/engentus-wcss-adapter.js", adapterExport = "buildEngentusGeneratedStylesheets" }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_chart_stylesheet_route"
 
 [[route]]
 actor = "aaron"
@@ -534,6 +567,20 @@ params = { auth = { featureId = "engentus.platform_config" } }
 actor = "aaron"
 serverRunner = "engentus_server"
 route = "engentus_platform_config_access_feature_update_route"
+
+[[route]]
+actor = "aaron"
+id = "engentus_pipeline_script_binding_save_route"
+method = "POST"
+path = "/api/pipeline/scripts/bindings"
+serves = "pipelineScriptBindingSave"
+handler = "pipeline.script.binding.save"
+params = { auth = { featureId = "engentus.platform_config" } }
+
+[[serve]]
+actor = "aaron"
+serverRunner = "engentus_server"
+route = "engentus_pipeline_script_binding_save_route"
 
 [[route]]
 actor = "aaron"

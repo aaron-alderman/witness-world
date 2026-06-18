@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
 import { createWorld } from "../../src/kernel.js";
 import { moduleProjectors } from "../../src/modules.js";
@@ -11,9 +12,35 @@ import {
 } from "../../src/modules.js";
 import { createRuntimeSessionServices } from "../../src/runtime-session-services.js";
 import { sessionCookieHeader } from "../../src/runtime-http-utils.js";
+import {
+  compileRvmFileToDesirePlus,
+  createDesireRegistriesFromPluginExtensions,
+  normalizeDesirePlusToDesire
+} from "../../src/desire/index.js";
+import {
+  desireExtensions as sqlDesireExtensions,
+  providers as sqlProviders
+} from "../sql/runtime.js";
+import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
 import { handlerCatalog } from "./handler-catalog.js";
 import { createPipelineRuntimeHandlers } from "./handlers.js";
+import { pipelineModuleProjectors } from "./projections.js";
 import runtimeModule from "./runtime.js";
+
+const EXAMPLE_SYNC_FILE = path.join(process.cwd(), "example-ports", "engentus-pipeline", "ingest-sensor-sync.rvm");
+
+async function pipelineAuthoredDesireDoc() {
+  const { rvmFormRegistry } = createDesireRegistriesFromPluginExtensions({
+    desireExtensions: {
+      rvmForms: [
+        ...(sqlDesireExtensions.rvmForms ?? []),
+        ...(runtimeModule.desireExtensions.rvmForms ?? [])
+      ]
+    }
+  });
+  const desirePlus = await compileRvmFileToDesirePlus(EXAMPLE_SYNC_FILE, { rvmFormRegistry });
+  return normalizeDesirePlusToDesire(desirePlus, { rvmFormRegistry });
+}
 
 test("pipeline runtime exposes the platform-config demo handlers and no plugin-owned routes", () => {
   assert.deepEqual(handlerCatalog.authorableHandlers, [
@@ -35,6 +62,7 @@ test("pipeline runtime exposes the platform-config demo handlers and no plugin-o
     "pipeline.platform-config.access.grant.revoke",
     "pipeline.platform-config.access.session.assume",
     "pipeline.platform-config.access.session.direct",
+    "pipeline.script.binding.save",
     "pipeline.script.run"
   ]);
   assert.deepEqual(handlerCatalog.pageHandlers, []);
@@ -52,6 +80,18 @@ test("pipeline runtime exposes the platform-config demo handlers and no plugin-o
   assert.equal(typeof runtimeModule.planPipelineSync, "function");
   assert.equal(typeof runtimeModule.evaluatePlannedSync, "function");
   assert.equal(runtimeModule.hasPipelineDeriveOperator("sample_timestamp"), true);
+  assert.equal(
+    runtimeModule.providers.some(provider =>
+      provider?.kind === "moduleProjectors" && provider?.id === "pipeline.projections"
+    ),
+    true
+  );
+  assert.equal(
+    runtimeModule.providers.some(provider =>
+      provider?.kind === "jobHandlerFactory" && provider?.id === "pipeline.jobs"
+    ),
+    true
+  );
   assert.equal(
     runtimeModule.providers.some(provider =>
       provider?.kind === "coreHook" && provider?.id === "sessionOpenResponsePayload"
@@ -108,31 +148,226 @@ test("pipeline runtime session-open response hook hydrates platform-config route
   assert.equal(hydrated.PlatformConfigAuthorityEffectiveActor, "aaron");
 });
 
-test("pipeline runtime handlers render the page and return a stub script response", async () => {
-  const json = [];
-  const handlers = runtimeModule.createHandlers({
-    world: { observe() {} },
-    backendHost: "backendHost",
-    sendJson: (res, status, body) => json.push({ res, status, body }),
-    readJson: async () => ({
-      scriptName: "demo",
-      datasourceId: "pg_main",
-      payload: { run: true }
-    })
+test("pipeline script handlers save bindings and enqueue manual runs", async () => withRegisteredPluginProjectors([runtimeModule.providers, sqlProviders], async () => {
+  const world = createWorld();
+  const authoredDesire = await pipelineAuthoredDesireDoc();
+  world.emit({
+    process: "db.sql.datasource.create",
+    actor: "aaron",
+    claims: [
+      { from: "mysql_source", rel: "hasModuleKind", to: "sqlDatasource" },
+      { from: "mysql_source", rel: "hasTitle", to: "Source MySQL" }
+    ],
+    body: {
+      id: "mysql_source",
+      serverRunner: "engentus_server",
+      provider: "mysql",
+      datasourceName: "source",
+      host: "localhost",
+      database: "engentus",
+      user: "reader",
+      status: "ready"
+    }
   });
+  world.emit({
+    process: "db.sql.datasource.create",
+    actor: "aaron",
+    claims: [
+      { from: "pg_target", rel: "hasModuleKind", to: "sqlDatasource" },
+      { from: "pg_target", rel: "hasTitle", to: "Warehouse PG" }
+    ],
+    body: {
+      id: "pg_target",
+      serverRunner: "engentus_server",
+      provider: "postgres",
+      datasourceName: "warehouse",
+      host: "localhost",
+      database: "engentus",
+      user: "writer",
+      status: "ready"
+    }
+  });
+  const json = [];
+  let readBody = {
+    syncId: "EngentusImuSensorIngest",
+    bindingName: "source_mysql",
+    datasourceId: "mysql_source"
+  };
+  const handlers = runtimeModule.createHandlers({
+    world,
+    backendHost: "backendHost",
+    sendJson: (_res, status, body) => json.push({ status, body }),
+    readJson: async () => readBody
+  });
+  const appContext = {
+    serverRunnerId: "engentus_server",
+    appProject: { authoredDesireDocs: [authoredDesire] },
+    secretStore: { listMetadata: async () => [] },
+    dbSql: {
+      listDatasources: () => [
+        { id: "mysql_source", serverRunner: "engentus_server", title: "Source MySQL", datasourceName: "source", provider: "mysql" },
+        { id: "pg_target", serverRunner: "engentus_server", title: "Warehouse PG", datasourceName: "warehouse", provider: "postgres" }
+      ]
+    },
+    jobs: {
+      enqueue: () => ({ ok: true, job: { id: "job_pipeline_1" } })
+    }
+  };
 
+  await handlers["pipeline.script.binding.save"]({
+    req: {},
+    res: {},
+    requestActor: "aaron",
+    appContext
+  });
+  assert.equal(json[0].status, 200);
+  assert.equal(json[0].body.PlatformConfigPipelineBindingSelectedName, "source_mysql");
+
+  readBody = {
+    syncId: "EngentusImuSensorIngest",
+    bindingName: "warehouse_pg",
+    datasourceId: "pg_target"
+  };
+  await handlers["pipeline.script.binding.save"]({
+    req: {},
+    res: {},
+    requestActor: "aaron",
+    appContext
+  });
+  assert.equal(json[1].status, 200);
+  assert.equal(world.project(pipelineModuleProjectors.pipelineSqlBindings).length, 2);
+
+  readBody = {
+    syncId: "EngentusImuSensorIngest",
+    mode: "dry_run",
+    rowLimit: 250
+  };
   await handlers["pipeline.script.run"]({
     req: {},
     res: {},
     requestActor: "aaron",
-    appContext: { serverRunnerId: "engentus_server" }
+    appContext
   });
-  assert.equal(json.length, 1);
-  assert.equal(json[0].status, 200);
-  assert.equal(json[0].body.stub, true);
-  assert.match(json[0].body.summary, /would run against datasource "pg_main"/);
-  assert.equal(json[0].body.request.datasourceId, "pg_main");
-});
+  assert.equal(json[2].status, 200);
+  assert.equal(json[2].body.PlatformConfigPipelineRunSelectedId.startsWith("pipeline_run_"), true);
+  assert.match(json[2].body.message, /Queued dry run/);
+  assert.deepEqual(world.project(pipelineModuleProjectors.pipelineRuns).map(row => row.mode), ["dry_run"]);
+}));
+
+test("pipeline job handler executes dry runs and execute runs through db.sql seams", async () => withRegisteredPluginProjectors([runtimeModule.providers, sqlProviders], async () => {
+  const world = createWorld();
+  const authoredDesire = await pipelineAuthoredDesireDoc();
+  world.emit({
+    process: "db.sql.datasource.create",
+    actor: "aaron",
+    claims: [
+      { from: "mysql_source", rel: "hasModuleKind", to: "sqlDatasource" },
+      { from: "mysql_source", rel: "hasTitle", to: "Source MySQL" }
+    ],
+    body: {
+      id: "mysql_source",
+      serverRunner: "engentus_server",
+      provider: "mysql",
+      datasourceName: "source",
+      host: "localhost",
+      database: "engentus",
+      user: "reader",
+      status: "ready"
+    }
+  });
+  world.emit({
+    process: "db.sql.datasource.create",
+    actor: "aaron",
+    claims: [
+      { from: "pg_target", rel: "hasModuleKind", to: "sqlDatasource" },
+      { from: "pg_target", rel: "hasTitle", to: "Warehouse PG" }
+    ],
+    body: {
+      id: "pg_target",
+      serverRunner: "engentus_server",
+      provider: "postgres",
+      datasourceName: "warehouse",
+      host: "localhost",
+      database: "engentus",
+      user: "writer",
+      status: "ready"
+    }
+  });
+  const json = [];
+  let readBody = {
+    syncId: "EngentusImuSensorIngest",
+    bindingName: "source_mysql",
+    datasourceId: "mysql_source"
+  };
+  const handlers = runtimeModule.createHandlers({
+    world,
+    backendHost: "backendHost",
+    sendJson: (_res, status, body) => json.push({ status, body }),
+    readJson: async () => readBody
+  });
+  const writes = [];
+  const sourceRows = [{
+    tx_gateway_id: "4EF47C45",
+    tx_IMU_device_id: "b_AccelX",
+    tx_timestamp_start: 1700000000000,
+    tx_sample_counter: 1,
+    tx_sample_IMU: 12.5
+  }];
+  const appContext = {
+    serverRunnerId: "engentus_server",
+    appProject: { authoredDesireDocs: [authoredDesire] },
+    secretStore: { listMetadata: async () => [] },
+    dbSql: {
+      listDatasources: () => world.project(moduleProjectors.sqlDatasources),
+      readOrderedBatch: async () => ({ ok: true, rowCount: sourceRows.length, rows: sourceRows }),
+      writeRows: async payload => {
+        writes.push(payload);
+        return { ok: true, rowCount: payload.rows.length, changes: payload.rows.length };
+      }
+    },
+    jobs: {
+      enqueue: () => ({ ok: true, job: { id: `job_${json.length + 1}` } })
+    }
+  };
+
+  await handlers["pipeline.script.binding.save"]({ req: {}, res: {}, requestActor: "aaron", appContext });
+  readBody = { syncId: "EngentusImuSensorIngest", bindingName: "warehouse_pg", datasourceId: "pg_target" };
+  await handlers["pipeline.script.binding.save"]({ req: {}, res: {}, requestActor: "aaron", appContext });
+
+  readBody = { syncId: "EngentusImuSensorIngest", mode: "dry_run", rowLimit: 100 };
+  await handlers["pipeline.script.run"]({ req: {}, res: {}, requestActor: "aaron", appContext });
+  assert.equal(json.at(-1).status, 200);
+  const dryRunId = world.project(pipelineModuleProjectors.pipelineRuns)[0].id;
+  const jobHandlers = runtimeModule.providers.find(provider => provider?.id === "pipeline.jobs")?.factory({
+    world,
+    project: projector => world.project(projector),
+    isoAt: value => new Date(value).toISOString()
+  });
+  await jobHandlers["pipeline.run.execute"]({
+    actor: "aaron",
+    appContext,
+    payload: { runId: dryRunId }
+  });
+  assert.equal(writes.length, 0);
+  assert.equal(world.project(pipelineModuleProjectors.pipelineCheckpoints).length, 0);
+  assert.equal(world.project(pipelineModuleProjectors.pipelineRunIndex).byId[dryRunId].status, "succeeded");
+  assert.equal(world.project(pipelineModuleProjectors.pipelineRunLogIndex).byRunId[dryRunId].some(row => row.process === "pipeline.run.write.simulated"), true);
+
+  readBody = { syncId: "EngentusImuSensorIngest", mode: "execute", rowLimit: 100 };
+  await handlers["pipeline.script.run"]({ req: {}, res: {}, requestActor: "aaron", appContext });
+  assert.equal(json.at(-1).status, 200);
+  const executeRunId = world.project(pipelineModuleProjectors.pipelineRuns)[0].id === dryRunId
+    ? world.project(pipelineModuleProjectors.pipelineRuns)[1].id
+    : world.project(pipelineModuleProjectors.pipelineRuns)[0].id;
+  await jobHandlers["pipeline.run.execute"]({
+    actor: "aaron",
+    appContext,
+    payload: { runId: executeRunId }
+  });
+  assert.equal(writes.length, 2);
+  assert.equal(world.project(pipelineModuleProjectors.pipelineCheckpointIndex).byRunnerSync["engentus_server:EngentusImuSensorIngest"].cursorValue, 1700000000000);
+  assert.equal(world.project(pipelineModuleProjectors.pipelineRunIndex).byId[executeRunId].checkpointCommitted, true);
+}));
 
 test("pipeline platform-config snapshot presents human-readable table content", async () => {
   const json = [];

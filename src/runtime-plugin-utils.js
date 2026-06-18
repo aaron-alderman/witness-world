@@ -789,6 +789,7 @@ function buildPluginPackageRow({
 }) {
   const errors = [...validationErrors];
   const availableBundleIds = availableRuntimeBundleIds();
+  const runtimeEntry = resolvePluginRuntimeEntry(discoveryPath, manifest?.runtime ?? null, errors);
   if (manifest) {
     const unknownProfiles = manifest.compatibleRuntimeProfiles.filter(profile => !availableProfileIds.includes(profile));
     if (unknownProfiles.length) {
@@ -798,12 +799,13 @@ function buildPluginPackageRow({
     if (missingPluginDeps.length) {
       errors.push(`missing plugin dependencies: ${missingPluginDeps.join(", ")}`);
     }
-    const unknownBundles = manifest.activatesBundles.filter(bundleId => !availableBundleIds.includes(bundleId));
-    if (unknownBundles.length) {
-      errors.push(`unknown runtime bundles: ${unknownBundles.join(", ")}`);
+    if (!runtimeEntry) {
+      const unknownBundles = manifest.activatesBundles.filter(bundleId => !availableBundleIds.includes(bundleId));
+      if (unknownBundles.length) {
+        errors.push(`unknown runtime bundles: ${unknownBundles.join(", ")}`);
+      }
     }
   }
-  const runtimeEntry = resolvePluginRuntimeEntry(discoveryPath, manifest?.runtime ?? null, errors);
   if (runtimeEntry && !existsSync(runtimeEntry.resolvedPath)) {
     errors.push(`runtime.entry not found: ${manifest?.runtime?.entry ?? runtimeEntry.entry}`);
   }
@@ -837,7 +839,12 @@ function buildPluginPackageRow({
       : "metadata-only";
   const resolvedBundleIds = [...(manifest?.activatesBundles ?? [])];
   const resolvedBundles = resolvedBundleIds
-    .map(bundleId => summarizeBundle(bundleId))
+    .map(bundleId => summarizeBundle(bundleId) ?? {
+      id: bundleId,
+      kind: "plugin",
+      displayName: bundleId,
+      description: "Plugin-owned runtime bundle."
+    })
     .filter(Boolean);
   const resolvedRuntimeContributions = summarizeRuntimeContributions(resolvedBundleIds);
   const trust = summarizePluginTrust(manifest, validation);
@@ -1010,10 +1017,10 @@ export function resolveRuntimePluginSelection({
       : [];
     if (active) {
       activePluginIds.push(pluginPackage.id);
-      for (const bundle of pluginPackage.resolvedBundles ?? []) {
-        if (activeBundleSet.has(bundle.id)) continue;
-        activeBundleSet.add(bundle.id);
-        activeBundleIds.push(bundle.id);
+      for (const bundleId of pluginPackage.manifest?.activatesBundles ?? []) {
+        if (activeBundleSet.has(bundleId)) continue;
+        activeBundleSet.add(bundleId);
+        activeBundleIds.push(bundleId);
       }
     } else if (requested) {
       rejectedPlugins.push({ id: pluginPackage.id, reasons, requestedSources });

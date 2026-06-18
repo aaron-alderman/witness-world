@@ -4,6 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import {
+  buildEngentusCanonicalStyleGrammar,
   buildEngentusPresentationInventory,
   buildEngentusStyleArtifacts,
   composeEngentusStylesheets,
@@ -12,8 +13,10 @@ import {
   loadEngentusBrowserDeclarationGroups,
   loadEngentusBrowserLoweringMap,
   loadEngentusCanonicalWcss,
+  loadEngentusCanonicalStyleGrammar,
   parseEngentusCanonicalWcss,
   renderOracleStylesheet,
+  validateEngentusCanonicalStyleGrammar,
   verifyEngentusStyleOwnership
 } from "../examples/engentus/app/engentus-style-application.js";
 
@@ -113,6 +116,64 @@ test("engentus canonical V1 parser exposes tokens, families, views, and applicat
   assert.deepEqual(
     canonical.lowering.byBackend.browser.assets.map(asset => asset.name),
     ["shell", "chart"]
+  );
+  assert.equal(canonical.grammar?.consistency?.ok, true);
+});
+
+test("engentus canonical style grammar formalizes token domains, style domains, and slice contracts", async () => {
+  const [canonical, grammar] = await Promise.all([
+    loadEngentusCanonicalWcss(),
+    loadEngentusCanonicalStyleGrammar()
+  ]);
+
+  assert.equal(grammar.theme, "engentus");
+  assert.deepEqual(grammar.tokens.domains, ["color", "font", "radius", "shadow", "size"]);
+  assert.deepEqual(grammar.styles.domains, ["auth", "chart", "chrome", "goodman", "interactive", "platform", "surface"]);
+  assert.deepEqual(
+    grammar.application.sliceFamilyDomainContracts["platform-config"],
+    ["platform"]
+  );
+  assert.deepEqual(
+    grammar.application.slices.find(slice => slice.name === "goodman")?.familyDomains,
+    ["chart", "chrome", "goodman", "surface"]
+  );
+  assert.deepEqual(
+    grammar.application.slices.find(slice => slice.name === "mill-force")?.familyDomains,
+    ["chrome", "interactive", "surface"]
+  );
+  assert.equal(grammar.consistency.ok, true);
+  assert.equal(validateEngentusCanonicalStyleGrammar(canonical).consistency.ok, true);
+  assert.deepEqual(buildEngentusCanonicalStyleGrammar(canonical).styles.allowedDomains, grammar.styles.allowedDomains);
+});
+
+test("engentus canonical style grammar rejects slices whose families or seam names break the formal contract", async () => {
+  const canonical = await loadEngentusCanonicalWcss();
+  const brokenCanonical = structuredClone(canonical);
+  brokenCanonical.slices = brokenCanonical.slices.map(slice => slice.name === "home"
+    ? {
+        ...slice,
+        families: [...slice.families, "platform.notice"],
+        seams: [
+          ...slice.seams,
+          {
+            kind: "toggle",
+            name: "broken.profile_menu_open",
+            prop: "className",
+            token: "open",
+            identities: ["EngentusProfileMenu"],
+            traits: [],
+            values: [],
+            min: null,
+            max: null,
+            notes: []
+          }
+        ]
+      }
+    : slice);
+
+  assert.throws(
+    () => validateEngentusCanonicalStyleGrammar(brokenCanonical),
+    /Slice home uses style family platform\.notice outside its allowed family domains|Slice home seam broken\.profile_menu_open must use prefix home\./
   );
 });
 
@@ -662,8 +723,9 @@ test("engentus can switch mill-force onto the authored native proof lane without
 test("engentus build script writes proof artifacts and css snapshots under tmp", async () => {
   await import(`${BUILD_SCRIPT_URL.href}?t=${Date.now()}`);
 
-  const [inventory, parity, ownership, shellCss, chartCss] = await Promise.all([
+  const [inventory, grammar, parity, ownership, shellCss, chartCss] = await Promise.all([
     readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-style-inventory.json"), "utf8"),
+    readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-style-grammar.json"), "utf8"),
     readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-style-parity.json"), "utf8"),
     readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-style-ownership.json"), "utf8"),
     readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-shell.css"), "utf8"),
@@ -672,6 +734,9 @@ test("engentus build script writes proof artifacts and css snapshots under tmp",
 
   assert.match(inventory, /"theme": "engentus"/);
   assert.match(inventory, /"reachableViaTemplate": true/);
+  assert.match(grammar, /"allowedDomains": \[/);
+  assert.match(grammar, /"sliceFamilyDomainContracts"/);
+  assert.match(grammar, /"consistency": \{/);
   assert.match(parity, /"name": "goodman"/);
   assert.match(parity, /"rawSelectorCount": 0/);
   assert.match(ownership, /"chart-pages"/);

@@ -265,6 +265,30 @@ state PlatformConfigScriptBusy: bool {
   initial false
 }
 
+state PlatformConfigPipelineSyncSelectedId: string {
+  initial ""
+}
+
+state PlatformConfigPipelineBindingSelectedName: string {
+  initial ""
+}
+
+state PlatformConfigPipelineBindingDatasourceId: string {
+  initial ""
+}
+
+state PlatformConfigPipelineRunSelectedId: string {
+  initial ""
+}
+
+state PlatformConfigPipelineRowLimit: string {
+  initial "500"
+}
+
+state PlatformConfigPipelineRunMode: string {
+  initial "dry_run"
+}
+
 state PlatformConfigAccessIdentitySelectedId: string {
   initial ""
 }
@@ -1001,6 +1025,12 @@ event PlatformConfigOpenDatasourcesRequested {
 event PlatformConfigOpenScriptsRequested {
 }
 
+event PlatformConfigRefreshScriptsRequested {
+}
+
+event PlatformConfigSaveScriptBindingRequested {
+}
+
 event PlatformConfigOpenAccessRequested {
 }
 
@@ -1120,7 +1150,14 @@ event PlatformConfigStateLoaded {
     PlatformConfigDatasourceSsl: PlatformConfigDatasourceSsl
     PlatformConfigDatasourceSearchVisible: PlatformConfigDatasourceSearchVisible
     PlatformConfigDatasourceSummary: PlatformConfigDatasourceSummary
+    PlatformConfigPipelineSyncSelectedId: PlatformConfigPipelineSyncSelectedId
+    PlatformConfigPipelineBindingSelectedName: PlatformConfigPipelineBindingSelectedName
+    PlatformConfigPipelineBindingDatasourceId: PlatformConfigPipelineBindingDatasourceId
+    PlatformConfigPipelineRunSelectedId: PlatformConfigPipelineRunSelectedId
+    PlatformConfigPipelineRowLimit: PlatformConfigPipelineRowLimit
+    PlatformConfigPipelineRunMode: PlatformConfigPipelineRunMode
     PlatformConfigScriptDatasourceId: PlatformConfigScriptDatasourceId
+    PlatformConfigScriptResult: PlatformConfigScriptResult
     PlatformConfigAccessIdentitySelectedId: PlatformConfigAccessIdentitySelectedId
     PlatformConfigAccessIdentityUsername: PlatformConfigAccessIdentityUsername
     PlatformConfigAccessIdentityDisplayName: PlatformConfigAccessIdentityDisplayName
@@ -1153,6 +1190,7 @@ event PlatformConfigStateLoaded {
   writes {
     PlatformConfigSecretBusy: false
     PlatformConfigDatasourceBusy: false
+    PlatformConfigScriptBusy: false
     PlatformConfigAccessBusy: false
     PlatformConfigNoticeTone: success
   }
@@ -1166,6 +1204,7 @@ event PlatformConfigStateLoadFailed {
   writes {
     PlatformConfigSecretBusy: false
     PlatformConfigDatasourceBusy: false
+    PlatformConfigScriptBusy: false
     PlatformConfigAccessBusy: false
     PlatformConfigNoticeTone: error
   }
@@ -1237,6 +1276,11 @@ command PlatformConfigLoadSnapshot {
   fields {
     secretQuery: PlatformConfigSecretSearchText
     datasourceQuery: PlatformConfigDatasourceSearchText
+    scriptSyncId: PlatformConfigPipelineSyncSelectedId
+    scriptBindingName: PlatformConfigPipelineBindingSelectedName
+    scriptRunId: PlatformConfigPipelineRunSelectedId
+    scriptRowLimit: PlatformConfigPipelineRowLimit
+    scriptRunMode: PlatformConfigPipelineRunMode
   }
 }
 
@@ -1339,8 +1383,18 @@ command PlatformConfigTestDatasource {
 
 command PlatformConfigRunScript {
   fields {
-    scriptName: PlatformConfigScriptName
-    datasourceId: PlatformConfigScriptDatasourceId
+    syncId: PlatformConfigPipelineSyncSelectedId
+    mode: PlatformConfigPipelineRunMode
+    rowLimit: PlatformConfigPipelineRowLimit
+  }
+}
+
+command PlatformConfigSaveScriptBinding {
+  fields {
+    syncId: PlatformConfigPipelineSyncSelectedId
+    bindingName: PlatformConfigPipelineBindingSelectedName
+    datasourceId: PlatformConfigPipelineBindingDatasourceId
+    rowLimit: PlatformConfigPipelineRowLimit
   }
 }
 
@@ -1417,6 +1471,10 @@ adapter PlatformConfigSnapshotHttp using HTTP {
     PlatformConfigAuthorityGrants = "authorityGrants"
     PlatformConfigAuthorityActors = "authorityActors"
     PlatformConfigAuthRoles = "authRoles"
+    PlatformConfigPipelineSyncs = "pipelineSyncs"
+    PlatformConfigPipelineBindings = "pipelineBindings"
+    PlatformConfigPipelineRuns = "pipelineRuns"
+    PlatformConfigPipelineRunLogs = "pipelineRunLogs"
   }
 }
 
@@ -1693,15 +1751,52 @@ adapter PlatformConfigDatasourceTestHttp using HTTP {
   }
 }
 
-adapter PlatformConfigScriptStubHttp using HTTP {
+adapter PlatformConfigScriptBindingSaveHttp using HTTP {
+  command PlatformConfigSaveScriptBinding
+  kind command
+  method POST
+  route /api/pipeline/scripts/bindings
+  host_operation engentus.platform.script.binding.save
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigScriptFailed
+  loading_state PlatformConfigScriptBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthorityGrants = "authorityGrants"
+    PlatformConfigAuthorityActors = "authorityActors"
+    PlatformConfigAuthRoles = "authRoles"
+    PlatformConfigPipelineSyncs = "pipelineSyncs"
+    PlatformConfigPipelineBindings = "pipelineBindings"
+    PlatformConfigPipelineRuns = "pipelineRuns"
+    PlatformConfigPipelineRunLogs = "pipelineRunLogs"
+  }
+}
+
+adapter PlatformConfigScriptRunHttp using HTTP {
   command PlatformConfigRunScript
   kind command
   method POST
   route /api/pipeline/scripts/run
-  host_operation engentus.platform.script.stub
-  success_event PlatformConfigScriptSucceeded
+  host_operation engentus.platform.script.run
+  success_event PlatformConfigStateLoaded
   failure_event PlatformConfigScriptFailed
   loading_state PlatformConfigScriptBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthorityGrants = "authorityGrants"
+    PlatformConfigAuthorityActors = "authorityActors"
+    PlatformConfigAuthRoles = "authRoles"
+    PlatformConfigPipelineSyncs = "pipelineSyncs"
+    PlatformConfigPipelineBindings = "pipelineBindings"
+    PlatformConfigPipelineRuns = "pipelineRuns"
+    PlatformConfigPipelineRunLogs = "pipelineRunLogs"
+  }
 }
 
 adapter PlatformConfigAccessIdentityReadHttp using HTTP {
@@ -2044,6 +2139,12 @@ process EngentusShellNavigation {
     PlatformConfigScriptDatasourceId
     PlatformConfigScriptResult
     PlatformConfigScriptBusy
+    PlatformConfigPipelineSyncSelectedId
+    PlatformConfigPipelineBindingSelectedName
+    PlatformConfigPipelineBindingDatasourceId
+    PlatformConfigPipelineRunSelectedId
+    PlatformConfigPipelineRowLimit
+    PlatformConfigPipelineRunMode
     PlatformConfigAccessIdentitySelectedId
     PlatformConfigAccessIdentityUsername
     PlatformConfigAccessIdentityDisplayName
@@ -2164,6 +2265,8 @@ process EngentusShellNavigation {
     PlatformConfigOpenSecretsRequested
     PlatformConfigOpenDatasourcesRequested
     PlatformConfigOpenScriptsRequested
+    PlatformConfigRefreshScriptsRequested
+    PlatformConfigSaveScriptBindingRequested
     PlatformConfigOpenAccessRequested
     PlatformConfigRefreshSecretsRequested
     PlatformConfigSearchSecretsRequested
@@ -2248,6 +2351,7 @@ process EngentusShellNavigation {
     PlatformConfigRevokeAuthorityGrant
     PlatformConfigOpenAssumedSession
     PlatformConfigReturnDirectSession
+    PlatformConfigSaveScriptBinding
     PlatformConfigRunScript
   }
   rules {
@@ -2323,10 +2427,22 @@ process EngentusShellNavigation {
     }
     on PlatformConfigOpenScriptsRequested {
       set EngentusShellActiveRoute platform-config-scripts
-      set PlatformConfigDatasourceBusy true
+      set PlatformConfigScriptBusy true
       set PlatformConfigNoticeTone warn
-      set PlatformConfigNoticeText "Loading data sources for scripts..."
+      set PlatformConfigNoticeText "Loading pipelines, bindings, and run history..."
       command PlatformConfigLoadSnapshot
+    }
+    on PlatformConfigRefreshScriptsRequested {
+      set PlatformConfigScriptBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Refreshing pipeline scripts..."
+      command PlatformConfigLoadSnapshot
+    }
+    on PlatformConfigSaveScriptBindingRequested {
+      set PlatformConfigScriptBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Saving pipeline binding..."
+      command PlatformConfigSaveScriptBinding
     }
     on PlatformConfigOpenAccessRequested {
       set EngentusShellActiveRoute platform-config-access
@@ -2464,7 +2580,7 @@ process EngentusShellNavigation {
     on PlatformConfigRunScriptRequested {
       set PlatformConfigScriptBusy true
       set PlatformConfigNoticeTone warn
-      set PlatformConfigNoticeText "Running script stub..."
+      set PlatformConfigNoticeText "Queueing pipeline run..."
       command PlatformConfigRunScript
     }
     on MillForceRunMonteCarloRequested {

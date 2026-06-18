@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { relation } from "../../src/kernel.js";
 import {
   grantIdentityActorAssumption,
@@ -13,8 +14,19 @@ import {
   identityActorAssumptionGrantHistory,
   resolveSessionAuthorityForIdentity
 } from "../../src/runtime-authz.js";
+import { isoAt } from "../../src/runtime-config-utils.js";
 import { createSecretStoreHandlers } from "../secret/handlers.js";
 import { createSqlDbHandlers, normalizeDatasourcePayload } from "../sql/handlers.js";
+import {
+  createPipelineCatalogFromAppProject,
+  pipelineBindingRowsForSync,
+  pipelineSyncCatalogRows
+} from "./catalog-runtime.js";
+import {
+  createPipelineRunRecord,
+  upsertPipelineBinding
+} from "./job-handlers.js";
+import { pipelineModuleProjectors } from "./projections.js";
 
 const SELECT_SLOT_LIMIT = 10;
 
@@ -32,6 +44,28 @@ function normalizeScriptName(value) {
 
 function normalizeDatasourceId(value) {
   return normalizeText(value, "") || null;
+}
+
+function normalizeBindingName(value) {
+  return normalizeText(value, "");
+}
+
+function normalizeSyncId(value) {
+  return normalizeText(value, "");
+}
+
+function normalizeRunId(value) {
+  return normalizeText(value, "");
+}
+
+function normalizeRunMode(value) {
+  const mode = normalizeText(value, "").toLowerCase();
+  return mode === "execute" ? "execute" : (mode === "dry_run" ? "dry_run" : null);
+}
+
+function normalizeRowLimit(value, fallback = 500) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function normalizeCsvList(value) {
@@ -108,6 +142,73 @@ function summarizeScriptStub(scriptName, datasourceId) {
   return datasourceId
     ? `Script stub only. "${scriptName}" would run against datasource "${datasourceId}" once execution is implemented.`
     : `Script stub only. "${scriptName}" would run once execution is implemented.`;
+}
+
+function safeProject(projectionWorld, projector, fallback) {
+  return typeof projector === "function"
+    ? (projectionWorld?.project?.(projector) ?? fallback)
+    : fallback;
+}
+
+function pipelineRunStatusText(status) {
+  if (status === "queued") return "Queued";
+  if (status === "running") return "Running";
+  if (status === "succeeded") return "Succeeded";
+  if (status === "failed") return "Failed";
+  return normalizeText(status, "Unknown");
+}
+
+function summarizePipelineScriptPanel({ selectedSync = null, selectedRun = null, checkpoint = null, bindingRows = [] } = {}) {
+  if (selectedRun) {
+    const runLabel = normalizeText(selectedRun.syncId, "pipeline");
+    const errorText = normalizeText(selectedRun.lastError, "");
+    return [
+      `${pipelineRunStatusText(selectedRun.status)} ${selectedRun.mode === "execute" ? "execute" : "dry run"} for ${runLabel}.`,
+      `Rows read: ${Number(selectedRun.rowsRead || 0)}.`,
+      `World counts: ${Object.entries(selectedRun.worldCounts ?? {}).map(([key, value]) => `${key}:${value}`).join(", ") || "none"}.`,
+      `SQL counts: ${Object.entries(selectedRun.sqlCounts ?? {}).map(([key, value]) => `${key}:${value}`).join(", ") || "none"}.`,
+      `Checkpoint committed: ${selectedRun.checkpointCommitted ? "yes" : "no"}.`,
+      errorText ? `Error: ${errorText}` : ""
+    ].filter(Boolean).join("\n");
+  }
+  if (selectedSync) {
+    const checkpointText = checkpoint?.cursorValue == null
+      ? "No checkpoint committed yet."
+      : `Checkpoint cursor: ${String(checkpoint.cursorValue)}.`;
+    return [
+      `Selected sync "${selectedSync.title}".`,
+      `${bindingRows.length} logical binding${bindingRows.length === 1 ? "" : "s"} required.`,
+      checkpointText
+    ].join(" ");
+  }
+  return "Select a pipeline sync to configure bindings and run it.";
+}
+
+function decoratePipelineRunRow(row, syncRowsById, now = Date.now()) {
+  return {
+    ...row,
+    title: normalizeText(syncRowsById[row.syncId]?.title, normalizeText(row.syncId, row.id)),
+    modeText: row.mode === "execute" ? "Execute" : "Dry Run",
+    statusText: pipelineRunStatusText(row.status),
+    startedAtText: formatRelativeTime(row.startedAt, now),
+    startedAtTitle: safeIso(row.startedAt) ?? "Not started",
+    completedAtText: formatRelativeTime(row.completedAt, now),
+    completedAtTitle: safeIso(row.completedAt) ?? "Not completed",
+    checkpointCommittedText: row.checkpointCommitted ? "Committed" : "No",
+    rowsReadText: String(Number(row.rowsRead || 0)),
+    outputCountsText: Object.entries(row.sqlCounts ?? {}).map(([key, value]) => `${key}:${value}`).join(", ") || "None",
+    lastErrorText: normalizeText(row.lastError, "")
+  };
+}
+
+function decoratePipelineLogRow(row, now = Date.now()) {
+  return {
+    ...row,
+    atText: formatRelativeTime(row.at, now),
+    atTitle: safeIso(row.at) ?? "Unknown time",
+    stageText: normalizeText(row.stage, normalizeText(row.process, "log")),
+    statusText: normalizeText(row.status, "info")
+  };
 }
 
 function decorateSecretRow(row, now = Date.now()) {
@@ -411,21 +512,45 @@ function sendDelegated(sendJson, res, delegated, body) {
 export async function pipelineSnapshotPayload(appContext, projectionWorld, {
   secretQuery = "",
   datasourceQuery = "",
+  scriptSyncId = "",
+  scriptBindingName = "",
+  scriptRunId = "",
+  scriptRowLimit = "500",
+  scriptRunMode = "dry_run",
   requestSession = null,
   requestActor = null
 } = {}) {
   const secrets = await (appContext?.secretStore?.listMetadata?.() ?? []);
   const datasources = appContext?.dbSql?.listDatasources?.() ?? [];
-  const identityRows = projectionWorld?.project?.(moduleProjectors.identities)
-    ?? [];
-  const identityIndex = projectionWorld?.project?.(moduleProjectors.identityIndex)
-    ?? { byId: {}, byActor: {} };
-  const roleGrantIndex = projectionWorld?.project?.(moduleProjectors.identityRoleGrantIndex)
-    ?? { byIdentity: {} };
-  const featurePolicyRows = projectionWorld?.project?.(moduleProjectors.appFeatureAccessPolicies)
-    ?? [];
-  const authRoleRows = projectionWorld?.project?.(moduleProjectors.authRoles)
-    ?? [];
+  const datasourceIndex = safeProject(projectionWorld, moduleProjectors.sqlDatasourceIndex, {
+    rows: datasources,
+    byId: Object.fromEntries(datasources.map(row => [row.id, row]))
+  });
+  const identityRows = projectionWorld?.project?.(moduleProjectors.identities) ?? [];
+  const identityIndex = projectionWorld?.project?.(moduleProjectors.identityIndex) ?? { byId: {}, byActor: {} };
+  const roleGrantIndex = projectionWorld?.project?.(moduleProjectors.identityRoleGrantIndex) ?? { byIdentity: {} };
+  const featurePolicyRows = projectionWorld?.project?.(moduleProjectors.appFeatureAccessPolicies) ?? [];
+  const authRoleRows = projectionWorld?.project?.(moduleProjectors.authRoles) ?? [];
+  const bindingIndex = safeProject(projectionWorld, pipelineModuleProjectors.pipelineSqlBindingIndex, {
+    rows: [],
+    byId: {},
+    byRunner: {},
+    byRunnerSync: {}
+  });
+  const checkpointIndex = safeProject(projectionWorld, pipelineModuleProjectors.pipelineCheckpointIndex, {
+    rows: [],
+    byId: {},
+    byRunnerSync: {}
+  });
+  const runIndex = safeProject(projectionWorld, pipelineModuleProjectors.pipelineRunIndex, {
+    rows: [],
+    byId: {},
+    byRunner: {}
+  });
+  const runLogIndex = safeProject(projectionWorld, pipelineModuleProjectors.pipelineRunLogIndex, {
+    rows: [],
+    byRunId: {}
+  });
   const authoritySummary = authSummaryForAuthority(projectionWorld, requestSession ?? {
     authenticatedActor: requestActor,
     effectiveActor: requestActor,
@@ -442,6 +567,34 @@ export async function pipelineSnapshotPayload(appContext, projectionWorld, {
     roles: roleGrantIndex?.byIdentity?.[row.id] ?? []
   }));
   const featurePolicies = featurePolicyRows.map(row => decorateFeaturePolicyRow(row));
+  const { catalog, rows: pipelineSyncRows } = pipelineSyncCatalogRows(appContext?.appProject);
+  const syncRowsById = Object.fromEntries(pipelineSyncRows.map(row => [row.id, row]));
+  const selectedSyncId = normalizeSyncId(scriptSyncId) || pipelineSyncRows[0]?.id || "";
+  const selectedSyncPlan = selectedSyncId ? catalog.syncPlans.get(selectedSyncId) ?? null : null;
+  const selectedCheckpoint = selectedSyncId
+    ? checkpointIndex.byRunnerSync?.[`${appContext?.serverRunnerId || ""}:${selectedSyncId}`] ?? null
+    : null;
+  const pipelineBindings = selectedSyncPlan
+    ? pipelineBindingRowsForSync(selectedSyncPlan, bindingIndex, datasourceIndex, appContext?.serverRunnerId || "", selectedSyncId)
+    : [];
+  const selectedBindingName = normalizeBindingName(scriptBindingName) || pipelineBindings[0]?.bindingName || "";
+  const selectedBindingRow = pipelineBindings.find(row => row.bindingName === selectedBindingName) ?? pipelineBindings[0] ?? null;
+  const recentRunRows = (runIndex.byRunner?.[appContext?.serverRunnerId || ""] ?? [])
+    .map(row => decoratePipelineRunRow(row, syncRowsById));
+  const selectedRunId = normalizeRunId(scriptRunId) || recentRunRows[0]?.id || "";
+  const selectedRunRow = recentRunRows.find(row => row.id === selectedRunId) ?? recentRunRows[0] ?? null;
+  const selectedRunLogs = selectedRunRow
+    ? (runLogIndex.byRunId?.[selectedRunRow.id] ?? []).map(row => decoratePipelineLogRow(row))
+    : [];
+  const pipelineSyncCollection = pipelineSyncRows.map(row => {
+    const checkpoint = checkpointIndex.byRunnerSync?.[`${appContext?.serverRunnerId || ""}:${row.id}`] ?? null;
+    return {
+      ...row,
+      checkpointText: checkpoint?.cursorValue == null ? "None" : String(checkpoint.cursorValue),
+      checkpointTitle: checkpoint?.updatedAt ?? "No checkpoint",
+      bindingSummaryText: row.bindingNames.join(", ")
+    };
+  });
   return {
     secrets: secretSelection.rows,
     datasources: datasourceSelection.rows,
@@ -450,10 +603,26 @@ export async function pipelineSnapshotPayload(appContext, projectionWorld, {
     authorityGrants,
     authorityActors,
     authRoles: authRoleRows,
+    pipelineSyncs: pipelineSyncCollection,
+    pipelineBindings,
+    pipelineRuns: recentRunRows,
+    pipelineRunLogs: selectedRunLogs,
     PlatformConfigSecretSearchVisible: secretSelection.searchVisible,
     PlatformConfigDatasourceSearchVisible: datasourceSelection.searchVisible,
     PlatformConfigSecretSummary: summarizeRows("secrets", secretSelection.totalCount, secretSelection.filteredCount, secretQuery),
     PlatformConfigDatasourceSummary: summarizeRows("datasources", datasourceSelection.totalCount, datasourceSelection.filteredCount, datasourceQuery),
+    PlatformConfigPipelineSyncSelectedId: selectedSyncId,
+    PlatformConfigPipelineBindingSelectedName: selectedBindingRow?.bindingName ?? selectedBindingName,
+    PlatformConfigPipelineBindingDatasourceId: selectedBindingRow?.datasourceId ?? "",
+    PlatformConfigPipelineRunSelectedId: selectedRunRow?.id ?? selectedRunId,
+    PlatformConfigPipelineRowLimit: String(normalizeRowLimit(scriptRowLimit, 500)),
+    PlatformConfigPipelineRunMode: normalizeRunMode(scriptRunMode) ?? "dry_run",
+    PlatformConfigScriptResult: summarizePipelineScriptPanel({
+      selectedSync: selectedSyncId ? syncRowsById[selectedSyncId] ?? { id: selectedSyncId, title: selectedSyncId } : null,
+      selectedRun: selectedRunRow,
+      checkpoint: selectedCheckpoint,
+      bindingRows: pipelineBindings
+    }),
     PlatformConfigAccessRolesHint: rolesHint(authRoleRows),
     ...authoritySummaryPayload(authoritySummary),
     ...authorityGrantEditorPayload({
@@ -517,6 +686,11 @@ export function createPipelineRuntimeHandlers(deps) {
       const payload = await pipelineSnapshotPayload(appContext, world, {
         secretQuery: normalizeText(body?.secretQuery, ""),
         datasourceQuery: normalizeText(body?.datasourceQuery, ""),
+        scriptSyncId: normalizeText(body?.scriptSyncId, ""),
+        scriptBindingName: normalizeText(body?.scriptBindingName, ""),
+        scriptRunId: normalizeText(body?.scriptRunId, ""),
+        scriptRowLimit: body?.scriptRowLimit,
+        scriptRunMode: body?.scriptRunMode,
         requestActor,
         requestSession
       });
@@ -1133,7 +1307,76 @@ export function createPipelineRuntimeHandlers(deps) {
       }, { "set-cookie": sessionCookieHeader(session.id) });
     },
 
-    "pipeline.script.run": async ({ req, res, requestActor, appContext }) => {
+    "pipeline.script.binding.save": async ({ req, res, requestActor, requestSession, appContext }) => {
+      if (!requestActor) {
+        world.observe({
+          process: "pipeline.script.binding.save.failed",
+          actor: backendHost,
+          claims: [],
+          body: { reason: "no actor", serverRunner: appContext?.serverRunnerId || "" }
+        });
+        sendJson(res, 401, { error: "sign in first" });
+        return;
+      }
+      const body = await readJson(req);
+      const syncId = normalizeSyncId(body?.syncId);
+      const bindingName = normalizeBindingName(body?.bindingName);
+      const datasourceId = normalizeDatasourceId(body?.datasourceId);
+      const catalog = createPipelineCatalogFromAppProject(appContext?.appProject);
+      const plan = syncId ? (catalog.syncPlans.get(syncId) ?? null) : null;
+      if (!plan) {
+        sendJson(res, 404, { error: "sync not found" });
+        return;
+      }
+      const allowedBindings = new Set([
+        normalizeText(plan?.source?.binding),
+        ...(plan?.outputTransforms ?? []).map(transform => normalizeText(transform?.target?.binding))
+      ].filter(Boolean));
+      if (!allowedBindings.has(bindingName)) {
+        sendJson(res, 400, { error: "binding not found on sync" });
+        return;
+      }
+      const datasourceRows = appContext?.dbSql?.listDatasources?.() ?? [];
+      const datasourceIndex = safeProject(world, moduleProjectors.sqlDatasourceIndex, {
+        rows: datasourceRows,
+        byId: Object.fromEntries(datasourceRows.map(row => [row.id, row]))
+      });
+      if (datasourceId) {
+        const datasource = datasourceIndex.byId?.[datasourceId] ?? null;
+        if (!datasource || datasource.serverRunner !== appContext?.serverRunnerId) {
+          sendJson(res, 400, { error: "datasource not found for runner" });
+          return;
+        }
+      }
+      const existing = safeProject(world, pipelineModuleProjectors.pipelineSqlBindingIndex, {
+        byRunnerSync: {}
+      }).byRunnerSync?.[`${appContext?.serverRunnerId || ""}:${syncId}`]?.[bindingName] ?? null;
+      upsertPipelineBinding({
+        world,
+        actor: requestActor,
+        serverRunnerId: appContext?.serverRunnerId || "",
+        syncId,
+        bindingName,
+        datasourceId,
+        existing,
+        isoAt
+      });
+      sendJson(res, 200, {
+        ...(await pipelineSnapshotPayload(appContext, world, {
+          requestActor,
+          requestSession,
+          scriptSyncId: syncId,
+          scriptBindingName: bindingName,
+          scriptRowLimit: body?.rowLimit,
+          scriptRunMode: body?.mode
+        })),
+        message: datasourceId
+          ? `Saved binding ${bindingName}.`
+          : `Cleared binding ${bindingName}.`
+      });
+    },
+
+    "pipeline.script.run": async ({ req, res, requestActor, requestSession, appContext }) => {
       if (!requestActor) {
         world.observe({
           process: "pipeline.script.run.failed",
@@ -1145,30 +1388,99 @@ export function createPipelineRuntimeHandlers(deps) {
         return;
       }
       const body = await readJson(req);
-      const scriptName = normalizeScriptName(body?.scriptName);
-      const datasourceId = normalizeDatasourceId(body?.datasourceId);
-      world.observe({
-        process: "pipeline.script.run",
+      const syncId = normalizeSyncId(body?.syncId);
+      const mode = normalizeRunMode(body?.mode);
+      const rowLimit = normalizeRowLimit(body?.rowLimit, 500);
+      if (!mode) {
+        sendJson(res, 400, { error: "run mode must be dry_run or execute" });
+        return;
+      }
+      const catalog = createPipelineCatalogFromAppProject(appContext?.appProject);
+      const plan = syncId ? (catalog.syncPlans.get(syncId) ?? null) : null;
+      if (!plan) {
+        sendJson(res, 404, { error: "sync not found" });
+        return;
+      }
+      if (!appContext?.jobs?.enqueue) {
+        sendJson(res, 503, { error: "jobs runtime unavailable" });
+        return;
+      }
+      const bindingIndex = safeProject(world, pipelineModuleProjectors.pipelineSqlBindingIndex, {
+        byRunnerSync: {}
+      });
+      const datasourceRows = appContext?.dbSql?.listDatasources?.() ?? [];
+      const datasourceIndex = safeProject(world, moduleProjectors.sqlDatasourceIndex, {
+        rows: datasourceRows,
+        byId: Object.fromEntries(datasourceRows.map(row => [row.id, row]))
+      });
+      const bindingNames = [...new Set([
+        normalizeText(plan?.source?.binding),
+        ...(plan?.outputTransforms ?? []).map(transform => normalizeText(transform?.target?.binding))
+      ].filter(Boolean))];
+      const bindingsByName = Object.fromEntries(
+        bindingNames.map(name => [name, bindingIndex.byRunnerSync?.[`${appContext?.serverRunnerId || ""}:${syncId}`]?.[name] ?? null])
+      );
+      const missingBindings = bindingNames.filter(name => !normalizeText(bindingsByName[name]?.datasourceId, ""));
+      if (missingBindings.length) {
+        sendJson(res, 400, { error: `bindings not assigned: ${missingBindings.join(", ")}` });
+        return;
+      }
+      const sourceBinding = normalizeText(plan?.source?.binding);
+      const sourceDatasourceId = normalizeText(bindingsByName[sourceBinding]?.datasourceId, "");
+      const targetBindings = (plan?.outputTransforms ?? []).map(transform => {
+        const bindingName = normalizeText(transform?.target?.binding);
+        const datasourceIdValue = normalizeText(bindingsByName[bindingName]?.datasourceId, "");
+        const datasource = datasourceIndex.byId?.[datasourceIdValue] ?? null;
+        return {
+          bindingName,
+          datasourceId: datasourceIdValue,
+          datasourceTitle: datasource?.title ?? datasource?.datasourceName ?? "",
+          tableId: transform?.target?.tableId ?? "",
+          table: transform?.target?.table ?? "",
+          schema: transform?.target?.schema ?? "",
+          provider: transform?.target?.provider ?? "",
+          writeMode: transform?.writeMode ?? ""
+        };
+      });
+      const checkpointBefore = safeProject(world, pipelineModuleProjectors.pipelineCheckpointIndex, {
+        byRunnerSync: {}
+      }).byRunnerSync?.[`${appContext?.serverRunnerId || ""}:${syncId}`]?.cursorValue ?? null;
+      const queuedRunId = `pipeline_run_${randomUUID()}`;
+      const queued = appContext.jobs.enqueue({
         actor: requestActor,
-        claims: [relation(requestActor, "requested", "pipelineScriptStub")],
-        body: {
-          serverRunner: appContext?.serverRunnerId || "",
-          scriptName,
-          datasourceId
-        }
+        handler: "pipeline.run.execute",
+        payload: { runId: queuedRunId },
+        maxAttempts: 1
+      });
+      if (!queued.ok) {
+        sendJson(res, queued.status || 500, { error: queued.reason || "job enqueue failed" });
+        return;
+      }
+      createPipelineRunRecord({
+        world,
+        actor: requestActor,
+        runId: queuedRunId,
+        serverRunnerId: appContext?.serverRunnerId || "",
+        syncId,
+        mode,
+        rowLimit,
+        sourceBinding,
+        sourceDatasourceId,
+        targetBindings,
+        checkpointBefore,
+        jobId: queued.job?.id ?? null,
+        isoAt
       });
       sendJson(res, 200, {
-        ok: false,
-        stub: true,
-        status: "not-implemented",
-        message: "Script execution is not implemented yet. This endpoint is a demo-app stub.",
-        summary: summarizeScriptStub(scriptName, datasourceId),
-        request: {
-          serverRunner: appContext?.serverRunnerId || "",
-          scriptName,
-          datasourceId,
-          payload: body?.payload ?? {}
-        }
+        ...(await pipelineSnapshotPayload(appContext, world, {
+          requestActor,
+          requestSession,
+          scriptSyncId: syncId,
+          scriptRunId: queuedRunId,
+          scriptRowLimit: rowLimit,
+          scriptRunMode: mode
+        })),
+        message: `Queued ${mode === "execute" ? "execute" : "dry run"} for ${syncId}.`
       });
     }
   };

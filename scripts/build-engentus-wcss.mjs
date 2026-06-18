@@ -21,6 +21,11 @@ await writeFile(
   "utf8"
 );
 await writeFile(
+  path.join(proofDir, "engentus-style-grammar.json"),
+  `${JSON.stringify(artifacts.grammar, null, 2)}\n`,
+  "utf8"
+);
+await writeFile(
   path.join(proofDir, "engentus-style-parity.json"),
   `${JSON.stringify(artifacts.parity, null, 2)}\n`,
   "utf8"

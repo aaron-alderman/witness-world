@@ -1444,6 +1444,14 @@ export function requestBootstrapRouteDefine(world, {
     });
     return { ok: false, status: 400, error: "stream routes cannot declare page or backend-program params", witness };
   }
+  if (routeKind === "resource" && (hasPageParams || backendProgramSoul)) {
+    const witness = fail(world, {
+      process: "route.define.failed",
+      actor: actor || backendHost,
+      body: { reason: "resource routes cannot declare page or backend-program params", handler: input.handler }
+    });
+    return { ok: false, status: 400, error: "resource routes cannot declare page or backend-program params", witness };
+  }
   if (backendProgramSoul) {
     const backendPrograms = new Set(backendProgramsProjection(world.allWitnesses()).map(row => row.soul));
     if (!backendPrograms.has(backendProgramSoul)) {
