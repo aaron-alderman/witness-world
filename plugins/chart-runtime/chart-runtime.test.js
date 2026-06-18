@@ -47,7 +47,7 @@ test("resolveChartSpec assembles {model, view} from the witnessed world", async 
   const spec = resolveChartSpec(world.allWitnesses(), "GoodmanDiagram");
   assert.ok(spec, "expected to resolve GoodmanDiagram");
   assert.equal(spec.view.modelRef, "BoltFatigue");
-  assert.equal(spec.pageProps.pageStylesheetHref, "/app-static/app/engentus-chart-pages.css");
+  assert.equal(spec.pageProps.pageStylesheetHref, "/engentus/__generated/engentus-chart-pages.css");
   assert.equal(spec.pageProps.bodyClass, "chart-page chart-page--goodman");
   assert.equal(spec.pageProps.mountId, "chart-svg");
   assert.equal(spec.pageProps.mountTag, "svg");

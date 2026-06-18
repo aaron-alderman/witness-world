@@ -21,15 +21,18 @@ presentation anchors in the compiled surface metadata.
 
 - `engentus-desired-v2.wcss` is the designer-facing and tooling-facing V1 style
   grammar, inline backend lowering map, and inline browser declaration source
-- the checked-in emitted CSS remains:
-  - `examples/engentus/app/engentus-shell.css`
-  - `examples/engentus/app/engentus-chart-pages.css`
+- the live runtime serves generated CSS at:
+  - `/engentus/__generated/engentus-shell.css`
+  - `/engentus/__generated/engentus-chart-pages.css`
+- optional debug snapshots can be written to:
+  - `tmp/engentus-wcss/engentus-shell.css`
+  - `tmp/engentus-wcss/engentus-chart-pages.css`
 
 ## Purpose
 
 The browser declaration grammar is not the canonical style ontology. It is the
-lowering layer that lets the current browser runtime keep serving unchanged CSS
-assets while the authored/internal grammar becomes cleaner.
+lowering layer that lets the current browser runtime serve runtime-generated CSS
+while the authored/internal grammar becomes cleaner.
 
 Browser group names such as `toolbar`, `goodman view`, or `platform config` are
 therefore backend-lowering nouns. They are not canonical style-family nouns.
@@ -41,6 +44,11 @@ The immediate goal of the lowering declaration grammar is now narrower:
 - provide stable backend-group buckets for current proof tooling and rollback
 - let native proof slices lower against recovered presentation anchors even when
   the current browser runtime still emits legacy ids/classes underneath
+
+For the validated success paths, that compatibility layer is now thinner:
+`auth`, `home`, `platform-config`, and `chart-pages` no longer carry
+browser-declaration bodies in the canonical file. The remaining declaration
+groups are concentrated around shared substrate and Goodman-heavy rollback.
 
 ## Grammar Shape
 

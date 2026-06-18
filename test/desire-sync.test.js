@@ -11,11 +11,18 @@ import {
 } from "../src/desire/index.js";
 import { desireExtensions as sqlDesireExtensions } from "../plugins/sql/runtime.js";
 import {
+  createPipelineExecutionPlanProgramFromDesire,
   createPipelineProofProgramFromDesire,
   desireExtensions as pipelineDesireExtensions,
+  evaluatePlannedInputTransform,
+  evaluatePlannedOutputTransform,
+  evaluatePlannedSync,
   evaluatePipelineProof,
   hasPipelineDeriveOperator,
-  listPipelineDeriveOperatorIds
+  listPipelineDeriveOperatorIds,
+  planInputTransform,
+  planOutputTransform,
+  planPipelineSync
 } from "../plugins/pipeline-runtime/runtime.js";
 
 const EXAMPLE_SYNC_FILE = path.join(process.cwd(), "example-ports", "engentus-pipeline", "ingest-sensor-sync.rvm");
@@ -416,6 +423,117 @@ test("pipeline proof runtime evaluates derive operators and exact proof expectat
     },
     skipCount: 0
   });
+});
+
+test("pipeline planner lowers the canonical IMU sync into a stable execution plan IR", async () => {
+  const { rvmFormRegistry } = pluginRegistries();
+  const desirePlus = await compileRvmFileToDesirePlus(EXAMPLE_SYNC_FILE, { rvmFormRegistry });
+  const desire = normalizeDesirePlusToDesire(desirePlus, { rvmFormRegistry });
+  const planProgram = createPipelineExecutionPlanProgramFromDesire(desire);
+  const syncPlan = planPipelineSync(planProgram, "EngentusImuSensorIngest");
+
+  assert.equal(planProgram.syncPlans.has("EngentusImuSensorIngest"), true);
+  assert.equal(syncPlan.kind, "pipelineExecutionPlan");
+  assert.equal(syncPlan.planKind, "sync");
+  assert.equal(syncPlan.syncId, "EngentusImuSensorIngest");
+  assert.deepEqual(syncPlan.source, {
+    tableId: "RawImuTransactions",
+    binding: "source_mysql",
+    provider: "mysql",
+    schema: "engentus",
+    table: "Transactions_IMU",
+    columns: [
+      { name: "tx_gateway_id", type: "varchar" },
+      { name: "tx_IMU_device_id", type: "varchar" },
+      { name: "tx_timestamp_start", type: "bigint" },
+      { name: "tx_sample_counter", type: "int" },
+      { name: "tx_sample_IMU", type: "double" }
+    ],
+    keys: ["tx_gateway_id"]
+  });
+  assert.equal(syncPlan.inputTransform.id, "EngentusImuRowsToWorld");
+  assert.deepEqual(syncPlan.outputTransforms.map(transform => ({
+    id: transform.id,
+    sourceShape: transform.sourceShape,
+    target: transform.target.tableId,
+    writeMode: transform.writeMode
+  })), [
+    {
+      id: "EngentusCanonicalSensors",
+      sourceShape: "Sensor",
+      target: "CanonicalSensorsTable",
+      writeMode: "upsert"
+    },
+    {
+      id: "EngentusCanonicalSensorSamples",
+      sourceShape: "SensorSample",
+      target: "CanonicalSensorDataTable",
+      writeMode: "insert_ignore"
+    }
+  ]);
+  assert.deepEqual(syncPlan.progress, {
+    kind: "monotonic",
+    field: "tx_timestamp_start",
+    replayWindowMs: 10050
+  });
+  assert.deepEqual(syncPlan.triggers, ["manual", "scheduled"]);
+  assert.equal(syncPlan.consistency, "eventual");
+  assert.deepEqual(syncPlan.stages.map(stage => stage.kind), [
+    "read_sql_rows",
+    "emit_world_entities",
+    "emit_world_entities",
+    "emit_world_stream",
+    "write_sql_rows",
+    "write_sql_rows"
+  ]);
+  assert.deepEqual(syncPlan.stages.filter(stage => stage.kind === "write_sql_rows").map(stage => ({
+    sourceShape: stage.sourceShape,
+    target: stage.target.tableId,
+    writeMode: stage.writeMode
+  })), [
+    {
+      sourceShape: "Sensor",
+      target: "CanonicalSensorsTable",
+      writeMode: "upsert"
+    },
+    {
+      sourceShape: "SensorSample",
+      target: "CanonicalSensorDataTable",
+      writeMode: "insert_ignore"
+    }
+  ]);
+});
+
+test("planned execution preserves the same outputs as direct pipeline proofs", async () => {
+  const { rvmFormRegistry } = pluginRegistries();
+  const desirePlus = await compileRvmFileToDesirePlus(EXAMPLE_SYNC_FILE, { rvmFormRegistry });
+  const desire = normalizeDesirePlusToDesire(desirePlus, { rvmFormRegistry });
+  const proofProgram = createPipelineProofProgramFromDesire(desire);
+  const planProgram = createPipelineExecutionPlanProgramFromDesire(desire);
+
+  const inputFixture = proofProgram.tests.get("EngentusImuRowsToWorldProof")?.fixture;
+  const inputProof = evaluatePipelineProof(proofProgram, "EngentusImuRowsToWorldProof");
+  const inputPlan = planInputTransform(planProgram, "EngentusImuRowsToWorld");
+  const inputPlanned = evaluatePlannedInputTransform(inputPlan, inputFixture);
+  assert.deepEqual(inputPlanned, inputProof.actual);
+
+  const sensorsFixture = proofProgram.tests.get("EngentusCanonicalSensorsProof")?.fixture;
+  const sensorsProof = evaluatePipelineProof(proofProgram, "EngentusCanonicalSensorsProof");
+  const sensorsPlan = planOutputTransform(planProgram, "EngentusCanonicalSensors");
+  const sensorsPlanned = evaluatePlannedOutputTransform(sensorsPlan, sensorsFixture);
+  assert.deepEqual(sensorsPlanned, sensorsProof.actual);
+
+  const samplesFixture = proofProgram.tests.get("EngentusCanonicalSensorSamplesProof")?.fixture;
+  const samplesProof = evaluatePipelineProof(proofProgram, "EngentusCanonicalSensorSamplesProof");
+  const samplesPlan = planOutputTransform(planProgram, "EngentusCanonicalSensorSamples");
+  const samplesPlanned = evaluatePlannedOutputTransform(samplesPlan, samplesFixture);
+  assert.deepEqual(samplesPlanned, samplesProof.actual);
+
+  const syncFixture = proofProgram.tests.get("EngentusImuSensorIngestProof")?.fixture;
+  const syncProof = evaluatePipelineProof(proofProgram, "EngentusImuSensorIngestProof");
+  const syncPlan = planProgram.syncPlans.get("EngentusImuSensorIngest") ?? planPipelineSync(planProgram, "EngentusImuSensorIngest");
+  const syncPlanned = evaluatePlannedSync(syncPlan, syncFixture);
+  assert.deepEqual(syncPlanned, syncProof.actual);
 });
 
 test("plugin-owned transform-composed pipeline forms fail clearly when the plugin is unavailable", () => {

@@ -46,8 +46,11 @@ test("pipeline runtime exposes the platform-config demo handlers and no plugin-o
     "output_transform",
     "pipeline_test"
   ]);
+  assert.equal(typeof runtimeModule.createPipelineExecutionPlanProgramFromDesire, "function");
   assert.equal(typeof runtimeModule.evaluatePipelineProof, "function");
   assert.equal(typeof runtimeModule.createPipelineProofProgramFromDesire, "function");
+  assert.equal(typeof runtimeModule.planPipelineSync, "function");
+  assert.equal(typeof runtimeModule.evaluatePlannedSync, "function");
   assert.equal(runtimeModule.hasPipelineDeriveOperator("sample_timestamp"), true);
   assert.equal(
     runtimeModule.providers.some(provider =>

@@ -14,6 +14,10 @@ import {
   createRuntimeAppContext,
   createUnavailableRuntimeAppContext
 } from "./runtime-app-context.js";
+import {
+  ENGENTUS_GENERATED_STYLESHEET_PATHS,
+  loadEngentusGeneratedCssBundle
+} from "../examples/engentus/app/engentus-style-application.js";
 import { AppSnapshotManager } from "./app-snapshot-manager.js";
 import {
   createRuntimeAppContextForRunner,
@@ -104,7 +108,8 @@ export async function startRuntimeServer(world, {
     defaultHostCapabilitiesForProfile: defaultHostCapabilitiesForProfileImpl = defaultHostCapabilitiesForProfile,
     loadRuntimePluginModules: loadRuntimePluginModulesImpl = loadRuntimePluginModules,
     applyRuntimePluginLoadState: applyRuntimePluginLoadStateImpl = applyRuntimePluginLoadState,
-    collectActiveRuntimeContributions: collectActiveRuntimeContributionsImpl = collectActiveRuntimeContributions
+    collectActiveRuntimeContributions: collectActiveRuntimeContributionsImpl = collectActiveRuntimeContributions,
+    loadEngentusGeneratedCssBundle: loadEngentusGeneratedCssBundleImpl = loadEngentusGeneratedCssBundle
   } = deps;
   const logInfo = typeof logger?.info === "function"
     ? (event, fields) => logger.info(event, fields)
@@ -470,6 +475,44 @@ export async function startRuntimeServer(world, {
   const sseClients = new Set();
   const appStaticRoot = appContext.appRoot;
   const APP_STATIC_PREFIX = "/app-static/";
+  const engentusGeneratedCssBySnapshot = new WeakMap();
+  const engentusGeneratedCssByRuntimeContext = new WeakMap();
+  const generatedEngentusAssetByPath = Object.freeze({
+    [ENGENTUS_GENERATED_STYLESHEET_PATHS.shell]: "shell",
+    [ENGENTUS_GENERATED_STYLESHEET_PATHS.chart]: "chart"
+  });
+  const memoizedGeneratedCssBundle = (cache, key, loadBundle) => {
+    const cached = cache.get(key);
+    if (cached) return cached;
+    const pending = Promise.resolve()
+      .then(loadBundle)
+      .catch(error => {
+        cache.delete(key);
+        throw error;
+      });
+    cache.set(key, pending);
+    return pending;
+  };
+  const generatedEngentusCssBundle = (runtimeContext, activeAppContext) => {
+    const snapshot = activeAppContext?.requestSnapshot
+      ?? activeAppContext?.appSnapshotManager?.getActiveSnapshot?.()
+      ?? null;
+    if (snapshot && typeof snapshot === "object") {
+      return memoizedGeneratedCssBundle(
+        engentusGeneratedCssBySnapshot,
+        snapshot,
+        () => loadEngentusGeneratedCssBundleImpl()
+      );
+    }
+    if (runtimeContext && typeof runtimeContext === "object") {
+      return memoizedGeneratedCssBundle(
+        engentusGeneratedCssByRuntimeContext,
+        runtimeContext,
+        () => loadEngentusGeneratedCssBundleImpl()
+      );
+    }
+    return loadEngentusGeneratedCssBundleImpl();
+  };
   const trimString = value => typeof value === "string" && value.trim() ? value.trim() : "";
   const authSurfaceStateOverrides = ({
     route,
@@ -616,6 +659,21 @@ export async function startRuntimeServer(world, {
         await runtime.context.appSnapshotManager.ensureFresh({ trigger: "request" });
       }
       const activeAppContext = requestScopedAppContext(runtime.context);
+      const generatedEngentusAsset = generatedEngentusAssetByPath[requestUrl.pathname] ?? null;
+      if (req.method === "GET" && generatedEngentusAsset) {
+        const generatedBundle = await generatedEngentusCssBundle(runtime.context, activeAppContext);
+        const fileName = generatedEngentusAsset === "chart"
+          ? "engentus-chart-pages.css"
+          : "engentus-shell.css";
+        const body = generatedBundle.files?.[fileName];
+        if (typeof body !== "string") {
+          sendJson(res, 404, { error: "not found" });
+          return;
+        }
+        res.writeHead(200, { "content-type": "text/css; charset=utf-8", "cache-control": "no-cache" });
+        res.end(body);
+        return;
+      }
 
       const mountedRouteTable = mountedRoutesFor(runtime.runner.id, activeAppContext);
       const matched = matchDeclaredRoute(mountedRouteTable, req.method || "GET", requestUrl.pathname);

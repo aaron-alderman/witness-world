@@ -14,6 +14,15 @@ import {
   listPipelineDeriveOperatorIds,
   pipelineDeriveOperators
 } from "./proof-runtime.js";
+import {
+  createPipelineExecutionPlanProgramFromDesire,
+  evaluatePlannedInputTransform,
+  evaluatePlannedOutputTransform,
+  evaluatePlannedSync,
+  planInputTransform,
+  planOutputTransform,
+  planPipelineSync
+} from "./planner-runtime.js";
 
 export const bundleId = "bundle-pipeline-runtime";
 
@@ -33,13 +42,20 @@ export const desireExtensions = Object.freeze({
 });
 
 export {
+  createPipelineExecutionPlanProgramFromDesire,
   createPipelineProofProgramFromDesire,
+  evaluatePlannedInputTransform,
+  evaluatePlannedOutputTransform,
+  evaluatePlannedSync,
   evaluateInputTransformSubject,
   evaluateOutputTransformSubject,
   evaluatePipelineProof,
   evaluateSyncSubject,
   hasPipelineDeriveOperator,
   listPipelineDeriveOperatorIds,
+  planInputTransform,
+  planOutputTransform,
+  planPipelineSync,
   pipelineDeriveOperators
 };
 
@@ -55,12 +71,19 @@ export default {
   providers,
   desireExtensions,
   createHandlers,
+  createPipelineExecutionPlanProgramFromDesire,
   createPipelineProofProgramFromDesire,
+  evaluatePlannedInputTransform,
+  evaluatePlannedOutputTransform,
+  evaluatePlannedSync,
   evaluateInputTransformSubject,
   evaluateOutputTransformSubject,
   evaluatePipelineProof,
   evaluateSyncSubject,
   hasPipelineDeriveOperator,
   listPipelineDeriveOperatorIds,
+  planInputTransform,
+  planOutputTransform,
+  planPipelineSync,
   pipelineDeriveOperators
 };

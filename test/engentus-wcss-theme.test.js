@@ -1,32 +1,38 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
-  composeEngentusStylesheets,
-  loadEngentusAppliedWcss,
+  ENGENTUS_GENERATED_STYLESHEET_PATHS,
+  loadEngentusGeneratedCssBundle,
   loadEngentusBrowserDeclarationGroups,
-  loadEngentusBrowserLoweringMap,
-  renderOracleStylesheet
+  loadEngentusBrowserLoweringMap
 } from "../examples/engentus/app/engentus-style-application.js";
+import { startUiServer } from "./support/harness.js";
 
-test("engentus canonical browser declaration grammar emits the checked-in shell and chart CSS", async () => {
-  const [authoredPlan, shellCss, chartCss] = await Promise.all([
-    loadEngentusAppliedWcss(),
-    readFile(path.join(process.cwd(), "examples", "engentus", "app", "engentus-shell.css"), "utf8"),
-    readFile(path.join(process.cwd(), "examples", "engentus", "app", "engentus-chart-pages.css"), "utf8")
+test("engentus generated stylesheet routes serve the canonical shell and chart CSS", async () => {
+  const [bundle, server] = await Promise.all([
+    loadEngentusGeneratedCssBundle(),
+    startUiServer({
+      dslPath: path.join(process.cwd(), "examples", "engentus", "app.wtoml"),
+      serverRunnerId: "engentus_server",
+      runtimeProfile: "authoring",
+      devMode: false
+    })
   ]);
-
-  const stylesheets = await composeEngentusStylesheets({
-    authoredPlan,
-    switchManifest: {
-      theme: "engentus",
-      slices: {}
-    }
-  });
-
-  assert.equal(shellCss, renderOracleStylesheet(stylesheets.shell));
-  assert.equal(chartCss, renderOracleStylesheet(stylesheets.chart));
+  try {
+    const [shellResponse, chartResponse] = await Promise.all([
+      fetch(`${server.url}${ENGENTUS_GENERATED_STYLESHEET_PATHS.shell}`),
+      fetch(`${server.url}${ENGENTUS_GENERATED_STYLESHEET_PATHS.chart}`)
+    ]);
+    assert.equal(shellResponse.status, 200);
+    assert.equal(chartResponse.status, 200);
+    assert.match(shellResponse.headers.get("content-type") || "", /^text\/css\b/i);
+    assert.match(chartResponse.headers.get("content-type") || "", /^text\/css\b/i);
+    assert.equal(await shellResponse.text(), bundle.files["engentus-shell.css"]);
+    assert.equal(await chartResponse.text(), bundle.files["engentus-chart-pages.css"]);
+  } finally {
+    await server.close();
+  }
 });
 
 test("engentus canonical browser lowering keeps declaration groups partitioned by backend bucket", async () => {
@@ -48,8 +54,6 @@ test("engentus canonical browser lowering keeps declaration groups partitioned b
     "foundation",
     "toolbar",
     "goodman toolbar",
-    "auth",
-    "home",
     "shared views",
     "goodman view",
     "chart scaffold",
@@ -58,14 +62,9 @@ test("engentus canonical browser lowering keeps declaration groups partitioned b
     "goodman windows",
     "controls and editor",
     "mill charge",
-    "mill force",
-    "platform config"
+    "mill force"
   ]);
-  assert.deepEqual(chartGroupNames, [
-    "chart tokens",
-    "chart foundation",
-    "chart surfaces"
-  ]);
+  assert.deepEqual(chartGroupNames, []);
   assert.equal(
     browserLowering.slices.find(slice => slice.name === "auth")?.mode,
     "native-browser"

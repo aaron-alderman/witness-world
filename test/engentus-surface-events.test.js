@@ -3,9 +3,8 @@ import test from "node:test";
 import path from "node:path";
 import { launchBrowser, startUiServer } from "./support/harness.js";
 import {
-  composeEngentusStylesheets,
-  loadEngentusAppliedWcss,
-  renderOracleStylesheet
+  ENGENTUS_GENERATED_STYLESHEET_PATHS,
+  loadEngentusGeneratedCssBundle
 } from "../examples/engentus/app/engentus-style-application.js";
 
 function sliderRow(page, label) {
@@ -22,20 +21,18 @@ function startEngentusUiServer({ devMode = false } = {}) {
 }
 
 async function interceptEngentusWcssAssets(page, switchManifest) {
-  const authoredPlan = await loadEngentusAppliedWcss();
-  const stylesheets = await composeEngentusStylesheets({
-    authoredPlan,
+  const bundle = await loadEngentusGeneratedCssBundle({
     switchManifest
   });
-  const shellCss = renderOracleStylesheet(stylesheets.shell);
-  const chartCss = renderOracleStylesheet(stylesheets.chart);
+  const shellCss = bundle.files["engentus-shell.css"];
+  const chartCss = bundle.files["engentus-chart-pages.css"];
 
-  await page.route("**/app-static/app/engentus-shell.css", route => route.fulfill({
+  await page.route(`**${ENGENTUS_GENERATED_STYLESHEET_PATHS.shell}`, route => route.fulfill({
     status: 200,
     contentType: "text/css",
     body: shellCss
   }));
-  await page.route("**/app-static/app/engentus-chart-pages.css", route => route.fulfill({
+  await page.route(`**${ENGENTUS_GENERATED_STYLESHEET_PATHS.chart}`, route => route.fulfill({
     status: 200,
     contentType: "text/css",
     body: chartCss
@@ -171,6 +168,194 @@ test("Engentus dev shell diagnostics expectation pack stays clean across the she
     );
     await page.waitForSelector("#view-login");
     await assertNoActiveShellIssues(page, "login-after-return");
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
+test("Engentus served WCSS manifest keeps whole-app runtime behavior faithful without injected assets", { timeout: 150000 }, async () => {
+  const server = await startEngentusUiServer({ devMode: true });
+  const browser = await launchBrowser({
+    headless: true,
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const page = await browser.context.newPage();
+    await page.goto(`${server.url}/engentus/login`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => window.world?.expectationProviderCount > 0);
+    await page.waitForFunction(() => Boolean(window.__surfaceInteractionRuntime?.processRuntime));
+    await assertNoActiveShellIssues(page, "served-login");
+
+    await page.click("#surface-engentusloginprimaryaction");
+    await waitForSurfaceSettled(page, "Served WCSS sign-in did not settle");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "home"
+      && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedIn"
+    , "Served WCSS sign-in did not land on the home route", { timeout: 15000 });
+    await page.waitForSelector("#view-home");
+    await assertNoActiveShellIssues(page, "served-home");
+    assert.ok(await page.locator(".mod-card.active").count() >= 2);
+    assert.ok(await page.locator(".news-item").count() >= 4);
+
+    await page.evaluate(() => {
+      document.getElementById("user-prof")?.click();
+    });
+    await waitForSurfaceCondition(page, () =>
+      document.getElementById("up-menu")?.classList.contains("open") === true
+      && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusProfileMenuVisible") === true
+    , "Served WCSS did not open the profile menu");
+    await assertNoActiveShellIssues(page, "served-home-menu-open");
+
+    await page.evaluate(() => {
+      document.querySelector(".up-mi-signout")?.click();
+    });
+    await waitForSurfaceSettled(page, "Served WCSS sign-out did not settle");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "signout"
+      && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedOut"
+    , "Served WCSS sign-out did not land on signout");
+    await page.waitForSelector("#view-signout");
+    await assertNoActiveShellIssues(page, "served-signout");
+
+    await page.getByRole("button", { name: "Sign back in" }).click();
+    await waitForSurfaceSettled(page, "Served WCSS return-to-login did not settle");
+    await page.waitForFunction(() =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "login"
+      && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "idle"
+    );
+    await page.click("#surface-engentusloginprimaryaction");
+    await waitForSurfaceSettled(page, "Served WCSS second sign-in did not settle");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "home"
+      && window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellAuthStatus") === "signedIn"
+    , "Served WCSS second sign-in did not return to home", { timeout: 15000 });
+    await page.waitForSelector("#view-home");
+    await assertNoActiveShellIssues(page, "served-home-after-relogin");
+
+    await page.goto(`${server.url}/engentus/goodman`, { waitUntil: "domcontentloaded" });
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "goodman"
+    , "Served WCSS Goodman route did not settle");
+    await page.waitForSelector("#view-goodman");
+    await waitForSurfaceCondition(page, () => Boolean(document.querySelector("#chart-svg")?.__chartController), "Served WCSS Goodman route did not mount the chart controller");
+    await assertNoActiveShellIssues(page, "served-goodman");
+    assert.deepEqual(await page.evaluate(() => ({
+      mountPresent: Boolean(document.querySelector("#chart-svg")),
+      overlayPresent: Boolean(document.querySelector("#mc-canvas")),
+      tooltipPresent: Boolean(document.querySelector("#chart-tip"))
+    })), {
+      mountPresent: true,
+      overlayPresent: true,
+      tooltipPresent: true
+    });
+    await page.click("#surface-goodmanmodemontecarlo");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanActiveMode") === "mc"
+    , "Served WCSS Goodman route did not switch to Monte Carlo mode");
+    await page.click("#surface-goodmansimulationnewaction");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunConfigVisible") === true
+    , "Served WCSS Goodman route did not open the run config");
+    await page.click("#surface-goodmanrunactionstart");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") !== "ready"
+    , "Served WCSS Goodman route never left the ready state");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("GoodmanRunStatusState") === "done"
+    , "Served WCSS Goodman route did not complete the run");
+    const goodmanRunVisuals = await page.evaluate(() => ({
+      progressClassName: document.querySelector("#prog-fill")?.className ?? "",
+      lockText: document.querySelector("#surface-goodmanrunlocknote")?.textContent ?? ""
+    }));
+    assert.match(goodmanRunVisuals.progressClassName, /\bdone\b/);
+    assert.match(goodmanRunVisuals.lockText, /locked/i);
+    await page.click("#surface-goodmanactionstats");
+    await waitForSurfaceCondition(page, () =>
+      !document.querySelector("#surface-goodmanstatswindow")?.hasAttribute("hidden")
+    , "Served WCSS Goodman route did not open the stats window");
+
+    await page.goto(`${server.url}/engentus/mill-charge`, { waitUntil: "domcontentloaded" });
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "mill-charge"
+    , "Served WCSS Mill Charge route did not settle");
+    await page.waitForSelector("#view-mill");
+    await waitForSurfaceCondition(page, () => Boolean(document.querySelector("#mill-canvas")?.__chartController), "Served WCSS Mill Charge route did not mount the canvas chart");
+    await assertNoActiveShellIssues(page, "served-mill-charge");
+    await sliderRow(page, "Speed N/N_c").locator('input[type="range"]').evaluate(input => {
+      input.value = "0.82";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillChargeSpeedFrac") === 0.82
+    , "Served WCSS Mill Charge route did not commit the speed input");
+    await waitForSurfaceCondition(page, () =>
+      document.querySelector("#mill-canvas")?.__chartController?.spec?.params?.speedFrac === 0.82
+    , "Served WCSS Mill Charge route did not propagate speed into chart params");
+    const millChargeVisuals = await page.evaluate(() => ({
+      regimeText: document.querySelector(".mill-regime-badge")?.textContent?.trim() ?? "",
+      regimeClassName: document.querySelector(".mill-regime-badge")?.className ?? "",
+      metricsPanelPresent: Boolean(document.querySelector("#mill-metrics-panel"))
+    }));
+    assert.equal(millChargeVisuals.metricsPanelPresent, true);
+    assert.equal(millChargeVisuals.regimeText, "CATARACTING");
+    assert.match(millChargeVisuals.regimeClassName, /\bcataracting\b/);
+
+    await page.goto(`${server.url}/engentus/mill-force`, { waitUntil: "domcontentloaded" });
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "mill-force"
+    , "Served WCSS Mill Force route did not settle");
+    await page.waitForSelector("#view-mill-force");
+    await waitForSurfaceCondition(page, () => Boolean(document.querySelector("#mill-force-svg-cross")?.__chartController), "Served WCSS Mill Force route did not mount the cross chart");
+    await assertNoActiveShellIssues(page, "served-mill-force");
+    assert.deepEqual(await page.evaluate(() => ({
+      crossOverlayPresent: Boolean(document.querySelector("#mill-force-cross-canvas")),
+      crossTooltipPresent: Boolean(document.querySelector("#mill-force-cross-tip"))
+    })), {
+      crossOverlayPresent: true,
+      crossTooltipPresent: true
+    });
+    await page.getByRole("button", { name: "Compare" }).click();
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveAnalysisMode") === "compare"
+    , "Served WCSS Mill Force route did not switch analysis mode");
+    await waitForSurfaceCondition(page, () =>
+      document.querySelector("#mill-force-svg-cross")?.__chartController?.spec?.params?.analysis_mode === "compare"
+    , "Served WCSS Mill Force route did not propagate analysis mode into chart params");
+    await page.click("#surface-millforcetabforcevsangle");
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("MillForceActiveChartTab") === "force"
+      && Boolean(document.querySelector("#mill-force-svg-force")?.__chartController)
+    , "Served WCSS Mill Force route did not materialize the force chart");
+    assert.deepEqual(await page.evaluate(() => ({
+      forceOverlayPresent: Boolean(document.querySelector("#mill-force-force-canvas")),
+      forceTooltipPresent: Boolean(document.querySelector("#mill-force-force-tip")),
+      tabClassName: document.querySelector("#surface-millforcetabforcevsangle")?.className ?? ""
+    })), {
+      forceOverlayPresent: true,
+      forceTooltipPresent: true,
+      tabClassName: "mill-force-cht-tab active"
+    });
+
+    await page.goto(`${server.url}/engentus/platform-config`, { waitUntil: "domcontentloaded" });
+    await waitForSurfaceCondition(page, () =>
+      window.__surfaceInteractionRuntime?.processRuntime?.value("EngentusShellActiveRoute") === "platform-config-operator"
+    , "Served WCSS platform-config operator route did not settle");
+    await page.waitForSelector("#view-platform-config");
+    await assertNoActiveShellIssues(page, "served-platform-operator");
+    const operatorChrome = await page.evaluate(() => ({
+      sidebarPresent: Boolean(document.getElementById("platform-config-sidebar")),
+      activeLinks: document.querySelectorAll(".platform-config-side-link.active").length,
+      noticeClassName: document.getElementById("platform-config-notice")?.className ?? "",
+      noticeBackgroundColor: document.getElementById("platform-config-notice")
+        ? getComputedStyle(document.getElementById("platform-config-notice")).backgroundColor
+        : null
+    }));
+    assert.equal(operatorChrome.sidebarPresent, true);
+    assert.equal(operatorChrome.activeLinks, 1);
+    assert.match(operatorChrome.noticeClassName, /\bplatform-config-notice\b/);
+    assert.notEqual(operatorChrome.noticeBackgroundColor, "rgba(0, 0, 0, 0)");
+
   } finally {
     await browser.close();
     await server.close();

@@ -26,7 +26,7 @@ model BoltFatigue {
 
 chart GoodmanDiagram of BoltFatigue {
   frame cartesian
-  prop pageStylesheetHref = "/app-static/app/engentus-chart-pages.css"
+  prop pageStylesheetHref = "/engentus/__generated/engentus-chart-pages.css"
   prop bodyClass = "chart-page chart-page--goodman"
   prop mountId = "chart-svg"
   prop mountTag = "svg"
@@ -64,7 +64,7 @@ chart GoodmanDiagram of BoltFatigue {
   assert.equal(chart.body.surfaceKind, "chart");
   assert.equal(chart.body.modelRef, "BoltFatigue");
   assert.equal(chart.body.frame, "cartesian");
-  assert.equal(chart.body.props.pageStylesheetHref, "/app-static/app/engentus-chart-pages.css");
+  assert.equal(chart.body.props.pageStylesheetHref, "/engentus/__generated/engentus-chart-pages.css");
   assert.equal(chart.body.props.bodyClass, "chart-page chart-page--goodman");
   assert.equal(chart.body.props.mountId, "chart-svg");
   assert.equal(chart.body.props.mountTag, "svg");

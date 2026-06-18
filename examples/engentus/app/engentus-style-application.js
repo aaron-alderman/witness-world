@@ -23,6 +23,10 @@ const STYLESHEET_TITLES = Object.freeze({
 });
 
 export const ENGENTUS_STYLE_THEME = "engentus";
+export const ENGENTUS_GENERATED_STYLESHEET_PATHS = Object.freeze({
+  shell: "/engentus/__generated/engentus-shell.css",
+  chart: "/engentus/__generated/engentus-chart-pages.css"
+});
 
 function splitClassTokens(value) {
   if (typeof value !== "string") return [];
@@ -543,6 +547,12 @@ function stylesheetBanner() {
 
 function styleAssetName(asset) {
   return asset === "chart" ? "engentus-chart-pages.css" : "engentus-shell.css";
+}
+
+export function engentusGeneratedStylesheetPath(asset) {
+  const route = ENGENTUS_GENERATED_STYLESHEET_PATHS[asset] ?? null;
+  if (!route) throw new Error(`Unknown Engentus generated stylesheet asset: ${asset}`);
+  return route;
 }
 
 function parseIndentedWcssDocument(text) {
@@ -1660,24 +1670,24 @@ export async function buildEngentusPresentationInventory(authoredPlan = null) {
   };
 }
 
-export async function buildEngentusParityReport(authoredPlan, stylesheets, switchManifest = null) {
-  const [shellCss, chartCss] = await Promise.all([
-    readFile(path.join(MODULE_DIR, styleAssetName("shell")), "utf8"),
-    readFile(path.join(MODULE_DIR, styleAssetName("chart")), "utf8")
-  ]);
+export async function buildEngentusParityReport(authoredPlan, stylesheets, switchManifest = null, baselineFiles = null) {
   const emittedByAsset = {
     shell: renderOracleStylesheet(stylesheets.shell),
     chart: renderOracleStylesheet(stylesheets.chart)
   };
   const checkedInByAsset = {
-    shell: shellCss,
-    chart: chartCss
+    shell: typeof baselineFiles?.[styleAssetName("shell")] === "string"
+      ? baselineFiles[styleAssetName("shell")]
+      : null,
+    chart: typeof baselineFiles?.[styleAssetName("chart")] === "string"
+      ? baselineFiles[styleAssetName("chart")]
+      : null
   };
   return {
     theme: ENGENTUS_STYLE_THEME,
     assets: Object.fromEntries(
       Object.entries(emittedByAsset).map(([asset, emittedCss]) => [asset, {
-        exactParity: emittedCss === checkedInByAsset[asset]
+        exactParity: checkedInByAsset[asset] == null ? null : emittedCss === checkedInByAsset[asset]
       }])
     ),
     slices: (authoredPlan?.slices ?? []).map(slice => {
@@ -1689,7 +1699,9 @@ export async function buildEngentusParityReport(authoredPlan, stylesheets, switc
         loweringMode: effectiveLoweringMode(slice, switchManifest),
         authoredGroups: [...slice.oracleGroups],
         legacyGroups: [...slice.oracleGroups],
-        exactOracleParity: emittedByAsset[slice.asset] === checkedInByAsset[slice.asset],
+        exactOracleParity: checkedInByAsset[slice.asset] == null
+          ? null
+          : emittedByAsset[slice.asset] === checkedInByAsset[slice.asset],
         authoredOnly: [],
         legacyOnly: [],
         nativeDebt: {
@@ -1983,6 +1995,11 @@ function effectiveLoweringMode(slice, switchManifest) {
   return mode;
 }
 
+function preferredNativeGroupName(slice) {
+  const groups = slice?.lowering?.[DEFAULT_BROWSER_BACKEND]?.groups ?? slice?.oracleGroups ?? [];
+  return groups[0] ?? slice?.name ?? "native";
+}
+
 async function composeStylesheetForAsset(browserLowering, authoredPlan, assetName, switchManifest) {
   const asset = browserAssetDefinition(browserLowering, assetName);
   const ownedSliceByGroup = new Map();
@@ -2023,6 +2040,21 @@ async function composeStylesheetForAsset(browserLowering, authoredPlan, assetNam
     });
   }
 
+  for (const ownerSlice of nativeSlices) {
+    if (emittedNativeSlices.has(ownerSlice.name)) continue;
+    const nativeBlock = asset.nativeBlocksBySlice?.[ownerSlice.name] ?? null;
+    const recordsByIdentity = nativeRecordsBySlice.get(ownerSlice.name) ?? null;
+    if (!nativeBlock || !recordsByIdentity) {
+      throw new Error(`Missing native lowering data for slice ${ownerSlice.name}`);
+    }
+    emittedNativeSlices.add(ownerSlice.name);
+    blocks.push({
+      kind: "group",
+      name: preferredNativeGroupName(ownerSlice),
+      blocks: nativeBlockToBrowserBlocks(nativeBlock, recordsByIdentity)
+    });
+  }
+
   return createWcssStylesheet({
     name: stylesheetTitle(assetName),
     blocks
@@ -2041,11 +2073,30 @@ export async function composeEngentusStylesheets({
   };
 }
 
+export async function loadEngentusGeneratedCssBundle({
+  authoredPlan = null,
+  switchManifest = null
+} = {}) {
+  const resolvedAuthoredPlan = authoredPlan ?? await loadEngentusAppliedWcss();
+  const resolvedSwitchManifest = switchManifest ?? await loadEngentusStyleSwitchManifest();
+  const stylesheets = await composeEngentusStylesheets({
+    authoredPlan: resolvedAuthoredPlan,
+    switchManifest: resolvedSwitchManifest
+  });
+  return {
+    authoredPlan: resolvedAuthoredPlan,
+    switchManifest: resolvedSwitchManifest,
+    stylesheets,
+    files: {
+      [styleAssetName("shell")]: renderOracleStylesheet(stylesheets.shell),
+      [styleAssetName("chart")]: renderOracleStylesheet(stylesheets.chart)
+    }
+  };
+}
+
 export async function buildEngentusStyleArtifacts() {
-  const [authoredPlan, switchManifest] = await Promise.all([
-    loadEngentusAppliedWcss(),
-    loadEngentusStyleSwitchManifest()
-  ]);
+  const bundle = await loadEngentusGeneratedCssBundle();
+  const { authoredPlan, switchManifest, stylesheets, files } = bundle;
   const inventory = await buildEngentusPresentationInventory(authoredPlan);
   const ownership = verifyEngentusStyleOwnership({
     inventory,
@@ -2055,21 +2106,14 @@ export async function buildEngentusStyleArtifacts() {
   if (!ownership.ok) {
     throw new Error(`Engentus WCSS ownership check failed:\n${ownership.errors.map(line => `- ${line}`).join("\n")}`);
   }
-  const stylesheets = await composeEngentusStylesheets({
-    authoredPlan,
-    switchManifest
-  });
-  const parity = await buildEngentusParityReport(authoredPlan, stylesheets, switchManifest);
+  const parity = await buildEngentusParityReport(authoredPlan, stylesheets, switchManifest, files);
   return {
     authoredPlan,
     switchManifest,
     inventory,
     parity,
     ownership,
-    files: {
-      [styleAssetName("shell")]: renderOracleStylesheet(stylesheets.shell),
-      [styleAssetName("chart")]: renderOracleStylesheet(stylesheets.chart)
-    }
+    files
   };
 }
 

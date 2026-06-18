@@ -10,7 +10,7 @@ import desire/v3-alpha
 
 chart GoodmanDiagram of BoltFatigue {
   frame cartesian
-  prop pageStylesheetHref = "/app-static/app/engentus-chart-pages.css"
+  prop pageStylesheetHref = "/engentus/__generated/engentus-chart-pages.css"
   prop bodyClass = "chart-page chart-page--goodman"
   prop viewportClass = "chart-page__viewport"
   prop hostClass = "chart-page__host chart-page__host--goodman"
@@ -98,7 +98,7 @@ chart GoodmanDiagram of BoltFatigue {
 // failure-time/canvas path, not a false per-sample spaghetti overlay here.
 chart GoodmanMCBands of BoltFatigueMC {
   frame cartesian
-  prop pageStylesheetHref = "/app-static/app/engentus-chart-pages.css"
+  prop pageStylesheetHref = "/engentus/__generated/engentus-chart-pages.css"
   prop bodyClass = "chart-page chart-page--goodman"
   prop viewportClass = "chart-page__viewport"
   prop hostClass = "chart-page__host chart-page__host--goodman"

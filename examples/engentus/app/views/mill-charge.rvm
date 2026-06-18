@@ -11,7 +11,7 @@ import desire/v3-alpha
 // Cross-section: charge region + centre-of-mass + the cataracting particle stream
 chart MillChargeCrossSection of MillCharge {
   frame disc
-  prop pageStylesheetHref = "/app-static/app/engentus-chart-pages.css"
+  prop pageStylesheetHref = "/engentus/__generated/engentus-chart-pages.css"
   prop bodyClass = "chart-page chart-page--mill-charge"
   prop viewportClass = "chart-page__viewport"
   prop hostClass = "chart-page__host chart-page__host--mill-charge"

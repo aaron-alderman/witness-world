@@ -2491,7 +2491,7 @@ view EngentusRoot {
   kind app-root
   class engentus-spa
   process EngentusShellNavigation
-  prop stylesheetHref = "/app-static/app/engentus-shell.css"
+  prop stylesheetHref = "/engentus/__generated/engentus-shell.css"
   children {
     EngentusLogin
     EngentusHome

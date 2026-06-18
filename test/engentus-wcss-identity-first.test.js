@@ -7,6 +7,7 @@ import {
   buildEngentusPresentationInventory,
   buildEngentusStyleArtifacts,
   composeEngentusStylesheets,
+  loadEngentusGeneratedCssBundle,
   loadEngentusAppliedWcss,
   loadEngentusBrowserDeclarationGroups,
   loadEngentusBrowserLoweringMap,
@@ -214,7 +215,7 @@ test("engentus browser lowering map is parsed separately from application slices
   assert.ok(browserLowering.assets.find(asset => asset.name === "shell")?.nativeBlocksBySlice?.goodman);
   assert.deepEqual(
     declarationGroups.chart.map(group => group.name),
-    ["chart tokens", "chart foundation", "chart surfaces"]
+    []
   );
 });
 
@@ -295,23 +296,22 @@ test("engentus presentation inventory extracts structured identities, traits, an
   );
 });
 
-test("engentus style artifacts keep current asset outputs stable while defaulting slices to legacy", async () => {
-  const artifacts = await buildEngentusStyleArtifacts();
-  const [shellCss, chartCss] = await Promise.all([
-    readFile(path.join(process.cwd(), "examples", "engentus", "app", "engentus-shell.css"), "utf8"),
-    readFile(path.join(process.cwd(), "examples", "engentus", "app", "engentus-chart-pages.css"), "utf8")
+test("engentus style artifacts keep current asset outputs stable while serving native-browser WCSS by default", async () => {
+  const [artifacts, bundle] = await Promise.all([
+    buildEngentusStyleArtifacts(),
+    loadEngentusGeneratedCssBundle()
   ]);
 
-  assert.equal(artifacts.files["engentus-shell.css"], shellCss);
-  assert.equal(artifacts.files["engentus-chart-pages.css"], chartCss);
+  assert.equal(artifacts.files["engentus-shell.css"], bundle.files["engentus-shell.css"]);
+  assert.equal(artifacts.files["engentus-chart-pages.css"], bundle.files["engentus-chart-pages.css"]);
   assert.equal(artifacts.ownership.ok, true);
   assert.equal(
     artifacts.parity.slices.find(slice => slice.name === "auth")?.loweringMode,
-    "declaration-groups"
+    "native-browser"
   );
   assert.equal(
     artifacts.parity.slices.find(slice => slice.name === "home")?.loweringMode,
-    "declaration-groups"
+    "native-browser"
   );
   assert.deepEqual(
     artifacts.parity.slices.find(slice => slice.name === "goodman")?.legacyGroups,
@@ -458,16 +458,23 @@ test("engentus can switch isolated slices onto the authored WCSS lane while shri
   );
 });
 
-test("engentus can switch chart-pages onto the authored native proof lane without changing the checked-in default shell contract", async () => {
-  const [authoredPlan, inventory, shellCss] = await Promise.all([
+test("engentus can switch chart-pages onto the authored native proof lane while preserving the live native shell contract", async () => {
+  const [authoredPlan, inventory, bundle] = await Promise.all([
     loadEngentusAppliedWcss(),
     buildEngentusPresentationInventory(),
-    readFile(path.join(process.cwd(), "examples", "engentus", "app", "engentus-shell.css"), "utf8")
+    loadEngentusGeneratedCssBundle()
   ]);
 
   const switchManifest = {
     theme: "engentus",
     slices: {
+      "shell-base": "wcss",
+      "auth": "wcss",
+      "home": "wcss",
+      "goodman": "wcss",
+      "mill-charge": "wcss",
+      "mill-force": "wcss",
+      "platform-config": "wcss",
       "chart-pages": "wcss"
     }
   };
@@ -483,7 +490,7 @@ test("engentus can switch chart-pages onto the authored native proof lane withou
     authoredPlan,
     switchManifest
   });
-  assert.equal(renderOracleStylesheet(stylesheets.shell), shellCss);
+  assert.equal(renderOracleStylesheet(stylesheets.shell), bundle.files["engentus-shell.css"]);
 
   const chartCss = renderOracleStylesheet(stylesheets.chart);
   assert.equal(chartCss.includes(":root"), true);
@@ -652,13 +659,15 @@ test("engentus can switch mill-force onto the authored native proof lane without
   assert.deepEqual(millForceSlice?.descendantCoverage?.missingTraits, []);
 });
 
-test("engentus build script writes proof artifacts under tmp without changing live asset paths", async () => {
+test("engentus build script writes proof artifacts and css snapshots under tmp", async () => {
   await import(`${BUILD_SCRIPT_URL.href}?t=${Date.now()}`);
 
-  const [inventory, parity, ownership] = await Promise.all([
+  const [inventory, parity, ownership, shellCss, chartCss] = await Promise.all([
     readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-style-inventory.json"), "utf8"),
     readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-style-parity.json"), "utf8"),
-    readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-style-ownership.json"), "utf8")
+    readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-style-ownership.json"), "utf8"),
+    readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-shell.css"), "utf8"),
+    readFile(path.join(process.cwd(), "tmp", "engentus-wcss", "engentus-chart-pages.css"), "utf8")
   ]);
 
   assert.match(inventory, /"theme": "engentus"/);
@@ -668,6 +677,8 @@ test("engentus build script writes proof artifacts under tmp without changing li
   assert.match(ownership, /"chart-pages"/);
   assert.match(ownership, /"platform-config-row-action"/);
   assert.match(ownership, /"nativeDebt"/);
+  assert.match(shellCss, /Generated from examples\/engentus\/app\/engentus-desired-v2\.wcss/);
+  assert.match(chartCss, /Generated from examples\/engentus\/app\/engentus-desired-v2\.wcss/);
 });
 
 test("engentus ownership checks reject unknown structured identities when a slice is switched to WCSS", async () => {

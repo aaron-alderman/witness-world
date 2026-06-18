@@ -1,7 +1,7 @@
 # Engentus WCSS Application
 
-Engentus now serves its canonical V1 WCSS lane by default through the current
-browser asset path.
+Engentus now serves its canonical V1 WCSS lane by default through runtime-generated
+stylesheet routes rather than repo-tracked static CSS assets.
 
 The important boundary is:
 
@@ -42,7 +42,8 @@ The canonical `.wcss` file now declares:
 - normalized style families
 - explicit node-scoped runtime override seams
 - a separate inline `lowering` section for browser backend mapping
-- browser declaration groups for the current backend assets
+- browser declaration groups where a compatibility lane is still intentionally
+  retained
 
 The three internal layers are now:
 
@@ -65,12 +66,15 @@ Running:
 cmd /c node scripts\build-engentus-wcss.mjs
 ```
 
-still writes the live asset files:
+does not write live CSS into the app source tree. The live runtime now serves:
 
-- `examples/engentus/app/engentus-shell.css`
-- `examples/engentus/app/engentus-chart-pages.css`
+- `/engentus/__generated/engentus-shell.css`
+- `/engentus/__generated/engentus-chart-pages.css`
 
-and writes offline proof artifacts outside the app source tree:
+The build script writes proof/debug artifacts outside the app source tree:
+
+- `tmp/engentus-wcss/engentus-shell.css`
+- `tmp/engentus-wcss/engentus-chart-pages.css`
 
 - `tmp/engentus-wcss/engentus-style-inventory.json`
 - `tmp/engentus-wcss/engentus-style-parity.json`
@@ -87,10 +91,12 @@ and writes offline proof artifacts outside the app source tree:
   definitions, and the checked-in switch manifest serves that lane live by
   default
 - the proof lane now has whole-app native coverage; declaration groups remain a
-  backend artifact rather than the authored slice contract
+  backend artifact rather than the authored slice contract, and they have
+  already been stripped from the validated auth/home/platform-config/chart
+  success paths
 - injected-asset tests still exercise isolated proof composition, but the
-  checked-in runtime now serves the WCSS lane directly; emergency rollback is a
-  manifest-only change back to `legacy`
+  checked-in runtime now serves the WCSS lane directly from generated routes;
+  emergency rollback is a manifest-only change back to `legacy`
 - native slices are expected to target identities, traits, variants, tags, and
   pseudos first; raw selector escapes are treated as backend debt and surfaced
   in the proof reports
@@ -101,5 +107,5 @@ and writes offline proof artifacts outside the app source tree:
   structure tree
 
 That is deliberate. The current tranche normalizes the authored style grammar
-and makes the application contract explicit without changing the runtime/public
-asset contract.
+and makes the application contract explicit while moving CSS delivery onto the
+same runtime-generated footing as the HTML.

@@ -10,7 +10,7 @@ import desire/v3-alpha
 // Force vs angle (cartesian): radial / tangential / resultant for the grounded model
 chart MillForceAngle of MillForce {
   frame cartesian
-  prop pageStylesheetHref = "/app-static/app/engentus-chart-pages.css"
+  prop pageStylesheetHref = "/engentus/__generated/engentus-chart-pages.css"
   prop bodyClass = "chart-page chart-page--mill-force"
   prop viewportClass = "chart-page__viewport"
   prop hostClass = "chart-page__host chart-page__host--mill-force"
@@ -81,7 +81,7 @@ chart MillForceAngle of MillForce {
 // Force rose (polar): resultant magnitude per segment, traced as a closed polygon
 chart MillForceRose of MillForce {
   frame polar
-  prop pageStylesheetHref = "/app-static/app/engentus-chart-pages.css"
+  prop pageStylesheetHref = "/engentus/__generated/engentus-chart-pages.css"
   prop bodyClass = "chart-page chart-page--mill-force"
   prop viewportClass = "chart-page__viewport"
   prop hostClass = "chart-page__host chart-page__host--mill-force"
@@ -132,7 +132,7 @@ chart MillForceRose of MillForce {
 // Cross-section (polar): per-segment wedge coloured by resultant force
 chart MillForceCross of MillForce {
   frame polar
-  prop pageStylesheetHref = "/app-static/app/engentus-chart-pages.css"
+  prop pageStylesheetHref = "/engentus/__generated/engentus-chart-pages.css"
   prop bodyClass = "chart-page chart-page--mill-force"
   prop viewportClass = "chart-page__viewport"
   prop hostClass = "chart-page__host chart-page__host--mill-force"
