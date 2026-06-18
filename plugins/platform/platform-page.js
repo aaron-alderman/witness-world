@@ -449,6 +449,8 @@ function renderSchemaValue(ctx, value, mode = "text") {
   switch (mode) {
     case "api":
       return renderApiLink(typeof value === "object" ? value.id : value);
+    case "href":
+      return `<a href="${esc(value)}">Event stream</a>`;
     case "concept":
       if (typeof value === "object") {
         const id = optionalText(value.id) || optionalText(value.path);
@@ -490,6 +492,13 @@ function parseCardSpecs(raw) {
 function listValuesFromMode(value, mode = "text") {
   const items = Array.isArray(value) ? value : (value === undefined || value === null || value === "" ? [] : [value]);
   switch (mode) {
+    case "path":
+      return items.map(item => typeof item === "object" && item ? item.path || item.id || "" : item).filter(Boolean);
+    case "errorMessage":
+      return items.map(item => {
+        if (typeof item === "object" && item) return `${item.kind || "error"}: ${item.message || ""}`;
+        return item;
+      }).filter(Boolean);
     case "label":
       return items.map(item => {
         if (typeof item === "object" && item) return item.label || item.title || item.system || item.id || item.path || "";
@@ -969,29 +978,39 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   if (detail.id?.startsWith?.("gate:")) {
     const gate = detail;
     const runs = (model.testRuns ?? []).filter(run => run.gateId === gate.id).slice(0, surfaceRowLimit(runHistorySurface, 12));
-    const usedKeys = ["id", "title", "runner", "environment", "timeoutMs", "costEstimate", "command", "protectedObjects", "selectedByBranches", "selectedByChangeSets", "lastResult"];
+    const gateRecord = {
+      ...gate,
+      lastResultLabel: gate.lastResult ? `${gate.lastResult.status} (${gate.lastResult.exitCode ?? "n/a"})` : "idle"
+    };
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "gateCardTitle", "gateFields", ctx, gateRecord, "Test Gate Detail", [
+      { label: "Gate", valueHtml: renderConceptLink(ctx, gate.id, gate.title || gate.id) },
+      { label: "Runner", valueHtml: esc(gate.runner || "") },
+      { label: "Environment", valueHtml: esc(gate.environment || "") },
+      { label: "Timeout", valueHtml: esc(gate.timeoutMs ?? "") },
+      { label: "Cost", valueHtml: esc(gate.costEstimate || "") },
+      { label: "Command", valueHtml: esc(gate.command || "") },
+      { label: "Latest result", valueHtml: esc(gate.lastResult ? `${gate.lastResult.status} (${gate.lastResult.exitCode ?? "n/a"})` : "idle") },
+      { label: "API resource", valueHtml: renderApiLink(gate.id) }
+    ]);
+    const usedKeys = [
+      ...(rootKeysFromSurfaceSchema(primarySurface, "gateFields").length
+        ? rootKeysFromSurfaceSchema(primarySurface, "gateFields")
+        : ["id", "title", "runner", "environment", "timeoutMs", "costEstimate", "command", "lastResult"]),
+      "protectedObjects",
+      "selectedByBranches",
+      "selectedByChangeSets"
+    ];
     return `
       <section class="grid2">
         <div>
           ${renderSurfaceFrame(primarySurface, `
-            ${renderPropertyTable("Test Gate Detail", [
-            { label: "Gate", valueHtml: renderConceptLink(ctx, gate.id, gate.title || gate.id) },
-            { label: "Runner", valueHtml: esc(gate.runner || "") },
-            { label: "Environment", valueHtml: esc(gate.environment || "") },
-            { label: "Timeout", valueHtml: esc(gate.timeoutMs ?? "") },
-            { label: "Cost", valueHtml: esc(gate.costEstimate || "") },
-            { label: "Command", valueHtml: esc(gate.command || "") },
-            { label: "Latest result", valueHtml: esc(gate.lastResult ? `${gate.lastResult.status} (${gate.lastResult.exitCode ?? "n/a"})` : "idle") },
-            { label: "API resource", valueHtml: renderApiLink(gate.id) }
-            ])}
+            ${renderPropertyCard(primaryCard)}
             ${renderLongTailProperties(ctx, gate, usedKeys)}
           `)}
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderLinksCard("Protected Objects", ctx, gate.protectedObjects ?? [])}
-            ${renderLinksCard("Selected Branches", ctx, gate.selectedByBranches ?? [])}
-            ${renderLinksCard("Selected Change Sets", ctx, gate.selectedByChangeSets ?? [])}
+            ${renderCardSpecs(relatedSurface?.props?.gateLinkCards, ctx, gate, "links") || `${renderLinksCard("Protected Objects", ctx, gate.protectedObjects ?? [])}${renderLinksCard("Selected Branches", ctx, gate.selectedByBranches ?? [])}${renderLinksCard("Selected Change Sets", ctx, gate.selectedByChangeSets ?? [])}`}
           `)}
         </div>
       </section>
@@ -1010,33 +1029,49 @@ function renderVerificationDetail(surface, detail, model, ctx) {
     const revision = detail;
     const builds = (model.snapshotBuilds ?? []).filter(build => Number(build.revision || 0) === Number(revision.revision || 0)).slice(0, surfaceRowLimit(buildHistorySurface, 12));
     const errors = (model.snapshotBuildErrors ?? []).filter(error => Number(error.revision || 0) === Number(revision.revision || 0)).slice(0, surfaceRowLimit(buildErrorsSurface, 12));
-    const usedKeys = ["id", "revision", "status", "trigger", "branchId", "changeSetId", "changedSources", "candidateBranchCount", "buildErrorCount"];
+    const revisionRecord = {
+      ...revision,
+      revisionLink: { id: revision.id, title: `Revision ${revision.revision}` }
+    };
+    const diagnosticsRecord = {
+      ...revision,
+      snapshotDiagnostics: model.snapshotDiagnostics,
+      backendStream: "/api/runtime/backend-revisions/events"
+    };
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "runtimeRevisionCardTitle", "runtimeRevisionFields", ctx, revisionRecord, "Runtime Revision Detail", [
+      { label: "Revision", valueHtml: renderConceptLink(ctx, revision.id, `Revision ${revision.revision}`) },
+      { label: "Status", valueHtml: esc(revision.status || "") },
+      { label: "Trigger", valueHtml: esc(revision.trigger || "") },
+      { label: "Branch", valueHtml: revision.branchId ? renderConceptLink(ctx, revision.branchId) : "" },
+      { label: "Change set", valueHtml: revision.changeSetId ? renderConceptLink(ctx, revision.changeSetId) : "" },
+      { label: "Changed sources", valueHtml: esc((revision.changedSources ?? []).length) },
+      { label: "Build errors", valueHtml: esc(revision.buildErrorCount ?? 0) },
+      { label: "API resource", valueHtml: renderApiLink(revision.id) }
+    ]);
+    const diagnosticsCard = propertyRowsFromSurfaceSchema(relatedSurface, "runtimeRevisionPropertyCardTitle", "runtimeRevisionPropertyFields", ctx, diagnosticsRecord, "Snapshot Diagnostics", [
+      { label: "Active revision", valueHtml: esc(model.snapshotDiagnostics?.appRevision ?? "") },
+      { label: "Last good", valueHtml: esc(model.snapshotDiagnostics?.lastGoodAppRevision ?? "") },
+      { label: "Pending dirty", valueHtml: esc((model.snapshotDiagnostics?.pendingDirtySources ?? []).length) },
+      { label: "Backend stream", valueHtml: `<a href="/api/runtime/backend-revisions/events">Event stream</a>` }
+    ]);
+    const usedKeys = [
+      ...(rootKeysFromSurfaceSchema(primarySurface, "runtimeRevisionFields").length
+        ? rootKeysFromSurfaceSchema(primarySurface, "runtimeRevisionFields")
+        : ["id", "revision", "status", "trigger", "branchId", "changeSetId", "changedSources", "buildErrorCount"]),
+      "candidateBranchCount"
+    ];
     return `
       <section class="grid2">
         <div>
           ${renderSurfaceFrame(primarySurface, `
-            ${renderPropertyTable("Runtime Revision Detail", [
-            { label: "Revision", valueHtml: renderConceptLink(ctx, revision.id, `Revision ${revision.revision}`) },
-            { label: "Status", valueHtml: esc(revision.status || "") },
-            { label: "Trigger", valueHtml: esc(revision.trigger || "") },
-            { label: "Branch", valueHtml: revision.branchId ? renderConceptLink(ctx, revision.branchId) : "" },
-            { label: "Change set", valueHtml: revision.changeSetId ? renderConceptLink(ctx, revision.changeSetId) : "" },
-            { label: "Changed sources", valueHtml: esc((revision.changedSources ?? []).length) },
-            { label: "Build errors", valueHtml: esc(revision.buildErrorCount ?? 0) },
-            { label: "API resource", valueHtml: renderApiLink(revision.id) }
-            ])}
+            ${renderPropertyCard(primaryCard)}
             ${renderLongTailProperties(ctx, revision, usedKeys)}
           `)}
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderLinksCard("Changed Sources", ctx, revision.changedSources ?? [])}
-            ${renderPropertyTable("Snapshot Diagnostics", [
-              { label: "Active revision", valueHtml: esc(model.snapshotDiagnostics?.appRevision ?? "") },
-              { label: "Last good", valueHtml: esc(model.snapshotDiagnostics?.lastGoodAppRevision ?? "") },
-              { label: "Pending dirty", valueHtml: esc((model.snapshotDiagnostics?.pendingDirtySources ?? []).length) },
-              { label: "Backend stream", valueHtml: `<a href="/api/runtime/backend-revisions/events">Event stream</a>` }
-            ])}
+            ${renderCardSpecs(relatedSurface?.props?.runtimeRevisionLinkCards, ctx, revision, "links") || renderLinksCard("Changed Sources", ctx, revision.changedSources ?? [])}
+            ${renderPropertyCard(diagnosticsCard)}
           `)}
         </div>
       </section>
@@ -1061,57 +1096,73 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   }
   if (detail.id?.startsWith?.("candidateSnapshot:")) {
     const snapshot = detail;
-    const usedKeys = ["id", "status", "branchId", "changeSetId", "revision", "files", "errors"];
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "candidateSnapshotCardTitle", "candidateSnapshotFields", ctx, snapshot, "Candidate Snapshot Detail", [
+      { label: "Snapshot", valueHtml: renderConceptLink(ctx, snapshot.id) },
+      { label: "Status", valueHtml: esc(snapshot.status || "") },
+      { label: "Branch", valueHtml: snapshot.branchId ? renderConceptLink(ctx, snapshot.branchId) : "" },
+      { label: "Change set", valueHtml: snapshot.changeSetId ? renderConceptLink(ctx, snapshot.changeSetId) : "" },
+      { label: "Revision", valueHtml: esc(snapshot.revision ?? "") },
+      { label: "API resource", valueHtml: renderApiLink(snapshot.id) }
+    ]);
+    const usedKeys = [
+      ...(rootKeysFromSurfaceSchema(primarySurface, "candidateSnapshotFields").length
+        ? rootKeysFromSurfaceSchema(primarySurface, "candidateSnapshotFields")
+        : ["id", "status", "branchId", "changeSetId", "revision"]),
+      "files",
+      "errors"
+    ];
     return `
       <section class="grid2">
         <div>
           ${renderSurfaceFrame(primarySurface, `
-            ${renderPropertyTable("Candidate Snapshot Detail", [
-            { label: "Snapshot", valueHtml: renderConceptLink(ctx, snapshot.id) },
-            { label: "Status", valueHtml: esc(snapshot.status || "") },
-            { label: "Branch", valueHtml: snapshot.branchId ? renderConceptLink(ctx, snapshot.branchId) : "" },
-            { label: "Change set", valueHtml: snapshot.changeSetId ? renderConceptLink(ctx, snapshot.changeSetId) : "" },
-            { label: "Revision", valueHtml: esc(snapshot.revision ?? "") },
-            { label: "API resource", valueHtml: renderApiLink(snapshot.id) }
-            ])}
+            ${renderPropertyCard(primaryCard)}
             ${renderLongTailProperties(ctx, snapshot, usedKeys)}
           `)}
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderTextListCard("Files", (snapshot.files ?? []).map(file => file.path || ""))}
-            ${renderTextListCard("Errors", (snapshot.errors ?? []).map(error => `${error.kind || "error"}: ${error.message || ""}`))}
+            ${renderCardSpecs(relatedSurface?.props?.candidateSnapshotTextCards, ctx, snapshot, "text") || `${renderTextListCard("Files", (snapshot.files ?? []).map(file => file.path || ""))}${renderTextListCard("Errors", (snapshot.errors ?? []).map(error => `${error.kind || "error"}: ${error.message || ""}`))}`}
           `)}
         </div>
       </section>
     `;
   }
   const run = detail;
-  const usedKeys = ["id", "title", "status", "gateId", "branchId", "changeSetId", "candidateSnapshotId", "durationMs", "exitCode", "startedAt", "finishedAt"];
+  const runRecord = {
+    ...run,
+    gateLink: run.gateId ? { id: run.gateId, title: run.title || run.gateId } : null,
+    testEvents: "/api/platform-test-runs/events",
+    backendRevisions: "/api/runtime/backend-revisions/events"
+  };
+  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "testRunCardTitle", "testRunFields", ctx, runRecord, "Test Run Detail", [
+    { label: "Run", valueHtml: renderConceptLink(ctx, run.id) },
+    { label: "Status", valueHtml: esc(run.status || "") },
+    { label: "Gate", valueHtml: run.gateId ? renderConceptLink(ctx, run.gateId, run.title || run.gateId) : esc(run.title || "") },
+    { label: "Branch", valueHtml: run.branchId ? renderConceptLink(ctx, run.branchId) : "" },
+    { label: "Change set", valueHtml: run.changeSetId ? renderConceptLink(ctx, run.changeSetId) : "" },
+    { label: "Candidate snapshot", valueHtml: run.candidateSnapshotId ? renderConceptLink(ctx, run.candidateSnapshotId) : "" },
+    { label: "Duration", valueHtml: esc(run.durationMs ?? "") },
+    { label: "Exit", valueHtml: esc(run.exitCode ?? "") },
+    { label: "API resource", valueHtml: renderApiLink(run.id) }
+  ]);
+  const streamsCard = propertyRowsFromSurfaceSchema(relatedSurface, "testRunPropertyCardTitle", "testRunPropertyFields", ctx, runRecord, "Verification Streams", [
+    { label: "Test events", valueHtml: `<a href="/api/platform-test-runs/events">Test run event stream</a>` },
+    { label: "Backend revisions", valueHtml: `<a href="/api/runtime/backend-revisions/events">Backend revision stream</a>` }
+  ]);
+  const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "testRunFields").length
+    ? rootKeysFromSurfaceSchema(primarySurface, "testRunFields")
+    : ["id", "title", "status", "gateId", "branchId", "changeSetId", "candidateSnapshotId", "durationMs", "exitCode", "startedAt", "finishedAt"];
   return `
     <section class="grid2">
       <div>
         ${renderSurfaceFrame(primarySurface, `
-          ${renderPropertyTable("Test Run Detail", [
-          { label: "Run", valueHtml: renderConceptLink(ctx, run.id) },
-          { label: "Status", valueHtml: esc(run.status || "") },
-          { label: "Gate", valueHtml: run.gateId ? renderConceptLink(ctx, run.gateId, run.title || run.gateId) : esc(run.title || "") },
-          { label: "Branch", valueHtml: run.branchId ? renderConceptLink(ctx, run.branchId) : "" },
-          { label: "Change set", valueHtml: run.changeSetId ? renderConceptLink(ctx, run.changeSetId) : "" },
-          { label: "Candidate snapshot", valueHtml: run.candidateSnapshotId ? renderConceptLink(ctx, run.candidateSnapshotId) : "" },
-          { label: "Duration", valueHtml: esc(run.durationMs ?? "") },
-          { label: "Exit", valueHtml: esc(run.exitCode ?? "") },
-          { label: "API resource", valueHtml: renderApiLink(run.id) }
-          ])}
+          ${renderPropertyCard(primaryCard)}
           ${renderLongTailProperties(ctx, run, usedKeys)}
         `)}
       </div>
       <div>
         ${renderSurfaceFrame(relatedSurface, `
-          ${renderPropertyTable("Verification Streams", [
-            { label: "Test events", valueHtml: `<a href="/api/platform-test-runs/events">Test run event stream</a>` },
-            { label: "Backend revisions", valueHtml: `<a href="/api/runtime/backend-revisions/events">Backend revision stream</a>` }
-          ])}
+          ${renderPropertyCard(streamsCard)}
         `)}
       </div>
     </section>

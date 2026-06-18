@@ -429,6 +429,20 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(verificationRunSurface);
   assert.equal(verificationRunSurface.props.columns, "Status|Run|Branch|Duration|Exit");
   assert.equal(verificationRunSurface.props.rowLimit, "12");
+  const verificationPrimarySurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationPrimaryPanel");
+  assert.ok(verificationPrimarySurface);
+  assert.equal(verificationPrimarySurface.props.gateCardTitle, "Test Gate Detail");
+  assert.match(verificationPrimarySurface.props.gateFields, /Gate=id@concept/);
+  assert.match(verificationPrimarySurface.props.runtimeRevisionFields, /Revision=revisionLink@concept/);
+  assert.match(verificationPrimarySurface.props.candidateSnapshotFields, /Snapshot=id@concept/);
+  assert.match(verificationPrimarySurface.props.testRunFields, /Gate=gateLink@concept/);
+  const verificationRelatedSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationRelatedPanel");
+  assert.ok(verificationRelatedSurface);
+  assert.equal(verificationRelatedSurface.props.gateLinkCards, "Protected Objects=protectedObjects|Selected Branches=selectedByBranches|Selected Change Sets=selectedByChangeSets");
+  assert.equal(verificationRelatedSurface.props.runtimeRevisionLinkCards, "Changed Sources=changedSources");
+  assert.equal(verificationRelatedSurface.props.runtimeRevisionPropertyCardTitle, "Snapshot Diagnostics");
+  assert.equal(verificationRelatedSurface.props.candidateSnapshotTextCards, "Files=files@path|Errors=errors@errorMessage");
+  assert.equal(verificationRelatedSurface.props.testRunPropertyCardTitle, "Verification Streams");
   assert.ok(signalsPage);
   assert.equal(signalsPage.pageId, "signals");
   assert.deepEqual(signalsPage.children, [

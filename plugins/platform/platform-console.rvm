@@ -389,6 +389,14 @@ view PlatformVerificationPrimaryPanel {
   class platform-verification-primary
   prop title = "Primary Detail"
   prop summary = "Selected verification object properties and long-tail fields."
+  prop gateCardTitle = "Test Gate Detail"
+  prop gateFields = "Gate=id@concept|Runner=runner|Environment=environment|Timeout=timeoutMs|Cost=costEstimate|Command=command|Latest result=lastResultLabel|API resource=id@api"
+  prop runtimeRevisionCardTitle = "Runtime Revision Detail"
+  prop runtimeRevisionFields = "Revision=revisionLink@concept|Status=status|Trigger=trigger|Branch=branchId@concept|Change set=changeSetId@concept|Changed sources=changedSources@count|Build errors=buildErrorCount|API resource=id@api"
+  prop candidateSnapshotCardTitle = "Candidate Snapshot Detail"
+  prop candidateSnapshotFields = "Snapshot=id@concept|Status=status|Branch=branchId@concept|Change set=changeSetId@concept|Revision=revision|API resource=id@api"
+  prop testRunCardTitle = "Test Run Detail"
+  prop testRunFields = "Run=id@concept|Status=status|Gate=gateLink@concept|Branch=branchId@concept|Change set=changeSetId@concept|Candidate snapshot=candidateSnapshotId@concept|Duration=durationMs|Exit=exitCode|API resource=id@api"
 }
 
 view PlatformVerificationRelatedPanel {
@@ -396,6 +404,13 @@ view PlatformVerificationRelatedPanel {
   class platform-verification-related
   prop title = "Related Resources"
   prop summary = "Linked verification resources, streams, and supporting context."
+  prop gateLinkCards = "Protected Objects=protectedObjects|Selected Branches=selectedByBranches|Selected Change Sets=selectedByChangeSets"
+  prop runtimeRevisionLinkCards = "Changed Sources=changedSources"
+  prop runtimeRevisionPropertyCardTitle = "Snapshot Diagnostics"
+  prop runtimeRevisionPropertyFields = "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Backend stream=backendStream@href"
+  prop candidateSnapshotTextCards = "Files=files@path|Errors=errors@errorMessage"
+  prop testRunPropertyCardTitle = "Verification Streams"
+  prop testRunPropertyFields = "Test events=testEvents@href|Backend revisions=backendRevisions@href"
 }
 
 view PlatformVerificationRunHistory {
