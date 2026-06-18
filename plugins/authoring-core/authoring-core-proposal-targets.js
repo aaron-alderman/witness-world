@@ -10,6 +10,7 @@ import {
   requestBootstrapContextImportRemove,
   requestBootstrapStewardshipGrant,
   requestBootstrapStewardshipRevoke,
+  resolveStewardshipTargetInput,
   requestBootstrapRouteDefine,
   requestBootstrapServeDefine,
   requestWidgetDefine,
@@ -88,15 +89,31 @@ export function executeAuthoringCoreProposalTarget({
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     case "stewardship.grant": {
-      const gate = ensureTargetAuthority(actor, body.target);
+      const resolvedTarget = resolveStewardshipTargetInput(world, body, {
+        label: "stewardship target"
+      });
+      if (!resolvedTarget.ok) return { ok: false, status: 400, error: resolvedTarget.error };
+      const gate = ensureTargetAuthority(actor, resolvedTarget.target);
       if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
-      const result = requestBootstrapStewardshipGrant(world, { actor, backendHost, body });
+      const result = requestBootstrapStewardshipGrant(world, {
+        actor,
+        backendHost,
+        body: { ...body, target: resolvedTarget.target, targetRef: null }
+      });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     case "stewardship.revoke": {
-      const gate = ensureTargetAuthority(actor, body.target);
+      const resolvedTarget = resolveStewardshipTargetInput(world, body, {
+        label: "stewardship target"
+      });
+      if (!resolvedTarget.ok) return { ok: false, status: 400, error: resolvedTarget.error };
+      const gate = ensureTargetAuthority(actor, resolvedTarget.target);
       if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
-      const result = requestBootstrapStewardshipRevoke(world, { actor, backendHost, body });
+      const result = requestBootstrapStewardshipRevoke(world, {
+        actor,
+        backendHost,
+        body: { ...body, target: resolvedTarget.target, targetRef: null }
+      });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     case "widget.define": {

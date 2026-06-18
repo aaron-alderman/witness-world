@@ -26,11 +26,13 @@ export const MCP_AUTHORING_RUNTIME_BUILTIN_SEEDS = Object.freeze({
       id: "mcp_tool_install_spec",
       process: "mcpTool.install",
       inputs: [
-        { name: "server", accepts: "mcpServer.id", required: true },
+        { name: "server", accepts: "mcpServer.id", required: false },
+        { name: "serverRef", accepts: "context.name", required: false },
         { name: "tool", accepts: "mcpServer.tool", required: true },
         { name: "actingMode", accepts: "mcpServer.actingMode", required: false },
         { name: "scopeContextsJson", accepts: "json.text", required: false },
-        { name: "scopeTargetsJson", accepts: "json.text", required: false }
+        { name: "scopeTargetsJson", accepts: "json.text", required: false },
+        { name: "context", accepts: "context.id", required: false }
       ],
       outputs: [{ name: "server", accepts: "mcpServer.id", required: true }]
     },
@@ -38,8 +40,10 @@ export const MCP_AUTHORING_RUNTIME_BUILTIN_SEEDS = Object.freeze({
       id: "mcp_tool_remove_spec",
       process: "mcpTool.remove",
       inputs: [
-        { name: "server", accepts: "mcpServer.id", required: true },
-        { name: "tool", accepts: "mcpServer.tool", required: true }
+        { name: "server", accepts: "mcpServer.id", required: false },
+        { name: "serverRef", accepts: "context.name", required: false },
+        { name: "tool", accepts: "mcpServer.tool", required: true },
+        { name: "context", accepts: "context.id", required: false }
       ],
       outputs: [{ name: "server", accepts: "mcpServer.id", required: true }]
     }

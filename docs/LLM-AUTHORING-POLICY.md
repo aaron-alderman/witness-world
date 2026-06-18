@@ -90,8 +90,10 @@ Current constrained truth is:
 - it now slices served runtime transport to the reachable fragment used by the
   active authored route subtree instead of serializing the whole broad process
   closure by default
-- route/state equivalence and canonical interactive execution through
-  `page.surface` remain blocked
+- route/state equivalence is pathway-proven on canonical `page.surface`
+- canonical interactive execution through authored process rules is
+  pathway-proven on canonical `page.surface`
+- `surface + projection` runtime pairing remains the next unproven gap
 
 Any future claim beyond that must be pathway-proven first.
 

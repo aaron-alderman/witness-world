@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createWorld } from "../../src/kernel.js";
+import { applyWitnessToml } from "../../src/dsl.js";
 import { moduleProjectors } from "../../src/modules.js";
 import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
 import { bundleId, createHandlers, handlerCatalog, routes } from "./runtime.js";
@@ -180,4 +181,85 @@ test("proposals plugin owns proposal process helpers", async () => {
   assert.equal(processesSource.includes("export async function requestBootstrapProposalApprove"), true);
   assert.equal(processesSource.includes("export function requestBootstrapProposalReject"), true);
   await assert.rejects(readFile(new URL("../../src/bootstrap-authoring.js", import.meta.url), "utf8"));
+});
+
+test("proposal create lowers targetId refs through context scope visibility", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[thing]]
+actor = "system"
+id = "backendHost"
+
+[[thing]]
+actor = "system"
+id = "frontendHost"
+
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceRunner"
+name = "importedRunner"
+`);
+
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    readJson: async () => ({
+      id: "proposal.runtime-plugin.source",
+      targetProcess: "runtimePlugin.install",
+      targetKind: "serverRunner",
+      context: "ctx.target",
+      targetIdRef: "importedRunner",
+      bodyJson: "{}",
+      reason: "Need runtime plugin install review"
+    }),
+    authoringServices: {
+      requireBootstrapActor: actor => ({ ok: true, actor }),
+      executeBootstrapProposal: () => async () => ({ ok: true, witnessIds: [] })
+    },
+    sendGateFailure(_res, gate) {
+      sent.push({ gate });
+    },
+    sendJson(_res, status, body) {
+      sent.push({ status, body });
+    }
+  });
+
+  await handlers["proposal.create"]({ req: {}, res: {}, requestActor: "aaron" });
+
+  assert.equal(sent[0]?.status, 201);
+  assert.equal(sent[0]?.body?.proposal?.targetId, "source_server");
+  assert.equal(world.project(moduleProjectors.proposals).some(row =>
+    row.id === "proposal.runtime-plugin.source"
+    && row.targetId === "source_server"
+  ), true);
 });

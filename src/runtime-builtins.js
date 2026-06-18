@@ -193,7 +193,9 @@ const PROCESS_SPECS = [
     process: "stewardship.grant",
     inputs: [
       { name: "steward", accepts: "stewardship.actor", required: true },
-      { name: "target", accepts: "stewardship.target", required: true },
+      { name: "target", accepts: "stewardship.target", required: false },
+      { name: "targetRef", accepts: "context.name", required: false },
+      { name: "context", accepts: "context.id", required: false },
       { name: "targetKind", accepts: "stewardship.targetKind", required: false }
     ],
     outputs: [{ name: "target", accepts: "stewardship.target", required: true }]
@@ -203,7 +205,9 @@ const PROCESS_SPECS = [
     process: "stewardship.revoke",
     inputs: [
       { name: "steward", accepts: "stewardship.actor", required: true },
-      { name: "target", accepts: "stewardship.target", required: true },
+      { name: "target", accepts: "stewardship.target", required: false },
+      { name: "targetRef", accepts: "context.name", required: false },
+      { name: "context", accepts: "context.id", required: false },
       { name: "targetKind", accepts: "stewardship.targetKind", required: false }
     ],
     outputs: [{ name: "target", accepts: "stewardship.target", required: true }]
@@ -216,6 +220,8 @@ const PROCESS_SPECS = [
       { name: "targetProcess", accepts: "proposal.process", required: true },
       { name: "targetKind", accepts: "proposal.kind", required: true },
       { name: "targetId", accepts: "stewardship.target", required: false },
+      { name: "targetIdRef", accepts: "context.name", required: false },
+      { name: "context", accepts: "context.id", required: false },
       { name: "bodyJson", accepts: "json.text", required: true },
       { name: "reason", accepts: "widget.text", required: false }
     ],
@@ -237,6 +243,28 @@ const PROCESS_SPECS = [
       { name: "reason", accepts: "widget.text", required: false }
     ],
     outputs: [{ name: "id", accepts: "proposal.id", required: true }]
+  },
+  {
+    id: "runtime_plugin_install_spec",
+    process: "runtimePlugin.install",
+    inputs: [
+      { name: "serverRunner", accepts: "serverRunner.id", required: false },
+      { name: "serverRunnerRef", accepts: "context.name", required: false },
+      { name: "plugin", accepts: "widget.text", required: true },
+      { name: "context", accepts: "context.id", required: false }
+    ],
+    outputs: [{ name: "serverRunner", accepts: "serverRunner.id", required: true }]
+  },
+  {
+    id: "runtime_plugin_remove_spec",
+    process: "runtimePlugin.remove",
+    inputs: [
+      { name: "serverRunner", accepts: "serverRunner.id", required: false },
+      { name: "serverRunnerRef", accepts: "context.name", required: false },
+      { name: "plugin", accepts: "widget.text", required: true },
+      { name: "context", accepts: "context.id", required: false }
+    ],
+    outputs: [{ name: "serverRunner", accepts: "serverRunner.id", required: true }]
   },
   {
     id: "frontend_program_define_spec",
@@ -332,6 +360,7 @@ const PROCESS_SPECS = [
       { name: "backendProgramSoul", accepts: "route.backendProgramSoul", required: false },
       { name: "backendProgramSoulRef", accepts: "context.name", required: false },
       { name: "rootWidgetRef", accepts: "context.name", required: false },
+      { name: "rootSurfaceRef", accepts: "context.name", required: false },
       { name: "context", accepts: "context.id", required: false }
     ],
     outputs: [{ name: "id", accepts: "route.id", required: true }]

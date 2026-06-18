@@ -18,6 +18,11 @@ import {
   previewValue
 } from "../../src/type-model.js";
 import { resolvePagePresentationTheme } from "../../src/runtime-presentation.js";
+import {
+  createSurfaceInspectionPoint,
+  installSurfaceInspectionPoint
+} from "../../src/runtime-surface-diagnostics.js";
+import { cloneInspectionValue } from "../../src/runtime-surface-runtime-shared.js";
 import { widgetTree, frontendProgram, templateWidgetTrees, stableJson } from "../../src/widgets.js";
 import { renderGuidanceClient } from "../../src/runtime-guidance-client.js";
 import { renderSurfaceCommandActionsFactory } from "./surface-command-actions.js";
@@ -279,6 +284,9 @@ function renderClientEngine(program) {
   const predicatePasses = ${predicatePasses.toString()};
   const runNode = ${runNode.toString()};
   const runProcessGraph = ${runProcessGraph.toString()};
+  const cloneInspectionValue = ${cloneInspectionValue.toString()};
+  const createSurfaceInspectionPoint = ${createSurfaceInspectionPoint.toString()};
+  const installSurfaceInspectionPoint = ${installSurfaceInspectionPoint.toString()};
   const compatibleWithType = ${compatibleWithType.toString()};
   const editorForValueType = ${editorForValueType.toString()};
   const processSpecFor = ${processSpecFor.toString()};
@@ -318,6 +326,9 @@ function renderClientEngine(program) {
   const applyTheme = () => { document.body.dataset.actor = currentActor() || ''; };
   const liveSurfaceInspectable = Boolean(config.page && config.page !== 'world');
   const validWorldGraphModes = new Set(['graph', 'things', 'primitive', 'witness', 'source', 'process']);
+  const browserRuntimeCapabilities = Array.isArray(config.browserRuntimeCapabilities)
+    ? config.browserRuntimeCapabilities.map(String).filter(Boolean)
+    : [];
   const processViewHref = ({ program, event }) => {
     const url = new URL('/process', window.location.origin);
     if (program) url.searchParams.set('program', program);
@@ -327,11 +338,100 @@ function renderClientEngine(program) {
   const currentSurfaceRouteId = () => typeof config.surfaceRouteId === 'string' && config.surfaceRouteId.trim()
     ? config.surfaceRouteId.trim()
     : '';
+  const currentSurfaceRootWidgetId = () => typeof config.surfaceRootWidgetId === 'string' && config.surfaceRootWidgetId.trim()
+    ? config.surfaceRootWidgetId.trim()
+    : (typeof program.rootWidget === 'string' && program.rootWidget.trim() ? program.rootWidget.trim() : '');
   const currentSurfaceRuntimeInspection = () => {
     const inspection = window?.__surfaceRuntimeInspection;
     return inspection && typeof inspection === 'object' ? inspection : null;
   };
   const backendFacingStepOps = new Set(['fetchJson', 'postJson', 'patchJson', 'deleteJson', 'refreshProjection', 'run']);
+  const widgetPageRuntimeBridgeOps = new Set(['fetchJson', 'postJson', 'patchJson', 'deleteJson', 'refreshProjection']);
+  const widgetPageRuntimeBridgeCount = () => (program.graph || program.steps || [])
+    .filter(step => widgetPageRuntimeBridgeOps.has(String(step?.op || '')))
+    .length;
+  const widgetPageBoundInteractionCount = () => {
+    const events = new Set();
+    for (const step of (program.graph || program.steps || [])) {
+      const event = typeof step?.event === 'string' ? step.event.trim() : '';
+      if (!event || event === 'load' || event === 'error') continue;
+      events.add(event);
+    }
+    return events.size;
+  };
+  const widgetPageRouteTarget = () => {
+    const path = typeof window?.location?.pathname === 'string' && window.location.pathname
+      ? window.location.pathname
+      : '/';
+    const surfaceId = currentSurfaceRootWidgetId();
+    const routeId = currentSurfaceRouteId();
+    return {
+      path,
+      ...(surfaceId ? { surfaceId } : {}),
+      ...(routeId ? { routeId } : {})
+    };
+  };
+  const widgetPageInspectionManifest = {
+    activeSurfaceId: currentSurfaceRootWidgetId() || null,
+    surfaces: currentSurfaceRootWidgetId() ? [{ id: currentSurfaceRootWidgetId() }] : [],
+    routeTargets: [widgetPageRouteTarget()],
+    browserRuntimeCapabilities,
+    diagnostics: {
+      includedRuntimeIds: [program.id].filter(Boolean)
+    }
+  };
+  const widgetPageProcessTrace = [];
+  const widgetPageProcessRuntime = {
+    counts: {
+      stepCount: (program.graph || program.steps || []).length,
+      eventCount: [...new Set((program.graph || program.steps || []).map(step => String(step?.event || '').trim()).filter(Boolean))].length
+    },
+    inFlightCount: 0,
+    trace: widgetPageProcessTrace,
+    snapshot: () => cloneInspectionValue(state),
+    derives: () => ({})
+  };
+  const buildWidgetPageRuntimeProbe = () => {
+    const routeTarget = widgetPageRouteTarget();
+    return {
+      activeSurfaceId: currentSurfaceRootWidgetId() || null,
+      currentProcessRefs: [program.id].filter(Boolean),
+      processState: cloneInspectionValue(state),
+      processDerives: {},
+      runtimeBridgeCount: widgetPageRuntimeBridgeCount(),
+      boundInteractionCount: widgetPageBoundInteractionCount(),
+      routeStateTarget: cloneInspectionValue(routeTarget),
+      activeRouteTarget: cloneInspectionValue(routeTarget)
+    };
+  };
+  const widgetPageInspectionRuntime = {
+    latestProbe: null,
+    issues: [],
+    expectationProviderCount: 0,
+    get runtimeBridgeCount() {
+      return widgetPageRuntimeBridgeCount();
+    },
+    get processRuntime() {
+      return widgetPageProcessRuntime;
+    },
+    async rerunProbe() {
+      this.latestProbe = buildWidgetPageRuntimeProbe();
+      return cloneInspectionValue(this.latestProbe);
+    },
+    whenSettled() {
+      return null;
+    },
+    clearIssues() {
+      this.issues = [];
+      return [];
+    }
+  };
+  const syncWidgetPageRuntimeProbe = () => {
+    widgetPageInspectionRuntime.latestProbe = buildWidgetPageRuntimeProbe();
+    return widgetPageInspectionRuntime.latestProbe;
+  };
+  installSurfaceInspectionPoint(window, widgetPageInspectionManifest, widgetPageInspectionRuntime);
+  syncWidgetPageRuntimeProbe();
   const worldSurfaceHref = ({ select = '', mode = '' } = {}) => {
     const url = new URL('/world', window.location.origin);
     if (select) url.searchParams.set('select', select);
@@ -1803,14 +1903,19 @@ function renderClientEngine(program) {
     timestamp: Date.now()
   });
   const recordProcessEvent = async (process, body = {}) => {
-    if (!processTraceEnabled) return;
+    const entry = traceStepBody(process, body);
+    widgetPageProcessTrace.push(cloneInspectionValue(entry));
+    if (widgetPageProcessTrace.length > 200) widgetPageProcessTrace.shift();
+    syncWidgetPageRuntimeProbe();
+    if (!processTraceEnabled) return entry;
     try {
       await fetch(traceEndpoint, requestOptions({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(traceStepBody(process, body))
+        body: JSON.stringify(entry)
       }, { url: traceEndpoint, disableTrace: true }));
     } catch {}
+    return entry;
   };
   const evaluateExpression = (expression, scope) => {
     const names = Object.keys(scope);
@@ -3133,15 +3238,17 @@ function renderClientEngine(program) {
   });
   async function run(event, eventData = {}, { runId = makeRunId() } = {}) {
     state.event = eventData;
+    widgetPageProcessRuntime.inFlightCount += 1;
+    syncWidgetPageRuntimeProbe();
     const nodes = (program.graph || program.steps || []).filter(s => s.event === event);
-    await recordProcessEvent('frontend.process.start', {
-      runId,
-      program: program.id || '',
-      event,
-      status: 'start',
-      eventData
-    });
     try {
+      await recordProcessEvent('frontend.process.start', {
+        runId,
+        program: program.id || '',
+        event,
+        status: 'start',
+        eventData
+      });
       await runProcessGraph(
         nodes,
         event,
@@ -3185,6 +3292,9 @@ function renderClientEngine(program) {
         message: error instanceof Error ? error.message : String(error)
       });
       throw error;
+    } finally {
+      widgetPageProcessRuntime.inFlightCount = Math.max(0, widgetPageProcessRuntime.inFlightCount - 1);
+      syncWidgetPageRuntimeProbe();
     }
   }
   const hasEventHandlers = event => (program.graph || program.steps || []).some(step => step.event === event);

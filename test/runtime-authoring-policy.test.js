@@ -47,17 +47,17 @@ test("authoring capability matrix reports page.surface pathway semantics separat
 
   assert.equal(pageSurface.status, "partial");
   assert.equal(pageSurface.pairings.surface, "supported");
-  assert.equal(pageSurface.pairings.process, "blocked");
+  assert.equal(pageSurface.pairings.process, "supported");
   assert.equal(pageSurface.pairings.projection, "blocked");
   assert.equal(pageSurface.pathwaySemantics.blockedResetHost.status, "supported");
   assert.equal(pageSurface.pathwaySemantics.staticSurfaceProjection.status, "supported");
   assert.equal(pageSurface.pathwaySemantics.routeSelectedSurface.status, "supported");
-  assert.equal(pageSurface.pathwaySemantics.urlToRouteState.status, "blocked");
-  assert.equal(pageSurface.pathwaySemantics.interactionToRouteState.status, "blocked");
-  assert.equal(pageSurface.pathwaySemantics.routeStateToUrl.status, "blocked");
-  assert.equal(pageSurface.pathwaySemantics.sameDocumentSurfaceRefresh.status, "blocked");
-  assert.equal(pageSurface.pathwaySemantics.routingCluster.status, "blocked");
-  assert.equal(pageSurface.pathwaySemantics.interactiveSurfaceExecution.status, "blocked");
+  assert.equal(pageSurface.pathwaySemantics.urlToRouteState.status, "supported");
+  assert.equal(pageSurface.pathwaySemantics.interactionToRouteState.status, "supported");
+  assert.equal(pageSurface.pathwaySemantics.routeStateToUrl.status, "supported");
+  assert.equal(pageSurface.pathwaySemantics.sameDocumentSurfaceRefresh.status, "supported");
+  assert.equal(pageSurface.pathwaySemantics.routingCluster.status, "supported");
+  assert.equal(pageSurface.pathwaySemantics.interactiveSurfaceExecution.status, "supported");
 });
 
 test("blocked direct mutation response returns the structured blocked handoff shape", () => {

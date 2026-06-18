@@ -274,6 +274,9 @@ view PlatformWorkflowDetail {
   prop title = "Workflow Detail"
   prop summary = "Properties and linked resources for the selected workflow item."
   prop detailSource = "workflow"
+  prop branchIdPrefixes = "branch:"
+  prop changeSetIdPrefixes = "changeSet:|changeset."
+  prop proposalIdPrefixes = "proposal:"
   prop emptyTitle = "Detail"
   prop emptyState = "No workflow rows are projected yet."
   children {
@@ -482,6 +485,10 @@ view PlatformVerificationDetail {
   prop title = "Verification Detail"
   prop summary = "Properties and linked resources for the selected verification object."
   prop detailSource = "verification"
+  prop gateIdPrefixes = "gate:"
+  prop runtimeRevisionIdPrefixes = "runtimeRevision:|backendRevision:|frontendRevision:"
+  prop candidateSnapshotIdPrefixes = "candidateSnapshot:"
+  prop testRunIdPrefixes = "testRun:"
   prop emptyTitle = "Detail"
   prop emptyState = "No verification rows are projected yet."
   children {
@@ -572,9 +579,9 @@ view PlatformVerificationStreams {
   class platform-verification-streams
   prop title = "Verification Streams"
   prop summary = "Links to live test-run and backend-revision event streams."
-  prop propertySource = "verificationStreams"
-  prop streamCardTitle = "Event Streams"
-  prop streamFields = "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href"
+  prop propertyCardTitle = "Event Streams"
+  prop propertyFields = "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href"
+  prop propertyValues = "testRunEventsHref=/api/platform-test-runs/events|backendRevisionEventsHref=/api/runtime/backend-revisions/events"
 }
 
 view PlatformBranchRedGreenList {
@@ -686,6 +693,8 @@ view PlatformSignalDetail {
   prop title = "Signal Detail"
   prop summary = "Properties and linked relationships for the selected signal."
   prop detailSource = "signals"
+  prop gapIdPrefixes = "gap."
+  prop signalNodeKinds = "telemetryMetric|defectCluster|boundary"
   prop emptyTitle = "Detail"
   prop emptyState = "No signal rows are projected yet."
   children {
@@ -773,6 +782,11 @@ view PlatformKnowledgeDetail {
   prop title = "Knowledge Detail"
   prop summary = "Properties and linked resources for the selected knowledge object."
   prop detailSource = "knowledge"
+  prop documentPathField = "path"
+  prop roadmapTaskIdPrefixes = "roadmapTask:"
+  prop roadmapTaskFallbackField = "doc"
+  prop epicIdPrefixes = "epic:"
+  prop featureIdPrefixes = "feature:"
   prop emptyTitle = "Detail"
   prop emptyState = "No knowledge rows are projected yet."
   children {

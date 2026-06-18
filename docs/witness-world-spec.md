@@ -83,7 +83,7 @@ The adjacent risk is "one more special route" gradually avoiding the shared gove
   - `[[contextExport]]`
   - `[[contextImport]]`
 - Covered authoring surfaces may also accept explicit contextual ref fields in parallel with canonical ids.
-  Current first-slice ref fields are `parentRef`, `rootWidgetRef`, `servesRef`, `serverRunnerRef`, `routeRef`, `backendHostRef`, and `frontendHostRef`.
+  Current first-slice ref fields are `parentRef`, `rootWidgetRef`, `rootSurfaceRef`, `servesRef`, `backendProgramSoulRef`, `serverRunnerRef`, `serverRef`, `routeRef`, `backendHostRef`, `frontendHostRef`, `targetRef`, and `targetIdRef`.
   These resolve against authored `contextBinding` / `contextImport` visibility before witnesses are stored, but the stored witness truth remains canonical ids.
 - Capability-specific sections now include:
   - `[[capability]]`

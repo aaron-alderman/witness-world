@@ -111,6 +111,8 @@ Derived or rebuildable runtime data:
 - blobs
 - search indexes
 - webhook payload storage
+- verification caches such as coverage, timing profiles, and other replayable test artifacts
+- candidate snapshots and other temporary validation workspaces
 
 ### Required operator flows
 
@@ -121,6 +123,21 @@ Derived or rebuildable runtime data:
 - export
 - import
 - repair/rebuild of derived runtime data from canonical truth
+
+### Runtime posture follow-on
+
+The intended direction is that local development, CI, and production are different postures of the same runtime rather than separate products with separate testing machinery.
+
+That means:
+
+- verification policy should become an authored runtime concern rather than only an external pipeline concern
+- profile, authority, and risk posture should decide what can auto-run, what must be isolated, and what must be approved
+- verification caches and timing or coverage artifacts should remain derived state rather than hidden canonical truth
+- larger payloads may live in explicit provider-backed stores, but the repo or world state should remain the control-plane story for authored program state and metadata
+
+Detailed tranche planning for that work lives here:
+
+- [docs/CONTINUOUS-VERIFICATION-ROADMAP.md](C:\Users\aaron\Documents\world\docs\CONTINUOUS-VERIFICATION-ROADMAP.md)
 
 ### Current first-slice operator flows
 

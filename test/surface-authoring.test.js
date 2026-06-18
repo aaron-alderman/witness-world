@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createWorld } from "../src/kernel.js";
+import { applyWitnessToml } from "../src/dsl.js";
 import { requestBootstrapRouteDefine, requestMessageDefine, requestProcessDefine, requestProjectionDefine, requestSurfaceDefine, requestTypeDefine } from "../plugins/authoring-core/authoring-core-processes.js";
 
 function routeSupport() {
@@ -329,4 +330,94 @@ test("route.create accepts page.surface rootSurface params and rejects missing r
   assert.equal(missingRootSurface.ok, false);
   assert.equal(missingRootSurface.status, 400);
   assert.match(missingRootSurface.error, /rootSurface/);
+});
+
+test("route.create lowers page.surface rootSurface refs and rejects hidden canonical root surfaces", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[surface]]
+actor = "system"
+id = "ReplayRoot"
+surfaceKind = "app-root"
+context = "ctx.source"
+
+[[surface]]
+actor = "system"
+id = "HiddenRoot"
+surfaceKind = "auth-screen"
+context = "ctx.source"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "replaySurface"
+target = "ReplayRoot"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "replaySurface"
+target = "ReplayRoot"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "replaySurface"
+name = "replaySurface"
+`);
+
+  const okRoute = requestBootstrapRouteDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: {
+      id: "replay_surface_import_route",
+      context: "ctx.target",
+      path: "/imported-surface",
+      method: "GET",
+      handler: "page.surface",
+      servesRef: "replaySurface",
+      rootSurfaceRef: "replaySurface",
+      defaultScreen: "login",
+      routeState: {
+        process: "ReplayFlow",
+        state: "ReplayActiveRoute"
+      }
+    },
+    ...routeSupport()
+  });
+  assert.equal(okRoute.ok, true);
+  assert.equal(okRoute.route.serves, "ReplayRoot");
+  assert.equal(okRoute.route.params.rootSurface, "ReplayRoot");
+  assert.equal(okRoute.route.params.defaultScreen, "login");
+  assert.deepEqual(okRoute.route.params.routeState, {
+    process: "ReplayFlow",
+    state: "ReplayActiveRoute"
+  });
+
+  const hiddenCanonical = requestBootstrapRouteDefine(world, {
+    actor: "aaron",
+    backendHost: "backendHost",
+    body: {
+      id: "hidden_surface_route",
+      context: "ctx.target",
+      path: "/hidden-surface",
+      method: "GET",
+      handler: "page.surface",
+      servesRef: "replaySurface",
+      rootSurface: "HiddenRoot"
+    },
+    ...routeSupport()
+  });
+  assert.equal(hiddenCanonical.ok, false);
+  assert.equal(hiddenCanonical.status, 400);
+  assert.match(hiddenCanonical.error, /route root surface id targets HiddenRoot.*not visible in authoring context ctx\.target/);
 });

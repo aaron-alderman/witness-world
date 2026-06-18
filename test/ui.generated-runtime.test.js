@@ -37,6 +37,49 @@ test("generated UI boots, renders core widgets, and is executable", async () => 
   }
 });
 
+test("generated live widget pages expose shared runtime inspection through the widget runtime", async () => {
+  const { server, close: closeServer } = await startUiDemoServer({});
+  const {
+    page,
+    runtime,
+    close: closeBrowser
+  } = await launchBrowser();
+
+  try {
+    await page.goto(`${server.url}/`);
+    await waitForAppReady(page);
+    await page.waitForFunction(() => Boolean(window.__surfaceRuntimeInspection?.latestProbe));
+
+    const inspection = await page.evaluate(async () => {
+      const inspection = window.__surfaceRuntimeInspection;
+      const probe = await inspection.rerunProbe();
+      const diagnostics = await inspection.refreshServerDiagnostics();
+      return {
+        aliasesShared: inspection === window.world && inspection === window.witnessWorld,
+        activeSurfaceId: inspection.activeSurfaceId,
+        runtimeIds: inspection.runtimeIds,
+        traceLength: inspection.process?.traceLength ?? 0,
+        currentProcessRefs: probe?.currentProcessRefs ?? [],
+        activeRoutePath: probe?.activeRouteTarget?.path ?? null,
+        mountedHomeRoutePath: diagnostics?.mountedRoutes?.find(route => route.id === "home_page_route")?.path ?? null
+      };
+    });
+
+    assert.equal(inspection.aliasesShared, true);
+    assert.equal(inspection.activeSurfaceId, "todo_app_widget");
+    assert.equal(inspection.runtimeIds.includes("todo_frontend_program"), true);
+    assert.equal(inspection.traceLength > 0, true);
+    assert.equal(inspection.currentProcessRefs.includes("todo_frontend_program"), true);
+    assert.equal(inspection.activeRoutePath, "/");
+    assert.equal(inspection.mountedHomeRoutePath, "/");
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
 test("generated runtime executes repeat.forEach steps in the browser", async () => {
   const world = createWorld();
   applyWitnessToml(world, `

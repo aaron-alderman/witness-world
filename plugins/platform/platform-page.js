@@ -1180,6 +1180,30 @@ function findModelDetail(model, id) {
   return (model.nodes ?? []).find(node => node.id === id) || (model.nodes ?? [])[0] || null;
 }
 
+function surfaceIdPrefixes(surface, key, fallback = []) {
+  const raw = surfacePropText(surface, key, "");
+  if (!raw) return fallback;
+  const prefixes = raw.split("|").map(value => value.trim()).filter(Boolean);
+  return prefixes.length ? prefixes : fallback;
+}
+
+function recordMatchesIdPrefixes(record, prefixes = []) {
+  const id = optionalText(record?.id);
+  return Boolean(id && prefixes.some(prefix => id.startsWith(prefix)));
+}
+
+function surfaceValueList(surface, key, fallback = []) {
+  const raw = surfacePropText(surface, key, "");
+  if (!raw) return fallback;
+  const values = raw.split("|").map(value => value.trim()).filter(Boolean);
+  return values.length ? values : fallback;
+}
+
+function recordMatchesKinds(record, kinds = []) {
+  const kind = optionalText(record?.kind);
+  return Boolean(kind && kinds.includes(kind));
+}
+
 function renderWorkflowDetail(surface, detail, model, ctx) {
   const primarySurface = nestedSurface(surface, "PlatformWorkflowPrimaryPanel", {
     title: "Primary Detail",
@@ -1199,8 +1223,11 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
     summary: "Staged overlay edits for the selected change set when available.",
     surfaceKind: "table"
   });
+  const branchIdPrefixes = surfaceIdPrefixes(surface, "branchIdPrefixes", ["branch:"]);
+  const changeSetIdPrefixes = surfaceIdPrefixes(surface, "changeSetIdPrefixes", ["changeSet:", "changeset."]);
+  const proposalIdPrefixes = surfaceIdPrefixes(surface, "proposalIdPrefixes", ["proposal:"]);
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No workflow rows are projected yet." });
-  if (detail.id?.startsWith?.("branch:")) {
+  if (recordMatchesIdPrefixes(detail, branchIdPrefixes)) {
     const branch = detail;
     const snapshots = (model.candidateSnapshots ?? []).filter(snapshot => snapshot.branchId === branch.id).slice(0, surfaceRowLimit(snapshotSurface, 12));
     const snapshotRows = snapshots.map(snapshot => ({
@@ -1234,7 +1261,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
       `)))]
     ]));
   }
-  if (detail.id?.startsWith?.("changeSet:") || detail.id?.startsWith?.("changeset.")) {
+  if (recordMatchesIdPrefixes(detail, changeSetIdPrefixes)) {
     const changeSet = detail;
     const edits = (model.changeSetEdits ?? []).filter(edit => edit.changeSetId === changeSet.id).slice(0, surfaceRowLimit(editSurface, 20));
     const snapshots = (model.candidateSnapshots ?? []).filter(snapshot => snapshot.changeSetId === changeSet.id).slice(0, surfaceRowLimit(snapshotSurface, 12));
@@ -1282,6 +1309,9 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
     ]));
   }
   const proposal = detail;
+  if (!recordMatchesIdPrefixes(proposal, proposalIdPrefixes) && detail.id) {
+    return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No workflow rows are projected yet." });
+  }
   const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "proposalCardTitle", "proposalFields", ctx, proposal, "Proposal Detail");
   const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "proposalFields").length
     ? rootKeysFromSurfaceSchema(primarySurface, "proposalFields")
@@ -1321,8 +1351,12 @@ function renderVerificationDetail(surface, detail, model, ctx) {
     summary: "Build errors for the selected runtime revision when available.",
     surfaceKind: "table"
   });
+  const gateIdPrefixes = surfaceIdPrefixes(surface, "gateIdPrefixes", ["gate:"]);
+  const runtimeRevisionIdPrefixes = surfaceIdPrefixes(surface, "runtimeRevisionIdPrefixes", ["runtimeRevision:", "backendRevision:", "frontendRevision:"]);
+  const candidateSnapshotIdPrefixes = surfaceIdPrefixes(surface, "candidateSnapshotIdPrefixes", ["candidateSnapshot:"]);
+  const testRunIdPrefixes = surfaceIdPrefixes(surface, "testRunIdPrefixes", ["testRun:"]);
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No verification rows are projected yet." });
-  if (detail.id?.startsWith?.("gate:")) {
+  if (recordMatchesIdPrefixes(detail, gateIdPrefixes)) {
     const gate = detail;
     const runRows = (model.testRuns ?? []).filter(run => run.gateId === gate.id).slice(0, surfaceRowLimit(runHistorySurface, 12));
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "gateCardTitle", "gateFields", ctx, gate, "Test Gate Detail");
@@ -1351,7 +1385,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       `)))]
     ]));
   }
-  if (detail.id?.startsWith?.("runtimeRevision:") || detail.id?.startsWith?.("backendRevision:") || detail.id?.startsWith?.("frontendRevision:")) {
+  if (recordMatchesIdPrefixes(detail, runtimeRevisionIdPrefixes)) {
     const revision = detail;
     const builds = (model.snapshotBuilds ?? []).filter(build => Number(build.revision || 0) === Number(revision.revision || 0)).slice(0, surfaceRowLimit(buildHistorySurface, 12));
     const errors = (model.snapshotBuildErrors ?? []).filter(error => Number(error.revision || 0) === Number(revision.revision || 0)).slice(0, surfaceRowLimit(buildErrorsSurface, 12));
@@ -1399,7 +1433,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       `)))]
     ]));
   }
-  if (detail.id?.startsWith?.("candidateSnapshot:")) {
+  if (recordMatchesIdPrefixes(detail, candidateSnapshotIdPrefixes)) {
     const snapshot = detail;
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "candidateSnapshotCardTitle", "candidateSnapshotFields", ctx, snapshot, "Candidate Snapshot Detail");
     const usedKeys = [
@@ -1419,6 +1453,9 @@ function renderVerificationDetail(surface, detail, model, ctx) {
     ]));
   }
   const run = detail;
+  if (!recordMatchesIdPrefixes(run, testRunIdPrefixes) && detail.id) {
+    return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No verification rows are projected yet." });
+  }
   const runRecord = {
     ...run,
     testRunEventsHref: "/api/platform-test-runs/events",
@@ -1459,8 +1496,13 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
     summary: "Document or roadmap tasks for the selected knowledge object when available.",
     surfaceKind: "table"
   });
+  const documentPathField = surfacePropText(surface, "documentPathField", "path");
+  const roadmapTaskIdPrefixes = surfaceIdPrefixes(surface, "roadmapTaskIdPrefixes", ["roadmapTask:"]);
+  const roadmapTaskFallbackField = surfacePropText(surface, "roadmapTaskFallbackField", "doc");
+  const epicIdPrefixes = surfaceIdPrefixes(surface, "epicIdPrefixes", ["epic:"]);
+  const featureIdPrefixes = surfaceIdPrefixes(surface, "featureIdPrefixes", ["feature:"]);
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No knowledge rows are projected yet." });
-  if (detail.path) {
+  if (resolveFieldPath(detail, documentPathField)) {
     const doc = detail;
     const sections = (model.docSections ?? []).filter(section => section.doc === doc.path).slice(0, surfaceRowLimit(sectionsSurface, 20));
     const tasks = (model.docTasks ?? []).filter(task => task.doc === doc.path).slice(0, surfaceRowLimit(tasksSurface, 20));
@@ -1496,7 +1538,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
       `)))]
     ]));
   }
-  if (detail.id?.startsWith?.("roadmapTask:") || detail.doc) {
+  if (recordMatchesIdPrefixes(detail, roadmapTaskIdPrefixes) || resolveFieldPath(detail, roadmapTaskFallbackField)) {
     const task = detail;
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "roadmapTaskCardTitle", "roadmapTaskFields", ctx, task, "Roadmap Task Detail");
     const usedKeys = [
@@ -1515,7 +1557,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
       `)]
     ]));
   }
-  if (detail.id?.startsWith?.("epic:")) {
+  if (recordMatchesIdPrefixes(detail, epicIdPrefixes)) {
     const epic = detail;
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "epicCardTitle", "epicFields", ctx, epic, "Epic Detail");
     const usedKeys = [
@@ -1535,6 +1577,9 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
     ]));
   }
   const feature = detail;
+  if (!recordMatchesIdPrefixes(feature, featureIdPrefixes) && detail.id) {
+    return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No knowledge rows are projected yet." });
+  }
   const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "featureCardTitle", "featureFields", ctx, feature, "Feature Detail");
   const usedKeys = [
     ...(rootKeysFromSurfaceSchema(primarySurface, "featureFields").length
@@ -1567,8 +1612,10 @@ function renderSignalDetail(surface, detail, model, ctx) {
     summary: "Linked graph relationships for the selected signal when available.",
     surfaceKind: "table"
   });
+  const gapIdPrefixes = surfaceIdPrefixes(surface, "gapIdPrefixes", ["gap."]);
+  const signalNodeKinds = surfaceValueList(surface, "signalNodeKinds", ["telemetryMetric", "defectCluster", "boundary"]);
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No signal rows are projected yet." });
-  if (detail.kind) {
+  if (recordMatchesIdPrefixes(detail, gapIdPrefixes)) {
     const gap = detail;
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "gapCardTitle", "gapFields", ctx, gap, "Gap Detail");
     const usedKeys = [
@@ -1590,6 +1637,9 @@ function renderSignalDetail(surface, detail, model, ctx) {
     ]));
   }
   const node = detail;
+  if (!recordMatchesKinds(node, signalNodeKinds) && detail.id) {
+    return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No signal rows are projected yet." });
+  }
   const relatedEdges = (model.edges ?? []).filter(edge => edge.from === node.id || edge.to === node.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
   const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "signalCardTitle", "signalFields", ctx, node, "Signal Detail");
   const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "signalFields").length
@@ -1727,32 +1777,16 @@ function renderAuthoredFormSection(surface, model) {
   `);
 }
 
-function renderVerificationStreamsSection(surface) {
-  const streamRecord = {
-    testRunEventsHref: "/api/platform-test-runs/events",
-    backendRevisionEventsHref: "/api/runtime/backend-revisions/events"
-  };
+function renderAuthoredStaticPropertySection(surface) {
+  const record = Object.fromEntries(parseSurfaceLabelMap(surface?.props?.propertyValues).entries());
   return renderSurfaceFrame(surface, renderPropertyCard(propertyRowsFromSurfaceSchema(
     surface,
-    "streamCardTitle",
-    "streamFields",
+    "propertyCardTitle",
+    "propertyFields",
     null,
-    streamRecord,
-    "Event Streams",
-    [
-      { label: "Test run event stream", valueHtml: `<a href="/api/platform-test-runs/events">Test run event stream</a>` },
-      { label: "Backend revision event stream", valueHtml: `<a href="/api/runtime/backend-revisions/events">Backend revision event stream</a>` }
-    ]
+    record,
+    "Properties"
   )));
-}
-
-function renderAuthoredPropertySourceSection(surface) {
-  switch (surfacePropText(surface, "propertySource", "")) {
-    case "verificationStreams":
-      return renderVerificationStreamsSection(surface);
-    default:
-      return "";
-  }
 }
 
 function renderAuthoredDetailSourceSection(surface, model, ctx) {
@@ -2035,8 +2069,8 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
   if (surface?.props?.formId && surface?.props?.formFields) {
     return renderAuthoredFormSection(surface, model);
   }
-  if (surface?.props?.propertySource) {
-    return renderAuthoredPropertySourceSection(surface);
+  if (surface?.props?.propertyValues && surface?.props?.propertyFields) {
+    return renderAuthoredStaticPropertySection(surface);
   }
   if (surface?.props?.detailSource) {
     return renderAuthoredDetailSourceSection(surface, model, ctx);

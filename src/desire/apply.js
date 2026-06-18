@@ -1095,27 +1095,44 @@ function applyCoreRuntimeDeclaration(world, doc) {
       ]);
     }
     case "stewardship":
-      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+      {
+        const target = resolvePreparedDocRef(world, values, {
+          idField: "target",
+          refField: "targetRef",
+          label: "stewardship target"
+        });
+        if (!target.ok) throw new Error(target.error);
+        if (!target.target) throw new Error("stewardship target is required");
+        return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
         (values.revoke === true ? revokeStewardship : grantStewardship)(world, {
           actor: req(values, "actor"),
           steward: req(values, "steward"),
-          target: req(values, "target"),
+          target: target.target,
           targetKind: values.targetKind ?? null
         })
-      ]);
+        ]);
+      }
     case "proposal":
-      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+      {
+        const target = resolvePreparedDocRef(world, values, {
+          idField: "targetId",
+          refField: "targetIdRef",
+          label: "proposal target"
+        });
+        if (!target.ok) throw new Error(target.error);
+        return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
         createProposal(world, {
           actor: req(values, "actor"),
           id: req(values, "id"),
           targetProcess: req(values, "targetProcess"),
           targetKind: req(values, "targetKind"),
-          targetId: values.targetId ?? null,
+          targetId: target.target ?? null,
           body: values.body ?? {},
           reason: values.reason ?? null,
           owner: values.owner ?? values.actor
         })
-      ]);
+        ]);
+      }
     case "thing":
       return withSourceAnnotations(world, doc, [req(values, "id")], req(values, "actor"), [
         createThing(world, {
@@ -1161,7 +1178,7 @@ function applyCoreRuntimeDeclaration(world, doc) {
         const target = resolvePreparedDocRef(world, values, {
           idField: "target",
           refField: "targetRef",
-          label: "capability target"
+          label: "capability install target"
         });
         if (!target.ok) throw new Error(target.error);
         if (!target.target) throw new Error("capability target is required");
@@ -1180,7 +1197,7 @@ function applyCoreRuntimeDeclaration(world, doc) {
         const target = resolvePreparedDocRef(world, values, {
           idField: "target",
           refField: "targetRef",
-          label: "capability target"
+          label: "capability remove target"
         });
         if (!target.ok) throw new Error(target.error);
         if (!target.target) throw new Error("capability target is required");
@@ -1194,21 +1211,39 @@ function applyCoreRuntimeDeclaration(world, doc) {
         ]);
       }
     case "runtimePluginInstall":
-      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+      {
+        const serverRunner = resolvePreparedDocRef(world, values, {
+          idField: "serverRunner",
+          refField: "serverRunnerRef",
+          label: "server runner"
+        });
+        if (!serverRunner.ok) throw new Error(serverRunner.error);
+        if (!serverRunner.target) throw new Error("server runner is required");
+        return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
         installRuntimePlugin(world, {
           actor: req(values, "actor"),
-          serverRunner: req(values, "serverRunner"),
+          serverRunner: serverRunner.target,
           plugin: req(values, "plugin")
         })
-      ]);
+        ]);
+      }
     case "runtimePluginRemove":
-      return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
+      {
+        const serverRunner = resolvePreparedDocRef(world, values, {
+          idField: "serverRunner",
+          refField: "serverRunnerRef",
+          label: "server runner"
+        });
+        if (!serverRunner.ok) throw new Error(serverRunner.error);
+        if (!serverRunner.target) throw new Error("server runner is required");
+        return withSourceAnnotations(world, doc, sourceTargetsForDoc(doc), req(values, "actor"), [
         removeRuntimePlugin(world, {
           actor: req(values, "actor"),
-          serverRunner: req(values, "serverRunner"),
+          serverRunner: serverRunner.target,
           plugin: req(values, "plugin")
         })
-      ]);
+        ]);
+      }
     case "serverRunner":
       {
         const backendHost = resolvePreparedDocRef(world, values, {
@@ -1769,10 +1804,28 @@ function applyNativeFrontendStepDoc(world, doc, values) {
 function routeParamsDirect(values) {
   const params = values.params && typeof values.params === "object" ? { ...values.params } : {};
   if (values.rootWidget != null) params.rootWidget = values.rootWidget;
+  if (values.rootSurface != null) params.rootSurface = values.rootSurface;
   if (values.page != null) params.page = values.page;
   if (values.frontendProgram != null) params.frontendProgram = values.frontendProgram;
   if (values.backendProgramSoul != null) params.backendProgramSoul = values.backendProgramSoul;
+  if (values.defaultScreen != null) params.defaultScreen = values.defaultScreen;
+  if (values.routeState && typeof values.routeState === "object" && !Array.isArray(values.routeState)) {
+    const process = trimOptionalString(values.routeState.process) ?? trimOptionalString(values.routeState.processRef);
+    const state = trimOptionalString(values.routeState.state) ?? trimOptionalString(values.routeState.stateRef);
+    if (state) {
+      params.routeState = {
+        ...(process ? { process } : {}),
+        state
+      };
+    }
+  }
   if (values.liveProjection === true) params.liveProjection = true;
+  if (Array.isArray(values.excludeWidgetRoles) && values.excludeWidgetRoles.length) {
+    params.excludeWidgetRoles = [...values.excludeWidgetRoles];
+  }
+  if (typeof values.defaultRootWidget === "string" && values.defaultRootWidget.trim()) {
+    params.rootWidget = values.defaultRootWidget.trim();
+  }
   return Object.keys(params).length ? params : null;
 }
 
@@ -1785,6 +1838,13 @@ function routeParamsResolved(world, values) {
   });
   if (!rootWidget.ok) return { ok: false, error: rootWidget.error };
   if (rootWidget.target) params.rootWidget = rootWidget.target;
+  const rootSurface = resolvePreparedDocRef(world, values, {
+    idField: "rootSurface",
+    refField: "rootSurfaceRef",
+    label: "root surface"
+  });
+  if (!rootSurface.ok) return { ok: false, error: rootSurface.error };
+  if (rootSurface.target) params.rootSurface = rootSurface.target;
   if (values.page != null) params.page = values.page;
   if (values.frontendProgram != null) params.frontendProgram = values.frontendProgram;
   const backendProgramSoul = resolvePreparedDocRef(world, values, {
@@ -1794,7 +1854,24 @@ function routeParamsResolved(world, values) {
   });
   if (!backendProgramSoul.ok) return { ok: false, error: backendProgramSoul.error };
   if (backendProgramSoul.target) params.backendProgramSoul = backendProgramSoul.target;
+  if (values.defaultScreen != null) params.defaultScreen = values.defaultScreen;
+  if (values.routeState && typeof values.routeState === "object" && !Array.isArray(values.routeState)) {
+    const process = trimOptionalString(values.routeState.process) ?? trimOptionalString(values.routeState.processRef);
+    const state = trimOptionalString(values.routeState.state) ?? trimOptionalString(values.routeState.stateRef);
+    if (state) {
+      params.routeState = {
+        ...(process ? { process } : {}),
+        state
+      };
+    }
+  }
   if (values.liveProjection === true) params.liveProjection = true;
+  if (Array.isArray(values.excludeWidgetRoles) && values.excludeWidgetRoles.length) {
+    params.excludeWidgetRoles = [...values.excludeWidgetRoles];
+  }
+  if (typeof values.defaultRootWidget === "string" && values.defaultRootWidget.trim()) {
+    params.rootWidget = values.defaultRootWidget.trim();
+  }
   return { ok: true, value: Object.keys(params).length ? params : null };
 }
 

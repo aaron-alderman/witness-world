@@ -131,6 +131,23 @@ function resolveBodyRef(world, body, {
   });
 }
 
+export function resolveStewardshipTargetInput(world, body, {
+  contextField = "context",
+  idField = "target",
+  refField = "targetRef",
+  label = "stewardship target"
+} = {}) {
+  const resolved = resolveBodyRef(world, body, {
+    contextField,
+    idField,
+    refField,
+    label
+  });
+  if (!resolved.ok) return resolved;
+  if (!resolved.target) return { ok: false, error: `${label} is required` };
+  return resolved;
+}
+
 function propsFromWidgetInput(input) {
   const props = {};
   const direct = ["text", "title", "class", "role", "href", "name", "placeholder", "autocomplete", "type", "action", "label", "valueType", "eventSoul", "eventVersion"];
@@ -916,7 +933,21 @@ export function requestBootstrapStewardshipGrant(world, {
     });
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
-  const input = validated.value;
+  const resolvedTarget = resolveStewardshipTargetInput(world, validated.value, {
+    label: "stewardship target"
+  });
+  if (!resolvedTarget.ok) {
+    const witness = fail(world, {
+      process: "stewardship.grant.failed",
+      actor: actor || backendHost,
+      body: { reason: resolvedTarget.error }
+    });
+    return { ok: false, status: 400, error: resolvedTarget.error, witness };
+  }
+  const input = {
+    ...validated.value,
+    target: resolvedTarget.target
+  };
   if (!exists(world, input.target)) {
     const witness = fail(world, {
       process: "stewardship.grant.failed",
@@ -963,7 +994,21 @@ export function requestBootstrapStewardshipRevoke(world, {
     });
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
-  const input = validated.value;
+  const resolvedTarget = resolveStewardshipTargetInput(world, validated.value, {
+    label: "stewardship target"
+  });
+  if (!resolvedTarget.ok) {
+    const witness = fail(world, {
+      process: "stewardship.revoke.failed",
+      actor: actor || backendHost,
+      body: { reason: resolvedTarget.error }
+    });
+    return { ok: false, status: 400, error: resolvedTarget.error, witness };
+  }
+  const input = {
+    ...validated.value,
+    target: resolvedTarget.target
+  };
   if (!world.project(moduleProjectors.stewardships).some(row => row.steward === input.steward && row.target === input.target)) {
     const witness = fail(world, {
       process: "stewardship.revoke.failed",

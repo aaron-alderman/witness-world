@@ -529,7 +529,7 @@ test("a bootstrap-authored runner and home route take over without restarting th
   }
 });
 
-test("canonical authoring pathway probe proves route-selected authored output and stops next at route-state synchronization", { timeout: 10000 }, async () => {
+test("canonical authoring pathway probe proves interactive authored page.surface routing", { timeout: 30000 }, async () => {
   const { server } = await startBlankServer({ runtimePluginIds: ["plugin.mcp"] });
   try {
     const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
@@ -552,8 +552,8 @@ test("canonical authoring pathway probe proves route-selected authored output an
       assert.equal(result.pathwayProbe.staticSurfaceProjectionVisible, true);
       assert.equal(result.pathwayProbe.routeSelectedSurfaceVisible, true);
       assert.equal(result.pathwayProbe.blockedResetHostVisible, false);
-      assert.equal(result.pathwayProbe.firstBlockedRung, "urlToRouteState");
-      assert.equal(result.blockers.firstBlocked?.limitationType, "platform");
+      assert.equal(result.pathwayProbe.firstBlockedRung, null);
+      assert.equal(result.blockers.firstBlocked ?? null, null);
       assert.equal(result.stateChecks.rootSurfacePresent, true);
     } finally {
       await server.close();

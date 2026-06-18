@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createWorld } from "../../src/kernel.js";
+import { applyWitnessToml } from "../../src/dsl.js";
+import { moduleProjectors } from "../../src/modules.js";
 import { bundles } from "./runtime.js";
 import { executeAuthoringCoreProposalTarget } from "./authoring-core-proposal-targets.js";
 
@@ -138,4 +140,166 @@ test("authoring-core plugin owns generic authoring process helpers", async () =>
     ensureTargetAuthority: () => ({ ok: true })
   });
   assert.equal(unsupported, null);
+});
+
+test("authoring-core stewardship handlers lower target refs before target authority checks", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[thing]]
+actor = "system"
+id = "backendHost"
+
+[[thing]]
+actor = "system"
+id = "frontendHost"
+
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceRunner"
+name = "importedRunner"
+`);
+
+  const seenTargets = [];
+  const sent = [];
+  const handlers = bundles["bundle-authoring-core"].createHandlers({
+    world,
+    backendHost: "backendHost",
+    readJson: async () => ({
+      steward: "callan",
+      context: "ctx.target",
+      targetRef: "importedRunner",
+      targetKind: "serverRunner"
+    }),
+    authoringServices: {
+      requireBootstrapActor: actor => ({ ok: true, actor }),
+      ensureIdentityAuthority: () => ({ ok: true }),
+      ensureContextAuthority: () => ({ ok: true }),
+      ensureTargetAuthority: (_actor, target) => {
+        seenTargets.push(target);
+        return { ok: true };
+      }
+    },
+    sendGateFailure(_res, gate) {
+      sent.push({ gate });
+    },
+    sendJson(_res, status, body) {
+      sent.push({ status, body });
+    },
+    syncSessionIdentity: () => null,
+    sessionResponseShape: session => session,
+    supportedHandlers: [],
+    supportedHandlerMetadata: {}
+  });
+
+  await handlers["stewardship.create"]({ req: {}, res: {}, requestActor: "aaron" });
+
+  assert.deepEqual(seenTargets, ["source_server"]);
+  assert.equal(sent[0]?.status, 201);
+  assert.equal(world.project(moduleProjectors.stewardships).some(row =>
+    row.steward === "callan" && row.target === "source_server"
+  ), true);
+});
+
+test("authoring-core stewardship proposal targets lower target refs before target authority checks", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[thing]]
+actor = "system"
+id = "backendHost"
+
+[[thing]]
+actor = "system"
+id = "frontendHost"
+
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceRunner"
+name = "importedRunner"
+`);
+
+  const seenTargets = [];
+  const result = executeAuthoringCoreProposalTarget({
+    world,
+    actor: "aaron",
+    backendHost: "backendHost",
+    proposal: { targetProcess: "stewardship.grant" },
+    body: {
+      steward: "callan",
+      context: "ctx.target",
+      targetRef: "importedRunner",
+      targetKind: "serverRunner"
+    },
+    supportedHandlers: [],
+    supportedHandlerMetadata: {},
+    ensureIdentityAuthority: () => ({ ok: true }),
+    ensureContextAuthority: () => ({ ok: true }),
+    ensureTargetAuthority: (_actor, target) => {
+      seenTargets.push(target);
+      return { ok: true };
+    }
+  });
+
+  assert.deepEqual(seenTargets, ["source_server"]);
+  assert.equal(result?.ok, true);
+  assert.equal(world.project(moduleProjectors.stewardships).some(row =>
+    row.steward === "callan" && row.target === "source_server"
+  ), true);
 });

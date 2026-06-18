@@ -1,7 +1,8 @@
 import {
   requestBootstrapServerRunnerDefine,
   requestBootstrapRuntimePluginInstall,
-  requestBootstrapRuntimePluginRemove
+  requestBootstrapRuntimePluginRemove,
+  resolveRuntimePluginServerRunnerInput
 } from "./server-runner-processes.js";
 
 export function createServerRunnerAuthoringBundleHandlers({
@@ -28,19 +29,26 @@ export function createServerRunnerAuthoringBundleHandlers({
         return;
       }
       const body = await readJson(req);
-      const auth = ensureTargetAuthority(gate.actor, body.serverRunner);
+      const resolvedServerRunner = resolveRuntimePluginServerRunnerInput(world, body, {
+        label: "server runner"
+      });
+      if (!resolvedServerRunner.ok) {
+        sendJson(res, 400, { error: resolvedServerRunner.error });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedServerRunner.target);
       if (!auth.ok) {
         sendGateFailure(res, auth);
         return;
       }
       const pluginCatalog = await getRuntimePluginCatalog({
         activeProfile: appContext?.runtimeProfile ?? runtimeProfile,
-        serverRunnerId: body.serverRunner ?? null
+        serverRunnerId: resolvedServerRunner.target ?? null
       });
       const result = requestBootstrapRuntimePluginInstall(world, {
         actor: gate.actor,
         backendHost,
-        body,
+        body: { ...body, serverRunner: resolvedServerRunner.target, serverRunnerRef: null },
         pluginCatalog
       });
       if (!result.ok) {
@@ -61,16 +69,28 @@ export function createServerRunnerAuthoringBundleHandlers({
         return;
       }
       const body = await readJson(req);
-      const auth = ensureTargetAuthority(gate.actor, body.serverRunner);
+      const resolvedServerRunner = resolveRuntimePluginServerRunnerInput(world, body, {
+        label: "server runner"
+      });
+      if (!resolvedServerRunner.ok) {
+        sendJson(res, 400, { error: resolvedServerRunner.error });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedServerRunner.target);
       if (!auth.ok) {
         sendGateFailure(res, auth);
         return;
       }
       const pluginCatalog = await getRuntimePluginCatalog({
         activeProfile: appContext?.runtimeProfile ?? runtimeProfile,
-        serverRunnerId: body.serverRunner ?? null
+        serverRunnerId: resolvedServerRunner.target ?? null
       });
-      const result = requestBootstrapRuntimePluginRemove(world, { actor: gate.actor, backendHost, body, pluginCatalog });
+      const result = requestBootstrapRuntimePluginRemove(world, {
+        actor: gate.actor,
+        backendHost,
+        body: { ...body, serverRunner: resolvedServerRunner.target, serverRunnerRef: null },
+        pluginCatalog
+      });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;

@@ -11,6 +11,7 @@ import {
   requestBootstrapContextImportRemove,
   requestBootstrapStewardshipGrant,
   requestBootstrapStewardshipRevoke,
+  resolveStewardshipTargetInput,
   requestSurfaceDefine,
   requestProcessDefine,
   requestTypeDefine,
@@ -262,12 +263,23 @@ export function createAuthoringCoreBundleHandlers({
         return;
       }
       const body = await readJson(req);
-      const auth = ensureTargetAuthority(gate.actor, body.target);
+      const resolvedTarget = resolveStewardshipTargetInput(world, body, {
+        label: "stewardship target"
+      });
+      if (!resolvedTarget.ok) {
+        sendJson(res, 400, { error: resolvedTarget.error });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedTarget.target);
       if (!auth.ok) {
         sendGateFailure(res, auth);
         return;
       }
-      const result = requestBootstrapStewardshipGrant(world, { actor: gate.actor, backendHost, body });
+      const result = requestBootstrapStewardshipGrant(world, {
+        actor: gate.actor,
+        backendHost,
+        body: { ...body, target: resolvedTarget.target, targetRef: null }
+      });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;
@@ -282,12 +294,23 @@ export function createAuthoringCoreBundleHandlers({
         return;
       }
       const body = await readJson(req);
-      const auth = ensureTargetAuthority(gate.actor, body.target);
+      const resolvedTarget = resolveStewardshipTargetInput(world, body, {
+        label: "stewardship target"
+      });
+      if (!resolvedTarget.ok) {
+        sendJson(res, 400, { error: resolvedTarget.error });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedTarget.target);
       if (!auth.ok) {
         sendGateFailure(res, auth);
         return;
       }
-      const result = requestBootstrapStewardshipRevoke(world, { actor: gate.actor, backendHost, body });
+      const result = requestBootstrapStewardshipRevoke(world, {
+        actor: gate.actor,
+        backendHost,
+        body: { ...body, target: resolvedTarget.target, targetRef: null }
+      });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;

@@ -66,6 +66,23 @@ function resolveBodyRef(world, body, {
   });
 }
 
+export function resolveRuntimePluginServerRunnerInput(world, body, {
+  contextField = "context",
+  idField = "serverRunner",
+  refField = "serverRunnerRef",
+  label = "server runner"
+} = {}) {
+  const resolved = resolveBodyRef(world, body, {
+    contextField,
+    idField,
+    refField,
+    label
+  });
+  if (!resolved.ok) return resolved;
+  if (!resolved.target) return { ok: false, error: `${label} is required` };
+  return resolved;
+}
+
 function runtimePluginInstallExists(world, { serverRunner, plugin }) {
   return world.project(moduleProjectors.runtimePluginInstalls)
     .some(row => row.serverRunner === serverRunner && row.plugin === plugin);
@@ -369,7 +386,18 @@ export function requestBootstrapRuntimePluginInstall(world, {
     });
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
-  const serverRunner = typeof validated.value.serverRunner === "string" ? validated.value.serverRunner.trim() : "";
+  const serverRunnerResolved = resolveRuntimePluginServerRunnerInput(world, validated.value, {
+    label: "server runner"
+  });
+  if (!serverRunnerResolved.ok) {
+    const witness = fail(world, {
+      process: "runtimePlugin.install.failed",
+      actor: actor || backendHost,
+      body: { reason: serverRunnerResolved.error }
+    });
+    return { ok: false, status: 400, error: serverRunnerResolved.error, witness };
+  }
+  const serverRunner = serverRunnerResolved.target;
   const plugin = typeof validated.value.plugin === "string" ? validated.value.plugin.trim() : "";
   if (!serverRunner || !plugin) {
     const witness = fail(world, {
@@ -497,7 +525,18 @@ export function requestBootstrapRuntimePluginRemove(world, {
     });
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
-  const serverRunner = typeof validated.value.serverRunner === "string" ? validated.value.serverRunner.trim() : "";
+  const serverRunnerResolved = resolveRuntimePluginServerRunnerInput(world, validated.value, {
+    label: "server runner"
+  });
+  if (!serverRunnerResolved.ok) {
+    const witness = fail(world, {
+      process: "runtimePlugin.remove.failed",
+      actor: actor || backendHost,
+      body: { reason: serverRunnerResolved.error }
+    });
+    return { ok: false, status: 400, error: serverRunnerResolved.error, witness };
+  }
+  const serverRunner = serverRunnerResolved.target;
   const plugin = typeof validated.value.plugin === "string" ? validated.value.plugin.trim() : "";
   const removeMode = typeof (validated.value.removeMode ?? body?.removeMode) === "string"
     ? (validated.value.removeMode ?? body.removeMode).trim()

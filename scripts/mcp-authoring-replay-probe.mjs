@@ -129,6 +129,137 @@ function readSurfaceRuntimeManifest(html) {
   }
 }
 
+async function exerciseAuthoredSurfaceRoutingInBrowser(baseUrl, {
+  paths,
+  ids
+} = {}) {
+  const { chromium } = await import("playwright");
+  const browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({
+    viewport: { width: 1280, height: 900 }
+  });
+  try {
+    const waitForRuntime = async routeStateId => {
+      await page.waitForFunction(id =>
+        Boolean(window.__surfaceInteractionRuntime?.processRuntime?.value?.(id)),
+      routeStateId);
+    };
+    const waitForState = async ({ routeStateId, routeState, authStatusId = null, authStatus = null }) => {
+      await page.waitForFunction(args => {
+        const runtime = window.__surfaceInteractionRuntime?.processRuntime;
+        if (!runtime || typeof runtime.value !== "function") return false;
+        if (runtime.value(args.routeStateId) !== args.routeState) return false;
+        if (args.authStatusId && runtime.value(args.authStatusId) !== args.authStatus) return false;
+        return true;
+      }, { routeStateId, routeState, authStatusId, authStatus });
+    };
+
+    await page.goto(`${baseUrl}${paths.home}`, { waitUntil: "domcontentloaded" });
+    await waitForRuntime(ids.routeState);
+    const directEntry = await page.evaluate(routeStateId => ({
+      path: window.location.pathname,
+      routeState: window.__surfaceInteractionRuntime?.processRuntime?.value?.(routeStateId) ?? null,
+      homeVisible: Boolean(document.querySelector("#module-area")),
+      runtimePresent: Boolean(window.__surfaceInteractionRuntime?.processRuntime)
+    }), ids.routeState);
+
+    await page.goto(`${baseUrl}${paths.login}`, { waitUntil: "domcontentloaded" });
+    await waitForRuntime(ids.routeState);
+    const marker = await page.evaluate(() => {
+      const token = `pathway-marker-${Math.random().toString(36).slice(2, 10)}`;
+      window.__pathwayMarker = token;
+      if (window.__surfaceInteractionRuntime) window.__surfaceInteractionRuntime.__pathwayMarker = token;
+      return token;
+    });
+
+    await page.click(".ms-btn");
+    await page.waitForFunction(() =>
+      document.querySelector("#ms-btn-label")?.textContent?.includes("Signing in")
+    );
+    const pendingPhase = await page.evaluate(() => ({
+      buttonLabel: document.querySelector("#ms-btn-label")?.textContent ?? null,
+      submitDisabled: Boolean(document.querySelector("#login-submit")?.disabled)
+    }));
+    await page.waitForURL(`${baseUrl}${paths.home}`);
+    await waitForState({
+      routeStateId: ids.routeState,
+      routeState: "home",
+      authStatusId: ids.authStatus,
+      authStatus: "signedIn"
+    });
+    const loginTransition = await page.evaluate(args => ({
+      path: window.location.pathname,
+      routeState: window.__surfaceInteractionRuntime?.processRuntime?.value?.(args.routeStateId) ?? null,
+      authStatus: window.__surfaceInteractionRuntime?.processRuntime?.value?.(args.authStatusId) ?? null,
+      pendingLabel: args.pendingPhase?.buttonLabel ?? null,
+      submitDisabledDuringPending: args.pendingPhase?.submitDisabled === true,
+      markerPreserved: window.__pathwayMarker === args.marker
+        && window.__surfaceInteractionRuntime?.__pathwayMarker === args.marker,
+      loginGone: !document.querySelector("#view-login"),
+      homeVisible: Boolean(document.querySelector("#module-area"))
+    }), {
+      routeStateId: ids.routeState,
+      authStatusId: ids.authStatus,
+      marker,
+      pendingPhase
+    });
+
+    await page.click("#user-prof");
+    await page.waitForFunction(() => !document.querySelector("#up-menu")?.hidden);
+    await page.click("#up-menu-signout");
+    await page.waitForURL(`${baseUrl}${paths.signout}`);
+    await waitForState({
+      routeStateId: ids.routeState,
+      routeState: "signout",
+      authStatusId: ids.authStatus,
+      authStatus: "signedOut"
+    });
+    const signoutTransition = await page.evaluate(args => ({
+      path: window.location.pathname,
+      routeState: window.__surfaceInteractionRuntime?.processRuntime?.value?.(args.routeStateId) ?? null,
+      authStatus: window.__surfaceInteractionRuntime?.processRuntime?.value?.(args.authStatusId) ?? null,
+      markerPreserved: window.__pathwayMarker === args.marker
+        && window.__surfaceInteractionRuntime?.__pathwayMarker === args.marker,
+      signoutVisible: Boolean(document.querySelector("#view-signout"))
+    }), {
+      routeStateId: ids.routeState,
+      authStatusId: ids.authStatus,
+      marker
+    });
+
+    await page.getByRole("button", { name: "Sign back in" }).click();
+    await page.waitForURL(`${baseUrl}${paths.login}`);
+    await waitForState({
+      routeStateId: ids.routeState,
+      routeState: "login",
+      authStatusId: ids.authStatus,
+      authStatus: "idle"
+    });
+    const signBackTransition = await page.evaluate(args => ({
+      path: window.location.pathname,
+      routeState: window.__surfaceInteractionRuntime?.processRuntime?.value?.(args.routeStateId) ?? null,
+      authStatus: window.__surfaceInteractionRuntime?.processRuntime?.value?.(args.authStatusId) ?? null,
+      markerPreserved: window.__pathwayMarker === args.marker
+        && window.__surfaceInteractionRuntime?.__pathwayMarker === args.marker,
+      loginVisible: Boolean(document.querySelector("#view-login"))
+    }), {
+      routeStateId: ids.routeState,
+      authStatusId: ids.authStatus,
+      marker
+    });
+
+    return {
+      directEntry,
+      loginTransition,
+      signoutTransition,
+      signBackTransition
+    };
+  } finally {
+    await page.close();
+    await browser.close();
+  }
+}
+
 async function authorEngentusShellFlowThroughMcp(write, {
   runnerId,
   stamp
@@ -728,25 +859,6 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     }
   }
 
-  if (!firstBlocked) {
-    firstBlocked = buildBlockedAuthoringHandoff({
-      limitationType: "platform",
-      goal: "synchronize URL state into authored route state on canonical page.surface",
-      attemptedAuthoringPath: "authoring.write(surface.create/process.create/type.create/message.create/route.create/serve.create)",
-      missingPrimitive: "page.surface does not yet execute canonical URL -> route-state synchronization",
-      minimumHumanAction: "add a clean generic interactive page.surface consumer that synchronizes URL state into authored route state without surface-kind-specific view logic or hidden DOM contracts",
-      proof: [
-        `type.create succeeded for ${routeStateTypeId}: ${createdType?.isError !== true}`,
-        `process.create succeeded for ${routeStateProcessId}: ${createdProcess?.isError !== true}`,
-        `message.create succeeded for ${routeStateMessageId}: ${createdMessage?.isError !== true}`,
-        `route-selected alternate authored surface output is proven: ${routeSelectedSurfaceVisible}`,
-        "page.surface does not yet wire a canonical generic interactive route-state consumer into the served path"
-      ]
-    });
-    rungResults.push(buildRungResult("urlToRouteState", "blocked", firstBlocked.missingPrimitive));
-    firstBlockedRung = "urlToRouteState";
-  }
-
   const engentusReauthoring = await authorEngentusShellFlowThroughMcp(write, {
     runnerId,
     stamp
@@ -794,6 +906,147 @@ export async function runCanonicalAuthoringPathwayProbe(serverUrl, {
     homeManifestBytes: homeManifest?.diagnostics?.serializedBytes ?? 0,
     signoutManifestBytes: signoutManifest?.diagnostics?.serializedBytes ?? 0
   };
+  engentusReauthoring.browserChecks = await exerciseAuthoredSurfaceRoutingInBrowser(baseUrl, {
+    paths: engentusReauthoring.paths,
+    ids: engentusReauthoring.ids
+  });
+
+  if (!firstBlocked) {
+    const browserChecks = engentusReauthoring.browserChecks;
+    const directEntrySupported = browserChecks?.directEntry?.path === engentusReauthoring.paths.home
+      && browserChecks?.directEntry?.routeState === "home"
+      && browserChecks?.directEntry?.homeVisible === true
+      && browserChecks?.directEntry?.runtimePresent === true;
+    if (directEntrySupported) {
+      rungResults.push(buildRungResult("urlToRouteState", "supported", "direct route entry synchronizes URL state into authored route state on page.surface"));
+    } else {
+      firstBlocked = buildBlockedAuthoringHandoff({
+        limitationType: "platform",
+        goal: "synchronize URL state into authored route state on canonical page.surface",
+        attemptedAuthoringPath: "authoring.write(surface.create/process.create/type.create/message.create/route.create/serve.create)",
+        missingPrimitive: "page.surface could not prove canonical URL -> route-state synchronization on direct route entry",
+        minimumHumanAction: "fix the generic page.surface runtime so direct route entry initializes authored route state from URL state without surface-specific browser facades",
+        proof: [
+          `type.create succeeded for ${routeStateTypeId}: ${createdType?.isError !== true}`,
+          `process.create succeeded for ${routeStateProcessId}: ${createdProcess?.isError !== true}`,
+          `message.create succeeded for ${routeStateMessageId}: ${createdMessage?.isError !== true}`,
+          `home direct-entry path observed: ${browserChecks?.directEntry?.path ?? ""}`,
+          `home direct-entry route state observed: ${browserChecks?.directEntry?.routeState ?? ""}`,
+          `home direct-entry visible shell observed: ${browserChecks?.directEntry?.homeVisible === true}`
+        ]
+      });
+      rungResults.push(buildRungResult("urlToRouteState", "blocked", firstBlocked.missingPrimitive));
+      firstBlockedRung = "urlToRouteState";
+    }
+  }
+
+  if (!firstBlocked) {
+    const browserChecks = engentusReauthoring.browserChecks;
+    const interactionSupported = browserChecks?.loginTransition?.routeState === "home"
+      && browserChecks?.loginTransition?.authStatus === "signedIn"
+      && browserChecks?.signoutTransition?.routeState === "signout"
+      && browserChecks?.signoutTransition?.authStatus === "signedOut"
+      && browserChecks?.signBackTransition?.routeState === "login"
+      && browserChecks?.signBackTransition?.authStatus === "idle";
+    if (interactionSupported) {
+      rungResults.push(buildRungResult("interactionToRouteState", "supported", "authored page.surface interactions transition route state and dependent shell state"));
+    } else {
+      firstBlocked = buildBlockedAuthoringHandoff({
+        limitationType: "platform",
+        goal: "transition authored route state from page.surface interactions",
+        attemptedAuthoringPath: "authoring.write(surface.create/process.create/type.create/message.create/route.create/serve.create)",
+        missingPrimitive: "page.surface could not prove interaction-driven authored route-state transitions",
+        minimumHumanAction: "fix the generic page.surface interaction runtime so authored interactions deliver and apply route-state transitions without app-local runtime glue",
+        proof: [
+          `login interaction route state observed: ${browserChecks?.loginTransition?.routeState ?? ""}`,
+          `login interaction auth status observed: ${browserChecks?.loginTransition?.authStatus ?? ""}`,
+          `signout interaction route state observed: ${browserChecks?.signoutTransition?.routeState ?? ""}`,
+          `sign back interaction route state observed: ${browserChecks?.signBackTransition?.routeState ?? ""}`
+        ]
+      });
+      rungResults.push(buildRungResult("interactionToRouteState", "blocked", firstBlocked.missingPrimitive));
+      firstBlockedRung = "interactionToRouteState";
+    }
+  }
+
+  if (!firstBlocked) {
+    const browserChecks = engentusReauthoring.browserChecks;
+    const routeStateToUrlSupported = browserChecks?.loginTransition?.path === engentusReauthoring.paths.home
+      && browserChecks?.signoutTransition?.path === engentusReauthoring.paths.signout
+      && browserChecks?.signBackTransition?.path === engentusReauthoring.paths.login;
+    if (routeStateToUrlSupported) {
+      rungResults.push(buildRungResult("routeStateToUrl", "supported", "authored route-state transitions synchronize back into browser URL state"));
+    } else {
+      firstBlocked = buildBlockedAuthoringHandoff({
+        limitationType: "platform",
+        goal: "synchronize authored route-state transitions back into the browser URL on page.surface",
+        attemptedAuthoringPath: "authoring.write(surface.create/process.create/type.create/message.create/route.create/serve.create)",
+        missingPrimitive: "page.surface could not prove route-state -> URL synchronization",
+        minimumHumanAction: "fix the generic route-state runtime so authored route-state transitions update the browser URL without app-specific navigation glue",
+        proof: [
+          `login transition path observed: ${browserChecks?.loginTransition?.path ?? ""}`,
+          `signout transition path observed: ${browserChecks?.signoutTransition?.path ?? ""}`,
+          `sign-back transition path observed: ${browserChecks?.signBackTransition?.path ?? ""}`
+        ]
+      });
+      rungResults.push(buildRungResult("routeStateToUrl", "blocked", firstBlocked.missingPrimitive));
+      firstBlockedRung = "routeStateToUrl";
+    }
+  }
+
+  if (!firstBlocked) {
+    const browserChecks = engentusReauthoring.browserChecks;
+    const sameDocumentRefreshSupported = browserChecks?.loginTransition?.markerPreserved === true
+      && browserChecks?.signoutTransition?.markerPreserved === true
+      && browserChecks?.signBackTransition?.markerPreserved === true;
+    if (sameDocumentRefreshSupported) {
+      rungResults.push(buildRungResult("sameDocumentSurfaceRefresh", "supported", "route-state transitions refresh authored page.surface output without losing same-document runtime state"));
+    } else {
+      firstBlocked = buildBlockedAuthoringHandoff({
+        limitationType: "platform",
+        goal: "refresh page.surface output after route-state changes without losing same-document runtime state",
+        attemptedAuthoringPath: "authoring.write(surface.create/process.create/type.create/message.create/route.create/serve.create)",
+        missingPrimitive: "page.surface could not prove same-document surface refresh after authored route-state transitions",
+        minimumHumanAction: "fix the generic page.surface refresh path so route-state transitions preserve same-document runtime state instead of falling back to full page reloads",
+        proof: [
+          `login transition preserved same-document marker: ${browserChecks?.loginTransition?.markerPreserved === true}`,
+          `signout transition preserved same-document marker: ${browserChecks?.signoutTransition?.markerPreserved === true}`,
+          `sign-back transition preserved same-document marker: ${browserChecks?.signBackTransition?.markerPreserved === true}`
+        ]
+      });
+      rungResults.push(buildRungResult("sameDocumentSurfaceRefresh", "blocked", firstBlocked.missingPrimitive));
+      firstBlockedRung = "sameDocumentSurfaceRefresh";
+    }
+  }
+
+  if (!firstBlocked) {
+    const browserChecks = engentusReauthoring.browserChecks;
+    const interactiveExecutionSupported = String(browserChecks?.loginTransition?.pendingLabel ?? "").includes("Signing in")
+      && browserChecks?.loginTransition?.submitDisabledDuringPending === true
+      && browserChecks?.loginTransition?.homeVisible === true
+      && browserChecks?.signoutTransition?.signoutVisible === true
+      && browserChecks?.signBackTransition?.loginVisible === true;
+    if (interactiveExecutionSupported) {
+      rungResults.push(buildRungResult("interactiveSurfaceExecution", "supported", "page.surface executes authored interactive process flow through shared runtime rules"));
+    } else {
+      firstBlocked = buildBlockedAuthoringHandoff({
+        limitationType: "platform",
+        goal: "execute interactive authored page.surface flow through shared runtime rules",
+        attemptedAuthoringPath: "authoring.write(surface.create/process.create/type.create/message.create/route.create/serve.create)",
+        missingPrimitive: "page.surface could not prove interactive authored execution through the shared runtime",
+        minimumHumanAction: "fix the generic page.surface execution path so authored process-driven interactions render and settle without hidden app-local runtime helpers",
+        proof: [
+          `login pending label observed: ${browserChecks?.loginTransition?.pendingLabel ?? ""}`,
+          `login submit disabled during pending: ${browserChecks?.loginTransition?.submitDisabledDuringPending === true}`,
+          `login transition home visible: ${browserChecks?.loginTransition?.homeVisible === true}`,
+          `signout transition visible: ${browserChecks?.signoutTransition?.signoutVisible === true}`,
+          `sign-back transition visible: ${browserChecks?.signBackTransition?.loginVisible === true}`
+        ]
+      });
+      rungResults.push(buildRungResult("interactiveSurfaceExecution", "blocked", firstBlocked.missingPrimitive));
+      firstBlockedRung = "interactiveSurfaceExecution";
+    }
+  }
 
   const finalState = await mcpToolCall(baseUrl, mcpServerId, token, "world.read", {
     view: "bootstrapState"
@@ -893,6 +1146,9 @@ async function main(argv = process.argv.slice(2)) {
     process.exit(1);
   }
   if (!result.engentusReauthoring?.servedChecks?.signoutVisible) {
+    process.exit(1);
+  }
+  if (result.pathwayProbe.firstBlockedRung) {
     process.exit(1);
   }
 }

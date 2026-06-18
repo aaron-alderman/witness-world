@@ -305,14 +305,14 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
         consumes: ["surface", "process", "projection"],
         status: "partial",
         staticProjection: "supported",
-        interactiveProjection: "blocked",
+        interactiveProjection: "supported",
         pairings: {
           surface: "supported",
-          process: "blocked",
+          process: "supported",
           projection: "blocked"
         },
         limitationType: "platform",
-        reason: "page.surface now supports static authored projection plus route-selected alternate authored output; route-state equivalence and interactive execution remain blocked",
+        reason: "page.surface now supports authored surface and process execution on canonical routes; projection pairing remains the next unproven gap",
         pathwaySemantics: {
           blockedResetHost: pathwaySemanticState({
             status: "supported",
@@ -330,34 +330,34 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
             reason: "page.surface can now serve alternate authored surface output by route through the canonical authoring pathway probe"
           }),
           urlToRouteState: pathwaySemanticState({
-            status: "blocked",
-            limitationType: "platform",
-            reason: "page.surface does not yet provide a canonical generic consumer that synchronizes URL state into authored route state"
+            status: "supported",
+            limitationType: null,
+            reason: "page.surface now synchronizes direct route entry URL state into authored route state on canonical served routes"
           }),
           interactionToRouteState: pathwaySemanticState({
-            status: "blocked",
-            limitationType: "platform",
-            reason: "page.surface does not yet provide a clean generic interaction consumer that transitions authored route state"
+            status: "supported",
+            limitationType: null,
+            reason: "page.surface now delivers authored interactions that transition route state through shared runtime rules"
           }),
           routeStateToUrl: pathwaySemanticState({
-            status: "blocked",
-            limitationType: "platform",
-            reason: "page.surface does not yet synchronize authored route state back into URL state"
+            status: "supported",
+            limitationType: null,
+            reason: "page.surface now synchronizes authored route-state transitions back into browser URL state"
           }),
           sameDocumentSurfaceRefresh: pathwaySemanticState({
-            status: "blocked",
-            limitationType: "platform",
-            reason: "page.surface does not yet perform same-document surface refresh after authored route-state transitions"
+            status: "supported",
+            limitationType: null,
+            reason: "page.surface now refreshes authored route-selected output after route-state changes without losing same-document runtime state"
           }),
           interactiveSurfaceExecution: pathwaySemanticState({
-            status: "blocked",
-            limitationType: "platform",
-            reason: "interactive page.surface execution remains unavailable after removal of the false-authority renderer"
+            status: "supported",
+            limitationType: null,
+            reason: "interactive page.surface execution is now pathway-proven through authored process rules and live route transitions"
           }),
           routingCluster: pathwaySemanticState({
-            status: "blocked",
-            limitationType: "platform",
-            reason: "the routing cluster remains blocked until URL-to-state, interaction-driven route-state transitions, reverse URL sync, and same-document refresh are all pathway-proven"
+            status: "supported",
+            limitationType: null,
+            reason: "the routing cluster is now pathway-proven end to end on canonical page.surface routes"
           })
         }
       },
@@ -376,11 +376,18 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
         reason: "page.surface supports static authored projection and route-selected alternate authored output"
       },
       {
-        authoring: ["surface", "process", "projection"],
+        authoring: ["surface", "process"],
+        runtime: "page.surface",
+        status: "supported",
+        limitationType: null,
+        reason: "page.surface now executes authored process-driven surface interactions and routing on canonical routes"
+      },
+      {
+        authoring: ["surface", "projection"],
         runtime: "page.surface",
         status: "blocked",
         limitationType: "platform",
-        reason: "page.surface does not yet consume process or projection semantics on the canonical authoring pathway probe"
+        reason: "page.surface projection pairing remains unproven on the canonical authoring pathway probe"
       },
       {
         authoring: ["widget", "frontendProgram", "frontendStep"],

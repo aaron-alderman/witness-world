@@ -443,7 +443,7 @@ Current molecules:
 - explicit cross-context export/import rows through `contextExport` and `contextImport`
 - explanatory `contextScopes` read models showing local vs imported visibility
 - shared contextual resolution and first-slice scope validation on the bootstrap/DSL authoring paths while preserving canonical stored ids
-  Covered first-slice refs are `parentRef`, `rootWidgetRef`, `servesRef`, `serverRunnerRef`, `routeRef`, `backendHostRef`, and `frontendHostRef`.
+  Covered first-slice refs are `parentRef`, `rootWidgetRef`, `rootSurfaceRef`, `servesRef`, `backendProgramSoulRef`, `serverRunnerRef`, `serverRef`, `routeRef`, `backendHostRef`, `frontendHostRef`, `targetRef`, and `targetIdRef`.
 - covered bootstrap/DSL authoring surfaces now reject direct canonical references to foreign scoped targets that are not explicitly visible in the authoring context
 
 Missing molecules:
@@ -472,7 +472,8 @@ Honest caveats:
   The honest guardrails for duplicate names, bad exports, and bad imports live on the bootstrap and DSL authoring paths rather than every internal helper call.
 - Some read surfaces still lag behind the write semantics.
   Widget parenting can now be authored through `parentRef`, but the bootstrap widget read model is still mostly a flat list rather than a full attachment/placement explanation surface.
-- Capability installs, proposal targets, stewardship targets, and most app-specific runtime actions still primarily use canonical ids.
+- Most app-specific runtime actions still primarily use canonical ids.
+  Capability install/remove targets, route root-surface and backend-program attachments, runtime plugin attachment targets, MCP tool attachment targets, stewardship targets, and proposal target ids now also lower through the shared contextual visibility rules when authored with `targetRef`, `rootSurfaceRef`, `backendProgramSoulRef`, `serverRunnerRef`, `serverRef`, and `targetIdRef`.
 
 ### 4.3 Authority, delegation, stewardship, proposals
 

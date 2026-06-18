@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createWorld } from "../../src/kernel.js";
+import { applyWitnessToml } from "../../src/dsl.js";
+import { moduleProjectors } from "../../src/modules.js";
 import { bundleId, createHandlers, handlerCatalog, routes } from "./runtime.js";
 import { executeServerRunnerAuthoringProposalTarget } from "./server-runner-proposal-targets.js";
 
@@ -82,4 +84,177 @@ test("server-runner-authoring plugin owns process helpers and proposal targets",
     getRuntimePluginCatalog: async () => ({ packages: [] })
   });
   assert.equal(unsupported, null);
+});
+
+test("server-runner authoring handlers lower serverRunner refs before authority checks", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[thing]]
+actor = "system"
+id = "backendHost"
+
+[[thing]]
+actor = "system"
+id = "frontendHost"
+
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceRunner"
+name = "importedRunner"
+`);
+
+  const seenTargets = [];
+  const sent = [];
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    runtimeProfile: "minimal",
+    readJson: async () => ({
+      context: "ctx.target",
+      serverRunnerRef: "importedRunner",
+      plugin: "plugin.inspect"
+    }),
+    authoringServices: {
+      requireBootstrapActor: actor => ({ ok: true, actor }),
+      ensureContextAuthority: () => ({ ok: true }),
+      ensureTargetAuthority: (_actor, target) => {
+        seenTargets.push(target);
+        return { ok: true };
+      }
+    },
+    sendGateFailure(_res, gate) {
+      sent.push({ gate });
+    },
+    sendJson(_res, status, body) {
+      sent.push({ status, body });
+    },
+    supportedHandlerSets: [],
+    getRuntimePluginCatalog: async () => ({
+      packages: [{
+        id: "plugin.inspect",
+        validation: { ok: true, errors: [] },
+        execution: { executable: true },
+        compatibility: { compatible: true },
+        dependencies: []
+      }]
+    })
+  });
+
+  await handlers["runtimePlugin.install"]({ req: {}, res: {}, requestActor: "aaron", appContext: {} });
+
+  assert.deepEqual(seenTargets, ["source_server"]);
+  assert.equal(sent[0]?.status, 201);
+  assert.equal(world.project(moduleProjectors.runtimePluginInstalls).some(row =>
+    row.serverRunner === "source_server" && row.plugin === "plugin.inspect"
+  ), true);
+});
+
+test("server-runner authoring proposal targets lower serverRunner refs before authority checks", async () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[thing]]
+actor = "system"
+id = "backendHost"
+
+[[thing]]
+actor = "system"
+id = "frontendHost"
+
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceRunner"
+name = "importedRunner"
+`);
+
+  const seenTargets = [];
+  const result = await executeServerRunnerAuthoringProposalTarget({
+    world,
+    actor: "aaron",
+    backendHost: "backendHost",
+    proposal: { targetProcess: "runtimePlugin.install" },
+    body: {
+      context: "ctx.target",
+      serverRunnerRef: "importedRunner",
+      plugin: "plugin.inspect"
+    },
+    supportedHandlerSets: [],
+    ensureContextAuthority: () => ({ ok: true }),
+    ensureTargetAuthority: (_actor, target) => {
+      seenTargets.push(target);
+      return { ok: true };
+    },
+    getRuntimePluginCatalog: async () => ({
+      packages: [{
+        id: "plugin.inspect",
+        validation: { ok: true, errors: [] },
+        execution: { executable: true },
+        compatibility: { compatible: true },
+        dependencies: []
+      }]
+    })
+  });
+
+  assert.deepEqual(seenTargets, ["source_server"]);
+  assert.equal(result?.ok, true);
+  assert.equal(world.project(moduleProjectors.runtimePluginInstalls).some(row =>
+    row.serverRunner === "source_server" && row.plugin === "plugin.inspect"
+  ), true);
 });

@@ -116,7 +116,7 @@ Contexts are how the user understands what belongs together and what has authori
 
 The first honest slice now exists through explicit local bindings plus explicit export/import edges.
 What is still missing is the stronger product-wide rule where contexts become hard naming boundaries rather than a composition layer that still coexists with canonical-id compatibility.
-In practice today that means contextual naming is real on the covered bootstrap/DSL surfaces, but it is still a first slice with bounded ref-lowering coverage and an explicit compatibility bypass through canonical ids.
+In practice today that means contextual naming is real on the covered bootstrap/DSL surfaces, including capability, route attachment, runtime-plugin attachment, MCP tool attachment, stewardship, and proposal target naming, but it is still a first slice with bounded ref-lowering coverage and an explicit compatibility bypass through canonical ids.
 
 Contexts should eventually carry:
 
@@ -144,6 +144,9 @@ The user should be able to:
 ### 7. Shells Are Adapters, Not Alternate Products
 
 Desktop, browser, and hosted/server shells should all sit over the same core model.
+
+Local development, CI, and production should also be different operating postures of that same product rather than separate mental models with separate hidden verification machinery.
+What changes across those environments should be authority, risk tolerance, approval gates, and presentation severity, not the fundamental runtime story.
 
 The first shipped desktop shell now proves the ownership seam in a narrow but real way.
 The web shell proves reachability.

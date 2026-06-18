@@ -2,8 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createWorld } from "../../src/kernel.js";
+import { parseWitnessToml, applyWitnessDocsWithRuntimePlugins } from "../../src/dsl.js";
+import { createModuleProjectorContext } from "../../src/modules.js";
 import { bundleId, createHandlers, desireExtensions, handlerCatalog, providers, routes } from "./runtime.js";
 import { executeMcpAuthoringProposalTarget } from "./mcp-proposal-targets.js";
+import { mcpModuleProjectors } from "../mcp/projections.js";
 
 const MCP_AUTHORING_HANDLER_IDS = [
   "mcpServer.create",
@@ -85,4 +88,185 @@ test("mcp-authoring plugin owns process helpers and proposal targets", async () 
     ensureTargetAuthority: () => ({ ok: true })
   });
   assert.equal(unsupported, null);
+});
+
+test("mcp-authoring handlers lower server refs before authority checks", async () => {
+  const world = createWorld();
+  await applyWitnessDocsWithRuntimePlugins(world, parseWitnessToml(`
+[[thing]]
+actor = "system"
+id = "backendHost"
+
+[[thing]]
+actor = "system"
+id = "frontendHost"
+
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[mcpServer]]
+actor = "system"
+id = "source_mcp"
+serverRunner = "source_server"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceMcp"
+target = "source_mcp"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceMcp"
+target = "source_mcp"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceMcp"
+name = "importedMcp"
+  `), {
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.mcp-authoring"]
+  });
+  const projectionContext = createModuleProjectorContext(mcpModuleProjectors, {
+    owner: "plugins/mcp-authoring/mcp-authoring.test.js"
+  });
+  const removeProjectionContext = world._pushProjectionContext(projectionContext);
+
+  try {
+    const seenTargets = [];
+    const sent = [];
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      readJson: async () => ({
+        context: "ctx.target",
+        serverRef: "importedMcp",
+        tool: "world.read"
+      }),
+      authoringServices: {
+        requireBootstrapActor: actor => ({ ok: true, actor }),
+        ensureContextAuthority: () => ({ ok: true }),
+        ensureTargetAuthority: (_actor, target) => {
+          seenTargets.push(target);
+          return { ok: true };
+        }
+      },
+      sendGateFailure(_res, gate) {
+        sent.push({ gate });
+      },
+      sendJson(_res, status, body) {
+        sent.push({ status, body });
+      },
+      mcpToolNames: () => ["world.read"]
+    });
+
+    await handlers["mcpTool.install"]({ req: {}, res: {}, requestActor: "aaron", appContext: {} });
+
+    assert.deepEqual(seenTargets, ["source_mcp"]);
+    assert.equal(sent[0]?.status, 201);
+    assert.equal(sent[0]?.body?.mcpToolInstall?.server, "source_mcp");
+  } finally {
+    removeProjectionContext();
+  }
+});
+
+test("mcp-authoring proposal targets lower server refs before authority checks", async () => {
+  const world = createWorld();
+  await applyWitnessDocsWithRuntimePlugins(world, parseWitnessToml(`
+[[thing]]
+actor = "system"
+id = "backendHost"
+
+[[thing]]
+actor = "system"
+id = "frontendHost"
+
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[mcpServer]]
+actor = "system"
+id = "source_mcp"
+serverRunner = "source_server"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceMcp"
+target = "source_mcp"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceMcp"
+target = "source_mcp"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceMcp"
+name = "importedMcp"
+  `), {
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.mcp-authoring"]
+  });
+  const projectionContext = createModuleProjectorContext(mcpModuleProjectors, {
+    owner: "plugins/mcp-authoring/mcp-authoring.test.js"
+  });
+  const removeProjectionContext = world._pushProjectionContext(projectionContext);
+
+  try {
+    const seenTargets = [];
+    const result = executeMcpAuthoringProposalTarget({
+      world,
+      actor: "aaron",
+      backendHost: "backendHost",
+      proposal: { targetProcess: "mcpTool.install" },
+      body: {
+        context: "ctx.target",
+        serverRef: "importedMcp",
+        tool: "world.read"
+      },
+      mcpToolNames: () => ["world.read"],
+      ensureContextAuthority: () => ({ ok: true }),
+      ensureTargetAuthority: (_actor, target) => {
+        seenTargets.push(target);
+        return { ok: true };
+      }
+    });
+
+    assert.deepEqual(seenTargets, ["source_mcp"]);
+    assert.equal(result?.ok, true);
+  } finally {
+    removeProjectionContext();
+  }
 });

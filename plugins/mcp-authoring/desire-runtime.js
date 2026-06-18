@@ -100,10 +100,17 @@ function applyMcpServer(world, doc) {
 
 function applyMcpToolInstall(world, doc) {
   const values = doc.values ?? {};
+  const server = resolvePreparedDocRef(world, values, {
+    idField: "server",
+    refField: "serverRef",
+    label: "mcp server"
+  });
+  if (!server.ok) throw new Error(server.error);
+  if (!server.target) throw new Error("missing required field: server");
   return withSourceAnnotations(world, doc, [
     installMcpTool(world, {
       actor: req(values, "actor"),
-      server: req(values, "server"),
+      server: server.target,
       tool: req(values, "tool"),
       actingMode: values.actingMode ?? "delegated",
       scopeContexts: values.scopeContexts ?? [],
@@ -114,10 +121,17 @@ function applyMcpToolInstall(world, doc) {
 
 function applyMcpToolRemove(world, doc) {
   const values = doc.values ?? {};
+  const server = resolvePreparedDocRef(world, values, {
+    idField: "server",
+    refField: "serverRef",
+    label: "mcp server"
+  });
+  if (!server.ok) throw new Error(server.error);
+  if (!server.target) throw new Error("missing required field: server");
   return withSourceAnnotations(world, doc, [
     removeMcpTool(world, {
       actor: req(values, "actor"),
-      server: req(values, "server"),
+      server: server.target,
       tool: req(values, "tool")
     })
   ]);

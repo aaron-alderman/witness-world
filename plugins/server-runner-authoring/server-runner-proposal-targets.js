@@ -1,7 +1,8 @@
 import {
   requestBootstrapServerRunnerDefine,
   requestBootstrapRuntimePluginInstall,
-  requestBootstrapRuntimePluginRemove
+  requestBootstrapRuntimePluginRemove,
+  resolveRuntimePluginServerRunnerInput
 } from "./server-runner-processes.js";
 
 export async function executeServerRunnerAuthoringProposalTarget({
@@ -23,28 +24,41 @@ export async function executeServerRunnerAuthoringProposalTarget({
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     case "runtimePlugin.install": {
-      const gate = ensureTargetAuthority(actor, body.serverRunner);
+      const resolvedServerRunner = resolveRuntimePluginServerRunnerInput(world, body, {
+        label: "server runner"
+      });
+      if (!resolvedServerRunner.ok) return { ok: false, status: 400, error: resolvedServerRunner.error };
+      const gate = ensureTargetAuthority(actor, resolvedServerRunner.target);
       if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
       const pluginCatalog = await getRuntimePluginCatalog({
         activeProfile: body.runtimeProfile ?? null,
-        serverRunnerId: body.serverRunner ?? null
+        serverRunnerId: resolvedServerRunner.target ?? null
       });
       const result = requestBootstrapRuntimePluginInstall(world, {
         actor,
         backendHost,
-        body,
+        body: { ...body, serverRunner: resolvedServerRunner.target, serverRunnerRef: null },
         pluginCatalog
       });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     case "runtimePlugin.remove": {
-      const gate = ensureTargetAuthority(actor, body.serverRunner);
+      const resolvedServerRunner = resolveRuntimePluginServerRunnerInput(world, body, {
+        label: "server runner"
+      });
+      if (!resolvedServerRunner.ok) return { ok: false, status: 400, error: resolvedServerRunner.error };
+      const gate = ensureTargetAuthority(actor, resolvedServerRunner.target);
       if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
       const pluginCatalog = await getRuntimePluginCatalog({
         activeProfile: body.runtimeProfile ?? null,
-        serverRunnerId: body.serverRunner ?? null
+        serverRunnerId: resolvedServerRunner.target ?? null
       });
-      const result = requestBootstrapRuntimePluginRemove(world, { actor, backendHost, body, pluginCatalog });
+      const result = requestBootstrapRuntimePluginRemove(world, {
+        actor,
+        backendHost,
+        body: { ...body, serverRunner: resolvedServerRunner.target, serverRunnerRef: null },
+        pluginCatalog
+      });
       return result.ok ? { ok: true, witnessIds: [result.witness.id] } : result;
     }
     default:

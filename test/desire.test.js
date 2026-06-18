@@ -9,6 +9,7 @@ import { moduleProjectors } from "../src/modules.js";
 import { frontendProgramsProjection, frontendStepsProjection, widgetTree, activeWidgetVersions } from "../src/widgets.js";
 import { backendProgramsProjection, backendProgramVersionsProjection, backendStepsProjection } from "../src/backend-programs.js";
 import { parseWitnessToml, loadWitnessTomlFile, applyWitnessDocs } from "../src/dsl.js";
+import { mcpAuthoringRuntimeDeclarations } from "../plugins/mcp-authoring/desire-runtime.js";
 import {
   applyDesire,
   applyDesireNativeOnly,
@@ -1025,6 +1026,31 @@ context = "ctx_target"
 name = "runnerNode"
 target = "demo_server"
 
+[[surface]]
+actor = "system"
+id = "ReplayRoot"
+surfaceKind = "app-root"
+context = "ctx_source"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx_source"
+name = "replaySurface"
+target = "ReplayRoot"
+
+[[contextExport]]
+actor = "system"
+context = "ctx_source"
+name = "replaySurface"
+target = "ReplayRoot"
+
+[[contextImport]]
+actor = "system"
+context = "ctx_target"
+sourceContext = "ctx_source"
+exportName = "replaySurface"
+name = "replaySurface"
+
 [[route]]
 actor = "system"
 id = "landing_route"
@@ -1033,6 +1059,19 @@ path = "/landing"
 method = "GET"
 handler = "page.home"
 servesRef = "landingView"
+
+[[route]]
+actor = "system"
+id = "surface_route"
+context = "ctx_target"
+path = "/surface"
+method = "GET"
+handler = "page.surface"
+servesRef = "replaySurface"
+rootSurfaceRef = "replaySurface"
+defaultScreen = "login"
+routeState = { process = "ReplayFlow", state = "ReplayActiveRoute" }
+excludeWidgetRoles = ["debug"]
 
 [[contextBinding]]
 actor = "system"
@@ -1058,9 +1097,309 @@ routeRef = "landingRoute"
   const route = world.project(moduleProjectors.routes).find(row => row.id === "landing_route");
   assert.ok(route);
   assert.equal(route.serves, "landing_view");
+  const surfaceRoute = world.project(moduleProjectors.routes).find(row => row.id === "surface_route");
+  assert.ok(surfaceRoute);
+  assert.equal(surfaceRoute.serves, "ReplayRoot");
+  assert.equal(surfaceRoute.params?.rootSurface, "ReplayRoot");
+  assert.equal(surfaceRoute.params?.defaultScreen, "login");
+  assert.deepEqual(surfaceRoute.params?.routeState, {
+    process: "ReplayFlow",
+    state: "ReplayActiveRoute"
+  });
+  assert.deepEqual(surfaceRoute.params?.excludeWidgetRoles, ["debug"]);
 
   assert.equal(world.project(moduleProjectors.servedRoutes).some(row => row.id === "landing_route" && row.serverRunner === "demo_server"), true);
   assert.equal(world.project(moduleProjectors.contextScopes).some(row => row.context === "ctx_target" && row.name === "landingView" && row.target === "landing_view" && row.sourceKind === "import"), true);
+});
+
+test("DESIRE native runtime declarations resolve capability target refs without the legacy fallback", () => {
+  const world = createWorld();
+  const docs = parseWitnessToml(`
+[context.ctx_source]
+actor = "system"
+
+[context.ctx_target]
+actor = "system"
+
+[[thing]]
+actor = "system"
+id = "backendHost"
+
+[[thing]]
+actor = "system"
+id = "frontendHost"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx_source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[serverRunner]]
+actor = "system"
+id = "local_server"
+context = "ctx_target"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx_source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextExport]]
+actor = "system"
+context = "ctx_source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextImport]]
+actor = "system"
+context = "ctx_target"
+sourceContext = "ctx_source"
+exportName = "sourceRunner"
+name = "importedRunner"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx_target"
+name = "localRunner"
+target = "local_server"
+
+[[capability]]
+actor = "system"
+id = "notes.sidebar"
+label = "Notes Sidebar"
+placement = ["serverRunner"]
+
+[[capabilityInstall]]
+actor = "system"
+capability = "notes.sidebar"
+context = "ctx_target"
+targetRef = "localRunner"
+targetKind = "serverRunner"
+
+[[capabilityInstall]]
+actor = "system"
+capability = "notes.sidebar"
+context = "ctx_target"
+targetRef = "importedRunner"
+targetKind = "serverRunner"
+
+[[capabilityRemove]]
+actor = "system"
+capability = "notes.sidebar"
+context = "ctx_target"
+targetRef = "importedRunner"
+targetKind = "serverRunner"
+`).map(doc => ({ ...doc, file: "C:/demo/native-capability-target-ref.wtoml" }));
+  const desire = normalizeDesirePlusToDesire(compileWtomlDocsToDesirePlus(docs));
+
+  applyDesireNativeOnly(world, desire);
+
+  const installs = world.project(moduleProjectors.capabilityInstalls);
+  assert.equal(installs.some(row =>
+    row.capability === "notes.sidebar"
+    && row.target === "local_server"
+    && row.targetKind === "serverRunner"
+  ), true);
+  assert.equal(installs.some(row =>
+    row.capability === "notes.sidebar"
+    && row.target === "source_server"
+    && row.targetKind === "serverRunner"
+  ), false);
+  assert.equal(world.allWitnesses().some(w =>
+    w.process === "installCapability"
+    && w.body?.capability === "notes.sidebar"
+    && w.body?.target === "source_server"
+  ), true);
+  assert.equal(world.allWitnesses().some(w =>
+    w.process === "removeCapability"
+    && w.body?.capability === "notes.sidebar"
+    && w.body?.target === "source_server"
+  ), true);
+});
+
+test("DESIRE native runtime declarations resolve stewardship and proposal target refs without the legacy fallback", () => {
+  const world = createWorld();
+  const docs = parseWitnessToml(`
+[context.ctx_source]
+actor = "system"
+
+[context.ctx_target]
+actor = "system"
+
+[[thing]]
+actor = "system"
+id = "backendHost"
+
+[[thing]]
+actor = "system"
+id = "frontendHost"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx_source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx_source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextExport]]
+actor = "system"
+context = "ctx_source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextImport]]
+actor = "system"
+context = "ctx_target"
+sourceContext = "ctx_source"
+exportName = "sourceRunner"
+name = "importedRunner"
+
+[[stewardship]]
+actor = "system"
+steward = "callan"
+context = "ctx_target"
+targetRef = "importedRunner"
+targetKind = "serverRunner"
+
+[[proposal]]
+actor = "system"
+id = "proposal.runtime-plugin.source"
+targetProcess = "runtimePlugin.install"
+targetKind = "serverRunner"
+context = "ctx_target"
+targetIdRef = "importedRunner"
+body = {}
+reason = "Govern the imported runner"
+`).map(doc => ({ ...doc, file: "C:/demo/native-stewardship-proposal-target-ref.wtoml" }));
+  const desire = normalizeDesirePlusToDesire(compileWtomlDocsToDesirePlus(docs));
+
+  applyDesireNativeOnly(world, desire);
+
+  assert.equal(world.project(moduleProjectors.stewardships).some(row =>
+    row.steward === "callan"
+    && row.target === "source_server"
+    && row.targetKind === "serverRunner"
+  ), true);
+  assert.equal(world.project(moduleProjectors.proposals).some(row =>
+    row.id === "proposal.runtime-plugin.source"
+    && row.targetId === "source_server"
+  ), true);
+});
+
+test("DESIRE native runtime declarations resolve runtime plugin and mcp tool attachment refs without the legacy fallback", () => {
+  const world = createWorld();
+  const docs = parseWitnessToml(`
+[context.ctx_source]
+actor = "system"
+
+[context.ctx_target]
+actor = "system"
+
+[[thing]]
+actor = "system"
+id = "backendHost"
+
+[[thing]]
+actor = "system"
+id = "frontendHost"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx_source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[mcpServer]]
+actor = "system"
+id = "source_mcp"
+serverRunner = "source_server"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx_source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx_source"
+name = "sourceMcp"
+target = "source_mcp"
+
+[[contextExport]]
+actor = "system"
+context = "ctx_source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextExport]]
+actor = "system"
+context = "ctx_source"
+name = "sourceMcp"
+target = "source_mcp"
+
+[[contextImport]]
+actor = "system"
+context = "ctx_target"
+sourceContext = "ctx_source"
+exportName = "sourceRunner"
+name = "importedRunner"
+
+[[contextImport]]
+actor = "system"
+context = "ctx_target"
+sourceContext = "ctx_source"
+exportName = "sourceMcp"
+name = "importedMcp"
+
+[[runtimePluginInstall]]
+actor = "system"
+context = "ctx_target"
+serverRunnerRef = "importedRunner"
+plugin = "plugin.inspect"
+
+[[runtimePluginRemove]]
+actor = "system"
+context = "ctx_target"
+serverRunnerRef = "importedRunner"
+plugin = "plugin.inspect"
+
+[[mcpToolInstall]]
+actor = "system"
+context = "ctx_target"
+serverRef = "importedMcp"
+tool = "world.read"
+
+[[mcpToolRemove]]
+actor = "system"
+context = "ctx_target"
+serverRef = "importedMcp"
+tool = "world.read"
+`).map(doc => ({ ...doc, file: "C:/demo/native-runtime-plugin-mcp-target-ref.wtoml" }));
+  const desire = normalizeDesirePlusToDesire(compileWtomlDocsToDesirePlus(docs));
+
+  applyDesireNativeOnly(world, desire, {
+    runtimeDeclarationRegistry: createRuntimeDeclarationRegistry([
+      ...createCoreRuntimeDeclarationRegistry().entries(),
+      ...mcpAuthoringRuntimeDeclarations
+    ])
+  });
+  assert.equal(world.allWitnesses().some(w => w.process === "installRuntimePlugin" && w.body?.serverRunner === "source_server"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "removeRuntimePlugin" && w.body?.serverRunner === "source_server"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "installMcpTool" && w.body?.server === "source_mcp"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "removeMcpTool" && w.body?.server === "source_mcp"), true);
 });
 
 test("DESIRE native runtime declarations apply widget/program authored refs without the legacy fallback", () => {

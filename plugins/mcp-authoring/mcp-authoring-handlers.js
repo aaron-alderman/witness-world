@@ -1,7 +1,8 @@
 import {
   requestBootstrapMcpServerDefine,
   requestBootstrapMcpToolInstall,
-  requestBootstrapMcpToolRemove
+  requestBootstrapMcpToolRemove,
+  resolveMcpServerInput
 } from "./mcp-processes.js";
 
 export function createMcpAuthoringBundleHandlers({
@@ -48,7 +49,14 @@ export function createMcpAuthoringBundleHandlers({
         return;
       }
       const body = await readJson(req);
-      const auth = ensureTargetAuthority(gate.actor, body.server);
+      const resolvedServer = resolveMcpServerInput(world, body, {
+        label: "mcp server"
+      });
+      if (!resolvedServer.ok) {
+        sendJson(res, 400, { error: resolvedServer.error });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedServer.target);
       if (!auth.ok) {
         sendGateFailure(res, auth);
         return;
@@ -56,7 +64,7 @@ export function createMcpAuthoringBundleHandlers({
       const result = requestBootstrapMcpToolInstall(world, {
         actor: gate.actor,
         backendHost,
-        body,
+        body: { ...body, server: resolvedServer.target, serverRef: null },
         allowedTools: mcpToolNames(),
         appContext
       });
@@ -74,12 +82,24 @@ export function createMcpAuthoringBundleHandlers({
         return;
       }
       const body = await readJson(req);
-      const auth = ensureTargetAuthority(gate.actor, body.server);
+      const resolvedServer = resolveMcpServerInput(world, body, {
+        label: "mcp server"
+      });
+      if (!resolvedServer.ok) {
+        sendJson(res, 400, { error: resolvedServer.error });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedServer.target);
       if (!auth.ok) {
         sendGateFailure(res, auth);
         return;
       }
-      const result = requestBootstrapMcpToolRemove(world, { actor: gate.actor, backendHost, body, appContext });
+      const result = requestBootstrapMcpToolRemove(world, {
+        actor: gate.actor,
+        backendHost,
+        body: { ...body, server: resolvedServer.target, serverRef: null },
+        appContext
+      });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;

@@ -504,6 +504,106 @@ plugin = "plugin.inspect"
   assert.equal(world.allWitnesses().some(w => w.process === "dsl.source.annotate" && w.body.section === "runtimePluginInstall" && w.body.target === "app_runner"), true);
 });
 
+test("runtime plugin and mcp tool DSL sections lower contextual refs to canonical ids", async () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "backendHost" });
+  createThing(world, { actor: "system", id: "frontendHost" });
+  await applyWitnessDocsWithRuntimePlugins(world, parseWitnessToml(`
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[mcpServer]]
+actor = "system"
+id = "source_mcp"
+serverRunner = "source_server"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceMcp"
+target = "source_mcp"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceMcp"
+target = "source_mcp"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceRunner"
+name = "importedRunner"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceMcp"
+name = "importedMcp"
+
+[[runtimePluginInstall]]
+actor = "system"
+context = "ctx.target"
+serverRunnerRef = "importedRunner"
+plugin = "plugin.inspect"
+
+[[runtimePluginRemove]]
+actor = "system"
+context = "ctx.target"
+serverRunnerRef = "importedRunner"
+plugin = "plugin.inspect"
+
+[[mcpToolInstall]]
+actor = "system"
+context = "ctx.target"
+serverRef = "importedMcp"
+tool = "world.read"
+
+[[mcpToolRemove]]
+actor = "system"
+context = "ctx.target"
+serverRef = "importedMcp"
+tool = "world.read"
+`), {
+    runtimeProfile: "minimal",
+    runtimePluginIds: ["plugin.mcp-authoring"]
+  });
+
+  assert.deepEqual(world.project(moduleProjectors.runtimePluginInstalls), []);
+  const projectedToolInstalls = mcpToolInstalls(world.allWitnesses());
+  assert.deepEqual(projectedToolInstalls, []);
+  assert.equal(world.allWitnesses().some(w => w.process === "installRuntimePlugin" && w.body?.serverRunner === "source_server"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "removeRuntimePlugin" && w.body?.serverRunner === "source_server"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "installMcpTool" && w.body?.server === "source_mcp"), true);
+  assert.equal(world.allWitnesses().some(w => w.process === "removeMcpTool" && w.body?.server === "source_mcp"), true);
+});
+
 test("maintained demo entrypoints inherit authored runtime plugin installs without duplicates", async () => {
   const expected = ["plugin.authoring", "plugin.canvas", "plugin.demo", "plugin.inspect"];
   const loadRunnerState = async relativePath => {
@@ -690,6 +790,273 @@ routeRef = "landingRoute"
   assert.equal(world.project(moduleProjectors.servedRoutes).some(row => row.id === "landing_route" && row.serverRunner === "demo_server"), true);
   assert.equal(world.project(moduleProjectors.contextScopes).some(row => row.context === "ctx.target" && row.name === "landingPage" && row.target === "page_root" && row.sourceKind === "import"), true);
   assert.equal(world.project(moduleProjectors.contextScopes).some(row => row.context === "ctx.target" && row.name === "homePage"), false);
+});
+
+test("context composition DSL lowers capability install target refs and rejects hidden canonical targets", () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "backendHost" });
+  createThing(world, { actor: "system", id: "frontendHost" });
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[serverRunner]]
+actor = "system"
+id = "local_server"
+context = "ctx.target"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceRunner"
+name = "importedRunner"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.target"
+name = "localRunner"
+target = "local_server"
+
+[[capability]]
+actor = "system"
+id = "notes.sidebar"
+label = "Notes Sidebar"
+placement = ["serverRunner"]
+
+[[capabilityInstall]]
+actor = "system"
+capability = "notes.sidebar"
+context = "ctx.target"
+targetRef = "localRunner"
+targetKind = "serverRunner"
+
+[[capabilityInstall]]
+actor = "system"
+capability = "notes.sidebar"
+context = "ctx.target"
+targetRef = "importedRunner"
+targetKind = "serverRunner"
+
+[[capabilityRemove]]
+actor = "system"
+capability = "notes.sidebar"
+context = "ctx.target"
+targetRef = "importedRunner"
+targetKind = "serverRunner"
+`);
+
+  const installs = world.project(moduleProjectors.capabilityInstalls);
+  assert.equal(installs.some(row =>
+    row.capability === "notes.sidebar"
+    && row.target === "local_server"
+    && row.targetKind === "serverRunner"
+  ), true);
+  assert.equal(installs.some(row =>
+    row.capability === "notes.sidebar"
+    && row.target === "source_server"
+    && row.targetKind === "serverRunner"
+  ), false);
+  assert.equal(world.allWitnesses().some(w =>
+    w.process === "installCapability"
+    && w.body?.capability === "notes.sidebar"
+    && w.body?.target === "source_server"
+  ), true);
+  assert.equal(world.allWitnesses().some(w =>
+    w.process === "removeCapability"
+    && w.body?.capability === "notes.sidebar"
+    && w.body?.target === "source_server"
+  ), true);
+
+  const blockedWorld = createWorld();
+  createThing(blockedWorld, { actor: "system", id: "backendHost" });
+  createThing(blockedWorld, { actor: "system", id: "frontendHost" });
+  assert.throws(() => {
+    applyWitnessToml(blockedWorld, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[capability]]
+actor = "system"
+id = "notes.sidebar"
+label = "Notes Sidebar"
+placement = ["serverRunner"]
+
+[[capabilityInstall]]
+actor = "system"
+capability = "notes.sidebar"
+context = "ctx.target"
+target = "source_server"
+targetKind = "serverRunner"
+`);
+  }, /capability install target id targets source_server in context ctx\.source and is not visible in authoring context ctx\.target/);
+});
+
+test("context composition DSL lowers stewardship and proposal target refs and rejects hidden canonical targets", () => {
+  const world = createWorld();
+  createThing(world, { actor: "system", id: "backendHost" });
+  createThing(world, { actor: "system", id: "frontendHost" });
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "sourceRunner"
+target = "source_server"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "sourceRunner"
+name = "importedRunner"
+
+[[stewardship]]
+actor = "system"
+steward = "callan"
+context = "ctx.target"
+targetRef = "importedRunner"
+targetKind = "serverRunner"
+
+[[proposal]]
+actor = "system"
+id = "proposal.runtime-plugin.source"
+targetProcess = "runtimePlugin.install"
+targetKind = "serverRunner"
+context = "ctx.target"
+targetIdRef = "importedRunner"
+body = {}
+reason = "Govern the imported runner"
+`);
+
+  assert.equal(world.project(moduleProjectors.stewardships).some(row =>
+    row.steward === "callan"
+    && row.target === "source_server"
+    && row.targetKind === "serverRunner"
+  ), true);
+  assert.equal(world.project(moduleProjectors.proposals).some(row =>
+    row.id === "proposal.runtime-plugin.source"
+    && row.targetId === "source_server"
+  ), true);
+
+  const blockedStewardship = createWorld();
+  createThing(blockedStewardship, { actor: "system", id: "backendHost" });
+  createThing(blockedStewardship, { actor: "system", id: "frontendHost" });
+  assert.throws(() => {
+    applyWitnessToml(blockedStewardship, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[stewardship]]
+actor = "system"
+steward = "callan"
+context = "ctx.target"
+target = "source_server"
+targetKind = "serverRunner"
+`);
+  }, /stewardship target id targets source_server in context ctx\.source and is not visible in authoring context ctx\.target/);
+
+  const blockedProposal = createWorld();
+  createThing(blockedProposal, { actor: "system", id: "backendHost" });
+  createThing(blockedProposal, { actor: "system", id: "frontendHost" });
+  assert.throws(() => {
+    applyWitnessToml(blockedProposal, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[serverRunner]]
+actor = "system"
+id = "source_server"
+context = "ctx.source"
+backendHost = "backendHost"
+frontendHost = "frontendHost"
+
+[[proposal]]
+actor = "system"
+id = "proposal.runtime-plugin.source"
+targetProcess = "runtimePlugin.install"
+targetKind = "serverRunner"
+context = "ctx.target"
+targetId = "source_server"
+body = {}
+reason = "Hidden canonical target should fail"
+`);
+  }, /proposal target id targets source_server in context ctx\.source and is not visible in authoring context ctx\.target/);
 });
 
 test("context composition DSL rejects duplicate visible names in one context", () => {
@@ -937,5 +1304,127 @@ rootWidget = "local_page"
   assert.ok(program);
   assert.equal(program.rootWidget, "local_page");
   assert.equal(world.project(moduleProjectors.contextScopes).some(row => row.context === "ctx.target" && row.name === "legacyShell" && row.target === "legacy_shell" && row.sourceKind === "local"), true);
+});
+
+test("context composition DSL lowers route rootSurface refs and preserves page-surface params without hidden canonical bypasses", () => {
+  const world = createWorld();
+  applyWitnessToml(world, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[surface]]
+actor = "system"
+id = "ReplayRoot"
+surfaceKind = "app-root"
+context = "ctx.source"
+
+[[surface]]
+actor = "system"
+id = "HiddenRoot"
+surfaceKind = "auth-screen"
+context = "ctx.source"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "replaySurface"
+target = "ReplayRoot"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "replaySurface"
+target = "ReplayRoot"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "replaySurface"
+name = "replaySurface"
+
+[[route]]
+actor = "system"
+id = "replay_surface_route"
+context = "ctx.target"
+path = "/replay-surface"
+method = "GET"
+handler = "page.surface"
+servesRef = "replaySurface"
+rootSurfaceRef = "replaySurface"
+defaultScreen = "login"
+routeState = { process = "ReplayFlow", state = "ReplayActiveRoute" }
+excludeWidgetRoles = ["debug"]
+`);
+
+  const route = world.project(moduleProjectors.routes).find(row => row.id === "replay_surface_route");
+  assert.ok(route);
+  assert.equal(route.serves, "ReplayRoot");
+  assert.equal(route.params?.rootSurface, "ReplayRoot");
+  assert.equal(route.params?.defaultScreen, "login");
+  assert.deepEqual(route.params?.routeState, {
+    process: "ReplayFlow",
+    state: "ReplayActiveRoute"
+  });
+  assert.deepEqual(route.params?.excludeWidgetRoles, ["debug"]);
+
+  const blockedWorld = createWorld();
+  assert.throws(() => {
+    applyWitnessToml(blockedWorld, `
+[[context]]
+actor = "system"
+id = "ctx.source"
+
+[[context]]
+actor = "system"
+id = "ctx.target"
+
+[[surface]]
+actor = "system"
+id = "ReplayRoot"
+surfaceKind = "app-root"
+context = "ctx.source"
+
+[[surface]]
+actor = "system"
+id = "HiddenRoot"
+surfaceKind = "auth-screen"
+context = "ctx.source"
+
+[[contextBinding]]
+actor = "system"
+context = "ctx.source"
+name = "replaySurface"
+target = "ReplayRoot"
+
+[[contextExport]]
+actor = "system"
+context = "ctx.source"
+name = "replaySurface"
+target = "ReplayRoot"
+
+[[contextImport]]
+actor = "system"
+context = "ctx.target"
+sourceContext = "ctx.source"
+exportName = "replaySurface"
+name = "replaySurface"
+
+[[route]]
+actor = "system"
+id = "hidden_surface_route"
+context = "ctx.target"
+path = "/hidden-surface"
+method = "GET"
+handler = "page.surface"
+servesRef = "replaySurface"
+rootSurface = "HiddenRoot"
+`);
+  }, /root surface id targets HiddenRoot in context ctx\.source and is not visible in authoring context ctx\.target/);
 });
 

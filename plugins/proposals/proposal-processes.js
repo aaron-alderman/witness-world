@@ -3,7 +3,8 @@ import {
   createProposal,
   approveProposal,
   rejectProposal,
-  moduleProjectors
+  moduleProjectors,
+  resolveContextualRef
 } from "../../src/modules.js";
 import { processSpecFor, typeModelProjection, validateProcessInput } from "../../src/type-model.js";
 
@@ -51,6 +52,20 @@ function normalizeJsonObject(parsed, field) {
   return { ok: true, value: parsed.value };
 }
 
+function resolveProposalTargetIdInput(world, body, {
+  contextField = "context",
+  idField = "targetId",
+  refField = "targetIdRef",
+  label = "proposal target"
+} = {}) {
+  return resolveContextualRef(world.allWitnesses(), {
+    context: body?.[contextField] ?? null,
+    id: body?.[idField] ?? null,
+    ref: body?.[refField] ?? null,
+    label
+  });
+}
+
 export function requestBootstrapProposalCreate(world, {
   actor,
   backendHost,
@@ -80,12 +95,23 @@ export function requestBootstrapProposalCreate(world, {
     const witness = fail(world, { process: "proposal.create.failed", actor: actor || backendHost, body: { reason: bodyParsed.error } });
     return { ok: false, status: 400, error: bodyParsed.error, witness };
   }
+  const resolvedTarget = resolveProposalTargetIdInput(world, input, {
+    label: "proposal target"
+  });
+  if (!resolvedTarget.ok) {
+    const witness = fail(world, {
+      process: "proposal.create.failed",
+      actor: actor || backendHost,
+      body: { reason: resolvedTarget.error }
+    });
+    return { ok: false, status: 400, error: resolvedTarget.error, witness };
+  }
   createProposal(world, {
     actor: actor || backendHost,
     id: input.id,
     targetProcess: input.targetProcess,
     targetKind: input.targetKind,
-    targetId: input.targetId ?? null,
+    targetId: resolvedTarget.target ?? null,
     body: bodyParsed.value ?? {},
     reason: input.reason ?? null,
     owner

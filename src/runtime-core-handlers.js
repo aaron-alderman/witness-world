@@ -829,6 +829,9 @@ export function createCoreRuntimeBundleHandlers({
           pageChrome: pageTheme,
           liveProjection: params.liveProjection !== false,
             runtimeSurfaces: appContext.runtimeSurfaceEntries ?? [],
+            browserRuntimeCapabilities: (appContext?.runtimeContributions?.capabilityDefinitions ?? [])
+              .map(definition => typeof definition?.id === "string" ? definition.id : "")
+              .filter(Boolean),
             surfaceContext: guidanceSurface.context,
             surfaceRouteId: guidanceSurface.routeId,
             surfaceRootWidgetId: guidanceSurface.rootWidgetId,

@@ -82,6 +82,23 @@ function resolveBodyRef(world, body, {
   });
 }
 
+export function resolveMcpServerInput(world, body, {
+  contextField = "context",
+  idField = "server",
+  refField = "serverRef",
+  label = "mcp server"
+} = {}) {
+  const resolved = resolveBodyRef(world, body, {
+    contextField,
+    idField,
+    refField,
+    label
+  });
+  if (!resolved.ok) return resolved;
+  if (!resolved.target) return { ok: false, error: `${label} is required` };
+  return resolved;
+}
+
 export function requestBootstrapMcpServerDefine(world, {
   actor,
   backendHost,
@@ -184,7 +201,21 @@ export function requestBootstrapMcpToolInstall(world, {
     });
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
-  const input = validated.value;
+  const resolvedServer = resolveMcpServerInput(world, validated.value, {
+    label: "mcp server"
+  });
+  if (!resolvedServer.ok) {
+    const witness = fail(world, {
+      process: "mcpTool.install.failed",
+      actor: actor || backendHost,
+      body: { reason: resolvedServer.error }
+    });
+    return { ok: false, status: 400, error: resolvedServer.error, witness };
+  }
+  const input = {
+    ...validated.value,
+    server: resolvedServer.target
+  };
   const server = project(moduleProjectors.mcpServerIndex).byId[input.server] ?? null;
   if (!server) {
     const witness = fail(world, { process: "mcpTool.install.failed", actor: actor || backendHost, body: { reason: "mcp server not found", server: input.server } });
@@ -260,7 +291,21 @@ export function requestBootstrapMcpToolRemove(world, {
     });
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
-  const input = validated.value;
+  const resolvedServer = resolveMcpServerInput(world, validated.value, {
+    label: "mcp server"
+  });
+  if (!resolvedServer.ok) {
+    const witness = fail(world, {
+      process: "mcpTool.remove.failed",
+      actor: actor || backendHost,
+      body: { reason: resolvedServer.error }
+    });
+    return { ok: false, status: 400, error: resolvedServer.error, witness };
+  }
+  const input = {
+    ...validated.value,
+    server: resolvedServer.target
+  };
   const existing = project(moduleProjectors.mcpToolInstalls)
     .find(row => row.server === input.server && row.tool === input.tool);
   if (!existing) {

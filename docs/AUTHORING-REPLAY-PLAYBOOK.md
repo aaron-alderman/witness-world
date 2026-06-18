@@ -35,9 +35,10 @@ frontend progress.
 6. interaction -> route-state transition
 7. route-state -> URL synchronization
 8. same-document surface refresh after route-state change
+9. interactive `page.surface` execution through authored process rules
 
-This routing cluster is all-or-nothing for green status, but the pathway still
-stops at the first blocked semantic and emits one structured blocked handoff.
+The routing cluster is now green on the canonical pathway. The next blocked
+semantic remains projection consumption on `page.surface`.
 
 ## Current truth
 
@@ -46,17 +47,21 @@ What the pathway probe now proves:
 - a minimal surface tree can be authored through constrained MCP
 - `page.surface` can project one minimal authored static text payload
 - `page.surface` can serve alternate authored output by route
+- `page.surface` can synchronize direct route entry URL state into authored
+  route state
+- `page.surface` can transition authored route state from live interactions
+- `page.surface` can synchronize authored route-state transitions back into the
+  browser URL
+- `page.surface` can refresh route-selected surface output without losing
+  same-document runtime state
+- `page.surface` can execute interactive authored process flow through shared
+  runtime rules
 - the reset host still exists as the honest fallback when no minimal static
   payload can be projected
 
 What remains blocked:
 
-- URL -> route-state synchronization
-- interaction -> route-state transition
-- route-state -> URL synchronization
-- same-document surface refresh after route-state change
-- interactive `page.surface` execution
-- process/projection consumption by `page.surface`
+- projection consumption by `page.surface`
 
 ## Evidence rules
 

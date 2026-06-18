@@ -19,6 +19,7 @@ Related direction:
 - [docs/EXPERIENCE.md](C:\Users\aaron\Documents\world\docs\EXPERIENCE.md)
 - [docs/CAPABILITIES.md](C:\Users\aaron\Documents\world\docs\CAPABILITIES.md)
 - [docs/BACKEND-SEAMS.md](C:\Users\aaron\Documents\world\docs\BACKEND-SEAMS.md)
+- [docs/CONTINUOUS-VERIFICATION-ROADMAP.md](C:\Users\aaron\Documents\world\docs\CONTINUOUS-VERIFICATION-ROADMAP.md)
 
 Terminology used in this roadmap:
 
@@ -643,6 +644,7 @@ Current base now exists:
 - [ ] Bring blank-world bootstrap/tutorial startup onto the same explicit runtime-composition story as the maintained demo so bootstrap can eventually run from a narrow baseline instead of a compatibility-heavy runtime path.
 - [ ] Add runner-scoped runtime-plugin reconcile and repair flows so authored installs that point at missing, invalid, incompatible, or dependency-broken local packages become operable cleanup work instead of only startup failures and review warnings.
 - [ ] Add operator-owned reset/recovery/repair flows beyond replace-only whole-world artifacts, including identity/bootstrap recovery where needed.
+- [ ] Turn continuous verification into a first-class runtime posture instead of a separate CI product: authored gate policy, explicit isolation classes, reverse-DAG invalidation, background scheduling, shared diagnostics, and stronger authority/risk gating across local dev, CI, and prod.
 - [ ] Keep theming visible but subordinate here as a shell/product boundary problem rather than a top-level driver.
 
 This seam is what turns the prototype into something ownable locally, reachable remotely, and extensible across worlds.
@@ -650,6 +652,7 @@ This seam is what turns the prototype into something ownable locally, reachable 
 Current contract and persistence slice detail lives here:
 
 - [docs/SHELLS-PERSISTENCE-ECOSYSTEM.md](C:\Users\aaron\Documents\world\docs\SHELLS-PERSISTENCE-ECOSYSTEM.md)
+- [docs/CONTINUOUS-VERIFICATION-ROADMAP.md](C:\Users\aaron\Documents\world\docs\CONTINUOUS-VERIFICATION-ROADMAP.md)
 
 Honest caveats / rollback watch:
 

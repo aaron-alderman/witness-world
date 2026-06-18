@@ -184,6 +184,8 @@ test("live page inspector can hand off a selected widget to its owning backend p
         && inspector.textContent.includes("todo_add_button")
         && inspector.textContent.includes("Runtime Correlation")
         && inspector.textContent.includes("submit:todo_form")
+        && inspector.textContent.includes("Process Active")
+        && !inspector.textContent.includes("Shared runtime inspection is unavailable")
       );
     });
 

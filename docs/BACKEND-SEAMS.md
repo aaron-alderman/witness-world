@@ -17,6 +17,7 @@ Related direction:
 
 - [ROADMAP.md](C:\Users\aaron\Documents\world\ROADMAP.md)
 - [docs/CAPABILITIES.md](C:\Users\aaron\Documents\world\docs\CAPABILITIES.md)
+- [docs/CONTINUOUS-VERIFICATION-ROADMAP.md](C:\Users\aaron\Documents\world\docs\CONTINUOUS-VERIFICATION-ROADMAP.md)
 - [BASELINE.md](C:\Users\aaron\Documents\world\BASELINE.md)
 
 ---
@@ -622,6 +623,32 @@ They should be isolated so vendor flakiness does not become the main test story.
 - host-level tests required for request-driven seams
 - provider integration tests later
 - no section-6 feature turns `[X]` on docs alone
+
+### Continuous verification follow-on
+
+The next testing step should not be a second product or a loose pile of CI scripts.
+
+It should be an authored runtime seam:
+
+- verification policy declared on the same runtime story as other capability bindings
+- local dev, CI, and prod all using the same runtime and gate model
+- different environments changing authority, risk posture, concurrency, and approval rules rather than switching to a different testing product
+- background verification work staying visible through the normal runtime and operator surfaces
+- dangerous verification work using explicit isolated execution paths rather than pretending all tests are equally safe to run in-process
+
+That means the long-term target here is not only layered tests.
+
+It is layered tests plus a first-class verification runtime that can:
+
+- classify gates by isolation mode such as in-process, child-process, browser, or candidate-snapshot
+- schedule work slowly by default, including one-core or one-worker background operation when requested
+- cache coverage, timing, and other verification artifacts as derived runtime data
+- invalidate those artifacts from authored dependency and reverse-DAG knowledge when code or provider inputs change
+- surface product failures and statistically meaningful regressions through the same product/runtime diagnostics story instead of a separate hidden CI report
+
+Detailed planning for that follow-on lives here:
+
+- [docs/CONTINUOUS-VERIFICATION-ROADMAP.md](C:\Users\aaron\Documents\world\docs\CONTINUOUS-VERIFICATION-ROADMAP.md)
 
 ---
 
