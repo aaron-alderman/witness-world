@@ -2468,6 +2468,8 @@ function supplementalRowsForView(viewId, model) {
           ...row,
           pageKind: "route",
           title: `${row.method} ${row.matcher}`,
+          objectLink: { id: row.id, title: `${row.method} ${row.matcher}` },
+          scopeValue: row.handler || "",
           scope: row.handler || "",
           summary: row.notes || ""
         })),
@@ -2475,6 +2477,8 @@ function supplementalRowsForView(viewId, model) {
           ...row,
           pageKind: "proposal-target",
           title: row.targetProcess,
+          objectLink: { id: row.id, title: row.targetProcess },
+          scopeValue: row.targetProcess || "",
           scope: row.authorityMechanism || "",
           summary: row.notes || ""
         }))
@@ -2482,12 +2486,15 @@ function supplementalRowsForView(viewId, model) {
     case "semantics":
       return (model.mutableSurfaceSemantics ?? []).map(row => ({
         ...row,
+        surfaceLink: { id: row.id, title: row.title || row.surface || row.id },
         scope: row.stateClass || "",
         summary: row.authorityRule || ""
       }));
     case "packageCoexistence":
       return (model.packageCoexistence ?? []).map(row => ({
         ...row,
+        packageLink: { id: row.packageId, title: row.packageLabel || row.packageId },
+        namespaceSelectionIds: (row.namespaceSelections ?? []).map(namespace => namespace.id),
         title: row.packageLabel || row.packageId,
         scope: row.coexistenceMode || "",
         summary: inlineSummary(row.selectedRevisionIds ?? [])
@@ -2495,6 +2502,8 @@ function supplementalRowsForView(viewId, model) {
     case "packageConvergence":
       return (model.packageConvergence ?? []).map(row => ({
         ...row,
+        packageLink: { id: row.packageId, title: row.packageLabel || row.packageId },
+        remainingGlueMessages: (row.remainingGlue ?? []).map(item => item.message),
         title: row.packageLabel || row.packageId,
         scope: row.status || "",
         summary: row.explanation || ""
@@ -2615,11 +2624,30 @@ function renderSupplementalRow(viewId, row, ctx) {
 }
 
 function renderSupplementalPage(currentView, sourceId, model, ctx) {
+  const pageSurface = currentView.surface ?? null;
   const rows = supplementalRowsForView(sourceId, model);
-  const page = paginateRows(rows, ctx, DEFAULT_PAGE_SIZE);
+  const page = paginateRows(rows, ctx, surfacePageSize(pageSurface, DEFAULT_PAGE_SIZE));
   const detail = supplementalRecordForView(sourceId, model, ctx.id);
-  const primaryFields = supplementalPrimaryFields(sourceId);
-  const primaryKeys = new Set(primaryFields.map(field => field.key));
+  const fallbackPrimaryFields = supplementalPrimaryFields(sourceId);
+  const fallbackPrimaryEntries = fallbackPrimaryFields.map(field => ({
+    label: field.label,
+    valueHtml: renderValueWithApi(ctx, detail?.[field.key])
+  }));
+  const primaryCard = propertyRowsFromSurfaceSchema(
+    pageSurface,
+    "detailCardTitle",
+    "primaryFields",
+    ctx,
+    detail,
+    `${currentView.title} Detail`,
+    fallbackPrimaryEntries
+  );
+  const primaryKeys = new Set([
+    ...(rootKeysFromSurfaceSchema(pageSurface, "primaryFields").length
+      ? rootKeysFromSurfaceSchema(pageSurface, "primaryFields")
+      : fallbackPrimaryFields.map(field => field.key)),
+    ...surfaceKeyList(pageSurface, "longTailExcludedFields", ["title", "scope", "summary"])
+  ]);
   return `
     ${renderSummaryCards([
       { label: "Rows", value: rows.length },
@@ -2629,22 +2657,22 @@ function renderSupplementalPage(currentView, sourceId, model, ctx) {
       <h2>${esc(currentView.title)}</h2>
       <div class="muted">${esc(currentView.subtitle || "")}</div>
       ${renderTable(
-        supplementalTableHeaders(sourceId),
-        page.items.map(row => renderSupplementalRow(sourceId, row, ctx)),
-        "No rows."
+        surfaceColumnLabels(pageSurface, supplementalTableHeaders(sourceId)),
+        renderRowsFromSurfaceSchema(pageSurface, "rowFields", page.items, ctx, row => renderSupplementalRow(sourceId, row, ctx)),
+        surfaceEmptyState(pageSurface, "No rows.")
       )}
       ${renderPagination(ctx, page.total, page.offset, page.limit)}
     </section>
     <section class="grid2">
       <div>
         ${detail
-          ? renderRecordPropertyTable(ctx, `${currentView.title} Detail`, detail, primaryFields)
-          : renderPropertyTable(`${currentView.title} Detail`, [])}
+          ? renderPropertyCard(primaryCard)
+          : renderPropertyTable(surfacePropText(pageSurface, "detailCardTitle", `${currentView.title} Detail`), [])}
       </div>
       <div>
         ${detail
-          ? renderRecordLongTailTable(ctx, "Properties", detail, [...primaryKeys, "title", "scope", "summary"])
-          : renderPropertyTable("Properties", [])}
+          ? renderRecordLongTailTable(ctx, surfacePropText(pageSurface, "longTailCardTitle", "Properties"), detail, [...primaryKeys])
+          : renderPropertyTable(surfacePropText(pageSurface, "longTailCardTitle", "Properties"), [])}
       </div>
     </section>
   `;

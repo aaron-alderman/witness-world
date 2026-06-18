@@ -1030,24 +1030,39 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(bridgesPage.pageId, "bridges");
   assert.equal(bridgesPage.props.modelView, "bridges");
   assert.equal(bridgesPage.props.supplementalPageSource, "bridges");
+  assert.equal(bridgesPage.props.columns, "Bridge|Class|Owner|Status|Surfaces");
+  assert.equal(bridgesPage.props.rowFields, "Bridge=id@concept|Class=bridgeClass|Owner=owner@value|Status=status|Surfaces=surfaces@value");
+  assert.equal(bridgesPage.props.detailCardTitle, "Bridge Detail");
+  assert.equal(bridgesPage.props.primaryFields, "Bridge=id@concept|Class=bridgeClass|Owner=owner@value|Status=status|Surfaces=surfaces@value|Sample Targets=sampleTargets@value");
+  assert.equal(bridgesPage.props.emptyState, "No compatibility bridges.");
   assert.equal(bridgesPage.summary, "Compatibility bridge inventory for remaining convenience seams.");
   assert.ok(governancePage);
   assert.equal(governancePage.pageId, "governance");
   assert.equal(governancePage.props.modelView, "governance");
   assert.equal(governancePage.props.supplementalPageSource, "governance");
+  assert.equal(governancePage.props.columns, "Kind|Object|Mode|Authority|Scope");
+  assert.equal(governancePage.props.rowFields, "Kind=pageKind|Object=objectLink@concept|Mode=governanceMode|Authority=authorityMechanism|Scope=scopeValue@value");
+  assert.equal(governancePage.props.detailCardTitle, "Governance Object Detail");
+  assert.equal(governancePage.props.primaryFields, "Object=objectLink@concept|Kind=pageKind|Mode=governanceMode|Authority=authorityMechanism|Workflow=workflowRole|Operation=operationSemantics");
   assert.equal(governancePage.summary, "Route and proposal-target governance coverage for mutating platform seams.");
   assert.ok(semanticsPage);
   assert.equal(semanticsPage.pageId, "semantics");
   assert.equal(semanticsPage.props.modelView, "semantics");
   assert.equal(semanticsPage.props.supplementalPageSource, "semantics");
+  assert.equal(semanticsPage.props.detailCardTitle, "Mutable Surface Detail");
+  assert.equal(semanticsPage.props.primaryFields, "Surface=surfaceLink@concept|Sharing=sharingClass|State Class=stateClass|Authority=authorityRule|Visibility=visibilityRule|Mutation Mode=mutationMode");
   assert.ok(packageCoexistencePage);
   assert.equal(packageCoexistencePage.pageId, "packageCoexistence");
   assert.equal(packageCoexistencePage.props.modelView, "packageCoexistence");
   assert.equal(packageCoexistencePage.props.supplementalPageSource, "packageCoexistence");
+  assert.equal(packageCoexistencePage.props.detailCardTitle, "Package Coexistence Detail");
+  assert.equal(packageCoexistencePage.props.primaryFields, "Package=packageLink@concept|Mode=coexistenceMode|Selected Revisions=selectedRevisionIds@value|Revision Lines=revisionIds@value");
   assert.ok(packageConvergencePage);
   assert.equal(packageConvergencePage.pageId, "packageConvergence");
   assert.equal(packageConvergencePage.props.modelView, "packageConvergence");
   assert.equal(packageConvergencePage.props.supplementalPageSource, "packageConvergence");
+  assert.equal(packageConvergencePage.props.detailCardTitle, "Package Convergence Detail");
+  assert.equal(packageConvergencePage.props.primaryFields, "Package=packageLink@concept|Status=status|Transformers=transformerIds@value|Convergence Patches=convergencePatchIds@value|Explanation=explanation");
   const consoleSummarySurface = overviewPage.childSurfaces.find(surface => surface.name === "PlatformConsoleSummary");
   assert.ok(consoleSummarySurface);
   assert.equal(consoleSummarySurface.props.summaryPageId, "overview");
@@ -6138,30 +6153,51 @@ test("platform page renders authored supplemental pages from the RVM page tree",
 
   assert.match(bridgesHtml, /Platform Console - Bridges/);
   assert.match(bridgesHtml, /Compatibility bridge inventory for remaining convenience seams\./);
+  assert.match(bridgesHtml, /Bridge Detail/);
   assert.match(bridgesHtml, /compatibilityBridge:detail-panels/);
   assert.match(bridgesHtml, /\?view=packageConvergence/);
   assert.doesNotMatch(bridgesHtml, /<pre/);
 
   assert.match(governanceHtml, /Platform Console - Governance/);
   assert.match(governanceHtml, /Route and proposal-target governance coverage for mutating platform seams\./);
+  assert.match(governanceHtml, /Governance Object Detail/);
   assert.match(governanceHtml, /governanceRoute:POST \/api\/platform-change-sets\/demo\/apply/);
   assert.doesNotMatch(governanceHtml, /<pre/);
 
   assert.match(semanticsHtml, /Platform Console - Semantics/);
   assert.match(semanticsHtml, /Personal, shared, and mixed mutable-surface semantics contract rows\./);
+  assert.match(semanticsHtml, /Mutable Surface Detail/);
   assert.match(semanticsHtml, /mutableSurface:plugin\.platform/);
   assert.doesNotMatch(semanticsHtml, /<pre/);
 
   assert.match(coexistenceHtml, /Platform Console - Package Coexistence/);
   assert.match(coexistenceHtml, /Divergent package revision lines and namespace selections\./);
+  assert.match(coexistenceHtml, /Package Coexistence Detail/);
   assert.match(coexistenceHtml, /packageRevision\.plugin\.inspect\.v1/);
   assert.doesNotMatch(coexistenceHtml, /<pre/);
 
   assert.match(convergenceHtml, /Platform Console - Package Convergence/);
   assert.match(convergenceHtml, /Transformer contracts, convergence patches, and remaining authored glue\./);
+  assert.match(convergenceHtml, /Package Convergence Detail/);
   assert.match(convergenceHtml, /packageTransformer\.inspect\.v1-to-v2/);
   assert.match(convergenceHtml, /Shared shim still needed\./);
   assert.doesNotMatch(convergenceHtml, /<pre/);
+});
+
+test("platform supplemental pages use authored empty states", () => {
+  const emptyModel = { summaries: {} };
+
+  const bridgesHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=bridges") });
+  const governanceHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=governance") });
+  const semanticsHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=semantics") });
+  const coexistenceHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=packageCoexistence") });
+  const convergenceHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=packageConvergence") });
+
+  assert.match(bridgesHtml, /No compatibility bridges\./);
+  assert.match(governanceHtml, /No governance rows\./);
+  assert.match(semanticsHtml, /No mutable-surface semantics rows\./);
+  assert.match(coexistenceHtml, /No package coexistence rows\./);
+  assert.match(convergenceHtml, /No package convergence rows\./);
 });
 
 test("platform page uses authored related-card empty states and item limits", () => {
