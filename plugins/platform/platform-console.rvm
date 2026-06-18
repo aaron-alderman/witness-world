@@ -347,9 +347,51 @@ view PlatformVerificationDetail {
   class platform-verification-detail
   prop title = "Verification Detail"
   prop summary = "Properties and linked resources for the selected verification object."
+  children {
+    PlatformVerificationPrimaryPanel
+    PlatformVerificationRelatedPanel
+    PlatformVerificationRunHistory
+    PlatformVerificationBuildHistory
+    PlatformVerificationBuildErrors
+  }
   projections {
     PlatformModelRead
   }
+}
+
+view PlatformVerificationPrimaryPanel {
+  kind region
+  class platform-verification-primary
+  prop title = "Primary Detail"
+  prop summary = "Selected verification object properties and long-tail fields."
+}
+
+view PlatformVerificationRelatedPanel {
+  kind region
+  class platform-verification-related
+  prop title = "Related Resources"
+  prop summary = "Linked verification resources, streams, and supporting context."
+}
+
+view PlatformVerificationRunHistory {
+  kind table
+  class platform-verification-runs
+  prop title = "Recent Test Runs"
+  prop summary = "Recent test-run history for the selected verification object when available."
+}
+
+view PlatformVerificationBuildHistory {
+  kind table
+  class platform-verification-builds
+  prop title = "Snapshot Builds"
+  prop summary = "Snapshot build history for the selected runtime revision when available."
+}
+
+view PlatformVerificationBuildErrors {
+  kind table
+  class platform-verification-build-errors
+  prop title = "Build Errors"
+  prop summary = "Build errors for the selected runtime revision when available."
 }
 
 view PlatformVerificationStreams {

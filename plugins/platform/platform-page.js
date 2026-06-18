@@ -783,7 +783,30 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
   `;
 }
 
-function renderVerificationDetail(detail, model, ctx) {
+function renderVerificationDetail(surface, detail, model, ctx) {
+  const primarySurface = nestedSurface(surface, "PlatformVerificationPrimaryPanel", {
+    title: "Primary Detail",
+    summary: "Selected verification object properties and long-tail fields."
+  });
+  const relatedSurface = nestedSurface(surface, "PlatformVerificationRelatedPanel", {
+    title: "Related Resources",
+    summary: "Linked verification resources, streams, and supporting context."
+  });
+  const runHistorySurface = nestedSurface(surface, "PlatformVerificationRunHistory", {
+    title: "Recent Test Runs",
+    summary: "Recent test-run history for the selected verification object when available.",
+    surfaceKind: "table"
+  });
+  const buildHistorySurface = nestedSurface(surface, "PlatformVerificationBuildHistory", {
+    title: "Snapshot Builds",
+    summary: "Snapshot build history for the selected runtime revision when available.",
+    surfaceKind: "table"
+  });
+  const buildErrorsSurface = nestedSurface(surface, "PlatformVerificationBuildErrors", {
+    title: "Build Errors",
+    summary: "Build errors for the selected runtime revision when available.",
+    surfaceKind: "table"
+  });
   if (!detail) return `<div class="card"><h2>Detail</h2><div class="muted">No verification rows are projected yet.</div></div>`;
   if (detail.id?.startsWith?.("gate:")) {
     const gate = detail;
@@ -792,7 +815,8 @@ function renderVerificationDetail(detail, model, ctx) {
     return `
       <section class="grid2">
         <div>
-          ${renderPropertyTable("Test Gate Detail", [
+          ${renderSurfaceFrame(primarySurface, `
+            ${renderPropertyTable("Test Gate Detail", [
             { label: "Gate", valueHtml: renderConceptLink(ctx, gate.id, gate.title || gate.id) },
             { label: "Runner", valueHtml: esc(gate.runner || "") },
             { label: "Environment", valueHtml: esc(gate.environment || "") },
@@ -801,16 +825,19 @@ function renderVerificationDetail(detail, model, ctx) {
             { label: "Command", valueHtml: esc(gate.command || "") },
             { label: "Latest result", valueHtml: esc(gate.lastResult ? `${gate.lastResult.status} (${gate.lastResult.exitCode ?? "n/a"})` : "idle") },
             { label: "API resource", valueHtml: renderApiLink(gate.id) }
-          ])}
-          ${renderLongTailProperties(ctx, gate, usedKeys)}
+            ])}
+            ${renderLongTailProperties(ctx, gate, usedKeys)}
+          `)}
         </div>
         <div>
-          ${renderLinksCard("Protected Objects", ctx, gate.protectedObjects ?? [])}
-          ${renderLinksCard("Selected Branches", ctx, gate.selectedByBranches ?? [])}
-          ${renderLinksCard("Selected Change Sets", ctx, gate.selectedByChangeSets ?? [])}
+          ${renderSurfaceFrame(relatedSurface, `
+            ${renderLinksCard("Protected Objects", ctx, gate.protectedObjects ?? [])}
+            ${renderLinksCard("Selected Branches", ctx, gate.selectedByBranches ?? [])}
+            ${renderLinksCard("Selected Change Sets", ctx, gate.selectedByChangeSets ?? [])}
+          `)}
         </div>
       </section>
-      ${renderDataTable("Recent Test Runs", ["Status", "Run", "Branch", "Duration", "Exit"], runs.map(run => `
+      ${renderSurfaceFrame(runHistorySurface, renderTable(["Status", "Run", "Branch", "Duration", "Exit"], runs.map(run => `
         <tr>
           <td>${esc(run.status || "")}</td>
           <td>${renderConceptLink(ctx, run.id)}</td>
@@ -818,7 +845,7 @@ function renderVerificationDetail(detail, model, ctx) {
           <td>${esc(run.durationMs ?? "")}</td>
           <td>${esc(run.exitCode ?? "")}</td>
         </tr>
-      `), "No runs for this gate yet.")}
+      `), "No runs for this gate yet."))}
     `;
   }
   if (detail.id?.startsWith?.("runtimeRevision:") || detail.id?.startsWith?.("backendRevision:") || detail.id?.startsWith?.("frontendRevision:")) {
@@ -829,7 +856,8 @@ function renderVerificationDetail(detail, model, ctx) {
     return `
       <section class="grid2">
         <div>
-          ${renderPropertyTable("Runtime Revision Detail", [
+          ${renderSurfaceFrame(primarySurface, `
+            ${renderPropertyTable("Runtime Revision Detail", [
             { label: "Revision", valueHtml: renderConceptLink(ctx, revision.id, `Revision ${revision.revision}`) },
             { label: "Status", valueHtml: esc(revision.status || "") },
             { label: "Trigger", valueHtml: esc(revision.trigger || "") },
@@ -838,20 +866,23 @@ function renderVerificationDetail(detail, model, ctx) {
             { label: "Changed sources", valueHtml: esc((revision.changedSources ?? []).length) },
             { label: "Build errors", valueHtml: esc(revision.buildErrorCount ?? 0) },
             { label: "API resource", valueHtml: renderApiLink(revision.id) }
-          ])}
-          ${renderLongTailProperties(ctx, revision, usedKeys)}
+            ])}
+            ${renderLongTailProperties(ctx, revision, usedKeys)}
+          `)}
         </div>
         <div>
-          ${renderLinksCard("Changed Sources", ctx, revision.changedSources ?? [])}
-          ${renderPropertyTable("Snapshot Diagnostics", [
-            { label: "Active revision", valueHtml: esc(model.snapshotDiagnostics?.appRevision ?? "") },
-            { label: "Last good", valueHtml: esc(model.snapshotDiagnostics?.lastGoodAppRevision ?? "") },
-            { label: "Pending dirty", valueHtml: esc((model.snapshotDiagnostics?.pendingDirtySources ?? []).length) },
-            { label: "Backend stream", valueHtml: `<a href="/api/runtime/backend-revisions/events">Event stream</a>` }
-          ])}
+          ${renderSurfaceFrame(relatedSurface, `
+            ${renderLinksCard("Changed Sources", ctx, revision.changedSources ?? [])}
+            ${renderPropertyTable("Snapshot Diagnostics", [
+              { label: "Active revision", valueHtml: esc(model.snapshotDiagnostics?.appRevision ?? "") },
+              { label: "Last good", valueHtml: esc(model.snapshotDiagnostics?.lastGoodAppRevision ?? "") },
+              { label: "Pending dirty", valueHtml: esc((model.snapshotDiagnostics?.pendingDirtySources ?? []).length) },
+              { label: "Backend stream", valueHtml: `<a href="/api/runtime/backend-revisions/events">Event stream</a>` }
+            ])}
+          `)}
         </div>
       </section>
-      ${renderDataTable("Snapshot Builds", ["Status", "Build", "Candidate Snapshot", "Branch", "Errors"], builds.map(build => `
+      ${renderSurfaceFrame(buildHistorySurface, renderTable(["Status", "Build", "Candidate Snapshot", "Branch", "Errors"], builds.map(build => `
         <tr>
           <td>${esc(build.status || "")}</td>
           <td>${esc(build.id || "")}</td>
@@ -859,15 +890,15 @@ function renderVerificationDetail(detail, model, ctx) {
           <td>${build.branchId ? renderConceptLink(ctx, build.branchId) : ""}</td>
           <td>${esc(build.errorCount ?? 0)}</td>
         </tr>
-      `), "No snapshot builds for this revision.")}
-      ${renderDataTable("Build Errors", ["Build", "Path", "Kind", "Message"], errors.map(error => `
+      `), "No snapshot builds for this revision."))}
+      ${renderSurfaceFrame(buildErrorsSurface, renderTable(["Build", "Path", "Kind", "Message"], errors.map(error => `
         <tr>
           <td>${esc(error.snapshotBuildId || "")}</td>
           <td>${esc(error.path || "")}</td>
           <td>${esc(error.kind || "")}</td>
           <td>${esc(error.message || "")}</td>
         </tr>
-      `), "No build errors for this revision.")}
+      `), "No build errors for this revision."))}
     `;
   }
   if (detail.id?.startsWith?.("candidateSnapshot:")) {
@@ -876,19 +907,23 @@ function renderVerificationDetail(detail, model, ctx) {
     return `
       <section class="grid2">
         <div>
-          ${renderPropertyTable("Candidate Snapshot Detail", [
+          ${renderSurfaceFrame(primarySurface, `
+            ${renderPropertyTable("Candidate Snapshot Detail", [
             { label: "Snapshot", valueHtml: renderConceptLink(ctx, snapshot.id) },
             { label: "Status", valueHtml: esc(snapshot.status || "") },
             { label: "Branch", valueHtml: snapshot.branchId ? renderConceptLink(ctx, snapshot.branchId) : "" },
             { label: "Change set", valueHtml: snapshot.changeSetId ? renderConceptLink(ctx, snapshot.changeSetId) : "" },
             { label: "Revision", valueHtml: esc(snapshot.revision ?? "") },
             { label: "API resource", valueHtml: renderApiLink(snapshot.id) }
-          ])}
-          ${renderLongTailProperties(ctx, snapshot, usedKeys)}
+            ])}
+            ${renderLongTailProperties(ctx, snapshot, usedKeys)}
+          `)}
         </div>
         <div>
-          ${renderTextListCard("Files", (snapshot.files ?? []).map(file => file.path || ""))}
-          ${renderTextListCard("Errors", (snapshot.errors ?? []).map(error => `${error.kind || "error"}: ${error.message || ""}`))}
+          ${renderSurfaceFrame(relatedSurface, `
+            ${renderTextListCard("Files", (snapshot.files ?? []).map(file => file.path || ""))}
+            ${renderTextListCard("Errors", (snapshot.errors ?? []).map(error => `${error.kind || "error"}: ${error.message || ""}`))}
+          `)}
         </div>
       </section>
     `;
@@ -898,7 +933,8 @@ function renderVerificationDetail(detail, model, ctx) {
   return `
     <section class="grid2">
       <div>
-        ${renderPropertyTable("Test Run Detail", [
+        ${renderSurfaceFrame(primarySurface, `
+          ${renderPropertyTable("Test Run Detail", [
           { label: "Run", valueHtml: renderConceptLink(ctx, run.id) },
           { label: "Status", valueHtml: esc(run.status || "") },
           { label: "Gate", valueHtml: run.gateId ? renderConceptLink(ctx, run.gateId, run.title || run.gateId) : esc(run.title || "") },
@@ -908,14 +944,17 @@ function renderVerificationDetail(detail, model, ctx) {
           { label: "Duration", valueHtml: esc(run.durationMs ?? "") },
           { label: "Exit", valueHtml: esc(run.exitCode ?? "") },
           { label: "API resource", valueHtml: renderApiLink(run.id) }
-        ])}
-        ${renderLongTailProperties(ctx, run, usedKeys)}
+          ])}
+          ${renderLongTailProperties(ctx, run, usedKeys)}
+        `)}
       </div>
       <div>
-        ${renderPropertyTable("Verification Streams", [
-          { label: "Test events", valueHtml: `<a href="/api/platform-test-runs/events">Test run event stream</a>` },
-          { label: "Backend revisions", valueHtml: `<a href="/api/runtime/backend-revisions/events">Backend revision stream</a>` }
-        ])}
+        ${renderSurfaceFrame(relatedSurface, `
+          ${renderPropertyTable("Verification Streams", [
+            { label: "Test events", valueHtml: `<a href="/api/platform-test-runs/events">Test run event stream</a>` },
+            { label: "Backend revisions", valueHtml: `<a href="/api/runtime/backend-revisions/events">Backend revision stream</a>` }
+          ])}
+        `)}
       </div>
     </section>
   `;
@@ -1756,7 +1795,7 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
     case "PlatformVerificationList":
       return renderVerificationListSection(surface, model, ctx);
     case "PlatformVerificationDetail":
-      return renderSurfaceFrame(surface, renderVerificationDetail(findVerificationDetail(model, ctx.id), model, ctx));
+      return renderSurfaceFrame(surface, renderVerificationDetail(surface, findVerificationDetail(model, ctx.id), model, ctx));
     case "PlatformVerificationStreams":
       return renderVerificationStreamsSection(surface);
     case "PlatformBranchRedGreenList":

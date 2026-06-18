@@ -394,6 +394,16 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformTestRunPanel",
     "PlatformSelectedTestRunPanel"
   ]);
+  const verificationDetailSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationDetail");
+  assert.ok(verificationDetailSurface);
+  assert.deepEqual(verificationDetailSurface.children, [
+    "PlatformVerificationPrimaryPanel",
+    "PlatformVerificationRelatedPanel",
+    "PlatformVerificationRunHistory",
+    "PlatformVerificationBuildHistory",
+    "PlatformVerificationBuildErrors"
+  ]);
+  assert.equal(verificationDetailSurface.childSurfaces.some(surface => surface.name === "PlatformVerificationBuildErrors" && surface.summary === "Build errors for the selected runtime revision when available."), true);
   assert.ok(signalsPage);
   assert.equal(signalsPage.pageId, "signals");
   assert.deepEqual(signalsPage.children, [
@@ -4945,6 +4955,12 @@ test("platform page renders required operating views", async () => {
   assert.match(verificationHtml, /Platform Console - Verification/);
   assert.match(verificationHtml, /Verification Items/);
   assert.match(verificationHtml, /Properties and linked resources for the selected verification object\./);
+  assert.match(verificationHtml, /Primary Detail/);
+  assert.match(verificationHtml, /Selected verification object properties and long-tail fields\./);
+  assert.match(verificationHtml, /Related Resources/);
+  assert.match(verificationHtml, /Linked verification resources, streams, and supporting context\./);
+  assert.match(verificationHtml, /Recent Test Runs/);
+  assert.match(verificationHtml, /Recent test-run history for the selected verification object when available\./);
   assert.match(verificationHtml, /Test Gate Detail/);
   assert.match(verificationHtml, /Links to live test-run and backend-revision event streams\./);
   assert.match(verificationHtml, /<form id="platform-test-run-form"/);
