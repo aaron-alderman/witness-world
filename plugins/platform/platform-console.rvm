@@ -500,9 +500,43 @@ view PlatformKnowledgeDetail {
   class platform-knowledge-detail
   prop title = "Knowledge Detail"
   prop summary = "Properties and linked resources for the selected knowledge object."
+  children {
+    PlatformKnowledgePrimaryPanel
+    PlatformKnowledgeRelatedPanel
+    PlatformKnowledgeSections
+    PlatformKnowledgeTasks
+  }
   projections {
     PlatformModelRead
   }
+}
+
+view PlatformKnowledgePrimaryPanel {
+  kind region
+  class platform-knowledge-primary
+  prop title = "Primary Detail"
+  prop summary = "Selected knowledge object properties and long-tail fields."
+}
+
+view PlatformKnowledgeRelatedPanel {
+  kind region
+  class platform-knowledge-related
+  prop title = "Related Resources"
+  prop summary = "Linked platform resources and supporting context for the selected knowledge object."
+}
+
+view PlatformKnowledgeSections {
+  kind table
+  class platform-knowledge-sections
+  prop title = "Sections"
+  prop summary = "Document sections for the selected governed document when available."
+}
+
+view PlatformKnowledgeTasks {
+  kind table
+  class platform-knowledge-tasks
+  prop title = "Tasks"
+  prop summary = "Document or roadmap tasks for the selected knowledge object when available."
 }
 
 view PlatformModelList {

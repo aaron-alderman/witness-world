@@ -960,7 +960,25 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   `;
 }
 
-function renderKnowledgeDetail(detail, model, ctx) {
+function renderKnowledgeDetail(surface, detail, model, ctx) {
+  const primarySurface = nestedSurface(surface, "PlatformKnowledgePrimaryPanel", {
+    title: "Primary Detail",
+    summary: "Selected knowledge object properties and long-tail fields."
+  });
+  const relatedSurface = nestedSurface(surface, "PlatformKnowledgeRelatedPanel", {
+    title: "Related Resources",
+    summary: "Linked platform resources and supporting context for the selected knowledge object."
+  });
+  const sectionsSurface = nestedSurface(surface, "PlatformKnowledgeSections", {
+    title: "Sections",
+    summary: "Document sections for the selected governed document when available.",
+    surfaceKind: "table"
+  });
+  const tasksSurface = nestedSurface(surface, "PlatformKnowledgeTasks", {
+    title: "Tasks",
+    summary: "Document or roadmap tasks for the selected knowledge object when available.",
+    surfaceKind: "table"
+  });
   if (!detail) return `<div class="card"><h2>Detail</h2><div class="muted">No knowledge rows are projected yet.</div></div>`;
   if (detail.path) {
     const doc = detail;
@@ -970,7 +988,8 @@ function renderKnowledgeDetail(detail, model, ctx) {
     return `
       <section class="grid2">
         <div>
-          ${renderPropertyTable("Document Detail", [
+          ${renderSurfaceFrame(primarySurface, `
+            ${renderPropertyTable("Document Detail", [
             { label: "Document", valueHtml: renderConceptLink(ctx, doc.path, doc.path) },
             { label: "Role", valueHtml: esc(doc.role || "") },
             { label: "Owner", valueHtml: esc(doc.owner || "") },
@@ -979,30 +998,33 @@ function renderKnowledgeDetail(detail, model, ctx) {
             { label: "Sections", valueHtml: esc(doc.sectionCount ?? 0) },
             { label: "Tasks", valueHtml: esc(doc.taskCount ?? 0) },
             { label: "API resource", valueHtml: renderApiLink(doc.path) }
-          ])}
-          ${renderLongTailProperties(ctx, doc, usedKeys)}
+            ])}
+            ${renderLongTailProperties(ctx, doc, usedKeys)}
+          `)}
         </div>
         <div>
-          ${renderLinksCard("Referenced Routes", ctx, doc.references?.routes ?? [])}
-          ${renderLinksCard("Referenced Plugins", ctx, doc.references?.pluginIds ?? [])}
-          ${renderLinksCard("Referenced Files", ctx, doc.references?.filePaths ?? [])}
+          ${renderSurfaceFrame(relatedSurface, `
+            ${renderLinksCard("Referenced Routes", ctx, doc.references?.routes ?? [])}
+            ${renderLinksCard("Referenced Plugins", ctx, doc.references?.pluginIds ?? [])}
+            ${renderLinksCard("Referenced Files", ctx, doc.references?.filePaths ?? [])}
+          `)}
         </div>
       </section>
-      ${renderDataTable("Sections", ["Title", "Line", "Depth"], sections.map(section => `
+      ${renderSurfaceFrame(sectionsSurface, renderTable(["Title", "Line", "Depth"], sections.map(section => `
         <tr>
           <td>${esc(section.title || "")}</td>
           <td>${esc(section.line ?? "")}</td>
           <td>${esc(section.depth ?? "")}</td>
         </tr>
-      `), "No sections projected for this document.")}
-      ${renderDataTable("Tasks", ["Status", "Task", "Line", "Section"], tasks.map(task => `
+      `), "No sections projected for this document."))}
+      ${renderSurfaceFrame(tasksSurface, renderTable(["Status", "Task", "Line", "Section"], tasks.map(task => `
         <tr>
           <td>${esc(task.status || "")}</td>
           <td>${task.id ? renderConceptLink(ctx, task.id, task.title || task.id) : esc(task.title || "")}</td>
           <td>${esc(task.line ?? "")}</td>
           <td>${esc(task.section || "")}</td>
         </tr>
-      `), "No tasks projected for this document.")}
+      `), "No tasks projected for this document."))}
     `;
   }
   if (detail.id?.startsWith?.("roadmapTask:") || detail.doc) {
@@ -1011,7 +1033,8 @@ function renderKnowledgeDetail(detail, model, ctx) {
     return `
       <section class="grid2">
         <div>
-          ${renderPropertyTable("Roadmap Task Detail", [
+          ${renderSurfaceFrame(primarySurface, `
+            ${renderPropertyTable("Roadmap Task Detail", [
             { label: "Task", valueHtml: renderConceptLink(ctx, task.id, task.title || task.id) },
             { label: "Markdown status", valueHtml: esc(task.status || "") },
             { label: "Derived status", valueHtml: esc(task.derivedStatus || "") },
@@ -1020,11 +1043,14 @@ function renderKnowledgeDetail(detail, model, ctx) {
             { label: "Line", valueHtml: esc(task.line ?? "") },
             { label: "Evidence", valueHtml: esc(task.derivedSummary || task.evidence?.summary || "") },
             { label: "API resource", valueHtml: renderApiLink(task.id) }
-          ])}
-          ${renderLongTailProperties(ctx, task, usedKeys)}
+            ])}
+            ${renderLongTailProperties(ctx, task, usedKeys)}
+          `)}
         </div>
         <div>
-          ${renderLinksCard("Linked Targets", ctx, (task.targets ?? []).map(target => target.targetId || target.id || "").filter(Boolean))}
+          ${renderSurfaceFrame(relatedSurface, `
+            ${renderLinksCard("Linked Targets", ctx, (task.targets ?? []).map(target => target.targetId || target.id || "").filter(Boolean))}
+          `)}
         </div>
       </section>
     `;
@@ -1035,7 +1061,8 @@ function renderKnowledgeDetail(detail, model, ctx) {
     return `
       <section class="grid2">
         <div>
-          ${renderPropertyTable("Epic Detail", [
+          ${renderSurfaceFrame(primarySurface, `
+            ${renderPropertyTable("Epic Detail", [
             { label: "Epic", valueHtml: renderConceptLink(ctx, epic.id, epic.title || epic.id) },
             { label: "Status", valueHtml: esc(epic.status || "") },
             { label: "Roadmap", valueHtml: epic.roadmapId ? renderConceptLink(ctx, epic.roadmapId) : "" },
@@ -1044,14 +1071,17 @@ function renderKnowledgeDetail(detail, model, ctx) {
             { label: "Verification gates", valueHtml: esc((epic.gateIds ?? []).length) },
             { label: "Docs", valueHtml: esc((epic.docIds ?? []).length) },
             { label: "API resource", valueHtml: renderApiLink(epic.id) }
-          ])}
-          ${renderLongTailProperties(ctx, epic, usedKeys)}
+            ])}
+            ${renderLongTailProperties(ctx, epic, usedKeys)}
+          `)}
         </div>
         <div>
-          ${renderLinksCard("Branches", ctx, epic.branchIds ?? [])}
-          ${renderLinksCard("Features", ctx, epic.featureIds ?? [])}
-          ${renderLinksCard("Verification Gates", ctx, epic.gateIds ?? [])}
-          ${renderLinksCard("Docs", ctx, epic.docIds ?? [])}
+          ${renderSurfaceFrame(relatedSurface, `
+            ${renderLinksCard("Branches", ctx, epic.branchIds ?? [])}
+            ${renderLinksCard("Features", ctx, epic.featureIds ?? [])}
+            ${renderLinksCard("Verification Gates", ctx, epic.gateIds ?? [])}
+            ${renderLinksCard("Docs", ctx, epic.docIds ?? [])}
+          `)}
         </div>
       </section>
     `;
@@ -1061,7 +1091,8 @@ function renderKnowledgeDetail(detail, model, ctx) {
   return `
     <section class="grid2">
       <div>
-        ${renderPropertyTable("Feature Detail", [
+        ${renderSurfaceFrame(primarySurface, `
+          ${renderPropertyTable("Feature Detail", [
           { label: "Feature", valueHtml: renderConceptLink(ctx, feature.id, feature.title || feature.id) },
           { label: "Status", valueHtml: esc(feature.status || "") },
           { label: "Epic", valueHtml: feature.epicId ? renderConceptLink(ctx, feature.epicId) : "" },
@@ -1069,13 +1100,16 @@ function renderKnowledgeDetail(detail, model, ctx) {
           { label: "Verification gates", valueHtml: esc((feature.gateIds ?? []).length) },
           { label: "Docs", valueHtml: esc((feature.docIds ?? []).length) },
           { label: "API resource", valueHtml: renderApiLink(feature.id) }
-        ])}
-        ${renderLongTailProperties(ctx, feature, usedKeys)}
+          ])}
+          ${renderLongTailProperties(ctx, feature, usedKeys)}
+        `)}
       </div>
       <div>
-        ${renderLinksCard("Branches", ctx, feature.branchIds ?? [])}
-        ${renderLinksCard("Verification Gates", ctx, feature.gateIds ?? [])}
-        ${renderLinksCard("Docs", ctx, feature.docIds ?? [])}
+        ${renderSurfaceFrame(relatedSurface, `
+          ${renderLinksCard("Branches", ctx, feature.branchIds ?? [])}
+          ${renderLinksCard("Verification Gates", ctx, feature.gateIds ?? [])}
+          ${renderLinksCard("Docs", ctx, feature.docIds ?? [])}
+        `)}
       </div>
     </section>
   `;
@@ -1809,7 +1843,7 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
     case "PlatformKnowledgeList":
       return renderKnowledgeListSection(surface, model, ctx);
     case "PlatformKnowledgeDetail":
-      return renderSurfaceFrame(surface, renderKnowledgeDetail(findKnowledgeDetail(model, ctx.id), model, ctx));
+      return renderSurfaceFrame(surface, renderKnowledgeDetail(surface, findKnowledgeDetail(model, ctx.id), model, ctx));
     case "PlatformGapList":
       return renderGapListSection(surface, model, ctx);
     case "PlatformSignalList":

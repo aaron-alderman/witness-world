@@ -412,6 +412,17 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformSignalDetail"
   ]);
   assert.equal(signalsPage.childSurfaces.some(surface => surface.name === "PlatformGapList" && surface.projectionRoutes.includes("/api/platform-gaps")), true);
+  const knowledgePage = layout.children.find(surface => surface.name === "PlatformKnowledgePage");
+  assert.ok(knowledgePage);
+  const knowledgeDetailSurface = knowledgePage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDetail");
+  assert.ok(knowledgeDetailSurface);
+  assert.deepEqual(knowledgeDetailSurface.children, [
+    "PlatformKnowledgePrimaryPanel",
+    "PlatformKnowledgeRelatedPanel",
+    "PlatformKnowledgeSections",
+    "PlatformKnowledgeTasks"
+  ]);
+  assert.equal(knowledgeDetailSurface.childSurfaces.some(surface => surface.name === "PlatformKnowledgeTasks" && surface.summary === "Document or roadmap tasks for the selected knowledge object when available."), true);
 });
 
 test("platform delegated test-gate projectors discover gate catalog rows", async () => withRegisteredPluginProjectors(providers, async () => {
@@ -4972,6 +4983,14 @@ test("platform page renders required operating views", async () => {
   assert.match(knowledgeHtml, /Platform Console - Knowledge/);
   assert.match(knowledgeHtml, /Knowledge Items/);
   assert.match(knowledgeHtml, /Properties and linked resources for the selected knowledge object\./);
+  assert.match(knowledgeHtml, /Primary Detail/);
+  assert.match(knowledgeHtml, /Selected knowledge object properties and long-tail fields\./);
+  assert.match(knowledgeHtml, /Related Resources/);
+  assert.match(knowledgeHtml, /Linked platform resources and supporting context for the selected knowledge object\./);
+  assert.match(knowledgeHtml, /Sections/);
+  assert.match(knowledgeHtml, /Document sections for the selected governed document when available\./);
+  assert.match(knowledgeHtml, /Tasks/);
+  assert.match(knowledgeHtml, /Document or roadmap tasks for the selected knowledge object when available\./);
   assert.match(knowledgeHtml, /Document Detail/);
   assert.match(knowledgeHtml, /Roadmap/);
   assert.doesNotMatch(knowledgeHtml, /<pre/);
