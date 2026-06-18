@@ -46,7 +46,9 @@ function parsePlatformPageRequest(requestUrl) {
     requestedView: optionalText(url.searchParams.get("view")) || "overview",
     id: optionalText(url.searchParams.get("id")),
     offset: safeInteger(url.searchParams.get("offset"), 0),
-    limit: limitParam ? clampPageSize(limitParam) : null
+    limit: limitParam ? clampPageSize(limitParam) : null,
+    sort: optionalText(url.searchParams.get("sort")),
+    dir: optionalText(url.searchParams.get("dir")) === "desc" ? "desc" : "asc"
   };
 }
 
@@ -116,10 +118,10 @@ function renderPagination(ctx, total, offset, limit) {
   const start = offset + 1;
   const end = Math.min(total, offset + limit);
   const previousHref = offset > 0
-    ? platformHref(ctx, ctx.view, { id: ctx.id, offset: Math.max(0, offset - limit), limit })
+    ? platformHref(ctx, ctx.view, { id: ctx.id, offset: Math.max(0, offset - limit), limit, sort: ctx.sort, dir: ctx.dir })
     : null;
   const nextHref = offset + limit < total
-    ? platformHref(ctx, ctx.view, { id: ctx.id, offset: offset + limit, limit })
+    ? platformHref(ctx, ctx.view, { id: ctx.id, offset: offset + limit, limit, sort: ctx.sort, dir: ctx.dir })
     : null;
   return `
     <div class="card">
@@ -415,6 +417,20 @@ function renderDataTable(title, headers, rows, emptyMessage = "No rows.") {
   `;
 }
 
+function compareSortValues(left, right) {
+  const normalize = value => {
+    if (Array.isArray(value)) return value.length;
+    if (typeof value === "boolean") return value ? 1 : 0;
+    if (value === undefined || value === null) return "";
+    return String(value).toLowerCase();
+  };
+  const normalizedLeft = normalize(left);
+  const normalizedRight = normalize(right);
+  if (normalizedLeft < normalizedRight) return -1;
+  if (normalizedLeft > normalizedRight) return 1;
+  return 0;
+}
+
 function parseSurfaceSchemaEntries(raw) {
   const text = optionalText(raw);
   if (!text) return [];
@@ -437,6 +453,11 @@ function parseSurfaceSchemaEntries(raw) {
     .filter(entry => entry?.label && entry?.path);
 }
 
+function surfaceSchemaMap(surface, key) {
+  const entries = parseSurfaceSchemaEntries(surface?.props?.[key]);
+  return new Map(entries.map(entry => [String(entry.label), entry]));
+}
+
 function resolveFieldPath(record, fieldPath) {
   return String(fieldPath || "")
     .split(".")
@@ -451,6 +472,8 @@ function renderSchemaValue(ctx, value, mode = "text") {
       return renderApiLink(typeof value === "object" ? value.id : value);
     case "href":
       return `<a href="${esc(value)}">Event stream</a>`;
+    case "value":
+      return renderValue(ctx, value);
     case "concept":
       if (typeof value === "object") {
         const id = optionalText(value.id) || optionalText(value.path);
@@ -521,6 +544,72 @@ function renderCardSpecs(raw, ctx, record, kind) {
       ? renderLinksCard(spec.title, ctx, listValuesFromMode(value, spec.mode))
       : renderTextListCard(spec.title, listValuesFromMode(value, spec.mode));
   }).join("");
+}
+
+function surfaceDefaultSort(surface, fallbackKey = null, fallbackDir = "asc") {
+  const raw = optionalText(surface?.props?.defaultSort);
+  if (!raw) return { key: fallbackKey, dir: fallbackDir };
+  const [key, dir] = raw.split(":");
+  return {
+    key: optionalText(key) || fallbackKey,
+    dir: dir === "desc" ? "desc" : "asc"
+  };
+}
+
+export function sortRecordsForSurface(records, surface, ctx, {
+  sortProp = "sortOptions",
+  defaultSortKey = null
+} = {}) {
+  const sortMap = surfaceSchemaMap(surface, sortProp);
+  const defaultSort = surfaceDefaultSort(surface, defaultSortKey, "asc");
+  const requestedKey = ctx.sort && sortMap.has(ctx.sort) ? ctx.sort : defaultSort.key;
+  const requestedDir = ctx.dir === "desc" ? "desc" : defaultSort.dir;
+  const sorted = [...records].sort((left, right) => {
+    if (requestedKey && sortMap.has(requestedKey)) {
+      const spec = sortMap.get(requestedKey);
+      const comparison = compareSortValues(resolveFieldPath(left, spec.path), resolveFieldPath(right, spec.path));
+      if (comparison) return requestedDir === "desc" ? comparison * -1 : comparison;
+    }
+    return compareSortValues(left.id || "", right.id || "");
+  });
+  return {
+    items: sorted,
+    sortKey: requestedKey,
+    sortDir: requestedDir,
+    sortEntries: [...sortMap.entries()].map(([key, spec]) => ({ key, label: humanizeKey(key), path: spec.path }))
+  };
+}
+
+function renderSortControls(surface, ctx, sortState) {
+  if (!sortState?.sortEntries?.length) return "";
+  const links = sortState.sortEntries.map(entry => {
+    const isActive = entry.key === sortState.sortKey;
+    const nextDir = isActive && sortState.sortDir === "asc" ? "desc" : "asc";
+    const href = platformHref(ctx, ctx.view, {
+      id: ctx.id,
+      offset: 0,
+      limit: ctx.limit,
+      sort: entry.key,
+      dir: nextDir
+    });
+    return `<a href="${esc(href)}">${esc(entry.label)}${isActive ? ` (${esc(sortState.sortDir)})` : ""}</a>`;
+  }).join(" <span class=\"muted\">|</span> ");
+  return `
+    <div class="card">
+      <strong>Sort</strong>
+      <div class="muted">${links}</div>
+    </div>
+  `;
+}
+
+function renderRowsFromSurfaceSchema(surface, schemaProp, records, ctx, fallbackRowRenderer) {
+  const entries = parseSurfaceSchemaEntries(surface?.props?.[schemaProp]);
+  if (!entries.length) return records.map(fallbackRowRenderer);
+  return records.map(record => `
+    <tr>
+      ${entries.map(entry => `<td>${renderSchemaValue(ctx, resolveFieldPath(record, entry.path), entry.mode)}</td>`).join("")}
+    </tr>
+  `);
 }
 
 function renderLifecycleBoard(surface, model) {
@@ -594,6 +683,7 @@ function workflowItems(model) {
     pageKind: "branch",
     id: branch.id,
     title: branch.title || branch.id,
+    resourceLink: { id: branch.id, title: branch.title || branch.id },
     status: branch.status,
     scope: branch.lifecycleLane || "",
     summary: `${branch.changeSetCount ?? 0} change sets, ${branch.docsFreshness?.status || "docs"} docs, ${branch.testRedGreen?.status || "tests"} tests`
@@ -602,6 +692,7 @@ function workflowItems(model) {
     pageKind: "changeSet",
     id: changeSet.id,
     title: changeSet.title || changeSet.id,
+    resourceLink: { id: changeSet.id, title: changeSet.title || changeSet.id },
     status: changeSet.status,
     scope: changeSet.branchId || "",
     summary: `${changeSet.editCount ?? 0} edits, ${changeSet.testRedGreen?.status || "tests"} tests`
@@ -610,6 +701,7 @@ function workflowItems(model) {
     pageKind: "proposal",
     id: proposal.id,
     title: proposal.id,
+    resourceLink: { id: proposal.id, title: proposal.id },
     status: proposal.status,
     scope: proposal.targetProcess || "",
     summary: `${proposal.targetId || "platform"}${proposal.reason ? `, ${proposal.reason}` : ""}`
@@ -626,6 +718,7 @@ function verificationItems(model) {
     pageKind: "testGate",
     id: gate.id,
     title: gate.title || gate.id,
+    resourceLink: { id: gate.id, title: gate.title || gate.id },
     status: gate.lastResult?.status || "idle",
     scope: gate.environment || "",
     summary: `${gate.runner || "runner"}, ${(gate.protectedObjects ?? []).length} protected objects`
@@ -634,6 +727,7 @@ function verificationItems(model) {
     pageKind: "testRun",
     id: run.id,
     title: run.title || run.id,
+    resourceLink: { id: run.id, title: run.title || run.id },
     status: run.status,
     scope: run.branchId || run.gateId || "",
     summary: `${run.durationMs ?? "?"} ms, exit ${run.exitCode ?? "n/a"}`
@@ -642,6 +736,7 @@ function verificationItems(model) {
     pageKind: "runtimeRevision",
     id: revision.id,
     title: `Revision ${revision.revision}`,
+    resourceLink: { id: revision.id, title: `Revision ${revision.revision}` },
     status: revision.status,
     scope: revision.trigger || "",
     summary: `${revision.changedSources?.length ?? 0} changed sources, ${revision.buildErrorCount ?? 0} build errors`
@@ -650,6 +745,7 @@ function verificationItems(model) {
     pageKind: "candidateSnapshot",
     id: snapshot.id,
     title: snapshot.id,
+    resourceLink: { id: snapshot.id, title: snapshot.id },
     status: snapshot.status,
     scope: snapshot.branchId || "",
     summary: `revision ${snapshot.revision ?? "n/a"}, ${snapshot.errorCount ?? snapshot.errors?.length ?? 0} errors`
@@ -665,6 +761,7 @@ function knowledgeItems(model) {
     pageKind: "doc",
     id: doc.path,
     title: doc.path,
+    resourceLink: { id: doc.path, title: doc.path },
     status: doc.freshness?.status || doc.status,
     scope: doc.role || "",
     summary: `${doc.sectionCount ?? 0} sections, ${doc.taskCount ?? 0} tasks`
@@ -673,6 +770,7 @@ function knowledgeItems(model) {
     pageKind: "roadmapTask",
     id: task.id,
     title: task.title,
+    resourceLink: { id: task.id, title: task.title },
     status: task.derivedStatus || task.status,
     scope: task.section || "",
     summary: task.derivedSummary || task.doc
@@ -681,6 +779,7 @@ function knowledgeItems(model) {
     pageKind: "epic",
     id: epic.id,
     title: epic.title,
+    resourceLink: { id: epic.id, title: epic.title },
     status: epic.status,
     scope: epic.roadmapId || "",
     summary: `${(epic.branchIds ?? []).length} branches, ${(epic.featureIds ?? []).length} features`
@@ -689,6 +788,7 @@ function knowledgeItems(model) {
     pageKind: "feature",
     id: feature.id,
     title: feature.title,
+    resourceLink: { id: feature.id, title: feature.title },
     status: feature.status,
     scope: feature.epicId || "",
     summary: `${(feature.branchIds ?? []).length} branches, ${(feature.gateIds ?? []).length} gates`
@@ -704,6 +804,7 @@ function signalItems(model) {
     pageKind: "gap",
     id: gap.id,
     title: gap.reason || gap.id,
+    resourceLink: { id: gap.id, title: gap.reason || gap.id },
     status: gap.severity || "",
     scope: gap.kind || "",
     summary: gap.target || ""
@@ -714,6 +815,7 @@ function signalItems(model) {
       pageKind: "telemetryMetric",
       id: node.id,
       title: node.title || node.id,
+      resourceLink: { id: node.id, title: node.title || node.id },
       status: node.status,
       scope: node.source || "",
       summary: node.owner || ""
@@ -724,6 +826,7 @@ function signalItems(model) {
       pageKind: "defectCluster",
       id: node.id,
       title: node.title || node.id,
+      resourceLink: { id: node.id, title: node.title || node.id },
       status: node.status,
       scope: node.source || "",
       summary: node.owner || ""
@@ -734,6 +837,7 @@ function signalItems(model) {
       pageKind: "boundary",
       id: node.id,
       title: node.title || node.id,
+      resourceLink: { id: node.id, title: node.title || node.id },
       status: node.status,
       scope: node.source || "",
       summary: node.owner || ""
@@ -752,6 +856,7 @@ function modelItems(model) {
     pageKind: node.kind,
     id: node.id,
     title: node.title || node.id,
+    resourceLink: { id: node.id, title: node.title || node.id },
     status: node.status,
     scope: node.source || "",
     summary: node.owner || ""
@@ -1557,9 +1662,11 @@ function renderProfileComparisonSection(surface, model) {
 
 function renderWorkflowListSection(surface, model, ctx) {
   const items = workflowItems(model);
-  const page = paginateRows(items, ctx, surfacePageSize(surface));
+  const sorted = sortRecordsForSurface(items, surface, ctx, { defaultSortKey: "kind" });
+  const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
   return renderSurfaceFrame(surface, `
-    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
+    ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
+    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
         <td>${esc(item.status || "")}</td>
@@ -1568,15 +1675,17 @@ function renderWorkflowListSection(surface, model, ctx) {
         <td>${esc(item.summary || "")}</td>
       </tr>
     `), "No workflow rows.")}
-    ${renderPagination(ctx, page.total, page.offset, page.limit)}
+    ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
   `);
 }
 
 function renderVerificationListSection(surface, model, ctx) {
   const items = verificationItems(model);
-  const page = paginateRows(items, ctx, surfacePageSize(surface));
+  const sorted = sortRecordsForSurface(items, surface, ctx, { defaultSortKey: "kind" });
+  const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
   return renderSurfaceFrame(surface, `
-    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
+    ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
+    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
         <td>${esc(item.status || "")}</td>
@@ -1585,15 +1694,17 @@ function renderVerificationListSection(surface, model, ctx) {
         <td>${esc(item.summary || "")}</td>
       </tr>
     `), "No verification rows.")}
-    ${renderPagination(ctx, page.total, page.offset, page.limit)}
+    ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
   `);
 }
 
 function renderKnowledgeListSection(surface, model, ctx) {
   const items = knowledgeItems(model);
-  const page = paginateRows(items, ctx, surfacePageSize(surface));
+  const sorted = sortRecordsForSurface(items, surface, ctx, { defaultSortKey: "kind" });
+  const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
   return renderSurfaceFrame(surface, `
-    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
+    ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
+    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
         <td>${esc(item.status || "")}</td>
@@ -1602,15 +1713,17 @@ function renderKnowledgeListSection(surface, model, ctx) {
         <td>${esc(item.summary || "")}</td>
       </tr>
     `), "No knowledge rows.")}
-    ${renderPagination(ctx, page.total, page.offset, page.limit)}
+    ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
   `);
 }
 
 function renderSignalsListSection(surface, model, ctx) {
   const items = signalItems(model);
-  const page = paginateRows(items, ctx, surfacePageSize(surface));
+  const sorted = sortRecordsForSurface(items, surface, ctx, { defaultSortKey: "kind" });
+  const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
   return renderSurfaceFrame(surface, `
-    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], page.items.map(item => `
+    ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
+    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
         <td>${esc(item.status || "")}</td>
@@ -1619,15 +1732,17 @@ function renderSignalsListSection(surface, model, ctx) {
         <td>${esc(item.summary || "")}</td>
       </tr>
     `), "No signal rows.")}
-    ${renderPagination(ctx, page.total, page.offset, page.limit)}
+    ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
   `);
 }
 
 function renderModelListSection(surface, model, ctx) {
   const items = modelItems(model);
-  const page = paginateRows(items, ctx, surfacePageSize(surface));
+  const sorted = sortRecordsForSurface(items, surface, ctx, { defaultSortKey: "kind" });
+  const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
   return renderSurfaceFrame(surface, `
-    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Source", "Owner"], page.items.map(item => `
+    ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
+    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Source", "Owner"], renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
         <td>${esc(item.status || "")}</td>
@@ -1636,7 +1751,7 @@ function renderModelListSection(surface, model, ctx) {
         <td>${esc(item.summary || "")}</td>
       </tr>
     `), "No platform objects.")}
-    ${renderPagination(ctx, page.total, page.offset, page.limit)}
+    ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
   `);
 }
 

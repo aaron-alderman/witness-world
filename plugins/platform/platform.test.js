@@ -9,7 +9,7 @@ import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js"
 import { compileRvmToDesirePlus } from "../../src/desire/index.js";
 import { bundleId, capabilities, createHandlers, handlerCatalog, providers, routes, surfaces } from "./runtime.js";
 import { buildPlatformCssDriftGap, buildPlatformModel, filterPlatformModel, parseRoadmapTasks, PLATFORM_LIFECYCLES } from "./platform-model.js";
-import { renderPlatformPage } from "./platform-page.js";
+import { renderPlatformPage, sortRecordsForSurface } from "./platform-page.js";
 import { readPlatformConsoleLayout } from "./platform-console-layout.js";
 import { buildPlatformProposalCreateBody, platformProposalTemplates } from "./platform-proposals.js";
 import { executePlatformProposalTarget } from "./platform-proposal-targets.js";
@@ -400,6 +400,9 @@ test("platform console layout compiles authored top-level surface metadata from 
   const workflowListSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowList");
   assert.ok(workflowListSurface);
   assert.equal(workflowListSurface.props.columns, "Kind|Status|Resource|Scope|Summary");
+  assert.equal(workflowListSurface.props.rowFields, "Kind=pageKind|Status=status|Resource=resourceLink@concept|Scope=scope@value|Summary=summary");
+  assert.equal(workflowListSurface.props.sortOptions, "kind=pageKind|status=status|resource=title|scope=scope|summary=summary");
+  assert.equal(workflowListSurface.props.defaultSort, "kind:asc");
   assert.equal(workflowListSurface.props.emptyState, "No workflow rows.");
   assert.equal(workflowListSurface.props.pageSize, "20");
   assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformProposalPanel" && surface.processRoute === "/api/platform-proposals"), true);
@@ -507,6 +510,11 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(profileSurface);
   assert.equal(profileSurface.props.columns, "Profile|Status|Plugins|Capabilities");
   assert.equal(profileSurface.props.rowLimit, "12");
+  const modelListSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelList");
+  assert.ok(modelListSurface);
+  assert.equal(modelListSurface.props.rowFields, "Kind=pageKind|Status=status|Resource=resourceLink@concept|Source=scope|Owner=summary");
+  assert.equal(modelListSurface.props.sortOptions, "kind=pageKind|status=status|resource=title|source=scope|owner=summary");
+  assert.equal(modelListSurface.props.defaultSort, "kind:asc");
   const modelDetailSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelDetail");
   assert.ok(modelDetailSurface);
   assert.deepEqual(modelDetailSurface.children, [
@@ -5029,6 +5037,7 @@ test("platform page renders required operating views", async () => {
 
   const overviewHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform") });
   const workflowHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:demo-0") });
+  const workflowSortedHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:demo-0&sort=kind&dir=desc&limit=5") });
   const verificationHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=gate:demo") });
   const knowledgeHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledge&id=docs/PLATFORM-ALL-THE-WAY-ROADMAP.md") });
   const signalsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signals&id=gap.demo") });
@@ -5059,6 +5068,11 @@ test("platform page renders required operating views", async () => {
   assert.match(workflowHtml, /<form id="platform-change-set-edit-form"/);
   assert.match(workflowHtml, /\/api\/platform-branches\/branch%3Ademo-0/);
   assert.match(workflowHtml, /offset=20/);
+  assert.match(workflowHtml, /Sort/);
+  assert.match(workflowSortedHtml, /sort=kind&amp;dir=asc/);
+  assert.match(workflowSortedHtml, /sort=kind&amp;dir=desc/);
+  assert.match(workflowSortedHtml, /offset=5&amp;limit=5&amp;sort=kind&amp;dir=desc/);
+  assert.ok(workflowSortedHtml.indexOf("proposal:demo") < workflowSortedHtml.indexOf("branch:demo-0"));
   assert.doesNotMatch(workflowHtml, /platform-initial-state/);
   assert.doesNotMatch(workflowHtml, /<pre/);
 
@@ -5116,4 +5130,70 @@ test("platform page renders required operating views", async () => {
   assert.match(modelHtml, /Platform Object Detail/);
   assert.match(modelHtml, /Coverage Edges/);
   assert.doesNotMatch(modelHtml, /<pre/);
+});
+
+test("platform page applies authored list sort semantics and preserves them through pagination links", async () => {
+  const surface = {
+    props: {
+      sortOptions: "kind=pageKind|status=status|resource=title|source=scope|owner=summary",
+      defaultSort: "kind:asc"
+    }
+  };
+  const rows = [
+    { id: "route:selected", pageKind: "route", title: "Selected", status: "known", scope: "platform", summary: "plugin.platform" },
+    { id: "route:alpha", pageKind: "route", title: "Alpha", status: "known", scope: "platform", summary: "plugin.platform" },
+    { id: "route:beta", pageKind: "route", title: "Beta", status: "known", scope: "platform", summary: "plugin.platform" },
+    { id: "route:gamma", pageKind: "route", title: "Gamma", status: "known", scope: "platform", summary: "plugin.platform" },
+    { id: "route:omega", pageKind: "route", title: "Omega", status: "known", scope: "platform", summary: "plugin.platform" },
+    { id: "route:theta", pageKind: "route", title: "Theta", status: "known", scope: "platform", summary: "plugin.platform" }
+  ];
+  const sorted = sortRecordsForSurface(rows, surface, { sort: "resource", dir: "desc" }, { defaultSortKey: "kind" });
+
+  assert.deepEqual(sorted.items.slice(0, 5).map(row => row.title), ["Theta", "Selected", "Omega", "Gamma", "Beta"]);
+
+  const baseModel = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [{ id: "bundle-platform" }],
+      providedCapabilities: ["platform.self"],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [{ id: "surface:platform", href: "/platform" }],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: () => []
+  });
+  const model = {
+    ...baseModel,
+    profiles: [{ id: "full", status: "active", pluginIds: ["plugin.platform"], capabilities: ["platform.self"] }],
+    nodes: rows.map(row => ({
+      id: row.id,
+      kind: row.pageKind,
+      title: row.title,
+      status: row.status,
+      owner: row.summary,
+      source: row.scope,
+      lifecycle: ["observe"]
+    })),
+    edges: [],
+    gaps: [],
+    docs: [],
+    docSections: [],
+    docTasks: [],
+    roadmapTasks: [],
+    epics: [],
+    features: [],
+    branches: [],
+    changeSets: [],
+    proposals: [],
+    testGates: [],
+    testRuns: [],
+    candidateSnapshots: [],
+    runtimeRevisions: []
+  };
+  const html = renderPlatformPage(model, {
+    requestUrl: new URL("http://platform.local/platform?view=model&id=route:selected&sort=resource&dir=desc&limit=5")
+  });
+
+  assert.match(html, /offset=5&amp;limit=5&amp;sort=resource&amp;dir=desc/);
+  assert.match(html, /sort=resource&amp;dir=asc/);
 });

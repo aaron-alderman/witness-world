@@ -223,6 +223,9 @@ view PlatformWorkflowList {
   prop title = "Workflow Items"
   prop summary = "Paginated list of branches, change sets, and proposals."
   prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=resourceLink@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
   prop emptyState = "No workflow rows."
   prop pageSize = "20"
   projections {
@@ -360,6 +363,9 @@ view PlatformVerificationList {
   prop title = "Verification Items"
   prop summary = "Paginated list of gates, runs, candidate snapshots, and runtime revisions."
   prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=resourceLink@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
   prop emptyState = "No verification rows."
   prop pageSize = "20"
   projections {
@@ -522,6 +528,9 @@ view PlatformSignalList {
   prop title = "Signals"
   prop summary = "Paginated list of gaps, telemetry metrics, defect clusters, and boundaries."
   prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=resourceLink@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
   prop emptyState = "No signal rows."
   prop pageSize = "20"
   projections {
@@ -593,6 +602,9 @@ view PlatformKnowledgeList {
   prop title = "Knowledge Items"
   prop summary = "Paginated list of docs, roadmap tasks, epics, and features."
   prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=resourceLink@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
   prop emptyState = "No knowledge rows."
   prop pageSize = "20"
   projections {
@@ -668,6 +680,9 @@ view PlatformModelList {
   prop title = "Platform Map"
   prop summary = "Paginated list of modeled platform objects."
   prop columns = "Kind|Status|Resource|Source|Owner"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=resourceLink@concept|Source=scope|Owner=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|source=scope|owner=summary"
+  prop defaultSort = "kind:asc"
   prop emptyState = "No platform objects."
   prop pageSize = "20"
   projections {
