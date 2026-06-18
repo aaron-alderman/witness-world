@@ -470,6 +470,8 @@ export function createPlatformHandlers({
         testRun: result.testRun,
         testResults: result.testResults,
         testArtifacts: result.testArtifacts,
+        testSuites: result.testSuites,
+        testCases: result.testCases,
         latestResult: result.latestResult,
         startWitness: result.startWitness,
         finishWitness: result.finishWitness
@@ -512,6 +514,8 @@ export function createPlatformHandlers({
         testRun: result.testRun,
         testResults: result.testResults,
         testArtifacts: result.testArtifacts,
+        testSuites: result.testSuites,
+        testCases: result.testCases,
         latestResult: result.latestResult
       });
     },

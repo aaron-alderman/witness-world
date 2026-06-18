@@ -2195,10 +2195,14 @@ test("platform test run handlers execute modeled gates and expose read model sta
   assert.equal(sent.at(-1).body.latestResult.environmentInputs.environment, "platform-candidate-snapshot");
   assert.equal(sent.at(-1).body.latestResult.sourceRevision.branchId, "branch.platform.demo");
   assert.equal(sent.at(-1).body.testArtifacts.length, 4);
+  assert.equal(sent.at(-1).body.testSuites.length, 2);
+  assert.equal(sent.at(-1).body.testCases.length, 1);
   assert.equal(sent.at(-1).body.testArtifacts.some(row => row.artifactKind === "stdout"), true);
   assert.equal(sent.at(-1).body.testArtifacts.some(row => row.artifactKind === "stderr"), true);
   assert.equal(sent.at(-1).body.testArtifacts.some(row => row.artifactKind === "tap" && row.summary?.total === 1), true);
   assert.equal(sent.at(-1).body.testArtifacts.some(row => row.artifactKind === "junit" && row.summary?.total === 1), true);
+  assert.equal(sent.at(-1).body.testSuites.some(row => row.format === "tap" && row.total === 1), true);
+  assert.equal(sent.at(-1).body.testCases.some(row => row.format === "tap" && row.status === "passed"), true);
   assert.equal(world.project(moduleProjectors.testRuns).length, 1);
   assert.equal(world.project(moduleProjectors.testResults).length, 1);
   assert.equal(world.project(moduleProjectors.testArtifacts).length, 4);
@@ -2237,6 +2241,8 @@ test("platform test run handlers execute modeled gates and expose read model sta
   assert.equal(sent.at(-1).body.testRun.id, "testRun.platform.demo");
   assert.equal(sent.at(-1).body.testResults.length, 1);
   assert.equal(sent.at(-1).body.testArtifacts.length, 4);
+  assert.equal(sent.at(-1).body.testSuites.length, 2);
+  assert.equal(sent.at(-1).body.testCases.length, 1);
   assert.equal(sent.at(-1).body.testRun.environmentInputs.environment, "platform-candidate-snapshot");
   assert.equal(sent.at(-1).body.testResults[0].sourceRevision.branchId, "branch.platform.demo");
 }));

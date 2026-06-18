@@ -641,12 +641,16 @@ export function readPlatformTestRun(world, testRunId) {
   if (!run) return { ok: false, status: 404, error: "test run not found" };
   const results = world.project(moduleProjectors.testResults).filter(row => row.runId === runId);
   const artifacts = world.project(moduleProjectors.testArtifacts).filter(row => row.runId === runId);
+  const suites = world.project(moduleProjectors.testSuites).filter(row => row.runId === runId);
+  const cases = world.project(moduleProjectors.testCases).filter(row => row.runId === runId);
   return {
     ok: true,
     status: 200,
     testRun: run,
     testResults: results,
     testArtifacts: artifacts,
+    testSuites: suites,
+    testCases: cases,
     latestResult: results.at(-1) ?? null
   };
 }
@@ -782,6 +786,8 @@ export async function runPlatformTestGate(world, {
     testRun: readback.testRun,
     testResults: readback.testResults,
     testArtifacts: readback.testArtifacts,
+    testSuites: readback.testSuites,
+    testCases: readback.testCases,
     latestResult: readback.latestResult
   };
 }
