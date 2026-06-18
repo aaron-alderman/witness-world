@@ -424,7 +424,7 @@ test("full runtime exposes platform console and platform self-model API", async 
   assert.equal(server.ok, true);
 
   try {
-    const rvm = await fs.readFile(new URL("../plugins/platform/platform-console.rvm", import.meta.url), "utf8");
+    const stagedPath = ["test", "runtime-profile-change-set.txt"].join("/");
     const page = await fetch(`${server.url}/platform`);
     const model = await fetch(`${server.url}/api/platform-model`).then(response => response.json());
     const gaps = await fetch(`${server.url}/api/platform-gaps`).then(response => response.json());
@@ -445,7 +445,7 @@ test("full runtime exposes platform console and platform self-model API", async 
     const editRoute = await fetch(`${server.url}/api/platform-change-sets/changeset.runtime.profile/edits`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ edits: [{ path: "plugins/platform/platform-console.rvm", content: `${rvm}\n` }] })
+      body: JSON.stringify({ edits: [{ path: stagedPath, content: "runtime profile staged edit\n" }] })
     });
     const editBody = await editRoute.json();
     const removeEditRoute = await fetch(`${server.url}/api/platform-change-sets/changeset.runtime.profile/edits/${encodeURIComponent(editBody.edits?.[0]?.pathHash || "missing")}`, {
