@@ -411,6 +411,14 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformSignalList",
     "PlatformSignalDetail"
   ]);
+  const signalDetailSurface = signalsPage.childSurfaces.find(surface => surface.name === "PlatformSignalDetail");
+  assert.ok(signalDetailSurface);
+  assert.deepEqual(signalDetailSurface.children, [
+    "PlatformSignalPrimaryPanel",
+    "PlatformSignalRelatedPanel",
+    "PlatformSignalRelationships"
+  ]);
+  assert.equal(signalDetailSurface.childSurfaces.some(surface => surface.name === "PlatformSignalRelationships" && surface.summary === "Linked graph relationships for the selected signal when available."), true);
   assert.equal(signalsPage.childSurfaces.some(surface => surface.name === "PlatformGapList" && surface.projectionRoutes.includes("/api/platform-gaps")), true);
   const knowledgePage = layout.children.find(surface => surface.name === "PlatformKnowledgePage");
   assert.ok(knowledgePage);
@@ -4997,6 +5005,12 @@ test("platform page renders required operating views", async () => {
 
   assert.match(signalsHtml, /Platform Console - Signals/);
   assert.match(signalsHtml, /Properties and linked relationships for the selected signal\./);
+  assert.match(signalsHtml, /Primary Detail/);
+  assert.match(signalsHtml, /Selected signal properties and long-tail fields\./);
+  assert.match(signalsHtml, /Related Resources/);
+  assert.match(signalsHtml, /Linked proposals, selector drift, and supporting signal context\./);
+  assert.match(signalsHtml, /Related Relationships/);
+  assert.match(signalsHtml, /Linked graph relationships for the selected signal when available\./);
   assert.match(signalsHtml, /Gap Detail/);
   assert.match(signalsHtml, /API resource/);
   assert.doesNotMatch(signalsHtml, /<pre/);

@@ -1053,6 +1053,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
           `)}
         </div>
       </section>
+      ${renderSurfaceFrame(relationshipsSurface, renderTable(["From", "Relation", "To"], [], "No related relationships."))}
     `;
   }
   if (detail.id?.startsWith?.("epic:")) {
@@ -1115,7 +1116,20 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
   `;
 }
 
-function renderSignalDetail(detail, model, ctx) {
+function renderSignalDetail(surface, detail, model, ctx) {
+  const primarySurface = nestedSurface(surface, "PlatformSignalPrimaryPanel", {
+    title: "Primary Detail",
+    summary: "Selected signal properties and long-tail fields."
+  });
+  const relatedSurface = nestedSurface(surface, "PlatformSignalRelatedPanel", {
+    title: "Related Resources",
+    summary: "Linked proposals, selector drift, and supporting signal context."
+  });
+  const relationshipsSurface = nestedSurface(surface, "PlatformSignalRelationships", {
+    title: "Related Relationships",
+    summary: "Linked graph relationships for the selected signal when available.",
+    surfaceKind: "table"
+  });
   if (!detail) return `<div class="card"><h2>Detail</h2><div class="muted">No signal rows are projected yet.</div></div>`;
   if (detail.kind) {
     const gap = detail;
@@ -1123,22 +1137,27 @@ function renderSignalDetail(detail, model, ctx) {
     return `
       <section class="grid2">
         <div>
-          ${renderPropertyTable("Gap Detail", [
+          ${renderSurfaceFrame(primarySurface, `
+            ${renderPropertyTable("Gap Detail", [
             { label: "Gap", valueHtml: esc(gap.id || "") },
             { label: "Severity", valueHtml: esc(gap.severity || "") },
             { label: "Kind", valueHtml: esc(gap.kind || "") },
             { label: "Target", valueHtml: gap.target ? renderConceptLink(ctx, gap.target) : "" },
             { label: "Reason", valueHtml: esc(gap.reason || "") },
             { label: "API resource", valueHtml: renderApiLink(gap.id) }
-          ])}
-          ${renderLongTailProperties(ctx, gap, usedKeys)}
+            ])}
+            ${renderLongTailProperties(ctx, gap, usedKeys)}
+          `)}
         </div>
         <div>
-          ${renderLinksCard("Recommended Proposal", ctx, gap.recommendedProposal ? [gap.recommendedProposal] : [])}
-          ${renderTextListCard("Missing In Generated", gap.missingInGenerated ?? [])}
-          ${renderTextListCard("Extra In Generated", gap.extraInGenerated ?? [])}
+          ${renderSurfaceFrame(relatedSurface, `
+            ${renderLinksCard("Recommended Proposal", ctx, gap.recommendedProposal ? [gap.recommendedProposal] : [])}
+            ${renderTextListCard("Missing In Generated", gap.missingInGenerated ?? [])}
+            ${renderTextListCard("Extra In Generated", gap.extraInGenerated ?? [])}
+          `)}
         </div>
       </section>
+      ${renderSurfaceFrame(relationshipsSurface, renderTable(["From", "Relation", "To"], [], "No related relationships."))}
     `;
   }
   const node = detail;
@@ -1147,7 +1166,8 @@ function renderSignalDetail(detail, model, ctx) {
   return `
     <section class="grid2">
       <div>
-        ${renderPropertyTable("Signal Detail", [
+        ${renderSurfaceFrame(primarySurface, `
+          ${renderPropertyTable("Signal Detail", [
           { label: "Node", valueHtml: renderConceptLink(ctx, node.id, node.title || node.id) },
           { label: "Kind", valueHtml: esc(node.kind || "") },
           { label: "Status", valueHtml: esc(node.status || "") },
@@ -1155,17 +1175,18 @@ function renderSignalDetail(detail, model, ctx) {
           { label: "Source", valueHtml: esc(node.source || "") },
           { label: "Lifecycle", valueHtml: esc((node.lifecycle ?? []).join(", ")) },
           { label: "API resource", valueHtml: renderApiLink(node.id) }
-        ])}
-        ${renderLongTailProperties(ctx, node, usedKeys)}
+          ])}
+          ${renderLongTailProperties(ctx, node, usedKeys)}
+        `)}
       </div>
       <div>
-        ${renderDataTable("Related Relationships", ["From", "Relation", "To"], relatedEdges.map(edge => `
+        ${renderSurfaceFrame(relationshipsSurface, renderTable(["From", "Relation", "To"], relatedEdges.map(edge => `
           <tr>
             <td>${renderConceptLink(ctx, edge.from)}</td>
             <td>${esc(edge.rel || "")}</td>
             <td>${renderConceptLink(ctx, edge.to)}</td>
           </tr>
-        `), "No related relationships.")}
+        `), "No related relationships."))}
       </div>
     </section>
   `;
@@ -1849,7 +1870,7 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
     case "PlatformSignalList":
       return renderSignalsListSection(surface, model, ctx);
     case "PlatformSignalDetail":
-      return renderSurfaceFrame(surface, renderSignalDetail(findSignalDetail(model, ctx.id), model, ctx));
+      return renderSurfaceFrame(surface, renderSignalDetail(surface, findSignalDetail(model, ctx.id), model, ctx));
     case "PlatformModelList":
       return renderModelListSection(surface, model, ctx);
     case "PlatformModelDetail":

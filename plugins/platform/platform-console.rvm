@@ -470,9 +470,35 @@ view PlatformSignalDetail {
   class platform-signal-detail
   prop title = "Signal Detail"
   prop summary = "Properties and linked relationships for the selected signal."
+  children {
+    PlatformSignalPrimaryPanel
+    PlatformSignalRelatedPanel
+    PlatformSignalRelationships
+  }
   projections {
     PlatformModelRead
   }
+}
+
+view PlatformSignalPrimaryPanel {
+  kind region
+  class platform-signal-primary
+  prop title = "Primary Detail"
+  prop summary = "Selected signal properties and long-tail fields."
+}
+
+view PlatformSignalRelatedPanel {
+  kind region
+  class platform-signal-related
+  prop title = "Related Resources"
+  prop summary = "Linked proposals, selector drift, and supporting signal context."
+}
+
+view PlatformSignalRelationships {
+  kind table
+  class platform-signal-relationships
+  prop title = "Related Relationships"
+  prop summary = "Linked graph relationships for the selected signal when available."
 }
 
 view PlatformProfileComparison {
