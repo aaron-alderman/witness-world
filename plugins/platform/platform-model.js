@@ -768,6 +768,7 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
       return {
         id: node.id,
         title: node.title,
+        sourcePath: node.source ? String(node.source) : null,
         command,
         runner: gateRunnerForPath(command || node.title),
         environment: gateEnvironmentForPath(command || node.title),
@@ -794,6 +795,51 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
 
   const affectedRows = [];
   const affectedRowsByChangeSet = [];
+  function selectionReasonsForGate(gate, matchedTargets = [], matchedSourceDependencies = []) {
+    const reasons = [];
+    const sourcePath = gate.sourcePath ? String(gate.sourcePath) : null;
+    const directDependencies = unique(matchedSourceDependencies.filter(path => sourcePath && path === sourcePath));
+    const importedDependencies = unique(matchedSourceDependencies.filter(path => !sourcePath || path !== sourcePath));
+    if (directDependencies.length) {
+      reasons.push({
+        kind: "direct-file-dependency",
+        summary: `Gate source changed: ${directDependencies.join(", ")}.`,
+        paths: directDependencies
+      });
+    }
+    if (importedDependencies.length) {
+      reasons.push({
+        kind: "imported-source-dependency",
+        summary: `Declared source dependencies changed: ${importedDependencies.join(", ")}.`,
+        paths: importedDependencies
+      });
+    }
+    const routeTargets = unique(matchedTargets.filter(target => String(target).startsWith("route:")));
+    if (routeTargets.length) {
+      reasons.push({
+        kind: "route-ownership-dependency",
+        summary: `Matched route targets: ${routeTargets.map(target => nodes.get(target)?.title || target).join(", ")}.`,
+        targets: routeTargets
+      });
+    }
+    const pluginTargets = unique(matchedTargets.filter(target => String(target).startsWith("plugin.")));
+    if (pluginTargets.length) {
+      reasons.push({
+        kind: "plugin-ownership-dependency",
+        summary: `Matched plugin targets: ${pluginTargets.map(target => nodes.get(target)?.title || target).join(", ")}.`,
+        targets: pluginTargets
+      });
+    }
+    const docTargets = unique(matchedTargets.filter(target => String(target).startsWith("doc:")));
+    if (docTargets.length) {
+      reasons.push({
+        kind: "doc-freshness-dependency",
+        summary: `Matched governed docs: ${docTargets.map(target => nodes.get(target)?.title || target).join(", ")}.`,
+        targets: docTargets
+      });
+    }
+    return reasons;
+  }
   function collectAffectedRows(scopeType, scope) {
     const affectedSystems = new Set((scope.affectedSystemSummaries ?? []).map(row => String(row.system || "")));
     const changedPaths = new Set((scope.changedPaths ?? []).map(String));
@@ -821,7 +867,8 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
         matchedTargets,
         matchedTargetLabels: matchedTargets.map(target => nodes.get(target)?.title || target),
         matchedSourceDependencies,
-        sourceDependencies: [...gate.sourceDependencies]
+        sourceDependencies: [...gate.sourceDependencies],
+        selectionReasons: selectionReasonsForGate(gate, matchedTargets, matchedSourceDependencies)
       };
       if (scopeType === "branch") {
         gate.selectedByBranches.push(scopeId);

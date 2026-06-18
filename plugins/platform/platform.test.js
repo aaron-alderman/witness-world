@@ -320,7 +320,8 @@ test("platform model filters support MCP views", async () => {
         protectedObjectLabels: ["Minimal runtime", "Platform plugin"],
         matchedTargets: ["profile:minimal"],
         matchedTargetLabels: ["Minimal runtime"],
-        sourceDependencies: ["test/runtime-profile.test.js"]
+        sourceDependencies: ["test/runtime-profile.test.js"],
+        selectionReasons: []
       },
       {
         id: "affectedTestGate:changeSet:changeset.demo:gate:test/runtime-profile.test.js",
@@ -331,7 +332,8 @@ test("platform model filters support MCP views", async () => {
         protectedObjectLabels: ["Minimal runtime", "Platform plugin"],
         matchedTargets: ["profile:minimal"],
         matchedTargetLabels: ["Minimal runtime"],
-        sourceDependencies: ["test/runtime-profile.test.js"]
+        sourceDependencies: ["test/runtime-profile.test.js"],
+        selectionReasons: []
       }
     ],
     affectedTestGatesByBranch: {
@@ -380,7 +382,8 @@ test("platform model filters support MCP views", async () => {
         protectedObjectLabels: ["Minimal runtime", "Platform plugin"],
         matchedTargets: ["profile:minimal"],
         matchedTargetLabels: ["Minimal runtime"],
-        sourceDependencies: ["test/runtime-profile.test.js"]
+        sourceDependencies: ["test/runtime-profile.test.js"],
+        selectionReasons: []
       }
     ],
     affectedTestGatesByBranch: {},
@@ -515,6 +518,18 @@ test("platform model projects structured test gates and affected branch selectio
     && row.sourceDependencies.includes("docs/RUNTIME-BUNDLE-MIGRATION-PLAN.md")
   );
   const branchView = filterPlatformModel(model, "testGates", "branch.platform.gates");
+  const runtimeProfileSelection = model.affectedTestGates.find(row =>
+    row.branchId === "branch.platform.gates"
+    && row.gateId === "gate:test/runtime-profile.test.js"
+  );
+  const platformGateSelection = model.affectedTestGates.find(row =>
+    row.branchId === "branch.platform.gates"
+    && row.gateId === "gate:plugins/platform/platform.test.js"
+  );
+  const packageGateSelection = model.affectedTestGates.find(row =>
+    row.branchId === "branch.platform.gates"
+    && row.gateId === packageScriptGate?.id
+  );
 
   assert.ok(runtimeProfileGate);
   assert.equal(runtimeProfileGate.runner, "node-test");
@@ -560,6 +575,12 @@ test("platform model projects structured test gates and affected branch selectio
   assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-gates"].includes("gate:test/runtime-profile.test.js"), true);
   assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-gates"].includes("gate:plugins/platform/platform.test.js"), true);
   assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-gates"].includes(packageScriptGate.id), true);
+  assert.ok(runtimeProfileSelection);
+  assert.equal(runtimeProfileSelection.selectionReasons.some(reason => reason.kind === "plugin-ownership-dependency" && reason.targets.includes("plugin.platform")), true);
+  assert.ok(platformGateSelection);
+  assert.equal(platformGateSelection.selectionReasons.some(reason => reason.kind === "imported-source-dependency" && reason.paths.includes("plugins/platform/platform-model.js")), true);
+  assert.ok(packageGateSelection);
+  assert.equal(packageGateSelection.selectionReasons.some(reason => reason.kind === "direct-file-dependency" && reason.paths.includes("package.json")), true);
   assert.equal(branchView.testGates.some(row => row.id === "gate:test/runtime-profile.test.js"), true);
   assert.equal(branchView.testGates.some(row => row.id === packageScriptGate.id), true);
   assert.equal(branchView.affectedTestGates.some(row => row.branchId === "branch.platform.gates"), true);

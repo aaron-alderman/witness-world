@@ -727,11 +727,11 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] docs
   - [ ] tests
 - [ ] Select smallest meaningful gate set.
-- [ ] Explain selection:
-  - [ ] direct file dependency
-  - [ ] imported source dependency
+- [~] Explain selection:
+  - [X] direct file dependency
+  - [X] imported source dependency
   - [ ] route ownership dependency
-  - [ ] plugin ownership dependency
+  - [X] plugin ownership dependency
   - [ ] doc freshness dependency
   - [ ] telemetry regression dependency
   - [ ] prior defect cluster dependency
@@ -747,6 +747,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add tests that WCSS-only edit does not run backend-only gates.
 - [ ] Add tests that dependency graph misses are logged as meta-defects.
 - [L] Current V1 now exposes `changedPaths`, affected system summaries, docs freshness, and telemetry impact summaries on both branches and change sets, and the platform model derives affected test gates for both scopes by matching declared source dependencies and protected objects. It still does not compute the smallest meaningful gate set, attach formal selection explanations per gate, or automatically run the selected set.
+- [L] Affected gate rows now carry explicit `selectionReasons` for direct file dependency, imported source dependency, and plugin ownership dependency. Route ownership, doc freshness, telemetry regression, and prior defect cluster explanations still need dedicated affected-object modeling instead of the current broad target/path matching.
 
 ## Phase 6: Pure Dependency Analysis And Coverage
 
