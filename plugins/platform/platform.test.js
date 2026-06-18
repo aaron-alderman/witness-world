@@ -381,6 +381,10 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformWorkflowEditHistory"
   ]);
   assert.equal(workflowDetailSurface.childSurfaces.some(surface => surface.name === "PlatformWorkflowSnapshotHistory" && surface.summary === "Candidate snapshot history for the selected workflow object when available."), true);
+  const workflowSnapshotSurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowSnapshotHistory");
+  assert.ok(workflowSnapshotSurface);
+  assert.equal(workflowSnapshotSurface.props.columns, "Status|Snapshot|Revision|Change Set|Errors");
+  assert.equal(workflowSnapshotSurface.props.rowLimit, "12");
   const workflowListSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowList");
   assert.ok(workflowListSurface);
   assert.equal(workflowListSurface.props.columns, "Kind|Status|Resource|Scope|Summary");
@@ -409,6 +413,10 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformVerificationBuildErrors"
   ]);
   assert.equal(verificationDetailSurface.childSurfaces.some(surface => surface.name === "PlatformVerificationBuildErrors" && surface.summary === "Build errors for the selected runtime revision when available."), true);
+  const verificationRunSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationRunHistory");
+  assert.ok(verificationRunSurface);
+  assert.equal(verificationRunSurface.props.columns, "Status|Run|Branch|Duration|Exit");
+  assert.equal(verificationRunSurface.props.rowLimit, "12");
   assert.ok(signalsPage);
   assert.equal(signalsPage.pageId, "signals");
   assert.deepEqual(signalsPage.children, [
@@ -441,6 +449,10 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformKnowledgeTasks"
   ]);
   assert.equal(knowledgeDetailSurface.childSurfaces.some(surface => surface.name === "PlatformKnowledgeTasks" && surface.summary === "Document or roadmap tasks for the selected knowledge object when available."), true);
+  const knowledgeTaskSurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeTasks");
+  assert.ok(knowledgeTaskSurface);
+  assert.equal(knowledgeTaskSurface.props.columns, "Status|Task|Line|Section");
+  assert.equal(knowledgeTaskSurface.props.rowLimit, "20");
   const modelPage = layout.children.find(surface => surface.name === "PlatformModelPage");
   assert.ok(modelPage);
   const profileSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformProfileComparison");
@@ -454,6 +466,10 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformModelRelationships"
   ]);
   assert.equal(modelDetailSurface.childSurfaces.some(surface => surface.name === "PlatformModelRelationships" && surface.summary === "Linked graph relationships for the selected platform object when available."), true);
+  const modelRelationshipsSurface = modelDetailSurface.childSurfaces.find(surface => surface.name === "PlatformModelRelationships");
+  assert.ok(modelRelationshipsSurface);
+  assert.equal(modelRelationshipsSurface.props.columns, "From|Relation|To");
+  assert.equal(modelRelationshipsSurface.props.rowLimit, "20");
 });
 
 test("platform delegated test-gate projectors discover gate catalog rows", async () => withRegisteredPluginProjectors(providers, async () => {

@@ -265,6 +265,9 @@ view PlatformWorkflowSnapshotHistory {
   class platform-workflow-snapshots
   prop title = "Candidate Snapshots"
   prop summary = "Candidate snapshot history for the selected workflow object when available."
+  prop columns = "Status|Snapshot|Revision|Change Set|Errors"
+  prop emptyState = "No candidate snapshots for this branch."
+  prop rowLimit = "12"
 }
 
 view PlatformWorkflowEditHistory {
@@ -272,6 +275,9 @@ view PlatformWorkflowEditHistory {
   class platform-workflow-edits
   prop title = "Staged Edits"
   prop summary = "Staged overlay edits for the selected change set when available."
+  prop columns = "Path|Language|Previous Hash|Next Hash"
+  prop emptyState = "No staged edits."
+  prop rowLimit = "20"
 }
 
 view PlatformBranchCreatePanel {
@@ -387,6 +393,9 @@ view PlatformVerificationRunHistory {
   class platform-verification-runs
   prop title = "Recent Test Runs"
   prop summary = "Recent test-run history for the selected verification object when available."
+  prop columns = "Status|Run|Branch|Duration|Exit"
+  prop emptyState = "No runs for this gate yet."
+  prop rowLimit = "12"
 }
 
 view PlatformVerificationBuildHistory {
@@ -394,6 +403,9 @@ view PlatformVerificationBuildHistory {
   class platform-verification-builds
   prop title = "Snapshot Builds"
   prop summary = "Snapshot build history for the selected runtime revision when available."
+  prop columns = "Status|Build|Candidate Snapshot|Branch|Errors"
+  prop emptyState = "No snapshot builds for this revision."
+  prop rowLimit = "12"
 }
 
 view PlatformVerificationBuildErrors {
@@ -401,6 +413,9 @@ view PlatformVerificationBuildErrors {
   class platform-verification-build-errors
   prop title = "Build Errors"
   prop summary = "Build errors for the selected runtime revision when available."
+  prop columns = "Build|Path|Kind|Message"
+  prop emptyState = "No build errors for this revision."
+  prop rowLimit = "12"
 }
 
 view PlatformVerificationStreams {
@@ -523,6 +538,9 @@ view PlatformSignalRelationships {
   class platform-signal-relationships
   prop title = "Related Relationships"
   prop summary = "Linked graph relationships for the selected signal when available."
+  prop columns = "From|Relation|To"
+  prop emptyState = "No related relationships."
+  prop rowLimit = "20"
 }
 
 view PlatformProfileComparison {
@@ -586,6 +604,9 @@ view PlatformKnowledgeSections {
   class platform-knowledge-sections
   prop title = "Sections"
   prop summary = "Document sections for the selected governed document when available."
+  prop columns = "Title|Line|Depth"
+  prop emptyState = "No sections projected for this document."
+  prop rowLimit = "20"
 }
 
 view PlatformKnowledgeTasks {
@@ -593,6 +614,9 @@ view PlatformKnowledgeTasks {
   class platform-knowledge-tasks
   prop title = "Tasks"
   prop summary = "Document or roadmap tasks for the selected knowledge object when available."
+  prop columns = "Status|Task|Line|Section"
+  prop emptyState = "No tasks projected for this document."
+  prop rowLimit = "20"
 }
 
 view PlatformModelList {
@@ -634,4 +658,7 @@ view PlatformModelRelationships {
   class platform-model-relationships
   prop title = "Relationships"
   prop summary = "Linked graph relationships for the selected platform object when available."
+  prop columns = "From|Relation|To"
+  prop emptyState = "No relationships for this object."
+  prop rowLimit = "20"
 }
