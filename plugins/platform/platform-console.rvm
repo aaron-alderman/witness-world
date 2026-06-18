@@ -241,6 +241,7 @@ view PlatformMap {
   class platform-map
   prop title = "Platform Map"
   prop summary = "Primary platform objects projected from the live model."
+  prop tableSource = "platformMapRows"
   prop columns = "Kind|Resource|Lifecycle|Status|Source"
   prop rowFields = "Kind=kind|Resource=id@concept|Lifecycle=lifecycleText|Status=status|Source=source"
   prop emptyState = "No platform objects."
@@ -526,6 +527,7 @@ view PlatformBranchRedGreenList {
   class platform-branch-red-green
   prop title = "Branch Red / Green"
   prop summary = "Selected-gate status for branches."
+  prop tableSource = "branchRedGreenRows"
   prop columns = "Status|Branch|Selected|Passed|Failed|Summary"
   prop rowFields = "Status=status|Branch=branchId@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary"
   prop emptyState = "No branch red/green summaries."
@@ -540,6 +542,7 @@ view PlatformChangeSetRedGreenList {
   class platform-change-set-red-green
   prop title = "Change Set Red / Green"
   prop summary = "Selected-gate status for change sets."
+  prop tableSource = "changeSetRedGreenRows"
   prop columns = "Status|Change Set|Selected|Passed|Failed|Summary"
   prop rowFields = "Status=status|Change Set=changeSetId@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary"
   prop emptyState = "No change-set red/green summaries."
@@ -568,6 +571,7 @@ view PlatformGapList {
   class platform-gaps
   prop title = "Platform Gaps"
   prop summary = "Projected platform gaps and meta-defects."
+  prop tableSource = "gapRows"
   prop columns = "Severity|Kind|Target|Reason"
   prop rowFields = "Severity=severity|Kind=kind|Target=target@concept|Reason=reason"
   prop emptyState = "No gaps."
@@ -582,6 +586,7 @@ view PlatformCoverageMatrix {
   class platform-coverage-matrix
   prop title = "Coverage Matrix"
   prop summary = "Gate-to-target coverage rows for the current modeled platform."
+  prop tableSource = "coverageRows"
   prop columns = "Gate|Target|Kind"
   prop rowFields = "Gate=gateId@concept|Target=targetId||targetLabel@concept|Kind=coverageKind"
   prop emptyState = "No coverage edges."
@@ -667,6 +672,7 @@ view PlatformProfileComparison {
   class platform-profiles
   prop title = "Runtime Profiles"
   prop summary = "Profile exposure and plugin composition differences."
+  prop tableSource = "profileComparisonRows"
   prop columns = "Profile|Status|Plugins|Capabilities"
   prop rowFields = "Profile=id|Status=status|Plugins=pluginCount|Capabilities=capabilityCount"
   prop emptyState = "No runtime profiles."

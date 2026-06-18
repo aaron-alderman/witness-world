@@ -1536,6 +1536,40 @@ function recordsForAuthoredListSource(source, model) {
   }
 }
 
+function recordsForAuthoredTableSource(source, model) {
+  switch (source) {
+    case "platformMapRows":
+      return (model.nodes ?? []).map(node => ({
+        ...node,
+        lifecycleText: (node.lifecycle ?? []).join(", ")
+      }));
+    case "profileComparisonRows":
+      return (model.profiles ?? []).map(profile => ({
+        ...profile,
+        pluginCount: (profile.pluginIds ?? []).length,
+        capabilityCount: (profile.capabilities ?? []).length
+      }));
+    case "gapRows":
+      return model.gaps ?? [];
+    case "coverageRows":
+      return model.coverageEdges ?? [];
+    case "branchRedGreenRows":
+      return (model.branchTestRedGreen ?? []).map(row => ({
+        ...row,
+        passedCount: (row.passedGateIds ?? []).length,
+        failedCount: (row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length
+      }));
+    case "changeSetRedGreenRows":
+      return (model.changeSetTestRedGreen ?? []).map(row => ({
+        ...row,
+        passedCount: (row.passedGateIds ?? []).length,
+        failedCount: (row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length
+      }));
+    default:
+      return [];
+  }
+}
+
 function renderAuthoredListSection(surface, model, ctx) {
   const source = surfacePropText(surface, "listSource", "");
   const items = recordsForAuthoredListSource(source, model);
@@ -1548,60 +1582,10 @@ function renderAuthoredListSection(surface, model, ctx) {
   `);
 }
 
-function renderPlatformMapSection(surface, model, ctx) {
-  const topNodes = (model.nodes ?? []).slice(0, surfaceRowLimit(surface, 12));
-  const rows = topNodes.map(node => ({
-    ...node,
-    lifecycleText: (node.lifecycle ?? []).join(", ")
-  }));
-  return renderSurfaceFrame(surface, renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, node => `
-    <tr>
-      <td>${esc(node.kind || "")}</td>
-      <td>${renderConceptLink(ctx, node.id, node.title || node.id)}</td>
-      <td>${esc((node.lifecycle ?? []).join(", "))}</td>
-      <td>${esc(node.status || "")}</td>
-      <td>${esc(node.source || "")}</td>
-    </tr>
-  `)));
-}
-
-function renderProfileComparisonSection(surface, model) {
-  const rows = (model.profiles ?? []).slice(0, surfaceRowLimit(surface, 12)).map(profile => ({
-    ...profile,
-    pluginCount: (profile.pluginIds ?? []).length,
-    capabilityCount: (profile.capabilities ?? []).length
-  }));
-  return renderSurfaceFrame(surface, renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", rows, null, profile => `
-    <tr>
-      <td>${esc(profile.id || "")}</td>
-      <td>${esc(profile.status || "")}</td>
-      <td>${esc((profile.pluginIds ?? []).length)}</td>
-      <td>${esc((profile.capabilities ?? []).length)}</td>
-    </tr>
-  `)));
-}
-
-function renderGapListSection(surface, model, ctx) {
-  const rows = (model.gaps ?? []).slice(0, surfaceRowLimit(surface, 12));
-  return renderSurfaceFrame(surface, renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, gap => `
-    <tr>
-      <td>${esc(gap.severity || "")}</td>
-      <td>${esc(gap.kind || "")}</td>
-      <td>${gap.target ? renderConceptLink(ctx, gap.target) : ""}</td>
-      <td>${esc(gap.reason || "")}</td>
-    </tr>
-  `)));
-}
-
-function renderCoverageMatrixSection(surface, model, ctx) {
-  const rows = (model.coverageEdges ?? []).slice(0, surfaceRowLimit(surface, 12));
-  return renderSurfaceFrame(surface, renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, edge => `
-    <tr>
-      <td>${renderConceptLink(ctx, edge.gateId)}</td>
-      <td>${edge.targetId ? renderConceptLink(ctx, edge.targetId, edge.targetLabel || edge.targetId) : esc(edge.targetLabel || "")}</td>
-      <td>${esc(edge.coverageKind || "")}</td>
-    </tr>
-  `)));
+function renderAuthoredTableSection(surface, model, ctx) {
+  const source = surfacePropText(surface, "tableSource", "");
+  const rows = recordsForAuthoredTableSource(source, model).slice(0, surfaceRowLimit(surface, 12));
+  return renderSurfaceFrame(surface, renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, () => "")));
 }
 
 function renderProposalPanelSection(surface, model) {
@@ -1758,42 +1742,6 @@ function renderVerificationStreamsSection(surface) {
       { label: "Backend revision event stream", valueHtml: `<a href="/api/runtime/backend-revisions/events">Backend revision event stream</a>` }
     ]
   )));
-}
-
-function renderBranchRedGreenSection(surface, model, ctx) {
-  const branchRedGreen = (model.branchTestRedGreen ?? []).slice(0, surfaceRowLimit(surface, 12)).map(row => ({
-    ...row,
-    passedCount: (row.passedGateIds ?? []).length,
-    failedCount: (row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length
-  }));
-  return renderSurfaceFrame(surface, renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", branchRedGreen, ctx, row => `
-    <tr>
-      <td>${esc(row.status || "")}</td>
-      <td>${renderConceptLink(ctx, row.branchId)}</td>
-      <td>${esc(row.totalSelectedGates ?? 0)}</td>
-      <td>${esc((row.passedGateIds ?? []).length)}</td>
-      <td>${esc((row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length)}</td>
-      <td>${esc(row.summary || "")}</td>
-    </tr>
-  `)));
-}
-
-function renderChangeSetRedGreenSection(surface, model, ctx) {
-  const changeSetRedGreen = (model.changeSetTestRedGreen ?? []).slice(0, surfaceRowLimit(surface, 12)).map(row => ({
-    ...row,
-    passedCount: (row.passedGateIds ?? []).length,
-    failedCount: (row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length
-  }));
-  return renderSurfaceFrame(surface, renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", changeSetRedGreen, ctx, row => `
-    <tr>
-      <td>${esc(row.status || "")}</td>
-      <td>${renderConceptLink(ctx, row.changeSetId)}</td>
-      <td>${esc(row.totalSelectedGates ?? 0)}</td>
-      <td>${esc((row.passedGateIds ?? []).length)}</td>
-      <td>${esc((row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length)}</td>
-      <td>${esc(row.summary || "")}</td>
-    </tr>
-  `)));
 }
 
 function renderTestRunPanelSection(surface, model) {
@@ -2037,6 +1985,9 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
   if (surface?.props?.listSource) {
     return renderAuthoredListSection(surface, model, ctx);
   }
+  if (surface?.props?.tableSource) {
+    return renderAuthoredTableSection(surface, model, ctx);
+  }
   switch (surface?.name) {
     case "PlatformConsoleSummary": {
       const sourcePageId = surfacePropText(surface, "summaryPageId", "overview");
@@ -2048,10 +1999,6 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
       return renderLifecycleBoard(surface, model, ctx);
     case "PlatformBranchBoard":
       return renderBranchBoard(surface, model, ctx);
-    case "PlatformMap":
-      return renderPlatformMapSection(surface, model, ctx);
-    case "PlatformProfileComparison":
-      return renderProfileComparisonSection(surface, model);
     case "PlatformWorkflowDetail":
       return renderSurfaceFrame(surface, renderWorkflowDetail(surface, findWorkflowDetail(model, ctx.id), model, ctx));
     case "PlatformProposalPanel":
@@ -2074,24 +2021,16 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
       return renderSurfaceFrame(surface, renderVerificationDetail(surface, findVerificationDetail(model, ctx.id), model, ctx));
     case "PlatformVerificationStreams":
       return renderVerificationStreamsSection(surface);
-    case "PlatformBranchRedGreenList":
-      return renderBranchRedGreenSection(surface, model, ctx);
-    case "PlatformChangeSetRedGreenList":
-      return renderChangeSetRedGreenSection(surface, model, ctx);
     case "PlatformTestRunPanel":
       return renderTestRunPanelSection(surface, model);
     case "PlatformSelectedTestRunPanel":
       return renderSelectedTestRunPanelSection(surface);
     case "PlatformKnowledgeDetail":
       return renderSurfaceFrame(surface, renderKnowledgeDetail(surface, findKnowledgeDetail(model, ctx.id), model, ctx));
-    case "PlatformGapList":
-      return renderGapListSection(surface, model, ctx);
     case "PlatformSignalDetail":
       return renderSurfaceFrame(surface, renderSignalDetail(surface, findSignalDetail(model, ctx.id), model, ctx));
     case "PlatformModelDetail":
       return renderSurfaceFrame(surface, renderModelDetail(surface, findModelDetail(model, ctx.id), model, ctx));
-    case "PlatformCoverageMatrix":
-      return renderCoverageMatrixSection(surface, model, ctx);
     default:
       return `
         <section class="card" data-platform-rvm-view="${esc(surface?.name || "unknown")}">

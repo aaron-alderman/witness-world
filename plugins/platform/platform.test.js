@@ -430,6 +430,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(workflowListSurface.props.pageSize, "20");
   const overviewMapSurface = overviewPage.childSurfaces.find(surface => surface.name === "PlatformMap");
   assert.ok(overviewMapSurface);
+  assert.equal(overviewMapSurface.props.tableSource, "platformMapRows");
   assert.equal(overviewMapSurface.props.rowFields, "Kind=kind|Resource=id@concept|Lifecycle=lifecycleText|Status=status|Source=source");
   const surfaceTreeSurface = overviewPage.childSurfaces.find(surface => surface.name === "PlatformAuthoredSurfaceTree");
   assert.ok(surfaceTreeSurface);
@@ -515,9 +516,11 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationStreamsSurface.props.streamFields, "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href");
   const branchRedGreenSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformBranchRedGreenList");
   assert.ok(branchRedGreenSurface);
+  assert.equal(branchRedGreenSurface.props.tableSource, "branchRedGreenRows");
   assert.equal(branchRedGreenSurface.props.rowFields, "Status=status|Branch=branchId@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary");
   const changeSetRedGreenSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformChangeSetRedGreenList");
   assert.ok(changeSetRedGreenSurface);
+  assert.equal(changeSetRedGreenSurface.props.tableSource, "changeSetRedGreenRows");
   assert.equal(changeSetRedGreenSurface.props.rowFields, "Status=status|Change Set=changeSetId@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary");
   const verificationListSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationList");
   assert.ok(verificationListSurface);
@@ -547,6 +550,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(signalsPage.childSurfaces.some(surface => surface.name === "PlatformGapList" && surface.projectionRoutes.includes("/api/platform-gaps")), true);
   const gapListSurface = signalsPage.childSurfaces.find(surface => surface.name === "PlatformGapList");
   assert.ok(gapListSurface);
+  assert.equal(gapListSurface.props.tableSource, "gapRows");
   assert.equal(gapListSurface.props.columns, "Severity|Kind|Target|Reason");
   assert.equal(gapListSurface.props.rowFields, "Severity=severity|Kind=kind|Target=target@concept|Reason=reason");
   assert.equal(gapListSurface.props.emptyState, "No gaps.");
@@ -628,6 +632,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(consoleSummarySurface.props.summaryPageId, "overview");
   const profileSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformProfileComparison");
   assert.ok(profileSurface);
+  assert.equal(profileSurface.props.tableSource, "profileComparisonRows");
   assert.equal(profileSurface.props.columns, "Profile|Status|Plugins|Capabilities");
   assert.equal(profileSurface.props.rowFields, "Profile=id|Status=status|Plugins=pluginCount|Capabilities=capabilityCount");
   assert.equal(profileSurface.props.rowLimit, "12");
@@ -639,6 +644,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(modelListSurface.props.defaultSort, "kind:asc");
   const coverageSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformCoverageMatrix");
   assert.ok(coverageSurface);
+  assert.equal(coverageSurface.props.tableSource, "coverageRows");
   assert.equal(coverageSurface.props.rowFields, "Gate=gateId@concept|Target=targetId||targetLabel@concept|Kind=coverageKind");
   const modelDetailSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelDetail");
   assert.ok(modelDetailSurface);
