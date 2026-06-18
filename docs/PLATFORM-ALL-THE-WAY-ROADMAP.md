@@ -1080,7 +1080,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Link epic to roadmap.
 - [ ] Link defects to feature/epic.
 - [ ] Link docs and tests to feature/epic.
-- [ ] Add Platform Console roadmap view.
+- [X] Add Platform Console roadmap view.
 - [ ] Add Platform Console epic view.
 
 ### 10.2 Executable Roadmaps
@@ -1096,9 +1096,10 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add proposal target process `roadmap.update`.
 - [L] Roadmap checkbox tasks are now modeled as task rows and graph nodes, and tasks that reference existing platform objects in Markdown now link to resolved plugin, route, capability, and modeled doc/RVM/WCSS targets. Generic unresolved source files remain later work.
 - [L] Roadmap and doc tasks now derive an evidence-backed status (`blocked`, `in-progress`, `ready`, `done`, `untracked`) from linked platform targets, modeled protecting gates, latest gate results, and open target gaps. Markdown checkbox state remains visible and authoritative as authored intent, while derived status tracks the live platform evidence separately.
+- [L] `/platform` now includes an explicit roadmap-detail panel backed by `/api/platform-model?view=roadmap&id=...` with cached fallback to the in-page model state. The broader epic-centric roadmap planning view remains later work.
 - [ ] Add proposal target process `epic.create`.
 - [ ] Add proposal target process `feature.create`.
-- [ ] Add tests for this roadmap being ingested into roadmap/task nodes.
+- [X] Add tests for this roadmap being ingested into roadmap/task nodes.
 
 ## Phase 11: Git Mirroring, Push, And Ship
 

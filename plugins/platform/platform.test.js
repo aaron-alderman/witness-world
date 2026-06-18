@@ -4453,6 +4453,10 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Doc Structure/);
   assert.match(html, /Doc Tasks/);
   assert.match(html, /Roadmap Tasks/);
+  assert.match(html, /Roadmap detail/);
+  assert.match(html, /platform-roadmap-select/);
+  assert.match(html, /platform-roadmap-detail-output/);
+  assert.match(html, /\/api\/platform-model\?view=roadmap/);
   assert.match(html, />Derived</);
   assert.match(html, />Evidence</);
   assert.match(html, /platform-proposal-form/);

@@ -81,6 +81,7 @@ export function renderPlatformPage(model) {
   const testCases = model.testCases ?? [];
   const latestTestResultsByGate = model.latestTestResultsByGate ?? {};
   const roadmapTasks = model.roadmapTasks ?? [];
+  const roadmapDocPath = "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md";
   const proposalActions = model.proposalActions ?? [];
   const proposals = model.proposals ?? [];
   const branchBoard = model.branchBoard ?? [];
@@ -96,6 +97,13 @@ export function renderPlatformPage(model) {
   const initialRuntimeCandidateSnapshots = initialRuntimeRevision
     ? candidateSnapshots.filter(row => Number(row.revision || 0) === Number(initialRuntimeRevision.revision || 0))
     : [];
+  const initialRoadmapDoc = docs.find(doc => doc.path === roadmapDocPath) ?? null;
+  const initialRoadmapDetail = {
+    docs: initialRoadmapDoc ? [initialRoadmapDoc] : [],
+    docSections: docSections.filter(section => section.doc === roadmapDocPath),
+    docTasks: docTasks.filter(task => task.doc === roadmapDocPath),
+    roadmapTasks: roadmapTasks.filter(task => task.doc === roadmapDocPath)
+  };
   const initialState = JSON.stringify(model).replaceAll("<", "\\u003c");
   return `<!doctype html>
 <html lang="en">
@@ -647,6 +655,14 @@ export function renderPlatformPage(model) {
           row => `${row.doc}:${row.line}`
         ])}</tbody>
       </table>
+      <label>Roadmap detail
+        <select id="platform-roadmap-select">
+          ${initialRoadmapDoc ? `<option value="${esc(initialRoadmapDoc.path)}">${esc(initialRoadmapDoc.path)}</option>` : ""}
+          ${roadmapTasks.slice(0, 120).map(row => `<option value="${esc(row.id)}">${esc(`${row.status} ${row.title}`)}</option>`).join("")}
+        </select>
+      </label>
+      <div id="platform-roadmap-status" class="muted">${esc(initialRoadmapDoc ? `Loaded from /api/platform-model?view=roadmap&id=${initialRoadmapDoc.path}` : "No roadmap detail projected yet.")}</div>
+      <pre id="platform-roadmap-detail-output">${esc(JSON.stringify(initialRoadmapDetail, null, 2))}</pre>
     </section>
   </main>
   <script id="platform-initial-state" type="application/json">${initialState}</script>
@@ -655,6 +671,10 @@ export function renderPlatformPage(model) {
     const platformActionTemplates = new Map((platformState.proposalActions || []).map(action => [action.action, action]));
     const platformBranches = platformState.branches || [];
     const platformCandidateSnapshots = platformState.candidateSnapshots || [];
+    const platformDocs = platformState.docs || [];
+    const platformDocSections = platformState.docSections || [];
+    const platformDocTasks = platformState.docTasks || [];
+    const platformRoadmapTasks = platformState.roadmapTasks || [];
     const platformRuntimeRevisions = platformState.runtimeRevisions || [];
     const platformSnapshotBuilds = platformState.snapshotBuilds || [];
     const platformSnapshotBuildErrors = platformState.snapshotBuildErrors || [];
@@ -670,6 +690,28 @@ export function renderPlatformPage(model) {
         candidateSnapshots: platformCandidateSnapshots.filter(row => Number(row.revision || 0) === revision),
         snapshotBuilds: platformSnapshotBuilds.filter(row => Number(row.revision || 0) === revision),
         snapshotBuildErrors: platformSnapshotBuildErrors.filter(row => Number(row.revision || 0) === revision)
+      };
+    }
+    function deriveRoadmapDetail(entryId) {
+      const roadmapDocPath = "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md";
+      const doc = platformDocs.find(entry => entry.path === entryId || (entryId === roadmapDocPath && entry.path === roadmapDocPath)) || null;
+      const roadmapTask = platformRoadmapTasks.find(entry => entry.id === entryId) || null;
+      const docPath = roadmapTask?.doc || doc?.path || (entryId === roadmapDocPath ? roadmapDocPath : null);
+      const matchedTasks = roadmapTask
+        ? platformDocTasks.filter(entry => entry.id === roadmapTask.id)
+        : platformDocTasks.filter(entry => entry.doc === docPath);
+      const matchedRoadmapTasks = roadmapTask
+        ? platformRoadmapTasks.filter(entry => entry.id === roadmapTask.id)
+        : platformRoadmapTasks.filter(entry => entry.doc === docPath);
+      const matchedSections = platformDocSections.filter(entry =>
+        entry.doc === docPath
+        && (!roadmapTask || entry.id === roadmapTask.section || entry.title === roadmapTask.section)
+      );
+      return {
+        docs: doc ? [doc] : platformDocs.filter(entry => entry.path === docPath),
+        docSections: matchedSections,
+        docTasks: matchedTasks,
+        roadmapTasks: matchedRoadmapTasks
       };
     }
     function syncRuntimeRevisionDetail(view, revisionId, sourceLabel) {
@@ -691,6 +733,14 @@ export function renderPlatformPage(model) {
         ? "Loaded " + String(sourceLabel || "revision detail") + " for " + String(revisionId || runtimeRevision.id)
         : "Runtime revision detail unavailable.";
     }
+    function syncRoadmapDetail(view, entryId, sourceLabel) {
+      const detail = document.getElementById("platform-roadmap-detail-output");
+      const status = document.getElementById("platform-roadmap-status");
+      if (detail) detail.textContent = JSON.stringify(view || {}, null, 2);
+      if (status) status.textContent = (view?.docs?.length || view?.roadmapTasks?.length)
+        ? "Loaded " + String(sourceLabel || "roadmap detail") + " for " + String(entryId || "")
+        : "Roadmap detail unavailable.";
+    }
     async function loadRuntimeRevisionDetail(revisionId) {
       if (!revisionId) {
         syncRuntimeRevisionDetail({ runtimeRevisions: [], candidateSnapshots: [], snapshotBuilds: [], snapshotBuildErrors: [] }, "", "empty state");
@@ -703,6 +753,20 @@ export function renderPlatformPage(model) {
         syncRuntimeRevisionDetail(json, revisionId, "/api/platform-model?view=runtimeRevisions&id=...");
       } catch {
         syncRuntimeRevisionDetail(deriveRuntimeRevisionDetail(revisionId), revisionId, "cached platform state");
+      }
+    }
+    async function loadRoadmapDetail(entryId) {
+      if (!entryId) {
+        syncRoadmapDetail({ docs: [], docSections: [], docTasks: [], roadmapTasks: [] }, "", "empty state");
+        return;
+      }
+      try {
+        const response = await fetch("/api/platform-model?view=roadmap&id=" + encodeURIComponent(entryId));
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(json.error || "roadmap detail request failed");
+        syncRoadmapDetail(json, entryId, "/api/platform-model?view=roadmap&id=...");
+      } catch {
+        syncRoadmapDetail(deriveRoadmapDetail(entryId), entryId, "cached platform state");
       }
     }
     function syncBackendRevisionStream() {
@@ -1009,6 +1073,13 @@ export function renderPlatformPage(model) {
         renderBranchDetail(event.currentTarget.value);
       });
       if (branchDetailSelect.value) renderBranchDetail(branchDetailSelect.value);
+    }
+    const roadmapSelect = document.getElementById("platform-roadmap-select");
+    if (roadmapSelect) {
+      roadmapSelect.addEventListener("change", event => {
+        loadRoadmapDetail(event.currentTarget.value);
+      });
+      if (roadmapSelect.value) loadRoadmapDetail(roadmapSelect.value);
     }
     connectBackendRevisionStream();
   </script>
