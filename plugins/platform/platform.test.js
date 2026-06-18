@@ -52,6 +52,10 @@ async function createTempPlatformRvmApplyFixture() {
   };
 }
 
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 test("platform plugin exposes platform bundle ownership", async () => {
   const manifest = JSON.parse(await readFile(new URL("./plugin.json", import.meta.url), "utf8"));
 
@@ -6133,6 +6137,236 @@ test("platform workflow detail follows authored child-surface order", () => {
   const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=changeSet:demo") });
 
   assert.ok(html.indexOf("Candidate Snapshots") < html.indexOf("Staged Edits"));
+});
+
+test("platform detail sections render authored child-surface metadata", () => {
+  const consoleLayout = readPlatformConsoleLayout();
+  const workflowPage = consoleLayout.children.find(surface => surface.props?.pageId === "workflow");
+  const verificationPage = consoleLayout.children.find(surface => surface.props?.pageId === "verification");
+  const knowledgePage = consoleLayout.children.find(surface => surface.props?.pageId === "knowledge");
+  const signalsPage = consoleLayout.children.find(surface => surface.props?.pageId === "signals");
+  const modelPage = consoleLayout.children.find(surface => surface.props?.pageId === "model");
+  const workflowDetailSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowDetail");
+  const verificationDetailSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationDetail");
+  const knowledgeDetailSurface = knowledgePage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDetail");
+  const signalDetailSurface = signalsPage.childSurfaces.find(surface => surface.name === "PlatformSignalDetail");
+  const modelDetailSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelDetail");
+  const model = {
+    lifecycleVocabulary: [],
+    lifecycleBoard: [],
+    branchLifecycleVocabulary: [],
+    branchBoard: [],
+    branches: [{
+      id: "branch:demo",
+      title: "Demo Branch",
+      status: "draft",
+      lifecycleLane: "draft",
+      owner: "aaron",
+      changeSetIds: ["changeSet:demo"],
+      affectedSystemSummaries: [],
+      telemetryImpactSummaries: []
+    }],
+    changeSets: [{
+      id: "changeSet:demo",
+      title: "Demo Change Set",
+      status: "draft",
+      branchId: "branch:demo",
+      owner: "aaron",
+      changedPaths: [],
+      editCount: 0
+    }],
+    changeSetEdits: [],
+    candidateSnapshots: [],
+    proposals: [],
+    proposalActions: [],
+    testGates: [{
+      id: "gate:demo",
+      title: "Demo Gate",
+      status: "ready",
+      runner: "node",
+      environment: "local",
+      command: "node --test",
+      lastResult: { status: "passed", exitCode: 0 },
+      protectedObjects: [],
+      selectedByBranches: [],
+      selectedByChangeSets: []
+    }],
+    runtimeRevisions: [{
+      id: "runtimeRevision:demo",
+      revision: 7,
+      status: "ready",
+      trigger: "candidateSnapshot",
+      branchId: "branch:demo",
+      changeSetId: "changeSet:demo",
+      changedSources: ["plugins/platform/platform-console.rvm"],
+      buildErrorCount: 1
+    }],
+    testRuns: [{
+      id: "testRun:demo",
+      title: "Demo Run",
+      status: "passed",
+      gateId: "gate:demo",
+      branchId: "branch:demo",
+      changeSetId: "changeSet:demo",
+      candidateSnapshotId: "candidateSnapshot:demo",
+      durationMs: 25,
+      exitCode: 0
+    }],
+    testReports: [{
+      id: "testReport:testRun:demo:summary",
+      runId: "testRun:demo",
+      reportKind: "summary",
+      status: "passed",
+      summary: "All good",
+      format: "json",
+      suiteCount: 1,
+      caseCount: 2,
+      passedCount: 2,
+      failedCount: 0,
+      errorCount: 0,
+      skippedCount: 0,
+      cached: false,
+      producedAt: "2026-06-19T00:00:00Z"
+    }, {
+      id: "testReport:testRun:demo:regression",
+      runId: "testRun:demo",
+      reportKind: "regression",
+      status: "passed",
+      summary: "Within baseline",
+      regressionSummary: {
+        baselineRunId: "testRun:baseline",
+        baselineDurationMs: 20,
+        currentDurationMs: 25,
+        deltaMs: 5,
+        deltaPercent: 25
+      }
+    }],
+    testArtifacts: [],
+    testSuites: [],
+    testCases: [],
+    snapshotBuilds: [{
+      id: "snapshotBuild:demo",
+      revision: 7,
+      status: "built",
+      candidateSnapshotId: "candidateSnapshot:demo",
+      branchId: "branch:demo",
+      errorCount: 1
+    }],
+    snapshotBuildErrors: [{
+      snapshotBuildId: "snapshotBuild:demo",
+      revision: 7,
+      path: "plugins/platform/platform-console.rvm",
+      kind: "parse",
+      message: "demo error"
+    }],
+    snapshotDiagnostics: {},
+    testMonitorDiagnostics: {},
+    branchTestRedGreen: [],
+    changeSetTestRedGreen: [],
+    latestTestResultsByGate: {},
+    docs: [{
+      id: "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md",
+      path: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md",
+      role: "roadmap",
+      owner: "plugin.platform",
+      status: "active",
+      freshness: { status: "current" },
+      sectionCount: 1,
+      taskCount: 1,
+      references: { routes: ["route:GET /platform"], pluginIds: [], filePaths: [] }
+    }],
+    docSections: [{
+      doc: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md",
+      title: "Phase 12",
+      line: 1,
+      depth: 1
+    }],
+    docTasks: [{
+      id: "roadmapTask:demo",
+      title: "Split console pages",
+      status: "open",
+      derivedStatus: "ready",
+      doc: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md",
+      line: 2,
+      section: "Phase 12"
+    }],
+    gaps: [{
+      id: "gap.demo",
+      severity: "low",
+      kind: "meta-defect",
+      target: "branch:demo",
+      reason: "Demo gap"
+    }],
+    nodes: [{
+      id: "route:GET /platform",
+      kind: "route",
+      title: "GET /platform",
+      status: "live",
+      owner: "plugin.platform",
+      source: "platform",
+      lifecycle: ["observe"]
+    }],
+    edges: [{
+      from: "route:GET /platform",
+      rel: "supports",
+      to: "branch:demo"
+    }],
+    summaries: {}
+  };
+
+  const workflowHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=changeSet:demo") });
+  const verificationGateHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=gate:demo") });
+  const verificationRevisionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=runtimeRevision:demo") });
+  const verificationRunHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=testRun:demo") });
+  const knowledgeHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledge&id=docs/PLATFORM-ALL-THE-WAY-ROADMAP.md") });
+  const signalHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signals&id=gap.demo") });
+  const modelHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=model&id=route:GET%20/platform") });
+
+  for (const child of workflowDetailSurface.childSurfaces) {
+    if (child.title) assert.match(workflowHtml, new RegExp(escapeRegExp(child.title)));
+    if (child.summary) assert.match(workflowHtml, new RegExp(escapeRegExp(child.summary)));
+  }
+  for (const child of verificationDetailSurface.childSurfaces.filter(surface => [
+    "PlatformVerificationPrimaryPanel",
+    "PlatformVerificationRelatedPanel",
+    "PlatformVerificationRunHistory"
+  ].includes(surface.name))) {
+    if (child.title) assert.match(verificationGateHtml, new RegExp(escapeRegExp(child.title)));
+    if (child.summary) assert.match(verificationGateHtml, new RegExp(escapeRegExp(child.summary)));
+  }
+  for (const child of verificationDetailSurface.childSurfaces.filter(surface => [
+    "PlatformVerificationPrimaryPanel",
+    "PlatformVerificationRelatedPanel",
+    "PlatformVerificationBuildHistory",
+    "PlatformVerificationBuildErrors"
+  ].includes(surface.name))) {
+    if (child.title) assert.match(verificationRevisionHtml, new RegExp(escapeRegExp(child.title)));
+    if (child.summary) assert.match(verificationRevisionHtml, new RegExp(escapeRegExp(child.summary)));
+  }
+  for (const child of verificationDetailSurface.childSurfaces.filter(surface => [
+    "PlatformVerificationPrimaryPanel",
+    "PlatformVerificationRelatedPanel",
+    "PlatformVerificationReportSummary",
+    "PlatformVerificationArtifactsReport",
+    "PlatformVerificationSuiteSummary",
+    "PlatformVerificationFailingCases",
+    "PlatformVerificationRegressionSummary"
+  ].includes(surface.name))) {
+    if (child.title) assert.match(verificationRunHtml, new RegExp(escapeRegExp(child.title)));
+    if (child.summary) assert.match(verificationRunHtml, new RegExp(escapeRegExp(child.summary)));
+  }
+  for (const child of knowledgeDetailSurface.childSurfaces) {
+    if (child.title) assert.match(knowledgeHtml, new RegExp(escapeRegExp(child.title)));
+    if (child.summary) assert.match(knowledgeHtml, new RegExp(escapeRegExp(child.summary)));
+  }
+  for (const child of signalDetailSurface.childSurfaces) {
+    if (child.title) assert.match(signalHtml, new RegExp(escapeRegExp(child.title)));
+    if (child.summary) assert.match(signalHtml, new RegExp(escapeRegExp(child.summary)));
+  }
+  for (const child of modelDetailSurface.childSurfaces) {
+    if (child.title) assert.match(modelHtml, new RegExp(escapeRegExp(child.title)));
+    if (child.summary) assert.match(modelHtml, new RegExp(escapeRegExp(child.summary)));
+  }
 });
 
 test("platform verification run detail respects authored empty states for reports, suites, and failures", () => {

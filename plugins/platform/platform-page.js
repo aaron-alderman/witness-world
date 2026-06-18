@@ -401,18 +401,10 @@ function renderSurfaceFrame(surface, bodyHtml, {
   `;
 }
 
-function nestedSurface(surface, name, {
-  title = null,
-  summary = null,
-  surfaceKind = "region",
-  className = null
-} = {}) {
+function authoredChildSurface(surface, name, fallback = {}) {
   return surface?.childSurfaces?.find(child => child.name === name) || {
     name,
-    title,
-    summary,
-    surfaceKind,
-    className
+    ...fallback
   };
 }
 
@@ -1431,24 +1423,10 @@ function findAuthoredDetailBySources(surface, model, id, fallback = []) {
 }
 
 function renderWorkflowDetail(surface, detail, model, ctx) {
-  const primarySurface = nestedSurface(surface, "PlatformWorkflowPrimaryPanel", {
-    title: "Primary Detail",
-    summary: "Selected workflow object properties and long-tail fields."
-  });
-  const relatedSurface = nestedSurface(surface, "PlatformWorkflowRelatedPanel", {
-    title: "Related Resources",
-    summary: "Linked resources and supporting context for the selected workflow object."
-  });
-  const snapshotSurface = nestedSurface(surface, "PlatformWorkflowSnapshotHistory", {
-    title: "Candidate Snapshots",
-    summary: "Candidate snapshot history for the selected workflow object when available.",
-    surfaceKind: "table"
-  });
-  const editSurface = nestedSurface(surface, "PlatformWorkflowEditHistory", {
-    title: "Staged Edits",
-    summary: "Staged overlay edits for the selected change set when available.",
-    surfaceKind: "table"
-  });
+  const primarySurface = authoredChildSurface(surface, "PlatformWorkflowPrimaryPanel");
+  const relatedSurface = authoredChildSurface(surface, "PlatformWorkflowRelatedPanel");
+  const snapshotSurface = authoredChildSurface(surface, "PlatformWorkflowSnapshotHistory");
+  const editSurface = authoredChildSurface(surface, "PlatformWorkflowEditHistory");
   const branchIdPrefixes = surfaceIdPrefixes(surface, "branchIdPrefixes", ["branch:"]);
   const changeSetIdPrefixes = surfaceIdPrefixes(surface, "changeSetIdPrefixes", ["changeSet:", "changeset."]);
   const proposalIdPrefixes = surfaceIdPrefixes(surface, "proposalIdPrefixes", ["proposal:"]);
@@ -1635,54 +1613,16 @@ function renderComputedPropertySection(surface, model, ctx) {
 }
 
 function renderVerificationDetail(surface, detail, model, ctx) {
-  const primarySurface = nestedSurface(surface, "PlatformVerificationPrimaryPanel", {
-    title: "Primary Detail",
-    summary: "Selected verification object properties and long-tail fields."
-  });
-  const relatedSurface = nestedSurface(surface, "PlatformVerificationRelatedPanel", {
-    title: "Related Resources",
-    summary: "Linked verification resources, streams, and supporting context."
-  });
-  const runHistorySurface = nestedSurface(surface, "PlatformVerificationRunHistory", {
-    title: "Recent Test Runs",
-    summary: "Recent test-run history for the selected verification object when available.",
-    surfaceKind: "table"
-  });
-  const buildHistorySurface = nestedSurface(surface, "PlatformVerificationBuildHistory", {
-    title: "Snapshot Builds",
-    summary: "Snapshot build history for the selected runtime revision when available.",
-    surfaceKind: "table"
-  });
-  const buildErrorsSurface = nestedSurface(surface, "PlatformVerificationBuildErrors", {
-    title: "Build Errors",
-    summary: "Build errors for the selected runtime revision when available.",
-    surfaceKind: "table"
-  });
-  const reportSummarySurface = nestedSurface(surface, "PlatformVerificationReportSummary", {
-    title: "Report Summary",
-    summary: "Derived report summary for the selected test run.",
-    surfaceKind: "region"
-  });
-  const artifactsSurface = nestedSurface(surface, "PlatformVerificationArtifactsReport", {
-    title: "Artifacts and Report Streams",
-    summary: "Artifacts and structured report streams for the selected test run.",
-    surfaceKind: "table"
-  });
-  const suiteSummarySurface = nestedSurface(surface, "PlatformVerificationSuiteSummary", {
-    title: "Suite Summary",
-    summary: "Structured suite summary for the selected test run.",
-    surfaceKind: "table"
-  });
-  const failingCasesSurface = nestedSurface(surface, "PlatformVerificationFailingCases", {
-    title: "Failing Cases",
-    summary: "Failing and error cases for the selected test run.",
-    surfaceKind: "table"
-  });
-  const regressionSurface = nestedSurface(surface, "PlatformVerificationRegressionSummary", {
-    title: "Regression Summary",
-    summary: "Heuristic timing regression summary for the selected test run.",
-    surfaceKind: "region"
-  });
+  const primarySurface = authoredChildSurface(surface, "PlatformVerificationPrimaryPanel");
+  const relatedSurface = authoredChildSurface(surface, "PlatformVerificationRelatedPanel");
+  const runHistorySurface = authoredChildSurface(surface, "PlatformVerificationRunHistory");
+  const buildHistorySurface = authoredChildSurface(surface, "PlatformVerificationBuildHistory");
+  const buildErrorsSurface = authoredChildSurface(surface, "PlatformVerificationBuildErrors");
+  const reportSummarySurface = authoredChildSurface(surface, "PlatformVerificationReportSummary");
+  const artifactsSurface = authoredChildSurface(surface, "PlatformVerificationArtifactsReport");
+  const suiteSummarySurface = authoredChildSurface(surface, "PlatformVerificationSuiteSummary");
+  const failingCasesSurface = authoredChildSurface(surface, "PlatformVerificationFailingCases");
+  const regressionSurface = authoredChildSurface(surface, "PlatformVerificationRegressionSummary");
   const gateIdPrefixes = surfaceIdPrefixes(surface, "gateIdPrefixes", ["gate:"]);
   const runtimeRevisionIdPrefixes = surfaceIdPrefixes(surface, "runtimeRevisionIdPrefixes", ["runtimeRevision:", "backendRevision:", "frontendRevision:"]);
   const candidateSnapshotIdPrefixes = surfaceIdPrefixes(surface, "candidateSnapshotIdPrefixes", ["candidateSnapshot:"]);
@@ -1902,24 +1842,10 @@ function renderVerificationDetail(surface, detail, model, ctx) {
 }
 
 function renderKnowledgeDetail(surface, detail, model, ctx) {
-  const primarySurface = nestedSurface(surface, "PlatformKnowledgePrimaryPanel", {
-    title: "Primary Detail",
-    summary: "Selected knowledge object properties and long-tail fields."
-  });
-  const relatedSurface = nestedSurface(surface, "PlatformKnowledgeRelatedPanel", {
-    title: "Related Resources",
-    summary: "Linked platform resources and supporting context for the selected knowledge object."
-  });
-  const sectionsSurface = nestedSurface(surface, "PlatformKnowledgeSections", {
-    title: "Sections",
-    summary: "Document sections for the selected governed document when available.",
-    surfaceKind: "table"
-  });
-  const tasksSurface = nestedSurface(surface, "PlatformKnowledgeTasks", {
-    title: "Tasks",
-    summary: "Document or roadmap tasks for the selected knowledge object when available.",
-    surfaceKind: "table"
-  });
+  const primarySurface = authoredChildSurface(surface, "PlatformKnowledgePrimaryPanel");
+  const relatedSurface = authoredChildSurface(surface, "PlatformKnowledgeRelatedPanel");
+  const sectionsSurface = authoredChildSurface(surface, "PlatformKnowledgeSections");
+  const tasksSurface = authoredChildSurface(surface, "PlatformKnowledgeTasks");
   const documentPathField = surfacePropText(surface, "documentPathField", "path");
   const roadmapTaskIdPrefixes = surfaceIdPrefixes(surface, "roadmapTaskIdPrefixes", ["roadmapTask:"]);
   const roadmapTaskFallbackField = surfacePropText(surface, "roadmapTaskFallbackField", "doc");
@@ -2023,19 +1949,9 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
 }
 
 function renderSignalDetail(surface, detail, model, ctx) {
-  const primarySurface = nestedSurface(surface, "PlatformSignalPrimaryPanel", {
-    title: "Primary Detail",
-    summary: "Selected signal properties and long-tail fields."
-  });
-  const relatedSurface = nestedSurface(surface, "PlatformSignalRelatedPanel", {
-    title: "Related Resources",
-    summary: "Linked proposals, selector drift, and supporting signal context."
-  });
-  const relationshipsSurface = nestedSurface(surface, "PlatformSignalRelationships", {
-    title: "Related Relationships",
-    summary: "Linked graph relationships for the selected signal when available.",
-    surfaceKind: "table"
-  });
+  const primarySurface = authoredChildSurface(surface, "PlatformSignalPrimaryPanel");
+  const relatedSurface = authoredChildSurface(surface, "PlatformSignalRelatedPanel");
+  const relationshipsSurface = authoredChildSurface(surface, "PlatformSignalRelationships");
   const gapIdPrefixes = surfaceIdPrefixes(surface, "gapIdPrefixes", ["gap."]);
   const signalNodeKinds = surfaceValueList(surface, "signalNodeKinds", ["telemetryMetric", "defectCluster", "boundary"]);
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No signal rows are projected yet." });
@@ -2085,15 +2001,8 @@ function renderSignalDetail(surface, detail, model, ctx) {
 }
 
 function renderModelDetail(surface, node, model, ctx) {
-  const primarySurface = nestedSurface(surface, "PlatformModelPrimaryPanel", {
-    title: "Primary Detail",
-    summary: "Selected platform object properties and long-tail fields."
-  });
-  const relationshipsSurface = nestedSurface(surface, "PlatformModelRelationships", {
-    title: "Relationships",
-    summary: "Linked graph relationships for the selected platform object when available.",
-    surfaceKind: "table"
-  });
+  const primarySurface = authoredChildSurface(surface, "PlatformModelPrimaryPanel");
+  const relationshipsSurface = authoredChildSurface(surface, "PlatformModelRelationships");
   if (!node) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No platform objects are projected yet." });
   const relatedEdges = (model.edges ?? []).filter(edge => edge.from === node.id || edge.to === node.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
   const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "objectCardTitle", "objectFields", ctx, node, "Platform Object Detail");
