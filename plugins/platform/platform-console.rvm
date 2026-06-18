@@ -347,6 +347,12 @@ view PlatformBranchCreatePanel {
   class platform-branch-create-panel
   prop title = "Create Branch"
   prop summary = "Create a branch from the shared platform mutation lane."
+  prop formId = "platform-branch-create-form"
+  prop statusId = "branch-create-status"
+  prop submitLabel = "Create Branch"
+  prop formFields = "Branch id=id@text|Title=title@text|Parent branch=parentBranchId@text|Epic=epic@text|Feature=feature@text|Defect=defect@text"
+  prop fieldDefaults = "id=branch:{generatedId}|title=Platform branch"
+  prop fieldPlaceholders = "parentBranchId=Optional parent branch id|epic=Optional epic tag|feature=Optional feature tag|defect=Optional defect tag"
 }
 
 view PlatformChangeSetCreatePanel {
@@ -354,6 +360,11 @@ view PlatformChangeSetCreatePanel {
   class platform-change-set-create-panel
   prop title = "Create Change Set"
   prop summary = "Create a staged change set attached to a branch."
+  prop formId = "platform-change-set-create-form"
+  prop statusId = "change-set-create-status"
+  prop submitLabel = "Create Change Set"
+  prop formFields = "Change set id=id@text|Branch id=branchId@text|Title=title@text|Reason=reason@text"
+  prop fieldDefaults = "id=changeSet:{generatedId}|branchId=branch:platform-console|title=Platform console change|reason=Stage platform console edits"
 }
 
 view PlatformChangeSetEditPanel {
@@ -361,6 +372,12 @@ view PlatformChangeSetEditPanel {
   class platform-change-set-edit-panel
   prop title = "Stage Edit"
   prop summary = "Stage an authored source edit into the selected change set."
+  prop formId = "platform-change-set-edit-form"
+  prop statusId = "change-set-edit-status"
+  prop submitLabel = "Stage Edit"
+  prop formFields = "Change set=changeSetId@select:changeSetOptions|Path=path@text|Content=content@textarea"
+  prop fieldDefaults = "path=plugins/platform/platform-console.rvm"
+  prop fieldRows = "content=8"
 }
 
 view PlatformChangeSetValidatePanel {
@@ -368,6 +385,10 @@ view PlatformChangeSetValidatePanel {
   class platform-change-set-validate-panel
   prop title = "Validate Change Set"
   prop summary = "Validate the selected change set without mutating the active runtime."
+  prop formId = "platform-change-set-validate-form"
+  prop statusId = "change-set-validate-status"
+  prop submitLabel = "Validate Change Set"
+  prop formFields = "Change set=changeSetId@select:changeSetOptions"
 }
 
 view PlatformChangeSetApplyPanel {
@@ -375,6 +396,10 @@ view PlatformChangeSetApplyPanel {
   class platform-change-set-apply-panel
   prop title = "Apply Change Set"
   prop summary = "Apply a validated change set through the shared platform handler lane."
+  prop formId = "platform-change-set-apply-form"
+  prop statusId = "change-set-apply-status"
+  prop submitLabel = "Apply Change Set"
+  prop formFields = "Change set=changeSetId@select:changeSetOptions"
 }
 
 view PlatformChangeSetLifecyclePanel {
@@ -382,6 +407,12 @@ view PlatformChangeSetLifecyclePanel {
   class platform-change-set-lifecycle-panel
   prop title = "Change Set Lifecycle"
   prop summary = "Reject or abandon a change set through the shared platform handler lane."
+  prop formId = "platform-change-set-lifecycle-form"
+  prop statusId = "change-set-lifecycle-status"
+  prop submitLabel = "Update Change Set"
+  prop formFields = "Change set=changeSetId@select:changeSetOptions|Action=action@select:lifecycleActions|Reason=reason@text"
+  prop fieldDefaults = "action=reject"
+  prop fieldPlaceholders = "reason=Optional lifecycle reason"
 }
 
 view PlatformProposalPanel {
@@ -557,6 +588,11 @@ view PlatformTestRunPanel {
   class platform-test-run-panel
   prop title = "Run Test Gate"
   prop summary = "Run a single modeled verification gate."
+  prop formId = "platform-test-run-form"
+  prop statusId = "test-run-status"
+  prop submitLabel = "Run Test Gate"
+  prop formFields = "Test gate=gateId@select:testGateOptions|Branch id=branchId@text|Change set id=changeSetId@text|Candidate snapshot id=candidateSnapshotId@text"
+  prop fieldPlaceholders = "branchId=Optional branch id|changeSetId=Optional change set id|candidateSnapshotId=Optional candidate snapshot id"
 }
 
 view PlatformSelectedTestRunPanel {
@@ -564,6 +600,11 @@ view PlatformSelectedTestRunPanel {
   class platform-selected-test-run-panel
   prop title = "Run Selected Gates"
   prop summary = "Run the selected verification gates for a branch, change set, or candidate snapshot."
+  prop formId = "platform-selected-test-run-form"
+  prop statusId = "selected-test-run-status"
+  prop submitLabel = "Run Selected Gates"
+  prop formFields = "Branch id=branchId@text|Change set id=changeSetId@text|Candidate snapshot id=candidateSnapshotId@text"
+  prop fieldPlaceholders = "branchId=Optional branch id|changeSetId=Optional change set id|candidateSnapshotId=Optional candidate snapshot id"
 }
 
 view PlatformGapList {

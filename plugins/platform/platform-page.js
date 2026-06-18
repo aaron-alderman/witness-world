@@ -390,6 +390,32 @@ function parseSurfaceLabelMap(raw) {
     .filter(Boolean));
 }
 
+function parseFormFieldEntries(raw) {
+  const text = optionalText(raw);
+  if (!text) return [];
+  return text
+    .split("|")
+    .map(part => part.trim())
+    .filter(Boolean)
+    .map(part => {
+      const [left, ...rest] = part.split("=");
+      const label = optionalText(left);
+      const rhs = optionalText(rest.join("="));
+      if (!label || !rhs) return null;
+      const [namePart, rawKind = "text"] = rhs.split("@");
+      const name = optionalText(namePart);
+      if (!name) return null;
+      const [kindPart, sourcePart] = String(rawKind || "text").split(/:(.+)/, 2);
+      return {
+        label,
+        name,
+        kind: optionalText(kindPart) || "text",
+        source: optionalText(sourcePart)
+      };
+    })
+    .filter(entry => entry?.label && entry?.name);
+}
+
 function renderListOverflowSummary(totalItems, renderedItems) {
   if (totalItems <= renderedItems) return "";
   return `<div class="muted">Showing first ${esc(renderedItems)} of ${esc(totalItems)} entries.</div>`;
@@ -700,6 +726,68 @@ function renderCardSpecs(surface, schemaProp, emptyStateProp, ctx, record, kind)
           itemLimit
         });
   }).join("");
+}
+
+function resolveFormDefaultValue(raw) {
+  const text = optionalText(raw);
+  if (!text) return "";
+  if (text.includes("{generatedId}")) {
+    return text.replaceAll("{generatedId}", Date.now().toString(36));
+  }
+  return text;
+}
+
+function formFieldOptions(source, model) {
+  switch (source) {
+    case "changeSetOptions":
+      return (model.changeSets ?? []).map(changeSet => ({
+        value: changeSet.id,
+        label: changeSet.id
+      }));
+    case "testGateOptions":
+      return (model.testGates ?? []).map(gate => ({
+        value: gate.id,
+        label: gate.title || gate.id
+      }));
+    case "lifecycleActions":
+      return [
+        { value: "reject", label: "reject" },
+        { value: "abandon", label: "abandon" }
+      ];
+    default:
+      return [];
+  }
+}
+
+function renderAuthoredFormField(field, model, defaultsMap, placeholdersMap, rowMap) {
+  const defaultValue = resolveFormDefaultValue(defaultsMap.get(field.name));
+  const placeholder = placeholdersMap.get(field.name) || "";
+  if (field.kind === "select") {
+    const options = formFieldOptions(field.source, model);
+    return `
+      <label>${esc(field.label)}
+        <select name="${esc(field.name)}">
+          ${options.map(option => {
+            const selected = defaultValue && option.value === defaultValue ? ' selected' : "";
+            return `<option value="${esc(option.value)}"${selected}>${esc(option.label || option.value)}</option>`;
+          }).join("")}
+        </select>
+      </label>
+    `;
+  }
+  if (field.kind === "textarea") {
+    const rows = Math.max(2, safeInteger(rowMap.get(field.name), 8));
+    return `
+      <label>${esc(field.label)}
+        <textarea name="${esc(field.name)}" rows="${esc(rows)}" placeholder="${esc(placeholder)}">${esc(defaultValue)}</textarea>
+      </label>
+    `;
+  }
+  return `
+    <label>${esc(field.label)}
+      <input name="${esc(field.name)}" value="${esc(defaultValue)}" placeholder="${esc(placeholder)}">
+    </label>
+  `;
 }
 
 function surfaceDefaultSort(surface, fallbackKey = null, fallbackDir = "asc") {
@@ -1588,6 +1676,20 @@ function renderAuthoredTableSection(surface, model, ctx) {
   return renderSurfaceFrame(surface, renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, () => "")));
 }
 
+function renderAuthoredFormSection(surface, model) {
+  const fields = parseFormFieldEntries(surface?.props?.formFields);
+  const defaultsMap = parseSurfaceLabelMap(surface?.props?.fieldDefaults);
+  const placeholdersMap = parseSurfaceLabelMap(surface?.props?.fieldPlaceholders);
+  const rowMap = parseSurfaceLabelMap(surface?.props?.fieldRows);
+  return renderSurfaceFrame(surface, `
+      <form id="${esc(surfacePropText(surface, "formId", `${surface?.name || "platform-form"}`))}">
+        ${fields.map(field => renderAuthoredFormField(field, model, defaultsMap, placeholdersMap, rowMap)).join("")}
+        <button type="submit">${esc(surfacePropText(surface, "submitLabel", "Submit"))}</button>
+        <div id="${esc(surfacePropText(surface, "statusId", `${surface?.name || "platform-status"}`))}"></div>
+      </form>
+  `);
+}
+
 function renderProposalPanelSection(surface, model) {
   const proposalActions = model.proposalActions ?? [];
   const firstActionBody = JSON.stringify(proposalActions[0]?.sampleBody ?? {}, null, 2);
@@ -1628,103 +1730,6 @@ function renderProposalReviewPanelSection(surface, model) {
   `);
 }
 
-function renderBranchCreatePanelSection(surface) {
-  return renderSurfaceFrame(surface, `
-      <form id="platform-branch-create-form">
-        <label>Branch id <input name="id" value="branch:${Date.now().toString(36)}"></label>
-        <label>Title <input name="title" value="Platform branch"></label>
-        <label>Parent branch <input name="parentBranchId" placeholder="Optional parent branch id"></label>
-        <label>Epic <input name="epic" placeholder="Optional epic tag"></label>
-        <label>Feature <input name="feature" placeholder="Optional feature tag"></label>
-        <label>Defect <input name="defect" placeholder="Optional defect tag"></label>
-        <button type="submit">Create Branch</button>
-        <div id="branch-create-status"></div>
-      </form>
-  `);
-}
-
-function renderChangeSetCreatePanelSection(surface) {
-  return renderSurfaceFrame(surface, `
-      <form id="platform-change-set-create-form">
-        <label>Change set id <input name="id" value="changeSet:${Date.now().toString(36)}"></label>
-        <label>Branch id <input name="branchId" value="branch:platform-console"></label>
-        <label>Title <input name="title" value="Platform console change"></label>
-        <label>Reason <input name="reason" value="Stage platform console edits"></label>
-        <button type="submit">Create Change Set</button>
-        <div id="change-set-create-status"></div>
-      </form>
-  `);
-}
-
-function renderChangeSetEditPanelSection(surface, model) {
-  const changeSets = model.changeSets ?? [];
-  return renderSurfaceFrame(surface, `
-      <form id="platform-change-set-edit-form">
-        <label>Change set
-          <select name="changeSetId">
-            ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
-          </select>
-        </label>
-        <label>Path <input name="path" value="plugins/platform/platform-console.rvm"></label>
-        <label>Content <textarea name="content"></textarea></label>
-        <button type="submit">Stage Edit</button>
-        <div id="change-set-edit-status"></div>
-      </form>
-  `);
-}
-
-function renderChangeSetValidatePanelSection(surface, model) {
-  const changeSets = model.changeSets ?? [];
-  return renderSurfaceFrame(surface, `
-      <form id="platform-change-set-validate-form">
-        <label>Change set
-          <select name="changeSetId">
-            ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
-          </select>
-        </label>
-        <button type="submit">Validate Change Set</button>
-        <div id="change-set-validate-status"></div>
-      </form>
-  `);
-}
-
-function renderChangeSetApplyPanelSection(surface, model) {
-  const changeSets = model.changeSets ?? [];
-  return renderSurfaceFrame(surface, `
-      <form id="platform-change-set-apply-form">
-        <label>Change set
-          <select name="changeSetId">
-            ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
-          </select>
-        </label>
-        <button type="submit">Apply Change Set</button>
-        <div id="change-set-apply-status"></div>
-      </form>
-  `);
-}
-
-function renderChangeSetLifecyclePanelSection(surface, model) {
-  const changeSets = model.changeSets ?? [];
-  return renderSurfaceFrame(surface, `
-      <form id="platform-change-set-lifecycle-form">
-        <label>Change set
-          <select name="changeSetId">
-            ${changeSets.map(changeSet => `<option value="${esc(changeSet.id)}">${esc(changeSet.id)}</option>`).join("")}
-          </select>
-        </label>
-        <label>Action
-          <select name="action">
-            <option value="reject">reject</option>
-            <option value="abandon">abandon</option>
-          </select>
-        </label>
-        <label>Reason <input name="reason" placeholder="Optional lifecycle reason"></label>
-        <button type="submit">Update Change Set</button>
-        <div id="change-set-lifecycle-status"></div>
-      </form>
-  `);
-}
-
 function renderVerificationStreamsSection(surface) {
   const streamRecord = {
     testRunEventsHref: "/api/platform-test-runs/events",
@@ -1742,36 +1747,6 @@ function renderVerificationStreamsSection(surface) {
       { label: "Backend revision event stream", valueHtml: `<a href="/api/runtime/backend-revisions/events">Backend revision event stream</a>` }
     ]
   )));
-}
-
-function renderTestRunPanelSection(surface, model) {
-  const testGates = model.testGates ?? [];
-  return renderSurfaceFrame(surface, `
-      <form id="platform-test-run-form">
-        <label>Test gate
-          <select name="gateId">
-            ${testGates.map(gate => `<option value="${esc(gate.id)}">${esc(gate.title || gate.id)}</option>`).join("")}
-          </select>
-        </label>
-        <label>Branch id <input name="branchId" placeholder="Optional branch id"></label>
-        <label>Change set id <input name="changeSetId" placeholder="Optional change set id"></label>
-        <label>Candidate snapshot id <input name="candidateSnapshotId" placeholder="Optional candidate snapshot id"></label>
-        <button type="submit">Run Test Gate</button>
-        <div id="test-run-status"></div>
-      </form>
-  `);
-}
-
-function renderSelectedTestRunPanelSection(surface) {
-  return renderSurfaceFrame(surface, `
-      <form id="platform-selected-test-run-form">
-        <label>Branch id <input name="branchId" placeholder="Optional branch id"></label>
-        <label>Change set id <input name="changeSetId" placeholder="Optional change set id"></label>
-        <label>Candidate snapshot id <input name="candidateSnapshotId" placeholder="Optional candidate snapshot id"></label>
-        <button type="submit">Run Selected Gates</button>
-        <div id="selected-test-run-status"></div>
-      </form>
-  `);
 }
 
 function renderAuthoringClientScript() {
@@ -1987,6 +1962,9 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
   }
   if (surface?.props?.tableSource) {
     return renderAuthoredTableSection(surface, model, ctx);
+  }
+  if (surface?.props?.formId && surface?.props?.formFields) {
+    return renderAuthoredFormSection(surface, model);
   }
   switch (surface?.name) {
     case "PlatformConsoleSummary": {
