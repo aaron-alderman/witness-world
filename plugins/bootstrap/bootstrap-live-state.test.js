@@ -8,6 +8,10 @@ test("live bootstrap state readers resolve authored, model, session, scoped sele
       identities: [],
       contexts: [{ id: "ctx.one" }],
       perspectives: [{ id: "perspective.one" }],
+      compatibilityBridges: [{ id: "compatibilityBridge:canonicalIdSugar.sameContextVisibleTarget", bridgeClass: "canonical-id-sugar" }],
+      governanceRoutes: [{ id: "governanceRoute:POST /api/widgets", handler: "widgets.create", governanceMode: "proposal-fallback" }],
+      proposalTargetGovernance: [{ id: "governanceProposalTarget:widget.define", targetProcess: "widget.define", governanceMode: "proposal-fallback" }],
+      canonicalIdPolicyClasses: ["same-context-convenience", "imported-target-reference", "legacy-only-path"],
       contextualTargets: [{ id: "widget.one", context: "ctx.one" }],
       contextScopes: [{ context: "ctx.one", sourceKind: "local", target: "widget.one", name: "homePage" }],
       contextExports: [{ context: "ctx.one", name: "homePage", target: "widget.one" }],
@@ -41,7 +45,11 @@ test("live bootstrap state readers resolve authored, model, session, scoped sele
     identities: [{ id: "identity.aaron" }],
     contexts: [{ id: "ctx.two" }],
     perspectives: [{ id: "perspective.two" }],
-    contextualTargets: [{ id: "widget.two", context: "ctx.two" }, { id: "widget.source", context: "ctx.source" }],
+    compatibilityBridges: [{ id: "compatibilityBridge:canonicalIdSugar.importedVisibleTarget", bridgeClass: "canonical-id-sugar" }],
+    governanceRoutes: [{ id: "governanceRoute:POST /api/widgets", handler: "widgets.create", governanceMode: "proposal-fallback" }],
+    proposalTargetGovernance: [{ id: "governanceProposalTarget:widget.define", targetProcess: "widget.define", governanceMode: "proposal-fallback" }],
+    canonicalIdPolicyClasses: ["same-context-convenience", "imported-target-reference", "legacy-only-path"],
+    contextualTargets: [{ id: "widget.two", context: "ctx.two" }, { id: "widget.source", context: "ctx.source" }, { id: "widget.hidden", context: "ctx.hidden" }],
     contextScopes: [
       { context: "ctx.two", sourceKind: "local", target: "widget.two", name: "homePage" },
       { context: "ctx.two", sourceKind: "import", target: "widget.source", name: "sourcePage", sourceContext: "ctx.source", exportName: "homePage" }
@@ -67,17 +75,25 @@ test("live bootstrap state readers resolve authored, model, session, scoped sele
   assert.equal(readers.runtimeProfile(), "full");
   assert.deepEqual(readers.supportedMcpActingModes(), ["delegated", "service"]);
   assert.deepEqual(readers.contextRows(), [{ id: "ctx.two" }]);
+  assert.deepEqual(readers.compatibilityBridgeRows(), [{ id: "compatibilityBridge:canonicalIdSugar.importedVisibleTarget", bridgeClass: "canonical-id-sugar" }]);
+  assert.deepEqual(readers.governanceRouteRows(), [{ id: "governanceRoute:POST /api/widgets", handler: "widgets.create", governanceMode: "proposal-fallback" }]);
+  assert.deepEqual(readers.proposalTargetGovernanceRows(), [{ id: "governanceProposalTarget:widget.define", targetProcess: "widget.define", governanceMode: "proposal-fallback" }]);
   assert.deepEqual(readers.contextBindableTargets("ctx.two"), [{ id: "widget.two", context: "ctx.two" }]);
   assert.deepEqual(readers.contextScopeRows("ctx.two", "local"), [{ context: "ctx.two", sourceKind: "local", target: "widget.two", name: "homePage" }]);
   assert.deepEqual(readers.contextExportRows("ctx.two"), [{ context: "ctx.two", name: "homePage", target: "widget.two" }]);
   assert.equal(readers.contextNameResolutionRows("ctx.two").length, 3);
   assert.deepEqual(readers.contextNameConflictRows("ctx.two"), [{ context: "ctx.two", name: "collision", targets: ["widget.source", "widget.two"], sourceKinds: ["import", "local"], rows: [] }]);
+  assert.deepEqual(readers.canonicalIdPolicyClasses(), ["same-context-convenience", "imported-target-reference", "legacy-only-path"]);
   assert.equal(readers.explainContextualName("ctx.two", "homePage").target, "widget.two");
   assert.equal(readers.explainContextualName("ctx.two", "sourcePage").resolution, "import");
   assert.equal(readers.explainContextualName("ctx.two", "collision").ok, false);
   assert.equal(readers.explainTargetVisibility("ctx.two", "widget.source").visibility, "import");
   assert.equal(readers.explainTargetVisibility("ctx.two", "widget.two").visibility, "local");
   assert.equal(readers.explainTargetVisibility("ctx.two", "widget.missing").visibility, "unscoped");
+  assert.equal(readers.classifyCanonicalIdPolicy("ctx.two", "widget.two").policyClass, "same-context-convenience");
+  assert.equal(readers.classifyCanonicalIdPolicy("ctx.two", "widget.source").policyClass, "imported-target-reference");
+  assert.equal(readers.classifyCanonicalIdPolicy("ctx.two", "widget.missing").policyClass, "legacy-only-path");
+  assert.equal(readers.classifyCanonicalIdPolicy("ctx.two", "widget.hidden").ok, false);
   assert.deepEqual(readers.stewardshipTargetKinds(), []);
   assert.deepEqual(readers.stewardshipTargetsFor("context"), [{ id: "ctx.two" }]);
   assert.deepEqual(readers.stewardshipTargetsFor("perspective"), [{ id: "perspective.two" }]);

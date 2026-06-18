@@ -158,6 +158,7 @@ function normalizeSemanticNode(node, versionFieldsByName) {
           authority: semantic.authority ?? [],
           providerAdapters: semantic.providerAdapters ?? [],
           witnessContract: semantic.witnessContract ?? null,
+          compatibility: semantic.compatibility ?? null,
           placement: semantic.placement ?? [],
           context: semantic.context ?? null,
           owner: semantic.owner ?? null

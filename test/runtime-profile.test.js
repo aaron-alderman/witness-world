@@ -1147,6 +1147,23 @@ test("runtime diagnostics endpoint exposes truthful minimal composition", async 
     assert.equal(body.shells.shells.find(shell => shell.id === "browser")?.ownerClass, "shell");
     assert.equal(body.shells.shells.some(shell => shell.id === "desktop" && shell.status === "present"), true);
     assert.equal(body.mountedRoutes.find(route => route.id === "home_route")?.ownerClass, "generic-host");
+    assert.deepEqual(body.mountedRoutes.find(route => route.id === "home_route")?.ownerChain, [
+      {
+        class: "route",
+        routeId: "home_route",
+        method: "GET",
+        path: "/",
+        serves: "page",
+        note: "Visible behavior enters through mounted route home_route."
+      },
+      {
+        class: "generic-host",
+        bundleId: "bundle-core-runtime",
+        pluginId: null,
+        handlerId: "page.home",
+        note: "Runtime behavior is owned by shared host/runtime code."
+      }
+    ]);
     assert.equal(typeof body.operator.directories.runtimeRoot, "string");
     assert.equal(body.plugins.validCount >= 5, true);
     assert.equal(body.plugins.activePluginIds.length, 0);
@@ -1189,6 +1206,17 @@ test("runtime diagnostics endpoint exposes full-profile bundle and handler-set c
     assert.equal(body.handlerMetadata["events.stream"].routeKind, "stream");
     assert.equal(body.handlerMetadata["events.stream"].ownerClass, "runtime-plugin");
     assert.deepEqual(body.handlerMetadata["events.stream"].methods, ["GET"]);
+    const demoHandlerRoute = body.mountedRoutes.find(route => Array.isArray(route.ownerHandlerSetIds) && route.ownerHandlerSetIds.includes("demo"));
+    assert.ok(demoHandlerRoute);
+    assert.equal(demoHandlerRoute.ownerClass, "handler-set");
+    assert.equal(demoHandlerRoute.ownerPluginId, "plugin.demo");
+    assert.equal(demoHandlerRoute.ownerChain[0]?.class, "route");
+    assert.equal(demoHandlerRoute.ownerChain[0]?.routeId, demoHandlerRoute.id);
+    assert.equal(demoHandlerRoute.ownerChain[0]?.method, demoHandlerRoute.method);
+    assert.equal(demoHandlerRoute.ownerChain[0]?.path, demoHandlerRoute.path);
+    assert.equal(demoHandlerRoute.ownerChain[1]?.class, "handler-set");
+    assert.equal(demoHandlerRoute.ownerChain[1]?.handlerSetId, "demo");
+    assert.equal(demoHandlerRoute.ownerChain[1]?.pluginId, "plugin.demo");
     assert.equal(body.plugins.validCount >= 5, true);
     assert.equal(body.plugins.compatibleCount >= 1, true);
     assert.equal(body.plugins.trustStateCounts.local >= 1 || body.plugins.trustStateCounts.unsigned >= 1, true);

@@ -1,5 +1,9 @@
 import { authorityForActor } from "../../src/kernel.js";
-import { moduleProjectors } from "../../src/modules.js";
+import { buildCompatibilityBridgeLedger } from "../../src/compatibility-bridges.js";
+import {
+  CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES,
+  moduleProjectors
+} from "../../src/modules.js";
 import {
   widgetDefinitions,
   widgetVersions,
@@ -24,6 +28,7 @@ import {
   defaultRuntimeAuthoringMode
 } from "../../src/runtime-authoring-policy.js";
 import {
+  buildGovernanceRouteInventory,
   proposalTargetGovernanceRows,
   proposalTargetProcessIds
 } from "../../src/runtime-governance.js";
@@ -160,6 +165,14 @@ export function createBootstrapReadModels({
     const capabilities = project(moduleProjectors.capabilities);
     const capabilityCatalog = project(moduleProjectors.capabilityCatalog);
     const capabilityInstalls = project(moduleProjectors.capabilityInstalls);
+    const compatibilityBridges = buildCompatibilityBridgeLedger({
+      capabilities,
+      capabilityInstalls
+    });
+    const governanceRoutes = runtimeBundleSummary?.governanceRoutes
+      ?? buildGovernanceRouteInventory(runtimeBundleSummary?.routes ?? []);
+    const proposalTargetGovernance = runtimeBundleSummary?.proposalTargetGovernance
+      ?? proposalTargetGovernanceRows();
     const runtimePluginInstalls = project(moduleProjectors.runtimePluginInstalls);
     const mcpServers = project(moduleProjectors.mcpServers);
     const mcpToolInstalls = project(moduleProjectors.mcpToolInstalls);
@@ -210,6 +223,7 @@ export function createBootstrapReadModels({
       contextualTargets,
       contextNameResolutions,
       contextNameConflicts,
+      canonicalIdPolicyClasses: [...CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES],
       perspectives,
       stewardships,
       authority: authorityForActor(world, requestActor),
@@ -218,6 +232,9 @@ export function createBootstrapReadModels({
       capabilityCatalog: capabilityPluginSources.capabilityCatalog,
       capabilityPackageSources: capabilityPluginSources.capabilityPackageSources,
       capabilityInstalls,
+      compatibilityBridges,
+      governanceRoutes,
+      proposalTargetGovernance,
       runtimePluginInstalls,
       runtimePluginAvailability,
       authoringPolicy,

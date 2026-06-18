@@ -164,13 +164,16 @@ export function createPlatformHandlers({
       const model = await platformModelFor(appContext);
       const view = requestUrl?.searchParams?.get("view") || "model";
       const id = requestUrl?.searchParams?.get("id") || null;
+      const context = requestUrl?.searchParams?.get("context") || null;
+      const name = requestUrl?.searchParams?.get("name") || null;
+      const target = requestUrl?.searchParams?.get("target") || null;
       world.observe({
         process: "backend.readPlatformModel",
         actor: requestActor || backendHost,
         claims: [relation(backendHost, "projected", "platformModel")],
         body: { view, nodes: model.nodes.length, gaps: model.gaps.length }
       });
-      sendJson(res, 200, filterPlatformModel(model, view, id));
+      sendJson(res, 200, filterPlatformModel(model, view, id, { context, name, target }));
     },
 
     "platform.gaps.read": async ({ res, requestActor, appContext }) => {

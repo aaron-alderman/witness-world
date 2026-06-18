@@ -169,37 +169,65 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "bootstrap-identity-authority",
     "Requires a bootstrap actor plus shared identity-authority checks before revoking actor assumption."
   ),
-  "backendProgram.create": directAuthority(
-    "bootstrap-target-authority",
-    "Bootstrap authoring is required and the target authority helper owns the final decision."
+  "context.create": proposalFallback(
+    "bootstrap-context-or-target-authority",
+    "Context creation attempts shared parent-target authority first and routes to proposal creation when direct child-context definition is not allowed."
   ),
-  "backendProgramVersion.create": directAuthority(
-    "bootstrap-target-authority",
-    "Bootstrap authoring is required and the governed backend-program target must authorize the new version."
+  "contextBinding.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Context-binding creation attempts shared context authority first and routes to proposal creation when direct binding is not allowed."
   ),
-  "backendProgramVersions.activate": directAuthority(
-    "bootstrap-target-authority",
-    "Bootstrap authoring is required and activation is guarded by shared target authority on the backend-program soul."
+  "contextBinding.remove": proposalFallback(
+    "bootstrap-context-authority",
+    "Context-binding removal attempts shared context authority first and routes to proposal creation when direct unbinding is not allowed."
   ),
-  "backendProgramVersions.rollback": directAuthority(
-    "bootstrap-target-authority",
-    "Bootstrap authoring is required and rollback is guarded by shared target authority on the backend-program soul."
+  "contextExport.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Context-export creation attempts shared context authority first and routes to proposal creation when direct export is not allowed."
   ),
-  "backendStep.create": directAuthority(
-    "bootstrap-target-authority",
-    "Bootstrap authoring is required and the target authority helper owns backend-step creation."
+  "contextExport.remove": proposalFallback(
+    "bootstrap-context-authority",
+    "Context-export removal attempts shared context authority first and routes to proposal creation when direct unexport is not allowed."
   ),
-  "capability.create": directAuthority(
-    "bootstrap-target-authority",
-    "Capability creation is bootstrap-gated and resolved through shared target authority on the authored capability target."
+  "contextImport.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Context-import creation attempts shared context authority first and routes to proposal creation when direct import is not allowed."
   ),
-  "capability.install": directAuthority(
-    "bootstrap-target-authority",
-    "Capability installation is bootstrap-gated and resolved through shared target authority on the install target."
+  "contextImport.remove": proposalFallback(
+    "bootstrap-context-authority",
+    "Context-import removal attempts shared context authority first and routes to proposal creation when direct unimport is not allowed."
   ),
-  "capability.remove": directAuthority(
+  "backendProgram.create": proposalFallback(
     "bootstrap-target-authority",
-    "Capability removal is bootstrap-gated and resolved through shared target authority on the install target."
+    "Bootstrap authoring attempts shared context authority first and routes to proposal creation when direct backend-program creation is not allowed."
+  ),
+  "backendProgramVersion.create": proposalFallback(
+    "bootstrap-target-authority",
+    "Bootstrap authoring attempts shared backend-program authority first and routes to proposal creation when direct version definition is not allowed."
+  ),
+  "backendProgramVersions.activate": proposalFallback(
+    "bootstrap-target-authority",
+    "Bootstrap authoring attempts shared backend-program authority first and routes to proposal creation when direct activation is not allowed."
+  ),
+  "backendProgramVersions.rollback": proposalFallback(
+    "bootstrap-target-authority",
+    "Bootstrap authoring attempts shared backend-program authority first and routes to proposal creation when direct rollback is not allowed."
+  ),
+  "backendStep.create": proposalFallback(
+    "bootstrap-target-authority",
+    "Bootstrap authoring attempts shared backend-program-version authority first and routes to proposal creation when direct backend-step creation is not allowed."
+  ),
+  "capability.create": proposalFallback(
+    "bootstrap-target-authority",
+    "Capability creation attempts shared context authority first and routes to proposal creation when direct definition is not allowed."
+  ),
+  "capability.install": proposalFallback(
+    "bootstrap-target-authority",
+    "Capability installation attempts shared target authority first and routes to proposal creation when direct installation is not allowed."
+  ),
+  "capability.remove": proposalFallback(
+    "bootstrap-target-authority",
+    "Capability removal attempts shared target authority first and routes to proposal creation when direct removal is not allowed."
   ),
   "db.sql.command": directAuthority(
     "server-runner-authority",
@@ -243,13 +271,13 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "Transactions are immediate and always run through the shared server-runner mutation gate.",
     { operationSemantics: "operational-mutation" }
   ),
-  "frontendProgram.create": directAuthority(
+  "frontendProgram.create": proposalFallback(
     "bootstrap-target-authority",
-    "Bootstrap authoring is required and the target authority helper owns frontend-program creation."
+    "Bootstrap authoring attempts shared context authority first and routes to proposal creation when direct frontend-program creation is not allowed."
   ),
-  "frontendStep.create": directAuthority(
+  "frontendStep.create": proposalFallback(
     "bootstrap-target-authority",
-    "Bootstrap authoring is required and the target authority helper owns frontend-step creation."
+    "Bootstrap authoring attempts shared frontend-program authority first and routes to proposal creation when direct frontend-step creation is not allowed."
   ),
   "fs.blob.delete": directAuthority(
     "storage-scope-authority",
@@ -286,6 +314,14 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "Outbound HTTP requests are immediate but always run through the shared server-runner mutation gate.",
     { operationSemantics: "operational-mutation" }
   ),
+  "identity.create": directAuthority(
+    "bootstrap-identity-authority",
+    "Identity creation writes immediately once a bootstrap actor is present; there is no proposal fallback."
+  ),
+  "identity.update": directAuthority(
+    "bootstrap-identity-authority",
+    "Identity updates write immediately once the bootstrap actor passes the shared identity-authority gate; there is no proposal fallback."
+  ),
   "jobs.queue.enqueue": directAuthority(
     "server-runner-authority",
     "Job enqueue mutates the runtime queue immediately under the shared server-runner mutation gate.",
@@ -317,6 +353,38 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "server-runner-authority",
     "Notification enqueue mutates runtime queue state immediately under the shared server-runner mutation gate.",
     { operationSemantics: "operational-mutation" }
+  ),
+  "message.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Message definition attempts shared context authority first and routes to proposal creation when direct authored definition is not allowed."
+  ),
+  "package.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Package creation attempts shared package-scope context authority first and routes to proposal creation when direct package definition is not allowed."
+  ),
+  "packageRevision.create": proposalFallback(
+    "bootstrap-target-authority",
+    "Package-revision creation attempts shared package authority first and routes to proposal creation when direct revision definition is not allowed."
+  ),
+  "packageRevision.publish": proposalFallback(
+    "bootstrap-target-authority",
+    "Package-revision publish attempts shared package-revision authority first and routes to proposal creation when direct publication is not allowed."
+  ),
+  "packagePatch.create": proposalFallback(
+    "bootstrap-target-authority",
+    "Package-patch creation attempts shared package-revision authority first and routes to proposal creation when direct patch definition is not allowed."
+  ),
+  "packageNamespace.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Package-namespace binding attempts shared context authority first and routes to proposal creation when direct namespace definition is not allowed."
+  ),
+  "packageDependency.create": proposalFallback(
+    "bootstrap-target-authority",
+    "Package-dependency creation attempts shared package-revision authority first and routes to proposal creation when direct dependency definition is not allowed."
+  ),
+  "packageTransformer.create": proposalFallback(
+    "bootstrap-target-authority",
+    "Package-transformer creation attempts shared package or package-revision authority first and routes to proposal creation when direct convergence definition is not allowed."
   ),
   "operator.backup": operatorOnly(
     "Operator backup writes host-managed runtime artifacts and is intentionally limited to the bootstrap operator.",
@@ -386,6 +454,22 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "Bootstrap proposal rejection remains in the operator lane; it is the shared review path, but not yet target-derived authority.",
     { workflowRole: "proposal-review" }
   ),
+  "perspective.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Perspective creation attempts shared context authority first and routes to proposal creation when direct definition is not allowed."
+  ),
+  "process.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Process definition attempts shared context authority first and routes to proposal creation when direct authored definition is not allowed."
+  ),
+  "projection.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Projection definition attempts shared context authority first and routes to proposal creation when direct authored definition is not allowed."
+  ),
+  "route.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Route creation attempts shared context authority first and routes to bootstrap proposal creation when direct route definition is not allowed."
+  ),
   "runtimePlugin.install": proposalFallback(
     "bootstrap-target-authority",
     "Runtime plugin installation attempts shared server-runner authority first and routes to bootstrap proposal creation when direct installation is not allowed."
@@ -425,6 +509,22 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "bootstrap-context-authority",
     "Server-runner creation attempts shared context authority first and routes to bootstrap proposal creation when direct creation is not allowed."
   ),
+  "serve.create": proposalFallback(
+    "bootstrap-target-authority",
+    "Serve-mount creation attempts shared server-runner or context authority first and routes to bootstrap proposal creation when direct mounting is not allowed."
+  ),
+  "stewardship.create": proposalFallback(
+    "bootstrap-target-authority",
+    "Stewardship grants attempt shared target authority first and route to proposal creation when direct grant is not allowed."
+  ),
+  "stewardship.remove": proposalFallback(
+    "bootstrap-target-authority",
+    "Stewardship revocations attempt shared target authority first and route to proposal creation when direct revoke is not allowed."
+  ),
+  "surface.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Surface definition attempts shared context authority on each authored document first and routes to proposal creation when direct authored definition is not allowed."
+  ),
   "session.logout": directAuthority(
     "credential-session",
     "Session logout clears only the caller session and does not use proposal or shared target authority.",
@@ -435,10 +535,22 @@ const HANDLER_GOVERNANCE = Object.freeze({
     "Session open creates only the caller session from credentials and assumption rules; it does not use proposal or shared target authority.",
     { operationSemantics: "operational-mutation", sharedAuthorityPath: false, workflowRole: "session-access" }
   ),
+  "type.create": proposalFallback(
+    "bootstrap-context-authority",
+    "Type definition attempts shared context authority first and routes to proposal creation when direct authored definition is not allowed."
+  ),
   "webhook.inbound.receive": directAuthority(
     "external-signature",
     "Inbound webhooks are accepted or rejected by transport signature and replay rules rather than actor-derived authority.",
     { operationSemantics: "operational-mutation", sharedAuthorityPath: false, workflowRole: "ingress" }
+  ),
+  "widgets.create": proposalFallback(
+    "bootstrap-context-or-target-authority",
+    "Widget creation attempts shared context or parent-widget authority first and routes to proposal creation when direct definition is not allowed."
+  ),
+  "widgets.update": proposalFallback(
+    "bootstrap-target-authority",
+    "Widget updates attempt shared widget authority first and route to proposal creation when direct mutation is not allowed."
   )
 });
 
@@ -567,6 +679,54 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
     "bootstrap-target-authority",
     "Stewardship-revoke proposals execute through shared target authority and identity checks once approved."
   ),
+  "surface.define": proposalTarget(
+    "bootstrap-context-authority",
+    "Surface-define proposals execute through shared context authority on each authored document once approved."
+  ),
+  "process.define": proposalTarget(
+    "bootstrap-context-authority",
+    "Process-define proposals execute through shared context authority on the authored process context once approved."
+  ),
+  "type.define": proposalTarget(
+    "bootstrap-context-authority",
+    "Type-define proposals execute through shared context authority on the authored type context once approved."
+  ),
+  "projection.define": proposalTarget(
+    "bootstrap-context-authority",
+    "Projection-define proposals execute through shared context authority on the authored projection context once approved."
+  ),
+  "message.define": proposalTarget(
+    "bootstrap-context-authority",
+    "Message-define proposals execute through shared context authority on the authored message context once approved."
+  ),
+  "package.define": proposalTarget(
+    "bootstrap-context-authority",
+    "Package-define proposals execute through shared package-scope context authority once approved."
+  ),
+  "packageRevision.define": proposalTarget(
+    "bootstrap-target-authority",
+    "Package-revision define proposals execute through shared package target authority once approved."
+  ),
+  "packageRevision.publish": proposalTarget(
+    "bootstrap-target-authority",
+    "Package-revision publish proposals execute through shared package-revision target authority once approved."
+  ),
+  "packagePatch.define": proposalTarget(
+    "bootstrap-target-authority",
+    "Package-patch define proposals execute through shared package-revision target authority once approved."
+  ),
+  "packageNamespace.define": proposalTarget(
+    "bootstrap-context-authority",
+    "Package-namespace define proposals execute through shared context authority on the bound namespace scope once approved."
+  ),
+  "packageDependency.define": proposalTarget(
+    "bootstrap-target-authority",
+    "Package-dependency define proposals execute through shared package-revision target authority once approved."
+  ),
+  "packageTransformer.define": proposalTarget(
+    "bootstrap-target-authority",
+    "Package-transformer define proposals execute through shared package or package-revision target authority once approved."
+  ),
   "widget.define": proposalTarget(
     "bootstrap-target-authority",
     "Widget-define proposals execute through shared target authority and contextual visibility checks once approved."
@@ -582,6 +742,16 @@ const PROPOSAL_TARGET_GOVERNANCE = Object.freeze({
   "widgetVersion.rollback": proposalTarget(
     "bootstrap-target-authority",
     "Widget-version rollback proposals execute through shared target authority on the widget soul once approved."
+  ),
+  "edenVersions.activate": proposalTarget(
+    "bootstrap-target-authority",
+    "Eden version activation proposals execute through the shared Eden version helper and target authority on the versioned soul once approved.",
+    { bootstrapSelectable: false }
+  ),
+  "edenVersions.rollback": proposalTarget(
+    "bootstrap-target-authority",
+    "Eden version rollback proposals execute through the shared Eden version helper and target authority on the versioned soul once approved.",
+    { bootstrapSelectable: false }
   ),
   "edenVersions.publish": proposalTarget(
     "bootstrap-target-authority",
@@ -778,4 +948,40 @@ export function buildGovernanceRouteInventory(routes = []) {
       || left.method.localeCompare(right.method)
       || left.matcher.localeCompare(right.matcher)
     );
+}
+
+export function describeMountedRouteGovernance({
+  route = {},
+  governanceRoutes = []
+} = {}) {
+  const method = String(route?.method || "GET").toUpperCase();
+  const matcher = String(route?.path || route?.matcher || route?.pattern || "");
+  const handler = String(route?.handler || "");
+  const governance = Array.isArray(governanceRoutes)
+    ? governanceRoutes.find(row =>
+      String(row?.method || "GET").toUpperCase() === method
+        && String(row?.matcher || "") === matcher
+        && String(row?.handler || "") === handler
+    )
+    : null;
+  if (!governance) {
+    return {
+      governanceRouteId: null,
+      operationSemantics: null,
+      governanceMode: null,
+      authorityMechanism: null,
+      sharedAuthorityPath: null,
+      workflowRole: null,
+      governanceNotes: null
+    };
+  }
+  return {
+    governanceRouteId: String(governance.id || ""),
+    operationSemantics: String(governance.operationSemantics || ""),
+    governanceMode: String(governance.governanceMode || ""),
+    authorityMechanism: String(governance.authorityMechanism || ""),
+    sharedAuthorityPath: governance.sharedAuthorityPath === true,
+    workflowRole: String(governance.workflowRole || ""),
+    governanceNotes: String(governance.notes || "")
+  };
 }

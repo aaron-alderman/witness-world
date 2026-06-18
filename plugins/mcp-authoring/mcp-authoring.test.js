@@ -345,17 +345,23 @@ name = "importedMcp"
       id: "shared_mcp",
       label: "Shared MCP",
       serverRunnerRef: "importedRunner",
-      transportsJson: JSON.stringify(["http"])
+      transportsJson: JSON.stringify(["http"]),
+      proposalId: "proposal.mcp.server.shared",
+      reason: "Create a shared MCP server"
     },
     {
       context: "ctx.target",
       serverRef: "importedMcp",
-      tool: "world.read"
+      tool: "world.read",
+      id: "proposal.mcp.tool.install.world-read",
+      reason: "Install world.read on the shared MCP server"
     },
     {
       context: "ctx.target",
       serverRef: "importedMcp",
-      tool: "world.read"
+      tool: "world.read",
+      id: "proposal.mcp.tool.remove.world-read",
+      reason: "Remove world.read from the shared MCP server"
     }
   ];
   const handlers = createHandlers({
@@ -387,12 +393,35 @@ name = "importedMcp"
   assert.equal(sent[0]?.status, 202);
   assert.equal(sent[0]?.body?.proposal?.targetProcess, "mcpServer.define");
   assert.equal(sent[0]?.body?.proposal?.targetId, "source_server");
+  assert.equal(sent[0]?.body?.proposal?.id, "proposal.mcp.server.shared");
+  assert.equal(sent[0]?.body?.proposal?.reason, "Create a shared MCP server");
+  assert.deepEqual(sent[0]?.body?.proposal?.body, {
+    context: "ctx.target",
+    id: "shared_mcp",
+    label: "Shared MCP",
+    serverRunnerRef: "importedRunner",
+    transportsJson: JSON.stringify(["http"])
+  });
   assert.equal(sent[1]?.status, 202);
   assert.equal(sent[1]?.body?.proposal?.targetProcess, "mcpTool.install");
   assert.equal(sent[1]?.body?.proposal?.targetId, "source_mcp");
+  assert.equal(sent[1]?.body?.proposal?.id, "proposal.mcp.tool.install.world-read");
+  assert.equal(sent[1]?.body?.proposal?.reason, "Install world.read on the shared MCP server");
+  assert.deepEqual(sent[1]?.body?.proposal?.body, {
+    context: "ctx.target",
+    serverRef: "importedMcp",
+    tool: "world.read"
+  });
   assert.equal(sent[2]?.status, 202);
   assert.equal(sent[2]?.body?.proposal?.targetProcess, "mcpTool.remove");
   assert.equal(sent[2]?.body?.proposal?.targetId, "source_mcp");
+  assert.equal(sent[2]?.body?.proposal?.id, "proposal.mcp.tool.remove.world-read");
+  assert.equal(sent[2]?.body?.proposal?.reason, "Remove world.read from the shared MCP server");
+  assert.deepEqual(sent[2]?.body?.proposal?.body, {
+    context: "ctx.target",
+    serverRef: "importedMcp",
+    tool: "world.read"
+  });
 });
 
 test("mcp-authoring proposal targets lower server refs before authority checks", async () => {

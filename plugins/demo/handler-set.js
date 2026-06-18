@@ -13,15 +13,10 @@ export const DEMO_HANDLER_SET_DEFINITION = Object.freeze({
   handlers: Object.freeze([
     "privateNotes.list",
     "privateNotes.create",
-    "privateNotes.createModel",
-    "todos.createModel",
-    "todos.updateModel",
-    "todos.deleteModel",
     "todos.list",
     "todos.create",
     "todos.update",
     "todos.delete",
-    "widgets.createModel",
     "widgets.create",
     "network.simulateError"
   ]),
@@ -218,34 +213,6 @@ export async function createDemoHandlerSet({
         });
         sendJson(res, result.status, result.body.payload);
       },
-
-      "privateNotes.createModel": async ({ req, requestActor }) => createPrivateNoteModel({
-        requestActor,
-        body: await readJson(req)
-      }),
-
-      "todos.createModel": async ({ req, requestActor }) => createTodoModel({
-        requestActor,
-        body: await readJson(req)
-      }),
-
-      "todos.updateModel": async ({ req, params, requestActor }) => updateTodoModel({
-        requestActor,
-        id: params.id || "",
-        body: await readJson(req)
-      }),
-
-      "todos.deleteModel": async ({ params, requestActor }) => deleteTodoModel({
-        requestActor,
-        id: params.id || ""
-      }),
-
-      "widgets.createModel": async ({ req, params, requestActor, route }) => createWidgetModel({
-        requestActor,
-        body: await readJson(req),
-        route,
-        routeParams: { ...(route?.params ?? {}), ...(params ?? {}) }
-      }),
 
       "todos.list": async ({ res, requestActor }) => {
         sendJson(res, 200, readTodoModel(requestActor));

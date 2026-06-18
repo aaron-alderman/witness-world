@@ -65,16 +65,7 @@ import {
   waitForSurfaceCapabilityModuleRegistration,
   waitForSurfaceCapabilityModuleSettle
 } from "./runtime-surface-capability-runtime.js";
-import {
-  buildRuntimeIssueSuggestions,
-  summarizeCompanionAttention,
-  summarizeSurfaceRuntimeIssues as summarizeCompanionSurfaceRuntimeIssues
-} from "./runtime-guidance-runtime-issue-suggestions.js";
-import {
-  createSurfaceDiagnosticsOverlay,
-  ensureSourceryCompanionShellStyles,
-  getOrCreateSourceryCompanionShell
-} from "./runtime-guidance-companion-shell.js";
+import { renderSourceryCompanionShellFactory } from "./runtime-guidance-companion-shell.js";
 import {
   capabilityAssetPresence,
   createSurfaceInspectionPoint,
@@ -170,14 +161,10 @@ function browserHelpersSource() {
     installSurfaceInspectionPoint.toString(),
     surfaceDiagnosticsOverlayEnabled.toString(),
     createSurfaceRuntimeIssueLedger.toString(),
-    surfaceRuntimeIssueSeverityRank.toString(),
-    summarizeSurfaceRuntimeIssues.toString(),
-    buildRuntimeIssueSuggestions.toString(),
-    summarizeCompanionAttention.toString(),
-    summarizeCompanionSurfaceRuntimeIssues.toString(),
-    ensureSourceryCompanionShellStyles.toString(),
-    getOrCreateSourceryCompanionShell.toString(),
-    createSurfaceDiagnosticsOverlay.toString(),
+    `const { createSurfaceDiagnosticsOverlay } = (() => {
+${renderSourceryCompanionShellFactory()}
+  return { createSurfaceDiagnosticsOverlay };
+})();`,
     installSurfaceRuntimeBootFailure.toString(),
     mountedCapabilityMarkersForSurface.toString(),
     capabilityAssetPresence.toString(),

@@ -191,7 +191,7 @@ function createEdenVersionsSurfaceNode(surface, deps) {
       setVersionStatus('Proposed loading the published version into the board as proposal.', 'ok');
       render();
       await createEdenVersionProposal(surface, {
-        processName: 'widgetVersion.activate',
+        processName: 'edenVersions.activate',
         version: runtime.publishedVersion,
         reason: 'Load the published shared version into the live board through proposal review',
         statusText: 'Proposed loading the published version into the board'
@@ -221,7 +221,7 @@ function createEdenVersionsSurfaceNode(surface, deps) {
       setVersionStatus('Proposed opening the draft version in the board as proposal.', 'ok');
       render();
       await createEdenVersionProposal(surface, {
-        processName: 'widgetVersion.activate',
+        processName: 'edenVersions.activate',
         version: runtime.draftVersion,
         reason: 'Open the draft shared version in the live board through proposal review',
         statusText: 'Proposed opening the draft version in the board'
@@ -251,7 +251,7 @@ function createEdenVersionsSurfaceNode(surface, deps) {
       setVersionStatus('Proposed restoring the last good version as proposal.', 'ok');
       render();
       await createEdenVersionProposal(surface, {
-        processName: 'widgetVersion.rollback',
+        processName: 'edenVersions.rollback',
         reason: 'Restore the last good shared version through proposal review',
         statusText: 'Proposed restoring the last good version'
       });

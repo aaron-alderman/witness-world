@@ -199,12 +199,8 @@ Keep removing handler-set glue from shipped behavior.
 
 Priority order:
 
-1. `todos.createModel` in authored backend programs
-2. `todos.updateModel` in authored backend programs
-3. `todos.deleteModel` in authored backend programs
-4. `privateNotes.createModel` in authored backend programs
-5. `widgets.createModel` in authored backend programs
-6. remaining demo helpers after those
+1. remove dead legacy demo handler exports such as `todos.createModel`, `todos.updateModel`, `todos.deleteModel`, `privateNotes.createModel`, and `widgets.createModel` now that maintained backend programs lower through `process.request`
+2. remaining demo helpers after those
 
 Slices:
 

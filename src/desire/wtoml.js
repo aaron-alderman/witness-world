@@ -102,6 +102,7 @@ function semanticWtomlShape(doc) {
         authority: values.authority ?? [],
         providerAdapters: values.providerAdapters ?? [],
         witnessContract: values.witnessContract ?? null,
+        compatibility: values.compatibility ?? null,
         placement: values.placement ?? [],
         context: values.context ?? null,
         owner: values.owner ?? null

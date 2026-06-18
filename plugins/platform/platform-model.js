@@ -3,8 +3,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { APP_REVISION_EVENTS_PATH } from "../../src/app-snapshot-manager.js";
 import { buildCompatibilityBridgeLedger } from "../../src/compatibility-bridges.js";
+import { contextNamingStateFromProject } from "../../src/context-naming-world.js";
 import { moduleProjectors } from "../../src/modules.js";
 import { buildGovernanceRouteInventory } from "../../src/runtime-governance.js";
+import { buildMutableSurfaceSemanticsLedger } from "../../src/runtime-semantics.js";
 import {
   platformBranchInsights,
   platformChangeSetInsights,
@@ -1257,6 +1259,37 @@ function projectValue(project, projector, fallback) {
   }
 }
 
+function matchesPackageCoexistenceRow(row, id) {
+  const target = typeof id === "string" && id.trim() ? id.trim() : "";
+  if (!target) return true;
+  const revisionIds = Array.isArray(row?.revisionIds) ? row.revisionIds : [];
+  const selectedRevisionIds = Array.isArray(row?.selectedRevisionIds) ? row.selectedRevisionIds : [];
+  const revisions = Array.isArray(row?.revisions) ? row.revisions : [];
+  const namespaceSelections = Array.isArray(row?.namespaceSelections) ? row.namespaceSelections : [];
+  const manifestPluginConflicts = Array.isArray(row?.manifestPluginConflicts) ? row.manifestPluginConflicts : [];
+  return row.id === target
+    || row.packageId === target
+    || revisionIds.includes(target)
+    || selectedRevisionIds.includes(target)
+    || revisions.some(revision =>
+      revision.id === target
+      || revision.manifestPluginId === target
+    )
+    || namespaceSelections.some(namespace =>
+      namespace.id === target
+      || namespace.context === target
+      || namespace.name === target
+      || `${namespace.context}:${namespace.name}` === target
+      || namespace.revision === target
+    )
+    || manifestPluginConflicts.some(conflict =>
+      conflict.id === target
+      || conflict.manifestPluginId === target
+      || (conflict.revisionIds ?? []).includes(target)
+      || (conflict.namespaceIds ?? []).includes(target)
+    );
+}
+
 function slugify(value) {
   return String(value || "")
     .trim()
@@ -2492,6 +2525,13 @@ export async function buildPlatformModel({
   const proposalTargetGovernance = normalizeProposalTargetGovernance(
     diagnostics?.proposalTargetGovernance
   );
+  const mutableSurfaceSemantics = buildMutableSurfaceSemanticsLedger();
+  const contextNaming = contextNamingStateFromProject(project);
+  const packagePatches = projectRows(project, moduleProjectors.packagePatches);
+  const packageTransformers = projectRows(project, moduleProjectors.packageTransformers);
+  const packageDependencies = projectRows(project, moduleProjectors.packageDependencies);
+  const packageCoexistence = projectRows(project, moduleProjectors.packageCoexistence);
+  const packageConvergence = projectRows(project, moduleProjectors.packageConvergence);
   const runtimeRevisions = buildRuntimeRevisionRows(snapshotDiagnostics, candidateSnapshotsByBranch);
   const activeRuntimeRevision = runtimeRevisions[0] ?? null;
   const snapshotBuilds = buildSnapshotBuildRows(candidateSnapshots);
@@ -2562,6 +2602,18 @@ export async function buildPlatformModel({
       owner: governanceCommand.targetProcess,
       status: governanceCommand.governanceMode,
       source: "governance-ledger"
+    });
+  }
+
+  for (const semanticsRow of mutableSurfaceSemantics) {
+    addNode(nodes, {
+      id: semanticsRow.id,
+      kind: "mutableSurface",
+      title: semanticsRow.title,
+      lifecycle: ["observe", "steward"],
+      owner: semanticsRow.surface,
+      status: semanticsRow.sharingClass,
+      source: "semantics-ledger"
     });
   }
 
@@ -2661,6 +2713,132 @@ export async function buildPlatformModel({
       status: "active",
       source: "runtime.diagnostics"
     });
+  }
+
+  for (const row of packageCoexistence) {
+    addNode(nodes, {
+      id: row.id,
+      kind: "packageCoexistence",
+      title: row.packageLabel || row.packageId,
+      lifecycle: ["author", "verify", "steward"],
+      owner: row.packageId,
+      status: row.coexistenceMode,
+      source: "witnesses"
+    });
+    addNode(nodes, {
+      id: row.packageId,
+      kind: "package",
+      title: row.packageLabel || row.packageId,
+      lifecycle: ["author", "transform", "execute", "steward"],
+      owner: row.packageId,
+      status: row.coexistenceMode,
+      source: "witnesses"
+    });
+    addEdge(edges, row.id, "tracks", row.packageId, "witnesses");
+    for (const revision of row.revisions ?? []) {
+      addNode(nodes, {
+        id: revision.id,
+        kind: "packageRevision",
+        title: revision.version ? `${row.packageLabel || row.packageId} ${revision.version}` : revision.id,
+        lifecycle: ["author", "transform", "execute", "steward"],
+        owner: row.packageId,
+        status: revision.status || "draft",
+        source: "witnesses"
+      });
+      addEdge(edges, row.packageId, "contains", revision.id, "witnesses");
+      addEdge(edges, row.id, "contains", revision.id, "witnesses");
+      for (const predecessor of revision.supersedes ?? []) addEdge(edges, revision.id, "supersedes", predecessor, "witnesses");
+    }
+    for (const namespace of row.namespaceSelections ?? []) {
+      addNode(nodes, {
+        id: namespace.id,
+        kind: "packageNamespace",
+        title: `${namespace.context}:${namespace.name}`,
+        lifecycle: ["author", "execute", "steward"],
+        owner: namespace.context,
+        status: namespace.explicitRevision ? "selected" : "floating",
+        source: "witnesses"
+      });
+      addEdge(edges, row.id, "records", namespace.id, "witnesses");
+      addEdge(edges, namespace.id, "bindsPackage", row.packageId, "witnesses");
+      if (namespace.revision) addEdge(edges, namespace.id, "selects", namespace.revision, "witnesses");
+    }
+    for (const conflict of row.manifestPluginConflicts ?? []) {
+      addNode(nodes, {
+        id: conflict.id,
+        kind: "packageConflict",
+        title: conflict.manifestPluginId,
+        lifecycle: ["verify", "steward"],
+        owner: row.packageId,
+        status: conflict.blocked ? "blocked" : "split",
+        source: "witnesses"
+      });
+      addEdge(edges, row.id, "detects", conflict.id, "witnesses");
+      for (const revisionId of conflict.revisionIds ?? []) addEdge(edges, conflict.id, "targets", revisionId, "witnesses");
+    }
+  }
+
+  for (const patch of packagePatches) {
+    addNode(nodes, {
+      id: patch.id,
+      kind: "packagePatch",
+      title: patch.path || patch.id,
+      lifecycle: ["author", "transform", "steward"],
+      owner: patch.package,
+      status: patch.operation || "patch",
+      source: "witnesses"
+    });
+    addEdge(edges, patch.package, "contains", patch.id, "witnesses");
+    addEdge(edges, patch.revision, "contains", patch.id, "witnesses");
+    if (patch.transformer) addEdge(edges, patch.id, "convergesVia", patch.transformer, "witnesses");
+  }
+
+  for (const dependency of packageDependencies) {
+    addNode(nodes, {
+      id: dependency.id,
+      kind: "packageDependency",
+      title: `${dependency.targetKind}:${dependency.targetId}`,
+      lifecycle: ["author", "execute", "steward"],
+      owner: dependency.sourcePackage || dependency.sourceRevision,
+      status: dependency.versionRange || "required",
+      source: "witnesses"
+    });
+    if (dependency.sourcePackage) addEdge(edges, dependency.sourcePackage, "contains", dependency.id, "witnesses");
+    addEdge(edges, dependency.sourceRevision, "dependsOn", dependency.id, "witnesses");
+    addEdge(edges, dependency.id, "targets", dependency.targetId, "witnesses");
+  }
+
+  for (const transformer of packageTransformers) {
+    addNode(nodes, {
+      id: transformer.id,
+      kind: "packageTransformer",
+      title: transformer.id,
+      lifecycle: ["author", "transform", "steward"],
+      owner: transformer.package,
+      status: transformer.status || "draft",
+      source: "witnesses"
+    });
+    addEdge(edges, transformer.package, "contains", transformer.id, "witnesses");
+    if (transformer.sourceRevision) addEdge(edges, transformer.id, "mapsFrom", transformer.sourceRevision, "witnesses");
+    if (transformer.targetRevision) addEdge(edges, transformer.id, "mapsTo", transformer.targetRevision, "witnesses");
+    if (transformer.sourceNamespace) addEdge(edges, transformer.id, "mapsFrom", transformer.sourceNamespace, "witnesses");
+    if (transformer.targetNamespace) addEdge(edges, transformer.id, "mapsTo", transformer.targetNamespace, "witnesses");
+  }
+
+  for (const row of packageConvergence) {
+    addNode(nodes, {
+      id: row.id,
+      kind: "packageConvergence",
+      title: row.packageLabel || row.packageId,
+      lifecycle: ["author", "transform", "verify", "steward"],
+      owner: row.packageId,
+      status: row.status,
+      source: "witnesses"
+    });
+    addEdge(edges, row.id, "tracks", row.coexistenceId, "witnesses");
+    addEdge(edges, row.id, "tracks", row.packageId, "witnesses");
+    for (const transformerId of row.transformerIds ?? []) addEdge(edges, row.id, "uses", transformerId, "witnesses");
+    for (const patchId of row.convergencePatchIds ?? []) addEdge(edges, row.id, "includes", patchId, "witnesses");
   }
 
   for (const install of capabilityInstalls) {
@@ -3340,6 +3518,18 @@ export async function buildPlatformModel({
     docReferences,
     docDependencies,
     docsByPlatformObject,
+    contextBindings: contextNaming.contextBindings,
+    contextExports: contextNaming.contextExports,
+    contextImports: contextNaming.contextImports,
+    contextScopes: contextNaming.contextScopes,
+    contextualTargets: contextNaming.contextualTargets,
+    contextNameResolutions: contextNaming.contextNameResolutions,
+    contextNameConflicts: contextNaming.contextNameConflicts,
+    packagePatches,
+    packageTransformers,
+    packageDependencies,
+    packageCoexistence,
+    packageConvergence,
     roadmaps: planning.roadmaps,
     epics: planning.epics,
     features: planning.features,
@@ -3386,13 +3576,17 @@ export async function buildPlatformModel({
     compatibilityBridges,
     governanceRoutes,
     proposalTargetGovernance,
+    mutableSurfaceSemantics,
     conflicts: conflicts.map(row => ({ ...row })),
     mergeIntents: mergeIntents.map(row => ({ ...row })),
     roadmapTasks
   };
 }
 
-export function filterPlatformModel(model, view, id = null) {
+export function filterPlatformModel(model, view, id = null, options = {}) {
+  const context = typeof options?.context === "string" ? options.context : null;
+  const name = typeof options?.name === "string" ? options.name : null;
+  const visibilityTarget = typeof options?.target === "string" ? options.target : null;
   if (view === "overview") {
     return {
       lifecycleVocabulary: model.lifecycleVocabulary,
@@ -3794,6 +3988,42 @@ export function filterPlatformModel(model, view, id = null) {
       summaries: model.summaries
     };
   }
+  if (view === "packageCoexistence") {
+    const packageCoexistence = id
+      ? (model.packageCoexistence ?? []).filter(row => matchesPackageCoexistenceRow(row, id))
+      : (model.packageCoexistence ?? []);
+    return { packageCoexistence, summaries: model.summaries };
+  }
+  if (view === "contextNaming") {
+    return {
+      contextNaming: contextNamingStateFromProject(projector => {
+        if (projector === moduleProjectors.contextBindings) return model.contextBindings ?? [];
+        if (projector === moduleProjectors.contextExports) return model.contextExports ?? [];
+        if (projector === moduleProjectors.contextImports) return model.contextImports ?? [];
+        if (projector === moduleProjectors.contextScopes) return model.contextScopes ?? [];
+        if (projector === moduleProjectors.contextualTargets) return model.contextualTargets ?? [];
+        if (projector === moduleProjectors.contextNameResolutions) return model.contextNameResolutions ?? [];
+        if (projector === moduleProjectors.contextNameConflicts) return model.contextNameConflicts ?? [];
+        return [];
+      }, {
+        id,
+        context,
+        name,
+        target: visibilityTarget
+      }),
+      summaries: model.summaries
+    };
+  }
+  if (view === "packageConvergence") {
+    const packageConvergence = id
+      ? (model.packageConvergence ?? []).filter(row =>
+        matchesPackageCoexistenceRow(row, id)
+        || (row.transformerIds ?? []).includes(id)
+        || (row.convergencePatchIds ?? []).includes(id)
+      )
+      : (model.packageConvergence ?? []);
+    return { packageConvergence, summaries: model.summaries };
+  }
   if (view === "candidateSnapshots") {
     const candidateSnapshots = id ? model.candidateSnapshots.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.candidateSnapshots;
     return { candidateSnapshots, summaries: model.summaries };
@@ -3884,6 +4114,25 @@ export function filterPlatformModel(model, view, id = null) {
       )
       : (model.proposalTargetGovernance ?? []);
     return { governanceRoutes, proposalTargetGovernance, summaries: model.summaries };
+  }
+  if (view === "semantics") {
+    const mutableSurfaceSemantics = id
+      ? (model.mutableSurfaceSemantics ?? []).filter(row =>
+        row.id === id
+        || row.surface === id
+        || row.sharingClass === id
+        || row.stateClass === id
+        || row.visibilityRule === id
+        || row.authorityRule === id
+        || row.variantOf === id
+        || row.readSurfaces.includes(id)
+        || row.mutationSurfaces.includes(id)
+        || row.witnessProcesses.includes(id)
+        || row.sourceFiles.includes(id)
+        || row.variants.includes(id)
+      )
+      : (model.mutableSurfaceSemantics ?? []);
+    return { mutableSurfaceSemantics, summaries: model.summaries };
   }
   if (view === "gates") return { gates: model.nodes.filter(node => node.kind === "testGate"), summaries: model.summaries };
   if (view === "mcp") return {

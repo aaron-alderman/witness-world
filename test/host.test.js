@@ -2300,11 +2300,13 @@ test("shared widget version APIs return proposals for signed-in unauthorized act
 
   try {
     const callan = await openSession(server.url, { username: "callan", password: "callan" });
+    const activateReason = "Promote the shared banner draft";
+    const rollbackReason = "Restore the previous shared banner";
 
     const activate = await fetch(`${server.url}/api/widget-versions/todo_versioned_banner/activate`, {
       method: "POST",
       headers: { "content-type": "application/json", cookie: callan.cookie },
-      body: JSON.stringify({ version: "todo_versioned_banner_v2" })
+      body: JSON.stringify({ version: "todo_versioned_banner_v2", reason: activateReason })
     });
     assert.equal(activate.status, 202);
     const activateBody = await activate.json();
@@ -2312,10 +2314,12 @@ test("shared widget version APIs return proposals for signed-in unauthorized act
     assert.equal(activateBody.statusMessage, "Proposed widget version activation for review.");
     assert.equal(activateBody.proposal?.targetProcess, "widgetVersion.activate");
     assert.equal(activateBody.proposal?.targetId, "todo_versioned_banner");
+    assert.equal(activateBody.proposal?.reason, activateReason);
 
     const rollback = await fetch(`${server.url}/api/widget-versions/todo_versioned_banner/rollback`, {
       method: "POST",
-      headers: { cookie: callan.cookie }
+      headers: { "content-type": "application/json", cookie: callan.cookie },
+      body: JSON.stringify({ reason: rollbackReason })
     });
     assert.equal(rollback.status, 202);
     const rollbackBody = await rollback.json();
@@ -2323,6 +2327,7 @@ test("shared widget version APIs return proposals for signed-in unauthorized act
     assert.equal(rollbackBody.statusMessage, "Proposed widget version rollback for review.");
     assert.equal(rollbackBody.proposal?.targetProcess, "widgetVersion.rollback");
     assert.equal(rollbackBody.proposal?.targetId, "todo_versioned_banner");
+    assert.equal(rollbackBody.proposal?.reason, rollbackReason);
 
     assert.equal(world.allWitnesses().some(w => w.process === "activateWidgetVersion" && w.actor === "callan"), false);
     assert.equal(world.allWitnesses().some(w => w.process === "widgetVersion.rollback" && w.actor === "callan"), false);

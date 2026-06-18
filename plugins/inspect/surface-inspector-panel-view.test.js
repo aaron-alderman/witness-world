@@ -38,24 +38,32 @@ test("surface inspector panel and menu views render inspector chrome, versions, 
     liveSurfaceInspectable: true,
     surfaceInspectorOpen: true,
     widgetId: "todo_form",
-    selectedRouteId: "home_route",
+    selectedRouteId: "todo_create_route",
     selectedProgramId: "todo_frontend_program",
     selectedNodeKind: "widget",
     selectedNodeContext: "todo",
     selectedElementTag: "form",
     selectedSourceFile: "todo.wtoml",
     processEvent: "submit",
-    ownershipSummary: "Selected widget inherits runtime behavior from mounted route home_route.",
+    ownershipSummary: "Selected widget inherits runtime behavior from mounted route todo_create_route.",
     ownershipRows: [
       ["Runtime Profile", "full"],
       ["Server Runner", "demo_server"],
       ["Frontend Program", "todo_frontend_program"],
-      ["Route", "home_route"],
-      ["Owner Class", "generic-host"],
-      ["Handler", "page.home"]
+      ["Route", "todo_create_route"],
+      ["Owner Class", "backend-program"],
+      ["Handler", "backendProgram.run"],
+      ["Backend Program", "todo.todos.create"],
+      ["Operation Semantics", "governed-mutation"],
+      ["Governance Mode", "proposal-fallback"],
+      ["Authority Mechanism", "widget-target-authority"],
+      ["Shared Authority Path", "yes"],
+      ["Workflow Role", "direct-mutation"]
     ],
     ownershipChain: [
-      { class: "generic-host", bundleId: "bundle-core-runtime", handlerId: "page.home", note: "Runtime behavior is owned by shared host/runtime code." }
+      { class: "route", routeId: "todo_create_route", method: "POST", path: "/api/todos", serves: "backendProgram", note: "Visible behavior enters through mounted route todo_create_route." },
+      { class: "backend-program", backendProgramSoul: "todo.todos.create", handlerId: "backendProgram.run", note: "Authored backend program todo.todos.create is selected by mounted route params." },
+      { class: "generic-host", bundleId: "bundle-core-runtime", handlerId: "backendProgram.run", note: "Runtime behavior is owned by shared host/runtime code." }
     ],
     runtimeCorrelationSummary: "Authored event submit:todo_form in todo_frontend_program is active in the shared runtime probe for this surface.",
     runtimeCorrelationRows: [
@@ -66,7 +74,7 @@ test("surface inspector panel and menu views render inspector chrome, versions, 
       ["Trace Entries", "12"]
     ],
     runtimeCorrelationOps: [
-      { label: "POST /api/todos", summary: "Lowers through /api/todos with owner backend-program / todo.todos.create / backendProgram.run.", selectTarget: "todo.todos.create", selectLabel: "Show Backend Program" }
+      { label: "POST /api/todos", summary: "Lowers through /api/todos with owner backend-program / todo.todos.create / backendProgram.run. Governance is proposal-fallback via widget-target-authority on the shared authority path (direct-mutation). Widget proposals use the shared target-authority lane.", selectTarget: "todo.todos.create", selectLabel: "Show Backend Program" }
     ],
     versionState: { rollbackAvailable: true, soul: "todo_form", rollbackVersion: "v1" },
     versionRows: [{ soul: "todo_form", version: "v2", isActive: false }],
@@ -84,12 +92,18 @@ test("surface inspector panel and menu views render inspector chrome, versions, 
   assert.equal(panelHtml.includes("Runtime Owner"), true);
   assert.equal(panelHtml.includes("Runtime Profile"), true);
   assert.equal(panelHtml.includes("demo_server"), true);
+  assert.equal(panelHtml.includes("proposal-fallback"), true);
+  assert.equal(panelHtml.includes("widget-target-authority"), true);
+  assert.equal(panelHtml.includes("Shared Authority Path"), true);
   assert.equal(panelHtml.includes("Runtime Correlation"), true);
   assert.equal(panelHtml.includes("submit:todo_form"), true);
   assert.equal(panelHtml.includes("POST /api/todos"), true);
   assert.equal(panelHtml.includes("Show Backend Program"), true);
-  assert.equal(panelHtml.includes("home_route"), true);
-  assert.equal(panelHtml.includes("generic-host"), true);
+  assert.equal(panelHtml.includes("todo_create_route"), true);
+  assert.equal(panelHtml.includes("backend-program"), true);
+  assert.equal(panelHtml.includes("route todo_create_route"), true);
+  assert.equal(panelHtml.includes("POST /api/todos"), true);
+  assert.equal(panelHtml.includes("backend program todo.todos.create"), true);
   assert.equal(panelHtml.includes("<section>Editor</section>"), true);
 
   const menuHtml = renderSurfaceInspectorMenuView({

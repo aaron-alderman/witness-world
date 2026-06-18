@@ -40,6 +40,7 @@ import {
   cloneRuntimeOwnerChain,
   describeMountedRouteOwnership
 } from "./runtime-ownership.js";
+import { describeMountedRouteGovernance } from "./runtime-governance.js";
 
 function widgetPageGuidanceSurface(world, {
   route = null,
@@ -1170,6 +1171,10 @@ export function createCoreRuntimeBundleHandlers({
             handlerSetDefinitions,
             handlerSetProviders: appContext?.runtimeContributions?.handlerSetProviders ?? {}
           });
+          const governance = describeMountedRouteGovernance({
+            route,
+            governanceRoutes: diagnostics.governanceRoutes ?? []
+          });
           const handlerMetadata = diagnostics.handlerMetadata?.[String(route.handler || "")] ?? null;
           return {
             id: route.id,
@@ -1180,6 +1185,7 @@ export function createCoreRuntimeBundleHandlers({
             serves: route.serves ?? null,
             params: route.params && typeof route.params === "object" ? { ...route.params } : {},
             ...ownership,
+            ...governance,
             ownerChain: cloneRuntimeOwnerChain(ownership.ownerChain),
             handlerMetadata: handlerMetadata
               ? {

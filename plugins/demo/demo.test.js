@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { createWorld } from "../../src/kernel.js";
 import { executeDemoProposalTarget } from "./demo-proposal-targets.js";
+import { DEMO_HANDLER_SET_DEFINITION } from "./handler-set.js";
 import { privateNotesPrivacyState } from "./private-notes-runtime.js";
 import { todoState, privateNotesFor, publicWitnessesFor } from "./projections.js";
 import { providers } from "./runtime.js";
@@ -26,6 +27,11 @@ test("demo plugin owns demo handler-set provider", async () => {
   assert.equal(handlerSetSource.includes("factory: createDemoHandlerSet"), true);
   assert.equal(handlerSetSource.includes('"todos.list"'), true);
   assert.equal(handlerSetSource.includes('"demo.echo"'), true);
+  assert.equal(DEMO_HANDLER_SET_DEFINITION.handlers.includes("todos.createModel"), false);
+  assert.equal(DEMO_HANDLER_SET_DEFINITION.handlers.includes("todos.updateModel"), false);
+  assert.equal(DEMO_HANDLER_SET_DEFINITION.handlers.includes("todos.deleteModel"), false);
+  assert.equal(DEMO_HANDLER_SET_DEFINITION.handlers.includes("privateNotes.createModel"), false);
+  assert.equal(DEMO_HANDLER_SET_DEFINITION.handlers.includes("widgets.createModel"), false);
 });
 
 test("demo plugin owns todo, private-note, and public witness helpers", () => {

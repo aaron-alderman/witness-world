@@ -278,15 +278,26 @@ export async function startRuntimeServer(world, {
   const activeRuntimeProfile = resolvedRuntime.profile;
   const compositionOptions = { additionalBundleIds, bundleOverrides };
   // Per-runner bundle gating (multi-host): plugin-contributed bundles are loaded process-wide so
-  // every host's handlers exist, but a bundle's generic endpoints must only answer on runners that
-  // actually install the plugin. Map each plugin id to the bundle(s) it owns, and treat the set of
-  // plugin-added bundle ids as "opt-in" (base profile bundles stay available to all runners).
+  // every host's handlers exist, but generic endpoints from authored runner installs must only
+  // answer on runners that actually install that plugin. Bundles activated by the runtime profile
+  // or explicit operator config are global and must stay mounted on every runner.
   const pluginBundleIdsByPlugin = new Map();
+  const globalPluginIds = new Set();
   for (const pluginPackage of effectiveRuntimePluginCatalog.packages ?? []) {
     const ids = pluginPackage?.runtimeModule?.bundleIds ?? [];
     if (ids.length) pluginBundleIdsByPlugin.set(pluginPackage.id, new Set(ids));
+    if (
+      pluginPackage?.activation?.active === true
+      && (pluginPackage.activation.requestedSources ?? []).some(source => source !== "authored")
+    ) {
+      globalPluginIds.add(pluginPackage.id);
+    }
   }
-  const optInBundleIds = new Set(additionalBundleIds);
+  const optInBundleIds = new Set();
+  for (const [pluginId, bundleIds] of pluginBundleIdsByPlugin.entries()) {
+    if (globalPluginIds.has(pluginId)) continue;
+    for (const bundleId of bundleIds) optInBundleIds.add(bundleId);
+  }
   const activeAddedBundlesForRunner = runnerId => {
     const active = new Set();
     const installs = world.project(moduleProjectors.runtimePluginInstallIndex)?.byServerRunner?.[runnerId] ?? [];

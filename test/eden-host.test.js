@@ -225,7 +225,7 @@ test("eden versions API rejects signed-in actors without authority over the shar
       },
       body: JSON.stringify({ version: "todo_versioned_banner_v2" })
     });
-    assert.equal(activate.status, 403);
+    assert.equal(activate.status, 202);
 
     const publish = await fetch(`${url}/api/eden/versions/publish`, {
       method: "POST",
@@ -235,13 +235,13 @@ test("eden versions API rejects signed-in actors without authority over the shar
       },
       body: JSON.stringify({ version: "todo_versioned_banner_v2" })
     });
-    assert.equal(publish.status, 403);
+    assert.equal(publish.status, 202);
 
     const rollback = await fetch(`${url}/api/eden/versions/rollback`, {
       method: "POST",
       headers: { cookie }
     });
-    assert.equal(rollback.status, 403);
+    assert.equal(rollback.status, 202);
 
     const readBack = await fetch(`${url}/api/eden/versions`, {
       headers: { cookie }
@@ -283,42 +283,31 @@ test("eden version publish proposals can be created without direct authority and
     assert.equal(loginCallan.status, 200);
     const callanCookie = (loginCallan.headers.get("set-cookie") || "").split(";")[0];
 
-    const proposed = await fetch(`${url}/api/proposals`, {
+    const proposed = await fetch(`${url}/api/eden/versions/publish`, {
       method: "POST",
       headers: {
         cookie: callanCookie,
         "content-type": "application/json"
       },
-      body: JSON.stringify({
-        id: "proposal.eden.publish.shared-banner",
-        targetProcess: "edenVersions.publish",
-        targetKind: "widgetVersion",
-        targetId: "todo_versioned_banner",
-        bodyJson: JSON.stringify({
-          surfaceId: "eden.surface.versions",
-          soul: "todo_versioned_banner",
-          version: "todo_versioned_banner_v2",
-          publishedVersion: "todo_versioned_banner_v1",
-          draftVersion: "todo_versioned_banner_v2"
-        }),
-        reason: "Publish the current shared banner through proposal review"
-      })
+      body: JSON.stringify({ version: "todo_versioned_banner_v2" })
     });
-    assert.equal(proposed.status, 201);
+    assert.equal(proposed.status, 202);
+    const proposedBody = await proposed.json();
+    assert.equal(proposedBody.proposal?.targetProcess, "edenVersions.publish");
 
-    const approved = await fetch(`${url}/api/proposals/proposal.eden.publish.shared-banner/approve`, {
+    const approved = await fetch(`${url}/api/proposals/${encodeURIComponent(proposedBody.proposal.id)}/approve`, {
       method: "POST",
       headers: { cookie: aaronCookie }
     });
     assert.equal(approved.status, 200);
 
-    const approveAgain = await fetch(`${url}/api/proposals/proposal.eden.publish.shared-banner/approve`, {
+    const approveAgain = await fetch(`${url}/api/proposals/${encodeURIComponent(proposedBody.proposal.id)}/approve`, {
       method: "POST",
       headers: { cookie: aaronCookie }
     });
     assert.equal(approveAgain.status, 409);
 
-    const proposal = world.project(moduleProjectors.proposals).find(row => row.id === "proposal.eden.publish.shared-banner");
+    const proposal = world.project(moduleProjectors.proposals).find(row => row.id === proposedBody.proposal.id);
     assert.equal(proposal.status, "approved");
     assert.equal(Array.isArray(proposal.executedWitnessIds), true);
     assert.equal(proposal.executedWitnessIds.length > 0, true);
@@ -332,6 +321,116 @@ test("eden version publish proposals can be created without direct authority and
       && witness.actor === "aaron"
       && witness.body?.soul === "todo_versioned_banner"
       && witness.body?.version === "todo_versioned_banner_v2"
+    ), true);
+  } finally {
+    await close();
+  }
+});
+
+test("eden version activate proposals can be created without direct authority and approved once by an authorized steward", async () => {
+  const { world, server, url, close } = await startUiDemoServer();
+  try {
+    const loginAaron = await fetch(`${url}/api/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: "aaron", password: "aaron" })
+    });
+    assert.equal(loginAaron.status, 200);
+    const aaronCookie = (loginAaron.headers.get("set-cookie") || "").split(";")[0];
+
+    const loginCallan = await fetch(`${url}/api/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: "callan", password: "callan" })
+    });
+    assert.equal(loginCallan.status, 200);
+    const callanCookie = (loginCallan.headers.get("set-cookie") || "").split(";")[0];
+
+    const proposed = await fetch(`${url}/api/eden/versions/activate`, {
+      method: "POST",
+      headers: {
+        cookie: callanCookie,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ version: "todo_versioned_banner_v2" })
+    });
+    assert.equal(proposed.status, 202);
+    const proposedBody = await proposed.json();
+    assert.equal(proposedBody.proposal?.targetProcess, "edenVersions.activate");
+
+    const approved = await fetch(`${url}/api/proposals/${encodeURIComponent(proposedBody.proposal.id)}/approve`, {
+      method: "POST",
+      headers: { cookie: aaronCookie }
+    });
+    assert.equal(approved.status, 200);
+
+    const versions = await fetch(`${url}/api/eden/versions`, {
+      headers: { cookie: callanCookie }
+    }).then(response => response.json());
+    assert.equal(versions.versionState.activeVersion, "todo_versioned_banner_v2");
+    assert.equal(world.allWitnesses().some(witness =>
+      witness.process === "widgetVersion.activate"
+      && witness.actor === "aaron"
+      && witness.body?.soul === "todo_versioned_banner"
+      && witness.body?.to === "todo_versioned_banner_v2"
+    ), true);
+  } finally {
+    await close();
+  }
+});
+
+test("eden version rollback proposals can be created without direct authority and approved once by an authorized steward", async () => {
+  const { world, server, url, close } = await startUiDemoServer();
+  try {
+    const loginAaron = await fetch(`${url}/api/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: "aaron", password: "aaron" })
+    });
+    assert.equal(loginAaron.status, 200);
+    const aaronCookie = (loginAaron.headers.get("set-cookie") || "").split(";")[0];
+
+    const activateDraft = await fetch(`${url}/api/eden/versions/activate`, {
+      method: "POST",
+      headers: {
+        cookie: aaronCookie,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({ version: "todo_versioned_banner_v2" })
+    });
+    assert.equal(activateDraft.status, 200);
+
+    const loginCallan = await fetch(`${url}/api/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ username: "callan", password: "callan" })
+    });
+    assert.equal(loginCallan.status, 200);
+    const callanCookie = (loginCallan.headers.get("set-cookie") || "").split(";")[0];
+
+    const proposed = await fetch(`${url}/api/eden/versions/rollback`, {
+      method: "POST",
+      headers: { cookie: callanCookie }
+    });
+    assert.equal(proposed.status, 202);
+    const proposedBody = await proposed.json();
+    assert.equal(proposedBody.proposal?.targetProcess, "edenVersions.rollback");
+
+    const approved = await fetch(`${url}/api/proposals/${encodeURIComponent(proposedBody.proposal.id)}/approve`, {
+      method: "POST",
+      headers: { cookie: aaronCookie }
+    });
+    assert.equal(approved.status, 200);
+
+    const versions = await fetch(`${url}/api/eden/versions`, {
+      headers: { cookie: callanCookie }
+    }).then(response => response.json());
+    assert.equal(versions.versionState.activeVersion, "todo_versioned_banner_v1");
+    assert.equal(world.allWitnesses().some(witness =>
+      witness.process === "widgetVersion.rollback"
+      && witness.actor === "aaron"
+      && witness.body?.soul === "todo_versioned_banner"
+      && witness.body?.to === "todo_versioned_banner_v1"
     ), true);
   } finally {
     await close();
@@ -408,40 +507,31 @@ test("eden capability install proposals can be created without direct authority 
     assert.equal(readBack.capabilityState.authority.canMutate, false);
     assert.equal(readBack.capabilityState.authority.canPropose, true);
 
-    const proposed = await fetch(`${url}/api/proposals`, {
+    const proposed = await fetch(`${url}/api/eden/capability-installs`, {
       method: "POST",
       headers: {
         cookie: callanCookie,
         "content-type": "application/json"
       },
-      body: JSON.stringify({
-        id: "proposal.eden.capability.install.frontend.notes-sidebar",
-        targetProcess: "capability.install",
-        targetKind: "context",
-        targetId: "frontend",
-        bodyJson: JSON.stringify({
-          capability: "notes.sidebar",
-          target: "frontend",
-          targetKind: "context"
-        }),
-        reason: "Install Notes Sidebar on the shared frontend context through proposal review"
-      })
+      body: JSON.stringify({ capability: "notes.sidebar" })
     });
-    assert.equal(proposed.status, 201);
+    assert.equal(proposed.status, 202);
+    const proposedBody = await proposed.json();
+    assert.equal(proposedBody.proposal?.targetProcess, "capability.install");
 
-    const approved = await fetch(`${url}/api/proposals/proposal.eden.capability.install.frontend.notes-sidebar/approve`, {
+    const approved = await fetch(`${url}/api/proposals/${encodeURIComponent(proposedBody.proposal.id)}/approve`, {
       method: "POST",
       headers: { cookie: aaronCookie }
     });
     assert.equal(approved.status, 200);
 
-    const approveAgain = await fetch(`${url}/api/proposals/proposal.eden.capability.install.frontend.notes-sidebar/approve`, {
+    const approveAgain = await fetch(`${url}/api/proposals/${encodeURIComponent(proposedBody.proposal.id)}/approve`, {
       method: "POST",
       headers: { cookie: aaronCookie }
     });
     assert.equal(approveAgain.status, 409);
 
-    const proposal = world.project(moduleProjectors.proposals).find(row => row.id === "proposal.eden.capability.install.frontend.notes-sidebar");
+    const proposal = world.project(moduleProjectors.proposals).find(row => row.id === proposedBody.proposal.id);
     assert.equal(proposal.status, "approved");
     assert.equal(Array.isArray(proposal.executedWitnessIds), true);
     assert.equal(proposal.executedWitnessIds.length > 0, true);

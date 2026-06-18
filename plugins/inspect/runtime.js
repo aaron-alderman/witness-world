@@ -205,13 +205,13 @@ export function createHandlers({
     const soulPart = String(soul || "widget").replace(/[^A-Za-z0-9_.:-]+/g, "-");
     return `proposal.${processPart}.${soulPart}.${world.allWitnesses().length + 1}`;
   };
-  const createWidgetVersionProposal = ({ actor, targetProcess, soul, version = null }) => {
+  const createWidgetVersionProposal = ({ actor, targetProcess, soul, version = null, reason = "" }) => {
     const body = targetProcess === "widgetVersion.activate"
       ? { soul, version }
       : { soul };
-    const reason = targetProcess === "widgetVersion.activate"
+    const proposalReason = reason || (targetProcess === "widgetVersion.activate"
       ? `Request activation of ${version || "a shared widget version"} on ${soul || "the shared widget"}`
-      : `Request rollback of ${soul || "the shared widget"} to its previous version`;
+      : `Request rollback of ${soul || "the shared widget"} to its previous version`);
     return requestBootstrapProposalCreate(world, {
       actor,
       backendHost,
@@ -221,7 +221,7 @@ export function createHandlers({
         targetKind: "widget",
         targetId: soul || null,
         bodyJson: JSON.stringify(body),
-        reason
+        reason: proposalReason
       }
     });
   };
@@ -241,6 +241,7 @@ export function createHandlers({
       }
       const body = await readJson(req);
       const version = typeof body.version === "string" ? body.version : null;
+      const reason = typeof body.reason === "string" ? body.reason.trim() : "";
       const auth = ensureTargetAuthority(requestActor, params.soul || "");
       if (!auth.ok) {
         if (auth.status === 403) {
@@ -248,7 +249,8 @@ export function createHandlers({
             actor: requestActor,
             targetProcess: "widgetVersion.activate",
             soul: params.soul || "",
-            version
+            version,
+            reason
           });
           if (!proposal.ok) {
             sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
@@ -288,19 +290,22 @@ export function createHandlers({
       });
     },
 
-    "widgetVersions.rollback": async ({ res, params, requestActor }) => {
+    "widgetVersions.rollback": async ({ req, res, params, requestActor }) => {
       if (!requestActor) {
         world.emit({ process: "widgetVersion.rollback.failed", actor: backendHost, claims: [], body: { soul: params.soul || "", reason: "no actor" } });
         sendJson(res, 401, { error: "choose a perspective first" });
         return;
       }
+      const body = await readJson(req);
+      const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
       const auth = ensureTargetAuthority(requestActor, params.soul || "");
       if (!auth.ok) {
         if (auth.status === 403) {
           const proposal = createWidgetVersionProposal({
             actor: requestActor,
             targetProcess: "widgetVersion.rollback",
-            soul: params.soul || ""
+            soul: params.soul || "",
+            reason
           });
           if (!proposal.ok) {
             sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });

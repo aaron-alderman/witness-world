@@ -23,6 +23,7 @@ import {
   explainContextualTargetVisibility,
   classifyCanonicalIdPolicy,
   CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES,
+  resolveCoveredContextualRef,
   resolveContextualRef,
   resolveContextualName,
   moduleProjectors
@@ -78,7 +79,10 @@ test("server runner serves a route that points at a frontend artifact", () => {
     storage: { todoProjection: "todos.json" },
     runtimeConfig: null,
     allowActorHeader: false,
-    context: null
+    hosts: null,
+    default: false,
+    context: null,
+    values: null
   }]);
   assert.deepEqual(world.project(moduleProjectors.servedRoutes), [{
     id: "root_route",
@@ -355,4 +359,28 @@ test("contextual ref resolution classifies canonical-id compatibility and enforc
   });
   assert.equal(blockedLegacy.ok, false);
   assert.match(blockedLegacy.error, /legacy-only-path/);
+
+  createThing(world, { actor: "system", id: "page.hidden" });
+  world.emit({
+    process: "scope.page.hidden",
+    actor: "system",
+    claims: [{ op: "relation", from: "page.hidden", rel: "inContext", to: "ctx.hidden" }],
+    body: {}
+  });
+
+  const coveredImported = resolveCoveredContextualRef(world.allWitnesses(), {
+    context: "ctx.target",
+    id: "page.imported",
+    label: "proposal target"
+  });
+  assert.equal(coveredImported.ok, true);
+  assert.equal(coveredImported.canonicalIdPolicyClass, "imported-target-reference");
+
+  const blockedHidden = resolveCoveredContextualRef(world.allWitnesses(), {
+    context: "ctx.target",
+    id: "page.hidden",
+    label: "proposal target"
+  });
+  assert.equal(blockedHidden.ok, false);
+  assert.match(blockedHidden.error, /not visible in authoring context ctx.target/);
 });

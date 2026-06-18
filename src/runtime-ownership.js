@@ -20,6 +20,23 @@ function ownerChainEntry(entry = {}) {
   );
 }
 
+function describeMountedRouteChainEntry(route = {}) {
+  const routeId = trimString(route?.id);
+  const method = trimString(route?.method)?.toUpperCase();
+  const path = trimString(route?.path);
+  const serves = trimString(route?.serves);
+  return ownerChainEntry({
+    class: "route",
+    routeId,
+    method,
+    path,
+    serves,
+    note: routeId
+      ? `Visible behavior enters through mounted route ${routeId}.`
+      : "Visible behavior enters through a mounted runtime route."
+  });
+}
+
 export function normalizeRuntimeOwnerClass(value) {
   const normalized = trimString(value);
   return normalized && OWNER_CLASS_SET.has(normalized) ? normalized : null;
@@ -231,6 +248,7 @@ export function describeMountedRouteOwnership({
 } = {}) {
   const handlerId = trimString(route?.handler);
   const handlerMetadata = handlerId ? (handlerMetadataById?.[handlerId] ?? {}) : {};
+  const mountedRouteChainEntry = describeMountedRouteChainEntry(route);
   const routeOwnership = extractRuntimeOwnershipFields(
     describeHandlerOwnership({
       handlerId,
@@ -244,12 +262,21 @@ export function describeMountedRouteOwnership({
   );
   const backendProgramSoul = trimString(route?.params?.backendProgramSoul);
   if (routeOwnership.ownerClass === "backend-program") {
+    const ownerChain = cloneRuntimeOwnerChain(routeOwnership.ownerChain) ?? [];
+    if (backendProgramSoul && ownerChain[0]?.class === "backend-program") {
+      ownerChain[0] = ownerChainEntry({
+        ...ownerChain[0],
+        backendProgramSoul,
+        note: `Authored backend program ${backendProgramSoul} is selected by mounted route params.`
+      });
+    }
     return {
       ...routeOwnership,
       ownerBackendProgramSoul: backendProgramSoul ?? routeOwnership.ownerBackendProgramSoul,
       ownerNote: backendProgramSoul
         ? `Mounted route dispatches to authored backend program ${backendProgramSoul}.`
-        : routeOwnership.ownerNote
+        : routeOwnership.ownerNote,
+      ownerChain: [mountedRouteChainEntry, ...ownerChain]
     };
   }
   const handlerSetIds = findHandlerSetIdsForHandler(handlerSetDefinitions, handlerId);
@@ -263,10 +290,19 @@ export function describeMountedRouteOwnership({
     return {
       ...extractRuntimeOwnershipFields(handlerSetOwnership),
       ownerNote: `Mounted route dispatches through handler set ${primaryHandlerSetId}.`,
-      ownerChain: cloneRuntimeOwnerChain(handlerSetOwnership.ownerChain),
+      ownerChain: [
+        mountedRouteChainEntry,
+        ...(cloneRuntimeOwnerChain(handlerSetOwnership.ownerChain) ?? [])
+      ],
       ownerHandlerId: handlerId ?? undefined,
       ownerHandlerSetIds: handlerSetIds
     };
   }
-  return routeOwnership;
+  return {
+    ...routeOwnership,
+    ownerChain: [
+      mountedRouteChainEntry,
+      ...(cloneRuntimeOwnerChain(routeOwnership.ownerChain) ?? [])
+    ]
+  };
 }

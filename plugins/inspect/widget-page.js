@@ -460,6 +460,14 @@ function renderClientEngine(program) {
   };
   const selectedSurfaceWidgetNode = () => state.surfaceInspectorGraphById?.[selectedSurfaceWidgetId()] || null;
   const selectedSurfaceWidgetAuthored = () => state.surfaceInspectorWidgetsById?.[selectedSurfaceWidgetId()] || null;
+  const surfaceInspectorGovernanceSummary = route => {
+    if (!route || !route.governanceMode) return '';
+    const sharedAuthority = route.sharedAuthorityPath === true ? 'shared authority path' : 'non-shared authority path';
+    const authorityMechanism = route.authorityMechanism ? (' via ' + route.authorityMechanism) : '';
+    const workflowRole = route.workflowRole ? (' (' + route.workflowRole + ')') : '';
+    const notes = route.governanceNotes ? (' ' + String(route.governanceNotes)) : '';
+    return ('Governance is ' + route.governanceMode + authorityMechanism + ' on the ' + sharedAuthority + workflowRole + '.' + notes).trim();
+  };
   const selectedSurfaceWidgetEditAuthority = () => {
     const widget = selectedSurfaceWidgetAuthored();
     if (!widget) return { ok: false, reason: 'This selected element is not currently backed by a directly editable authored widget row.' };
@@ -837,8 +845,11 @@ function renderClientEngine(program) {
         unavailableReason: 'Runtime diagnostics do not currently expose mounted route ' + routeId + '.'
       };
     }
+    const governanceSummary = surfaceInspectorGovernanceSummary(mountedRoute);
     return {
-      summary: mountedRoute.ownerNote || ('Selected widget inherits runtime behavior from mounted route ' + routeId + '.'),
+      summary: [mountedRoute.ownerNote || ('Selected widget inherits runtime behavior from mounted route ' + routeId + '.'), governanceSummary]
+        .filter(Boolean)
+        .join(' '),
       rows: [
         ['Runtime Profile', diagnostics.activeProfile || ''],
         ['Server Runner', diagnostics.serverRunner?.id || mountedRoute.serverRunner || ''],
@@ -855,7 +866,12 @@ function renderClientEngine(program) {
         ['Bundle', mountedRoute.ownerBundleId || ''],
         ['Handler Set', mountedRoute.ownerHandlerSetId || (Array.isArray(mountedRoute.ownerHandlerSetIds) ? mountedRoute.ownerHandlerSetIds.join(', ') : '')],
         ['Backend Program', mountedRoute.ownerBackendProgramSoul || ''],
-        ['Serves', mountedRoute.serves || '']
+        ['Serves', mountedRoute.serves || ''],
+        ['Operation Semantics', mountedRoute.operationSemantics || ''],
+        ['Governance Mode', mountedRoute.governanceMode || ''],
+        ['Authority Mechanism', mountedRoute.authorityMechanism || ''],
+        ['Shared Authority Path', typeof mountedRoute.sharedAuthorityPath === 'boolean' ? (mountedRoute.sharedAuthorityPath ? 'yes' : 'no') : ''],
+        ['Workflow Role', mountedRoute.workflowRole || '']
       ].filter(([, value]) => value),
       chain: Array.isArray(mountedRoute.ownerChain) ? mountedRoute.ownerChain : [],
       unavailableReason: ''
@@ -921,59 +937,33 @@ function renderClientEngine(program) {
     const body = await response.json().catch(() => ({}));
     return { ok: response.ok, status: response.status, body };
   };
-  const proposalIdForSurfaceWidget = widgetId => {
-    const base = String(widgetId || 'widget').replace(/[^A-Za-z0-9_.:-]+/g, '-');
-    const suffix = typeof crypto?.randomUUID === 'function'
-      ? crypto.randomUUID().replace(/[^A-Za-z0-9_.:-]+/g, '-')
-      : String(Date.now());
-    return 'proposal.widget.update.' + base + '.' + suffix;
-  };
-  const proposalIdForSurfaceWidgetVersion = (processName, soul) => {
-    const processPart = String(processName || 'widgetVersion.action').replace(/[^A-Za-z0-9_.:-]+/g, '-');
-    const soulPart = String(soul || 'widget').replace(/[^A-Za-z0-9_.:-]+/g, '-');
-    const suffix = typeof crypto?.randomUUID === 'function'
-      ? crypto.randomUUID().replace(/[^A-Za-z0-9_.:-]+/g, '-')
-      : String(Date.now());
-    return 'proposal.' + processPart + '.' + soulPart + '.' + suffix;
-  };
   const proposeSurfaceWidgetPatch = async ({ id, patch, reason = '' }) => {
-    const url = '/api/proposals';
-    const proposalId = proposalIdForSurfaceWidget(id);
+    const url = '/api/widgets/' + encodeURIComponent(id);
     const response = await fetch(url, requestOptions({
-      method: 'POST',
+      method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        id: proposalId,
-        targetProcess: 'widget.update',
-        targetKind: 'widget',
-        targetId: id,
-        bodyJson: JSON.stringify({ id, ...patch }),
+        ...(patch || {}),
         reason: String(reason || '').trim()
       })
     }, { url }));
     const body = await response.json().catch(() => ({}));
-    return { ok: response.ok, status: response.status, body, proposalId };
+    return { ok: response.ok, status: response.status, body };
   };
   const proposeSurfaceWidgetVersionAction = async ({ targetProcess, soul, version = '', reason = '' }) => {
-    const url = '/api/proposals';
-    const proposalId = proposalIdForSurfaceWidgetVersion(targetProcess, soul);
-    const proposalBody = targetProcess === 'widgetVersion.activate'
-      ? { soul, version }
-      : { soul };
+    const url = targetProcess === 'widgetVersion.rollback'
+      ? '/api/widget-versions/' + encodeURIComponent(soul) + '/rollback'
+      : '/api/widget-versions/' + encodeURIComponent(soul) + '/activate';
+    const bodyPayload = targetProcess === 'widgetVersion.activate'
+      ? { version, reason: String(reason || '').trim() }
+      : { reason: String(reason || '').trim() };
     const response = await fetch(url, requestOptions({
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        id: proposalId,
-        targetProcess,
-        targetKind: 'widget',
-        targetId: soul,
-        bodyJson: JSON.stringify(proposalBody),
-        reason: String(reason || '').trim()
-      })
+      body: JSON.stringify(bodyPayload)
     }, { url }));
     const body = await response.json().catch(() => ({}));
-    return { ok: response.ok, status: response.status, body, proposalId };
+    return { ok: response.ok, status: response.status, body };
   };
   const renderSurfaceInspectorEditor = () => renderSurfaceInspectorEditorView({
     widgetId: selectedSurfaceWidgetId(),
@@ -2077,12 +2067,13 @@ function renderClientEngine(program) {
           route?.ownerPluginId || '',
           route?.handler || surfaceInspectorNodeValueString(routeNode, 'handler')
         ].filter(Boolean).join(' / ');
+        const governanceSummary = surfaceInspectorGovernanceSummary(route);
         return {
           label: (method + ' ' + (url || routeLabel || step.op)).trim(),
           selectTarget: authoredBackendProgramSoul || route?.id || routeNode?.id || '',
           selectLabel: authoredBackendProgramSoul ? 'Show Backend Program' : ((route?.id || routeNode?.id) ? 'Show Backend Route' : ''),
           summary: (route || routeNode)
-            ? ('Lowers through ' + routeLabel + ' with owner ' + routeOwner + '.')
+            ? ('Lowers through ' + routeLabel + ' with owner ' + routeOwner + '.' + (governanceSummary ? (' ' + governanceSummary) : ''))
             : ('Authored step ' + step.op + ' targets ' + (url || 'a runtime route') + '.')
         };
       });

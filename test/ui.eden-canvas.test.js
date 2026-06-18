@@ -549,6 +549,48 @@ test("eden versions surface exposes explicit proposal actions for read-only acto
   }
 });
 
+test("eden versions surface proposes open-draft through eden version proposal targets for read-only actors", async () => {
+  const { world, server, url, close: closeServer } = await startUiDemoServer();
+  const { page, runtime, close: closeBrowser } = await launchBrowser();
+
+  try {
+    await page.goto(`${url}/eden-canvas`);
+    await page.waitForSelector('#eden-stage');
+    for (let i = 0; i < 10; i += 1) {
+      await page.locator('#eden-stage').hover();
+      await page.mouse.wheel(0, 480);
+    }
+    await page.waitForFunction(() => !document.querySelector('[data-eden-surface="eden.surface.versions"]')?.hidden);
+    await page.fill('[data-eden-version-login-form] input[name="username"]', 'callan');
+    await page.fill('[data-eden-version-login-form] input[name="password"]', 'callan');
+    await page.locator('[data-eden-version-login-form]').evaluate(form => form.requestSubmit());
+
+    await page.waitForFunction(() => {
+      const session = document.querySelector('[data-eden-version-session]');
+      const button = document.querySelector('[data-eden-version-open-draft]');
+      return Boolean(
+        session?.textContent?.includes('create real proposals for the shared board')
+        && button?.textContent?.includes('Propose Draft In Board')
+      );
+    });
+
+    await page.click('[data-eden-version-open-draft]');
+    await page.waitForFunction(() => document.body.textContent.includes('Proposed opening the draft version in the board as proposal.'));
+
+    const proposal = world.project(moduleProjectors.proposals).find(row =>
+      row.targetProcess === 'edenVersions.activate'
+      && row.targetId === 'todo_versioned_banner'
+      && row.status === 'open'
+    );
+    assert.ok(proposal?.id);
+
+    await expectNoRuntimeErrors(runtime);
+  } finally {
+    await closeBrowser();
+    await closeServer();
+  }
+});
+
 test("eden capability install surface exposes explicit proposal actions for read-only actors and can refresh after approval", async () => {
   const { world, server, url, close: closeServer } = await startUiDemoServer();
   const { page, runtime, close: closeBrowser } = await launchBrowser();

@@ -468,6 +468,7 @@ const PROCESS_SPECS = [
       { name: "configJson", accepts: "json.text", required: false },
       { name: "internalsJson", accepts: "json.text", required: false },
       { name: "authorityJson", accepts: "json.text", required: false },
+      { name: "compatibilityJson", accepts: "json.text", required: false },
       { name: "placementJson", accepts: "json.text", required: false },
       { name: "context", accepts: "context.id", required: false }
     ],

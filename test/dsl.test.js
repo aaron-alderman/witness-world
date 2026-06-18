@@ -632,7 +632,7 @@ test("context composition DSL sections project bindings and lower contextual ref
   const world = createWorld();
   createThing(world, { actor: "system", id: "backendHost" });
   createThing(world, { actor: "system", id: "frontendHost" });
-  applyWitnessToml(world, `
+  applyWitnessDocs(world, parseWitnessToml(`
 [[context]]
 actor = "system"
 id = "ctx.source"
@@ -771,7 +771,7 @@ actor = "system"
 context = "ctx.target"
 serverRunnerRef = "runnerNode"
 routeRef = "landingRoute"
-`);
+`).map(doc => ({ ...doc, file: "C:/demo/context-composition-covered.wtoml" })));
 
   const program = frontendProgramsProjection(world.allWitnesses()).find(row => row.id === "landing_program");
   assert.ok(program);
@@ -790,13 +790,49 @@ routeRef = "landingRoute"
   assert.equal(world.project(moduleProjectors.servedRoutes).some(row => row.id === "landing_route" && row.serverRunner === "demo_server"), true);
   assert.equal(world.project(moduleProjectors.contextScopes).some(row => row.context === "ctx.target" && row.name === "landingPage" && row.target === "page_root" && row.sourceKind === "import"), true);
   assert.equal(world.project(moduleProjectors.contextScopes).some(row => row.context === "ctx.target" && row.name === "homePage"), false);
+  const programAnnotation = world.allWitnesses().find(w =>
+    w.process === "dsl.source.annotate"
+    && w.body?.section === "frontendProgram"
+    && w.body?.target === "landing_program"
+  );
+  assert.deepEqual(programAnnotation?.body?.refResolutions, [{
+    idField: "rootWidget",
+    refField: "rootWidgetRef",
+    source: "contextual",
+    target: "page_root",
+    canonicalIdPolicyClass: null,
+    targetContext: null
+  }]);
+  const runnerAnnotation = world.allWitnesses().find(w =>
+    w.process === "dsl.source.annotate"
+    && w.body?.section === "serverRunner"
+    && w.body?.target === "demo_server"
+  );
+  assert.deepEqual(runnerAnnotation?.body?.refResolutions, [
+    {
+      idField: "backendHost",
+      refField: "backendHostRef",
+      source: "contextual",
+      target: "backendHost",
+      canonicalIdPolicyClass: null,
+      targetContext: null
+    },
+    {
+      idField: "frontendHost",
+      refField: "frontendHostRef",
+      source: "contextual",
+      target: "frontendHost",
+      canonicalIdPolicyClass: null,
+      targetContext: null
+    }
+  ]);
 });
 
 test("context composition DSL lowers capability install target refs and rejects hidden canonical targets", () => {
   const world = createWorld();
   createThing(world, { actor: "system", id: "backendHost" });
   createThing(world, { actor: "system", id: "frontendHost" });
-  applyWitnessToml(world, `
+  applyWitnessDocs(world, parseWitnessToml(`
 [[context]]
 actor = "system"
 id = "ctx.source"
@@ -870,7 +906,7 @@ capability = "notes.sidebar"
 context = "ctx.target"
 targetRef = "importedRunner"
 targetKind = "serverRunner"
-`);
+`).map(doc => ({ ...doc, file: "C:/demo/capability-install-context.wtoml" })));
 
   const installs = world.project(moduleProjectors.capabilityInstalls);
   assert.equal(installs.some(row =>
@@ -893,12 +929,25 @@ targetKind = "serverRunner"
     && w.body?.capability === "notes.sidebar"
     && w.body?.target === "source_server"
   ), true);
+  const capabilityInstallAnnotation = world.allWitnesses().find(w =>
+    w.process === "dsl.source.annotate"
+    && w.body?.section === "capabilityInstall"
+    && w.body?.target === "notes.sidebar"
+  );
+  assert.deepEqual(capabilityInstallAnnotation?.body?.refResolutions, [{
+    idField: "target",
+    refField: "targetRef",
+    source: "contextual",
+    target: "local_server",
+    canonicalIdPolicyClass: null,
+    targetContext: null
+  }]);
 
   const blockedWorld = createWorld();
   createThing(blockedWorld, { actor: "system", id: "backendHost" });
   createThing(blockedWorld, { actor: "system", id: "frontendHost" });
   assert.throws(() => {
-    applyWitnessToml(blockedWorld, `
+    applyWitnessDocs(blockedWorld, parseWitnessToml(`
 [[context]]
 actor = "system"
 id = "ctx.source"
@@ -926,7 +975,7 @@ capability = "notes.sidebar"
 context = "ctx.target"
 target = "source_server"
 targetKind = "serverRunner"
-`);
+`).map(doc => ({ ...doc, file: "C:/demo/capability-install-blocked.wtoml" })));
   }, /capability install target id targets source_server in context ctx\.source and is not visible in authoring context ctx\.target/);
 });
 
@@ -934,7 +983,7 @@ test("context composition DSL lowers stewardship and proposal target refs and re
   const world = createWorld();
   createThing(world, { actor: "system", id: "backendHost" });
   createThing(world, { actor: "system", id: "frontendHost" });
-  applyWitnessToml(world, `
+  applyWitnessDocs(world, parseWitnessToml(`
 [[context]]
 actor = "system"
 id = "ctx.source"
@@ -985,7 +1034,7 @@ context = "ctx.target"
 targetIdRef = "importedRunner"
 body = {}
 reason = "Govern the imported runner"
-`);
+`).map(doc => ({ ...doc, file: "C:/demo/stewardship-proposal-context.wtoml" })));
 
   assert.equal(world.project(moduleProjectors.stewardships).some(row =>
     row.steward === "callan"
@@ -996,12 +1045,38 @@ reason = "Govern the imported runner"
     row.id === "proposal.runtime-plugin.source"
     && row.targetId === "source_server"
   ), true);
+  const stewardshipAnnotation = world.allWitnesses().find(w =>
+    w.process === "dsl.source.annotate"
+    && w.body?.section === "stewardship"
+    && w.body?.target === "source_server"
+  );
+  assert.deepEqual(stewardshipAnnotation?.body?.refResolutions, [{
+    idField: "target",
+    refField: "targetRef",
+    source: "contextual",
+    target: "source_server",
+    canonicalIdPolicyClass: null,
+    targetContext: null
+  }]);
+  const proposalAnnotation = world.allWitnesses().find(w =>
+    w.process === "dsl.source.annotate"
+    && w.body?.section === "proposal"
+    && w.body?.target === "proposal.runtime-plugin.source"
+  );
+  assert.deepEqual(proposalAnnotation?.body?.refResolutions, [{
+    idField: "targetId",
+    refField: "targetIdRef",
+    source: "contextual",
+    target: "source_server",
+    canonicalIdPolicyClass: null,
+    targetContext: null
+  }]);
 
   const blockedStewardship = createWorld();
   createThing(blockedStewardship, { actor: "system", id: "backendHost" });
   createThing(blockedStewardship, { actor: "system", id: "frontendHost" });
   assert.throws(() => {
-    applyWitnessToml(blockedStewardship, `
+    applyWitnessDocs(blockedStewardship, parseWitnessToml(`
 [[context]]
 actor = "system"
 id = "ctx.source"
@@ -1023,14 +1098,14 @@ steward = "callan"
 context = "ctx.target"
 target = "source_server"
 targetKind = "serverRunner"
-`);
+`).map(doc => ({ ...doc, file: "C:/demo/stewardship-blocked.wtoml" })));
   }, /stewardship target id targets source_server in context ctx\.source and is not visible in authoring context ctx\.target/);
 
   const blockedProposal = createWorld();
   createThing(blockedProposal, { actor: "system", id: "backendHost" });
   createThing(blockedProposal, { actor: "system", id: "frontendHost" });
   assert.throws(() => {
-    applyWitnessToml(blockedProposal, `
+    applyWitnessDocs(blockedProposal, parseWitnessToml(`
 [[context]]
 actor = "system"
 id = "ctx.source"
@@ -1055,7 +1130,7 @@ context = "ctx.target"
 targetId = "source_server"
 body = {}
 reason = "Hidden canonical target should fail"
-`);
+`).map(doc => ({ ...doc, file: "C:/demo/proposal-blocked.wtoml" })));
   }, /proposal target id targets source_server in context ctx\.source and is not visible in authoring context ctx\.target/);
 });
 

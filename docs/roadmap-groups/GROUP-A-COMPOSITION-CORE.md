@@ -94,6 +94,10 @@ Bring the remaining app-specific and operating-surface mutations under one share
 
 Decide and implement the authored unit for reusable composition.
 
+Reference design:
+
+- [docs/PACKAGE-PLUGIN-AUTHORSHIP-MODEL.md](../PACKAGE-PLUGIN-AUTHORSHIP-MODEL.md)
+
 Candidate direction suggested by current discussion:
 
 - plugin authorship happens through MCP
@@ -134,6 +138,12 @@ Done when:
 - every bridge is reachable in diagnostics or an inspector surface
 - no new bridge lands without documentation
 
+Current proof:
+
+- `src/compatibility-bridges.js` now remains the source-of-truth ledger for known composition shortcuts, while `plugins/bootstrap/bootstrap-read-models.js` publishes projected `compatibilityBridges` rows directly in bootstrap state instead of leaving the inventory trapped in internal diagnostics only
+- `plugins/bootstrap/bootstrap-live-state.js` now exposes `compatibilityBridgeRows()` and `plugins/mcp/mcp-tools.js` now advertises explicit `platform.read(view="bridges")` and `platform.read(view="governance")` surfaces, so operator and MCP-facing reads can inspect bridge policy status without reaching into hidden JS seams
+- `plugins/bootstrap/bootstrap-live-state.test.js`, `test/bootstrap-host.test.js`, and `plugins/mcp/mcp.test.js` prove the bridge ledger is present in live bootstrap readers, bootstrap HTTP state, and the constrained MCP read catalog end to end
+
 ### Stage A1. Finish Capability Lifecycle Semantics
 
 Objective:
@@ -154,6 +164,13 @@ Acceptance:
 - install attempts can fail with specific structured reasons
 - review surfaces show why a capability can or cannot land
 - tests cover valid, blocked, incompatible, and replaceable installs
+
+Current proof:
+
+- `src/capability-compatibility.js` now defines a first-class capability compatibility contract with explicit `minimumRuntimeProfile`, `authorityAssumptions`, `dependencyConstraints`, and `migrationNotes` fields plus a shared evaluator that returns machine-readable `compatible`, `blocked`, and `incompatible` reason codes instead of leaving installability policy split across ad hoc route logic
+- `src/modules.js`, `src/desire/apply.js`, `src/desire/wtoml.js`, and `src/desire/normalize.js` now preserve authored capability compatibility metadata through the witnessed capability definition path, so WTOML-backed capability nouns can carry the same installability contract as direct authoring requests
+- `plugins/capability-authoring/capability-processes.js` now routes capability install gating through the shared evaluator and emits structured compatibility payloads on failure, while `src/runtime-builtins.js` exposes `compatibilityJson` on `capability.define` so the typed authoring seam can carry the authored contract directly
+- `test/capability-compatibility.test.js`, `plugins/capability-authoring/capability-authoring.test.js`, and `test/dsl.test.js` prove compatible, blocked, and incompatible evaluator outcomes, persisted compatibility contracts on authored capability definitions, structured install failure reasons, and WTOML preservation of the new capability compatibility fields end to end
 
 #### A1.2 Capability update and replacement flow
 
@@ -203,6 +220,13 @@ Acceptance:
 - foreign targets require explicit visibility
 - tests cover local, imported, hidden, and ambiguous names
 
+Current proof:
+
+- `plugins/authoring-core/authoring-core-processes.js`, `plugins/capability-authoring/capability-processes.js`, `plugins/server-runner-authoring/server-runner-processes.js`, and `plugins/program-authoring/program-processes.js` already lower covered authoring refs through the shared contextual visibility lane, and `plugins/authoring-core/authoring-core.test.js`, `plugins/capability-authoring/capability-authoring.test.js`, `plugins/server-runner-authoring/server-runner-authoring.test.js`, and `plugins/program-authoring/program-authoring.test.js` prove imported, hidden, and ambiguous behavior across package, capability, server-runner, route/serve, widget, and frontend/backend program authoring routes
+- `src/desire/apply.js` now brings the native WTOML / DESIRE apply path onto the same explicit covered-ref contract for `frontendProgram`, `serverRunner`, `capabilityInstall`, `capabilityRemove`, `stewardship`, and proposal target refs, instead of leaving those authored nouns on an older generic resolver lane
+- `dsl.source.annotate` witnesses now carry first-class `refResolutions` evidence for those covered native declarations, so the authored source record can explain which contextual or canonical lane resolved a dependency instead of hiding that decision inside JS helpers
+- `test/dsl.test.js` and `test/modules.test.js` prove the native apply path now lowers imported refs for root widgets, backend/frontend hosts, capability targets, stewardship targets, and proposal targets while still rejecting hidden foreign canonical targets and surfacing explicit canonical-id policy classes
+
 #### A2.2 Context read models become explanation surfaces
 
 Implementation:
@@ -231,6 +255,15 @@ Acceptance:
 - policy is explicit in docs and validation
 - compatibility sugar stops expanding accidentally
 
+Current proof:
+
+- canonical-id compatibility classes are now enforced through shared covered-target helpers for stewardship and capability mutation seams, with `plugins/authoring-core/authoring-core.test.js` and `plugins/capability-authoring/capability-authoring.test.js` proving same-context, imported-visible, legacy-unscoped, and hidden-foreign target behavior instead of letting those routes inherit an implicit “all canonical ids are fine” default
+
+- package authorship now uses the same contextual-ref lane for `packageRevision`, `packageRevision.publish`, `packagePatch`, `packageNamespace`, `packageDependency`, and `packageTransformer` references in `plugins/authoring-core/authoring-core-processes.js`, `plugins/authoring-core/authoring-core-handlers.js`, and `plugins/authoring-core/authoring-core-proposal-targets.js`, with `plugins/authoring-core/authoring-core.test.js` covering local, imported, hidden, and ambiguous package-noun reference behavior plus pre-authority lowering for handler and proposal execution paths
+
+- contextual explanation rows and answers are now exposed through first-class read seams in `src/context-naming-world.js`, `plugins/mcp/mcp-tools.js`, and `plugins/platform/platform-model.js`, with `plugins/mcp/mcp.test.js` and `plugins/platform/platform.test.js` proving product-facing `contextNaming` reads can show bindings, imports, conflicts, why a name resolves ambiguously, and why a target is hidden
+- canonical-id compatibility classes are now explicit product state instead of code-only constants: `plugins/bootstrap/bootstrap-read-models.js` publishes the allowed class list in bootstrap state, `plugins/bootstrap/bootstrap-live-state.js` exposes `canonicalIdPolicyClasses()` and `classifyCanonicalIdPolicy(...)`, and `plugins/bootstrap/bootstrap-live-state.test.js` plus `test/bootstrap-host.test.js` prove same-context, imported, legacy, and hidden cases are inspectable without reading validator internals
+
 ### Stage A3. Unify Authority and Proposal Coverage
 
 Objective:
@@ -250,6 +283,12 @@ Acceptance:
 
 - no mutating route is uncategorized
 - shared helpers own the evaluation path
+
+Current proof:
+
+- `src/runtime-governance.js` now remains the shared source of truth for mutating-route governance classes, and `test/runtime-governance.test.js` proves every potentially mutating runtime handler across bundled and plugin routes is either classified as `direct-authority`, `proposal-fallback`, or `operator-only`, with missing annotations failing the inventory check
+- `src/runtime-bundles.js`, `plugins/platform/platform-model.js`, and `plugins/mcp/mcp-tools.js` now project that same ledger into runtime diagnostics plus first-class `platform.read(view="governance")` inspection, so route and proposal-target coverage are inspectable without reverse-engineering handler code
+- `plugins/bootstrap/bootstrap-read-models.js` and `plugins/bootstrap/bootstrap-live-state.js` now publish the same `governanceRoutes` and `proposalTargetGovernance` rows into bootstrap state and browser-side live readers, with `plugins/bootstrap/bootstrap-read-models.test.js`, `plugins/bootstrap/bootstrap-live-state.test.js`, and `test/bootstrap-host.test.js` proving operator-facing bootstrap surfaces can inspect the shared governance inventory directly
 
 #### A3.2 Proposal support for remaining high-value surfaces
 
@@ -276,6 +315,11 @@ Acceptance:
 
 - each mutable surface declares whether it is shared, personal, or mixed
 - witness visibility and authority rules match that declaration
+
+Current proof:
+
+- `src/runtime-semantics.js` now publishes a first-class mutable-surface semantics ledger that classifies runtime session state, demo private notes, Eden page theme state, shared demo todos, and canvas perspectives across `personal`, `shared`, and `mixed` sharing classes with explicit `actor-scoped`, `perspective-scoped`, and `context-shared` state classes
+- `plugins/platform/platform-model.js` and `plugins/mcp/mcp-tools.js` now expose that contract directly through `platform.read(view="semantics")`, and `plugins/platform/platform.test.js`, `plugins/mcp/mcp.test.js`, and `test/runtime-semantics.test.js` prove the shared read surface carries the semantics inventory instead of leaving those authority and visibility rules implicit inside app-specific projections
 
 ### Stage A4. Plugin or Package Authorship Model
 
@@ -306,6 +350,10 @@ Acceptance:
 
 - the model can represent a reusable unit without assuming an external toolchain first
 
+Current proof:
+
+- first-class world nouns now exist on the shared witnessed path in `src/modules.js` and `src/desire/apply.js`, with `test/package-authorship-world.test.js` covering authored `package`, `packageRevision`, `packagePatch`, `packageNamespace`, and `packageDependency` WTOML declarations plus projection into canonical bundle serialization inputs
+
 #### A4.2 Canonical bundle format
 
 Implementation:
@@ -320,6 +368,10 @@ Acceptance:
 - two identical authored revisions serialize identically
 - diff and patch review are deterministic
 
+Current proof:
+
+- a first prototype now exists in `src/package-authorship.js`, with `test/package-authorship.test.js` covering canonical `package` / `packageRevision` / `packagePatch` WTOML serialization, content-addressed patch ids, normalized bundle paths, deterministic file ordering, revision-scoped `packageNamespace` and `packageDependency` bundle entries, and stable bundle hashing across reordered inputs
+
 #### A4.3 MCP-mediated authorship flow
 
 Implementation:
@@ -332,6 +384,13 @@ Acceptance:
 
 - plugin authorship can happen through the explicit MCP seam
 - MCP is not bypassing the normal world model
+
+Current proof:
+
+- proposal-backed package authoring now runs on the shared authority lane in `plugins/authoring-core/authoring-core-processes.js`, `plugins/authoring-core/authoring-core-handlers.js`, `plugins/authoring-core/authoring-core-proposal-targets.js`, and `plugins/proposals/proposal-executor.js`, with `plugins/authoring-core/authoring-core.test.js` covering proposal fallback and approved execution for `package`, `packageRevision`, `packageRevision.publish`, `packagePatch`, `packageNamespace`, and `packageDependency`
+- the constrained MCP seam now exposes those authored package nouns directly through `plugins/mcp/mcp-tools.js` `authoring.write` actions for `package.create`, `packageRevision.create`, `packageRevision.publish`, `packagePatch.create`, `packageNamespace.create`, and `packageDependency.create`, with `plugins/mcp/mcp.test.js` covering package-aware scope extraction and routing to the shared package handlers
+- the constrained MCP seam now also exposes `package.bundle` preview for authored revisions, backed by `src/package-authorship-world.js` projection of live world state into canonical bundle output, with `plugins/mcp/mcp.test.js` covering inspectable preview of emitted `package`, `packageRevision`, `packagePatch`, `packageNamespace`, and `packageDependency` documents without bypassing the normal witnessed model
+- runner-scoped versus profile-scoped runtime composition is now explicitly covered in `test/runtime-multihost-host.test.js`, proving authored plugin bundle endpoints stay mounted only on the host that installs them while profile-activated bundle endpoints like `/_bootstrap` remain mounted on every host in the same multi-runner process
 
 ### Stage A5. Namespace and Merge Convergence
 
@@ -353,6 +412,14 @@ Acceptance:
 - conflict does not require immediate destructive resolution
 - runtime and review surfaces can show branch A and branch B
 
+Current proof:
+
+- `src/modules.js` now projects first-class `packageCoexistence` and `packageCoexistenceIndex` rows from authored `package`, `packageRevision`, and `packageNamespace` nouns, so divergent revisions stay inspectable instead of collapsing into fake merge state
+- `plugins/platform/platform-model.js` now also lifts `packagePatch`, `packageDependency`, and `packageConvergence` into explicit platform nodes and relationships, while `plugins/platform/platform-page.js` routes bridge, governance, semantics, and package authorship ids toward their dedicated platform views instead of flattening them back into generic model links
+- `plugins/platform/platform-model.js` now models package coexistence, revision, and namespace nodes and exposes a dedicated `packageCoexistence` review view for branch A and branch B inspection
+- `plugins/mcp/mcp-tools.js` now exposes the same authored coexistence projection through `world.read(view="packageCoexistence")` and `platform.read(view="packageCoexistence")`, keeping runtime-adjacent and review-adjacent reads on the same witnessed truth
+- `test/package-authorship-world.test.js`, `plugins/platform/platform.test.js`, `plugins/platform/platform-package-nouns.test.js`, and `plugins/mcp/mcp.test.js` cover divergent revisions selected by separate namespace bindings and assert the surfaced coexistence, convergence, and page-routed package nouns remain inspectable end to end
+
 #### A5.2 Transformer-based convergence
 
 Implementation:
@@ -365,6 +432,14 @@ Acceptance:
 
 - convergence work is explicit and inspectable
 - the system can explain when glue is still required
+
+Current proof:
+
+- `src/modules.js` now defines first-class `packageTransformer` nouns plus `packageConvergence` projections, so authored revision or namespace mapping contracts and their remaining glue stay visible instead of hiding inside fake merge semantics
+- `src/package-authorship.js`, `src/package-authorship-world.js`, and `src/desire/apply.js` now carry transformer-linked package patches through canonical bundle materialization and WTOML lowering, making authored convergence patches part of the same inspectable package surface
+- `plugins/authoring-core/*`, `src/runtime-governance.js`, and `src/runtime-authoring-policy.js` now expose `packageTransformer.create` and `packageTransformer.define` through the shared governed authoring path rather than bespoke side channels
+- `plugins/platform/platform-model.js` and `plugins/mcp/mcp-tools.js` now expose `packageConvergence` reads alongside package coexistence, including explicit remaining-glue explanations when convergence still needs authored follow-up
+- `test/package-authorship-world.test.js`, `plugins/platform/platform.test.js`, `plugins/mcp/mcp.test.js`, `plugins/authoring-core/authoring-core.test.js`, and `test/runtime-governance.test.js` cover transformer authoring, transformer-linked patches, convergence reads, and governance wiring end to end
 
 ## Detailed Task Backlog
 
@@ -417,3 +492,4 @@ This group only counts as materially advanced when:
 - [BASELINE.md](../BASELINE.md)
 - [docs/CAPABILITIES.md](../CAPABILITIES.md)
 - [docs/ROADMAP-TRANCHES.md](../ROADMAP-TRANCHES.md)
+- [docs/PACKAGE-PLUGIN-AUTHORSHIP-MODEL.md](../PACKAGE-PLUGIN-AUTHORSHIP-MODEL.md)

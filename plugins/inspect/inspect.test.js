@@ -175,6 +175,10 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(pluginWidgetPage.includes("renderSurfaceInspectorEditorView({"), true);
   assert.equal(pluginWidgetPage.includes("renderSurfaceInspectorOverlayView({"), true);
   assert.equal(pluginWidgetPage.includes("bindSurfaceInspectorVersionActions({"), true);
+  assert.equal(pluginWidgetPage.includes("'/api/proposals'"), false);
+  assert.equal(pluginWidgetPage.includes("'/api/widgets/' + encodeURIComponent(id)"), true);
+  assert.equal(pluginWidgetPage.includes("'/api/widget-versions/' + encodeURIComponent(soul) + '/activate'"), true);
+  assert.equal(pluginWidgetPage.includes("'/api/widget-versions/' + encodeURIComponent(soul) + '/rollback'"), true);
   assert.equal(pluginWidgetPage.includes("bindWorldCommandActions({"), true);
   assert.equal(pluginWidgetPage.includes("renderWorldSourceDocumentView({"), true);
   assert.equal(pluginWidgetPage.includes("renderWorldThingListView({"), true);
@@ -452,4 +456,76 @@ test("inspect plugin owns widget-version request and rollback workflows", async 
   assert.equal(srcWidgets.includes("export function requestWidgetVersionActivation"), false);
   assert.equal(srcWidgets.includes("export function rollbackWidgetVersion"), false);
   assert.equal(srcWidgets.includes("../plugins/inspect/widget-versions.js"), false);
+});
+
+test("inspect handlers route unauthorized widget-version actions through shared routes with caller-supplied proposal reasons", async () => {
+  const world = createWorld();
+  const sent = [];
+
+  defineWidgetVersion(world, { actor: "adam", soul: "banner", version: "banner_v1", kind: "Banner", props: { text: "One" } });
+  defineWidgetVersion(world, { actor: "adam", soul: "banner", version: "banner_v2", kind: "Banner", props: { text: "Two" } });
+  activateWidgetVersion(world, { actor: "adam", soul: "banner", version: "banner_v1" });
+
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    logger: null,
+    send() {},
+    sendJson(_res, status, body) {
+      sent.push({ status, body });
+    },
+    readJson: async req => req.body ?? {},
+    sendGateFailure() {},
+    authorityServices: {
+      ensureTargetAuthority() {
+        return { ok: false, status: 403, reason: "forbidden" };
+      }
+    },
+    requestActors: () => [],
+    requestVisibleWitnesses: () => [],
+    processSelection: () => ({}),
+    processViewInputs: () => ({ witnesses: [], observations: [] }),
+    frontendTraceProcesses: new Set()
+  });
+
+  await handlers["widgetVersions.activate"]({
+    req: { body: { version: "banner_v2", reason: "Promote the shared banner draft" } },
+    res: {},
+    params: { soul: "banner" },
+    requestActor: "callan"
+  });
+  await handlers["widgetVersions.rollback"]({
+    req: { body: { reason: "Restore the previous shared banner" } },
+    res: {},
+    params: { soul: "banner" },
+    requestActor: "callan"
+  });
+
+  assert.deepEqual(sent.map(entry => entry.status), [202, 202]);
+  assert.deepEqual(
+    sent.map(entry => ({
+      status: entry.body.status,
+      targetProcess: entry.body.proposal?.targetProcess,
+      targetId: entry.body.proposal?.targetId,
+      reason: entry.body.proposal?.reason,
+      proposalBody: entry.body.proposal?.body
+    })),
+    [
+      {
+        status: "proposed",
+        targetProcess: "widgetVersion.activate",
+        targetId: "banner",
+        reason: "Promote the shared banner draft",
+        proposalBody: { soul: "banner", version: "banner_v2" }
+      },
+      {
+        status: "proposed",
+        targetProcess: "widgetVersion.rollback",
+        targetId: "banner",
+        reason: "Restore the previous shared banner",
+        proposalBody: { soul: "banner" }
+      }
+    ]
+  );
 });

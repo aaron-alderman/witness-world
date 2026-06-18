@@ -121,6 +121,10 @@ function renderSurfaceInspectorOwnershipView({
     ? '<div class="surface-item-list">' + chain.map(entry => {
         const labels = [
           entry.class || "",
+          entry.routeId ? ("route " + entry.routeId) : "",
+          entry.method && entry.path ? (String(entry.method) + " " + String(entry.path)) : (entry.path ? String(entry.path) : ""),
+          entry.serves ? ("serves " + entry.serves) : "",
+          entry.backendProgramSoul ? ("backend program " + entry.backendProgramSoul) : "",
           entry.pluginId ? ("plugin " + entry.pluginId) : "",
           entry.bundleId ? ("bundle " + entry.bundleId) : "",
           entry.handlerSetId ? ("handler set " + entry.handlerSetId) : "",

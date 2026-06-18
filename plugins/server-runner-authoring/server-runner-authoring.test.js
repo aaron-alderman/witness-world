@@ -311,12 +311,16 @@ name = "importedRunner"
     {
       context: "ctx.target",
       serverRunnerRef: "importedRunner",
-      plugin: "plugin.inspect"
+      plugin: "plugin.inspect",
+      id: "proposal.runtime-plugin.install.inspect",
+      reason: "Install inspect on the shared runner"
     },
     {
       context: "ctx.target",
       serverRunnerRef: "importedRunner",
-      plugin: "plugin.inspect"
+      plugin: "plugin.inspect",
+      id: "proposal.runtime-plugin.remove.inspect",
+      reason: "Remove inspect from the shared runner"
     }
   ];
   const handlers = createHandlers({
@@ -353,9 +357,23 @@ name = "importedRunner"
   assert.equal(sent[1]?.status, 202);
   assert.equal(sent[1]?.body?.proposal?.targetProcess, "runtimePlugin.install");
   assert.equal(sent[1]?.body?.proposal?.targetId, "source_server");
+  assert.equal(sent[1]?.body?.proposal?.id, "proposal.runtime-plugin.install.inspect");
+  assert.equal(sent[1]?.body?.proposal?.reason, "Install inspect on the shared runner");
+  assert.deepEqual(sent[1]?.body?.proposal?.body, {
+    context: "ctx.target",
+    serverRunnerRef: "importedRunner",
+    plugin: "plugin.inspect"
+  });
   assert.equal(sent[2]?.status, 202);
   assert.equal(sent[2]?.body?.proposal?.targetProcess, "runtimePlugin.remove");
   assert.equal(sent[2]?.body?.proposal?.targetId, "source_server");
+  assert.equal(sent[2]?.body?.proposal?.id, "proposal.runtime-plugin.remove.inspect");
+  assert.equal(sent[2]?.body?.proposal?.reason, "Remove inspect from the shared runner");
+  assert.deepEqual(sent[2]?.body?.proposal?.body, {
+    context: "ctx.target",
+    serverRunnerRef: "importedRunner",
+    plugin: "plugin.inspect"
+  });
 });
 
 test("server-runner authoring proposal targets lower serverRunner refs before authority checks", async () => {

@@ -4,8 +4,7 @@ import {
   installMcpTool,
   removeMcpTool,
   moduleProjectors,
-  resolveContextualRef,
-  CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
+  resolveCoveredContextualRef
 } from "../../src/modules.js";
 import { processSpecFor, typeModelProjection, validateProcessInput } from "../../src/type-model.js";
 
@@ -75,12 +74,11 @@ function resolveBodyRef(world, body, {
   refField,
   label
 }) {
-  return resolveContextualRef(world.allWitnesses(), {
+  return resolveCoveredContextualRef(world.allWitnesses(), {
     context: body?.[contextField] ?? null,
     id: body?.[idField] ?? null,
     ref: body?.[refField] ?? null,
-    label,
-    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
+    label
   });
 }
 

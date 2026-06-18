@@ -11,6 +11,7 @@ export function createBootstrapLiveStateReaders({
   buildBootstrapRuntimeIntegrationStateFn = buildBootstrapRuntimeIntegrationState
 } = {}) {
   const uniqueStrings = values => [...new Set((values || []).map(value => String(value)).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const canonicalIdPolicyClasses = ["same-context-convenience", "imported-target-reference", "legacy-only-path"];
   return {
     authored() {
       return state.bootstrapState || {};
@@ -30,6 +31,15 @@ export function createBootstrapLiveStateReaders({
     contextRows() {
       return state.bootstrapState?.contexts || [];
     },
+    compatibilityBridgeRows() {
+      return state.bootstrapState?.compatibilityBridges || [];
+    },
+    governanceRouteRows() {
+      return state.bootstrapState?.governanceRoutes || [];
+    },
+    proposalTargetGovernanceRows() {
+      return state.bootstrapState?.proposalTargetGovernance || [];
+    },
     contextBindableTargets(contextId) {
       return (state.model?.contextBindableTargets || []).filter(row => !row.context || row.context === contextId);
     },
@@ -46,6 +56,9 @@ export function createBootstrapLiveStateReaders({
     },
     contextNameConflictRows(contextId) {
       return (state.bootstrapState?.contextNameConflicts || []).filter(row => row.context === contextId);
+    },
+    canonicalIdPolicyClasses() {
+      return state.bootstrapState?.canonicalIdPolicyClasses || canonicalIdPolicyClasses;
     },
     explainContextualName(contextId, name) {
       const context = typeof contextId === "string" ? contextId.trim() : "";
@@ -186,6 +199,52 @@ export function createBootstrapLiveStateReaders({
         names,
         rows,
         reason: "target " + target + " belongs to context " + contextualTarget.context + " and is not visible in authoring context " + context
+      };
+    },
+    classifyCanonicalIdPolicy(contextId, targetId) {
+      const context = typeof contextId === "string" ? contextId.trim() : "";
+      const target = typeof targetId === "string" ? targetId.trim() : "";
+      if (!context || !target) {
+        return {
+          ok: false,
+          policyClass: null,
+          reason: "context and target are required for canonical-id policy classification"
+        };
+      }
+      const visibility = this.explainTargetVisibility(context, target);
+      if (!visibility.ok) {
+        return {
+          ok: false,
+          policyClass: null,
+          reason: visibility.reason,
+          visibility
+        };
+      }
+      if (visibility.targetContext === context) {
+        return {
+          ok: true,
+          policyClass: "same-context-convenience",
+          visibility
+        };
+      }
+      if (visibility.targetContext) {
+        return {
+          ok: true,
+          policyClass: "imported-target-reference",
+          visibility
+        };
+      }
+      if (visibility.visibility === "unscoped") {
+        return {
+          ok: true,
+          policyClass: "legacy-only-path",
+          visibility
+        };
+      }
+      return {
+        ok: true,
+        policyClass: null,
+        visibility
       };
     },
     stewardshipTargetKinds() {

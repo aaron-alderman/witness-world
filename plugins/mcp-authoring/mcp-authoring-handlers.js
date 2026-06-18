@@ -36,6 +36,10 @@ export function createMcpAuthoringBundleHandlers({
     ensureTargetAuthority,
     ensureContextAuthority
   } = authoringServices;
+  const trimmedStringOrEmpty = value => typeof value === "string" ? value.trim() : "";
+  const omitProposalMetadata = body => body && typeof body === "object" && !Array.isArray(body)
+    ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "proposalId" && key !== "reason"))
+    : {};
   return {
     "mcpServer.create": async ({ req, res, requestActor, appContext }) => {
       const gate = requireBootstrapActor(requestActor);
@@ -44,6 +48,9 @@ export function createMcpAuthoringBundleHandlers({
         return;
       }
       const body = await readJson(req);
+      const proposalId = trimmedStringOrEmpty(body?.proposalId);
+      const proposalReason = trimmedStringOrEmpty(body?.reason);
+      const mutationBody = omitProposalMetadata(body);
       const resolvedServerRunner = resolveMcpServerRunnerInput(world, body, {
         contextField: "context",
         idField: "serverRunner",
@@ -61,17 +68,17 @@ export function createMcpAuthoringBundleHandlers({
             actor: gate.actor,
             backendHost,
             body: {
-              id: mcpProposalId({
+              id: proposalId || mcpProposalId({
                 actor: gate.actor,
                 process: "mcpServer.define",
                 target: resolvedServerRunner.target,
-                extra: body?.id
+                extra: mutationBody?.id
               }),
               targetProcess: "mcpServer.define",
               targetKind: "serverRunner",
               targetId: resolvedServerRunner.target,
-              bodyJson: JSON.stringify(body ?? {}),
-              reason: "Create an MCP server through witnessed proposal"
+              bodyJson: JSON.stringify(mutationBody ?? {}),
+              reason: proposalReason || "Create an MCP server through witnessed proposal"
             }
           });
           if (!proposal.ok) {
@@ -90,7 +97,7 @@ export function createMcpAuthoringBundleHandlers({
         sendGateFailure(res, auth);
         return;
       }
-      const result = requestBootstrapMcpServerDefine(world, { actor: gate.actor, backendHost, body, appContext });
+      const result = requestBootstrapMcpServerDefine(world, { actor: gate.actor, backendHost, body: mutationBody, appContext });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;
@@ -105,6 +112,10 @@ export function createMcpAuthoringBundleHandlers({
         return;
       }
       const body = await readJson(req);
+      const proposalId = trimmedStringOrEmpty(body?.proposalId || body?.id);
+      const proposalReason = trimmedStringOrEmpty(body?.reason);
+      const mutationBody = omitProposalMetadata(body);
+      delete mutationBody.id;
       const resolvedServer = resolveMcpServerInput(world, body, {
         label: "mcp server"
       });
@@ -119,17 +130,17 @@ export function createMcpAuthoringBundleHandlers({
             actor: gate.actor,
             backendHost,
             body: {
-              id: mcpProposalId({
+              id: proposalId || mcpProposalId({
                 actor: gate.actor,
                 process: "mcpTool.install",
                 target: resolvedServer.target,
-                extra: body?.tool
+                extra: mutationBody?.tool
               }),
               targetProcess: "mcpTool.install",
               targetKind: "mcpServer",
               targetId: resolvedServer.target,
-              bodyJson: JSON.stringify(body ?? {}),
-              reason: "Install an MCP tool through witnessed proposal"
+              bodyJson: JSON.stringify(mutationBody ?? {}),
+              reason: proposalReason || "Install an MCP tool through witnessed proposal"
             }
           });
           if (!proposal.ok) {
@@ -151,7 +162,7 @@ export function createMcpAuthoringBundleHandlers({
       const result = requestBootstrapMcpToolInstall(world, {
         actor: gate.actor,
         backendHost,
-        body: { ...body, server: resolvedServer.target, serverRef: null },
+        body: { ...mutationBody, server: resolvedServer.target, serverRef: null },
         allowedTools: mcpToolNames(),
         appContext
       });
@@ -169,6 +180,10 @@ export function createMcpAuthoringBundleHandlers({
         return;
       }
       const body = await readJson(req);
+      const proposalId = trimmedStringOrEmpty(body?.proposalId || body?.id);
+      const proposalReason = trimmedStringOrEmpty(body?.reason);
+      const mutationBody = omitProposalMetadata(body);
+      delete mutationBody.id;
       const resolvedServer = resolveMcpServerInput(world, body, {
         label: "mcp server"
       });
@@ -183,17 +198,17 @@ export function createMcpAuthoringBundleHandlers({
             actor: gate.actor,
             backendHost,
             body: {
-              id: mcpProposalId({
+              id: proposalId || mcpProposalId({
                 actor: gate.actor,
                 process: "mcpTool.remove",
                 target: resolvedServer.target,
-                extra: body?.tool
+                extra: mutationBody?.tool
               }),
               targetProcess: "mcpTool.remove",
               targetKind: "mcpServer",
               targetId: resolvedServer.target,
-              bodyJson: JSON.stringify(body ?? {}),
-              reason: "Remove an MCP tool through witnessed proposal"
+              bodyJson: JSON.stringify(mutationBody ?? {}),
+              reason: proposalReason || "Remove an MCP tool through witnessed proposal"
             }
           });
           if (!proposal.ok) {
@@ -215,7 +230,7 @@ export function createMcpAuthoringBundleHandlers({
       const result = requestBootstrapMcpToolRemove(world, {
         actor: gate.actor,
         backendHost,
-        body: { ...body, server: resolvedServer.target, serverRef: null },
+        body: { ...mutationBody, server: resolvedServer.target, serverRef: null },
         appContext
       });
       if (!result.ok) {

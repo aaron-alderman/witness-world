@@ -58,3 +58,48 @@ test("bootstrap read models expose identity-to-actor assumption grants in author
     targetActor: "callan"
   }]);
 });
+
+test("bootstrap read models expose governance route and proposal-target ledgers in authored state", async () => {
+  const world = createWorld();
+
+  const { getBootstrapState } = createBootstrapReadModels({
+    world,
+    runtimeProfile: "minimal",
+    runtimeBundleSummary: {
+      routes: [{ method: "POST", path: "/api/widgets", handler: "widgets.create" }],
+      governanceRoutes: [{ id: "governanceRoute:POST /api/widgets", method: "POST", matcher: "/api/widgets", handler: "widgets.create", governanceMode: "proposal-fallback" }],
+      proposalTargetGovernance: [{ id: "governanceProposalTarget:widget.define", targetProcess: "widget.define", governanceMode: "proposal-fallback" }]
+    },
+    supportedHandlers: [],
+    supportedHandlerMetadata: {},
+    supportedPageHandlers: [],
+    supportedHandlerSets: [],
+    supportedFrontendOps: [],
+    supportedBackendOps: [],
+    backendHosts: [],
+    frontendHosts: [],
+    getRuntimePluginCatalog: async () => ({
+      packages: [],
+      addedBundleIds: [],
+      summary: null
+    }),
+    buildPluginCapabilitySourceIndex: ({ capabilityCatalog = [] } = {}) => ({
+      capabilityCatalog,
+      capabilityPackageSources: []
+    })
+  });
+
+  const state = await getBootstrapState("aaron", null);
+  assert.deepEqual(state.governanceRoutes, [{
+    id: "governanceRoute:POST /api/widgets",
+    method: "POST",
+    matcher: "/api/widgets",
+    handler: "widgets.create",
+    governanceMode: "proposal-fallback"
+  }]);
+  assert.deepEqual(state.proposalTargetGovernance, [{
+    id: "governanceProposalTarget:widget.define",
+    targetProcess: "widget.define",
+    governanceMode: "proposal-fallback"
+  }]);
+});

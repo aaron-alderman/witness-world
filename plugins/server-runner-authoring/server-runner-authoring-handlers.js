@@ -47,6 +47,10 @@ export function createServerRunnerAuthoringBundleHandlers({
     ensureTargetAuthority,
     ensureContextAuthority
   } = authoringServices;
+  const trimmedStringOrEmpty = value => typeof value === "string" ? value.trim() : "";
+  const omitProposalMetadata = body => body && typeof body === "object" && !Array.isArray(body)
+    ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "id" && key !== "proposalId" && key !== "reason"))
+    : {};
   return {
     "runtimePlugin.install": async ({ req, res, requestActor, appContext }) => {
       const gate = requireBootstrapActor(requestActor);
@@ -55,6 +59,9 @@ export function createServerRunnerAuthoringBundleHandlers({
         return;
       }
       const body = await readJson(req);
+      const proposalId = trimmedStringOrEmpty(body?.proposalId || body?.id);
+      const proposalReason = trimmedStringOrEmpty(body?.reason);
+      const mutationBody = omitProposalMetadata(body);
       const resolvedServerRunner = resolveRuntimePluginServerRunnerInput(world, body, {
         label: "server runner"
       });
@@ -69,17 +76,17 @@ export function createServerRunnerAuthoringBundleHandlers({
             actor: gate.actor,
             backendHost,
             body: {
-              id: runtimePluginProposalId({
+              id: proposalId || runtimePluginProposalId({
                 actor: gate.actor,
                 process: "runtimePlugin.install",
                 serverRunner: resolvedServerRunner.target,
-                plugin: body?.plugin
+                plugin: mutationBody?.plugin
               }),
               targetProcess: "runtimePlugin.install",
               targetKind: "serverRunner",
               targetId: resolvedServerRunner.target,
-              bodyJson: JSON.stringify(body ?? {}),
-              reason: "Install a runtime plugin through witnessed proposal"
+              bodyJson: JSON.stringify(mutationBody ?? {}),
+              reason: proposalReason || "Install a runtime plugin through witnessed proposal"
             }
           });
           if (!proposal.ok) {
@@ -105,7 +112,7 @@ export function createServerRunnerAuthoringBundleHandlers({
       const result = requestBootstrapRuntimePluginInstall(world, {
         actor: gate.actor,
         backendHost,
-        body: { ...body, serverRunner: resolvedServerRunner.target, serverRunnerRef: null },
+        body: { ...mutationBody, serverRunner: resolvedServerRunner.target, serverRunnerRef: null },
         pluginCatalog
       });
       if (!result.ok) {
@@ -126,6 +133,9 @@ export function createServerRunnerAuthoringBundleHandlers({
         return;
       }
       const body = await readJson(req);
+      const proposalId = trimmedStringOrEmpty(body?.proposalId || body?.id);
+      const proposalReason = trimmedStringOrEmpty(body?.reason);
+      const mutationBody = omitProposalMetadata(body);
       const resolvedServerRunner = resolveRuntimePluginServerRunnerInput(world, body, {
         label: "server runner"
       });
@@ -140,17 +150,17 @@ export function createServerRunnerAuthoringBundleHandlers({
             actor: gate.actor,
             backendHost,
             body: {
-              id: runtimePluginProposalId({
+              id: proposalId || runtimePluginProposalId({
                 actor: gate.actor,
                 process: "runtimePlugin.remove",
                 serverRunner: resolvedServerRunner.target,
-                plugin: body?.plugin
+                plugin: mutationBody?.plugin
               }),
               targetProcess: "runtimePlugin.remove",
               targetKind: "serverRunner",
               targetId: resolvedServerRunner.target,
-              bodyJson: JSON.stringify(body ?? {}),
-              reason: "Remove a runtime plugin through witnessed proposal"
+              bodyJson: JSON.stringify(mutationBody ?? {}),
+              reason: proposalReason || "Remove a runtime plugin through witnessed proposal"
             }
           });
           if (!proposal.ok) {
@@ -176,7 +186,7 @@ export function createServerRunnerAuthoringBundleHandlers({
       const result = requestBootstrapRuntimePluginRemove(world, {
         actor: gate.actor,
         backendHost,
-        body: { ...body, serverRunner: resolvedServerRunner.target, serverRunnerRef: null },
+        body: { ...mutationBody, serverRunner: resolvedServerRunner.target, serverRunnerRef: null },
         pluginCatalog
       });
       if (!result.ok) {

@@ -118,6 +118,49 @@ export function createEdenBundleHandlers({
     }),
     authority: edenVersionAuthorityState(requestActor, soul)
   });
+  const nextEdenVersionProposalId = ({ actor, processName, soul, version = null }) => {
+    const actorPart = String(actor || "guest").replace(/[^A-Za-z0-9_.:-]+/g, "-");
+    const processPart = String(processName || "edenVersions.action").replace(/[^A-Za-z0-9_.:-]+/g, "-");
+    const soulPart = String(soul || "version-surface").replace(/[^A-Za-z0-9_.:-]+/g, "-");
+    const versionPart = String(version || processName || Date.now()).replace(/[^A-Za-z0-9_.:-]+/g, "-");
+    return ["proposal", "eden", actorPart, processPart, soulPart, versionPart].filter(Boolean).join(".");
+  };
+  const requestEdenVersionProposalCreate = ({ actor, processName, soul, surfaceId, publishedVersion = null, draftVersion = null, version = null, reason }) => {
+    const proposalBody = { surfaceId, soul };
+    if (version) proposalBody.version = version;
+    if (publishedVersion) proposalBody.publishedVersion = publishedVersion;
+    if (draftVersion) proposalBody.draftVersion = draftVersion;
+    return requestBootstrapProposalCreate(world, {
+      actor,
+      backendHost,
+      body: {
+        id: nextEdenVersionProposalId({ actor, processName, soul, version }),
+        targetProcess: processName,
+        targetKind: "widgetVersion",
+        targetId: soul,
+        bodyJson: JSON.stringify(proposalBody),
+        reason
+      }
+    });
+  };
+  const nextEdenCapabilityInstallProposalId = ({ actor, target, capability }) => {
+    const actorPart = String(actor || "guest").replace(/[^A-Za-z0-9_.:-]+/g, "-");
+    const targetPart = String(target || "capability-target").replace(/[^A-Za-z0-9_.:-]+/g, "-");
+    const capabilityPart = String(capability || "capability").replace(/[^A-Za-z0-9_.:-]+/g, "-");
+    return ["proposal", "eden", actorPart, "capability.install", targetPart, capabilityPart].filter(Boolean).join(".");
+  };
+  const requestEdenCapabilityInstallProposalCreate = ({ actor, target, targetKind, capability, targetLabel }) => requestBootstrapProposalCreate(world, {
+    actor,
+    backendHost,
+    body: {
+      id: nextEdenCapabilityInstallProposalId({ actor, target, capability }),
+      targetProcess: "capability.install",
+      targetKind,
+      targetId: target,
+      bodyJson: JSON.stringify({ capability, target, targetKind }),
+      reason: "Install " + capability + " on " + (targetLabel || target || "this target") + " through proposal review"
+    }
+  });
   const edenCapabilityInstallStateForRequest = ({
     requestActor,
     appContext,
@@ -609,6 +652,44 @@ export function createEdenBundleHandlers({
         ? route.params.recommendedCapabilities
         : [];
       const body = await readJson(req);
+      const auth = requestActor ? ensureTargetAuthority(requestActor, target) : null;
+      if (requestActor && auth && !auth.ok) {
+        if (auth.status === 403) {
+          const capability = typeof body?.capability === "string" ? body.capability : null;
+          const proposal = requestEdenCapabilityInstallProposalCreate({
+            actor: requestActor,
+            target,
+            targetKind,
+            capability,
+            targetLabel
+          });
+          if (!proposal.ok) {
+            sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            capabilityState: {
+              ...edenCapabilityInstallStateForRequest({
+                requestActor,
+                appContext: null,
+                surfaceId,
+                target,
+                targetKind,
+                targetLabel,
+                recommendedCapabilities
+              }),
+              authority: edenCapabilityInstallAuthorityState(requestActor, target)
+            }
+          });
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
       const result = requestEdenCapabilityInstall(world, {
         actor: requestActor,
         backendHost,
@@ -633,6 +714,19 @@ export function createEdenBundleHandlers({
               targetLabel,
               recommendedCapabilities
             })),
+            authority: edenCapabilityInstallAuthorityState(requestActor, target)
+          }
+        });
+        return;
+      }
+      if (result.status === 202) {
+        sendJson(res, 202, {
+          ok: true,
+          status: "proposed",
+          proposal: result.proposal,
+          witness: result.witness,
+          capabilityState: {
+            ...result.capabilityState,
             authority: edenCapabilityInstallAuthorityState(requestActor, target)
           }
         });
@@ -663,12 +757,37 @@ export function createEdenBundleHandlers({
       const soul = route?.params?.soul ?? "";
       const publishedVersion = route?.params?.publishedVersion ?? null;
       const draftVersion = route?.params?.draftVersion ?? null;
+      const body = await readJson(req);
+      const version = typeof body?.version === "string" ? body.version : null;
       const auth = requestActor ? ensureTargetAuthority(requestActor, soul) : null;
       if (requestActor && auth && !auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestEdenVersionProposalCreate({
+            actor: requestActor,
+            processName: "edenVersions.activate",
+            soul,
+            surfaceId,
+            publishedVersion,
+            draftVersion,
+            version,
+            reason: "Open a shared Eden version through proposal review"
+          });
+          if (!proposal.ok) {
+            sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            versionState: edenVersionStateForRequest({ requestActor, surfaceId, soul, publishedVersion, draftVersion })
+          });
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
-      const body = await readJson(req);
       const result = requestEdenVersionActivate(world, {
         actor: requestActor,
         backendHost,
@@ -707,6 +826,29 @@ export function createEdenBundleHandlers({
       const draftVersion = route?.params?.draftVersion ?? null;
       const auth = requestActor ? ensureTargetAuthority(requestActor, soul) : null;
       if (requestActor && auth && !auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestEdenVersionProposalCreate({
+            actor: requestActor,
+            processName: "edenVersions.rollback",
+            soul,
+            surfaceId,
+            publishedVersion,
+            draftVersion,
+            reason: "Restore the last good shared Eden version through proposal review"
+          });
+          if (!proposal.ok) {
+            sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            versionState: edenVersionStateForRequest({ requestActor, surfaceId, soul, publishedVersion, draftVersion })
+          });
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -747,6 +889,32 @@ export function createEdenBundleHandlers({
       const draftVersion = route?.params?.draftVersion ?? null;
       const auth = requestActor ? ensureTargetAuthority(requestActor, soul) : null;
       if (requestActor && auth && !auth.ok) {
+        if (auth.status === 403) {
+          const body = await readJson(req);
+          const version = typeof body?.version === "string" ? body.version : null;
+          const proposal = requestEdenVersionProposalCreate({
+            actor: requestActor,
+            processName: "edenVersions.publish",
+            soul,
+            surfaceId,
+            publishedVersion,
+            draftVersion,
+            version,
+            reason: "Publish the current shared version through proposal review"
+          });
+          if (!proposal.ok) {
+            sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+            return;
+          }
+          sendJson(res, 202, {
+            ok: true,
+            status: "proposed",
+            proposal: proposal.proposal,
+            witness: proposal.witness,
+            versionState: edenVersionStateForRequest({ requestActor, surfaceId, soul, publishedVersion, draftVersion })
+          });
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }

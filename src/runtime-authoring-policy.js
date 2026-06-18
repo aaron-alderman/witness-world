@@ -29,6 +29,13 @@ export const MCP_ONLY_ALLOWED_HANDLER_IDS = Object.freeze([
   "type.create",
   "projection.create",
   "message.create",
+  "package.create",
+  "packageRevision.create",
+  "packageRevision.publish",
+  "packagePatch.create",
+  "packageNamespace.create",
+  "packageDependency.create",
+  "packageTransformer.create",
   "route.create",
   "serve.create",
   "serverRunner.create",
@@ -60,6 +67,13 @@ export const MCP_ONLY_PUBLIC_MCP_ACTIONS = Object.freeze([
   "type.create",
   "projection.create",
   "message.create",
+  "package.create",
+  "packageRevision.create",
+  "packageRevision.publish",
+  "packagePatch.create",
+  "packageNamespace.create",
+  "packageDependency.create",
+  "packageTransformer.create",
   "route.create",
   "serve.create",
   "serverRunner.create",
@@ -279,6 +293,19 @@ export function buildRuntimeAuthoringCapabilityMatrix(policy = null) {
       capability: capabilityState({
         publicActions: ["capability.create", "capability.install", "capability.remove"],
         runtimeConsumers: ["runtime capability resolution"],
+        status: "supported"
+      }),
+      package: capabilityState({
+        publicActions: [
+          "package.create",
+          "packageRevision.create",
+          "packageRevision.publish",
+          "packagePatch.create",
+          "packageNamespace.create",
+          "packageDependency.create",
+          "packageTransformer.create"
+        ],
+        runtimeConsumers: ["plugin and package authorship"],
         status: "supported"
       }),
       widget: capabilityState({

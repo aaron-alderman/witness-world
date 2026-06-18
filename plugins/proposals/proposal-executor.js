@@ -7,7 +7,60 @@ import { executeMcpAuthoringProposalTarget } from "../mcp-authoring/mcp-proposal
 import { executeDemoProposalTarget } from "../demo/demo-proposal-targets.js";
 import { executePlatformProposalTarget } from "../platform/platform-proposal-targets.js";
 import { requestWidgetVersionActivation, rollbackWidgetVersion } from "../inspect/widget-versions.js";
-import { requestEdenVersionPublish } from "../eden/eden-versions.js";
+import {
+  requestEdenVersionActivate,
+  requestEdenVersionPublish,
+  requestEdenVersionRollback
+} from "../eden/eden-versions.js";
+
+function executeEdenVersionActivateProposal({
+  world,
+  actor,
+  backendHost,
+  proposal,
+  body,
+  ensureTargetAuthority
+}) {
+  const soul = body.soul || proposal.targetId || "";
+  const gate = ensureTargetAuthority(actor, soul);
+  if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+  const result = requestEdenVersionActivate(world, {
+    actor,
+    backendHost,
+    surfaceId: body.surfaceId,
+    soul,
+    publishedVersion: body.publishedVersion ?? null,
+    draftVersion: body.draftVersion ?? null,
+    body
+  });
+  return result.ok
+    ? { ok: true, witnessIds: [result.witness?.id].filter(Boolean) }
+    : { ok: false, status: result.status, error: result.error || "eden version activation failed", witness: result.witness };
+}
+
+function executeEdenVersionRollbackProposal({
+  world,
+  actor,
+  backendHost,
+  proposal,
+  body,
+  ensureTargetAuthority
+}) {
+  const soul = body.soul || proposal.targetId || "";
+  const gate = ensureTargetAuthority(actor, soul);
+  if (!gate.ok) return { ok: false, status: gate.status, error: gate.reason };
+  const result = requestEdenVersionRollback(world, {
+    actor,
+    backendHost,
+    surfaceId: body.surfaceId,
+    soul,
+    publishedVersion: body.publishedVersion ?? null,
+    draftVersion: body.draftVersion ?? null
+  });
+  return result.ok
+    ? { ok: true, witnessIds: [result.witness?.id].filter(Boolean) }
+    : { ok: false, status: result.status, error: result.error || "eden version rollback failed", witness: result.witness };
+}
 
 export function executeEdenVersionPublishProposal({
   world,
@@ -183,6 +236,18 @@ export function createAuthoringProposalExecutor({
       case "perspective.define":
       case "stewardship.grant":
       case "stewardship.revoke":
+      case "surface.define":
+      case "process.define":
+      case "type.define":
+      case "projection.define":
+      case "message.define":
+      case "package.define":
+      case "packageRevision.define":
+      case "packageRevision.publish":
+      case "packagePatch.define":
+      case "packageNamespace.define":
+      case "packageDependency.define":
+      case "packageTransformer.define":
       case "widget.define":
       case "widget.update":
         return executeAuthoringCoreProposalTarget({
@@ -219,6 +284,26 @@ export function createAuthoringProposalExecutor({
           ? { ok: true, witnessIds: (result.witnesses || []).map(entry => entry.id).filter(Boolean) }
           : { ok: false, status: 409, error: result.witness.body?.reason || "widget version rollback failed", witness: result.witness };
       }
+      case "edenVersions.activate": {
+        return executeEdenVersionActivateProposal({
+          world,
+          actor,
+          backendHost,
+          proposal,
+          body,
+          ensureTargetAuthority
+        });
+      }
+      case "edenVersions.rollback": {
+        return executeEdenVersionRollbackProposal({
+          world,
+          actor,
+          backendHost,
+          proposal,
+          body,
+          ensureTargetAuthority
+        });
+      }
       case "edenVersions.publish": {
         return executeEdenVersionPublishProposal({
           world,
@@ -244,20 +329,6 @@ export function createAuthoringProposalExecutor({
           body,
           supportedFrontendOps,
           supportedBackendOps,
-          ensureContextAuthority,
-          ensureTargetAuthority
-        });
-      case "route.define":
-      case "serve.define":
-        return executeAuthoringCoreProposalTarget({
-          world,
-          actor,
-          backendHost,
-          proposal,
-          body,
-          supportedHandlers,
-          supportedHandlerMetadata,
-          ensureIdentityAuthority,
           ensureContextAuthority,
           ensureTargetAuthority
         });

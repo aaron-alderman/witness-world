@@ -138,11 +138,39 @@ async function exerciseAuthoredSurfaceRoutingInBrowser(baseUrl, {
   const page = await browser.newPage({
     viewport: { width: 1280, height: 900 }
   });
+  const pageErrors = [];
+  const consoleErrors = [];
+  page.on("pageerror", error => {
+    pageErrors.push(String(error?.stack || error?.message || error));
+  });
+  page.on("console", message => {
+    if (message.type() !== "error") return;
+    consoleErrors.push(message.text());
+  });
   try {
     const waitForRuntime = async routeStateId => {
-      await page.waitForFunction(id =>
-        Boolean(window.__surfaceInteractionRuntime?.processRuntime?.value?.(id)),
-      routeStateId);
+      try {
+        await page.waitForFunction(id =>
+          Boolean(window.__surfaceInteractionRuntime?.processRuntime?.value?.(id)),
+        routeStateId);
+      } catch (error) {
+        const diagnostics = await page.evaluate(id => ({
+          pathname: window.location.pathname,
+          bootStarted: window.__surfaceRuntimeBootStarted === true,
+          bootError: window.__surfaceRuntimeBootError ?? null,
+          blocked: window.__surfaceInteractionRuntime?.blocked ?? null,
+          activeSurfaceId: window.__surfaceInteractionRuntime?.activeSurfaceId ?? null,
+          latestProbe: window.__surfaceInteractionRuntime?.latestProbe ?? null,
+          routeStateValue: window.__surfaceInteractionRuntime?.processRuntime?.value?.(id) ?? null
+        }), routeStateId);
+        throw new Error(`surface runtime unavailable for ${routeStateId}: ${JSON.stringify({ ...diagnostics, pageErrors, consoleErrors })}`, { cause: error });
+      }
+    };
+    const waitForSurfaceReady = async surfaceId => {
+      await page.waitForFunction(id => {
+        const probe = window.__surfaceInteractionRuntime?.latestProbe;
+        return probe?.activeSurfaceId === id && Number(probe?.boundInteractionCount || 0) > 0;
+      }, surfaceId);
     };
     const waitForState = async ({ routeStateId, routeState, authStatusId = null, authStatus = null }) => {
       await page.waitForFunction(args => {
@@ -156,6 +184,7 @@ async function exerciseAuthoredSurfaceRoutingInBrowser(baseUrl, {
 
     await page.goto(`${baseUrl}${paths.home}`, { waitUntil: "domcontentloaded" });
     await waitForRuntime(ids.routeState);
+    await waitForSurfaceReady(ids.home);
     const directEntry = await page.evaluate(routeStateId => ({
       path: window.location.pathname,
       routeState: window.__surfaceInteractionRuntime?.processRuntime?.value?.(routeStateId) ?? null,
@@ -165,6 +194,7 @@ async function exerciseAuthoredSurfaceRoutingInBrowser(baseUrl, {
 
     await page.goto(`${baseUrl}${paths.login}`, { waitUntil: "domcontentloaded" });
     await waitForRuntime(ids.routeState);
+    await waitForSurfaceReady(ids.login);
     const marker = await page.evaluate(() => {
       const token = `pathway-marker-${Math.random().toString(36).slice(2, 10)}`;
       window.__pathwayMarker = token;
@@ -187,6 +217,7 @@ async function exerciseAuthoredSurfaceRoutingInBrowser(baseUrl, {
       authStatusId: ids.authStatus,
       authStatus: "signedIn"
     });
+    await waitForSurfaceReady(ids.home);
     const loginTransition = await page.evaluate(args => ({
       path: window.location.pathname,
       routeState: window.__surfaceInteractionRuntime?.processRuntime?.value?.(args.routeStateId) ?? null,
@@ -214,6 +245,7 @@ async function exerciseAuthoredSurfaceRoutingInBrowser(baseUrl, {
       authStatusId: ids.authStatus,
       authStatus: "signedOut"
     });
+    await waitForSurfaceReady(ids.signout);
     const signoutTransition = await page.evaluate(args => ({
       path: window.location.pathname,
       routeState: window.__surfaceInteractionRuntime?.processRuntime?.value?.(args.routeStateId) ?? null,
@@ -235,6 +267,7 @@ async function exerciseAuthoredSurfaceRoutingInBrowser(baseUrl, {
       authStatusId: ids.authStatus,
       authStatus: "idle"
     });
+    await waitForSurfaceReady(ids.login);
     const signBackTransition = await page.evaluate(args => ({
       path: window.location.pathname,
       routeState: window.__surfaceInteractionRuntime?.processRuntime?.value?.(args.routeStateId) ?? null,
@@ -544,7 +577,7 @@ async function authorEngentusShellFlowThroughMcp(write, {
       context: contextId,
       surfaceKind: "action",
       className: "auth-submit",
-      props: { tag: "button", domId: "sign-back-in", label: "Sign back in", href: paths.root },
+      props: { tag: "button", domId: "sign-back-in", label: "Sign back in", href: paths.login },
       interactions: [
         { target: "self", event: "click", action: { kind: "deliver", message: ids.signBackIn } }
       ]

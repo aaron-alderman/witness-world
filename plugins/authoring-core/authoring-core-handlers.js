@@ -17,11 +17,35 @@ import {
   requestTypeDefine,
   requestProjectionDefine,
   requestMessageDefine,
+  requestPackageDefine,
+  requestPackageRevisionDefine,
+  requestPackageRevisionPublish,
+  requestPackagePatchDefine,
+  requestPackageNamespaceDefine,
+  requestPackageDependencyDefine,
+  requestPackageTransformerDefine,
+  resolveCoveredAuthoringRefInput,
+  requireCoveredAuthoringRefInput,
   requestBootstrapRouteDefine,
   requestBootstrapServeDefine,
   requestWidgetDefine,
   requestWidgetUpdate
 } from "./authoring-core-processes.js";
+import { requestBootstrapProposalCreate } from "../proposals/proposal-processes.js";
+
+function proposalIdPart(value, fallback = "target") {
+  const normalized = String(value || "")
+    .replace(/[^A-Za-z0-9_.:-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || fallback;
+}
+
+function proposalContextsForSurfaceBody(body) {
+  const docs = Array.isArray(body) ? body : [body];
+  return docs
+    .map(doc => doc && typeof doc === "object" && !Array.isArray(doc) ? (doc.context ?? null) : null)
+    .filter(context => typeof context === "string" && context.trim());
+}
 
 export function createAuthoringCoreBundleHandlers({
   world,
@@ -50,6 +74,46 @@ export function createAuthoringCoreBundleHandlers({
     ensureTargetAuthority,
     ensureContextAuthority
   } = authoringServices;
+  const nextAuthoringCoreProposalId = ({ actor, targetProcess, targetKind, targetId }) => [
+    "proposal",
+    "authoringCore",
+    proposalIdPart(actor || "guest"),
+    proposalIdPart(targetProcess),
+    proposalIdPart(targetKind),
+    proposalIdPart(targetId || targetProcess)
+  ].join(".");
+  const requestAuthoringCoreProposalCreate = ({
+    actor,
+    targetProcess,
+    targetKind,
+    targetId,
+    body,
+    reason
+  }) => requestBootstrapProposalCreate(world, {
+    actor,
+    backendHost,
+    body: {
+      id: nextAuthoringCoreProposalId({ actor, targetProcess, targetKind, targetId }),
+      targetProcess,
+      targetKind,
+      targetId,
+      bodyJson: JSON.stringify(body ?? {}),
+      reason
+    }
+  });
+  const sendAuthoringCoreProposalResponse = (res, proposal, statusMessage = null) => {
+    if (!proposal.ok) {
+      sendJson(res, proposal.status || 400, { error: proposal.error, witness: proposal.witness });
+      return;
+    }
+    sendJson(res, 202, {
+      ok: true,
+      status: "proposed",
+      proposal: proposal.proposal,
+      witness: proposal.witness,
+      ...(statusMessage ? { statusMessage } : {})
+    });
+  };
   return {
     "identity.create": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
@@ -105,6 +169,18 @@ export function createAuthoringCoreBundleHandlers({
       const body = await readJson(req);
       const auth = body.parent ? ensureTargetAuthority(gate.actor, body.parent) : { ok: true };
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "context.define",
+            targetKind: "context",
+            targetId: body.parent ?? null,
+            body,
+            reason: "Create a child context through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -125,6 +201,18 @@ export function createAuthoringCoreBundleHandlers({
       const body = await readJson(req);
       const auth = ensureContextAuthority(gate.actor, body.context ?? null);
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "perspective.define",
+            targetKind: "context",
+            targetId: body.context ?? null,
+            body,
+            reason: "Create a perspective through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -145,6 +233,18 @@ export function createAuthoringCoreBundleHandlers({
       const body = await readJson(req);
       const auth = ensureContextAuthority(gate.actor, body.context);
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "context.bind",
+            targetKind: "context",
+            targetId: body.context ?? null,
+            body,
+            reason: "Create a context binding through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -165,6 +265,18 @@ export function createAuthoringCoreBundleHandlers({
       const body = await readJson(req);
       const auth = ensureContextAuthority(gate.actor, body.context);
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "context.unbind",
+            targetKind: "context",
+            targetId: body.context ?? null,
+            body,
+            reason: "Remove a context binding through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -185,6 +297,18 @@ export function createAuthoringCoreBundleHandlers({
       const body = await readJson(req);
       const auth = ensureContextAuthority(gate.actor, body.context);
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "context.export",
+            targetKind: "context",
+            targetId: body.context ?? null,
+            body,
+            reason: "Create a context export through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -205,6 +329,18 @@ export function createAuthoringCoreBundleHandlers({
       const body = await readJson(req);
       const auth = ensureContextAuthority(gate.actor, body.context);
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "context.unexport",
+            targetKind: "context",
+            targetId: body.context ?? null,
+            body,
+            reason: "Remove a context export through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -225,6 +361,18 @@ export function createAuthoringCoreBundleHandlers({
       const body = await readJson(req);
       const auth = ensureContextAuthority(gate.actor, body.context);
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "context.import",
+            targetKind: "context",
+            targetId: body.context ?? null,
+            body,
+            reason: "Create a context import through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -245,6 +393,18 @@ export function createAuthoringCoreBundleHandlers({
       const body = await readJson(req);
       const auth = ensureContextAuthority(gate.actor, body.context);
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "context.unimport",
+            targetKind: "context",
+            targetId: body.context ?? null,
+            body,
+            reason: "Remove a context import through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -272,6 +432,18 @@ export function createAuthoringCoreBundleHandlers({
       }
       const auth = ensureTargetAuthority(gate.actor, resolvedTarget.target);
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "stewardship.grant",
+            targetKind: body.targetKind ?? null,
+            targetId: resolvedTarget.target,
+            body: { ...body, target: resolvedTarget.target, targetRef: null },
+            reason: "Grant stewardship through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -303,6 +475,18 @@ export function createAuthoringCoreBundleHandlers({
       }
       const auth = ensureTargetAuthority(gate.actor, resolvedTarget.target);
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "stewardship.revoke",
+            targetKind: body.targetKind ?? null,
+            targetId: resolvedTarget.target,
+            body: { ...body, target: resolvedTarget.target, targetRef: null },
+            reason: "Revoke stewardship through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -326,10 +510,26 @@ export function createAuthoringCoreBundleHandlers({
       }
       const body = await readJson(req);
       const docs = Array.isArray(body) ? body : [body];
+      const proposalContexts = proposalContextsForSurfaceBody(body);
       for (const doc of docs) {
         const context = doc && typeof doc === "object" ? (doc.context ?? null) : null;
         const auth = context ? ensureContextAuthority(gate.actor, context) : { ok: true };
         if (!auth.ok) {
+          if (auth.status === 403) {
+            const sharedContext = proposalContexts.length > 0 && proposalContexts.every(value => value === proposalContexts[0])
+              ? proposalContexts[0]
+              : null;
+            const proposal = requestAuthoringCoreProposalCreate({
+              actor: gate.actor,
+              targetProcess: "surface.define",
+              targetKind: sharedContext ? "context" : "surfaceBatch",
+              targetId: sharedContext ?? context ?? null,
+              body,
+              reason: "Define surfaces through witnessed proposal"
+            });
+            sendAuthoringCoreProposalResponse(res, proposal);
+            return;
+          }
           sendGateFailure(res, auth);
           return;
         }
@@ -356,6 +556,18 @@ export function createAuthoringCoreBundleHandlers({
         : null;
       const auth = context ? ensureContextAuthority(gate.actor, context) : { ok: true };
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "process.define",
+            targetKind: "context",
+            targetId: context,
+            body,
+            reason: "Define a process through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -379,6 +591,18 @@ export function createAuthoringCoreBundleHandlers({
         : null;
       const auth = context ? ensureContextAuthority(gate.actor, context) : { ok: true };
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "type.define",
+            targetKind: "context",
+            targetId: context,
+            body,
+            reason: "Define a type through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -402,6 +626,18 @@ export function createAuthoringCoreBundleHandlers({
         : null;
       const auth = context ? ensureContextAuthority(gate.actor, context) : { ok: true };
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "projection.define",
+            targetKind: "context",
+            targetId: context,
+            body,
+            reason: "Define a projection through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -425,6 +661,18 @@ export function createAuthoringCoreBundleHandlers({
         : null;
       const auth = context ? ensureContextAuthority(gate.actor, context) : { ok: true };
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "message.define",
+            targetKind: "context",
+            targetId: context,
+            body,
+            reason: "Define a message through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -436,6 +684,307 @@ export function createAuthoringCoreBundleHandlers({
       sendJson(res, result.status, { message: result.message, witness: result.witness });
     },
 
+    "package.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const context = body && typeof body === "object" && !Array.isArray(body)
+        ? (body.context ?? null)
+        : null;
+      const auth = context ? ensureContextAuthority(gate.actor, context) : { ok: true };
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "package.define",
+            targetKind: "context",
+            targetId: context,
+            body,
+            reason: "Define a package through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestPackageDefine(world, { actor: gate.actor, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { package: result.package, witness: result.witness });
+    },
+
+    "packageRevision.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const resolvedPackage = requireCoveredAuthoringRefInput(world, body, {
+        idField: "package",
+        refField: "packageRef",
+        label: "package"
+      });
+      if (!resolvedPackage.ok) {
+        sendJson(res, 400, { error: resolvedPackage.error, witness: null });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedPackage.target);
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "packageRevision.define",
+            targetKind: "package",
+            targetId: resolvedPackage.target,
+            body: { ...body, package: resolvedPackage.target, packageRef: null },
+            reason: "Define a package revision through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestPackageRevisionDefine(world, { actor: gate.actor, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { packageRevision: result.packageRevision, witness: result.witness });
+    },
+
+    "packageRevision.publish": async ({ req, res, requestActor, params }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const paramRevisionId = typeof params?.id === "string" && params.id.trim()
+        ? params.id.trim()
+        : "";
+      const resolvedRevision = paramRevisionId
+        ? { ok: true, target: paramRevisionId }
+        : requireCoveredAuthoringRefInput(world, body, {
+            idField: "id",
+            refField: "idRef",
+            label: "package revision"
+          });
+      if (!resolvedRevision.ok) {
+        sendJson(res, 400, { error: resolvedRevision.error, witness: null });
+        return;
+      }
+      const revisionId = resolvedRevision.target;
+      const auth = ensureTargetAuthority(gate.actor, revisionId);
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "packageRevision.publish",
+            targetKind: "packageRevision",
+            targetId: revisionId || null,
+            body: { ...body, id: revisionId, idRef: null },
+            reason: "Publish a package revision through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestPackageRevisionPublish(world, {
+        actor: gate.actor,
+        body: { ...body, id: revisionId }
+      });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { packageRevision: result.packageRevision, witness: result.witness });
+    },
+
+    "packagePatch.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const resolvedRevision = requireCoveredAuthoringRefInput(world, body, {
+        idField: "revision",
+        refField: "revisionRef",
+        label: "package revision"
+      });
+      if (!resolvedRevision.ok) {
+        sendJson(res, 400, { error: resolvedRevision.error, witness: null });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedRevision.target);
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "packagePatch.define",
+            targetKind: "packageRevision",
+            targetId: resolvedRevision.target,
+            body: { ...body, revision: resolvedRevision.target, revisionRef: null },
+            reason: "Define a package patch through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestPackagePatchDefine(world, { actor: gate.actor, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { packagePatch: result.packagePatch, witness: result.witness });
+    },
+
+    "packageNamespace.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const context = body && typeof body === "object" && !Array.isArray(body)
+        ? (body.context ?? null)
+        : null;
+      const auth = ensureContextAuthority(gate.actor, context);
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "packageNamespace.define",
+            targetKind: "context",
+            targetId: context,
+            body,
+            reason: "Bind a package namespace through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestPackageNamespaceDefine(world, { actor: gate.actor, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { packageNamespace: result.packageNamespace, witness: result.witness });
+    },
+
+    "packageDependency.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const resolvedSourceRevision = requireCoveredAuthoringRefInput(world, body, {
+        idField: "sourceRevision",
+        refField: "sourceRevisionRef",
+        label: "package source revision"
+      });
+      if (!resolvedSourceRevision.ok) {
+        sendJson(res, 400, { error: resolvedSourceRevision.error, witness: null });
+        return;
+      }
+      const auth = ensureTargetAuthority(gate.actor, resolvedSourceRevision.target);
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "packageDependency.define",
+            targetKind: "packageRevision",
+            targetId: resolvedSourceRevision.target,
+            body: { ...body, sourceRevision: resolvedSourceRevision.target, sourceRevisionRef: null },
+            reason: "Define a package dependency through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestPackageDependencyDefine(world, { actor: gate.actor, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { packageDependency: result.packageDependency, witness: result.witness });
+    },
+
+    "packageTransformer.create": async ({ req, res, requestActor }) => {
+      const gate = requireBootstrapActor(requestActor);
+      if (!gate.ok) {
+        sendGateFailure(res, gate);
+        return;
+      }
+      const body = await readJson(req);
+      const resolvedTargetRevision = resolveCoveredAuthoringRefInput(world, body, {
+        idField: "targetRevision",
+        refField: "targetRevisionRef",
+        label: "target package revision"
+      });
+      const resolvedPackage = requireCoveredAuthoringRefInput(world, body, {
+        idField: "package",
+        refField: "packageRef",
+        label: "package"
+      });
+      if (!resolvedTargetRevision.ok) {
+        sendJson(res, 400, { error: resolvedTargetRevision.error, witness: null });
+        return;
+      }
+      if (!resolvedPackage.ok) {
+        sendJson(res, 400, { error: resolvedPackage.error, witness: null });
+        return;
+      }
+      const targetId = resolvedTargetRevision.target ?? resolvedPackage.target;
+      const targetKind = resolvedTargetRevision.target
+        ? "packageRevision"
+        : "package";
+      const auth = ensureTargetAuthority(gate.actor, targetId);
+      if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "packageTransformer.define",
+            targetKind,
+            targetId: targetId || null,
+            body: {
+              ...body,
+              ...(resolvedPackage.ok ? { package: resolvedPackage.target, packageRef: null } : {}),
+              ...(resolvedTargetRevision.ok ? { targetRevision: resolvedTargetRevision.target, targetRevisionRef: null } : {})
+            },
+            reason: "Define a package transformer through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
+        sendGateFailure(res, auth);
+        return;
+      }
+      const result = requestPackageTransformerDefine(world, { actor: gate.actor, body });
+      if (!result.ok) {
+        sendJson(res, result.status, { error: result.error, witness: result.witness ?? null });
+        return;
+      }
+      sendJson(res, result.status, { packageTransformer: result.packageTransformer, witness: result.witness });
+    },
+
     "route.create": async ({ req, res, requestActor }) => {
       const gate = requireBootstrapActor(requestActor);
       if (!gate.ok) {
@@ -445,6 +994,18 @@ export function createAuthoringCoreBundleHandlers({
       const body = await readJson(req);
       const auth = body.context ? ensureContextAuthority(gate.actor, body.context) : { ok: true };
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "route.define",
+            targetKind: "context",
+            targetId: body.context ?? null,
+            body,
+            reason: "Create a route through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -467,6 +1028,18 @@ export function createAuthoringCoreBundleHandlers({
         ? ensureTargetAuthority(gate.actor, body.serverRunner)
         : ensureContextAuthority(gate.actor, body.context ?? null);
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "serve.define",
+            targetKind: body.serverRunner ? "serverRunner" : "context",
+            targetId: body.serverRunner ?? body.context ?? null,
+            body,
+            reason: "Create a serve mount through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal);
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -485,8 +1058,25 @@ export function createAuthoringCoreBundleHandlers({
         return;
       }
       const body = await readJson(req);
-      const auth = ensureContextAuthority(gate.actor, body.context ?? null);
+      const auth = body.context
+        ? ensureContextAuthority(gate.actor, body.context)
+        : (body.parent ? ensureTargetAuthority(gate.actor, body.parent) : { ok: true });
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const reason = body.context
+            ? "Create a widget through witnessed proposal"
+            : "Create a child widget through witnessed proposal";
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "widget.define",
+            targetKind: body.context ? "context" : "widget",
+            targetId: body.context ?? body.parent ?? body.id ?? null,
+            body,
+            reason
+          });
+          sendAuthoringCoreProposalResponse(res, proposal, "Proposed widget for review.");
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
@@ -505,12 +1095,28 @@ export function createAuthoringCoreBundleHandlers({
         return;
       }
       const body = await readJson(req);
+      const reason = typeof body?.reason === "string" ? body.reason.trim() : "";
+      const widgetBody = body && typeof body === "object" && !Array.isArray(body)
+        ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "reason"))
+        : {};
       const auth = ensureTargetAuthority(gate.actor, params.id || "");
       if (!auth.ok) {
+        if (auth.status === 403) {
+          const proposal = requestAuthoringCoreProposalCreate({
+            actor: gate.actor,
+            targetProcess: "widget.update",
+            targetKind: "widget",
+            targetId: params.id || "",
+            body: { ...widgetBody, id: params.id || "" },
+            reason: reason || "Update a widget through witnessed proposal"
+          });
+          sendAuthoringCoreProposalResponse(res, proposal, "Proposed widget update for review.");
+          return;
+        }
         sendGateFailure(res, auth);
         return;
       }
-      const result = requestWidgetUpdate(world, { actor: gate.actor, backendHost, body: { ...body, id: params.id || "" } });
+      const result = requestWidgetUpdate(world, { actor: gate.actor, backendHost, body: { ...widgetBody, id: params.id || "" } });
       if (!result.ok) {
         sendJson(res, result.status, { error: result.error, witness: result.witness });
         return;

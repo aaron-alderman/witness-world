@@ -64,7 +64,8 @@ export function buildBootstrapProposalAdjacentSubmitRequest({
   });
   if (!body) return null;
   return {
-    url: contract.url || "/api/proposals",
+    url: contract.url || "",
+    ...(contract.method ? { method: contract.method } : {}),
     body,
     successText: contract.successText || "Saved."
   };
@@ -92,7 +93,7 @@ export async function runBootstrapProposalAdjacentSubmit({
       contractsByFamily
     });
     if (!request) return false;
-    await postJson(request.url, request.body);
+    await postJson(request.url, request.body, request.method || "POST");
     setStatus(detail.statusId, request.successText);
     resetForm(detail.formId);
     await refresh();

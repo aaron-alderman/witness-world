@@ -1442,6 +1442,7 @@ function buildRuntimePluginReviewRows({
     .map(pluginPackage => {
       const pluginId = pluginPackage.id;
       const installed = requestedAuthoredIds.includes(pluginId);
+      const requested = installed || pluginPackage.activation?.requested === true;
       const directDependencies = [...(pluginPackage.manifest?.dependsOnPlugins ?? pluginPackage.metadata?.dependsOnPlugins ?? [])];
       const missingDependencies = directDependencies.filter(dependencyId => !requestedAuthoredIds.includes(dependencyId));
       const dependencyIssues = directDependencies.flatMap(dependencyId => {

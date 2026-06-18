@@ -150,6 +150,7 @@ Acceptance:
 Implementation:
 
 - align runtime-plugin lifecycle with whatever Group A chooses for package or patch authorship
+- use [docs/PACKAGE-PLUGIN-AUTHORSHIP-MODEL.md](../PACKAGE-PLUGIN-AUTHORSHIP-MODEL.md) as the current bridge target
 - keep manifest-only local packages as compatibility if needed
 
 Acceptance:

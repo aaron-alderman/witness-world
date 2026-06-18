@@ -15,13 +15,21 @@ import {
   validateContextExport,
   validateContextImport,
   resolveContextualRef,
-  CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES,
+  resolveCoveredContextualRef,
   grantStewardship,
   revokeStewardship,
   defineRoute,
   serveRoute,
+  definePackage,
+  definePackageRevision,
+  publishPackageRevision,
+  definePackagePatch,
+  definePackageNamespace,
+  definePackageDependency,
+  definePackageTransformer,
   moduleProjectors
 } from "../../src/modules.js";
+import { createCanonicalPackagePatch } from "../../src/package-authorship.js";
 import { defineFrontendProgram, defineFrontendStep, defineWidget, updateWidget, attachWidget, widgetDefinitions, widgetVersions } from "../../src/widgets.js";
 import {
   defineBackendProgram,
@@ -134,13 +142,53 @@ function resolveBodyRef(world, body, {
   });
 }
 
+function resolveCoveredBodyRef(world, body, {
+  contextField = "context",
+  idField,
+  refField,
+  label
+}) {
+  return resolveCoveredContextualRef(world.allWitnesses(), {
+    context: body?.[contextField] ?? null,
+    id: body?.[idField] ?? null,
+    ref: body?.[refField] ?? null,
+    label
+  });
+}
+
+export function resolveCoveredAuthoringRefInput(world, body, {
+  contextField = "context",
+  idField,
+  refField,
+  label
+}) {
+  return resolveCoveredBodyRef(world, body, {
+    contextField,
+    idField,
+    refField,
+    label
+  });
+}
+
+export function requireCoveredAuthoringRefInput(world, body, options = {}) {
+  const resolved = resolveCoveredAuthoringRefInput(world, body, options);
+  if (!resolved.ok) return resolved;
+  if (!resolved.target) {
+    return {
+      ok: false,
+      error: `${options?.label ?? "reference"} is required`
+    };
+  }
+  return resolved;
+}
+
 export function resolveStewardshipTargetInput(world, body, {
   contextField = "context",
   idField = "target",
   refField = "targetRef",
   label = "stewardship target"
 } = {}) {
-  const resolved = resolveBodyRef(world, body, {
+  const resolved = resolveCoveredBodyRef(world, body, {
     contextField,
     idField,
     refField,
@@ -1332,6 +1380,672 @@ export function requestMessageDefine(world, {
   };
 }
 
+function authoringObject(body, label) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new Error(`${label} must be an object`);
+  }
+  return { ...body };
+}
+
+function requiredStringField(body, field, label) {
+  const value = trimOptionalString(body?.[field]);
+  if (!value) throw new Error(`${label} requires ${field}`);
+  return value;
+}
+
+function optionalObjectField(body, field) {
+  const value = body?.[field];
+  if (value === undefined || value === null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${field} must be an object`);
+  }
+  return structuredClone(value);
+}
+
+function optionalArrayField(body, field) {
+  const value = body?.[field];
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error(`${field} must be an array`);
+  return structuredClone(value);
+}
+
+function requiredResolvedAuthoringRef(world, body, {
+  contextField = "context",
+  idField,
+  refField,
+  label
+}) {
+  const resolved = requireCoveredAuthoringRefInput(world, body, {
+    contextField,
+    idField,
+    refField,
+    label
+  });
+  if (!resolved.ok) throw new Error(resolved.error);
+  return resolved.target;
+}
+
+function optionalResolvedAuthoringRef(world, body, {
+  contextField = "context",
+  idField,
+  refField,
+  label
+}) {
+  const id = trimOptionalString(body?.[idField]);
+  const ref = trimOptionalString(body?.[refField]);
+  if (!id && !ref) return null;
+  const resolved = requireCoveredAuthoringRefInput(world, body, {
+    contextField,
+    idField,
+    refField,
+    label
+  });
+  if (!resolved.ok) throw new Error(resolved.error);
+  return resolved.target;
+}
+
+function packageNamespaceIdFromBody(body) {
+  return trimOptionalString(body?.id) ?? `packageNamespace:${String(body?.context)}:${String(body?.name)}`;
+}
+
+function packageDependencyIdFromBody(body) {
+  return trimOptionalString(body?.id) ?? `packageDependency:${String(body?.sourceRevision)}:${String(body?.targetKind)}:${String(body?.targetId)}`;
+}
+
+function packageTransformerIdFromBody(body) {
+  return trimOptionalString(body?.id)
+    ?? `packageTransformer:${String(body?.package)}:${String(body?.targetRevision ?? body?.targetNamespace ?? body?.sourceRevision ?? body?.sourceNamespace ?? "draft")}`;
+}
+
+export function requestPackageDefine(world, {
+  actor,
+  body
+}) {
+  let input;
+  try {
+    input = authoringObject(body, "package doc");
+    input.id = requiredStringField(input, "id", "package doc");
+    if (input.context !== undefined && input.context !== null) {
+      input.context = requiredStringField(input, "context", "package doc");
+    }
+    input.exports = optionalArrayField(input, "exports");
+    input.provenance = optionalObjectField(input, "provenance");
+    input.compatibleRuntimeProfiles = optionalArrayField(input, "compatibleRuntimeProfiles");
+    input.compatibleShells = optionalArrayField(input, "compatibleShells");
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  if (input.context && !exists(world, input.context)) {
+    return {
+      ok: false,
+      status: 404,
+      error: "package context not found",
+      witness: null
+    };
+  }
+  if (exists(world, input.id)) {
+    return {
+      ok: false,
+      status: 409,
+      error: "package id already exists",
+      witness: null
+    };
+  }
+
+  const { context, ...packageBody } = input;
+  const witness = definePackage(world, {
+    actor,
+    ...packageBody
+  });
+  return {
+    ok: true,
+    status: 201,
+    package: witness.body ?? { id: input.id },
+    witness
+  };
+}
+
+export function requestPackageRevisionDefine(world, {
+  actor,
+  body
+}) {
+  let input;
+  try {
+    input = authoringObject(body, "package revision doc");
+    input.id = requiredStringField(input, "id", "package revision doc");
+    input.package = requiredResolvedAuthoringRef(world, input, {
+      idField: "package",
+      refField: "packageRef",
+      label: "package"
+    });
+    input.supersedes = optionalArrayField(input, "supersedes");
+    input.manifest = optionalObjectField(input, "manifest");
+    input.compatibility = optionalObjectField(input, "compatibility");
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  if (!world.project(moduleProjectors.packageIndex).byId[input.package]) {
+    return {
+      ok: false,
+      status: 404,
+      error: "package not found",
+      witness: null
+    };
+  }
+  if (exists(world, input.id)) {
+    return {
+      ok: false,
+      status: 409,
+      error: "package revision id already exists",
+      witness: null
+    };
+  }
+
+  const witness = definePackageRevision(world, {
+    actor,
+    ...input
+  });
+  return {
+    ok: true,
+    status: 201,
+    packageRevision: witness.body ?? { id: input.id },
+    witness
+  };
+}
+
+export function requestPackageRevisionPublish(world, {
+  actor,
+  body
+}) {
+  const revisionIndex = world.project(moduleProjectors.packageRevisionIndex).byId;
+  let input;
+  try {
+    input = authoringObject(body, "package revision publish doc");
+    input.id = requiredResolvedAuthoringRef(world, input, {
+      idField: "id",
+      refField: "idRef",
+      label: "package revision"
+    });
+    if (input.package !== undefined && input.package !== null) {
+      input.package = requiredResolvedAuthoringRef(world, input, {
+        idField: "package",
+        refField: "packageRef",
+        label: "package"
+      });
+    }
+    input.manifest = optionalObjectField(input, "manifest");
+    input.compatibility = optionalObjectField(input, "compatibility");
+    if (input.status !== undefined && input.status !== null) {
+      input.status = requiredStringField(input, "status", "package revision publish doc");
+    }
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  const revisionRow = revisionIndex[input.id];
+  if (!revisionRow) {
+    return {
+      ok: false,
+      status: 404,
+      error: "package revision not found",
+      witness: null
+    };
+  }
+  if (input.package && input.package !== revisionRow.package) {
+    return {
+      ok: false,
+      status: 400,
+      error: "package revision does not belong to package",
+      witness: null
+    };
+  }
+
+  const nextStatus = trimOptionalString(input.status) ?? "published";
+  if (nextStatus !== "published") {
+    return {
+      ok: false,
+      status: 400,
+      error: "package revision publish only supports published status",
+      witness: null
+    };
+  }
+  if (revisionRow.status === "published") {
+    return {
+      ok: false,
+      status: 409,
+      error: "package revision is already published",
+      witness: null
+    };
+  }
+  if (!["draft", "review"].includes(revisionRow.status)) {
+    return {
+      ok: false,
+      status: 409,
+      error: "package revision cannot be published from its current status",
+      witness: null
+    };
+  }
+
+  const witness = publishPackageRevision(world, {
+    actor,
+    id: revisionRow.id,
+    package: revisionRow.package,
+    version: revisionRow.version,
+    status: nextStatus,
+    supersedes: revisionRow.supersedes,
+    emittedBundleHash: trimOptionalString(input.emittedBundleHash) ?? revisionRow.emittedBundleHash ?? null,
+    manifest: input.manifest ?? revisionRow.manifest ?? null,
+    compatibility: input.compatibility ?? revisionRow.compatibility ?? null
+  });
+  return {
+    ok: true,
+    status: 200,
+    packageRevision: witness.body ?? { id: revisionRow.id },
+    witness
+  };
+}
+
+export function requestPackagePatchDefine(world, {
+  actor,
+  body
+}) {
+  const packageIndex = world.project(moduleProjectors.packageIndex).byId;
+  const revisionIndex = world.project(moduleProjectors.packageRevisionIndex).byId;
+  const transformerIndex = world.project(moduleProjectors.packageTransformerIndex).byId;
+  let normalized;
+  try {
+    const input = authoringObject(body, "package patch doc");
+    const packageId = requiredResolvedAuthoringRef(world, input, {
+      idField: "package",
+      refField: "packageRef",
+      label: "package"
+    });
+    const revisionId = requiredResolvedAuthoringRef(world, input, {
+      idField: "revision",
+      refField: "revisionRef",
+      label: "package revision"
+    });
+    if (!packageIndex[packageId]) throw new Error("package not found");
+    const revisionRow = revisionIndex[revisionId];
+    if (!revisionRow) throw new Error("package revision not found");
+    if (revisionRow.package !== packageId) throw new Error("package revision does not belong to package");
+    const transformerId = optionalResolvedAuthoringRef(world, input, {
+      idField: "transformer",
+      refField: "transformerRef",
+      label: "package transformer"
+    });
+    if (transformerId) {
+      const transformerRow = transformerIndex[transformerId];
+      if (!transformerRow) throw new Error("package transformer not found");
+      if (transformerRow.package !== packageId) throw new Error("package transformer does not belong to package");
+      if (transformerRow.targetRevision && transformerRow.targetRevision !== revisionId) {
+        throw new Error("package patch revision does not match transformer target revision");
+      }
+    }
+    normalized = createCanonicalPackagePatch({
+      package: packageId,
+      revision: revisionId,
+      ordinal: input.ordinal ?? null,
+      path: input.path,
+      operation: input.operation,
+      sourceLanguage: input.sourceLanguage,
+      transformer: transformerId,
+      previousHash: trimOptionalString(input.previousHash),
+      nextHash: trimOptionalString(input.nextHash),
+      body: input.body ?? null
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      status: /not found/i.test(message) ? 404 : 400,
+      error: message,
+      witness: null
+    };
+  }
+
+  if (exists(world, normalized.id)) {
+    return {
+      ok: false,
+      status: 409,
+      error: "package patch id already exists",
+      witness: null
+    };
+  }
+
+  const witness = definePackagePatch(world, {
+    actor,
+    ...normalized
+  });
+  return {
+    ok: true,
+    status: 201,
+    packagePatch: witness.body ?? { id: normalized.id },
+    witness
+  };
+}
+
+export function requestPackageNamespaceDefine(world, {
+  actor,
+  body
+}) {
+  const packageIndex = world.project(moduleProjectors.packageIndex).byId;
+  const revisionIndex = world.project(moduleProjectors.packageRevisionIndex).byId;
+  let input;
+  let namespaceId;
+  try {
+    input = authoringObject(body, "package namespace doc");
+    input.context = requiredStringField(input, "context", "package namespace doc");
+    input.name = requiredStringField(input, "name", "package namespace doc");
+    input.package = requiredResolvedAuthoringRef(world, input, {
+      idField: "package",
+      refField: "packageRef",
+      label: "package"
+    });
+    input.revision = optionalResolvedAuthoringRef(world, input, {
+      idField: "revision",
+      refField: "revisionRef",
+      label: "package revision"
+    });
+    namespaceId = packageNamespaceIdFromBody(input);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  if (!exists(world, input.context)) {
+    return {
+      ok: false,
+      status: 404,
+      error: "package namespace context not found",
+      witness: null
+    };
+  }
+  if (!packageIndex[input.package]) {
+    return {
+      ok: false,
+      status: 404,
+      error: "package not found",
+      witness: null
+    };
+  }
+  if (input.revision) {
+    const revisionRow = revisionIndex[input.revision];
+    if (!revisionRow) {
+      return {
+        ok: false,
+        status: 404,
+        error: "package revision not found",
+        witness: null
+      };
+    }
+    if (revisionRow.package !== input.package) {
+      return {
+        ok: false,
+        status: 400,
+        error: "package revision does not belong to package",
+        witness: null
+      };
+    }
+  }
+  if (exists(world, namespaceId)) {
+    return {
+      ok: false,
+      status: 409,
+      error: "package namespace id already exists",
+      witness: null
+    };
+  }
+
+  const witness = definePackageNamespace(world, {
+    actor,
+    ...input,
+    id: namespaceId
+  });
+  return {
+    ok: true,
+    status: 201,
+    packageNamespace: witness.body ?? { id: namespaceId },
+    witness
+  };
+}
+
+export function requestPackageDependencyDefine(world, {
+  actor,
+  body
+}) {
+  const packageIndex = world.project(moduleProjectors.packageIndex).byId;
+  const revisionIndex = world.project(moduleProjectors.packageRevisionIndex).byId;
+  let input;
+  let dependencyId;
+  try {
+    input = authoringObject(body, "package dependency doc");
+    input.sourceRevision = requiredResolvedAuthoringRef(world, input, {
+      idField: "sourceRevision",
+      refField: "sourceRevisionRef",
+      label: "package source revision"
+    });
+    input.targetKind = requiredStringField(input, "targetKind", "package dependency doc");
+    input.targetId = requiredResolvedAuthoringRef(world, input, {
+      idField: "targetId",
+      refField: "targetRef",
+      label: "package dependency target"
+    });
+    input.sourcePackage = optionalResolvedAuthoringRef(world, input, {
+      idField: "sourcePackage",
+      refField: "sourcePackageRef",
+      label: "source package"
+    });
+    input.compatibility = optionalObjectField(input, "compatibility");
+    input.runtimeProfiles = optionalArrayField(input, "runtimeProfiles");
+    dependencyId = packageDependencyIdFromBody(input);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  const revisionRow = revisionIndex[input.sourceRevision];
+  if (!revisionRow) {
+    return {
+      ok: false,
+      status: 404,
+      error: "package source revision not found",
+      witness: null
+    };
+  }
+  if (input.sourcePackage) {
+    if (!packageIndex[input.sourcePackage]) {
+      return {
+        ok: false,
+        status: 404,
+        error: "source package not found",
+        witness: null
+      };
+    }
+    if (revisionRow.package !== input.sourcePackage) {
+      return {
+        ok: false,
+        status: 400,
+        error: "package source revision does not belong to source package",
+        witness: null
+      };
+    }
+  }
+  if (exists(world, dependencyId)) {
+    return {
+      ok: false,
+      status: 409,
+      error: "package dependency id already exists",
+      witness: null
+    };
+  }
+
+  const witness = definePackageDependency(world, {
+    actor,
+    ...input,
+    id: dependencyId
+  });
+  return {
+    ok: true,
+    status: 201,
+    packageDependency: witness.body ?? { id: dependencyId },
+    witness
+  };
+}
+
+export function requestPackageTransformerDefine(world, {
+  actor,
+  body
+}) {
+  const packageIndex = world.project(moduleProjectors.packageIndex).byId;
+  const revisionIndex = world.project(moduleProjectors.packageRevisionIndex).byId;
+  const namespaceIndex = world.project(moduleProjectors.packageNamespaceIndex).byId;
+  let input;
+  let transformerId;
+  try {
+    input = authoringObject(body, "package transformer doc");
+    input.package = requiredResolvedAuthoringRef(world, input, {
+      idField: "package",
+      refField: "packageRef",
+      label: "package"
+    });
+    input.sourceRevision = optionalResolvedAuthoringRef(world, input, {
+      idField: "sourceRevision",
+      refField: "sourceRevisionRef",
+      label: "source package revision"
+    });
+    input.sourceNamespace = optionalResolvedAuthoringRef(world, input, {
+      idField: "sourceNamespace",
+      refField: "sourceNamespaceRef",
+      label: "source package namespace"
+    });
+    input.targetRevision = optionalResolvedAuthoringRef(world, input, {
+      idField: "targetRevision",
+      refField: "targetRevisionRef",
+      label: "target package revision"
+    });
+    input.targetNamespace = optionalResolvedAuthoringRef(world, input, {
+      idField: "targetNamespace",
+      refField: "targetNamespaceRef",
+      label: "target package namespace"
+    });
+    if (!trimOptionalString(input.sourceRevision) && !trimOptionalString(input.sourceNamespace)) {
+      throw new Error("package transformer requires sourceRevision or sourceNamespace");
+    }
+    if (!trimOptionalString(input.targetRevision) && !trimOptionalString(input.targetNamespace)) {
+      throw new Error("package transformer requires targetRevision or targetNamespace");
+    }
+    input.mappings = optionalArrayField(input, "mappings");
+    input.remainingGlue = optionalArrayField(input, "remainingGlue");
+    input.notes = optionalArrayField(input, "notes");
+    transformerId = packageTransformerIdFromBody(input);
+  } catch (error) {
+    return {
+      ok: false,
+      status: 400,
+      error: error instanceof Error ? error.message : String(error),
+      witness: null
+    };
+  }
+
+  if (!packageIndex[input.package]) {
+    return {
+      ok: false,
+      status: 404,
+      error: "package not found",
+      witness: null
+    };
+  }
+  const packageId = input.package;
+  for (const field of ["sourceRevision", "targetRevision"]) {
+    const revisionId = trimOptionalString(input[field]);
+    if (!revisionId) continue;
+    const revisionRow = revisionIndex[revisionId];
+    if (!revisionRow) {
+      return {
+        ok: false,
+        status: 404,
+        error: "package revision not found",
+        witness: null
+      };
+    }
+    if (revisionRow.package !== packageId) {
+      return {
+        ok: false,
+        status: 400,
+        error: "package transformer revision does not belong to package",
+        witness: null
+      };
+    }
+  }
+  for (const field of ["sourceNamespace", "targetNamespace"]) {
+    const namespaceId = trimOptionalString(input[field]);
+    if (!namespaceId) continue;
+    const namespaceRow = namespaceIndex[namespaceId];
+    if (!namespaceRow) {
+      return {
+        ok: false,
+        status: 404,
+        error: "package namespace not found",
+        witness: null
+      };
+    }
+    if (namespaceRow.package !== packageId) {
+      return {
+        ok: false,
+        status: 400,
+        error: "package transformer namespace does not belong to package",
+        witness: null
+      };
+    }
+  }
+  if (exists(world, transformerId)) {
+    return {
+      ok: false,
+      status: 409,
+      error: "package transformer id already exists",
+      witness: null
+    };
+  }
+
+  const witness = definePackageTransformer(world, {
+    actor,
+    ...input,
+    id: transformerId
+  });
+  return {
+    ok: true,
+    status: 201,
+    packageTransformer: witness.body ?? { id: transformerId },
+    witness
+  };
+}
+
 export function requestBootstrapRouteDefine(world, {
   actor,
   backendHost,
@@ -1380,47 +2094,43 @@ export function requestBootstrapRouteDefine(world, {
     });
     return { ok: false, status: 400, error: "handler does not support method", witness };
   }
-  const backendProgramResolved = resolveBodyRef(world, body, {
+  const backendProgramResolved = resolveCoveredBodyRef(world, body, {
     contextField: "context",
     idField: "backendProgramSoul",
     refField: "backendProgramSoulRef",
-    label: "backend program soul",
-    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
+    label: "backend program soul"
   });
   if (!backendProgramResolved.ok) {
     const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: backendProgramResolved.error } });
     return { ok: false, status: 400, error: backendProgramResolved.error, witness };
   }
-  const servesResolved = resolveBodyRef(world, body, {
+  const servesResolved = resolveCoveredBodyRef(world, body, {
     contextField: "context",
     idField: "serves",
     refField: "servesRef",
-    label: "route serves",
-    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
+    label: "route serves"
   });
   if (!servesResolved.ok) {
     const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: servesResolved.error } });
     return { ok: false, status: 400, error: servesResolved.error, witness };
   }
   const params = {};
-  const rootWidgetResolved = resolveBodyRef(world, body, {
+  const rootWidgetResolved = resolveCoveredBodyRef(world, body, {
     contextField: "context",
     idField: "rootWidget",
     refField: "rootWidgetRef",
-    label: "route root widget",
-    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
+    label: "route root widget"
   });
   if (!rootWidgetResolved.ok) {
     const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: rootWidgetResolved.error } });
     return { ok: false, status: 400, error: rootWidgetResolved.error, witness };
   }
   if (typeof rootWidgetResolved.target === "string" && rootWidgetResolved.target.trim()) params.rootWidget = rootWidgetResolved.target.trim();
-  const rootSurfaceResolved = resolveBodyRef(world, body, {
+  const rootSurfaceResolved = resolveCoveredBodyRef(world, body, {
     contextField: "context",
     idField: "rootSurface",
     refField: "rootSurfaceRef",
-    label: "route root surface",
-    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
+    label: "route root surface"
   });
   if (!rootSurfaceResolved.ok) {
     const witness = fail(world, { process: "route.define.failed", actor: actor || backendHost, body: { reason: rootSurfaceResolved.error } });
@@ -1576,23 +2286,21 @@ export function requestBootstrapServeDefine(world, {
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
   const input = validated.value;
-  const serverRunnerResolved = resolveBodyRef(world, body, {
+  const serverRunnerResolved = resolveCoveredBodyRef(world, body, {
     contextField: "context",
     idField: "serverRunner",
     refField: "serverRunnerRef",
-    label: "server runner",
-    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
+    label: "server runner"
   });
   if (!serverRunnerResolved.ok) {
     const witness = fail(world, { process: "serve.define.failed", actor: actor || backendHost, body: { reason: serverRunnerResolved.error } });
     return { ok: false, status: 400, error: serverRunnerResolved.error, witness };
   }
-  const routeResolved = resolveBodyRef(world, body, {
+  const routeResolved = resolveCoveredBodyRef(world, body, {
     contextField: "context",
     idField: "route",
     refField: "routeRef",
-    label: "route",
-    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
+    label: "route"
   });
   if (!routeResolved.ok) {
     const witness = fail(world, { process: "serve.define.failed", actor: actor || backendHost, body: { reason: routeResolved.error } });
@@ -1648,12 +2356,11 @@ export function requestWidgetDefine(world, {
     return { ok: false, status: 400, error: "typed validation failed", witness };
   }
 
-  const resolvedParent = resolveBodyRef(world, body, {
+  const resolvedParent = resolveCoveredBodyRef(world, body, {
     contextField: "context",
     idField: "parent",
     refField: "parentRef",
-    label: "parent widget",
-    allowedCanonicalIdPolicyClasses: CONTEXTUAL_CANONICAL_ID_POLICY_CLASSES
+    label: "parent widget"
   });
   if (!resolvedParent.ok) {
     const witness = fail(world, {

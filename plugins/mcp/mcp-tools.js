@@ -2,6 +2,12 @@ import {
   buildBlockedAuthoringHandoff,
   buildRuntimeAuthoringCapabilityMatrix
 } from "../../src/runtime-authoring-policy.js";
+import {
+  materializeCanonicalPackageBundleFromProject,
+  packageCoexistenceFromProject,
+  packageConvergenceFromProject
+} from "../../src/package-authorship-world.js";
+import { contextNamingStateFromProject } from "../../src/context-naming-world.js";
 import { PLATFORM_PROPOSAL_ACTIONS } from "../platform/platform-proposals.js";
 
 export const MCP_PROTOCOL_VERSION = "2025-06-18";
@@ -137,9 +143,13 @@ const TOOL_DEFINITIONS = [
   {
     name: "world.read",
     title: "World Read",
-    description: "Read bootstrap state, witnesses, source, world graph, or process projections.",
+    description: "Read bootstrap state, witnesses, source, world graph, process projections, contextual naming state, authored package coexistence, or authoring capability state.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source", "authoringMatrix"] },
+      view: { type: "string", enum: ["bootstrapModel", "bootstrapState", "witnesses", "worldGraph", "processView", "processRun", "source", "contextNaming", "packageCoexistence", "packageConvergence", "authoringMatrix"] },
+      id: { type: "string" },
+      context: { type: "string" },
+      name: { type: "string" },
+      target: { type: "string" },
       offset: { type: "number" },
       runId: { type: "string" },
       replay: { type: "string" },
@@ -150,10 +160,15 @@ const TOOL_DEFINITIONS = [
     }, ["view"]),
     scope(args) {
       return scopeResult({
-        targets: args?.view === "processRun" && args?.runId ? [args.runId] : []
+        contexts: args?.view === "contextNaming" && args?.context ? [args.context] : [],
+        targets: args?.view === "processRun" && args?.runId
+          ? [args.runId]
+          : (args?.view === "contextNaming"
+              ? [args?.id, args?.target].filter(Boolean)
+              : ((args?.view === "packageCoexistence" || args?.view === "packageConvergence") && args?.id ? [args.id] : []))
       });
     },
-    async run({ args, callHandler }) {
+    async run({ args, callHandler, appContext }) {
       switch (args.view) {
         case "bootstrapModel":
           return runJsonHandler(callHandler, { handler: "bootstrap.model.read", method: "GET", path: "/api/bootstrap-model" });
@@ -194,10 +209,94 @@ const TOOL_DEFINITIONS = [
             path: "/api/source",
             query: { file: args.sourceFile || "" }
           });
+        case "contextNaming":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("contextNaming read requires projected world access");
+          }
+          try {
+            return jsonToolResult({
+              contextNaming: contextNamingStateFromProject(appContext.project, {
+                id: args.id ?? null,
+                context: args.context ?? null,
+                name: args.name ?? null,
+                target: args.target ?? null
+              })
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null,
+              context: args.context ?? null,
+              name: args.name ?? null,
+              target: args.target ?? null
+            });
+          }
+        case "packageCoexistence":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("packageCoexistence read requires projected world access");
+          }
+          try {
+            return jsonToolResult({
+              packageCoexistence: packageCoexistenceFromProject(appContext.project, {
+                id: args.id ?? null
+              })
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
+        case "packageConvergence":
+          if (typeof appContext?.project !== "function") {
+            return errorToolResult("packageConvergence read requires projected world access");
+          }
+          try {
+            return jsonToolResult({
+              packageConvergence: packageConvergenceFromProject(appContext.project, {
+                id: args.id ?? null
+              })
+            });
+          } catch (error) {
+            return errorToolResult(error instanceof Error ? error.message : String(error), {
+              view: args.view,
+              id: args.id ?? null
+            });
+          }
         case "authoringMatrix":
           return readAuthoringMatrix(callHandler);
         default:
           return errorToolResult("unknown world.read view", { view: args.view });
+      }
+    }
+  },
+  {
+    name: "package.bundle",
+    title: "Package Bundle",
+    description: "Preview the canonical emitted bundle for an authored package revision from current world state.",
+    inputSchema: jsonSchemaObject({
+      operation: { type: "string", enum: ["preview"] },
+      revisionId: { type: "string" }
+    }, ["operation", "revisionId"]),
+    scope(args) {
+      return scopeResult({ targets: args?.revisionId ? [args.revisionId] : [] });
+    },
+    async run({ args, appContext }) {
+      if (args.operation !== "preview") {
+        return errorToolResult("unknown package.bundle operation", { operation: args.operation });
+      }
+      if (typeof appContext?.project !== "function") {
+        return errorToolResult("package.bundle preview requires projected world access");
+      }
+      try {
+        return jsonToolResult(materializeCanonicalPackageBundleFromProject(appContext.project, {
+          revisionId: args.revisionId
+        }));
+      } catch (error) {
+        return errorToolResult(error instanceof Error ? error.message : String(error), {
+          operation: args.operation,
+          revisionId: args.revisionId ?? null
+        });
       }
     }
   },
@@ -226,6 +325,13 @@ const TOOL_DEFINITIONS = [
           "type.create",
           "projection.create",
           "message.create",
+          "package.create",
+          "packageRevision.create",
+          "packageRevision.publish",
+          "packagePatch.create",
+          "packageNamespace.create",
+          "packageDependency.create",
+          "packageTransformer.create",
           "route.create",
           "serve.create",
           "serverRunner.create",
@@ -251,7 +357,20 @@ const TOOL_DEFINITIONS = [
         : (body && typeof body === "object" ? [body] : []);
       return scopeResult({
         contexts: docs.flatMap(doc => [doc.context, doc.parent, doc.homeContext]).filter(Boolean),
-        targets: docs.flatMap(doc => [doc.target, doc.server, doc.serverRunner, doc.id]).filter(Boolean)
+        targets: docs.flatMap(doc => [
+          doc.target,
+          doc.server,
+          doc.serverRunner,
+          doc.id,
+          doc.package,
+          doc.revision,
+          doc.sourcePackage,
+          doc.sourceRevision
+          ,
+          doc.targetRevision,
+          doc.sourceNamespace,
+          doc.targetNamespace
+        ]).filter(Boolean)
       });
     },
     async run({ args, callHandler }) {
@@ -297,6 +416,26 @@ const TOOL_DEFINITIONS = [
           return runJsonHandler(callHandler, { handler: "projection.create", method: "POST", path: "/api/projections", body });
         case "message.create":
           return runJsonHandler(callHandler, { handler: "message.create", method: "POST", path: "/api/messages", body });
+        case "package.create":
+          return runJsonHandler(callHandler, { handler: "package.create", method: "POST", path: "/api/packages", body });
+        case "packageRevision.create":
+          return runJsonHandler(callHandler, { handler: "packageRevision.create", method: "POST", path: "/api/package-revisions", body });
+        case "packageRevision.publish":
+          return runJsonHandler(callHandler, {
+            handler: "packageRevision.publish",
+            method: "POST",
+            path: `/api/package-revisions/${encodeURIComponent(body.id || "")}/publish`,
+            params: { id: body.id || "" },
+            body
+          });
+        case "packagePatch.create":
+          return runJsonHandler(callHandler, { handler: "packagePatch.create", method: "POST", path: "/api/package-patches", body });
+        case "packageNamespace.create":
+          return runJsonHandler(callHandler, { handler: "packageNamespace.create", method: "POST", path: "/api/package-namespaces", body });
+        case "packageDependency.create":
+          return runJsonHandler(callHandler, { handler: "packageDependency.create", method: "POST", path: "/api/package-dependencies", body });
+        case "packageTransformer.create":
+          return runJsonHandler(callHandler, { handler: "packageTransformer.create", method: "POST", path: "/api/package-transformers", body });
         case "widget.create":
         case "widget.update":
         case "frontendProgram.create":
@@ -392,18 +531,27 @@ const TOOL_DEFINITIONS = [
   {
     name: "platform.read",
     title: "Platform Read",
-    description: "Read the platform self-model, gaps, docs, roadmap, telemetry, profiles, branches, change sets, test gates, red/green test state, test runs, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
+    description: "Read the platform self-model, gaps, docs, roadmap, telemetry, profiles, compatibility bridges, mutable-surface semantics, governance, branches, change sets, package coexistence, test gates, red/green test state, test runs, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["model", "gaps", "docs", "roadmap", "telemetry", "profiles", "plugin", "bundle", "capability", "mcp", "gates", "proposals", "branches", "changeSets", "testGates", "testRedGreen", "testRuns", "candidateSnapshots", "runtimeRevisions"] },
-      id: { type: "string" }
+      view: { type: "string", enum: ["model", "gaps", "docs", "roadmap", "telemetry", "profiles", "plugin", "bundle", "capability", "mcp", "bridges", "semantics", "governance", "gates", "proposals", "branches", "changeSets", "contextNaming", "packageCoexistence", "packageConvergence", "testGates", "testRedGreen", "testRuns", "candidateSnapshots", "runtimeRevisions"] },
+      id: { type: "string" },
+      context: { type: "string" },
+      name: { type: "string" },
+      target: { type: "string" }
     }, ["view"]),
     scope(args) {
-      return scopeResult({ targets: args?.id ? [args.id] : [] });
+      return scopeResult({
+        contexts: args?.context ? [args.context] : [],
+        targets: [args?.id, args?.target].filter(Boolean)
+      });
     },
     async run({ args, callHandler }) {
       const query = {
         view: args.view || "model",
-        ...(args.id ? { id: args.id } : {})
+        ...(args.id ? { id: args.id } : {}),
+        ...(args.context ? { context: args.context } : {}),
+        ...(args.name ? { name: args.name } : {}),
+        ...(args.target ? { target: args.target } : {})
       };
       if (args.view === "gaps") {
         return runJsonHandler(callHandler, { handler: "platform.gaps.read", method: "GET", path: "/api/platform-gaps" });

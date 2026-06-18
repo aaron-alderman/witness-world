@@ -372,14 +372,14 @@ test("live page inspector can create a real widget.update proposal for a read-on
     await page.locator('[data-surface-inspector-proposal-form] input[name="reason"]').fill("Shared title should change");
 
     const proposalResponse = page.waitForResponse(response =>
-      response.request().method() === "POST"
-      && new URL(response.url()).pathname === "/api/proposals"
-      && response.status() === 201
+      response.request().method() === "PATCH"
+      && new URL(response.url()).pathname === "/api/widgets/todo_title"
+      && response.status() === 202
     );
     await page.locator('[data-surface-inspector-propose]').click();
     const proposalBody = await (await proposalResponse).json();
     const proposalId = proposalBody?.proposal?.id || "";
-    assert.match(proposalId, /^proposal\.widget\.update\.todo_title\./);
+    assert.equal(proposalId, "proposal.authoringCore.callan.widget.update.widget.todo_title");
 
     await page.waitForFunction(() => {
       const inspector = document.querySelector('.surface-inspector-panel');
@@ -455,8 +455,8 @@ test("live page inspector can create a real widgetVersion.activate proposal for 
 
     const proposalResponse = page.waitForResponse(response =>
       response.request().method() === "POST"
-      && new URL(response.url()).pathname === "/api/proposals"
-      && response.status() === 201
+      && new URL(response.url()).pathname === "/api/widget-versions/todo_versioned_banner/activate"
+      && response.status() === 202
     );
     await page.locator('[data-surface-inspector-propose-version="activate"]').first().click();
     const proposalBody = await (await proposalResponse).json();
@@ -553,8 +553,8 @@ test("live page inspector can create a real widgetVersion.rollback proposal for 
 
     const proposalResponse = page.waitForResponse(response =>
       response.request().method() === "POST"
-      && new URL(response.url()).pathname === "/api/proposals"
-      && response.status() === 201
+      && new URL(response.url()).pathname === "/api/widget-versions/todo_versioned_banner/rollback"
+      && response.status() === 202
     );
     await page.locator('[data-surface-inspector-propose-version="rollback"]').first().click();
     const proposalBody = await (await proposalResponse).json();

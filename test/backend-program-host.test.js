@@ -133,6 +133,35 @@ test("route-backed backend programs execute existing handlers and switch version
   assert.equal(server.ok, true);
 
   try {
+    const diagnostics = await fetch(`${server.url}/api/runtime/diagnostics`).then(response => response.json());
+    const mountedRoute = diagnostics.mountedRoutes.find(route => route.id === "backend_program_route");
+    assert.ok(mountedRoute);
+    assert.equal(mountedRoute.ownerClass, "backend-program");
+    assert.equal(mountedRoute.ownerBackendProgramSoul, "backend.echo");
+    assert.deepEqual(mountedRoute.ownerChain, [
+      {
+        class: "route",
+        routeId: "backend_program_route",
+        method: "GET",
+        path: "/api/runtime-program",
+        serves: "backendProgram",
+        note: "Visible behavior enters through mounted route backend_program_route."
+      },
+      {
+        class: "backend-program",
+        handlerId: "backendProgram.run",
+        backendProgramSoul: "backend.echo",
+        note: "Authored backend program backend.echo is selected by mounted route params."
+      },
+      {
+        class: "generic-host",
+        bundleId: "bundle-core-runtime",
+        pluginId: null,
+        handlerId: "backendProgram.run",
+        note: "Runtime behavior is owned by shared host/runtime code."
+      }
+    ]);
+
     const before = await fetch(`${server.url}/api/runtime-program`).then(response => response.json());
     assert.deepEqual(before, { version: "v1", authenticated: false });
 

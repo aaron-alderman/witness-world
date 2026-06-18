@@ -5,6 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   buildGovernanceRouteInventory,
+  describeMountedRouteGovernance,
   isPotentiallyMutatingMethod,
   proposalTargetGovernanceCatalog,
   proposalTargetGovernanceEntry,
@@ -44,6 +45,16 @@ async function collectRuntimeRoutes() {
       continue;
     }
     const runtime = await import(pathToFileURL(runtimePath).href);
+    for (const [bundleId, bundle] of Object.entries(runtime.bundles ?? runtime.default?.bundles ?? {})) {
+      for (const route of bundle?.routes ?? []) {
+        routes.push({
+          bundleId: String(bundleId || entry.name),
+          handler: String(route.handler || ""),
+          method: String(route.method || "GET").toUpperCase(),
+          matcher: routeMatcher(route)
+        });
+      }
+    }
     for (const route of runtime.routes ?? []) {
       routes.push({
         bundleId: String(runtime.bundleId || entry.name),
@@ -80,6 +91,32 @@ test("governance inventory preserves proposal, operator, mixed, and session clas
 
   assert.equal(byHandler.get("asset.attach")?.governanceMode, "proposal-fallback");
   assert.equal(byHandler.get("asset.attach")?.sharedAuthorityPath, true);
+  assert.equal(byHandler.get("capability.install")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("capability.remove")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("context.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("contextBinding.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("contextImport.remove")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("perspective.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("stewardship.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("surface.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("process.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("type.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("projection.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("message.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("package.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("packageRevision.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("packageRevision.publish")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("packagePatch.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("packageNamespace.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("packageDependency.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("packageTransformer.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("widgets.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("widgets.create")?.authorityMechanism, "bootstrap-context-or-target-authority");
+  assert.equal(byHandler.get("widgets.update")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("frontendProgram.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("backendProgramVersions.activate")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("route.create")?.governanceMode, "proposal-fallback");
+  assert.equal(byHandler.get("serve.create")?.governanceMode, "proposal-fallback");
   assert.equal(byHandler.get("serverRunner.create")?.governanceMode, "proposal-fallback");
   assert.equal(byHandler.get("runtimePlugin.install")?.governanceMode, "proposal-fallback");
   assert.equal(byHandler.get("mcpServer.create")?.governanceMode, "proposal-fallback");
@@ -102,7 +139,68 @@ test("proposal target governance catalog covers every supported executor target 
   assert.deepEqual(proposalTargetProcessIds({ bootstrapSelectableOnly: true }), Object.keys(bootstrapCatalog));
   assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("runtimePlugin.install"), true);
   assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("mcpServer.define"), true);
+  assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("package.define"), true);
+  assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("packageRevision.define"), true);
+  assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("packageRevision.publish"), true);
+  assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("packageTransformer.define"), true);
   assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("changeSet.apply"), false);
+  assert.equal(proposalTargetProcessIds({ bootstrapSelectableOnly: true }).includes("edenVersions.activate"), false);
   assert.equal(proposalTargetGovernanceEntry("changeSet.apply")?.governanceMode, "operator-only");
   assert.equal(proposalTargetGovernanceEntry("widget.define")?.governanceMode, "proposal-fallback");
+  assert.equal(proposalTargetGovernanceEntry("packageRevision.publish")?.governanceMode, "proposal-fallback");
+  assert.equal(proposalTargetGovernanceEntry("packagePatch.define")?.governanceMode, "proposal-fallback");
+  assert.equal(proposalTargetGovernanceEntry("packageDependency.define")?.governanceMode, "proposal-fallback");
+  assert.equal(proposalTargetGovernanceEntry("packageTransformer.define")?.governanceMode, "proposal-fallback");
+  assert.equal(proposalTargetGovernanceEntry("edenVersions.activate")?.bootstrapSelectable, false);
+  assert.equal(proposalTargetGovernanceEntry("edenVersions.rollback")?.governanceMode, "proposal-fallback");
+});
+
+test("mounted route governance reuses the shared governance inventory shape", () => {
+  const governance = describeMountedRouteGovernance({
+    route: {
+      method: "POST",
+      path: "/api/widgets",
+      handler: "widget.define"
+    },
+    governanceRoutes: [{
+      id: "governanceRoute:POST /api/widgets",
+      routeId: "route:POST /api/widgets",
+      method: "POST",
+      matcher: "/api/widgets",
+      handler: "widget.define",
+      operationSemantics: "governed-mutation",
+      governanceMode: "proposal-fallback",
+      authorityMechanism: "widget-target-authority",
+      sharedAuthorityPath: true,
+      workflowRole: "direct-mutation",
+      notes: "Widget creation lowers through the shared target-authority path."
+    }]
+  });
+
+  assert.deepEqual(governance, {
+    governanceRouteId: "governanceRoute:POST /api/widgets",
+    operationSemantics: "governed-mutation",
+    governanceMode: "proposal-fallback",
+    authorityMechanism: "widget-target-authority",
+    sharedAuthorityPath: true,
+    workflowRole: "direct-mutation",
+    governanceNotes: "Widget creation lowers through the shared target-authority path."
+  });
+
+  assert.deepEqual(describeMountedRouteGovernance({
+    route: {
+      method: "GET",
+      path: "/",
+      handler: "page.home"
+    },
+    governanceRoutes: []
+  }), {
+    governanceRouteId: null,
+    operationSemantics: null,
+    governanceMode: null,
+    authorityMechanism: null,
+    sharedAuthorityPath: null,
+    workflowRole: null,
+    governanceNotes: null
+  });
 });
