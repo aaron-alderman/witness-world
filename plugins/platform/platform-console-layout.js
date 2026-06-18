@@ -19,7 +19,8 @@ const FALLBACK_LAYOUT = Object.freeze({
       "PlatformVerificationPage",
       "PlatformKnowledgePage",
       "PlatformSignalsPage",
-      "PlatformModelPage"
+      "PlatformModelPage",
+      "PlatformPackageApplyPreviewPage"
     ])
   }),
   children: Object.freeze([
@@ -114,6 +115,18 @@ const FALLBACK_LAYOUT = Object.freeze({
       title: "Model",
       summary: "Platform objects, relationships, runtime profiles, and dependency evidence.",
       children: ["PlatformProfileComparison", "PlatformModelList", "PlatformModelDetail", "PlatformCoverageMatrix"]
+    }),
+    fallbackSurface("PlatformPackageApplyPreviewPage", {
+      surfaceKind: "page",
+      className: "platform-model",
+      pageId: "packageApplyPreview",
+      props: Object.freeze({
+        modelView: "packageApplyPreview",
+        summaryCards: "Revisions=packageApplyPreviews@count"
+      }),
+      title: "Package Apply Preview",
+      summary: "Revision-scoped apply impact, emitted bundle summary, and convergence truth.",
+      children: ["PlatformPackageApplyPreviewList", "PlatformPackageApplyPreviewDetail"]
     })
   ])
 });

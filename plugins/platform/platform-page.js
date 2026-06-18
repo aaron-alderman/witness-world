@@ -13,7 +13,8 @@ const FALLBACK_PLATFORM_PAGE_VIEWS = Object.freeze([
   Object.freeze({ id: "governance", title: "Governance", subtitle: "Route and proposal-target governance coverage for mutating platform seams.", modelView: "governance", supplementalPageSource: "governance" }),
   Object.freeze({ id: "semantics", title: "Semantics", subtitle: "Personal, shared, and mixed mutable-surface semantics contract rows.", modelView: "semantics", supplementalPageSource: "semantics" }),
   Object.freeze({ id: "packageCoexistence", title: "Package Coexistence", subtitle: "Divergent package revision lines and namespace selections.", modelView: "packageCoexistence", supplementalPageSource: "packageCoexistence" }),
-  Object.freeze({ id: "packageConvergence", title: "Package Convergence", subtitle: "Transformer contracts, convergence patches, and remaining authored glue.", modelView: "packageConvergence", supplementalPageSource: "packageConvergence" })
+  Object.freeze({ id: "packageConvergence", title: "Package Convergence", subtitle: "Transformer contracts, convergence patches, and remaining authored glue.", modelView: "packageConvergence", supplementalPageSource: "packageConvergence" }),
+  Object.freeze({ id: "packageApplyPreview", title: "Package Apply Preview", subtitle: "Revision-scoped apply impact, emitted bundle summary, and convergence truth.", modelView: "packageApplyPreview", supplementalPageSource: "packageApplyPreview" })
 ]);
 const DEFAULT_PAGE_SIZE = 20;
 
@@ -244,6 +245,7 @@ function conceptDestination(value) {
   if (raw.startsWith("mutableSurface:")) return { view: "semantics", id: raw };
   if (raw.startsWith("packageCoexistence:")) return { view: "packageCoexistence", id: raw };
   if (raw.startsWith("packageConvergence:")) return { view: "packageConvergence", id: raw };
+  if (raw.startsWith("packageApplyPreview:")) return { view: "packageApplyPreview", id: raw };
   if (raw.startsWith("packageTransformer:") || raw.startsWith("packageTransformer.")) return { view: "packageConvergence", id: raw };
   if (raw.startsWith("packagePatch:")) return { view: "packageConvergence", id: raw };
   if (raw.startsWith("packageDependency:")) return { view: "model", id: raw };
@@ -281,6 +283,7 @@ function conceptApiHref(value) {
   if (raw.startsWith("mutableSurface:")) return `/api/platform-model?view=semantics&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("packageCoexistence:")) return `/api/platform-model?view=packageCoexistence&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("packageConvergence:")) return `/api/platform-model?view=packageConvergence&id=${encodeURIComponent(raw)}`;
+  if (raw.startsWith("packageApplyPreview:")) return `/api/platform-model?view=packageApplyPreview&id=${encodeURIComponent(raw)}`;
   if (raw.startsWith("packageTransformer:") || raw.startsWith("packageTransformer.") || raw.startsWith("packagePatch:")) {
     return `/api/platform-model?view=packageConvergence&id=${encodeURIComponent(raw)}`;
   }
@@ -652,6 +655,12 @@ function renderAuthoredDetailLayout(surface, sectionsByName = new Map()) {
   `;
 }
 
+function surfaceAppliesToDetailKinds(surface, detailKind = null) {
+  const kinds = surfaceValueList(surface, "detailKinds", []);
+  if (!kinds.length || !detailKind) return !kinds.length || Boolean(detailKind);
+  return kinds.includes(detailKind);
+}
+
 function renderDataTable(title, headers, rows, emptyMessage = "No rows.") {
   return `
     <section>
@@ -837,6 +846,16 @@ function renderCardSpecs(surface, schemaProp, emptyStateProp, ctx, record, kind)
           itemLimit
         });
   }).join("");
+}
+
+function renderAuthoredCardSpecChildren(surface, detailKind, ctx, record) {
+  return (surface?.childSurfaces ?? [])
+    .filter(child => surfaceAppliesToDetailKinds(child, detailKind))
+    .map(child => `
+      ${renderCardSpecs(child, "linkCards", "linkCardEmptyStates", ctx, record, "links")}
+      ${renderCardSpecs(child, "textCards", "textCardEmptyStates", ctx, record, "text")}
+    `)
+    .join("");
 }
 
 function resolveFormDefaultValue(raw) {
@@ -1420,6 +1439,7 @@ function detailRecordsForSource(source, model) {
     case "semantics":
     case "packageCoexistence":
     case "packageConvergence":
+    case "packageApplyPreview":
       return platformSourceRows(source, model);
     case "telemetryMetric":
     case "defectCluster":
@@ -1441,6 +1461,16 @@ function detailRecordMatchesSource(source, record, id) {
         || record.coexistenceId === id
         || (record.transformerIds ?? []).includes(id)
         || (record.convergencePatchIds ?? []).includes(id);
+    case "packageApplyPreview":
+      return record.id === id
+        || record.packageId === id
+        || record.revisionId === id
+        || record.coexistenceId === id
+        || record.convergenceId === id
+        || (record.selectedNamespaceIds ?? []).includes(id)
+        || (record.manifestConflictIds ?? []).includes(id)
+        || (record.relatedTransformerIds ?? []).includes(id)
+        || (record.relatedConvergencePatchIds ?? []).includes(id);
     case "packageCoexistence":
       return record.id === id
         || record.packageId === id
@@ -1966,7 +1996,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
         ${renderLongTailProperties(primarySurface, ctx, doc, usedKeys)}
       `)],
       [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-        ${renderCardSpecs(relatedSurface, "documentLinkCards", "documentLinkCardEmptyStates", ctx, doc, "links")}
+        ${renderAuthoredCardSpecChildren(relatedSurface, "document", ctx, doc)}
       `)],
       [sectionsSurface.name, renderSurfaceFrame(sectionsSurface, renderAuthoredSurfaceTable(sectionsSurface, renderRowsFromSurfaceSchema(sectionsSurface, "rowFields", sections, ctx, section => `
         <tr>
@@ -2000,7 +2030,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
         ${renderLongTailProperties(primarySurface, ctx, task, usedKeys)}
       `)],
       [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-        ${renderCardSpecs(relatedSurface, "roadmapTaskLinkCards", "roadmapTaskLinkCardEmptyStates", ctx, task, "links")}
+        ${renderAuthoredCardSpecChildren(relatedSurface, "roadmapTask", ctx, task)}
       `)]
     ]));
   }
@@ -2019,7 +2049,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
         ${renderLongTailProperties(primarySurface, ctx, epic, usedKeys)}
       `)],
       [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-        ${renderCardSpecs(relatedSurface, "epicLinkCards", "epicLinkCardEmptyStates", ctx, epic, "links")}
+        ${renderAuthoredCardSpecChildren(relatedSurface, "epic", ctx, epic)}
       `)]
     ]));
   }
@@ -2040,7 +2070,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
       ${renderLongTailProperties(primarySurface, ctx, feature, usedKeys)}
     `)],
     [relatedSurface.name, renderSurfaceFrame(relatedSurface, `
-      ${renderCardSpecs(relatedSurface, "featureLinkCards", "featureLinkCardEmptyStates", ctx, feature, "links")}
+      ${renderAuthoredCardSpecChildren(relatedSurface, "feature", ctx, feature)}
     `)]
   ]));
 }
@@ -2286,6 +2316,7 @@ function renderAuthoredDetailSourceSection(surface, model, ctx) {
     case "semantics":
     case "packageCoexistence":
     case "packageConvergence":
+    case "packageApplyPreview":
       return renderAuthoredRecordDetailSection(
         surface,
         findAuthoredDetailBySources(surface, model, ctx.id, [surfacePropText(surface, "detailSource", "")]),
@@ -2668,6 +2699,15 @@ function platformSourceRows(source, model) {
         packageLink: { id: row.packageId, title: row.packageLabel || row.packageId },
         remainingGlueMessages: (row.remainingGlue ?? []).map(item => item.message),
         title: row.packageLabel || row.packageId,
+        scope: row.status || "",
+        summary: row.explanation || ""
+      }));
+    case "packageApplyPreview":
+      return (model.packageApplyPreviews ?? []).map(row => ({
+        ...row,
+        packageLink: { id: row.packageId, title: row.packageLabel || row.packageId },
+        revisionLink: { id: row.id, title: row.revisionVersion ? `${row.packageLabel || row.packageId} ${row.revisionVersion}` : row.revisionId },
+        title: row.title || row.revisionId,
         scope: row.status || "",
         summary: row.explanation || ""
       }));

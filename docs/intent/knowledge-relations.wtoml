@@ -1,0 +1,781 @@
+# Platform Knowledge Relations (doc ↔ doc, doc ↔ code)
+#
+# This is an authored WTOML expression of the relationships between
+# documentation nodes and between documentation and code.
+#
+# Goal: make ContextHub / intent registry relationships first-class
+# in the witnessed model rather than only markdown links or JS inference.
+#
+# These lower via DESIRE (entity + relation forms) and can be projected
+# into ContextHub surfaces, platform model, and LLM context packs.
+#
+# Id conventions align with platform-model.js where possible:
+#   doc:docs/...md
+#   code:src/... or code:plugins/...
+#
+# Key typed relations (from CONTEXTHUB-SPEC + common usage):
+#   references, expands, explains, implements, isRealizedBy,
+#   governs, affects, derivedFrom, nearbyTo
+
+[context.platform-knowledge]
+actor = "system"
+owner = "plugin.platform"
+capabilities = ["world.read", "entity.write"]
+
+# -------------------------------------------------------------------
+# Primary Intent Root Document
+# -------------------------------------------------------------------
+
+[[entity]]
+id = "doc:docs/intent/PRIMARY-INTENT.md"
+kind = "docNode"
+label = "Primary Intent (Root)"
+path = "docs/intent/PRIMARY-INTENT.md"
+facet = ["system", "rationale", "product"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+description = "Executive summary and root node of the platform intent tree."
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/PRIMARY-INTENT.md"
+rel = "references"
+to = "doc:docs/SYSTEM.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/PRIMARY-INTENT.md"
+rel = "references"
+to = "doc:docs/CAPABILITIES.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/PRIMARY-INTENT.md"
+rel = "references"
+to = "doc:docs/EXPERIENCE.md"
+
+# -------------------------------------------------------------------
+# Category 01 - Foundational Philosophy & Ontology
+# -------------------------------------------------------------------
+
+[[entity]]
+id = "doc:docs/intent/01-foundational-philosophy-ontology.md"
+kind = "docNode"
+label = "01 - Foundational Philosophy & Ontology"
+path = "docs/intent/01-foundational-philosophy-ontology.md"
+facet = ["system", "rationale"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/PRIMARY-INTENT.md"
+rel = "expands"
+to = "doc:docs/intent/01-foundational-philosophy-ontology.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/01-foundational-philosophy-ontology.md"
+rel = "references"
+to = "doc:docs/SYSTEM.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/01-foundational-philosophy-ontology.md"
+rel = "isRealizedBy"
+to = "code:src/kernel.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/01-foundational-philosophy-ontology.md"
+rel = "isRealizedBy"
+to = "code:src/projectors-core.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/01-foundational-philosophy-ontology.md"
+rel = "isRealizedBy"
+to = "code:src/desire/projection-eval.js"
+
+# -------------------------------------------------------------------
+# Category 02 - Witness Substrate & Projections
+# -------------------------------------------------------------------
+
+[[entity]]
+id = "doc:docs/intent/02-witness-substrate-projections.md"
+kind = "docNode"
+label = "02 - Witness Substrate & Projections"
+path = "docs/intent/02-witness-substrate-projections.md"
+facet = ["system", "developer"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/PRIMARY-INTENT.md"
+rel = "expands"
+to = "doc:docs/intent/02-witness-substrate-projections.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/02-witness-substrate-projections.md"
+rel = "references"
+to = "doc:docs/CAPABILITIES.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/02-witness-substrate-projections.md"
+rel = "isRealizedBy"
+to = "code:src/witness-log.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/02-witness-substrate-projections.md"
+rel = "isRealizedBy"
+to = "code:src/kernel.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/02-witness-substrate-projections.md"
+rel = "isRealizedBy"
+to = "code:src/desire/projection-eval.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/02-witness-substrate-projections.md"
+rel = "isRealizedBy"
+to = "code:src/app-snapshot-manager.js"
+
+# -------------------------------------------------------------------
+# Category 03 - Semantic Authoring Kernel (DESIRE)
+# -------------------------------------------------------------------
+
+[[entity]]
+id = "doc:docs/intent/03-semantic-authoring-kernel.md"
+kind = "docNode"
+label = "03 - Semantic Authoring Kernel (DESIRE)"
+path = "docs/intent/03-semantic-authoring-kernel.md"
+facet = ["system", "developer"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/PRIMARY-INTENT.md"
+rel = "expands"
+to = "doc:docs/intent/03-semantic-authoring-kernel.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/03-semantic-authoring-kernel.md"
+rel = "references"
+to = "doc:docs/DESIRE.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/03-semantic-authoring-kernel.md"
+rel = "references"
+to = "doc:docs/experiment/new-desire/DESIRE-KERNEL.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/03-semantic-authoring-kernel.md"
+rel = "references"
+to = "doc:docs/experiment/new-desire/DESIRE-PLUS.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/03-semantic-authoring-kernel.md"
+rel = "isRealizedBy"
+to = "code:src/desire/ir.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/03-semantic-authoring-kernel.md"
+rel = "isRealizedBy"
+to = "code:src/desire/wtoml.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/03-semantic-authoring-kernel.md"
+rel = "isRealizedBy"
+to = "code:src/desire/rvm.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/03-semantic-authoring-kernel.md"
+rel = "isRealizedBy"
+to = "code:src/desire/apply.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/03-semantic-authoring-kernel.md"
+rel = "isRealizedBy"
+to = "code:src/desire/elaborate.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/03-semantic-authoring-kernel.md"
+rel = "isRealizedBy"
+to = "code:src/desire/process-eval.js"
+
+# -------------------------------------------------------------------
+# Category 04 - Composition Primitives & Authoring
+# -------------------------------------------------------------------
+
+[[entity]]
+id = "doc:docs/intent/04-composition-primitives-authoring.md"
+kind = "docNode"
+label = "04 - Composition Primitives & Authoring"
+path = "docs/intent/04-composition-primitives-authoring.md"
+facet = ["system", "developer", "author"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/PRIMARY-INTENT.md"
+rel = "expands"
+to = "doc:docs/intent/04-composition-primitives-authoring.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/04-composition-primitives-authoring.md"
+rel = "references"
+to = "doc:docs/CAPABILITIES.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/04-composition-primitives-authoring.md"
+rel = "isRealizedBy"
+to = "code:src/dsl.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/04-composition-primitives-authoring.md"
+rel = "isRealizedBy"
+to = "code:src/desire/ir.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/04-composition-primitives-authoring.md"
+rel = "isRealizedBy"
+to = "code:src/widgets.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/04-composition-primitives-authoring.md"
+rel = "isRealizedBy"
+to = "code:src/runtime-routing.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/04-composition-primitives-authoring.md"
+rel = "isRealizedBy"
+to = "code:plugins/bootstrap/"
+
+# -------------------------------------------------------------------
+# Category 05 - Capabilities, Plugins & Extensibility
+# -------------------------------------------------------------------
+
+[[entity]]
+id = "doc:docs/intent/05-capabilities-plugins-extensibility.md"
+kind = "docNode"
+label = "05 - Capabilities, Plugins & Extensibility"
+path = "docs/intent/05-capabilities-plugins-extensibility.md"
+facet = ["system", "developer"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/PRIMARY-INTENT.md"
+rel = "expands"
+to = "doc:docs/intent/05-capabilities-plugins-extensibility.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/05-capabilities-plugins-extensibility.md"
+rel = "references"
+to = "doc:docs/CAPABILITIES.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/05-capabilities-plugins-extensibility.md"
+rel = "references"
+to = "doc:docs/DESIRE-SPA.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/05-capabilities-plugins-extensibility.md"
+rel = "isRealizedBy"
+to = "code:src/runtime-plugin-loader.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/05-capabilities-plugins-extensibility.md"
+rel = "isRealizedBy"
+to = "code:src/desire/plugins.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/05-capabilities-plugins-extensibility.md"
+rel = "isRealizedBy"
+to = "code:plugins/capability-authoring/"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/05-capabilities-plugins-extensibility.md"
+rel = "isRealizedBy"
+to = "code:plugins/demo/"
+
+# -------------------------------------------------------------------
+# Category 06 - Identity, Context, Authority & Governance
+# -------------------------------------------------------------------
+
+[[entity]]
+id = "doc:docs/intent/06-identity-context-authority-governance.md"
+kind = "docNode"
+label = "06 - Identity, Context, Authority & Governance"
+path = "docs/intent/06-identity-context-authority-governance.md"
+facet = ["system", "developer", "admin"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/PRIMARY-INTENT.md"
+rel = "expands"
+to = "doc:docs/intent/06-identity-context-authority-governance.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/06-identity-context-authority-governance.md"
+rel = "references"
+to = "doc:docs/AUTHORITY-MODEL.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/06-identity-context-authority-governance.md"
+rel = "isRealizedBy"
+to = "code:src/runtime-authz.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/06-identity-context-authority-governance.md"
+rel = "isRealizedBy"
+to = "code:src/context-naming-world.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/06-identity-context-authority-governance.md"
+rel = "isRealizedBy"
+to = "code:src/runtime-governance.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/06-identity-context-authority-governance.md"
+rel = "isRealizedBy"
+to = "code:plugins/proposals/"
+
+# -------------------------------------------------------------------
+# Category 07 - Runtime Execution, Processes & Inspection
+# -------------------------------------------------------------------
+
+[[entity]]
+id = "doc:docs/intent/07-runtime-execution-processes-inspection.md"
+kind = "docNode"
+label = "07 - Runtime Execution, Processes & Inspection"
+path = "docs/intent/07-runtime-execution-processes-inspection.md"
+facet = ["system", "developer"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/PRIMARY-INTENT.md"
+rel = "expands"
+to = "doc:docs/intent/07-runtime-execution-processes-inspection.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/07-runtime-execution-processes-inspection.md"
+rel = "references"
+to = "doc:docs/CANVAS.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/07-runtime-execution-processes-inspection.md"
+rel = "isRealizedBy"
+to = "code:src/desire/process-eval.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/07-runtime-execution-processes-inspection.md"
+rel = "isRealizedBy"
+to = "code:src/runtime-execution-runner.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/07-runtime-execution-processes-inspection.md"
+rel = "isRealizedBy"
+to = "code:src/process-graph.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/07-runtime-execution-processes-inspection.md"
+rel = "isRealizedBy"
+to = "code:plugins/inspect/"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/07-runtime-execution-processes-inspection.md"
+rel = "isRealizedBy"
+to = "code:plugins/canvas/"
+
+# -------------------------------------------------------------------
+# Category 08 - Product Experience, Guidance & Academy
+# -------------------------------------------------------------------
+
+[[entity]]
+id = "doc:docs/intent/08-product-experience-guidance-academy.md"
+kind = "docNode"
+label = "08 - Product Experience, Guidance & Academy"
+path = "docs/intent/08-product-experience-guidance-academy.md"
+facet = ["product", "actor-facing"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/PRIMARY-INTENT.md"
+rel = "expands"
+to = "doc:docs/intent/08-product-experience-guidance-academy.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/08-product-experience-guidance-academy.md"
+rel = "references"
+to = "doc:docs/EXPERIENCE.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/08-product-experience-guidance-academy.md"
+rel = "references"
+to = "doc:docs/FIRST-5-MINUTES.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/08-product-experience-guidance-academy.md"
+rel = "references"
+to = "doc:docs/ACADEMY.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/08-product-experience-guidance-academy.md"
+rel = "isRealizedBy"
+to = "code:plugins/eden/"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/08-product-experience-guidance-academy.md"
+rel = "isRealizedBy"
+to = "code:plugins/tutorial/"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/08-product-experience-guidance-academy.md"
+rel = "isRealizedBy"
+to = "code:src/runtime-guidance-*.js"
+
+# -------------------------------------------------------------------
+# Category 09 - Surfaces & Editing Grammar
+# -------------------------------------------------------------------
+
+[[entity]]
+id = "doc:docs/intent/09-surfaces-editing-grammar.md"
+kind = "docNode"
+label = "09 - Surfaces & Editing Grammar"
+path = "docs/intent/09-surfaces-editing-grammar.md"
+facet = ["system", "developer"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/PRIMARY-INTENT.md"
+rel = "expands"
+to = "doc:docs/intent/09-surfaces-editing-grammar.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/09-surfaces-editing-grammar.md"
+rel = "references"
+to = "doc:docs/DESIRE.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/09-surfaces-editing-grammar.md"
+rel = "references"
+to = "doc:docs/CANVAS.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/09-surfaces-editing-grammar.md"
+rel = "isRealizedBy"
+to = "code:src/desire/ir.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/09-surfaces-editing-grammar.md"
+rel = "isRealizedBy"
+to = "code:src/runtime-surface-*.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/09-surfaces-editing-grammar.md"
+rel = "isRealizedBy"
+to = "code:plugins/inspect/"
+
+# -------------------------------------------------------------------
+# Category 10 - Shells, Persistence & Ecosystem
+# -------------------------------------------------------------------
+
+[[entity]]
+id = "doc:docs/intent/10-shells-persistence-ecosystem.md"
+kind = "docNode"
+label = "10 - Shells, Persistence & Ecosystem"
+path = "docs/intent/10-shells-persistence-ecosystem.md"
+facet = ["system", "operator"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/PRIMARY-INTENT.md"
+rel = "expands"
+to = "doc:docs/intent/10-shells-persistence-ecosystem.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/10-shells-persistence-ecosystem.md"
+rel = "references"
+to = "doc:docs/SHELLS-PERSISTENCE-ECOSYSTEM.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/10-shells-persistence-ecosystem.md"
+rel = "isRealizedBy"
+to = "code:src/cli.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/10-shells-persistence-ecosystem.md"
+rel = "isRealizedBy"
+to = "code:src/desktop-*.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/10-shells-persistence-ecosystem.md"
+rel = "isRealizedBy"
+to = "code:src/app-runtime.js"
+
+# -------------------------------------------------------------------
+# Category 11 - Platform Self-Modeling, Verification & Knowledge
+# -------------------------------------------------------------------
+
+[[entity]]
+id = "doc:docs/intent/11-platform-self-modeling-verification-knowledge.md"
+kind = "docNode"
+label = "11 - Platform Self-Modeling, Verification & Knowledge"
+path = "docs/intent/11-platform-self-modeling-verification-knowledge.md"
+facet = ["system", "developer", "admin"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/PRIMARY-INTENT.md"
+rel = "expands"
+to = "doc:docs/intent/11-platform-self-modeling-verification-knowledge.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/11-platform-self-modeling-verification-knowledge.md"
+rel = "references"
+to = "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/11-platform-self-modeling-verification-knowledge.md"
+rel = "references"
+to = "doc:docs/INTENT-REGISTRY-ROADMAP.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/11-platform-self-modeling-verification-knowledge.md"
+rel = "references"
+to = "doc:docs/CONTEXTHUB-SPEC.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/11-platform-self-modeling-verification-knowledge.md"
+rel = "isRealizedBy"
+to = "code:plugins/platform/"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/11-platform-self-modeling-verification-knowledge.md"
+rel = "isRealizedBy"
+to = "code:docs/intent/knowledge-relations.wtoml"
+
+# -------------------------------------------------------------------
+# Category 12 - Backend & External Integration Seams
+# -------------------------------------------------------------------
+
+[[entity]]
+id = "doc:docs/intent/12-backend-external-integration-seams.md"
+kind = "docNode"
+label = "12 - Backend & External Integration Seams"
+path = "docs/intent/12-backend-external-integration-seams.md"
+facet = ["system", "developer"]
+lifecycle = ["author", "steward"]
+owner = "plugin.platform"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/PRIMARY-INTENT.md"
+rel = "expands"
+to = "doc:docs/intent/12-backend-external-integration-seams.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/12-backend-external-integration-seams.md"
+rel = "references"
+to = "doc:docs/BACKEND-SEAMS.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/12-backend-external-integration-seams.md"
+rel = "references"
+to = "doc:docs/CAPABILITIES.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/12-backend-external-integration-seams.md"
+rel = "isRealizedBy"
+to = "code:plugins/http-outbound/"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/12-backend-external-integration-seams.md"
+rel = "isRealizedBy"
+to = "code:plugins/oauth/"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/12-backend-external-integration-seams.md"
+rel = "isRealizedBy"
+to = "code:plugins/jobs/"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/12-backend-external-integration-seams.md"
+rel = "isRealizedBy"
+to = "code:plugins/mcp/"
+
+# -------------------------------------------------------------------
+# Cross-document relationships (doc ↔ doc) - examples
+# -------------------------------------------------------------------
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/CATEGORIZED-LIST.md"
+rel = "references"
+to = "doc:docs/intent/PRIMARY-INTENT.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/INTENT-TREE.md"
+rel = "references"
+to = "doc:docs/intent/PRIMARY-INTENT.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/01-foundational-philosophy-ontology.md"
+rel = "references"
+to = "doc:docs/intent/02-witness-substrate-projections.md"
+
+# Example of a doc explaining and being implemented by code in another doc's area
+[[relation]]
+actor = "system"
+from = "doc:docs/SYSTEM.md"
+rel = "explains"
+to = "doc:docs/intent/01-foundational-philosophy-ontology.md"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/CAPABILITIES.md"
+rel = "governs"
+to = "doc:docs/intent/05-capabilities-plugins-extensibility.md"
+
+# -------------------------------------------------------------------
+# Document to Code (selected high-signal examples across categories)
+# -------------------------------------------------------------------
+
+# Primary kernel truths referenced from multiple docs
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/01-foundational-philosophy-ontology.md"
+rel = "isRealizedBy"
+to = "code:src/kernel.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/intent/02-witness-substrate-projections.md"
+rel = "isRealizedBy"
+to = "code:src/kernel.js"
+
+[[relation]]
+actor = "system"
+from = "doc:docs/CAPABILITIES.md"
+rel = "explains"
+to = "code:src/desire/ir.js"
+
+# -------------------------------------------------------------------
+# Intent to doc + code (bridging the intent registry)
+# -------------------------------------------------------------------
+
+# These would ideally be generated or maintained alongside the intent tree
+# For now they are explicitly authored here as the canonical model.
+
+[[relation]]
+actor = "system"
+from = "intent:foundational-philosophy-ontology"
+rel = "explainedBy"
+to = "doc:docs/intent/01-foundational-philosophy-ontology.md"
+
+[[relation]]
+actor = "system"
+from = "intent:foundational-philosophy-ontology"
+rel = "implementedBy"
+to = "code:src/kernel.js"
+
+# Note: intent:* ids are placeholders here to match the spirit of
+# INTENT-REGISTRY-ROADMAP and CONTEXTHUB-SPEC. They can be promoted to
+# first-class [[entity]] id = "intent:..." when the registry is modeled.
+
+# -------------------------------------------------------------------
+# Usage
+# -------------------------------------------------------------------
+# This file can be:
+# - Loaded as a governed knowledge source in the platform model
+# - Lowered into DESIRE entities + relations
+# - Projected by ContextHub for intent-linked docs + code
+# - Used to drive "nearby code/docs" surfaces and LLM context packs
+#
+# See:
+# - docs/CONTEXTHUB-SPEC.md (docNode, contextLink, implements, explains)
+# - docs/INTENT-REGISTRY-ROADMAP.md
+# - plugins/platform/platform-model.js (current inferred doc nodes & edges)
+# - docs/intent/ (the 12 category files + tree that this models)

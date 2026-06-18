@@ -299,6 +299,7 @@ body = { export = "migrated" }
   assert.equal(model.nodes.some(node => node.id === "packageRevision.plugin.inspect.v1" && node.kind === "packageRevision"), true);
   assert.equal(model.nodes.some(node => node.id === "packageNamespace:ctx.alpha:inspectA" && node.kind === "packageNamespace"), true);
   assert.equal(model.nodes.some(node => node.id === "packageTransformer.inspect.v1-to-v2" && node.kind === "packageTransformer"), true);
+  assert.equal(model.nodes.some(node => node.id === "packageApplyPreview:packageRevision.plugin.inspect.v2" && node.kind === "packageApplyPreview"), true);
 
   const packageView = filterPlatformModel(model, "packageCoexistence", "package.plugin.inspect");
   assert.equal(packageView.packageCoexistence.length, 1);
@@ -316,6 +317,11 @@ body = { export = "migrated" }
   assert.equal(convergenceView.packageConvergence.length, 1);
   assert.equal(convergenceView.packageConvergence[0].status, "glue-required");
   assert.deepEqual(convergenceView.packageConvergence[0].transformerIds, ["packageTransformer.inspect.v1-to-v2"]);
+
+  const applyPreviewView = filterPlatformModel(model, "packageApplyPreview", "packageRevision.plugin.inspect.v2");
+  assert.equal(applyPreviewView.packageApplyPreviews.length, 1);
+  assert.equal(applyPreviewView.packageApplyPreviews[0].status, "glue-required");
+  assert.deepEqual(applyPreviewView.packageApplyPreviews[0].relatedTransformerIds, ["packageTransformer.inspect.v1-to-v2"]);
 });
 
 test("platform context naming view surfaces resolution and visibility explanations", async () => {
@@ -605,7 +611,8 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformGovernancePage",
     "PlatformSemanticsPage",
     "PlatformPackageCoexistencePage",
-    "PlatformPackageConvergencePage"
+    "PlatformPackageConvergencePage",
+    "PlatformPackageApplyPreviewPage"
   ]);
   const overviewPage = layout.children.find(surface => surface.name === "PlatformOverviewPage");
   const workflowPage = layout.children.find(surface => surface.name === "PlatformWorkflowPage");
@@ -616,6 +623,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   const semanticsPage = layout.children.find(surface => surface.name === "PlatformSemanticsPage");
   const packageCoexistencePage = layout.children.find(surface => surface.name === "PlatformPackageCoexistencePage");
   const packageConvergencePage = layout.children.find(surface => surface.name === "PlatformPackageConvergencePage");
+  const packageApplyPreviewPage = layout.children.find(surface => surface.name === "PlatformPackageApplyPreviewPage");
   assert.ok(overviewPage);
   assert.equal(overviewPage.pageId, "overview");
   assert.equal(overviewPage.props.modelView, "overview");
@@ -1012,14 +1020,32 @@ test("platform console layout compiles authored top-level surface metadata from 
   const knowledgeRelatedSurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeRelatedPanel");
   assert.ok(knowledgeRelatedSurface);
   assert.equal(knowledgeRelatedSurface.props.cardItemLimit, "12");
-  assert.equal(knowledgeRelatedSurface.props.documentLinkCards, "Referenced Routes=references.routes|Referenced Plugins=references.pluginIds|Referenced Files=references.filePaths|Authored Doc Links=references.authoredDocLinks@authoredLink|Authored Code Links=references.authoredCodeLinks@authoredLink");
-  assert.equal(knowledgeRelatedSurface.props.documentLinkCardEmptyStates, "Referenced Routes=No referenced routes in this document.|Referenced Plugins=No referenced plugins in this document.|Referenced Files=No referenced files in this document.|Authored Doc Links=No authored doc↔doc links in the knowledge model.|Authored Code Links=No authored doc↔code realizations in the knowledge model.");
-  assert.equal(knowledgeRelatedSurface.props.roadmapTaskLinkCards, "Linked Targets=targets@targetId");
-  assert.equal(knowledgeRelatedSurface.props.roadmapTaskLinkCardEmptyStates, "Linked Targets=No linked platform targets for this roadmap task.");
-  assert.equal(knowledgeRelatedSurface.props.epicLinkCards, "Branches=branchIds|Features=featureIds|Verification Gates=gateIds|Docs=docIds");
-  assert.equal(knowledgeRelatedSurface.props.epicLinkCardEmptyStates, "Branches=No branches linked to this epic.|Features=No features linked to this epic.|Verification Gates=No verification gates linked to this epic.|Docs=No docs linked to this epic.");
-  assert.equal(knowledgeRelatedSurface.props.featureLinkCards, "Branches=branchIds|Verification Gates=gateIds|Docs=docIds");
-  assert.equal(knowledgeRelatedSurface.props.featureLinkCardEmptyStates, "Branches=No branches linked to this feature.|Verification Gates=No verification gates linked to this feature.|Docs=No docs linked to this feature.");
+  assert.deepEqual(knowledgeRelatedSurface.children, [
+    "PlatformKnowledgeDocumentLinks",
+    "PlatformKnowledgeRoadmapTaskLinks",
+    "PlatformKnowledgeEpicLinks",
+    "PlatformKnowledgeFeatureLinks"
+  ]);
+  const knowledgeDocumentLinksSurface = knowledgeRelatedSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDocumentLinks");
+  assert.ok(knowledgeDocumentLinksSurface);
+  assert.equal(knowledgeDocumentLinksSurface.props.detailKinds, "document");
+  assert.equal(knowledgeDocumentLinksSurface.props.linkCards, "Referenced Routes=references.routes|Referenced Plugins=references.pluginIds|Referenced Files=references.filePaths|Authored Doc Links=references.authoredDocLinks@authoredLink|Authored Code Links=references.authoredCodeLinks@authoredLink");
+  assert.equal(knowledgeDocumentLinksSurface.props.linkCardEmptyStates, "Referenced Routes=No referenced routes in this document.|Referenced Plugins=No referenced plugins in this document.|Referenced Files=No referenced files in this document.|Authored Doc Links=No authored doc-to-doc links in the knowledge model.|Authored Code Links=No authored doc-to-code realizations in the knowledge model.");
+  const knowledgeRoadmapTaskLinksSurface = knowledgeRelatedSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeRoadmapTaskLinks");
+  assert.ok(knowledgeRoadmapTaskLinksSurface);
+  assert.equal(knowledgeRoadmapTaskLinksSurface.props.detailKinds, "roadmapTask");
+  assert.equal(knowledgeRoadmapTaskLinksSurface.props.linkCards, "Linked Targets=targets@targetId");
+  assert.equal(knowledgeRoadmapTaskLinksSurface.props.linkCardEmptyStates, "Linked Targets=No linked platform targets for this roadmap task.");
+  const knowledgeEpicLinksSurface = knowledgeRelatedSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeEpicLinks");
+  assert.ok(knowledgeEpicLinksSurface);
+  assert.equal(knowledgeEpicLinksSurface.props.detailKinds, "epic");
+  assert.equal(knowledgeEpicLinksSurface.props.linkCards, "Branches=branchIds|Features=featureIds|Verification Gates=gateIds|Docs=docIds");
+  assert.equal(knowledgeEpicLinksSurface.props.linkCardEmptyStates, "Branches=No branches linked to this epic.|Features=No features linked to this epic.|Verification Gates=No verification gates linked to this epic.|Docs=No docs linked to this epic.");
+  const knowledgeFeatureLinksSurface = knowledgeRelatedSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeFeatureLinks");
+  assert.ok(knowledgeFeatureLinksSurface);
+  assert.equal(knowledgeFeatureLinksSurface.props.detailKinds, "feature");
+  assert.equal(knowledgeFeatureLinksSurface.props.linkCards, "Branches=branchIds|Verification Gates=gateIds|Docs=docIds");
+  assert.equal(knowledgeFeatureLinksSurface.props.linkCardEmptyStates, "Branches=No branches linked to this feature.|Verification Gates=No verification gates linked to this feature.|Docs=No docs linked to this feature.");
   const signalPrimarySurface = signalDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalPrimaryPanel");
   assert.ok(signalPrimarySurface);
   assert.equal(signalPrimarySurface.props.longTailCardTitle, "Properties");
@@ -1072,6 +1098,12 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(packageConvergencePage.props.summaryCards, "Packages=packageConvergence@count");
   assert.equal(packageConvergencePage.props.supplementalPageSource, "packageConvergence");
   assert.deepEqual(packageConvergencePage.children, ["PlatformPackageConvergenceList", "PlatformPackageConvergenceDetail"]);
+  assert.ok(packageApplyPreviewPage);
+  assert.equal(packageApplyPreviewPage.pageId, "packageApplyPreview");
+  assert.equal(packageApplyPreviewPage.props.modelView, "packageApplyPreview");
+  assert.equal(packageApplyPreviewPage.props.summaryCards, "Revisions=packageApplyPreviews@count");
+  assert.equal(packageApplyPreviewPage.props.supplementalPageSource, "packageApplyPreview");
+  assert.deepEqual(packageApplyPreviewPage.children, ["PlatformPackageApplyPreviewList", "PlatformPackageApplyPreviewDetail"]);
   const bridgesListSurface = bridgesPage.childSurfaces.find(surface => surface.name === "PlatformBridgesList");
   assert.ok(bridgesListSurface);
   assert.equal(bridgesListSurface.props.listSource, "bridges");
@@ -1114,6 +1146,13 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(packageConvergenceDetailSurface);
   assert.equal(packageConvergenceDetailSurface.props.detailSource, "packageConvergence");
   assert.equal(packageConvergenceDetailSurface.props.detailCardTitle, "Package Convergence Detail");
+  const packageApplyPreviewListSurface = packageApplyPreviewPage.childSurfaces.find(surface => surface.name === "PlatformPackageApplyPreviewList");
+  assert.ok(packageApplyPreviewListSurface);
+  assert.equal(packageApplyPreviewListSurface.props.listSource, "packageApplyPreview");
+  const packageApplyPreviewDetailSurface = packageApplyPreviewPage.childSurfaces.find(surface => surface.name === "PlatformPackageApplyPreviewDetail");
+  assert.ok(packageApplyPreviewDetailSurface);
+  assert.equal(packageApplyPreviewDetailSurface.props.detailSource, "packageApplyPreview");
+  assert.equal(packageApplyPreviewDetailSurface.props.detailCardTitle, "Package Apply Preview Detail");
   const consoleSummarySurface = overviewPage.childSurfaces.find(surface => surface.name === "PlatformConsoleSummary");
   assert.ok(consoleSummarySurface);
   assert.equal(consoleSummarySurface.props.summaryPageId, "overview");
@@ -6080,6 +6119,7 @@ test("platform page renders required operating views", async () => {
   assert.match(overviewHtml, /\?view=semantics/);
   assert.match(overviewHtml, /\?view=packageCoexistence/);
   assert.match(overviewHtml, /\?view=packageConvergence/);
+  assert.match(overviewHtml, /\?view=packageApplyPreview/);
   assert.doesNotMatch(overviewHtml, /bindAuthoredJsonSubmit/);
   assert.doesNotMatch(overviewHtml, /<pre/);
 
@@ -6312,6 +6352,20 @@ test("platform page renders authored supplemental pages from the RVM page tree",
       convergencePatchIds: ["packagePatch.inspect"],
       remainingGlue: [{ message: "Shared shim still needed." }]
     }],
+    packageApplyPreviews: [{
+      id: "packageApplyPreview:packageRevision.plugin.inspect.v2",
+      packageId: "package.plugin.inspect",
+      packageLabel: "Plugin Inspect",
+      revisionId: "packageRevision.plugin.inspect.v2",
+      revisionVersion: "v2",
+      status: "glue-required",
+      bundleHash: "bundle.inspect.v2",
+      bundleFileCount: 3,
+      relatedTransformerIds: ["packageTransformer.inspect.v1-to-v2"],
+      relatedConvergencePatchIds: ["packagePatch.inspect"],
+      remainingGlueMessages: ["Shared shim still needed."],
+      explanation: "Preview still requires shared shim glue."
+    }],
     summaries: {}
   };
 
@@ -6320,6 +6374,7 @@ test("platform page renders authored supplemental pages from the RVM page tree",
   const semanticsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=semantics&id=mutableSurface:plugin.platform") });
   const coexistenceHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=packageCoexistence&id=package.plugin.inspect") });
   const convergenceHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=packageConvergence&id=package.plugin.inspect") });
+  const applyPreviewHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=packageApplyPreview&id=packageRevision.plugin.inspect.v2") });
 
   assert.match(bridgesHtml, /Platform Console - Bridges/);
   assert.match(bridgesHtml, /Bridge Inventory/);
@@ -6357,6 +6412,14 @@ test("platform page renders authored supplemental pages from the RVM page tree",
   assert.match(convergenceHtml, /packageTransformer\.inspect\.v1-to-v2/);
   assert.match(convergenceHtml, /Shared shim still needed\./);
   assert.doesNotMatch(convergenceHtml, /<pre/);
+
+  assert.match(applyPreviewHtml, /Platform Console - Package Apply Preview/);
+  assert.match(applyPreviewHtml, /Package Apply Preview Rows/);
+  assert.match(applyPreviewHtml, /Revision-scoped apply impact, emitted bundle summary, and convergence truth\./);
+  assert.match(applyPreviewHtml, /Package Apply Preview Detail/);
+  assert.match(applyPreviewHtml, /packageRevision\.plugin\.inspect\.v2/);
+  assert.match(applyPreviewHtml, /packageTransformer\.inspect\.v1-to-v2/);
+  assert.doesNotMatch(applyPreviewHtml, /<pre/);
 });
 
 test("platform supplemental pages use authored empty states", () => {
@@ -6367,6 +6430,7 @@ test("platform supplemental pages use authored empty states", () => {
   const semanticsHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=semantics") });
   const coexistenceHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=packageCoexistence") });
   const convergenceHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=packageConvergence") });
+  const applyPreviewHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=packageApplyPreview") });
 
   assert.match(bridgesHtml, /No compatibility bridges\./);
   assert.match(bridgesHtml, /No compatibility bridge selected\./);
@@ -6378,6 +6442,8 @@ test("platform supplemental pages use authored empty states", () => {
   assert.match(coexistenceHtml, /No package coexistence row selected\./);
   assert.match(convergenceHtml, /No package convergence rows\./);
   assert.match(convergenceHtml, /No package convergence row selected\./);
+  assert.match(applyPreviewHtml, /No package apply preview rows\./);
+  assert.match(applyPreviewHtml, /No package apply preview row selected\./);
 });
 
 test("platform page uses authored related-card empty states and item limits", () => {

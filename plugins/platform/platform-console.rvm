@@ -77,6 +77,7 @@ view PlatformConsolePage {
     PlatformSemanticsPage
     PlatformPackageCoexistencePage
     PlatformPackageConvergencePage
+    PlatformPackageApplyPreviewPage
   }
 }
 
@@ -260,6 +261,21 @@ view PlatformPackageConvergencePage {
   }
 }
 
+view PlatformPackageApplyPreviewPage {
+  kind page
+  class platform-model
+  prop pageId = "packageApplyPreview"
+  prop modelView = "packageApplyPreview"
+  prop summaryCards = "Revisions=packageApplyPreviews@count"
+  prop supplementalPageSource = "packageApplyPreview"
+  prop title = "Package Apply Preview"
+  prop summary = "Revision-scoped apply impact, emitted bundle summary, and convergence truth."
+  children {
+    PlatformPackageApplyPreviewList
+    PlatformPackageApplyPreviewDetail
+  }
+}
+
 view PlatformBridgesList {
   kind table
   class platform-model-list
@@ -388,6 +404,32 @@ view PlatformPackageConvergenceDetail {
   prop longTailExcludedFields = "title|scope|summary|packageLink|remainingGlueMessages"
   prop emptyTitle = "Package Convergence Detail"
   prop emptyState = "No package convergence row selected."
+}
+
+view PlatformPackageApplyPreviewList {
+  kind table
+  class platform-model-list
+  prop title = "Package Apply Preview Rows"
+  prop summary = "Revision-scoped apply impact, emitted bundle summary, and convergence truth."
+  prop listSource = "packageApplyPreview"
+  prop columns = "Revision|Status|Files|Transformers|Glue"
+  prop rowFields = "Revision=revisionLink@concept|Status=status|Files=bundleFileCount|Transformers=relatedTransformerIds@value|Glue=remainingGlueMessages@value"
+  prop emptyState = "No package apply preview rows."
+  prop pageSize = "20"
+}
+
+view PlatformPackageApplyPreviewDetail {
+  kind region
+  class platform-model-detail
+  prop title = "Package Apply Preview Detail"
+  prop summary = "Selected revision apply preview properties and long-tail fields."
+  prop detailSource = "packageApplyPreview"
+  prop detailCardTitle = "Package Apply Preview Detail"
+  prop primaryFields = "Package=packageLink@concept|Revision=revisionLink@concept|Status=status|Bundle Hash=bundleHash|Explanation=explanation"
+  prop longTailCardTitle = "Properties"
+  prop longTailExcludedFields = "title|scope|summary|packageLink|revisionLink|bundle|coexistence|convergence|selectedRevision|selectedNamespaces|manifestPluginConflicts|relatedTransformers|relatedConvergencePatches|remainingGlue"
+  prop emptyTitle = "Package Apply Preview Detail"
+  prop emptyState = "No package apply preview row selected."
 }
 
 view PlatformConsoleSummary {
@@ -1202,14 +1244,44 @@ view PlatformKnowledgeRelatedPanel {
   prop title = "Related Resources"
   prop summary = "Linked platform resources and supporting context for the selected knowledge object."
   prop cardItemLimit = "12"
-  prop documentLinkCards = "Referenced Routes=references.routes|Referenced Plugins=references.pluginIds|Referenced Files=references.filePaths|Authored Doc Links=references.authoredDocLinks@authoredLink|Authored Code Links=references.authoredCodeLinks@authoredLink"
-  prop documentLinkCardEmptyStates = "Referenced Routes=No referenced routes in this document.|Referenced Plugins=No referenced plugins in this document.|Referenced Files=No referenced files in this document.|Authored Doc Links=No authored doc↔doc links in the knowledge model.|Authored Code Links=No authored doc↔code realizations in the knowledge model."
-  prop roadmapTaskLinkCards = "Linked Targets=targets@targetId"
-  prop roadmapTaskLinkCardEmptyStates = "Linked Targets=No linked platform targets for this roadmap task."
-  prop epicLinkCards = "Branches=branchIds|Features=featureIds|Verification Gates=gateIds|Docs=docIds"
-  prop epicLinkCardEmptyStates = "Branches=No branches linked to this epic.|Features=No features linked to this epic.|Verification Gates=No verification gates linked to this epic.|Docs=No docs linked to this epic."
-  prop featureLinkCards = "Branches=branchIds|Verification Gates=gateIds|Docs=docIds"
-  prop featureLinkCardEmptyStates = "Branches=No branches linked to this feature.|Verification Gates=No verification gates linked to this feature.|Docs=No docs linked to this feature."
+  children {
+    PlatformKnowledgeDocumentLinks
+    PlatformKnowledgeRoadmapTaskLinks
+    PlatformKnowledgeEpicLinks
+    PlatformKnowledgeFeatureLinks
+  }
+}
+
+view PlatformKnowledgeDocumentLinks {
+  kind region
+  class platform-knowledge-document-links
+  prop detailKinds = "document"
+  prop linkCards = "Referenced Routes=references.routes|Referenced Plugins=references.pluginIds|Referenced Files=references.filePaths|Authored Doc Links=references.authoredDocLinks@authoredLink|Authored Code Links=references.authoredCodeLinks@authoredLink"
+  prop linkCardEmptyStates = "Referenced Routes=No referenced routes in this document.|Referenced Plugins=No referenced plugins in this document.|Referenced Files=No referenced files in this document.|Authored Doc Links=No authored doc-to-doc links in the knowledge model.|Authored Code Links=No authored doc-to-code realizations in the knowledge model."
+}
+
+view PlatformKnowledgeRoadmapTaskLinks {
+  kind region
+  class platform-knowledge-roadmap-task-links
+  prop detailKinds = "roadmapTask"
+  prop linkCards = "Linked Targets=targets@targetId"
+  prop linkCardEmptyStates = "Linked Targets=No linked platform targets for this roadmap task."
+}
+
+view PlatformKnowledgeEpicLinks {
+  kind region
+  class platform-knowledge-epic-links
+  prop detailKinds = "epic"
+  prop linkCards = "Branches=branchIds|Features=featureIds|Verification Gates=gateIds|Docs=docIds"
+  prop linkCardEmptyStates = "Branches=No branches linked to this epic.|Features=No features linked to this epic.|Verification Gates=No verification gates linked to this epic.|Docs=No docs linked to this epic."
+}
+
+view PlatformKnowledgeFeatureLinks {
+  kind region
+  class platform-knowledge-feature-links
+  prop detailKinds = "feature"
+  prop linkCards = "Branches=branchIds|Verification Gates=gateIds|Docs=docIds"
+  prop linkCardEmptyStates = "Branches=No branches linked to this feature.|Verification Gates=No verification gates linked to this feature.|Docs=No docs linked to this feature."
 }
 
 view PlatformKnowledgeSections {
