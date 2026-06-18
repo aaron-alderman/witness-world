@@ -7,7 +7,12 @@ import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js"
 import { bundleId, handlerCatalog, providers, routes } from "./runtime.js";
 import { createMcpBundleSupportServices } from "./mcp-support-services.js";
 import { MCP_PROTOCOL_VERSION, executeMcpTool, listSupportedMcpTools, mcpToolNames, resolveMcpToolScope } from "./mcp-tools.js";
-import { createHandlers as createPlatformHandlers, providers as platformProviders } from "../platform/runtime.js";
+import {
+  createHandlers as createPlatformHandlers,
+  handlerCatalog as platformHandlerCatalog,
+  providers as platformProviders,
+  routes as platformRoutes
+} from "../platform/runtime.js";
 
 function buildRequestUrl(path, query = {}) {
   const url = new URL(`http://localhost${path}`);
@@ -309,6 +314,122 @@ test("current platform console mutation surfaces have MCP tool equivalents", () 
   assert.equal(changeSetOperations.includes("abandon"), true);
   assert.equal(testOperations.includes("run"), true);
   assert.equal(testOperations.includes("runSelected"), true);
+});
+
+test("platform MCP mutation tools only target human-exposed platform handlers", async () => {
+  const calls = [];
+  const callHandler = async request => {
+    calls.push(request);
+    return { status: request.method === "POST" ? 200 : 200, body: { ok: true, handler: request.handler } };
+  };
+  const cases = [
+    {
+      tool: "platform.proposal",
+      args: {
+        operation: "create",
+        action: "branch.create",
+        id: "proposal.platform.guard.create",
+        body: { id: "branch.guard.create", title: "Guard branch" }
+      }
+    },
+    {
+      tool: "platform.proposal",
+      args: {
+        operation: "approve",
+        proposalId: "proposal.platform.guard.create"
+      }
+    },
+    {
+      tool: "platform.proposal",
+      args: {
+        operation: "reject",
+        proposalId: "proposal.platform.guard.create",
+        reason: "guard"
+      }
+    },
+    {
+      tool: "platform.branch",
+      args: {
+        operation: "create",
+        id: "branch.guard.create",
+        title: "Guard branch"
+      }
+    },
+    {
+      tool: "platform.changeSet",
+      args: {
+        operation: "create",
+        id: "changeSet:guard",
+        branchId: "branch.guard.create"
+      }
+    },
+    {
+      tool: "platform.changeSet",
+      args: {
+        operation: "edit",
+        changeSetId: "changeSet:guard",
+        edits: [{ path: "plugins/platform/platform-console.rvm", content: "surface PlatformConsolePage {}" }]
+      }
+    },
+    {
+      tool: "platform.changeSet",
+      args: {
+        operation: "validate",
+        changeSetId: "changeSet:guard"
+      }
+    },
+    {
+      tool: "platform.changeSet",
+      args: {
+        operation: "apply",
+        changeSetId: "changeSet:guard"
+      }
+    },
+    {
+      tool: "platform.changeSet",
+      args: {
+        operation: "reject",
+        changeSetId: "changeSet:guard",
+        reason: "guard"
+      }
+    },
+    {
+      tool: "platform.changeSet",
+      args: {
+        operation: "abandon",
+        changeSetId: "changeSet:guard",
+        reason: "guard"
+      }
+    },
+    {
+      tool: "platform.test",
+      args: {
+        operation: "run",
+        id: "testRun.guard",
+        gateId: "gate:plugins/platform/platform.test.js",
+        branchId: "branch.guard.create"
+      }
+    },
+    {
+      tool: "platform.test",
+      args: {
+        operation: "runSelected",
+        branchId: "branch.guard.create",
+        changeSetId: "changeSet:guard"
+      }
+    }
+  ];
+
+  for (const testCase of cases) {
+    const result = await executeMcpTool(testCase.tool, {
+      args: testCase.args,
+      callHandler
+    });
+    assert.equal(result.isError, false, `${testCase.tool} ${testCase.args.operation} should succeed`);
+    const call = calls.at(-1);
+    assert.equal(platformHandlerCatalog.dispatchHandlers.includes(call.handler), true, `${call.handler} should be owned by plugin.platform`);
+    assert.equal(platformRoutes.some(route => route.handler === call.handler && route.method === call.method), true, `${call.handler} should map to a human-exposed platform route`);
+  }
 });
 
 test("platform MCP read tool routes runtime revision view through platform model handlers", async () => {
