@@ -1755,6 +1755,23 @@ function renderAuthoredPropertySourceSection(surface) {
   }
 }
 
+function renderAuthoredDetailSourceSection(surface, model, ctx) {
+  switch (surfacePropText(surface, "detailSource", "")) {
+    case "workflow":
+      return renderSurfaceFrame(surface, renderWorkflowDetail(surface, findWorkflowDetail(model, ctx.id), model, ctx));
+    case "verification":
+      return renderSurfaceFrame(surface, renderVerificationDetail(surface, findVerificationDetail(model, ctx.id), model, ctx));
+    case "knowledge":
+      return renderSurfaceFrame(surface, renderKnowledgeDetail(surface, findKnowledgeDetail(model, ctx.id), model, ctx));
+    case "signals":
+      return renderSurfaceFrame(surface, renderSignalDetail(surface, findSignalDetail(model, ctx.id), model, ctx));
+    case "model":
+      return renderSurfaceFrame(surface, renderModelDetail(surface, findModelDetail(model, ctx.id), model, ctx));
+    default:
+      return "";
+  }
+}
+
 function renderAuthoringClientScript() {
   return `
     <script>
@@ -2021,17 +2038,10 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
   if (surface?.props?.propertySource) {
     return renderAuthoredPropertySourceSection(surface);
   }
+  if (surface?.props?.detailSource) {
+    return renderAuthoredDetailSourceSection(surface, model, ctx);
+  }
   switch (surface?.name) {
-    case "PlatformWorkflowDetail":
-      return renderSurfaceFrame(surface, renderWorkflowDetail(surface, findWorkflowDetail(model, ctx.id), model, ctx));
-    case "PlatformVerificationDetail":
-      return renderSurfaceFrame(surface, renderVerificationDetail(surface, findVerificationDetail(model, ctx.id), model, ctx));
-    case "PlatformKnowledgeDetail":
-      return renderSurfaceFrame(surface, renderKnowledgeDetail(surface, findKnowledgeDetail(model, ctx.id), model, ctx));
-    case "PlatformSignalDetail":
-      return renderSurfaceFrame(surface, renderSignalDetail(surface, findSignalDetail(model, ctx.id), model, ctx));
-    case "PlatformModelDetail":
-      return renderSurfaceFrame(surface, renderModelDetail(surface, findModelDetail(model, ctx.id), model, ctx));
     default:
       return `
         <section class="card" data-platform-rvm-view="${esc(surface?.name || "unknown")}">

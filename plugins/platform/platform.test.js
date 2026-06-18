@@ -407,6 +407,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   ]);
   const workflowDetailSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowDetail");
   assert.ok(workflowDetailSurface);
+  assert.equal(workflowDetailSurface.props.detailSource, "workflow");
   assert.equal(workflowDetailSurface.props.emptyTitle, "Detail");
   assert.equal(workflowDetailSurface.props.emptyState, "No workflow rows are projected yet.");
   assert.deepEqual(workflowDetailSurface.children, [
@@ -517,6 +518,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   ]);
   const verificationDetailSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationDetail");
   assert.ok(verificationDetailSurface);
+  assert.equal(verificationDetailSurface.props.detailSource, "verification");
   assert.equal(verificationDetailSurface.props.emptyTitle, "Detail");
   assert.equal(verificationDetailSurface.props.emptyState, "No verification rows are projected yet.");
   assert.deepEqual(verificationDetailSurface.children, [
@@ -565,6 +567,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationRelatedSurface.props.testRunPropertyFields, "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href");
   const verificationStreamsSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationStreams");
   assert.ok(verificationStreamsSurface);
+  assert.equal(verificationStreamsSurface.props.propertySource, "verificationStreams");
   assert.equal(verificationStreamsSurface.props.streamCardTitle, "Event Streams");
   assert.equal(verificationStreamsSurface.props.streamFields, "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href");
   const testRunPanelSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformTestRunPanel");
@@ -597,6 +600,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   ]);
   const signalDetailSurface = signalsPage.childSurfaces.find(surface => surface.name === "PlatformSignalDetail");
   assert.ok(signalDetailSurface);
+  assert.equal(signalDetailSurface.props.detailSource, "signals");
   assert.equal(signalDetailSurface.props.emptyTitle, "Detail");
   assert.equal(signalDetailSurface.props.emptyState, "No signal rows are projected yet.");
   assert.deepEqual(signalDetailSurface.children, [
@@ -625,6 +629,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.match(knowledgePage.props.summaryCards, /Governed Docs=docs@count/);
   const knowledgeDetailSurface = knowledgePage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDetail");
   assert.ok(knowledgeDetailSurface);
+  assert.equal(knowledgeDetailSurface.props.detailSource, "knowledge");
   assert.equal(knowledgeDetailSurface.props.emptyTitle, "Detail");
   assert.equal(knowledgeDetailSurface.props.emptyState, "No knowledge rows are projected yet.");
   assert.deepEqual(knowledgeDetailSurface.children, [
@@ -709,6 +714,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(coverageSurface.props.rowFields, "Gate=gateId@concept|Target=targetId||targetLabel@concept|Kind=coverageKind");
   const modelDetailSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelDetail");
   assert.ok(modelDetailSurface);
+  assert.equal(modelDetailSurface.props.detailSource, "model");
   assert.equal(modelDetailSurface.props.emptyTitle, "Detail");
   assert.equal(modelDetailSurface.props.emptyState, "No platform objects are projected yet.");
   assert.deepEqual(modelDetailSurface.children, [
