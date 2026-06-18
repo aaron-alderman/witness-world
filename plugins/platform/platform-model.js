@@ -303,7 +303,7 @@ function aggregatePlanningStatus(statuses = []) {
   return values[0] || "known";
 }
 
-function buildRoadmapPlanningRows({ roadmapDocPath, docs = [], branches = [] }) {
+function buildRoadmapPlanningRows({ roadmapDocPath, docs = [], branches = [], selectedTestGatesByBranch = Object.create(null) }) {
   const roadmapDoc = docs.find(doc => doc.path === roadmapDocPath) ?? null;
   const roadmapId = `roadmap:${roadmapDocPath}`;
   const epicsById = new Map();
@@ -321,6 +321,8 @@ function buildRoadmapPlanningRows({ roadmapDocPath, docs = [], branches = [] }) 
         roadmapId,
         branchIds: [],
         featureIds: [],
+        gateIds: [],
+        docIds: [],
         status: "known"
       });
     }
@@ -341,6 +343,8 @@ function buildRoadmapPlanningRows({ roadmapDocPath, docs = [], branches = [] }) 
         epicId: normalizedEpic ? `epic:${slugify(normalizedEpic)}` : null,
         roadmapId,
         branchIds: [],
+        gateIds: [],
+        docIds: [],
         status: "known"
       });
     }
@@ -351,12 +355,22 @@ function buildRoadmapPlanningRows({ roadmapDocPath, docs = [], branches = [] }) 
     const branchId = String(branch.id || "");
     const epic = ensureEpic(branch.epic);
     const feature = ensureFeature(branch.epic, branch.feature);
+    const gateIds = unique(selectedTestGatesByBranch[branchId] ?? []);
+    const docIds = unique([
+      ...(branch.docsFreshness?.requiredDocs ?? []),
+      ...(branch.docsFreshness?.touchedDocs ?? []),
+      ...(branch.docsFreshness?.missingDocs ?? [])
+    ].map(doc => `doc:${doc}`));
     if (epic) {
       if (!epic.branchIds.includes(branchId)) epic.branchIds.push(branchId);
+      epic.gateIds.push(...gateIds);
+      epic.docIds.push(...docIds);
       pushByKey(branchesByEpic, epic.id, branchId);
     }
     if (feature) {
       if (!feature.branchIds.includes(branchId)) feature.branchIds.push(branchId);
+      feature.gateIds.push(...gateIds);
+      feature.docIds.push(...docIds);
       feature.status = aggregatePlanningStatus([feature.status, branch.status]);
     }
     if (epic && feature && !epic.featureIds.includes(feature.id)) epic.featureIds.push(feature.id);
@@ -367,16 +381,29 @@ function buildRoadmapPlanningRows({ roadmapDocPath, docs = [], branches = [] }) 
     .map(row => ({
       ...row,
       branchIds: [...row.branchIds].sort(),
-      featureIds: [...row.featureIds].sort()
+      featureIds: [...row.featureIds].sort(),
+      gateIds: unique(row.gateIds).sort(),
+      docIds: unique(row.docIds).sort()
     }))
     .sort((left, right) => String(left.id).localeCompare(String(right.id)));
   const features = [...featuresById.values()]
     .map(row => ({
       ...row,
-      branchIds: [...row.branchIds].sort()
+      branchIds: [...row.branchIds].sort(),
+      gateIds: unique(row.gateIds).sort(),
+      docIds: unique(row.docIds).sort()
     }))
     .sort((left, right) => String(left.id).localeCompare(String(right.id)));
   for (const key of Object.keys(branchesByEpic)) branchesByEpic[key] = unique(branchesByEpic[key]).sort();
+  const testsByFeature = features.map(row => ({
+    id: `testsByFeature:${row.id}`,
+    featureId: row.id,
+    epicId: row.epicId,
+    roadmapId: row.roadmapId,
+    branchIds: [...row.branchIds],
+    gateIds: [...row.gateIds],
+    gateCount: row.gateIds.length
+  }));
 
   return {
     roadmaps: [{
@@ -391,7 +418,8 @@ function buildRoadmapPlanningRows({ roadmapDocPath, docs = [], branches = [] }) 
     }],
     epics,
     features,
-    branchesByEpic
+    branchesByEpic,
+    testsByFeature
   };
 }
 
@@ -2907,7 +2935,8 @@ export async function buildPlatformModel({
   const planning = buildRoadmapPlanningRows({
     roadmapDocPath,
     docs,
-    branches: enrichedBranches
+    branches: enrichedBranches,
+    selectedTestGatesByBranch: testGateProjection.selectedByBranch
   });
   for (const roadmap of planning.roadmaps) {
     addNode(nodes, {
@@ -2933,6 +2962,14 @@ export async function buildPlatformModel({
     });
     addEdge(edges, epic.roadmapId, "contains", epic.id, "roadmap");
     for (const branchId of epic.branchIds) addEdge(edges, `branch:${branchId}`, "belongsTo", epic.id, "roadmap");
+    for (const gateId of epic.gateIds) {
+      addEdge(edges, epic.id, "verifiedBy", gateId, "roadmap");
+      if (nodes.has(gateId)) addEdge(edges, gateId, "verifies", epic.id, "roadmap");
+    }
+    for (const docId of epic.docIds) {
+      addEdge(edges, epic.id, "documentedBy", docId, "roadmap");
+      if (nodes.has(docId)) addEdge(edges, docId, "describes", epic.id, "roadmap");
+    }
   }
   for (const feature of planning.features) {
     addNode(nodes, {
@@ -2947,6 +2984,14 @@ export async function buildPlatformModel({
     if (feature.epicId) addEdge(edges, feature.id, "belongsTo", feature.epicId, "roadmap");
     if (feature.roadmapId) addEdge(edges, feature.roadmapId, "contains", feature.id, "roadmap");
     for (const branchId of feature.branchIds) addEdge(edges, `branch:${branchId}`, "targets", feature.id, "roadmap");
+    for (const gateId of feature.gateIds) {
+      addEdge(edges, feature.id, "verifiedBy", gateId, "roadmap");
+      if (nodes.has(gateId)) addEdge(edges, gateId, "verifies", feature.id, "roadmap");
+    }
+    for (const docId of feature.docIds) {
+      addEdge(edges, feature.id, "documentedBy", docId, "roadmap");
+      if (nodes.has(docId)) addEdge(edges, docId, "describes", feature.id, "roadmap");
+    }
   }
   return {
     lifecycleVocabulary: [...PLATFORM_LIFECYCLES],
@@ -2967,6 +3012,7 @@ export async function buildPlatformModel({
     epics: planning.epics,
     features: planning.features,
     branchesByEpic: planning.branchesByEpic,
+    testsByFeature: planning.testsByFeature,
     testGates: testGateProjection.rows,
     testGateIndex: testGateProjection.index,
     coverageEdges,
@@ -3036,6 +3082,15 @@ export function filterPlatformModel(model, view, id = null) {
       || epicIds.has(row.epicId)
       || row.branchIds.includes(id)
     );
+    const featureIds = new Set(features.map(row => row.id));
+    const testsByFeature = (model.testsByFeature ?? []).filter(row =>
+      !id
+      || row.id === id
+      || row.featureId === id
+      || row.epicId === id
+      || featureIds.has(row.featureId)
+      || row.branchIds.includes(id)
+    );
     const roadmapTasks = (model.roadmapTasks ?? []).filter(task =>
       (!id && roadmapDocIds.has(task.doc))
       || task.id === id
@@ -3049,6 +3104,7 @@ export function filterPlatformModel(model, view, id = null) {
       roadmaps,
       epics,
       features,
+      testsByFeature,
       branchesByEpic: Object.fromEntries(
         Object.entries(model.branchesByEpic ?? {})
           .filter(([epicId]) => !id || epicIds.has(epicId) || epicId === id)

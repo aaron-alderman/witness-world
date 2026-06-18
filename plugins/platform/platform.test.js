@@ -651,6 +651,7 @@ test("platform model filters support MCP views", async () => {
   assert.equal(roadmap.docSections.length > 0, true);
   assert.equal(roadmap.docTasks.length > 0, true);
   assert.equal(roadmap.roadmapTasks.length > 0, true);
+  assert.equal(Array.isArray(roadmap.testsByFeature), true);
   assert.equal(gates.gates.every(node => node.kind === "testGate"), true);
   assert.equal(testGates.testGates.length, 1);
   assert.equal(testGates.testGates[0].id, "gate:test/runtime-profile.test.js");
@@ -706,17 +707,27 @@ test("roadmap planning model projects branch-backed roadmap, epic, and feature l
             title: "Platform Console",
             epic: "platform",
             feature: "console",
-            status: "valid",
-            changeSetIds: []
+            status: "valid"
           },
           {
             id: "branch.platform.runtime",
             title: "Platform Runtime",
             epic: "platform",
             feature: "runtime",
-            status: "open",
-            changeSetIds: []
+            status: "open"
           }
+        ];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [
+          { id: "changeSet.platform.console", branchId: "branch.platform.console", status: "valid" },
+          { id: "changeSet.platform.runtime", branchId: "branch.platform.runtime", status: "draft" }
+        ];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [
+          { id: "changeSetEdit:platform:console", changeSetId: "changeSet.platform.console", path: "plugins/platform/platform-page.js" },
+          { id: "changeSetEdit:platform:runtime", changeSetId: "changeSet.platform.runtime", path: "store/seeds/runtime-profiles.json" }
         ];
       }
       return [];
@@ -730,14 +741,19 @@ test("roadmap planning model projects branch-backed roadmap, epic, and feature l
   assert.equal(model.nodes.some(node => node.kind === "feature" && node.id === "feature:platform:console"), true);
   assert.equal(model.features.some(row => row.id === "feature:platform:console" && row.epicId === "epic:platform"), true);
   assert.equal(model.branchesByEpic["epic:platform"].includes("branch.platform.console"), true);
+  assert.equal(model.testsByFeature.some(row => row.featureId === "feature:platform:console" && row.gateCount > 0), true);
   assert.equal(model.edges.some(edge => edge.from === "branch:branch.platform.console" && edge.rel === "targets" && edge.to === "feature:platform:console"), true);
   assert.equal(model.edges.some(edge => edge.from === "feature:platform:console" && edge.rel === "belongsTo" && edge.to === "epic:platform"), true);
+  assert.equal(model.edges.some(edge => edge.from === "feature:platform:console" && edge.rel === "verifiedBy" && edge.to === "gate:plugins/platform/platform.test.js"), true);
+  assert.equal(model.edges.some(edge => edge.from === "feature:platform:console" && edge.rel === "documentedBy" && edge.to === "doc:docs/CAPABILITIES.md"), true);
+  assert.equal(model.edges.some(edge => edge.from === "epic:platform" && edge.rel === "verifiedBy" && edge.to === "gate:plugins/platform/platform.test.js"), true);
   assert.equal(model.edges.some(edge => edge.from === "roadmap:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" && edge.rel === "contains" && edge.to === "epic:platform"), true);
 
   const roadmap = filterPlatformModel(model, "roadmap", "epic:platform");
   assert.equal(roadmap.roadmaps.length, 1);
   assert.equal(roadmap.epics.length, 1);
   assert.equal(roadmap.features.length, 2);
+  assert.equal(roadmap.testsByFeature.some(row => row.featureId === "feature:platform:console"), true);
   assert.equal(roadmap.branchesByEpic["epic:platform"].includes("branch.platform.runtime"), true);
 });
 
