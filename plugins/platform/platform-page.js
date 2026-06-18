@@ -250,6 +250,13 @@ function renderPropertyTable(title, entries = []) {
   `;
 }
 
+function propertyTableRows(title, entries = []) {
+  return {
+    title,
+    entries: entries.filter(entry => entry && entry.valueHtml)
+  };
+}
+
 function renderSurfaceFrame(surface, bodyHtml, {
   summary = null,
   tag = "section",
@@ -307,7 +314,11 @@ function surfaceRowLimit(surface, fallback = 12) {
   return Math.max(1, parsed || fallback);
 }
 
-function renderLongTailProperties(ctx, record, usedKeys = []) {
+function renderPropertyCard(card) {
+  return renderPropertyTable(card?.title || "Properties", card?.entries || []);
+}
+
+function renderLongTailProperties(ctx, record, usedKeys = [], title = "Properties") {
   const used = new Set(usedKeys);
   const entries = Object.entries(record ?? {})
     .filter(([key, value]) => !used.has(key) && value !== undefined && value !== null && value !== "")
@@ -319,7 +330,7 @@ function renderLongTailProperties(ctx, record, usedKeys = []) {
       label: humanizeKey(key),
       valueHtml: renderValue(ctx, value)
     }));
-  return renderPropertyTable("Properties", entries);
+  return renderPropertyTable(title, entries);
 }
 
 function renderLinksCard(title, ctx, values = []) {
@@ -402,6 +413,103 @@ function renderDataTable(title, headers, rows, emptyMessage = "No rows.") {
       ${renderTable(headers, rows, emptyMessage)}
     </section>
   `;
+}
+
+function parseSurfaceSchemaEntries(raw) {
+  const text = optionalText(raw);
+  if (!text) return [];
+  return text
+    .split("|")
+    .map(part => part.trim())
+    .filter(Boolean)
+    .map(part => {
+      const [left, ...rest] = part.split("=");
+      const label = optionalText(left);
+      const rhs = optionalText(rest.join("="));
+      if (!label || !rhs) return null;
+      const [path, mode] = rhs.split("@");
+      return {
+        label,
+        path: optionalText(path),
+        mode: optionalText(mode) || "text"
+      };
+    })
+    .filter(entry => entry?.label && entry?.path);
+}
+
+function resolveFieldPath(record, fieldPath) {
+  return String(fieldPath || "")
+    .split(".")
+    .filter(Boolean)
+    .reduce((value, segment) => value == null ? null : value[segment], record);
+}
+
+function renderSchemaValue(ctx, value, mode = "text") {
+  if (value === undefined || value === null || value === "") return "";
+  switch (mode) {
+    case "api":
+      return renderApiLink(typeof value === "object" ? value.id : value);
+    case "concept":
+      if (typeof value === "object") {
+        const id = optionalText(value.id) || optionalText(value.path);
+        const label = optionalText(value.title) || optionalText(value.label) || optionalText(value.path) || optionalText(value.id);
+        return id ? renderConceptLink(ctx, id, label || id) : esc(label || "");
+      }
+      return renderConceptLink(ctx, value);
+    case "count":
+      return esc(Array.isArray(value) ? value.length : value);
+    default:
+      return esc(Array.isArray(value) ? value.join(", ") : value);
+  }
+}
+
+function propertyRowsFromSurfaceSchema(surface, titleProp, fieldsProp, ctx, record, fallbackTitle, fallbackEntries = []) {
+  const entries = parseSurfaceSchemaEntries(surface?.props?.[fieldsProp]);
+  if (!entries.length) return propertyTableRows(fallbackTitle, fallbackEntries);
+  return propertyTableRows(
+    surfacePropText(surface, titleProp, fallbackTitle),
+    entries.map(entry => ({
+      label: entry.label,
+      valueHtml: renderSchemaValue(ctx, resolveFieldPath(record, entry.path), entry.mode)
+    }))
+  );
+}
+
+function rootKeysFromSurfaceSchema(surface, fieldsProp) {
+  return [...new Set(parseSurfaceSchemaEntries(surface?.props?.[fieldsProp]).map(entry => String(entry.path).split(".")[0]).filter(Boolean))];
+}
+
+function parseCardSpecs(raw) {
+  return parseSurfaceSchemaEntries(raw).map(entry => ({
+    title: entry.label,
+    path: entry.path,
+    mode: entry.mode
+  }));
+}
+
+function listValuesFromMode(value, mode = "text") {
+  const items = Array.isArray(value) ? value : (value === undefined || value === null || value === "" ? [] : [value]);
+  switch (mode) {
+    case "label":
+      return items.map(item => {
+        if (typeof item === "object" && item) return item.label || item.title || item.system || item.id || item.path || "";
+        return item;
+      }).filter(Boolean);
+    default:
+      return items.map(item => {
+        if (typeof item === "object" && item) return item.id || item.path || item.title || item.label || "";
+        return item;
+      }).filter(Boolean);
+  }
+}
+
+function renderCardSpecs(raw, ctx, record, kind) {
+  return parseCardSpecs(raw).map(spec => {
+    const value = resolveFieldPath(record, spec.path);
+    return kind === "links"
+      ? renderLinksCard(spec.title, ctx, listValuesFromMode(value, spec.mode))
+      : renderTextListCard(spec.title, listValuesFromMode(value, spec.mode));
+  }).join("");
 }
 
 function renderLifecycleBoard(surface, model) {
@@ -700,35 +808,42 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
   if (detail.id?.startsWith?.("branch:")) {
     const branch = detail;
     const snapshots = (model.candidateSnapshots ?? []).filter(snapshot => snapshot.branchId === branch.id).slice(0, surfaceRowLimit(snapshotSurface, 12));
-    const usedKeys = ["id", "title", "status", "lifecycleLane", "owner", "parentBranchId", "epic", "feature", "defect", "runtimeProfile", "latestCandidateSnapshotId", "changeSetIds", "docsFreshness", "testRedGreen", "affectedSystemSummaries", "telemetryImpactSummaries"];
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "branchCardTitle", "branchFields", ctx, branch, "Branch Detail", [
+      { label: "Branch", valueHtml: renderConceptLink(ctx, branch.id) },
+      { label: "Status", valueHtml: esc(branch.status || "") },
+      { label: "Title", valueHtml: esc(branch.title || "") },
+      { label: "Lane", valueHtml: esc(branch.lifecycleLane || "") },
+      { label: "Owner", valueHtml: esc(branch.owner || "") },
+      { label: "Parent", valueHtml: branch.parentBranchId ? renderConceptLink(ctx, branch.parentBranchId) : "" },
+      { label: "Epic", valueHtml: branch.epic ? renderConceptLink(ctx, branch.epic) : "" },
+      { label: "Feature", valueHtml: branch.feature ? renderConceptLink(ctx, branch.feature) : "" },
+      { label: "Defect", valueHtml: branch.defect ? renderConceptLink(ctx, branch.defect) : "" },
+      { label: "Runtime profile", valueHtml: esc(branch.runtimeProfile || "") },
+      { label: "Docs freshness", valueHtml: esc(branch.docsFreshness?.status || "") },
+      { label: "Red / green", valueHtml: esc(branch.testRedGreen?.status || "") },
+      { label: "Latest candidate", valueHtml: branch.latestCandidateSnapshotId ? renderConceptLink(ctx, branch.latestCandidateSnapshotId) : "" },
+      { label: "API resource", valueHtml: renderApiLink(branch.id) }
+    ]);
+    const usedKeys = [
+      ...(rootKeysFromSurfaceSchema(primarySurface, "branchFields").length
+        ? rootKeysFromSurfaceSchema(primarySurface, "branchFields")
+        : ["id", "title", "status", "lifecycleLane", "owner", "parentBranchId", "epic", "feature", "defect", "runtimeProfile", "latestCandidateSnapshotId", "docsFreshness", "testRedGreen"]),
+      "changeSetIds",
+      "affectedSystemSummaries",
+      "telemetryImpactSummaries"
+    ];
     return `
       <section class="grid2">
         <div>
           ${renderSurfaceFrame(primarySurface, `
-            ${renderPropertyTable("Branch Detail", [
-            { label: "Branch", valueHtml: renderConceptLink(ctx, branch.id) },
-            { label: "Status", valueHtml: esc(branch.status || "") },
-            { label: "Title", valueHtml: esc(branch.title || "") },
-            { label: "Lane", valueHtml: esc(branch.lifecycleLane || "") },
-            { label: "Owner", valueHtml: esc(branch.owner || "") },
-            { label: "Parent", valueHtml: branch.parentBranchId ? renderConceptLink(ctx, branch.parentBranchId) : "" },
-            { label: "Epic", valueHtml: branch.epic ? renderConceptLink(ctx, branch.epic) : "" },
-            { label: "Feature", valueHtml: branch.feature ? renderConceptLink(ctx, branch.feature) : "" },
-            { label: "Defect", valueHtml: branch.defect ? renderConceptLink(ctx, branch.defect) : "" },
-            { label: "Runtime profile", valueHtml: esc(branch.runtimeProfile || "") },
-            { label: "Docs freshness", valueHtml: esc(branch.docsFreshness?.status || "") },
-            { label: "Red / green", valueHtml: esc(branch.testRedGreen?.status || "") },
-            { label: "Latest candidate", valueHtml: branch.latestCandidateSnapshotId ? renderConceptLink(ctx, branch.latestCandidateSnapshotId) : "" },
-            { label: "API resource", valueHtml: renderApiLink(branch.id) }
-            ])}
+            ${renderPropertyCard(primaryCard)}
             ${renderLongTailProperties(ctx, branch, usedKeys)}
           `)}
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderLinksCard("Change Sets", ctx, branch.changeSetIds ?? [])}
-            ${renderTextListCard("Affected Systems", (branch.affectedSystemSummaries ?? []).map(summary => summary.label || summary.system || summary.id || ""))}
-            ${renderTextListCard("Telemetry Impacts", (branch.telemetryImpactSummaries ?? []).map(summary => summary.label || summary.id || ""))}
+            ${renderCardSpecs(relatedSurface?.props?.branchLinkCards, ctx, branch, "links") || renderLinksCard("Change Sets", ctx, branch.changeSetIds ?? [])}
+            ${renderCardSpecs(relatedSurface?.props?.branchTextCards, ctx, branch, "text") || `${renderTextListCard("Affected Systems", (branch.affectedSystemSummaries ?? []).map(summary => summary.label || summary.system || summary.id || ""))}${renderTextListCard("Telemetry Impacts", (branch.telemetryImpactSummaries ?? []).map(summary => summary.label || summary.id || ""))}`}
           `)}
         </div>
       </section>
@@ -747,29 +862,35 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
     const changeSet = detail;
     const edits = (model.changeSetEdits ?? []).filter(edit => edit.changeSetId === changeSet.id).slice(0, surfaceRowLimit(editSurface, 20));
     const snapshots = (model.candidateSnapshots ?? []).filter(snapshot => snapshot.changeSetId === changeSet.id).slice(0, surfaceRowLimit(snapshotSurface, 12));
-    const usedKeys = ["id", "title", "status", "branchId", "owner", "reason", "editCount", "latestCandidateSnapshotId", "testRedGreen", "changedPaths"];
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "changeSetCardTitle", "changeSetFields", ctx, changeSet, "Change Set Detail", [
+      { label: "Change set", valueHtml: renderConceptLink(ctx, changeSet.id) },
+      { label: "Status", valueHtml: esc(changeSet.status || "") },
+      { label: "Title", valueHtml: esc(changeSet.title || "") },
+      { label: "Branch", valueHtml: changeSet.branchId ? renderConceptLink(ctx, changeSet.branchId) : "" },
+      { label: "Owner", valueHtml: esc(changeSet.owner || "") },
+      { label: "Reason", valueHtml: esc(changeSet.reason || "") },
+      { label: "Edits", valueHtml: esc(changeSet.editCount ?? 0) },
+      { label: "Red / green", valueHtml: esc(changeSet.testRedGreen?.status || "") },
+      { label: "Latest candidate", valueHtml: changeSet.latestCandidateSnapshotId ? renderConceptLink(ctx, changeSet.latestCandidateSnapshotId) : "" },
+      { label: "API resource", valueHtml: renderApiLink(changeSet.id) }
+    ]);
+    const usedKeys = [
+      ...(rootKeysFromSurfaceSchema(primarySurface, "changeSetFields").length
+        ? rootKeysFromSurfaceSchema(primarySurface, "changeSetFields")
+        : ["id", "title", "status", "branchId", "owner", "reason", "editCount", "latestCandidateSnapshotId", "testRedGreen"]),
+      "changedPaths"
+    ];
     return `
       <section class="grid2">
         <div>
           ${renderSurfaceFrame(primarySurface, `
-            ${renderPropertyTable("Change Set Detail", [
-            { label: "Change set", valueHtml: renderConceptLink(ctx, changeSet.id) },
-            { label: "Status", valueHtml: esc(changeSet.status || "") },
-            { label: "Title", valueHtml: esc(changeSet.title || "") },
-            { label: "Branch", valueHtml: changeSet.branchId ? renderConceptLink(ctx, changeSet.branchId) : "" },
-            { label: "Owner", valueHtml: esc(changeSet.owner || "") },
-            { label: "Reason", valueHtml: esc(changeSet.reason || "") },
-            { label: "Edits", valueHtml: esc(changeSet.editCount ?? 0) },
-            { label: "Red / green", valueHtml: esc(changeSet.testRedGreen?.status || "") },
-            { label: "Latest candidate", valueHtml: changeSet.latestCandidateSnapshotId ? renderConceptLink(ctx, changeSet.latestCandidateSnapshotId) : "" },
-            { label: "API resource", valueHtml: renderApiLink(changeSet.id) }
-            ])}
+            ${renderPropertyCard(primaryCard)}
             ${renderLongTailProperties(ctx, changeSet, usedKeys)}
           `)}
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderLinksCard("Changed Paths", ctx, changeSet.changedPaths ?? [])}
+            ${renderCardSpecs(relatedSurface?.props?.changeSetLinkCards, ctx, changeSet, "links") || renderLinksCard("Changed Paths", ctx, changeSet.changedPaths ?? [])}
           `)}
         </div>
       </section>
@@ -792,25 +913,28 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
     `;
   }
   const proposal = detail;
-  const usedKeys = ["id", "status", "targetProcess", "targetId", "reason", "action"];
+  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "proposalCardTitle", "proposalFields", ctx, proposal, "Proposal Detail", [
+    { label: "Proposal", valueHtml: renderConceptLink(ctx, proposal.id) },
+    { label: "Status", valueHtml: esc(proposal.status || "") },
+    { label: "Target process", valueHtml: esc(proposal.targetProcess || "") },
+    { label: "Target", valueHtml: proposal.targetId ? renderConceptLink(ctx, proposal.targetId) : "" },
+    { label: "Reason", valueHtml: esc(proposal.reason || "") },
+    { label: "API resource", valueHtml: renderApiLink(proposal.id) }
+  ]);
+  const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "proposalFields").length
+    ? rootKeysFromSurfaceSchema(primarySurface, "proposalFields")
+    : ["id", "status", "targetProcess", "targetId", "reason", "action"];
   return `
     <section class="grid2">
       <div>
         ${renderSurfaceFrame(primarySurface, `
-          ${renderPropertyTable("Proposal Detail", [
-          { label: "Proposal", valueHtml: renderConceptLink(ctx, proposal.id) },
-          { label: "Status", valueHtml: esc(proposal.status || "") },
-          { label: "Target process", valueHtml: esc(proposal.targetProcess || "") },
-          { label: "Target", valueHtml: proposal.targetId ? renderConceptLink(ctx, proposal.targetId) : "" },
-          { label: "Reason", valueHtml: esc(proposal.reason || "") },
-          { label: "API resource", valueHtml: renderApiLink(proposal.id) }
-          ])}
+          ${renderPropertyCard(primaryCard)}
           ${renderLongTailProperties(ctx, proposal, usedKeys)}
         `)}
       </div>
       <div>
         ${renderSurfaceFrame(relatedSurface, `
-          ${renderLinksCard("Target Resource", ctx, proposal.targetId ? [proposal.targetId] : [])}
+          ${renderCardSpecs(relatedSurface?.props?.proposalLinkCards, ctx, proposal, "links") || renderLinksCard("Target Resource", ctx, proposal.targetId ? [proposal.targetId] : [])}
         `)}
       </div>
     </section>

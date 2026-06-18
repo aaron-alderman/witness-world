@@ -385,6 +385,18 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(workflowSnapshotSurface);
   assert.equal(workflowSnapshotSurface.props.columns, "Status|Snapshot|Revision|Change Set|Errors");
   assert.equal(workflowSnapshotSurface.props.rowLimit, "12");
+  const workflowPrimarySurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowPrimaryPanel");
+  assert.ok(workflowPrimarySurface);
+  assert.equal(workflowPrimarySurface.props.branchCardTitle, "Branch Detail");
+  assert.match(workflowPrimarySurface.props.branchFields, /Branch=id@concept/);
+  assert.match(workflowPrimarySurface.props.changeSetFields, /Change set=id@concept/);
+  assert.match(workflowPrimarySurface.props.proposalFields, /Target process=targetProcess/);
+  const workflowRelatedSurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowRelatedPanel");
+  assert.ok(workflowRelatedSurface);
+  assert.equal(workflowRelatedSurface.props.branchLinkCards, "Change Sets=changeSetIds");
+  assert.equal(workflowRelatedSurface.props.branchTextCards, "Affected Systems=affectedSystemSummaries@label|Telemetry Impacts=telemetryImpactSummaries@label");
+  assert.equal(workflowRelatedSurface.props.changeSetLinkCards, "Changed Paths=changedPaths");
+  assert.equal(workflowRelatedSurface.props.proposalLinkCards, "Target Resource=targetId");
   const workflowListSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowList");
   assert.ok(workflowListSurface);
   assert.equal(workflowListSurface.props.columns, "Kind|Status|Resource|Scope|Summary");

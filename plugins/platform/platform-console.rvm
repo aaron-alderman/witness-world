@@ -251,6 +251,12 @@ view PlatformWorkflowPrimaryPanel {
   class platform-workflow-primary
   prop title = "Primary Detail"
   prop summary = "Selected workflow object properties and long-tail fields."
+  prop branchCardTitle = "Branch Detail"
+  prop branchFields = "Branch=id@concept|Status=status|Title=title|Lane=lifecycleLane|Owner=owner|Parent=parentBranchId@concept|Epic=epic@concept|Feature=feature@concept|Defect=defect@concept|Runtime profile=runtimeProfile|Docs freshness=docsFreshness.status|Red / green=testRedGreen.status|Latest candidate=latestCandidateSnapshotId@concept|API resource=id@api"
+  prop changeSetCardTitle = "Change Set Detail"
+  prop changeSetFields = "Change set=id@concept|Status=status|Title=title|Branch=branchId@concept|Owner=owner|Reason=reason|Edits=editCount|Red / green=testRedGreen.status|Latest candidate=latestCandidateSnapshotId@concept|API resource=id@api"
+  prop proposalCardTitle = "Proposal Detail"
+  prop proposalFields = "Proposal=id@concept|Status=status|Target process=targetProcess|Target=targetId@concept|Reason=reason|API resource=id@api"
 }
 
 view PlatformWorkflowRelatedPanel {
@@ -258,6 +264,10 @@ view PlatformWorkflowRelatedPanel {
   class platform-workflow-related
   prop title = "Related Resources"
   prop summary = "Linked resources and supporting context for the selected workflow object."
+  prop branchLinkCards = "Change Sets=changeSetIds"
+  prop branchTextCards = "Affected Systems=affectedSystemSummaries@label|Telemetry Impacts=telemetryImpactSummaries@label"
+  prop changeSetLinkCards = "Changed Paths=changedPaths"
+  prop proposalLinkCards = "Target Resource=targetId"
 }
 
 view PlatformWorkflowSnapshotHistory {
