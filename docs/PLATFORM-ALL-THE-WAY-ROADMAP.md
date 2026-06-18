@@ -932,9 +932,10 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Detect failed validation without defect proposal.
 - [ ] Detect direct boundary handles.
 - [ ] Detect unowned runtime objects.
-- [ ] Add meta-issues to `/api/platform-gaps`.
-- [ ] Add Platform Console meta-system panel.
+- [~] Add meta-issues to `/api/platform-gaps`.
+- [X] Add Platform Console meta-system panel.
 - [ ] Add tests that each meta-rule produces a deterministic gap/defect.
+- [L] `/api/platform-gaps` now includes the currently implemented `meta-defect` gap class for dependency-graph misses when a change set touches non-doc sources but no verification gates are selected. `/platform` now renders those rows in a dedicated Meta-System panel, but the broader meta-rule catalog remains later work.
 
 ## Phase 8: Live Telemetry And Self-Observation
 
@@ -1174,8 +1175,8 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add Sessions view.
 - [X] Add Roadmap/Epics view.
 - [ ] Add Boundaries view.
-- [ ] Add Meta-System view.
-- [L] `/platform` now renders section-based human views for branches, change sets, candidate snapshots, runtime revisions, governed docs, test gates, test runs, roadmap tasks, and epic detail on the main console page. Dependency graph, coverage, defect, telemetry, session, boundary, and meta-system views remain later work.
+- [X] Add Meta-System view.
+- [L] `/platform` now renders section-based human views for branches, change sets, candidate snapshots, runtime revisions, governed docs, test gates, test runs, roadmap tasks, epic detail, and meta-system gaps on the main console page. Dependency graph, coverage, defect, telemetry, session, and boundary views remain later work.
 
 ### 12.2 RVM/WCSS Dogfooding
 

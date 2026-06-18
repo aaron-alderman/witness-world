@@ -4577,6 +4577,11 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Snapshot Builds/);
   assert.match(html, /Last Good/);
   assert.match(html, /Failed Snapshot Builds/);
+  assert.match(html, /Gaps/);
+  assert.match(html, /Meta-System/);
+  assert.match(html, /Meta-System Detail/);
+  assert.match(html, /Meta gaps/);
+  assert.match(html, /Meta categories/);
   assert.match(html, /Governed Docs/);
   assert.match(html, /Doc Structure/);
   assert.match(html, /Doc Tasks/);

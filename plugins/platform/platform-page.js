@@ -54,6 +54,11 @@ export function renderPlatformPage(model) {
   const lifecycle = model.lifecycleVocabulary ?? [];
   const topNodes = model.nodes.slice(0, 80);
   const gaps = model.gaps.slice(0, 80);
+  const metaGaps = gaps.filter(gap =>
+    gap?.kind === "meta-defect"
+    || String(gap?.category || "").includes("meta")
+    || String(gap?.id || "").includes(".meta-")
+  );
   const profiles = model.profiles ?? [];
   const branches = model.branches ?? [];
   const changeSets = model.changeSets ?? [];
@@ -624,6 +629,37 @@ export function renderPlatformPage(model) {
           row => row.recommendedProposal ? `${row.recommendedProposal.targetProcess} ${row.recommendedProposal.targetId}` : ""
         ])}</tbody>
       </table>
+    </section>
+
+    <section class="grid2">
+      <div>
+        <h2>Meta-System</h2>
+        <div class="platform-branch-summary">
+          <div class="card">
+            <h3>Meta gaps</h3>
+            <div>${esc(metaGaps.length)}</div>
+            <div class="muted">${esc(metaGaps.length ? "Detected through /api/platform-gaps" : "No modeled meta gaps right now.")}</div>
+          </div>
+          <div class="card">
+            <h3>Meta categories</h3>
+            <div>${esc([...new Set(metaGaps.map(gap => gap.category || gap.kind).filter(Boolean))].length)}</div>
+            <div class="muted">${esc([...new Set(metaGaps.map(gap => gap.category || gap.kind).filter(Boolean))].join(", "))}</div>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>Severity</th><th>Category</th><th>Target</th><th>Reason</th></tr></thead>
+          <tbody>${tableRows(metaGaps, [
+            row => row.severity,
+            row => row.category || row.kind,
+            row => row.target,
+            row => row.reason
+          ])}</tbody>
+        </table>
+      </div>
+      <div>
+        <h2>Meta-System Detail</h2>
+        <pre>${esc(JSON.stringify(metaGaps, null, 2))}</pre>
+      </div>
     </section>
 
     <section>
