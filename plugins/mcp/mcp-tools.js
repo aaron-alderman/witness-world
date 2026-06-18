@@ -392,9 +392,9 @@ const TOOL_DEFINITIONS = [
   {
     name: "platform.read",
     title: "Platform Read",
-    description: "Read the platform self-model, gaps, docs, roadmap, profiles, branches, change sets, test gates, red/green test state, test runs, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
+    description: "Read the platform self-model, gaps, docs, roadmap, telemetry, profiles, branches, change sets, test gates, red/green test state, test runs, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["model", "gaps", "docs", "roadmap", "profiles", "plugin", "bundle", "capability", "mcp", "gates", "proposals", "branches", "changeSets", "testGates", "testRedGreen", "testRuns", "candidateSnapshots", "runtimeRevisions"] },
+      view: { type: "string", enum: ["model", "gaps", "docs", "roadmap", "telemetry", "profiles", "plugin", "bundle", "capability", "mcp", "gates", "proposals", "branches", "changeSets", "testGates", "testRedGreen", "testRuns", "candidateSnapshots", "runtimeRevisions"] },
       id: { type: "string" }
     }, ["view"]),
     scope(args) {
@@ -470,6 +470,35 @@ const TOOL_DEFINITIONS = [
         query: {
           view: "roadmap",
           ...(roadmapId ? { id: roadmapId } : {})
+        }
+      });
+    }
+  },
+  {
+    name: "platform.telemetry",
+    title: "Platform Telemetry",
+    description: "Inspect the current telemetry-metric platform model through the shared platform handlers.",
+    inputSchema: jsonSchemaObject({
+      operation: { type: "string", enum: ["list", "read"] },
+      id: { type: "string" }
+    }),
+    scope(args) {
+      return scopeResult({ targets: args?.id ? [args.id] : [] });
+    },
+    async run({ args, callHandler }) {
+      const operation = args.operation || "list";
+      if (operation !== "list" && operation !== "read") {
+        return errorToolResult("unknown platform telemetry operation", { operation });
+      }
+      const telemetryId = operation === "read" ? (args.id || "") : (args.id || "");
+      if (operation === "read" && !telemetryId) return errorToolResult("telemetry id is required", { operation });
+      return runJsonHandler(callHandler, {
+        handler: "platform.model.read",
+        method: "GET",
+        path: "/api/platform-model",
+        query: {
+          view: "telemetry",
+          ...(telemetryId ? { id: telemetryId } : {})
         }
       });
     }

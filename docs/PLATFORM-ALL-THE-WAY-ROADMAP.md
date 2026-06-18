@@ -1172,7 +1172,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [B] Add Defects view.
 - [X] Add Defect Clusters view.
 - [X] Add Telemetry view.
-- [ ] Add Sessions view.
+- [B] Add Sessions view.
 - [X] Add Roadmap/Epics view.
 - [X] Add Boundaries view.
 - [X] Add Meta-System view.
@@ -1180,6 +1180,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [L] The current defect-cluster view is backed by existing `defectCluster` graph nodes and their relationships to branches, features, epics, and historically relevant gates. It does not claim the later full `defect` / `defectObservation` / `rootCauseHypothesis` model is complete.
 - [L] The current telemetry view is backed by existing `telemetryMetric` graph nodes plus linked `verifies` / `verifiedBy` relationships and branch/change-set telemetry-impact hints. It does not claim the later live `telemetrySample` / `telemetryWindow` / detector model from Phase 8 is complete.
 - [L] `Add Defects view.` is currently blocked on the later standalone defect model from Phase 7.3. The platform can project defect clusters today, but it does not yet expose first-class `defect`, `defectObservation`, `rootCauseHypothesis`, or fix-proposal rows that would make a dedicated defects view truthful.
+- [L] `Add Sessions view.` is currently blocked on the later Phase 9 session/execution model. The current platform flow carries transient request/session metadata for witnesses and handlers, but it does not yet project first-class `session`, `execution`, `sessionTag`, or `executionArtifact` rows that would make a dedicated sessions view truthful.
 - [L] The current dependency-graph view is backed by the existing platform-model `nodes` and `edges` projection rather than by the later dedicated `dependencyGraph` / `dependencyEdge` module kinds from Phase 6.1. It makes the already-modeled relationships inspectable in `/platform` without claiming the later incremental graph subsystem is complete.
 
 ### 12.2 RVM/WCSS Dogfooding
@@ -1204,15 +1205,16 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] `platform.read { view: "testRuns" }`
   - [X] `platform.test`
   - [X] `platform.docs`
-  - [ ] `platform.telemetry`
+  - [X] `platform.telemetry`
   - [ ] `platform.defects`
   - [X] `platform.roadmap`
 - [X] Add tests for human/MCP parity.
-- [L] `platform.docs` now routes through the shared `/api/platform-model?view=docs` handler lane and returns governed docs, doc sections, doc tasks, and roadmap-task rows for the same modeled documentation surfaced on `/platform`. Dedicated telemetry, defect, and roadmap MCP lanes remain later work.
+- [L] `platform.docs` now routes through the shared `/api/platform-model?view=docs` handler lane and returns governed docs, doc sections, doc tasks, and roadmap-task rows for the same modeled documentation surfaced on `/platform`. Dedicated defect MCP coverage remains later work.
 - [L] `platform.roadmap` now routes through the shared `/api/platform-model?view=roadmap` handler lane and exposes the currently implemented roadmap surface: the ingested `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md` doc, its sections, checkbox task rows, evidence-backed derived task status, branch-metadata-backed `roadmap` / `epic` / `feature` projections, aggregated `testsByFeature` coverage rows, and aggregated `defectsByEpic` coverage rows backed by `defectCluster` targets. Milestones, acceptance criteria, and deeper planning coverage remain later work.
-- [L] Current parity coverage compares normalized direct platform-handler responses against MCP tool results for the implemented docs, roadmap, branch, change-set, proposal-create, and test-run/list/read flows. Future telemetry, defect, and broader planning-model MCP lanes will need their own parity extensions as those surfaces land.
+- [L] `platform.telemetry` now routes through the shared `/api/platform-model?view=telemetry` handler lane and exposes the current telemetry surface truthfully: `telemetryMetric` graph nodes, telemetry-linked edges, branch/change-set telemetry-impact summaries, and telemetry-protecting gates/latest gate results. It does not claim the later live `telemetrySample` / `telemetryWindow` / detector model from Phase 8 is complete.
+- [L] Current parity coverage compares normalized direct platform-handler responses against MCP tool results for the implemented docs, roadmap, telemetry, branch, change-set, proposal-create, and test-run/list/read flows. Future defect and broader planning-model MCP lanes will need their own parity extensions as those surfaces land.
 - [L] Current `/platform` mutation surfaces all have MCP equivalents on the shared handler lane: proposal create/review maps to `platform.proposal`, branch creation maps to `platform.branch create`, change-set create/edit/validate/apply/reject/abandon maps to `platform.changeSet`, and explicit or selected test execution maps to `platform.test run` / `runSelected`.
-- [L] Current `/platform` read surfaces all have MCP equivalents on the shared handler lane: proposals, branches, change sets, candidate snapshots, runtime revisions, docs, roadmap/epics, test gates, test runs, and red/green state are exposed through `platform.read`, `platform.docs`, `platform.roadmap`, `platform.branch`, `platform.changeSet`, and `platform.test` depending on the scope. Future telemetry, defect, boundary, session, and meta-system surfaces will need their own MCP coverage when those console views exist.
+- [L] Current `/platform` read surfaces all have MCP equivalents on the shared handler lane: proposals, branches, change sets, candidate snapshots, runtime revisions, docs, roadmap/epics, telemetry, test gates, test runs, and red/green state are exposed through `platform.read`, `platform.docs`, `platform.roadmap`, `platform.telemetry`, `platform.branch`, `platform.changeSet`, and `platform.test` depending on the scope. Future defect, boundary, session, and meta-system surfaces will need their own MCP coverage when those console views exist.
 - [L] Current MCP authority parity is enforced at the shared-handler layer: the implemented mutation tools only target `plugin.platform` handlers and HTTP methods that are already exposed on the human surface, so MCP does not gain a stronger mutation lane than `/platform`. Richer actor/policy authorization remains later Phase 13 work.
 - [L] The live docs model now projects explicit `docIndex`, `docReference`, `docDependencies`, and `docsByPlatformObject` rows from governed targets and resolved Markdown references to routes, plugins, capabilities, proposal IDs, branch IDs, governed docs, authored RVM/WCSS sources, JSON/WTOML config sources, and generic repo file/test nodes when the referenced workspace path exists.
 

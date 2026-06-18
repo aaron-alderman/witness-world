@@ -3330,6 +3330,56 @@ export function filterPlatformModel(model, view, id = null) {
       summaries: model.summaries
     };
   }
+  if (view === "telemetry") {
+    const allTelemetryMetrics = (model.nodes ?? []).filter(node => node.kind === "telemetryMetric");
+    const allBranches = model.branches ?? [];
+    const allChangeSets = model.changeSets ?? [];
+    const matchesTelemetrySummary = row => (row.telemetryImpactSummaries ?? []).some(summary => {
+      const metricId = summary?.id ? telemetryMetricNodeId(summary.id) : null;
+      return metricId === id || summary?.id === id;
+    });
+    const branches = id
+      ? allBranches.filter(row => row.id === id || (row.changeSetIds ?? []).includes(id) || matchesTelemetrySummary(row))
+      : allBranches.filter(row => (row.telemetryImpactSummaries ?? []).length > 0);
+    const changeSets = id
+      ? allChangeSets.filter(row => row.id === id || row.branchId === id || matchesTelemetrySummary(row))
+      : allChangeSets.filter(row => (row.telemetryImpactSummaries ?? []).length > 0);
+    const telemetryMetricIds = new Set([
+      ...allTelemetryMetrics
+        .filter(node => !id || node.id === id || node.title === id || node.source === id)
+        .map(node => node.id),
+      ...branches.flatMap(row => (row.telemetryImpactSummaries ?? []).map(summary => summary?.id ? telemetryMetricNodeId(summary.id) : null)),
+      ...changeSets.flatMap(row => (row.telemetryImpactSummaries ?? []).map(summary => summary?.id ? telemetryMetricNodeId(summary.id) : null))
+    ].filter(Boolean));
+    const telemetryMetrics = id
+      ? allTelemetryMetrics.filter(node => telemetryMetricIds.has(node.id))
+      : allTelemetryMetrics;
+    const telemetryEdges = (model.edges ?? []).filter(edge =>
+      telemetryMetricIds.has(edge.from)
+      || telemetryMetricIds.has(edge.to)
+    );
+    const testGates = id
+      ? (model.testGates ?? []).filter(row =>
+        row.id === id
+        || (row.protectedObjects ?? []).some(target => telemetryMetricIds.has(target) || target === id)
+      )
+      : (model.testGates ?? []).filter(row => (row.protectedObjects ?? []).some(target => String(target).startsWith("telemetryMetric:")));
+    const gateIds = new Set(testGates.map(row => row.id));
+    const latestTestResultsByGate = Object.fromEntries(
+      Object.entries(model.latestTestResultsByGate ?? {})
+        .filter(([gateId]) => gateIds.has(gateId))
+        .map(([gateId, row]) => [gateId, { ...row }])
+    );
+    return {
+      telemetryMetrics,
+      telemetryEdges,
+      branches,
+      changeSets,
+      testGates,
+      latestTestResultsByGate,
+      summaries: model.summaries
+    };
+  }
   if (view === "candidateSnapshots") {
     const candidateSnapshots = id ? model.candidateSnapshots.filter(row => row.id === id || row.branchId === id || row.changeSetId === id) : model.candidateSnapshots;
     return { candidateSnapshots, summaries: model.summaries };

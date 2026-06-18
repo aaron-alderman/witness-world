@@ -62,6 +62,7 @@ export function createMcpBundleSupportServices({
       case "platform.read":
       case "platform.docs":
       case "platform.roadmap":
+      case "platform.telemetry":
       case "platform.proposal":
       case "platform.changeSet":
       case "platform.test":

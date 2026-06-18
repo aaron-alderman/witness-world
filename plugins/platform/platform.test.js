@@ -573,6 +573,41 @@ test("platform model filters support MCP views", async () => {
       "gate:test/runtime-profile.test.js": { id: "testResult:demo:1", runId: "testRun:demo", gateId: "gate:test/runtime-profile.test.js", status: "passed" }
     }
   }, "testRedGreen");
+  const telemetry = filterPlatformModel({
+    ...model,
+    nodes: [
+      { id: "telemetryMetric:platform.self", kind: "telemetryMetric", title: "Platform Self" },
+      { id: "telemetryMetric:mcp.availability", kind: "telemetryMetric", title: "MCP Availability" },
+      { id: "plugin.platform", kind: "plugin", title: "plugin.platform" }
+    ],
+    edges: [
+      { from: "gate:test/runtime-profile.test.js", rel: "verifies", to: "telemetryMetric:platform.self" },
+      { from: "telemetryMetric:platform.self", rel: "verifiedBy", to: "gate:test/runtime-profile.test.js" },
+      { from: "plugin.platform", rel: "owns", to: "bundle-platform" }
+    ],
+    branches: [
+      {
+        id: "branch.demo",
+        telemetryImpactSummaries: [{ id: "platform.self", label: "Platform Self" }]
+      }
+    ],
+    changeSets: [
+      {
+        id: "changeset.demo",
+        branchId: "branch.demo",
+        telemetryImpactSummaries: [{ id: "platform.self", label: "Platform Self" }]
+      }
+    ],
+    testGates: [
+      {
+        id: "gate:test/runtime-profile.test.js",
+        protectedObjects: ["telemetryMetric:platform.self"]
+      }
+    ],
+    latestTestResultsByGate: {
+      "gate:test/runtime-profile.test.js": { id: "testResult:demo:1", runId: "testRun:demo", gateId: "gate:test/runtime-profile.test.js", status: "passed" }
+    }
+  }, "telemetry", "branch.demo");
   const branches = filterPlatformModel({
     ...model,
     branches: [{ id: "branch.demo", status: "open" }],
@@ -678,6 +713,13 @@ test("platform model filters support MCP views", async () => {
   assert.equal(testRedGreen.branchTestRedGreen[0].status, "green");
   assert.equal(testRedGreen.changeSetTestRedGreen[0].status, "red");
   assert.equal(testRedGreen.testGates[0].id, "gate:test/runtime-profile.test.js");
+  assert.equal(telemetry.telemetryMetrics.length, 1);
+  assert.equal(telemetry.telemetryMetrics[0].id, "telemetryMetric:platform.self");
+  assert.equal(telemetry.telemetryEdges.length, 2);
+  assert.equal(telemetry.branches[0].id, "branch.demo");
+  assert.equal(telemetry.changeSets[0].id, "changeset.demo");
+  assert.equal(telemetry.testGates[0].id, "gate:test/runtime-profile.test.js");
+  assert.equal(telemetry.latestTestResultsByGate["gate:test/runtime-profile.test.js"].status, "passed");
   assert.equal(branches.branches[0].id, "branch.demo");
   assert.equal(runtimeRevisions.runtimeRevisions[0].id, "runtimeRevision:backend:3");
   assert.equal(runtimeRevisions.runtimeRevisions[0].frontendRevisionId, "frontendRevision:3");
