@@ -886,6 +886,7 @@ view PlatformModelDetail {
   prop title = "Platform Object Detail"
   prop summary = "Properties and linked relationships for the selected platform object."
   prop detailSource = "model"
+  prop detailSelectionSources = "nodes"
   prop emptyTitle = "Detail"
   prop emptyState = "No platform objects are projected yet."
   children {

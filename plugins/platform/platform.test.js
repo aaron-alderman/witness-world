@@ -733,6 +733,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   const modelDetailSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelDetail");
   assert.ok(modelDetailSurface);
   assert.equal(modelDetailSurface.props.detailSource, "model");
+  assert.equal(modelDetailSurface.props.detailSelectionSources, "nodes");
   assert.equal(modelDetailSurface.props.emptyTitle, "Detail");
   assert.equal(modelDetailSurface.props.emptyState, "No platform objects are projected yet.");
   assert.deepEqual(modelDetailSurface.children, [

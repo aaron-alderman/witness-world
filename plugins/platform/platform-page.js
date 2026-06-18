@@ -1142,10 +1142,6 @@ function modelItems(model) {
   }));
 }
 
-function findModelDetail(model, id) {
-  return (model.nodes ?? []).find(node => node.id === id) || (model.nodes ?? [])[0] || null;
-}
-
 function surfaceIdPrefixes(surface, key, fallback = []) {
   const raw = surfacePropText(surface, key, "");
   if (!raw) return fallback;
@@ -1186,6 +1182,8 @@ function detailRecordsForSource(source, model) {
       return model.testRuns ?? [];
     case "candidateSnapshots":
       return model.candidateSnapshots ?? [];
+    case "nodes":
+      return model.nodes ?? [];
     case "docs":
       return model.docs ?? [];
     case "roadmapTasks":
@@ -1848,7 +1846,12 @@ function renderAuthoredDetailSourceSection(surface, model, ctx) {
         ctx
       ));
     case "model":
-      return renderSurfaceFrame(surface, renderModelDetail(surface, findModelDetail(model, ctx.id), model, ctx));
+      return renderSurfaceFrame(surface, renderModelDetail(
+        surface,
+        findAuthoredDetailBySources(surface, model, ctx.id, ["nodes"]),
+        model,
+        ctx
+      ));
     default:
       return "";
   }
