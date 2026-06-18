@@ -493,14 +493,14 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add `docDecision` module kind.
 - [ ] Add `docRunbook` module kind.
 - [ ] Add `docFreshnessGate` module kind.
-- [ ] Add `docReference` module kind.
+- [X] Add `docReference` module kind.
 - [~] Add projectors:
   - [X] `docs`
-  - [ ] `docIndex`
+  - [X] `docIndex`
   - [X] `docSections`
-  - [ ] `docDependencies`
+  - [X] `docDependencies`
   - [X] `docFreshness`
-  - [ ] `docsByPlatformObject`
+  - [X] `docsByPlatformObject`
 - [~] Classify docs by role:
   - [ ] architecture
   - [ ] design
@@ -1158,8 +1158,8 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add Branches view.
 - [ ] Add Change Sets view.
 - [ ] Add Candidate Snapshots view.
-- [ ] Add Runtime Revisions view.
-- [ ] Add Docs view.
+- [X] Add Runtime Revisions view.
+- [X] Add Docs view.
 - [X] Add Test Gates view.
 - [X] Add Test Runs view.
 - [ ] Add Dependency Graph view.
@@ -1201,6 +1201,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [L] `platform.docs` now routes through the shared `/api/platform-model?view=docs` handler lane and returns governed docs, doc sections, doc tasks, and roadmap-task rows for the same modeled documentation surfaced on `/platform`. Dedicated telemetry, defect, and roadmap MCP lanes remain later work.
 - [L] `platform.roadmap` now routes through the shared `/api/platform-model?view=roadmap` handler lane and exposes the currently implemented roadmap surface: the ingested `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md` doc, its sections, and checkbox task rows. This is not yet the broader Phase 10 planning model with first-class epics, milestones, features, or evidence-backed task status.
 - [L] Current parity coverage compares normalized direct platform-handler responses against MCP tool results for the implemented docs, roadmap, branch, change-set, proposal-create, and test-run/list/read flows. Future telemetry, defect, and broader planning-model MCP lanes will need their own parity extensions as those surfaces land.
+- [L] The live docs model now projects explicit `docIndex`, `docReference`, `docDependencies`, and `docsByPlatformObject` rows from governed targets and resolved Markdown references to routes, plugins, capabilities, and modeled doc/RVM/WCSS sources. Proposal IDs, branch IDs, and generic unresolved source-file references remain later work.
 
 ## Phase 13: Policy, Authority, And Safety
 

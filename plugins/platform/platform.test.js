@@ -660,6 +660,53 @@ test("platform model filters support MCP views", async () => {
   assert.equal(runtimeRevisionDetail.candidateSnapshots[0].id, "candidateSnapshot:demo:1");
 });
 
+test("platform docs projections expose dependency indexes and reverse target lookups", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: ["platform.self"],
+      routes: [
+        { method: "GET", matcher: "/platform", handler: "page.platform" },
+        { method: "GET", matcher: "/api/platform-model", handler: "platform.model.read" }
+      ],
+      surfaces: [{ id: "surface:platform", href: "/platform" }],
+      plugins: {
+        activePluginIds: ["plugin.platform", "plugin.mcp"],
+        effectivePluginIds: ["plugin.platform", "plugin.mcp"],
+        rejectedPlugins: []
+      }
+    },
+    project: () => []
+  });
+
+  assert.equal(model.docIndex.byPath["docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"], "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md");
+  assert.equal(model.nodes.some(node => node.kind === "docReference"), true);
+  assert.equal(model.docReferences.some(row =>
+    row.doc === "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"
+    && row.referenceKind === "route"
+    && row.targetId === "route:GET /platform"
+  ), true);
+  assert.equal(model.docDependencies.some(row =>
+    row.doc === "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"
+    && row.dependencyKind === "governs"
+    && row.targetId === "plugin.platform"
+  ), true);
+  assert.equal(model.docsByPlatformObject["plugin.platform"].some(row =>
+    row.docId === "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"
+  ), true);
+
+  const docsByTarget = filterPlatformModel(model, "docs", "plugin.platform");
+  assert.equal(docsByTarget.docs.some(doc => doc.path === "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"), true);
+  assert.equal(docsByTarget.docDependencies.some(row =>
+    row.doc === "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"
+    && row.targetId === "plugin.platform"
+  ), true);
+  assert.equal(docsByTarget.docsByPlatformObject["plugin.platform"].some(row =>
+    row.path === "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"
+  ), true);
+});
+
 test("platform model projects structured test gates and affected branch selection", async () => {
   const model = await buildPlatformModel({
     diagnostics: {

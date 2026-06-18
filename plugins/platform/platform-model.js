@@ -333,6 +333,248 @@ function buildSnapshotBuildErrorRows(candidateSnapshots = []) {
   return rows;
 }
 
+function platformObjectKindForId(targetId, nodes) {
+  const value = String(targetId || "");
+  if (!value) return "platformObject";
+  const knownKind = nodes.get(value)?.kind;
+  if (knownKind) return knownKind;
+  if (value.startsWith("plugin.")) return "plugin";
+  if (value.startsWith("capability:")) return "capability";
+  if (value.startsWith("route:")) return "route";
+  if (value.startsWith("doc:")) return "doc";
+  if (value.startsWith("rvm:")) return "rvmSource";
+  if (value.startsWith("wcss:")) return "wcssSource";
+  if (value.startsWith("branch:")) return "branch";
+  if (value.startsWith("proposal:")) return "proposal";
+  return "platformObject";
+}
+
+function buildDocProjectionRows(parsedDocs, nodes, routeIdsByMatcher = {}) {
+  const docReferences = [];
+  const docDependencies = [];
+  const referenceSeen = new Set();
+  const dependencySeen = new Set();
+
+  const pushDependency = ({
+    doc,
+    dependencyKind,
+    referenceKind = null,
+    targetId
+  }) => {
+    const normalizedTargetId = String(targetId || "");
+    if (!normalizedTargetId) return;
+    const key = [
+      doc.id,
+      dependencyKind,
+      referenceKind || "",
+      normalizedTargetId
+    ].join("\u0000");
+    if (dependencySeen.has(key)) return;
+    dependencySeen.add(key);
+    docDependencies.push({
+      id: `docDependency:${slugify(`${doc.path}:${dependencyKind}:${referenceKind || "dependency"}:${normalizedTargetId}`)}`,
+      docId: doc.id,
+      doc: doc.path,
+      role: doc.role,
+      owner: doc.owner,
+      dependencyKind,
+      referenceKind,
+      targetId: normalizedTargetId,
+      targetKind: platformObjectKindForId(normalizedTargetId, nodes),
+      targetLabel: platformModelTargetTitle(normalizedTargetId, nodes)
+    });
+  };
+
+  const pushReference = ({
+    doc,
+    referenceKind,
+    targetId
+  }) => {
+    const normalizedTargetId = String(targetId || "");
+    if (!normalizedTargetId) return;
+    const key = [doc.id, referenceKind, normalizedTargetId].join("\u0000");
+    if (referenceSeen.has(key)) return;
+    referenceSeen.add(key);
+    const row = {
+      id: `docReference:${slugify(`${doc.path}:${referenceKind}:${normalizedTargetId}`)}`,
+      docId: doc.id,
+      doc: doc.path,
+      role: doc.role,
+      owner: doc.owner,
+      referenceKind,
+      targetId: normalizedTargetId,
+      targetKind: platformObjectKindForId(normalizedTargetId, nodes),
+      targetLabel: platformModelTargetTitle(normalizedTargetId, nodes)
+    };
+    docReferences.push(row);
+    pushDependency({
+      doc,
+      dependencyKind: "references",
+      referenceKind,
+      targetId: normalizedTargetId
+    });
+  };
+
+  for (const doc of parsedDocs) {
+    for (const targetId of GOVERNED_DOC_TARGETS[doc.path] ?? []) {
+      pushDependency({
+        doc,
+        dependencyKind: "governs",
+        referenceKind: "governedObject",
+        targetId
+      });
+    }
+    for (const routeRef of doc.references.routes) {
+      const routeId = routeIdsByMatcher[routeRef];
+      if (!routeId) continue;
+      pushReference({ doc, referenceKind: "route", targetId: routeId });
+    }
+    for (const pluginId of doc.references.pluginIds) {
+      pushReference({ doc, referenceKind: "plugin", targetId: pluginId });
+    }
+    for (const capabilityId of doc.references.capabilityIds) {
+      pushReference({ doc, referenceKind: "capability", targetId: `capability:${capabilityId}` });
+    }
+    for (const filePath of doc.references.filePaths) {
+      const targetId = nodes.has(`doc:${filePath}`)
+        ? `doc:${filePath}`
+        : (nodes.has(`rvm:${filePath}`)
+          ? `rvm:${filePath}`
+          : (nodes.has(`wcss:${filePath}`) ? `wcss:${filePath}` : null));
+      if (!targetId) continue;
+      pushReference({
+        doc,
+        referenceKind: targetId.startsWith("doc:") ? "doc" : (targetId.startsWith("rvm:") ? "rvmSource" : "wcssSource"),
+        targetId
+      });
+    }
+  }
+
+  docReferences.sort((left, right) =>
+    String(left.doc || "").localeCompare(String(right.doc || ""))
+    || String(left.referenceKind || "").localeCompare(String(right.referenceKind || ""))
+    || String(left.targetId || "").localeCompare(String(right.targetId || ""))
+  );
+  docDependencies.sort((left, right) =>
+    String(left.doc || "").localeCompare(String(right.doc || ""))
+    || String(left.dependencyKind || "").localeCompare(String(right.dependencyKind || ""))
+    || String(left.referenceKind || "").localeCompare(String(right.referenceKind || ""))
+    || String(left.targetId || "").localeCompare(String(right.targetId || ""))
+  );
+
+  return {
+    docReferences,
+    docDependencies
+  };
+}
+
+function buildDocIndex(docs = []) {
+  const byId = Object.create(null);
+  const byPath = Object.create(null);
+  const byRole = Object.create(null);
+  const byOwner = Object.create(null);
+  const byStatus = Object.create(null);
+  for (const doc of docs) {
+    byId[doc.id] = { ...doc };
+    byPath[doc.path] = doc.id;
+    pushByKey(byRole, doc.role || "unknown", doc.id);
+    pushByKey(byOwner, doc.owner || "unowned", doc.id);
+    pushByKey(byStatus, doc.status || "known", doc.id);
+  }
+  for (const bucket of [byRole, byOwner, byStatus]) {
+    for (const key of Object.keys(bucket)) bucket[key] = unique(bucket[key]);
+  }
+  return {
+    byId,
+    byPath,
+    byRole,
+    byOwner,
+    byStatus
+  };
+}
+
+function buildDocsByPlatformObject(docs = [], docDependencies = []) {
+  const docsById = Object.fromEntries(docs.map(doc => [doc.id, doc]));
+  const byObject = Object.create(null);
+  for (const dependency of docDependencies) {
+    const doc = docsById[dependency.docId];
+    if (!doc) continue;
+    if (!byObject[dependency.targetId]) byObject[dependency.targetId] = [];
+    let entry = byObject[dependency.targetId].find(row => row.docId === dependency.docId);
+    if (!entry) {
+      entry = {
+        docId: doc.id,
+        path: doc.path,
+        role: doc.role,
+        owner: doc.owner,
+        status: doc.status,
+        dependencyKinds: [],
+        referenceKinds: []
+      };
+      byObject[dependency.targetId].push(entry);
+    }
+    if (!entry.dependencyKinds.includes(dependency.dependencyKind)) entry.dependencyKinds.push(dependency.dependencyKind);
+    if (dependency.referenceKind && !entry.referenceKinds.includes(dependency.referenceKind)) entry.referenceKinds.push(dependency.referenceKind);
+    entry.targetKind = dependency.targetKind;
+    entry.targetLabel = dependency.targetLabel;
+  }
+  for (const entries of Object.values(byObject)) {
+    entries.sort((left, right) => String(left.path || "").localeCompare(String(right.path || "")));
+    for (const entry of entries) {
+      entry.dependencyKinds = unique(entry.dependencyKinds);
+      entry.referenceKinds = unique(entry.referenceKinds);
+    }
+  }
+  return byObject;
+}
+
+function buildFilteredDocProjection(model, docs, id = null, { expandByTarget = false } = {}) {
+  let filteredDocs = [...docs];
+  if (expandByTarget && id && !filteredDocs.length) {
+    const dependencyMatches = (model.docDependencies ?? []).filter(row =>
+      row.id === id
+      || row.targetId === id
+    );
+    const matchedDocIds = new Set(dependencyMatches.map(row => row.docId));
+    if (matchedDocIds.size) filteredDocs = model.docs.filter(doc => matchedDocIds.has(doc.id));
+  }
+  const docIds = new Set(filteredDocs.map(doc => doc.id));
+  const docPaths = new Set(filteredDocs.map(doc => doc.path));
+  const docSections = model.docSections.filter(section =>
+    docPaths.has(section.doc)
+    && (!id || section.id === id || section.doc === id || section.title === id)
+  );
+  const docTasks = model.docTasks.filter(task =>
+    docPaths.has(task.doc)
+    && (!id || task.id === id || task.doc === id || task.section === id)
+  );
+  const roadmapTasks = (model.roadmapTasks ?? []).filter(task =>
+    docPaths.has(task.doc)
+    && (!id || task.id === id || task.doc === id || task.section === id)
+  );
+  const docReferences = (model.docReferences ?? []).filter(row =>
+    docIds.has(row.docId)
+    || row.id === id
+    || row.targetId === id
+  );
+  const docDependencies = (model.docDependencies ?? []).filter(row =>
+    docIds.has(row.docId)
+    || row.id === id
+    || row.targetId === id
+  );
+  return {
+    docs: filteredDocs,
+    docIndex: buildDocIndex(filteredDocs),
+    docSections,
+    docTasks,
+    roadmapTasks,
+    docReferences,
+    docDependencies,
+    docsByPlatformObject: buildDocsByPlatformObject(filteredDocs, docDependencies),
+    summaries: model.summaries
+  };
+}
+
 function addTestExecutionNodes(nodes, edges, testGates = [], testRuns = [], testResults = [], testArtifacts = [], testSuites = [], testCases = []) {
   addNode(nodes, {
     id: TEST_RUNNER_BOUNDARY_ID,
@@ -632,7 +874,7 @@ function extractMarkdownCodeTokens(source) {
 
 function extractMarkdownRouteRefs(source) {
   const routes = [];
-  const pattern = /(?:^|[\s(])((?:\/platform)|(?:\/api\/[A-Za-z0-9_./:-]+))/g;
+  const pattern = /(?:^|[\s(`"])((?:\/platform)|(?:\/api\/[A-Za-z0-9_./:-]+))/g;
   for (const match of String(source || "").matchAll(pattern)) routes.push(match[1].trim());
   return unique(routes);
 }
@@ -2142,6 +2384,7 @@ export async function buildPlatformModel({
     String(route.matcher || ""),
     `route:${route.method || "GET"} ${route.matcher}`
   ]));
+  const { docReferences, docDependencies } = buildDocProjectionRows(parsedDocs, nodes, routeIdsByMatcher);
   for (const doc of parsedDocs) {
     for (const target of GOVERNED_DOC_TARGETS[doc.path] ?? []) {
       addEdge(edges, doc.id, "governs", target, "docs");
@@ -2162,6 +2405,19 @@ export async function buildPlatformModel({
       if (nodes.has(`rvm:${filePath}`)) addEdge(edges, doc.id, "references", `rvm:${filePath}`, "docs");
       if (nodes.has(`wcss:${filePath}`)) addEdge(edges, doc.id, "references", `wcss:${filePath}`, "docs");
     }
+  }
+  for (const reference of docReferences) {
+    addNode(nodes, {
+      id: reference.id,
+      kind: "docReference",
+      title: `${reference.doc} -> ${reference.targetLabel}`,
+      lifecycle: ["author", "steward"],
+      owner: reference.owner,
+      status: "known",
+      source: reference.doc
+    });
+    addEdge(edges, reference.docId, "records", reference.id, "docs");
+    addEdge(edges, reference.id, "references", reference.targetId, "docs");
   }
 
   const packageJson = await readJson("package.json", {});
@@ -2340,6 +2596,8 @@ export async function buildPlatformModel({
   }));
   const docSections = parsedDocs.flatMap(doc => doc.sections.map(section => ({ ...section })));
   const docTasks = parsedDocs.flatMap(doc => doc.tasks.map(task => ({ ...task })));
+  const docIndex = buildDocIndex(docs);
+  const docsByPlatformObject = buildDocsByPlatformObject(docs, docDependencies);
   return {
     lifecycleVocabulary: [...PLATFORM_LIFECYCLES],
     branchLifecycleVocabulary: [...PLATFORM_BRANCH_LIFECYCLE_LANES],
@@ -2349,8 +2607,12 @@ export async function buildPlatformModel({
     gaps,
     profiles,
     docs,
+    docIndex,
     docSections,
     docTasks,
+    docReferences,
+    docDependencies,
+    docsByPlatformObject,
     testGates: testGateProjection.rows,
     testGateIndex: testGateProjection.index,
     coverageEdges,
@@ -2404,32 +2666,12 @@ export function filterPlatformModel(model, view, id = null) {
     );
     const includeRoadmapDoc = !id || roadmapTasks.length > 0 || roadmapDocIds.has(id);
     const docs = includeRoadmapDoc ? roadmapDocs : [];
-    const docIds = new Set(docs.map(doc => doc.path));
-    return {
-      docs,
-      docSections: model.docSections.filter(section =>
-        (docIds.has(section.doc) && (!id || section.id === id || section.doc === id || section.title === id))
-        || section.id === id
-      ),
-      docTasks: model.docTasks.filter(task =>
-        (docIds.has(task.doc) && (!id || task.id === id || task.doc === id || task.section === id))
-        || task.id === id
-      ),
-      roadmapTasks,
-      summaries: model.summaries
-    };
+    return buildFilteredDocProjection(model, docs, id);
   }
   if (view === "docs") {
     const matchDoc = doc => !id || doc.id === id || doc.path === id;
     const docs = model.docs.filter(matchDoc);
-    const docIds = new Set(docs.map(doc => doc.path));
-    return {
-      docs,
-      docSections: model.docSections.filter(section => !id || docIds.has(section.doc) || section.id === id),
-      docTasks: model.docTasks.filter(task => !id || docIds.has(task.doc) || task.id === id),
-      roadmapTasks: (model.roadmapTasks ?? []).filter(task => !id || docIds.has(task.doc) || task.id === id),
-      summaries: model.summaries
-    };
+    return buildFilteredDocProjection(model, docs, id, { expandByTarget: true });
   }
   if (view === "profiles") return { profiles: model.profiles, summaries: model.summaries };
   if (view === "proposals") return { proposals: model.proposals, proposalActions: model.proposalActions, summaries: model.summaries };
