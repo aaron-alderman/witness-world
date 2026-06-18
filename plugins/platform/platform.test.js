@@ -385,6 +385,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(workflowListSurface);
   assert.equal(workflowListSurface.props.columns, "Kind|Status|Resource|Scope|Summary");
   assert.equal(workflowListSurface.props.emptyState, "No workflow rows.");
+  assert.equal(workflowListSurface.props.pageSize, "20");
   assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformProposalPanel" && surface.processRoute === "/api/platform-proposals"), true);
   assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformChangeSetEditPanel"), true);
   assert.ok(verificationPage);
@@ -428,6 +429,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(gapListSurface);
   assert.equal(gapListSurface.props.columns, "Severity|Kind|Target|Reason");
   assert.equal(gapListSurface.props.emptyState, "No gaps.");
+  assert.equal(gapListSurface.props.rowLimit, "12");
   const knowledgePage = layout.children.find(surface => surface.name === "PlatformKnowledgePage");
   assert.ok(knowledgePage);
   const knowledgeDetailSurface = knowledgePage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDetail");
@@ -444,6 +446,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   const profileSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformProfileComparison");
   assert.ok(profileSurface);
   assert.equal(profileSurface.props.columns, "Profile|Status|Plugins|Capabilities");
+  assert.equal(profileSurface.props.rowLimit, "12");
   const modelDetailSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelDetail");
   assert.ok(modelDetailSurface);
   assert.deepEqual(modelDetailSurface.children, [

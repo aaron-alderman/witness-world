@@ -211,6 +211,7 @@ view PlatformMap {
   prop summary = "Primary platform objects projected from the live model."
   prop columns = "Kind|Resource|Lifecycle|Status|Source"
   prop emptyState = "No platform objects."
+  prop rowLimit = "12"
   projections {
     PlatformModelRead
   }
@@ -223,6 +224,7 @@ view PlatformWorkflowList {
   prop summary = "Paginated list of branches, change sets, and proposals."
   prop columns = "Kind|Status|Resource|Scope|Summary"
   prop emptyState = "No workflow rows."
+  prop pageSize = "20"
   projections {
     PlatformModelRead
   }
@@ -343,6 +345,7 @@ view PlatformVerificationList {
   prop summary = "Paginated list of gates, runs, candidate snapshots, and runtime revisions."
   prop columns = "Kind|Status|Resource|Scope|Summary"
   prop emptyState = "No verification rows."
+  prop pageSize = "20"
   projections {
     PlatformModelRead
   }
@@ -414,6 +417,7 @@ view PlatformBranchRedGreenList {
   prop summary = "Selected-gate status for branches."
   prop columns = "Status|Branch|Selected|Passed|Failed|Summary"
   prop emptyState = "No branch red/green summaries."
+  prop rowLimit = "12"
   projections {
     PlatformModelRead
   }
@@ -426,6 +430,7 @@ view PlatformChangeSetRedGreenList {
   prop summary = "Selected-gate status for change sets."
   prop columns = "Status|Change Set|Selected|Passed|Failed|Summary"
   prop emptyState = "No change-set red/green summaries."
+  prop rowLimit = "12"
   projections {
     PlatformModelRead
   }
@@ -452,6 +457,7 @@ view PlatformGapList {
   prop summary = "Projected platform gaps and meta-defects."
   prop columns = "Severity|Kind|Target|Reason"
   prop emptyState = "No gaps."
+  prop rowLimit = "12"
   projections {
     PlatformGapsRead
   }
@@ -464,6 +470,7 @@ view PlatformCoverageMatrix {
   prop summary = "Gate-to-target coverage rows for the current modeled platform."
   prop columns = "Gate|Target|Kind"
   prop emptyState = "No coverage edges."
+  prop rowLimit = "12"
   projections {
     PlatformModelRead
   }
@@ -476,6 +483,7 @@ view PlatformSignalList {
   prop summary = "Paginated list of gaps, telemetry metrics, defect clusters, and boundaries."
   prop columns = "Kind|Status|Resource|Scope|Summary"
   prop emptyState = "No signal rows."
+  prop pageSize = "20"
   projections {
     PlatformModelRead
   }
@@ -524,6 +532,7 @@ view PlatformProfileComparison {
   prop summary = "Profile exposure and plugin composition differences."
   prop columns = "Profile|Status|Plugins|Capabilities"
   prop emptyState = "No runtime profiles."
+  prop rowLimit = "12"
   projections {
     PlatformModelRead
   }
@@ -536,6 +545,7 @@ view PlatformKnowledgeList {
   prop summary = "Paginated list of docs, roadmap tasks, epics, and features."
   prop columns = "Kind|Status|Resource|Scope|Summary"
   prop emptyState = "No knowledge rows."
+  prop pageSize = "20"
   projections {
     PlatformModelRead
   }
@@ -592,6 +602,7 @@ view PlatformModelList {
   prop summary = "Paginated list of modeled platform objects."
   prop columns = "Kind|Status|Resource|Source|Owner"
   prop emptyState = "No platform objects."
+  prop pageSize = "20"
   projections {
     PlatformModelRead
   }
