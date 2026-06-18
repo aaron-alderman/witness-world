@@ -156,7 +156,18 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
           candidateSnapshotId: "candidateSnapshot:platform:1"
         }],
         pendingChangeSetCount: 1
-      }
+      },
+      proposalTargetGovernance: [{
+        id: "governanceProposalTarget:runtimePlugin.install",
+        targetProcess: "runtimePlugin.install",
+        operationSemantics: "governed-mutation",
+        governanceMode: "proposal-fallback",
+        authorityMechanism: "bootstrap-target-authority",
+        sharedAuthorityPath: true,
+        workflowRole: "proposal-target",
+        bootstrapSelectable: true,
+        notes: "Runtime-plugin install proposals execute through shared server-runner target authority once approved."
+      }]
     },
     project: () => []
   });
@@ -177,6 +188,7 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   assert.equal(model.nodes.some(node => node.id === "boundary:testRunner.platform" && node.kind === "boundary"), true);
   assert.equal(model.nodes.some(node => node.id === "compatibilityBridge:canonicalIdSugar.sameContextVisibleTarget" && node.kind === "compatibilityBridge"), true);
   assert.equal(model.nodes.some(node => node.id === "governanceRoute:POST /api/platform-change-sets/demo/apply" && node.kind === "governanceRoute"), true);
+  assert.equal(model.nodes.some(node => node.id === "governanceProposalTarget:runtimePlugin.install" && node.kind === "governanceCommand"), true);
   assert.equal(model.nodes.some(node => node.id === "testEnvironment:local-node" && node.kind === "testEnvironment"), true);
   assert.equal(model.nodes.some(node => node.id === "testEnvironment:local-browser" && node.kind === "testEnvironment"), true);
   assert.equal(model.edges.some(edge => edge.from === "surface:platform" && edge.rel === "authoredBy" && edge.to === "rvm:plugins/platform/platform-console.rvm"), true);
@@ -196,6 +208,7 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   assert.equal(model.testMonitorDiagnostics?.pendingChangeSetCount, 1);
   assert.equal(model.compatibilityBridges.some(row => row.id === "compatibilityBridge:canonicalIdSugar.importedVisibleTarget" && row.status === "policy"), true);
   assert.equal(model.governanceRoutes.some(row => row.handler === "platform.changeSet.apply" && row.governanceMode === "operator-only"), true);
+  assert.equal(model.proposalTargetGovernance.some(row => row.targetProcess === "runtimePlugin.install" && row.governanceMode === "proposal-fallback"), true);
   assert.equal(model.roadmapTasks.some(task => task.doc === "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"), true);
 });
 
@@ -485,6 +498,10 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(proposalPanelSurface.props.formId, "platform-proposal-form");
   assert.equal(proposalPanelSurface.props.clientAction, "proposal.create");
   assert.equal(proposalPanelSurface.props.formFields, "Action=action@select:proposalActionOptions|Proposal id=id@text|Target kind override=targetKind@text|Target id override=targetId@text|Reason=reason@text|Body JSON=bodyJson@textarea");
+  assert.equal(proposalPanelSurface.props.submitPath, "/api/platform-proposals");
+  assert.equal(proposalPanelSurface.props.submitBodyFields, "id=id@nullable|action=action@nullable|targetKind=targetKind@nullable|targetId=targetId@nullable|body=bodyJson@json|reason=reason@nullable");
+  assert.equal(proposalPanelSurface.props.invalidFieldMessages, "bodyJson=Body JSON is invalid.");
+  assert.equal(proposalPanelSurface.props.fieldSyncs, "bodyJson=action:data-sample-body@jsonPretty");
   assert.equal(proposalPanelSurface.props.proposalActionOptionsSource, "proposalActions");
   assert.equal(proposalPanelSurface.props.proposalActionOptionsValuePath, "action");
   assert.equal(proposalPanelSurface.props.proposalActionOptionsLabelPath, "action");
@@ -494,6 +511,10 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(proposalReviewSurface.props.formId, "platform-review-form");
   assert.equal(proposalReviewSurface.props.clientAction, "proposal.review");
   assert.equal(proposalReviewSurface.props.formFields, "Open proposal=id@select:openProposalOptions|Reject reason=reason@text");
+  assert.equal(proposalReviewSurface.props.submitPath, "/api/platform-proposals/{id}/{reviewAction}");
+  assert.equal(proposalReviewSurface.props.submitBodyFields, "reason=reason@nullable");
+  assert.equal(proposalReviewSurface.props.requiredFieldMessages, "id=No open proposal selected.");
+  assert.equal(proposalReviewSurface.props.successMessageTemplate, "Proposal {proposal.status}.");
   assert.equal(proposalReviewSurface.props.openProposalOptionsSource, "proposals");
   assert.equal(proposalReviewSurface.props.openProposalOptionsValuePath, "id");
   assert.equal(proposalReviewSurface.props.openProposalOptionsLabelPath, "id");
@@ -830,6 +851,7 @@ test("platform page views filter the model to page-scoped slices", () => {
     testMonitorDiagnostics: { status: "idle", pendingSourceCount: 0, pendingChangeSetCount: 0 },
     compatibilityBridges: [{ id: "compatibilityBridge:canonicalIdSugar.sameContextVisibleTarget", bridgeClass: "canonical-id-sugar", owner: "context.naming", surfaces: ["src/modules.js"], sampleTargets: [], status: "policy" }],
     governanceRoutes: [{ id: "governanceRoute:POST /api/platform-change-sets/demo/apply", routeId: "route:POST /api/platform-change-sets/demo/apply", method: "POST", matcher: "/api/platform-change-sets/demo/apply", handler: "platform.changeSet.apply", operationSemantics: "governed-mutation", governanceMode: "operator-only", authorityMechanism: "bootstrap-operator", sharedAuthorityPath: false, workflowRole: "direct-mutation", notes: "Platform change-set apply is still bootstrap-operator-only.", ownerClass: "runtime-plugin", ownerBundleId: "bundle-platform", ownerPluginId: "plugin.platform" }],
+    proposalTargetGovernance: [{ id: "governanceProposalTarget:runtimePlugin.install", targetProcess: "runtimePlugin.install", operationSemantics: "governed-mutation", governanceMode: "proposal-fallback", authorityMechanism: "bootstrap-target-authority", sharedAuthorityPath: true, workflowRole: "proposal-target", bootstrapSelectable: true, notes: "Runtime-plugin install proposals execute through shared server-runner target authority once approved." }],
     branchTestRedGreen: [{ id: "branchRedGreen:platform", branchId: "branch:platform", status: "green" }],
     changeSetTestRedGreen: [{ id: "changeSetRedGreen:platform", changeSetId: "changeSet:platform", status: "green" }],
     latestTestResultsByGate: { "gate:platform": { runId: "testRun:platform", status: "passed" } },
@@ -857,7 +879,7 @@ test("platform page views filter the model to page-scoped slices", () => {
   assert.deepEqual(Object.keys(knowledge).sort(), ["docSections", "docTasks", "docs", "epics", "features", "roadmapTasks", "summaries"]);
   assert.deepEqual(Object.keys(modelPage).sort(), ["coverageEdges", "edges", "nodes", "profiles", "summaries"]);
   assert.deepEqual(Object.keys(bridges).sort(), ["compatibilityBridges", "summaries"]);
-  assert.deepEqual(Object.keys(governance).sort(), ["governanceRoutes", "summaries"]);
+  assert.deepEqual(Object.keys(governance).sort(), ["governanceRoutes", "proposalTargetGovernance", "summaries"]);
   assert.equal("nodes" in workflow, false);
   assert.equal("docs" in verification, false);
   assert.equal(signals.nodes.length, 3);
@@ -865,6 +887,7 @@ test("platform page views filter the model to page-scoped slices", () => {
   assert.equal(signals.nodes.some(node => node.id === "plugin.platform"), false);
   assert.equal(bridges.compatibilityBridges.length, 1);
   assert.equal(governance.governanceRoutes.length, 1);
+  assert.equal(governance.proposalTargetGovernance.length, 1);
 });
 
 test("platform delegated test-gate projectors discover gate catalog rows", async () => withRegisteredPluginProjectors(providers, async () => {
@@ -5445,10 +5468,10 @@ test("platform page renders required operating views", async () => {
   assert.match(workflowHtml, /Stage an authored source edit into the selected change set\./);
   assert.match(workflowHtml, /<form id="platform-branch-create-form" data-platform-client-action="branch.create" data-platform-submit-spec=/);
   assert.match(workflowHtml, /<form id="platform-change-set-create-form" data-platform-client-action="changeSet.create" data-platform-submit-spec=/);
-  assert.match(workflowHtml, /<form id="platform-proposal-form" data-platform-client-action="proposal.create" data-platform-status-id="proposal-status"/);
+  assert.match(workflowHtml, /<form id="platform-proposal-form" data-platform-client-action="proposal.create" data-platform-submit-spec=.*data-platform-field-syncs=.*data-platform-status-id="proposal-status"/);
   assert.match(workflowHtml, /data-sample-body=/);
   assert.match(workflowHtml, /<option value="changeSet:demo-0">changeSet:demo-0<\/option>/);
-  assert.match(workflowHtml, /<form id="platform-review-form" data-platform-client-action="proposal.review" data-platform-status-id="review-status"/);
+  assert.match(workflowHtml, /<form id="platform-review-form" data-platform-client-action="proposal.review" data-platform-submit-spec=.*data-platform-status-id="review-status"/);
   assert.match(workflowHtml, /<option value="proposal:demo">proposal:demo<\/option>/);
   assert.match(workflowHtml, /name="reviewAction" value="approve"/);
   assert.match(workflowHtml, /<form id="platform-change-set-edit-form"/);

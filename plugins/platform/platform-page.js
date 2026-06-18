@@ -871,10 +871,23 @@ function surfaceFormRequestSpec(surface) {
       mode: entry.mode || "value"
     })),
     requiredFieldMessages: Object.fromEntries(parseSurfaceLabelMap(surface?.props?.requiredFieldMessages).entries()),
+    invalidFieldMessages: Object.fromEntries(parseSurfaceLabelMap(surface?.props?.invalidFieldMessages).entries()),
     successMessage: surfacePropText(surface, "successMessage", ""),
     successMessageTemplate: surfacePropText(surface, "successMessageTemplate", ""),
     errorMessage: surfacePropText(surface, "errorMessage", "")
   };
+}
+
+function surfaceFieldSyncSpecs(surface) {
+  return parseSurfaceSchemaEntries(surface?.props?.fieldSyncs).map(entry => {
+    const [sourceField = "", attr = "value"] = String(entry.path || "").split(":");
+    return {
+      targetField: entry.label,
+      sourceField: sourceField.trim(),
+      attr: attr.trim(),
+      mode: entry.mode || "text"
+    };
+  }).filter(spec => spec.targetField && spec.sourceField);
 }
 
 function renderFormActionButtons(surface) {
@@ -1862,9 +1875,11 @@ function renderAuthoredFormSection(surface, model) {
   const statusId = surfacePropText(surface, "statusId", `${surface?.name || "platform-status"}`);
   const clientAction = optionalText(surface?.props?.clientAction);
   const requestSpec = surfaceFormRequestSpec(surface);
+  const fieldSyncs = surfaceFieldSyncSpecs(surface);
   const requestAttrs = requestSpec ? ` data-platform-submit-spec="${esc(JSON.stringify(requestSpec))}"` : "";
+  const syncAttrs = fieldSyncs.length ? ` data-platform-field-syncs="${esc(JSON.stringify(fieldSyncs))}"` : "";
   return renderSurfaceFrame(surface, `
-      <form id="${esc(formId)}"${clientAction ? ` data-platform-client-action="${esc(clientAction)}"` : ""}${requestAttrs} data-platform-status-id="${esc(statusId)}">
+      <form id="${esc(formId)}"${clientAction ? ` data-platform-client-action="${esc(clientAction)}"` : ""}${requestAttrs}${syncAttrs} data-platform-status-id="${esc(statusId)}">
         ${fields.map(field => renderAuthoredFormField(surface, field, model, defaultsMap, placeholdersMap, rowMap)).join("")}
         ${renderFormActionButtons(surface)}
         <div id="${esc(statusId)}"></div>
@@ -1950,6 +1965,16 @@ function renderAuthoringClientScript() {
             return null;
           }
         }
+        function parseFieldSyncSpecs(form) {
+          const raw = form && form.getAttribute("data-platform-field-syncs");
+          if (!raw) return [];
+          try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch {
+            return [];
+          }
+        }
         function assignBodyPath(target, path, value) {
           const tokens = String(path || "").match(/[^.[\\]]+|\\[\\d+\\]/g) || [];
           if (!tokens.length) return;
@@ -1972,6 +1997,12 @@ function renderAuthoringClientScript() {
           const element = form && form.elements ? form.elements[entry.source] : null;
           const raw = element ? element.value : "";
           switch (entry.mode) {
+            case "json":
+              try {
+                return JSON.parse(raw || "null");
+              } catch {
+                return { __platformInvalidJson: true, raw };
+              }
             case "nullable":
               return raw === "" ? null : raw;
             case "value":
@@ -2030,7 +2061,15 @@ function renderAuthoringClientScript() {
             const requestPath = String(spec.path || "").replaceAll(/\\{([^}]+)\\}/g, (_, fieldName) => encodeURIComponent(context[fieldName] || ""));
             const bodyEntries = Array.isArray(spec.bodyFields) ? spec.bodyFields : [];
             const requestBody = {};
-            for (const entry of bodyEntries) assignBodyPath(requestBody, entry.target, formFieldRequestValue(form, entry));
+            for (const entry of bodyEntries) {
+              const value = formFieldRequestValue(form, entry);
+              if (value && typeof value === "object" && value.__platformInvalidJson) {
+                const invalidMessage = spec.invalidFieldMessages?.[entry.source] || "Invalid JSON.";
+                setFormStatus(form, invalidMessage);
+                return;
+              }
+              assignBodyPath(requestBody, entry.target, value);
+            }
             const requestInit = {
               method: spec.method || "POST",
               headers: { "content-type": "application/json" }
@@ -2045,72 +2084,36 @@ function renderAuthoringClientScript() {
           });
           return true;
         }
-        function bindProposalCreate(form) {
-          const actionSelect = form.elements.action;
-          if (!actionSelect) return;
-          function syncProposalBody() {
-            const option = actionSelect.options[actionSelect.selectedIndex];
-            if (!option) return;
-            const sample = option.getAttribute("data-sample-body") || "{}";
-            try {
-              form.elements.bodyJson.value = JSON.stringify(JSON.parse(sample), null, 2);
-            } catch {}
+        function bindAuthoredFieldSyncs(form) {
+          const specs = parseFieldSyncSpecs(form);
+          if (!specs.length) return;
+          for (const spec of specs) {
+            const source = form?.elements?.[spec.sourceField];
+            const target = form?.elements?.[spec.targetField];
+            if (!source || !target) continue;
+            const sync = () => {
+              let raw = "";
+              if (String(spec.attr || "").startsWith("data-")) {
+                const option = source.options ? source.options[source.selectedIndex] : null;
+                raw = option ? (option.getAttribute(spec.attr) || "") : "";
+              } else if (spec.attr === "value") {
+                raw = source.value || "";
+              }
+              if (spec.mode === "jsonPretty") {
+                try {
+                  target.value = JSON.stringify(JSON.parse(raw || "null"), null, 2);
+                } catch {}
+                return;
+              }
+              target.value = raw;
+            };
+            source.addEventListener("change", sync);
+            sync();
           }
-          actionSelect.addEventListener("change", syncProposalBody);
-          syncProposalBody();
-          form.addEventListener("submit", async event => {
-            event.preventDefault();
-            let body = {};
-            try {
-              body = JSON.parse(form.elements.bodyJson.value || "{}");
-            } catch {
-              setFormStatus(form, "Body JSON is invalid.");
-              return;
-            }
-            const response = await fetch("/api/platform-proposals", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({
-                id: form.elements.id.value || null,
-                action: form.elements.action.value || null,
-                targetKind: form.elements.targetKind.value || null,
-                targetId: form.elements.targetId.value || null,
-                body,
-                reason: form.elements.reason.value || null
-              })
-            });
-            const json = await readResponseJson(response);
-            setFormStatus(form, response.ok ? "Proposal created." : (json.error || "Proposal creation failed."));
-          });
         }
-        function bindProposalReview(form) {
-          form.addEventListener("submit", async event => {
-            event.preventDefault();
-            const submitter = event.submitter;
-            const action = submitter && submitter.value === "reject" ? "reject" : "approve";
-            const id = form.elements.id.value;
-            if (!id) {
-              setFormStatus(form, "No open proposal selected.");
-              return;
-            }
-            const response = await fetch("/api/platform-proposals/" + encodeURIComponent(id) + "/" + action, {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify(action === "reject" ? { reason: form.elements.reason.value || null } : {})
-            });
-            const json = await readResponseJson(response);
-            setFormStatus(form, response.ok ? (action === "approve" ? "Proposal approved." : "Proposal rejected.") : (json.error || "Review failed."));
-          });
-        }
-        const handlers = {
-          "proposal.create": bindProposalCreate,
-          "proposal.review": bindProposalReview
-        };
         document.querySelectorAll("form[data-platform-client-action]").forEach(form => {
-          const action = form.getAttribute("data-platform-client-action") || "";
-          const handler = handlers[action];
-          if (handler) handler(form);
-          else bindAuthoredJsonSubmit(form);
+          bindAuthoredFieldSyncs(form);
+          bindAuthoredJsonSubmit(form);
         });
       }());
     </script>
