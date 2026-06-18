@@ -323,6 +323,7 @@ function buildRoadmapPlanningRows({ roadmapDocPath, docs = [], branches = [], se
         featureIds: [],
         gateIds: [],
         docIds: [],
+        defectClusterIds: [],
         status: "known"
       });
     }
@@ -345,6 +346,7 @@ function buildRoadmapPlanningRows({ roadmapDocPath, docs = [], branches = [], se
         branchIds: [],
         gateIds: [],
         docIds: [],
+        defectClusterIds: [],
         status: "known"
       });
     }
@@ -361,16 +363,19 @@ function buildRoadmapPlanningRows({ roadmapDocPath, docs = [], branches = [], se
       ...(branch.docsFreshness?.touchedDocs ?? []),
       ...(branch.docsFreshness?.missingDocs ?? [])
     ].map(doc => `doc:${doc}`));
+    const defectClusterId = branch.defect ? defectClusterNodeId(branch.defect) : null;
     if (epic) {
       if (!epic.branchIds.includes(branchId)) epic.branchIds.push(branchId);
       epic.gateIds.push(...gateIds);
       epic.docIds.push(...docIds);
+      if (defectClusterId) epic.defectClusterIds.push(defectClusterId);
       pushByKey(branchesByEpic, epic.id, branchId);
     }
     if (feature) {
       if (!feature.branchIds.includes(branchId)) feature.branchIds.push(branchId);
       feature.gateIds.push(...gateIds);
       feature.docIds.push(...docIds);
+      if (defectClusterId) feature.defectClusterIds.push(defectClusterId);
       feature.status = aggregatePlanningStatus([feature.status, branch.status]);
     }
     if (epic && feature && !epic.featureIds.includes(feature.id)) epic.featureIds.push(feature.id);
@@ -383,7 +388,8 @@ function buildRoadmapPlanningRows({ roadmapDocPath, docs = [], branches = [], se
       branchIds: [...row.branchIds].sort(),
       featureIds: [...row.featureIds].sort(),
       gateIds: unique(row.gateIds).sort(),
-      docIds: unique(row.docIds).sort()
+      docIds: unique(row.docIds).sort(),
+      defectClusterIds: unique(row.defectClusterIds).sort()
     }))
     .sort((left, right) => String(left.id).localeCompare(String(right.id)));
   const features = [...featuresById.values()]
@@ -391,10 +397,19 @@ function buildRoadmapPlanningRows({ roadmapDocPath, docs = [], branches = [], se
       ...row,
       branchIds: [...row.branchIds].sort(),
       gateIds: unique(row.gateIds).sort(),
-      docIds: unique(row.docIds).sort()
+      docIds: unique(row.docIds).sort(),
+      defectClusterIds: unique(row.defectClusterIds).sort()
     }))
     .sort((left, right) => String(left.id).localeCompare(String(right.id)));
   for (const key of Object.keys(branchesByEpic)) branchesByEpic[key] = unique(branchesByEpic[key]).sort();
+  const defectsByEpic = epics.map(row => ({
+    id: `defectsByEpic:${row.id}`,
+    epicId: row.id,
+    roadmapId: row.roadmapId,
+    branchIds: [...row.branchIds],
+    defectClusterIds: [...row.defectClusterIds],
+    defectCount: row.defectClusterIds.length
+  }));
   const testsByFeature = features.map(row => ({
     id: `testsByFeature:${row.id}`,
     featureId: row.id,
@@ -419,6 +434,7 @@ function buildRoadmapPlanningRows({ roadmapDocPath, docs = [], branches = [], se
     epics,
     features,
     branchesByEpic,
+    defectsByEpic,
     testsByFeature
   };
 }
@@ -2970,6 +2986,10 @@ export async function buildPlatformModel({
       addEdge(edges, epic.id, "documentedBy", docId, "roadmap");
       if (nodes.has(docId)) addEdge(edges, docId, "describes", epic.id, "roadmap");
     }
+    for (const defectClusterId of epic.defectClusterIds) {
+      addEdge(edges, defectClusterId, "targets", epic.id, "roadmap");
+      if (nodes.has(defectClusterId)) addEdge(edges, epic.id, "tracks", defectClusterId, "roadmap");
+    }
   }
   for (const feature of planning.features) {
     addNode(nodes, {
@@ -2992,6 +3012,10 @@ export async function buildPlatformModel({
       addEdge(edges, feature.id, "documentedBy", docId, "roadmap");
       if (nodes.has(docId)) addEdge(edges, docId, "describes", feature.id, "roadmap");
     }
+    for (const defectClusterId of feature.defectClusterIds) {
+      addEdge(edges, defectClusterId, "targets", feature.id, "roadmap");
+      if (nodes.has(defectClusterId)) addEdge(edges, feature.id, "tracks", defectClusterId, "roadmap");
+    }
   }
   return {
     lifecycleVocabulary: [...PLATFORM_LIFECYCLES],
@@ -3012,6 +3036,7 @@ export async function buildPlatformModel({
     epics: planning.epics,
     features: planning.features,
     branchesByEpic: planning.branchesByEpic,
+    defectsByEpic: planning.defectsByEpic,
     testsByFeature: planning.testsByFeature,
     testGates: testGateProjection.rows,
     testGateIndex: testGateProjection.index,
@@ -3083,6 +3108,13 @@ export function filterPlatformModel(model, view, id = null) {
       || row.branchIds.includes(id)
     );
     const featureIds = new Set(features.map(row => row.id));
+    const defectsByEpic = (model.defectsByEpic ?? []).filter(row =>
+      !id
+      || row.id === id
+      || row.epicId === id
+      || row.branchIds.includes(id)
+      || row.defectClusterIds.includes(id)
+    );
     const testsByFeature = (model.testsByFeature ?? []).filter(row =>
       !id
       || row.id === id
@@ -3104,6 +3136,7 @@ export function filterPlatformModel(model, view, id = null) {
       roadmaps,
       epics,
       features,
+      defectsByEpic,
       testsByFeature,
       branchesByEpic: Object.fromEntries(
         Object.entries(model.branchesByEpic ?? {})

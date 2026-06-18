@@ -1073,16 +1073,16 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] `features`
   - [ ] `milestones`
   - [X] `branchesByEpic`
-  - [ ] `defectsByEpic`
+  - [X] `defectsByEpic`
   - [X] `testsByFeature`
 - [X] Link branch to feature.
 - [X] Link feature to epic.
 - [X] Link epic to roadmap.
-- [ ] Link defects to feature/epic.
+- [X] Link defects to feature/epic.
 - [X] Link docs and tests to feature/epic.
 - [X] Add Platform Console roadmap view.
 - [ ] Add Platform Console epic view.
-- [L] Current planning objects are branch-metadata-backed: `/api/platform-model?view=roadmap`, `/platform`, and MCP now expose a first-class `roadmap` row for `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md`, plus derived `epic`, `feature`, `branchesByEpic`, and `testsByFeature` projections from branch `epic`/`feature` fields, selected branch gates, and branch doc-freshness evidence. Doc and test links to features/epics are currently inferred from the active branch evidence rather than from standalone authored planning records. Milestones, acceptance criteria, defect/test coverage beyond that branch evidence, and a dedicated epic console view remain later work.
+- [L] Current planning objects are branch-metadata-backed: `/api/platform-model?view=roadmap`, `/platform`, and MCP now expose a first-class `roadmap` row for `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md`, plus derived `epic`, `feature`, `branchesByEpic`, `testsByFeature`, and `defectsByEpic` projections from branch `epic`/`feature` fields, selected branch gates, branch doc-freshness evidence, and branch `defect` tags via the existing `defectCluster:*` projection. Doc, test, and defect links to features/epics are currently inferred from active branch evidence rather than from standalone authored planning records. Milestones, acceptance criteria, richer defect authoring, and a dedicated epic console view remain later work.
 
 ### 10.2 Executable Roadmaps
 
@@ -1203,7 +1203,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] `platform.roadmap`
 - [X] Add tests for human/MCP parity.
 - [L] `platform.docs` now routes through the shared `/api/platform-model?view=docs` handler lane and returns governed docs, doc sections, doc tasks, and roadmap-task rows for the same modeled documentation surfaced on `/platform`. Dedicated telemetry, defect, and roadmap MCP lanes remain later work.
-- [L] `platform.roadmap` now routes through the shared `/api/platform-model?view=roadmap` handler lane and exposes the currently implemented roadmap surface: the ingested `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md` doc, its sections, checkbox task rows, evidence-backed derived task status, branch-metadata-backed `roadmap` / `epic` / `feature` projections, and aggregated `testsByFeature` coverage rows. Milestones, acceptance criteria, and deeper planning coverage remain later work.
+- [L] `platform.roadmap` now routes through the shared `/api/platform-model?view=roadmap` handler lane and exposes the currently implemented roadmap surface: the ingested `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md` doc, its sections, checkbox task rows, evidence-backed derived task status, branch-metadata-backed `roadmap` / `epic` / `feature` projections, aggregated `testsByFeature` coverage rows, and aggregated `defectsByEpic` coverage rows backed by `defectCluster` targets. Milestones, acceptance criteria, and deeper planning coverage remain later work.
 - [L] Current parity coverage compares normalized direct platform-handler responses against MCP tool results for the implemented docs, roadmap, branch, change-set, proposal-create, and test-run/list/read flows. Future telemetry, defect, and broader planning-model MCP lanes will need their own parity extensions as those surfaces land.
 - [L] The live docs model now projects explicit `docIndex`, `docReference`, `docDependencies`, and `docsByPlatformObject` rows from governed targets and resolved Markdown references to routes, plugins, capabilities, proposal IDs, branch IDs, governed docs, authored RVM/WCSS sources, JSON/WTOML config sources, and generic repo file/test nodes when the referenced workspace path exists.
 
