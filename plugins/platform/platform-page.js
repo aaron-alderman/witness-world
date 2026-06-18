@@ -4,7 +4,10 @@ import { filterPlatformModel } from "./platform-model.js";
 
 const FALLBACK_PLATFORM_PAGE_VIEWS = Object.freeze([
   Object.freeze({ id: "overview", title: "Overview", subtitle: "Counts, authored surfaces, lifecycle, and quick links.", modelView: "overview" }),
-  Object.freeze({ id: "workflow", title: "Workflow", subtitle: "Branches, change sets, proposals, and authoring commands.", modelView: "workflow" }),
+  Object.freeze({ id: "workflow", title: "Workflow", subtitle: "Workflow landing page for branch activity and links into narrower authored workflow pages.", modelView: "workflowOverview" }),
+  Object.freeze({ id: "workflowBranches", title: "Workflow Branches", subtitle: "Branch lifecycle, linked change sets, and branch authoring.", modelView: "workflowBranches" }),
+  Object.freeze({ id: "workflowChangeSets", title: "Workflow Change Sets", subtitle: "Staged change sets, overlays, candidate snapshots, and change-set operations.", modelView: "workflowChangeSets" }),
+  Object.freeze({ id: "workflowProposals", title: "Workflow Proposals", subtitle: "Proposal intake, review, and proposal-linked workflow detail.", modelView: "workflowProposals" }),
   Object.freeze({ id: "verification", title: "Verification", subtitle: "Verification landing page for live health, red/green state, and links into narrower authored verification pages.", modelView: "verificationOverview" }),
   Object.freeze({ id: "verificationStatus", title: "Verification Status", subtitle: "Policies, freshness, invalidations, queue state, and test-gate detail.", modelView: "verificationStatus" }),
   Object.freeze({ id: "verificationRuns", title: "Verification Runs", subtitle: "Test runs, authored reports, artifacts, suites, failures, and run execution commands.", modelView: "verificationRuns" }),
@@ -225,9 +228,9 @@ function uniqueLinkEntries(values = []) {
 function conceptDestination(value) {
   const raw = optionalText(value);
   if (!raw) return null;
-  if (raw.startsWith("branch:")) return { view: "workflow", id: raw };
-  if (raw.startsWith("changeSet:") || raw.startsWith("changeset.")) return { view: "workflow", id: raw };
-  if (raw.startsWith("proposal:")) return { view: "workflow", id: raw };
+  if (raw.startsWith("branch:")) return { view: "workflowBranches", id: raw };
+  if (raw.startsWith("changeSet:") || raw.startsWith("changeset.")) return { view: "workflowChangeSets", id: raw };
+  if (raw.startsWith("proposal:")) return { view: "workflowProposals", id: raw };
   if (raw.startsWith("candidateSnapshot:")) return { view: "verificationRuntime", id: raw };
   if (raw.startsWith("runtimeRevision:") || raw.startsWith("backendRevision:") || raw.startsWith("frontendRevision:") || raw.startsWith("snapshotBuild:") || raw.startsWith("snapshotBuildError:")) {
     return { view: "verificationRuntime", id: raw };

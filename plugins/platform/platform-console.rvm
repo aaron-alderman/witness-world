@@ -68,6 +68,9 @@ view PlatformConsolePage {
   children {
     PlatformOverviewPage
     PlatformWorkflowPage
+    PlatformWorkflowBranchesPage
+    PlatformWorkflowChangeSetsPage
+    PlatformWorkflowProposalsPage
     PlatformVerificationPage
     PlatformVerificationStatusPage
     PlatformVerificationRunsPage
@@ -105,22 +108,63 @@ view PlatformWorkflowPage {
   kind page
   class platform-workflow
   prop pageId = "workflow"
-  prop modelView = "workflow"
+  prop modelView = "workflowOverview"
   prop summaryCards = "Branches=branches@count|Change Sets=changeSets@count|Open Proposals=proposals@countWhere:status=open|Candidate Snapshots=candidateSnapshots@count"
   prop title = "Workflow"
-  prop summary = "Branches, change sets, proposals, and authoring commands."
+  prop summary = "Workflow landing page for branch activity and links into narrower authored workflow pages."
   children {
     PlatformBranchBoard
-    PlatformWorkflowList
+  }
+}
+
+view PlatformWorkflowBranchesPage {
+  kind page
+  class platform-workflow
+  prop pageId = "workflowBranches"
+  prop modelView = "workflowBranches"
+  prop summaryCards = "Branches=branches@count|Draft=branches@countWhere:status=draft|Active=branches@countWhere:status=active|Candidate Snapshots=candidateSnapshots@count"
+  prop title = "Workflow Branches"
+  prop summary = "Branch lifecycle, linked change sets, and branch authoring."
+  children {
+    PlatformBranchBoard
+    PlatformWorkflowBranchesList
     PlatformWorkflowDetail
-    PlatformProposalPanel
-    PlatformProposalReviewList
     PlatformBranchCreatePanel
+  }
+}
+
+view PlatformWorkflowChangeSetsPage {
+  kind page
+  class platform-workflow
+  prop pageId = "workflowChangeSets"
+  prop modelView = "workflowChangeSets"
+  prop summaryCards = "Change Sets=changeSets@count|Draft=changeSets@countWhere:status=draft|Validated=changeSets@countWhere:status=validated|Candidate Snapshots=candidateSnapshots@count"
+  prop title = "Workflow Change Sets"
+  prop summary = "Staged change sets, overlays, candidate snapshots, and change-set operations."
+  children {
+    PlatformWorkflowChangeSetsList
+    PlatformWorkflowDetail
     PlatformChangeSetCreatePanel
     PlatformChangeSetEditPanel
     PlatformChangeSetValidatePanel
     PlatformChangeSetApplyPanel
     PlatformChangeSetLifecyclePanel
+  }
+}
+
+view PlatformWorkflowProposalsPage {
+  kind page
+  class platform-workflow
+  prop pageId = "workflowProposals"
+  prop modelView = "workflowProposals"
+  prop summaryCards = "Open Proposals=proposals@countWhere:status=open|Approved=proposals@countWhere:status=approved|Rejected=proposals@countWhere:status=rejected"
+  prop title = "Workflow Proposals"
+  prop summary = "Proposal intake, review, and proposal-linked workflow detail."
+  children {
+    PlatformWorkflowProposalsList
+    PlatformWorkflowDetail
+    PlatformProposalPanel
+    PlatformProposalReviewList
   }
 }
 
@@ -562,6 +606,57 @@ view PlatformWorkflowList {
   prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
   prop defaultSort = "kind:asc"
   prop emptyState = "No workflow rows."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformWorkflowBranchesList {
+  kind table
+  class platform-workflow-list
+  prop title = "Branches"
+  prop summary = "Paginated list of projected branches."
+  prop listSource = "workflowItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No branches."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformWorkflowChangeSetsList {
+  kind table
+  class platform-workflow-list
+  prop title = "Change Sets"
+  prop summary = "Paginated list of projected change sets."
+  prop listSource = "workflowItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No change sets."
+  prop pageSize = "20"
+  projections {
+    PlatformModelRead
+  }
+}
+
+view PlatformWorkflowProposalsList {
+  kind table
+  class platform-workflow-list
+  prop title = "Proposals"
+  prop summary = "Paginated list of projected workflow proposals."
+  prop listSource = "workflowItems"
+  prop columns = "Kind|Status|Resource|Scope|Summary"
+  prop rowFields = "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary"
+  prop sortOptions = "kind=pageKind|status=status|resource=title|scope=scope|summary=summary"
+  prop defaultSort = "kind:asc"
+  prop emptyState = "No proposals."
   prop pageSize = "20"
   projections {
     PlatformModelRead

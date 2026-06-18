@@ -16,6 +16,9 @@ const FALLBACK_LAYOUT = Object.freeze({
     children: Object.freeze([
       "PlatformOverviewPage",
       "PlatformWorkflowPage",
+      "PlatformWorkflowBranchesPage",
+      "PlatformWorkflowChangeSetsPage",
+      "PlatformWorkflowProposalsPage",
       "PlatformVerificationPage",
       "PlatformVerificationStatusPage",
       "PlatformVerificationRunsPage",
@@ -44,23 +47,67 @@ const FALLBACK_LAYOUT = Object.freeze({
       className: "platform-workflow",
       pageId: "workflow",
       props: Object.freeze({
-        modelView: "workflow",
+        modelView: "workflowOverview",
         summaryCards: "Branches=branches@count|Change Sets=changeSets@count|Open Proposals=proposals@countWhere:status=open|Candidate Snapshots=candidateSnapshots@count"
       }),
       title: "Workflow",
-      summary: "Branches, change sets, proposals, and authoring commands.",
+      summary: "Workflow landing page for branch activity and links into narrower authored workflow pages.",
+      children: [
+        "PlatformBranchBoard"
+      ]
+    }),
+    fallbackSurface("PlatformWorkflowBranchesPage", {
+      surfaceKind: "page",
+      className: "platform-workflow",
+      pageId: "workflowBranches",
+      props: Object.freeze({
+        modelView: "workflowBranches",
+        summaryCards: "Branches=branches@count|Draft=branches@countWhere:status=draft|Active=branches@countWhere:status=active|Candidate Snapshots=candidateSnapshots@count"
+      }),
+      title: "Workflow Branches",
+      summary: "Branch lifecycle, linked change sets, and branch authoring.",
       children: [
         "PlatformBranchBoard",
-        "PlatformWorkflowList",
+        "PlatformWorkflowBranchesList",
         "PlatformWorkflowDetail",
-        "PlatformProposalPanel",
-        "PlatformProposalReviewList",
         "PlatformBranchCreatePanel",
+      ]
+    }),
+    fallbackSurface("PlatformWorkflowChangeSetsPage", {
+      surfaceKind: "page",
+      className: "platform-workflow",
+      pageId: "workflowChangeSets",
+      props: Object.freeze({
+        modelView: "workflowChangeSets",
+        summaryCards: "Change Sets=changeSets@count|Draft=changeSets@countWhere:status=draft|Validated=changeSets@countWhere:status=validated|Candidate Snapshots=candidateSnapshots@count"
+      }),
+      title: "Workflow Change Sets",
+      summary: "Staged change sets, overlays, candidate snapshots, and change-set operations.",
+      children: [
+        "PlatformWorkflowChangeSetsList",
+        "PlatformWorkflowDetail",
         "PlatformChangeSetCreatePanel",
         "PlatformChangeSetEditPanel",
         "PlatformChangeSetValidatePanel",
         "PlatformChangeSetApplyPanel",
         "PlatformChangeSetLifecyclePanel"
+      ]
+    }),
+    fallbackSurface("PlatformWorkflowProposalsPage", {
+      surfaceKind: "page",
+      className: "platform-workflow",
+      pageId: "workflowProposals",
+      props: Object.freeze({
+        modelView: "workflowProposals",
+        summaryCards: "Open Proposals=proposals@countWhere:status=open|Approved=proposals@countWhere:status=approved|Rejected=proposals@countWhere:status=rejected"
+      }),
+      title: "Workflow Proposals",
+      summary: "Proposal intake, review, and proposal-linked workflow detail.",
+      children: [
+        "PlatformWorkflowProposalsList",
+        "PlatformWorkflowDetail",
+        "PlatformProposalPanel",
+        "PlatformProposalReviewList"
       ]
     }),
     fallbackSurface("PlatformVerificationPage", {

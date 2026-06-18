@@ -5,7 +5,7 @@ import { APP_REVISION_EVENTS_PATH } from "../../src/app-snapshot-manager.js";
 import { buildCompatibilityBridgeLedger } from "../../src/compatibility-bridges.js";
 import { contextNamingStateFromProject } from "../../src/context-naming-world.js";
 import { moduleProjectors } from "../../src/modules.js";
-import { previewPackageRevisionApplyFromProject } from "../../src/package-authorship-world.js";
+import { packageApplyPreviewRowsFromProject } from "../../src/package-authorship-world.js";
 import { buildGovernanceRouteInventory } from "../../src/runtime-governance.js";
 import { buildMutableSurfaceSemanticsLedger } from "../../src/runtime-semantics.js";
 import { parseWitnessToml } from "../../src/dsl.js";
@@ -1351,44 +1351,7 @@ function matchesPackageCoexistenceRow(row, id) {
 }
 
 function buildPackageApplyPreviewRows(project) {
-  const packageRevisionIndex = projectValue(project, moduleProjectors.packageRevisionIndex, null);
-  const revisions = Array.isArray(packageRevisionIndex?.rows) ? packageRevisionIndex.rows : [];
-  return revisions
-    .map(revision => {
-      try {
-        const preview = previewPackageRevisionApplyFromProject(project, {
-          revisionId: revision.id
-        });
-        return {
-          ...preview,
-          id: `packageApplyPreview:${preview.revisionId}`,
-          title: preview.selectedRevision?.version
-            ? `${preview.packageId} ${preview.selectedRevision.version}`
-            : preview.revisionId,
-          packageLabel: preview.bundle?.packageRecord?.label ?? preview.packageId,
-          revisionVersion: preview.selectedRevision?.version ?? preview.bundle?.revisionRecord?.version ?? null,
-          revisionStatus: preview.selectedRevision?.status ?? preview.bundle?.revisionRecord?.status ?? null,
-          bundleHash: preview.bundle?.bundleHash ?? null,
-          bundleFileCount: Array.isArray(preview.bundle?.files) ? preview.bundle.files.length : 0,
-          bundleFilePaths: Array.isArray(preview.bundle?.files) ? preview.bundle.files.map(file => file.path) : [],
-          coexistenceId: preview.coexistence?.id ?? null,
-          convergenceId: preview.convergence?.id ?? null,
-          selectedNamespaceIds: (preview.selectedNamespaces ?? []).map(namespace => namespace.id),
-          manifestConflictIds: (preview.manifestPluginConflicts ?? []).map(conflict => conflict.id),
-          relatedTransformerIds: (preview.relatedTransformers ?? []).map(transformer => transformer.id),
-          relatedConvergencePatchIds: (preview.relatedConvergencePatches ?? []).map(patch => patch.id),
-          remainingGlueMessages: (preview.remainingGlue ?? []).map(item => item.message)
-        };
-      } catch {
-        return null;
-      }
-    })
-    .filter(Boolean)
-    .sort((left, right) =>
-      String(left.packageId).localeCompare(String(right.packageId))
-      || String(left.revisionVersion ?? "").localeCompare(String(right.revisionVersion ?? ""))
-      || String(left.revisionId).localeCompare(String(right.revisionId))
-    );
+  return packageApplyPreviewRowsFromProject(project);
 }
 
 function matchesPackageApplyPreviewRow(row, id) {
@@ -3888,6 +3851,40 @@ export function filterPlatformModel(model, view, id = null, options = {}) {
       changeSets: model.changeSets,
       changeSetEdits: model.changeSetEdits,
       candidateSnapshots: model.candidateSnapshots,
+      proposals: model.proposals,
+      proposalActions: model.proposalActions,
+      summaries: model.summaries
+    };
+  }
+  if (view === "workflowOverview") {
+    return {
+      branchBoard: model.branchBoard,
+      branches: model.branches,
+      changeSets: model.changeSets,
+      proposals: model.proposals,
+      candidateSnapshots: model.candidateSnapshots,
+      summaries: model.summaries
+    };
+  }
+  if (view === "workflowBranches") {
+    return {
+      branches: model.branches,
+      branchBoard: model.branchBoard,
+      branchLifecycleVocabulary: model.branchLifecycleVocabulary,
+      candidateSnapshots: model.candidateSnapshots,
+      summaries: model.summaries
+    };
+  }
+  if (view === "workflowChangeSets") {
+    return {
+      changeSets: model.changeSets,
+      changeSetEdits: model.changeSetEdits,
+      candidateSnapshots: model.candidateSnapshots,
+      summaries: model.summaries
+    };
+  }
+  if (view === "workflowProposals") {
+    return {
       proposals: model.proposals,
       proposalActions: model.proposalActions,
       summaries: model.summaries

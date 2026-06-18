@@ -648,6 +648,9 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.deepEqual(layout.page.children, [
     "PlatformOverviewPage",
     "PlatformWorkflowPage",
+    "PlatformWorkflowBranchesPage",
+    "PlatformWorkflowChangeSetsPage",
+    "PlatformWorkflowProposalsPage",
     "PlatformVerificationPage",
     "PlatformVerificationStatusPage",
     "PlatformVerificationRunsPage",
@@ -664,6 +667,9 @@ test("platform console layout compiles authored top-level surface metadata from 
   ]);
   const overviewPage = layout.children.find(surface => surface.name === "PlatformOverviewPage");
   const workflowPage = layout.children.find(surface => surface.name === "PlatformWorkflowPage");
+  const workflowBranchesPage = layout.children.find(surface => surface.name === "PlatformWorkflowBranchesPage");
+  const workflowChangeSetsPage = layout.children.find(surface => surface.name === "PlatformWorkflowChangeSetsPage");
+  const workflowProposalsPage = layout.children.find(surface => surface.name === "PlatformWorkflowProposalsPage");
   const verificationPage = layout.children.find(surface => surface.name === "PlatformVerificationPage");
   const verificationStatusPage = layout.children.find(surface => surface.name === "PlatformVerificationStatusPage");
   const verificationRunsPage = layout.children.find(surface => surface.name === "PlatformVerificationRunsPage");
@@ -688,22 +694,48 @@ test("platform console layout compiles authored top-level surface metadata from 
   ]);
   assert.ok(workflowPage);
   assert.equal(workflowPage.pageId, "workflow");
-  assert.equal(workflowPage.props.modelView, "workflow");
+  assert.equal(workflowPage.props.modelView, "workflowOverview");
   assert.match(workflowPage.props.summaryCards, /Open Proposals=proposals@countWhere:status=open/);
   assert.deepEqual(workflowPage.children, [
+    "PlatformBranchBoard"
+  ]);
+  assert.ok(workflowBranchesPage);
+  assert.equal(workflowBranchesPage.pageId, "workflowBranches");
+  assert.equal(workflowBranchesPage.props.modelView, "workflowBranches");
+  assert.match(workflowBranchesPage.props.summaryCards, /Candidate Snapshots=candidateSnapshots@count/);
+  assert.deepEqual(workflowBranchesPage.children, [
     "PlatformBranchBoard",
-    "PlatformWorkflowList",
+    "PlatformWorkflowBranchesList",
     "PlatformWorkflowDetail",
-    "PlatformProposalPanel",
-    "PlatformProposalReviewList",
-    "PlatformBranchCreatePanel",
+    "PlatformBranchCreatePanel"
+  ]);
+  assert.ok(workflowChangeSetsPage);
+  assert.equal(workflowChangeSetsPage.pageId, "workflowChangeSets");
+  assert.equal(workflowChangeSetsPage.props.modelView, "workflowChangeSets");
+  assert.match(workflowChangeSetsPage.props.summaryCards, /Validated=changeSets@countWhere:status=validated/);
+  assert.deepEqual(workflowChangeSetsPage.children, [
+    "PlatformWorkflowChangeSetsList",
+    "PlatformWorkflowDetail",
     "PlatformChangeSetCreatePanel",
     "PlatformChangeSetEditPanel",
     "PlatformChangeSetValidatePanel",
     "PlatformChangeSetApplyPanel",
     "PlatformChangeSetLifecyclePanel"
   ]);
-  const workflowDetailSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowDetail");
+  assert.ok(workflowProposalsPage);
+  assert.equal(workflowProposalsPage.pageId, "workflowProposals");
+  assert.equal(workflowProposalsPage.props.modelView, "workflowProposals");
+  assert.match(workflowProposalsPage.props.summaryCards, /Open Proposals=proposals@countWhere:status=open/);
+  assert.deepEqual(workflowPage.children, [
+    "PlatformBranchBoard"
+  ]);
+  assert.deepEqual(workflowProposalsPage.children, [
+    "PlatformWorkflowProposalsList",
+    "PlatformWorkflowDetail",
+    "PlatformProposalPanel",
+    "PlatformProposalReviewList"
+  ]);
+  const workflowDetailSurface = workflowBranchesPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowDetail");
   assert.ok(workflowDetailSurface);
   assert.equal(workflowDetailSurface.props.detailSource, "workflow");
   assert.equal(workflowDetailSurface.props.detailSelectionSources, "branches|changeSets|proposals");
@@ -761,15 +793,20 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(workflowRelatedSurface.props.changeSetLinkCardEmptyStates, "Changed Paths=No changed paths staged for this change set.");
   assert.equal(workflowRelatedSurface.props.proposalLinkCards, "Target Resource=targetId");
   assert.equal(workflowRelatedSurface.props.proposalLinkCardEmptyStates, "Target Resource=No linked target resource.");
-  const workflowListSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowList");
-  assert.ok(workflowListSurface);
-  assert.equal(workflowListSurface.props.listSource, "workflowItems");
-  assert.equal(workflowListSurface.props.columns, "Kind|Status|Resource|Scope|Summary");
-  assert.equal(workflowListSurface.props.rowFields, "Kind=pageKind|Status=status|Resource=id@concept|Scope=scope@value|Summary=summary");
-  assert.equal(workflowListSurface.props.sortOptions, "kind=pageKind|status=status|resource=title|scope=scope|summary=summary");
-  assert.equal(workflowListSurface.props.defaultSort, "kind:asc");
-  assert.equal(workflowListSurface.props.emptyState, "No workflow rows.");
-  assert.equal(workflowListSurface.props.pageSize, "20");
+  const workflowBranchesListSurface = workflowBranchesPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowBranchesList");
+  assert.ok(workflowBranchesListSurface);
+  assert.equal(workflowBranchesListSurface.props.listSource, "workflowItems");
+  assert.equal(workflowBranchesListSurface.props.columns, "Kind|Status|Resource|Scope|Summary");
+  assert.equal(workflowBranchesListSurface.props.emptyState, "No branches.");
+  assert.equal(workflowBranchesListSurface.props.pageSize, "20");
+  const workflowChangeSetsListSurface = workflowChangeSetsPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowChangeSetsList");
+  assert.ok(workflowChangeSetsListSurface);
+  assert.equal(workflowChangeSetsListSurface.props.listSource, "workflowItems");
+  assert.equal(workflowChangeSetsListSurface.props.emptyState, "No change sets.");
+  const workflowProposalsListSurface = workflowProposalsPage.childSurfaces.find(surface => surface.name === "PlatformWorkflowProposalsList");
+  assert.ok(workflowProposalsListSurface);
+  assert.equal(workflowProposalsListSurface.props.listSource, "workflowItems");
+  assert.equal(workflowProposalsListSurface.props.emptyState, "No proposals.");
   const overviewMapSurface = overviewPage.childSurfaces.find(surface => surface.name === "PlatformMap");
   assert.ok(overviewMapSurface);
   assert.equal(overviewMapSurface.props.listSource, "platformMapRows");
@@ -792,7 +829,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(branchBoardSurface.props.laneMetaFields, "Count=countLabel");
   assert.equal(branchBoardSurface.props.itemTitlePath, "titleLink");
   assert.equal(branchBoardSurface.props.itemFields, "Status=status|Activity=activitySummary|Latest Candidate Snapshot=latestCandidateSnapshotId@concept");
-  const proposalPanelSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformProposalPanel");
+  const proposalPanelSurface = workflowProposalsPage.childSurfaces.find(surface => surface.name === "PlatformProposalPanel");
   assert.ok(proposalPanelSurface);
   assert.equal(proposalPanelSurface.processRoute, "/api/platform-proposals");
   assert.equal(proposalPanelSurface.props.formId, "platform-proposal-form");
@@ -806,7 +843,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(proposalPanelSurface.props.proposalActionOptionsValuePath, "action");
   assert.equal(proposalPanelSurface.props.proposalActionOptionsLabelPath, "action");
   assert.equal(proposalPanelSurface.props.proposalActionOptionsAttrFields, "data-sample-body=sampleBody@json");
-  const proposalReviewSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformProposalReviewList");
+  const proposalReviewSurface = workflowProposalsPage.childSurfaces.find(surface => surface.name === "PlatformProposalReviewList");
   assert.ok(proposalReviewSurface);
   assert.equal(proposalReviewSurface.props.formId, "platform-review-form");
   assert.equal(proposalReviewSurface.props.clientAction, "proposal.review");
@@ -820,7 +857,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(proposalReviewSurface.props.openProposalOptionsLabelPath, "id");
   assert.equal(proposalReviewSurface.props.openProposalOptionsWhere, "status=open");
   assert.equal(proposalReviewSurface.props.actionButtons, "Approve=approve|Reject=reject");
-  const branchCreateSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformBranchCreatePanel");
+  const branchCreateSurface = workflowBranchesPage.childSurfaces.find(surface => surface.name === "PlatformBranchCreatePanel");
   assert.ok(branchCreateSurface);
   assert.equal(branchCreateSurface.props.formId, "platform-branch-create-form");
   assert.equal(branchCreateSurface.props.clientAction, "branch.create");
@@ -828,13 +865,13 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(branchCreateSurface.props.submitPath, "/api/platform-branches");
   assert.equal(branchCreateSurface.props.submitBodyFields, "id=id@nullable|title=title@nullable|parentBranchId=parentBranchId@nullable|epic=epic@nullable|feature=feature@nullable|defect=defect@nullable");
   assert.equal(branchCreateSurface.props.successMessage, "Branch created.");
-  const changeSetCreateSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformChangeSetCreatePanel");
+  const changeSetCreateSurface = workflowChangeSetsPage.childSurfaces.find(surface => surface.name === "PlatformChangeSetCreatePanel");
   assert.ok(changeSetCreateSurface);
   assert.equal(changeSetCreateSurface.props.formId, "platform-change-set-create-form");
   assert.equal(changeSetCreateSurface.props.submitPath, "/api/platform-change-sets");
   assert.equal(changeSetCreateSurface.props.submitBodyFields, "id=id@nullable|branchId=branchId@nullable|title=title@nullable|reason=reason@nullable");
   assert.equal(changeSetCreateSurface.props.fieldDefaults, "id=changeSet:{generatedId}|branchId=branch:platform-console|title=Platform console change|reason=Stage platform console edits");
-  const changeSetEditSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformChangeSetEditPanel");
+  const changeSetEditSurface = workflowChangeSetsPage.childSurfaces.find(surface => surface.name === "PlatformChangeSetEditPanel");
   assert.ok(changeSetEditSurface);
   assert.equal(changeSetEditSurface.props.formId, "platform-change-set-edit-form");
   assert.equal(changeSetEditSurface.props.formFields, "Change set=changeSetId@select:changeSetOptions|Path=path@text|Content=content@textarea");
@@ -844,12 +881,12 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(changeSetEditSurface.props.changeSetOptionsSource, "changeSets");
   assert.equal(changeSetEditSurface.props.changeSetOptionsValuePath, "id");
   assert.equal(changeSetEditSurface.props.changeSetOptionsLabelPath, "id");
-  const changeSetApplySurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformChangeSetApplyPanel");
+  const changeSetApplySurface = workflowChangeSetsPage.childSurfaces.find(surface => surface.name === "PlatformChangeSetApplyPanel");
   assert.ok(changeSetApplySurface);
   assert.equal(changeSetApplySurface.props.submitPath, "/api/platform-change-sets/{changeSetId}/apply");
   assert.equal(changeSetApplySurface.props.requiredFieldMessages, "changeSetId=Select a change set first.");
   assert.equal(changeSetApplySurface.props.successMessage, "Change set applied.");
-  const changeSetLifecycleSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformChangeSetLifecyclePanel");
+  const changeSetLifecycleSurface = workflowChangeSetsPage.childSurfaces.find(surface => surface.name === "PlatformChangeSetLifecyclePanel");
   assert.ok(changeSetLifecycleSurface);
   assert.equal(changeSetLifecycleSurface.props.formFields, "Change set=changeSetId@select:changeSetOptions|Action=action@select:lifecycleActions|Reason=reason@text");
   assert.equal(changeSetLifecycleSurface.props.submitPath, "/api/platform-change-sets/{changeSetId}/{action}");
@@ -6269,8 +6306,11 @@ test("platform page renders required operating views", async () => {
   };
 
   const overviewHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform") });
-  const workflowHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:demo-0") });
-  const workflowSortedHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:demo-0&sort=kind&dir=desc&limit=5") });
+  const workflowLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow") });
+  const workflowBranchesHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflowBranches&id=branch:demo-0") });
+  const workflowBranchesSortedHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflowBranches&id=branch:demo-0&sort=status&dir=desc&limit=5") });
+  const workflowChangeSetHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflowChangeSets&id=changeSet:demo-0") });
+  const workflowProposalHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflowProposals&id=proposal:demo") });
   const verificationLandingHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification") });
   const verificationStatusHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=gate:demo") });
   const verificationPolicyHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=verificationPolicy:demo") });
@@ -6300,43 +6340,54 @@ test("platform page renders required operating views", async () => {
   assert.doesNotMatch(overviewHtml, /bindAuthoredJsonSubmit/);
   assert.doesNotMatch(overviewHtml, /<pre/);
 
-  assert.match(workflowHtml, /Platform Console - Workflow/);
-  assert.match(workflowHtml, /Workflow Items/);
-  assert.match(workflowHtml, /Properties and linked resources for the selected workflow item\./);
-  assert.match(workflowHtml, /Primary Detail/);
-  assert.match(workflowHtml, /Selected workflow object properties and long-tail fields\./);
-  assert.match(workflowHtml, /Related Resources/);
-  assert.match(workflowHtml, /Linked resources and supporting context for the selected workflow object\./);
-  assert.match(workflowHtml, /Change Sets/);
-  assert.match(workflowHtml, /Affected Systems/);
-  assert.match(workflowHtml, /Candidate Snapshots/);
-  assert.match(workflowHtml, /Candidate snapshot history for the selected workflow object when available\./);
-  assert.match(workflowHtml, /Branch Detail/);
-  assert.match(workflowHtml, /Proposal Panel/);
-  assert.match(workflowHtml, /Stage an authored source edit into the selected change set\./);
-  assert.match(workflowHtml, /<form id="platform-branch-create-form" data-platform-client-action="branch.create" data-platform-submit-spec=/);
-  assert.match(workflowHtml, /bindAuthoredJsonSubmit/);
-  assert.match(workflowHtml, /<form id="platform-change-set-create-form" data-platform-client-action="changeSet.create" data-platform-submit-spec=/);
-  assert.match(workflowHtml, /<form id="platform-proposal-form" data-platform-client-action="proposal.create" data-platform-submit-spec=.*data-platform-field-syncs=.*data-platform-status-id="proposal-status"/);
-  assert.match(workflowHtml, /data-sample-body=/);
-  assert.match(workflowHtml, /<option value="changeSet:demo-0">changeSet:demo-0<\/option>/);
-  assert.match(workflowHtml, /<form id="platform-review-form" data-platform-client-action="proposal.review" data-platform-submit-spec=.*data-platform-status-id="review-status"/);
-  assert.match(workflowHtml, /<option value="proposal:demo">proposal:demo<\/option>/);
-  assert.match(workflowHtml, /name="reviewAction" value="approve"/);
-  assert.match(workflowHtml, /<form id="platform-change-set-edit-form"/);
-  assert.match(workflowHtml, /<form id="platform-change-set-lifecycle-form" data-platform-client-action="changeSet.lifecycle" data-platform-submit-spec=/);
-  assert.match(workflowHtml, /<option value="reject" selected>Reject<\/option>/);
-  assert.match(workflowHtml, /<option value="abandon">Abandon<\/option>/);
-  assert.match(workflowHtml, /enableVerificationLiveUpdates: false/);
-  assert.match(workflowHtml, /\/api\/platform-branches\/branch%3Ademo-0/);
-  assert.match(workflowHtml, /offset=20/);
-  assert.match(workflowHtml, /Sort/);
-  assert.match(workflowSortedHtml, /sort=kind&amp;dir=asc/);
-  assert.match(workflowSortedHtml, /sort=kind&amp;dir=desc/);
-  assert.match(workflowSortedHtml, /offset=5&amp;limit=5&amp;sort=kind&amp;dir=desc/);
-  assert.ok(workflowSortedHtml.indexOf("proposal:demo") < workflowSortedHtml.indexOf("branch:demo-0"));
-  assert.doesNotMatch(workflowHtml, /platform-initial-state/);
-  assert.doesNotMatch(workflowHtml, /<pre/);
+  assert.match(workflowLandingHtml, /Platform Console - Workflow/);
+  assert.match(workflowLandingHtml, /Branch Board/);
+  assert.match(workflowLandingHtml, /Lifecycle lanes for branch-backed work\./);
+  assert.doesNotMatch(workflowLandingHtml, /Workflow Items/);
+  assert.doesNotMatch(workflowLandingHtml, /<form id="platform-branch-create-form"/);
+  assert.doesNotMatch(workflowLandingHtml, /<pre/);
+  assert.match(workflowBranchesHtml, /Platform Console - Workflow Branches/);
+  assert.match(workflowBranchesHtml, /Branches/);
+  assert.match(workflowBranchesHtml, /Properties and linked resources for the selected workflow item\./);
+  assert.match(workflowBranchesHtml, /Primary Detail/);
+  assert.match(workflowBranchesHtml, /Selected workflow object properties and long-tail fields\./);
+  assert.match(workflowBranchesHtml, /Related Resources/);
+  assert.match(workflowBranchesHtml, /Linked resources and supporting context for the selected workflow object\./);
+  assert.match(workflowBranchesHtml, /Change Sets/);
+  assert.match(workflowBranchesHtml, /Affected Systems/);
+  assert.match(workflowBranchesHtml, /Candidate Snapshots/);
+  assert.match(workflowBranchesHtml, /Candidate snapshot history for the selected workflow object when available\./);
+  assert.match(workflowBranchesHtml, /Branch Detail/);
+  assert.match(workflowBranchesHtml, /<form id="platform-branch-create-form" data-platform-client-action="branch.create" data-platform-submit-spec=/);
+  assert.match(workflowBranchesHtml, /bindAuthoredJsonSubmit/);
+  assert.match(workflowBranchesHtml, /\/api\/platform-branches\/branch%3Ademo-0/);
+  assert.match(workflowBranchesHtml, /offset=20/);
+  assert.match(workflowBranchesHtml, /Sort/);
+  assert.match(workflowBranchesSortedHtml, /sort=status&amp;dir=asc/);
+  assert.match(workflowBranchesSortedHtml, /sort=status&amp;dir=desc/);
+  assert.match(workflowBranchesSortedHtml, /offset=5&amp;limit=5&amp;sort=status&amp;dir=desc/);
+  assert.doesNotMatch(workflowBranchesHtml, /platform-initial-state/);
+  assert.doesNotMatch(workflowBranchesHtml, /<pre/);
+  assert.match(workflowChangeSetHtml, /Platform Console - Workflow Change Sets/);
+  assert.match(workflowChangeSetHtml, /Change Sets/);
+  assert.match(workflowChangeSetHtml, /Change Set Detail/);
+  assert.match(workflowChangeSetHtml, /Staged Edits/);
+  assert.match(workflowChangeSetHtml, /Stage an authored source edit into the selected change set\./);
+  assert.match(workflowChangeSetHtml, /<form id="platform-change-set-create-form" data-platform-client-action="changeSet.create" data-platform-submit-spec=/);
+  assert.match(workflowChangeSetHtml, /<option value="changeSet:demo-0">changeSet:demo-0<\/option>/);
+  assert.match(workflowChangeSetHtml, /<form id="platform-change-set-edit-form"/);
+  assert.match(workflowChangeSetHtml, /<form id="platform-change-set-lifecycle-form" data-platform-client-action="changeSet.lifecycle" data-platform-submit-spec=/);
+  assert.match(workflowChangeSetHtml, /<option value="reject" selected>Reject<\/option>/);
+  assert.match(workflowChangeSetHtml, /<option value="abandon">Abandon<\/option>/);
+  assert.match(workflowProposalHtml, /Platform Console - Workflow Proposals/);
+  assert.match(workflowProposalHtml, /Proposals/);
+  assert.match(workflowProposalHtml, /Proposal Detail/);
+  assert.match(workflowProposalHtml, /Proposal Panel/);
+  assert.match(workflowProposalHtml, /<form id="platform-proposal-form" data-platform-client-action="proposal.create" data-platform-submit-spec=.*data-platform-field-syncs=.*data-platform-status-id="proposal-status"/);
+  assert.match(workflowProposalHtml, /data-sample-body=/);
+  assert.match(workflowProposalHtml, /<form id="platform-review-form" data-platform-client-action="proposal.review" data-platform-submit-spec=.*data-platform-status-id="review-status"/);
+  assert.match(workflowProposalHtml, /<option value="proposal:demo">proposal:demo<\/option>/);
+  assert.match(workflowProposalHtml, /name="reviewAction" value="approve"/);
 
   assert.match(verificationLandingHtml, /Platform Console - Verification/);
   assert.match(verificationLandingHtml, /Live Verification Status/);
@@ -6663,7 +6714,7 @@ test("platform page uses authored related-card empty states and item limits", ()
     summaries: {}
   };
 
-  const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:demo") });
+  const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflowBranches&id=branch:demo") });
 
   assert.match(html, /No affected system summaries\./);
   assert.match(html, /No telemetry impact summaries\./);
@@ -6696,7 +6747,7 @@ test("platform page uses authored change-set snapshot empty state", () => {
     summaries: {}
   };
 
-  const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=changeSet:demo") });
+  const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflowChangeSets&id=changeSet:demo") });
 
   assert.match(html, /No candidate snapshots for this change set\./);
   assert.doesNotMatch(html, /No candidate snapshots for this branch\./);
@@ -6724,14 +6775,14 @@ test("platform workflow detail follows authored child-surface order", () => {
     summaries: {}
   };
 
-  const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=changeSet:demo") });
+  const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflowChangeSets&id=changeSet:demo") });
 
   assert.ok(html.indexOf("Candidate Snapshots") < html.indexOf("Staged Edits"));
 });
 
 test("platform detail sections render authored child-surface metadata", () => {
   const consoleLayout = readPlatformConsoleLayout();
-  const workflowPage = consoleLayout.children.find(surface => surface.props?.pageId === "workflow");
+  const workflowPage = consoleLayout.children.find(surface => surface.props?.pageId === "workflowBranches");
   const verificationPage = consoleLayout.children.find(surface => surface.props?.pageId === "verificationStatus");
   const knowledgePage = consoleLayout.children.find(surface => surface.props?.pageId === "knowledge");
   const signalsPage = consoleLayout.children.find(surface => surface.props?.pageId === "signals");
@@ -6923,7 +6974,7 @@ test("platform detail sections render authored child-surface metadata", () => {
     summaries: {}
   };
 
-  const workflowHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=changeSet:demo") });
+  const workflowHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflowChangeSets&id=changeSet:demo") });
   const verificationGateHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=gate:demo") });
   const verificationRevisionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuntime&id=runtimeRevision:demo") });
   const verificationRunHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verificationRuns&id=testRun:demo") });
@@ -7073,7 +7124,7 @@ test("platform page uses authored empty-detail states", () => {
     summaries: {}
   };
 
-  const workflowHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:missing") });
+  const workflowHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=workflowBranches&id=branch:missing") });
   const verificationHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=verificationStatus&id=gate:missing") });
   const knowledgeHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=knowledge&id=doc:missing") });
   const signalsHtml = renderPlatformPage(emptyModel, { requestUrl: new URL("http://platform.local/platform?view=signals&id=gap.missing") });
