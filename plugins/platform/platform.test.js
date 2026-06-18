@@ -392,6 +392,8 @@ test("platform console layout compiles authored top-level surface metadata from 
   const workflowPrimarySurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowPrimaryPanel");
   assert.ok(workflowPrimarySurface);
   assert.equal(workflowPrimarySurface.props.longTailCardTitle, "Properties");
+  assert.equal(workflowPrimarySurface.props.branchLongTailExcludedFields, "changeSetIds|affectedSystemSummaries|telemetryImpactSummaries");
+  assert.equal(workflowPrimarySurface.props.changeSetLongTailExcludedFields, "changedPaths");
   assert.equal(workflowPrimarySurface.props.branchCardTitle, "Branch Detail");
   assert.match(workflowPrimarySurface.props.branchFields, /Branch=id@concept/);
   assert.match(workflowPrimarySurface.props.changeSetFields, /Change set=id@concept/);
@@ -450,6 +452,9 @@ test("platform console layout compiles authored top-level surface metadata from 
   const verificationPrimarySurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationPrimaryPanel");
   assert.ok(verificationPrimarySurface);
   assert.equal(verificationPrimarySurface.props.longTailCardTitle, "Properties");
+  assert.equal(verificationPrimarySurface.props.gateLongTailExcludedFields, "protectedObjects|selectedByBranches|selectedByChangeSets");
+  assert.equal(verificationPrimarySurface.props.runtimeRevisionLongTailExcludedFields, "candidateBranchCount");
+  assert.equal(verificationPrimarySurface.props.candidateSnapshotLongTailExcludedFields, "files|errors");
   assert.equal(verificationPrimarySurface.props.gateCardTitle, "Test Gate Detail");
   assert.match(verificationPrimarySurface.props.gateFields, /Gate=id@concept/);
   assert.match(verificationPrimarySurface.props.runtimeRevisionFields, /Revision=revisionLink@concept/);
@@ -521,6 +526,10 @@ test("platform console layout compiles authored top-level surface metadata from 
   const knowledgePrimarySurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgePrimaryPanel");
   assert.ok(knowledgePrimarySurface);
   assert.equal(knowledgePrimarySurface.props.longTailCardTitle, "Properties");
+  assert.equal(knowledgePrimarySurface.props.documentLongTailExcludedFields, "references");
+  assert.equal(knowledgePrimarySurface.props.roadmapTaskLongTailExcludedFields, "targets|derivedSummary|evidence");
+  assert.equal(knowledgePrimarySurface.props.epicLongTailExcludedFields, "defectClusterIds");
+  assert.equal(knowledgePrimarySurface.props.featureLongTailExcludedFields, "defectClusterIds");
   assert.equal(knowledgePrimarySurface.props.documentCardTitle, "Document Detail");
   assert.match(knowledgePrimarySurface.props.documentFields, /Document=path@concept/);
   assert.match(knowledgePrimarySurface.props.roadmapTaskFields, /Evidence=evidenceSummary/);
@@ -535,6 +544,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   const signalPrimarySurface = signalDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalPrimaryPanel");
   assert.ok(signalPrimarySurface);
   assert.equal(signalPrimarySurface.props.longTailCardTitle, "Properties");
+  assert.equal(signalPrimarySurface.props.gapLongTailExcludedFields, "recommendedProposal|missingInGenerated|extraInGenerated");
   assert.equal(signalPrimarySurface.props.gapCardTitle, "Gap Detail");
   assert.match(signalPrimarySurface.props.gapFields, /Target=target@concept/);
   assert.match(signalPrimarySurface.props.signalFields, /Node=id@concept/);

@@ -509,6 +509,13 @@ function rootKeysFromSurfaceSchema(surface, fieldsProp) {
   return [...new Set(parseSurfaceSchemaEntries(surface?.props?.[fieldsProp]).map(entry => String(entry.path).split(".")[0]).filter(Boolean))];
 }
 
+function surfaceKeyList(surface, key, fallback = []) {
+  const raw = surfacePropText(surface, key, null);
+  if (!raw) return fallback;
+  const values = raw.split("|").map(part => part.trim()).filter(Boolean);
+  return values.length ? values : fallback;
+}
+
 function parseCardSpecs(raw) {
   return parseSurfaceSchemaEntries(raw).map(entry => ({
     title: entry.label,
@@ -959,9 +966,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
       ...(rootKeysFromSurfaceSchema(primarySurface, "branchFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "branchFields")
         : ["id", "title", "status", "lifecycleLane", "owner", "parentBranchId", "epic", "feature", "defect", "runtimeProfile", "latestCandidateSnapshotId", "docsFreshness", "testRedGreen"]),
-      "changeSetIds",
-      "affectedSystemSummaries",
-      "telemetryImpactSummaries"
+      ...surfaceKeyList(primarySurface, "branchLongTailExcludedFields", ["changeSetIds", "affectedSystemSummaries", "telemetryImpactSummaries"])
     ];
     return `
       <section class="grid2">
@@ -1020,7 +1025,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
       ...(rootKeysFromSurfaceSchema(primarySurface, "changeSetFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "changeSetFields")
         : ["id", "title", "status", "branchId", "owner", "reason", "editCount", "latestCandidateSnapshotId", "testRedGreen"]),
-      "changedPaths"
+      ...surfaceKeyList(primarySurface, "changeSetLongTailExcludedFields", ["changedPaths"])
     ];
     return `
       <section class="grid2">
@@ -1135,9 +1140,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       ...(rootKeysFromSurfaceSchema(primarySurface, "gateFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "gateFields")
         : ["id", "title", "runner", "environment", "timeoutMs", "costEstimate", "command", "lastResult"]),
-      "protectedObjects",
-      "selectedByBranches",
-      "selectedByChangeSets"
+      ...surfaceKeyList(primarySurface, "gateLongTailExcludedFields", ["protectedObjects", "selectedByBranches", "selectedByChangeSets"])
     ];
     return `
       <section class="grid2">
@@ -1210,7 +1213,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       ...(rootKeysFromSurfaceSchema(primarySurface, "runtimeRevisionFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "runtimeRevisionFields")
         : ["id", "revision", "status", "trigger", "branchId", "changeSetId", "changedSources", "buildErrorCount"]),
-      "candidateBranchCount"
+      ...surfaceKeyList(primarySurface, "runtimeRevisionLongTailExcludedFields", ["candidateBranchCount"])
     ];
     return `
       <section class="grid2">
@@ -1260,8 +1263,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       ...(rootKeysFromSurfaceSchema(primarySurface, "candidateSnapshotFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "candidateSnapshotFields")
         : ["id", "status", "branchId", "changeSetId", "revision"]),
-      "files",
-      "errors"
+      ...surfaceKeyList(primarySurface, "candidateSnapshotLongTailExcludedFields", ["files", "errors"])
     ];
     return `
       <section class="grid2">
@@ -1369,7 +1371,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
       ...(rootKeysFromSurfaceSchema(primarySurface, "documentFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "documentFields")
         : ["id", "path", "role", "owner", "status", "freshness", "sectionCount", "taskCount"]),
-      "references"
+      ...surfaceKeyList(primarySurface, "documentLongTailExcludedFields", ["references"])
     ];
     return `
       <section class="grid2">
@@ -1422,9 +1424,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
       ...(rootKeysFromSurfaceSchema(primarySurface, "roadmapTaskFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "roadmapTaskFields")
         : ["id", "title", "status", "derivedStatus", "section", "doc", "line"]),
-      "targets",
-      "derivedSummary",
-      "evidence"
+      ...surfaceKeyList(primarySurface, "roadmapTaskLongTailExcludedFields", ["targets", "derivedSummary", "evidence"])
     ];
     return `
       <section class="grid2">
@@ -1458,7 +1458,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
       ...(rootKeysFromSurfaceSchema(primarySurface, "epicFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "epicFields")
         : ["id", "title", "status", "roadmapId", "branchIds", "featureIds", "gateIds", "docIds"]),
-      "defectClusterIds"
+      ...surfaceKeyList(primarySurface, "epicLongTailExcludedFields", ["defectClusterIds"])
     ];
     return `
       <section class="grid2">
@@ -1490,7 +1490,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
     ...(rootKeysFromSurfaceSchema(primarySurface, "featureFields").length
       ? rootKeysFromSurfaceSchema(primarySurface, "featureFields")
       : ["id", "title", "status", "epicId", "branchIds", "gateIds", "docIds"]),
-    "defectClusterIds"
+    ...surfaceKeyList(primarySurface, "featureLongTailExcludedFields", ["defectClusterIds"])
   ];
   return `
     <section class="grid2">
@@ -1538,9 +1538,7 @@ function renderSignalDetail(surface, detail, model, ctx) {
       ...(rootKeysFromSurfaceSchema(primarySurface, "gapFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "gapFields")
         : ["id", "severity", "kind", "target", "reason"]),
-      "recommendedProposal",
-      "missingInGenerated",
-      "extraInGenerated"
+      ...surfaceKeyList(primarySurface, "gapLongTailExcludedFields", ["recommendedProposal", "missingInGenerated", "extraInGenerated"])
     ];
     return `
       <section class="grid2">
