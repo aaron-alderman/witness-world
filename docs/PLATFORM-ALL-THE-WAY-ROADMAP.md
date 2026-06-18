@@ -696,8 +696,8 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Capture stdout/stderr as artifacts.
 - [X] Capture structured TAP/JUnit where available.
 - [~] Capture duration, memory, CPU, exit code.
-- [~] Capture environment inputs.
-- [~] Capture source revision and branch.
+- [X] Capture environment inputs.
+- [X] Capture source revision and branch.
 - [X] Capture candidate snapshot ID.
 - [X] Add `POST /api/platform-test-runs`.
 - [X] Add `GET /api/platform-test-runs/:id`.
@@ -708,7 +708,8 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [L] `local Rust/cargo` is named in the execution environment catalog and chosen for cargo-shaped gate commands, but the current repo does not yet expose a discovered cargo gate that exercises that path end to end.
 - [L] Current stdout/stderr artifacts are projected as inline witness-backed `testArtifact` rows attached to each run/result. They are first-class platform objects now, but they are not yet external blob-backed artifacts or structured report files.
 - [L] Structured report capture currently derives TAP and JUnit artifacts opportunistically from captured stdout/stderr content. It does not yet ingest standalone report files, merge multi-file reports, or model per-test-case objects.
-- [L] Current V1 captures exit code, duration, stdout, stderr, timeout state, branch id, change-set id, candidate snapshot id, runtime profile, source dependencies, and protected objects. Memory, CPU, structured reports, source revision hashes, artifact storage, and SSE streaming remain later work.
+- [L] Current V1 captures exit code, duration, stdout, stderr, timeout state, branch id, change-set id, candidate snapshot id, runtime profile, shell/cwd/env input metadata, and source revision dependency hashes for candidate-snapshot/workspace inputs. Memory, CPU, standalone structured report ingestion, artifact storage, and richer SSE/replay semantics remain later work.
+- [L] Source revision capture is mixed by design in V1: dependency hashes come from candidate snapshot overlay entries when the dependency is staged there, and from the live workspace for other declared source dependencies. This improves provenance without yet claiming isolated candidate-snapshot execution.
 - [L] Current `platform.test` supports list/read/run over the shared platform handlers. It does not yet expose richer operations such as cancellation, streaming progress, or proposal-mediated execution policy.
 - [L] Current test-run SSE is implemented as a streamed view over newly appended `platform.test.run.start` / `platform.test.run.finish` witnesses. It does not yet provide a dedicated push subscription substrate, replay cursors, or durable event retention beyond witness history.
 

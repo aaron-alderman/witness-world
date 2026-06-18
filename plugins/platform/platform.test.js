@@ -14,6 +14,7 @@ import { buildPlatformProposalCreateBody, platformProposalTemplates } from "./pl
 import { executePlatformProposalTarget } from "./platform-proposal-targets.js";
 import { applyPlatformChangeSet, readPlatformBranch, validatePlatformChangeSet } from "./change-sets.js";
 import { renderPlatformConsoleCss } from "./platform-style.js";
+import { runPlatformTestGate } from "./test-runs.js";
 
 async function createTempPlatformApplyFixture() {
   const root = path.join(process.cwd(), "test", `.platform-apply-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`);
@@ -1487,7 +1488,18 @@ test("platform test run handlers execute modeled gates and expose read model sta
   assert.equal(sent.at(-1).body.testRun.id, "testRun.platform.demo");
   assert.equal(sent.at(-1).body.testRun.status, "passed");
   assert.equal(sent.at(-1).body.testRun.environment, "platform-candidate-snapshot");
+  assert.equal(sent.at(-1).body.testRun.environmentInputs.cwd, ".");
+  assert.equal(sent.at(-1).body.testRun.environmentInputs.environment, "platform-candidate-snapshot");
+  assert.equal(sent.at(-1).body.testRun.environmentInputs.runner, "node-test");
+  assert.equal(sent.at(-1).body.testRun.environmentInputs.runtimeProfile, "full");
+  assert.equal(Array.isArray(sent.at(-1).body.testRun.environmentInputs.shellArgs), true);
+  assert.equal(Array.isArray(sent.at(-1).body.testRun.environmentInputs.envOverrideKeys), true);
+  assert.equal(sent.at(-1).body.testRun.sourceRevision.branchId, "branch.platform.demo");
+  assert.equal(sent.at(-1).body.testRun.sourceRevision.candidateSnapshotId, "candidateSnapshot:platform-demo:1");
+  assert.equal(Array.isArray(sent.at(-1).body.testRun.sourceRevision.dependencyHashes), true);
   assert.equal(sent.at(-1).body.latestResult.status, "passed");
+  assert.equal(sent.at(-1).body.latestResult.environmentInputs.environment, "platform-candidate-snapshot");
+  assert.equal(sent.at(-1).body.latestResult.sourceRevision.branchId, "branch.platform.demo");
   assert.equal(sent.at(-1).body.testArtifacts.length, 4);
   assert.equal(sent.at(-1).body.testArtifacts.some(row => row.artifactKind === "stdout"), true);
   assert.equal(sent.at(-1).body.testArtifacts.some(row => row.artifactKind === "stderr"), true);
@@ -1526,6 +1538,124 @@ test("platform test run handlers execute modeled gates and expose read model sta
   assert.equal(sent.at(-1).body.testRun.id, "testRun.platform.demo");
   assert.equal(sent.at(-1).body.testResults.length, 1);
   assert.equal(sent.at(-1).body.testArtifacts.length, 4);
+  assert.equal(sent.at(-1).body.testRun.environmentInputs.environment, "platform-candidate-snapshot");
+  assert.equal(sent.at(-1).body.testResults[0].sourceRevision.branchId, "branch.platform.demo");
+}));
+
+test("platform test runs capture environment inputs and prefer candidate snapshot hashes for source revision", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const handlers = createHandlers({
+    world,
+    backendHost: "backendHost",
+    frontendHost: "frontendHost",
+    readJson: async req => req.body,
+    authoringServices: {
+      requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+    },
+    sendGateFailure: () => {},
+    send: () => {},
+    sendJson: () => {}
+  });
+
+  const originalConsole = await readFile(new URL("./platform-console.rvm", import.meta.url), "utf8");
+  const updatedConsole = originalConsole.replace("Platform Console", "Platform Console Candidate Snapshot");
+
+  await handlers["platform.changeSet.create"]({
+    req: {
+      body: {
+        id: "changeset.test.source.revision",
+        branchId: "branch.test.source.revision",
+        title: "Source revision proof"
+      }
+    },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+
+  await handlers["platform.changeSet.edit"]({
+    req: {
+      body: {
+        edits: [{
+          path: "plugins/platform/platform-console.rvm",
+          content: updatedConsole
+        }]
+      }
+    },
+    res: {},
+    params: { id: "changeset.test.source.revision" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+
+  await handlers["platform.changeSet.validate"]({
+    res: {},
+    params: { id: "changeset.test.source.revision" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+
+  const candidateSnapshot = world.project(moduleProjectors.candidateSnapshotIndex).byChangeSet["changeset.test.source.revision"]?.at(-1) ?? null;
+  assert.ok(candidateSnapshot);
+  const candidateFile = candidateSnapshot.files.find(file => file.path === "plugins/platform/platform-console.rvm");
+  assert.ok(candidateFile);
+
+  const run = await runPlatformTestGate(world, {
+    actor: "aaron",
+    gate: {
+      id: "gate:platform-source-revision",
+      title: "Platform source revision gate",
+      command: "node --test plugins/platform/platform.test.js",
+      runner: "node-test",
+      timeoutMs: 3210,
+      sourceDependencies: [
+        "plugins/platform/platform-console.rvm",
+        "plugins/platform/platform-console.wcss"
+      ],
+      protectedObjects: ["plugin.platform"]
+    },
+    id: "testRun.platform.source.revision",
+    branchId: "branch.test.source.revision",
+    changeSetId: "changeset.test.source.revision",
+    candidateSnapshotId: candidateSnapshot.id,
+    session: { id: "session.platform" },
+    runtimeProfile: "full",
+    runCommand: async () => ({
+      startedAt: "2026-06-18T00:00:00.000Z",
+      finishedAt: "2026-06-18T00:00:00.250Z",
+      durationMs: 250,
+      exitCode: 0,
+      signal: null,
+      status: "passed",
+      stdout: "ok 1 - platform source revision",
+      stderr: "",
+      timedOut: false,
+      error: null
+    })
+  });
+
+  assert.equal(run.status, 201);
+  assert.equal(run.testRun.environmentInputs.cwd, ".");
+  assert.equal(run.testRun.environmentInputs.environment, "platform-candidate-snapshot");
+  assert.equal(run.testRun.environmentInputs.timeoutMs, 3210);
+  assert.equal(run.testRun.environmentInputs.runtimeProfile, "full");
+  assert.equal(run.testRun.sourceRevision.branchId, "branch.test.source.revision");
+  assert.equal(run.testRun.sourceRevision.changeSetId, "changeset.test.source.revision");
+  assert.equal(run.testRun.sourceRevision.candidateSnapshotId, candidateSnapshot.id);
+  assert.equal(run.testRun.sourceRevision.candidateSnapshotRevision, candidateSnapshot.revision);
+  assert.equal(run.testRun.sourceRevision.candidateSnapshotStatus, candidateSnapshot.status);
+  const candidateHashEntry = run.testRun.sourceRevision.dependencyHashes.find(row => row.path === "plugins/platform/platform-console.rvm");
+  assert.ok(candidateHashEntry);
+  assert.equal(candidateHashEntry.source, "candidateSnapshot");
+  assert.equal(candidateHashEntry.hash, candidateFile.nextContentHash);
+  const workspaceHashEntry = run.testRun.sourceRevision.dependencyHashes.find(row => row.path === "plugins/platform/platform-console.wcss");
+  assert.ok(workspaceHashEntry);
+  assert.equal(workspaceHashEntry.source, "workspace");
+  assert.equal(typeof workspaceHashEntry.hash, "string");
+  assert.equal(workspaceHashEntry.hash.length, 64);
+  assert.equal(run.testResults[0].environmentInputs.environment, "platform-candidate-snapshot");
+  assert.equal(run.testResults[0].sourceRevision.candidateSnapshotId, candidateSnapshot.id);
 }));
 
 test("platform test run event stream publishes start and finish witnesses", async () => withRegisteredPluginProjectors(providers, async () => {
