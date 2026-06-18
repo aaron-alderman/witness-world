@@ -790,7 +790,7 @@ test("platform WCSS-only edits do not select runtime-core backend gates", async 
   assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-wcss"].includes("gate:test/runtime-server.test.js"), false);
 });
 
-test("platform RVM-only edits select platform-facing gates without runtime-core backend gates", async () => {
+test("platform RVM-only edits select platform and candidate-snapshot gates without runtime-core backend gates", async () => {
   const model = await buildPlatformModel({
     diagnostics: {
       activeProfile: "full",
@@ -817,8 +817,13 @@ test("platform RVM-only edits select platform-facing gates without runtime-core 
   });
 
   const platformGate = model.testGates.find(row => row.id === "gate:plugins/platform/platform.test.js");
+  const appSnapshotGate = model.testGates.find(row => row.id === "gate:test/app-snapshot-runtime.test.js");
   const runtimeProfileGate = model.testGates.find(row => row.id === "gate:test/runtime-profile.test.js");
   const runtimeServerGate = model.testGates.find(row => row.id === "gate:test/runtime-server.test.js");
+  const appSnapshotSelection = model.affectedTestGates.find(row =>
+    row.branchId === "branch.platform.rvm"
+    && row.gateId === "gate:test/app-snapshot-runtime.test.js"
+  );
   const runtimeProfileSelection = model.affectedTestGates.find(row =>
     row.branchId === "branch.platform.rvm"
     && row.gateId === "gate:test/runtime-profile.test.js"
@@ -829,15 +834,25 @@ test("platform RVM-only edits select platform-facing gates without runtime-core 
   );
 
   assert.ok(platformGate);
+  assert.ok(appSnapshotGate);
   assert.ok(runtimeProfileGate);
   assert.ok(runtimeServerGate);
   assert.equal(platformGate.selectedByBranches.includes("branch.platform.rvm"), true);
   assert.equal(platformGate.selectedByChangeSets.includes("changeSet:platform-rvm"), true);
+  assert.equal(appSnapshotGate.protectedObjects.includes("testEnvironment:platform-candidate-snapshot"), true);
+  assert.equal(appSnapshotGate.selectedByBranches.includes("branch.platform.rvm"), true);
+  assert.equal(appSnapshotGate.selectedByChangeSets.includes("changeSet:platform-rvm"), true);
   assert.equal(runtimeProfileGate.selectedByBranches.includes("branch.platform.rvm"), true);
   assert.equal(runtimeProfileGate.selectedByChangeSets.includes("changeSet:platform-rvm"), true);
   assert.equal(runtimeServerGate.selectedByBranches.includes("branch.platform.rvm"), false);
   assert.equal(runtimeServerGate.selectedByChangeSets.includes("changeSet:platform-rvm"), false);
 
+  assert.ok(appSnapshotSelection);
+  assert.equal(appSnapshotSelection.matchedTargets.includes("testEnvironment:platform-candidate-snapshot"), true);
+  assert.equal(appSnapshotSelection.selectionReasons.some(reason =>
+    reason.kind === "candidate-snapshot-environment-dependency"
+    && reason.targets.includes("testEnvironment:platform-candidate-snapshot")
+  ), true);
   assert.ok(runtimeProfileSelection);
   assert.equal(runtimeProfileSelection.matchedTargets.includes("route:GET /platform"), true);
   assert.ok(platformGateSelection);
@@ -852,9 +867,11 @@ test("platform RVM-only edits select platform-facing gates without runtime-core 
     && reason.paths.includes("plugins/platform/platform-console.rvm")
   ), true);
   assert.equal(model.affectedTestGatesByBranch["branch.platform.rvm"].includes("gate:plugins/platform/platform.test.js"), true);
+  assert.equal(model.affectedTestGatesByBranch["branch.platform.rvm"].includes("gate:test/app-snapshot-runtime.test.js"), true);
   assert.equal(model.affectedTestGatesByBranch["branch.platform.rvm"].includes("gate:test/runtime-profile.test.js"), true);
   assert.equal(model.affectedTestGatesByBranch["branch.platform.rvm"].includes("gate:test/runtime-server.test.js"), false);
   assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-rvm"].includes("gate:plugins/platform/platform.test.js"), true);
+  assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-rvm"].includes("gate:test/app-snapshot-runtime.test.js"), true);
   assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-rvm"].includes("gate:test/runtime-profile.test.js"), true);
   assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-rvm"].includes("gate:test/runtime-server.test.js"), false);
 });

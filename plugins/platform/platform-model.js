@@ -73,12 +73,26 @@ const TEST_ENVIRONMENT_CATALOG = Object.freeze([
   { id: "platform-candidate-snapshot", title: "platform candidate snapshot" }
 ]);
 
+const TEST_ENVIRONMENT_TITLES = Object.freeze(
+  Object.fromEntries(TEST_ENVIRONMENT_CATALOG.map(environment => [`testEnvironment:${environment.id}`, environment.title]))
+);
+
 function slash(value) {
   return String(value || "").replace(/\\/g, "/");
 }
 
 function unique(values = []) {
   return [...new Set(values.map(String).filter(Boolean))];
+}
+
+function isKnownPlatformModelTarget(target, nodes) {
+  const value = String(target || "");
+  return Boolean(value) && (nodes.has(value) || Object.prototype.hasOwnProperty.call(TEST_ENVIRONMENT_TITLES, value));
+}
+
+function platformModelTargetTitle(target, nodes) {
+  const value = String(target || "");
+  return nodes.get(value)?.title || TEST_ENVIRONMENT_TITLES[value] || value;
 }
 
 function addNode(nodes, node) {
@@ -720,7 +734,7 @@ function extractPlatformModelHintTargets(source, nodes, routeIdsByMatcher) {
   const targets = [];
   const pluginPattern = /\bplugin\.[A-Za-z0-9_.-]+\b/g;
   const handlerOrCapabilityPattern = /\b[a-z][A-Za-z0-9_-]*(?:\.[A-Za-z0-9_-]+){1,5}\b/g;
-  const directNodePattern = /\b(?:profile|surface):[A-Za-z0-9_./-]+\b/g;
+  const directNodePattern = /\b(?:profile|surface|testEnvironment):[A-Za-z0-9_./-]+\b/g;
   for (const match of String(source || "").matchAll(pluginPattern)) {
     if (nodes.has(match[0])) targets.push(match[0]);
   }
@@ -730,7 +744,7 @@ function extractPlatformModelHintTargets(source, nodes, routeIdsByMatcher) {
     if (nodes.has(`capability:${token}`)) targets.push(`capability:${token}`);
   }
   for (const match of String(source || "").matchAll(directNodePattern)) {
-    if (nodes.has(match[0])) targets.push(match[0]);
+    if (isKnownPlatformModelTarget(match[0], nodes)) targets.push(match[0]);
   }
   for (const routeRef of extractMarkdownRouteRefs(source)) {
     const routeId = routeIdsByMatcher[routeRef];
@@ -739,13 +753,28 @@ function extractPlatformModelHintTargets(source, nodes, routeIdsByMatcher) {
   return unique(targets);
 }
 
+function extractCandidateSnapshotHintTargets(source) {
+  const text = String(source || "");
+  if (
+    text.includes("platform-change-set-apply")
+    || text.includes("runtimeSnapshotRefresh")
+    || text.includes("/api/runtime/backend-revisions/events")
+  ) {
+    return ["testEnvironment:platform-candidate-snapshot"];
+  }
+  return [];
+}
+
 function buildTestGateSourceHints(relativePath, source, nodes, routeIdsByMatcher) {
   const sourceDependencies = unique([
     relativePath,
     ...extractRepoRelativeSpecifiers(relativePath, source),
     ...extractRepoRootPathHints(source)
   ]);
-  const protectedObjects = new Set(extractPlatformModelHintTargets(source, nodes, routeIdsByMatcher));
+  const protectedObjects = new Set([
+    ...extractPlatformModelHintTargets(source, nodes, routeIdsByMatcher),
+    ...extractCandidateSnapshotHintTargets(source)
+  ]);
   for (const dependency of sourceDependencies) {
     const system = summarizePlatformPathSystem(dependency);
     if (nodes.has(system.id)) protectedObjects.add(system.id);
@@ -919,7 +948,7 @@ function buildTestGateRows(
   bundleIdsByPlugin = Object.create(null)
 ) {
   function pushTarget(targets, id) {
-    if (id && nodes.has(id)) targets.add(id);
+    if (isKnownPlatformModelTarget(id, nodes)) targets.add(String(id));
   }
   function addOwnedBundleTargets(targets, pluginId) {
     for (const bundleId of bundleIdsByPlugin[String(pluginId || "")] ?? []) {
@@ -972,6 +1001,12 @@ function buildTestGateRows(
         pushTarget(targets, "route:GET /platform");
         pushTarget(targets, "handler:page.platform");
       }
+      if (
+        changedPath === "plugins/platform/platform-console.rvm"
+        || changedPath === "plugins/platform/platform-console.wcss"
+      ) {
+        pushTarget(targets, "testEnvironment:platform-candidate-snapshot");
+      }
       if (changedPath.startsWith("plugins/mcp/")) {
         pushTarget(targets, "plugin.mcp");
         addOwnedBundleTargets(targets, "plugin.mcp");
@@ -993,7 +1028,7 @@ function buildTestGateRows(
         ...baseProtectedObjects,
         ...telemetryMetricTargetsForProtectedObjects(baseProtectedObjects)
       ]);
-      const protectedObjectLabels = protectedObjects.map(target => nodes.get(target)?.title || target);
+      const protectedObjectLabels = protectedObjects.map(target => platformModelTargetTitle(target, nodes));
       const command = normalizeGateCommand(node.command || `node --test ${node.title}`);
       const sourceDependencies = unique(
         Array.isArray(node.sourceDependencies) && node.sourceDependencies.length
@@ -1120,6 +1155,14 @@ function buildTestGateRows(
         targets: telemetryTargets
       });
     }
+    const testEnvironmentTargets = unique(matchedTargets.filter(target => String(target).startsWith("testEnvironment:")));
+    if (testEnvironmentTargets.length) {
+      reasons.push({
+        kind: "candidate-snapshot-environment-dependency",
+        summary: `Matched candidate snapshot environments: ${testEnvironmentTargets.map(target => platformModelTargetTitle(target, nodes)).join(", ")}.`,
+        targets: testEnvironmentTargets
+      });
+    }
     if (priorDefectCluster) {
       reasons.push({
         kind: "prior-defect-cluster-dependency",
@@ -1178,7 +1221,7 @@ function buildTestGateRows(
           ...matchedTargets,
           ...(hasPriorDefectDependency ? [priorDefectCluster.id] : [])
         ]),
-        matchedTargetLabels: matchedTargets.map(target => nodes.get(target)?.title || target),
+        matchedTargetLabels: matchedTargets.map(target => platformModelTargetTitle(target, nodes)),
         matchedSourceDependencies,
         sourceDependencies: [...gate.sourceDependencies],
         selectionReasons: selectionReasonsForGate(
