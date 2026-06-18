@@ -458,8 +458,10 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationRelatedSurface.props.gateLinkCards, "Protected Objects=protectedObjects|Selected Branches=selectedByBranches|Selected Change Sets=selectedByChangeSets");
   assert.equal(verificationRelatedSurface.props.runtimeRevisionLinkCards, "Changed Sources=changedSources");
   assert.equal(verificationRelatedSurface.props.runtimeRevisionPropertyCardTitle, "Snapshot Diagnostics");
+  assert.equal(verificationRelatedSurface.props.runtimeRevisionPropertyFields, "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Backend revision events=backendStreamLink@href");
   assert.equal(verificationRelatedSurface.props.candidateSnapshotTextCards, "Files=files@path|Errors=errors@errorMessage");
   assert.equal(verificationRelatedSurface.props.testRunPropertyCardTitle, "Verification Streams");
+  assert.equal(verificationRelatedSurface.props.testRunPropertyFields, "Test run events=testEventsLink@href|Backend revision events=backendRevisionsLink@href");
   const branchRedGreenSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformBranchRedGreenList");
   assert.ok(branchRedGreenSurface);
   assert.equal(branchRedGreenSurface.props.rowFields, "Status=status|Branch=branchLink@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary");
@@ -5072,6 +5074,8 @@ test("platform page renders required operating views", async () => {
   const workflowHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:demo-0") });
   const workflowSortedHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=branch:demo-0&sort=kind&dir=desc&limit=5") });
   const verificationHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=gate:demo") });
+  const verificationRevisionHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=runtimeRevision:demo") });
+  const verificationRunHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=verification&id=testRun:demo") });
   const knowledgeHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=knowledge&id=docs/PLATFORM-ALL-THE-WAY-ROADMAP.md") });
   const signalsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=signals&id=gap.demo") });
   const modelHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=model&id=route:GET%20/platform") });
@@ -5125,6 +5129,9 @@ test("platform page renders required operating views", async () => {
   assert.match(verificationHtml, /\/api\/platform-test-runs\/events/);
   assert.match(verificationHtml, /\/api\/runtime\/backend-revisions\/events/);
   assert.doesNotMatch(verificationHtml, /<pre/);
+  assert.match(verificationRevisionHtml, />Backend revision event stream</);
+  assert.match(verificationRunHtml, />Test run event stream</);
+  assert.match(verificationRunHtml, />Backend revision event stream</);
 
   assert.match(knowledgeHtml, /Platform Console - Knowledge/);
   assert.match(knowledgeHtml, /Knowledge Items/);

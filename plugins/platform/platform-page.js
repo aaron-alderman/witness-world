@@ -471,6 +471,11 @@ function renderSchemaValue(ctx, value, mode = "text") {
     case "api":
       return renderApiLink(typeof value === "object" ? value.id : value);
     case "href":
+      if (typeof value === "object") {
+        const href = optionalText(value.href) || optionalText(value.url) || optionalText(value.id);
+        const label = optionalText(value.title) || optionalText(value.label) || href;
+        return href ? `<a href="${esc(href)}">${esc(label || href)}</a>` : esc(label || "");
+      }
       return `<a href="${esc(value)}">Event stream</a>`;
     case "value":
       return renderValue(ctx, value);
@@ -1180,7 +1185,10 @@ function renderVerificationDetail(surface, detail, model, ctx) {
     const diagnosticsRecord = {
       ...revision,
       snapshotDiagnostics: model.snapshotDiagnostics,
-      backendStream: "/api/runtime/backend-revisions/events"
+      backendStreamLink: {
+        href: "/api/runtime/backend-revisions/events",
+        title: "Backend revision event stream"
+      }
     };
     const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "runtimeRevisionCardTitle", "runtimeRevisionFields", ctx, revisionRecord, "Runtime Revision Detail", [
       { label: "Revision", valueHtml: renderConceptLink(ctx, revision.id, `Revision ${revision.revision}`) },
@@ -1275,8 +1283,14 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   const runRecord = {
     ...run,
     gateLink: run.gateId ? { id: run.gateId, title: run.title || run.gateId } : null,
-    testEvents: "/api/platform-test-runs/events",
-    backendRevisions: "/api/runtime/backend-revisions/events"
+    testEventsLink: {
+      href: "/api/platform-test-runs/events",
+      title: "Test run event stream"
+    },
+    backendRevisionsLink: {
+      href: "/api/runtime/backend-revisions/events",
+      title: "Backend revision event stream"
+    }
   };
   const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "testRunCardTitle", "testRunFields", ctx, runRecord, "Test Run Detail", [
     { label: "Run", valueHtml: renderConceptLink(ctx, run.id) },

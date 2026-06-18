@@ -416,10 +416,10 @@ view PlatformVerificationRelatedPanel {
   prop gateLinkCards = "Protected Objects=protectedObjects|Selected Branches=selectedByBranches|Selected Change Sets=selectedByChangeSets"
   prop runtimeRevisionLinkCards = "Changed Sources=changedSources"
   prop runtimeRevisionPropertyCardTitle = "Snapshot Diagnostics"
-  prop runtimeRevisionPropertyFields = "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Backend stream=backendStream@href"
+  prop runtimeRevisionPropertyFields = "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Backend revision events=backendStreamLink@href"
   prop candidateSnapshotTextCards = "Files=files@path|Errors=errors@errorMessage"
   prop testRunPropertyCardTitle = "Verification Streams"
-  prop testRunPropertyFields = "Test events=testEvents@href|Backend revisions=backendRevisions@href"
+  prop testRunPropertyFields = "Test run events=testEventsLink@href|Backend revision events=backendRevisionsLink@href"
 }
 
 view PlatformVerificationRunHistory {
