@@ -594,11 +594,13 @@ test("platform model projects structured test gates and affected branch selectio
   assert.equal(branchView.affectedTestGates.some(row => row.branchId === "branch.platform.gates"), true);
   assert.deepEqual(branchView.testGateIndex.byBranch["branch.platform.gates"], model.testGateIndex.byBranch["branch.platform.gates"]);
   assert.deepEqual(branchView.affectedTestGatesByBranch["branch.platform.gates"], model.affectedTestGatesByBranch["branch.platform.gates"]);
+  assert.deepEqual(branchView.selectedTestGatesByBranch["branch.platform.gates"], model.selectedTestGatesByBranch["branch.platform.gates"]);
   const changeSetView = filterPlatformModel(model, "testGates", "changeSet:platform-gates");
   assert.equal(changeSetView.testGates.some(row => row.id === "gate:test/runtime-profile.test.js"), true);
   assert.equal(changeSetView.affectedTestGates.some(row => row.changeSetId === "changeSet:platform-gates"), true);
   assert.deepEqual(changeSetView.testGateIndex.byChangeSet["changeSet:platform-gates"], model.testGateIndex.byChangeSet["changeSet:platform-gates"]);
   assert.deepEqual(changeSetView.affectedTestGatesByChangeSet["changeSet:platform-gates"], model.affectedTestGatesByChangeSet["changeSet:platform-gates"]);
+  assert.deepEqual(changeSetView.selectedTestGatesByChangeSet["changeSet:platform-gates"], model.selectedTestGatesByChangeSet["changeSet:platform-gates"]);
 });
 
 test("platform route edits select platform and runtime-profile gates through owned route targets", async () => {
@@ -744,6 +746,13 @@ test("prior defect clusters select historically relevant platform gates", async 
   assert.equal(packageGateSelection.selectionReasons.some(reason => reason.kind === "prior-defect-cluster-dependency"), false);
   assert.equal(model.affectedTestGatesByBranch["branch.defect.current"].includes("gate:test/runtime-profile.test.js"), true);
   assert.equal(model.affectedTestGatesByBranch["branch.defect.current"].includes("gate:plugins/platform/platform.test.js"), true);
+  assert.equal(model.selectedTestGatesByBranch["branch.defect.current"].length, 2);
+  assert.equal(
+    model.selectedTestGatesByBranch["branch.defect.current"].length
+      < model.affectedTestGatesByBranch["branch.defect.current"].length,
+    true
+  );
+  assert.equal(model.selectedTestGatesByBranch["branch.defect.current"].includes("gate:test/runtime-profile.test.js"), false);
 });
 
 test("platform WCSS-only edits do not select runtime-core backend gates", async () => {
@@ -3470,7 +3479,9 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Selected test gates/);
   assert.match(html, /Test Gates/);
   assert.match(html, /Affected Test Gates By Branch/);
+  assert.match(html, /Selected Test Gates By Branch/);
   assert.match(html, /Affected Test Gate Selections/);
+  assert.match(html, /Selected Test Gates By Change Set/);
   assert.match(html, /Test Gate Index/);
   assert.match(html, /Protected Objects/);
   assert.match(html, /Selected Branches/);

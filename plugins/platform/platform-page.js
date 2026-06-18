@@ -71,6 +71,8 @@ export function renderPlatformPage(model) {
   const affectedTestGates = model.affectedTestGates ?? [];
   const affectedTestGatesByBranch = model.affectedTestGatesByBranch ?? {};
   const affectedTestGatesByChangeSet = model.affectedTestGatesByChangeSet ?? {};
+  const selectedTestGatesByBranch = model.selectedTestGatesByBranch ?? {};
+  const selectedTestGatesByChangeSet = model.selectedTestGatesByChangeSet ?? {};
   const testRuns = model.testRuns ?? [];
   const latestTestResultsByGate = model.latestTestResultsByGate ?? {};
   const roadmapTasks = model.roadmapTasks ?? [];
@@ -301,8 +303,8 @@ export function renderPlatformPage(model) {
           </div>
           <div class="card">
             <h3>Selected test gates</h3>
-            <div id="platform-branch-test-gates-count">${esc(affectedTestGates.filter(row => row.branchId === initialBranch?.id).length)}</div>
-            <div class="muted" id="platform-branch-test-gates-summary">${esc(affectedTestGates.filter(row => row.branchId === initialBranch?.id).map(row => row.gateId).join(", "))}</div>
+            <div id="platform-branch-test-gates-count">${esc((selectedTestGatesByBranch[initialBranch?.id] ?? []).length)}</div>
+            <div class="muted" id="platform-branch-test-gates-summary">${esc((selectedTestGatesByBranch[initialBranch?.id] ?? []).join(", "))}</div>
           </div>
         </div>
       </div>
@@ -339,12 +341,20 @@ export function renderPlatformPage(model) {
         <pre>${esc(JSON.stringify(affectedTestGatesByBranch, null, 2))}</pre>
       </div>
       <div class="card">
+        <h3>Selected Test Gates By Branch</h3>
+        <pre>${esc(JSON.stringify(selectedTestGatesByBranch, null, 2))}</pre>
+      </div>
+      <div class="card">
         <h3>Affected Test Gate Selections</h3>
         <pre>${esc(JSON.stringify(affectedTestGates.slice(0, 80), null, 2))}</pre>
       </div>
       <div class="card">
         <h3>Affected Test Gates By Change Set</h3>
         <pre>${esc(JSON.stringify(affectedTestGatesByChangeSet, null, 2))}</pre>
+      </div>
+      <div class="card">
+        <h3>Selected Test Gates By Change Set</h3>
+        <pre>${esc(JSON.stringify(selectedTestGatesByChangeSet, null, 2))}</pre>
       </div>
       <div class="card">
         <h3>Test Gate Index</h3>
@@ -578,6 +588,7 @@ export function renderPlatformPage(model) {
     const platformSnapshotBuilds = platformState.snapshotBuilds || [];
     const platformSnapshotBuildErrors = platformState.snapshotBuildErrors || [];
     const platformAffectedTestGates = platformState.affectedTestGates || [];
+    const platformSelectedTestGatesByBranch = platformState.selectedTestGatesByBranch || {};
     const backendRevisionEvents = [];
     function deriveRuntimeRevisionDetail(revisionId) {
       const runtimeRevision = platformRuntimeRevisions.find(entry => entry.id === revisionId || entry.backendRevisionId === revisionId) || null;
@@ -659,7 +670,7 @@ export function renderPlatformPage(model) {
       const telemetrySummary = document.getElementById("platform-branch-telemetry-summary");
       const testGateCount = document.getElementById("platform-branch-test-gates-count");
       const testGateSummary = document.getElementById("platform-branch-test-gates-summary");
-      const selectedTestGates = platformAffectedTestGates.filter(row => row.branchId === branchId).map(row => row.gateId);
+      const selectedTestGates = platformSelectedTestGatesByBranch[branchId] || [];
       if (detail) detail.textContent = JSON.stringify(branch, null, 2);
       if (docsStatus) docsStatus.textContent = branch?.docsFreshness?.status || "";
       if (docsSummary) docsSummary.textContent = branch?.docsFreshness?.summary || "";

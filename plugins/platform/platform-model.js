@@ -818,6 +818,109 @@ function buildTestGateIndex(rows, affectedRows = [], affectedRowsByChangeSet = [
   return { byId, byProtectedObject, byBranch, byChangeSet };
 }
 
+function testGateCostRank(costEstimate) {
+  switch (String(costEstimate || "")) {
+    case "low":
+      return 1;
+    case "medium":
+      return 2;
+    case "high":
+      return 3;
+    default:
+      return 4;
+  }
+}
+
+function testGateSpecificityRank(gate = null) {
+  const sourcePath = String(gate?.sourcePath || "");
+  const command = normalizeGateCommand(gate?.command || gate?.title || "");
+  if (sourcePath.endsWith(".test.js")) return 1;
+  if (sourcePath === "package.json" && /^npm run test:[^ ]+/i.test(command)) return 2;
+  if (sourcePath === "package.json" && /^npm run test\b/i.test(command)) return 4;
+  if (sourcePath.startsWith("docs/")) return 5;
+  return 3;
+}
+
+function scopeSelectionCoverageKeys(row) {
+  const keys = unique([
+    ...((row?.matchedTargets ?? []).map(target => `target:${target}`)),
+    ...((row?.matchedSourceDependencies ?? []).map(sourceDependency => `path:${sourceDependency}`))
+  ]);
+  return keys.length ? keys : [`gate:${String(row?.gateId || "")}`];
+}
+
+function isCoverageSubset(leftCoverageKeys, rightCoverageKeys) {
+  const right = new Set(Array.isArray(rightCoverageKeys) ? rightCoverageKeys : []);
+  return (Array.isArray(leftCoverageKeys) ? leftCoverageKeys : []).every(key => right.has(key));
+}
+
+function compareGateSelectionCandidates(left, right) {
+  const uncoveredDiff = Number(right.uncoveredCount || 0) - Number(left.uncoveredCount || 0);
+  if (uncoveredDiff) return uncoveredDiff;
+  const specificityDiff = Number(left.specificityRank || 0) - Number(right.specificityRank || 0);
+  if (specificityDiff) return specificityDiff;
+  const costDiff = testGateCostRank(left.costEstimate) - testGateCostRank(right.costEstimate);
+  if (costDiff) return costDiff;
+  const coverageDiff = Number(right.coverageKeys?.length || 0) - Number(left.coverageKeys?.length || 0);
+  if (coverageDiff) return coverageDiff;
+  return String(left.gateId || "").localeCompare(String(right.gateId || ""));
+}
+
+function selectMeaningfulTestGates(scopeRows = [], testGateRows = []) {
+  const gateById = Object.fromEntries((Array.isArray(testGateRows) ? testGateRows : []).map(row => [String(row.id), row]));
+  const candidates = (Array.isArray(scopeRows) ? scopeRows : [])
+    .map(row => ({
+      gateId: String(row.gateId || ""),
+      costEstimate: gateById[String(row.gateId || "")]?.costEstimate ?? null,
+      specificityRank: testGateSpecificityRank(gateById[String(row.gateId || "")] ?? null),
+      coverageKeys: scopeSelectionCoverageKeys(row)
+    }))
+    .filter(candidate => candidate.gateId);
+  if (!candidates.length) return [];
+
+  const pruned = candidates.filter((candidate, index) => !candidates.some((other, otherIndex) => {
+    if (index === otherIndex) return false;
+    if (!isCoverageSubset(candidate.coverageKeys, other.coverageKeys)) return false;
+    const candidateCost = testGateCostRank(candidate.costEstimate);
+    const otherCost = testGateCostRank(other.costEstimate);
+    const candidateSpecificity = Number(candidate.specificityRank || 0);
+    const otherSpecificity = Number(other.specificityRank || 0);
+    if (otherSpecificity > candidateSpecificity) return false;
+    if (otherSpecificity === candidateSpecificity && otherCost > candidateCost) return false;
+    const strictSuperset = candidate.coverageKeys.length < other.coverageKeys.length;
+    const moreSpecific = otherSpecificity < candidateSpecificity;
+    const lowerCost = otherSpecificity === candidateSpecificity && otherCost < candidateCost;
+    const deterministicTie = otherSpecificity === candidateSpecificity
+      && otherCost === candidateCost
+      && candidate.coverageKeys.length === other.coverageKeys.length
+      && String(other.gateId || "").localeCompare(String(candidate.gateId || "")) < 0;
+    return strictSuperset || moreSpecific || lowerCost || deterministicTie;
+  }));
+
+  const universe = unique(pruned.flatMap(candidate => candidate.coverageKeys));
+  const uncovered = new Set(universe);
+  const selected = [];
+  const remaining = [...pruned];
+  while (uncovered.size && remaining.length) {
+    const ranked = remaining
+      .map(candidate => ({
+        ...candidate,
+        uncoveredCount: candidate.coverageKeys.filter(key => uncovered.has(key)).length
+      }))
+      .filter(candidate => candidate.uncoveredCount > 0)
+      .sort(compareGateSelectionCandidates);
+    const next = ranked[0] ?? null;
+    if (!next) break;
+    selected.push(next.gateId);
+    for (const key of next.coverageKeys) uncovered.delete(key);
+    const removeIndex = remaining.findIndex(candidate => candidate.gateId === next.gateId);
+    if (removeIndex >= 0) remaining.splice(removeIndex, 1);
+  }
+
+  if (!selected.length && pruned.length) return [pruned[0].gateId];
+  return selected;
+}
+
 function telemetryMetricNodeId(id) {
   return `telemetryMetric:${String(id || "")}`;
 }
@@ -1261,13 +1364,33 @@ function buildTestGateRows(
   affectedRows.sort((left, right) => left.branchId.localeCompare(right.branchId) || left.gateId.localeCompare(right.gateId));
   affectedRowsByChangeSet.sort((left, right) => left.changeSetId.localeCompare(right.changeSetId) || left.gateId.localeCompare(right.gateId));
   const index = buildTestGateIndex(rows, affectedRows, affectedRowsByChangeSet);
+  const selectedByBranch = Object.fromEntries(
+    Object.entries(index.byBranch).map(([branchId]) => [
+      branchId,
+      selectMeaningfulTestGates(
+        affectedRows.filter(row => row.branchId === branchId),
+        rows
+      )
+    ])
+  );
+  const selectedByChangeSet = Object.fromEntries(
+    Object.entries(index.byChangeSet).map(([changeSetId]) => [
+      changeSetId,
+      selectMeaningfulTestGates(
+        affectedRowsByChangeSet.filter(row => row.changeSetId === changeSetId),
+        rows
+      )
+    ])
+  );
   return {
     rows,
     affectedRows,
     affectedRowsByChangeSet,
     index,
     byBranch: index.byBranch,
-    byChangeSet: index.byChangeSet
+    byChangeSet: index.byChangeSet,
+    selectedByBranch,
+    selectedByChangeSet
   };
 }
 
@@ -1966,6 +2089,8 @@ export async function buildPlatformModel({
     ],
     affectedTestGatesByBranch: testGateProjection.byBranch,
     affectedTestGatesByChangeSet: testGateProjection.byChangeSet,
+    selectedTestGatesByBranch: testGateProjection.selectedByBranch,
+    selectedTestGatesByChangeSet: testGateProjection.selectedByChangeSet,
     testRuns: testRuns.map(row => ({ ...row })),
     testResults: testResults.map(row => ({ ...row })),
     testArtifacts: testArtifacts.map(row => ({ ...row })),
@@ -2047,10 +2172,29 @@ export function filterPlatformModel(model, view, id = null) {
         .filter(([branchId, gateIds]) => !id || relevantBranchIds.has(branchId) || gateIds.includes(id))
         .map(([branchId, gateIds]) => [branchId, [...gateIds]])
     );
+    const selectedTestGatesByChangeSet = Object.fromEntries(
+      Object.entries(model.selectedTestGatesByChangeSet ?? {})
+        .filter(([changeSetId, gateIds]) => !id || relevantChangeSetIds.has(changeSetId) || gateIds.includes(id))
+        .map(([changeSetId, gateIds]) => [changeSetId, [...gateIds]])
+    );
+    const selectedTestGatesByBranch = Object.fromEntries(
+      Object.entries(model.selectedTestGatesByBranch ?? {})
+        .filter(([branchId, gateIds]) => !id || relevantBranchIds.has(branchId) || gateIds.includes(id))
+        .map(([branchId, gateIds]) => [branchId, [...gateIds]])
+    );
     const affectedTestGatesForBranches = affectedTestGates.filter(row => row.branchId);
     const affectedTestGatesForChangeSets = affectedTestGates.filter(row => row.changeSetId);
     const testGateIndex = buildTestGateIndex(testGates, affectedTestGatesForBranches, affectedTestGatesForChangeSets);
-    return { testGates, testGateIndex, affectedTestGates, affectedTestGatesByBranch, affectedTestGatesByChangeSet, summaries: model.summaries };
+    return {
+      testGates,
+      testGateIndex,
+      affectedTestGates,
+      affectedTestGatesByBranch,
+      affectedTestGatesByChangeSet,
+      selectedTestGatesByBranch,
+      selectedTestGatesByChangeSet,
+      summaries: model.summaries
+    };
   }
   if (view === "testRuns") {
     const testRuns = id
