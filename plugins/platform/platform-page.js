@@ -951,22 +951,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
       changeSetLink: snapshot.changeSetId ? { id: snapshot.changeSetId, title: snapshot.changeSetId } : null,
       errorCount: Array.isArray(snapshot.errors) ? snapshot.errors.length : (snapshot.errorCount ?? 0)
     }));
-    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "branchCardTitle", "branchFields", ctx, branch, "Branch Detail", [
-      { label: "Branch", valueHtml: renderConceptLink(ctx, branch.id) },
-      { label: "Status", valueHtml: esc(branch.status || "") },
-      { label: "Title", valueHtml: esc(branch.title || "") },
-      { label: "Lane", valueHtml: esc(branch.lifecycleLane || "") },
-      { label: "Owner", valueHtml: esc(branch.owner || "") },
-      { label: "Parent", valueHtml: branch.parentBranchId ? renderConceptLink(ctx, branch.parentBranchId) : "" },
-      { label: "Epic", valueHtml: branch.epic ? renderConceptLink(ctx, branch.epic) : "" },
-      { label: "Feature", valueHtml: branch.feature ? renderConceptLink(ctx, branch.feature) : "" },
-      { label: "Defect", valueHtml: branch.defect ? renderConceptLink(ctx, branch.defect) : "" },
-      { label: "Runtime profile", valueHtml: esc(branch.runtimeProfile || "") },
-      { label: "Docs freshness", valueHtml: esc(branch.docsFreshness?.status || "") },
-      { label: "Red / green", valueHtml: esc(branch.testRedGreen?.status || "") },
-      { label: "Latest candidate", valueHtml: branch.latestCandidateSnapshotId ? renderConceptLink(ctx, branch.latestCandidateSnapshotId) : "" },
-      { label: "API resource", valueHtml: renderApiLink(branch.id) }
-    ]);
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "branchCardTitle", "branchFields", ctx, branch, "Branch Detail");
     const usedKeys = [
       ...(rootKeysFromSurfaceSchema(primarySurface, "branchFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "branchFields")
@@ -1014,18 +999,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
       changeSetLink: snapshot.changeSetId ? { id: snapshot.changeSetId, title: snapshot.changeSetId } : null,
       errorCount: Array.isArray(snapshot.errors) ? snapshot.errors.length : (snapshot.errorCount ?? 0)
     }));
-    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "changeSetCardTitle", "changeSetFields", ctx, changeSet, "Change Set Detail", [
-      { label: "Change set", valueHtml: renderConceptLink(ctx, changeSet.id) },
-      { label: "Status", valueHtml: esc(changeSet.status || "") },
-      { label: "Title", valueHtml: esc(changeSet.title || "") },
-      { label: "Branch", valueHtml: changeSet.branchId ? renderConceptLink(ctx, changeSet.branchId) : "" },
-      { label: "Owner", valueHtml: esc(changeSet.owner || "") },
-      { label: "Reason", valueHtml: esc(changeSet.reason || "") },
-      { label: "Edits", valueHtml: esc(changeSet.editCount ?? 0) },
-      { label: "Red / green", valueHtml: esc(changeSet.testRedGreen?.status || "") },
-      { label: "Latest candidate", valueHtml: changeSet.latestCandidateSnapshotId ? renderConceptLink(ctx, changeSet.latestCandidateSnapshotId) : "" },
-      { label: "API resource", valueHtml: renderApiLink(changeSet.id) }
-    ]);
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "changeSetCardTitle", "changeSetFields", ctx, changeSet, "Change Set Detail");
     const usedKeys = [
       ...(rootKeysFromSurfaceSchema(primarySurface, "changeSetFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "changeSetFields")
@@ -1066,14 +1040,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
     `;
   }
   const proposal = detail;
-  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "proposalCardTitle", "proposalFields", ctx, proposal, "Proposal Detail", [
-    { label: "Proposal", valueHtml: renderConceptLink(ctx, proposal.id) },
-    { label: "Status", valueHtml: esc(proposal.status || "") },
-    { label: "Target process", valueHtml: esc(proposal.targetProcess || "") },
-    { label: "Target", valueHtml: proposal.targetId ? renderConceptLink(ctx, proposal.targetId) : "" },
-    { label: "Reason", valueHtml: esc(proposal.reason || "") },
-    { label: "API resource", valueHtml: renderApiLink(proposal.id) }
-  ]);
+  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "proposalCardTitle", "proposalFields", ctx, proposal, "Proposal Detail");
   const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "proposalFields").length
     ? rootKeysFromSurfaceSchema(primarySurface, "proposalFields")
     : ["id", "status", "targetProcess", "targetId", "reason", "action"];
@@ -1131,16 +1098,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       ...gate,
       lastResultLabel: gate.lastResult ? `${gate.lastResult.status} (${gate.lastResult.exitCode ?? "n/a"})` : "idle"
     };
-    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "gateCardTitle", "gateFields", ctx, gateRecord, "Test Gate Detail", [
-      { label: "Gate", valueHtml: renderConceptLink(ctx, gate.id, gate.title || gate.id) },
-      { label: "Runner", valueHtml: esc(gate.runner || "") },
-      { label: "Environment", valueHtml: esc(gate.environment || "") },
-      { label: "Timeout", valueHtml: esc(gate.timeoutMs ?? "") },
-      { label: "Cost", valueHtml: esc(gate.costEstimate || "") },
-      { label: "Command", valueHtml: esc(gate.command || "") },
-      { label: "Latest result", valueHtml: esc(gate.lastResult ? `${gate.lastResult.status} (${gate.lastResult.exitCode ?? "n/a"})` : "idle") },
-      { label: "API resource", valueHtml: renderApiLink(gate.id) }
-    ]);
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "gateCardTitle", "gateFields", ctx, gateRecord, "Test Gate Detail");
     const usedKeys = [
       ...(rootKeysFromSurfaceSchema(primarySurface, "gateFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "gateFields")
@@ -1198,22 +1156,8 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         title: "Backend revision event stream"
       }
     };
-    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "runtimeRevisionCardTitle", "runtimeRevisionFields", ctx, revisionRecord, "Runtime Revision Detail", [
-      { label: "Revision", valueHtml: renderConceptLink(ctx, revision.id, `Revision ${revision.revision}`) },
-      { label: "Status", valueHtml: esc(revision.status || "") },
-      { label: "Trigger", valueHtml: esc(revision.trigger || "") },
-      { label: "Branch", valueHtml: revision.branchId ? renderConceptLink(ctx, revision.branchId) : "" },
-      { label: "Change set", valueHtml: revision.changeSetId ? renderConceptLink(ctx, revision.changeSetId) : "" },
-      { label: "Changed sources", valueHtml: esc((revision.changedSources ?? []).length) },
-      { label: "Build errors", valueHtml: esc(revision.buildErrorCount ?? 0) },
-      { label: "API resource", valueHtml: renderApiLink(revision.id) }
-    ]);
-    const diagnosticsCard = propertyRowsFromSurfaceSchema(relatedSurface, "runtimeRevisionPropertyCardTitle", "runtimeRevisionPropertyFields", ctx, diagnosticsRecord, "Snapshot Diagnostics", [
-      { label: "Active revision", valueHtml: esc(model.snapshotDiagnostics?.appRevision ?? "") },
-      { label: "Last good", valueHtml: esc(model.snapshotDiagnostics?.lastGoodAppRevision ?? "") },
-      { label: "Pending dirty", valueHtml: esc((model.snapshotDiagnostics?.pendingDirtySources ?? []).length) },
-      { label: "Backend stream", valueHtml: `<a href="/api/runtime/backend-revisions/events">Event stream</a>` }
-    ]);
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "runtimeRevisionCardTitle", "runtimeRevisionFields", ctx, revisionRecord, "Runtime Revision Detail");
+    const diagnosticsCard = propertyRowsFromSurfaceSchema(relatedSurface, "runtimeRevisionPropertyCardTitle", "runtimeRevisionPropertyFields", ctx, diagnosticsRecord, "Snapshot Diagnostics");
     const usedKeys = [
       ...(rootKeysFromSurfaceSchema(primarySurface, "runtimeRevisionFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "runtimeRevisionFields")
@@ -1256,14 +1200,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   }
   if (detail.id?.startsWith?.("candidateSnapshot:")) {
     const snapshot = detail;
-    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "candidateSnapshotCardTitle", "candidateSnapshotFields", ctx, snapshot, "Candidate Snapshot Detail", [
-      { label: "Snapshot", valueHtml: renderConceptLink(ctx, snapshot.id) },
-      { label: "Status", valueHtml: esc(snapshot.status || "") },
-      { label: "Branch", valueHtml: snapshot.branchId ? renderConceptLink(ctx, snapshot.branchId) : "" },
-      { label: "Change set", valueHtml: snapshot.changeSetId ? renderConceptLink(ctx, snapshot.changeSetId) : "" },
-      { label: "Revision", valueHtml: esc(snapshot.revision ?? "") },
-      { label: "API resource", valueHtml: renderApiLink(snapshot.id) }
-    ]);
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "candidateSnapshotCardTitle", "candidateSnapshotFields", ctx, snapshot, "Candidate Snapshot Detail");
     const usedKeys = [
       ...(rootKeysFromSurfaceSchema(primarySurface, "candidateSnapshotFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "candidateSnapshotFields")
@@ -1299,21 +1236,8 @@ function renderVerificationDetail(surface, detail, model, ctx) {
       title: "Backend revision event stream"
     }
   };
-  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "testRunCardTitle", "testRunFields", ctx, runRecord, "Test Run Detail", [
-    { label: "Run", valueHtml: renderConceptLink(ctx, run.id) },
-    { label: "Status", valueHtml: esc(run.status || "") },
-    { label: "Gate", valueHtml: run.gateId ? renderConceptLink(ctx, run.gateId, run.title || run.gateId) : esc(run.title || "") },
-    { label: "Branch", valueHtml: run.branchId ? renderConceptLink(ctx, run.branchId) : "" },
-    { label: "Change set", valueHtml: run.changeSetId ? renderConceptLink(ctx, run.changeSetId) : "" },
-    { label: "Candidate snapshot", valueHtml: run.candidateSnapshotId ? renderConceptLink(ctx, run.candidateSnapshotId) : "" },
-    { label: "Duration", valueHtml: esc(run.durationMs ?? "") },
-    { label: "Exit", valueHtml: esc(run.exitCode ?? "") },
-    { label: "API resource", valueHtml: renderApiLink(run.id) }
-  ]);
-  const streamsCard = propertyRowsFromSurfaceSchema(relatedSurface, "testRunPropertyCardTitle", "testRunPropertyFields", ctx, runRecord, "Verification Streams", [
-    { label: "Test events", valueHtml: `<a href="/api/platform-test-runs/events">Test run event stream</a>` },
-    { label: "Backend revisions", valueHtml: `<a href="/api/runtime/backend-revisions/events">Backend revision stream</a>` }
-  ]);
+  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "testRunCardTitle", "testRunFields", ctx, runRecord, "Test Run Detail");
+  const streamsCard = propertyRowsFromSurfaceSchema(relatedSurface, "testRunPropertyCardTitle", "testRunPropertyFields", ctx, runRecord, "Verification Streams");
   const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "testRunFields").length
     ? rootKeysFromSurfaceSchema(primarySurface, "testRunFields")
     : ["id", "title", "status", "gateId", "branchId", "changeSetId", "candidateSnapshotId", "durationMs", "exitCode", "startedAt", "finishedAt"];
@@ -1362,16 +1286,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
       ...task,
       taskLink: task.id ? { id: task.id, title: task.title || task.id } : null
     }));
-    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "documentCardTitle", "documentFields", ctx, doc, "Document Detail", [
-      { label: "Document", valueHtml: renderConceptLink(ctx, doc.path, doc.path) },
-      { label: "Role", valueHtml: esc(doc.role || "") },
-      { label: "Owner", valueHtml: esc(doc.owner || "") },
-      { label: "Status", valueHtml: esc(doc.status || "") },
-      { label: "Freshness", valueHtml: esc(doc.freshness?.status || "") },
-      { label: "Sections", valueHtml: esc(doc.sectionCount ?? 0) },
-      { label: "Tasks", valueHtml: esc(doc.taskCount ?? 0) },
-      { label: "API resource", valueHtml: renderApiLink(doc.path) }
-    ]);
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "documentCardTitle", "documentFields", ctx, doc, "Document Detail");
     const usedKeys = [
       ...(rootKeysFromSurfaceSchema(primarySurface, "documentFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "documentFields")
@@ -1415,16 +1330,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
       ...task,
       evidenceSummary: task.derivedSummary || task.evidence?.summary || ""
     };
-    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "roadmapTaskCardTitle", "roadmapTaskFields", ctx, taskRecord, "Roadmap Task Detail", [
-      { label: "Task", valueHtml: renderConceptLink(ctx, task.id, task.title || task.id) },
-      { label: "Markdown status", valueHtml: esc(task.status || "") },
-      { label: "Derived status", valueHtml: esc(task.derivedStatus || "") },
-      { label: "Section", valueHtml: esc(task.section || "") },
-      { label: "Document", valueHtml: task.doc ? renderConceptLink(ctx, task.doc, task.doc) : "" },
-      { label: "Line", valueHtml: esc(task.line ?? "") },
-      { label: "Evidence", valueHtml: esc(task.derivedSummary || task.evidence?.summary || "") },
-      { label: "API resource", valueHtml: renderApiLink(task.id) }
-    ]);
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "roadmapTaskCardTitle", "roadmapTaskFields", ctx, taskRecord, "Roadmap Task Detail");
     const usedKeys = [
       ...(rootKeysFromSurfaceSchema(primarySurface, "roadmapTaskFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "roadmapTaskFields")
@@ -1449,16 +1355,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
   }
   if (detail.id?.startsWith?.("epic:")) {
     const epic = detail;
-    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "epicCardTitle", "epicFields", ctx, epic, "Epic Detail", [
-      { label: "Epic", valueHtml: renderConceptLink(ctx, epic.id, epic.title || epic.id) },
-      { label: "Status", valueHtml: esc(epic.status || "") },
-      { label: "Roadmap", valueHtml: epic.roadmapId ? renderConceptLink(ctx, epic.roadmapId) : "" },
-      { label: "Branches", valueHtml: esc((epic.branchIds ?? []).length) },
-      { label: "Features", valueHtml: esc((epic.featureIds ?? []).length) },
-      { label: "Verification gates", valueHtml: esc((epic.gateIds ?? []).length) },
-      { label: "Docs", valueHtml: esc((epic.docIds ?? []).length) },
-      { label: "API resource", valueHtml: renderApiLink(epic.id) }
-    ]);
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "epicCardTitle", "epicFields", ctx, epic, "Epic Detail");
     const usedKeys = [
       ...(rootKeysFromSurfaceSchema(primarySurface, "epicFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "epicFields")
@@ -1482,15 +1379,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
     `;
   }
   const feature = detail;
-  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "featureCardTitle", "featureFields", ctx, feature, "Feature Detail", [
-    { label: "Feature", valueHtml: renderConceptLink(ctx, feature.id, feature.title || feature.id) },
-    { label: "Status", valueHtml: esc(feature.status || "") },
-    { label: "Epic", valueHtml: feature.epicId ? renderConceptLink(ctx, feature.epicId) : "" },
-    { label: "Branches", valueHtml: esc((feature.branchIds ?? []).length) },
-    { label: "Verification gates", valueHtml: esc((feature.gateIds ?? []).length) },
-    { label: "Docs", valueHtml: esc((feature.docIds ?? []).length) },
-    { label: "API resource", valueHtml: renderApiLink(feature.id) }
-  ]);
+  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "featureCardTitle", "featureFields", ctx, feature, "Feature Detail");
   const usedKeys = [
     ...(rootKeysFromSurfaceSchema(primarySurface, "featureFields").length
       ? rootKeysFromSurfaceSchema(primarySurface, "featureFields")
@@ -1531,14 +1420,7 @@ function renderSignalDetail(surface, detail, model, ctx) {
   if (!detail) return `<div class="card"><h2>Detail</h2><div class="muted">No signal rows are projected yet.</div></div>`;
   if (detail.kind) {
     const gap = detail;
-    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "gapCardTitle", "gapFields", ctx, gap, "Gap Detail", [
-      { label: "Gap", valueHtml: esc(gap.id || "") },
-      { label: "Severity", valueHtml: esc(gap.severity || "") },
-      { label: "Kind", valueHtml: esc(gap.kind || "") },
-      { label: "Target", valueHtml: gap.target ? renderConceptLink(ctx, gap.target) : "" },
-      { label: "Reason", valueHtml: esc(gap.reason || "") },
-      { label: "API resource", valueHtml: renderApiLink(gap.id) }
-    ]);
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "gapCardTitle", "gapFields", ctx, gap, "Gap Detail");
     const usedKeys = [
       ...(rootKeysFromSurfaceSchema(primarySurface, "gapFields").length
         ? rootKeysFromSurfaceSchema(primarySurface, "gapFields")
@@ -1570,15 +1452,7 @@ function renderSignalDetail(surface, detail, model, ctx) {
     fromLink: edge.from ? { id: edge.from, title: edge.from } : null,
     toLink: edge.to ? { id: edge.to, title: edge.to } : null
   }));
-  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "signalCardTitle", "signalFields", ctx, node, "Signal Detail", [
-    { label: "Node", valueHtml: renderConceptLink(ctx, node.id, node.title || node.id) },
-    { label: "Kind", valueHtml: esc(node.kind || "") },
-    { label: "Status", valueHtml: esc(node.status || "") },
-    { label: "Owner", valueHtml: esc(node.owner || "") },
-    { label: "Source", valueHtml: esc(node.source || "") },
-    { label: "Lifecycle", valueHtml: esc((node.lifecycle ?? []).join(", ")) },
-    { label: "API resource", valueHtml: renderApiLink(node.id) }
-  ]);
+  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "signalCardTitle", "signalFields", ctx, node, "Signal Detail");
   const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "signalFields").length
     ? rootKeysFromSurfaceSchema(primarySurface, "signalFields")
     : ["id", "kind", "title", "status", "owner", "source", "lifecycle"];
@@ -1620,15 +1494,7 @@ function renderModelDetail(surface, node, model, ctx) {
     fromLink: edge.from ? { id: edge.from, title: edge.from } : null,
     toLink: edge.to ? { id: edge.to, title: edge.to } : null
   }));
-  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "objectCardTitle", "objectFields", ctx, node, "Platform Object Detail", [
-    { label: "Object", valueHtml: renderConceptLink(ctx, node.id, node.title || node.id) },
-    { label: "Kind", valueHtml: esc(node.kind || "") },
-    { label: "Status", valueHtml: esc(node.status || "") },
-    { label: "Owner", valueHtml: esc(node.owner || "") },
-    { label: "Source", valueHtml: esc(node.source || "") },
-    { label: "Lifecycle", valueHtml: esc((node.lifecycle ?? []).join(", ")) },
-    { label: "API resource", valueHtml: renderApiLink(node.id) }
-  ]);
+  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "objectCardTitle", "objectFields", ctx, node, "Platform Object Detail");
   const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "objectFields").length
     ? rootKeysFromSurfaceSchema(primarySurface, "objectFields")
     : ["id", "kind", "title", "status", "owner", "source", "lifecycle"];
