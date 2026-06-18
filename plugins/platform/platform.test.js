@@ -193,7 +193,34 @@ test("platform model emits a gap when a platform surface lacks modeled RVM or WC
   assert.ok(missingSourceGap);
   assert.equal(missingSourceGap.kind, "missing-platform-source");
   assert.deepEqual(missingSourceGap.missingSourceKinds, ["rvmSource", "wcssSource"]);
-  assert.equal(model.gaps.some(gap => gap.target === "surface:platform"), false);
+  assert.equal(model.gaps.some(gap => gap.id === "gap.platform-sources.surface:platform"), false);
+});
+
+test("platform model emits a gap when generated console CSS selector coverage drifts from authored WCSS", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [{ id: "bundle-platform", displayName: "Platform Self Model" }],
+      providedCapabilities: ["platform.self"],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [{ id: "surface:platform", href: "/platform" }],
+      plugins: {
+        activePluginIds: ["plugin.platform"],
+        effectivePluginIds: ["plugin.platform"],
+        rejectedPlugins: []
+      }
+    },
+    project: () => []
+  });
+
+  const cssDriftGap = model.gaps.find(gap => gap.id === "gap.platform-css-drift.surface:platform");
+  assert.ok(cssDriftGap);
+  assert.equal(cssDriftGap.kind, "platform-css-drift");
+  assert.equal(cssDriftGap.target, "surface:platform");
+  assert.equal(cssDriftGap.authoredSelectorCount > 0, true);
+  assert.equal(cssDriftGap.generatedSelectorCount > 0, true);
+  assert.equal(Array.isArray(cssDriftGap.extraInGenerated), true);
+  assert.equal(cssDriftGap.extraInGenerated.includes(".muted"), true);
 });
 
 test("platform model promotes runtime snapshot diagnostics into revision and build nodes", async () => {

@@ -1191,10 +1191,11 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Replace hand-authored HTML sections with rendered RVM surface tree.
 - [X] Keep tests proving RVM identity and WCSS lowering.
 - [X] Add platform gap when a platform page lacks RVM/WCSS source.
-- [ ] Add platform gap when generated CSS differs from WCSS source.
+- [X] Add platform gap when generated CSS differs from WCSS source.
 - [L] `plugins/platform/platform.test.js` now keeps an explicit proof that the console still compiles from `platform-console.rvm` and that the current lowering bridge still renders CSS with the `Generated from plugins/platform/platform-console.wcss` banner.
 - [L] Current WCSS proof is bridge-backed rather than fully file-driven: `platform-page.js` renders CSS from `platform-style.js`, and `platform-style.js` currently constructs the stylesheet in JS before rendering it. That is enough to keep identity/lowering coverage honest, but it does not mean all console styles have already been moved into authored `platform-console.wcss` or that generated-CSS parity with the file is solved.
 - [L] The current gap is intentionally narrow: it applies to modeled platform surfaces with ids beginning `surface:platform` and checks for attached `rvmSource` and `wcssSource` graph edges (`authoredBy` / `styledBy`). It catches platform pages that drift away from authored source ownership without claiming the later rendered-RVM or generated-CSS parity work is done.
+- [L] The current generated-CSS drift gap is selector-coverage-backed: it compares selectors declared in `plugins/platform/platform-console.wcss` against selectors emitted by the current `platform-style.js` bridge and emits a `platform-css-drift` gap when they differ. It truthfully catches the current bridge/file mismatch, but declaration/value parity and file-driven lowering remain later work.
 
 ### 12.3 MCP Parity
 

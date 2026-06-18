@@ -11,6 +11,7 @@ import {
   TELEMETRY_IMPACT_RULES
 } from "./branch-insights.js";
 import { platformProposalTemplates } from "./platform-proposals.js";
+import { renderPlatformConsoleCss } from "./platform-style.js";
 import { buildFlakeScoreByGate } from "./test-gate-catalog.js";
 
 export const PLATFORM_LIFECYCLES = Object.freeze([
@@ -1146,6 +1147,56 @@ function roadmapTaskStatus(marker) {
     default:
       return { checked: false, status: "open" };
   }
+}
+
+function extractAuthoredPlatformWcssSelectors(source = "") {
+  const selectors = [];
+  let sawTheme = false;
+  let section = null;
+  let inStyle = false;
+  for (const rawLine of String(source || "").split(/\r?\n/)) {
+    const trimmed = rawLine.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const indent = rawLine.match(/^ */)?.[0]?.length ?? 0;
+    if (indent === 0) {
+      inStyle = false;
+      if (/^theme\s+\S+/.test(trimmed)) {
+        sawTheme = true;
+        section = null;
+        continue;
+      }
+      if ((trimmed === "tokens" || trimmed === "styles") && sawTheme) {
+        section = trimmed;
+        continue;
+      }
+      continue;
+    }
+    if (section !== "styles") continue;
+    if (indent === 2 && /^style\s+\S+/.test(trimmed)) {
+      inStyle = true;
+      continue;
+    }
+    if (indent === 4 && /^selector\s*=\s*.+$/.test(trimmed) && inStyle) {
+      selectors.push(trimmed.replace(/^selector\s*=\s*/, "").trim());
+    }
+  }
+  return unique(selectors);
+}
+
+function extractRenderedCssSelectors(cssText = "") {
+  const stripped = String(cssText || "").replace(/\/\*[\s\S]*?\*\//g, "");
+  const selectors = [];
+  const pattern = /(^|})\s*([^@][^{}]+)\{/g;
+  let match = null;
+  while ((match = pattern.exec(stripped))) {
+    const selectorText = String(match[2] || "").trim();
+    if (!selectorText) continue;
+    for (const selector of selectorText.split(",")) {
+      const trimmed = selector.trim();
+      if (trimmed) selectors.push(trimmed);
+    }
+  }
+  return unique(selectors);
 }
 
 function docRoleForPath(docPath) {
@@ -2937,6 +2988,26 @@ export async function buildPlatformModel({
     }
   }
   const gaps = buildGaps(nodes, edges, { branches, changeSets, testGateProjection });
+  const authoredPlatformWcss = await readText("plugins/platform/platform-console.wcss", "");
+  const authoredPlatformSelectors = extractAuthoredPlatformWcssSelectors(authoredPlatformWcss);
+  const generatedPlatformSelectors = extractRenderedCssSelectors(renderPlatformConsoleCss());
+  const missingInGenerated = authoredPlatformSelectors.filter(selector => !generatedPlatformSelectors.includes(selector));
+  const extraInGenerated = generatedPlatformSelectors.filter(selector => !authoredPlatformSelectors.includes(selector));
+  if (missingInGenerated.length || extraInGenerated.length) {
+    gaps.push({
+      id: "gap.platform-css-drift.surface:platform",
+      severity: "low",
+      kind: "platform-css-drift",
+      target: "surface:platform",
+      authoredSelectorCount: authoredPlatformSelectors.length,
+      generatedSelectorCount: generatedPlatformSelectors.length,
+      missingInGenerated,
+      extraInGenerated,
+      reason: "Generated platform CSS selector coverage differs from authored plugins/platform/platform-console.wcss.",
+      recommendedProposal: null
+    });
+    gaps.sort((a, b) => a.severity.localeCompare(b.severity) || a.id.localeCompare(b.id));
+  }
   const docs = parsedDocs.map(doc => ({
     id: doc.id,
     path: doc.path,
