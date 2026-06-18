@@ -748,6 +748,60 @@ function buildTestGateIndex(rows, affectedRows = [], affectedRowsByChangeSet = [
 }
 
 function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestResultsByGate = Object.create(null)) {
+  function pushTarget(targets, id) {
+    if (id && nodes.has(id)) targets.add(id);
+  }
+  function addPlatformRouteTargets(targets) {
+    for (const node of nodes.values()) {
+      if (node.kind !== "route") continue;
+      if (String(node.owner || "").startsWith("platform.") || String(node.owner || "") === "page.platform") {
+        targets.add(node.id);
+      }
+    }
+  }
+  function addPlatformHandlerTargets(targets) {
+    for (const node of nodes.values()) {
+      if (node.kind !== "handler") continue;
+      if (String(node.id).startsWith("handler:platform.") || String(node.id) === "handler:page.platform") {
+        targets.add(node.id);
+      }
+    }
+  }
+  function inferredAffectedTargetsForChangedPaths(changedPaths = []) {
+    const targets = new Set();
+    for (const changedPath of changedPaths.map(String)) {
+      pushTarget(targets, `doc:${changedPath}`);
+      pushTarget(targets, `rvm:${changedPath}`);
+      pushTarget(targets, `wcss:${changedPath}`);
+      pushTarget(targets, `gate:${changedPath}`);
+      if (changedPath === "store/seeds/runtime-profiles.json") {
+        pushTarget(targets, "profile:full");
+        pushTarget(targets, "profile:minimal");
+      }
+      if (changedPath === "plugins/platform/runtime.js" || changedPath === "plugins/platform/handlers.js") {
+        pushTarget(targets, "plugin.platform");
+        pushTarget(targets, "surface:platform");
+        pushTarget(targets, "capability:platform.self");
+        addPlatformRouteTargets(targets);
+        addPlatformHandlerTargets(targets);
+      }
+      if (
+        changedPath === "plugins/platform/platform-page.js"
+        || changedPath === "plugins/platform/platform-console.rvm"
+        || changedPath === "plugins/platform/platform-console.wcss"
+        || changedPath === "plugins/platform/platform-style.js"
+      ) {
+        pushTarget(targets, "plugin.platform");
+        pushTarget(targets, "surface:platform");
+        pushTarget(targets, "route:GET /platform");
+        pushTarget(targets, "handler:page.platform");
+      }
+      if (changedPath.startsWith("plugins/mcp/")) {
+        pushTarget(targets, "plugin.mcp");
+      }
+    }
+    return targets;
+  }
   const outgoing = new Map();
   for (const edge of edges.values()) {
     if (!outgoing.has(edge.from)) outgoing.set(edge.from, []);
@@ -843,6 +897,7 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
   function collectAffectedRows(scopeType, scope) {
     const affectedSystems = new Set((scope.affectedSystemSummaries ?? []).map(row => String(row.system || "")));
     const changedPaths = new Set((scope.changedPaths ?? []).map(String));
+    const affectedTargets = inferredAffectedTargetsForChangedPaths(scope.changedPaths ?? []);
     const docTargets = new Set([
       ...(scope.docsFreshness?.requiredDocs ?? []).map(doc => `doc:${doc}`),
       ...(scope.docsFreshness?.touchedDocs ?? []).map(doc => `doc:${doc}`),
@@ -854,6 +909,7 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
         || affectedSystems.has(target.replace(/^profile:/, ""))
         || affectedSystems.has(target.replace(/^capability:/, ""))
         || docTargets.has(target)
+        || affectedTargets.has(target)
       ));
       const matchedSourceDependencies = unique(gate.sourceDependencies.filter(dependency => changedPaths.has(dependency)));
       if (!matchedTargets.length && !matchedSourceDependencies.length) continue;

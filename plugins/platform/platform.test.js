@@ -593,6 +593,64 @@ test("platform model projects structured test gates and affected branch selectio
   assert.deepEqual(changeSetView.affectedTestGatesByChangeSet["changeSet:platform-gates"], model.affectedTestGatesByChangeSet["changeSet:platform-gates"]);
 });
 
+test("platform route edits select platform and runtime-profile gates through owned route targets", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [{ id: "branch.platform.route", title: "Platform Route", status: "open" }];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [{ id: "changeSet:platform-route", branchId: "branch.platform.route", status: "draft" }];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [
+          { id: "changeSetEdit:platform-route:runtime", changeSetId: "changeSet:platform-route", path: "plugins/platform/runtime.js" }
+        ];
+      }
+      return [];
+    }
+  });
+
+  const runtimeProfileSelection = model.affectedTestGates.find(row =>
+    row.branchId === "branch.platform.route"
+    && row.gateId === "gate:test/runtime-profile.test.js"
+  );
+  const platformGateSelection = model.affectedTestGates.find(row =>
+    row.branchId === "branch.platform.route"
+    && row.gateId === "gate:plugins/platform/platform.test.js"
+  );
+  const packageScriptGate = model.testGates.find(row => row.command === "npm run test:plugin:mcp");
+
+  assert.ok(runtimeProfileSelection);
+  assert.equal(runtimeProfileSelection.matchedTargets.includes("plugin.platform"), true);
+  assert.equal(runtimeProfileSelection.selectionReasons.some(reason =>
+    reason.kind === "plugin-ownership-dependency"
+    && reason.targets.includes("plugin.platform")
+  ), true);
+
+  assert.ok(platformGateSelection);
+  assert.equal(platformGateSelection.matchedTargets.includes("route:GET /platform"), true);
+  assert.equal(platformGateSelection.matchedTargets.includes("handler:page.platform"), true);
+  assert.equal(platformGateSelection.selectionReasons.some(reason =>
+    reason.kind === "route-ownership-dependency"
+    && reason.targets.includes("route:GET /platform")
+  ), true);
+
+  assert.equal(model.affectedTestGatesByBranch["branch.platform.route"].includes("gate:test/runtime-profile.test.js"), true);
+  assert.equal(model.affectedTestGatesByBranch["branch.platform.route"].includes("gate:plugins/platform/platform.test.js"), true);
+  assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-route"].includes("gate:test/runtime-profile.test.js"), true);
+  assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-route"].includes("gate:plugins/platform/platform.test.js"), true);
+  assert.equal(model.affectedTestGatesByBranch["branch.platform.route"].includes(packageScriptGate?.id), false);
+});
+
 test("platform roadmap task parser preserves extended status markers", () => {
   const tasks = parseRoadmapTasks("docs/demo.md", `
 # Demo
