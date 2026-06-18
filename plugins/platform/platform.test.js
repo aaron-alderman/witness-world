@@ -391,6 +391,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(workflowSnapshotSurface);
   assert.equal(workflowSnapshotSurface.props.columns, "Status|Snapshot|Revision|Change Set|Errors");
   assert.equal(workflowSnapshotSurface.props.rowFields, "Status=status|Snapshot=id@concept|Revision=revision|Change Set=changeSetId@concept|Errors=errorCount");
+  assert.equal(workflowSnapshotSurface.props.changeSetEmptyState, "No candidate snapshots for this change set.");
   assert.equal(workflowSnapshotSurface.props.rowLimit, "12");
   const workflowEditSurface = workflowDetailSurface.childSurfaces.find(surface => surface.name === "PlatformWorkflowEditHistory");
   assert.ok(workflowEditSurface);
@@ -5401,6 +5402,34 @@ test("platform page uses authored related-card empty states and item limits", ()
   assert.doesNotMatch(html, /changeSet:demo-12/);
   assert.doesNotMatch(html, /No linked resources\./);
   assert.doesNotMatch(html, /No entries\./);
+});
+
+test("platform page uses authored change-set snapshot empty state", () => {
+  const model = {
+    lifecycleVocabulary: [],
+    lifecycleBoard: [],
+    branchLifecycleVocabulary: [],
+    branchBoard: [],
+    branches: [],
+    changeSets: [{
+      id: "changeSet:demo",
+      title: "Demo Change Set",
+      status: "draft",
+      branchId: "branch:demo",
+      owner: "aaron",
+      changedPaths: []
+    }],
+    changeSetEdits: [],
+    candidateSnapshots: [],
+    proposals: [],
+    proposalActions: [],
+    summaries: {}
+  };
+
+  const html = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=workflow&id=changeSet:demo") });
+
+  assert.match(html, /No candidate snapshots for this change set\./);
+  assert.doesNotMatch(html, /No candidate snapshots for this branch\./);
 });
 
 test("platform page applies authored list sort semantics and preserves them through pagination links", async () => {

@@ -487,12 +487,16 @@ function renderTable(headers, rows, emptyMessage = "No rows.") {
   `;
 }
 
-function renderSurfaceTable(surface, fallbackHeaders, rows, fallbackEmptyMessage = "No rows.") {
+function renderAuthoredSurfaceTable(surface, rows) {
   return renderTable(
-    surfaceColumnLabels(surface, fallbackHeaders),
+    surfaceColumnLabels(surface, []),
     rows,
-    surfaceEmptyState(surface, fallbackEmptyMessage)
+    surfaceEmptyState(surface, "No rows.")
   );
+}
+
+function surfaceVariantEmptyState(surface, key, fallback = "No rows.") {
+  return surfacePropText(surface, key, surfaceEmptyState(surface, fallback));
 }
 
 function renderDataTable(title, headers, rows, emptyMessage = "No rows.") {
@@ -1076,7 +1080,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
           `)}
         </div>
       </section>
-      ${renderSurfaceFrame(snapshotSurface, renderSurfaceTable(snapshotSurface, ["Status", "Snapshot", "Revision", "Change Set", "Errors"], renderRowsFromSurfaceSchema(snapshotSurface, "rowFields", snapshotRows, ctx, snapshot => `
+      ${renderSurfaceFrame(snapshotSurface, renderAuthoredSurfaceTable(snapshotSurface, renderRowsFromSurfaceSchema(snapshotSurface, "rowFields", snapshotRows, ctx, snapshot => `
         <tr>
           <td>${esc(snapshot.status || "")}</td>
           <td>${renderConceptLink(ctx, snapshot.id)}</td>
@@ -1084,7 +1088,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
           <td>${renderConceptLink(ctx, snapshot.changeSetId)}</td>
           <td>${esc(Array.isArray(snapshot.errors) ? snapshot.errors.length : 0)}</td>
         </tr>
-      `), "No candidate snapshots for this branch."))}
+      `)))}
     `;
   }
   if (detail.id?.startsWith?.("changeSet:") || detail.id?.startsWith?.("changeset.")) {
@@ -1121,15 +1125,15 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
           `)}
         </div>
       </section>
-      ${renderSurfaceFrame(editSurface, renderSurfaceTable(editSurface, ["Path", "Language", "Previous Hash", "Next Hash"], renderRowsFromSurfaceSchema(editSurface, "rowFields", editRows, ctx, edit => `
+      ${renderSurfaceFrame(editSurface, renderAuthoredSurfaceTable(editSurface, renderRowsFromSurfaceSchema(editSurface, "rowFields", editRows, ctx, edit => `
         <tr>
           <td>${esc(edit.path || "")}</td>
           <td>${esc(edit.sourceLanguage || "")}</td>
           <td>${esc(edit.previousHash ? String(edit.previousHash).slice(0, 12) : "")}</td>
           <td>${esc(edit.nextHash ? String(edit.nextHash).slice(0, 12) : "")}</td>
         </tr>
-      `), "No staged edits."))}
-      ${renderSurfaceFrame(snapshotSurface, renderSurfaceTable(snapshotSurface, ["Status", "Snapshot", "Revision", "Change Set", "Errors"], renderRowsFromSurfaceSchema(snapshotSurface, "rowFields", snapshotRows, ctx, snapshot => `
+      `)))}
+      ${renderSurfaceFrame(snapshotSurface, renderTable(surfaceColumnLabels(snapshotSurface, []), renderRowsFromSurfaceSchema(snapshotSurface, "rowFields", snapshotRows, ctx, snapshot => `
         <tr>
           <td>${esc(snapshot.status || "")}</td>
           <td>${renderConceptLink(ctx, snapshot.id)}</td>
@@ -1137,7 +1141,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
           <td>${renderConceptLink(ctx, snapshot.changeSetId)}</td>
           <td>${esc(Array.isArray(snapshot.errors) ? snapshot.errors.length : 0)}</td>
         </tr>
-      `), "No candidate snapshots for this change set."))}
+      `), surfaceVariantEmptyState(snapshotSurface, "changeSetEmptyState", "No candidate snapshots for this change set.")))}
     `;
   }
   const proposal = detail;
@@ -1211,7 +1215,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
           `)}
         </div>
       </section>
-      ${renderSurfaceFrame(runHistorySurface, renderSurfaceTable(runHistorySurface, ["Status", "Run", "Branch", "Duration", "Exit"], renderRowsFromSurfaceSchema(runHistorySurface, "rowFields", runRows, ctx, run => `
+      ${renderSurfaceFrame(runHistorySurface, renderAuthoredSurfaceTable(runHistorySurface, renderRowsFromSurfaceSchema(runHistorySurface, "rowFields", runRows, ctx, run => `
         <tr>
           <td>${esc(run.status || "")}</td>
           <td>${renderConceptLink(ctx, run.id)}</td>
@@ -1219,7 +1223,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
           <td>${esc(run.durationMs ?? "")}</td>
           <td>${esc(run.exitCode ?? "")}</td>
         </tr>
-      `), "No runs for this gate yet."))}
+      `)))}
     `;
   }
   if (detail.id?.startsWith?.("runtimeRevision:") || detail.id?.startsWith?.("backendRevision:") || detail.id?.startsWith?.("frontendRevision:")) {
@@ -1256,7 +1260,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
           `)}
         </div>
       </section>
-      ${renderSurfaceFrame(buildHistorySurface, renderSurfaceTable(buildHistorySurface, ["Status", "Build", "Candidate Snapshot", "Branch", "Errors"], renderRowsFromSurfaceSchema(buildHistorySurface, "rowFields", buildRows, ctx, build => `
+      ${renderSurfaceFrame(buildHistorySurface, renderAuthoredSurfaceTable(buildHistorySurface, renderRowsFromSurfaceSchema(buildHistorySurface, "rowFields", buildRows, ctx, build => `
         <tr>
           <td>${esc(build.status || "")}</td>
           <td>${esc(build.id || "")}</td>
@@ -1264,15 +1268,15 @@ function renderVerificationDetail(surface, detail, model, ctx) {
           <td>${build.branchId ? renderConceptLink(ctx, build.branchId) : ""}</td>
           <td>${esc(build.errorCount ?? 0)}</td>
         </tr>
-      `), "No snapshot builds for this revision."))}
-      ${renderSurfaceFrame(buildErrorsSurface, renderSurfaceTable(buildErrorsSurface, ["Build", "Path", "Kind", "Message"], renderRowsFromSurfaceSchema(buildErrorsSurface, "rowFields", errorRows, ctx, error => `
+      `)))}
+      ${renderSurfaceFrame(buildErrorsSurface, renderAuthoredSurfaceTable(buildErrorsSurface, renderRowsFromSurfaceSchema(buildErrorsSurface, "rowFields", errorRows, ctx, error => `
         <tr>
           <td>${esc(error.snapshotBuildId || "")}</td>
           <td>${esc(error.path || "")}</td>
           <td>${esc(error.kind || "")}</td>
           <td>${esc(error.message || "")}</td>
         </tr>
-      `), "No build errors for this revision."))}
+      `)))}
     `;
   }
   if (detail.id?.startsWith?.("candidateSnapshot:")) {
@@ -1373,21 +1377,21 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
           `)}
         </div>
       </section>
-      ${renderSurfaceFrame(sectionsSurface, renderSurfaceTable(sectionsSurface, ["Title", "Line", "Depth"], renderRowsFromSurfaceSchema(sectionsSurface, "rowFields", sections, ctx, section => `
+      ${renderSurfaceFrame(sectionsSurface, renderAuthoredSurfaceTable(sectionsSurface, renderRowsFromSurfaceSchema(sectionsSurface, "rowFields", sections, ctx, section => `
         <tr>
           <td>${esc(section.title || "")}</td>
           <td>${esc(section.line ?? "")}</td>
           <td>${esc(section.depth ?? "")}</td>
         </tr>
-      `), "No sections projected for this document."))}
-      ${renderSurfaceFrame(tasksSurface, renderSurfaceTable(tasksSurface, ["Status", "Task", "Line", "Section"], renderRowsFromSurfaceSchema(tasksSurface, "rowFields", tasks, ctx, task => `
+      `)))}
+      ${renderSurfaceFrame(tasksSurface, renderAuthoredSurfaceTable(tasksSurface, renderRowsFromSurfaceSchema(tasksSurface, "rowFields", tasks, ctx, task => `
         <tr>
           <td>${esc(task.status || "")}</td>
           <td>${task.id ? renderConceptLink(ctx, task.id, task.title || task.id) : esc(task.title || "")}</td>
           <td>${esc(task.line ?? "")}</td>
           <td>${esc(task.section || "")}</td>
         </tr>
-      `), "No tasks projected for this document."))}
+      `)))}
     `;
   }
   if (detail.id?.startsWith?.("roadmapTask:") || detail.doc) {
@@ -1504,7 +1508,7 @@ function renderSignalDetail(surface, detail, model, ctx) {
           `)}
         </div>
       </section>
-      ${renderSurfaceFrame(relationshipsSurface, renderSurfaceTable(relationshipsSurface, ["From", "Relation", "To"], [], "No related relationships."))}
+      ${renderSurfaceFrame(relationshipsSurface, renderAuthoredSurfaceTable(relationshipsSurface, []))}
     `;
   }
   const node = detail;
@@ -1522,13 +1526,13 @@ function renderSignalDetail(surface, detail, model, ctx) {
         `)}
       </div>
       <div>
-        ${renderSurfaceFrame(relationshipsSurface, renderSurfaceTable(relationshipsSurface, ["From", "Relation", "To"], renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
+        ${renderSurfaceFrame(relationshipsSurface, renderAuthoredSurfaceTable(relationshipsSurface, renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
           <tr>
             <td>${renderConceptLink(ctx, edge.from)}</td>
             <td>${esc(edge.rel || "")}</td>
             <td>${renderConceptLink(ctx, edge.to)}</td>
           </tr>
-        `), "No related relationships."))}
+        `)))}
       </div>
     </section>
   `;
@@ -1559,13 +1563,13 @@ function renderModelDetail(surface, node, model, ctx) {
         `)}
       </div>
       <div>
-        ${renderSurfaceFrame(relationshipsSurface, renderSurfaceTable(relationshipsSurface, ["From", "Relation", "To"], renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
+        ${renderSurfaceFrame(relationshipsSurface, renderAuthoredSurfaceTable(relationshipsSurface, renderRowsFromSurfaceSchema(relationshipsSurface, "rowFields", relatedEdges, ctx, edge => `
           <tr>
             <td>${renderConceptLink(ctx, edge.from)}</td>
             <td>${esc(edge.rel || "")}</td>
             <td>${renderConceptLink(ctx, edge.to)}</td>
           </tr>
-        `), "No relationships for this object."))}
+        `)))}
       </div>
     </section>
   `;
@@ -1577,7 +1581,7 @@ function renderPlatformMapSection(surface, model, ctx) {
     ...node,
     lifecycleText: (node.lifecycle ?? []).join(", ")
   }));
-  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Kind", "Resource", "Lifecycle", "Status", "Source"], renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, node => `
+  return renderSurfaceFrame(surface, renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, node => `
     <tr>
       <td>${esc(node.kind || "")}</td>
       <td>${renderConceptLink(ctx, node.id, node.title || node.id)}</td>
@@ -1585,7 +1589,7 @@ function renderPlatformMapSection(surface, model, ctx) {
       <td>${esc(node.status || "")}</td>
       <td>${esc(node.source || "")}</td>
     </tr>
-  `), "No platform objects."));
+  `)));
 }
 
 function renderProfileComparisonSection(surface, model) {
@@ -1594,14 +1598,14 @@ function renderProfileComparisonSection(surface, model) {
     pluginCount: (profile.pluginIds ?? []).length,
     capabilityCount: (profile.capabilities ?? []).length
   }));
-  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Profile", "Status", "Plugins", "Capabilities"], renderRowsFromSurfaceSchema(surface, "rowFields", rows, null, profile => `
+  return renderSurfaceFrame(surface, renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", rows, null, profile => `
     <tr>
       <td>${esc(profile.id || "")}</td>
       <td>${esc(profile.status || "")}</td>
       <td>${esc((profile.pluginIds ?? []).length)}</td>
       <td>${esc((profile.capabilities ?? []).length)}</td>
     </tr>
-  `), "No runtime profiles."));
+  `)));
 }
 
 function renderWorkflowListSection(surface, model, ctx) {
@@ -1610,7 +1614,7 @@ function renderWorkflowListSection(surface, model, ctx) {
   const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
   return renderSurfaceFrame(surface, `
     ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
-    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
+    ${renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
         <td>${esc(item.status || "")}</td>
@@ -1618,7 +1622,7 @@ function renderWorkflowListSection(surface, model, ctx) {
         <td>${item.scope ? renderValue(ctx, item.scope) : ""}</td>
         <td>${esc(item.summary || "")}</td>
       </tr>
-    `), "No workflow rows.")}
+    `))}
     ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
   `);
 }
@@ -1629,7 +1633,7 @@ function renderVerificationListSection(surface, model, ctx) {
   const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
   return renderSurfaceFrame(surface, `
     ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
-    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
+    ${renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
         <td>${esc(item.status || "")}</td>
@@ -1637,7 +1641,7 @@ function renderVerificationListSection(surface, model, ctx) {
         <td>${item.scope ? renderValue(ctx, item.scope) : ""}</td>
         <td>${esc(item.summary || "")}</td>
       </tr>
-    `), "No verification rows.")}
+    `))}
     ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
   `);
 }
@@ -1648,7 +1652,7 @@ function renderKnowledgeListSection(surface, model, ctx) {
   const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
   return renderSurfaceFrame(surface, `
     ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
-    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
+    ${renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
         <td>${esc(item.status || "")}</td>
@@ -1656,7 +1660,7 @@ function renderKnowledgeListSection(surface, model, ctx) {
         <td>${item.scope ? renderValue(ctx, item.scope) : ""}</td>
         <td>${esc(item.summary || "")}</td>
       </tr>
-    `), "No knowledge rows.")}
+    `))}
     ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
   `);
 }
@@ -1667,7 +1671,7 @@ function renderSignalsListSection(surface, model, ctx) {
   const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
   return renderSurfaceFrame(surface, `
     ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
-    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Scope", "Summary"], renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
+    ${renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
         <td>${esc(item.status || "")}</td>
@@ -1675,7 +1679,7 @@ function renderSignalsListSection(surface, model, ctx) {
         <td>${item.scope ? renderValue(ctx, item.scope) : ""}</td>
         <td>${esc(item.summary || "")}</td>
       </tr>
-    `), "No signal rows.")}
+    `))}
     ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
   `);
 }
@@ -1686,7 +1690,7 @@ function renderModelListSection(surface, model, ctx) {
   const page = paginateRows(sorted.items, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, surfacePageSize(surface));
   return renderSurfaceFrame(surface, `
     ${renderSortControls(surface, { ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, sorted)}
-    ${renderSurfaceTable(surface, ["Kind", "Status", "Resource", "Source", "Owner"], renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
+    ${renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", page.items, ctx, item => `
       <tr>
         <td>${esc(item.pageKind)}</td>
         <td>${esc(item.status || "")}</td>
@@ -1694,32 +1698,32 @@ function renderModelListSection(surface, model, ctx) {
         <td>${esc(item.scope || "")}</td>
         <td>${esc(item.summary || "")}</td>
       </tr>
-    `), "No platform objects.")}
+    `))}
     ${renderPagination({ ...ctx, sort: sorted.sortKey, dir: sorted.sortDir }, page.total, page.offset, page.limit)}
   `);
 }
 
 function renderGapListSection(surface, model, ctx) {
   const rows = (model.gaps ?? []).slice(0, surfaceRowLimit(surface, 12));
-  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Severity", "Kind", "Target", "Reason"], renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, gap => `
+  return renderSurfaceFrame(surface, renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, gap => `
     <tr>
       <td>${esc(gap.severity || "")}</td>
       <td>${esc(gap.kind || "")}</td>
       <td>${gap.target ? renderConceptLink(ctx, gap.target) : ""}</td>
       <td>${esc(gap.reason || "")}</td>
     </tr>
-  `), "No gaps."));
+  `)));
 }
 
 function renderCoverageMatrixSection(surface, model, ctx) {
   const rows = (model.coverageEdges ?? []).slice(0, surfaceRowLimit(surface, 12));
-  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Gate", "Target", "Kind"], renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, edge => `
+  return renderSurfaceFrame(surface, renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, edge => `
     <tr>
       <td>${renderConceptLink(ctx, edge.gateId)}</td>
       <td>${edge.targetId ? renderConceptLink(ctx, edge.targetId, edge.targetLabel || edge.targetId) : esc(edge.targetLabel || "")}</td>
       <td>${esc(edge.coverageKind || "")}</td>
     </tr>
-  `), "No coverage edges."));
+  `)));
 }
 
 function renderProposalPanelSection(surface, model) {
@@ -1884,7 +1888,7 @@ function renderBranchRedGreenSection(surface, model, ctx) {
     passedCount: (row.passedGateIds ?? []).length,
     failedCount: (row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length
   }));
-  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Status", "Branch", "Selected", "Passed", "Failed", "Summary"], renderRowsFromSurfaceSchema(surface, "rowFields", branchRedGreen, ctx, row => `
+  return renderSurfaceFrame(surface, renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", branchRedGreen, ctx, row => `
     <tr>
       <td>${esc(row.status || "")}</td>
       <td>${renderConceptLink(ctx, row.branchId)}</td>
@@ -1893,7 +1897,7 @@ function renderBranchRedGreenSection(surface, model, ctx) {
       <td>${esc((row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length)}</td>
       <td>${esc(row.summary || "")}</td>
     </tr>
-  `), "No branch red/green summaries."));
+  `)));
 }
 
 function renderChangeSetRedGreenSection(surface, model, ctx) {
@@ -1902,7 +1906,7 @@ function renderChangeSetRedGreenSection(surface, model, ctx) {
     passedCount: (row.passedGateIds ?? []).length,
     failedCount: (row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length
   }));
-  return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Status", "Change Set", "Selected", "Passed", "Failed", "Summary"], renderRowsFromSurfaceSchema(surface, "rowFields", changeSetRedGreen, ctx, row => `
+  return renderSurfaceFrame(surface, renderAuthoredSurfaceTable(surface, renderRowsFromSurfaceSchema(surface, "rowFields", changeSetRedGreen, ctx, row => `
     <tr>
       <td>${esc(row.status || "")}</td>
       <td>${renderConceptLink(ctx, row.changeSetId)}</td>
@@ -1911,7 +1915,7 @@ function renderChangeSetRedGreenSection(surface, model, ctx) {
       <td>${esc((row.failedGateIds ?? []).length + (row.errorGateIds ?? []).length + (row.timedOutGateIds ?? []).length)}</td>
       <td>${esc(row.summary || "")}</td>
     </tr>
-  `), "No change-set red/green summaries."));
+  `)));
 }
 
 function renderTestRunPanelSection(surface, model) {

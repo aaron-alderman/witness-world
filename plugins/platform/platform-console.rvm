@@ -323,6 +323,7 @@ view PlatformWorkflowSnapshotHistory {
   prop columns = "Status|Snapshot|Revision|Change Set|Errors"
   prop rowFields = "Status=status|Snapshot=id@concept|Revision=revision|Change Set=changeSetId@concept|Errors=errorCount"
   prop emptyState = "No candidate snapshots for this branch."
+  prop changeSetEmptyState = "No candidate snapshots for this change set."
   prop rowLimit = "12"
 }
 
