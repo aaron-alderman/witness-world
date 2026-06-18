@@ -5,14 +5,28 @@ import {
 export function renderBootstrapBackendAuthoringSubmitFactory() {
   return String.raw`
     const bootstrapBackendAuthoringSubmitContractsByFamily = ${JSON.stringify(bootstrapBackendAuthoringSubmitContractsByFamily)};
-    const contractForFamily = ${contractForFamily.toString()};
+    const bootstrapBackendAuthoringCoerceFieldValue = ${bootstrapBackendAuthoringCoerceFieldValue.toString()};
+    const bootstrapBackendAuthoringOmitBlankStringFields = ${bootstrapBackendAuthoringOmitBlankStringFields.toString()};
+    const bootstrapBackendAuthoringContractForFamily = ${bootstrapBackendAuthoringContractForFamily.toString()};
     const buildBootstrapBackendAuthoringSubmitRequest = ${buildBootstrapBackendAuthoringSubmitRequest.toString()};
     const runBootstrapBackendAuthoringSubmit = ${runBootstrapBackendAuthoringSubmit.toString()};
     const bindBootstrapBackendAuthoringSubmit = ${bindBootstrapBackendAuthoringSubmit.toString()};
   `;
 }
 
-function contractForFamily(family = "", contractsByFamily = bootstrapBackendAuthoringSubmitContractsByFamily) {
+function bootstrapBackendAuthoringCoerceFieldValue(field, value) {
+  if (value === "") return value;
+  if (field === "index" || field === "order") return Number(value);
+  return value;
+}
+
+function bootstrapBackendAuthoringOmitBlankStringFields(record = {}) {
+  return Object.fromEntries(
+    Object.entries(record).filter(([, value]) => value !== "")
+  );
+}
+
+function bootstrapBackendAuthoringContractForFamily(family = "", contractsByFamily = bootstrapBackendAuthoringSubmitContractsByFamily) {
   const key = typeof family === "string" ? family.trim() : "";
   return key ? (contractsByFamily[key] || null) : null;
 }
@@ -21,11 +35,11 @@ export function buildBootstrapBackendAuthoringSubmitRequest({
   detail = {},
   contractsByFamily = bootstrapBackendAuthoringSubmitContractsByFamily
 } = {}) {
-  const contract = contractForFamily(detail.family, contractsByFamily);
+  const contract = bootstrapBackendAuthoringContractForFamily(detail.family, contractsByFamily);
   if (!contract) return null;
-  const body = Object.fromEntries(
-    (contract.bodyFields || []).map(field => [field, detail[field] ?? ""])
-  );
+  const body = bootstrapBackendAuthoringOmitBlankStringFields(Object.fromEntries(
+    (contract.bodyFields || []).map(field => [field, bootstrapBackendAuthoringCoerceFieldValue(field, detail[field] ?? "")])
+  ));
   return {
     url: contract.url || "",
     body
@@ -44,9 +58,9 @@ export async function runBootstrapBackendAuthoringSubmit({
   if (!request) return false;
   try {
     await postJson(request.url, request.body);
-    setStatus(detail.statusId, "Saved.");
     resetForm(detail.formId);
     await refresh();
+    setStatus(detail.statusId, "Saved.");
     return true;
   } catch (error) {
     setStatus(detail.statusId, error.message);

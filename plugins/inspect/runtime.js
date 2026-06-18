@@ -6,7 +6,7 @@ import {
   widgetDefinitions
 } from "../../src/widgets.js";
 import { guidanceConfigForSession } from "../../src/runtime-guidance.js";
-import { renderWidgetPage } from "../../src/runtime-widget-page.js";
+import { renderWidgetPage } from "./widget-page.js";
 import { requestWidgetVersionActivation, rollbackWidgetVersion } from "./widget-versions.js";
 import { worldGraphProjection, astNodesProjection } from "./world-graph.js";
 import { processRunProjection, processViewProjection, renderProcessPage } from "./process-view.js";

@@ -271,6 +271,8 @@ view PlatformWorkflowDetail {
   class platform-workflow-detail
   prop title = "Workflow Detail"
   prop summary = "Properties and linked resources for the selected workflow item."
+  prop emptyTitle = "Detail"
+  prop emptyState = "No workflow rows are projected yet."
   children {
     PlatformWorkflowPrimaryPanel
     PlatformWorkflowRelatedPanel
@@ -423,6 +425,8 @@ view PlatformVerificationDetail {
   class platform-verification-detail
   prop title = "Verification Detail"
   prop summary = "Properties and linked resources for the selected verification object."
+  prop emptyTitle = "Detail"
+  prop emptyState = "No verification rows are projected yet."
   children {
     PlatformVerificationPrimaryPanel
     PlatformVerificationRelatedPanel
@@ -606,6 +610,8 @@ view PlatformSignalDetail {
   class platform-signal-detail
   prop title = "Signal Detail"
   prop summary = "Properties and linked relationships for the selected signal."
+  prop emptyTitle = "Detail"
+  prop emptyState = "No signal rows are projected yet."
   children {
     PlatformSignalPrimaryPanel
     PlatformSignalRelatedPanel
@@ -688,6 +694,8 @@ view PlatformKnowledgeDetail {
   class platform-knowledge-detail
   prop title = "Knowledge Detail"
   prop summary = "Properties and linked resources for the selected knowledge object."
+  prop emptyTitle = "Detail"
+  prop emptyState = "No knowledge rows are projected yet."
   children {
     PlatformKnowledgePrimaryPanel
     PlatformKnowledgeRelatedPanel
@@ -779,6 +787,8 @@ view PlatformModelDetail {
   class platform-model-detail
   prop title = "Platform Object Detail"
   prop summary = "Properties and linked relationships for the selected platform object."
+  prop emptyTitle = "Detail"
+  prop emptyState = "No platform objects are projected yet."
   children {
     PlatformModelPrimaryPanel
     PlatformModelRelationships

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { bundleId, createHandlers, routes } from "./runtime.js";
+import { providers as authoringProviders } from "../wcss-authoring/runtime.js";
 
 function createResponse() {
   return {
@@ -141,6 +142,96 @@ test("wcss runtime plugin rejects adapter modules outside the app root and share
     assert.equal(res.statusCode, 500);
     assert.match(res.body, /outside allowed roots/i);
   } finally {
+    await fs.rm(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test("wcss runtime plugin serves preview-scoped CSS when a preview session id is present", async () => {
+  const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "wcss-runtime-preview-"));
+  const appRoot = path.join(tempRoot, "engentus");
+  try {
+    await writeAdapter(appRoot, "app/authoring-adapter.js", `
+      export async function loadAuthoringAdapter() {
+        globalThis.__wcssPreviewBuildCalls = (globalThis.__wcssPreviewBuildCalls || 0) + 1;
+        const document = {
+          kind: "wcss-document",
+          theme: "engentus",
+          tokens: [{ name: "color.chrome.bg", value: "#112233" }]
+        };
+        return {
+          document,
+          tokenCatalog: { tokens: [{ name: "color.chrome.bg", value: "#112233", domain: "color" }] },
+          applyTokenPatch({ ops }) {
+            const next = JSON.parse(JSON.stringify(document));
+            for (const op of ops) {
+              if (op.kind === "set") next.tokens[0].value = op.value;
+            }
+            return next;
+          },
+          async buildStylesheets({ document: patched }) {
+            return {
+              files: {
+                shell: ":root{--dk:" + patched.tokens[0].value + ";}",
+                chart: ":root{--dk:" + patched.tokens[0].value + ";}"
+              }
+            };
+          }
+        };
+      }
+    `);
+    const previewRuntime = authoringProviders[0].factory();
+    const session = previewRuntime.createSession({
+      appRoot,
+      adapterKey: `${path.join(appRoot, "app/authoring-adapter.js")}\u0000loadAuthoringAdapter`,
+      requestSnapshot: { appRevision: 3 }
+    });
+    previewRuntime.patchTokens({
+      previewSessionId: session.previewSessionId,
+      appRoot,
+      adapterKey: `${path.join(appRoot, "app/authoring-adapter.js")}\u0000loadAuthoringAdapter`,
+      requestSnapshot: { appRevision: 3 },
+      ops: [{ kind: "set", token: "color.chrome.bg", value: "#445566" }]
+    });
+    const handlers = createHandlers({
+      send(res, status, contentType, body, headers = {}) {
+        res.writeHead(status, { "content-type": contentType, ...headers });
+        res.end(body);
+      }
+    });
+    const route = {
+      params: {
+        asset: "shell",
+        adapterModule: "./app/authoring-adapter.js",
+        adapterExport: "loadAuthoringAdapter"
+      }
+    };
+    const appContext = {
+      appRoot,
+      requestSnapshot: { appRevision: 3 },
+      providerRuntimes: { "wcss.previewSessions": previewRuntime }
+    };
+
+    const baseRes = createResponse();
+    await handlers["wcss.stylesheet.read"]({
+      res: baseRes,
+      route,
+      appContext,
+      requestUrl: new URL("http://example.test/engentus/__generated/engentus-shell.css")
+    });
+    assert.equal(baseRes.statusCode, 200);
+    assert.equal(baseRes.body, ":root{--dk:#112233;}");
+
+    const previewRes = createResponse();
+    await handlers["wcss.stylesheet.read"]({
+      res: previewRes,
+      route,
+      appContext,
+      requestUrl: new URL(`http://example.test/engentus/__generated/engentus-shell.css?wcssPreview=${encodeURIComponent(session.previewSessionId)}`)
+    });
+    assert.equal(previewRes.statusCode, 200);
+    assert.equal(previewRes.body, ":root{--dk:#445566;}");
+  } finally {
+    delete globalThis.__wcssPreviewBuildCalls;
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
 });

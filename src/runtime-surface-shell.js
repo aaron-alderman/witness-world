@@ -1,4 +1,5 @@
 import { surfaceDomId } from "./runtime-surface-dom-identity.js";
+import { appendQueryParamsToHref } from "./runtime-url-utils.js";
 
 const surfaceMapCache = new WeakMap();
 const initialStateCache = new WeakMap();
@@ -838,10 +839,14 @@ function renderSurfaceDocument({
   activeSurface,
   surfaces,
   surfaceRenderers = [],
-  initialState = new Map()
+  initialState = new Map(),
+  stylesheetQuery = null
 }) {
   const rootProps = readProps(rootSurface);
-  const stylesheetHref = staticTextValue(rootProps, "stylesheetHref");
+  const stylesheetHref = appendQueryParamsToHref(
+    staticTextValue(rootProps, "stylesheetHref"),
+    stylesheetQuery ?? {}
+  );
   const rootInfo = describeSurface(rootSurface);
   const activeInfo = describeSurface(activeSurface);
   const bodyClass = readClassNames(rootSurface).join(" ");
@@ -924,7 +929,8 @@ export function renderSurfaceShellFromMap({
   requestPathname = "/",
   route = null,
   surfaceRenderers = [],
-  initialState = new Map()
+  initialState = new Map(),
+  stylesheetQuery = null
 } = {}) {
   const state = resolveSurfaceShellFromMap({
     surfaces,
@@ -932,7 +938,8 @@ export function renderSurfaceShellFromMap({
     requestPathname,
     route,
     surfaceRenderers,
-    initialState
+    initialState,
+    stylesheetQuery
   });
   return state?.html ?? null;
 }
@@ -943,7 +950,8 @@ export function resolveSurfaceShellFromMap({
   requestPathname = "/",
   route = null,
   surfaceRenderers = [],
-  initialState = new Map()
+  initialState = new Map(),
+  stylesheetQuery = null
 } = {}) {
   if (!(surfaces instanceof Map) || !rootSurfaceId) return null;
   const rootSurface = surfaces.get(rootSurfaceId);
@@ -962,7 +970,8 @@ export function resolveSurfaceShellFromMap({
       activeSurface,
       surfaces,
       surfaceRenderers,
-      initialState
+      initialState,
+      stylesheetQuery
     });
     return {
       html,

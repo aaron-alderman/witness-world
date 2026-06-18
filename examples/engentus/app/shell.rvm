@@ -281,12 +281,28 @@ state PlatformConfigPipelineRunSelectedId: string {
   initial ""
 }
 
+state PlatformConfigPipelineLogRunSelectedId: string {
+  initial ""
+}
+
 state PlatformConfigPipelineRowLimit: string {
   initial "500"
 }
 
+state PlatformConfigPipelineMaxBatches: string {
+  initial "10"
+}
+
 state PlatformConfigPipelineRunMode: string {
   initial "dry_run"
+}
+
+state PlatformConfigPipelineScheduleEnabled: bool {
+  initial false
+}
+
+state PlatformConfigPipelineScheduleIntervalMs: string {
+  initial "60000"
 }
 
 state PlatformConfigAccessIdentitySelectedId: string {
@@ -1031,6 +1047,9 @@ event PlatformConfigRefreshScriptsRequested {
 event PlatformConfigSaveScriptBindingRequested {
 }
 
+event PlatformConfigSaveScriptScheduleRequested {
+}
+
 event PlatformConfigOpenAccessRequested {
 }
 
@@ -1154,8 +1173,12 @@ event PlatformConfigStateLoaded {
     PlatformConfigPipelineBindingSelectedName: PlatformConfigPipelineBindingSelectedName
     PlatformConfigPipelineBindingDatasourceId: PlatformConfigPipelineBindingDatasourceId
     PlatformConfigPipelineRunSelectedId: PlatformConfigPipelineRunSelectedId
+    PlatformConfigPipelineLogRunSelectedId: PlatformConfigPipelineLogRunSelectedId
     PlatformConfigPipelineRowLimit: PlatformConfigPipelineRowLimit
+    PlatformConfigPipelineMaxBatches: PlatformConfigPipelineMaxBatches
     PlatformConfigPipelineRunMode: PlatformConfigPipelineRunMode
+    PlatformConfigPipelineScheduleEnabled: PlatformConfigPipelineScheduleEnabled
+    PlatformConfigPipelineScheduleIntervalMs: PlatformConfigPipelineScheduleIntervalMs
     PlatformConfigScriptDatasourceId: PlatformConfigScriptDatasourceId
     PlatformConfigScriptResult: PlatformConfigScriptResult
     PlatformConfigAccessIdentitySelectedId: PlatformConfigAccessIdentitySelectedId
@@ -1279,8 +1302,12 @@ command PlatformConfigLoadSnapshot {
     scriptSyncId: PlatformConfigPipelineSyncSelectedId
     scriptBindingName: PlatformConfigPipelineBindingSelectedName
     scriptRunId: PlatformConfigPipelineRunSelectedId
+    scriptLogRunId: PlatformConfigPipelineLogRunSelectedId
     scriptRowLimit: PlatformConfigPipelineRowLimit
+    scriptMaxBatches: PlatformConfigPipelineMaxBatches
     scriptRunMode: PlatformConfigPipelineRunMode
+    scriptScheduleEnabled: PlatformConfigPipelineScheduleEnabled
+    scriptScheduleIntervalMs: PlatformConfigPipelineScheduleIntervalMs
   }
 }
 
@@ -1386,6 +1413,7 @@ command PlatformConfigRunScript {
     syncId: PlatformConfigPipelineSyncSelectedId
     mode: PlatformConfigPipelineRunMode
     rowLimit: PlatformConfigPipelineRowLimit
+    maxBatches: PlatformConfigPipelineMaxBatches
   }
 }
 
@@ -1395,6 +1423,23 @@ command PlatformConfigSaveScriptBinding {
     bindingName: PlatformConfigPipelineBindingSelectedName
     datasourceId: PlatformConfigPipelineBindingDatasourceId
     rowLimit: PlatformConfigPipelineRowLimit
+    maxBatches: PlatformConfigPipelineMaxBatches
+    scriptRunId: PlatformConfigPipelineRunSelectedId
+    scriptLogRunId: PlatformConfigPipelineLogRunSelectedId
+    scheduleEnabled: PlatformConfigPipelineScheduleEnabled
+    scheduleIntervalMs: PlatformConfigPipelineScheduleIntervalMs
+  }
+}
+
+command PlatformConfigSaveScriptSchedule {
+  fields {
+    syncId: PlatformConfigPipelineSyncSelectedId
+    enabled: PlatformConfigPipelineScheduleEnabled
+    intervalMs: PlatformConfigPipelineScheduleIntervalMs
+    rowLimit: PlatformConfigPipelineRowLimit
+    maxBatches: PlatformConfigPipelineMaxBatches
+    scriptRunId: PlatformConfigPipelineRunSelectedId
+    scriptLogRunId: PlatformConfigPipelineLogRunSelectedId
   }
 }
 
@@ -1472,8 +1517,10 @@ adapter PlatformConfigSnapshotHttp using HTTP {
     PlatformConfigAuthorityActors = "authorityActors"
     PlatformConfigAuthRoles = "authRoles"
     PlatformConfigPipelineSyncs = "pipelineSyncs"
+    PlatformConfigPipelineSchedules = "pipelineSchedules"
     PlatformConfigPipelineBindings = "pipelineBindings"
     PlatformConfigPipelineRuns = "pipelineRuns"
+    PlatformConfigPipelineChildRuns = "pipelineChildRuns"
     PlatformConfigPipelineRunLogs = "pipelineRunLogs"
   }
 }
@@ -1769,8 +1816,10 @@ adapter PlatformConfigScriptBindingSaveHttp using HTTP {
     PlatformConfigAuthorityActors = "authorityActors"
     PlatformConfigAuthRoles = "authRoles"
     PlatformConfigPipelineSyncs = "pipelineSyncs"
+    PlatformConfigPipelineSchedules = "pipelineSchedules"
     PlatformConfigPipelineBindings = "pipelineBindings"
     PlatformConfigPipelineRuns = "pipelineRuns"
+    PlatformConfigPipelineChildRuns = "pipelineChildRuns"
     PlatformConfigPipelineRunLogs = "pipelineRunLogs"
   }
 }
@@ -1793,8 +1842,36 @@ adapter PlatformConfigScriptRunHttp using HTTP {
     PlatformConfigAuthorityActors = "authorityActors"
     PlatformConfigAuthRoles = "authRoles"
     PlatformConfigPipelineSyncs = "pipelineSyncs"
+    PlatformConfigPipelineSchedules = "pipelineSchedules"
     PlatformConfigPipelineBindings = "pipelineBindings"
     PlatformConfigPipelineRuns = "pipelineRuns"
+    PlatformConfigPipelineChildRuns = "pipelineChildRuns"
+    PlatformConfigPipelineRunLogs = "pipelineRunLogs"
+  }
+}
+
+adapter PlatformConfigScriptScheduleSaveHttp using HTTP {
+  command PlatformConfigSaveScriptSchedule
+  kind command
+  method POST
+  route /api/pipeline/scripts/schedules
+  host_operation engentus.platform.script.schedule.save
+  success_event PlatformConfigStateLoaded
+  failure_event PlatformConfigScriptFailed
+  loading_state PlatformConfigScriptBusy
+  collection_outputs = {
+    PlatformConfigSecrets = "secrets"
+    PlatformConfigDatasources = "datasources"
+    PlatformConfigIdentities = "identities"
+    PlatformConfigFeaturePolicies = "featurePolicies"
+    PlatformConfigAuthorityGrants = "authorityGrants"
+    PlatformConfigAuthorityActors = "authorityActors"
+    PlatformConfigAuthRoles = "authRoles"
+    PlatformConfigPipelineSyncs = "pipelineSyncs"
+    PlatformConfigPipelineSchedules = "pipelineSchedules"
+    PlatformConfigPipelineBindings = "pipelineBindings"
+    PlatformConfigPipelineRuns = "pipelineRuns"
+    PlatformConfigPipelineChildRuns = "pipelineChildRuns"
     PlatformConfigPipelineRunLogs = "pipelineRunLogs"
   }
 }
@@ -2143,8 +2220,12 @@ process EngentusShellNavigation {
     PlatformConfigPipelineBindingSelectedName
     PlatformConfigPipelineBindingDatasourceId
     PlatformConfigPipelineRunSelectedId
+    PlatformConfigPipelineLogRunSelectedId
     PlatformConfigPipelineRowLimit
+    PlatformConfigPipelineMaxBatches
     PlatformConfigPipelineRunMode
+    PlatformConfigPipelineScheduleEnabled
+    PlatformConfigPipelineScheduleIntervalMs
     PlatformConfigAccessIdentitySelectedId
     PlatformConfigAccessIdentityUsername
     PlatformConfigAccessIdentityDisplayName
@@ -2267,6 +2348,7 @@ process EngentusShellNavigation {
     PlatformConfigOpenScriptsRequested
     PlatformConfigRefreshScriptsRequested
     PlatformConfigSaveScriptBindingRequested
+    PlatformConfigSaveScriptScheduleRequested
     PlatformConfigOpenAccessRequested
     PlatformConfigRefreshSecretsRequested
     PlatformConfigSearchSecretsRequested
@@ -2443,6 +2525,12 @@ process EngentusShellNavigation {
       set PlatformConfigNoticeTone warn
       set PlatformConfigNoticeText "Saving pipeline binding..."
       command PlatformConfigSaveScriptBinding
+    }
+    on PlatformConfigSaveScriptScheduleRequested {
+      set PlatformConfigScriptBusy true
+      set PlatformConfigNoticeTone warn
+      set PlatformConfigNoticeText "Saving pipeline schedule..."
+      command PlatformConfigSaveScriptSchedule
     }
     on PlatformConfigOpenAccessRequested {
       set EngentusShellActiveRoute platform-config-access

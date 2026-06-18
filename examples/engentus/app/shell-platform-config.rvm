@@ -6,9 +6,12 @@ collection PlatformConfigIdentities
 collection PlatformConfigFeaturePolicies
 collection PlatformConfigAuthorityGrants
 collection PlatformConfigAuthorityActors
+collection PlatformConfigAuthRoles
 collection PlatformConfigPipelineSyncs
+collection PlatformConfigPipelineSchedules
 collection PlatformConfigPipelineBindings
 collection PlatformConfigPipelineRuns
+collection PlatformConfigPipelineChildRuns
 collection PlatformConfigPipelineRunLogs
 
 view PlatformConfigSecretOptionTemplate {
@@ -1078,6 +1081,7 @@ view PlatformConfigPipelineSyncSelect {
     on change self set PlatformConfigPipelineSyncSelectedId eventValue
     on change self set PlatformConfigPipelineBindingSelectedName ""
     on change self set PlatformConfigPipelineRunSelectedId ""
+    on change self set PlatformConfigPipelineLogRunSelectedId ""
     on change self deliver PlatformConfigRefreshScriptsRequested
   }
   repeat {
@@ -1322,6 +1326,67 @@ view PlatformConfigPipelineRowLimitField {
   }
 }
 
+view PlatformConfigPipelineMaxBatchesField {
+  kind form-field
+  class platform-config-field
+  prop label = "Max batches"
+  prop inputId = "platform-config-pipeline-max-batches"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "10"
+  bindings {
+    value from state PlatformConfigPipelineMaxBatches
+    disabled from state PlatformConfigScriptBusy
+  }
+  interactions {
+    on input self set PlatformConfigPipelineMaxBatches eventValue
+  }
+}
+
+view PlatformConfigPipelineScheduleEnabledField {
+  kind checkbox-field
+  class platform-config-checkbox
+  prop label = "Enable schedule"
+  prop inputId = "platform-config-pipeline-schedule-enabled"
+  prop inputType = "checkbox"
+  bindings {
+    checked from state PlatformConfigPipelineScheduleEnabled
+    disabled from state PlatformConfigScriptBusy
+  }
+  interactions {
+    on change self set PlatformConfigPipelineScheduleEnabled eventChecked
+  }
+}
+
+view PlatformConfigPipelineScheduleIntervalField {
+  kind form-field
+  class platform-config-field
+  prop label = "Schedule interval (ms)"
+  prop inputId = "platform-config-pipeline-schedule-interval"
+  prop inputClass = "platform-config-input"
+  prop placeholder = "60000"
+  bindings {
+    value from state PlatformConfigPipelineScheduleIntervalMs
+    disabled from state PlatformConfigScriptBusy
+  }
+  interactions {
+    on input self set PlatformConfigPipelineScheduleIntervalMs eventValue
+  }
+}
+
+view PlatformConfigPipelineScheduleSaveAction {
+  kind action
+  class rbtn
+  prop tag = "button"
+  prop buttonType = "button"
+  prop label = "Save Schedule"
+  bindings {
+    disabled from state PlatformConfigScriptBusy
+  }
+  interactions {
+    on click self deliver PlatformConfigSaveScriptScheduleRequested
+  }
+}
+
 view PlatformConfigPipelineDryRunAction {
   kind action
   class rbtn
@@ -1371,6 +1436,7 @@ view PlatformConfigPipelineActions {
   class run-row platform-config-actions
   children {
     PlatformConfigPipelineBindingSaveAction
+    PlatformConfigPipelineScheduleSaveAction
     PlatformConfigPipelineBindingClearAction
     PlatformConfigPipelineDryRunAction
     PlatformConfigPipelineExecuteAction
@@ -1387,6 +1453,7 @@ view PlatformConfigPipelineRunRowAction {
   class platform-config-row-action
   interactions {
     on click self set PlatformConfigPipelineRunSelectedId eventValue
+    on click self set PlatformConfigPipelineLogRunSelectedId eventValue
     on click self deliver PlatformConfigRefreshScriptsRequested
   }
 }
@@ -1564,6 +1631,177 @@ view PlatformConfigPipelineRunTable {
   }
 }
 
+view PlatformConfigPipelineChildRunRowAction {
+  kind action
+  prop tag = "button"
+  prop buttonType = "button"
+  prop value = "${item.id}"
+  prop text = "Logs"
+  class platform-config-row-action
+  interactions {
+    on click self set PlatformConfigPipelineLogRunSelectedId eventValue
+    on click self deliver PlatformConfigRefreshScriptsRequested
+  }
+}
+
+view PlatformConfigPipelineChildRunRowTemplate {
+  kind region
+  prop tag = "tr"
+  prop template = true
+  children {
+    PlatformConfigPipelineChildRunRowBatch
+    PlatformConfigPipelineChildRunRowMode
+    PlatformConfigPipelineChildRunRowStatus
+    PlatformConfigPipelineChildRunRowRowsRead
+    PlatformConfigPipelineChildRunRowCounts
+    PlatformConfigPipelineChildRunRowCheckpoint
+    PlatformConfigPipelineChildRunRowError
+    PlatformConfigPipelineChildRunRowActionCell
+  }
+}
+
+view PlatformConfigPipelineChildRunRowBatch {
+  kind text
+  prop tag = "td"
+  prop text = "${item.batchOrdinalText}"
+}
+
+view PlatformConfigPipelineChildRunRowMode {
+  kind text
+  prop tag = "td"
+  prop text = "${item.modeText}"
+}
+
+view PlatformConfigPipelineChildRunRowStatus {
+  kind text
+  prop tag = "td"
+  prop text = "${item.statusText}"
+}
+
+view PlatformConfigPipelineChildRunRowRowsRead {
+  kind text
+  prop tag = "td"
+  prop text = "${item.rowsReadText}"
+}
+
+view PlatformConfigPipelineChildRunRowCounts {
+  kind text
+  prop tag = "td"
+  prop text = "${item.outputCountsText}"
+}
+
+view PlatformConfigPipelineChildRunRowCheckpoint {
+  kind text
+  prop tag = "td"
+  prop text = "${item.checkpointCommittedText}"
+}
+
+view PlatformConfigPipelineChildRunRowError {
+  kind text
+  prop tag = "td"
+  prop text = "${item.lastErrorText}"
+}
+
+view PlatformConfigPipelineChildRunRowActionCell {
+  kind region
+  prop tag = "td"
+  children {
+    PlatformConfigPipelineChildRunRowAction
+  }
+}
+
+view PlatformConfigPipelineChildRunTableHeader {
+  kind region
+  prop tag = "thead"
+  children {
+    PlatformConfigPipelineChildRunTableHeaderRow
+  }
+}
+
+view PlatformConfigPipelineChildRunTableHeaderRow {
+  kind region
+  prop tag = "tr"
+  children {
+    PlatformConfigPipelineChildRunHeaderBatch
+    PlatformConfigPipelineChildRunHeaderMode
+    PlatformConfigPipelineChildRunHeaderStatus
+    PlatformConfigPipelineChildRunHeaderRowsRead
+    PlatformConfigPipelineChildRunHeaderCounts
+    PlatformConfigPipelineChildRunHeaderCheckpoint
+    PlatformConfigPipelineChildRunHeaderError
+    PlatformConfigPipelineChildRunHeaderActions
+  }
+}
+
+view PlatformConfigPipelineChildRunHeaderBatch {
+  kind text
+  prop tag = "th"
+  prop text = "Batch"
+}
+
+view PlatformConfigPipelineChildRunHeaderMode {
+  kind text
+  prop tag = "th"
+  prop text = "Mode"
+}
+
+view PlatformConfigPipelineChildRunHeaderStatus {
+  kind text
+  prop tag = "th"
+  prop text = "Status"
+}
+
+view PlatformConfigPipelineChildRunHeaderRowsRead {
+  kind text
+  prop tag = "th"
+  prop text = "Rows"
+}
+
+view PlatformConfigPipelineChildRunHeaderCounts {
+  kind text
+  prop tag = "th"
+  prop text = "Outputs"
+}
+
+view PlatformConfigPipelineChildRunHeaderCheckpoint {
+  kind text
+  prop tag = "th"
+  prop text = "Checkpoint"
+}
+
+view PlatformConfigPipelineChildRunHeaderError {
+  kind text
+  prop tag = "th"
+  prop text = "Last Error"
+}
+
+view PlatformConfigPipelineChildRunHeaderActions {
+  kind text
+  prop tag = "th"
+  prop text = "Actions"
+}
+
+view PlatformConfigPipelineChildRunTableBody {
+  kind region
+  prop tag = "tbody"
+  repeat {
+    collection PlatformConfigPipelineChildRuns
+    template PlatformConfigPipelineChildRunRowTemplate
+    itemAs item
+    indexAs index
+  }
+}
+
+view PlatformConfigPipelineChildRunTable {
+  kind region
+  prop tag = "table"
+  class platform-config-table
+  children {
+    PlatformConfigPipelineChildRunTableHeader
+    PlatformConfigPipelineChildRunTableBody
+  }
+}
+
 view PlatformConfigPipelineLogRowTemplate {
   kind region
   prop tag = "tr"
@@ -1685,8 +1923,12 @@ view PlatformConfigScriptsContent {
     PlatformConfigPipelineBindingTable
     PlatformConfigPipelineBindingEditorField
     PlatformConfigPipelineRowLimitField
+    PlatformConfigPipelineMaxBatchesField
+    PlatformConfigPipelineScheduleEnabledField
+    PlatformConfigPipelineScheduleIntervalField
     PlatformConfigPipelineActions
     PlatformConfigPipelineRunTable
+    PlatformConfigPipelineChildRunTable
     PlatformConfigPipelineLogTable
     PlatformConfigScriptResult
   }

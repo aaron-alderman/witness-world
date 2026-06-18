@@ -5,8 +5,8 @@ import {
 export function renderBootstrapRuntimeIntegrationDirectSubmitFactory() {
   return String.raw`
     const bootstrapRuntimeIntegrationDirectSubmitContractsByFamily = ${JSON.stringify(bootstrapRuntimeIntegrationDirectSubmitContractsByFamily)};
-    const omitBlankStringFields = ${omitBlankStringFields.toString()};
-    const contractForFamily = ${contractForFamily.toString()};
+    const bootstrapRuntimeIntegrationDirectOmitBlankStringFields = ${bootstrapRuntimeIntegrationDirectOmitBlankStringFields.toString()};
+    const bootstrapRuntimeIntegrationDirectContractForFamily = ${bootstrapRuntimeIntegrationDirectContractForFamily.toString()};
     const applyBootstrapRuntimeIntegrationDirectSubmitFieldRule = ${applyBootstrapRuntimeIntegrationDirectSubmitFieldRule.toString()};
     const buildBootstrapRuntimeIntegrationDirectSubmitRequest = ${buildBootstrapRuntimeIntegrationDirectSubmitRequest.toString()};
     const runBootstrapRuntimeIntegrationDirectSubmit = ${runBootstrapRuntimeIntegrationDirectSubmit.toString()};
@@ -14,13 +14,13 @@ export function renderBootstrapRuntimeIntegrationDirectSubmitFactory() {
   `;
 }
 
-function omitBlankStringFields(record = {}) {
+function bootstrapRuntimeIntegrationDirectOmitBlankStringFields(record = {}) {
   return Object.fromEntries(
     Object.entries(record).filter(([, value]) => value !== "")
   );
 }
 
-function contractForFamily(family = "", contractsByFamily = bootstrapRuntimeIntegrationDirectSubmitContractsByFamily) {
+function bootstrapRuntimeIntegrationDirectContractForFamily(family = "", contractsByFamily = bootstrapRuntimeIntegrationDirectSubmitContractsByFamily) {
   const key = typeof family === "string" ? family.trim() : "";
   return key ? (contractsByFamily[key] || null) : null;
 }
@@ -43,7 +43,7 @@ export function buildBootstrapRuntimeIntegrationDirectSubmitRequest({
   detail = {},
   contractsByFamily = bootstrapRuntimeIntegrationDirectSubmitContractsByFamily
 } = {}) {
-  const contract = contractForFamily(detail.family, contractsByFamily);
+  const contract = bootstrapRuntimeIntegrationDirectContractForFamily(detail.family, contractsByFamily);
   if (!contract) return null;
   let body = Object.fromEntries(
     (contract.bodyFields || []).map(field => [field, detail[field] || ""])
@@ -52,7 +52,7 @@ export function buildBootstrapRuntimeIntegrationDirectSubmitRequest({
     body = applyBootstrapRuntimeIntegrationDirectSubmitFieldRule({ body, detail, rule });
   }
   if (contract.omitBlankStrings === true) {
-    body = omitBlankStringFields(body);
+    body = bootstrapRuntimeIntegrationDirectOmitBlankStringFields(body);
   }
   return {
     url: contract.url || "",

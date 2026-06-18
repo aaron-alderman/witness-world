@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { relation } from "../../src/kernel.js";
 import {
   grantIdentityActorAssumption,
@@ -23,9 +22,12 @@ import {
   pipelineSyncCatalogRows
 } from "./catalog-runtime.js";
 import {
-  createPipelineRunRecord,
   upsertPipelineBinding
 } from "./job-handlers.js";
+import {
+  createOrUpdatePipelineSchedule,
+  createPipelineParentRunForSync
+} from "./coordinator-runtime.js";
 import { pipelineModuleProjectors } from "./projections.js";
 
 const SELECT_SLOT_LIMIT = 10;
@@ -63,9 +65,34 @@ function normalizeRunMode(value) {
   return mode === "execute" ? "execute" : (mode === "dry_run" ? "dry_run" : null);
 }
 
+function activeParentRunForIndex(runIndex, serverRunnerId, syncId) {
+  return (runIndex?.byRunnerSyncParents?.[`${serverRunnerId}:${syncId}`] ?? [])
+    .find(row => row.status === "queued" || row.status === "running") ?? null;
+}
+
 function normalizeRowLimit(value, fallback = 500) {
   const parsed = Number.parseInt(String(value ?? ""), 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeMaxBatches(value, fallback = 10) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeIntervalMs(value, fallback = 60000) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizeBoolean(value, fallback = false) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const lowered = value.trim().toLowerCase();
+    if (lowered === "true") return true;
+    if (lowered === "false") return false;
+  }
+  return fallback;
 }
 
 function normalizeCsvList(value) {
@@ -158,16 +185,29 @@ function pipelineRunStatusText(status) {
   return normalizeText(status, "Unknown");
 }
 
-function summarizePipelineScriptPanel({ selectedSync = null, selectedRun = null, checkpoint = null, bindingRows = [] } = {}) {
+function summarizePipelineScriptPanel({
+  selectedSync = null,
+  selectedRun = null,
+  selectedSchedule = null,
+  checkpoint = null,
+  bindingRows = [],
+  childRuns = []
+} = {}) {
   if (selectedRun) {
     const runLabel = normalizeText(selectedRun.syncId, "pipeline");
     const errorText = normalizeText(selectedRun.lastError, "");
+    const completionText = normalizeText(selectedRun.completionReasonText, "");
+    const batchText = selectedRun.runKind === "child"
+      ? `Batch ${Number(selectedRun.batchOrdinal || 0)}.`
+      : `${Number(selectedRun.childCount || 0)} child batch${Number(selectedRun.childCount || 0) === 1 ? "" : "es"}.`;
     return [
-      `${pipelineRunStatusText(selectedRun.status)} ${selectedRun.mode === "execute" ? "execute" : "dry run"} for ${runLabel}.`,
+      `${pipelineRunStatusText(selectedRun.status)} ${selectedRun.runKind === "child" ? "child" : "parent"} ${selectedRun.mode === "execute" ? "execute" : "dry run"} for ${runLabel}.`,
+      batchText,
       `Rows read: ${Number(selectedRun.rowsRead || 0)}.`,
       `World counts: ${Object.entries(selectedRun.worldCounts ?? {}).map(([key, value]) => `${key}:${value}`).join(", ") || "none"}.`,
       `SQL counts: ${Object.entries(selectedRun.sqlCounts ?? {}).map(([key, value]) => `${key}:${value}`).join(", ") || "none"}.`,
       `Checkpoint committed: ${selectedRun.checkpointCommitted ? "yes" : "no"}.`,
+      completionText ? `Completion: ${completionText}.` : "",
       errorText ? `Error: ${errorText}` : ""
     ].filter(Boolean).join("\n");
   }
@@ -175,28 +215,41 @@ function summarizePipelineScriptPanel({ selectedSync = null, selectedRun = null,
     const checkpointText = checkpoint?.cursorValue == null
       ? "No checkpoint committed yet."
       : `Checkpoint cursor: ${String(checkpoint.cursorValue)}.`;
+    const scheduleText = selectedSchedule?.enabled === true
+      ? `Schedule enabled every ${String(selectedSchedule.intervalMs)} ms with row limit ${String(selectedSchedule.rowLimit)} and max ${String(selectedSchedule.maxBatchesPerRun)} batches.`
+      : "Schedule disabled.";
     return [
       `Selected sync "${selectedSync.title}".`,
       `${bindingRows.length} logical binding${bindingRows.length === 1 ? "" : "s"} required.`,
-      checkpointText
-    ].join(" ");
+      checkpointText,
+      scheduleText,
+      childRuns.length ? `${childRuns.length} child batch${childRuns.length === 1 ? "" : "es"} loaded for the selected parent.` : ""
+    ].filter(Boolean).join(" ");
   }
-  return "Select a pipeline sync to configure bindings and run it.";
+  return "Select a pipeline sync to configure bindings, schedules, and catch-up runs.";
 }
 
 function decoratePipelineRunRow(row, syncRowsById, now = Date.now()) {
+  const completionReason = normalizeText(row.completionReason, "");
+  const runKind = normalizeText(row.runKind, "parent");
   return {
     ...row,
     title: normalizeText(syncRowsById[row.syncId]?.title, normalizeText(row.syncId, row.id)),
+    runKindText: runKind === "child" ? "Child" : "Parent",
     modeText: row.mode === "execute" ? "Execute" : "Dry Run",
+    triggerText: normalizeText(row.triggerKind, "manual") === "scheduled" ? "Scheduled" : "Manual",
     statusText: pipelineRunStatusText(row.status),
     startedAtText: formatRelativeTime(row.startedAt, now),
     startedAtTitle: safeIso(row.startedAt) ?? "Not started",
     completedAtText: formatRelativeTime(row.completedAt, now),
     completedAtTitle: safeIso(row.completedAt) ?? "Not completed",
     checkpointCommittedText: row.checkpointCommitted ? "Committed" : "No",
+    checkpointAfterText: row.checkpointAfter == null ? "None" : String(row.checkpointAfter),
+    childCountText: String(Number(row.childCount || 0)),
+    batchOrdinalText: row.batchOrdinal == null ? "" : String(row.batchOrdinal),
     rowsReadText: String(Number(row.rowsRead || 0)),
     outputCountsText: Object.entries(row.sqlCounts ?? {}).map(([key, value]) => `${key}:${value}`).join(", ") || "None",
+    completionReasonText: completionReason ? completionReason.replaceAll("_", " ") : "",
     lastErrorText: normalizeText(row.lastError, "")
   };
 }
@@ -208,6 +261,16 @@ function decoratePipelineLogRow(row, now = Date.now()) {
     atTitle: safeIso(row.at) ?? "Unknown time",
     stageText: normalizeText(row.stage, normalizeText(row.process, "log")),
     statusText: normalizeText(row.status, "info")
+  };
+}
+
+function decoratePipelineScheduleRow(row, now = Date.now()) {
+  return {
+    ...row,
+    title: normalizeText(row.title, normalizeText(row.syncId, row.id)),
+    enabledText: row.enabled === true ? "Enabled" : "Disabled",
+    lastTriggeredAtText: formatRelativeTime(row.lastTriggeredAt, now),
+    lastTriggeredAtTitle: safeIso(row.lastTriggeredAt) ?? "Never triggered"
   };
 }
 
@@ -515,8 +578,12 @@ export async function pipelineSnapshotPayload(appContext, projectionWorld, {
   scriptSyncId = "",
   scriptBindingName = "",
   scriptRunId = "",
+  scriptLogRunId = "",
   scriptRowLimit = "500",
+  scriptMaxBatches = "10",
   scriptRunMode = "dry_run",
+  scriptScheduleEnabled = false,
+  scriptScheduleIntervalMs = "60000",
   requestSession = null,
   requestActor = null
 } = {}) {
@@ -542,10 +609,19 @@ export async function pipelineSnapshotPayload(appContext, projectionWorld, {
     byId: {},
     byRunnerSync: {}
   });
+  const scheduleIndex = safeProject(projectionWorld, pipelineModuleProjectors.pipelineScheduleIndex, {
+    rows: [],
+    byId: {},
+    byRunner: {},
+    byRunnerSync: {}
+  });
   const runIndex = safeProject(projectionWorld, pipelineModuleProjectors.pipelineRunIndex, {
     rows: [],
     byId: {},
-    byRunner: {}
+    byRunner: {},
+    byParentId: {},
+    byRunnerSyncParents: {},
+    byRunnerSyncChildren: {}
   });
   const runLogIndex = safeProject(projectionWorld, pipelineModuleProjectors.pipelineRunLogIndex, {
     rows: [],
@@ -570,31 +646,53 @@ export async function pipelineSnapshotPayload(appContext, projectionWorld, {
   const { catalog, rows: pipelineSyncRows } = pipelineSyncCatalogRows(appContext?.appProject);
   const syncRowsById = Object.fromEntries(pipelineSyncRows.map(row => [row.id, row]));
   const selectedSyncId = normalizeSyncId(scriptSyncId) || pipelineSyncRows[0]?.id || "";
+  const selectedSyncKey = `${appContext?.serverRunnerId || ""}:${selectedSyncId}`;
   const selectedSyncPlan = selectedSyncId ? catalog.syncPlans.get(selectedSyncId) ?? null : null;
   const selectedCheckpoint = selectedSyncId
-    ? checkpointIndex.byRunnerSync?.[`${appContext?.serverRunnerId || ""}:${selectedSyncId}`] ?? null
+    ? checkpointIndex.byRunnerSync?.[selectedSyncKey] ?? null
+    : null;
+  const selectedSchedule = selectedSyncId
+    ? scheduleIndex.byRunnerSync?.[selectedSyncKey] ?? null
     : null;
   const pipelineBindings = selectedSyncPlan
     ? pipelineBindingRowsForSync(selectedSyncPlan, bindingIndex, datasourceIndex, appContext?.serverRunnerId || "", selectedSyncId)
     : [];
   const selectedBindingName = normalizeBindingName(scriptBindingName) || pipelineBindings[0]?.bindingName || "";
   const selectedBindingRow = pipelineBindings.find(row => row.bindingName === selectedBindingName) ?? pipelineBindings[0] ?? null;
-  const recentRunRows = (runIndex.byRunner?.[appContext?.serverRunnerId || ""] ?? [])
+  const allRunRows = (runIndex.byRunner?.[appContext?.serverRunnerId || ""] ?? [])
     .map(row => decoratePipelineRunRow(row, syncRowsById));
-  const selectedRunId = normalizeRunId(scriptRunId) || recentRunRows[0]?.id || "";
-  const selectedRunRow = recentRunRows.find(row => row.id === selectedRunId) ?? recentRunRows[0] ?? null;
-  const selectedRunLogs = selectedRunRow
-    ? (runLogIndex.byRunId?.[selectedRunRow.id] ?? []).map(row => decoratePipelineLogRow(row))
+  const recentParentRuns = allRunRows.filter(row => row.runKind === "parent" && row.syncId === selectedSyncId);
+  const selectedParentRunId = normalizeRunId(scriptRunId) || recentParentRuns[0]?.id || "";
+  const selectedParentRun = recentParentRuns.find(row => row.id === selectedParentRunId) ?? recentParentRuns[0] ?? null;
+  const childRunRows = selectedParentRun
+    ? (runIndex.byParentId?.[selectedParentRun.id] ?? []).map(row => decoratePipelineRunRow(row, syncRowsById))
+    : [];
+  const selectedLogRunId = normalizeRunId(scriptLogRunId) || selectedParentRun?.id || childRunRows[0]?.id || "";
+  const selectedLogRun = [...recentParentRuns, ...childRunRows].find(row => row.id === selectedLogRunId)
+    ?? selectedParentRun
+    ?? childRunRows[0]
+    ?? null;
+  const selectedRunLogs = selectedLogRun
+    ? (runLogIndex.byRunId?.[selectedLogRun.id] ?? []).map(row => decoratePipelineLogRow(row))
     : [];
   const pipelineSyncCollection = pipelineSyncRows.map(row => {
     const checkpoint = checkpointIndex.byRunnerSync?.[`${appContext?.serverRunnerId || ""}:${row.id}`] ?? null;
+    const schedule = scheduleIndex.byRunnerSync?.[`${appContext?.serverRunnerId || ""}:${row.id}`] ?? null;
     return {
       ...row,
       checkpointText: checkpoint?.cursorValue == null ? "None" : String(checkpoint.cursorValue),
       checkpointTitle: checkpoint?.updatedAt ?? "No checkpoint",
-      bindingSummaryText: row.bindingNames.join(", ")
+      bindingSummaryText: row.bindingNames.join(", "),
+      scheduleText: schedule?.enabled === true
+        ? `Every ${String(schedule.intervalMs)} ms`
+        : "Disabled"
     };
   });
+  const pipelineScheduleRows = (scheduleIndex.byRunner?.[appContext?.serverRunnerId || ""] ?? []).map(row => decoratePipelineScheduleRow(row));
+  const normalizedRowLimit = normalizeRowLimit(scriptRowLimit, selectedSchedule?.rowLimit ?? 500);
+  const normalizedMaxBatches = normalizeMaxBatches(scriptMaxBatches, selectedSchedule?.maxBatchesPerRun ?? 10);
+  const normalizedScheduleEnabled = normalizeBoolean(scriptScheduleEnabled, selectedSchedule?.enabled === true);
+  const normalizedScheduleIntervalMs = normalizeIntervalMs(scriptScheduleIntervalMs, selectedSchedule?.intervalMs ?? 60000);
   return {
     secrets: secretSelection.rows,
     datasources: datasourceSelection.rows,
@@ -604,8 +702,10 @@ export async function pipelineSnapshotPayload(appContext, projectionWorld, {
     authorityActors,
     authRoles: authRoleRows,
     pipelineSyncs: pipelineSyncCollection,
+    pipelineSchedules: pipelineScheduleRows,
     pipelineBindings,
-    pipelineRuns: recentRunRows,
+    pipelineRuns: recentParentRuns,
+    pipelineChildRuns: childRunRows,
     pipelineRunLogs: selectedRunLogs,
     PlatformConfigSecretSearchVisible: secretSelection.searchVisible,
     PlatformConfigDatasourceSearchVisible: datasourceSelection.searchVisible,
@@ -614,14 +714,20 @@ export async function pipelineSnapshotPayload(appContext, projectionWorld, {
     PlatformConfigPipelineSyncSelectedId: selectedSyncId,
     PlatformConfigPipelineBindingSelectedName: selectedBindingRow?.bindingName ?? selectedBindingName,
     PlatformConfigPipelineBindingDatasourceId: selectedBindingRow?.datasourceId ?? "",
-    PlatformConfigPipelineRunSelectedId: selectedRunRow?.id ?? selectedRunId,
-    PlatformConfigPipelineRowLimit: String(normalizeRowLimit(scriptRowLimit, 500)),
+    PlatformConfigPipelineRunSelectedId: selectedParentRun?.id ?? selectedParentRunId,
+    PlatformConfigPipelineLogRunSelectedId: selectedLogRun?.id ?? selectedLogRunId,
+    PlatformConfigPipelineRowLimit: String(normalizedRowLimit),
+    PlatformConfigPipelineMaxBatches: String(normalizedMaxBatches),
     PlatformConfigPipelineRunMode: normalizeRunMode(scriptRunMode) ?? "dry_run",
+    PlatformConfigPipelineScheduleEnabled: normalizedScheduleEnabled,
+    PlatformConfigPipelineScheduleIntervalMs: String(normalizedScheduleIntervalMs),
     PlatformConfigScriptResult: summarizePipelineScriptPanel({
       selectedSync: selectedSyncId ? syncRowsById[selectedSyncId] ?? { id: selectedSyncId, title: selectedSyncId } : null,
-      selectedRun: selectedRunRow,
+      selectedRun: selectedLogRun,
+      selectedSchedule,
       checkpoint: selectedCheckpoint,
-      bindingRows: pipelineBindings
+      bindingRows: pipelineBindings,
+      childRuns: childRunRows
     }),
     PlatformConfigAccessRolesHint: rolesHint(authRoleRows),
     ...authoritySummaryPayload(authoritySummary),
@@ -689,8 +795,12 @@ export function createPipelineRuntimeHandlers(deps) {
         scriptSyncId: normalizeText(body?.scriptSyncId, ""),
         scriptBindingName: normalizeText(body?.scriptBindingName, ""),
         scriptRunId: normalizeText(body?.scriptRunId, ""),
+        scriptLogRunId: normalizeText(body?.scriptLogRunId, ""),
         scriptRowLimit: body?.scriptRowLimit,
+        scriptMaxBatches: body?.scriptMaxBatches,
         scriptRunMode: body?.scriptRunMode,
+        scriptScheduleEnabled: body?.scriptScheduleEnabled,
+        scriptScheduleIntervalMs: body?.scriptScheduleIntervalMs,
         requestActor,
         requestSession
       });
@@ -1368,11 +1478,74 @@ export function createPipelineRuntimeHandlers(deps) {
           scriptSyncId: syncId,
           scriptBindingName: bindingName,
           scriptRowLimit: body?.rowLimit,
-          scriptRunMode: body?.mode
+          scriptMaxBatches: body?.maxBatches,
+          scriptRunMode: body?.mode,
+          scriptRunId: body?.scriptRunId,
+          scriptLogRunId: body?.scriptLogRunId,
+          scriptScheduleEnabled: body?.scheduleEnabled,
+          scriptScheduleIntervalMs: body?.scheduleIntervalMs
         })),
         message: datasourceId
           ? `Saved binding ${bindingName}.`
           : `Cleared binding ${bindingName}.`
+      });
+    },
+
+    "pipeline.script.schedule.save": async ({ req, res, requestActor, requestSession, appContext }) => {
+      if (!requestActor) {
+        world.observe({
+          process: "pipeline.script.schedule.save.failed",
+          actor: backendHost,
+          claims: [],
+          body: { reason: "no actor", serverRunner: appContext?.serverRunnerId || "" }
+        });
+        sendJson(res, 401, { error: "sign in first" });
+        return;
+      }
+      const body = await readJson(req);
+      const syncId = normalizeSyncId(body?.syncId);
+      const enabled = normalizeBoolean(body?.enabled, false);
+      const intervalMs = normalizeIntervalMs(body?.intervalMs, 60000);
+      const rowLimit = normalizeRowLimit(body?.rowLimit, 500);
+      const maxBatches = normalizeMaxBatches(body?.maxBatches, 10);
+      const catalog = createPipelineCatalogFromAppProject(appContext?.appProject);
+      if (!syncId || !catalog.syncPlans.has(syncId)) {
+        sendJson(res, 404, { error: "sync not found" });
+        return;
+      }
+      const existing = safeProject(world, pipelineModuleProjectors.pipelineScheduleIndex, {
+        byRunnerSync: {}
+      }).byRunnerSync?.[`${appContext?.serverRunnerId || ""}:${syncId}`] ?? null;
+      createOrUpdatePipelineSchedule({
+        world,
+        actor: requestActor,
+        serverRunnerId: appContext?.serverRunnerId || "",
+        syncId,
+        enabled,
+        intervalMs,
+        rowLimit,
+        maxBatchesPerRun: maxBatches,
+        existing
+      });
+      if (enabled) {
+        await appContext?.providerRuntimes?.["pipeline.orchestrator"]?.tick?.();
+      }
+      sendJson(res, 200, {
+        ...(await pipelineSnapshotPayload(appContext, world, {
+          requestActor,
+          requestSession,
+          scriptSyncId: syncId,
+          scriptRunId: body?.scriptRunId,
+          scriptLogRunId: body?.scriptLogRunId,
+          scriptRowLimit: rowLimit,
+          scriptMaxBatches: maxBatches,
+          scriptRunMode: body?.mode,
+          scriptScheduleEnabled: enabled,
+          scriptScheduleIntervalMs: intervalMs
+        })),
+        message: enabled
+          ? `Saved schedule for ${syncId}.`
+          : `Disabled schedule for ${syncId}.`
       });
     },
 
@@ -1391,6 +1564,7 @@ export function createPipelineRuntimeHandlers(deps) {
       const syncId = normalizeSyncId(body?.syncId);
       const mode = normalizeRunMode(body?.mode);
       const rowLimit = normalizeRowLimit(body?.rowLimit, 500);
+      const maxBatches = normalizeMaxBatches(body?.maxBatches, 10);
       if (!mode) {
         sendJson(res, 400, { error: "run mode must be dry_run or execute" });
         return;
@@ -1405,80 +1579,61 @@ export function createPipelineRuntimeHandlers(deps) {
         sendJson(res, 503, { error: "jobs runtime unavailable" });
         return;
       }
-      const bindingIndex = safeProject(world, pipelineModuleProjectors.pipelineSqlBindingIndex, {
-        byRunnerSync: {}
+      const runIndex = safeProject(world, pipelineModuleProjectors.pipelineRunIndex, {
+        byRunnerSyncParents: {}
       });
-      const datasourceRows = appContext?.dbSql?.listDatasources?.() ?? [];
-      const datasourceIndex = safeProject(world, moduleProjectors.sqlDatasourceIndex, {
-        rows: datasourceRows,
-        byId: Object.fromEntries(datasourceRows.map(row => [row.id, row]))
-      });
-      const bindingNames = [...new Set([
-        normalizeText(plan?.source?.binding),
-        ...(plan?.outputTransforms ?? []).map(transform => normalizeText(transform?.target?.binding))
-      ].filter(Boolean))];
-      const bindingsByName = Object.fromEntries(
-        bindingNames.map(name => [name, bindingIndex.byRunnerSync?.[`${appContext?.serverRunnerId || ""}:${syncId}`]?.[name] ?? null])
-      );
-      const missingBindings = bindingNames.filter(name => !normalizeText(bindingsByName[name]?.datasourceId, ""));
-      if (missingBindings.length) {
-        sendJson(res, 400, { error: `bindings not assigned: ${missingBindings.join(", ")}` });
+      const activeParent = activeParentRunForIndex(runIndex, appContext?.serverRunnerId || "", syncId);
+      if (activeParent) {
+        sendJson(res, 409, {
+          ...(await pipelineSnapshotPayload(appContext, world, {
+            requestActor,
+            requestSession,
+            scriptSyncId: syncId,
+            scriptRunId: activeParent.id,
+            scriptLogRunId: activeParent.id,
+            scriptRowLimit: rowLimit,
+            scriptMaxBatches: maxBatches,
+            scriptRunMode: mode,
+            scriptScheduleEnabled: body?.scheduleEnabled,
+            scriptScheduleIntervalMs: body?.scheduleIntervalMs
+          })),
+          error: `pipeline already running for ${syncId}`,
+          activeRunId: activeParent.id,
+          message: `Sync ${syncId} already has an active parent run (${activeParent.id}).`
+        });
         return;
       }
-      const sourceBinding = normalizeText(plan?.source?.binding);
-      const sourceDatasourceId = normalizeText(bindingsByName[sourceBinding]?.datasourceId, "");
-      const targetBindings = (plan?.outputTransforms ?? []).map(transform => {
-        const bindingName = normalizeText(transform?.target?.binding);
-        const datasourceIdValue = normalizeText(bindingsByName[bindingName]?.datasourceId, "");
-        const datasource = datasourceIndex.byId?.[datasourceIdValue] ?? null;
-        return {
-          bindingName,
-          datasourceId: datasourceIdValue,
-          datasourceTitle: datasource?.title ?? datasource?.datasourceName ?? "",
-          tableId: transform?.target?.tableId ?? "",
-          table: transform?.target?.table ?? "",
-          schema: transform?.target?.schema ?? "",
-          provider: transform?.target?.provider ?? "",
-          writeMode: transform?.writeMode ?? ""
-        };
-      });
-      const checkpointBefore = safeProject(world, pipelineModuleProjectors.pipelineCheckpointIndex, {
-        byRunnerSync: {}
-      }).byRunnerSync?.[`${appContext?.serverRunnerId || ""}:${syncId}`]?.cursorValue ?? null;
-      const queuedRunId = `pipeline_run_${randomUUID()}`;
-      const queued = appContext.jobs.enqueue({
-        actor: requestActor,
-        handler: "pipeline.run.execute",
-        payload: { runId: queuedRunId },
-        maxAttempts: 1
-      });
-      if (!queued.ok) {
-        sendJson(res, queued.status || 500, { error: queued.reason || "job enqueue failed" });
-        return;
-      }
-      createPipelineRunRecord({
+
+      const created = createPipelineParentRunForSync({
         world,
+        project: projector => world.project(projector),
         actor: requestActor,
-        runId: queuedRunId,
+        appContext,
         serverRunnerId: appContext?.serverRunnerId || "",
         syncId,
+        triggerKind: "manual",
         mode,
         rowLimit,
-        sourceBinding,
-        sourceDatasourceId,
-        targetBindings,
-        checkpointBefore,
-        jobId: queued.job?.id ?? null,
-        isoAt
+        maxBatches,
+        failOnInvalid: false
       });
+      if (!created.ok) {
+        sendJson(res, created.status || 400, { error: created.reason || "pipeline run could not be created" });
+        return;
+      }
+      await appContext?.providerRuntimes?.["pipeline.orchestrator"]?.tick?.();
       sendJson(res, 200, {
         ...(await pipelineSnapshotPayload(appContext, world, {
           requestActor,
           requestSession,
           scriptSyncId: syncId,
-          scriptRunId: queuedRunId,
+          scriptRunId: created.runId,
+          scriptLogRunId: created.runId,
           scriptRowLimit: rowLimit,
-          scriptRunMode: mode
+          scriptMaxBatches: maxBatches,
+          scriptRunMode: mode,
+          scriptScheduleEnabled: body?.scheduleEnabled,
+          scriptScheduleIntervalMs: body?.scheduleIntervalMs
         })),
         message: `Queued ${mode === "execute" ? "execute" : "dry run"} for ${syncId}.`
       });

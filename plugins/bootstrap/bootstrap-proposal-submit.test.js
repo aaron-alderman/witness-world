@@ -162,7 +162,7 @@ test("proposal submit bridge binds one documented event family", () => {
 
   const factory = renderBootstrapProposalSubmitFactory();
   assert.equal(factory.includes("const bootstrapProposalSubmitContractsByFamily ="), true);
-  assert.equal(factory.includes("const resolveUrlTemplate ="), true);
+  assert.equal(factory.includes("const bootstrapProposalResolveUrlTemplate ="), true);
   assert.equal(factory.includes("const buildBootstrapProposalSubmitRequest ="), true);
   assert.equal(factory.includes("const runBootstrapProposalSubmit ="), true);
   assert.equal(factory.includes("const bindBootstrapProposalSubmit ="), true);

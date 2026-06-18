@@ -77,6 +77,33 @@ Those routes are served by the standalone `plugin.wcss-runtime` delivery lane.
 The runtime delivery seam is generic; Engentus-specific compilation stays in the
 Engentus adapter.
 
+## Headless Authoring Baseline
+
+Engentus now also installs a standalone headless authoring lane through
+`plugin.wcss-authoring`.
+
+The first authoring surface is token-only and session-scoped:
+
+- `GET /engentus/__generated/wcss/document`
+  - returns the canonical `WCSSDocument` plus a safe token catalog
+- `POST /engentus/__generated/wcss/preview-session`
+  - creates a preview session id
+- `PATCH /engentus/__generated/wcss/preview-session`
+  - applies token patch ops to that preview session only
+- `DELETE /engentus/__generated/wcss/preview-session`
+  - clears the preview session
+
+Preview never mutates repo-tracked WCSS. Instead, stylesheet requests may carry:
+
+- `?wcssPreview=<previewSessionId>`
+
+When present, the runtime-generated CSS routes rebuild shell/chart CSS from the
+canonical document plus the session token overlay for that request only.
+
+Page requests may also carry the same query param. The current page renderers
+propagate `wcssPreview` into emitted stylesheet hrefs so browser-session preview
+stays explicit and route-local rather than global runner state.
+
 ## Outputs
 
 Running:

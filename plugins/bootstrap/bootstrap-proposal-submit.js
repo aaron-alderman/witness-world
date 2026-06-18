@@ -5,20 +5,20 @@ import {
 export function renderBootstrapProposalSubmitFactory() {
   return String.raw`
     const bootstrapProposalSubmitContractsByFamily = ${JSON.stringify(bootstrapProposalSubmitContractsByFamily)};
-    const contractForFamily = ${contractForFamily.toString()};
-    const resolveUrlTemplate = ${resolveUrlTemplate.toString()};
+    const bootstrapProposalContractForFamily = ${bootstrapProposalContractForFamily.toString()};
+    const bootstrapProposalResolveUrlTemplate = ${bootstrapProposalResolveUrlTemplate.toString()};
     const buildBootstrapProposalSubmitRequest = ${buildBootstrapProposalSubmitRequest.toString()};
     const runBootstrapProposalSubmit = ${runBootstrapProposalSubmit.toString()};
     const bindBootstrapProposalSubmit = ${bindBootstrapProposalSubmit.toString()};
   `;
 }
 
-function contractForFamily(family = "", contractsByFamily = bootstrapProposalSubmitContractsByFamily) {
+function bootstrapProposalContractForFamily(family = "", contractsByFamily = bootstrapProposalSubmitContractsByFamily) {
   const key = typeof family === "string" ? family.trim() : "";
   return key ? (contractsByFamily[key] || null) : null;
 }
 
-function resolveUrlTemplate(template = "", detail = {}) {
+function bootstrapProposalResolveUrlTemplate(template = "", detail = {}) {
   return String(template || "").replace(/\$\{([^}]+)\}/g, (_match, key) => (
     encodeURIComponent(detail?.[String(key).trim()] || "")
   ));
@@ -28,13 +28,13 @@ export function buildBootstrapProposalSubmitRequest({
   detail = {},
   contractsByFamily = bootstrapProposalSubmitContractsByFamily
 } = {}) {
-  const contract = contractForFamily(detail.family, contractsByFamily);
+  const contract = bootstrapProposalContractForFamily(detail.family, contractsByFamily);
   if (!contract) return null;
   const body = Object.fromEntries(
     (contract.bodyFields || []).map(field => [field, detail[field] || ""])
   );
   return {
-    url: contract.urlTemplate ? resolveUrlTemplate(contract.urlTemplate, detail) : (contract.url || ""),
+    url: contract.urlTemplate ? bootstrapProposalResolveUrlTemplate(contract.urlTemplate, detail) : (contract.url || ""),
     body,
     successText: contract.successText || "Saved."
   };

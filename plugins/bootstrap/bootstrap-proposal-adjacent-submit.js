@@ -5,7 +5,7 @@ import {
 export function renderBootstrapProposalAdjacentSubmitFactory() {
   return String.raw`
     const bootstrapProposalAdjacentSubmitContractsByFamily = ${JSON.stringify(bootstrapProposalAdjacentSubmitContractsByFamily)};
-    const contractForFamily = ${contractForFamily.toString()};
+    const bootstrapProposalAdjacentContractForFamily = ${bootstrapProposalAdjacentContractForFamily.toString()};
     const buildBootstrapProposalAdjacentSubmitBody = ${buildBootstrapProposalAdjacentSubmitBody.toString()};
     const buildBootstrapProposalAdjacentSubmitRequest = ${buildBootstrapProposalAdjacentSubmitRequest.toString()};
     const runBootstrapProposalAdjacentSubmit = ${runBootstrapProposalAdjacentSubmit.toString()};
@@ -13,7 +13,7 @@ export function renderBootstrapProposalAdjacentSubmitFactory() {
   `;
 }
 
-function contractForFamily(family = "", contractsByFamily = bootstrapProposalAdjacentSubmitContractsByFamily) {
+function bootstrapProposalAdjacentContractForFamily(family = "", contractsByFamily = bootstrapProposalAdjacentSubmitContractsByFamily) {
   const key = typeof family === "string" ? family.trim() : "";
   return key ? (contractsByFamily[key] || null) : null;
 }
@@ -52,7 +52,7 @@ export function buildBootstrapProposalAdjacentSubmitRequest({
   mcpToolProposalBodyFn = null,
   contractsByFamily = bootstrapProposalAdjacentSubmitContractsByFamily
 } = {}) {
-  const contract = contractForFamily(detail.family, contractsByFamily);
+  const contract = bootstrapProposalAdjacentContractForFamily(detail.family, contractsByFamily);
   if (!contract) return null;
   const body = buildBootstrapProposalAdjacentSubmitBody({
     contract,

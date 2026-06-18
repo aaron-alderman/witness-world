@@ -147,7 +147,8 @@ export function renderSurfacePage(world, {
   surfaceCapabilityRenderers = [],
   surfaceRuntimeSupportAssets = [],
   devMode = false,
-  initialStateOverrides = null
+  initialStateOverrides = null,
+  stylesheetQuery = null
 } = {}) {
   const initialState = readInitialStateFromWorld(world);
   const mergedInitialState = initialStateOverrides && typeof initialStateOverrides === "object"
@@ -159,7 +160,8 @@ export function renderSurfacePage(world, {
     rootSurfaceId,
     requestPathname,
     route,
-    initialState: mergedInitialState
+    initialState: mergedInitialState,
+    stylesheetQuery
   });
   if (!shellState?.html) return null;
   const requiredCapabilities = activeSurfaceCapabilityRefs(shellState.surfaces, shellState.activeSurface?.id);
@@ -192,8 +194,9 @@ export function renderSurfacePage(world, {
         rootSurfaceId,
         requestPathname,
         route,
-        surfaceRenderers,
-        initialState: mergedInitialState
+      surfaceRenderers,
+      initialState: mergedInitialState,
+      stylesheetQuery
       })
     : shellState;
   if (!shell?.html) return null;

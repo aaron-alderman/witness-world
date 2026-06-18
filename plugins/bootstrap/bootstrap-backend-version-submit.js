@@ -5,20 +5,20 @@ import {
 export function renderBootstrapBackendVersionSubmitFactory() {
   return String.raw`
     const bootstrapBackendVersionSubmitContractsByFamily = ${JSON.stringify(bootstrapBackendVersionSubmitContractsByFamily)};
-    const contractForFamily = ${contractForFamily.toString()};
-    const resolveUrlTemplate = ${resolveUrlTemplate.toString()};
+    const bootstrapBackendVersionContractForFamily = ${bootstrapBackendVersionContractForFamily.toString()};
+    const bootstrapBackendVersionResolveUrlTemplate = ${bootstrapBackendVersionResolveUrlTemplate.toString()};
     const buildBootstrapBackendVersionSubmitRequest = ${buildBootstrapBackendVersionSubmitRequest.toString()};
     const runBootstrapBackendVersionSubmit = ${runBootstrapBackendVersionSubmit.toString()};
     const bindBootstrapBackendVersionSubmit = ${bindBootstrapBackendVersionSubmit.toString()};
   `;
 }
 
-function contractForFamily(family = "", contractsByFamily = bootstrapBackendVersionSubmitContractsByFamily) {
+function bootstrapBackendVersionContractForFamily(family = "", contractsByFamily = bootstrapBackendVersionSubmitContractsByFamily) {
   const key = typeof family === "string" ? family.trim() : "";
   return key ? (contractsByFamily[key] || null) : null;
 }
 
-function resolveUrlTemplate(template = "", detail = {}) {
+function bootstrapBackendVersionResolveUrlTemplate(template = "", detail = {}) {
   return String(template || "").replace(/\$\{([^}]+)\}/g, (_match, key) => (
     encodeURIComponent(detail?.[String(key).trim()] || "")
   ));
@@ -28,13 +28,13 @@ export function buildBootstrapBackendVersionSubmitRequest({
   detail = {},
   contractsByFamily = bootstrapBackendVersionSubmitContractsByFamily
 } = {}) {
-  const contract = contractForFamily(detail.family, contractsByFamily);
+  const contract = bootstrapBackendVersionContractForFamily(detail.family, contractsByFamily);
   if (!contract) return null;
   const body = Object.fromEntries(
     (contract.bodyFields || []).map(field => [field, detail[field] || ""])
   );
   return {
-    url: resolveUrlTemplate(contract.urlTemplate, detail),
+    url: bootstrapBackendVersionResolveUrlTemplate(contract.urlTemplate, detail),
     body,
     successText: contract.successText || "Saved."
   };

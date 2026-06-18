@@ -270,8 +270,8 @@ test("top-cards submit bridge binds one documented event family", () => {
 
   const factory = renderBootstrapTopCardsSubmitFactory();
   assert.equal(factory.includes("const bootstrapTopCardsSubmitContractsByFamily ="), true);
-  assert.equal(factory.includes("const contractForFamily ="), true);
-  assert.equal(factory.includes("const resolveUrlTemplate ="), true);
+  assert.equal(factory.includes("const bootstrapTopCardsContractForFamily ="), true);
+  assert.equal(factory.includes("const bootstrapTopCardsResolveUrlTemplate ="), true);
   assert.equal(factory.includes("const buildBootstrapTopCardsSubmitRequest ="), true);
   assert.equal(factory.includes("const runBootstrapTopCardsSubmit ="), true);
   assert.equal(factory.includes("const bindBootstrapTopCardsSubmit ="), true);

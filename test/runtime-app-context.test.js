@@ -138,7 +138,8 @@ test("createRuntimeAppContext does not create optional provider runtimes without
   assert.equal(appContext.jobs.enqueue, undefined);
   assert.equal(appContext.dbSql, null);
   assert.equal(appContext.searchIndex, null);
-  assert.deepEqual(appContext.providerRuntimes, { "jobs.queue": appContext.jobs });
+  assert.deepEqual(Object.keys(appContext.providerRuntimes), ["jobs.queue"]);
+  assert.equal(appContext.providerRuntimes["jobs.queue"], appContext.jobs);
 });
 
 test("createRuntimeAppContext exposes context-aware projection helper", async () => {

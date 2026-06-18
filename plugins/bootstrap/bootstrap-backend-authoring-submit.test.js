@@ -59,7 +59,6 @@ test("backend authoring submit request builder preserves typed backend create pa
         version: "todo.todos.list.v1",
         index: 0,
         context: "ctx.demo",
-        transitionFrom: "",
         transitionStrategy: "replace"
       }
     }
@@ -86,10 +85,7 @@ test("backend authoring submit request builder preserves typed backend create pa
         event: "request",
         op: "emit",
         order: 0,
-        paramsJson: "{\"handler\":\"todos.readModel\"}",
-        whenJson: "",
-        repeatJson: "",
-        afterJson: ""
+        paramsJson: "{\"handler\":\"todos.readModel\"}"
       }
     }
   );
@@ -134,10 +130,7 @@ test("backend authoring submit helper posts, resets, and refreshes on success", 
       event: "request",
       op: "emit",
       order: 0,
-      paramsJson: "{\"handler\":\"todos.readModel\"}",
-      whenJson: "",
-      repeatJson: "",
-      afterJson: ""
+      paramsJson: "{\"handler\":\"todos.readModel\"}"
     }
   }]);
   assert.deepEqual(statuses, [{ id: "backend-step-status", text: "Saved." }]);
@@ -189,6 +182,8 @@ test("backend authoring submit bridge binds one documented event family", () => 
 
   const factory = renderBootstrapBackendAuthoringSubmitFactory();
   assert.equal(factory.includes("const bootstrapBackendAuthoringSubmitContractsByFamily ="), true);
+  assert.equal(factory.includes("const bootstrapBackendAuthoringCoerceFieldValue ="), true);
+  assert.equal(factory.includes("const bootstrapBackendAuthoringOmitBlankStringFields ="), true);
   assert.equal(factory.includes("const buildBootstrapBackendAuthoringSubmitRequest ="), true);
   assert.equal(factory.includes("const runBootstrapBackendAuthoringSubmit ="), true);
   assert.equal(factory.includes("const bindBootstrapBackendAuthoringSubmit ="), true);

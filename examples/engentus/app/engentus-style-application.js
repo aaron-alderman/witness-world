@@ -49,6 +49,21 @@ export const ENGENTUS_GENERATED_STYLESHEET_PATHS = Object.freeze({
   shell: "/engentus/__generated/engentus-shell.css",
   chart: "/engentus/__generated/engentus-chart-pages.css"
 });
+const ENGENTUS_PREVIEWABLE_TOKEN_BINDINGS = Object.freeze({
+  "color.chrome.bg": Object.freeze([{ asset: "shell", cssVariable: "--dk" }, { asset: "chart", cssVariable: "--dk" }]),
+  "color.chrome.panel": Object.freeze([{ asset: "shell", cssVariable: "--mid" }, { asset: "chart", cssVariable: "--mid" }]),
+  "color.chrome.edge": Object.freeze([{ asset: "shell", cssVariable: "--brd" }, { asset: "chart", cssVariable: "--brd" }]),
+  "color.ink.primary": Object.freeze([{ asset: "shell", cssVariable: "--t1" }, { asset: "chart", cssVariable: "--t1" }]),
+  "color.ink.secondary": Object.freeze([{ asset: "shell", cssVariable: "--t2" }, { asset: "chart", cssVariable: "--t2" }]),
+  "color.ink.body": Object.freeze([{ asset: "shell", cssVariable: "--t3" }, { asset: "chart", cssVariable: "--t3" }]),
+  "color.accent.cool": Object.freeze([{ asset: "shell", cssVariable: "--blue" }, { asset: "chart", cssVariable: "--blue" }]),
+  "color.accent.cool.strong": Object.freeze([{ asset: "shell", cssVariable: "--blu2" }]),
+  "color.accent.warm": Object.freeze([{ asset: "shell", cssVariable: "--ylw" }]),
+  "color.success": Object.freeze([{ asset: "shell", cssVariable: "--grn" }]),
+  "size.sidebar.width": Object.freeze([{ asset: "shell", cssVariable: "--sw" }]),
+  "size.toolbar.height": Object.freeze([{ asset: "shell", cssVariable: "--th" }]),
+  "size.scrubber.height": Object.freeze([{ asset: "shell", cssVariable: "--sch" }])
+});
 
 function splitClassTokens(value) {
   if (typeof value !== "string") return [];
@@ -57,6 +72,10 @@ function splitClassTokens(value) {
 
 function uniqueSorted(values) {
   return [...new Set(values.filter(Boolean))].sort((left, right) => left.localeCompare(right));
+}
+
+function escapeRegExp(value) {
+  return String(value ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function maybeUnquote(value) {
@@ -661,6 +680,26 @@ function renderIndentedWcssNode(node, level = 0) {
     lines.push(renderIndentedWcssNode(child, level + 1));
   }
   return lines.join("\n");
+}
+
+function buildTokenSectionNode(tokens = []) {
+  return {
+    text: "tokens",
+    children: tokens.map(token => ({
+      text: `${token.name} = ${token.value}`,
+      children: []
+    }))
+  };
+}
+
+function replaceTopLevelSectionNode(ast, sectionName, nextSectionNode) {
+  const root = ast && typeof ast === "object" ? structuredClone(ast) : { text: "__root__", children: [] };
+  const children = Array.isArray(root.children) ? [...root.children] : [];
+  const index = children.findIndex(node => node?.text === sectionName);
+  if (index === -1) children.push(nextSectionNode);
+  else children[index] = nextSectionNode;
+  root.children = children;
+  return root;
 }
 
 function parseTokenSection(node) {
@@ -1679,6 +1718,82 @@ export function serializeEngentusCanonicalWcss(document) {
   return `${nodes.map(node => renderIndentedWcssNode(node)).join("\n\n")}\n`;
 }
 
+function serializeEngentusDocumentWithAttachments(document) {
+  const children = Array.isArray(document?.ast?.children) ? document.ast.children : [];
+  return `${children.map(node => renderIndentedWcssNode(node)).join("\n\n")}\n`;
+}
+
+function tokenValueByName(document) {
+  return new Map((document?.tokens ?? []).map(token => [token.name, token.value]));
+}
+
+function canonicalizeEngentusDocument(document) {
+  const canonical = structuredClone(document);
+  canonical.grammar = validateEngentusCanonicalStyleGrammar(canonical);
+  return canonical;
+}
+
+export function buildEngentusTokenCatalog(document) {
+  const values = tokenValueByName(document);
+  return {
+    theme: ENGENTUS_STYLE_THEME,
+    tokens: Object.entries(ENGENTUS_PREVIEWABLE_TOKEN_BINDINGS)
+      .map(([name, bindings]) => {
+        if (!values.has(name)) return null;
+        return {
+          name,
+          value: values.get(name),
+          domain: primaryNameDomain(name),
+          bindings: structuredClone(bindings)
+        };
+      })
+      .filter(Boolean)
+  };
+}
+
+export function applyEngentusTokenPatch(document, { ops } = {}) {
+  if (!document || document.kind !== "wcss-document") {
+    throw new Error("applyEngentusTokenPatch requires a WCSSDocument");
+  }
+  if (!Array.isArray(ops)) {
+    throw new Error("applyEngentusTokenPatch requires ops");
+  }
+  const tokenMap = new Map((document.tokens ?? []).map(token => [token.name, { ...token }]));
+  const tokenCatalog = buildEngentusTokenCatalog(document);
+  const previewable = new Set(tokenCatalog.tokens.map(token => token.name));
+  const canonicalValues = tokenValueByName(document);
+  for (const [index, rawOp] of ops.entries()) {
+    const kind = typeof rawOp?.kind === "string" ? rawOp.kind.trim() : "";
+    const token = typeof rawOp?.token === "string" ? rawOp.token.trim() : "";
+    if (!token) throw new Error(`Token patch op ${index} is missing token`);
+    if (!previewable.has(token)) throw new Error(`Token ${token} is not previewable in Engentus yet`);
+    if (!tokenMap.has(token)) throw new Error(`Unknown Engentus token ${token}`);
+    if (kind === "set") {
+      const value = typeof rawOp?.value === "string" ? rawOp.value.trim() : "";
+      if (!value) throw new Error(`Token patch op ${index} must set a non-empty value`);
+      tokenMap.set(token, { name: token, value });
+      continue;
+    }
+    if (kind === "reset") {
+      tokenMap.set(token, { name: token, value: canonicalValues.get(token) });
+      continue;
+    }
+    throw new Error(`Unsupported token patch op ${kind || "<empty>"}`);
+  }
+  const nextTokens = (document.tokens ?? []).map(token => tokenMap.get(token.name) ?? { ...token });
+  const nextSections = {
+    ...(document.sections ?? {}),
+    tokens: buildTokenSectionNode(nextTokens)
+  };
+  const next = {
+    ...structuredClone(document),
+    tokens: nextTokens,
+    sections: nextSections
+  };
+  next.ast = replaceTopLevelSectionNode(document.ast, "tokens", nextSections.tokens);
+  return canonicalizeEngentusDocument(next);
+}
+
 export async function loadEngentusCanonicalWcss(file = DEFAULT_CANONICAL_WCSS_FILE) {
   const canonical = parseEngentusCanonicalWcss(await readFile(file, "utf8"));
   canonical.grammar = validateEngentusCanonicalStyleGrammar(canonical);
@@ -1748,14 +1863,25 @@ export async function loadEngentusAppliedWcss(file = DEFAULT_CANONICAL_WCSS_FILE
     loadEngentusCanonicalWcss(file),
     loadEngentusLoweringSidecar(file)
   ]);
+  return createEngentusAppliedWcssFromDocument(canonical, { loweringSidecar });
+}
+
+export function createEngentusAppliedWcssFromDocument(document, {
+  loweringSidecar = null
+} = {}) {
+  const canonical = canonicalizeEngentusDocument(document);
+  const resolvedLoweringSidecar = loweringSidecar ?? deriveEngentusLoweringSidecar({
+    document: canonical,
+    text: serializeEngentusDocumentWithAttachments(canonical)
+  });
   return {
     theme: canonical.theme,
     kind: canonical.kind,
     styles: canonical.styles.map(style => style.name),
     views: canonical.views.map(view => view.name),
     document: structuredClone(canonical),
-    lowering: structuredClone(loweringSidecar),
-    slices: compatibilitySlicesFromDocument(canonical, loweringSidecar)
+    lowering: structuredClone(resolvedLoweringSidecar),
+    slices: compatibilitySlicesFromDocument(canonical, resolvedLoweringSidecar)
   };
 }
 
@@ -2339,6 +2465,23 @@ export async function loadEngentusGeneratedCssBundle({
       [styleAssetName("chart")]: renderOracleStylesheet(stylesheets.chart)
     }
   };
+}
+
+export function applyEngentusTokenBindingsToCssBundle(files, document) {
+  const tokenValues = tokenValueByName(document);
+  const nextFiles = { ...files };
+  for (const [tokenName, bindings] of Object.entries(ENGENTUS_PREVIEWABLE_TOKEN_BINDINGS)) {
+    const value = tokenValues.get(tokenName);
+    if (typeof value !== "string" || !value.trim()) continue;
+    for (const binding of bindings) {
+      const fileName = styleAssetName(binding.asset);
+      const source = nextFiles[fileName];
+      if (typeof source !== "string") continue;
+      const pattern = new RegExp(`(${escapeRegExp(binding.cssVariable)}\\s*:\\s*)([^;]+)(;)`, "g");
+      nextFiles[fileName] = source.replace(pattern, `$1${value}$3`);
+    }
+  }
+  return nextFiles;
 }
 
 export async function buildEngentusStyleArtifacts() {

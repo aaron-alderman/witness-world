@@ -847,6 +847,9 @@ export function createCoreRuntimeBundleHandlers({
         rootSurfaceId,
         requestPathname: normalizePathname(requestUrl?.pathname ?? route?.path ?? "/"),
         route,
+        stylesheetQuery: {
+          wcssPreview: requestUrl?.searchParams?.get("wcssPreview")?.trim() || null
+        },
         browserRuntimeCapabilities: (appContext?.runtimeContributions?.capabilityDefinitions ?? [])
           .map(definition => typeof definition?.id === "string" ? definition.id : "")
           .filter(Boolean),
