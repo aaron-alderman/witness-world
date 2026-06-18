@@ -146,6 +146,21 @@ function testRunRows(witnesses) {
         candidateSnapshotId: body.candidateSnapshotId ? String(body.candidateSnapshotId) : null,
         sourceDependencies: Array.isArray(body.sourceDependencies) ? body.sourceDependencies.map(String) : [],
         protectedObjects: Array.isArray(body.protectedObjects) ? body.protectedObjects.map(String) : [],
+        environmentInputs: body.environmentInputs && typeof body.environmentInputs === "object"
+          ? {
+              ...body.environmentInputs,
+              shellArgs: Array.isArray(body.environmentInputs.shellArgs) ? body.environmentInputs.shellArgs.map(String) : [],
+              envOverrideKeys: Array.isArray(body.environmentInputs.envOverrideKeys) ? body.environmentInputs.envOverrideKeys.map(String) : []
+            }
+          : null,
+        sourceRevision: body.sourceRevision && typeof body.sourceRevision === "object"
+          ? {
+              ...body.sourceRevision,
+              dependencyHashes: Array.isArray(body.sourceRevision.dependencyHashes)
+                ? body.sourceRevision.dependencyHashes.map(row => ({ ...row }))
+                : []
+            }
+          : null,
         actor: body.actor ? String(body.actor) : null,
         session: body.session ? String(body.session) : null,
         runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
@@ -178,6 +193,21 @@ function testRunRows(witnesses) {
         candidateSnapshotId: body.candidateSnapshotId ? String(body.candidateSnapshotId) : null,
         sourceDependencies: Array.isArray(body.sourceDependencies) ? body.sourceDependencies.map(String) : [],
         protectedObjects: Array.isArray(body.protectedObjects) ? body.protectedObjects.map(String) : [],
+        environmentInputs: body.environmentInputs && typeof body.environmentInputs === "object"
+          ? {
+              ...body.environmentInputs,
+              shellArgs: Array.isArray(body.environmentInputs.shellArgs) ? body.environmentInputs.shellArgs.map(String) : [],
+              envOverrideKeys: Array.isArray(body.environmentInputs.envOverrideKeys) ? body.environmentInputs.envOverrideKeys.map(String) : []
+            }
+          : null,
+        sourceRevision: body.sourceRevision && typeof body.sourceRevision === "object"
+          ? {
+              ...body.sourceRevision,
+              dependencyHashes: Array.isArray(body.sourceRevision.dependencyHashes)
+                ? body.sourceRevision.dependencyHashes.map(row => ({ ...row }))
+                : []
+            }
+          : null,
         actor: body.actor ? String(body.actor) : null,
         session: body.session ? String(body.session) : null,
         runtimeProfile: body.runtimeProfile ? String(body.runtimeProfile) : null,
@@ -223,6 +253,21 @@ function testResultRows(witnesses) {
         candidateSnapshotId: result.candidateSnapshotId ? String(result.candidateSnapshotId) : null,
         sourceDependencies: Array.isArray(result.sourceDependencies) ? result.sourceDependencies.map(String) : [],
         protectedObjects: Array.isArray(result.protectedObjects) ? result.protectedObjects.map(String) : [],
+        environmentInputs: result.environmentInputs && typeof result.environmentInputs === "object"
+          ? {
+              ...result.environmentInputs,
+              shellArgs: Array.isArray(result.environmentInputs.shellArgs) ? result.environmentInputs.shellArgs.map(String) : [],
+              envOverrideKeys: Array.isArray(result.environmentInputs.envOverrideKeys) ? result.environmentInputs.envOverrideKeys.map(String) : []
+            }
+          : null,
+        sourceRevision: result.sourceRevision && typeof result.sourceRevision === "object"
+          ? {
+              ...result.sourceRevision,
+              dependencyHashes: Array.isArray(result.sourceRevision.dependencyHashes)
+                ? result.sourceRevision.dependencyHashes.map(row => ({ ...row }))
+                : []
+            }
+          : null,
         producedAt: result.producedAt ?? witness.body.finishedAt ?? null
       });
     }
