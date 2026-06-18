@@ -26,6 +26,11 @@ await writeFile(
   "utf8"
 );
 await writeFile(
+  path.join(proofDir, "engentus-style-lowering-sidecar.json"),
+  `${JSON.stringify(artifacts.loweringSidecar, null, 2)}\n`,
+  "utf8"
+);
+await writeFile(
   path.join(proofDir, "engentus-style-parity.json"),
   `${JSON.stringify(artifacts.parity, null, 2)}\n`,
   "utf8"

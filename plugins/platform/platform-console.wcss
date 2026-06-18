@@ -1,114 +1,219 @@
 theme platform-console
 
 tokens
-  color.ink.primary       = #172026
-  color.ink.muted         = #5b6670
-  color.line              = #d8dee4
-  color.surface.base      = #ffffff
-  color.surface.soft      = #f6f8fa
-  color.accent.primary    = #1f6feb
-  color.success           = #1a7f37
-  color.warning           = #9a6700
-
-  radius.panel            = 8px
-  radius.control          = 6px
-  size.header.padding     = 20px 24px 14px
-  size.main.padding       = 20px 24px 40px
-  font.body               = system-ui, -apple-system, Segoe UI, sans-serif
+  --platform-ink = #172026
+  --platform-muted = #5b6670
+  --platform-line = #d8dee4
+  --platform-wash = #f6f8fa
+  --platform-accent = #1f6feb
+  --platform-ok = #1a7f37
+  --platform-warn = #9a6700
 
 styles
   style console.body
     selector = body.platform-console
-    layout
+    base
       margin = 0
-    paint
-      background = color.surface.base
-      ink = color.ink.primary
-    text
-      font = 14px/1.45 font.body
+      font = 14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif
+      color = var(--platform-ink)
+      background = #ffffff
 
   style console.header
     selector = body.platform-console header
-    layout
-      padding = size.header.padding
+    base
+      padding = 20px 24px 14px
+      border-bottom = 1px solid var(--platform-line)
+      background = #ffffff
       position = sticky
       top = 0
       z-index = 2
-    paint
-      background = color.surface.base
-      border.bottom = 1px solid color.line
 
   style console.main
     selector = body.platform-console main
-    layout
+    base
+      padding = 20px 24px 40px
       display = grid
       gap = 22px
-      padding = size.main.padding
+
+  style console.h1
+    selector = body.platform-console h1
+    base
+      margin = 0 0 4px
+      font-size = 24px
+
+  style console.h2
+    selector = body.platform-console h2
+    base
+      margin = 0 0 12px
+      font-size = 18px
+
+  style console.h3
+    selector = body.platform-console h3
+    base
+      margin = 0 0 8px
+      font-size = 14px
+      text-transform = capitalize
+
+  style console.muted
+    selector = .muted
+    base
+      color = var(--platform-muted)
+
+  style console.metric
+    selector = .metric
+    base
+      font-size = 24px
+      font-weight = 700
 
   style console.summary
     selector = .summary
-    layout
+    base
       display = grid
       grid-template-columns = repeat(auto-fit, minmax(130px, 1fr))
       gap = 10px
 
-  style console.card
-    selector = .card
-    layout
-      padding = 12px
-    paint
-      background = color.surface.base
-      border = 1px solid color.line
-      radius = radius.panel
-
   style console.board
     selector = .board
-    layout
+    base
       display = grid
       grid-template-columns = repeat(auto-fit, minmax(160px, 1fr))
       gap = 10px
 
+  style console.grid2
+    selector = .grid2
+    base
+      display = grid
+      grid-template-columns = minmax(0, 1fr) minmax(320px, .55fr)
+      gap = 18px
+      align-items = start
+
+  style console.branch-summary
+    selector = .platform-branch-summary
+    base
+      display = grid
+      gap = 10px
+      grid-template-columns = repeat(auto-fit, minmax(180px, 1fr))
+      margin = 12px 0 0
+
+  style console.card
+    selector = .card
+    base
+      border = 1px solid var(--platform-line)
+      border-radius = 8px
+      padding = 12px
+      background = #ffffff
+
   style console.column
     selector = .platform-column
-    layout
-      min-height = 120px
+    base
+      border = 1px solid var(--platform-line)
+      border-radius = 8px
+      background = var(--platform-wash)
       padding = 10px
-    paint
-      background = color.surface.soft
-      border = 1px solid color.line
-      radius = radius.panel
+      min-height = 120px
+
+  style console.chip
+    selector = .platform-chip
+    base
+      background = #ffffff
+      border = 1px solid var(--platform-line)
+      border-radius = 6px
+      padding = 7px 8px
+      margin = 6px 0
+
+  style console.chip-meta
+    selector = .platform-chip span
+    base
+      color = var(--platform-muted)
+      font-size = 12px
+      float = right
 
   style console.table
     selector = table
-    layout
-      width = 100%
+    base
       border-collapse = collapse
+      width = 100%
+      background = #ffffff
+      border = 1px solid var(--platform-line)
+      border-radius = 8px
       overflow = hidden
-    paint
-      background = color.surface.base
-      border = 1px solid color.line
-      radius = radius.panel
 
-  style console.forms
+  style console.cells
+    selector = th, td
+    base
+      text-align = left
+      border-bottom = 1px solid var(--platform-line)
+      padding = 8px 10px
+      vertical-align = top
+
+  style console.header-cell
+    selector = th
+    base
+      background = var(--platform-wash)
+      font-size = 12px
+      text-transform = uppercase
+      color = var(--platform-muted)
+
+  style console.last-row
+    selector = tr:last-child td
+    base
+      border-bottom = 0
+
+  style console.form
     selector = form
-    layout
+    base
       display = grid
       gap = 10px
 
+  style console.label
+    selector = label
+    base
+      display = grid
+      gap = 4px
+      font-weight = 600
+
+  style console.form-font
+    selector = input, select, textarea, button
+    base
+      font = inherit
+
   style console.controls
     selector = input, select, textarea
-    layout
+    base
+      border = 1px solid var(--platform-line)
+      border-radius = 6px
       padding = 8px
-    paint
-      border = 1px solid color.line
-      radius = radius.control
+
+  style console.textarea
+    selector = textarea
+    base
+      min-height = 110px
+      font-family = ui-monospace, SFMono-Regular, Consolas, monospace
 
   style console.button
     selector = button
-    layout
+    base
+      border = 1px solid var(--platform-accent)
+      background = var(--platform-accent)
+      color = white
+      border-radius = 6px
       padding = 8px 10px
-    paint
-      background = color.accent.primary
-      border = 1px solid color.accent.primary
-      ink = #ffffff
-      radius = radius.control
+      cursor = pointer
+
+  style console.status
+    selector = #proposal-status, #review-status, #branch-create-status, #change-set-create-status, #change-set-edit-status, #change-set-validate-status, #change-set-apply-status, #change-set-lifecycle-status, #test-run-status, #selected-test-run-status
+    base
+      color = var(--platform-muted)
+      min-height = 20px
+
+  media (max-width: 880px)
+    style console.grid2.mobile
+      selector = .grid2
+      base
+        grid-template-columns = 1fr
+
+    style console.shell.mobile
+      selector = body.platform-console header, body.platform-console main
+      base
+        padding-left = 14px
+        padding-right = 14px

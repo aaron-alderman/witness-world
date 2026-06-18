@@ -54,6 +54,7 @@ test("createRuntimeAppContext composes provider services from active runtime con
   };
   const closed = [];
   let queuedConfig = null;
+  let orchestratorConfig = null;
 
   const appContext = await createRuntimeAppContext({
     world,
@@ -82,7 +83,11 @@ test("createRuntimeAppContext composes provider services from active runtime con
           return { close: () => closed.push("jobs") };
         },
         "db.sql": () => ({ close: () => closed.push("db") }),
-        "search.index": () => ({ close: () => closed.push("search") })
+        "search.index": () => ({ close: () => closed.push("search") }),
+        "pipeline.orchestrator": config => {
+          orchestratorConfig = config;
+          return { tick() {}, close: () => closed.push("pipeline") };
+        }
       }
     },
     identityIndex
@@ -99,11 +104,14 @@ test("createRuntimeAppContext composes provider services from active runtime con
   assert.equal(queuedConfig.serverRunnerId, "runner-1");
   assert.deepEqual(Object.keys(queuedConfig.jobHandlers).sort(), ["asset.job", "notify.job", "webhook.job"]);
   assert.equal(queuedConfig.getAppContext(), appContext);
+  assert.equal(orchestratorConfig.serverRunnerId, "runner-1");
+  assert.equal(orchestratorConfig.getAppContext(), appContext);
+  assert.equal(typeof appContext.providerRuntimes["pipeline.orchestrator"].tick, "function");
   assert.ok(appContext.authOAuth.pendingFlows instanceof Map);
   assert.ok(appContext.httpOutboundStubState instanceof Map);
 
   appContext.close();
-  assert.deepEqual(closed, ["jobs", "db", "search"]);
+  assert.deepEqual(closed, ["jobs", "db", "search", "pipeline"]);
 });
 
 test("createRuntimeAppContext does not create optional provider runtimes without active contributions", async () => {
@@ -130,6 +138,7 @@ test("createRuntimeAppContext does not create optional provider runtimes without
   assert.equal(appContext.jobs.enqueue, undefined);
   assert.equal(appContext.dbSql, null);
   assert.equal(appContext.searchIndex, null);
+  assert.deepEqual(appContext.providerRuntimes, { "jobs.queue": appContext.jobs });
 });
 
 test("createRuntimeAppContext exposes context-aware projection helper", async () => {

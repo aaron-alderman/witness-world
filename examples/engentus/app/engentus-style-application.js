@@ -14,7 +14,7 @@ import {
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CANONICAL_WCSS_FILE = path.join(MODULE_DIR, "engentus-desired-v2.wcss");
 const DEFAULT_SWITCH_MANIFEST_FILE = path.join(MODULE_DIR, "engentus-style-switch.json");
-const REQUIRED_TOP_LEVEL_SECTIONS = ["tokens", "styles", "views", "application", "lowering"];
+const REQUIRED_CORE_TOP_LEVEL_SECTIONS = ["tokens", "styles", "views", "application"];
 const DEFAULT_BROWSER_BACKEND = "browser";
 const KNOWN_STYLE_ASSETS = new Set(["shell", "chart"]);
 const CANONICAL_TOKEN_DOMAINS = Object.freeze(["color", "size", "radius", "font", "shadow"]);
@@ -653,6 +653,14 @@ function sectionStatus(root) {
     application: onlySection(root, "application"),
     lowering: onlySection(root, "lowering")
   };
+}
+
+function renderIndentedWcssNode(node, level = 0) {
+  const lines = [`${"  ".repeat(level)}${node.text}`];
+  for (const child of node.children ?? []) {
+    lines.push(renderIndentedWcssNode(child, level + 1));
+  }
+  return lines.join("\n");
 }
 
 function parseTokenSection(node) {
@@ -1465,11 +1473,11 @@ function parseLoweringSection(node, authoredSlices, styleNames) {
   return lowering;
 }
 
-function compatibilitySlicesFromCanonical(canonical, backendName = DEFAULT_BROWSER_BACKEND) {
-  const backend = canonical.lowering.byBackend[backendName] ?? null;
+function compatibilitySlicesFromDocument(document, loweringSidecar, backendName = DEFAULT_BROWSER_BACKEND) {
+  const backend = loweringSidecar?.byBackend?.[backendName] ?? null;
   if (!backend) throw new Error(`Unknown lowering backend ${backendName}`);
   const loweringBySlice = new Map(backend.slices.map(slice => [slice.name, slice]));
-  return canonical.slices.map(slice => {
+  return (document?.application?.slices ?? []).map(slice => {
     const lowering = loweringBySlice.get(slice.name) ?? null;
     if (!lowering) throw new Error(`Missing lowering coverage for slice ${slice.name} on backend ${backendName}`);
     return {
@@ -1497,7 +1505,7 @@ export function parseEngentusCanonicalWcss(text) {
   }
 
   const sections = sectionStatus(root);
-  for (const sectionName of REQUIRED_TOP_LEVEL_SECTIONS) {
+  for (const sectionName of REQUIRED_CORE_TOP_LEVEL_SECTIONS) {
     if (!sections[sectionName]) throw new Error(`Missing required top-level section: ${sectionName}`);
   }
 
@@ -1505,15 +1513,27 @@ export function parseEngentusCanonicalWcss(text) {
   const styles = parseStyleSection(sections.styles);
   const views = parseViewSection(sections.views);
   const slices = parseApplicationSection(sections.application, new Set(styles.map(style => style.name)));
-  const lowering = parseLoweringSection(sections.lowering, slices, new Set(styles.map(style => style.name)));
 
   return {
+    kind: "wcss-document",
     theme,
     tokens,
     styles,
     views,
-    slices,
-    lowering,
+    application: {
+      slices
+    },
+    sections: {
+      theme: structuredClone(themeNode),
+      tokens: structuredClone(sections.tokens),
+      styles: structuredClone(sections.styles),
+      views: structuredClone(sections.views),
+      application: structuredClone(sections.application)
+    },
+    attachments: {
+      loweringSectionPresent: Boolean(sections.lowering),
+      loweringSection: sections.lowering ? structuredClone(sections.lowering) : null
+    },
     ast: root
   };
 }
@@ -1537,7 +1557,7 @@ function collectNamesByDomain(names = []) {
 export function buildEngentusCanonicalStyleGrammar(canonical) {
   const tokensByDomain = collectNamesByDomain((canonical?.tokens ?? []).map(token => token.name));
   const stylesByDomain = collectNamesByDomain((canonical?.styles ?? []).map(style => style.name));
-  const slices = (canonical?.slices ?? []).map(slice => {
+  const slices = (canonical?.application?.slices ?? canonical?.slices ?? []).map(slice => {
     const familyDomains = uniqueSorted(slice.families.map(family => primaryNameDomain(family)));
     const seamKinds = uniqueSorted(slice.seams.map(seam => seam.kind));
     return {
@@ -1645,6 +1665,20 @@ export function validateEngentusCanonicalStyleGrammar(canonical) {
   return grammar;
 }
 
+export function serializeEngentusCanonicalWcss(document) {
+  if (!document || document.kind !== "wcss-document") {
+    throw new Error("serializeEngentusCanonicalWcss expects a WCSSDocument");
+  }
+  const nodes = [
+    document.sections?.theme ?? { text: `theme ${document.theme}`, children: [] },
+    document.sections?.tokens,
+    document.sections?.styles,
+    document.sections?.views,
+    document.sections?.application
+  ].filter(Boolean);
+  return `${nodes.map(node => renderIndentedWcssNode(node)).join("\n\n")}\n`;
+}
+
 export async function loadEngentusCanonicalWcss(file = DEFAULT_CANONICAL_WCSS_FILE) {
   const canonical = parseEngentusCanonicalWcss(await readFile(file, "utf8"));
   canonical.grammar = validateEngentusCanonicalStyleGrammar(canonical);
@@ -1656,9 +1690,50 @@ export async function loadEngentusCanonicalStyleGrammar(file = DEFAULT_CANONICAL
   return structuredClone(canonical.grammar ?? buildEngentusCanonicalStyleGrammar(canonical));
 }
 
+export function deriveEngentusLoweringSidecar({
+  document,
+  text
+} = {}) {
+  if (!document || document.kind !== "wcss-document") {
+    throw new Error("deriveEngentusLoweringSidecar requires a WCSSDocument");
+  }
+  const sourceText = typeof text === "string" ? text : serializeEngentusCanonicalWcss(document);
+  const root = typeof text === "string" ? parseIndentedWcssDocument(text) : document.ast;
+  const sections = sectionStatus(root);
+  if (!sections.lowering) {
+    throw new Error(`Missing required lowering section for renderer backend ${DEFAULT_BROWSER_BACKEND}`);
+  }
+  const lowering = parseLoweringSection(
+    sections.lowering,
+    document.application.slices,
+    new Set(document.styles.map(style => style.name))
+  );
+  return {
+    kind: "wcss-renderer-sidecar",
+    theme: document.theme,
+    sourceText,
+    backends: structuredClone(lowering.backends),
+    byBackend: structuredClone(lowering.byBackend),
+    sections: {
+      lowering: structuredClone(sections.lowering)
+    }
+  };
+}
+
+export async function loadEngentusLoweringSidecar(file = DEFAULT_CANONICAL_WCSS_FILE) {
+  const [text, canonical] = await Promise.all([
+    readFile(file, "utf8"),
+    loadEngentusCanonicalWcss(file)
+  ]);
+  return deriveEngentusLoweringSidecar({
+    document: canonical,
+    text
+  });
+}
+
 export async function loadEngentusBrowserLoweringMap(file = DEFAULT_CANONICAL_WCSS_FILE) {
-  const canonical = await loadEngentusCanonicalWcss(file);
-  return structuredClone(canonical.lowering.byBackend[DEFAULT_BROWSER_BACKEND]);
+  const sidecar = await loadEngentusLoweringSidecar(file);
+  return structuredClone(sidecar.byBackend[DEFAULT_BROWSER_BACKEND]);
 }
 
 export async function loadEngentusBrowserDeclarationGroups(file = DEFAULT_CANONICAL_WCSS_FILE) {
@@ -1669,13 +1744,18 @@ export async function loadEngentusBrowserDeclarationGroups(file = DEFAULT_CANONI
 }
 
 export async function loadEngentusAppliedWcss(file = DEFAULT_CANONICAL_WCSS_FILE) {
-  const canonical = await loadEngentusCanonicalWcss(file);
+  const [canonical, loweringSidecar] = await Promise.all([
+    loadEngentusCanonicalWcss(file),
+    loadEngentusLoweringSidecar(file)
+  ]);
   return {
     theme: canonical.theme,
+    kind: canonical.kind,
     styles: canonical.styles.map(style => style.name),
     views: canonical.views.map(view => view.name),
-    lowering: structuredClone(canonical.lowering),
-    slices: compatibilitySlicesFromCanonical(canonical)
+    document: structuredClone(canonical),
+    lowering: structuredClone(loweringSidecar),
+    slices: compatibilitySlicesFromDocument(canonical, loweringSidecar)
   };
 }
 
@@ -2265,6 +2345,7 @@ export async function buildEngentusStyleArtifacts() {
   const bundle = await loadEngentusGeneratedCssBundle();
   const { authoredPlan, switchManifest, stylesheets, files } = bundle;
   const grammar = await loadEngentusCanonicalStyleGrammar();
+  const loweringSidecar = structuredClone(authoredPlan.lowering);
   const inventory = await buildEngentusPresentationInventory(authoredPlan);
   const ownership = verifyEngentusStyleOwnership({
     inventory,
@@ -2279,6 +2360,7 @@ export async function buildEngentusStyleArtifacts() {
     authoredPlan,
     switchManifest,
     grammar,
+    loweringSidecar,
     inventory,
     parity,
     ownership,

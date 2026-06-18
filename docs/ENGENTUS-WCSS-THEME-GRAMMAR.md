@@ -1,111 +1,97 @@
 # Engentus WCSS Theme Grammar
 
-The Engentus browser CSS now lowers directly from the canonical V1 file:
+The Engentus theme grammar now has a cleaner split:
+
+- authored WCSS core is the canonical document model
+- renderer lowering is derived downstream
+- browser CSS remains an output format, not the authored ontology
+
+## Canonical Model
+
+The canonical source remains:
 
 - `examples/engentus/app/engentus-desired-v2.wcss`
 
-The canonical file carries three internal layers:
+That source is read as a pure `WCSSDocument` core built from:
 
-- semantic style/application grammar
-- inline browser lowering map
-- inline browser declaration groups
+- `theme`
+- `tokens`
+- `styles`
+- `views`
+- `application`
 
-That separation is intentional.
+This is the document model future authoring tools are expected to edit.
 
-For `native-browser` slices such as `shell-base`, `auth`, `home`, `goodman`,
-`mill-charge`, `mill-force`, `platform-config`, and `chart-pages`, the browser
-lowering map now also resolves authored identity references through explicit
-presentation anchors in the compiled surface metadata.
+The canonical grammar is concerned with authored consistency only:
 
-## Roles
+- token-domain rules
+- style-domain rules
+- per-slice family-domain contracts
+- typed seam targeting and naming contracts
 
-- `engentus-desired-v2.wcss` is the designer-facing and tooling-facing V1 style
-  grammar, inline backend lowering map, and inline browser declaration source
-- the live runtime serves generated CSS at:
-  - `/engentus/__generated/engentus-shell.css`
-  - `/engentus/__generated/engentus-chart-pages.css`
-- optional debug snapshots can be written to:
-  - `tmp/engentus-wcss/engentus-shell.css`
-  - `tmp/engentus-wcss/engentus-chart-pages.css`
+It is not supposed to carry browser bucket names, selector groups, rollback
+lanes, or backend-specific asset composition as first-class authored semantics.
 
-## Purpose
+## Lowering Is Derived
 
-The browser declaration grammar is not the canonical style ontology. It is the
-lowering layer that lets the current browser runtime serve runtime-generated CSS
-while the authored/internal grammar becomes cleaner.
+Browser lowering still exists because the current runtime serves CSS, but it now
+belongs to a generated renderer-side attachment.
 
-The authored core is now also summarized as a formal grammar artifact under
-`tmp/engentus-wcss/engentus-style-grammar.json`, which captures the canonical
-token domains, style-family domains, and per-slice application contracts
-without browser bucket names mixed in.
+The current browser sidecar contains renderer-specific data such as:
 
-Route delivery for those generated stylesheets is app-owned through the
-standalone `plugin.wcss-runtime` lane rather than hard-coded into the shared
-runtime server.
+- asset partitioning
+- group ownership
+- selector/declaration evidence
+- native-lowering references used by the browser renderer
 
-Browser group names such as `toolbar`, `goodman view`, or `platform config` are
-therefore backend-lowering nouns. They are not canonical style-family nouns.
+That lowering sidecar is emitted as:
 
-The immediate goal of the lowering declaration grammar is now narrower:
+- `tmp/engentus-wcss/engentus-style-lowering-sidecar.json`
 
-- preserve exact emitted CSS
-- keep selector/state groupings explicit for the browser backend
-- provide stable backend-group buckets for current proof tooling and rollback
-- let native proof slices lower against recovered presentation anchors even when
-  the current browser runtime still emits legacy ids/classes underneath
+The formalized authored grammar is emitted separately as:
 
-For the validated success paths, that compatibility layer is now thinner:
-`auth`, `home`, `platform-config`, and `chart-pages` no longer carry
-browser-declaration bodies in the canonical file. The remaining declaration
-groups are concentrated around shared substrate and Goodman-heavy rollback.
+- `tmp/engentus-wcss/engentus-style-grammar.json`
 
-## Grammar Shape
+This split is the important architectural correction. The canonical theme/style
+grammar is no longer defined in terms of browser lowering nouns.
 
-The inline browser declaration grammar uses four block types:
+## Runtime Role
 
-- `group <name>` for browser lowering buckets such as `toolbar` or
-  `platform config`
-- `rule <selector>` for selectors and nested descendants
-  or state variants
-- `media <query>` for responsive overrides
-- `keyframes <name>` for motion evidence
+The live runtime still serves generated CSS at:
 
-Children inside a `rule <selector>` behave like nested CSS:
+- `/engentus/__generated/engentus-shell.css`
+- `/engentus/__generated/engentus-chart-pages.css`
 
-- `&.active` expands against the parent selector
-- `img` becomes a descendant selector
+Those routes are delivered through `plugin.wcss-runtime`. The delivery plugin is
+generic; Engentus-specific derivation remains in the Engentus adapter.
 
-The semantic application layer now declares node-scoped seams. A seam may target
-specific identities or traits and may describe:
+## Plugin Direction
 
-- enum-like `variant` values
-- boolean `toggle` tokens
-- numeric `scalar` bounds
-- theme `token` substitutions
-- explicit `escape` seams where fidelity still requires them
+The platform now keeps one global plugin store with typed contribution lanes
+that can support future WCSS-side extensibility:
 
-For the current native lane, the intended steady state is stricter:
+- `styles`
+- `themes`
+- `widgets`
+- `renderers`
+- `authoringTools`
 
-- `shell-base`, `auth`, `home`, `goodman`, `mill-charge`, `mill-force`,
-  `platform-config`, and `chart-pages` should lower through semantic nouns
-  first
-- raw selector escapes remain available, but they are reported as debt rather
-  than treated as normal authored shape
-- repeat-template descendants that belong to a native slice should be recovered
-  into the presentation inventory instead of forcing structural shadow models
-- chart-page subparts such as host, mount, overlay canvas, and tooltip are now
-  recovered into the presentation inventory from chart-view metadata instead of
-  being treated as authored browser nouns
+The intended direction is:
 
-## Ownership Rule
+- authoring tools operate on the canonical WCSS document model
+- renderers derive sidecars and outputs from that model
+- widget/style/theme plugins contribute typed capabilities into the same global
+  store
 
-The authored WCSS grammar should describe presentation law first and selector
-accidents second. The lowering declaration grammar should preserve browser fidelity while
-remaining clearly downstream of that authored contract.
+## Practical Meaning
 
-At this point the default served lane is whole-app native WCSS. Browser
-declaration groups remain as backend-lowering buckets and rollback support, not
-the authored slice contract.
+For Engentus, this means:
 
-If later uplift work needs more browser detail, extend the lowering declaration
-layer as a backend artifact. Do not treat it as the primary style guide.
+- the `.wcss` file is still the seed text
+- the canonical meaning is the document model, not the browser declarations
+- generated CSS is a renderer output, similar in spirit to generated HTML from
+  the runtime view model
+
+If later work needs more browser detail, that detail should live in renderer
+sidecars or renderer plugins. It should not flow back into the canonical WCSS
+document model.

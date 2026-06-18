@@ -87,6 +87,50 @@ test("plugin discovery finds valid executable local plugin packages through bund
   }
 });
 
+test("plugin discovery preserves typed style, theme, widget, renderer, and authoring-tool contributions", async () => {
+  const root = await tempPluginRoot();
+  try {
+    await writePlugin(root, "design-system", {
+      id: "plugin.design-system",
+      version: "0.1.0",
+      displayName: "Design System",
+      description: "Typed authoring contributions",
+      kind: "plugin",
+      contributes: {
+        styles: [{ id: "styles.engentus-base", family: "surface" }],
+        themes: [{ id: "theme.engentus", documentModel: "wcss" }],
+        widgets: [{ id: "widget.color-swatch", kind: "authoring" }],
+        renderers: [{ id: "renderer.wcss-browser", output: "text/css" }],
+        authoringTools: [{ id: "authoring.wcss-inspector", kind: "inspector" }]
+      }
+    });
+
+    const discovered = await discoverRuntimePluginPackages({
+      pluginRoot: root,
+      runtimeProfile: "full"
+    });
+
+    assert.equal(discovered.summary.validCount, 1);
+    assert.deepEqual(discovered.packages[0].metadata.contributes.styles, [
+      { id: "styles.engentus-base", family: "surface" }
+    ]);
+    assert.deepEqual(discovered.packages[0].metadata.contributes.themes, [
+      { id: "theme.engentus", documentModel: "wcss" }
+    ]);
+    assert.deepEqual(discovered.packages[0].metadata.contributes.widgets, [
+      { id: "widget.color-swatch", kind: "authoring" }
+    ]);
+    assert.deepEqual(discovered.packages[0].metadata.contributes.renderers, [
+      { id: "renderer.wcss-browser", output: "text/css" }
+    ]);
+    assert.deepEqual(discovered.packages[0].metadata.contributes.authoringTools, [
+      { id: "authoring.wcss-inspector", kind: "inspector" }
+    ]);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
 test("plugin discovery rejects invalid runtime entry paths and missing runtime modules", async () => {
   const root = await tempPluginRoot();
   try {

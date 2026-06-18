@@ -1199,6 +1199,30 @@ function extractRenderedCssSelectors(cssText = "") {
   return unique(selectors);
 }
 
+export function buildPlatformCssDriftGap({
+  authoredWcss = "",
+  generatedCss = "",
+  target = "surface:platform"
+} = {}) {
+  const authoredSelectorList = extractAuthoredPlatformWcssSelectors(authoredWcss);
+  const generatedSelectorList = extractRenderedCssSelectors(generatedCss);
+  const missingInGenerated = authoredSelectorList.filter(selector => !generatedSelectorList.includes(selector));
+  const extraInGenerated = generatedSelectorList.filter(selector => !authoredSelectorList.includes(selector));
+  if (!missingInGenerated.length && !extraInGenerated.length) return null;
+  return {
+    id: `gap.platform-css-drift.${target}`,
+    severity: "low",
+    kind: "platform-css-drift",
+    target,
+    authoredSelectorCount: authoredSelectorList.length,
+    generatedSelectorCount: generatedSelectorList.length,
+    missingInGenerated,
+    extraInGenerated,
+    reason: "Generated platform CSS selector coverage differs from authored plugins/platform/platform-console.wcss.",
+    recommendedProposal: null
+  };
+}
+
 function docRoleForPath(docPath) {
   const value = String(docPath || "").toLowerCase();
   if (value.includes("roadmap")) return "roadmap";
@@ -2989,23 +3013,12 @@ export async function buildPlatformModel({
   }
   const gaps = buildGaps(nodes, edges, { branches, changeSets, testGateProjection });
   const authoredPlatformWcss = await readText("plugins/platform/platform-console.wcss", "");
-  const authoredPlatformSelectors = extractAuthoredPlatformWcssSelectors(authoredPlatformWcss);
-  const generatedPlatformSelectors = extractRenderedCssSelectors(renderPlatformConsoleCss());
-  const missingInGenerated = authoredPlatformSelectors.filter(selector => !generatedPlatformSelectors.includes(selector));
-  const extraInGenerated = generatedPlatformSelectors.filter(selector => !authoredPlatformSelectors.includes(selector));
-  if (missingInGenerated.length || extraInGenerated.length) {
-    gaps.push({
-      id: "gap.platform-css-drift.surface:platform",
-      severity: "low",
-      kind: "platform-css-drift",
-      target: "surface:platform",
-      authoredSelectorCount: authoredPlatformSelectors.length,
-      generatedSelectorCount: generatedPlatformSelectors.length,
-      missingInGenerated,
-      extraInGenerated,
-      reason: "Generated platform CSS selector coverage differs from authored plugins/platform/platform-console.wcss.",
-      recommendedProposal: null
-    });
+  const platformCssDriftGap = buildPlatformCssDriftGap({
+    authoredWcss: authoredPlatformWcss,
+    generatedCss: renderPlatformConsoleCss()
+  });
+  if (platformCssDriftGap) {
+    gaps.push(platformCssDriftGap);
     gaps.sort((a, b) => a.severity.localeCompare(b.severity) || a.id.localeCompare(b.id));
   }
   const docs = parsedDocs.map(doc => ({

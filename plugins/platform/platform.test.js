@@ -8,7 +8,7 @@ import { moduleProjectors } from "../../src/modules.js";
 import { withRegisteredPluginProjectors } from "../../test/plugin-test-utils.js";
 import { compileRvmToDesirePlus } from "../../src/desire/index.js";
 import { bundleId, capabilities, createHandlers, handlerCatalog, providers, routes, surfaces } from "./runtime.js";
-import { buildPlatformModel, filterPlatformModel, parseRoadmapTasks, PLATFORM_LIFECYCLES } from "./platform-model.js";
+import { buildPlatformCssDriftGap, buildPlatformModel, filterPlatformModel, parseRoadmapTasks, PLATFORM_LIFECYCLES } from "./platform-model.js";
 import { renderPlatformPage } from "./platform-page.js";
 import { readPlatformConsoleLayout } from "./platform-console-layout.js";
 import { buildPlatformProposalCreateBody, platformProposalTemplates } from "./platform-proposals.js";
@@ -197,7 +197,7 @@ test("platform model emits a gap when a platform surface lacks modeled RVM or WC
   assert.equal(model.gaps.some(gap => gap.id === "gap.platform-sources.surface:platform"), false);
 });
 
-test("platform model emits a gap when generated console CSS selector coverage drifts from authored WCSS", async () => {
+test("platform model does not emit a live gap when generated console CSS matches authored WCSS", async () => {
   const model = await buildPlatformModel({
     diagnostics: {
       activeProfile: "full",
@@ -214,14 +214,31 @@ test("platform model emits a gap when generated console CSS selector coverage dr
     project: () => []
   });
 
-  const cssDriftGap = model.gaps.find(gap => gap.id === "gap.platform-css-drift.surface:platform");
-  assert.ok(cssDriftGap);
-  assert.equal(cssDriftGap.kind, "platform-css-drift");
-  assert.equal(cssDriftGap.target, "surface:platform");
-  assert.equal(cssDriftGap.authoredSelectorCount > 0, true);
-  assert.equal(cssDriftGap.generatedSelectorCount > 0, true);
-  assert.equal(Array.isArray(cssDriftGap.extraInGenerated), true);
-  assert.equal(cssDriftGap.extraInGenerated.includes(".muted"), true);
+  assert.equal(model.gaps.some(gap => gap.id === "gap.platform-css-drift.surface:platform"), false);
+});
+
+test("platform css drift helper reports missing and extra selectors when generated CSS diverges from authored WCSS", () => {
+  const gap = buildPlatformCssDriftGap({
+    authoredWcss: `theme platform-console
+
+styles
+  style one
+    selector = .alpha
+    base
+      color = red
+  style two
+    selector = .beta
+    base
+      color = blue
+`,
+    generatedCss: `.alpha { color: red; }\n.gamma { color: green; }`
+  });
+
+  assert.ok(gap);
+  assert.equal(gap.kind, "platform-css-drift");
+  assert.equal(gap.target, "surface:platform");
+  assert.deepEqual(gap.missingInGenerated, [".beta"]);
+  assert.deepEqual(gap.extraInGenerated, [".gamma"]);
 });
 
 test("platform model promotes runtime snapshot diagnostics into revision and build nodes", async () => {
@@ -309,6 +326,8 @@ test("platform console is declared through RVM and styled through WCSS", async (
   assert.match(css, /Generated from plugins\/platform\/platform-console\.wcss/);
   assert.match(css, /body\.platform-console/);
   assert.match(css, /--platform-accent: #1f6feb;/);
+  assert.match(css, /#selected-test-run-status/);
+  assert.match(css, /@media \(max-width: 880px\)/);
 });
 
 test("platform console layout compiles authored top-level surface metadata from RVM", () => {

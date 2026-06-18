@@ -42,7 +42,12 @@ const CONTRIBUTES_FIELDS = new Set([
   "capabilities",
   "routes",
   "surfaces",
-  "providers"
+  "providers",
+  "styles",
+  "themes",
+  "widgets",
+  "renderers",
+  "authoringTools"
 ]);
 
 const PROVENANCE_FIELDS = new Set([
@@ -80,7 +85,12 @@ const SEMVER_RE = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
  *   capabilities: Array<string|{id:string,[key:string]:any}>,
  *   routes: Array<{handler:string,path?:string,pattern?:string,[key:string]:any}>,
  *   surfaces: Array<{id:string,title:string,[key:string]:any}>,
- *   providers: Array<{id:string,kind:string,[key:string]:any}>
+ *   providers: Array<{id:string,kind:string,[key:string]:any}>,
+ *   styles: Array<{id:string,[key:string]:any}>,
+ *   themes: Array<{id:string,[key:string]:any}>,
+ *   widgets: Array<{id:string,[key:string]:any}>,
+ *   renderers: Array<{id:string,[key:string]:any}>,
+ *   authoringTools: Array<{id:string,[key:string]:any}>
  * }} contributes
  * @property {string[]=} dependsOnPlugins
  * @property {string[]=} dependsOnCapabilities
@@ -228,6 +238,28 @@ function normalizeProviderEntries(value, errors) {
       continue;
     }
     rows.push({ ...entry, id, kind });
+  }
+  return rows;
+}
+
+function normalizeTypedContributionEntries(value, label, errors) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) {
+    errors.push(`${label} must be an array`);
+    return [];
+  }
+  const rows = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      errors.push(`${label} entries must be objects`);
+      continue;
+    }
+    const id = typeof entry.id === "string" && entry.id.trim() ? entry.id.trim() : null;
+    if (!id) {
+      errors.push(`${label} entries must include id`);
+      continue;
+    }
+    rows.push({ ...entry, id });
   }
   return rows;
 }
@@ -396,7 +428,12 @@ function normalizeManifestObject(raw, discoveryPath) {
     capabilities: normalizeCapabilityEntries(contributesRaw?.capabilities, errors),
     routes: normalizeRouteEntries(contributesRaw?.routes, errors),
     surfaces: normalizeSurfaceEntries(contributesRaw?.surfaces, errors),
-    providers: normalizeProviderEntries(contributesRaw?.providers, errors)
+    providers: normalizeProviderEntries(contributesRaw?.providers, errors),
+    styles: normalizeTypedContributionEntries(contributesRaw?.styles, "contributes.styles", errors),
+    themes: normalizeTypedContributionEntries(contributesRaw?.themes, "contributes.themes", errors),
+    widgets: normalizeTypedContributionEntries(contributesRaw?.widgets, "contributes.widgets", errors),
+    renderers: normalizeTypedContributionEntries(contributesRaw?.renderers, "contributes.renderers", errors),
+    authoringTools: normalizeTypedContributionEntries(contributesRaw?.authoringTools, "contributes.authoringTools", errors)
   };
   return {
     manifest: id && version && displayName && description && kind === "plugin"
@@ -867,7 +904,12 @@ function buildPluginPackageRow({
           capabilities: manifest.contributes.capabilities.map(entry => ({ ...entry })),
           routes: manifest.contributes.routes.map(entry => ({ ...entry })),
           surfaces: manifest.contributes.surfaces.map(entry => ({ ...entry })),
-          providers: manifest.contributes.providers.map(entry => ({ ...entry }))
+          providers: manifest.contributes.providers.map(entry => ({ ...entry })),
+          styles: manifest.contributes.styles.map(entry => ({ ...entry })),
+          themes: manifest.contributes.themes.map(entry => ({ ...entry })),
+          widgets: manifest.contributes.widgets.map(entry => ({ ...entry })),
+          renderers: manifest.contributes.renderers.map(entry => ({ ...entry })),
+          authoringTools: manifest.contributes.authoringTools.map(entry => ({ ...entry }))
         },
         provenance: manifest.provenance ? { ...manifest.provenance } : null
       }
@@ -939,7 +981,12 @@ function buildPluginPackageRow({
         capabilities: manifest.contributes.capabilities.map(entry => ({ ...entry })),
         routes: manifest.contributes.routes.map(entry => ({ ...entry })),
         surfaces: manifest.contributes.surfaces.map(entry => ({ ...entry })),
-        providers: manifest.contributes.providers.map(entry => ({ ...entry }))
+        providers: manifest.contributes.providers.map(entry => ({ ...entry })),
+        styles: manifest.contributes.styles.map(entry => ({ ...entry })),
+        themes: manifest.contributes.themes.map(entry => ({ ...entry })),
+        widgets: manifest.contributes.widgets.map(entry => ({ ...entry })),
+        renderers: manifest.contributes.renderers.map(entry => ({ ...entry })),
+        authoringTools: manifest.contributes.authoringTools.map(entry => ({ ...entry }))
       }
     } : null
   };
@@ -1480,7 +1527,12 @@ function buildRuntimePluginReviewRows({
             capabilities: (metadata.contributes?.capabilities ?? []).map(entry => ({ ...entry })),
             routes: (metadata.contributes?.routes ?? []).map(entry => ({ ...entry })),
             surfaces: (metadata.contributes?.surfaces ?? []).map(entry => ({ ...entry })),
-            providers: (metadata.contributes?.providers ?? []).map(entry => ({ ...entry }))
+            providers: (metadata.contributes?.providers ?? []).map(entry => ({ ...entry })),
+            styles: (metadata.contributes?.styles ?? []).map(entry => ({ ...entry })),
+            themes: (metadata.contributes?.themes ?? []).map(entry => ({ ...entry })),
+            widgets: (metadata.contributes?.widgets ?? []).map(entry => ({ ...entry })),
+            renderers: (metadata.contributes?.renderers ?? []).map(entry => ({ ...entry })),
+            authoringTools: (metadata.contributes?.authoringTools ?? []).map(entry => ({ ...entry }))
           }
         } : null,
         declaredManifestContributions: {
@@ -1490,6 +1542,11 @@ function buildRuntimePluginReviewRows({
             .sort(compareRouteSummary),
           surfaces: (metadata?.contributes?.surfaces ?? []).map(entry => ({ ...entry })),
           providers: (metadata?.contributes?.providers ?? []).map(entry => ({ ...entry })),
+          styles: (metadata?.contributes?.styles ?? []).map(entry => ({ ...entry })),
+          themes: (metadata?.contributes?.themes ?? []).map(entry => ({ ...entry })),
+          widgets: (metadata?.contributes?.widgets ?? []).map(entry => ({ ...entry })),
+          renderers: (metadata?.contributes?.renderers ?? []).map(entry => ({ ...entry })),
+          authoringTools: (metadata?.contributes?.authoringTools ?? []).map(entry => ({ ...entry })),
           handlerMetadata: Object.fromEntries(
             Object.entries(pluginPackage.resolvedRuntimeContributions?.handlerMetadata ?? {})
               .sort(([left], [right]) => left.localeCompare(right))
