@@ -462,7 +462,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationPrimarySurface.props.candidateSnapshotLongTailExcludedFields, "files|errors");
   assert.equal(verificationPrimarySurface.props.gateCardTitle, "Test Gate Detail");
   assert.match(verificationPrimarySurface.props.gateFields, /Gate=id@concept/);
-  assert.match(verificationPrimarySurface.props.runtimeRevisionFields, /Revision=revisionLink@concept/);
+  assert.match(verificationPrimarySurface.props.runtimeRevisionFields, /Revision=id@concept/);
   assert.match(verificationPrimarySurface.props.candidateSnapshotFields, /Snapshot=id@concept/);
   assert.match(verificationPrimarySurface.props.testRunFields, /Gate=gateId@concept/);
   const verificationRelatedSurface = verificationDetailSurface.childSurfaces.find(surface => surface.name === "PlatformVerificationRelatedPanel");
@@ -470,14 +470,14 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationRelatedSurface.props.gateLinkCards, "Protected Objects=protectedObjects|Selected Branches=selectedByBranches|Selected Change Sets=selectedByChangeSets");
   assert.equal(verificationRelatedSurface.props.runtimeRevisionLinkCards, "Changed Sources=changedSources");
   assert.equal(verificationRelatedSurface.props.runtimeRevisionPropertyCardTitle, "Snapshot Diagnostics");
-  assert.equal(verificationRelatedSurface.props.runtimeRevisionPropertyFields, "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Backend revision events=backendStreamLink@href");
+  assert.equal(verificationRelatedSurface.props.runtimeRevisionPropertyFields, "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Backend revision event stream=backendRevisionEventsHref@href");
   assert.equal(verificationRelatedSurface.props.candidateSnapshotTextCards, "Files=files@path|Errors=errors@errorMessage");
   assert.equal(verificationRelatedSurface.props.testRunPropertyCardTitle, "Verification Streams");
-  assert.equal(verificationRelatedSurface.props.testRunPropertyFields, "Test run events=testEventsLink@href|Backend revision events=backendRevisionsLink@href");
+  assert.equal(verificationRelatedSurface.props.testRunPropertyFields, "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href");
   const verificationStreamsSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationStreams");
   assert.ok(verificationStreamsSurface);
   assert.equal(verificationStreamsSurface.props.streamCardTitle, "Event Streams");
-  assert.equal(verificationStreamsSurface.props.streamFields, "Test run events=testEventsLink@href|Backend revision events=backendRevisionsLink@href");
+  assert.equal(verificationStreamsSurface.props.streamFields, "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href");
   const branchRedGreenSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformBranchRedGreenList");
   assert.ok(branchRedGreenSurface);
   assert.equal(branchRedGreenSurface.props.rowFields, "Status=status|Branch=branchId@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary");
@@ -576,7 +576,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(modelListSurface.props.defaultSort, "kind:asc");
   const coverageSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformCoverageMatrix");
   assert.ok(coverageSurface);
-  assert.equal(coverageSurface.props.rowFields, "Gate=gateLink@concept|Target=targetLink@concept|Kind=coverageKind");
+  assert.equal(coverageSurface.props.rowFields, "Gate=gateId@concept|Target=targetId||targetLabel@concept|Kind=coverageKind");
   const modelDetailSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformModelDetail");
   assert.ok(modelDetailSurface);
   assert.deepEqual(modelDetailSurface.children, [

@@ -415,7 +415,7 @@ view PlatformVerificationPrimaryPanel {
   prop gateFields = "Gate=id@concept|Runner=runner|Environment=environment|Timeout=timeoutMs|Cost=costEstimate|Command=command|Latest result=lastResult@statusExit|API resource=id@api"
   prop runtimeRevisionLongTailExcludedFields = "candidateBranchCount"
   prop runtimeRevisionCardTitle = "Runtime Revision Detail"
-  prop runtimeRevisionFields = "Revision=revisionLink@concept|Status=status|Trigger=trigger|Branch=branchId@concept|Change set=changeSetId@concept|Changed sources=changedSources@count|Build errors=buildErrorCount|API resource=id@api"
+  prop runtimeRevisionFields = "Revision=id@concept|Status=status|Trigger=trigger|Branch=branchId@concept|Change set=changeSetId@concept|Changed sources=changedSources@count|Build errors=buildErrorCount|API resource=id@api"
   prop candidateSnapshotLongTailExcludedFields = "files|errors"
   prop candidateSnapshotCardTitle = "Candidate Snapshot Detail"
   prop candidateSnapshotFields = "Snapshot=id@concept|Status=status|Branch=branchId@concept|Change set=changeSetId@concept|Revision=revision|API resource=id@api"
@@ -431,10 +431,10 @@ view PlatformVerificationRelatedPanel {
   prop gateLinkCards = "Protected Objects=protectedObjects|Selected Branches=selectedByBranches|Selected Change Sets=selectedByChangeSets"
   prop runtimeRevisionLinkCards = "Changed Sources=changedSources"
   prop runtimeRevisionPropertyCardTitle = "Snapshot Diagnostics"
-  prop runtimeRevisionPropertyFields = "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Backend revision events=backendStreamLink@href"
+  prop runtimeRevisionPropertyFields = "Active revision=snapshotDiagnostics.appRevision|Last good=snapshotDiagnostics.lastGoodAppRevision|Pending dirty=snapshotDiagnostics.pendingDirtySources@count|Backend revision event stream=backendRevisionEventsHref@href"
   prop candidateSnapshotTextCards = "Files=files@path|Errors=errors@errorMessage"
   prop testRunPropertyCardTitle = "Verification Streams"
-  prop testRunPropertyFields = "Test run events=testEventsLink@href|Backend revision events=backendRevisionsLink@href"
+  prop testRunPropertyFields = "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href"
 }
 
 view PlatformVerificationRunHistory {
@@ -476,7 +476,7 @@ view PlatformVerificationStreams {
   prop title = "Verification Streams"
   prop summary = "Links to live test-run and backend-revision event streams."
   prop streamCardTitle = "Event Streams"
-  prop streamFields = "Test run events=testEventsLink@href|Backend revision events=backendRevisionsLink@href"
+  prop streamFields = "Test run event stream=testRunEventsHref@href|Backend revision event stream=backendRevisionEventsHref@href"
 }
 
 view PlatformBranchRedGreenList {
@@ -541,7 +541,7 @@ view PlatformCoverageMatrix {
   prop title = "Coverage Matrix"
   prop summary = "Gate-to-target coverage rows for the current modeled platform."
   prop columns = "Gate|Target|Kind"
-  prop rowFields = "Gate=gateLink@concept|Target=targetLink@concept|Kind=coverageKind"
+  prop rowFields = "Gate=gateId@concept|Target=targetId||targetLabel@concept|Kind=coverageKind"
   prop emptyState = "No coverage edges."
   prop rowLimit = "12"
   projections {

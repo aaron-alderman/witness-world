@@ -484,7 +484,7 @@ function resolveFieldPath(record, fieldPath) {
     .reduce((value, segment) => value == null ? null : value[segment], record);
 }
 
-function renderSchemaValue(ctx, value, mode = "text") {
+function renderSchemaValue(ctx, value, mode = "text", label = null) {
   switch (mode) {
     case "statusExit":
       if (!value || typeof value !== "object") return "idle";
@@ -499,7 +499,7 @@ function renderSchemaValue(ctx, value, mode = "text") {
         const label = optionalText(value.title) || optionalText(value.label) || href;
         return href ? `<a href="${esc(href)}">${esc(label || href)}</a>` : esc(label || "");
       }
-      return `<a href="${esc(value)}">Event stream</a>`;
+      return `<a href="${esc(value)}">${esc(label || "Event stream")}</a>`;
     case "value":
       if (value === undefined || value === null || value === "") return "";
       return renderValue(ctx, value);
@@ -527,7 +527,7 @@ function propertyRowsFromSurfaceSchema(surface, titleProp, fieldsProp, ctx, reco
     surfacePropText(surface, titleProp, fallbackTitle),
     entries.map(entry => ({
       label: entry.label,
-      valueHtml: renderSchemaValue(ctx, resolveSchemaPath(record, entry.path), entry.mode)
+      valueHtml: renderSchemaValue(ctx, resolveSchemaPath(record, entry.path), entry.mode, entry.label)
     }))
   );
 }
@@ -646,7 +646,7 @@ function renderRowsFromSurfaceSchema(surface, schemaProp, records, ctx, fallback
   if (!entries.length) return records.map(fallbackRowRenderer);
   return records.map(record => `
     <tr>
-      ${entries.map(entry => `<td>${renderSchemaValue(ctx, resolveSchemaPath(record, entry.path), entry.mode)}</td>`).join("")}
+      ${entries.map(entry => `<td>${renderSchemaValue(ctx, resolveSchemaPath(record, entry.path), entry.mode, entry.label)}</td>`).join("")}
     </tr>
   `);
 }
@@ -1129,19 +1129,12 @@ function renderVerificationDetail(surface, detail, model, ctx) {
     const errors = (model.snapshotBuildErrors ?? []).filter(error => Number(error.revision || 0) === Number(revision.revision || 0)).slice(0, surfaceRowLimit(buildErrorsSurface, 12));
     const buildRows = builds.map(build => ({ ...build }));
     const errorRows = errors.map(error => ({ ...error }));
-    const revisionRecord = {
-      ...revision,
-      revisionLink: { id: revision.id, title: `Revision ${revision.revision}` }
-    };
     const diagnosticsRecord = {
       ...revision,
       snapshotDiagnostics: model.snapshotDiagnostics,
-      backendStreamLink: {
-        href: "/api/runtime/backend-revisions/events",
-        title: "Backend revision event stream"
-      }
+      backendRevisionEventsHref: "/api/runtime/backend-revisions/events"
     };
-    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "runtimeRevisionCardTitle", "runtimeRevisionFields", ctx, revisionRecord, "Runtime Revision Detail");
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "runtimeRevisionCardTitle", "runtimeRevisionFields", ctx, revision, "Runtime Revision Detail");
     const diagnosticsCard = propertyRowsFromSurfaceSchema(relatedSurface, "runtimeRevisionPropertyCardTitle", "runtimeRevisionPropertyFields", ctx, diagnosticsRecord, "Snapshot Diagnostics");
     const usedKeys = [
       ...(rootKeysFromSurfaceSchema(primarySurface, "runtimeRevisionFields").length
@@ -1211,14 +1204,8 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   const run = detail;
   const runRecord = {
     ...run,
-    testEventsLink: {
-      href: "/api/platform-test-runs/events",
-      title: "Test run event stream"
-    },
-    backendRevisionsLink: {
-      href: "/api/runtime/backend-revisions/events",
-      title: "Backend revision event stream"
-    }
+    testRunEventsHref: "/api/platform-test-runs/events",
+    backendRevisionEventsHref: "/api/runtime/backend-revisions/events"
   };
   const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "testRunCardTitle", "testRunFields", ctx, runRecord, "Test Run Detail");
   const streamsCard = propertyRowsFromSurfaceSchema(relatedSurface, "testRunPropertyCardTitle", "testRunPropertyFields", ctx, runRecord, "Verification Streams");
@@ -1677,11 +1664,7 @@ function renderGapListSection(surface, model, ctx) {
 }
 
 function renderCoverageMatrixSection(surface, model, ctx) {
-  const rows = (model.coverageEdges ?? []).slice(0, surfaceRowLimit(surface, 12)).map(edge => ({
-    ...edge,
-    gateLink: { id: edge.gateId, title: edge.gateId },
-    targetLink: edge.targetId ? { id: edge.targetId, title: edge.targetLabel || edge.targetId } : { id: edge.targetLabel || "", title: edge.targetLabel || "" }
-  }));
+  const rows = (model.coverageEdges ?? []).slice(0, surfaceRowLimit(surface, 12));
   return renderSurfaceFrame(surface, renderSurfaceTable(surface, ["Gate", "Target", "Kind"], renderRowsFromSurfaceSchema(surface, "rowFields", rows, ctx, edge => `
     <tr>
       <td>${renderConceptLink(ctx, edge.gateId)}</td>
@@ -1830,14 +1813,8 @@ function renderChangeSetLifecyclePanelSection(surface, model) {
 
 function renderVerificationStreamsSection(surface) {
   const streamRecord = {
-    testEventsLink: {
-      href: "/api/platform-test-runs/events",
-      title: "Test run event stream"
-    },
-    backendRevisionsLink: {
-      href: "/api/runtime/backend-revisions/events",
-      title: "Backend revision event stream"
-    }
+    testRunEventsHref: "/api/platform-test-runs/events",
+    backendRevisionEventsHref: "/api/runtime/backend-revisions/events"
   };
   return renderSurfaceFrame(surface, renderPropertyCard(propertyRowsFromSurfaceSchema(
     surface,
@@ -1847,8 +1824,8 @@ function renderVerificationStreamsSection(surface) {
     streamRecord,
     "Event Streams",
     [
-      { label: "Test run events", valueHtml: `<a href="/api/platform-test-runs/events">Test run event stream</a>` },
-      { label: "Backend revision events", valueHtml: `<a href="/api/runtime/backend-revisions/events">Backend revision event stream</a>` }
+      { label: "Test run event stream", valueHtml: `<a href="/api/platform-test-runs/events">Test run event stream</a>` },
+      { label: "Backend revision event stream", valueHtml: `<a href="/api/runtime/backend-revisions/events">Backend revision event stream</a>` }
     ]
   )));
 }
