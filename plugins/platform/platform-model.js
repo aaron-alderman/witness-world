@@ -793,6 +793,10 @@ function telemetryMetricNodeId(id) {
   return `telemetryMetric:${String(id || "")}`;
 }
 
+function defectClusterNodeId(defect) {
+  return `defectCluster:${slugify(String(defect || ""))}`;
+}
+
 function telemetryImpactRuleForSystem(systemId) {
   return TELEMETRY_IMPACT_RULES[String(systemId || "")] ?? null;
 }
@@ -833,6 +837,68 @@ function addTelemetryMetricNodes(nodes) {
   }
 }
 
+function compareTimeline(left, right) {
+  const leftCreatedAt = String(left?.createdAt || "");
+  const rightCreatedAt = String(right?.createdAt || "");
+  if (leftCreatedAt && rightCreatedAt && leftCreatedAt !== rightCreatedAt) return leftCreatedAt.localeCompare(rightCreatedAt);
+  return String(left?.id || "").localeCompare(String(right?.id || ""));
+}
+
+function buildDefectClusterRows(branches = []) {
+  const byDefect = new Map();
+  for (const branch of Array.isArray(branches) ? branches : []) {
+    const defect = String(branch?.defect || "").trim();
+    if (!defect) continue;
+    const existing = byDefect.get(defect) ?? {
+      id: defectClusterNodeId(defect),
+      defect,
+      title: defect,
+      branchMembers: []
+    };
+    existing.branchMembers.push({
+      branchId: String(branch.id),
+      title: String(branch.title || branch.id),
+      createdAt: branch.createdAt ?? null,
+      changedPaths: [...(branch.changedPaths ?? [])],
+      affectedSystems: [...((branch.affectedSystemSummaries ?? []).map(row => String(row.system || "")).filter(Boolean))],
+      docsFreshness: branch.docsFreshness ? {
+        requiredDocs: [...(branch.docsFreshness.requiredDocs ?? [])],
+        touchedDocs: [...(branch.docsFreshness.touchedDocs ?? [])],
+        missingDocs: [...(branch.docsFreshness.missingDocs ?? [])]
+      } : null,
+      telemetryImpactIds: [...((branch.telemetryImpactSummaries ?? []).map(row => row?.id).filter(Boolean))]
+    });
+    byDefect.set(defect, existing);
+  }
+  return [...byDefect.values()]
+    .map(cluster => {
+      cluster.branchMembers.sort(compareTimeline);
+      return {
+        ...cluster,
+        branchCount: cluster.branchMembers.length,
+        branchIds: cluster.branchMembers.map(member => member.branchId)
+      };
+    })
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
+function addDefectClusterNodes(nodes, edges, defectClusters = []) {
+  for (const cluster of defectClusters) {
+    addNode(nodes, {
+      id: cluster.id,
+      kind: "defectCluster",
+      title: cluster.title,
+      lifecycle: ["observe", "verify", "steward"],
+      owner: "plugin.platform",
+      status: cluster.branchCount > 1 ? "recurring" : "known",
+      source: "witnesses"
+    });
+    for (const branchId of cluster.branchIds ?? []) {
+      if (nodes.has(`branch:${branchId}`)) addEdge(edges, cluster.id, "targets", `branch:${branchId}`, "defects");
+    }
+  }
+}
+
 function addTestGateTelemetryEdges(nodes, edges, testGates = []) {
   for (const gate of testGates) {
     for (const target of gate.protectedObjects ?? []) {
@@ -843,7 +909,7 @@ function addTestGateTelemetryEdges(nodes, edges, testGates = []) {
   }
 }
 
-function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestResultsByGate = Object.create(null)) {
+function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestResultsByGate = Object.create(null), defectClusters = []) {
   function pushTarget(targets, id) {
     if (id && nodes.has(id)) targets.add(id);
   }
@@ -948,7 +1014,46 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
 
   const affectedRows = [];
   const affectedRowsByChangeSet = [];
-  function selectionReasonsForGate(gate, matchedTargets = [], matchedSourceDependencies = []) {
+  const branchesById = Object.fromEntries((Array.isArray(branches) ? branches : []).map(branch => [String(branch.id), branch]));
+  const defectClustersByDefect = Object.fromEntries((Array.isArray(defectClusters) ? defectClusters : []).map(cluster => [String(cluster.defect), cluster]));
+
+  function priorDefectClusterContextForScope(scopeType, scope) {
+    const branchId = scopeType === "branch" ? String(scope.id || "") : String(scope.branchId || "");
+    const branch = branchesById[branchId] ?? null;
+    const defect = String(scope?.defect || branch?.defect || "").trim();
+    if (!defect) return null;
+    const cluster = defectClustersByDefect[defect] ?? null;
+    if (!cluster) return null;
+    const currentMember = (cluster.branchMembers ?? []).find(member => member.branchId === branchId) ?? { branchId, createdAt: branch?.createdAt ?? null };
+    const priorMembers = (cluster.branchMembers ?? []).filter(member => {
+      if (member.branchId === branchId) return false;
+      if (!currentMember.createdAt) return true;
+      if (!member.createdAt) return true;
+      return compareTimeline(member, currentMember) < 0;
+    });
+    if (!priorMembers.length) return null;
+    const historicalChangedPaths = unique(priorMembers.flatMap(member => member.changedPaths ?? []));
+    const historicalAffectedSystems = new Set(unique(priorMembers.flatMap(member => member.affectedSystems ?? [])));
+    const historicalDocTargets = new Set(unique(priorMembers.flatMap(member => [
+      ...(member.docsFreshness?.requiredDocs ?? []),
+      ...(member.docsFreshness?.touchedDocs ?? []),
+      ...(member.docsFreshness?.missingDocs ?? [])
+    ])).map(doc => `doc:${doc}`));
+    const historicalTelemetryTargets = new Set(unique(priorMembers.flatMap(member => member.telemetryImpactIds ?? [])).map(id => telemetryMetricNodeId(id)));
+    const historicalTargets = inferredAffectedTargetsForChangedPaths(historicalChangedPaths);
+    return {
+      id: cluster.id,
+      title: cluster.title,
+      priorBranchIds: priorMembers.map(member => member.branchId),
+      historicalChangedPaths: new Set(historicalChangedPaths),
+      historicalAffectedSystems,
+      historicalDocTargets,
+      historicalTelemetryTargets,
+      historicalTargets
+    };
+  }
+
+  function selectionReasonsForGate(gate, matchedTargets = [], matchedSourceDependencies = [], priorDefectCluster = null) {
     const reasons = [];
     const sourcePath = gate.sourcePath ? String(gate.sourcePath) : null;
     const directDependencies = unique(matchedSourceDependencies.filter(path => sourcePath && path === sourcePath));
@@ -999,6 +1104,14 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
         targets: telemetryTargets
       });
     }
+    if (priorDefectCluster) {
+      reasons.push({
+        kind: "prior-defect-cluster-dependency",
+        summary: `Matched prior defect cluster ${priorDefectCluster.title} from ${priorDefectCluster.priorBranchIds.join(", ")}.`,
+        targets: [priorDefectCluster.id],
+        branchIds: [...priorDefectCluster.priorBranchIds]
+      });
+    }
     return reasons;
   }
   function collectAffectedRows(scopeType, scope) {
@@ -1013,7 +1126,20 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
     const telemetryTargets = new Set((scope.telemetryImpactSummaries ?? [])
       .map(summary => summary?.id ? telemetryMetricNodeId(summary.id) : null)
       .filter(Boolean));
+    const priorDefectCluster = priorDefectClusterContextForScope(scopeType, scope);
     for (const gate of rows) {
+      const clusterMatchedTargets = priorDefectCluster
+        ? unique(gate.protectedObjects.filter(target =>
+            priorDefectCluster.historicalAffectedSystems.has(target)
+            || priorDefectCluster.historicalAffectedSystems.has(target.replace(/^profile:/, ""))
+            || priorDefectCluster.historicalDocTargets.has(target)
+            || priorDefectCluster.historicalTelemetryTargets.has(target)
+            || priorDefectCluster.historicalTargets.has(target)
+          ))
+        : [];
+      const clusterMatchedSourceDependencies = priorDefectCluster
+        ? unique(gate.sourceDependencies.filter(dependency => priorDefectCluster.historicalChangedPaths.has(dependency)))
+        : [];
       const matchedTargets = unique(gate.protectedObjects.filter(target =>
         affectedSystems.has(target)
         || affectedSystems.has(target.replace(/^profile:/, ""))
@@ -1023,7 +1149,8 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
         || affectedTargets.has(target)
       ));
       const matchedSourceDependencies = unique(gate.sourceDependencies.filter(dependency => changedPaths.has(dependency)));
-      if (!matchedTargets.length && !matchedSourceDependencies.length) continue;
+      const hasPriorDefectDependency = Boolean(priorDefectCluster && (clusterMatchedTargets.length || clusterMatchedSourceDependencies.length));
+      if (!matchedTargets.length && !matchedSourceDependencies.length && !hasPriorDefectDependency) continue;
       const scopeId = String(scope.id);
       const affectedRow = {
         id: `affectedTestGate:${scopeType}:${scopeId}:${gate.id}`,
@@ -1031,12 +1158,26 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
         gateTitle: gate.title,
         protectedObjects: [...gate.protectedObjects],
         protectedObjectLabels: [...gate.protectedObjectLabels],
-        matchedTargets,
+        matchedTargets: unique([
+          ...matchedTargets,
+          ...(hasPriorDefectDependency ? [priorDefectCluster.id] : [])
+        ]),
         matchedTargetLabels: matchedTargets.map(target => nodes.get(target)?.title || target),
         matchedSourceDependencies,
         sourceDependencies: [...gate.sourceDependencies],
-        selectionReasons: selectionReasonsForGate(gate, matchedTargets, matchedSourceDependencies)
+        selectionReasons: selectionReasonsForGate(
+          gate,
+          matchedTargets,
+          matchedSourceDependencies,
+          hasPriorDefectDependency ? priorDefectCluster : null
+        )
       };
+      if (hasPriorDefectDependency) {
+        affectedRow.matchedTargetLabels = unique([
+          ...affectedRow.matchedTargetLabels,
+          nodes.get(priorDefectCluster.id)?.title || priorDefectCluster.id
+        ]);
+      }
       if (scopeType === "branch") {
         gate.selectedByBranches.push(scopeId);
         affectedRows.push({
@@ -1707,7 +1848,9 @@ export async function buildPlatformModel({
     }
   }
 
-  const testGateProjection = buildTestGateRows(nodes, edges, branches, changeSets, latestTestResultsProjection.byGate ?? Object.create(null));
+  const defectClusters = buildDefectClusterRows(branches);
+  addDefectClusterNodes(nodes, edges, defectClusters);
+  const testGateProjection = buildTestGateRows(nodes, edges, branches, changeSets, latestTestResultsProjection.byGate ?? Object.create(null), defectClusters);
   addTestGateTelemetryEdges(nodes, edges, testGateProjection.rows);
   addTestExecutionNodes(nodes, edges, testGateProjection.rows, testRuns, testResults, testArtifacts);
   const gaps = buildGaps(nodes, edges, { branches, changeSets, testGateProjection });

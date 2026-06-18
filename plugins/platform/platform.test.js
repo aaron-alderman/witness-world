@@ -664,6 +664,88 @@ test("platform route edits select platform and runtime-profile gates through own
   assert.equal(model.affectedTestGatesByBranch["branch.platform.route"].includes(packageScriptGate?.id), false);
 });
 
+test("prior defect clusters select historically relevant platform gates", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [],
+      providedCapabilities: [],
+      routes: [{ method: "GET", matcher: "/platform", handler: "page.platform" }],
+      surfaces: [],
+      plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+    },
+    project: projector => {
+      if (projector === moduleProjectors.branches) {
+        return [
+          {
+            id: "branch.defect.prior",
+            title: "Prior Defect Branch",
+            status: "open",
+            defect: "platform-route-regression",
+            createdAt: "2026-01-01T00:00:00.000Z"
+          },
+          {
+            id: "branch.defect.current",
+            title: "Current Defect Branch",
+            status: "open",
+            defect: "platform-route-regression",
+            createdAt: "2026-01-02T00:00:00.000Z"
+          }
+        ];
+      }
+      if (projector === moduleProjectors.changeSets) {
+        return [
+          { id: "changeSet:defect-prior", branchId: "branch.defect.prior", status: "draft" },
+          { id: "changeSet:defect-current", branchId: "branch.defect.current", status: "draft" }
+        ];
+      }
+      if (projector === moduleProjectors.changeSetEdits) {
+        return [
+          { id: "changeSetEdit:defect-prior:runtime", changeSetId: "changeSet:defect-prior", path: "plugins/platform/runtime.js" },
+          { id: "changeSetEdit:defect-current:package", changeSetId: "changeSet:defect-current", path: "package.json" }
+        ];
+      }
+      return [];
+    }
+  });
+
+  const defectClusterId = "defectCluster:platform-route-regression";
+  const runtimeProfileSelection = model.affectedTestGates.find(row =>
+    row.branchId === "branch.defect.current"
+    && row.gateId === "gate:test/runtime-profile.test.js"
+  );
+  const platformGateSelection = model.affectedTestGates.find(row =>
+    row.branchId === "branch.defect.current"
+    && row.gateId === "gate:plugins/platform/platform.test.js"
+  );
+  const packageScriptGate = model.testGates.find(row => row.command === "npm run test:plugin:mcp");
+  const packageGateSelection = model.affectedTestGates.find(row =>
+    row.branchId === "branch.defect.current"
+    && row.gateId === packageScriptGate?.id
+  );
+
+  assert.equal(model.nodes.some(node => node.id === defectClusterId && node.kind === "defectCluster"), true);
+  assert.ok(runtimeProfileSelection);
+  assert.deepEqual(runtimeProfileSelection.matchedTargets, [defectClusterId]);
+  assert.equal(runtimeProfileSelection.matchedSourceDependencies.length, 0);
+  assert.equal(runtimeProfileSelection.selectionReasons.some(reason =>
+    reason.kind === "prior-defect-cluster-dependency"
+    && reason.targets.includes(defectClusterId)
+    && reason.branchIds.includes("branch.defect.prior")
+  ), true);
+
+  assert.ok(platformGateSelection);
+  assert.equal(platformGateSelection.selectionReasons.some(reason =>
+    reason.kind === "prior-defect-cluster-dependency"
+    && reason.targets.includes(defectClusterId)
+  ), true);
+
+  assert.ok(packageGateSelection);
+  assert.equal(packageGateSelection.selectionReasons.some(reason => reason.kind === "prior-defect-cluster-dependency"), false);
+  assert.equal(model.affectedTestGatesByBranch["branch.defect.current"].includes("gate:test/runtime-profile.test.js"), true);
+  assert.equal(model.affectedTestGatesByBranch["branch.defect.current"].includes("gate:plugins/platform/platform.test.js"), true);
+});
+
 test("platform WCSS-only edits do not select runtime-core backend gates", async () => {
   const model = await buildPlatformModel({
     diagnostics: {
