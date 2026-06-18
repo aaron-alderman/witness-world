@@ -1190,7 +1190,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 ### 12.3 MCP Parity
 
 - [~] Add MCP views for each Platform Console view.
-- [ ] Ensure every human mutation has an MCP proposal equivalent.
+- [X] Ensure every human mutation has an MCP proposal equivalent.
 - [ ] Ensure MCP cannot bypass proposal/change-set authority.
 - [ ] Add MCP tool:
   - [X] `platform.branch`
@@ -1206,6 +1206,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [L] `platform.docs` now routes through the shared `/api/platform-model?view=docs` handler lane and returns governed docs, doc sections, doc tasks, and roadmap-task rows for the same modeled documentation surfaced on `/platform`. Dedicated telemetry, defect, and roadmap MCP lanes remain later work.
 - [L] `platform.roadmap` now routes through the shared `/api/platform-model?view=roadmap` handler lane and exposes the currently implemented roadmap surface: the ingested `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md` doc, its sections, checkbox task rows, evidence-backed derived task status, branch-metadata-backed `roadmap` / `epic` / `feature` projections, aggregated `testsByFeature` coverage rows, and aggregated `defectsByEpic` coverage rows backed by `defectCluster` targets. Milestones, acceptance criteria, and deeper planning coverage remain later work.
 - [L] Current parity coverage compares normalized direct platform-handler responses against MCP tool results for the implemented docs, roadmap, branch, change-set, proposal-create, and test-run/list/read flows. Future telemetry, defect, and broader planning-model MCP lanes will need their own parity extensions as those surfaces land.
+- [L] Current `/platform` mutation surfaces all have MCP equivalents on the shared handler lane: proposal create/review maps to `platform.proposal`, branch creation maps to `platform.branch create`, change-set create/edit/validate/apply/reject/abandon maps to `platform.changeSet`, and explicit or selected test execution maps to `platform.test run` / `runSelected`.
 - [L] The live docs model now projects explicit `docIndex`, `docReference`, `docDependencies`, and `docsByPlatformObject` rows from governed targets and resolved Markdown references to routes, plugins, capabilities, proposal IDs, branch IDs, governed docs, authored RVM/WCSS sources, JSON/WTOML config sources, and generic repo file/test nodes when the referenced workspace path exists.
 
 ## Phase 13: Policy, Authority, And Safety

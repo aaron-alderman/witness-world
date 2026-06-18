@@ -169,7 +169,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("changeSet.create"), true);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("changeSet.apply"), true);
   assert.equal(platformProposal.inputSchema.properties.action.enum.includes("branch.create"), true);
-  assert.equal(platformProposal.inputSchema.properties.operation.enum.includes("approve"), true);
+  assert.deepEqual(platformProposal.inputSchema.properties.operation.enum, ["create", "approve", "reject"]);
   assert.deepEqual(platformChangeSet.inputSchema.properties.operation.enum, ["list", "read", "create", "edit", "removeEdit", "validate", "apply", "reject", "abandon"]);
   assert.deepEqual(platformTest.inputSchema.properties.operation.enum, ["list", "read", "run", "runSelected"]);
   assert.equal(authoringWrite.inputSchema.properties.action.enum.includes("process.create"), true);
@@ -280,6 +280,35 @@ test("platform MCP proposal tool routes through platform proposal handlers", asy
   assert.equal(approved.isError, false);
   assert.equal(calls.at(-1).handler, "platform.proposal.approve");
   assert.equal(calls.at(-1).params.id, "proposal.platform.install");
+
+  const rejected = await executeMcpTool("platform.proposal", {
+    args: { operation: "reject", proposalId: "proposal.platform.install", reason: "Rejected in parity test" },
+    callHandler
+  });
+  assert.equal(rejected.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.proposal.reject");
+  assert.equal(calls.at(-1).params.id, "proposal.platform.install");
+  assert.equal(calls.at(-1).body.reason, "Rejected in parity test");
+});
+
+test("current platform console mutation surfaces have MCP tool equivalents", () => {
+  const tools = listSupportedMcpTools();
+  const byName = Object.fromEntries(tools.map(tool => [tool.name, tool]));
+  const proposalOperations = byName["platform.proposal"].inputSchema.properties.operation.enum;
+  const branchOperations = byName["platform.branch"].inputSchema.properties.operation.enum;
+  const changeSetOperations = byName["platform.changeSet"].inputSchema.properties.operation.enum;
+  const testOperations = byName["platform.test"].inputSchema.properties.operation.enum;
+
+  assert.deepEqual(proposalOperations, ["create", "approve", "reject"]);
+  assert.deepEqual(branchOperations, ["list", "read", "create"]);
+  assert.equal(changeSetOperations.includes("create"), true);
+  assert.equal(changeSetOperations.includes("edit"), true);
+  assert.equal(changeSetOperations.includes("validate"), true);
+  assert.equal(changeSetOperations.includes("apply"), true);
+  assert.equal(changeSetOperations.includes("reject"), true);
+  assert.equal(changeSetOperations.includes("abandon"), true);
+  assert.equal(testOperations.includes("run"), true);
+  assert.equal(testOperations.includes("runSelected"), true);
 });
 
 test("platform MCP read tool routes runtime revision view through platform model handlers", async () => {
@@ -730,6 +759,20 @@ test("implemented platform MCP tools stay in parity with direct platform handler
   });
   assert.equal(mcpProposalCreate.isError, false);
   assert.deepEqual(normalizePlatformParity(mcpProposalCreate.structuredContent), normalizePlatformParity(directProposalCreate.body));
+
+  const directProposalReject = await direct.callHandler({
+    handler: "platform.proposal.reject",
+    method: "POST",
+    path: `/api/platform-proposals/${encodeURIComponent(proposalBody.id)}/reject`,
+    params: { id: proposalBody.id },
+    body: { reason: "Parity reject" }
+  });
+  const mcpProposalReject = await executeMcpTool("platform.proposal", {
+    args: { operation: "reject", proposalId: proposalBody.id, reason: "Parity reject" },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpProposalReject.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpProposalReject.structuredContent), normalizePlatformParity(directProposalReject.body));
 
   const directTestList = await direct.callHandler({
     handler: "platform.model.read",
