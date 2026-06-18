@@ -447,7 +447,16 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(branchBoardSurface.props.laneMetaFields, "Count=countLabel");
   assert.equal(branchBoardSurface.props.itemTitlePath, "titleLink");
   assert.equal(branchBoardSurface.props.itemFields, "Status=status|Activity=activitySummary|Latest Candidate Snapshot=latestCandidateSnapshotId@concept");
-  assert.equal(workflowPage.childSurfaces.some(surface => surface.name === "PlatformProposalPanel" && surface.processRoute === "/api/platform-proposals"), true);
+  const proposalPanelSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformProposalPanel");
+  assert.ok(proposalPanelSurface);
+  assert.equal(proposalPanelSurface.processRoute, "/api/platform-proposals");
+  assert.equal(proposalPanelSurface.props.formId, "platform-proposal-form");
+  assert.equal(proposalPanelSurface.props.formFields, "Action=action@select:proposalActionOptions|Proposal id=id@text|Target kind override=targetKind@text|Target id override=targetId@text|Reason=reason@text|Body JSON=bodyJson@textarea");
+  const proposalReviewSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformProposalReviewList");
+  assert.ok(proposalReviewSurface);
+  assert.equal(proposalReviewSurface.props.formId, "platform-review-form");
+  assert.equal(proposalReviewSurface.props.formFields, "Open proposal=id@select:openProposalOptions|Reject reason=reason@text");
+  assert.equal(proposalReviewSurface.props.actionButtons, "Approve=approve|Reject=reject");
   const branchCreateSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformBranchCreatePanel");
   assert.ok(branchCreateSurface);
   assert.equal(branchCreateSurface.props.formId, "platform-branch-create-form");
@@ -5332,6 +5341,9 @@ test("platform page renders required operating views", async () => {
   assert.match(workflowHtml, /<form id="platform-branch-create-form"/);
   assert.match(workflowHtml, /<form id="platform-change-set-create-form"/);
   assert.match(workflowHtml, /<form id="platform-proposal-form"/);
+  assert.match(workflowHtml, /data-sample-body=/);
+  assert.match(workflowHtml, /<form id="platform-review-form"/);
+  assert.match(workflowHtml, /name="reviewAction" value="approve"/);
   assert.match(workflowHtml, /<form id="platform-change-set-edit-form"/);
   assert.match(workflowHtml, /<form id="platform-change-set-lifecycle-form"/);
   assert.match(workflowHtml, /\/api\/platform-branches\/branch%3Ademo-0/);

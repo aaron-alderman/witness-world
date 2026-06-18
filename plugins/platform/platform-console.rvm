@@ -421,6 +421,13 @@ view PlatformProposalPanel {
   process PlatformProposalCreate
   prop title = "Proposal Panel"
   prop summary = "Create guarded platform proposals through the shared mutation lane."
+  prop formId = "platform-proposal-form"
+  prop statusId = "proposal-status"
+  prop submitLabel = "Create Proposal"
+  prop formFields = "Action=action@select:proposalActionOptions|Proposal id=id@text|Target kind override=targetKind@text|Target id override=targetId@text|Reason=reason@text|Body JSON=bodyJson@textarea"
+  prop fieldDefaults = "id=proposal.platform.{generatedId}|reason=Platform stewardship change|bodyJson={}"
+  prop fieldPlaceholders = "targetKind=derived from body|targetId=derived from body"
+  prop fieldRows = "bodyJson=8"
   projections {
     PlatformModelRead
   }
@@ -432,6 +439,12 @@ view PlatformProposalReviewList {
   process PlatformProposalApprove
   prop title = "Review Proposals"
   prop summary = "Approve or reject open platform proposals."
+  prop formId = "platform-review-form"
+  prop statusId = "review-status"
+  prop formFields = "Open proposal=id@select:openProposalOptions|Reject reason=reason@text"
+  prop fieldPlaceholders = "reason=Only used when rejecting"
+  prop actionButtons = "Approve=approve|Reject=reject"
+  prop actionButtonName = "reviewAction"
   projections {
     PlatformModelRead
   }

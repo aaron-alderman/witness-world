@@ -739,6 +739,21 @@ function resolveFormDefaultValue(raw) {
 
 function formFieldOptions(source, model) {
   switch (source) {
+    case "proposalActionOptions":
+      return (model.proposalActions ?? []).map(action => ({
+        value: action.action,
+        label: action.action,
+        attrs: {
+          "data-sample-body": JSON.stringify(action.sampleBody ?? {})
+        }
+      }));
+    case "openProposalOptions":
+      return (model.proposals ?? [])
+        .filter(proposal => proposal.status === "open")
+        .map(proposal => ({
+          value: proposal.id,
+          label: proposal.id
+        }));
     case "changeSetOptions":
       return (model.changeSets ?? []).map(changeSet => ({
         value: changeSet.id,
@@ -769,7 +784,10 @@ function renderAuthoredFormField(field, model, defaultsMap, placeholdersMap, row
         <select name="${esc(field.name)}">
           ${options.map(option => {
             const selected = defaultValue && option.value === defaultValue ? ' selected' : "";
-            return `<option value="${esc(option.value)}"${selected}>${esc(option.label || option.value)}</option>`;
+            const attrs = Object.entries(option.attrs ?? {})
+              .map(([key, value]) => ` ${esc(key)}="${esc(value)}"`)
+              .join("");
+            return `<option value="${esc(option.value)}"${selected}${attrs}>${esc(option.label || option.value)}</option>`;
           }).join("")}
         </select>
       </label>
@@ -787,6 +805,19 @@ function renderAuthoredFormField(field, model, defaultsMap, placeholdersMap, row
     <label>${esc(field.label)}
       <input name="${esc(field.name)}" value="${esc(defaultValue)}" placeholder="${esc(placeholder)}">
     </label>
+  `;
+}
+
+function renderFormActionButtons(surface) {
+  const actionButtons = parseSurfaceLabelMap(surface?.props?.actionButtons);
+  if (!actionButtons.size) {
+    return `<button type="submit">${esc(surfacePropText(surface, "submitLabel", "Submit"))}</button>`;
+  }
+  const buttonName = optionalText(surface?.props?.actionButtonName);
+  return `
+    <div style="display:flex; gap:8px;">
+      ${[...actionButtons.entries()].map(([label, value]) => `<button type="submit"${buttonName ? ` name="${esc(buttonName)}"` : ""} value="${esc(value)}">${esc(label)}</button>`).join("")}
+    </div>
   `;
 }
 
@@ -1684,49 +1715,9 @@ function renderAuthoredFormSection(surface, model) {
   return renderSurfaceFrame(surface, `
       <form id="${esc(surfacePropText(surface, "formId", `${surface?.name || "platform-form"}`))}">
         ${fields.map(field => renderAuthoredFormField(field, model, defaultsMap, placeholdersMap, rowMap)).join("")}
-        <button type="submit">${esc(surfacePropText(surface, "submitLabel", "Submit"))}</button>
+        ${renderFormActionButtons(surface)}
         <div id="${esc(surfacePropText(surface, "statusId", `${surface?.name || "platform-status"}`))}"></div>
       </form>
-  `);
-}
-
-function renderProposalPanelSection(surface, model) {
-  const proposalActions = model.proposalActions ?? [];
-  const firstActionBody = JSON.stringify(proposalActions[0]?.sampleBody ?? {}, null, 2);
-  return renderSurfaceFrame(surface, `
-    <form id="platform-proposal-form">
-      <label>Action
-        <select name="action">
-          ${proposalActions.map(action => `<option value="${esc(action.action)}" data-sample-body="${esc(JSON.stringify(action.sampleBody ?? {}))}">${esc(action.action)}</option>`).join("")}
-        </select>
-      </label>
-      <label>Proposal id <input name="id" value="proposal.platform.${Date.now().toString(36)}"></label>
-      <label>Target kind override <input name="targetKind" placeholder="derived from body"></label>
-      <label>Target id override <input name="targetId" placeholder="derived from body"></label>
-      <label>Reason <input name="reason" value="Platform stewardship change"></label>
-      <label>Body JSON <textarea name="bodyJson">${esc(firstActionBody)}</textarea></label>
-      <button type="submit">Create Proposal</button>
-      <div id="proposal-status"></div>
-    </form>
-  `);
-}
-
-function renderProposalReviewPanelSection(surface, model) {
-  const openProposals = (model.proposals ?? []).filter(proposal => proposal.status === "open");
-  return renderSurfaceFrame(surface, `
-    <form id="platform-review-form">
-      <label>Open proposal
-        <select name="id">
-          ${openProposals.map(proposal => `<option value="${esc(proposal.id)}">${esc(proposal.id)}</option>`).join("")}
-        </select>
-      </label>
-      <label>Reject reason <input name="reason" placeholder="Only used when rejecting"></label>
-      <div style="display:flex; gap:8px;">
-        <button type="submit" name="reviewAction" value="approve">Approve</button>
-        <button type="submit" name="reviewAction" value="reject">Reject</button>
-      </div>
-      <div id="review-status"></div>
-    </form>
   `);
 }
 
@@ -1979,30 +1970,10 @@ function renderSurfaceSection(surface, model, ctx, consoleLayout) {
       return renderBranchBoard(surface, model, ctx);
     case "PlatformWorkflowDetail":
       return renderSurfaceFrame(surface, renderWorkflowDetail(surface, findWorkflowDetail(model, ctx.id), model, ctx));
-    case "PlatformProposalPanel":
-      return renderProposalPanelSection(surface, model);
-    case "PlatformProposalReviewList":
-      return renderProposalReviewPanelSection(surface, model);
-    case "PlatformBranchCreatePanel":
-      return renderBranchCreatePanelSection(surface);
-    case "PlatformChangeSetCreatePanel":
-      return renderChangeSetCreatePanelSection(surface);
-    case "PlatformChangeSetEditPanel":
-      return renderChangeSetEditPanelSection(surface, model);
-    case "PlatformChangeSetValidatePanel":
-      return renderChangeSetValidatePanelSection(surface, model);
-    case "PlatformChangeSetApplyPanel":
-      return renderChangeSetApplyPanelSection(surface, model);
-    case "PlatformChangeSetLifecyclePanel":
-      return renderChangeSetLifecyclePanelSection(surface, model);
     case "PlatformVerificationDetail":
       return renderSurfaceFrame(surface, renderVerificationDetail(surface, findVerificationDetail(model, ctx.id), model, ctx));
     case "PlatformVerificationStreams":
       return renderVerificationStreamsSection(surface);
-    case "PlatformTestRunPanel":
-      return renderTestRunPanelSection(surface, model);
-    case "PlatformSelectedTestRunPanel":
-      return renderSelectedTestRunPanelSection(surface);
     case "PlatformKnowledgeDetail":
       return renderSurfaceFrame(surface, renderKnowledgeDetail(surface, findKnowledgeDetail(model, ctx.id), model, ctx));
     case "PlatformSignalDetail":
