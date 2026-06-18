@@ -38,7 +38,7 @@ The immediate goal of the lowering declaration grammar is now narrower:
 
 - preserve exact emitted CSS
 - keep selector/state groupings explicit for the browser backend
-- provide stable backend-group buckets for current proof tooling
+- provide stable backend-group buckets for current proof tooling and rollback
 - let native proof slices lower against recovered presentation anchors even when
   the current browser runtime still emits legacy ids/classes underneath
 
@@ -86,8 +86,9 @@ The authored WCSS grammar should describe presentation law first and selector
 accidents second. The lowering declaration grammar should preserve browser fidelity while
 remaining clearly downstream of that authored contract.
 
-At this point the proof lane is whole-app native. Browser declaration groups
-remain as backend-lowering buckets, not the authored slice contract.
+At this point the default served lane is whole-app native WCSS. Browser
+declaration groups remain as backend-lowering buckets and rollback support, not
+the authored slice contract.
 
 If later uplift work needs more browser detail, extend the lowering declaration
 layer as a backend artifact. Do not treat it as the primary style guide.

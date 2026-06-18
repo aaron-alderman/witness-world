@@ -1,7 +1,7 @@
 # Engentus WCSS Application
 
-Engentus now has a canonical V1 WCSS lane that runs in parallel with the
-current browser asset path.
+Engentus now serves its canonical V1 WCSS lane by default through the current
+browser asset path.
 
 The important boundary is:
 
@@ -84,11 +84,13 @@ and writes offline proof artifacts outside the app source tree:
   against canonical V1 plus the browser lowering map
 - `shell-base`, `auth`, `home`, `goodman`, `mill-charge`, `mill-force`,
   `platform-config`, and `chart-pages` now have `native-browser` lowering
-  definitions; the checked-in switch manifest remains legacy and the native lane
-  is still exercised through proof/injected assets rather than live default
-  serving
+  definitions, and the checked-in switch manifest serves that lane live by
+  default
 - the proof lane now has whole-app native coverage; declaration groups remain a
   backend artifact rather than the authored slice contract
+- injected-asset tests still exercise isolated proof composition, but the
+  checked-in runtime now serves the WCSS lane directly; emergency rollback is a
+  manifest-only change back to `legacy`
 - native slices are expected to target identities, traits, variants, tags, and
   pseudos first; raw selector escapes are treated as backend debt and surfaced
   in the proof reports

@@ -1159,9 +1159,9 @@ This section is the execution contract for a fresh agent. Read it before startin
 
 ### 12.1 Expand Human Views
 
-- [ ] Add Branches view.
-- [ ] Add Change Sets view.
-- [ ] Add Candidate Snapshots view.
+- [X] Add Branches view.
+- [X] Add Change Sets view.
+- [X] Add Candidate Snapshots view.
 - [X] Add Runtime Revisions view.
 - [X] Add Docs view.
 - [X] Add Test Gates view.
@@ -1172,9 +1172,10 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add Defect Clusters view.
 - [ ] Add Telemetry view.
 - [ ] Add Sessions view.
-- [ ] Add Roadmap/Epics view.
+- [X] Add Roadmap/Epics view.
 - [ ] Add Boundaries view.
 - [ ] Add Meta-System view.
+- [L] `/platform` now renders section-based human views for branches, change sets, candidate snapshots, runtime revisions, governed docs, test gates, test runs, roadmap tasks, and epic detail on the main console page. Dependency graph, coverage, defect, telemetry, session, boundary, and meta-system views remain later work.
 
 ### 12.2 RVM/WCSS Dogfooding
 

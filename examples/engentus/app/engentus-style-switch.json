@@ -1,13 +1,13 @@
 {
   "theme": "engentus",
   "slices": {
-    "shell-base": "legacy",
-    "auth": "legacy",
-    "home": "legacy",
-    "goodman": "legacy",
-    "mill-charge": "legacy",
-    "mill-force": "legacy",
-    "platform-config": "legacy",
-    "chart-pages": "legacy"
+    "shell-base": "wcss",
+    "auth": "wcss",
+    "home": "wcss",
+    "goodman": "wcss",
+    "mill-charge": "wcss",
+    "mill-force": "wcss",
+    "platform-config": "wcss",
+    "chart-pages": "wcss"
   }
 }
