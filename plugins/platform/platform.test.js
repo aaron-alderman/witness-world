@@ -156,7 +156,7 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   assert.equal(model.nodes.some(node => node.id === "testEnvironment:local-browser" && node.kind === "testEnvironment"), true);
   assert.equal(model.edges.some(edge => edge.from === "surface:platform" && edge.rel === "authoredBy" && edge.to === "rvm:plugins/platform/platform-console.rvm"), true);
   assert.equal(model.edges.some(edge => edge.from === "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" && edge.rel === "references" && edge.to === "plugin.platform"), true);
-  assert.equal(model.nodes.some(node => node.kind === "gate" && node.id.includes("plugins/platform/platform.test.js")), true);
+  assert.equal(model.nodes.some(node => node.kind === "testGate" && node.id.includes("plugins/platform/platform.test.js")), true);
   assert.equal(model.edges.some(edge => edge.from === "gate:plugins/platform/platform.test.js" && edge.rel === "usesBoundary" && edge.to === "boundary:testRunner.platform"), true);
   assert.equal(model.edges.some(edge => edge.from === "plugin.platform" && edge.rel === "owns" && edge.to === "bundle-platform"), true);
   assert.equal(Array.isArray(model.gaps), true);
@@ -487,7 +487,7 @@ test("platform model filters support MCP views", async () => {
   assert.equal(docs.docs[0].path, "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md");
   assert.equal(docs.docSections.length > 0, true);
   assert.equal(docs.docTasks.length > 0, true);
-  assert.equal(gates.gates.every(node => node.kind === "gate"), true);
+  assert.equal(gates.gates.every(node => node.kind === "testGate"), true);
   assert.equal(testGates.testGates.length, 1);
   assert.equal(testGates.testGates[0].id, "gate:test/runtime-profile.test.js");
   assert.equal(testGates.testGateIndex.byId["gate:test/runtime-profile.test.js"].title, "test/runtime-profile.test.js");

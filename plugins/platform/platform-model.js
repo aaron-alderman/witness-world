@@ -1191,7 +1191,7 @@ function buildTestGateRows(
     outgoing.get(edge.from).push(edge);
   }
   const rows = [...nodes.values()]
-    .filter(node => node.kind === "gate")
+    .filter(node => node.kind === "testGate")
     .map(node => {
       const gateEdges = outgoing.get(node.id) ?? [];
       const baseProtectedObjects = unique(gateEdges.filter(edge => edge.rel === "verifies").map(edge => edge.to));
@@ -2026,12 +2026,12 @@ export async function buildPlatformModel({
     if (!String(scriptName).startsWith("test")) continue;
     const gateId = `gate:script:${slugify(scriptName)}`;
     const command = `npm run ${scriptName}`;
-    addNode(nodes, {
-      id: gateId,
-      kind: "gate",
-      title: command,
-      lifecycle: ["verify", "steward"],
-      owner: "tests",
+      addNode(nodes, {
+        id: gateId,
+        kind: "testGate",
+        title: command,
+        lifecycle: ["verify", "steward"],
+        owner: "tests",
       status: "modeled",
       source: "package.json",
       command,
@@ -2046,12 +2046,12 @@ export async function buildPlatformModel({
   for (const doc of parsedDocs) {
     for (const command of extractDocTestGateCommands(doc.source)) {
       const gateId = `gate:doc:${doc.path}:${slugify(command)}`;
-      addNode(nodes, {
-        id: gateId,
-        kind: "gate",
-        title: command,
-        lifecycle: ["verify", "steward"],
-        owner: doc.owner,
+        addNode(nodes, {
+          id: gateId,
+          kind: "testGate",
+          title: command,
+          lifecycle: ["verify", "steward"],
+          owner: doc.owner,
         status: "modeled",
         source: doc.path,
         command,
@@ -2073,12 +2073,12 @@ export async function buildPlatformModel({
     const id = `gate:${relative}`;
     const source = await readText(relative, "");
     const hints = buildTestGateSourceHints(relative, source, nodes, routeIdsByMatcher);
-    addNode(nodes, {
-      id,
-      kind: "gate",
-      title: relative,
-      lifecycle: lifecycleForTest(relative),
-      owner: "tests",
+      addNode(nodes, {
+        id,
+        kind: "testGate",
+        title: relative,
+        lifecycle: lifecycleForTest(relative),
+        owner: "tests",
       status: "modeled",
       source: relative,
       sourceDependencies: hints.sourceDependencies
@@ -2419,7 +2419,7 @@ export function filterPlatformModel(model, view, id = null) {
     const mergeIntents = id ? model.mergeIntents.filter(row => row.id === id || row.branchId === id || row.proposalId === id) : model.mergeIntents;
     return { mergeIntents, summaries: model.summaries };
   }
-  if (view === "gates") return { gates: model.nodes.filter(node => node.kind === "gate"), summaries: model.summaries };
+  if (view === "gates") return { gates: model.nodes.filter(node => node.kind === "testGate"), summaries: model.summaries };
   if (view === "mcp") return {
     nodes: model.nodes.filter(node => node.kind === "mcpServer" || node.kind === "mcpTool"),
     edges: model.edges.filter(edge => edge.from.startsWith("mcp:") || edge.to.startsWith("mcpTool:")),

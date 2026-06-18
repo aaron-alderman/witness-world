@@ -114,7 +114,7 @@ export function renderPlatformPage(model) {
       <div class="card"><div class="metric">${countByKind(model, "bundle")}</div><div class="muted">Bundles</div></div>
       <div class="card"><div class="metric">${countByKind(model, "route")}</div><div class="muted">Routes</div></div>
       <div class="card"><div class="metric">${countByKind(model, "handler")}</div><div class="muted">Handlers</div></div>
-      <div class="card"><div class="metric">${countByKind(model, "gate")}</div><div class="muted">Verification Gates</div></div>
+      <div class="card"><div class="metric">${countByKind(model, "testGate")}</div><div class="muted">Verification Gates</div></div>
       <div class="card"><div class="metric">${changeSets.length}</div><div class="muted">Change Sets</div></div>
       <div class="card"><div class="metric">${model.gaps.length}</div><div class="muted">Gaps</div></div>
     </section>
