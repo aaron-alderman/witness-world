@@ -71,6 +71,11 @@ export function renderPlatformPage(model) {
   const docs = model.docs ?? [];
   const docSections = model.docSections ?? [];
   const docTasks = model.docTasks ?? [];
+  const boundaries = model.nodes.filter(node => node.kind === "boundary").slice(0, 80);
+  const boundaryEdges = model.edges.filter(edge =>
+    edge.rel === "usesBoundary"
+    || edge.rel === "supports"
+  );
   const testGates = model.testGates ?? [];
   const testGateIndex = model.testGateIndex ?? { byId: {}, byProtectedObject: {}, byBranch: {}, byChangeSet: {} };
   const coverageEdges = model.coverageEdges ?? [];
@@ -659,6 +664,26 @@ export function renderPlatformPage(model) {
       <div>
         <h2>Meta-System Detail</h2>
         <pre>${esc(JSON.stringify(metaGaps, null, 2))}</pre>
+      </div>
+    </section>
+
+    <section class="grid2">
+      <div>
+        <h2>Boundaries</h2>
+        <table>
+          <thead><tr><th>Status</th><th>Boundary</th><th>Lifecycle</th><th>Owner</th><th>Source</th></tr></thead>
+          <tbody>${tableRows(boundaries, [
+            row => row.status,
+            row => row.title,
+            row => row.lifecycle.join(", "),
+            row => row.owner,
+            row => row.source
+          ])}</tbody>
+        </table>
+      </div>
+      <div>
+        <h2>Boundary Relationships</h2>
+        <pre>${esc(JSON.stringify(boundaryEdges.slice(0, 80), null, 2))}</pre>
       </div>
     </section>
 

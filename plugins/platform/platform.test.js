@@ -4582,6 +4582,8 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Meta-System Detail/);
   assert.match(html, /Meta gaps/);
   assert.match(html, /Meta categories/);
+  assert.match(html, /Boundaries/);
+  assert.match(html, /Boundary Relationships/);
   assert.match(html, /Governed Docs/);
   assert.match(html, /Doc Structure/);
   assert.match(html, /Doc Tasks/);
