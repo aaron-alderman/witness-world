@@ -690,7 +690,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] local node
   - [X] local browser
   - [~] local Rust/cargo
-  - [ ] isolated temp workspace
+  - [X] isolated temp workspace
   - [X] platform candidate snapshot
 - [~] Run tests inside platform execution commands.
 - [X] Capture stdout/stderr as artifacts.
@@ -704,12 +704,13 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add test run SSE events.
 - [X] Add Platform Console test run panel.
 - [X] Add MCP tool `platform.test` or extend `platform.proposal` gate execution.
-- [L] Current V1 test execution now models a `testRunner` boundary actor plus named local-node, local-browser, and candidate-snapshot execution environments in the platform graph. The actual command execution still runs through the same `plugin.platform` handler lane used by the human HTTP path; it is not yet isolated behind a separate runner process or candidate-snapshot workspace.
+- [L] Current V1 test execution now models a `testRunner` boundary actor plus named local-node, local-browser, isolated-temp-workspace, and candidate-snapshot execution environments in the platform graph. Commands still run through the same `plugin.platform` handler lane used by the human HTTP path, but explicit `isolated-temp-workspace` runs and candidate-snapshot runs now materialize a temp workspace copy before execution instead of running directly against the live repo root.
 - [L] `local Rust/cargo` is named in the execution environment catalog and chosen for cargo-shaped gate commands, but the current repo does not yet expose a discovered cargo gate that exercises that path end to end.
 - [L] Current stdout/stderr artifacts are projected as inline witness-backed `testArtifact` rows attached to each run/result. They are first-class platform objects now, but they are not yet external blob-backed artifacts or structured report files.
 - [L] Structured report capture currently derives TAP and JUnit artifacts opportunistically from captured stdout/stderr content. It does not yet ingest standalone report files, merge multi-file reports, or model per-test-case objects.
 - [L] Current V1 captures exit code, duration, stdout, stderr, timeout state, branch id, change-set id, candidate snapshot id, runtime profile, shell/cwd/env input metadata, and source revision dependency hashes for candidate-snapshot/workspace inputs. Memory, CPU, standalone structured report ingestion, artifact storage, and richer SSE/replay semantics remain later work.
-- [L] Source revision capture is mixed by design in V1: dependency hashes come from candidate snapshot overlay entries when the dependency is staged there, and from the live workspace for other declared source dependencies. This improves provenance without yet claiming isolated candidate-snapshot execution.
+- [L] Source revision capture is mixed by design in V1: dependency hashes come from candidate snapshot overlay entries when the dependency is staged there, and from the live workspace for other declared source dependencies. This improves provenance, and candidate-snapshot execution now applies those staged overlays inside a temp workspace, but local-node/local-browser/local-rust-cargo execution still runs directly from the live workspace.
+- [L] Candidate-snapshot temp workspaces currently reconstruct overlay content from the current staged `changeSetEdit` rows by matching the requested snapshot file hashes. This means a stale candidate snapshot ID can stop being executable once its change-set edits drift, because the platform does not yet store full overlay contents as snapshot artifacts.
 - [L] Current `platform.test` supports list/read/run over the shared platform handlers. It does not yet expose richer operations such as cancellation, streaming progress, or proposal-mediated execution policy.
 - [L] Current test-run SSE is implemented as a streamed view over newly appended `platform.test.run.start` / `platform.test.run.finish` witnesses. It does not yet provide a dedicated push subscription substrate, replay cursors, or durable event retention beyond witness history.
 

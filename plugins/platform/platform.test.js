@@ -2045,6 +2045,7 @@ test("platform change-set handlers stage overlays and validate candidate snapsho
 test("platform test run handlers execute modeled gates and expose read model state", async () => withRegisteredPluginProjectors(providers, async () => {
   const world = createWorld();
   const sent = [];
+  const rvm = await readFile(new URL("./platform-console.rvm", import.meta.url), "utf8");
   const handlers = createHandlers({
     world,
     backendHost: "backendHost",
@@ -2071,13 +2072,51 @@ test("platform test run handlers execute modeled gates and expose read model sta
     sendJson: (res, status, body) => sent.push({ status, body })
   });
 
+  await handlers["platform.changeSet.create"]({
+    req: {
+      body: {
+        id: "changeset.test.run.handlers",
+        branchId: "branch.test.run.handlers",
+        title: "Test run handler snapshot"
+      }
+    },
+    res: {},
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" },
+    appContext: { runtimeProfile: "full" }
+  });
+
+  await handlers["platform.changeSet.edit"]({
+    req: {
+      body: {
+        edits: [{
+          path: "plugins/platform/platform-console.rvm",
+          content: `${rvm}\n`
+        }]
+      }
+    },
+    res: {},
+    params: { id: "changeset.test.run.handlers" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+
+  await handlers["platform.changeSet.validate"]({
+    res: {},
+    params: { id: "changeset.test.run.handlers" },
+    requestActor: "aaron",
+    requestSession: { id: "session.platform" }
+  });
+
+  const candidateSnapshotId = sent.at(-1).body.candidateSnapshot.id;
+
   await handlers["platform.testRun.create"]({
     req: {
       body: {
         id: "testRun.platform.demo",
         gateId: "gate:plugins/platform/platform.test.js",
         branchId: "branch.platform.demo",
-        candidateSnapshotId: "candidateSnapshot:platform-demo:1"
+        candidateSnapshotId
       }
     },
     res: {},
@@ -2096,11 +2135,13 @@ test("platform test run handlers execute modeled gates and expose read model sta
   assert.equal(sent.at(-1).body.testRun.environmentInputs.cwd, ".");
   assert.equal(sent.at(-1).body.testRun.environmentInputs.environment, "platform-candidate-snapshot");
   assert.equal(sent.at(-1).body.testRun.environmentInputs.runner, "node-test");
+  assert.equal(sent.at(-1).body.testRun.environmentInputs.workspaceMode, "isolated-temp-workspace");
+  assert.equal(sent.at(-1).body.testRun.environmentInputs.workspaceSource, "candidateSnapshot");
   assert.equal(sent.at(-1).body.testRun.environmentInputs.runtimeProfile, "full");
   assert.equal(Array.isArray(sent.at(-1).body.testRun.environmentInputs.shellArgs), true);
   assert.equal(Array.isArray(sent.at(-1).body.testRun.environmentInputs.envOverrideKeys), true);
   assert.equal(sent.at(-1).body.testRun.sourceRevision.branchId, "branch.platform.demo");
-  assert.equal(sent.at(-1).body.testRun.sourceRevision.candidateSnapshotId, "candidateSnapshot:platform-demo:1");
+  assert.equal(sent.at(-1).body.testRun.sourceRevision.candidateSnapshotId, candidateSnapshotId);
   assert.equal(Array.isArray(sent.at(-1).body.testRun.sourceRevision.dependencyHashes), true);
   assert.equal(sent.at(-1).body.latestResult.status, "passed");
   assert.equal(sent.at(-1).body.latestResult.environmentInputs.environment, "platform-candidate-snapshot");
@@ -2243,6 +2284,9 @@ test("platform test runs capture environment inputs and prefer candidate snapsho
   assert.equal(run.status, 201);
   assert.equal(run.testRun.environmentInputs.cwd, ".");
   assert.equal(run.testRun.environmentInputs.environment, "platform-candidate-snapshot");
+  assert.equal(run.testRun.environmentInputs.workspaceMode, "isolated-temp-workspace");
+  assert.equal(run.testRun.environmentInputs.workspaceSource, "candidateSnapshot");
+  assert.equal(run.testRun.environmentInputs.overlayFileCount, 1);
   assert.equal(run.testRun.environmentInputs.timeoutMs, 3210);
   assert.equal(run.testRun.environmentInputs.runtimeProfile, "full");
   assert.equal(run.testRun.sourceRevision.branchId, "branch.test.source.revision");
@@ -2261,6 +2305,162 @@ test("platform test runs capture environment inputs and prefer candidate snapsho
   assert.equal(workspaceHashEntry.hash.length, 64);
   assert.equal(run.testResults[0].environmentInputs.environment, "platform-candidate-snapshot");
   assert.equal(run.testResults[0].sourceRevision.candidateSnapshotId, candidateSnapshot.id);
+}));
+
+test("platform candidate snapshot test runs execute against an isolated temp workspace overlay", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const fixture = await createTempPlatformApplyFixture();
+  try {
+    const handlers = createHandlers({
+      world,
+      backendHost: "backendHost",
+      frontendHost: "frontendHost",
+      readJson: async req => req.body,
+      authoringServices: {
+        requireBootstrapActor: actor => actor ? { ok: true, actor } : { ok: false, status: 401, reason: "sign in" }
+      },
+      sendGateFailure: () => {},
+      send: () => {},
+      sendJson: () => {}
+    });
+
+    await handlers["platform.changeSet.create"]({
+      req: {
+        body: {
+          id: "changeset.test.temp.overlay",
+          branchId: "branch.test.temp.overlay",
+          title: "Temp workspace overlay"
+        }
+      },
+      res: {},
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" },
+      appContext: { runtimeProfile: "full" }
+    });
+
+    await handlers["platform.changeSet.edit"]({
+      req: {
+        body: {
+          edits: [{
+            path: fixture.first,
+            content: JSON.stringify({ value: 99 }, null, 2)
+          }]
+        }
+      },
+      res: {},
+      params: { id: "changeset.test.temp.overlay" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+
+    await handlers["platform.changeSet.validate"]({
+      res: {},
+      params: { id: "changeset.test.temp.overlay" },
+      requestActor: "aaron",
+      requestSession: { id: "session.platform" }
+    });
+
+    const candidateSnapshot = world.project(moduleProjectors.candidateSnapshotIndex).byChangeSet["changeset.test.temp.overlay"]?.at(-1) ?? null;
+    assert.ok(candidateSnapshot);
+
+    const run = await runPlatformTestGate(world, {
+      actor: "aaron",
+      gate: {
+        id: "gate:platform-temp-overlay",
+        title: "Platform temp overlay gate",
+        command: "node --test plugins/platform/platform.test.js",
+        runner: "node-test",
+        timeoutMs: 2100,
+        sourceDependencies: [fixture.first],
+        protectedObjects: ["plugin.platform"]
+      },
+      id: "testRun.platform.temp.overlay",
+      branchId: "branch.test.temp.overlay",
+      changeSetId: "changeset.test.temp.overlay",
+      candidateSnapshotId: candidateSnapshot.id,
+      runtimeProfile: "full",
+      runCommand: async ({ cwd }) => {
+        const tempContent = JSON.parse(await readFile(path.join(cwd, fixture.first), "utf8"));
+        const liveContent = JSON.parse(await readFile(path.join(process.cwd(), fixture.first), "utf8"));
+        assert.notEqual(path.resolve(cwd), process.cwd());
+        assert.deepEqual(tempContent, { value: 99 });
+        assert.deepEqual(liveContent, { value: 1 });
+        await writeFile(path.join(cwd, fixture.first), JSON.stringify({ value: 123 }, null, 2), "utf8");
+        return {
+          startedAt: "2026-06-18T00:00:00.000Z",
+          finishedAt: "2026-06-18T00:00:00.150Z",
+          durationMs: 150,
+          exitCode: 0,
+          signal: null,
+          status: "passed",
+          stdout: "ok 1 - candidate snapshot workspace",
+          stderr: "",
+          timedOut: false,
+          error: null
+        };
+      }
+    });
+
+    assert.equal(run.status, 201);
+    assert.equal(run.testRun.environment, "platform-candidate-snapshot");
+    assert.equal(run.testRun.environmentInputs.workspaceMode, "isolated-temp-workspace");
+    assert.equal(run.testRun.environmentInputs.workspaceSource, "candidateSnapshot");
+    assert.equal(run.testRun.environmentInputs.overlayFileCount, 1);
+    assert.deepEqual(JSON.parse(await readFile(path.join(process.cwd(), fixture.first), "utf8")), { value: 1 });
+  } finally {
+    await removeTempPlatformApplyFixture(fixture.root);
+  }
+}));
+
+test("isolated temp workspace test runs copy the live workspace without mutating it", async () => withRegisteredPluginProjectors(providers, async () => {
+  const world = createWorld();
+  const fixture = await createTempPlatformApplyFixture();
+  try {
+    const run = await runPlatformTestGate(world, {
+      actor: "aaron",
+      gate: {
+        id: "gate:platform-temp-workspace",
+        title: "Platform temp workspace gate",
+        command: "node --test plugins/platform/platform.test.js",
+        runner: "node-test",
+        environment: "isolated-temp-workspace",
+        timeoutMs: 1700,
+        sourceDependencies: [fixture.first],
+        protectedObjects: ["plugin.platform"]
+      },
+      id: "testRun.platform.temp.workspace",
+      runtimeProfile: "full",
+      runCommand: async ({ cwd }) => {
+        const tempContent = JSON.parse(await readFile(path.join(cwd, fixture.first), "utf8"));
+        const liveContent = JSON.parse(await readFile(path.join(process.cwd(), fixture.first), "utf8"));
+        assert.notEqual(path.resolve(cwd), process.cwd());
+        assert.deepEqual(tempContent, { value: 1 });
+        assert.deepEqual(liveContent, { value: 1 });
+        await writeFile(path.join(cwd, fixture.first), JSON.stringify({ value: 7 }, null, 2), "utf8");
+        return {
+          startedAt: "2026-06-18T00:00:00.000Z",
+          finishedAt: "2026-06-18T00:00:00.120Z",
+          durationMs: 120,
+          exitCode: 0,
+          signal: null,
+          status: "passed",
+          stdout: "ok 1 - isolated temp workspace",
+          stderr: "",
+          timedOut: false,
+          error: null
+        };
+      }
+    });
+
+    assert.equal(run.status, 201);
+    assert.equal(run.testRun.environment, "isolated-temp-workspace");
+    assert.equal(run.testRun.environmentInputs.workspaceMode, "isolated-temp-workspace");
+    assert.equal(run.testRun.environmentInputs.workspaceSource, "workspace");
+    assert.equal(run.testRun.environmentInputs.overlayFileCount, 0);
+    assert.deepEqual(JSON.parse(await readFile(path.join(process.cwd(), fixture.first), "utf8")), { value: 1 });
+  } finally {
+    await removeTempPlatformApplyFixture(fixture.root);
+  }
 }));
 
 test("platform test runs cache successful results and invalidate on source, environment, runner, and dependency graph changes", async () => withRegisteredPluginProjectors(providers, async () => {

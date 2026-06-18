@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import process from "node:process";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -132,20 +133,121 @@ function buildPlatformTestEnvironmentInputs({
   env = {},
   runner = "node-test",
   environment = "local-node",
-  runtimeProfile = null
+  runtimeProfile = null,
+  workspaceMode = "live-workspace",
+  workspaceSource = "workspace",
+  overlayFileCount = 0
 }) {
   const shell = defaultShellCommand(command);
   return {
-    cwd: slash(path.relative(repoRoot, cwd) || "."),
+    cwd: workspaceMode === "isolated-temp-workspace"
+      ? "."
+      : slash(path.relative(repoRoot, cwd) || "."),
     platform: process.platform,
     shellFile: shell.file,
     shellArgs: [...shell.args],
     envOverrideKeys: Object.keys(env || {}).sort(),
     runner: String(runner || "node-test"),
     environment: String(environment || "local-node"),
+    workspaceMode: String(workspaceMode || "live-workspace"),
+    workspaceSource: String(workspaceSource || "workspace"),
+    overlayFileCount: Number(overlayFileCount || 0),
     timeoutMs: Number(timeoutMs || 0),
     runtimeProfile: runtimeProfile ? String(runtimeProfile) : null
   };
+}
+
+function candidateSnapshotOverlayError(status, error, details = null) {
+  return {
+    ok: false,
+    status,
+    error,
+    ...(details ? { details } : {})
+  };
+}
+
+function resolvePlatformTestWorkspaceDescriptor(world, {
+  environment = "local-node",
+  candidateSnapshotId = null
+}) {
+  const normalizedEnvironment = String(environment || "local-node");
+  const normalizedCandidateSnapshotId = optionalText(candidateSnapshotId);
+  if (normalizedEnvironment !== "isolated-temp-workspace" && normalizedEnvironment !== "platform-candidate-snapshot") {
+    return {
+      ok: true,
+      workspaceMode: "live-workspace",
+      workspaceSource: "workspace",
+      overlayFiles: []
+    };
+  }
+  if (!normalizedCandidateSnapshotId) {
+    if (normalizedEnvironment === "platform-candidate-snapshot") {
+      return candidateSnapshotOverlayError(400, "candidate snapshot id is required for platform-candidate-snapshot execution");
+    }
+    return {
+      ok: true,
+      workspaceMode: "isolated-temp-workspace",
+      workspaceSource: "workspace",
+      overlayFiles: []
+    };
+  }
+  const snapshot = world.project(moduleProjectors.candidateSnapshotIndex).byId?.[normalizedCandidateSnapshotId] ?? null;
+  if (!snapshot) return candidateSnapshotOverlayError(404, "candidate snapshot not found");
+  const edits = world.project(moduleProjectors.changeSetEditIndex).byChangeSet?.[snapshot.changeSetId] ?? [];
+  const editsByPath = new Map(
+    edits.map(edit => [String(edit.path || ""), edit])
+  );
+  const overlayFiles = [];
+  for (const file of Array.isArray(snapshot.files) ? snapshot.files : []) {
+    const relativePath = String(file?.path || "");
+    const edit = editsByPath.get(relativePath);
+    if (!edit || String(edit.nextContentHash || "") !== String(file?.nextContentHash || "")) {
+      return candidateSnapshotOverlayError(
+        409,
+        "candidate snapshot overlay can no longer be materialized from the current staged edits",
+        {
+          candidateSnapshotId: normalizedCandidateSnapshotId,
+          path: relativePath || null
+        }
+      );
+    }
+    overlayFiles.push({
+      path: relativePath,
+      content: String(edit.nextContent ?? "")
+    });
+  }
+  return {
+    ok: true,
+    workspaceMode: "isolated-temp-workspace",
+    workspaceSource: "candidateSnapshot",
+    overlayFiles
+  };
+}
+
+async function materializePlatformTestWorkspace({
+  overlayFiles = []
+}) {
+  const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), "witness-platform-test-workspace-"));
+  try {
+    await fs.cp(repoRoot, workspaceRoot, {
+      recursive: true,
+      filter: source => path.basename(source) !== ".git"
+    });
+    for (const overlay of overlayFiles) {
+      const targetPath = path.join(workspaceRoot, String(overlay.path || ""));
+      await fs.mkdir(path.dirname(targetPath), { recursive: true });
+      await fs.writeFile(targetPath, String(overlay.content ?? ""), "utf8");
+    }
+    return {
+      cwd: workspaceRoot,
+      async cleanup() {
+        await fs.rm(workspaceRoot, { recursive: true, force: true });
+      }
+    };
+  } catch (error) {
+    await fs.rm(workspaceRoot, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
 }
 
 async function capturePlatformTestSourceRevision(world, {
@@ -338,6 +440,9 @@ function buildPlatformTestCacheIdentity({
     envOverrideKeys: Array.isArray(environmentInputs?.envOverrideKeys) ? environmentInputs.envOverrideKeys.map(String).sort(compareStable) : [],
     runner: environmentInputs?.runner ? String(environmentInputs.runner) : null,
     environment: environmentInputs?.environment ? String(environmentInputs.environment) : null,
+    workspaceMode: environmentInputs?.workspaceMode ? String(environmentInputs.workspaceMode) : null,
+    workspaceSource: environmentInputs?.workspaceSource ? String(environmentInputs.workspaceSource) : null,
+    overlayFileCount: Number(environmentInputs?.overlayFileCount || 0),
     timeoutMs: Number(environmentInputs?.timeoutMs || 0),
     runtimeProfile: environmentInputs?.runtimeProfile ? String(environmentInputs.runtimeProfile) : null
   });
@@ -566,6 +671,11 @@ export async function runPlatformTestGate(world, {
   const normalizedChangeSetId = optionalText(changeSetId);
   const normalizedCandidateSnapshotId = optionalText(candidateSnapshotId);
   const environment = resolvePlatformTestEnvironment(gate, normalizedCandidateSnapshotId);
+  const workspaceDescriptor = resolvePlatformTestWorkspaceDescriptor(world, {
+    environment,
+    candidateSnapshotId: normalizedCandidateSnapshotId
+  });
+  if (!workspaceDescriptor.ok) return workspaceDescriptor;
   const environmentInputs = buildPlatformTestEnvironmentInputs({
     command: gate.command,
     cwd: repoRoot,
@@ -573,7 +683,10 @@ export async function runPlatformTestGate(world, {
     env: {},
     runner: gate.runner,
     environment,
-    runtimeProfile
+    runtimeProfile,
+    workspaceMode: workspaceDescriptor.workspaceMode,
+    workspaceSource: workspaceDescriptor.workspaceSource,
+    overlayFileCount: workspaceDescriptor.overlayFiles.length
   });
   const sourceRevision = await capturePlatformTestSourceRevision(world, {
     gate,
@@ -614,11 +727,27 @@ export async function runPlatformTestGate(world, {
   });
   const execution = reusableResult
     ? cachedExecutionFromResult(reusableResult)
-    : await runCommand({
-        command: gate.command,
-        timeoutMs: gate.timeoutMs,
-        cwd: repoRoot
-      });
+    : await (async () => {
+        if (workspaceDescriptor.workspaceMode !== "isolated-temp-workspace") {
+          return runCommand({
+            command: gate.command,
+            timeoutMs: gate.timeoutMs,
+            cwd: repoRoot
+          });
+        }
+        const workspace = await materializePlatformTestWorkspace({
+          overlayFiles: workspaceDescriptor.overlayFiles
+        });
+        try {
+          return await runCommand({
+            command: gate.command,
+            timeoutMs: gate.timeoutMs,
+            cwd: workspace.cwd
+          });
+        } finally {
+          await workspace.cleanup();
+        }
+      })();
   const finishWitness = emitPlatformTestRunFinish(world, {
     actor,
     run: {
