@@ -608,6 +608,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   const signalDetailSurface = signalsPage.childSurfaces.find(surface => surface.name === "PlatformSignalDetail");
   assert.ok(signalDetailSurface);
   assert.equal(signalDetailSurface.props.detailSource, "signals");
+  assert.equal(signalDetailSurface.props.detailSelectionSources, "gaps|telemetryMetric|defectCluster|boundary");
   assert.equal(signalDetailSurface.props.gapIdPrefixes, "gap.");
   assert.equal(signalDetailSurface.props.signalNodeKinds, "telemetryMetric|defectCluster|boundary");
   assert.equal(signalDetailSurface.props.emptyTitle, "Detail");
@@ -639,6 +640,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   const knowledgeDetailSurface = knowledgePage.childSurfaces.find(surface => surface.name === "PlatformKnowledgeDetail");
   assert.ok(knowledgeDetailSurface);
   assert.equal(knowledgeDetailSurface.props.detailSource, "knowledge");
+  assert.equal(knowledgeDetailSurface.props.detailSelectionSources, "docs|roadmapTasks|epics|features");
   assert.equal(knowledgeDetailSurface.props.documentPathField, "path");
   assert.equal(knowledgeDetailSurface.props.roadmapTaskIdPrefixes, "roadmapTask:");
   assert.equal(knowledgeDetailSurface.props.roadmapTaskFallbackField, "doc");

@@ -1159,23 +1159,6 @@ function findVerificationDetail(model, id) {
     || null;
 }
 
-function findKnowledgeDetail(model, id) {
-  if (!id) return (model.docs ?? [])[0] || (model.roadmapTasks ?? [])[0] || (model.epics ?? [])[0] || (model.features ?? [])[0] || null;
-  return (model.docs ?? []).find(doc => doc.path === id || doc.id === id)
-    || (model.roadmapTasks ?? []).find(task => task.id === id)
-    || (model.epics ?? []).find(epic => epic.id === id)
-    || (model.features ?? []).find(feature => feature.id === id)
-    || null;
-}
-
-function findSignalDetail(model, id) {
-  const signalNodes = model.nodes ?? [];
-  if (!id) return (model.gaps ?? [])[0] || signalNodes.find(node => node.kind === "telemetryMetric" || node.kind === "defectCluster" || node.kind === "boundary") || null;
-  return (model.gaps ?? []).find(gap => gap.id === id)
-    || signalNodes.find(node => node.id === id && (node.kind === "telemetryMetric" || node.kind === "defectCluster" || node.kind === "boundary"))
-    || null;
-}
-
 function findModelDetail(model, id) {
   return (model.nodes ?? []).find(node => node.id === id) || (model.nodes ?? [])[0] || null;
 }
@@ -1202,6 +1185,54 @@ function surfaceValueList(surface, key, fallback = []) {
 function recordMatchesKinds(record, kinds = []) {
   const kind = optionalText(record?.kind);
   return Boolean(kind && kinds.includes(kind));
+}
+
+function detailRecordsForSource(source, model) {
+  switch (source) {
+    case "docs":
+      return model.docs ?? [];
+    case "roadmapTasks":
+      return model.roadmapTasks ?? [];
+    case "epics":
+      return model.epics ?? [];
+    case "features":
+      return model.features ?? [];
+    case "gaps":
+      return model.gaps ?? [];
+    case "telemetryMetric":
+    case "defectCluster":
+    case "boundary":
+      return (model.nodes ?? []).filter(node => node.kind === source);
+    default:
+      return [];
+  }
+}
+
+function detailRecordMatchesSource(source, record, id) {
+  if (!record || !id) return false;
+  switch (source) {
+    case "docs":
+      return optionalText(record.path) === id || optionalText(record.id) === id;
+    default:
+      return optionalText(record.id) === id;
+  }
+}
+
+function findAuthoredDetailBySources(surface, model, id, fallback = []) {
+  const sources = surfaceValueList(surface, "detailSelectionSources", fallback);
+  if (!sources.length) return null;
+  if (!id) {
+    for (const source of sources) {
+      const [record] = detailRecordsForSource(source, model);
+      if (record) return record;
+    }
+    return null;
+  }
+  for (const source of sources) {
+    const record = detailRecordsForSource(source, model).find(candidate => detailRecordMatchesSource(source, candidate, id));
+    if (record) return record;
+  }
+  return null;
 }
 
 function renderWorkflowDetail(surface, detail, model, ctx) {
@@ -1796,9 +1827,19 @@ function renderAuthoredDetailSourceSection(surface, model, ctx) {
     case "verification":
       return renderSurfaceFrame(surface, renderVerificationDetail(surface, findVerificationDetail(model, ctx.id), model, ctx));
     case "knowledge":
-      return renderSurfaceFrame(surface, renderKnowledgeDetail(surface, findKnowledgeDetail(model, ctx.id), model, ctx));
+      return renderSurfaceFrame(surface, renderKnowledgeDetail(
+        surface,
+        findAuthoredDetailBySources(surface, model, ctx.id, ["docs", "roadmapTasks", "epics", "features"]),
+        model,
+        ctx
+      ));
     case "signals":
-      return renderSurfaceFrame(surface, renderSignalDetail(surface, findSignalDetail(model, ctx.id), model, ctx));
+      return renderSurfaceFrame(surface, renderSignalDetail(
+        surface,
+        findAuthoredDetailBySources(surface, model, ctx.id, ["gaps", "telemetryMetric", "defectCluster", "boundary"]),
+        model,
+        ctx
+      ));
     case "model":
       return renderSurfaceFrame(surface, renderModelDetail(surface, findModelDetail(model, ctx.id), model, ctx));
     default:
