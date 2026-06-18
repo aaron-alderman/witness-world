@@ -148,9 +148,15 @@ const GENERIC_PLUGIN_SRC_IMPORT_TARGETS = Object.freeze([
   "src/runtime-guidance-client-runtime.js",
   "src/runtime-guidance-client-state.js",
   "src/runtime-guidance-client.js",
+  "src/runtime-guidance-action-registry.js",
+  "src/runtime-guidance-companion-shell.js",
+  "src/runtime-guidance-runtime-issue-suggestions.js",
   "src/runtime-guidance-disabled-scopes-actions.js",
   "src/runtime-guidance-disabled-scopes-view.js",
   "src/runtime-guidance-model.js",
+  "src/runtime-guidance-scope-anchors.js",
+  "src/runtime-guidance-scope-inventory-factory.js",
+  "src/runtime-guidance-scope-inventory.js",
   "src/runtime-guidance-overlay-actions.js",
   "src/runtime-guidance-overlay-dom.js",
   "src/runtime-guidance-overlay-drag.js",
@@ -228,7 +234,12 @@ const LARGE_SRC_CEREMONY_ALLOWLIST = Object.freeze({
   "src/runtime-guidance-bootstrap-client.js": "core guidance progress client runtime and session persistence helpers",
   "src/runtime-guidance-bootstrap-controller-client.js": "core guidance overlay controller and authored bootstrap guidance interaction ceremony",
   "src/runtime-guidance-client-adapter.js": "core live guidance client projection and runtime snapshot helpers",
+  "src/runtime-guidance-action-registry.js": "core guidance action audit registry and suggestion action truth metadata",
+  "src/runtime-guidance-companion-shell.js": "core unified Sourcery companion shell for runtime issues and guidance recovery",
+  "src/runtime-guidance-runtime-issue-suggestions.js": "core runtime-issue to ambient suggestion projection for the companion shell",
   "src/runtime-guidance-model.js": "core guidance progress normalization, scope disabling, and authored guidance state helpers",
+  "src/runtime-guidance-scope-inventory.js": "core guidance scope inventory projection across active, muted, and completed scopes",
+  "src/runtime-guidance-scope-anchors.js": "core guidance scope-anchor builders for authored widget and bootstrap operator surfaces",
   "src/runtime-guidance-overlay-actions.js": "core live guidance overlay action choreography",
   "src/runtime-guidance-overlay-view.js": "core live guidance overlay rendering and disabled-scope panel projection",
   "src/runtime-guidance-progress-state.js": "core live guidance surface-state and disabled-scope derivation helpers",
@@ -367,7 +378,7 @@ test("runtime profiles are seed-backed and global first-party plugin registries 
 
 test("bootstrap consumes generic guidance and starter registries without tutorial-owned imports", async () => {
   const bootstrapManifest = JSON.parse(await fs.readFile(path.join(pluginsRoot, "bootstrap", "plugin.json"), "utf8"));
-  const bootstrapReadModelsSource = await fs.readFile(path.join(pluginsRoot, "bootstrap", "bootstrap-read-models.js"), "utf8");
+  const bootstrapReadModelsSource = await fs.readFile(path.join(pluginsRoot, "bootstrap", "bootstrap-contribution-state.js"), "utf8");
   const bootstrapPageScriptSource = await fs.readFile(path.join(pluginsRoot, "bootstrap", "bootstrap-page-script.js"), "utf8");
   const tutorialRuntimeSource = await fs.readFile(path.join(pluginsRoot, "tutorial", "runtime.js"), "utf8");
   const starterRuntimeSource = await fs.readFile(path.join(pluginsRoot, "starter", "runtime.js"), "utf8");

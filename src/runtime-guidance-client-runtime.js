@@ -1,5 +1,14 @@
+import { runGuidanceSuggestionAction, renderGuidanceCompanionActionsFactory } from "./runtime-guidance-companion-actions.js";
+import { getOrCreateSourceryCompanionShell, renderSourceryCompanionShellFactory } from "./runtime-guidance-companion-shell.js";
+import { bindSourceryCompanionSuggestionActions, renderSourceryCompanionSyncFactory, syncSourceryCompanionShell } from "./runtime-guidance-companion-sync.js";
+import { buildLiveGuidanceSuggestions, renderLiveGuidanceSuggestionsFactory } from "./runtime-guidance-live-suggestions.js";
+
 export function renderTutorialClientRuntimeFactory() {
   return String.raw`
+    ${renderGuidanceCompanionActionsFactory()}
+    ${renderSourceryCompanionShellFactory()}
+    ${renderSourceryCompanionSyncFactory()}
+    ${renderLiveGuidanceSuggestionsFactory()}
     const startTutorialClientRuntimeApp = ${startTutorialClientRuntimeApp.toString()};
   `;
 }
@@ -20,6 +29,13 @@ export function startTutorialClientRuntimeApp({
   const currentSurfaceProgramId = typeof tutorialConfig.surfaceProgramId === "string" && tutorialConfig.surfaceProgramId.trim() ? tutorialConfig.surfaceProgramId.trim() : null;
   const stepIndex = new Map(tutorial.steps.map((step, index) => [step.id, index]));
   const { dimmer, overlay, resumeButton, disabledScopesToggle, disabledScopesPanel } = createTutorialOverlayDom({ document: documentTarget });
+  getOrCreateSourceryCompanionShell({
+    document: documentTarget,
+    window: windowTarget,
+    enabled: true,
+    inspection: windowTarget?.world || windowTarget?.__surfaceRuntimeInspection || null,
+    issueLedger: null
+  });
   const overlayDrag = createTutorialOverlayDragState();
   const tutorialClientState = createTutorialClientState({
     tutorial,
@@ -64,6 +80,10 @@ export function startTutorialClientRuntimeApp({
     tutorialRevealedConcepts,
     tutorialSurfaceState,
     tutorialDisabledGuidanceRows,
+    tutorialScopeInventoryRows,
+    tutorialContextInfo,
+    isTutorialScopeDisabled,
+    isTutorialContextDisabled,
     clearTutorialScopeDisabled,
     clearTutorialContextDisabled,
     disableTutorialOnCurrentScope,
@@ -105,7 +125,7 @@ export function startTutorialClientRuntimeApp({
     normalizeProgressFn: normalizeProgress,
     setProgress
   });
-  const { renderDisabledScopes, render, publishRuntimeState } = createTutorialClientViewAdapter({
+  const { renderDisabledScopes, render: renderTutorialView, publishRuntimeState } = createTutorialClientViewAdapter({
     getProgress,
     currentStep,
     tutorialSurfaceState,
@@ -129,6 +149,7 @@ export function startTutorialClientRuntimeApp({
     getDisabledScopesOpen,
     setDisabledScopesOpen,
     tutorialDisabledGuidanceRowsFn: tutorialDisabledGuidanceRows,
+    tutorialScopeInventoryRowsFn: tutorialScopeInventoryRows,
     currentSurfacePage,
     renderTutorialDisabledScopeRowsFn: renderTutorialDisabledScopeRows,
     documentTarget,
@@ -145,6 +166,8 @@ export function startTutorialClientRuntimeApp({
     currentSurfaceRootWidgetId,
     currentSurfaceProgramId
   });
+  let render = renderTutorialView;
+  const invokeRender = () => render();
   const tutorialRuntimeActions = createTutorialRuntimeActions({
     windowTarget,
     fetchFn,
@@ -153,7 +176,7 @@ export function startTutorialClientRuntimeApp({
     firstStepInChapter,
     tutorialStepScopeFn: tutorialStepScope,
     saveProgress,
-    render,
+    render: invokeRender,
     flashAutoClickFn: flashAutoClick,
     wait
   });
@@ -164,6 +187,93 @@ export function startTutorialClientRuntimeApp({
     restartFromHere,
     isComplete
   } = tutorialRuntimeActions;
+  const syncLiveCompanionShell = () => {
+    const progress = getProgress();
+    const surface = tutorialSurfaceState();
+    const disabledRows = tutorialScopeInventoryRows(progress).filter(row => row.status === "muted");
+    syncSourceryCompanionShell({
+      windowTarget,
+      documentTarget,
+      inspection: windowTarget?.world || windowTarget?.__surfaceRuntimeInspection || null,
+      issueLedger: windowTarget?.__surfaceRuntimeIssueLedger || null,
+      guidanceSuggestions: buildLiveGuidanceSuggestions({
+        progress,
+        currentStep: currentStep(),
+        surface,
+        disabledRows,
+        tutorialPageLabel,
+        tutorialStepScope,
+        tutorialStepSurfaceContext,
+        tutorialContextInfo,
+        tutorialContextLabel: contextId => tutorialContextInfo(contextId)?.label || contextId,
+        isTutorialContextDisabled,
+        isTutorialScopeDisabled
+      })
+    });
+  };
+  const runLiveSuggestion = async suggestion => {
+    await runGuidanceSuggestionAction(suggestion, {
+      resumeTutorial: async () => {
+        resumeButton?.click?.();
+      },
+      enableCurrentPage: async scopeKey => {
+        await saveProgress(clearTutorialScopeDisabled(getProgress(), scopeKey || tutorialStepScope(currentStep())?.key || null));
+        render();
+      },
+      enableContext: async contextId => {
+        await saveProgress(clearTutorialContextDisabled(getProgress(), contextId || tutorialStepSurfaceContext(currentStep())?.id || null));
+        render();
+      },
+      enablePage: async (scopeKey, page) => {
+        await saveProgress(clearTutorialScopeDisabled(getProgress(), scopeKey || (page === "world" ? "world" : null)));
+        render();
+      },
+      continueSurface: async page => {
+        await continueTutorialOnPage(page);
+      },
+      focusDisabledScopes: async () => {
+        setDisabledScopesOpen(true);
+        renderDisabledScopes();
+        disabledScopesPanel?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+      },
+      focusTarget: async target => {
+        focusTutorialTarget(target);
+      },
+      openRuntimeIssues: async () => {
+        const shell = windowTarget?.__sourceryCompanionShell;
+        if (!shell?.panel) return;
+        shell.panel.hidden = false;
+        shell.issues?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+      },
+      focusRuntimeTarget: async targetId => {
+        const node = documentTarget?.getElementById?.(targetId);
+        node?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+        node?.focus?.();
+      },
+      rerunRuntimeProbe: async () => {
+        const inspection = windowTarget?.world || windowTarget?.__surfaceRuntimeInspection || null;
+        await inspection?.rerunProbe?.();
+      },
+      copyRuntimeInspection: async () => {
+        const inspection = windowTarget?.world || windowTarget?.__surfaceRuntimeInspection || null;
+        const payload = typeof inspection?.inspect === "function" ? inspection.inspect() : null;
+        const json = JSON.stringify(payload, null, 2);
+        if (windowTarget?.navigator?.clipboard?.writeText) {
+          try {
+            await windowTarget.navigator.clipboard.writeText(json);
+          } catch {}
+        }
+      }
+    });
+  };
+  render = () => {
+    renderTutorialView();
+    syncLiveCompanionShell();
+  };
+  bindSourceryCompanionSuggestionActions({
+    windowTarget,
+    runSuggestion: runLiveSuggestion
+  });
   const tutorialProgressRuntime = createTutorialProgressRuntime({
     tutorial,
     getProgress,
@@ -175,7 +285,7 @@ export function startTutorialClientRuntimeApp({
     normalizeProgressFn: normalizeProgress,
     api,
     saveProgress,
-    render,
+    render: invokeRender,
     isComplete
   });
   const {
@@ -199,7 +309,7 @@ export function startTutorialClientRuntimeApp({
     clearTutorialContextDisabledFn: clearTutorialContextDisabled,
     clearTutorialScopeDisabledFn: clearTutorialScopeDisabled,
     saveProgress,
-    render,
+    render: invokeRender,
     continueTutorialOnPage,
     overlay,
     overlayDrag,

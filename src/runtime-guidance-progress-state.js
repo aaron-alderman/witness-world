@@ -1,5 +1,9 @@
+import { renderGuidanceScopeInventoryFactory } from "./runtime-guidance-scope-inventory-factory.js";
+import { buildGuidanceScopeInventoryRowsFromHelpers } from "./runtime-guidance-scope-inventory.js";
+
 export function renderTutorialProgressStateFactory() {
   return String.raw`
+    ${renderGuidanceScopeInventoryFactory()}
     const tutorialPageLabel = ${tutorialPageLabel.toString()};
     const tutorialContextLabel = ${tutorialContextLabel.toString()};
     const tutorialPageScopeKey = ${tutorialPageScopeKey.toString()};
@@ -244,40 +248,31 @@ export function createTutorialProgressState({
     return { kind: "active", page: step.page || null, scopeKey: currentScope?.key || null };
   };
 
-  const tutorialDisabledGuidanceRows = current => {
-    const currentScopeKey = tutorialStepScope(currentStep())?.key || null;
-    const currentScopeKeys = tutorialScopeAncestors(currentScopeKey);
-    const currentContextId = tutorialStepSurfaceContext(currentStep())?.id || null;
-    const rows = tutorialDisabledContextIds(current).map(contextId => {
-      const context = tutorialContextInfo(contextId);
-      const matchingStep = (currentContextId && currentContextId === contextId ? currentStep() : null)
-        || tutorial.steps.find(step => tutorialStepSurfaceContext(step)?.id === contextId && step.page === currentSurfacePage)
-        || tutorial.steps.find(step => tutorialStepSurfaceContext(step)?.id === contextId)
-        || null;
-      const scopeKey = tutorialStepScope(matchingStep)?.key || null;
-      return {
-        type: "context",
-        contextId,
-        page: matchingStep?.page || null,
-        label: context?.label || tutorialContextLabel(contextId) || contextId,
-        currentStepTitle: currentContextId === contextId ? currentStep()?.title || null : null,
-        focusScopeKey: scopeKey,
-        target: matchingStep?.page === currentSurfacePage && scopeKey ? tutorialScopeTargetName(scopeKey) : null
-      };
-    });
-    for (const scopeKey of tutorialDisabledScopeKeys(current)) {
-      const scope = tutorialScopeInfo(scopeKey);
-      rows.push({
-        type: "scope",
-        scopeKey,
-        page: scope?.page || null,
-        label: scope?.kind === "page" && scope?.page ? tutorialPageLabel(scope.page) : (scope?.label || scopeKey),
-        currentStepTitle: currentScopeKeys.includes(scopeKey) ? currentStep()?.title || null : null,
-        target: scope?.page === currentSurfacePage ? tutorialScopeTargetName(scopeKey) : null
-      });
-    }
-    return rows;
-  };
+  const tutorialScopeInventoryRows = current => buildGuidanceScopeInventoryRowsFromHelpers({
+    scopes: tutorialScopeCatalog,
+    steps: tutorial.steps,
+    progress: current,
+    currentStep: currentStep(),
+    currentSurfacePage,
+    stepScopeFn: tutorialStepScope,
+    stepSurfaceContextFn: tutorialStepSurfaceContext,
+    stepIndexFn: stepId => tutorial.steps.findIndex(step => step.id === stepId),
+    scopeInfoFn: tutorialScopeInfo,
+    contextInfoFn: tutorialContextInfo,
+    scopeTargetNameFn: tutorialScopeTargetName,
+    scopeAncestorsFn: tutorialScopeAncestors,
+    disabledScopeKeysFn: tutorialDisabledScopeKeys,
+    disabledContextIdsFn: tutorialDisabledContextIds,
+    isScopeDisabledFn: isTutorialScopeDisabled,
+    pageLabelFn: tutorialPageLabel
+  });
+
+  const tutorialDisabledGuidanceRows = current => tutorialScopeInventoryRows(current)
+    .filter(row => row.status === "muted")
+    .map(row => ({
+      ...row,
+      focusScopeKey: row.scopeKey || null
+    }));
 
   const clearTutorialScopeDisabled = (current, scopeKey) => {
     const keysToRemove = new Set(tutorialScopeAncestors(scopeKey));
@@ -330,6 +325,7 @@ export function createTutorialProgressState({
     tutorialRevealedConcepts,
     tutorialSurfaceState,
     tutorialDisabledGuidanceRows,
+    tutorialScopeInventoryRows,
     clearTutorialScopeDisabled,
     clearTutorialContextDisabled,
     disableTutorialOnCurrentScope,

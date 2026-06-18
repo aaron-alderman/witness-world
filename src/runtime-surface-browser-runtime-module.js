@@ -66,12 +66,20 @@ import {
   waitForSurfaceCapabilityModuleSettle
 } from "./runtime-surface-capability-runtime.js";
 import {
-  capabilityAssetPresence,
+  buildRuntimeIssueSuggestions,
+  summarizeCompanionAttention,
+  summarizeSurfaceRuntimeIssues as summarizeCompanionSurfaceRuntimeIssues
+} from "./runtime-guidance-runtime-issue-suggestions.js";
+import {
   createSurfaceDiagnosticsOverlay,
+  ensureSourceryCompanionShellStyles,
+  getOrCreateSourceryCompanionShell
+} from "./runtime-guidance-companion-shell.js";
+import {
+  capabilityAssetPresence,
   createSurfaceInspectionPoint,
   createSurfaceRuntimeIssueLedger,
   createSurfaceRuntimeProbe,
-  ensureSurfaceDiagnosticsOverlayStyles,
   installSurfaceInspectionPoint,
   installSurfaceRuntimeBootFailure,
   mountedCapabilityMarkersForSurface,
@@ -164,7 +172,11 @@ function browserHelpersSource() {
     createSurfaceRuntimeIssueLedger.toString(),
     surfaceRuntimeIssueSeverityRank.toString(),
     summarizeSurfaceRuntimeIssues.toString(),
-    ensureSurfaceDiagnosticsOverlayStyles.toString(),
+    buildRuntimeIssueSuggestions.toString(),
+    summarizeCompanionAttention.toString(),
+    summarizeCompanionSurfaceRuntimeIssues.toString(),
+    ensureSourceryCompanionShellStyles.toString(),
+    getOrCreateSourceryCompanionShell.toString(),
     createSurfaceDiagnosticsOverlay.toString(),
     installSurfaceRuntimeBootFailure.toString(),
     mountedCapabilityMarkersForSurface.toString(),

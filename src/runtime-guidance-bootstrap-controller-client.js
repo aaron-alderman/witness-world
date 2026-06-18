@@ -3,9 +3,15 @@ import {
   renderBootstrapGuidanceChapterList
 } from "./runtime-guidance-bootstrap-card-view.js";
 import { createBootstrapGuidanceInteractionRuntime } from "./runtime-guidance-bootstrap-interactions.js";
+import { renderGuidanceCompanionActionsFactory } from "./runtime-guidance-companion-actions.js";
+import { renderSourceryCompanionShellFactory } from "./runtime-guidance-companion-shell.js";
+import { renderSourceryCompanionSyncFactory } from "./runtime-guidance-companion-sync.js";
 
 export function renderBootstrapGuidanceControllerFactory() {
   return String.raw`
+    ${renderGuidanceCompanionActionsFactory()}
+    ${renderSourceryCompanionShellFactory()}
+    ${renderSourceryCompanionSyncFactory()}
     const buildBootstrapGuidanceCardView = ${buildBootstrapGuidanceCardView.toString()};
     const renderBootstrapGuidanceChapterList = ${renderBootstrapGuidanceChapterList.toString()};
     const createBootstrapGuidanceInteractionRuntime = ${createBootstrapGuidanceInteractionRuntime.toString()};
@@ -55,6 +61,7 @@ export function renderBootstrapGuidanceControllerFactory() {
         renderConceptList,
         setSuggestionRows,
         tutorialDisabledPageRows,
+        tutorialScopeInventoryRows,
         setDisabledPageRows,
         tutorialSuggestions
       } = tutorialState;
@@ -101,45 +108,64 @@ export function renderBootstrapGuidanceControllerFactory() {
       };
       const canAutoFinishChapter = current => Boolean(current && current.page === "bootstrap" && autoCompletableChapters.has(current.chapterId) && !state.tutorialProgress?.completedAt);
       const runSuggestion = async suggestion => {
-        if (!suggestion?.action) return;
-        if (suggestion.action.kind === "startTutorial") {
-          byId("tutorial-start").click();
-          return;
+        await runGuidanceSuggestionAction(suggestion, {
+          startTutorial: async () => {
+            byId("tutorial-start").click();
+          },
+          resumeTutorial: async () => {
+            byId("tutorial-resume").click();
+          },
+          enableCurrentPage: async scopeKey => {
+            await persistTutorialProgress(clearTutorialScopeDisabled(state.tutorialProgress, scopeKey || tutorialSurfaceState().scopeKey || tutorialStepScope(tutorialStep())?.key || null));
+            renderPage();
+          },
+          enableContext: async contextId => {
+            await persistTutorialProgress(clearTutorialContextDisabled(state.tutorialProgress, contextId || tutorialStepSurfaceContext(tutorialStep())?.id || null));
+            renderPage();
+          },
+          enablePage: async (scopeKey, page) => {
+            await persistTutorialProgress(clearTutorialScopeDisabled(state.tutorialProgress, scopeKey || (page === "world" ? "world" : null)));
+            renderPage();
+          },
+          continueSurface: async page => {
+            await continueTutorialOnPage(page);
+          },
+          openApp: async () => {
+            await openAppHome(byId("open-app-link").href, { advance: false });
+          },
+          focusDisabledScopes: async () => {
+            focusDisabledGuidance();
+          },
+          focusTarget: async target => {
+            focusTutorialTarget(target);
+          }
+        });
+      };
+      const buildBootstrapCompanionGuidanceState = () => {
+        const progress = state.tutorialProgress;
+        const surface = tutorialSurfaceState();
+        if (!progress || progress.completedAt || !["hidden", "disabled", "disabled-context", "offpage"].includes(surface.kind)) {
+          return { visible: false, label: "Sourcery", onResume: null };
         }
-        if (suggestion.action.kind === "resumeTutorial") {
-          byId("tutorial-resume").click();
-          return;
-        }
-        if (suggestion.action.kind === "enableCurrentPage") {
-          await persistTutorialProgress(clearTutorialScopeDisabled(state.tutorialProgress, suggestion.action.scopeKey || tutorialSurfaceState().scopeKey || tutorialStepScope(tutorialStep())?.key || null));
-          renderPage();
-          return;
-        }
-        if (suggestion.action.kind === "enableContext") {
-          await persistTutorialProgress(clearTutorialContextDisabled(state.tutorialProgress, suggestion.action.contextId || tutorialStepSurfaceContext(tutorialStep())?.id || null));
-          renderPage();
-          return;
-        }
-        if (suggestion.action.kind === "enablePage") {
-          await persistTutorialProgress(clearTutorialScopeDisabled(state.tutorialProgress, suggestion.action.scopeKey || (suggestion.action.page === "world" ? "world" : null)));
-          renderPage();
-          return;
-        }
-        if (suggestion.action.kind === "continueSurface") {
-          await continueTutorialOnPage(suggestion.action.page);
-          return;
-        }
-        if (suggestion.action.kind === "openApp") {
-          await openAppHome(byId("open-app-link").href, { advance: false });
-          return;
-        }
-        if (suggestion.action.kind === "focusDisabledScopes") {
-          focusDisabledGuidance();
-          return;
-        }
-        if (suggestion.action.kind === "focusTarget") {
-          focusTutorialTarget(suggestion.action.target);
-        }
+        const resumeLabel = surface.kind === "offpage"
+          ? ("Continue On " + tutorialPageLabel(surface.page))
+          : (surface.kind === "disabled-context"
+              ? "Enable Sourcery In This Context"
+              : (surface.kind === "disabled" ? "Enable Sourcery Here" : "Resume Tutorial"));
+        return {
+          visible: true,
+          label: resumeLabel,
+          onResume: () => byId("tutorial-resume")?.click?.()
+        };
+      };
+      const syncBootstrapCompanionShell = () => {
+        syncSourceryCompanionShell({
+          windowTarget: window,
+          inspection: window?.world || window?.__surfaceRuntimeInspection || null,
+          issueLedger: window?.__surfaceRuntimeIssueLedger || null,
+          guidanceSuggestions: currentSuggestions,
+          guidanceState: buildBootstrapCompanionGuidanceState()
+        });
       };
       const renderTutorialCard = () => {
         const current = tutorialStep();
@@ -148,7 +174,7 @@ export function renderBootstrapGuidanceControllerFactory() {
         const currentConcepts = current ? tutorialStepConcepts(current) : [];
         const revealedConcepts = tutorialRevealedConcepts(progress);
         const suggestions = tutorialSuggestions();
-        const disabledPages = tutorialDisabledPageRows(progress);
+        const disabledPages = tutorialScopeInventoryRows(progress);
         const currentScopeKey = tutorialStepScope(current)?.key || null;
         const currentScopeDisabled = Boolean(progress && currentScopeKey && tutorialState.isTutorialScopeDisabled(progress, currentScopeKey));
         const currentContextId = tutorialStepSurfaceContext(current)?.id || null;
@@ -172,6 +198,7 @@ export function renderBootstrapGuidanceControllerFactory() {
         renderConceptList("tutorial-revealed-concepts", revealedConcepts, "No concepts revealed yet.");
         setSuggestionRows(suggestions);
         setDisabledPageRows(disabledPages);
+        syncBootstrapCompanionShell();
         byId("tutorial-start").disabled = view.startDisabled;
         byId("tutorial-resume").disabled = view.resumeDisabled;
         byId("tutorial-resume").textContent = view.resumeText;
@@ -352,6 +379,23 @@ export function renderBootstrapGuidanceControllerFactory() {
       const bindTutorialInteractions = () => {
         if (tutorialHandlersBound) return;
         tutorialHandlersBound = true;
+        getOrCreateSourceryCompanionShell({
+          document,
+          window,
+          enabled: true,
+          inspection: window?.world || window?.__surfaceRuntimeInspection || null,
+          issueLedger: window?.__surfaceRuntimeIssueLedger || null
+        });
+        bindSourceryCompanionSuggestionActions({
+          windowTarget: window,
+          runSuggestion: async suggestion => {
+            try {
+              await runSuggestion(suggestion);
+            } catch (error) {
+              setStatus("tutorial-status", error.message);
+            }
+          }
+        });
         byId("tutorial-suggestions").addEventListener("click", async event => {
           const button = event.target.closest("button[data-suggestion-id]");
           if (!button) return;

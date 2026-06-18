@@ -93,6 +93,8 @@ export function createBootstrapClientRuntimeOrchestration({
     tutorialRevealedConcepts,
     guidanceSurfaceState,
     tutorialSurfaceState,
+    guidanceScopeInventoryRows,
+    tutorialScopeInventoryRows,
     loadGuidanceProgress,
     loadTutorialProgress,
     openAppHome,
@@ -245,6 +247,7 @@ export function createBootstrapClientRuntimeOrchestration({
     guidanceDisabledContextIds,
     guidanceSurfaceState,
     tutorialSurfaceState,
+    tutorialScopeInventoryRows,
     publishGuidanceRuntimeView: publishRuntimeView,
     publishTutorialRuntimeView: publishRuntimeView
   });

@@ -32,8 +32,8 @@ import {
   bootSurfaceCapabilities,
   ensureSurfaceCapabilityAssets
 } from "./runtime-surface-capability-runtime.js";
+import { createSurfaceDiagnosticsOverlay } from "./runtime-guidance-companion-shell.js";
 import {
-  createSurfaceDiagnosticsOverlay,
   createSurfaceRuntimeIssueLedger,
   createSurfaceRuntimeProbe,
   installSurfaceInspectionPoint,

@@ -116,6 +116,7 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   const worldShellViewSource = await readFile(new URL("./world-shell-view.js", import.meta.url), "utf8");
   const worldSurfaceViewSource = await readFile(new URL("./world-surface-view.js", import.meta.url), "utf8");
   const worldTutorialActionsSource = await readFile(new URL("./world-tutorial-actions.js", import.meta.url), "utf8");
+  const worldTutorialCompanionSource = await readFile(new URL("./world-tutorial-companion.js", import.meta.url), "utf8");
   const surfaceKitSource = await readFile(new URL("./surface-kit-styles.js", import.meta.url), "utf8");
   const runtimeSurfaceKitSource = await readFile(new URL("../../src/runtime-surface-kit.js", import.meta.url), "utf8");
   const runtimeSurfaceCommandSource = await readFile(new URL("../../src/runtime-surface-command-primitives.js", import.meta.url), "utf8");
@@ -149,6 +150,9 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(pluginWidgetPage.includes('from "./world-shell-view.js"'), true);
   assert.equal(pluginWidgetPage.includes('from "./world-surface-view.js"'), true);
   assert.equal(pluginWidgetPage.includes('from "./world-tutorial-actions.js"'), true);
+  assert.equal(pluginWidgetPage.includes('from "./world-tutorial-companion.js"'), true);
+  assert.equal(pluginWidgetPage.includes("renderWorldTutorialCompanionFactory()"), true);
+  assert.equal(pluginWidgetPage.includes("syncWorldTutorialCompanion()"), true);
   assert.equal(pluginWidgetPage.includes('from "./widget-page-head.js"'), true);
   assert.equal(pluginWidgetPage.includes("const processTraceEnabled = config.traceProcessEvents !== false;"), true);
   assert.equal(pluginWidgetPage.includes("if (checkboxes === 'boolean')"), true);
@@ -334,10 +338,12 @@ test("inspect plugin owns widget page rendering while src widgets stays model-fo
   assert.equal(worldSurfaceViewSource.includes("export function renderWorldTutorialPanelView"), true);
   assert.equal(worldSurfaceViewSource.includes("export function renderWorldSurfaceViewFactory"), true);
   assert.equal(worldSurfaceViewSource.includes("No matching surfaces, objects, or commands."), true);
-  assert.equal(worldSurfaceViewSource.includes("Show Disabled Sourcery Scopes"), true);
+  assert.equal(worldSurfaceViewSource.includes("Show Sourcery Scope Inventory"), true);
   assert.equal(worldSurfaceViewSource.includes("Search / Command"), true);
   assert.equal(worldTutorialActionsSource.includes("export function bindWorldTutorialActions"), true);
   assert.equal(worldTutorialActionsSource.includes("export function renderWorldTutorialActionsFactory"), true);
+  assert.equal(worldTutorialCompanionSource.includes("export function renderWorldTutorialCompanionFactory"), true);
+  assert.equal(worldTutorialCompanionSource.includes("export function syncWorldTutorialCompanionShell"), true);
   assert.equal(widgetPageHeadSource.includes("export function renderWidgetPageHead"), true);
   assert.equal(widgetPageHeadSource.includes("renderPagePresentationHead"), true);
   assert.equal(widgetPageHeadSource.includes("renderEdenPageThemeCssVars"), false);

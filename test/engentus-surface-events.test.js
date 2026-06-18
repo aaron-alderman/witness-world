@@ -388,8 +388,8 @@ test("Engentus dev shell diagnostics expectation pack surfaces induced mismatche
       await window.world.rerunProbe();
       return {
         activeIssues: window.world.issues.filter(issue => issue.status === "active"),
-        overlayHidden: document.getElementById("surface-runtime-diagnostics-root")?.hidden,
-        fabText: document.getElementById("surface-runtime-diagnostics-fab")?.textContent
+        overlayHidden: document.getElementById("sourcery-companion-root")?.hidden,
+        fabText: document.getElementById("sourcery-companion-fab")?.textContent
       };
     });
     assert.equal(broken.activeIssues.some(issue => issue.id === "engentus-shell:stale-underlay:home"), true);

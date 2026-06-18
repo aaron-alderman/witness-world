@@ -99,6 +99,7 @@ text = ""
 [[form]]
 id = "bootstrap_perspective_form"
 domId = "perspective-form"
+guidanceTarget = "perspective-form"
 class = "surface-stack surface-mono"
 children = ["bootstrap_perspective_grid_primary", "bootstrap_perspective_grid_secondary", "bootstrap_perspective_actions"]
 

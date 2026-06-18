@@ -44,8 +44,8 @@ export function renderBootstrapGuidanceCard(guidance = null) {
           <div class="tutorial-suggestion-list" id="tutorial-suggestions"></div>
         </div>
         <div>
-          <div class="surface-kicker">Disabled Sourcery Scopes</div>
-          <div class="tutorial-disabled-list" id="tutorial-disabled-pages"></div>
+          <div class="surface-kicker">Sourcery Scope Inventory</div>
+          <div class="tutorial-disabled-list" id="tutorial-disabled-pages" data-guidance-scope-inventory="true"></div>
         </div>
         <div class="surface-actions">
           <button type="button" id="tutorial-start">Start Tutorial</button>

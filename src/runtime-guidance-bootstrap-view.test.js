@@ -95,8 +95,10 @@ test("bootstrap guidance disabled rows view renders shared action buttons and st
     root,
     rows: [{
       type: "scope",
+      status: "muted",
       scopeKey: "page:app",
       page: "app",
+      pageLabel: "App",
       label: "App",
       currentStepTitle: null,
       isCurrentSurface: false,
@@ -107,10 +109,10 @@ test("bootstrap guidance disabled rows view renders shared action buttons and st
 
   assert.equal(root.children.length, 1);
   assert.equal(root.children[0].className, "tutorial-disabled-item");
-  assert.equal(root.children[0].children[2].className, "surface-actions");
-  assert.equal(root.children[0].children[2].children[0].dataset.disabledFocus, "todo-form");
-  assert.equal(root.children[0].children[2].children[1].dataset.disabledScope, "page:app");
-  assert.equal(root.children[0].children[2].children[1].dataset.disabledEnable, "app");
-  assert.equal(root.children[0].children[2].children[2].dataset.disabledOpen, "app");
-  assert.equal(root.children[0].children[2].children[0].className, "surface-button-secondary");
+  assert.equal(root.children[0].children[3].className, "surface-actions");
+  assert.equal(root.children[0].children[3].children[0].dataset.disabledFocus, "todo-form");
+  assert.equal(root.children[0].children[3].children[1].dataset.disabledScope, "page:app");
+  assert.equal(root.children[0].children[3].children[1].dataset.disabledEnable, "app");
+  assert.equal(root.children[0].children[3].children[2].dataset.disabledOpen, "app");
+  assert.equal(root.children[0].children[3].children[0].className, "surface-button-secondary");
 });

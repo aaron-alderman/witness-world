@@ -356,8 +356,10 @@ Sourcery should evolve from a single guided Todo tutorial into the truthful comp
 - [x] Extend that page-scoped Sourcery slice onto the real `/world` operating surface so the shipped tutorial can end on a real inspection surface instead of stopping at the live app.
 - [x] Make Sourcery contextual at world, page, section, widget, and chapter scope.
 - [x] Support restart-from-here behavior for the relevant scope beyond chapter rewind.
-- [ ] Broaden scope-aware Sourcery authoring beyond the shipped Todo slice so more real surfaces expose authored section/widget anchors, clearer recovery naming, and truthful local scope actions.
-- [ ] Generalize authored scope-anchor catalogs beyond the shipped Todo surfaces so app/world packages can opt into truthful Sourcery recovery and focus without being turned into tutorial steps.
+- [x] Audit guidance actions against real controls, handoffs, and witnessed mutation paths with a regression-tested action registry.
+- [x] Broaden scope-aware Sourcery authoring beyond the shipped Todo slice so bootstrap operator surfaces expose authored section/widget anchors, clearer recovery naming, and truthful local scope actions.
+- [x] Generalize authored scope-anchor catalogs beyond the shipped Todo surfaces so app/world packages can opt into truthful Sourcery recovery and focus without being turned into tutorial steps.
+- [x] Add a cross-surface Sourcery scope inventory that projects active, muted, and completed guidance state across bootstrap, live app, and `/world`.
 - [x] Support per-context enable/disable while keeping disabled guidance visible and recoverable.
 - [x] Introduce concept-aware guidance that reveals ideas as they become relevant.
 - [x] Introduce ambient, truthful curation that can surface good next steps without hiding the machine.
@@ -381,6 +383,10 @@ Current Sourcery slices now include:
 - authored concept metadata revealed progressively on those same surfaces as tutorial progress reaches the relevant steps
 - bootstrap-first next-step suggestions derived from real world/session/tutorial state, wired only to real controls or real surface handoffs, and now keeping disabled-scope recovery visible when it competes with optional fast-path curation
 - a final shipped Todo tutorial handoff into `/world`, with a world-page guidance panel driven by the same persisted tutorial progress model rather than a separate onboarding-only state path
+- a regression-tested guidance action registry that maps suggestion, overlay, disabled-scope, and runtime actions to real controls, handoffs, or witnessed mutation paths
+- bootstrap operator scope anchors on capability, backend-program, runtime-plugin, MCP, and perspective forms plus widget anchors on identity controls, all wired through the same `guidanceTarget` contract as tutorial steps
+- a shared Sourcery scope inventory across bootstrap, live app, and `/world` that shows active, muted, and completed scopes with truthful recovery actions instead of only a disabled-scope list
+- shared scope-anchor builders in `src/runtime-guidance-scope-anchors.js` so app/world packages and future tutorials can opt into truthful focus/recovery by authoring `guidanceTarget` on widgets or declaring bootstrap section anchors without inventing extra tutorial steps
 
 Honest caveats / rollback watch:
 

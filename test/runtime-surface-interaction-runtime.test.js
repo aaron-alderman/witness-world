@@ -228,8 +228,8 @@ test("createSurfaceInteractionRuntime records blocked boot issues in the inspect
   assert.equal(runtimeWindow.world.issues.length, 1);
   assert.equal(runtimeWindow.world.issues[0].id, "surface-runtime:missing-interaction-target-descriptors");
   assert.equal(runtimeWindow.world.issues[0].phase, "boot");
-  const overlayRoot = document.getElementById("surface-runtime-diagnostics-root");
-  const fab = document.getElementById("surface-runtime-diagnostics-fab");
+  const overlayRoot = document.getElementById("sourcery-companion-root");
+  const fab = document.getElementById("sourcery-companion-fab");
   assert.ok(overlayRoot);
   assert.ok(fab);
   assert.equal(overlayRoot.hidden, false);

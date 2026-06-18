@@ -10,6 +10,7 @@ children = ["bootstrap_capability_create_form", "bootstrap_capability_create_sta
 [[form]]
 id = "bootstrap_capability_create_form"
 domId = "capability-form"
+guidanceTarget = "capability-form"
 class = "surface-stack"
 children = ["bootstrap_capability_create_grid_primary", "bootstrap_capability_create_grid_secondary", "bootstrap_capability_create_context_grid", "bootstrap_capability_create_depends_field", "bootstrap_capability_create_provenance_field", "bootstrap_capability_create_public_api_field", "bootstrap_capability_create_config_field", "bootstrap_capability_create_internals_field", "bootstrap_capability_create_authority_field", "bootstrap_capability_create_actions"]
 
@@ -247,6 +248,7 @@ children = ["bootstrap_capability_install_form", "bootstrap_capability_install_h
 [[form]]
 id = "bootstrap_capability_install_form"
 domId = "capability-install-form"
+guidanceTarget = "capability-install-form"
 class = "surface-stack"
 children = ["bootstrap_capability_install_grid", "bootstrap_capability_install_target_field", "bootstrap_capability_install_actions"]
 
