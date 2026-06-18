@@ -2,7 +2,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { moduleProjectors } from "../../src/modules.js";
-import { platformBranchInsights, platformChangeSetInsights, PLATFORM_BRANCH_LIFECYCLE_LANES, summarizePlatformPathSystem } from "./branch-insights.js";
+import {
+  platformBranchInsights,
+  platformChangeSetInsights,
+  PLATFORM_BRANCH_LIFECYCLE_LANES,
+  summarizePlatformPathSystem,
+  TELEMETRY_IMPACT_RULES
+} from "./branch-insights.js";
 import { platformProposalTemplates } from "./platform-proposals.js";
 
 export const PLATFORM_LIFECYCLES = Object.freeze([
@@ -783,6 +789,60 @@ function buildTestGateIndex(rows, affectedRows = [], affectedRowsByChangeSet = [
   return { byId, byProtectedObject, byBranch, byChangeSet };
 }
 
+function telemetryMetricNodeId(id) {
+  return `telemetryMetric:${String(id || "")}`;
+}
+
+function telemetryImpactRuleForSystem(systemId) {
+  return TELEMETRY_IMPACT_RULES[String(systemId || "")] ?? null;
+}
+
+function telemetrySystemIdsForProtectedTarget(target) {
+  const value = String(target || "");
+  if (value === "plugin.platform" || value === "capability:platform.self") return ["plugin.platform"];
+  if (value === "surface:platform" || value === "route:GET /platform" || value === "handler:page.platform") return ["surface.platform"];
+  if (value === "plugin.mcp") return ["plugin.mcp"];
+  if (value === "runtime.core") return ["runtime.core"];
+  if (value.startsWith("profile:")) return ["runtime.profile"];
+  if (value.startsWith("doc:")) return ["docs"];
+  return [];
+}
+
+function telemetryMetricTargetsForProtectedObjects(protectedObjects = []) {
+  const targets = new Set();
+  for (const target of Array.isArray(protectedObjects) ? protectedObjects : []) {
+    for (const systemId of telemetrySystemIdsForProtectedTarget(target)) {
+      const rule = telemetryImpactRuleForSystem(systemId);
+      if (rule?.id) targets.add(telemetryMetricNodeId(rule.id));
+    }
+  }
+  return [...targets].sort((left, right) => left.localeCompare(right));
+}
+
+function addTelemetryMetricNodes(nodes) {
+  for (const rule of Object.values(TELEMETRY_IMPACT_RULES)) {
+    addNode(nodes, {
+      id: telemetryMetricNodeId(rule.id),
+      kind: "telemetryMetric",
+      title: rule.label,
+      lifecycle: ["observe", "verify", "steward"],
+      owner: "plugin.platform",
+      status: "known",
+      source: "plugins/platform/branch-insights.js"
+    });
+  }
+}
+
+function addTestGateTelemetryEdges(nodes, edges, testGates = []) {
+  for (const gate of testGates) {
+    for (const target of gate.protectedObjects ?? []) {
+      if (!String(target).startsWith("telemetryMetric:")) continue;
+      addEdge(edges, gate.id, "verifies", target, "telemetry");
+      if (nodes.has(target)) addEdge(edges, target, "verifiedBy", gate.id, "telemetry");
+    }
+  }
+}
+
 function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestResultsByGate = Object.create(null)) {
   function pushTarget(targets, id) {
     if (id && nodes.has(id)) targets.add(id);
@@ -846,7 +906,11 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
     .filter(node => node.kind === "gate")
     .map(node => {
       const gateEdges = outgoing.get(node.id) ?? [];
-      const protectedObjects = unique(gateEdges.filter(edge => edge.rel === "verifies").map(edge => edge.to));
+      const baseProtectedObjects = unique(gateEdges.filter(edge => edge.rel === "verifies").map(edge => edge.to));
+      const protectedObjects = unique([
+        ...baseProtectedObjects,
+        ...telemetryMetricTargetsForProtectedObjects(baseProtectedObjects)
+      ]);
       const protectedObjectLabels = protectedObjects.map(target => nodes.get(target)?.title || target);
       const command = normalizeGateCommand(node.command || `node --test ${node.title}`);
       const sourceDependencies = unique(
@@ -927,6 +991,14 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
         targets: docTargets
       });
     }
+    const telemetryTargets = unique(matchedTargets.filter(target => String(target).startsWith("telemetryMetric:")));
+    if (telemetryTargets.length) {
+      reasons.push({
+        kind: "telemetry-regression-dependency",
+        summary: `Matched telemetry-sensitive metrics: ${telemetryTargets.map(target => nodes.get(target)?.title || target).join(", ")}.`,
+        targets: telemetryTargets
+      });
+    }
     return reasons;
   }
   function collectAffectedRows(scopeType, scope) {
@@ -938,12 +1010,16 @@ function buildTestGateRows(nodes, edges, branches = [], changeSets = [], latestR
       ...(scope.docsFreshness?.touchedDocs ?? []).map(doc => `doc:${doc}`),
       ...(scope.docsFreshness?.missingDocs ?? []).map(doc => `doc:${doc}`)
     ]);
+    const telemetryTargets = new Set((scope.telemetryImpactSummaries ?? [])
+      .map(summary => summary?.id ? telemetryMetricNodeId(summary.id) : null)
+      .filter(Boolean));
     for (const gate of rows) {
       const matchedTargets = unique(gate.protectedObjects.filter(target =>
         affectedSystems.has(target)
         || affectedSystems.has(target.replace(/^profile:/, ""))
         || affectedSystems.has(target.replace(/^capability:/, ""))
         || docTargets.has(target)
+        || telemetryTargets.has(target)
         || affectedTargets.has(target)
       ));
       const matchedSourceDependencies = unique(gate.sourceDependencies.filter(dependency => changedPaths.has(dependency)));
@@ -1140,6 +1216,8 @@ export async function buildPlatformModel({
     for (const plugin of profile.plugins) addEdge(edges, `profile:${profile.id}`, "activates", plugin, "profile");
     for (const bundle of profile.coreBundles) addEdge(edges, `profile:${profile.id}`, "activates", bundle, "profile");
   }
+
+  addTelemetryMetricNodes(nodes);
 
   for (const runner of serverRunners) {
     addNode(nodes, {
@@ -1630,6 +1708,7 @@ export async function buildPlatformModel({
   }
 
   const testGateProjection = buildTestGateRows(nodes, edges, branches, changeSets, latestTestResultsProjection.byGate ?? Object.create(null));
+  addTestGateTelemetryEdges(nodes, edges, testGateProjection.rows);
   addTestExecutionNodes(nodes, edges, testGateProjection.rows, testRuns, testResults, testArtifacts);
   const gaps = buildGaps(nodes, edges, { branches, changeSets, testGateProjection });
   const docs = parsedDocs.map(doc => ({

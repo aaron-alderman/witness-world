@@ -733,7 +733,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] route ownership dependency
   - [X] plugin ownership dependency
   - [X] doc freshness dependency
-  - [ ] telemetry regression dependency
+  - [X] telemetry regression dependency
   - [ ] prior defect cluster dependency
 - [ ] Cache successful gate results by:
   - [ ] source hash set
@@ -747,7 +747,8 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add tests that WCSS-only edit does not run backend-only gates.
 - [X] Add tests that dependency graph misses are logged as meta-defects.
 - [L] Current V1 now exposes `changedPaths`, affected system summaries, docs freshness, and telemetry impact summaries on both branches and change sets, and the platform model derives affected test gates for both scopes by matching declared source dependencies and protected objects. It still does not compute the smallest meaningful gate set, attach formal selection explanations per gate, or automatically run the selected set.
-- [L] Affected gate rows now carry explicit `selectionReasons` for direct file dependency, imported source dependency, plugin ownership dependency, route ownership dependency, and doc freshness dependency. Telemetry regression and prior defect cluster explanations still need dedicated affected-object modeling instead of the current broad target/path matching.
+- [L] Affected gate rows now carry explicit `selectionReasons` for direct file dependency, imported source dependency, plugin ownership dependency, route ownership dependency, doc freshness dependency, and telemetry regression dependency. Prior defect cluster explanations still need dedicated affected-object modeling instead of the current broad target/path matching.
+- [L] Current telemetry regression dependency is modeled through stable `telemetryMetric:*` objects derived from branch/change-set telemetry impact summaries and matched gate protected objects. It proves which telemetry-sensitive metrics a selected gate is expected to cover, but it is not yet backed by observed telemetry samples, windows, or threshold breaches.
 - [L] Current route-aware gate selection is still heuristic rather than a general dependency graph. It now infers broad platform plugin/capability/profile targets from `plugins/platform/runtime.js`, `plugins/platform/handlers.js`, `plugins/mcp/*`, and `store/seeds/runtime-profiles.json`, while authored platform page sources such as `plugins/platform/platform-page.js`, `plugins/platform/platform-console.rvm`, `plugins/platform/platform-console.wcss`, and `plugins/platform/platform-style.js` are classified as a narrower `surface.platform` system and infer the `/platform` surface, route, and page-handler targets instead of the whole plugin.
 - [L] The current WCSS-only backend exclusion proof is anchored on runtime-core gate selection: a `plugins/platform/platform-console.wcss` change continues to select platform-facing gates while leaving `gate:test/runtime-server.test.js` unselected.
 - [L] Current RVM-only proof is still limited to backend exclusion. After the runtime-profile exposure suite was decoupled from direct `platform-console.rvm` fixture reads, a `plugins/platform/platform-console.rvm` change still selects `gate:test/runtime-profile.test.js` through the current `/platform` route-hint heuristic, while `gate:test/runtime-server.test.js` remains unselected.

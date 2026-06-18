@@ -537,6 +537,7 @@ test("platform model projects structured test gates and affected branch selectio
   assert.equal(runtimeProfileGate.timeoutMs, 180000);
   assert.equal(runtimeProfileGate.protectedObjects.includes("profile:minimal"), true);
   assert.equal(runtimeProfileGate.protectedObjects.includes("plugin.platform"), true);
+  assert.equal(runtimeProfileGate.protectedObjects.includes("telemetryMetric:platform.self"), true);
   assert.equal(runtimeProfileGate.sourceDependencies.includes("test/runtime-profile.test.js"), true);
   assert.equal(runtimeProfileGate.costEstimate, "high");
   assert.equal(runtimeProfileGate.selectedByBranches.includes("branch.platform.gates"), true);
@@ -545,12 +546,15 @@ test("platform model projects structured test gates and affected branch selectio
   assert.equal(platformGate.protectedObjects.includes("route:GET /platform"), true);
   assert.equal(platformGate.protectedObjects.includes("handler:page.platform"), true);
   assert.equal(platformGate.protectedObjects.includes("plugin.mcp"), true);
+  assert.equal(platformGate.protectedObjects.includes("telemetryMetric:platform.self"), true);
+  assert.equal(platformGate.protectedObjects.includes("telemetryMetric:mcp.availability"), true);
   assert.equal(platformGate.sourceDependencies.includes("plugins/platform/platform-model.js"), true);
   assert.equal(platformGate.sourceDependencies.includes("plugins/platform/platform-console.rvm"), true);
   assert.equal(platformGate.selectedByBranches.includes("branch.platform.gates"), true);
   assert.equal(platformGate.selectedByChangeSets.includes("changeSet:platform-gates"), true);
   assert.ok(packageScriptGate);
   assert.equal(packageScriptGate.protectedObjects.includes("plugin.mcp"), true);
+  assert.equal(packageScriptGate.protectedObjects.includes("telemetryMetric:mcp.availability"), true);
   assert.deepEqual(packageScriptGate.sourceDependencies, ["package.json"]);
   assert.equal(packageScriptGate.selectedByBranches.includes("branch.platform.gates"), true);
   assert.equal(packageScriptGate.selectedByChangeSets.includes("changeSet:platform-gates"), true);
@@ -560,6 +564,8 @@ test("platform model projects structured test gates and affected branch selectio
   assert.deepEqual(docGate.sourceDependencies, ["docs/RUNTIME-BUNDLE-MIGRATION-PLAN.md"]);
   assert.equal(model.testGateIndex.byId["gate:test/runtime-profile.test.js"].title, "test/runtime-profile.test.js");
   assert.equal(model.testGateIndex.byProtectedObject["plugin.platform"].includes("gate:plugins/platform/platform.test.js"), true);
+  assert.equal(model.testGateIndex.byProtectedObject["telemetryMetric:platform.self"].includes("gate:test/runtime-profile.test.js"), true);
+  assert.equal(model.nodes.some(node => node.id === "telemetryMetric:platform.self" && node.kind === "telemetryMetric"), true);
   assert.equal(model.affectedTestGates.some(row =>
     row.branchId === "branch.platform.gates"
     && row.gateId === "gate:test/runtime-profile.test.js"
@@ -577,8 +583,10 @@ test("platform model projects structured test gates and affected branch selectio
   assert.equal(model.affectedTestGatesByChangeSet["changeSet:platform-gates"].includes(packageScriptGate.id), true);
   assert.ok(runtimeProfileSelection);
   assert.equal(runtimeProfileSelection.selectionReasons.some(reason => reason.kind === "plugin-ownership-dependency" && reason.targets.includes("plugin.platform")), true);
+  assert.equal(runtimeProfileSelection.selectionReasons.some(reason => reason.kind === "telemetry-regression-dependency" && reason.targets.includes("telemetryMetric:platform.self")), true);
   assert.ok(platformGateSelection);
   assert.equal(platformGateSelection.selectionReasons.some(reason => reason.kind === "imported-source-dependency" && reason.paths.includes("plugins/platform/platform-model.js")), true);
+  assert.equal(platformGateSelection.selectionReasons.some(reason => reason.kind === "telemetry-regression-dependency" && reason.targets.includes("telemetryMetric:platform.self")), true);
   assert.ok(packageGateSelection);
   assert.equal(packageGateSelection.selectionReasons.some(reason => reason.kind === "direct-file-dependency" && reason.paths.includes("package.json")), true);
   assert.equal(branchView.testGates.some(row => row.id === "gate:test/runtime-profile.test.js"), true);
@@ -631,9 +639,14 @@ test("platform route edits select platform and runtime-profile gates through own
 
   assert.ok(runtimeProfileSelection);
   assert.equal(runtimeProfileSelection.matchedTargets.includes("plugin.platform"), true);
+  assert.equal(runtimeProfileSelection.matchedTargets.includes("telemetryMetric:platform.self"), true);
   assert.equal(runtimeProfileSelection.selectionReasons.some(reason =>
     reason.kind === "plugin-ownership-dependency"
     && reason.targets.includes("plugin.platform")
+  ), true);
+  assert.equal(runtimeProfileSelection.selectionReasons.some(reason =>
+    reason.kind === "telemetry-regression-dependency"
+    && reason.targets.includes("telemetryMetric:platform.self")
   ), true);
 
   assert.ok(platformGateSelection);

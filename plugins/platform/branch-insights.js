@@ -8,7 +8,7 @@ const DOC_REQUIREMENTS = Object.freeze({
   "runtime.core": Object.freeze(["docs/RUNTIME-AUDIT-INVENTORY.md"])
 });
 
-const TELEMETRY_IMPACT_RULES = Object.freeze({
+export const TELEMETRY_IMPACT_RULES = Object.freeze({
   "plugin.platform": Object.freeze({
     id: "platform.self",
     label: "Platform self surface",
@@ -46,8 +46,23 @@ const TELEMETRY_IMPACT_RULES = Object.freeze({
   })
 });
 
+const TELEMETRY_IMPACT_RULES_BY_ID = Object.freeze(
+  Object.fromEntries(Object.values(TELEMETRY_IMPACT_RULES).map(rule => [rule.id, rule]))
+);
+
 function uniqueSorted(values = []) {
   return [...new Set(values.map(String).filter(Boolean))].sort((left, right) => left.localeCompare(right));
+}
+
+export function telemetryImpactSummaryById(id) {
+  const rule = TELEMETRY_IMPACT_RULES_BY_ID[String(id || "")];
+  return rule ? { ...rule } : null;
+}
+
+export function telemetryImpactSummariesForSystems(systemIds = []) {
+  return uniqueSorted((Array.isArray(systemIds) ? systemIds : []).map(systemId => TELEMETRY_IMPACT_RULES[systemId]?.id))
+    .map(id => telemetryImpactSummaryById(id))
+    .filter(Boolean);
 }
 
 function rootSegment(path) {
@@ -118,12 +133,7 @@ function platformPathInsights(paths = []) {
     paths: system.paths
   }));
 
-  const telemetryImpacts = uniqueSorted(affectedSystems.map(system => TELEMETRY_IMPACT_RULES[system.id]?.id))
-    .map(id => {
-      const rule = Object.values(TELEMETRY_IMPACT_RULES).find(entry => entry.id === id);
-      return rule ? { ...rule } : null;
-    })
-    .filter(Boolean);
+  const telemetryImpacts = telemetryImpactSummariesForSystems(affectedSystems.map(system => system.id));
 
   const requiredDocs = uniqueSorted(affectedSystems.flatMap(system => DOC_REQUIREMENTS[system.id] ?? []));
   const missingDocs = requiredDocs.filter(doc => !touchedDocs.includes(doc));
