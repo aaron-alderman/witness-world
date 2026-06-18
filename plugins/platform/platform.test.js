@@ -600,12 +600,22 @@ test("platform console layout compiles authored top-level surface metadata from 
     "PlatformVerificationPage",
     "PlatformKnowledgePage",
     "PlatformSignalsPage",
-    "PlatformModelPage"
+    "PlatformModelPage",
+    "PlatformBridgesPage",
+    "PlatformGovernancePage",
+    "PlatformSemanticsPage",
+    "PlatformPackageCoexistencePage",
+    "PlatformPackageConvergencePage"
   ]);
   const overviewPage = layout.children.find(surface => surface.name === "PlatformOverviewPage");
   const workflowPage = layout.children.find(surface => surface.name === "PlatformWorkflowPage");
   const verificationPage = layout.children.find(surface => surface.name === "PlatformVerificationPage");
   const signalsPage = layout.children.find(surface => surface.name === "PlatformSignalsPage");
+  const bridgesPage = layout.children.find(surface => surface.name === "PlatformBridgesPage");
+  const governancePage = layout.children.find(surface => surface.name === "PlatformGovernancePage");
+  const semanticsPage = layout.children.find(surface => surface.name === "PlatformSemanticsPage");
+  const packageCoexistencePage = layout.children.find(surface => surface.name === "PlatformPackageCoexistencePage");
+  const packageConvergencePage = layout.children.find(surface => surface.name === "PlatformPackageConvergencePage");
   assert.ok(overviewPage);
   assert.equal(overviewPage.pageId, "overview");
   assert.equal(overviewPage.props.modelView, "overview");
@@ -1013,8 +1023,31 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(signalRelatedSurface.props.gapTextCardEmptyStates, "Missing In Generated=No missing selectors detected.|Extra In Generated=No extra selectors detected.");
   const modelPage = layout.children.find(surface => surface.name === "PlatformModelPage");
   assert.ok(modelPage);
+  assert.equal(modelPage.pageId, "model");
   assert.equal(modelPage.props.modelView, "model");
   assert.match(modelPage.props.summaryCards, /Coverage Edges=coverageEdges@count/);
+  assert.ok(bridgesPage);
+  assert.equal(bridgesPage.pageId, "bridges");
+  assert.equal(bridgesPage.props.modelView, "bridges");
+  assert.equal(bridgesPage.props.supplementalPageSource, "bridges");
+  assert.equal(bridgesPage.summary, "Compatibility bridge inventory for remaining convenience seams.");
+  assert.ok(governancePage);
+  assert.equal(governancePage.pageId, "governance");
+  assert.equal(governancePage.props.modelView, "governance");
+  assert.equal(governancePage.props.supplementalPageSource, "governance");
+  assert.equal(governancePage.summary, "Route and proposal-target governance coverage for mutating platform seams.");
+  assert.ok(semanticsPage);
+  assert.equal(semanticsPage.pageId, "semantics");
+  assert.equal(semanticsPage.props.modelView, "semantics");
+  assert.equal(semanticsPage.props.supplementalPageSource, "semantics");
+  assert.ok(packageCoexistencePage);
+  assert.equal(packageCoexistencePage.pageId, "packageCoexistence");
+  assert.equal(packageCoexistencePage.props.modelView, "packageCoexistence");
+  assert.equal(packageCoexistencePage.props.supplementalPageSource, "packageCoexistence");
+  assert.ok(packageConvergencePage);
+  assert.equal(packageConvergencePage.pageId, "packageConvergence");
+  assert.equal(packageConvergencePage.props.modelView, "packageConvergence");
+  assert.equal(packageConvergencePage.props.supplementalPageSource, "packageConvergence");
   const consoleSummarySurface = overviewPage.childSurfaces.find(surface => surface.name === "PlatformConsoleSummary");
   assert.ok(consoleSummarySurface);
   assert.equal(consoleSummarySurface.props.summaryPageId, "overview");
@@ -5920,6 +5953,11 @@ test("platform page renders required operating views", async () => {
   assert.match(overviewHtml, /Platform Summary, Authored Surface Tree, Lifecycle Board, Platform Map, Runtime Profiles/);
   assert.match(overviewHtml, /Counts, authored surface ownership, lifecycle, and quick platform links\./);
   assert.match(overviewHtml, /\?view=workflow/);
+  assert.match(overviewHtml, /\?view=bridges/);
+  assert.match(overviewHtml, /\?view=governance/);
+  assert.match(overviewHtml, /\?view=semantics/);
+  assert.match(overviewHtml, /\?view=packageCoexistence/);
+  assert.match(overviewHtml, /\?view=packageConvergence/);
   assert.doesNotMatch(overviewHtml, /bindAuthoredJsonSubmit/);
   assert.doesNotMatch(overviewHtml, /<pre/);
 
@@ -6035,6 +6073,95 @@ test("platform page renders required operating views", async () => {
   assert.match(modelHtml, /Platform Object Detail/);
   assert.match(modelHtml, /Coverage Edges/);
   assert.doesNotMatch(modelHtml, /<pre/);
+});
+
+test("platform page renders authored supplemental pages from the RVM page tree", () => {
+  const model = {
+    compatibilityBridges: [{
+      id: "compatibilityBridge:detail-panels",
+      bridgeClass: "rendering",
+      owner: "plugin.platform",
+      status: "active",
+      surfaces: ["PlatformWorkflowDetail"],
+      sampleTargets: ["surface:platform"]
+    }],
+    governanceRoutes: [{
+      id: "governanceRoute:POST /api/platform-change-sets/demo/apply",
+      pageKind: "route",
+      method: "POST",
+      matcher: "/api/platform-change-sets/demo/apply",
+      handler: "platform.changeSet.apply",
+      governanceMode: "operator-only",
+      authorityMechanism: "bootstrap-operator"
+    }],
+    proposalTargetGovernance: [{
+      id: "governanceProposalTarget:runtimePlugin.install",
+      pageKind: "proposal-target",
+      targetProcess: "runtimePlugin.install",
+      governanceMode: "proposal-fallback",
+      authorityMechanism: "bootstrap-target-authority"
+    }],
+    mutableSurfaceSemantics: [{
+      id: "mutableSurface:plugin.platform",
+      title: "plugin.platform",
+      surface: "plugin.platform",
+      sharingClass: "shared",
+      stateClass: "platform-graph",
+      authorityRule: "proposal",
+      visibilityRule: "modeled"
+    }],
+    packageCoexistence: [{
+      id: "packageCoexistence:package.plugin.inspect",
+      packageId: "package.plugin.inspect",
+      packageLabel: "Plugin Inspect",
+      coexistenceMode: "coexisting",
+      selectedRevisionIds: ["packageRevision.plugin.inspect.v1", "packageRevision.plugin.inspect.v2"],
+      namespaceSelections: [{ id: "namespaceSelection:plugin.inspect", context: "platform", name: "inspect" }]
+    }],
+    packageConvergence: [{
+      id: "packageConvergence:package.plugin.inspect",
+      packageId: "package.plugin.inspect",
+      packageLabel: "Plugin Inspect",
+      status: "glue-required",
+      transformerIds: ["packageTransformer.inspect.v1-to-v2"],
+      convergencePatchIds: ["packagePatch.inspect"],
+      remainingGlue: [{ message: "Shared shim still needed." }]
+    }],
+    summaries: {}
+  };
+
+  const bridgesHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=bridges&id=compatibilityBridge:detail-panels") });
+  const governanceHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=governance&id=governanceRoute:POST%20/api/platform-change-sets/demo/apply") });
+  const semanticsHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=semantics&id=mutableSurface:plugin.platform") });
+  const coexistenceHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=packageCoexistence&id=package.plugin.inspect") });
+  const convergenceHtml = renderPlatformPage(model, { requestUrl: new URL("http://platform.local/platform?view=packageConvergence&id=package.plugin.inspect") });
+
+  assert.match(bridgesHtml, /Platform Console - Bridges/);
+  assert.match(bridgesHtml, /Compatibility bridge inventory for remaining convenience seams\./);
+  assert.match(bridgesHtml, /compatibilityBridge:detail-panels/);
+  assert.match(bridgesHtml, /\?view=packageConvergence/);
+  assert.doesNotMatch(bridgesHtml, /<pre/);
+
+  assert.match(governanceHtml, /Platform Console - Governance/);
+  assert.match(governanceHtml, /Route and proposal-target governance coverage for mutating platform seams\./);
+  assert.match(governanceHtml, /governanceRoute:POST \/api\/platform-change-sets\/demo\/apply/);
+  assert.doesNotMatch(governanceHtml, /<pre/);
+
+  assert.match(semanticsHtml, /Platform Console - Semantics/);
+  assert.match(semanticsHtml, /Personal, shared, and mixed mutable-surface semantics contract rows\./);
+  assert.match(semanticsHtml, /mutableSurface:plugin\.platform/);
+  assert.doesNotMatch(semanticsHtml, /<pre/);
+
+  assert.match(coexistenceHtml, /Platform Console - Package Coexistence/);
+  assert.match(coexistenceHtml, /Divergent package revision lines and namespace selections\./);
+  assert.match(coexistenceHtml, /packageRevision\.plugin\.inspect\.v1/);
+  assert.doesNotMatch(coexistenceHtml, /<pre/);
+
+  assert.match(convergenceHtml, /Platform Console - Package Convergence/);
+  assert.match(convergenceHtml, /Transformer contracts, convergence patches, and remaining authored glue\./);
+  assert.match(convergenceHtml, /packageTransformer\.inspect\.v1-to-v2/);
+  assert.match(convergenceHtml, /Shared shim still needed\./);
+  assert.doesNotMatch(convergenceHtml, /<pre/);
 });
 
 test("platform page uses authored related-card empty states and item limits", () => {

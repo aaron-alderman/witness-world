@@ -3,40 +3,18 @@ import { readPlatformConsoleLayout } from "./platform-console-layout.js";
 import { filterPlatformModel } from "./platform-model.js";
 
 const FALLBACK_PLATFORM_PAGE_VIEWS = Object.freeze([
-  Object.freeze({ id: "overview", title: "Overview", subtitle: "Counts, authored surfaces, lifecycle, and quick links." }),
-  Object.freeze({ id: "workflow", title: "Workflow", subtitle: "Branches, change sets, proposals, and authoring commands." }),
-  Object.freeze({ id: "verification", title: "Verification", subtitle: "Live test runs, RVM-authored reports, candidate snapshots, failures, regressions, and runtime revisions." }),
-  Object.freeze({ id: "knowledge", title: "Knowledge", subtitle: "Governed docs, roadmap tasks, epics, features, and intent-linked knowledge." }),
-  Object.freeze({ id: "signals", title: "Signals", subtitle: "Gaps, telemetry, defect clusters, and boundaries." }),
-  Object.freeze({ id: "model", title: "Model", subtitle: "Platform objects, relationships, profiles, and dependency evidence." })
+  Object.freeze({ id: "overview", title: "Overview", subtitle: "Counts, authored surfaces, lifecycle, and quick links.", modelView: "overview" }),
+  Object.freeze({ id: "workflow", title: "Workflow", subtitle: "Branches, change sets, proposals, and authoring commands.", modelView: "workflow" }),
+  Object.freeze({ id: "verification", title: "Verification", subtitle: "Live test runs, RVM-authored reports, candidate snapshots, failures, regressions, and runtime revisions.", modelView: "verification" }),
+  Object.freeze({ id: "knowledge", title: "Knowledge", subtitle: "Governed docs, roadmap tasks, epics, features, and intent-linked knowledge.", modelView: "knowledge" }),
+  Object.freeze({ id: "signals", title: "Signals", subtitle: "Gaps, telemetry, defect clusters, and boundaries.", modelView: "signals" }),
+  Object.freeze({ id: "model", title: "Model", subtitle: "Platform objects, relationships, profiles, and dependency evidence.", modelView: "model" }),
+  Object.freeze({ id: "bridges", title: "Bridges", subtitle: "Compatibility bridge inventory for remaining convenience seams.", modelView: "bridges", supplementalPageSource: "bridges" }),
+  Object.freeze({ id: "governance", title: "Governance", subtitle: "Route and proposal-target governance coverage for mutating platform seams.", modelView: "governance", supplementalPageSource: "governance" }),
+  Object.freeze({ id: "semantics", title: "Semantics", subtitle: "Personal, shared, and mixed mutable-surface semantics contract rows.", modelView: "semantics", supplementalPageSource: "semantics" }),
+  Object.freeze({ id: "packageCoexistence", title: "Package Coexistence", subtitle: "Divergent package revision lines and namespace selections.", modelView: "packageCoexistence", supplementalPageSource: "packageCoexistence" }),
+  Object.freeze({ id: "packageConvergence", title: "Package Convergence", subtitle: "Transformer contracts, convergence patches, and remaining authored glue.", modelView: "packageConvergence", supplementalPageSource: "packageConvergence" })
 ]);
-const SUPPLEMENTAL_PLATFORM_PAGE_SPECS = Object.freeze({
-  bridges: Object.freeze({
-    hostPageId: "model",
-    title: "Bridges",
-    subtitle: "Compatibility bridge inventory for remaining convenience seams."
-  }),
-  governance: Object.freeze({
-    hostPageId: "model",
-    title: "Governance",
-    subtitle: "Route and proposal-target governance coverage for mutating platform seams."
-  }),
-  semantics: Object.freeze({
-    hostPageId: "model",
-    title: "Semantics",
-    subtitle: "Personal, shared, and mixed mutable-surface semantics contract rows."
-  }),
-  packageCoexistence: Object.freeze({
-    hostPageId: "model",
-    title: "Package Coexistence",
-    subtitle: "Divergent package revision lines and namespace selections."
-  }),
-  packageConvergence: Object.freeze({
-    hostPageId: "model",
-    title: "Package Convergence",
-    subtitle: "Transformer contracts, convergence patches, and remaining authored glue."
-  })
-});
 const DEFAULT_PAGE_SIZE = 20;
 
 function esc(value) {
@@ -90,16 +68,15 @@ function authoredPageViews(consoleLayout) {
       id: String(surface.pageId),
       title: surface.title || humanizeKey(surface.pageId),
       subtitle: surface.summary || "",
+      modelView: surfaceModelView(surface),
+      supplementalPageSource: surfacePropText(surface, "supplementalPageSource", null),
       surface
     }));
   return authored.length ? authored : FALLBACK_PLATFORM_PAGE_VIEWS;
 }
 
 function pageDef(viewId, pageViews) {
-  const authored = pageViews.find(view => view.id === viewId);
-  if (authored) return authored;
-  const supplemental = supplementalPageDef(viewId, pageViews);
-  return supplemental || pageViews[0];
+  return pageViews.find(view => view.id === viewId) || pageViews[0];
 }
 
 function surfaceModelView(surface) {
@@ -108,21 +85,6 @@ function surfaceModelView(surface) {
 
 function pageViewModelView(pageView) {
   return optionalText(pageView?.modelView) || surfaceModelView(pageView?.surface);
-}
-
-function supplementalPageDef(viewId, pageViews) {
-  const spec = SUPPLEMENTAL_PLATFORM_PAGE_SPECS[viewId];
-  if (!spec) return null;
-  const hostPage = pageViews.find(view => view.id === spec.hostPageId);
-  if (!hostPage) return null;
-  return Object.freeze({
-    id: viewId,
-    title: spec.title,
-    subtitle: spec.subtitle,
-    surface: hostPage.surface,
-    modelView: viewId,
-    supplementalSpec: spec
-  });
 }
 
 function platformHref(ctx, view, params = {}) {
@@ -2652,11 +2614,11 @@ function renderSupplementalRow(viewId, row, ctx) {
   }
 }
 
-function renderSupplementalPage(currentView, model, ctx) {
-  const rows = supplementalRowsForView(currentView.id, model);
+function renderSupplementalPage(currentView, sourceId, model, ctx) {
+  const rows = supplementalRowsForView(sourceId, model);
   const page = paginateRows(rows, ctx, DEFAULT_PAGE_SIZE);
-  const detail = supplementalRecordForView(currentView.id, model, ctx.id);
-  const primaryFields = supplementalPrimaryFields(currentView.id);
+  const detail = supplementalRecordForView(sourceId, model, ctx.id);
+  const primaryFields = supplementalPrimaryFields(sourceId);
   const primaryKeys = new Set(primaryFields.map(field => field.key));
   return `
     ${renderSummaryCards([
@@ -2667,8 +2629,8 @@ function renderSupplementalPage(currentView, model, ctx) {
       <h2>${esc(currentView.title)}</h2>
       <div class="muted">${esc(currentView.subtitle || "")}</div>
       ${renderTable(
-        supplementalTableHeaders(currentView.id),
-        page.items.map(row => renderSupplementalRow(currentView.id, row, ctx)),
+        supplementalTableHeaders(sourceId),
+        page.items.map(row => renderSupplementalRow(sourceId, row, ctx)),
         "No rows."
       )}
       ${renderPagination(ctx, page.total, page.offset, page.limit)}
@@ -2703,8 +2665,10 @@ export function renderPlatformPage(model, { requestUrl = null } = {}) {
     name: ctx.name,
     target: ctx.target
   });
-  const body = currentView.supplementalSpec
-    ? renderSupplementalPage(currentView, pageModel, ctx)
+  const supplementalPageSource = optionalText(currentView.supplementalPageSource)
+    || surfacePropText(currentView.surface, "supplementalPageSource", "");
+  const body = supplementalPageSource
+    ? renderSupplementalPage(currentView, supplementalPageSource, pageModel, ctx)
     : renderPageFromSurface(currentView.surface ?? null, pageModel, ctx, consoleLayout);
   return `<!doctype html>
 <html lang="en">

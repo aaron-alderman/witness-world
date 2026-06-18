@@ -61,7 +61,7 @@ view PlatformConsolePage {
   kind page
   class platform-console
   prop title = "Platform Console"
-  prop summary = "RVM-authored platform pages for overview, workflow, verification, knowledge, signals, and model inspection."
+  prop summary = "RVM-authored platform pages for overview, workflow, verification, knowledge, signals, model inspection, and supplemental governance/model seams."
   capabilities {
     platform.self
   }
@@ -72,6 +72,11 @@ view PlatformConsolePage {
     PlatformKnowledgePage
     PlatformSignalsPage
     PlatformModelPage
+    PlatformBridgesPage
+    PlatformGovernancePage
+    PlatformSemanticsPage
+    PlatformPackageCoexistencePage
+    PlatformPackageConvergencePage
   }
 }
 
@@ -178,6 +183,56 @@ view PlatformModelPage {
     PlatformModelDetail
     PlatformCoverageMatrix
   }
+}
+
+view PlatformBridgesPage {
+  kind page
+  class platform-model
+  prop pageId = "bridges"
+  prop modelView = "bridges"
+  prop supplementalPageSource = "bridges"
+  prop title = "Bridges"
+  prop summary = "Compatibility bridge inventory for remaining convenience seams."
+}
+
+view PlatformGovernancePage {
+  kind page
+  class platform-model
+  prop pageId = "governance"
+  prop modelView = "governance"
+  prop supplementalPageSource = "governance"
+  prop title = "Governance"
+  prop summary = "Route and proposal-target governance coverage for mutating platform seams."
+}
+
+view PlatformSemanticsPage {
+  kind page
+  class platform-model
+  prop pageId = "semantics"
+  prop modelView = "semantics"
+  prop supplementalPageSource = "semantics"
+  prop title = "Semantics"
+  prop summary = "Personal, shared, and mixed mutable-surface semantics contract rows."
+}
+
+view PlatformPackageCoexistencePage {
+  kind page
+  class platform-model
+  prop pageId = "packageCoexistence"
+  prop modelView = "packageCoexistence"
+  prop supplementalPageSource = "packageCoexistence"
+  prop title = "Package Coexistence"
+  prop summary = "Divergent package revision lines and namespace selections."
+}
+
+view PlatformPackageConvergencePage {
+  kind page
+  class platform-model
+  prop pageId = "packageConvergence"
+  prop modelView = "packageConvergence"
+  prop supplementalPageSource = "packageConvergence"
+  prop title = "Package Convergence"
+  prop summary = "Transformer contracts, convergence patches, and remaining authored glue."
 }
 
 view PlatformConsoleSummary {
