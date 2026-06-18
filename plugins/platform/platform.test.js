@@ -464,6 +464,10 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.equal(verificationRelatedSurface.props.candidateSnapshotTextCards, "Files=files@path|Errors=errors@errorMessage");
   assert.equal(verificationRelatedSurface.props.testRunPropertyCardTitle, "Verification Streams");
   assert.equal(verificationRelatedSurface.props.testRunPropertyFields, "Test run events=testEventsLink@href|Backend revision events=backendRevisionsLink@href");
+  const verificationStreamsSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformVerificationStreams");
+  assert.ok(verificationStreamsSurface);
+  assert.equal(verificationStreamsSurface.props.streamCardTitle, "Event Streams");
+  assert.equal(verificationStreamsSurface.props.streamFields, "Test run events=testEventsLink@href|Backend revision events=backendRevisionsLink@href");
   const branchRedGreenSurface = verificationPage.childSurfaces.find(surface => surface.name === "PlatformBranchRedGreenList");
   assert.ok(branchRedGreenSurface);
   assert.equal(branchRedGreenSurface.props.rowFields, "Status=status|Branch=branchLink@concept|Selected=totalSelectedGates|Passed=passedCount|Failed=failedCount|Summary=summary");
@@ -5129,6 +5133,9 @@ test("platform page renders required operating views", async () => {
   assert.match(verificationHtml, /Recent test-run history for the selected verification object when available\./);
   assert.match(verificationHtml, /Test Gate Detail/);
   assert.match(verificationHtml, /Links to live test-run and backend-revision event streams\./);
+  assert.match(verificationHtml, /Event Streams/);
+  assert.match(verificationHtml, />Test run event stream</);
+  assert.match(verificationHtml, />Backend revision event stream</);
   assert.match(verificationHtml, /<form id="platform-test-run-form"/);
   assert.match(verificationHtml, /<form id="platform-selected-test-run-form"/);
   assert.match(verificationHtml, /\/api\/platform-test-runs\/events/);

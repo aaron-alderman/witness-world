@@ -1995,10 +1995,28 @@ function renderChangeSetLifecyclePanelSection(surface, model) {
 }
 
 function renderVerificationStreamsSection(surface) {
-  return renderSurfaceFrame(surface, renderTable(["Property", "Value"], [
-    `<tr><td>Test run events</td><td><a href="/api/platform-test-runs/events">/api/platform-test-runs/events</a></td></tr>`,
-    `<tr><td>Backend revision events</td><td><a href="/api/runtime/backend-revisions/events">/api/runtime/backend-revisions/events</a></td></tr>`
-  ], "No verification streams."));
+  const streamRecord = {
+    testEventsLink: {
+      href: "/api/platform-test-runs/events",
+      title: "Test run event stream"
+    },
+    backendRevisionsLink: {
+      href: "/api/runtime/backend-revisions/events",
+      title: "Backend revision event stream"
+    }
+  };
+  return renderSurfaceFrame(surface, renderPropertyCard(propertyRowsFromSurfaceSchema(
+    surface,
+    "streamCardTitle",
+    "streamFields",
+    null,
+    streamRecord,
+    "Event Streams",
+    [
+      { label: "Test run events", valueHtml: `<a href="/api/platform-test-runs/events">Test run event stream</a>` },
+      { label: "Backend revision events", valueHtml: `<a href="/api/runtime/backend-revisions/events">Backend revision event stream</a>` }
+    ]
+  )));
 }
 
 function renderBranchRedGreenSection(surface, model, ctx) {

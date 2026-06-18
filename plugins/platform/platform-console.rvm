@@ -462,6 +462,8 @@ view PlatformVerificationStreams {
   class platform-verification-streams
   prop title = "Verification Streams"
   prop summary = "Links to live test-run and backend-revision event streams."
+  prop streamCardTitle = "Event Streams"
+  prop streamFields = "Test run events=testEventsLink@href|Backend revision events=backendRevisionsLink@href"
 }
 
 view PlatformBranchRedGreenList {
