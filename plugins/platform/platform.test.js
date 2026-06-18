@@ -1462,6 +1462,56 @@ test("platform roadmap task parser preserves extended status markers", () => {
   ]);
 });
 
+test("markdown ingestion parses explicit branch and proposal ids into task and doc edges", async () => {
+  const fixtureName = `PLATFORM-TEMP-REF-${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}.md`;
+  const fixtureRelativePath = `docs/${fixtureName}`;
+  const fixtureAbsolutePath = path.join(process.cwd(), fixtureRelativePath);
+  await writeFile(fixtureAbsolutePath, `# Temp References
+
+See \`branch:docs-fixture\` and \`proposal.platform.docs.fixture\`.
+
+- [ ] Review \`branch:docs-fixture\` before approving \`proposal.platform.docs.fixture\`.
+`, "utf8");
+
+  try {
+    const model = await buildPlatformModel({
+      diagnostics: {
+        activeProfile: "full",
+        activeBundles: [],
+        providedCapabilities: [],
+        routes: [],
+        surfaces: [],
+        plugins: { activePluginIds: ["plugin.platform"], effectivePluginIds: ["plugin.platform"], rejectedPlugins: [] }
+      },
+      project: projector => {
+        if (projector === moduleProjectors.branches) {
+          return [{ id: "branch:docs-fixture", title: "Docs Fixture", status: "open" }];
+        }
+        if (projector === moduleProjectors.proposals) {
+          return [{ id: "proposal.platform.docs.fixture", status: "open", targetProcess: "branch.merge", targetKind: "branch", targetId: "branch:docs-fixture" }];
+        }
+        return [];
+      }
+    });
+
+    const doc = model.docs.find(row => row.path === fixtureRelativePath);
+    const task = model.docTasks.find(row => row.doc === fixtureRelativePath);
+
+    assert.ok(doc);
+    assert.ok(task);
+    assert.equal(doc.references.branchIds.includes("branch:docs-fixture"), true);
+    assert.equal(doc.references.proposalIds.includes("proposal.platform.docs.fixture"), true);
+    assert.equal(model.docReferences.some(row => row.doc === fixtureRelativePath && row.targetId === "branch:branch:docs-fixture"), true);
+    assert.equal(model.docReferences.some(row => row.doc === fixtureRelativePath && row.targetId === "proposal:proposal.platform.docs.fixture"), true);
+    assert.equal(task.targets.some(target => target.targetId === "branch:branch:docs-fixture"), true);
+    assert.equal(task.targets.some(target => target.targetId === "proposal:proposal.platform.docs.fixture"), true);
+    assert.equal(model.edges.some(edge => edge.from === task.id && edge.rel === "targets" && edge.to === "branch:branch:docs-fixture"), true);
+    assert.equal(model.edges.some(edge => edge.from === task.id && edge.rel === "targets" && edge.to === "proposal:proposal.platform.docs.fixture"), true);
+  } finally {
+    await rm(fixtureAbsolutePath, { force: true });
+  }
+});
+
 test("platform model groups branches into lifecycle board lanes", async () => {
   const model = await buildPlatformModel({
     diagnostics: {

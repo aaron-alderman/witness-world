@@ -372,6 +372,8 @@ function resolveMarkdownReferenceTargets(references = {}, nodes, routeIdsByMatch
   }
   for (const pluginId of references.pluginIds ?? []) pushTarget("plugin", pluginId);
   for (const capabilityId of references.capabilityIds ?? []) pushTarget("capability", `capability:${capabilityId}`);
+  for (const proposalId of references.proposalIds ?? []) pushTarget("proposal", `proposal:${proposalId}`);
+  for (const branchId of references.branchIds ?? []) pushTarget("branch", `branch:${branchId}`);
   for (const filePath of references.filePaths ?? []) {
     const targetId = nodes.has(`doc:${filePath}`)
       ? `doc:${filePath}`
@@ -954,6 +956,8 @@ function extractMarkdownReferences(source) {
     filePaths: unique(codeTokens.filter(token => /^(?:docs|plugins|src|test|store|examples)\//.test(token))),
     pluginIds: unique(codeTokens.filter(token => /^plugin\.[A-Za-z0-9_.-]+$/.test(token))),
     capabilityIds: unique(codeTokens.filter(token => /^[A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+$/.test(token))),
+    proposalIds: unique(codeTokens.filter(token => /^proposal(?:[:.])[A-Za-z0-9_.:-]+$/.test(token))),
+    branchIds: unique(codeTokens.filter(token => /^branch:[A-Za-z0-9_.:-]+$/.test(token))),
     routes: extractMarkdownRouteRefs(source)
   };
 }
@@ -2667,6 +2671,8 @@ export async function buildPlatformModel({
       filePaths: [...doc.references.filePaths],
       pluginIds: [...doc.references.pluginIds],
       capabilityIds: [...doc.references.capabilityIds],
+      proposalIds: [...(doc.references.proposalIds ?? [])],
+      branchIds: [...(doc.references.branchIds ?? [])],
       routes: [...doc.references.routes]
     }
   }));
@@ -2678,6 +2684,8 @@ export async function buildPlatformModel({
       filePaths: [...(task.references?.filePaths ?? [])],
       pluginIds: [...(task.references?.pluginIds ?? [])],
       capabilityIds: [...(task.references?.capabilityIds ?? [])],
+      proposalIds: [...(task.references?.proposalIds ?? [])],
+      branchIds: [...(task.references?.branchIds ?? [])],
       routes: [...(task.references?.routes ?? [])]
     },
     targets: (task.targets ?? []).map(target => ({ ...target }))

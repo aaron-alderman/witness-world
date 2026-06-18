@@ -527,8 +527,8 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Parse plugin IDs into edges.
 - [X] Parse capability IDs into edges.
 - [~] Parse file paths into source edges.
-- [ ] Parse proposal IDs into proposal edges.
-- [ ] Parse branch IDs into branch edges.
+- [X] Parse proposal IDs into proposal edges.
+- [X] Parse branch IDs into branch edges.
 - [~] Parse test command blocks into `testGate` suggestions.
 - [X] Add tests for Markdown ingestion.
 - [X] Add tests for this roadmap document becoming doc/task nodes.
@@ -551,7 +551,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Add MCP view `platform.read { view: "docs" }`.
 - [X] Add tests that code changes mark governing docs stale.
 - [X] Add tests that doc edits restore freshness after validation.
-- [L] Current doc freshness is branch-heuristic and dependency-edge backed for governed docs, plugin IDs, capability IDs, route mentions, and modeled file references inside Markdown. Proposal IDs, branch IDs, generic source-file nodes, and test-failure freshness invalidation remain open follow-on work.
+- [L] Current doc freshness is branch-heuristic and dependency-edge backed for governed docs, plugin IDs, capability IDs, route mentions, explicit `proposal.*` / `proposal:` references, explicit `branch:` references, and modeled file references inside Markdown. Generic source-file nodes and test-failure freshness invalidation remain open follow-on work.
 
 ### 3.4 LLM Documentation As It Goes
 

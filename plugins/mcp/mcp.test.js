@@ -27,6 +27,7 @@ function normalizePlatformParity(value) {
       key === "witness"
       || key === "startWitness"
       || key === "finishWitness"
+      || key === "summaries"
       || key === "createdAt"
       || key === "updatedAt"
       || key === "capturedAt"
