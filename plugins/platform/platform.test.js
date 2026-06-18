@@ -155,6 +155,7 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   assert.equal(model.nodes.some(node => node.id === "testEnvironment:local-node" && node.kind === "testEnvironment"), true);
   assert.equal(model.nodes.some(node => node.id === "testEnvironment:local-browser" && node.kind === "testEnvironment"), true);
   assert.equal(model.edges.some(edge => edge.from === "surface:platform" && edge.rel === "authoredBy" && edge.to === "rvm:plugins/platform/platform-console.rvm"), true);
+  assert.equal(model.edges.some(edge => edge.from === "surface:platform" && edge.rel === "styledBy" && edge.to === "wcss:plugins/platform/platform-console.wcss"), true);
   assert.equal(model.edges.some(edge => edge.from === "doc:docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" && edge.rel === "references" && edge.to === "plugin.platform"), true);
   assert.equal(model.nodes.some(node => node.kind === "testGate" && node.id.includes("plugins/platform/platform.test.js")), true);
   assert.equal(model.edges.some(edge => edge.from === "gate:plugins/platform/platform.test.js" && edge.rel === "usesBoundary" && edge.to === "boundary:testRunner.platform"), true);
@@ -166,6 +167,33 @@ test("platform model merges runtime diagnostics with repo inventory", async () =
   assert.equal(Array.isArray(model.docTasks), true);
   assert.equal(Array.isArray(model.roadmapTasks), true);
   assert.equal(model.roadmapTasks.some(task => task.doc === "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md"), true);
+});
+
+test("platform model emits a gap when a platform surface lacks modeled RVM or WCSS source", async () => {
+  const model = await buildPlatformModel({
+    diagnostics: {
+      activeProfile: "full",
+      activeBundles: [{ id: "bundle-platform", displayName: "Platform Self Model" }],
+      providedCapabilities: ["platform.self"],
+      routes: [],
+      surfaces: [
+        { id: "surface:platform", href: "/platform" },
+        { id: "surface:platform-secondary", href: "/platform/secondary" }
+      ],
+      plugins: {
+        activePluginIds: ["plugin.platform"],
+        effectivePluginIds: ["plugin.platform"],
+        rejectedPlugins: []
+      }
+    },
+    project: () => []
+  });
+
+  const missingSourceGap = model.gaps.find(gap => gap.id === "gap.platform-sources.surface:platform-secondary");
+  assert.ok(missingSourceGap);
+  assert.equal(missingSourceGap.kind, "missing-platform-source");
+  assert.deepEqual(missingSourceGap.missingSourceKinds, ["rvmSource", "wcssSource"]);
+  assert.equal(model.gaps.some(gap => gap.target === "surface:platform"), false);
 });
 
 test("platform model promotes runtime snapshot diagnostics into revision and build nodes", async () => {

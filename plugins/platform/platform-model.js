@@ -1080,6 +1080,26 @@ function buildGaps(nodes, edges, { branches = [], changeSets = [], testGateProje
         recommendedProposal: null
       });
     }
+    if (node.kind === "surface" && String(node.id).startsWith("surface:platform")) {
+      const linkedSourceKinds = new Set(
+        (outgoing.get(node.id) ?? [])
+          .filter(edge => edge.rel === "authoredBy" || edge.rel === "styledBy")
+          .map(edge => nodes.get(edge.to)?.kind ?? null)
+          .filter(Boolean)
+      );
+      const missingSourceKinds = ["rvmSource", "wcssSource"].filter(kind => !linkedSourceKinds.has(kind));
+      if (missingSourceKinds.length) {
+        gaps.push({
+          id: `gap.platform-sources.${node.id}`,
+          severity: "low",
+          kind: "missing-platform-source",
+          target: node.id,
+          missingSourceKinds,
+          reason: `${node.id} is missing modeled platform source for ${missingSourceKinds.join(" and ")}.`,
+          recommendedProposal: null
+        });
+      }
+    }
   }
   gaps.push(...buildDependencyGraphMissGaps(branches, changeSets, testGateProjection));
   return gaps.sort((a, b) => a.severity.localeCompare(b.severity) || a.id.localeCompare(b.id));
@@ -2544,7 +2564,13 @@ export async function buildPlatformModel({
       status: "authored"
     });
     addEdge(edges, "plugin.platform", "declares", authoredSource.id, "source");
-    addEdge(edges, "surface:platform", "authoredBy", authoredSource.id, "source");
+    addEdge(
+      edges,
+      "surface:platform",
+      authoredSource.kind === "wcssSource" ? "styledBy" : "authoredBy",
+      authoredSource.id,
+      "source"
+    );
   }
 
   for (const proposal of proposals) {

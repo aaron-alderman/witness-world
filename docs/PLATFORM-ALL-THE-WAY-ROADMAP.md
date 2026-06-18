@@ -1190,8 +1190,9 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Build a renderer that can consume RVM surface declarations for internal platform pages.
 - [ ] Replace hand-authored HTML sections with rendered RVM surface tree.
 - [ ] Keep tests proving RVM identity and WCSS lowering.
-- [ ] Add platform gap when a platform page lacks RVM/WCSS source.
+- [X] Add platform gap when a platform page lacks RVM/WCSS source.
 - [ ] Add platform gap when generated CSS differs from WCSS source.
+- [L] The current gap is intentionally narrow: it applies to modeled platform surfaces with ids beginning `surface:platform` and checks for attached `rvmSource` and `wcssSource` graph edges (`authoredBy` / `styledBy`). It catches platform pages that drift away from authored source ownership without claiming the later rendered-RVM or generated-CSS parity work is done.
 
 ### 12.3 MCP Parity
 
