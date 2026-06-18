@@ -1441,9 +1441,9 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
   const relatedSurface = authoredChildSurface(surface, "PlatformWorkflowRelatedPanel");
   const snapshotSurface = authoredChildSurface(surface, "PlatformWorkflowSnapshotHistory");
   const editSurface = authoredChildSurface(surface, "PlatformWorkflowEditHistory");
-  const branchIdPrefixes = surfaceIdPrefixes(surface, "branchIdPrefixes", ["branch:"]);
-  const changeSetIdPrefixes = surfaceIdPrefixes(surface, "changeSetIdPrefixes", ["changeSet:", "changeset."]);
-  const proposalIdPrefixes = surfaceIdPrefixes(surface, "proposalIdPrefixes", ["proposal:"]);
+  const branchIdPrefixes = surfaceIdPrefixes(surface, "branchIdPrefixes");
+  const changeSetIdPrefixes = surfaceIdPrefixes(surface, "changeSetIdPrefixes");
+  const proposalIdPrefixes = surfaceIdPrefixes(surface, "proposalIdPrefixes");
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No workflow rows are projected yet." });
   if (recordMatchesIdPrefixes(detail, branchIdPrefixes)) {
     const branch = detail;
@@ -1644,14 +1644,14 @@ function renderVerificationDetail(surface, detail, model, ctx) {
   const suiteSummarySurface = authoredChildSurface(surface, "PlatformVerificationSuiteSummary");
   const failingCasesSurface = authoredChildSurface(surface, "PlatformVerificationFailingCases");
   const regressionSurface = authoredChildSurface(surface, "PlatformVerificationRegressionSummary");
-  const verificationPolicyIdPrefixes = surfaceIdPrefixes(surface, "verificationPolicyIdPrefixes", ["verificationPolicy:"]);
-  const verificationQueueIdPrefixes = surfaceIdPrefixes(surface, "verificationQueueIdPrefixes", ["verificationQueue:"]);
-  const verificationExecutionIdPrefixes = surfaceIdPrefixes(surface, "verificationExecutionIdPrefixes", ["verificationExecution:"]);
-  const gateIdPrefixes = surfaceIdPrefixes(surface, "gateIdPrefixes", ["gate:"]);
-  const runtimeRevisionIdPrefixes = surfaceIdPrefixes(surface, "runtimeRevisionIdPrefixes", ["runtimeRevision:", "backendRevision:", "frontendRevision:"]);
-  const candidateSnapshotIdPrefixes = surfaceIdPrefixes(surface, "candidateSnapshotIdPrefixes", ["candidateSnapshot:"]);
-  const testRunIdPrefixes = surfaceIdPrefixes(surface, "testRunIdPrefixes", ["testRun:"]);
-  const testReportIdPrefixes = surfaceIdPrefixes(surface, "testReportIdPrefixes", ["testReport:"]);
+  const verificationPolicyIdPrefixes = surfaceIdPrefixes(surface, "verificationPolicyIdPrefixes");
+  const verificationQueueIdPrefixes = surfaceIdPrefixes(surface, "verificationQueueIdPrefixes");
+  const verificationExecutionIdPrefixes = surfaceIdPrefixes(surface, "verificationExecutionIdPrefixes");
+  const gateIdPrefixes = surfaceIdPrefixes(surface, "gateIdPrefixes");
+  const runtimeRevisionIdPrefixes = surfaceIdPrefixes(surface, "runtimeRevisionIdPrefixes");
+  const candidateSnapshotIdPrefixes = surfaceIdPrefixes(surface, "candidateSnapshotIdPrefixes");
+  const testRunIdPrefixes = surfaceIdPrefixes(surface, "testRunIdPrefixes");
+  const testReportIdPrefixes = surfaceIdPrefixes(surface, "testReportIdPrefixes");
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No verification rows are projected yet." });
   if (recordMatchesIdPrefixes(detail, verificationPolicyIdPrefixes)) {
     const policy = detail;
@@ -1906,11 +1906,11 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
   const relatedSurface = authoredChildSurface(surface, "PlatformKnowledgeRelatedPanel");
   const sectionsSurface = authoredChildSurface(surface, "PlatformKnowledgeSections");
   const tasksSurface = authoredChildSurface(surface, "PlatformKnowledgeTasks");
-  const documentPathField = surfacePropText(surface, "documentPathField", "path");
-  const roadmapTaskIdPrefixes = surfaceIdPrefixes(surface, "roadmapTaskIdPrefixes", ["roadmapTask:"]);
-  const roadmapTaskFallbackField = surfacePropText(surface, "roadmapTaskFallbackField", "doc");
-  const epicIdPrefixes = surfaceIdPrefixes(surface, "epicIdPrefixes", ["epic:"]);
-  const featureIdPrefixes = surfaceIdPrefixes(surface, "featureIdPrefixes", ["feature:"]);
+  const documentPathField = surfacePropText(surface, "documentPathField", "");
+  const roadmapTaskIdPrefixes = surfaceIdPrefixes(surface, "roadmapTaskIdPrefixes");
+  const roadmapTaskFallbackField = surfacePropText(surface, "roadmapTaskFallbackField", "");
+  const epicIdPrefixes = surfaceIdPrefixes(surface, "epicIdPrefixes");
+  const featureIdPrefixes = surfaceIdPrefixes(surface, "featureIdPrefixes");
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No knowledge rows are projected yet." });
   if (resolveFieldPath(detail, documentPathField)) {
     const doc = detail;
@@ -2012,8 +2012,8 @@ function renderSignalDetail(surface, detail, model, ctx) {
   const primarySurface = authoredChildSurface(surface, "PlatformSignalPrimaryPanel");
   const relatedSurface = authoredChildSurface(surface, "PlatformSignalRelatedPanel");
   const relationshipsSurface = authoredChildSurface(surface, "PlatformSignalRelationships");
-  const gapIdPrefixes = surfaceIdPrefixes(surface, "gapIdPrefixes", ["gap."]);
-  const signalNodeKinds = surfaceValueList(surface, "signalNodeKinds", ["telemetryMetric", "defectCluster", "boundary"]);
+  const gapIdPrefixes = surfaceIdPrefixes(surface, "gapIdPrefixes");
+  const signalNodeKinds = surfaceValueList(surface, "signalNodeKinds");
   if (!detail) return renderSurfaceEmptyCard(surface, { title: "Detail", message: "No signal rows are projected yet." });
   if (recordMatchesIdPrefixes(detail, gapIdPrefixes)) {
     const gap = detail;
@@ -2212,35 +2212,35 @@ function renderAuthoredDetailSourceSection(surface, model, ctx) {
     case "workflow":
       return renderSurfaceFrame(surface, renderWorkflowDetail(
         surface,
-        findAuthoredDetailBySources(surface, model, ctx.id, ["branches", "changeSets", "proposals"]),
+        findAuthoredDetailBySources(surface, model, ctx.id),
         model,
         ctx
       ));
     case "verification":
       return renderSurfaceFrame(surface, renderVerificationDetail(
         surface,
-        findAuthoredDetailBySources(surface, model, ctx.id, ["verificationPolicies", "verificationQueue", "verificationExecutions", "testGates", "runtimeRevisions", "testRuns", "testReports", "candidateSnapshots"]),
+        findAuthoredDetailBySources(surface, model, ctx.id),
         model,
         ctx
       ));
     case "knowledge":
       return renderSurfaceFrame(surface, renderKnowledgeDetail(
         surface,
-        findAuthoredDetailBySources(surface, model, ctx.id, ["docs", "roadmapTasks", "epics", "features"]),
+        findAuthoredDetailBySources(surface, model, ctx.id),
         model,
         ctx
       ));
     case "signals":
       return renderSurfaceFrame(surface, renderSignalDetail(
         surface,
-        findAuthoredDetailBySources(surface, model, ctx.id, ["gaps", "telemetryMetric", "defectCluster", "boundary"]),
+        findAuthoredDetailBySources(surface, model, ctx.id),
         model,
         ctx
       ));
     case "model":
       return renderSurfaceFrame(surface, renderModelDetail(
         surface,
-        findAuthoredDetailBySources(surface, model, ctx.id, ["nodes"]),
+        findAuthoredDetailBySources(surface, model, ctx.id),
         model,
         ctx
       ));

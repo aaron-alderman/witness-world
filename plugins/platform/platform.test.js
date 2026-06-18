@@ -807,6 +807,9 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(verificationDetailSurface);
   assert.equal(verificationDetailSurface.props.detailSource, "verification");
   assert.equal(verificationDetailSurface.props.detailSelectionSources, "verificationPolicies|verificationQueue|verificationExecutions|testGates|runtimeRevisions|testRuns|testReports|candidateSnapshots");
+  assert.equal(verificationDetailSurface.props.verificationPolicyIdPrefixes, "verificationPolicy:");
+  assert.equal(verificationDetailSurface.props.verificationQueueIdPrefixes, "verificationQueue:");
+  assert.equal(verificationDetailSurface.props.verificationExecutionIdPrefixes, "verificationExecution:");
   assert.equal(verificationDetailSurface.props.gateIdPrefixes, "gate:");
   assert.equal(verificationDetailSurface.props.runtimeRevisionIdPrefixes, "runtimeRevision:|backendRevision:|frontendRevision:");
   assert.equal(verificationDetailSurface.props.candidateSnapshotIdPrefixes, "candidateSnapshot:");
