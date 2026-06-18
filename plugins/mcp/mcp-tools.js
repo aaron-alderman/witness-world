@@ -392,9 +392,9 @@ const TOOL_DEFINITIONS = [
   {
     name: "platform.read",
     title: "Platform Read",
-    description: "Read the platform self-model, gaps, profiles, branches, change sets, test gates, red/green test state, test runs, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
+    description: "Read the platform self-model, gaps, docs, profiles, branches, change sets, test gates, red/green test state, test runs, candidate snapshots, runtime revisions, plugin, bundle, capability, MCP, or verification gate views.",
     inputSchema: jsonSchemaObject({
-      view: { type: "string", enum: ["model", "gaps", "profiles", "plugin", "bundle", "capability", "mcp", "gates", "proposals", "branches", "changeSets", "testGates", "testRedGreen", "testRuns", "candidateSnapshots", "runtimeRevisions"] },
+      view: { type: "string", enum: ["model", "gaps", "docs", "profiles", "plugin", "bundle", "capability", "mcp", "gates", "proposals", "branches", "changeSets", "testGates", "testRedGreen", "testRuns", "candidateSnapshots", "runtimeRevisions"] },
       id: { type: "string" }
     }, ["view"]),
     scope(args) {
@@ -413,6 +413,35 @@ const TOOL_DEFINITIONS = [
         method: "GET",
         path: "/api/platform-model",
         query
+      });
+    }
+  },
+  {
+    name: "platform.docs",
+    title: "Platform Docs",
+    description: "Inspect governed platform docs, sections, tasks, and roadmap tasks through the shared platform handlers.",
+    inputSchema: jsonSchemaObject({
+      operation: { type: "string", enum: ["list", "read"] },
+      id: { type: "string" }
+    }),
+    scope(args) {
+      return scopeResult({ targets: args?.id ? [args.id] : [] });
+    },
+    async run({ args, callHandler }) {
+      const operation = args.operation || "list";
+      if (operation !== "list" && operation !== "read") {
+        return errorToolResult("unknown platform docs operation", { operation });
+      }
+      const docId = operation === "read" ? (args.id || "") : (args.id || "");
+      if (operation === "read" && !docId) return errorToolResult("doc id is required", { operation });
+      return runJsonHandler(callHandler, {
+        handler: "platform.model.read",
+        method: "GET",
+        path: "/api/platform-model",
+        query: {
+          view: "docs",
+          ...(docId ? { id: docId } : {})
+        }
       });
     }
   },

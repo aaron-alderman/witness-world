@@ -619,6 +619,7 @@ test("platform model filters support MCP views", async () => {
   assert.equal(docs.docs[0].path, "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md");
   assert.equal(docs.docSections.length > 0, true);
   assert.equal(docs.docTasks.length > 0, true);
+  assert.equal(docs.roadmapTasks.length > 0, true);
   assert.equal(gates.gates.every(node => node.kind === "testGate"), true);
   assert.equal(testGates.testGates.length, 1);
   assert.equal(testGates.testGates[0].id, "gate:test/runtime-profile.test.js");

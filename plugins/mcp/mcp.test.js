@@ -20,6 +20,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(toolNames.includes("world.read"), true);
   assert.equal(toolNames.includes("authoring.write"), true);
   assert.equal(toolNames.includes("platform.read"), true);
+  assert.equal(toolNames.includes("platform.docs"), true);
   assert.equal(toolNames.includes("platform.branch"), true);
   assert.equal(toolNames.includes("platform.proposal"), true);
   assert.equal(toolNames.includes("platform.changeSet"), true);
@@ -33,11 +34,13 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   const worldRead = listSupportedMcpTools().find(tool => tool.name === "world.read");
   const authoringWrite = listSupportedMcpTools().find(tool => tool.name === "authoring.write");
   const platformRead = listSupportedMcpTools().find(tool => tool.name === "platform.read");
+  const platformDocs = listSupportedMcpTools().find(tool => tool.name === "platform.docs");
   const platformBranch = listSupportedMcpTools().find(tool => tool.name === "platform.branch");
   const platformProposal = listSupportedMcpTools().find(tool => tool.name === "platform.proposal");
   const platformChangeSet = listSupportedMcpTools().find(tool => tool.name === "platform.changeSet");
   const platformTest = listSupportedMcpTools().find(tool => tool.name === "platform.test");
   assert.equal(worldRead.inputSchema.properties.view.enum.includes("authoringMatrix"), true);
+  assert.equal(platformRead.inputSchema.properties.view.enum.includes("docs"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("gaps"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("proposals"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("branches"), true);
@@ -46,6 +49,7 @@ test("mcp plugin owns protocol constants and supported tool catalog", () => {
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("testRuns"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("candidateSnapshots"), true);
   assert.equal(platformRead.inputSchema.properties.view.enum.includes("runtimeRevisions"), true);
+  assert.deepEqual(platformDocs.inputSchema.properties.operation.enum, ["list", "read"]);
   assert.deepEqual(platformBranch.inputSchema.properties.operation.enum, ["list", "read", "create"]);
   assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "parentBranchId"), true);
   assert.equal(Object.prototype.hasOwnProperty.call(platformBranch.inputSchema.properties, "epic"), true);
@@ -98,10 +102,12 @@ test("mcp plugin owns origin, principal, and scope support services", () => {
   assert.equal(services.mcpToolAvailable("db.sql"), true);
   assert.equal(services.mcpToolAvailable("storage.blob"), false);
   assert.equal(services.mcpToolAvailable("platform.read"), false);
+  assert.equal(services.mcpToolAvailable("platform.docs"), false);
   assert.equal(services.mcpToolAvailable("platform.changeSet"), false);
   assert.equal(services.mcpToolAvailable("platform.test"), false);
   projected.backendCapabilities.add("platform.self");
   assert.equal(services.mcpToolAvailable("platform.read"), true);
+  assert.equal(services.mcpToolAvailable("platform.docs"), true);
   assert.equal(services.mcpToolAvailable("platform.changeSet"), true);
   assert.equal(services.mcpToolAvailable("platform.test"), true);
   assert.deepEqual(
@@ -210,6 +216,34 @@ test("platform MCP read tool routes runtime revision view through platform model
   assert.equal(calls.at(-1).path, "/api/platform-model");
   assert.equal(calls.at(-1).query.view, "testRedGreen");
   assert.equal(calls.at(-1).query.id, "branch.demo");
+});
+
+test("platform MCP docs tool routes docs and roadmap task reads through platform model handlers", async () => {
+  const calls = [];
+  const callHandler = async request => {
+    calls.push(request);
+    return { status: 200, body: { ok: true, handler: request.handler, view: request.query?.view ?? null, id: request.query?.id ?? null } };
+  };
+
+  const listed = await executeMcpTool("platform.docs", {
+    args: { operation: "list" },
+    callHandler
+  });
+  assert.equal(listed.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.model.read");
+  assert.equal(calls.at(-1).path, "/api/platform-model");
+  assert.equal(calls.at(-1).query.view, "docs");
+  assert.equal(calls.at(-1).query.id, undefined);
+
+  const read = await executeMcpTool("platform.docs", {
+    args: { operation: "read", id: "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md" },
+    callHandler
+  });
+  assert.equal(read.isError, false);
+  assert.equal(calls.at(-1).handler, "platform.model.read");
+  assert.equal(calls.at(-1).path, "/api/platform-model");
+  assert.equal(calls.at(-1).query.view, "docs");
+  assert.equal(calls.at(-1).query.id, "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md");
 });
 
 test("platform MCP branch tool routes through platform branch handlers", async () => {

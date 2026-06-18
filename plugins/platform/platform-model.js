@@ -2400,6 +2400,7 @@ export function filterPlatformModel(model, view, id = null) {
       docs,
       docSections: model.docSections.filter(section => !id || docIds.has(section.doc) || section.id === id),
       docTasks: model.docTasks.filter(task => !id || docIds.has(task.doc) || task.id === id),
+      roadmapTasks: (model.roadmapTasks ?? []).filter(task => !id || docIds.has(task.doc) || task.id === id),
       summaries: model.summaries
     };
   }

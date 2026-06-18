@@ -1193,11 +1193,12 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] `platform.read { view: "testGates" }`
   - [X] `platform.read { view: "testRuns" }`
   - [X] `platform.test`
-  - [ ] `platform.docs`
+  - [X] `platform.docs`
   - [ ] `platform.telemetry`
   - [ ] `platform.defects`
   - [ ] `platform.roadmap`
 - [ ] Add tests for human/MCP parity.
+- [L] `platform.docs` now routes through the shared `/api/platform-model?view=docs` handler lane and returns governed docs, doc sections, doc tasks, and roadmap-task rows for the same modeled documentation surfaced on `/platform`. Dedicated telemetry, defect, and roadmap MCP lanes remain later work.
 
 ## Phase 13: Policy, Authority, And Safety
 

@@ -60,6 +60,7 @@ export function createMcpBundleSupportServices({
       case "notifications":
         return capabilities.has("jobs.queue") && (capabilities.has("notify.email") || capabilities.has("notify.sms"));
       case "platform.read":
+      case "platform.docs":
       case "platform.proposal":
       case "platform.changeSet":
       case "platform.test":
