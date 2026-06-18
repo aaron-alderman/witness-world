@@ -96,6 +96,63 @@ function platformModelTargetTitle(target, nodes) {
   return nodes.get(value)?.title || TEST_ENVIRONMENT_TITLES[value] || value;
 }
 
+function repoFileTargetId(relativePath) {
+  const value = slash(relativePath);
+  if (!value) return null;
+  if (value.endsWith(".md")) return `doc:${value}`;
+  if (value.endsWith(".rvm")) return `rvm:${value}`;
+  if (value.endsWith(".wcss")) return `wcss:${value}`;
+  if (value.endsWith(".wtoml")) return `wtoml:${value}`;
+  if (value.endsWith(".json")) return `json:${value}`;
+  return `file:${value}`;
+}
+
+function repoFileNodeKind(relativePath) {
+  const value = slash(relativePath).toLowerCase();
+  if (!value) return "fileSource";
+  if (value.startsWith("test/") || value.includes(".test.") || value.includes(".spec.")) return "testFile";
+  if (value.endsWith(".rvm")) return "rvmSource";
+  if (value.endsWith(".wcss")) return "wcssSource";
+  if (value.endsWith(".wtoml")) return "wtomlSource";
+  if (value.endsWith(".json")) return "jsonSource";
+  return "fileSource";
+}
+
+function repoFileLifecycle(relativePath) {
+  const kind = repoFileNodeKind(relativePath);
+  if (kind === "testFile") return lifecycleForTest(slash(relativePath));
+  if (kind === "rvmSource" || kind === "wcssSource") return ["author", "observe", "steward"];
+  if (kind === "wtomlSource") return ["author", "transform", "execute", "steward"];
+  if (kind === "jsonSource") return ["author", "execute", "steward"];
+  const value = slash(relativePath).toLowerCase();
+  if (value.startsWith("plugins/")) return ["author", "execute", "steward"];
+  if (value.startsWith("src/")) return ["transform", "execute", "steward"];
+  if (value.startsWith("store/")) return ["execute", "steward"];
+  return ["author", "steward"];
+}
+
+function repoFileOwner(relativePath) {
+  const value = slash(relativePath);
+  const pluginMatch = value.match(/^plugins\/([^/]+)\//);
+  if (pluginMatch) return `plugin.${pluginMatch[1]}`;
+  if (value.startsWith("src/") || value.startsWith("store/")) return "runtime.core";
+  if (value.startsWith("test/")) return "tests";
+  if (value.startsWith("examples/")) return "examples";
+  if (value.startsWith("docs/")) return docOwnerForPath(value);
+  return null;
+}
+
+function repoFileReferenceKind(targetId, nodes) {
+  const kind = platformObjectKindForId(targetId, nodes);
+  if (kind === "doc") return "doc";
+  if (kind === "rvmSource") return "rvmSource";
+  if (kind === "wcssSource") return "wcssSource";
+  if (kind === "wtomlSource") return "wtomlSource";
+  if (kind === "jsonSource") return "jsonSource";
+  if (kind === "testFile") return "testFile";
+  return "fileSource";
+}
+
 function addNode(nodes, node) {
   const id = String(node.id || "");
   if (!id) return;
@@ -344,6 +401,9 @@ function platformObjectKindForId(targetId, nodes) {
   if (value.startsWith("doc:")) return "doc";
   if (value.startsWith("rvm:")) return "rvmSource";
   if (value.startsWith("wcss:")) return "wcssSource";
+  if (value.startsWith("wtoml:")) return "wtomlSource";
+  if (value.startsWith("json:")) return "jsonSource";
+  if (value.startsWith("file:")) return "fileSource";
   if (value.startsWith("branch:")) return "branch";
   if (value.startsWith("proposal:")) return "proposal";
   return "platformObject";
@@ -375,13 +435,9 @@ function resolveMarkdownReferenceTargets(references = {}, nodes, routeIdsByMatch
   for (const proposalId of references.proposalIds ?? []) pushTarget("proposal", `proposal:${proposalId}`);
   for (const branchId of references.branchIds ?? []) pushTarget("branch", `branch:${branchId}`);
   for (const filePath of references.filePaths ?? []) {
-    const targetId = nodes.has(`doc:${filePath}`)
-      ? `doc:${filePath}`
-      : (nodes.has(`rvm:${filePath}`)
-        ? `rvm:${filePath}`
-        : (nodes.has(`wcss:${filePath}`) ? `wcss:${filePath}` : null));
-    if (!targetId) continue;
-    pushTarget(targetId.startsWith("doc:") ? "doc" : (targetId.startsWith("rvm:") ? "rvmSource" : "wcssSource"), targetId);
+    const targetId = repoFileTargetId(filePath);
+    if (!targetId || !nodes.has(targetId)) continue;
+    pushTarget(repoFileReferenceKind(targetId, nodes), targetId);
   }
   return targets;
 }
@@ -1142,9 +1198,8 @@ function buildTestGateSourceHints(relativePath, source, nodes, routeIdsByMatcher
   for (const dependency of sourceDependencies) {
     const system = summarizePlatformPathSystem(dependency);
     if (nodes.has(system.id)) protectedObjects.add(system.id);
-    if (nodes.has(`doc:${dependency}`)) protectedObjects.add(`doc:${dependency}`);
-    if (nodes.has(`rvm:${dependency}`)) protectedObjects.add(`rvm:${dependency}`);
-    if (nodes.has(`wcss:${dependency}`)) protectedObjects.add(`wcss:${dependency}`);
+    const targetId = repoFileTargetId(dependency);
+    if (targetId && nodes.has(targetId)) protectedObjects.add(targetId);
   }
   return {
     sourceDependencies,
@@ -1583,9 +1638,7 @@ function buildTestGateRows(
   function inferredAffectedTargetsForChangedPaths(changedPaths = []) {
     const targets = new Set();
     for (const changedPath of changedPaths.map(String)) {
-      pushTarget(targets, `doc:${changedPath}`);
-      pushTarget(targets, `rvm:${changedPath}`);
-      pushTarget(targets, `wcss:${changedPath}`);
+      pushTarget(targets, repoFileTargetId(changedPath));
       pushTarget(targets, `gate:${changedPath}`);
       if (changedPath === "store/seeds/runtime-profiles.json") {
         pushTarget(targets, "profile:full");
@@ -2310,6 +2363,28 @@ export async function buildPlatformModel({
   const roadmapDocPath = "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md";
   const rawRoadmapTasks = parsedDocs.find(doc => doc.path === roadmapDocPath)?.tasks ?? [];
 
+  const referencedRepoPaths = unique(parsedDocs.flatMap(doc => doc.references?.filePaths ?? []));
+  for (const filePath of referencedRepoPaths) {
+    const targetId = repoFileTargetId(filePath);
+    if (!targetId || targetId.startsWith("doc:")) continue;
+    try {
+      await fs.stat(path.join(repoRoot, filePath));
+    } catch {
+      continue;
+    }
+    addNode(nodes, {
+      id: targetId,
+      kind: repoFileNodeKind(filePath),
+      title: filePath,
+      lifecycle: repoFileLifecycle(filePath),
+      owner: repoFileOwner(filePath),
+      status: "authored",
+      source: filePath
+    });
+    const owner = repoFileOwner(filePath);
+    if (owner && nodes.has(owner)) addEdge(edges, owner, "declares", targetId, "source");
+  }
+
   for (const authoredSource of PLATFORM_AUTHORED_SOURCES) {
     addNode(nodes, {
       ...authoredSource,
@@ -2497,9 +2572,8 @@ export async function buildPlatformModel({
       if (nodes.has(`capability:${capabilityId}`)) addEdge(edges, doc.id, "references", `capability:${capabilityId}`, "docs");
     }
     for (const filePath of doc.references.filePaths) {
-      if (nodes.has(`doc:${filePath}`)) addEdge(edges, doc.id, "references", `doc:${filePath}`, "docs");
-      if (nodes.has(`rvm:${filePath}`)) addEdge(edges, doc.id, "references", `rvm:${filePath}`, "docs");
-      if (nodes.has(`wcss:${filePath}`)) addEdge(edges, doc.id, "references", `wcss:${filePath}`, "docs");
+      const targetId = repoFileTargetId(filePath);
+      if (targetId && nodes.has(targetId)) addEdge(edges, doc.id, "references", targetId, "docs");
     }
   }
   for (const reference of docReferences) {

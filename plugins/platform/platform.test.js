@@ -727,6 +727,9 @@ test("roadmap task projections link resolved platform targets", async () => {
   const pluginTask = model.roadmapTasks.find(task => task.title === "Treat `plugin.platform` as the existing home for this work.");
   const routeTask = model.roadmapTasks.find(task => task.title === "Treat `/platform` as the human surface for platform self-inspection.");
   const sourceTask = model.roadmapTasks.find(task => task.title === "Read `plugins/platform/platform-console.rvm`.");
+  const fileTask = model.roadmapTasks.find(task => task.title === "Treat `plugins/platform/platform-page.js` as the current HTML/JS console renderer.");
+  const jsonTask = model.roadmapTasks.find(task => task.title === "Treat `store/seeds/runtime-profiles.json` as the runtime profile seed source.");
+  const testFileTask = model.roadmapTasks.find(task => task.title === "Treat `test/runtime-profile.test.js` as the profile isolation/exposure test suite.");
 
   assert.ok(pluginTask);
   assert.equal(pluginTask.targets.some(target => target.targetId === "plugin.platform"), true);
@@ -747,6 +750,27 @@ test("roadmap task projections link resolved platform targets", async () => {
   assert.equal(sourceTask.evidence.status !== "unlinked", true);
   assert.equal(sourceTask.derivedStatus !== "untracked", true);
   assert.equal(sourceTask.evidence.targetCount > 0, true);
+
+  assert.ok(fileTask);
+  assert.equal(fileTask.targets.some(target => target.targetId === "file:plugins/platform/platform-page.js"), true);
+  assert.equal(fileTask.targets.some(target => target.targetKind === "fileSource"), true);
+  assert.equal(model.edges.some(edge => edge.from === fileTask.id && edge.rel === "targets" && edge.to === "file:plugins/platform/platform-page.js"), true);
+  assert.equal(fileTask.evidence.status !== "unlinked", true);
+  assert.equal(fileTask.evidence.gateIds.length > 0, true);
+
+  assert.ok(jsonTask);
+  assert.equal(jsonTask.targets.some(target => target.targetId === "json:store/seeds/runtime-profiles.json"), true);
+  assert.equal(jsonTask.targets.some(target => target.targetKind === "jsonSource"), true);
+  assert.equal(model.edges.some(edge => edge.from === jsonTask.id && edge.rel === "targets" && edge.to === "json:store/seeds/runtime-profiles.json"), true);
+  assert.equal(jsonTask.evidence.status !== "unlinked", true);
+  assert.equal(jsonTask.evidence.gateIds.length > 0, true);
+
+  assert.ok(testFileTask);
+  assert.equal(testFileTask.targets.some(target => target.targetId === "file:test/runtime-profile.test.js"), true);
+  assert.equal(testFileTask.targets.some(target => target.targetKind === "testFile"), true);
+  assert.equal(model.edges.some(edge => edge.from === testFileTask.id && edge.rel === "targets" && edge.to === "file:test/runtime-profile.test.js"), true);
+  assert.equal(testFileTask.evidence.status !== "unlinked", true);
+  assert.equal(testFileTask.evidence.gateIds.length > 0, true);
 });
 
 test("roadmap task evidence tracks linked targets, gates, and gaps without replacing markdown status", async () => {

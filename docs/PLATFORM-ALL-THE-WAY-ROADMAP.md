@@ -1086,7 +1086,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 ### 10.2 Executable Roadmaps
 
 - [X] Parse checkbox tasks from roadmap docs into platform task nodes.
-- [~] Link checkbox tasks to code/test/doc/platform objects.
+- [X] Link checkbox tasks to code/test/doc/platform objects.
 - [X] Track task status from platform evidence, not only Markdown text.
 - [ ] Add roadmap validation:
   - [ ] every feature has acceptance criteria
@@ -1094,7 +1094,7 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [ ] every feature has docs owner
   - [ ] every epic has branch/proposal status
 - [ ] Add proposal target process `roadmap.update`.
-- [L] Roadmap checkbox tasks are now modeled as task rows and graph nodes, and tasks that reference existing platform objects in Markdown now link to resolved plugin, route, capability, and modeled doc/RVM/WCSS targets. Generic unresolved source files remain later work.
+- [L] Roadmap checkbox tasks are now modeled as task rows and graph nodes, and Markdown references now resolve to existing plugins, routes, capabilities, proposal IDs, branch IDs, governed docs, authored RVM/WCSS sources, JSON/WTOML config sources, and generic repo file/test nodes when the referenced workspace path exists. Nonexistent or non-repo tokens remain intentionally unlinked.
 - [L] Roadmap and doc tasks now derive an evidence-backed status (`blocked`, `in-progress`, `ready`, `done`, `untracked`) from linked platform targets, modeled protecting gates, latest gate results, and open target gaps. Markdown checkbox state remains visible and authoritative as authored intent, while derived status tracks the live platform evidence separately.
 - [L] `/platform` now includes an explicit roadmap-detail panel backed by `/api/platform-model?view=roadmap&id=...` with cached fallback to the in-page model state. The broader epic-centric roadmap planning view remains later work.
 - [ ] Add proposal target process `epic.create`.
@@ -1202,9 +1202,9 @@ This section is the execution contract for a fresh agent. Read it before startin
   - [X] `platform.roadmap`
 - [X] Add tests for human/MCP parity.
 - [L] `platform.docs` now routes through the shared `/api/platform-model?view=docs` handler lane and returns governed docs, doc sections, doc tasks, and roadmap-task rows for the same modeled documentation surfaced on `/platform`. Dedicated telemetry, defect, and roadmap MCP lanes remain later work.
-- [L] `platform.roadmap` now routes through the shared `/api/platform-model?view=roadmap` handler lane and exposes the currently implemented roadmap surface: the ingested `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md` doc, its sections, and checkbox task rows. This is not yet the broader Phase 10 planning model with first-class epics, milestones, features, or evidence-backed task status.
+- [L] `platform.roadmap` now routes through the shared `/api/platform-model?view=roadmap` handler lane and exposes the currently implemented roadmap surface: the ingested `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md` doc, its sections, checkbox task rows, and evidence-backed derived task status. This is not yet the broader Phase 10 planning model with first-class epics, milestones, or features.
 - [L] Current parity coverage compares normalized direct platform-handler responses against MCP tool results for the implemented docs, roadmap, branch, change-set, proposal-create, and test-run/list/read flows. Future telemetry, defect, and broader planning-model MCP lanes will need their own parity extensions as those surfaces land.
-- [L] The live docs model now projects explicit `docIndex`, `docReference`, `docDependencies`, and `docsByPlatformObject` rows from governed targets and resolved Markdown references to routes, plugins, capabilities, and modeled doc/RVM/WCSS sources. Proposal IDs, branch IDs, and generic unresolved source-file references remain later work.
+- [L] The live docs model now projects explicit `docIndex`, `docReference`, `docDependencies`, and `docsByPlatformObject` rows from governed targets and resolved Markdown references to routes, plugins, capabilities, proposal IDs, branch IDs, governed docs, authored RVM/WCSS sources, JSON/WTOML config sources, and generic repo file/test nodes when the referenced workspace path exists.
 
 ## Phase 13: Policy, Authority, And Safety
 
