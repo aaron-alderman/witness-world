@@ -479,6 +479,28 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(knowledgeTaskSurface);
   assert.equal(knowledgeTaskSurface.props.columns, "Status|Task|Line|Section");
   assert.equal(knowledgeTaskSurface.props.rowLimit, "20");
+  const knowledgePrimarySurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgePrimaryPanel");
+  assert.ok(knowledgePrimarySurface);
+  assert.equal(knowledgePrimarySurface.props.documentCardTitle, "Document Detail");
+  assert.match(knowledgePrimarySurface.props.documentFields, /Document=path@concept/);
+  assert.match(knowledgePrimarySurface.props.roadmapTaskFields, /Evidence=evidenceSummary/);
+  assert.match(knowledgePrimarySurface.props.epicFields, /Roadmap=roadmapId@concept/);
+  assert.match(knowledgePrimarySurface.props.featureFields, /Epic=epicId@concept/);
+  const knowledgeRelatedSurface = knowledgeDetailSurface.childSurfaces.find(surface => surface.name === "PlatformKnowledgeRelatedPanel");
+  assert.ok(knowledgeRelatedSurface);
+  assert.equal(knowledgeRelatedSurface.props.documentLinkCards, "Referenced Routes=references.routes|Referenced Plugins=references.pluginIds|Referenced Files=references.filePaths");
+  assert.equal(knowledgeRelatedSurface.props.roadmapTaskLinkCards, "Linked Targets=targets@targetId");
+  assert.equal(knowledgeRelatedSurface.props.epicLinkCards, "Branches=branchIds|Features=featureIds|Verification Gates=gateIds|Docs=docIds");
+  assert.equal(knowledgeRelatedSurface.props.featureLinkCards, "Branches=branchIds|Verification Gates=gateIds|Docs=docIds");
+  const signalPrimarySurface = signalDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalPrimaryPanel");
+  assert.ok(signalPrimarySurface);
+  assert.equal(signalPrimarySurface.props.gapCardTitle, "Gap Detail");
+  assert.match(signalPrimarySurface.props.gapFields, /Target=target@concept/);
+  assert.match(signalPrimarySurface.props.signalFields, /Node=id@concept/);
+  const signalRelatedSurface = signalDetailSurface.childSurfaces.find(surface => surface.name === "PlatformSignalRelatedPanel");
+  assert.ok(signalRelatedSurface);
+  assert.equal(signalRelatedSurface.props.gapLinkCards, "Recommended Proposal=recommendedProposal");
+  assert.equal(signalRelatedSurface.props.gapTextCards, "Missing In Generated=missingInGenerated|Extra In Generated=extraInGenerated");
   const modelPage = layout.children.find(surface => surface.name === "PlatformModelPage");
   assert.ok(modelPage);
   const profileSurface = modelPage.childSurfaces.find(surface => surface.name === "PlatformProfileComparison");
@@ -496,6 +518,10 @@ test("platform console layout compiles authored top-level surface metadata from 
   assert.ok(modelRelationshipsSurface);
   assert.equal(modelRelationshipsSurface.props.columns, "From|Relation|To");
   assert.equal(modelRelationshipsSurface.props.rowLimit, "20");
+  const modelPrimarySurface = modelDetailSurface.childSurfaces.find(surface => surface.name === "PlatformModelPrimaryPanel");
+  assert.ok(modelPrimarySurface);
+  assert.equal(modelPrimarySurface.props.objectCardTitle, "Platform Object Detail");
+  assert.match(modelPrimarySurface.props.objectFields, /Object=id@concept/);
 });
 
 test("platform delegated test-gate projectors discover gate catalog rows", async () => withRegisteredPluginProjectors(providers, async () => {

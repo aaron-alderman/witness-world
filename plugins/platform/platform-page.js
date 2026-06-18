@@ -492,6 +492,8 @@ function parseCardSpecs(raw) {
 function listValuesFromMode(value, mode = "text") {
   const items = Array.isArray(value) ? value : (value === undefined || value === null || value === "" ? [] : [value]);
   switch (mode) {
+    case "targetId":
+      return items.map(item => typeof item === "object" && item ? item.targetId || item.id || "" : item).filter(Boolean);
     case "path":
       return items.map(item => typeof item === "object" && item ? item.path || item.id || "" : item).filter(Boolean);
     case "errorMessage":
@@ -1193,29 +1195,33 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
     const doc = detail;
     const sections = (model.docSections ?? []).filter(section => section.doc === doc.path).slice(0, surfaceRowLimit(sectionsSurface, 20));
     const tasks = (model.docTasks ?? []).filter(task => task.doc === doc.path).slice(0, surfaceRowLimit(tasksSurface, 20));
-    const usedKeys = ["id", "path", "role", "owner", "status", "freshness", "sectionCount", "taskCount", "references"];
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "documentCardTitle", "documentFields", ctx, doc, "Document Detail", [
+      { label: "Document", valueHtml: renderConceptLink(ctx, doc.path, doc.path) },
+      { label: "Role", valueHtml: esc(doc.role || "") },
+      { label: "Owner", valueHtml: esc(doc.owner || "") },
+      { label: "Status", valueHtml: esc(doc.status || "") },
+      { label: "Freshness", valueHtml: esc(doc.freshness?.status || "") },
+      { label: "Sections", valueHtml: esc(doc.sectionCount ?? 0) },
+      { label: "Tasks", valueHtml: esc(doc.taskCount ?? 0) },
+      { label: "API resource", valueHtml: renderApiLink(doc.path) }
+    ]);
+    const usedKeys = [
+      ...(rootKeysFromSurfaceSchema(primarySurface, "documentFields").length
+        ? rootKeysFromSurfaceSchema(primarySurface, "documentFields")
+        : ["id", "path", "role", "owner", "status", "freshness", "sectionCount", "taskCount"]),
+      "references"
+    ];
     return `
       <section class="grid2">
         <div>
           ${renderSurfaceFrame(primarySurface, `
-            ${renderPropertyTable("Document Detail", [
-            { label: "Document", valueHtml: renderConceptLink(ctx, doc.path, doc.path) },
-            { label: "Role", valueHtml: esc(doc.role || "") },
-            { label: "Owner", valueHtml: esc(doc.owner || "") },
-            { label: "Status", valueHtml: esc(doc.status || "") },
-            { label: "Freshness", valueHtml: esc(doc.freshness?.status || "") },
-            { label: "Sections", valueHtml: esc(doc.sectionCount ?? 0) },
-            { label: "Tasks", valueHtml: esc(doc.taskCount ?? 0) },
-            { label: "API resource", valueHtml: renderApiLink(doc.path) }
-            ])}
+            ${renderPropertyCard(primaryCard)}
             ${renderLongTailProperties(ctx, doc, usedKeys)}
           `)}
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderLinksCard("Referenced Routes", ctx, doc.references?.routes ?? [])}
-            ${renderLinksCard("Referenced Plugins", ctx, doc.references?.pluginIds ?? [])}
-            ${renderLinksCard("Referenced Files", ctx, doc.references?.filePaths ?? [])}
+            ${renderCardSpecs(relatedSurface?.props?.documentLinkCards, ctx, doc, "links") || `${renderLinksCard("Referenced Routes", ctx, doc.references?.routes ?? [])}${renderLinksCard("Referenced Plugins", ctx, doc.references?.pluginIds ?? [])}${renderLinksCard("Referenced Files", ctx, doc.references?.filePaths ?? [])}`}
           `)}
         </div>
       </section>
@@ -1238,27 +1244,39 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
   }
   if (detail.id?.startsWith?.("roadmapTask:") || detail.doc) {
     const task = detail;
-    const usedKeys = ["id", "title", "status", "derivedStatus", "section", "doc", "line", "targets", "derivedSummary", "evidence"];
+    const taskRecord = {
+      ...task,
+      evidenceSummary: task.derivedSummary || task.evidence?.summary || ""
+    };
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "roadmapTaskCardTitle", "roadmapTaskFields", ctx, taskRecord, "Roadmap Task Detail", [
+      { label: "Task", valueHtml: renderConceptLink(ctx, task.id, task.title || task.id) },
+      { label: "Markdown status", valueHtml: esc(task.status || "") },
+      { label: "Derived status", valueHtml: esc(task.derivedStatus || "") },
+      { label: "Section", valueHtml: esc(task.section || "") },
+      { label: "Document", valueHtml: task.doc ? renderConceptLink(ctx, task.doc, task.doc) : "" },
+      { label: "Line", valueHtml: esc(task.line ?? "") },
+      { label: "Evidence", valueHtml: esc(task.derivedSummary || task.evidence?.summary || "") },
+      { label: "API resource", valueHtml: renderApiLink(task.id) }
+    ]);
+    const usedKeys = [
+      ...(rootKeysFromSurfaceSchema(primarySurface, "roadmapTaskFields").length
+        ? rootKeysFromSurfaceSchema(primarySurface, "roadmapTaskFields")
+        : ["id", "title", "status", "derivedStatus", "section", "doc", "line"]),
+      "targets",
+      "derivedSummary",
+      "evidence"
+    ];
     return `
       <section class="grid2">
         <div>
           ${renderSurfaceFrame(primarySurface, `
-            ${renderPropertyTable("Roadmap Task Detail", [
-            { label: "Task", valueHtml: renderConceptLink(ctx, task.id, task.title || task.id) },
-            { label: "Markdown status", valueHtml: esc(task.status || "") },
-            { label: "Derived status", valueHtml: esc(task.derivedStatus || "") },
-            { label: "Section", valueHtml: esc(task.section || "") },
-            { label: "Document", valueHtml: task.doc ? renderConceptLink(ctx, task.doc, task.doc) : "" },
-            { label: "Line", valueHtml: esc(task.line ?? "") },
-            { label: "Evidence", valueHtml: esc(task.derivedSummary || task.evidence?.summary || "") },
-            { label: "API resource", valueHtml: renderApiLink(task.id) }
-            ])}
+            ${renderPropertyCard(primaryCard)}
             ${renderLongTailProperties(ctx, task, usedKeys)}
           `)}
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderLinksCard("Linked Targets", ctx, (task.targets ?? []).map(target => target.targetId || target.id || "").filter(Boolean))}
+            ${renderCardSpecs(relatedSurface?.props?.roadmapTaskLinkCards, ctx, task, "links") || renderLinksCard("Linked Targets", ctx, (task.targets ?? []).map(target => target.targetId || target.id || "").filter(Boolean))}
           `)}
         </div>
       </section>
@@ -1266,58 +1284,65 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
   }
   if (detail.id?.startsWith?.("epic:")) {
     const epic = detail;
-    const usedKeys = ["id", "title", "status", "roadmapId", "branchIds", "featureIds", "gateIds", "docIds", "defectClusterIds"];
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "epicCardTitle", "epicFields", ctx, epic, "Epic Detail", [
+      { label: "Epic", valueHtml: renderConceptLink(ctx, epic.id, epic.title || epic.id) },
+      { label: "Status", valueHtml: esc(epic.status || "") },
+      { label: "Roadmap", valueHtml: epic.roadmapId ? renderConceptLink(ctx, epic.roadmapId) : "" },
+      { label: "Branches", valueHtml: esc((epic.branchIds ?? []).length) },
+      { label: "Features", valueHtml: esc((epic.featureIds ?? []).length) },
+      { label: "Verification gates", valueHtml: esc((epic.gateIds ?? []).length) },
+      { label: "Docs", valueHtml: esc((epic.docIds ?? []).length) },
+      { label: "API resource", valueHtml: renderApiLink(epic.id) }
+    ]);
+    const usedKeys = [
+      ...(rootKeysFromSurfaceSchema(primarySurface, "epicFields").length
+        ? rootKeysFromSurfaceSchema(primarySurface, "epicFields")
+        : ["id", "title", "status", "roadmapId", "branchIds", "featureIds", "gateIds", "docIds"]),
+      "defectClusterIds"
+    ];
     return `
       <section class="grid2">
         <div>
           ${renderSurfaceFrame(primarySurface, `
-            ${renderPropertyTable("Epic Detail", [
-            { label: "Epic", valueHtml: renderConceptLink(ctx, epic.id, epic.title || epic.id) },
-            { label: "Status", valueHtml: esc(epic.status || "") },
-            { label: "Roadmap", valueHtml: epic.roadmapId ? renderConceptLink(ctx, epic.roadmapId) : "" },
-            { label: "Branches", valueHtml: esc((epic.branchIds ?? []).length) },
-            { label: "Features", valueHtml: esc((epic.featureIds ?? []).length) },
-            { label: "Verification gates", valueHtml: esc((epic.gateIds ?? []).length) },
-            { label: "Docs", valueHtml: esc((epic.docIds ?? []).length) },
-            { label: "API resource", valueHtml: renderApiLink(epic.id) }
-            ])}
+            ${renderPropertyCard(primaryCard)}
             ${renderLongTailProperties(ctx, epic, usedKeys)}
           `)}
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderLinksCard("Branches", ctx, epic.branchIds ?? [])}
-            ${renderLinksCard("Features", ctx, epic.featureIds ?? [])}
-            ${renderLinksCard("Verification Gates", ctx, epic.gateIds ?? [])}
-            ${renderLinksCard("Docs", ctx, epic.docIds ?? [])}
+            ${renderCardSpecs(relatedSurface?.props?.epicLinkCards, ctx, epic, "links") || `${renderLinksCard("Branches", ctx, epic.branchIds ?? [])}${renderLinksCard("Features", ctx, epic.featureIds ?? [])}${renderLinksCard("Verification Gates", ctx, epic.gateIds ?? [])}${renderLinksCard("Docs", ctx, epic.docIds ?? [])}`}
           `)}
         </div>
       </section>
     `;
   }
   const feature = detail;
-  const usedKeys = ["id", "title", "status", "epicId", "branchIds", "gateIds", "docIds", "defectClusterIds"];
+  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "featureCardTitle", "featureFields", ctx, feature, "Feature Detail", [
+    { label: "Feature", valueHtml: renderConceptLink(ctx, feature.id, feature.title || feature.id) },
+    { label: "Status", valueHtml: esc(feature.status || "") },
+    { label: "Epic", valueHtml: feature.epicId ? renderConceptLink(ctx, feature.epicId) : "" },
+    { label: "Branches", valueHtml: esc((feature.branchIds ?? []).length) },
+    { label: "Verification gates", valueHtml: esc((feature.gateIds ?? []).length) },
+    { label: "Docs", valueHtml: esc((feature.docIds ?? []).length) },
+    { label: "API resource", valueHtml: renderApiLink(feature.id) }
+  ]);
+  const usedKeys = [
+    ...(rootKeysFromSurfaceSchema(primarySurface, "featureFields").length
+      ? rootKeysFromSurfaceSchema(primarySurface, "featureFields")
+      : ["id", "title", "status", "epicId", "branchIds", "gateIds", "docIds"]),
+    "defectClusterIds"
+  ];
   return `
     <section class="grid2">
       <div>
         ${renderSurfaceFrame(primarySurface, `
-          ${renderPropertyTable("Feature Detail", [
-          { label: "Feature", valueHtml: renderConceptLink(ctx, feature.id, feature.title || feature.id) },
-          { label: "Status", valueHtml: esc(feature.status || "") },
-          { label: "Epic", valueHtml: feature.epicId ? renderConceptLink(ctx, feature.epicId) : "" },
-          { label: "Branches", valueHtml: esc((feature.branchIds ?? []).length) },
-          { label: "Verification gates", valueHtml: esc((feature.gateIds ?? []).length) },
-          { label: "Docs", valueHtml: esc((feature.docIds ?? []).length) },
-          { label: "API resource", valueHtml: renderApiLink(feature.id) }
-          ])}
+          ${renderPropertyCard(primaryCard)}
           ${renderLongTailProperties(ctx, feature, usedKeys)}
         `)}
       </div>
       <div>
         ${renderSurfaceFrame(relatedSurface, `
-          ${renderLinksCard("Branches", ctx, feature.branchIds ?? [])}
-          ${renderLinksCard("Verification Gates", ctx, feature.gateIds ?? [])}
-          ${renderLinksCard("Docs", ctx, feature.docIds ?? [])}
+          ${renderCardSpecs(relatedSurface?.props?.featureLinkCards, ctx, feature, "links") || `${renderLinksCard("Branches", ctx, feature.branchIds ?? [])}${renderLinksCard("Verification Gates", ctx, feature.gateIds ?? [])}${renderLinksCard("Docs", ctx, feature.docIds ?? [])}`}
         `)}
       </div>
     </section>
@@ -1341,27 +1366,34 @@ function renderSignalDetail(surface, detail, model, ctx) {
   if (!detail) return `<div class="card"><h2>Detail</h2><div class="muted">No signal rows are projected yet.</div></div>`;
   if (detail.kind) {
     const gap = detail;
-    const usedKeys = ["id", "severity", "kind", "target", "reason", "recommendedProposal", "missingInGenerated", "extraInGenerated"];
+    const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "gapCardTitle", "gapFields", ctx, gap, "Gap Detail", [
+      { label: "Gap", valueHtml: esc(gap.id || "") },
+      { label: "Severity", valueHtml: esc(gap.severity || "") },
+      { label: "Kind", valueHtml: esc(gap.kind || "") },
+      { label: "Target", valueHtml: gap.target ? renderConceptLink(ctx, gap.target) : "" },
+      { label: "Reason", valueHtml: esc(gap.reason || "") },
+      { label: "API resource", valueHtml: renderApiLink(gap.id) }
+    ]);
+    const usedKeys = [
+      ...(rootKeysFromSurfaceSchema(primarySurface, "gapFields").length
+        ? rootKeysFromSurfaceSchema(primarySurface, "gapFields")
+        : ["id", "severity", "kind", "target", "reason"]),
+      "recommendedProposal",
+      "missingInGenerated",
+      "extraInGenerated"
+    ];
     return `
       <section class="grid2">
         <div>
           ${renderSurfaceFrame(primarySurface, `
-            ${renderPropertyTable("Gap Detail", [
-            { label: "Gap", valueHtml: esc(gap.id || "") },
-            { label: "Severity", valueHtml: esc(gap.severity || "") },
-            { label: "Kind", valueHtml: esc(gap.kind || "") },
-            { label: "Target", valueHtml: gap.target ? renderConceptLink(ctx, gap.target) : "" },
-            { label: "Reason", valueHtml: esc(gap.reason || "") },
-            { label: "API resource", valueHtml: renderApiLink(gap.id) }
-            ])}
+            ${renderPropertyCard(primaryCard)}
             ${renderLongTailProperties(ctx, gap, usedKeys)}
           `)}
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderLinksCard("Recommended Proposal", ctx, gap.recommendedProposal ? [gap.recommendedProposal] : [])}
-            ${renderTextListCard("Missing In Generated", gap.missingInGenerated ?? [])}
-            ${renderTextListCard("Extra In Generated", gap.extraInGenerated ?? [])}
+            ${renderCardSpecs(relatedSurface?.props?.gapLinkCards, ctx, gap, "links") || renderLinksCard("Recommended Proposal", ctx, gap.recommendedProposal ? [gap.recommendedProposal] : [])}
+            ${renderCardSpecs(relatedSurface?.props?.gapTextCards, ctx, gap, "text") || `${renderTextListCard("Missing In Generated", gap.missingInGenerated ?? [])}${renderTextListCard("Extra In Generated", gap.extraInGenerated ?? [])}`}
           `)}
         </div>
       </section>
@@ -1370,20 +1402,23 @@ function renderSignalDetail(surface, detail, model, ctx) {
   }
   const node = detail;
   const relatedEdges = (model.edges ?? []).filter(edge => edge.from === node.id || edge.to === node.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
-  const usedKeys = ["id", "kind", "title", "status", "owner", "source", "lifecycle"];
+  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "signalCardTitle", "signalFields", ctx, node, "Signal Detail", [
+    { label: "Node", valueHtml: renderConceptLink(ctx, node.id, node.title || node.id) },
+    { label: "Kind", valueHtml: esc(node.kind || "") },
+    { label: "Status", valueHtml: esc(node.status || "") },
+    { label: "Owner", valueHtml: esc(node.owner || "") },
+    { label: "Source", valueHtml: esc(node.source || "") },
+    { label: "Lifecycle", valueHtml: esc((node.lifecycle ?? []).join(", ")) },
+    { label: "API resource", valueHtml: renderApiLink(node.id) }
+  ]);
+  const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "signalFields").length
+    ? rootKeysFromSurfaceSchema(primarySurface, "signalFields")
+    : ["id", "kind", "title", "status", "owner", "source", "lifecycle"];
   return `
     <section class="grid2">
       <div>
         ${renderSurfaceFrame(primarySurface, `
-          ${renderPropertyTable("Signal Detail", [
-          { label: "Node", valueHtml: renderConceptLink(ctx, node.id, node.title || node.id) },
-          { label: "Kind", valueHtml: esc(node.kind || "") },
-          { label: "Status", valueHtml: esc(node.status || "") },
-          { label: "Owner", valueHtml: esc(node.owner || "") },
-          { label: "Source", valueHtml: esc(node.source || "") },
-          { label: "Lifecycle", valueHtml: esc((node.lifecycle ?? []).join(", ")) },
-          { label: "API resource", valueHtml: renderApiLink(node.id) }
-          ])}
+          ${renderPropertyCard(primaryCard)}
           ${renderLongTailProperties(ctx, node, usedKeys)}
         `)}
       </div>
@@ -1412,20 +1447,23 @@ function renderModelDetail(surface, node, model, ctx) {
   });
   if (!node) return `<div class="card"><h2>Detail</h2><div class="muted">No platform objects are projected yet.</div></div>`;
   const relatedEdges = (model.edges ?? []).filter(edge => edge.from === node.id || edge.to === node.id).slice(0, surfaceRowLimit(relationshipsSurface, 20));
-  const usedKeys = ["id", "kind", "title", "status", "owner", "source", "lifecycle"];
+  const primaryCard = propertyRowsFromSurfaceSchema(primarySurface, "objectCardTitle", "objectFields", ctx, node, "Platform Object Detail", [
+    { label: "Object", valueHtml: renderConceptLink(ctx, node.id, node.title || node.id) },
+    { label: "Kind", valueHtml: esc(node.kind || "") },
+    { label: "Status", valueHtml: esc(node.status || "") },
+    { label: "Owner", valueHtml: esc(node.owner || "") },
+    { label: "Source", valueHtml: esc(node.source || "") },
+    { label: "Lifecycle", valueHtml: esc((node.lifecycle ?? []).join(", ")) },
+    { label: "API resource", valueHtml: renderApiLink(node.id) }
+  ]);
+  const usedKeys = rootKeysFromSurfaceSchema(primarySurface, "objectFields").length
+    ? rootKeysFromSurfaceSchema(primarySurface, "objectFields")
+    : ["id", "kind", "title", "status", "owner", "source", "lifecycle"];
   return `
     <section class="grid2">
       <div>
         ${renderSurfaceFrame(primarySurface, `
-          ${renderPropertyTable("Platform Object Detail", [
-          { label: "Object", valueHtml: renderConceptLink(ctx, node.id, node.title || node.id) },
-          { label: "Kind", valueHtml: esc(node.kind || "") },
-          { label: "Status", valueHtml: esc(node.status || "") },
-          { label: "Owner", valueHtml: esc(node.owner || "") },
-          { label: "Source", valueHtml: esc(node.source || "") },
-          { label: "Lifecycle", valueHtml: esc((node.lifecycle ?? []).join(", ")) },
-          { label: "API resource", valueHtml: renderApiLink(node.id) }
-          ])}
+          ${renderPropertyCard(primaryCard)}
           ${renderLongTailProperties(ctx, node, usedKeys)}
         `)}
       </div>

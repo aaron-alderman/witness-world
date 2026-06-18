@@ -549,6 +549,10 @@ view PlatformSignalPrimaryPanel {
   class platform-signal-primary
   prop title = "Primary Detail"
   prop summary = "Selected signal properties and long-tail fields."
+  prop gapCardTitle = "Gap Detail"
+  prop gapFields = "Gap=id|Severity=severity|Kind=kind|Target=target@concept|Reason=reason|API resource=id@api"
+  prop signalCardTitle = "Signal Detail"
+  prop signalFields = "Node=id@concept|Kind=kind|Status=status|Owner=owner|Source=source|Lifecycle=lifecycle|API resource=id@api"
 }
 
 view PlatformSignalRelatedPanel {
@@ -556,6 +560,8 @@ view PlatformSignalRelatedPanel {
   class platform-signal-related
   prop title = "Related Resources"
   prop summary = "Linked proposals, selector drift, and supporting signal context."
+  prop gapLinkCards = "Recommended Proposal=recommendedProposal"
+  prop gapTextCards = "Missing In Generated=missingInGenerated|Extra In Generated=extraInGenerated"
 }
 
 view PlatformSignalRelationships {
@@ -615,6 +621,14 @@ view PlatformKnowledgePrimaryPanel {
   class platform-knowledge-primary
   prop title = "Primary Detail"
   prop summary = "Selected knowledge object properties and long-tail fields."
+  prop documentCardTitle = "Document Detail"
+  prop documentFields = "Document=path@concept|Role=role|Owner=owner|Status=status|Freshness=freshness.status|Sections=sectionCount|Tasks=taskCount|API resource=path@api"
+  prop roadmapTaskCardTitle = "Roadmap Task Detail"
+  prop roadmapTaskFields = "Task=id@concept|Markdown status=status|Derived status=derivedStatus|Section=section|Document=doc@concept|Line=line|Evidence=evidenceSummary|API resource=id@api"
+  prop epicCardTitle = "Epic Detail"
+  prop epicFields = "Epic=id@concept|Status=status|Roadmap=roadmapId@concept|Branches=branchIds@count|Features=featureIds@count|Verification gates=gateIds@count|Docs=docIds@count|API resource=id@api"
+  prop featureCardTitle = "Feature Detail"
+  prop featureFields = "Feature=id@concept|Status=status|Epic=epicId@concept|Branches=branchIds@count|Verification gates=gateIds@count|Docs=docIds@count|API resource=id@api"
 }
 
 view PlatformKnowledgeRelatedPanel {
@@ -622,6 +636,10 @@ view PlatformKnowledgeRelatedPanel {
   class platform-knowledge-related
   prop title = "Related Resources"
   prop summary = "Linked platform resources and supporting context for the selected knowledge object."
+  prop documentLinkCards = "Referenced Routes=references.routes|Referenced Plugins=references.pluginIds|Referenced Files=references.filePaths"
+  prop roadmapTaskLinkCards = "Linked Targets=targets@targetId"
+  prop epicLinkCards = "Branches=branchIds|Features=featureIds|Verification Gates=gateIds|Docs=docIds"
+  prop featureLinkCards = "Branches=branchIds|Verification Gates=gateIds|Docs=docIds"
 }
 
 view PlatformKnowledgeSections {
@@ -676,6 +694,8 @@ view PlatformModelPrimaryPanel {
   class platform-model-primary
   prop title = "Primary Detail"
   prop summary = "Selected platform object properties and long-tail fields."
+  prop objectCardTitle = "Platform Object Detail"
+  prop objectFields = "Object=id@concept|Kind=kind|Status=status|Owner=owner|Source=source|Lifecycle=lifecycle|API resource=id@api"
 }
 
 view PlatformModelRelationships {
