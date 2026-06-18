@@ -80,6 +80,12 @@ export function renderPlatformPage(model) {
   const testSuites = model.testSuites ?? [];
   const testCases = model.testCases ?? [];
   const latestTestResultsByGate = model.latestTestResultsByGate ?? {};
+  const roadmaps = model.roadmaps ?? [];
+  const epics = model.epics ?? [];
+  const features = model.features ?? [];
+  const branchesByEpic = model.branchesByEpic ?? {};
+  const defectsByEpic = model.defectsByEpic ?? [];
+  const testsByFeature = model.testsByFeature ?? [];
   const roadmapTasks = model.roadmapTasks ?? [];
   const roadmapDocPath = "docs/PLATFORM-ALL-THE-WAY-ROADMAP.md";
   const proposalActions = model.proposalActions ?? [];
@@ -103,6 +109,24 @@ export function renderPlatformPage(model) {
     docSections: docSections.filter(section => section.doc === roadmapDocPath),
     docTasks: docTasks.filter(task => task.doc === roadmapDocPath),
     roadmapTasks: roadmapTasks.filter(task => task.doc === roadmapDocPath)
+  };
+  const initialEpic = epics[0] ?? null;
+  const initialEpicFeatures = initialEpic
+    ? features.filter(feature => feature.epicId === initialEpic.id)
+    : [];
+  const initialEpicTests = initialEpic
+    ? testsByFeature.filter(row => row.epicId === initialEpic.id)
+    : [];
+  const initialEpicDefects = initialEpic
+    ? defectsByEpic.filter(row => row.epicId === initialEpic.id)
+    : [];
+  const initialEpicDetail = {
+    roadmaps: initialEpic ? roadmaps.filter(row => row.id === initialEpic.roadmapId) : [],
+    epics: initialEpic ? [initialEpic] : [],
+    features: initialEpicFeatures,
+    defectsByEpic: initialEpicDefects,
+    testsByFeature: initialEpicTests,
+    branchesByEpic: initialEpic ? { [initialEpic.id]: [...(branchesByEpic[initialEpic.id] ?? [])] } : {}
   };
   const initialState = JSON.stringify(model).replaceAll("<", "\\u003c");
   return `<!doctype html>
@@ -643,6 +667,58 @@ export function renderPlatformPage(model) {
     </section>
 
     <section>
+      <h2>Epic View</h2>
+      <div class="grid2">
+        <div>
+          <table>
+            <thead><tr><th>Status</th><th>Epic</th><th>Branches</th><th>Features</th><th>Defects</th><th>Gates</th><th>Docs</th></tr></thead>
+            <tbody>${tableRows(epics.slice(0, 80), [
+              row => row.status,
+              row => row.title,
+              row => (branchesByEpic[row.id] ?? []).length,
+              row => (row.featureIds ?? []).length,
+              row => defectsByEpic.find(entry => entry.epicId === row.id)?.defectCount ?? 0,
+              row => (row.gateIds ?? []).length,
+              row => (row.docIds ?? []).length
+            ])}</tbody>
+          </table>
+        </div>
+        <div>
+          <h3>Epic detail</h3>
+          <label>Epic
+            <select id="platform-epic-select">
+              ${epics.map(row => `<option value="${esc(row.id)}">${esc(`${row.status} ${row.title}`)}</option>`).join("")}
+            </select>
+          </label>
+          <div id="platform-epic-status" class="muted">${esc(initialEpic ? `Loaded from /api/platform-model?view=roadmap&id=${initialEpic.id}` : "No epic projections available yet.")}</div>
+          <div class="platform-branch-summary">
+            <div class="card">
+              <h3>Branches</h3>
+              <div id="platform-epic-branches-count">${esc((branchesByEpic[initialEpic?.id] ?? []).length)}</div>
+              <div class="muted" id="platform-epic-branches-summary">${esc((branchesByEpic[initialEpic?.id] ?? []).join(", "))}</div>
+            </div>
+            <div class="card">
+              <h3>Features</h3>
+              <div id="platform-epic-features-count">${esc(initialEpicFeatures.length)}</div>
+              <div class="muted" id="platform-epic-features-summary">${esc(initialEpicFeatures.map(row => row.title || row.id).join(", "))}</div>
+            </div>
+            <div class="card">
+              <h3>Defect clusters</h3>
+              <div id="platform-epic-defects-count">${esc(initialEpicDefects[0]?.defectCount ?? 0)}</div>
+              <div class="muted" id="platform-epic-defects-summary">${esc((initialEpicDefects[0]?.defectClusterIds ?? []).join(", "))}</div>
+            </div>
+            <div class="card">
+              <h3>Verification gates</h3>
+              <div id="platform-epic-gates-count">${esc((initialEpic?.gateIds ?? []).length)}</div>
+              <div class="muted" id="platform-epic-gates-summary">${esc((initialEpic?.gateIds ?? []).join(", "))}</div>
+            </div>
+          </div>
+          <pre id="platform-epic-detail-output">${esc(JSON.stringify(initialEpicDetail, null, 2))}</pre>
+        </div>
+      </div>
+    </section>
+
+    <section>
       <h2>Roadmap Tasks</h2>
       <table>
         <thead><tr><th>Status</th><th>Derived</th><th>Task</th><th>Section</th><th>Evidence</th><th>Source</th></tr></thead>
@@ -674,6 +750,12 @@ export function renderPlatformPage(model) {
     const platformDocs = platformState.docs || [];
     const platformDocSections = platformState.docSections || [];
     const platformDocTasks = platformState.docTasks || [];
+    const platformRoadmaps = platformState.roadmaps || [];
+    const platformEpics = platformState.epics || [];
+    const platformFeatures = platformState.features || [];
+    const platformBranchesByEpic = platformState.branchesByEpic || {};
+    const platformDefectsByEpic = platformState.defectsByEpic || [];
+    const platformTestsByFeature = platformState.testsByFeature || [];
     const platformRoadmapTasks = platformState.roadmapTasks || [];
     const platformRuntimeRevisions = platformState.runtimeRevisions || [];
     const platformSnapshotBuilds = platformState.snapshotBuilds || [];
@@ -718,6 +800,29 @@ export function renderPlatformPage(model) {
         roadmapTasks: matchedRoadmapTasks
       };
     }
+    function deriveEpicDetail(epicId) {
+      const epic = platformEpics.find(entry => entry.id === epicId) || null;
+      const matchedFeatures = epic
+        ? platformFeatures.filter(entry => entry.epicId === epic.id || (epic.featureIds || []).includes(entry.id))
+        : [];
+      const matchedRoadmaps = epic
+        ? platformRoadmaps.filter(entry => entry.id === epic.roadmapId)
+        : [];
+      const matchedDefects = epic
+        ? platformDefectsByEpic.filter(entry => entry.epicId === epic.id)
+        : [];
+      const matchedTests = epic
+        ? platformTestsByFeature.filter(entry => entry.epicId === epic.id)
+        : [];
+      return {
+        roadmaps: matchedRoadmaps,
+        epics: epic ? [epic] : [],
+        features: matchedFeatures,
+        defectsByEpic: matchedDefects,
+        testsByFeature: matchedTests,
+        branchesByEpic: epic ? { [epic.id]: [...(platformBranchesByEpic[epic.id] || [])] } : {}
+      };
+    }
     function syncRuntimeRevisionDetail(view, revisionId, sourceLabel) {
       const runtimeRevision = (view.runtimeRevisions || [])[0] || null;
       const detail = document.getElementById("platform-runtime-revision-detail-output");
@@ -745,6 +850,34 @@ export function renderPlatformPage(model) {
         ? "Loaded " + String(sourceLabel || "roadmap detail") + " for " + String(entryId || "")
         : "Roadmap detail unavailable.";
     }
+    function syncEpicDetail(view, epicId, sourceLabel) {
+      const epic = (view.epics || [])[0] || null;
+      const branches = view?.branchesByEpic?.[epic?.id || epicId] || [];
+      const features = view.features || [];
+      const defects = (view.defectsByEpic || [])[0] || null;
+      const detail = document.getElementById("platform-epic-detail-output");
+      const status = document.getElementById("platform-epic-status");
+      const branchesCount = document.getElementById("platform-epic-branches-count");
+      const branchesSummary = document.getElementById("platform-epic-branches-summary");
+      const featuresCount = document.getElementById("platform-epic-features-count");
+      const featuresSummary = document.getElementById("platform-epic-features-summary");
+      const defectsCount = document.getElementById("platform-epic-defects-count");
+      const defectsSummary = document.getElementById("platform-epic-defects-summary");
+      const gatesCount = document.getElementById("platform-epic-gates-count");
+      const gatesSummary = document.getElementById("platform-epic-gates-summary");
+      if (detail) detail.textContent = JSON.stringify(view || {}, null, 2);
+      if (status) status.textContent = (view?.epics?.length || view?.features?.length)
+        ? "Loaded " + String(sourceLabel || "epic detail") + " for " + String(epicId || epic?.id || "")
+        : "Epic detail unavailable.";
+      if (branchesCount) branchesCount.textContent = String(branches.length);
+      if (branchesSummary) branchesSummary.textContent = branches.join(", ");
+      if (featuresCount) featuresCount.textContent = String(features.length);
+      if (featuresSummary) featuresSummary.textContent = features.map(row => row.title || row.id || "").filter(Boolean).join(", ");
+      if (defectsCount) defectsCount.textContent = String(defects?.defectCount ?? 0);
+      if (defectsSummary) defectsSummary.textContent = (defects?.defectClusterIds ?? []).join(", ");
+      if (gatesCount) gatesCount.textContent = String((epic?.gateIds ?? []).length);
+      if (gatesSummary) gatesSummary.textContent = (epic?.gateIds ?? []).join(", ");
+    }
     async function loadRuntimeRevisionDetail(revisionId) {
       if (!revisionId) {
         syncRuntimeRevisionDetail({ runtimeRevisions: [], candidateSnapshots: [], snapshotBuilds: [], snapshotBuildErrors: [] }, "", "empty state");
@@ -771,6 +904,20 @@ export function renderPlatformPage(model) {
         syncRoadmapDetail(json, entryId, "/api/platform-model?view=roadmap&id=...");
       } catch {
         syncRoadmapDetail(deriveRoadmapDetail(entryId), entryId, "cached platform state");
+      }
+    }
+    async function loadEpicDetail(epicId) {
+      if (!epicId) {
+        syncEpicDetail({ roadmaps: [], epics: [], features: [], defectsByEpic: [], testsByFeature: [], branchesByEpic: {} }, "", "empty state");
+        return;
+      }
+      try {
+        const response = await fetch("/api/platform-model?view=roadmap&id=" + encodeURIComponent(epicId));
+        const json = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(json.error || "epic detail request failed");
+        syncEpicDetail(json, epicId, "/api/platform-model?view=roadmap&id=...");
+      } catch {
+        syncEpicDetail(deriveEpicDetail(epicId), epicId, "cached platform state");
       }
     }
     function syncBackendRevisionStream() {
@@ -1084,6 +1231,13 @@ export function renderPlatformPage(model) {
         loadRoadmapDetail(event.currentTarget.value);
       });
       if (roadmapSelect.value) loadRoadmapDetail(roadmapSelect.value);
+    }
+    const epicSelect = document.getElementById("platform-epic-select");
+    if (epicSelect) {
+      epicSelect.addEventListener("change", event => {
+        loadEpicDetail(event.currentTarget.value);
+      });
+      if (epicSelect.value) loadEpicDetail(epicSelect.value);
     }
     connectBackendRevisionStream();
   </script>

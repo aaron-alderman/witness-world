@@ -4580,6 +4580,15 @@ test("platform page renders required operating views", async () => {
   assert.match(html, /Governed Docs/);
   assert.match(html, /Doc Structure/);
   assert.match(html, /Doc Tasks/);
+  assert.match(html, /Epic View/);
+  assert.match(html, /Epic detail/);
+  assert.match(html, /platform-epic-select/);
+  assert.match(html, /platform-epic-detail-output/);
+  assert.match(html, /platform-epic-status/);
+  assert.match(html, /platform-epic-branches-count/);
+  assert.match(html, /platform-epic-features-count/);
+  assert.match(html, /platform-epic-defects-count/);
+  assert.match(html, /platform-epic-gates-count/);
   assert.match(html, /Roadmap Tasks/);
   assert.match(html, /Roadmap detail/);
   assert.match(html, /platform-roadmap-select/);

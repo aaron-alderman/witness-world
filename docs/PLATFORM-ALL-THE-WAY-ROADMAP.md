@@ -1081,8 +1081,8 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [X] Link defects to feature/epic.
 - [X] Link docs and tests to feature/epic.
 - [X] Add Platform Console roadmap view.
-- [ ] Add Platform Console epic view.
-- [L] Current planning objects are branch-metadata-backed: `/api/platform-model?view=roadmap`, `/platform`, and MCP now expose a first-class `roadmap` row for `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md`, plus derived `epic`, `feature`, `branchesByEpic`, `testsByFeature`, and `defectsByEpic` projections from branch `epic`/`feature` fields, selected branch gates, branch doc-freshness evidence, and branch `defect` tags via the existing `defectCluster:*` projection. Doc, test, and defect links to features/epics are currently inferred from active branch evidence rather than from standalone authored planning records. Milestones, acceptance criteria, richer defect authoring, and a dedicated epic console view remain later work.
+- [X] Add Platform Console epic view.
+- [L] Current planning objects are branch-metadata-backed: `/api/platform-model?view=roadmap`, `/platform`, and MCP now expose a first-class `roadmap` row for `docs/PLATFORM-ALL-THE-WAY-ROADMAP.md`, plus derived `epic`, `feature`, `branchesByEpic`, `testsByFeature`, and `defectsByEpic` projections from branch `epic`/`feature` fields, selected branch gates, branch doc-freshness evidence, and branch `defect` tags via the existing `defectCluster:*` projection. `/platform` now includes a dedicated epic view that reads through the same roadmap handler lane and shows per-epic branch, feature, defect-cluster, and gate summaries with a raw detail panel for the selected epic. Doc, test, and defect links to features/epics are currently inferred from active branch evidence rather than from standalone authored planning records. Milestones, acceptance criteria, and richer defect authoring remain later work.
 
 ### 10.2 Executable Roadmaps
 
@@ -1097,7 +1097,7 @@ This section is the execution contract for a fresh agent. Read it before startin
 - [ ] Add proposal target process `roadmap.update`.
 - [L] Roadmap checkbox tasks are now modeled as task rows and graph nodes, and Markdown references now resolve to existing plugins, routes, capabilities, proposal IDs, branch IDs, governed docs, authored RVM/WCSS sources, JSON/WTOML config sources, and generic repo file/test nodes when the referenced workspace path exists. Nonexistent or non-repo tokens remain intentionally unlinked.
 - [L] Roadmap and doc tasks now derive an evidence-backed status (`blocked`, `in-progress`, `ready`, `done`, `untracked`) from linked platform targets, modeled protecting gates, latest gate results, and open target gaps. Markdown checkbox state remains visible and authoritative as authored intent, while derived status tracks the live platform evidence separately.
-- [L] `/platform` now includes an explicit roadmap-detail panel backed by `/api/platform-model?view=roadmap&id=...` with cached fallback to the in-page model state. The broader epic-centric roadmap planning view remains later work.
+- [L] `/platform` now includes an explicit roadmap-detail panel plus an epic-detail panel, both backed by `/api/platform-model?view=roadmap&id=...` with cached fallback to the in-page model state. Richer roadmap validation and authoring flows remain later work.
 - [ ] Add proposal target process `epic.create`.
 - [ ] Add proposal target process `feature.create`.
 - [X] Add tests for this roadmap being ingested into roadmap/task nodes.
