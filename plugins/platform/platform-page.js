@@ -739,7 +739,18 @@ function resolveFormDefaultValue(raw) {
   return text;
 }
 
-function formFieldOptions(source, model) {
+function authoredStaticFormFieldOptions(surface, source) {
+  const authored = parseSurfaceLabelMap(surface?.props?.[`${source}Options`]);
+  if (!authored.size) return [];
+  return [...authored.entries()].map(([label, value]) => ({
+    value,
+    label
+  }));
+}
+
+function formFieldOptions(surface, source, model) {
+  const authored = authoredStaticFormFieldOptions(surface, source);
+  if (authored.length) return authored;
   switch (source) {
     case "proposalActionOptions":
       return (model.proposalActions ?? []).map(action => ({
@@ -766,21 +777,16 @@ function formFieldOptions(source, model) {
         value: gate.id,
         label: gate.title || gate.id
       }));
-    case "lifecycleActions":
-      return [
-        { value: "reject", label: "reject" },
-        { value: "abandon", label: "abandon" }
-      ];
     default:
       return [];
   }
 }
 
-function renderAuthoredFormField(field, model, defaultsMap, placeholdersMap, rowMap) {
+function renderAuthoredFormField(surface, field, model, defaultsMap, placeholdersMap, rowMap) {
   const defaultValue = resolveFormDefaultValue(defaultsMap.get(field.name));
   const placeholder = placeholdersMap.get(field.name) || "";
   if (field.kind === "select") {
-    const options = formFieldOptions(field.source, model);
+    const options = formFieldOptions(surface, field.source, model);
     return `
       <label>${esc(field.label)}
         <select name="${esc(field.name)}">
@@ -1796,7 +1802,7 @@ function renderAuthoredFormSection(surface, model) {
   const clientAction = optionalText(surface?.props?.clientAction);
   return renderSurfaceFrame(surface, `
       <form id="${esc(formId)}"${clientAction ? ` data-platform-client-action="${esc(clientAction)}"` : ""} data-platform-status-id="${esc(statusId)}">
-        ${fields.map(field => renderAuthoredFormField(field, model, defaultsMap, placeholdersMap, rowMap)).join("")}
+        ${fields.map(field => renderAuthoredFormField(surface, field, model, defaultsMap, placeholdersMap, rowMap)).join("")}
         ${renderFormActionButtons(surface)}
         <div id="${esc(statusId)}"></div>
       </form>

@@ -507,6 +507,7 @@ test("platform console layout compiles authored top-level surface metadata from 
   const changeSetLifecycleSurface = workflowPage.childSurfaces.find(surface => surface.name === "PlatformChangeSetLifecyclePanel");
   assert.ok(changeSetLifecycleSurface);
   assert.equal(changeSetLifecycleSurface.props.formFields, "Change set=changeSetId@select:changeSetOptions|Action=action@select:lifecycleActions|Reason=reason@text");
+  assert.equal(changeSetLifecycleSurface.props.lifecycleActionsOptions, "Reject=reject|Abandon=abandon");
   assert.ok(verificationPage);
   assert.equal(verificationPage.pageId, "verification");
   assert.equal(verificationPage.props.modelView, "verification");
@@ -5410,6 +5411,8 @@ test("platform page renders required operating views", async () => {
   assert.match(workflowHtml, /name="reviewAction" value="approve"/);
   assert.match(workflowHtml, /<form id="platform-change-set-edit-form"/);
   assert.match(workflowHtml, /<form id="platform-change-set-lifecycle-form"/);
+  assert.match(workflowHtml, /<option value="reject" selected>Reject<\/option>/);
+  assert.match(workflowHtml, /<option value="abandon">Abandon<\/option>/);
   assert.match(workflowHtml, /\/api\/platform-branches\/branch%3Ademo-0/);
   assert.match(workflowHtml, /offset=20/);
   assert.match(workflowHtml, /Sort/);

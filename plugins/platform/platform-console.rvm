@@ -422,6 +422,7 @@ view PlatformChangeSetLifecyclePanel {
   prop statusId = "change-set-lifecycle-status"
   prop submitLabel = "Update Change Set"
   prop formFields = "Change set=changeSetId@select:changeSetOptions|Action=action@select:lifecycleActions|Reason=reason@text"
+  prop lifecycleActionsOptions = "Reject=reject|Abandon=abandon"
   prop fieldDefaults = "action=reject"
   prop fieldPlaceholders = "reason=Optional lifecycle reason"
 }
