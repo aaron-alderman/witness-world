@@ -983,8 +983,8 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.branchLinkCards, ctx, branch, "links") || renderLinksCard("Change Sets", ctx, branch.changeSetIds ?? [])}
-            ${renderCardSpecs(relatedSurface?.props?.branchTextCards, ctx, branch, "text") || `${renderTextListCard("Affected Systems", (branch.affectedSystemSummaries ?? []).map(summary => summary.label || summary.system || summary.id || ""))}${renderTextListCard("Telemetry Impacts", (branch.telemetryImpactSummaries ?? []).map(summary => summary.label || summary.id || ""))}`}
+            ${renderCardSpecs(relatedSurface?.props?.branchLinkCards, ctx, branch, "links")}
+            ${renderCardSpecs(relatedSurface?.props?.branchTextCards, ctx, branch, "text")}
           `)}
         </div>
       </section>
@@ -1042,7 +1042,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.changeSetLinkCards, ctx, changeSet, "links") || renderLinksCard("Changed Paths", ctx, changeSet.changedPaths ?? [])}
+            ${renderCardSpecs(relatedSurface?.props?.changeSetLinkCards, ctx, changeSet, "links")}
           `)}
         </div>
       </section>
@@ -1087,7 +1087,7 @@ function renderWorkflowDetail(surface, detail, model, ctx) {
       </div>
       <div>
         ${renderSurfaceFrame(relatedSurface, `
-          ${renderCardSpecs(relatedSurface?.props?.proposalLinkCards, ctx, proposal, "links") || renderLinksCard("Target Resource", ctx, proposal.targetId ? [proposal.targetId] : [])}
+          ${renderCardSpecs(relatedSurface?.props?.proposalLinkCards, ctx, proposal, "links")}
         `)}
       </div>
     </section>
@@ -1157,7 +1157,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.gateLinkCards, ctx, gate, "links") || `${renderLinksCard("Protected Objects", ctx, gate.protectedObjects ?? [])}${renderLinksCard("Selected Branches", ctx, gate.selectedByBranches ?? [])}${renderLinksCard("Selected Change Sets", ctx, gate.selectedByChangeSets ?? [])}`}
+            ${renderCardSpecs(relatedSurface?.props?.gateLinkCards, ctx, gate, "links")}
           `)}
         </div>
       </section>
@@ -1230,7 +1230,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.runtimeRevisionLinkCards, ctx, revision, "links") || renderLinksCard("Changed Sources", ctx, revision.changedSources ?? [])}
+            ${renderCardSpecs(relatedSurface?.props?.runtimeRevisionLinkCards, ctx, revision, "links")}
             ${renderPropertyCard(diagnosticsCard)}
           `)}
         </div>
@@ -1280,7 +1280,7 @@ function renderVerificationDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.candidateSnapshotTextCards, ctx, snapshot, "text") || `${renderTextListCard("Files", (snapshot.files ?? []).map(file => file.path || ""))}${renderTextListCard("Errors", (snapshot.errors ?? []).map(error => `${error.kind || "error"}: ${error.message || ""}`))}`}
+            ${renderCardSpecs(relatedSurface?.props?.candidateSnapshotTextCards, ctx, snapshot, "text")}
           `)}
         </div>
       </section>
@@ -1388,7 +1388,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.documentLinkCards, ctx, doc, "links") || `${renderLinksCard("Referenced Routes", ctx, doc.references?.routes ?? [])}${renderLinksCard("Referenced Plugins", ctx, doc.references?.pluginIds ?? [])}${renderLinksCard("Referenced Files", ctx, doc.references?.filePaths ?? [])}`}
+            ${renderCardSpecs(relatedSurface?.props?.documentLinkCards, ctx, doc, "links")}
           `)}
         </div>
       </section>
@@ -1441,7 +1441,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.roadmapTaskLinkCards, ctx, task, "links") || renderLinksCard("Linked Targets", ctx, (task.targets ?? []).map(target => target.targetId || target.id || "").filter(Boolean))}
+            ${renderCardSpecs(relatedSurface?.props?.roadmapTaskLinkCards, ctx, task, "links")}
           `)}
         </div>
       </section>
@@ -1475,7 +1475,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.epicLinkCards, ctx, epic, "links") || `${renderLinksCard("Branches", ctx, epic.branchIds ?? [])}${renderLinksCard("Features", ctx, epic.featureIds ?? [])}${renderLinksCard("Verification Gates", ctx, epic.gateIds ?? [])}${renderLinksCard("Docs", ctx, epic.docIds ?? [])}`}
+            ${renderCardSpecs(relatedSurface?.props?.epicLinkCards, ctx, epic, "links")}
           `)}
         </div>
       </section>
@@ -1507,7 +1507,7 @@ function renderKnowledgeDetail(surface, detail, model, ctx) {
       </div>
       <div>
         ${renderSurfaceFrame(relatedSurface, `
-          ${renderCardSpecs(relatedSurface?.props?.featureLinkCards, ctx, feature, "links") || `${renderLinksCard("Branches", ctx, feature.branchIds ?? [])}${renderLinksCard("Verification Gates", ctx, feature.gateIds ?? [])}${renderLinksCard("Docs", ctx, feature.docIds ?? [])}`}
+          ${renderCardSpecs(relatedSurface?.props?.featureLinkCards, ctx, feature, "links")}
         `)}
       </div>
     </section>
@@ -1555,8 +1555,8 @@ function renderSignalDetail(surface, detail, model, ctx) {
         </div>
         <div>
           ${renderSurfaceFrame(relatedSurface, `
-            ${renderCardSpecs(relatedSurface?.props?.gapLinkCards, ctx, gap, "links") || renderLinksCard("Recommended Proposal", ctx, gap.recommendedProposal ? [gap.recommendedProposal] : [])}
-            ${renderCardSpecs(relatedSurface?.props?.gapTextCards, ctx, gap, "text") || `${renderTextListCard("Missing In Generated", gap.missingInGenerated ?? [])}${renderTextListCard("Extra In Generated", gap.extraInGenerated ?? [])}`}
+            ${renderCardSpecs(relatedSurface?.props?.gapLinkCards, ctx, gap, "links")}
+            ${renderCardSpecs(relatedSurface?.props?.gapTextCards, ctx, gap, "text")}
           `)}
         </div>
       </section>

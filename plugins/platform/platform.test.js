@@ -5120,6 +5120,8 @@ test("platform page renders required operating views", async () => {
   assert.match(workflowHtml, /Selected workflow object properties and long-tail fields\./);
   assert.match(workflowHtml, /Related Resources/);
   assert.match(workflowHtml, /Linked resources and supporting context for the selected workflow object\./);
+  assert.match(workflowHtml, /Change Sets/);
+  assert.match(workflowHtml, /Affected Systems/);
   assert.match(workflowHtml, /Candidate Snapshots/);
   assert.match(workflowHtml, /Candidate snapshot history for the selected workflow object when available\./);
   assert.match(workflowHtml, /Branch Detail/);
@@ -5144,6 +5146,7 @@ test("platform page renders required operating views", async () => {
   assert.match(verificationHtml, /Selected verification object properties and long-tail fields\./);
   assert.match(verificationHtml, /Related Resources/);
   assert.match(verificationHtml, /Linked verification resources, streams, and supporting context\./);
+  assert.match(verificationHtml, /Protected Objects/);
   assert.match(verificationHtml, /Recent Test Runs/);
   assert.match(verificationHtml, /Recent test-run history for the selected verification object when available\./);
   assert.match(verificationHtml, /Test Gate Detail/);
@@ -5167,6 +5170,7 @@ test("platform page renders required operating views", async () => {
   assert.match(knowledgeHtml, /Selected knowledge object properties and long-tail fields\./);
   assert.match(knowledgeHtml, /Related Resources/);
   assert.match(knowledgeHtml, /Linked platform resources and supporting context for the selected knowledge object\./);
+  assert.match(knowledgeHtml, /Referenced Routes/);
   assert.match(knowledgeHtml, /Sections/);
   assert.match(knowledgeHtml, /Document sections for the selected governed document when available\./);
   assert.match(knowledgeHtml, /Tasks/);
@@ -5181,6 +5185,7 @@ test("platform page renders required operating views", async () => {
   assert.match(signalsHtml, /Selected signal properties and long-tail fields\./);
   assert.match(signalsHtml, /Related Resources/);
   assert.match(signalsHtml, /Linked proposals, selector drift, and supporting signal context\./);
+  assert.match(signalsHtml, /Recommended Proposal/);
   assert.match(signalsHtml, /Related Relationships/);
   assert.match(signalsHtml, /Linked graph relationships for the selected signal when available\./);
   assert.match(signalsHtml, /Gap Detail/);
