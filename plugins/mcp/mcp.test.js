@@ -359,6 +359,26 @@ test("platform MCP read tool routes runtime revision view through platform model
   assert.equal(calls.at(-1).query.id, "branch.demo");
 });
 
+test("platform MCP read tool routes proposal, branch, change-set, and candidate snapshot views through platform model handlers", async () => {
+  const calls = [];
+  const callHandler = async request => {
+    calls.push(request);
+    return { status: 200, body: { ok: true, handler: request.handler, view: request.query?.view ?? null, id: request.query?.id ?? null } };
+  };
+
+  for (const view of ["proposals", "branches", "changeSets", "candidateSnapshots"]) {
+    const result = await executeMcpTool("platform.read", {
+      args: { view, id: "branch.demo" },
+      callHandler
+    });
+    assert.equal(result.isError, false);
+    assert.equal(calls.at(-1).handler, "platform.model.read");
+    assert.equal(calls.at(-1).path, "/api/platform-model");
+    assert.equal(calls.at(-1).query.view, view);
+    assert.equal(calls.at(-1).query.id, "branch.demo");
+  }
+});
+
 test("platform MCP docs tool routes docs and roadmap task reads through platform model handlers", async () => {
   const calls = [];
   const callHandler = async request => {
@@ -660,6 +680,19 @@ test("implemented platform MCP tools stay in parity with direct platform handler
   assert.equal(mcpRoadmap.isError, false);
   assert.deepEqual(normalizePlatformParity(mcpRoadmap.structuredContent), normalizePlatformParity(directRoadmap.body));
 
+  const directProposalList = await direct.callHandler({
+    handler: "platform.model.read",
+    method: "GET",
+    path: "/api/platform-model",
+    query: { view: "proposals" }
+  });
+  const mcpProposalList = await executeMcpTool("platform.read", {
+    args: { view: "proposals" },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpProposalList.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpProposalList.structuredContent), normalizePlatformParity(directProposalList.body));
+
   const branchBody = {
     id: "branch.parity.demo",
     title: "Parity branch",
@@ -700,6 +733,19 @@ test("implemented platform MCP tools stay in parity with direct platform handler
   assert.equal(mcpBranchRead.isError, false);
   assert.deepEqual(normalizePlatformParity(mcpBranchRead.structuredContent), normalizePlatformParity(directBranchRead.body));
 
+  const directBranchView = await direct.callHandler({
+    handler: "platform.model.read",
+    method: "GET",
+    path: "/api/platform-model",
+    query: { view: "branches", id: branchBody.id }
+  });
+  const mcpBranchView = await executeMcpTool("platform.read", {
+    args: { view: "branches", id: branchBody.id },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpBranchView.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpBranchView.structuredContent), normalizePlatformParity(directBranchView.body));
+
   const changeSetBody = {
     id: "changeset.parity.demo",
     branchId: branchBody.id,
@@ -737,6 +783,19 @@ test("implemented platform MCP tools stay in parity with direct platform handler
   });
   assert.equal(mcpChangeSetRead.isError, false);
   assert.deepEqual(normalizePlatformParity(mcpChangeSetRead.structuredContent), normalizePlatformParity(directChangeSetRead.body));
+
+  const directChangeSetView = await direct.callHandler({
+    handler: "platform.model.read",
+    method: "GET",
+    path: "/api/platform-model",
+    query: { view: "changeSets", id: changeSetBody.id }
+  });
+  const mcpChangeSetView = await executeMcpTool("platform.read", {
+    args: { view: "changeSets", id: changeSetBody.id },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpChangeSetView.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpChangeSetView.structuredContent), normalizePlatformParity(directChangeSetView.body));
 
   const proposalBody = {
     id: "proposal.platform.parity",
@@ -786,6 +845,19 @@ test("implemented platform MCP tools stay in parity with direct platform handler
   });
   assert.equal(mcpTestList.isError, false);
   assert.deepEqual(normalizePlatformParity(mcpTestList.structuredContent), normalizePlatformParity(directTestList.body));
+
+  const directCandidateSnapshotView = await direct.callHandler({
+    handler: "platform.model.read",
+    method: "GET",
+    path: "/api/platform-model",
+    query: { view: "candidateSnapshots", id: changeSetBody.id }
+  });
+  const mcpCandidateSnapshotView = await executeMcpTool("platform.read", {
+    args: { view: "candidateSnapshots", id: changeSetBody.id },
+    callHandler: viaMcp.callHandler
+  });
+  assert.equal(mcpCandidateSnapshotView.isError, false);
+  assert.deepEqual(normalizePlatformParity(mcpCandidateSnapshotView.structuredContent), normalizePlatformParity(directCandidateSnapshotView.body));
 
   const testRunBody = {
     id: "testRun.parity.demo",
